@@ -1708,7 +1708,7 @@
       "required_signals": [
         "dependency"
       ],
-      "notes": "Measured 0.761 (2026-08-24): source_id subject 'crate-tokio' is a declared direct dep -> strongly grounded, 3 confirmed axes (interest+ace+dependency), no commodity cap. Floor 0.55 keeps it clearly above the ungrounded look-alike band (0.37)."
+      "notes": "Measured 0.761 (2026-08-24): source_id subject 'crate-tokio' is a declared direct dep -> strongly grounded, 3 confirmed axes (interest+ace+dependency), no commodity cap. Floor 0.55 keeps it clearly above the ungrounded look-alike band (0.37). v33 (2026-09-08): the profile pins tokio at 1.46.1 so this 1.47.0 announcement is a release the user does NOT yet run; at the old 1.47.1 pin it was already installed and the already-installed ceiling held it at 0.370 - correct behaviour, wrong control."
     }
   },
   {
@@ -2129,7 +2129,7 @@
       "score_max": 0.37,
       "should_be_relevant": false,
       "required_signals": [],
-      "notes": "Twin of vf_cve_direct_dep_affected: the same grounded direct dependency, but the profile's installed tokio 1.47.1 is past the 1.38.1 fix, so the version verdict is CONFIRMED not affected. Pinned false (v31): a grounded registry advisory confirmed not to affect the installed version is capped at the registry-ungrounded tier (0.35 + 0.02 offset) and verdict-gated — live 2026-09-06 two Hono advisories fixed below the installed 4.13.3 sat in the feed at 0.88; Preemption keeps the row as 'you are on a fixed version'. Band measured 2026-09-06: zero-embedding 0.370, real-embedding 0.370 (the exit ceiling in both modes; the twin stays 0.650 / relevant)."
+      "notes": "Twin of vf_cve_direct_dep_affected: the same grounded direct dependency, but the profile's installed tokio 1.46.1 is past the 1.38.1 fix, so the version verdict is CONFIRMED not affected. Pinned false (v31): a grounded registry advisory confirmed not to affect the installed version is capped at the registry-ungrounded tier (0.35 + 0.02 offset) and verdict-gated — live 2026-09-06 two Hono advisories fixed below the installed 4.13.3 sat in the feed at 0.88; Preemption keeps the row as 'you are on a fixed version'. Band measured 2026-09-06: zero-embedding 0.370, real-embedding 0.370 (the exit ceiling in both modes; the twin stays 0.650 / relevant)."
     }
   }
 ]

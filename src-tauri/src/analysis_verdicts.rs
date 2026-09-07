@@ -169,6 +169,19 @@ pub(crate) async fn reconcile_stale_verdicts_cycle(budget: usize) -> Result<Verd
             "Orphaned duplicate verdicts withdrawn — their curated twin is no longer in the feed"
         );
     }
+    // v33: one slot per release line — the newest final stands, its betas,
+    // RCs and older patches of the same line yield (and return if it leaves).
+    let (train_demoted, train_withdrawn) = db
+        .reconcile_release_train(scoring::PIPELINE_VERSION)
+        .map_err(|e| format!("Failed to reconcile release trains: {e}"))?;
+    if train_demoted > 0 || train_withdrawn > 0 {
+        info!(
+            target: "4da::verdicts",
+            demoted = train_demoted,
+            withdrawn = train_withdrawn,
+            "Release trains collapsed to their newest curated final"
+        );
+    }
     let risen = db
         .promote_risen_verdicts(
             scoring::PIPELINE_VERSION,

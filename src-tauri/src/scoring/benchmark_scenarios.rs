@@ -277,8 +277,13 @@ fn rust_developer_ctx() -> ScoringContext {
     );
     // tokio's installed version: below vf_cve_direct_dep_affected's 1.53.2 fix
     // (affected) and past vf_cve_grounded_not_affected's 1.38.1 fix (not
-    // affected) — the two pinned version verdicts on one dependency.
-    set_bench_dep_version(&mut ace, "tokio", "1.47.1");
+    // affected) — the two pinned version verdicts on one dependency — and
+    // BELOW hc_registry_grounded_dep_release's announced 1.47.0, so that
+    // fresh-release control is a release the profile does not yet run. At
+    // 1.47.1 (the pin until v33) the announcement was already installed and
+    // the v33 ceiling held it at 0.370 — correctly, but the control then
+    // measured the wrong thing.
+    set_bench_dep_version(&mut ace, "tokio", "1.46.1");
     // Lockfile-only family children of the direct deps above, exactly as a
     // real serde/tokio user's Cargo.lock carries them (family rule, item 15).
     install_bench_transitive_deps(

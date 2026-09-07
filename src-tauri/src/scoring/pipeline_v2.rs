@@ -2316,6 +2316,85 @@ fn critical_security_action(
     }
 }
 
+/// v33: does every declaring project already run the version this release
+/// row announces? Reads the strongest grounded dependency, the announced
+/// version from the title (`scoring::release_version`) and the installed
+/// versions from `user_dependencies` (all projects when the match carries no
+/// paths; the match's own version as the last resort). Unknown → false.
+fn release_already_installed(
+    db: &Database,
+    input: &ScoringInput,
+    matched_deps: &[DepMatch],
+) -> bool {
+    let Some(dep) = matched_deps
+        .iter()
+        .filter(|d| dependencies::is_strong_grounding_match(d))
+        .max_by(|a, b| {
+            a.confidence
+                .partial_cmp(&b.confidence)
+                .unwrap_or(std::cmp::Ordering::Equal)
+        })
+    else {
+        return false;
+    };
+    let raw_name = dep.raw_name.as_deref().unwrap_or(&dep.package_name);
+    let announced =
+        super::release_version::announced_release_version(input.title, input.source_type, raw_name)
+            .or_else(|| {
+                super::release_version::announced_release_version(
+                    input.title,
+                    input.source_type,
+                    &dep.package_name,
+                )
+            });
+    let Some(announced) = announced else {
+        return false;
+    };
+    let installed = installed_versions_for_dep(db, dep);
+    super::release_version::already_installed(&announced, &installed)
+}
+
+fn installed_versions_for_dep(db: &Database, dep: &DepMatch) -> Vec<semver::Version> {
+    let raw_name = dep.raw_name.as_deref().unwrap_or(&dep.package_name);
+    let fallback = || {
+        dep.version
+            .iter()
+            .filter_map(|v| super::release_version::lenient_semver(v, None))
+            .collect::<Vec<_>>()
+    };
+    let conn = db.conn.lock();
+    let Ok(mut stmt) = conn.prepare_cached(
+        "SELECT project_path, version FROM user_dependencies
+         WHERE LOWER(package_name) IN (LOWER(?1), LOWER(?2))
+           AND version IS NOT NULL AND version <> ''",
+    ) else {
+        return fallback();
+    };
+    let rows: Vec<(String, String)> = stmt
+        .query_map(rusqlite::params![raw_name, dep.package_name], |r| {
+            Ok((r.get(0)?, r.get(1)?))
+        })
+        .map(|rs| rs.flatten().collect())
+        .unwrap_or_default();
+    let wanted: Vec<String> = dep
+        .project_paths
+        .iter()
+        .map(|p| p.replace('\\', "/").to_lowercase())
+        .collect();
+    let versions: Vec<semver::Version> = rows
+        .iter()
+        .filter(|(path, _)| {
+            wanted.is_empty() || wanted.contains(&path.replace('\\', "/").to_lowercase())
+        })
+        .filter_map(|(_, v)| super::release_version::lenient_semver(v, None))
+        .collect();
+    if versions.is_empty() {
+        fallback()
+    } else {
+        versions
+    }
+}
+
 /// The subset of `dep.project_paths` whose installed copy is inside the
 /// mirror's affected range for the advisory this item is about. `None` when
 /// the mirror holds no row for it, or no project's version can be read —
@@ -2506,6 +2585,24 @@ fn classify_signals(
             // registry-subject route and no match passes the corroboration
             // filter, say "connects to your stack" without guessing a name
             // (mirrors critical_security_action's refusal to guess).
+            // v33: a tool discovery is a signal for THIS stack only when it
+            // is grounded in a dependency OR its title names a technology the
+            // user declared. Live 2026-09-07 all three tool signals read "New
+            // tool spotted — no confirmed link to your stack": a Next.js form
+            // helper, a vanilla-JS notes app and a Rust Foundation hiring
+            // post — none for this stack. A fresh "Rust testing framework"
+            // for a Rust developer still surfaces, with the classifier's own
+            // "connects to your rust stack" line. The item stays in the feed
+            // with its score; only the signal lane drops it.
+            if c.signal_type == signals::SignalType::ToolDiscovery && !grounding.strong {
+                let title_lower = input.title.to_lowercase();
+                let names_declared_tech = ctx.declared_tech.iter().any(|t| {
+                    crate::knowledge_decay::has_word_boundary_match(&title_lower, &t.to_lowercase())
+                });
+                if !names_declared_tech {
+                    return (None, None, None, None, None);
+                }
+            }
             if c.signal_type == signals::SignalType::ToolDiscovery && grounding.strong {
                 let lang = crate::i18n::get_user_language();
                 let best_dep = matched_deps
@@ -2973,6 +3070,19 @@ pub(crate) fn score_item(
                 ((chrono::Utc::now() - *published).num_days().max(0) as f32) / DAYS_PER_MONTH;
             age_months >= scoring_config::STALE_CONTENT_SUPERSEDED_MONTHS
         });
+    // v33: a release the user ALREADY RUNS is not a "new release in your
+    // stack" — the announced version (registry subject, or the literal after
+    // the dependency's name) at or below the installed version in EVERY
+    // declaring project. Same ceiling and verdict gate as a superseded
+    // release: the age rule alone let "Announcing TypeScript 5.9" (installed
+    // 5.9.3) and "crates.io: sha2 v0.11.0" (installed 0.11.0) sit at 0.88–0.90
+    // as new releases (2026-09-07, twenty of fifty-one release rows). An
+    // unknown installed version never gates.
+    let already_installed_release =
+        matches!(content_type, crate::content_dna::ContentType::ReleaseNotes)
+            && !matches!(input.source_type, "cve" | "osv")
+            && grounding.strong
+            && release_already_installed(db, input, &raw.matched_deps);
     // v30: the source class decides whether an ungrounded advisory is a
     // registry row (gated) or an editorial story (decided by score).
     let registry_advisory = is_registry_advisory_source(input.source_type);
@@ -3193,7 +3303,7 @@ pub(crate) fn score_item(
         let ugc = ugc_capped.then_some(0.50);
         // Superseded release (v24): same shape as the commodity ceiling —
         // the offset is added here so the cap survives `normalize_score_offset`.
-        let superseded = superseded_release.then_some(
+        let superseded = (superseded_release || already_installed_release).then_some(
             scoring_config::STALE_CONTENT_SUPERSEDED_CEILING
                 + scoring_config::SCORE_OFFSET_NEGATIVE_FLOOR,
         );
@@ -3260,6 +3370,7 @@ pub(crate) fn score_item(
     // fast path); its capped score stays for ranking/display.
     let relevant = !ungrounded_registry_release
         && !superseded_release
+        && !already_installed_release
         && !ugc_capped
         && !security_ungrounded
         && !version_not_affected
@@ -3384,6 +3495,11 @@ pub(crate) fn score_item(
         registry_advisory,
     };
     let mut necessity_result = necessity::compute_necessity(&necessity_inputs);
+    // v33: a release you already run needs nothing from you — the "New
+    // release in your stack" reason would contradict the gate above.
+    if already_installed_release {
+        necessity_result.score = 0.0;
+    }
 
     // ── Source authority weighting for necessity ───────────────────────
     // Security items are NOT penalized — a CVE is critical regardless of source.
@@ -5561,6 +5677,89 @@ mod tests {
         );
     }
 
+    /// v33: a release the user already runs is not a "new release in your
+    /// stack" — gated like a superseded release, and its necessity says
+    /// nothing. Live 2026-09-07: `crates.io: sha2 v0.11.0` scored 0.877 with
+    /// "New release in your stack: sha2" against an installed 0.11.0.
+    #[test]
+    fn already_installed_release_is_ceilinged_not_relevant_and_needs_nothing() {
+        let db = crate::test_utils::test_db();
+        db.store_dependency("/proj/app", "sha2", Some("0.11.0"), "cargo", false, None)
+            .unwrap();
+        let ctx = fastpath_ctx(&[("sha2", "rust")]);
+        let opts = ScoringOptions {
+            apply_freshness: true,
+            apply_signals: true,
+            trend_topics: vec![],
+        };
+        let published = chrono::Utc::now() - chrono::Duration::days(3);
+        let embedding = crate::test_utils::seed_embedding("sha2-release");
+        let installed = ScoringInput {
+            id: 1,
+            title: "crates.io: sha2 v0.11.0",
+            url: Some("https://crates.io/crates/sha2"),
+            content: "SHA-2 hash functions. This release updates the digest traits.",
+            source_type: "crates_io",
+            embedding: &embedding,
+            created_at: Some(&published),
+            detected_lang: "en",
+            source_tags: &[],
+            tags_json: None,
+            feed_origin: None,
+            source_id: Some("crate-sha2"),
+        };
+        let r = score_item(&installed, &ctx, &db, &opts, None);
+        assert!(
+            !r.relevant,
+            "the version the user runs is not a new release"
+        );
+        let ceiling = r.score_breakdown.as_ref().and_then(|b| b.score_ceiling);
+        assert!(
+            ceiling.is_some_and(|c| {
+                (c - (scoring_config::STALE_CONTENT_SUPERSEDED_CEILING
+                    + scoring_config::SCORE_OFFSET_NEGATIVE_FLOOR))
+                    .abs()
+                    < 1e-4
+            }),
+            "held at the superseded ceiling (got {ceiling:?})"
+        );
+        assert_ne!(
+            r.score_breakdown
+                .as_ref()
+                .and_then(|b| b.necessity_reason.as_deref()),
+            Some("New release in your stack: sha2"),
+            "necessity must not call it new"
+        );
+
+        let newer = ScoringInput {
+            id: 2,
+            title: "crates.io: sha2 v0.12.0",
+            url: Some("https://crates.io/crates/sha2"),
+            content: "SHA-2 hash functions. This release updates the digest traits.",
+            source_type: "crates_io",
+            embedding: &embedding,
+            created_at: Some(&published),
+            detected_lang: "en",
+            source_tags: &[],
+            tags_json: None,
+            feed_origin: None,
+            source_id: Some("crate-sha2"),
+        };
+        let r2 = score_item(&newer, &ctx, &db, &opts, None);
+        assert_eq!(
+            r2.score_breakdown
+                .as_ref()
+                .and_then(|b| b.necessity_reason.as_deref()),
+            Some("New release in your stack: sha2"),
+            "a newer release than the installed one is still news"
+        );
+        assert_eq!(
+            r2.score_breakdown.as_ref().and_then(|b| b.score_ceiling),
+            None,
+            "and carries no ceiling"
+        );
+    }
+
     /// Tightening T3 (2026-08-25): a superseded RELEASE announcement gets
     /// neither the grounded softening nor the shallow stale floor — the live
     /// "TypeScript 5.1 Beta is OUT!" (2023, typescript IS a dep) held 0.882
@@ -5608,10 +5807,11 @@ mod tests {
     fn tool_discovery_input<'a>(
         published: &'a chrono::DateTime<chrono::Utc>,
         embedding: &'a [f32],
+        title: &'a str,
     ) -> ScoringInput<'a> {
         ScoringInput {
             id: 42,
-            title: "Announcing Toasty, an async ORM",
+            title,
             url: Some("https://example.com/announcing-toasty"),
             content: "Toasty is a new open source ORM. We built it as a simpler \
                       alternative to existing data-access layers.",
@@ -5632,6 +5832,8 @@ mod tests {
     #[allow(clippy::type_complexity)]
     fn classify_tool_discovery(
         published: &chrono::DateTime<chrono::Utc>,
+        title: &str,
+        declared_tech: &[&str],
         matched_deps: &[dependencies::DepMatch],
         grounding: dependencies::GroundingVerdict,
     ) -> (
@@ -5642,7 +5844,8 @@ mod tests {
         Option<String>,
     ) {
         let db = crate::test_utils::test_db();
-        let ctx = fastpath_ctx(&[]);
+        let mut ctx = fastpath_ctx(&[]);
+        ctx.declared_tech = declared_tech.iter().map(|s| s.to_string()).collect();
         let options = ScoringOptions {
             apply_freshness: true,
             apply_signals: true,
@@ -5650,7 +5853,7 @@ mod tests {
         };
         let classifier = signals::SignalClassifier::new();
         let embedding: Vec<f32> = Vec::new();
-        let input = tool_discovery_input(published, &embedding);
+        let input = tool_discovery_input(published, &embedding, title);
         classify_signals(
             true,
             0.6,
@@ -5695,8 +5898,13 @@ mod tests {
         // `created_at` carries the EFFECTIVE publication date (published_at
         // when the source provides one), so the gate sees the real age.
         let published = chrono::Utc::now() - chrono::Duration::days(600);
-        let (sig_type, sig_priority, sig_action, ..) =
-            classify_tool_discovery(&published, &[], ungrounded_verdict());
+        let (sig_type, sig_priority, sig_action, ..) = classify_tool_discovery(
+            &published,
+            "Announcing Toasty, an async ORM for Rust",
+            &["rust"],
+            &[],
+            ungrounded_verdict(),
+        );
         assert_eq!(
             sig_type, None,
             "a 600-day-old announcement must not be a 'New tool' signal (got {sig_type:?} / {sig_action:?})"
@@ -5705,22 +5913,65 @@ mod tests {
     }
 
     #[test]
-    fn tool_discovery_signal_kept_for_fresh_announcement() {
-        // Negative test for the gate (gate-precision rule): the same input
-        // published 5 days ago keeps its ToolDiscovery signal.
+    fn tool_discovery_signal_kept_for_fresh_announcement_naming_declared_tech() {
+        // Negative test for the gates (gate-precision rule): the same input
+        // published 5 days ago, naming a declared technology, keeps its
+        // ToolDiscovery signal — no dependency edge, so the classifier's own
+        // declared-tech line ("connects to your rust stack") stands.
         let published = chrono::Utc::now() - chrono::Duration::days(5);
-        let (sig_type, _, sig_action, ..) =
-            classify_tool_discovery(&published, &[], ungrounded_verdict());
+        let (sig_type, _, sig_action, ..) = classify_tool_discovery(
+            &published,
+            "Announcing Toasty, an async ORM for Rust",
+            &["rust"],
+            &[],
+            ungrounded_verdict(),
+        );
         assert_eq!(
             sig_type.as_deref(),
             Some("tool_discovery"),
-            "a genuinely fresh launch must still classify"
+            "a genuinely fresh launch for a declared technology must still classify"
         );
-        // Ungrounded: the honest no-link disclosure stands.
         let lang = crate::i18n::get_user_language();
         assert_eq!(
-            sig_action.as_deref(),
-            Some(crate::i18n::t("signals:action.toolEvaluateUngrounded", &lang, &[]).as_str()),
+            sig_action,
+            Some(crate::i18n::t(
+                "signals:action.toolEvaluateGrounded",
+                &lang,
+                &[("tech", "rust")]
+            )),
+        );
+    }
+
+    #[test]
+    fn tool_discovery_signal_dropped_when_nothing_ties_it_to_this_stack() {
+        // v33 (live 2026-09-07): every "New tool spotted" signal read "no
+        // confirmed link to your stack" — a Next.js form helper, a vanilla-JS
+        // notes app, a hiring post. Fresh, ungrounded, naming no declared
+        // technology: not a signal for THIS developer.
+        let published = chrono::Utc::now() - chrono::Duration::days(5);
+        let (sig_type, sig_priority, sig_action, ..) = classify_tool_discovery(
+            &published,
+            "Announcing Toasty, an async ORM",
+            &["rust"],
+            &[],
+            ungrounded_verdict(),
+        );
+        assert_eq!(
+            sig_type, None,
+            "an ungrounded tool that names none of the declared technologies is not a signal (got {sig_type:?} / {sig_action:?})"
+        );
+        assert_eq!(sig_priority, None);
+        // "rustc" is not "rust": the match is word-bounded.
+        let (sig_type, ..) = classify_tool_discovery(
+            &published,
+            "Announcing Toasty, an ORM for Rustaceans",
+            &["rust"],
+            &[],
+            ungrounded_verdict(),
+        );
+        assert_eq!(
+            sig_type, None,
+            "a substring of a declared technology is not a match"
         );
     }
 
@@ -5736,7 +5987,13 @@ mod tests {
             strong_direct: true,
             via_registry_subject: false,
         };
-        let (sig_type, _, sig_action, ..) = classify_tool_discovery(&published, &deps, grounding);
+        let (sig_type, _, sig_action, ..) = classify_tool_discovery(
+            &published,
+            "Announcing Toasty, an async ORM",
+            &[],
+            &deps,
+            grounding,
+        );
         assert_eq!(sig_type.as_deref(), Some("tool_discovery"));
         let action = sig_action.expect("grounded tool discovery keeps its action line");
         let lang = crate::i18n::get_user_language();
@@ -5767,7 +6024,13 @@ mod tests {
             strong_direct: false,
             via_registry_subject: true,
         };
-        let (sig_type, _, sig_action, ..) = classify_tool_discovery(&published, &[], grounding);
+        let (sig_type, _, sig_action, ..) = classify_tool_discovery(
+            &published,
+            "Announcing Toasty, an async ORM",
+            &[],
+            &[],
+            grounding,
+        );
         assert_eq!(sig_type.as_deref(), Some("tool_discovery"));
         let action = sig_action.expect("action line present");
         let lang = crate::i18n::get_user_language();

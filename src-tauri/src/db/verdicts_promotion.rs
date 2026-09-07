@@ -214,6 +214,112 @@ impl Database {
     /// boundary — immediate, and twin-checked again against whatever is
     /// curated by then. Convergent: a row whose twin is back is re-written
     /// `duplicate_curated` by that same sweep.
+    /// Collapse a dependency's release train (v33): among the CURATED
+    /// `release_notes` rows about one dependency, from one source class
+    /// (registry rows / editorial rows), a row is superseded when a newer
+    /// version on the SAME release line is also curated — 5.9 Beta and 5.9 RC
+    /// fall to 5.9, 7.0 Beta to 7.0, but 6.0 and 7.0 both stand (a major is
+    /// its own story). Equal versions are twins, not supersessions, and stay
+    /// with the duplicate rule. A `superseded_release` verdict whose newer
+    /// sibling is no longer curated is withdrawn (cleared, never flipped) so
+    /// the risen sweep grants the row a first verdict again. Returns
+    /// `(demoted, withdrawn)`.
+    pub fn reconcile_release_train(&self, version: i32) -> SqliteResult<(usize, usize)> {
+        use crate::scoring::release_version::{announced_release_version, same_release_line};
+        struct Row {
+            id: i64,
+            curated: bool,
+            version: semver::Version,
+        }
+        let rows: Vec<(i64, String, String, String, i64)> = {
+            let conn = self.read_conn();
+            let mut stmt = conn.prepare_cached(
+                "SELECT si.id, si.title, si.source_type,
+                        json_extract(se.breakdown, '$.breakdown.matched_deps[0]'),
+                        si.feed_relevant
+                 FROM source_items si
+                 JOIN scoring_explanations se ON se.source_item_id = si.id
+                 WHERE si.content_type = 'release_notes'
+                   AND (si.feed_relevant = 1
+                        OR (si.feed_relevant = 0
+                            AND si.feed_verdict_reason = 'superseded_release'))
+                   AND json_extract(se.breakdown, '$.breakdown.matched_deps[0]') IS NOT NULL",
+            )?;
+            let mapped = stmt.query_map([], |r| {
+                Ok((
+                    r.get::<_, i64>(0)?,
+                    r.get::<_, String>(1)?,
+                    r.get::<_, String>(2)?,
+                    r.get::<_, String>(3)?,
+                    r.get::<_, i64>(4)?,
+                ))
+            })?;
+            mapped.collect::<SqliteResult<Vec<_>>>()?
+        };
+        let mut groups: std::collections::HashMap<(String, bool), Vec<Row>> =
+            std::collections::HashMap::new();
+        for (id, title, source_type, dep, relevant) in rows {
+            let Some(version) = announced_release_version(&title, &source_type, &dep) else {
+                continue;
+            };
+            let class = crate::dep_linker::is_registry_source(&source_type);
+            groups
+                .entry((dep.to_lowercase(), class))
+                .or_default()
+                .push(Row {
+                    id,
+                    curated: relevant == 1,
+                    version,
+                });
+        }
+        let mut demote: Vec<(i64, bool, VerdictSource, Option<VerdictReason>)> = Vec::new();
+        let mut withdraw: Vec<i64> = Vec::new();
+        for group in groups.values() {
+            let curated: Vec<&Row> = group.iter().filter(|r| r.curated).collect();
+            for row in group {
+                let newer_curated = curated.iter().any(|c| {
+                    c.id != row.id
+                        && same_release_line(&c.version, &row.version)
+                        && c.version > row.version
+                });
+                match (row.curated, newer_curated) {
+                    (true, true) => demote.push((
+                        row.id,
+                        false,
+                        VerdictSource::Score,
+                        Some(VerdictReason::SupersededRelease),
+                    )),
+                    (false, false) => withdraw.push(row.id),
+                    _ => {}
+                }
+            }
+        }
+        let demoted = if demote.is_empty() {
+            0
+        } else {
+            self.persist_feed_verdicts_with_reasons(&demote, version)?
+        };
+        let mut withdrawn = 0usize;
+        if !withdraw.is_empty() {
+            let conn = self.conn.lock();
+            let tx = conn.unchecked_transaction()?;
+            {
+                let mut stmt = tx.prepare_cached(
+                    "UPDATE source_items
+                     SET feed_relevant = NULL, feed_verdict_at = NULL, feed_verdict_version = NULL,
+                         feed_verdict_source = NULL, feed_verdict_reason = NULL,
+                         feed_verdict_pending = NULL
+                     WHERE id = ?1 AND feed_verdict_reason = 'superseded_release'",
+                )?;
+                for id in &withdraw {
+                    withdrawn += stmt.execute(params![id])?;
+                }
+            }
+            tx.commit()?;
+        }
+        Ok((demoted, withdrawn))
+    }
+
     pub fn withdraw_orphaned_duplicate_verdicts(&self) -> SqliteResult<usize> {
         let duplicates: Vec<(i64, Option<String>, String)> = {
             let conn = self.read_conn();

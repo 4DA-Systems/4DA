@@ -41,6 +41,7 @@ pub(crate) mod query_weighting;
 pub(crate) mod reexamination;
 #[cfg(test)]
 mod registry_grounding_tests;
+pub(crate) mod release_version;
 mod role_inference;
 mod semantic;
 #[cfg(test)]
@@ -576,7 +577,39 @@ pub(crate) use types::{ScoringInput, ScoringOptions};
 // rewrites the explanation of every security-factor row whatever its source
 // — no positive-form predicate covers either. The whole corpus drains
 // (5 minutes live at v31).
-pub(crate) const PIPELINE_VERSION: i32 = 32;
+//
+// v33 (2026-09-07): release intelligence knows what version you run
+// (adversarial audit #2, AD-041).
+//   1. Already-installed release gate: a `release_notes` row strongly
+//      grounded in a dependency, announcing a version every declaring
+//      project already runs (registry subject or the literal after the
+//      dependency's name — `scoring::release_version`), is capped at the
+//      superseded ceiling and categorically not feed-relevant, and its
+//      necessity no longer says "New release in your stack". Twenty of 51
+//      live "new release" rows announced the installed version (sha2 0.11.0,
+//      ed25519-dalek 3.0.0, TypeScript 5.9 on 5.9.3 …).
+//   2. Tool discovery requires a dependency edge: a `tool_discovery` signal
+//      with no strong grounding is not emitted ("New tool spotted — no
+//      confirmed link to your stack" was 3 of 3 live tool signals, none a
+//      tool for this stack).
+//   3. Signal classifier: a keyword preceded by a negator within three words
+//      does not trigger ("this is not a breaking change" made rustup 1.29.1
+//      a breaking-change ALERT), and Alert or higher requires a confirmed
+//      dependency edge for every signal type (a survey blog post was the
+//      page's top ALERT on title corroboration alone).
+//   4. Explanation chain: "Similar to your code in X" is shown only at
+//      ≥ 0.80 similarity — 115 of 236 live items carried it in a
+//      0.67–0.74 band that discriminated nothing.
+//   5. Verdict lane (no score change): `reconcile_release_train` keeps the
+//      newest final per (dependency, release line, source class) and demotes
+//      the rest `superseded_release`; a superseded verdict is withdrawn when
+//      its newer sibling leaves the feed.
+//
+// Deliberately UNREGISTERED in epochs::SCOPED_EPOCHS: items 1 and 2–4 change
+// verdicts and display classification on release, signal and every
+// context-matched row — no positive-form predicate is a provable superset.
+// The whole corpus drains (5 minutes live at v32).
+pub(crate) const PIPELINE_VERSION: i32 = 33;
 
 /// Parse the topic tags carried in the `source_items.tags` column.
 ///

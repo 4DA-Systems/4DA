@@ -228,6 +228,13 @@ pub enum VerdictReason {
     /// across four cycles (2026-09-04 audit, M2). Written at the persist
     /// boundary; the original keeps its verdict.
     DuplicateCurated,
+    /// The item announces a release of a dependency that a NEWER final on
+    /// the same release line, from the same source class, already
+    /// announces in the feed (v33, `Database::reconcile_release_train`).
+    /// The TypeScript train — 5.9 Beta, 5.9 RC, 5.9, 6.0 Beta, 6.0 RC, 6.0,
+    /// 7.0 Beta, 7.0 RC, 7.0 — held nine feed slots (2026-09-07). Withdrawn
+    /// when the newer sibling leaves the feed.
+    SupersededRelease,
 }
 
 impl VerdictReason {
@@ -240,6 +247,7 @@ impl VerdictReason {
             Self::LlmReject => "llm_reject",
             Self::PendingRetriesExhausted => "pending_retries_exhausted",
             Self::DuplicateCurated => "duplicate_curated",
+            Self::SupersededRelease => "superseded_release",
         }
     }
 }
