@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { memo, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { formatRelativeAge, getRelevancePresentation } from '../../utils/score';
+import { formatRelativeAge, getRelevancePresentation, isSurfacedSignal } from '../../utils/score';
 import { getSourceLabel, getSourceColorClass } from '../../config/sources';
 import { isSafeUrl } from '../../utils/sanitize-html';
 import { useTranslatedContent } from '../ContentTranslationProvider';
@@ -39,15 +39,21 @@ export const IntelligenceFeed = memo(function IntelligenceFeed({
 }: IntelligenceFeedProps) {
   const { t } = useTranslation();
 
-  // Top 15 relevant items, excluding signal items already in Zone 2
+  // Top 15 surfaced signals, excluding signal items already in Zone 2.
+  // `isSurfacedSignal`, not `r.relevant`: an exclusion demotes a row out of
+  // every list. Reading `relevant` alone listed the Brief's OWN rejections
+  // (`brief:` keeps `relevant = true` — it is an ordering verdict) at the top
+  // of this queue by rank, and counted them in "view all" while the header
+  // chip did not (live 2026-09-07: 239 here vs 234 in the header, the five
+  // extra rows all durably rejected by the judge).
   const feedItems = useMemo(() => {
     return results
-      .filter(r => r.relevant && !signalIds.has(r.id))
+      .filter(r => isSurfacedSignal(r) && !signalIds.has(r.id))
       .slice(0, 15);
   }, [results, signalIds]);
 
   const totalRelevant = useMemo(() => {
-    return results.filter(r => r.relevant).length;
+    return results.filter(isSurfacedSignal).length;
   }, [results]);
 
   if (feedItems.length === 0) return null;

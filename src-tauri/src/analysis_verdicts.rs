@@ -304,6 +304,19 @@ pub(crate) async fn reconcile_stale_verdicts_logged() -> VerdictReconciliation {
 /// and anti-topic exclusions are never touched.
 const VERDICT_EXCLUSION_PREFIX: &str = "verdict:";
 
+/// `excluded_by` prefix of a Brief rejection (`brief_rejections`). A Brief
+/// demotion is display ORDER, not curation (AD-035): the row keeps
+/// `relevant = true` and every list that reads `relevant` alone still shows
+/// it. It therefore cannot shield a row from a durable rejection.
+const BRIEF_EXCLUSION_PREFIX: &str = "brief:";
+
+fn is_brief_exclusion(r: &SourceRelevance) -> bool {
+    r.excluded
+        && r.excluded_by
+            .as_deref()
+            .is_some_and(|e| e.starts_with(BRIEF_EXCLUSION_PREFIX))
+}
+
 /// Outcome of [`converge_display_on_durable_verdicts`].
 #[derive(Debug, Default, PartialEq, Eq)]
 pub(crate) struct DisplayConvergence {
@@ -340,14 +353,25 @@ fn is_verdict_exclusion(r: &SourceRelevance) -> bool {
 /// decision the cycle already made — except to lift a demotion THIS pass
 /// wrote once the durable verdict stops rejecting the row (a deferred flip
 /// the next run confirmed, a judge promotion). Rows with no durable verdict
-/// and rows excluded for any other reason are left alone.
+/// are left alone, and so are rows a user or anti-topic rule excluded (those
+/// already carry `relevant = false`).
+///
+/// A Brief demotion does NOT shield a row: `brief:` keeps `relevant = true`
+/// because it is an ordering verdict, and the Brief's own review queue reads
+/// `relevant` (live 2026-09-07 11:2x: all five brief-demoted rows in memory
+/// were durably `llm_reject`, and "2D Game Development … Rust edition" led
+/// the queue at rank 0.93). A durable rejection outranks the Brief's ordering
+/// and REPLACES the exclusion, so the brief-expiry pass cannot resurrect the
+/// row and only this pass lifts it.
 pub(crate) fn converge_display_on_durable_verdicts(
     db: &crate::db::Database,
     results: &mut [SourceRelevance],
 ) -> DisplayConvergence {
     let candidates: Vec<i64> = results
         .iter()
-        .filter(|r| (r.relevant && !r.excluded) || is_verdict_exclusion(r))
+        .filter(|r| {
+            (r.relevant && (!r.excluded || is_brief_exclusion(r))) || is_verdict_exclusion(r)
+        })
         .map(|r| r.id as i64)
         .collect();
     if candidates.is_empty() {
@@ -496,6 +520,60 @@ mod display_convergence_tests {
         );
         assert!(results[0].relevant && !results[0].excluded);
         assert!(results[0].excluded_by.is_none());
+    }
+
+    #[test]
+    fn a_brief_demotion_does_not_shield_a_durable_rejection() {
+        let db = test_db();
+        let id = insert_test_item(
+            &db,
+            "reddit",
+            "dc6",
+            "2D Game Development: From Zero To Hero - Rust edition",
+            "tutorial",
+        );
+        set_verdict(&db, id, 0, Some("llm_reject"));
+        let mut results = vec![scored(id, 0.93)];
+        // The Brief demoted it first: an ORDERING verdict that keeps
+        // `relevant = true`, which is what the review queue reads.
+        results[0].excluded = true;
+        results[0].excluded_by = Some("brief:game dev tutorial, no stack relevance".to_string());
+
+        let outcome = converge_display_on_durable_verdicts(&db, &mut results);
+
+        assert_eq!(
+            outcome,
+            DisplayConvergence {
+                demoted: 1,
+                restored: 0
+            }
+        );
+        assert!(!results[0].relevant && results[0].excluded);
+        assert_eq!(
+            results[0].excluded_by.as_deref(),
+            Some("verdict:llm_reject"),
+            "the durable rejection replaces the ordering exclusion so brief expiry cannot resurrect it"
+        );
+    }
+
+    #[test]
+    fn a_brief_demotion_without_a_durable_rejection_is_left_alone() {
+        let db = test_db();
+        let id = insert_test_item(&db, "devto", "dc7", "brief-demoted but curated", "body");
+        set_verdict(&db, id, 1, None);
+        let mut results = vec![scored(id, 0.62)];
+        results[0].excluded = true;
+        results[0].excluded_by = Some("brief:self-promotional release".to_string());
+
+        let outcome = converge_display_on_durable_verdicts(&db, &mut results);
+
+        assert_eq!(outcome, DisplayConvergence::default());
+        assert!(results[0].relevant && results[0].excluded);
+        assert_eq!(
+            results[0].excluded_by.as_deref(),
+            Some("brief:self-promotional release"),
+            "the Brief's ordering verdict stands when the durable column agrees the row is curated"
+        );
     }
 
     #[test]
