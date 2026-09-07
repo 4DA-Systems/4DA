@@ -487,7 +487,9 @@ fn normalize_dep_name(name: &str) -> String {
 ///      scanner populates on every scan.
 ///   2. It already has `package_name`, `is_direct`, `is_dev`, `language` —
 ///      everything we need for risk classification.
-///   3. `user_dependencies` is a user-curated watchlist that may be empty.
+///   3. `user_dependencies` is the LOCKFILE-resolved table — the only one
+///      that carries installed versions (`installed_versions`); it is read
+///      for versions, never for the coverage set.
 ///
 /// Returns only DIRECT dependencies (deps declared in a manifest file, not
 /// transitive lockfile entries). Transitive deps balloon the set to ~2500
@@ -2694,27 +2696,79 @@ pub(crate) mod test_support {
     }
 }
 
+/// The LOWEST installed version of `dep_name` (display only — the counters
+/// take every version).
 fn lookup_installed_version(dep_name: &str) -> Option<String> {
+    installed_versions(dep_name).into_iter().next()
+}
+
+/// Installed versions of `dep_name` across the user's included projects,
+/// lowest first, from the LOCKFILE-resolved table.
+///
+/// `project_dependencies` records what a MANIFEST declares and its `version`
+/// is NULL for every row in practice (measured live 2026-09-08: 245 of 245;
+/// the knowledge gap learned the same lesson earlier). Reading it handed the
+/// exposure check a `None` every time, which took its conservative branch:
+/// hono 4.13.3, lettre 0.11.22 and react 19.2.7 were HIGH "security signals
+/// unreviewed" against advisories they had all outgrown, and sha2's own
+/// 0.11.0 was "1 new release" — with the Phase 120 rules in place and unit
+/// tested against explicit versions the wiring never supplied.
+fn installed_versions(dep_name: &str) -> Vec<String> {
     #[cfg(test)]
     {
-        test_support::with_test_conn(|conn| lookup_installed_version_conn(conn, dep_name)).flatten()
+        test_support::with_test_conn(|conn| installed_versions_conn(conn, dep_name))
+            .unwrap_or_default()
     }
     #[cfg(not(test))]
     {
-        let db = crate::get_database().ok()?;
+        let Ok(db) = crate::get_database() else {
+            return Vec::new();
+        };
         let conn = db.conn.lock();
-        lookup_installed_version_conn(&conn, dep_name)
+        installed_versions_conn(&conn, dep_name)
     }
 }
 
-fn lookup_installed_version_conn(conn: &rusqlite::Connection, dep_name: &str) -> Option<String> {
-    conn.query_row(
-        "SELECT version FROM project_dependencies WHERE package_name = ?1 AND version IS NOT NULL LIMIT 1",
-        params![dep_name],
-        |row| row.get::<_, String>(0),
-    )
-    .ok()
-    .filter(|v| !v.is_empty())
+fn installed_versions_conn(conn: &rusqlite::Connection, dep_name: &str) -> Vec<String> {
+    let Ok(mut stmt) = conn.prepare(
+        "SELECT project_path, version FROM user_dependencies
+         WHERE lower(package_name) = lower(?1)
+           AND version IS NOT NULL AND version != ''",
+    ) else {
+        return Vec::new();
+    };
+    let Ok(rows) = stmt.query_map(params![dep_name], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+    }) else {
+        return Vec::new();
+    };
+    let user_excluded = crate::project_inclusion::user_excluded_paths();
+    let mut versions: Vec<String> = rows
+        .flatten()
+        .filter(|(path, _)| {
+            !crate::project_inclusion::is_excluded_from_intelligence(path, &user_excluded)
+        })
+        .map(|(_, v)| v)
+        .collect();
+    versions.sort_by(|a, b| {
+        let pa = semver::Version::parse(a.trim_start_matches(['v', 'V']));
+        let pb = semver::Version::parse(b.trim_start_matches(['v', 'V']));
+        match (pa, pb) {
+            (Ok(a), Ok(b)) => a.cmp(&b),
+            _ => a.cmp(b),
+        }
+    });
+    versions.dedup();
+    versions
+}
+
+/// "(you're on 0.11.0)" — or the span when projects disagree.
+fn installed_note(installed: &[String]) -> String {
+    match (installed.first(), installed.last()) {
+        (Some(lo), Some(hi)) if lo == hi => format!(" (you're on {lo})"),
+        (Some(lo), Some(hi)) => format!(" (you're on {lo} – {hi})"),
+        _ => String::new(),
+    }
 }
 
 /// Count signal types available for a dep in the last 30 days.
@@ -2735,7 +2789,7 @@ struct DepSignalBreakdown {
     other: u32,
 }
 
-fn count_signal_types_for_dep(dep_name: &str, installed: Option<&str>) -> DepSignalBreakdown {
+fn count_signal_types_for_dep(dep_name: &str, installed: &[String]) -> DepSignalBreakdown {
     #[cfg(test)]
     {
         test_support::with_test_conn(|conn| {
@@ -2751,7 +2805,7 @@ fn count_signal_types_for_dep(dep_name: &str, installed: Option<&str>) -> DepSig
         static MEMO: std::sync::Mutex<
             Option<std::collections::HashMap<String, (std::time::Instant, DepSignalBreakdown)>>,
         > = std::sync::Mutex::new(None);
-        let key = format!("{dep_name}\u{0}{}", installed.unwrap_or(""));
+        let key = format!("{dep_name}\u{0}{}", installed.join(","));
         if let Ok(guard) = MEMO.lock() {
             if let Some((at, cached)) = guard.as_ref().and_then(|m| m.get(&key)) {
                 if at.elapsed() < std::time::Duration::from_mins(2) {
@@ -2795,18 +2849,24 @@ fn release_is_newer_than_installed(announced: Option<&str>, installed: Option<&s
 fn count_signal_types_for_dep_conn(
     conn: &rusqlite::Connection,
     dep_name: &str,
-    installed: Option<&str>,
+    installed: &[String],
 ) -> DepSignalBreakdown {
     let mut b = DepSignalBreakdown::default();
     let dep_lower = dep_name.to_lowercase();
     let ambiguous = is_ambiguous_package_name(dep_name);
-    // A security signal counts only while the install is exposed to a stored
-    // advisory. Live 2026-09-07: hono 4.13.3 (every advisory fixed ≤ 4.12.34),
-    // lettre 0.11.22 (= the fix) and react 19.2.7 (OSV-clean) all read
-    // "N security signals unreviewed" at HIGH, and the AI assessment then
-    // told the user to review before upgrading. Conservative: an unknown
-    // installed version stays exposed.
-    let exposed = crate::knowledge_decay::still_vulnerable(conn, dep_name, installed, &[]);
+    // A security signal counts only while SOME install is exposed to a
+    // stored advisory. Live 2026-09-07: hono 4.13.3 (every advisory fixed
+    // ≤ 4.12.34), lettre 0.11.22 (= the fix) and react 19.2.7 (OSV-clean)
+    // all read "N security signals unreviewed" at HIGH, and the AI assessment
+    // then told the user to review before upgrading. Conservative: no known
+    // installed version stays exposed. `installed` is lowest-first (see
+    // `installed_versions`), so a release is NEW when the lowest install is
+    // below it — one project behind keeps it new.
+    let exposed = installed.is_empty()
+        || installed
+            .iter()
+            .any(|v| crate::knowledge_decay::still_vulnerable(conn, dep_name, Some(v), &[]));
+    let lowest_installed = installed.first().map(String::as_str);
     // Candidates: everything the linker bound to this package with
     // registry/advisory proof, plus title substring hits — re-checked below.
     // The bare `title LIKE '%name%'` this replaced counted five Next.js
@@ -2852,7 +2912,7 @@ fn count_signal_types_for_dep_conn(
             if !crate::dep_linker::registry_names_equal(&subject, dep_name) {
                 continue;
             }
-            if release_is_newer_than_installed(version.as_deref(), installed) {
+            if release_is_newer_than_installed(version.as_deref(), lowest_installed) {
                 b.releases += 1;
             }
             continue;
@@ -2932,9 +2992,9 @@ fn consequence_urgency(d: &UncoveredDep, breakdown: Option<DepSignalBreakdown>) 
 /// [`uncovered_dep_to_evidence_item`] computes it (memoised breakdown).
 fn uncovered_dep_display_urgency(d: &UncoveredDep) -> Urgency {
     let bare = bare_package_name(&d.name);
-    let installed = lookup_installed_version(bare);
-    let breakdown = (d.available_signal_count > 0)
-        .then(|| count_signal_types_for_dep(bare, installed.as_deref()));
+    let installed = installed_versions(bare);
+    let breakdown =
+        (d.available_signal_count > 0).then(|| count_signal_types_for_dep(bare, &installed));
     consequence_urgency(d, breakdown)
 }
 
@@ -2945,9 +3005,9 @@ fn uncovered_dep_to_evidence_item(d: &UncoveredDep) -> EvidenceItem {
     // unseen signals) — it drives the title, the explanation, AND the consequence-
     // weighted confidence/urgency below (#2b: rank by what changed, not by volume).
     let bare = bare_package_name(&d.name);
-    let installed_version = lookup_installed_version(bare);
-    let breakdown = (d.available_signal_count > 0)
-        .then(|| count_signal_types_for_dep(bare, installed_version.as_deref()));
+    let installed = installed_versions(bare);
+    let breakdown =
+        (d.available_signal_count > 0).then(|| count_signal_types_for_dep(bare, &installed));
 
     // Zero-signal deps get a distinct title and explanation — they have
     // NO coverage at all, which is qualitatively different from "has signals
@@ -3031,10 +3091,7 @@ fn uncovered_dep_to_evidence_item(d: &UncoveredDep) -> EvidenceItem {
             ));
         }
         if b.releases > 0 {
-            let ver_note = installed_version
-                .as_ref()
-                .map(|v| format!(" (you're on {v})"))
-                .unwrap_or_default();
+            let ver_note = installed_note(&installed);
             explanation_parts.push(format!(
                 "{} new release{}{ver_note} in the last 30 days.",
                 b.releases,
@@ -3141,7 +3198,7 @@ fn stale_topic_to_evidence_item(t: &StaleTopic) -> EvidenceItem {
     // releases, then analyses) rather than the raw unread count.
     // DepSignalBreakdown is Copy, so both matches read it freely.
     let signal_breakdown =
-        (t.missed_signal_count > 0).then(|| count_signal_types_for_dep(&t.topic, None));
+        (t.missed_signal_count > 0).then(|| count_signal_types_for_dep(&t.topic, &[]));
     let title = match signal_breakdown {
         Some(b) if b.security > 0 => truncate_title(&format!(
             "{} — {} security/breaking-change signal{} unreviewed",
@@ -6332,7 +6389,7 @@ mod tests {
         );
         assert!(!weak.iter().any(|d| d.name.contains("image")));
 
-        let b = count_signal_types_for_dep_conn(&conn, "image", None);
+        let b = count_signal_types_for_dep_conn(&conn, "image", &[]);
         assert_eq!(b.security, 1);
         assert_eq!(
             b.releases, 0,
@@ -6348,7 +6405,7 @@ mod tests {
             1,
         );
         assert_eq!(
-            count_signal_types_for_dep_conn(&conn, "axum", None).releases,
+            count_signal_types_for_dep_conn(&conn, "axum", &[]).releases,
             1
         );
     }
@@ -6369,17 +6426,17 @@ mod tests {
             insert_source_item_with_meta(&conn, title, "crates_io", Some("release_notes"), 0.7, 1);
         }
         assert_eq!(
-            count_signal_types_for_dep_conn(&conn, "axum", None).releases,
+            count_signal_types_for_dep_conn(&conn, "axum", &[]).releases,
             1,
             "axum-stack, axum-serde-boundary and axum_marko_build are not axum releases"
         );
         assert_eq!(
-            count_signal_types_for_dep_conn(&conn, "axum", Some("0.8.9")).releases,
+            count_signal_types_for_dep_conn(&conn, "axum", &["0.8.9".to_string()]).releases,
             0,
             "the release the user already runs is not a NEW release"
         );
         assert_eq!(
-            count_signal_types_for_dep_conn(&conn, "axum", Some("0.8.6")).releases,
+            count_signal_types_for_dep_conn(&conn, "axum", &["0.8.6".to_string()]).releases,
             1,
             "a newer release than the installed one counts"
         );
@@ -6393,7 +6450,7 @@ mod tests {
             1,
         );
         assert_eq!(
-            count_signal_types_for_dep_conn(&conn, "serial_test", Some("3.4.0")).releases,
+            count_signal_types_for_dep_conn(&conn, "serial_test", &["3.4.0".to_string()]).releases,
             1
         );
     }
@@ -6450,21 +6507,110 @@ mod tests {
             1,
         );
 
-        let exposed = count_signal_types_for_dep_conn(&conn, "hono", Some("4.11.0"));
+        let exposed = count_signal_types_for_dep_conn(&conn, "hono", &["4.11.0".to_string()]);
         assert_eq!(exposed.security, 1, "4.11.0 is inside the range");
         assert_eq!(
             exposed.other, 1,
             "the editorial story is a citation, never a security signal"
         );
-        let patched = count_signal_types_for_dep_conn(&conn, "hono", Some("4.13.3"));
+        let patched = count_signal_types_for_dep_conn(&conn, "hono", &["4.13.3".to_string()]);
         assert_eq!(
             patched.security, 0,
             "4.13.3 is past the fix — no security signal to review"
         );
-        let unknown = count_signal_types_for_dep_conn(&conn, "hono", None);
+        let unknown = count_signal_types_for_dep_conn(&conn, "hono", &[]);
         assert_eq!(
             unknown.security, 1,
             "an unknown installed version stays conservatively exposed"
+        );
+        // One project behind the fix keeps the signal; every project past it
+        // clears it.
+        let mixed = count_signal_types_for_dep_conn(
+            &conn,
+            "hono",
+            &["4.11.0".to_string(), "4.13.3".to_string()],
+        );
+        assert_eq!(mixed.security, 1, "the 4.11.0 install is still exposed");
+        let all_patched = count_signal_types_for_dep_conn(
+            &conn,
+            "hono",
+            &["4.12.34".to_string(), "4.13.3".to_string()],
+        );
+        assert_eq!(all_patched.security, 0);
+    }
+
+    /// 2026-09-08 live, after Phase 120: hono 4.13.3, lettre 0.11.22 and
+    /// react 19.2.7 were STILL "security signals unreviewed" at HIGH, and
+    /// sha2's installed 0.11.0 was still "1 new release". The rules above
+    /// were right and unit-tested against explicit versions — but the wiring
+    /// read `project_dependencies.version`, which is NULL for every row (the
+    /// manifest table never carries a resolved version), so the counters ran
+    /// with no version at all. Versions come from the lockfile table, every
+    /// project, lowest first.
+    #[test]
+    fn installed_versions_come_from_the_lockfile_table_lowest_first() {
+        let conn = setup_test_db();
+        // The manifest table (what the display path used to read) carries no
+        // version; the lockfile table does. A third project on the same
+        // version as relay proves the list is deduplicated.
+        conn.execute_batch(
+            "INSERT INTO project_dependencies (project_path, manifest_type, package_name, version, language)
+             VALUES ('d:/app', 'cargo', 'sha2', NULL, 'rust'), ('d:/relay', 'cargo', 'sha2', NULL, 'rust');
+             INSERT INTO user_dependencies (project_path, package_name, version, ecosystem)
+             VALUES ('d:/app', 'sha2', '0.11.0', 'cargo'),
+                    ('d:/relay', 'sha2', '0.10.9', 'cargo'),
+                    ('d:/tools', 'sha2', '0.10.9', 'cargo'),
+                    ('d:/app', 'hono', '4.13.3', 'npm');",
+        )
+        .unwrap();
+        assert_eq!(
+            installed_versions_conn(&conn, "sha2"),
+            vec!["0.10.9".to_string(), "0.11.0".to_string()],
+            "lockfile versions, deduplicated, lowest first"
+        );
+        assert_eq!(
+            installed_versions_conn(&conn, "SHA2"),
+            installed_versions_conn(&conn, "sha2")
+        );
+        assert!(
+            installed_versions_conn(&conn, "tokio").is_empty(),
+            "a package with no lockfile row has no known version"
+        );
+        assert_eq!(
+            installed_note(&installed_versions_conn(&conn, "hono")),
+            " (you're on 4.13.3)"
+        );
+        assert_eq!(
+            installed_note(&installed_versions_conn(&conn, "sha2")),
+            " (you're on 0.10.9 – 0.11.0)"
+        );
+
+        // The release counter sees the LOWEST install: relay on 0.10.9 keeps
+        // sha2 0.11.0 a new release; once relay catches up it is not.
+        insert_source_item_with_meta(
+            &conn,
+            "crates.io: sha2 v0.11.0",
+            "crates_io",
+            Some("release_notes"),
+            0.7,
+            1,
+        );
+        let installed = installed_versions_conn(&conn, "sha2");
+        assert_eq!(
+            count_signal_types_for_dep_conn(&conn, "sha2", &installed).releases,
+            1
+        );
+        conn.execute(
+            "UPDATE user_dependencies SET version = '0.11.0' WHERE package_name = 'sha2'",
+            [],
+        )
+        .unwrap();
+        let installed = installed_versions_conn(&conn, "sha2");
+        assert_eq!(installed, vec!["0.11.0".to_string()]);
+        assert_eq!(
+            count_signal_types_for_dep_conn(&conn, "sha2", &installed).releases,
+            0,
+            "the release every project already runs is not new"
         );
     }
 
@@ -6550,7 +6696,7 @@ mod tests {
             1,
         );
 
-        let stripe = count_signal_types_for_dep_conn(&conn, "stripe", None);
+        let stripe = count_signal_types_for_dep_conn(&conn, "stripe", &[]);
         assert_eq!(
             (
                 stripe.security,
@@ -6561,12 +6707,12 @@ mod tests {
             (0, 0, 0, 0),
             "silverstripe is not stripe"
         );
-        let hono = count_signal_types_for_dep_conn(&conn, "hono", None);
+        let hono = count_signal_types_for_dep_conn(&conn, "hono", &[]);
         assert_eq!(
             hono.security, 1,
             "only the linker-bound Hono CVE counts — not 'honors', not @hono/oauth-providers"
         );
-        let react = count_signal_types_for_dep_conn(&conn, "react", None);
+        let react = count_signal_types_for_dep_conn(&conn, "react", &[]);
         assert_eq!(
             react.security, 0,
             "'reacted' and an unlinked Next.js advisory are not react security signals"
