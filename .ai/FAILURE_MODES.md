@@ -668,3 +668,16 @@ column stores, write the column at score time — a column that only ingest
 fills is stale from the first re-score. Before trusting a display list,
 query the durable column for its top rows: the list must not show what the
 column rejects.
+
+**Second sighting, same day (adversarial audit, 2026-09-07 11:2x).** The first
+fix skipped rows that were already excluded, and the Brief's review queue
+(`IntelligenceFeed.tsx`) read `r.relevant` alone. A Brief rejection is an
+ORDERING verdict — `excluded_by = "brief:…"` keeps `relevant = true` so the
+Signal feed can sort it to the bottom — so it shielded the row from the durable
+rejection AND kept it in the queue: all five brief-demoted rows in memory were
+durably `llm_reject`, the queue counted 239 against the header's 234, and "2D
+Game Development … Rust edition" led the queue at rank 0.93. Two rules follow:
+an exclusion that means "order" never shields a verdict that means "reject" (a
+durable rejection now replaces a `brief:` exclusion), and every list reads the
+one surfaced-signal predicate (`isSurfacedSignal`) that the header reads — a
+list that filters on `relevant` alone will show what an exclusion demoted.
