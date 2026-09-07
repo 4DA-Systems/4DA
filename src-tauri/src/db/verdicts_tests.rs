@@ -1197,6 +1197,96 @@ fn orphaned_duplicate_verdict_is_withdrawn_and_the_row_re_enters_on_its_own_scor
     assert_eq!(db.withdraw_orphaned_duplicate_verdicts().unwrap(), 0);
 }
 
+/// v33: one slot per release line. The TypeScript train (5.9 Beta, 5.9 RC,
+/// 5.9, 6.0 Beta, 6.0 RC, 6.0, 7.0 Beta, 7.0 RC, 7.0) held nine feed slots
+/// (2026-09-07). Pre-releases yield to their final; majors stand on their
+/// own; a superseded verdict is withdrawn when the newer sibling leaves.
+#[test]
+fn release_train_keeps_the_newest_final_per_line_and_withdraws_when_it_leaves() {
+    use crate::test_utils::insert_test_item_with_url;
+    let db = test_db();
+    let version = crate::scoring::PIPELINE_VERSION;
+    let release = |sid: &str, url: &str, title: &str| -> i64 {
+        let id = insert_test_item_with_url(&db, "rss", sid, url, title, "body");
+        let conn = db.conn.lock();
+        conn.execute(
+            "UPDATE source_items SET content_type = 'release_notes' WHERE id = ?1",
+            rusqlite::params![id],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO scoring_explanations (source_item_id, pipeline_version, breakdown)
+             VALUES (?1, ?2, '{\"breakdown\":{\"matched_deps\":[\"typescript\"]}}')",
+            rusqlite::params![id, version],
+        )
+        .unwrap();
+        id
+    };
+    let beta = release(
+        "ts1",
+        "https://devblogs.test/ts-5-9-beta",
+        "Announcing TypeScript 5.9 Beta",
+    );
+    let final59 = release(
+        "ts2",
+        "https://devblogs.test/ts-5-9",
+        "Announcing TypeScript 5.9",
+    );
+    let final70 = release(
+        "ts3",
+        "https://devblogs.test/ts-7-0",
+        "Announcing TypeScript 7.0",
+    );
+    db.persist_feed_verdicts(
+        &[
+            (beta, true, VerdictSource::Score),
+            (final59, true, VerdictSource::Score),
+            (final70, true, VerdictSource::Score),
+        ],
+        version,
+    )
+    .unwrap();
+
+    assert_eq!(db.reconcile_release_train(version).unwrap(), (1, 0));
+    assert_eq!(verdict_of(&db, beta).0, Some(0), "5.9 Beta yields to 5.9");
+    assert_eq!(verdict_of(&db, final59).0, Some(1));
+    assert_eq!(
+        verdict_of(&db, final70).0,
+        Some(1),
+        "7.0 is its own story beside 5.9"
+    );
+    let reason: Option<String> = db
+        .conn
+        .lock()
+        .query_row(
+            "SELECT feed_verdict_reason FROM source_items WHERE id = ?1",
+            rusqlite::params![beta],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(reason.as_deref(), Some("superseded_release"));
+    // Convergent: nothing more to do.
+    assert_eq!(db.reconcile_release_train(version).unwrap(), (0, 0));
+
+    // The 5.9 final leaves the feed → the beta's superseded verdict is withdrawn.
+    db.persist_feed_verdicts_with_reasons(
+        &[(
+            final59,
+            false,
+            VerdictSource::Score,
+            Some(VerdictReason::LlmReject),
+        )],
+        version,
+    )
+    .unwrap();
+    assert_eq!(db.reconcile_release_train(version).unwrap(), (0, 1));
+    assert_eq!(
+        verdict_of(&db, beta),
+        (None, None, None),
+        "withdrawn, never flipped"
+    );
+}
+
 #[test]
 fn twin_rule_is_stable_under_a_full_redrain() {
     use crate::test_utils::insert_test_item_with_url;

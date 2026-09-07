@@ -781,3 +781,58 @@ is a dated fact ("first seen by 4DA <date>"); "no fix published" is stated
 where true and the prompt forbids fix instructions for it. A number the
 model could only have got from its own previous output is a hallucination
 in the making — remove it at the boundary, do not ask the model to ignore it.
+
+---
+
+### "New release in your stack" for the version you run (2026-09-07, AD-041)
+
+**Symptom.** Twenty of fifty-one "New release in your stack" rows in the
+Signal feed announced a version the user already had installed (sha2 0.11.0,
+ed25519-dalek 3.0.0, tracing 0.1.44, TypeScript 5.9 against an installed
+5.9.3). A nine-row TypeScript train (5.9 Beta … 7.0) sat in the feed at
+0.76–0.90.
+
+**Root cause.** Nothing compared the announced version with the installed
+one. The only "superseded" rule was age (`superseded_months`), and the twin
+check compared titles, so each pre-release of the same line was a distinct
+story.
+
+**The rule.** The announced version is read from the title
+(`scoring::release_version`); a release every carrying project already runs
+is ceilinged and non-relevant (PIPELINE_VERSION 33), and the reconcile pass
+keeps one curated row per release line (`reconcile_release_train`,
+`VerdictReason::SupersededRelease`), withdrawing the verdict when the newer
+sibling leaves. Unknown install versions never hide a release.
+
+---
+
+### A negated keyword still fires the classifier (2026-09-07, AD-041)
+
+**Symptom.** rustup 1.29.1 was a `breaking_change` Alert for a release post
+whose own text said "this is not a breaking change".
+
+**Root cause.** Keyword scoring counted the term wherever it appeared; the
+corroboration gates required a dependency edge only for SecurityAlert, so a
+BreakingChange with no matched dependency could still reach Alert.
+
+**The rule.** A keyword preceded by a negator within three tokens does not
+count (`signals::keyword_present_unnegated`), and every signal type is capped
+at Advisory without a corroborated dependency match. A gate that exists for
+one signal type and not the others is a gap, not a design.
+
+---
+
+### "Similar to your code (67%)" as an explanation (2026-09-07, AD-041)
+
+**Symptom.** 115 of 236 explained items carried "Similar to your code
+(67–74%)" — a factor shown so often it explained nothing, in a band where the
+KNN score does not separate relevant from irrelevant.
+
+**Root cause.** The explanation rendered the factor at the scorer's own
+threshold (0.45). A threshold that decides whether a signal CONTRIBUTES is not
+the threshold at which a number becomes a CLAIM the user can act on.
+
+**The rule.** The code-similarity factor renders at ≥ 0.80
+(`CODE_SIMILARITY_DISPLAY_FLOOR`); the score contribution is unchanged. When
+a factor appears on half of all items, check whether it discriminates before
+believing it explains.

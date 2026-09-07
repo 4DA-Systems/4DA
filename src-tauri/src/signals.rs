@@ -193,6 +193,46 @@ fn has_word_boundary(text: &str, term: &str) -> bool {
     crate::utils::has_word_boundary_match(text, term)
 }
 
+/// Words that, within three tokens before a keyword, negate it.
+const NEGATORS: [&str; 10] = [
+    "not", "no", "isn't", "isn’t", "never", "without", "non", "nothing", "aren't", "aren’t",
+];
+
+/// Does `text` contain `term` as a whole word in at least one place the
+/// text does not negate? "has been deprecated" triggers; "this is not a
+/// breaking change" does not (v33).
+fn keyword_present_unnegated(text: &str, term: &str) -> bool {
+    if term.is_empty() {
+        return false;
+    }
+    let mut from = 0usize;
+    while let Some(rel) = text.get(from..).and_then(|s| s.find(term)) {
+        let pos = from + rel;
+        let before_ok = text
+            .get(..pos)
+            .and_then(|s| s.chars().next_back())
+            .is_none_or(|c| !c.is_alphanumeric());
+        let after_ok = text
+            .get(pos + term.len()..)
+            .and_then(|s| s.chars().next())
+            .is_none_or(|c| !c.is_alphanumeric());
+        if before_ok && after_ok && !negated_before(text.get(..pos).unwrap_or("")) {
+            return true;
+        }
+        from = pos + term.len().max(1);
+    }
+    false
+}
+
+fn negated_before(prefix: &str) -> bool {
+    prefix.split_whitespace().rev().take(3).any(|w| {
+        let w = w
+            .trim_matches(|c: char| !c.is_alphanumeric() && c != '\'' && c != '’')
+            .to_lowercase();
+        NEGATORS.contains(&w.as_str())
+    })
+}
+
 /// Detects SemVer patterns in a title — used to reject ToolDiscovery classification
 /// for version bumps like "Announcing Rust 1.94.0" or "React 19 released".
 ///
@@ -499,13 +539,16 @@ impl SignalClassifier {
                 let mut score: f32 = 0.0;
 
                 // Match keywords (word-boundary checked to prevent false positives
-                // like "source" triggering "rce" or "success" triggering "xss")
+                // like "source" triggering "rce" or "success" triggering "xss";
+                // v33: a keyword the text NEGATES does not trigger — "this is
+                // not a breaking change" made rustup 1.29.1 a breaking-change
+                // ALERT, 2026-09-07)
                 for &kw in &pattern.keywords {
-                    if has_word_boundary(&text_lower, kw) {
+                    if keyword_present_unnegated(&text_lower, kw) {
                         score += pattern.weight;
                         matched_keywords.push(kw.to_string());
                         // Title match is worth more
-                        if has_word_boundary(&title_lower, kw) {
+                        if keyword_present_unnegated(&title_lower, kw) {
                             score += pattern.weight * 0.5;
                         }
                     }
@@ -639,6 +682,17 @@ impl SignalClassifier {
             && priority > SignalPriority::Advisory
             && !dependency_confirmed
         {
+            priority = SignalPriority::Advisory;
+        }
+
+        // v33: the same rule for EVERY type. Alert and above are the page's
+        // klaxons; title corroboration across mirrors is not a reason to
+        // sound one. "The many journeys of learning Rust" — a survey blog
+        // post boosted by two Mastodon mirrors — was the Signal tab's top
+        // ALERT with no dependency anywhere near it (2026-09-07). A signal
+        // that touches an installed package keeps its tier; everything else
+        // surfaces one tier down, as an advisory.
+        if priority > SignalPriority::Advisory && !dependency_confirmed {
             priority = SignalPriority::Advisory;
         }
 
@@ -947,6 +1001,97 @@ mod tests {
         let c = result.expect("should classify as breaking change");
         assert_eq!(c.signal_type, SignalType::BreakingChange);
         assert!(c.action.contains("react") || c.action.contains("React"));
+    }
+
+    /// v33: "Announcing rustup 1.29.1" — "Implicit installation … has been
+    /// deprecated … Please note that this is not a breaking change" — was a
+    /// breaking-change ALERT on the Signal tab (2026-09-07). A negated
+    /// keyword does not trigger; one keyword is not a signal.
+    #[test]
+    fn negated_keyword_does_not_trigger() {
+        assert!(keyword_present_unnegated(
+            "implicit installation has been deprecated",
+            "deprecated"
+        ));
+        assert!(!keyword_present_unnegated(
+            "please note that this is not a breaking change in the cli",
+            "breaking change"
+        ));
+        assert!(!keyword_present_unnegated(
+            "there are no breaking changes",
+            "breaking change"
+        ));
+        assert!(keyword_present_unnegated(
+            "not related: v3 is a breaking change for plugins",
+            "breaking change"
+        ));
+
+        let classifier = SignalClassifier::new();
+        let declared = vec!["rust".to_string()];
+        let result = classifier.classify(
+            "Announcing rustup 1.29.1",
+            "Implicit installation of the active toolchain has been deprecated where deemed \
+             unnecessary. Please note that this is not a breaking change in the CLI since the \
+             existing options are not using this terminology.",
+            0.62,
+            &declared,
+            &declared,
+            &CorroborationContext::default(),
+        );
+        assert!(
+            result
+                .as_ref()
+                .is_none_or(|c| c.signal_type != SignalType::BreakingChange),
+            "a release note that says it is not a breaking change is not one: {result:?}"
+        );
+    }
+
+    /// v33: Alert and above require a dependency edge for EVERY type. A
+    /// survey post boosted by mirrors reached ALERT on title corroboration
+    /// alone ("Emerging trend: The many journeys of learning Rust").
+    #[test]
+    fn alert_requires_a_dependency_edge_for_every_signal_type() {
+        let classifier = SignalClassifier::new();
+        let declared = vec!["rust".to_string()];
+        let corroborated_no_dep = CorroborationContext {
+            source_count: 3,
+            dependency_match: false,
+            chain_phase: Some("escalating".to_string()),
+        };
+        let c = classifier
+            .classify(
+                "The many journeys of learning Rust: adoption, state of the ecosystem, industry survey",
+                "A survey of the ecosystem and industry adoption in 2026; state of Rust.",
+                0.85,
+                &declared,
+                &declared,
+                &corroborated_no_dep,
+            )
+            .expect("a tech trend still classifies");
+        assert!(
+            c.priority <= SignalPriority::Advisory,
+            "no dependency edge → advisory at most (got {:?})",
+            c.priority
+        );
+
+        let corroborated_with_dep = CorroborationContext {
+            dependency_match: true,
+            ..corroborated_no_dep
+        };
+        let grounded = classifier
+            .classify(
+                "The many journeys of learning Rust: adoption, state of the ecosystem, industry survey",
+                "A survey of the ecosystem and industry adoption in 2026; state of Rust.",
+                0.85,
+                &declared,
+                &declared,
+                &corroborated_with_dep,
+            )
+            .expect("classifies");
+        assert!(
+            grounded.priority >= c.priority,
+            "a dependency edge never lowers the tier"
+        );
     }
 
     #[test]

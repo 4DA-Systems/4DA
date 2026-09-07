@@ -37,6 +37,13 @@ use super::dependencies::DepMatch;
 use super::utils::has_word_boundary_match;
 use crate::{context_engine, scoring_config, ExplanationFactor, FactorKind, RelevanceMatch};
 
+/// Code-similarity claims name a file only above this cosine. The pipeline's
+/// own confirmation bar (`CONTEXT_THRESHOLD`) decides whether the axis
+/// COUNTS; this decides whether the chain may say "similar to your code in
+/// X" — at 0.65–0.75 every Rust article resembles some Rust file, so the
+/// sentence carried no information on half the live feed (v33).
+const CODE_SIMILARITY_DISPLAY_FLOOR: f32 = 0.80;
+
 /// Everything the chain builder needs, gathered from values the pipeline
 /// already computed. All evidence must come from here — the builder performs
 /// no scoring of its own.
@@ -421,9 +428,16 @@ pub(crate) fn build_explanation_chain(inp: &ChainInputs<'_>) -> Vec<ExplanationF
             FactorKind::SecurityAdvisory | FactorKind::DependencyMatch
         )
     });
+    // v33: the claim is shown only when it discriminates. Live 2026-09-07,
+    // 115 of 236 relevant items carried "Similar to your code in X" in a
+    // 0.67–0.74 band — "Announcing Rust 1.96.1 — pipeline.rs (70%)",
+    // "rust-analyzer changelog — plugin.js (69%)": every Rust text resembles
+    // some Rust file at that level. The score still USES the context axis;
+    // the chain names a file only when the resemblance is strong enough to
+    // mean something to the reader.
     if !already_grounded && inp.context_score >= scoring_config::CONTEXT_THRESHOLD {
         if let Some(m) = inp.matches.iter().find(|m| {
-            m.similarity >= scoring_config::CONTEXT_THRESHOLD && !m.source_file.trim().is_empty()
+            m.similarity >= CODE_SIMILARITY_DISPLAY_FLOOR && !m.source_file.trim().is_empty()
         }) {
             factors.push(WeightedFactor {
                 kind: FactorKind::ContextMatch,

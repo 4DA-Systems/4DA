@@ -377,7 +377,9 @@ fn magnitude_orders_within_a_tier() {
     f.matches = vec![RelevanceMatch {
         source_file: "src/main.rs".to_string(),
         matched_text: "async fn spawn worker pool".to_string(),
-        similarity: 0.45,
+        // Above the v33 display floor so the KNN factor is emitted; the
+        // ordering under test rides `context_score`, not this figure.
+        similarity: 0.85,
     }];
     let chain = f.build();
     let ctx: Vec<_> = chain
@@ -635,7 +637,7 @@ fn code_similarity_names_the_file_never_quotes_a_comment() {
         matched_text:
             "/// Maximum content length per feed item (100KB)\nconst MAX: usize = 100_000;"
                 .to_string(),
-        similarity: 0.71,
+        similarity: 0.85,
     }];
 
     let chain = f.build();
@@ -651,9 +653,28 @@ fn code_similarity_names_the_file_never_quotes_a_comment() {
         factor.display
     );
     assert!(
-        factor.evidence.contains("71%"),
+        factor.evidence.contains("85%"),
         "the similarity that justifies the claim must be shown: {}",
         factor.evidence
+    );
+}
+
+/// v33: a resemblance in the band every Rust text shares with some Rust file
+/// (0.67–0.74 live, on 115 of 236 items) names no file. The axis still
+/// scores; the sentence is reserved for a resemblance that means something.
+#[test]
+fn code_similarity_in_the_undiscriminating_band_is_silent() {
+    let mut f = Fixture::default();
+    f.context_score = 0.62;
+    f.matches = vec![RelevanceMatch {
+        source_file: "src/scoring/pipeline.rs".to_string(),
+        matched_text: "fn score_item(input: &ScoringInput) -> ScoreResult".to_string(),
+        similarity: 0.70,
+    }];
+    let chain = f.build();
+    assert!(
+        knn_factor(&chain).is_none(),
+        "'Announcing Rust 1.96.1 — similar to pipeline.rs (70%)' is not evidence"
     );
 }
 

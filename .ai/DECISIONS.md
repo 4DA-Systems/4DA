@@ -560,6 +560,24 @@
 
 ---
 
+### AD-041: A Release Is New Only Against the Installed Version; A Signal Needs a Dependency Edge
+
+- **Decision:** 2026-09-08, adversarial audit #2, PR 2 (PIPELINE_VERSION 33 — evidence scores change, the whole corpus re-judges). Four rules for release intelligence and the signal lane:
+  1. **A release row announces a version, and "new" is measured against the install.** The announced version is read from the title (`scoring::release_version::announced_release_version`: the registry subject's version, or the literal after THIS dependency's name in an editorial title; "5.9 Beta" → 5.9.0-beta, so a train orders beta < rc < final). When EVERY project that carries the dependency already runs that version or newer (`already_installed`, from `user_dependencies`; an unknown install never hides a release), the row is held at the superseded ceiling, is not `relevant`, and carries no necessity — the same treatment as a 24-month-old release. Unknown installs stay new.
+  2. **A release train keeps one row per line.** The reconcile pass (`Database::reconcile_release_train`, every cycle) groups curated `release_notes` rows by (dependency, registry-or-editorial) and demotes a curated row with a newer curated version on the same line (`VerdictReason::SupersededRelease`, major line; minor line for 0.x); a superseded row whose newer sibling later leaves the feed is withdrawn (cleared, never flipped) and re-enters on its own score. "Announcing TypeScript 5.9 Beta / 5.9 RC / 5.9 / 6.0 Beta / 6.0 RC / 6.0 / 7.0 Beta / 7.0 RC / 7.0" is three rows.
+  3. **A signal above Advisory needs a dependency edge; a negated keyword is no keyword.** The classifier (`signals`) drops a keyword that a negator precedes within three tokens ("not a breaking change", "no longer vulnerable"), and caps any signal type at Advisory when no corroborated dependency match exists — the rule SecurityAlert already had applies to BreakingChange, Deprecation, Migration and the rest. A ToolDiscovery with no dependency edge is emitted only when its title names a declared technology (`pipeline_v2::classify_signals`), with the classifier's own "connects to your <tech> stack" line; otherwise the item keeps its score and loses its signal.
+  4. **"Similar to your code" is shown only where the number discriminates.** The explanation chain renders the code-similarity factor at ≥ 0.80 (`explanation_chain::CODE_SIMILARITY_DISPLAY_FLOOR`); the scorer keeps using the KNN score from 0.45 as before — only the CLAIM to the user moves.
+- **Rationale:** Live 2026-09-07: twenty of fifty-one "New release in your stack" rows announced a version the user already ran (sha2 0.11.0, ed25519-dalek 3.0.0, tracing 0.1.44, TypeScript 5.9 against 5.9.3) — nothing compared announced with installed, the only superseded rule was age; the nine-row TypeScript train sat at 0.76–0.90; rustup 1.29.1 was a `breaking_change` Alert for a post that said "not a breaking change"; "Similar to your code (67–74%)" appeared on 115 of 236 explained items, a band where the KNN score does not separate relevant from irrelevant (the 0.45 threshold is the scorer's floor, not a claim the user can act on); all three "New tool spotted" signals were for other stacks.
+- **Considered:**
+  - *Tightening `superseded_months` (24 → 6):* Rejected — age is the wrong axis; a two-year-old release the user has not adopted is still new to them, and a two-week-old one they run is not.
+  - *Collapsing the train at fetch time (skip pre-releases):* Rejected — the pre-release IS the news until the final ships; the verdict lane already knows how to hold and release a slot.
+  - *Dropping ungrounded ToolDiscovery entirely:* Rejected — a fresh Rust testing framework for a declared Rust developer is a discovery with no dependency edge by construction; declared technology is the honest second route.
+  - *Raising the KNN scoring threshold to 0.80:* Rejected — the score contribution is calibrated by the persona simulations at 0.45; only the displayed claim was dishonest.
+- **Date:** 2026-09-08
+- **Status:** Final
+
+---
+
 ## Decision Template
 
 When adding a new decision:
