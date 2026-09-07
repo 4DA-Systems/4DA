@@ -852,7 +852,7 @@ jobs:
 
       - name: Install cargo-audit + cargo-deny (prebuilt)
         if: matrix.label == 'default'
-        uses: taiki-e/install-action@b20dedce73af6905cdc30d6611090c9b67557c8d # v2
+        uses: taiki-e/install-action@5bf6ce016fd2e72eefc647cbca1e4213f65955b8 # v2
         with:
           tool: cargo-audit,cargo-deny
 
