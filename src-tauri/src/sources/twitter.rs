@@ -159,7 +159,7 @@ impl TwitterSource {
     /// string-searching the message.
     fn classify_x_status(status: reqwest::StatusCode, context: &str) -> SourceResult<()> {
         if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
-            return Err(SourceError::RateLimited(format!("Rate limited {context}")));
+            return Err(SourceError::rate_limited(format!("Rate limited {context}")));
         }
         if status == reqwest::StatusCode::UNAUTHORIZED || status == reqwest::StatusCode::FORBIDDEN {
             return Err(SourceError::Forbidden(format!(
@@ -436,7 +436,7 @@ impl Source for TwitterSource {
                     // Triage on the error VARIANT — the taxonomy carries the meaning, so
                     // there is nothing to string-match.
                     match &e {
-                        SourceError::RateLimited(_) => {
+                        SourceError::RateLimited { .. } => {
                             warn!("X API rate limited - stopping handle fetches for this run");
                             rate_limited = true;
                         }
@@ -490,7 +490,7 @@ impl Source for TwitterSource {
                     info!(query, count = items.len(), "Search results");
                     all_items.extend(items);
                 }
-                Err(SourceError::RateLimited(_)) => {
+                Err(SourceError::RateLimited { .. }) => {
                     warn!("X API rate limited - stopping searches");
                     break;
                 }

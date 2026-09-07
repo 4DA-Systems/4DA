@@ -214,9 +214,13 @@ fn classify_error(status: reqwest::StatusCode, body: &str) -> SourceError {
             retry_after_hours = format!("{:.1}", armed as f64 / 3600.0),
             "Stack Exchange THROTTLE VIOLATION — circuit breaker armed, no further requests until it expires"
         );
-        return SourceError::RateLimited(format!(
-            "Stack Exchange throttled this IP; retry in {armed}s ({message})"
-        ));
+        // Stack Exchange announces its cooldown in the JSON body rather than a
+        // `Retry-After` header, but it is the same announcement — carry it so
+        // the retry layer and the circuit breaker honour it like any other.
+        return SourceError::rate_limited_after(
+            format!("Stack Exchange throttled this IP; retry in {armed}s ({message})"),
+            Some(armed),
+        );
     }
 
     SourceError::Network(format!(
@@ -262,7 +266,7 @@ impl StackOverflowSource {
         // made while throttled is both guaranteed to fail and liable to extend
         // the ban.
         if let Some(remaining) = throttle_remaining() {
-            return Err(SourceError::RateLimited(format!(
+            return Err(SourceError::rate_limited(format!(
                 "Stack Exchange throttle active for another {remaining}s; request suppressed"
             )));
         }
@@ -279,7 +283,7 @@ impl StackOverflowSource {
             .await
             .map_err(|e| SourceError::Network(e.to_string()))?;
 
-        // DELIBERATELY does not use `super::classify_http_status`, unlike every
+        // DELIBERATELY does not use `super::classify_http_response`, unlike every
         // sibling source. That helper decides from the STATUS CODE alone, and
         // Stack Exchange is the one upstream where the status code does not
         // carry the meaning: a throttle arrives as HTTP 400 with the reason in
@@ -471,7 +475,10 @@ impl Source for StackOverflowSource {
                     // A throttle applies to the IP, not the tag. Continuing the
                     // loop would spend three more doomed requests and can push
                     // the ban out further.
-                    if matches!(e, SourceError::RateLimited(_) | SourceError::Forbidden(_)) {
+                    if matches!(
+                        e,
+                        SourceError::RateLimited { .. } | SourceError::Forbidden(_)
+                    ) {
                         warn!("Aborting Stack Overflow cycle — rate limit applies to the whole IP");
                         break;
                     }
@@ -602,7 +609,7 @@ mod tests {
         let err = classify_error(reqwest::StatusCode::BAD_REQUEST, body);
 
         assert!(
-            matches!(err, SourceError::RateLimited(_)),
+            matches!(err, SourceError::RateLimited { .. }),
             "throttle must not be reported as a generic bad request, got {err:?}"
         );
 
@@ -646,7 +653,7 @@ mod tests {
             reqwest::StatusCode::BAD_REQUEST,
             r#"{"error_name":"throttle_violation","error_message":"too many requests"}"#,
         );
-        assert!(matches!(err, SourceError::RateLimited(_)));
+        assert!(matches!(err, SourceError::RateLimited { .. }));
 
         let remaining = throttle_remaining().expect("breaker must be armed");
         assert!(

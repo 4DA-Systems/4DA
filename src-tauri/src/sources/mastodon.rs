@@ -404,7 +404,7 @@ async fn fetch_tag_api(
 
     let status = response.status();
     if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
-        return Err(SourceError::RateLimited(
+        return Err(SourceError::rate_limited(
             "Mastodon rate limited (HTTP 429)".to_string(),
         ));
     }
@@ -438,7 +438,7 @@ async fn fetch_tag_rss(
 
     let status = response.status();
     if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
-        return Err(SourceError::RateLimited(
+        return Err(SourceError::rate_limited(
             "Mastodon RSS rate limited (HTTP 429)".to_string(),
         ));
     }
@@ -521,10 +521,12 @@ async fn fetch_via(
                 all.extend(items);
             }
             Err(e) => {
-                let whole_instance_block =
-                    matches!(e, SourceError::Forbidden(_) | SourceError::RateLimited(_));
+                let whole_instance_block = matches!(
+                    e,
+                    SourceError::Forbidden(_) | SourceError::RateLimited { .. }
+                );
                 match &e {
-                    SourceError::Forbidden(_) | SourceError::RateLimited(_) => {
+                    SourceError::Forbidden(_) | SourceError::RateLimited { .. } => {
                         debug!(tag, error = %e, "Skipped Mastodon tag (auth/rate-limit)");
                     }
                     _ => warn!(tag, error = %e, "Failed to fetch Mastodon tag"),

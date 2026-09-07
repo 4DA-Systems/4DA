@@ -578,6 +578,27 @@
 
 ---
 
+### AD-042: Backoff Is Announced by the Server and Escalates on Repeat
+
+- **Decision:** 2026-09-08, adversarial audit #2 (schema 121; no pipeline-version bump — nothing about scoring changes, only when we are allowed to knock). Four rules that every source adapter, the shared retry layer and both circuit breakers obey:
+  1. **The server's `Retry-After` is read, and it wins.** `sources::parse_retry_after` handles both RFC 9110 forms (delta-seconds and HTTP-date, a past date being `Some(0)` rather than a parse failure), capped at 6 hours. `classify_http_response` — which replaces the status-only `classify_http_status` at all 23 adapter call sites — carries it into `SourceError::RateLimited { retry_after_secs }`. `fetch_with_retry` sleeps for the announcement instead of the fixed 30s guess. Stack Exchange, whose cooldown arrives in the JSON body rather than a header, feeds the same field.
+  2. **A 503 is an outage unless it names a cooldown.** `503` + `Retry-After` is a server asking us to wait and classifies as rate-limited; a bare `503` stays a network error. Collapsing the two would hide real breakage behind a long, quiet backoff.
+  3. **An unaffordable wait is the breaker's job, not the retry loop's.** A fetch may sleep at most `RATE_LIMIT_WAIT_BUDGET_SECS` (120s) in total across its rate-limit backoffs. An announcement that does not fit returns immediately, carrying the hint, rather than burning attempts — sleeping through it starves the cycle and retrying before it elapses is the hammering the limit exists to stop.
+  4. **The circuit cooldown escalates, and the announcement floors it.** `db::sources::circuit_cooldown_secs` is the one ladder — 10 min, 60 min, 6 h — indexed by `circuit_reopen_count`, the number of half-opens that earned no success. A stored `retry_after_secs` raises the cooldown but never lowers it. One success resets the ladder. BOTH breakers use it: the per-feed breaker's unexplained hard 30 minutes is gone.
+- **Rationale:** Live 2026-09-07 on the founder instance, arXiv sat in a `circuit_open` loop with no end: the breaker opened at 5 consecutive failures, half-opened after a FIXED 10 minutes, was hammered again, and re-opened — indefinitely. Nothing in the codebase read the `Retry-After` header on any source (only `embeddings_providers/openai.rs` did, for a different purpose), so arXiv's 429/503 announcements were discarded at `classify_http_status`, which took a bare `StatusCode` and never saw the headers. The retry layer's fixed `RATE_LIMIT_BACKOFF_SECS = 30` and the breaker's fixed 10 minutes were both guesses standing in for a number the server was already sending us. The 10-minute source breaker had no direct test at all, which is how a permanent retry loop stayed invisible.
+- **Considered:**
+  - *A new `RateLimitedFor(u64)` variant beside the existing `RateLimited(String)`:* Rejected — every `matches!(e, SourceError::RateLimited(_))` early-bail across reddit/mastodon/twitter/pypi/crates_io would silently stop matching the new variant, a behaviour regression with no compile error. Making `RateLimited` a struct variant forces the compiler to walk every one of the ~40 sites.
+  - *Extending `classify_http_status` to take a `HeaderMap` in place:* Rejected in favour of a `&Response` sibling — the adapters already hold the response, and passing headers separately invites a site that passes the status of one response and the headers of another.
+  - *Sleeping for whatever the server announces, however long:* Rejected — a 6-hour hint would hold a fetch worker for 6 hours. The breaker is the cheap place to wait; the retry loop is not.
+  - *Letting `Retry-After` shorten an escalated cooldown:* Rejected — it is a floor, not an override. A source that has failed through three tiers is not talked back to a 30-second knock by one header.
+  - *Documenting why the per-feed breaker keeps its own 30 minutes:* Rejected — there was no reason, only drift. Two contradictory constants for the same idea is the defect, not a thing to annotate.
+  - *A pipeline-version bump:* Rejected — no evidence score changes; this governs fetch scheduling only.
+- **Open (recorded, not decided):** the in-memory `AdapterFailureTracker` and the DB breaker still count failures independently within a cycle; a source whose announcement exceeds 6 hours is capped rather than parked for the full window.
+- **Date:** 2026-09-08
+- **Status:** Final
+
+---
+
 ## Decision Template
 
 When adding a new decision:

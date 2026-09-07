@@ -233,8 +233,15 @@ pub(crate) async fn fetch_all_sources(
             Ok(items) => {
                 let item_count = items.len();
                 info!(target: "4da::sources", source = source_name, count = item_count, ms = elapsed_ms, "Fetched items from source");
-                db.record_source_health(source_type, true, item_count as i64, elapsed_ms, None)
-                    .ok();
+                db.record_source_health(
+                    source_type,
+                    true,
+                    item_count as i64,
+                    elapsed_ms,
+                    None,
+                    None,
+                )
+                .ok();
                 db.update_source_fetch_time(source_type).ok();
 
                 // Record per-feed health from returned items
@@ -417,6 +424,7 @@ pub(crate) async fn fetch_all_sources(
                                 items.len() as i64,
                                 elapsed_ms,
                                 None,
+                                None,
                             )
                             .ok();
                             db.update_source_fetch_time(source_type).ok();
@@ -451,6 +459,9 @@ pub(crate) async fn fetch_all_sources(
                         0,
                         elapsed_ms,
                         Some(&format!("{retry_err}")),
+                        // The server's announced cooldown, when it sent one,
+                        // becomes the floor under the breaker's own cooldown.
+                        retry_err.last_error.retry_after_secs(),
                     )
                     .ok();
                     let _ = app.emit(

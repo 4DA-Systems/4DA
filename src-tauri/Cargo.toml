@@ -208,6 +208,10 @@ required-features = ["ocr"]
 tempfile = "3"
 criterion = { version = "0.5", features = ["html_reports"] }
 victauri-test = "0.8"
+# `test-util` gives tests tokio's virtual clock (`#[tokio::test(start_paused)]`),
+# so retry/backoff tests assert exact elapsed time without real sleeps. Test
+# builds only — it is deliberately NOT on the main tokio dependency.
+tokio = { version = "1", features = ["test-util"] }
 
 [[bench]]
 name = "db_scale"

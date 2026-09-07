@@ -126,7 +126,7 @@ impl NpmRegistrySource {
             warn!(package = %package, "npm package not found, skipping");
             return Ok(None);
         }
-        super::classify_http_status(status, "npm registry API")?;
+        super::classify_http_response(&response, "npm registry API")?;
 
         let info: NpmPackageInfo = response
             .json()
@@ -157,7 +157,7 @@ impl NpmRegistrySource {
             match self.fetch_package(package).await {
                 Ok(Some(item)) => items.push(item),
                 Ok(None) => {} // 404 — skip
-                Err(SourceError::RateLimited(msg)) => {
+                Err(SourceError::RateLimited { message: msg, .. }) => {
                     warn!(error = %msg, "Rate limited, stopping npm fetch early");
                     break;
                 }

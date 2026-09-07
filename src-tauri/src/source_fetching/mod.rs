@@ -146,7 +146,21 @@ const RETRY_BACKOFF_SECS: [u64; 3] = [1, 2, 4];
 
 /// Extended backoff for rate-limited requests (seconds).
 /// Much longer than normal backoff to respect API rate limits.
+/// Only used when the server did NOT announce a `Retry-After` — an announced
+/// cooldown always wins over this guess.
 const RATE_LIMIT_BACKOFF_SECS: u64 = 30;
+
+/// Total seconds this fetch may spend asleep waiting out rate limits.
+///
+/// A server-announced `Retry-After` can be hours; holding a fetch worker for
+/// that long starves every other source in the cycle. When the announced
+/// cooldown does not fit in the remaining budget we stop retrying and return
+/// the error WITH the hint attached, so the circuit breaker parks the source
+/// for the announced window instead — that is the cheap place to wait.
+///
+/// Sized so the previous behaviour is unchanged when no hint is present:
+/// two un-announced rate-limit backoffs (30s + 30s) still fit.
+const RATE_LIMIT_WAIT_BUDGET_SECS: u64 = 120;
 
 /// Maximum number of fetch attempts (1 initial + 2 retries = 3 total).
 const MAX_RETRY_ATTEMPTS: usize = 3;
@@ -177,7 +191,7 @@ impl std::fmt::Display for RetryExhaustedError {
 fn is_retryable(err: &SourceError) -> bool {
     match err {
         SourceError::Network(_) => true,
-        SourceError::RateLimited(_) => true,
+        SourceError::RateLimited { .. } => true,
         SourceError::Other(_) => true,
         // Parse errors are deterministic — retrying won't help
         SourceError::Parse(_) => false,
@@ -193,7 +207,7 @@ fn is_retryable(err: &SourceError) -> bool {
 /// in error strings (for errors tunnelled through Network/Other variants).
 fn is_rate_limited(err: &SourceError) -> bool {
     match err {
-        SourceError::RateLimited(_) => true,
+        SourceError::RateLimited { .. } => true,
         SourceError::Network(msg) | SourceError::Other(msg) => {
             let lower = msg.to_lowercase();
             lower.contains("429")
@@ -222,6 +236,7 @@ where
     Fut: std::future::Future<Output = SourceResult<Vec<SourceItem>>>,
 {
     let mut last_error: Option<SourceError> = None;
+    let mut rate_limit_budget_secs = RATE_LIMIT_WAIT_BUDGET_SECS;
 
     for attempt in 1..=MAX_RETRY_ATTEMPTS {
         let _global_permit = rate_limiter().acquire_global_permit().await;
@@ -276,14 +291,41 @@ where
 
                 if attempt < MAX_RETRY_ATTEMPTS {
                     let rate_limited = is_rate_limited(&e);
+                    let announced = e.retry_after_secs();
                     let delay_secs = if rate_limited {
-                        // Use extended backoff for rate-limited requests
-                        RATE_LIMIT_BACKOFF_SECS
+                        // The server's own number beats our guess. Only fall
+                        // back to the fixed backoff when it announced nothing.
+                        announced.unwrap_or(RATE_LIMIT_BACKOFF_SECS)
                     } else {
                         RETRY_BACKOFF_SECS.get(attempt - 1).copied().unwrap_or(4)
                     };
 
+                    // An announced cooldown that does not fit the remaining
+                    // wait budget is NOT worth burning attempts on: sleeping
+                    // through it starves the rest of the cycle, and retrying
+                    // before it elapses is exactly the hammering that keeps
+                    // the breaker cycling. Hand the error back with its hint
+                    // so the breaker parks the source for the announced window.
+                    if rate_limited && delay_secs > rate_limit_budget_secs {
+                        warn!(
+                            target: "4da::retry",
+                            adapter = adapter_name,
+                            attempt,
+                            error = %e,
+                            delay_secs,
+                            budget_secs = rate_limit_budget_secs,
+                            "Announced Retry-After exceeds the retry budget — deferring to the circuit breaker"
+                        );
+                        tracker.record_failure(adapter_name);
+                        return Err(RetryExhaustedError {
+                            adapter_name: adapter_name.to_string(),
+                            attempts: attempt,
+                            last_error: e,
+                        });
+                    }
+
                     if rate_limited {
+                        rate_limit_budget_secs = rate_limit_budget_secs.saturating_sub(delay_secs);
                         warn!(
                             target: "4da::retry",
                             adapter = adapter_name,
@@ -291,7 +333,8 @@ where
                             max_attempts = MAX_RETRY_ATTEMPTS,
                             error = %e,
                             delay_secs,
-                            "Rate limited (HTTP 429) — using extended backoff"
+                            announced = announced.is_some(),
+                            "Rate limited — backing off"
                         );
                     } else {
                         warn!(
@@ -1030,9 +1073,7 @@ mod retry_tests {
 
     #[test]
     fn rate_limited_is_retryable() {
-        assert!(is_retryable(&SourceError::RateLimited(
-            "test rate limit".into()
-        )));
+        assert!(is_retryable(&SourceError::rate_limited("test rate limit")));
     }
 
     #[test]
@@ -1151,6 +1192,112 @@ mod retry_tests {
         assert!(err.to_string().contains("server down"));
         assert_eq!(call_count.load(Ordering::SeqCst), 3);
         assert_eq!(tracker.failure_count("failing-source"), 1);
+    }
+
+    // ---------- Retry-After honouring ----------
+    //
+    // `start_paused` runs these on tokio's virtual clock: the sleeps are real
+    // to the code under test and instant on the wall clock, so the elapsed
+    // assertions below are exact rather than flaky.
+
+    #[tokio::test(start_paused = true)]
+    async fn rate_limit_sleeps_for_the_announced_retry_after() {
+        let tracker = AdapterFailureTracker::new();
+        let call_count = Arc::new(AtomicUsize::new(0));
+        let cc = call_count.clone();
+        let started = tokio::time::Instant::now();
+
+        let result = fetch_with_retry("announced-limit", &tracker, || {
+            let cc = cc.clone();
+            async move {
+                let attempt = cc.fetch_add(1, Ordering::SeqCst) + 1;
+                if attempt == 1 {
+                    Err(SourceError::rate_limited_after("429", Some(2)))
+                } else {
+                    Ok(vec![SourceItem::new("test", "1", "Item 1")])
+                }
+            }
+        })
+        .await;
+
+        assert!(result.is_ok());
+        assert_eq!(call_count.load(Ordering::SeqCst), 2);
+        let elapsed = started.elapsed();
+        assert!(
+            elapsed >= std::time::Duration::from_secs(2),
+            "must wait at least the announced 2s, waited {elapsed:?}"
+        );
+        // The announcement REPLACES the fixed 30s guess — it does not add to it.
+        assert!(
+            elapsed < std::time::Duration::from_secs(30),
+            "announced 2s must beat the fixed {RATE_LIMIT_BACKOFF_SECS}s backoff, waited {elapsed:?}"
+        );
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn unannounced_rate_limit_still_uses_the_fixed_backoff() {
+        // NEGATIVE TEST: the new path must not change behaviour when the
+        // server said nothing. This is the pre-existing contract.
+        let tracker = AdapterFailureTracker::new();
+        let call_count = Arc::new(AtomicUsize::new(0));
+        let cc = call_count.clone();
+        let started = tokio::time::Instant::now();
+
+        let result = fetch_with_retry("silent-limit", &tracker, || {
+            let cc = cc.clone();
+            async move {
+                let attempt = cc.fetch_add(1, Ordering::SeqCst) + 1;
+                if attempt == 1 {
+                    Err(SourceError::rate_limited("429, no header"))
+                } else {
+                    Ok(vec![SourceItem::new("test", "1", "Item 1")])
+                }
+            }
+        })
+        .await;
+
+        assert!(result.is_ok());
+        assert!(started.elapsed() >= std::time::Duration::from_secs(RATE_LIMIT_BACKOFF_SECS));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn retry_after_beyond_the_budget_returns_immediately_with_the_hint() {
+        // arXiv's live failure mode: a cooldown far longer than any fetch cycle
+        // should tolerate. Sleeping through it starves the cycle; retrying
+        // before it elapses is the hammering that kept the breaker looping.
+        // Correct answer: stop now, hand the breaker the hint.
+        let tracker = AdapterFailureTracker::new();
+        let call_count = Arc::new(AtomicUsize::new(0));
+        let cc = call_count.clone();
+        let started = tokio::time::Instant::now();
+        let huge = RATE_LIMIT_WAIT_BUDGET_SECS + 1;
+
+        let result = fetch_with_retry("long-limit", &tracker, || {
+            let cc = cc.clone();
+            async move {
+                cc.fetch_add(1, Ordering::SeqCst);
+                Err(SourceError::rate_limited_after("429", Some(huge)))
+            }
+        })
+        .await;
+
+        let err = result.unwrap_err();
+        assert_eq!(
+            call_count.load(Ordering::SeqCst),
+            1,
+            "an unaffordable cooldown must not burn further attempts"
+        );
+        assert_eq!(err.attempts, 1);
+        assert_eq!(
+            err.last_error.retry_after_secs(),
+            Some(huge),
+            "the hint must survive to the circuit breaker"
+        );
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(1),
+            "must return without sleeping"
+        );
+        assert_eq!(tracker.failure_count("long-limit"), 1);
     }
 
     #[tokio::test]

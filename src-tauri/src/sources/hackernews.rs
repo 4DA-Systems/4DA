@@ -173,7 +173,7 @@ impl Source for HackerNewsSource {
             .await
             .map_err(|e| SourceError::Network(e.to_string()))?;
 
-        super::classify_http_status(response.status(), "Hacker News API")?;
+        super::classify_http_response(&response, "Hacker News API")?;
 
         let top_ids: Vec<u64> = response
             .json()

@@ -350,7 +350,10 @@ async fn live_mastodon_produces_items() {
         }
         Err(e) => {
             assert!(
-                matches!(e, SourceError::Forbidden(_) | SourceError::RateLimited(_)),
+                matches!(
+                    e,
+                    SourceError::Forbidden(_) | SourceError::RateLimited { .. }
+                ),
                 "credential-free paths must fail with an ACTIONABLE error, got {e:?}"
             );
             println!("LIVE mastodon: walled -> surfaced {e:?}");
