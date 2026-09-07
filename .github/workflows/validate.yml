@@ -441,7 +441,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        uses: dtolnay/rust-toolchain@d1031067263f94b142dd6c0ce24c5eb9d02d52a0 # v1
         with:
           toolchain: stable
           components: rustfmt, clippy
@@ -626,7 +626,7 @@ jobs:
       # and a dependency install it would not otherwise need; the alternative was
       # a gate that silently skips on exactly the PRs that move dependencies.
       - name: Install Rust toolchain (for `cargo metadata`)
-        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        uses: dtolnay/rust-toolchain@d1031067263f94b142dd6c0ce24c5eb9d02d52a0 # v1
         with:
           toolchain: stable
 
@@ -701,7 +701,7 @@ jobs:
       # Same recipe as the NOTICE gate in `repo-guards`, so what this job
       # generates is byte-for-byte what that gate will verify.
       - name: Install Rust toolchain (for `cargo metadata`)
-        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        uses: dtolnay/rust-toolchain@d1031067263f94b142dd6c0ce24c5eb9d02d52a0 # v1
         with:
           toolchain: stable
 
@@ -823,7 +823,7 @@ jobs:
         # repo's rust-toolchain.toml (1.93.1) still governs the actual build via
         # rustup where it is honored; this job's value is fast, parallel,
         # contention-free clippy/audit/test on a dedicated runner.
-        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        uses: dtolnay/rust-toolchain@d1031067263f94b142dd6c0ce24c5eb9d02d52a0 # v1
         with:
           toolchain: stable
           components: clippy, rustfmt
