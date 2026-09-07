@@ -139,7 +139,16 @@ pub fn present_preemption_list(
 }
 
 fn is_plan_covered(item: &EvidenceItem, plan_packages: &HashSet<String>) -> bool {
-    if item.lens_hints.upgrade_plan || item.lens_hints.other_build_target {
+    // A dormant-project notice is a statement about a PROJECT — "this repo is
+    // dead and has N vulnerable packages" — not a per-package advisory the
+    // plan can subsume. It is osv_verified and lists every affected package,
+    // so without this it would be dropped here exactly when the plan happens
+    // to cover them all: the same silence AD-043 exists to end, arriving at
+    // the last step instead of the first.
+    if item.lens_hints.upgrade_plan
+        || item.lens_hints.other_build_target
+        || item.lens_hints.dormant_notice
+    {
         return false;
     }
     item.confidence.provenance == ConfidenceProvenance::OsvVerified

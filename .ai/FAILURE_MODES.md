@@ -926,3 +926,89 @@ A wait too long to afford is handed to the breaker rather than slept through.
 Retrying on a fixed interval forever is not resilience; it is the behaviour
 the rate limit exists to stop. Any breaker whose cooldown does not escalate
 needs a test proving it eventually gives up, or it does not.
+
+---
+
+### A lockfile crate that never reaches rustc, reported as version-confirmed (2026-09-08, AD-043)
+
+**Symptom.** Preemption's #1 item on the founder instance was a HIGH,
+"version-confirmed" advisory for `quinn-proto` in `D:\4DA`. The crate is in
+`Cargo.lock`; `cargo tree -e all --target all -i quinn-proto` answers *nothing
+to print* — it is an optional dependency of a `reqwest` feature this tree does
+not enable and has never been compiled on that machine. `anyhow` and `openssl`
+did the same from a gitignored scratch dir. Re-measured on 4DA's own lockfile:
+250 of 788 crates are unreachable on this host.
+
+**Root cause.** Two compounding gaps. `Cargo.lock` is a superset in two
+independent dimensions — target AND features — and nothing in the app asked
+cargo about either (zero `cargo metadata` / `cargo tree` call sites existed
+under `src-tauri/src`). And the one platform filter read `project_dependencies`
+alone, a table only the manifest scan writes and only for
+`[target.'cfg(...)'.dependencies]`: transitives live exclusively in
+`user_dependencies`, which had no platform columns at all, so no transitive
+could ever earn a verdict. The MCP server, which did ask cargo, asked with
+`cargo metadata --filter-platform` — target-resolved but NOT feature-resolved,
+so it reported `quinn-proto` as built-on-host too (560 crates vs `cargo tree`'s
+538 on the same workspace).
+
+**The rule.** A dependency finding needs a compiled path on THIS host. The
+lockfile walk resolves the host build with `cargo tree` (the only mechanism
+that applies both axes — it is what the build does) and records the rest as
+`user_dependencies.target_cfg = 'lockfile-only'`; `platform_filter` reads BOTH
+tables and reports which of the two reasons applies. Cargo missing, a stale
+lockfile, a cold `--offline` registry, a held package-cache lock or a timeout
+all mean *unknown*, and unknown leaves every crate ACTIVE — an empty answer is
+refused at the parser and again at the cache, because believing it would mark
+the whole lockfile unreachable and bury every real advisory.
+
+---
+
+### A gitignored scratch tree indistinguishable from a product (2026-09-08, AD-043)
+
+**Symptom.** `D:\4DA\victauri-gauntlet` — a throwaway test harness, gitignored
+by 4DA's own `.gitignore`, carrying its own `Cargo.lock` — contributed
+advisories that sat beside the user's real findings with nothing to tell them
+apart. A gauntlet read as the user's security posture.
+
+**Root cause.** Every exclusion the scanner applies is a hardcoded name list
+(`project_inclusion`'s three tiers, `SKIPPED_DIR_NAMES`, `skip_dirs`). Nothing
+in `src-tauri/src` had ever run `git check-ignore` or `git ls-files`, so a
+scratch dir with a plausible name was a first-class project, and
+`detected_projects` had no column to record otherwise.
+
+**The rule.** Ask git, do not reimplement it — `.gitignore` files nest,
+negate, and compose with `.git/info/exclude` and the global excludes file, so
+`git check-ignore -q` is the only correct oracle (`ace::scratch`, memoized per
+scan, conservative on every failure: no git, no repository, an errored probe
+and a timeout all mean NOT scratch). And it LABELS, never suppresses: a
+gitignored project is still real code with real dependencies the user may
+still build. The user needs to be able to tell, which is a label, not a filter.
+
+---
+
+### A dormant project below the relevance floor is silent, not safe (2026-09-08, AD-043)
+
+**Symptom.** `D:\runyourempire\navcal`, dormant since ~2025-11, holds 31
+packages with published OSV advisories. 4DA showed **nothing** about it —
+not on Preemption, not in Blind Spots, not in the brief. A user who reads
+Preemption as "my security posture" was told nothing about a repo they still
+own and may redeploy.
+
+**Root cause.** `compute_project_relevance` is `path_score × recency_score`,
+and the product cannot say which factor fired: a fresh `examples/` dir
+(0.1 × 1.0) and a real repo idle 90+ days (1.0 × 0.1) both land on 0.1, both
+below `PROJECT_RELEVANCE_FLOOR` (0.15). The lockfile walk read that single
+number, skipped the project's lockfile, and the OSV mirror then had nothing to
+match against. The dormancy machinery that exists (`cap_dormant_items`,
+`apply_liveness_policy`) is cap-and-annotate for projects that get IN — it can
+say nothing about one held out before it ever runs.
+
+**The rule.** Do not let one number stand for two different claims. "This path
+is scaffolding" and "nobody has touched this lately" are separate judgements
+(`scanner::path_relevance` is now the path half alone), and only the first may
+keep a real project's dependencies out of the corpus. Indexing a dormant
+project does not make it urgent — instead every finding whose affected
+projects are ALL dormant collapses into ONE `Watch` summary per project
+(`evidence::collapse_dormant_alerts`), because the opposite failure (31 rows
+about a repo nobody is deploying) buries today's work just as effectively.
+A dormant project with nothing wrong emits nothing at all.

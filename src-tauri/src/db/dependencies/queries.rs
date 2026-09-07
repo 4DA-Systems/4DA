@@ -262,6 +262,56 @@ impl Database {
         Ok(())
     }
 
+    /// Record which of a project's crates the host build never compiles.
+    ///
+    /// `Cargo.lock` is a superset — target-agnostic and feature-agnostic — so
+    /// a crate can sit in it and never reach `rustc` on this machine.
+    /// `crate::ace::cargo_resolve` asks cargo; this persists the answer where
+    /// `crate::platform_filter` can read it.
+    ///
+    /// Idempotent and self-correcting: every call first CLEARS the marker for
+    /// the project, so a crate that becomes reachable (the user enables the
+    /// feature, or switches platform) goes active again on the next scan
+    /// rather than staying suppressed forever. Only rows carrying THIS marker
+    /// are cleared — a manifest `cfg(...)` verdict is a different writer's
+    /// and is never touched.
+    ///
+    /// `inactive` empty means "cargo could not answer" as well as "everything
+    /// is reachable"; both leave the project fully active, which is the
+    /// conservative answer either way. Returns rows marked.
+    pub fn mark_lockfile_only_crates(
+        &self,
+        project_path: &str,
+        ecosystem: &str,
+        inactive: &[String],
+    ) -> SqliteResult<usize> {
+        if is_excluded_project_path(project_path) {
+            return Ok(0);
+        }
+        let project_path = canonicalize_project_path(project_path);
+        let marker = crate::ace::cargo_resolve::LOCKFILE_ONLY_MARKER;
+        let conn = self.conn.lock();
+        conn.execute(
+            "UPDATE user_dependencies SET platform_active = 1, target_cfg = NULL
+             WHERE project_path = ?1 AND ecosystem = ?2 AND target_cfg = ?3",
+            params![project_path, ecosystem, marker],
+        )?;
+        let mut stmt = conn.prepare(
+            "UPDATE user_dependencies SET platform_active = 0, target_cfg = ?3
+             WHERE project_path = ?1 AND ecosystem = ?2 AND LOWER(package_name) = ?4",
+        )?;
+        let mut marked = 0usize;
+        for name in inactive {
+            marked += stmt.execute(params![
+                project_path,
+                ecosystem,
+                marker,
+                name.to_lowercase()
+            ])?;
+        }
+        Ok(marked)
+    }
+
     /// Timestamp of the most recent ACE scan, as the freshness signal for the headless
     /// dep-scan gate. `detected_projects.updated_at` is DO-UPDATEd on every scan (by
     /// `upsert_detected_project`) for every detected project — including ones with no
@@ -774,17 +824,12 @@ impl Database {
     /// still surface in Preemption's collapsed "other build targets" group, so
     /// this labels-and-de-prioritises, never suppresses (doctrine).
     pub fn platform_inactive_packages(&self) -> std::collections::HashSet<String> {
+        // Delegates so there is exactly ONE definition of "inactive on this
+        // host" (see `crate::platform_filter`). This was a verbatim copy of
+        // the manifest-only query, which meant the Upgrade Plan kept ranking
+        // crates Preemption had already de-prioritised as unreachable.
         let conn = self.conn.lock();
-        let mut stmt = match conn.prepare(
-            "SELECT LOWER(package_name) FROM project_dependencies
-             GROUP BY LOWER(package_name) HAVING MAX(platform_active) = 0",
-        ) {
-            Ok(s) => s,
-            Err(_) => return std::collections::HashSet::new(),
-        };
-        stmt.query_map([], |row| row.get::<_, String>(0))
-            .map(|rows| rows.flatten().collect())
-            .unwrap_or_default()
+        crate::platform_filter::load_platform_inactive_packages(&conn).into_names()
     }
 }
 

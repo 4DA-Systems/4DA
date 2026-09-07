@@ -1236,6 +1236,46 @@ impl Database {
 
     /// Run a migration step inside a transaction with history recording.
     /// If the migration function fails, the transaction rolls back and schema_version is unchanged.
+    /// Add `column` to `table` unless it is already there.
+    ///
+    /// Every additive migration hand-rolled this `pragma_table_info` probe.
+    /// Phase 122 needs it twice and needs to be re-runnable in either order
+    /// against a concurrently-landing sibling phase, so it lives here once.
+    /// A missing TABLE is not an error: an ACE-owned table (`ace::db::migrate`
+    /// runs on its own schedule, not under `schema_version`) may not exist
+    /// yet on a fresh database, and the CREATE carries the column.
+    fn add_column_if_missing(
+        conn: &Connection,
+        table: &str,
+        column: &str,
+        decl: &str,
+    ) -> SqliteResult<()> {
+        let table_exists: bool = conn
+            .query_row(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1",
+                [table],
+                |row| row.get::<_, i64>(0).map(|n| n > 0),
+            )
+            .unwrap_or(false);
+        if !table_exists {
+            return Ok(());
+        }
+        let has_column: bool = conn
+            .query_row(
+                &format!("SELECT COUNT(*) FROM pragma_table_info('{table}') WHERE name=?1"),
+                [column],
+                |row| row.get::<_, i64>(0).map(|n| n > 0),
+            )
+            .unwrap_or(false);
+        if !has_column {
+            conn.execute(
+                &format!("ALTER TABLE {table} ADD COLUMN {column} {decl}"),
+                [],
+            )?;
+        }
+        Ok(())
+    }
+
     pub(crate) fn run_versioned_migration(
         conn: &Connection,
         from_version: i64,
@@ -1430,7 +1470,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 121;
+        const TARGET_VERSION: i64 = 122;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -5655,6 +5695,50 @@ impl Database {
                         info!(
                             target: "4da::db",
                             "Phase 121: circuit_reopen_count + retry_after_secs added — a repeatedly failing source now backs off instead of being retried every 10 minutes forever"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+            // Phase 122: `user_dependencies` learns whether the host actually
+            // COMPILES each crate. Cargo.lock is a superset — target-agnostic
+            // and feature-agnostic — but only `project_dependencies` had
+            // `platform_active`, and only the MANIFEST scan ever writes that
+            // table. Transitives live exclusively in `user_dependencies`, so
+            // no transitive could ever earn a platform verdict: live
+            // 2026-09-07 Preemption's #1 item was a HIGH advisory for
+            // `quinn-proto`, an optional dependency of a `reqwest` feature
+            // this tree does not enable, which has never been compiled on the
+            // founder's machine. Measured on 4DA's own lockfile: 250 of 788
+            // crates are unreachable here. The lockfile walk now asks cargo
+            // and records the verdict; `platform_filter` reads both tables.
+            //
+            // Phase number note: 121 is claimed by the concurrent
+            // `source_health` migration. Version numbers only need to
+            // increase — `run_versioned_migration` records `from_version`
+            // for history and writes `to_version` unconditionally — so a gap
+            // is safe if that phase lands after this one.
+            //
+            // Additive columns, no data rewrite. Default 1 (active) keeps the
+            // pre-migration answer: nothing is de-prioritised until a scan
+            // proves cargo does not build it.
+            if current_version < 122 {
+                Self::run_versioned_migration(
+                    &conn,
+                    121,
+                    122,
+                    "Phase 122: user_dependencies.platform_active + target_cfg",
+                    |c| {
+                        Self::add_column_if_missing(
+                            c,
+                            "user_dependencies",
+                            "platform_active",
+                            "INTEGER NOT NULL DEFAULT 1",
+                        )?;
+                        Self::add_column_if_missing(c, "user_dependencies", "target_cfg", "TEXT")?;
+                        info!(
+                            target: "4da::db",
+                            "Phase 122: user_dependencies gained platform_active/target_cfg — a finding now needs a compiled path"
                         );
                         Ok(())
                     },

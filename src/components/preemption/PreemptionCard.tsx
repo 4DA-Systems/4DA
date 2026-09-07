@@ -252,12 +252,24 @@ export const ItemCard = memo(function ItemCard({
               {t(tier.badge)}
             </span>
           )}
+          {/* Two reasons a dep is de-prioritised, and they are not the same
+              claim. "Other target" = you build that target, just not here.
+              "Not built here" = cargo compiles this crate nowhere on this
+              machine (2026-09-07: quinn-proto, an optional dep of a reqwest
+              feature this tree does not enable, ranked HIGH). The narrower
+              one wins the badge. */}
           {item.lens_hints.other_build_target && (
             <span
               className="shrink-0 inline-flex items-center text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded text-text-muted bg-bg-tertiary border border-border"
-              title={t('preemption.otherTargets.badgeHint')}
+              title={
+                item.lens_hints.lockfile_only
+                  ? t('preemption.lockfileOnly.badgeHint')
+                  : t('preemption.otherTargets.badgeHint')
+              }
             >
-              {t('preemption.otherTargets.badge')}
+              {item.lens_hints.lockfile_only
+                ? t('preemption.lockfileOnly.badge')
+                : t('preemption.otherTargets.badge')}
             </span>
           )}
           <h3 className="flex-1 min-w-0 text-[13px] font-medium text-text-primary leading-snug">

@@ -244,6 +244,14 @@ pub struct PreemptionAlert {
     /// "other build targets" — surfaced, never hidden.
     #[serde(default)]
     pub platform_inactive: bool,
+    /// True when the reason for `platform_inactive` is that cargo resolves the
+    /// crate for NO target/feature combination this host builds — it is in the
+    /// lockfile and has never been compiled here (2026-09-07 audit: a HIGH
+    /// `quinn-proto` finding). Strictly narrower than `platform_inactive`,
+    /// which also covers a dep gated to a build target the user does have.
+    /// Only selects more precise copy; changes no urgency of its own.
+    #[serde(default)]
+    pub lockfile_only: bool,
 }
 
 /// The full preemption feed with summary counts.
@@ -579,7 +587,14 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
             // (e.g. a Linux-only crate on Windows). Never hidden — capped to Watch,
             // and tagged platform_inactive so the lens groups it under "other build
             // targets" (Phase 2c).
-            let platform_inactive = platform_inactive_pkgs.contains(&first.package_name.to_lowercase());
+            let package_key = first.package_name.to_lowercase();
+            let platform_inactive = platform_inactive_pkgs.contains(&package_key);
+            // WHY it is inactive, not just that it is. "Other build target"
+            // means the user has that target; "lockfile-only" means cargo
+            // builds this crate nowhere on this machine, which is the
+            // stronger and more useful thing to say.
+            let lockfile_only =
+                platform_inactive && platform_inactive_pkgs.is_lockfile_only(&package_key);
             let urgency = if platform_inactive {
                 AlertUrgency::Watch
             } else {
@@ -694,8 +709,17 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
                 )
             };
 
+            // A crate that never reaches rustc on this machine has no
+            // reachable code path, so the explanation says so plainly rather
+            // than leaving the reader to wonder why a "version-confirmed"
+            // advisory is only a Watch (2026-09-07 audit).
+            let reachability = if lockfile_only {
+                " Lockfile-only — cargo does not compile this crate on this host, so nothing here is reachable."
+            } else {
+                ""
+            };
             let explanation = format!(
-                "{ids} ({count} {vuln_word}) affect {pkg}@{ver} in {projects}. Scope: {scope}.{fix}",
+                "{ids} ({count} {vuln_word}) affect {pkg}@{ver} in {projects}. Scope: {scope}.{fix}{reach}",
                 ids = ids_display,
                 count = advisory_count,
                 vuln_word = vuln_word,
@@ -704,6 +728,7 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
                 projects = project_display,
                 scope = scope_label,
                 fix = fix_str,
+                reach = reachability,
             );
 
             // 4DA is read-only local intelligence: it surfaces the advisory and
@@ -777,6 +802,7 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
                 is_direct: dep_is_direct,
                 is_dev: dep_is_dev,
                 platform_inactive,
+                lockfile_only,
             }
         })
         .collect()
@@ -934,6 +960,7 @@ fn llm_judged_to_alerts() -> Vec<PreemptionAlert> {
             is_direct: None,
             is_dev: None,
             platform_inactive: false,
+            lockfile_only: false,
         });
     }
 
@@ -1269,6 +1296,7 @@ fn chain_to_alert(
         is_direct: None,
         is_dev: None,
         platform_inactive: false,
+        lockfile_only: false,
     }
 }
 
@@ -1296,13 +1324,20 @@ fn shorten_project_path(full_path: &str) -> String {
 /// is known-dormant — explanations must not present graveyard repos as
 /// active work (2026-08-31 live audit).
 fn dormancy_labeled_project(path: &str, liveness: &crate::evidence::ProjectLiveness) -> String {
-    let label = shorten_project_path(path);
-    match liveness.dormant_days(path) {
-        Some(days) if crate::ace::dormancy::is_dormant_days(days) => {
-            format!("{label} {}", crate::evidence::inactive_label(days))
+    let mut label = shorten_project_path(path);
+    if let Some(days) = liveness.dormant_days(path) {
+        if crate::ace::dormancy::is_dormant_days(days) {
+            label = format!("{label} {}", crate::evidence::inactive_label(days));
         }
-        _ => label,
     }
+    // A project its own repository gitignores is a scratch tree, and saying so
+    // is the whole fix for 2026-09-07's `victauri-gauntlet`: a gauntlet's
+    // `anyhow`/`openssl` advisories read as the user's own posture with
+    // nothing to tell them apart. Label only — urgency is untouched.
+    if liveness.is_scratch(path) {
+        label = format!("{label} {}", crate::ace::scratch::scratch_label());
+    }
+    label
 }
 
 /// Infer urgency from advisory summary text when CVSS score is absent.
@@ -1710,6 +1745,10 @@ impl PreemptionAlert {
                 // them under "other build targets" and badges them. The urgency
                 // was already capped to Watch upstream; this drives the grouping.
                 other_build_target: self.platform_inactive,
+                // Narrower reason, same de-prioritisation: the crate is in
+                // the lockfile and this host compiles it nowhere. Selects the
+                // precise badge; `other_build_target` still drives grouping.
+                lockfile_only: self.lockfile_only,
                 ..LensHints::preemption_only()
             },
             created_at,
@@ -1878,7 +1917,7 @@ async fn compute_preemption_evidence_feed() -> std::result::Result<EvidenceFeed,
     let mut items = items;
     append_upgrade_plan_items(&mut items);
 
-    let mut feed = EvidenceFeed::from_items(items);
+    let mut feed = feed_with_dormant_notices(items);
     feed.tier_scope = Some(TierScope::Full);
     Ok(feed)
 }
@@ -1904,7 +1943,7 @@ fn compute_preemption_fast_full_feed() -> std::result::Result<EvidenceFeed, Stri
         );
     }
     append_upgrade_plan_items(&mut items);
-    let mut feed = EvidenceFeed::from_items(items);
+    let mut feed = feed_with_dormant_notices(items);
     feed.tier_scope = Some(TierScope::Full);
     Ok(feed)
 }
@@ -1958,6 +1997,32 @@ fn append_upgrade_plan_items(items: &mut Vec<EvidenceItem>) {
     }
 }
 
+/// Build the feed, collapsing every finding whose affected projects are ALL
+/// dormant into one quiet summary row per project.
+///
+/// The LAST step before the feed exists, so it runs after `cap_dormant_items`
+/// and `apply_liveness_policy` have already done their capping — the many-rows
+/// outcome those produce is exactly what this replaces. Applied on all three
+/// feed paths (full, fast, free floor) so a cache miss and a cache hit never
+/// disagree about how a dead repo is presented.
+///
+/// A dormant project with no findings produces nothing (doctrine rule 6), and
+/// an unreadable database leaves every item exactly as it was.
+fn feed_with_dormant_notices(mut items: Vec<EvidenceItem>) -> EvidenceFeed {
+    if let Ok(conn) = crate::open_db_connection() {
+        let liveness = crate::evidence::ProjectLiveness::load(&conn);
+        let collapsed = crate::evidence::collapse_dormant_alerts(&mut items, &liveness);
+        if collapsed > 0 {
+            info!(
+                target: "4da::preemption",
+                collapsed,
+                "dormant-project alerts collapsed into per-project notices"
+            );
+        }
+    }
+    EvidenceFeed::from_items(items)
+}
+
 /// Compute the free-tier security floor: Tier 1 (OSV-verified) items only.
 /// Fully deterministic — live OSV matching plus schema validation, with NO
 /// adversarial LLM pass (Tier 1 items are version-verified advisory matches;
@@ -1970,7 +2035,7 @@ fn compute_preemption_free_floor_feed() -> std::result::Result<EvidenceFeed, Str
         tier1 = items.len(),
         "preemption free-floor feed recomputed"
     );
-    let mut feed = EvidenceFeed::from_items(items);
+    let mut feed = feed_with_dormant_notices(items);
     feed.tier_scope = Some(TierScope::FreeFloor);
     Ok(feed)
 }
@@ -2465,6 +2530,7 @@ mod tests {
             is_direct: None,
             is_dev: None,
             platform_inactive: false,
+            lockfile_only: false,
         }
     }
 
@@ -3039,6 +3105,7 @@ mod tests {
             is_direct: None,
             is_dev: None,
             platform_inactive: false,
+            lockfile_only: false,
         }
     }
 
@@ -3183,5 +3250,56 @@ mod tests {
             dormancy_labeled_project("/home/dev/unknown-app", &liveness),
             "dev/unknown-app"
         );
+    }
+
+    /// 2026-09-07: `D:\4DA\victauri-gauntlet` is gitignored by 4DA's own
+    /// `.gitignore` and carries its own Cargo.lock, so its `anyhow`/`openssl`
+    /// advisories sat beside the user's real findings with nothing to tell
+    /// them apart. The label is the fix; urgency is untouched.
+    #[test]
+    fn scratch_projects_are_labelled_and_ordinary_ones_are_not() {
+        let liveness = crate::evidence::ProjectLiveness::from_entries(&[("/4da/gauntlet", 1)])
+            .with_scratch(&["/4da/gauntlet"]);
+        assert_eq!(
+            dormancy_labeled_project("/4da/gauntlet", &liveness),
+            "4da/gauntlet (scratch, gitignored)"
+        );
+        // The negative half: a tracked project must never carry the label, or
+        // the label tells the user nothing.
+        assert_eq!(
+            dormancy_labeled_project("/4da/src-tauri", &liveness),
+            "4da/src-tauri"
+        );
+    }
+
+    /// Both labels can apply, and both are facts about the project.
+    #[test]
+    fn a_dormant_scratch_project_carries_both_labels() {
+        let liveness = crate::evidence::ProjectLiveness::from_entries(&[("/4da/gauntlet", 200)])
+            .with_scratch(&["/4da/gauntlet"]);
+        assert_eq!(
+            dormancy_labeled_project("/4da/gauntlet", &liveness),
+            "4da/gauntlet (inactive 200 days) (scratch, gitignored)"
+        );
+    }
+
+    /// A lockfile-only advisory must SAY it is unreachable — a "version-
+    /// confirmed" HIGH silently demoted to Watch reads as a bug, not a
+    /// judgement (2026-09-07: `quinn-proto`).
+    #[test]
+    fn the_lockfile_only_reason_reaches_the_evidence_item() {
+        let mut alert = liveness_test_alert("osv-pkg-quinn-proto-crates", AlertUrgency::Watch);
+        alert.platform_inactive = true;
+        alert.lockfile_only = true;
+        let hints = alert.to_evidence_item().lens_hints;
+        assert!(hints.other_build_target, "still grouped as de-prioritised");
+        assert!(hints.lockfile_only, "and labelled with the precise reason");
+
+        // The negative half: a cfg-gated dep is de-prioritised for a DIFFERENT
+        // reason and must not borrow this copy.
+        alert.lockfile_only = false;
+        let hints = alert.to_evidence_item().lens_hints;
+        assert!(hints.other_build_target);
+        assert!(!hints.lockfile_only);
     }
 }

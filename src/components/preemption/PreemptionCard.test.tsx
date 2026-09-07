@@ -114,6 +114,29 @@ describe('ItemCard', () => {
     render(<ItemCard item={makeItem()} surfacedRef={surfacedRef} onDismiss={vi.fn()} />);
     expect(screen.queryByText('preemption.otherTargets.badge')).toBeNull();
   });
+
+  it('says "not built here" when the crate is lockfile-only (2026-09-07 audit)', () => {
+    // "Other target" and "never compiled on this machine" are different
+    // claims. `quinn-proto` — an optional dep of a reqwest feature this tree
+    // does not enable — ranked HIGH while being the second kind.
+    const item = makeItem({
+      lens_hints: { briefing: false, preemption: true, blind_spots: false, evidence: false, other_build_target: true, upgrade_plan: false, no_coverage: false, lockfile_only: true },
+    });
+    render(<ItemCard item={item} surfacedRef={surfacedRef} onDismiss={vi.fn()} />);
+    expect(screen.getByText('preemption.lockfileOnly.badge')).toBeDefined();
+    expect(screen.queryByText('preemption.otherTargets.badge')).toBeNull();
+  });
+
+  it('keeps the other-build-target copy for a cfg-gated dep', () => {
+    // The negative half: the narrower badge must not leak onto a dep that is
+    // simply gated to a target the user DOES build.
+    const item = makeItem({
+      lens_hints: { briefing: false, preemption: true, blind_spots: false, evidence: false, other_build_target: true, upgrade_plan: false, no_coverage: false, lockfile_only: false },
+    });
+    render(<ItemCard item={item} surfacedRef={surfacedRef} onDismiss={vi.fn()} />);
+    expect(screen.getByText('preemption.otherTargets.badge')).toBeDefined();
+    expect(screen.queryByText('preemption.lockfileOnly.badge')).toBeNull();
+  });
 });
 
 // ─── Lazy detail hydration (AD-035) ─────────────────────────────────────────

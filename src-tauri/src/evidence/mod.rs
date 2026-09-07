@@ -20,6 +20,7 @@
 //! Plan: `docs/strategy/INTELLIGENCE-RECONCILIATION.md`.
 //! Doctrine: `.claude/rules/intelligence-doctrine.md`.
 
+mod dormant_notice;
 mod list_transport;
 mod liveness;
 mod materializer;
@@ -37,6 +38,11 @@ pub use liveness::{
     cap_dormant_items, cap_unverified_item_urgency, dormant_projects_note, inactive_label,
     load_user_dependency_names, provenance_is_unverified, ProjectLiveness,
 };
+
+// Dormant-project visibility (2026-09-07 audit): a repo the user still owns
+// but has not touched is named ONCE, quietly, instead of being silently
+// absent (below the relevance floor) or shouting N rows.
+pub use dormant_notice::collapse_dormant_alerts;
 
 // Phase 1 dependency Upgrade Plan brain. `_with_drops` returns the ranked plan
 // plus the validation-drop canary the persisted snapshot records.
