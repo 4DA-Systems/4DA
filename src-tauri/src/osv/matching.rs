@@ -241,6 +241,8 @@ pub fn get_matched_advisories(db: &Database) -> Result<Vec<MatchedAdvisory>> {
             project_paths,
             published_at: advisory.published_at.clone(),
             dependency_instances,
+            aliases: advisory.aliases.clone(),
+            severity_label: advisory.severity_label.clone(),
         });
     }
 

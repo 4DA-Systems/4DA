@@ -142,9 +142,13 @@ fn test_advisory_title_fallback_only_for_specific_names() {
         source_id: "rss-1".to_string(),
         url: None,
     };
+    // Phase 120: an editorial security story with no `Affected:` metadata
+    // links by TITLE HEURISTIC, never as advisory proof — the strict consumers
+    // read `advisory` as exposure ("Security story names your dependency
+    // react" on the Shai-Hulud codegen story, 2026-09-07).
     assert_eq!(
         classify_item_dep_match(&item, "react"),
-        Some(("advisory", 0.75))
+        Some(("title_heuristic", 0.50))
     );
     assert_eq!(classify_item_dep_match(&item, "path"), None);
 }
@@ -568,9 +572,36 @@ fn test_advisory_allows_title_fallback_when_no_affected_metadata() {
     };
     assert_eq!(
         classify_item_dep_match(&item, "axios"),
-        Some(("advisory", 0.75)),
-        "no Affected: metadata — title fallback should be allowed for specific names"
+        Some(("title_heuristic", 0.50)),
+        "no Affected: metadata — the title still links, but as a HEURISTIC, never as advisory proof"
     );
+}
+
+/// Phase 120: registry titles name their subject and version; the shared
+/// parser is what keeps `axum-stack` from being an axum release everywhere.
+#[test]
+fn registry_title_subject_reads_adapter_and_bare_shapes() {
+    assert_eq!(
+        registry_title_subject("crates.io: tauri v2.11.5"),
+        Some(("tauri".to_string(), Some("2.11.5".to_string())))
+    );
+    assert_eq!(
+        registry_title_subject("npm: @tanstack/react-virtual v3.14.10"),
+        Some((
+            "@tanstack/react-virtual".to_string(),
+            Some("3.14.10".to_string())
+        ))
+    );
+    assert_eq!(
+        registry_title_subject("react-dom 19.2.0 released"),
+        Some(("react-dom".to_string(), Some("19.2.0".to_string())))
+    );
+    assert_eq!(
+        registry_title_subject("Go: github.com/a/b v1.2.3"),
+        Some(("github.com/a/b".to_string(), Some("1.2.3".to_string())))
+    );
+    assert!(registry_names_equal("serial-test", "serial_test"));
+    assert!(!registry_names_equal("axum-stack", "axum"));
 }
 
 #[test]

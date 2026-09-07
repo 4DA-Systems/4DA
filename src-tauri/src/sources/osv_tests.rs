@@ -21,6 +21,8 @@ fn test_matched_advisory_title_is_grounding_compatible() {
         project_paths: vec!["/stack".to_string()],
         published_at: Some("2026-01-01T00:00:00Z".to_string()),
         dependency_instances: vec![],
+        aliases: vec![],
+        severity_label: None,
     };
 
     let item = matched_advisory_to_source_item(&m);

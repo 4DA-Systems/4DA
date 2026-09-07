@@ -2274,7 +2274,11 @@ pub(crate) fn finalize_scores(results: &mut [crate::SourceRelevance]) {
 /// manifest dependencies, which is what made grounding strong); only the
 /// identification is unavailable. This mirrors the trigger-chip rule a few lines below, which
 /// filters on `corroborated` and emits nothing rather than falling back.
-fn critical_security_action(matched_deps: &[dependencies::DepMatch]) -> String {
+fn critical_security_action(
+    matched_deps: &[dependencies::DepMatch],
+    affected_projects: Option<&[String]>,
+    prefix: &str,
+) -> String {
     let best_dep = matched_deps
         .iter()
         .filter(|d| dependencies::is_strong_grounding_match(d))
@@ -2289,17 +2293,116 @@ fn critical_security_action(matched_deps: &[dependencies::DepMatch]) -> String {
         // repository on the same machine, and the banner gave the reader no way
         // to tell which one to go and fix. Falls back to the old wording when
         // provenance is unavailable, so the alert never degrades to "in ".
-        Some(dep) => match dependencies::project_label(&dep.project_paths) {
-            Some(location) => format!(
-                "Critical: Security issue affects {} in {location}",
-                dep.package_name
-            ),
-            None => format!(
-                "Critical: Security issue affects your dependency {}",
-                dep.package_name
-            ),
-        },
-        None => "Critical: Security issue affects one of your dependencies".to_string(),
+        // The projects named are the EXPOSED ones when the mirror can tell
+        // (2026-09-07: "jsonwebtoken in 4da/relay (+1 more)" counted a
+        // project running the fixed 10.4.0); every declaring project otherwise.
+        Some(dep) => {
+            let paths: &[String] = match affected_projects {
+                Some(exposed) if !exposed.is_empty() => exposed,
+                _ => &dep.project_paths,
+            };
+            match dependencies::project_label(paths) {
+                Some(location) => format!(
+                    "{prefix}: Security issue affects {} in {location}",
+                    dep.package_name
+                ),
+                None => format!(
+                    "{prefix}: Security issue affects your dependency {}",
+                    dep.package_name
+                ),
+            }
+        }
+        None => format!("{prefix}: Security issue affects one of your dependencies"),
+    }
+}
+
+/// The subset of `dep.project_paths` whose installed copy is inside the
+/// mirror's affected range for the advisory this item is about. `None` when
+/// the mirror holds no row for it, or no project's version can be read —
+/// the caller then names every declaring project rather than claim safety.
+fn mirror_affected_projects(
+    db: &Database,
+    input: &ScoringInput,
+    dep: &DepMatch,
+    title_id: Option<&str>,
+) -> Option<Vec<String>> {
+    let ecosystem = osv_ecosystem_for(&dep.ecosystem)?;
+    let ids = item_advisory_ids(input, title_id);
+    if ids.is_empty() {
+        return None;
+    }
+    let raw_name = dep.raw_name.as_deref().unwrap_or(&dep.package_name);
+    let advisories = db
+        .get_osv_advisories_for_package(raw_name, ecosystem)
+        .ok()?;
+    let advisory = advisories
+        .iter()
+        .find(|a| ids.iter().any(|id| a.advisory_id.eq_ignore_ascii_case(id)))?;
+    let conn = db.conn.lock();
+    let mut stmt = conn
+        .prepare_cached(
+            "SELECT version FROM user_dependencies
+             WHERE LOWER(REPLACE(project_path, '\\', '/')) = LOWER(REPLACE(?1, '\\', '/'))
+               AND LOWER(package_name) IN (LOWER(?2), LOWER(?3))
+               AND version IS NOT NULL AND version <> ''
+             LIMIT 1",
+        )
+        .ok()?;
+    let mut decided = 0usize;
+    let mut exposed: Vec<String> = Vec::new();
+    for path in &dep.project_paths {
+        let version: Option<String> = stmt
+            .query_row(rusqlite::params![path, raw_name, dep.package_name], |r| {
+                r.get::<_, String>(0)
+            })
+            .ok();
+        let Some(version) = version else {
+            continue;
+        };
+        let (affected, confirmed) = crate::osv::matching::check_version_affected(
+            Some(version.as_str()),
+            &advisory.affected_ranges,
+        );
+        if confirmed {
+            decided += 1;
+            if affected {
+                exposed.push(path.clone());
+            }
+        }
+    }
+    (decided > 0).then_some(exposed)
+}
+
+/// The shared severity tier of the advisory this item is about, from the
+/// mirror (CVSS band, else the source's curated label). `None` when the
+/// mirror holds no graded row for it.
+fn mirror_severity_tier(
+    db: &Database,
+    input: &ScoringInput,
+    dep: &DepMatch,
+    title_id: Option<&str>,
+) -> Option<&'static str> {
+    let ecosystem = osv_ecosystem_for(&dep.ecosystem)?;
+    let ids = item_advisory_ids(input, title_id);
+    if ids.is_empty() {
+        return None;
+    }
+    let raw_name = dep.raw_name.as_deref().unwrap_or(&dep.package_name);
+    let advisories = db
+        .get_osv_advisories_for_package(raw_name, ecosystem)
+        .ok()?;
+    let advisory = advisories
+        .iter()
+        .find(|a| ids.iter().any(|id| a.advisory_id.eq_ignore_ascii_case(id)))?;
+    if let Some(score) = advisory.cvss_score {
+        return Some(crate::osv::types::cvss_band(score));
+    }
+    match advisory.severity_label.as_deref() {
+        Some("critical") => Some("critical"),
+        Some("high") => Some("high"),
+        Some("medium") => Some("medium"),
+        Some("low") => Some("low"),
+        _ => None,
     }
 }
 
@@ -2431,8 +2534,35 @@ fn classify_signals(
             if !matched_deps.is_empty() {
                 let has_strong_dep = grounding.strong;
                 if c.signal_type == signals::SignalType::SecurityAlert && has_strong_dep {
-                    c.priority = signals::SignalPriority::Critical;
-                    c.action = critical_security_action(matched_deps);
+                    // The advisory's OWN tier decides the priority (Phase 120):
+                    // the mirror's CVSS band or the source's curated label —
+                    // the same tier Preemption, the knowledge gap and the MCP
+                    // read. A GitHub-MODERATE type-confusion bug was "Critical"
+                    // here and "medium" on the next tab (2026-09-07). Ungraded
+                    // stays Critical: an advisory in your direct dependency
+                    // with no severity is not a reason to relax.
+                    let best = matched_deps
+                        .iter()
+                        .filter(|d| dependencies::is_strong_grounding_match(d))
+                        .max_by(|a, b| {
+                            a.confidence
+                                .partial_cmp(&b.confidence)
+                                .unwrap_or(std::cmp::Ordering::Equal)
+                        });
+                    let exposed =
+                        best.and_then(|dep| mirror_affected_projects(db, input, dep, None));
+                    let tier = best.and_then(|dep| mirror_severity_tier(db, input, dep, None));
+                    c.priority = match tier {
+                        Some("medium") => signals::SignalPriority::Alert,
+                        Some("low") => signals::SignalPriority::Advisory,
+                        _ => signals::SignalPriority::Critical,
+                    };
+                    let prefix = if c.priority == signals::SignalPriority::Critical {
+                        "Critical"
+                    } else {
+                        "Security"
+                    };
+                    c.action = critical_security_action(matched_deps, exposed.as_deref(), prefix);
                 } else if c.signal_type == signals::SignalType::BreakingChange
                     && matched_deps
                         .iter()
@@ -3714,7 +3844,7 @@ mod tests {
             "c:/users/admin/documents/kairos-mvp/backend",
         )];
         assert_eq!(
-            critical_security_action(&deps),
+            critical_security_action(&deps, None, "Critical"),
             "Critical: Security issue affects axios in kairos-mvp/backend"
         );
     }
@@ -3725,7 +3855,7 @@ mod tests {
         // carry no project and keep the original wording.
         let deps = vec![disp_dep("lodash", 0.92, true)];
         assert_eq!(
-            critical_security_action(&deps),
+            critical_security_action(&deps, None, "Critical"),
             "Critical: Security issue affects your dependency lodash"
         );
     }
@@ -3740,8 +3870,29 @@ mod tests {
             ..disp_dep("rkyv", 0.92, true)
         }];
         assert_eq!(
-            critical_security_action(&deps),
+            critical_security_action(&deps, None, "Critical"),
             "Critical: Security issue affects rkyv in 4da/relay (+1 more)"
+        );
+    }
+
+    /// 2026-09-07 live: "jsonwebtoken in 4da/relay (+1 more)" — the "+1" ran
+    /// the fixed 10.4.0. When the mirror can say which projects are exposed,
+    /// only those are named; the severity prefix follows the advisory's tier.
+    #[test]
+    fn critical_action_names_only_the_exposed_projects_when_known() {
+        let deps = vec![DepMatch {
+            project_paths: vec!["d:/4da/relay".to_string(), "d:/4da/src-tauri".to_string()],
+            ..disp_dep("jsonwebtoken", 0.92, true)
+        }];
+        let exposed = vec!["d:/4da/relay".to_string()];
+        assert_eq!(
+            critical_security_action(&deps, Some(&exposed), "Security"),
+            "Security: Security issue affects jsonwebtoken in 4da/relay"
+        );
+        // An empty exposed set is "cannot tell" here — never a silent all-clear.
+        assert_eq!(
+            critical_security_action(&deps, Some(&[]), "Critical"),
+            "Critical: Security issue affects jsonwebtoken in 4da/relay (+1 more)"
         );
     }
 
@@ -3753,7 +3904,7 @@ mod tests {
             disp_dep("sentry-react", 0.35, false),
         ];
         assert_eq!(
-            critical_security_action(&deps),
+            critical_security_action(&deps, None, "Critical"),
             "Critical: Security issue affects your dependency lodash"
         );
     }
@@ -3772,7 +3923,7 @@ mod tests {
             disp_dep("tauri-apps-plugin-opener", 0.95, false),
             disp_dep("tauri-apps-plugin-updater", 0.35, false),
         ];
-        let action = critical_security_action(&deps);
+        let action = critical_security_action(&deps, None, "Critical");
         assert_eq!(
             action, "Critical: Security issue affects one of your dependencies",
             "an unverified match must never be named in a Critical alert"
@@ -3792,7 +3943,7 @@ mod tests {
     fn critical_action_omits_the_name_below_the_grounding_confidence_floor() {
         let deps = vec![disp_dep("react", 0.20, true)];
         assert_eq!(
-            critical_security_action(&deps),
+            critical_security_action(&deps, None, "Critical"),
             "Critical: Security issue affects one of your dependencies"
         );
     }

@@ -2346,10 +2346,17 @@ fn generate_recommendations(
 ) -> Vec<BlindSpotRecommendation> {
     let mut recs = Vec::new();
 
-    // Recommendation for critical/high uncovered deps
+    // Recommendation for critical/high uncovered deps — by the urgency the
+    // items DISPLAY (consequence-adjusted), not the raw engagement risk the
+    // items no longer show.
     let critical_deps: Vec<&UncoveredDep> = uncovered
         .iter()
-        .filter(|d| d.risk_level == "critical" || d.risk_level == "high")
+        .filter(|d| {
+            matches!(
+                uncovered_dep_display_urgency(d),
+                Urgency::Critical | Urgency::High
+            )
+        })
         .collect();
 
     if !critical_deps.is_empty() {
@@ -2358,11 +2365,16 @@ fn generate_recommendations(
             .take(3)
             .map(|d| d.name.as_str())
             .collect();
+        let n = critical_deps.len();
         recs.push(BlindSpotRecommendation {
             action: format!("Review signals for: {}", dep_names.join(", ")),
             reason: format!(
-                "{} dependencies have critical/high risk blind spots with no recent engagement",
-                critical_deps.len()
+                "{n} {} unreviewed security or breaking-change signals",
+                if n == 1 {
+                    "dependency has"
+                } else {
+                    "dependencies have"
+                }
             ),
             priority: "high".to_string(),
         });
@@ -2723,30 +2735,78 @@ struct DepSignalBreakdown {
     other: u32,
 }
 
-fn count_signal_types_for_dep(dep_name: &str) -> DepSignalBreakdown {
+fn count_signal_types_for_dep(dep_name: &str, installed: Option<&str>) -> DepSignalBreakdown {
     #[cfg(test)]
     {
-        test_support::with_test_conn(|conn| count_signal_types_for_dep_conn(conn, dep_name))
-            .unwrap_or_default()
+        test_support::with_test_conn(|conn| {
+            count_signal_types_for_dep_conn(conn, dep_name, installed)
+        })
+        .unwrap_or_default()
     }
     #[cfg(not(test))]
     {
+        // The breakdown drives the item AND the recommendations for the same
+        // report; memoise per (dep, installed) for the report's lifetime so
+        // the second consumer costs nothing (get_blind_spots measured 15 s).
+        static MEMO: std::sync::Mutex<
+            Option<std::collections::HashMap<String, (std::time::Instant, DepSignalBreakdown)>>,
+        > = std::sync::Mutex::new(None);
+        let key = format!("{dep_name}\u{0}{}", installed.unwrap_or(""));
+        if let Ok(guard) = MEMO.lock() {
+            if let Some((at, cached)) = guard.as_ref().and_then(|m| m.get(&key)) {
+                if at.elapsed() < std::time::Duration::from_mins(2) {
+                    return *cached;
+                }
+            }
+        }
         let db = match crate::get_database() {
             Ok(db) => db,
             Err(_) => return DepSignalBreakdown::default(),
         };
-        let conn = db.conn.lock();
-        count_signal_types_for_dep_conn(&conn, dep_name)
+        let computed = {
+            let conn = db.conn.lock();
+            count_signal_types_for_dep_conn(&conn, dep_name, installed)
+        };
+        if let Ok(mut guard) = MEMO.lock() {
+            guard
+                .get_or_insert_with(Default::default)
+                .insert(key, (std::time::Instant::now(), computed));
+        }
+        computed
+    }
+}
+
+/// Is `announced` a version the user does not already run? Unparseable
+/// versions count as new (conservative — a release we cannot compare is
+/// still worth a look).
+fn release_is_newer_than_installed(announced: Option<&str>, installed: Option<&str>) -> bool {
+    let (Some(a), Some(i)) = (announced, installed) else {
+        return true;
+    };
+    match (
+        semver::Version::parse(a.trim_start_matches(['v', 'V'])),
+        semver::Version::parse(i.trim_start_matches(['v', 'V'])),
+    ) {
+        (Ok(a), Ok(i)) => a > i,
+        _ => true,
     }
 }
 
 fn count_signal_types_for_dep_conn(
     conn: &rusqlite::Connection,
     dep_name: &str,
+    installed: Option<&str>,
 ) -> DepSignalBreakdown {
     let mut b = DepSignalBreakdown::default();
     let dep_lower = dep_name.to_lowercase();
     let ambiguous = is_ambiguous_package_name(dep_name);
+    // A security signal counts only while the install is exposed to a stored
+    // advisory. Live 2026-09-07: hono 4.13.3 (every advisory fixed ≤ 4.12.34),
+    // lettre 0.11.22 (= the fix) and react 19.2.7 (OSV-clean) all read
+    // "N security signals unreviewed" at HIGH, and the AI assessment then
+    // told the user to review before upgrading. Conservative: an unknown
+    // installed version stays exposed.
+    let exposed = crate::knowledge_decay::still_vulnerable(conn, dep_name, installed, &[]);
     // Candidates: everything the linker bound to this package with
     // registry/advisory proof, plus title substring hits — re-checked below.
     // The bare `title LIKE '%name%'` this replaced counted five Next.js
@@ -2779,23 +2839,47 @@ fn count_signal_types_for_dep_conn(
         return b;
     };
     for (title, content_type, source_type, linked) in rows.flatten() {
-        // A linker row is proof. Without one: an advisory row (osv / cve)
-        // never counts on its title — its `Affected:` line is the only honest
-        // link and the linker already read it; an ambiguous name never counts
-        // on its title; anything else needs the dependency name as a WHOLE
-        // word — "silverstripe" is not stripe, "honors" is not hono,
-        // "reacted" is not react.
-        let qualifies = linked
-            || (!matches!(source_type.as_str(), "osv" | "cve")
-                && !ambiguous
-                && has_word_boundary_match(&title.to_lowercase(), &dep_lower));
+        // A REGISTRY row is a release of its SUBJECT crate, nothing else: the
+        // subject must be this dependency (axum-stack, axum-serde-boundary
+        // and tauri-plugin-* are not releases of axum or tauri — live
+        // 2026-09-07 "axum — 32 new releases in 30 days" for a crate that
+        // shipped once, in April), and a version the user already runs is
+        // not a NEW release ("sha2 — 2 new releases" for the installed 0.11.0).
+        if crate::dep_linker::is_registry_source(&source_type) {
+            let Some((subject, version)) = crate::dep_linker::registry_title_subject(&title) else {
+                continue;
+            };
+            if !crate::dep_linker::registry_names_equal(&subject, dep_name) {
+                continue;
+            }
+            if release_is_newer_than_installed(version.as_deref(), installed) {
+                b.releases += 1;
+            }
+            continue;
+        }
+        // An ADVISORY row counts only through the linker's `Affected:` proof
+        // and only while the install is exposed; its title is never the link.
+        if matches!(source_type.as_str(), "osv" | "cve") {
+            if linked && exposed {
+                b.security += 1;
+            }
+            continue;
+        }
+        // Editorial rows: a linker row is proof; otherwise an ambiguous name
+        // never counts on its title and anything else needs the dependency
+        // name as a WHOLE word — "silverstripe" is not stripe, "honors" is
+        // not hono, "reacted" is not react. An editorial security story is a
+        // citation about the package, never proof of exposure — it is
+        // discussion here (the Shai-Hulud codegen story is not a react bug).
+        let qualifies =
+            linked || (!ambiguous && has_word_boundary_match(&title.to_lowercase(), &dep_lower));
         if !qualifies {
             continue;
         }
         match content_type.as_deref() {
             Some("release_notes") | Some("platform_update") => b.releases += 1,
             Some("expert_analysis") | Some("deep_dive") => b.analyses += 1,
-            Some("security_advisory") | Some("breaking_change") => b.security += 1,
+            Some("breaking_change") => b.security += 1,
             _ => b.other += 1,
         }
     }
@@ -2812,6 +2896,48 @@ fn cap_urgency_at_medium(u: Urgency) -> Urgency {
     }
 }
 
+/// Consequence-adjusted urgency for a coverage gap — THE urgency the item
+/// shows and the recommendation counts (they disagreed live 2026-09-07:
+/// "39 dependencies have critical/high risk" above a list showing 5 High).
+/// Security/breaking elevates regardless of volume; real release/analysis
+/// activity keeps the risk-based urgency; deps whose only unseen signals are
+/// general discussion are capped at Medium. Unmonitored deps (no breakdown)
+/// keep their risk-based urgency. A dep inactive on every target the user
+/// builds is capped to Watch — surfaced, never urgent, never hidden.
+fn consequence_urgency(d: &UncoveredDep, breakdown: Option<DepSignalBreakdown>) -> Urgency {
+    let urgency = match breakdown {
+        // Urgency ordinals: Critical < High < Medium < Watch, so the MORE
+        // urgent of two is the smaller one — use min() to mean "at least High"
+        // (keeps Critical if the risk is already critical).
+        Some(b) if b.security > 0 => Urgency::High.min(risk_level_to_urgency(&d.risk_level)),
+        // Unread releases / analyses are Medium at most, and a single unread
+        // release is a Watch: live 2026-09-06, 43 of 87 coverage gaps were
+        // HIGH because one release of `@fontsource-variable/inter` or
+        // `react-dom` inherited the engagement-based risk level.
+        Some(b) if b.releases + b.analyses == 1 => Urgency::Watch,
+        Some(b) if b.releases > 0 || b.analyses > 0 => {
+            cap_urgency_at_medium(risk_level_to_urgency(&d.risk_level))
+        }
+        Some(_) => cap_urgency_at_medium(risk_level_to_urgency(&d.risk_level)),
+        None => risk_level_to_urgency(&d.risk_level),
+    };
+    if d.platform_active {
+        urgency
+    } else {
+        Urgency::Watch
+    }
+}
+
+/// The urgency a coverage gap will display, computed the way
+/// [`uncovered_dep_to_evidence_item`] computes it (memoised breakdown).
+fn uncovered_dep_display_urgency(d: &UncoveredDep) -> Urgency {
+    let bare = bare_package_name(&d.name);
+    let installed = lookup_installed_version(bare);
+    let breakdown = (d.available_signal_count > 0)
+        .then(|| count_signal_types_for_dep(bare, installed.as_deref()));
+    consequence_urgency(d, breakdown)
+}
+
 fn uncovered_dep_to_evidence_item(d: &UncoveredDep) -> EvidenceItem {
     // d.name is the DISPLAY name ("react (npm)"); signal/version lookups match
     // article titles via LIKE, which never carry the " (ecosystem)" qualifier, so
@@ -2819,7 +2945,9 @@ fn uncovered_dep_to_evidence_item(d: &UncoveredDep) -> EvidenceItem {
     // unseen signals) — it drives the title, the explanation, AND the consequence-
     // weighted confidence/urgency below (#2b: rank by what changed, not by volume).
     let bare = bare_package_name(&d.name);
-    let breakdown = (d.available_signal_count > 0).then(|| count_signal_types_for_dep(bare));
+    let installed_version = lookup_installed_version(bare);
+    let breakdown = (d.available_signal_count > 0)
+        .then(|| count_signal_types_for_dep(bare, installed_version.as_deref()));
 
     // Zero-signal deps get a distinct title and explanation — they have
     // NO coverage at all, which is qualitatively different from "has signals
@@ -2860,7 +2988,6 @@ fn uncovered_dep_to_evidence_item(d: &UncoveredDep) -> EvidenceItem {
         // reads as FOMO, not insight). Fall back to a soft "N updates to review"
         // only when there is no consequence signal at all.
         let b = breakdown.unwrap_or_default();
-        let installed_version = lookup_installed_version(bare);
         let title = truncate_title(&if b.security > 0 {
             format!(
                 "{} — {} security/breaking-change signal{} unreviewed",
@@ -2936,37 +3063,7 @@ fn uncovered_dep_to_evidence_item(d: &UncoveredDep) -> EvidenceItem {
         (title, explanation_parts.join(" "))
     };
 
-    // Consequence-adjusted urgency: security/breaking elevates regardless of
-    // volume; real release/analysis activity keeps the risk-based urgency;
-    // deps whose only unseen signals are general discussion are capped at
-    // Medium. Unmonitored deps (no breakdown) keep their risk-based urgency.
-    let urgency = match breakdown {
-        // Urgency ordinals: Critical < High < Medium < Watch, so the MORE
-        // urgent of two is the smaller one — use min() to mean "at least High"
-        // (keeps Critical if the risk is already critical).
-        Some(b) if b.security > 0 => Urgency::High.min(risk_level_to_urgency(&d.risk_level)),
-        // Unread releases / analyses are Medium at most, and a single unread
-        // release is a Watch: live 2026-09-06, 43 of 87 coverage gaps were
-        // HIGH because one release of `@fontsource-variable/inter` or
-        // `react-dom` inherited the engagement-based risk level.
-        Some(b) if b.releases + b.analyses == 1 => Urgency::Watch,
-        Some(b) if b.releases > 0 || b.analyses > 0 => {
-            cap_urgency_at_medium(risk_level_to_urgency(&d.risk_level))
-        }
-        Some(_) => cap_urgency_at_medium(risk_level_to_urgency(&d.risk_level)),
-        None => risk_level_to_urgency(&d.risk_level),
-    };
-    // Platform-relevance de-prioritisation (Phase 2b): a dep inactive on every
-    // target the user builds (e.g. a `cfg(not(windows))` crate on Windows) has
-    // its coverage-gap urgency capped to Watch — surfaced, never urgent, and
-    // never hidden (a cross-platform dev still reaches it). Mirrors the preemption
-    // de-prioritisation. `platform_active` defaults true, so this is a no-op until
-    // the scanner + Phase-85 columns confidently mark a dep inactive.
-    let urgency = if d.platform_active {
-        urgency
-    } else {
-        Urgency::Watch
-    };
+    let urgency = consequence_urgency(d, breakdown);
 
     // Synthesize at least one inferred citation so the schema's
     // "evidence required for user-surfaced kinds" rule holds. Real
@@ -3044,7 +3141,7 @@ fn stale_topic_to_evidence_item(t: &StaleTopic) -> EvidenceItem {
     // releases, then analyses) rather than the raw unread count.
     // DepSignalBreakdown is Copy, so both matches read it freely.
     let signal_breakdown =
-        (t.missed_signal_count > 0).then(|| count_signal_types_for_dep(&t.topic));
+        (t.missed_signal_count > 0).then(|| count_signal_types_for_dep(&t.topic, None));
     let title = match signal_breakdown {
         Some(b) if b.security > 0 => truncate_title(&format!(
             "{} — {} security/breaking-change signal{} unreviewed",
@@ -3400,6 +3497,10 @@ fn llm_judged_blind_spot_items() -> Vec<EvidenceItem> {
 
     let conn = db.conn.lock();
     let mut items = Vec::new();
+    // One story once: the judge sees every mirror of a post (lobsters +
+    // two Mastodon boosts of "Announcing Rust 1.98.1" all judged relevant),
+    // and the panel showed all three (2026-09-07).
+    let mut seen_stories: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     for judgment in &judgments {
         // Load the source item to get title/url/source_type
@@ -3417,6 +3518,15 @@ fn llm_judged_blind_spot_items() -> Vec<EvidenceItem> {
         };
 
         if is_preemption_territory(&title_raw) || source_type == "osv" || source_type == "cve" {
+            continue;
+        }
+
+        let story_key = url
+            .as_deref()
+            .map(crate::scoring::normalize_result_url)
+            .filter(|u| !u.is_empty())
+            .unwrap_or_else(|| crate::scoring::normalize_result_title(&title_raw));
+        if !story_key.is_empty() && !seen_stories.insert(story_key) {
             continue;
         }
 
@@ -3738,8 +3848,19 @@ pub async fn get_blind_spots() -> std::result::Result<EvidenceFeed, String> {
             }
         }
 
-        // Tier 2: inject LLM-judged blind spot items (missed signals the user hasn't seen)
-        feed.items.extend(llm_judged_blind_spot_items());
+        // Tier 2: inject LLM-judged blind spot items (missed signals the user
+        // hasn't seen) — skipping any story Tier 1 already lists as a missed
+        // signal (the same `crates.io: tauri v2.11.5` appeared twice, 2026-09-07).
+        let missed_ids: std::collections::HashSet<String> = feed
+            .items
+            .iter()
+            .filter_map(|i| i.id.strip_prefix("bs_missed_").map(str::to_string))
+            .collect();
+        feed.items
+            .extend(llm_judged_blind_spot_items().into_iter().filter(|i| {
+                i.id.strip_prefix("llm-bs-")
+                    .is_none_or(|sid| !missed_ids.contains(sid))
+            }));
 
         let total_tracked = feed.total_tracked;
         let weak_match_count = feed.weak_match_count;
@@ -6211,22 +6332,140 @@ mod tests {
         );
         assert!(!weak.iter().any(|d| d.name.contains("image")));
 
-        let b = count_signal_types_for_dep_conn(&conn, "image");
+        let b = count_signal_types_for_dep_conn(&conn, "image", None);
         assert_eq!(b.security, 1);
         assert_eq!(
             b.releases, 0,
             "docker / diffusion / container titles are not image releases"
         );
-        // A non-ambiguous name keeps the title-based breakdown.
+        // A non-ambiguous name keeps the registry-subject breakdown.
         insert_source_item_with_meta(
             &conn,
-            "axum 0.8.6 released",
+            "crates.io: axum v0.8.6",
             "crates_io",
             Some("release_notes"),
             0.7,
             1,
         );
-        assert_eq!(count_signal_types_for_dep_conn(&conn, "axum").releases, 1);
+        assert_eq!(
+            count_signal_types_for_dep_conn(&conn, "axum", None).releases,
+            1
+        );
+    }
+
+    /// 2026-09-07 live: "axum — 32 new releases in 30 days" counted every
+    /// `axum-*` crate on crates.io, and "sha2 — 2 new releases" counted the
+    /// 0.11.0 the user already runs. A registry row is a release of its
+    /// SUBJECT only, and only when the user does not already run it.
+    #[test]
+    fn registry_rows_count_only_their_subject_and_only_newer_versions() {
+        let conn = setup_test_db();
+        for title in [
+            "crates.io: axum v0.8.9",
+            "crates.io: axum-stack v0.1.0",
+            "crates.io: axum-serde-boundary v0.1.0",
+            "crates.io: axum_marko_build v0.1.0",
+        ] {
+            insert_source_item_with_meta(&conn, title, "crates_io", Some("release_notes"), 0.7, 1);
+        }
+        assert_eq!(
+            count_signal_types_for_dep_conn(&conn, "axum", None).releases,
+            1,
+            "axum-stack, axum-serde-boundary and axum_marko_build are not axum releases"
+        );
+        assert_eq!(
+            count_signal_types_for_dep_conn(&conn, "axum", Some("0.8.9")).releases,
+            0,
+            "the release the user already runs is not a NEW release"
+        );
+        assert_eq!(
+            count_signal_types_for_dep_conn(&conn, "axum", Some("0.8.6")).releases,
+            1,
+            "a newer release than the installed one counts"
+        );
+        // Registry subjects honour crates.io's -/_ equivalence.
+        insert_source_item_with_meta(
+            &conn,
+            "crates.io: serial-test v4.0.1",
+            "crates_io",
+            Some("release_notes"),
+            0.7,
+            1,
+        );
+        assert_eq!(
+            count_signal_types_for_dep_conn(&conn, "serial_test", Some("3.4.0")).releases,
+            1
+        );
+    }
+
+    /// 2026-09-07 live: hono 4.13.3 (every advisory fixed ≤ 4.12.34), lettre
+    /// 0.11.22 (= the fix) and react 19.2.7 read "N security signals
+    /// unreviewed" at HIGH. A linked advisory counts only while the
+    /// installed version is inside its range; an editorial security story
+    /// naming the package is discussion, not exposure.
+    #[test]
+    fn security_signals_require_exposure_of_the_installed_version() {
+        let conn = setup_test_db();
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS osv_advisories (
+                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                 advisory_id TEXT NOT NULL, summary TEXT NOT NULL, details TEXT,
+                 package_name TEXT NOT NULL, ecosystem TEXT NOT NULL,
+                 affected_ranges TEXT, fixed_versions TEXT, severity_type TEXT,
+                 cvss_score REAL, source_url TEXT, published_at TEXT, modified_at TEXT,
+                 synced_at TEXT NOT NULL DEFAULT (datetime('now')),
+                 withdrawn_at TEXT, aliases TEXT, severity_label TEXT
+             );",
+        )
+        .unwrap();
+        let hono_cve = insert_source_item_with_meta(
+            &conn,
+            "[GHSA-f23p-vx2j-j53r] hono: memo() retains SSR output across requests",
+            "osv",
+            Some("security_advisory"),
+            0.9,
+            2,
+        );
+        conn.execute(
+            "INSERT INTO source_item_dependencies
+                (source_item_id, package_name, ecosystem, match_type, confidence)
+             VALUES (?1, 'hono', 'npm', 'advisory', 0.90)",
+            params![hono_cve],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO osv_advisories (advisory_id, summary, package_name, ecosystem, affected_ranges, fixed_versions)
+             VALUES ('GHSA-f23p-vx2j-j53r', 'memo() retains SSR output', 'hono', 'npm',
+                     '[{\"type\":\"SEMVER\",\"events\":[{\"introduced\":\"0\"},{\"fixed\":\"4.12.34\"}]}]',
+                     '[\"4.12.34\"]')",
+            [],
+        )
+        .unwrap();
+        insert_source_item_with_meta(
+            &conn,
+            "OpenAPI hono Query Codegen Compromised in Mini Shai-Hulud npm Supply Chain Attack",
+            "rss",
+            Some("security_advisory"),
+            0.8,
+            1,
+        );
+
+        let exposed = count_signal_types_for_dep_conn(&conn, "hono", Some("4.11.0"));
+        assert_eq!(exposed.security, 1, "4.11.0 is inside the range");
+        assert_eq!(
+            exposed.other, 1,
+            "the editorial story is a citation, never a security signal"
+        );
+        let patched = count_signal_types_for_dep_conn(&conn, "hono", Some("4.13.3"));
+        assert_eq!(
+            patched.security, 0,
+            "4.13.3 is past the fix — no security signal to review"
+        );
+        let unknown = count_signal_types_for_dep_conn(&conn, "hono", None);
+        assert_eq!(
+            unknown.security, 1,
+            "an unknown installed version stays conservatively exposed"
+        );
     }
 
     /// The consequence breakdown behind a gap's urgency and title counted by
@@ -6311,7 +6550,7 @@ mod tests {
             1,
         );
 
-        let stripe = count_signal_types_for_dep_conn(&conn, "stripe");
+        let stripe = count_signal_types_for_dep_conn(&conn, "stripe", None);
         assert_eq!(
             (
                 stripe.security,
@@ -6322,12 +6561,12 @@ mod tests {
             (0, 0, 0, 0),
             "silverstripe is not stripe"
         );
-        let hono = count_signal_types_for_dep_conn(&conn, "hono");
+        let hono = count_signal_types_for_dep_conn(&conn, "hono", None);
         assert_eq!(
             hono.security, 1,
             "only the linker-bound Hono CVE counts — not 'honors', not @hono/oauth-providers"
         );
-        let react = count_signal_types_for_dep_conn(&conn, "react");
+        let react = count_signal_types_for_dep_conn(&conn, "react", None);
         assert_eq!(
             react.security, 0,
             "'reacted' and an unlinked Next.js advisory are not react security signals"

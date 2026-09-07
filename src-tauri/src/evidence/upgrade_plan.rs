@@ -300,11 +300,12 @@ fn aggregate_by_package(matches: &[MatchedAdvisory]) -> Vec<PackageGroup<'_>> {
                 .filter_map(|a| a.cvss_score)
                 .fold(0.0_f64, f64::max);
 
-            // Most-urgent advisory, then a one-level discount if the package is
-            // dev-only (labelled, never suppressed).
-            let base_urgency = advisories
+            // Most-urgent vulnerability (alias clusters, Phase 120), then a
+            // one-level discount if the package is dev-only (labelled, never
+            // suppressed).
+            let base_urgency = crate::osv::identity::cluster_by_vulnerability(&advisories)
                 .iter()
-                .map(|a| advisory_urgency(a))
+                .map(|cluster| cluster_urgency(cluster))
                 .min()
                 .unwrap_or(Urgency::Medium);
             let urgency = if all_dev {
@@ -355,8 +356,18 @@ impl PackageGroup<'_> {
         )
     }
 
+    /// One row per VULNERABILITY (Phase 120): the mirror stores a GHSA and
+    /// its RUSTSEC twin as two rows; the plan counts, cites and grades the
+    /// bug once ("clears 2 advisories" for one quinn-proto bug, 2026-09-07).
+    fn representatives(&self) -> Vec<&'_ MatchedAdvisory> {
+        crate::osv::identity::cluster_by_vulnerability(&self.advisories)
+            .into_iter()
+            .map(|cluster| cluster[0])
+            .collect()
+    }
+
     fn advisory_count(&self) -> usize {
-        self.advisories.len()
+        self.representatives().len()
     }
 
     fn into_evidence_item(self, now_millis: i64) -> EvidenceItem {
@@ -404,8 +415,8 @@ impl PackageGroup<'_> {
         } else {
             ""
         };
-        let ids: Vec<&str> = self
-            .advisories
+        let representatives = self.representatives();
+        let ids: Vec<&str> = representatives
             .iter()
             .take(MAX_CITATIONS)
             .map(|a| a.advisory_id.as_str())
@@ -430,9 +441,8 @@ impl PackageGroup<'_> {
             more = more_note,
         );
 
-        // Citations: one per advisory (capped), plus the affected-projects context.
-        let mut evidence: Vec<EvidenceCitation> = self
-            .advisories
+        // Citations: one per vulnerability (capped), plus the affected-projects context.
+        let mut evidence: Vec<EvidenceCitation> = representatives
             .iter()
             .take(MAX_CITATIONS)
             .map(|a| EvidenceCitation {
@@ -663,12 +673,15 @@ fn normalize_ecosystem(eco: &str) -> String {
 /// ("CVSS_V3"), NOT the level — so the level comes from `cvss_score`. A
 /// confirmed match with no score defaults to `Medium` (a real advisory, but no
 /// evidence to call it Critical or dismiss it to Watch).
-fn advisory_urgency(a: &MatchedAdvisory) -> Urgency {
-    match a.cvss_score {
-        Some(c) if c >= 9.0 => Urgency::Critical,
-        Some(c) if c >= 7.0 => Urgency::High,
-        Some(c) if c >= 4.0 => Urgency::Medium,
-        Some(c) if c > 0.0 => Urgency::Watch,
+/// Urgency of one vulnerability cluster from the shared severity tier (CVSS
+/// band, else the source's curated label). A cluster the source never graded
+/// stays Medium — the pre-Phase-120 default for an unscored advisory.
+fn cluster_urgency(cluster: &[&MatchedAdvisory]) -> Urgency {
+    match crate::osv::identity::cluster_severity_tier(cluster) {
+        Some("critical") => Urgency::Critical,
+        Some("high") => Urgency::High,
+        Some("medium") => Urgency::Medium,
+        Some("low") => Urgency::Watch,
         _ => Urgency::Medium,
     }
 }
