@@ -71,6 +71,12 @@ pub struct ProjectLiveness {
     /// Distinct paths actually probed on disk — the budget spent against
     /// [`MAX_FS_LIVENESS_PROBES`].
     fs_probes: AtomicUsize,
+    /// Normalized paths of projects their own repository gitignores
+    /// (`detected_projects.scratch`, 2026-09-07 audit). A label only: a
+    /// scratch tree's findings are never capped or dropped for being scratch,
+    /// they are just NAMED as one so `victauri-gauntlet` cannot masquerade as
+    /// a product.
+    scratch_paths: std::collections::HashSet<String>,
 }
 
 impl ProjectLiveness {
@@ -96,8 +102,23 @@ impl ProjectLiveness {
         }
         Self {
             dormant_days_by_path,
+            scratch_paths: load_scratch_paths(conn),
             ..Self::default()
         }
+    }
+
+    /// Is the project a scratch tree its enclosing repository gitignores?
+    /// Unknown projects are NOT scratch — the label must be earned.
+    pub fn is_scratch(&self, project_path: &str) -> bool {
+        self.scratch_paths
+            .contains(&normalize_project_path(project_path))
+    }
+
+    /// Test builder: mark these paths scratch.
+    #[cfg(test)]
+    pub fn with_scratch(mut self, paths: &[&str]) -> Self {
+        self.scratch_paths = paths.iter().map(|p| normalize_project_path(p)).collect();
+        self
     }
 
     /// Test constructor: (path, days_since_activity) pairs.
@@ -178,6 +199,24 @@ impl ProjectLiveness {
     pub fn all_dormant(&self, paths: &[String]) -> bool {
         !paths.is_empty() && paths.iter().all(|p| self.is_dormant(p))
     }
+}
+
+/// Normalized paths flagged `scratch` in `detected_projects`.
+///
+/// Separate statement from the liveness read so a pre-column database (the
+/// ACE migration adds `scratch` on its own schedule, outside `schema_version`)
+/// loses only the label and keeps every dormancy verdict.
+fn load_scratch_paths(conn: &Connection) -> std::collections::HashSet<String> {
+    let Ok(mut stmt) = conn.prepare("SELECT path FROM detected_projects WHERE scratch = 1") else {
+        return std::collections::HashSet::new();
+    };
+    stmt.query_map([], |row| row.get::<_, String>(0))
+        .map(|rows| {
+            rows.filter_map(std::result::Result::ok)
+                .map(|p| normalize_project_path(&p))
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// Windows/Unix separators, drive-letter case and trailing slashes all vary

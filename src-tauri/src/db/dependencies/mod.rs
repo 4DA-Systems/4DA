@@ -12,6 +12,8 @@ mod hygiene;
 #[cfg(test)]
 mod inclusion_tests;
 pub(crate) mod mappers;
+#[cfg(test)]
+mod platform_reach_tests;
 mod queries;
 #[cfg(test)]
 mod scope_tests;

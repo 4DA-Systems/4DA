@@ -21,6 +21,7 @@ import { execFileSync } from "node:child_process";
 import {
   hostTriple,
   activeCratesForHost,
+  parseTreeNames,
   _resetCargoPlatformCache,
 } from "../live/cargo-platform.js";
 import { platformFilterNote } from "../tools/vulnerability-scan.js";
@@ -58,6 +59,34 @@ describe("hostTriple", () => {
   });
 });
 
+describe("parseTreeNames", () => {
+  it("reads one crate name per package line, ignoring decorations", () => {
+    const names = parseTreeNames(
+      [
+        "fourda v1.0.2 (D:\\4DA\\src-tauri)",
+        "ammonia v4.1.4",
+        "cssparser-macros v0.7.0 (proc-macro)",
+        "quote v1.0.45 (*)",
+      ].join("\n"),
+    );
+    expect(names).toEqual(new Set(["fourda", "ammonia", "cssparser-macros", "quote"]));
+  });
+
+  it("skips blank lines and anything that is not a crate-name token", () => {
+    expect(parseTreeNames("\n[dev-dependencies]\n   \nserde v1.0.0\n")).toEqual(
+      new Set(["serde"]),
+    );
+  });
+
+  it("returns an empty set for empty output — which the caller reads as unknown", () => {
+    // Load-bearing: `computeActiveCrates` turns an empty set into `null`, and
+    // callers then keep EVERY crate active. Believing an empty set would mark
+    // the whole lockfile unreachable and bury every real advisory.
+    expect(parseTreeNames("").size).toBe(0);
+    expect(parseTreeNames("warning: nothing to print.\n").has("warning:")).toBe(false);
+  });
+});
+
 describe("activeCratesForHost", () => {
   it("returns null — unknown, never empty — for a directory with no Cargo.toml", () => {
     const result = activeCratesForHost(path.join(process.cwd(), "src", "__tests__"));
@@ -80,6 +109,29 @@ describe("activeCratesForHost", () => {
   const CARGO_TEST_TIMEOUT_MS = 90_000;
 
   it.runIf(runnable)(
+    "excludes a crate no enabled feature ever compiles",
+    () => {
+      // 2026-09-08 divergence: `cargo metadata --filter-platform` resolves the
+      // TARGET axis only, so it kept the `reqwest -> quinn` edge even though
+      // `reqwest`'s enabled features contain no `http3`. `quinn-proto` — never
+      // compiled on this machine — counted as built-on-host, and it was
+      // Preemption's #1 HIGH on the founder instance. `cargo tree` resolves
+      // features too, which is what the build does.
+      const crates = activeCratesForHost(dir!);
+      if (crates === null) {
+        console.warn("cargo tree --offline unavailable here — assertions skipped");
+        return;
+      }
+      expect(crates.has("serde"), "a crate the build DOES compile").toBe(true);
+      expect(
+        crates.has("quinn-proto"),
+        "an optional dep of a disabled feature is not built here",
+      ).toBe(false);
+    },
+    CARGO_TEST_TIMEOUT_MS,
+  );
+
+  it.runIf(runnable)(
     "excludes transitive crates that never build on this host",
     () => {
       const crates = activeCratesForHost(dir!);
@@ -90,7 +142,7 @@ describe("activeCratesForHost", () => {
       // non-null here would fail the build for an environment condition
       // rather than a regression. Verify the behaviour when cargo does answer.
       if (crates === null) {
-        console.warn("cargo metadata --offline unavailable here — assertions skipped");
+        console.warn("cargo tree --offline unavailable here — assertions skipped");
         return;
       }
 

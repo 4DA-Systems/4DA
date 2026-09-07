@@ -155,6 +155,20 @@ export function resolveAuditVersions(
   // platform-filtered. Ask cargo to resolve the graph for this host instead.
   // `null` means cargo could not answer; every crate then stays active, because
   // "unknown" must never silently hide a real advisory.
+  //
+  // THE SHARED PREDICATE — keep in step with the app's
+  // `src-tauri/src/platform_filter.rs`, which documents it in full:
+  //
+  //   a crate that is not RESOLVED FOR THE HOST is platform-inactive
+  //
+  // Two independent facts can make that true, and both are recorded because
+  // the copy differs: (1) the manifest gates it behind a `cfg(...)` for a
+  // target this machine is not — `targetActiveOnHost(declaredTarget)`, the
+  // app's `project_dependencies.target_cfg`; (2) cargo builds it for no
+  // target/feature combination here — `builtOnHost`, the app's
+  // `user_dependencies.target_cfg = 'lockfile-only'` (schema 122). Neither
+  // fact alone is the whole picture: (1) covers only DIRECT deps, and (2) is
+  // the only one that can see a transitive.
   const hostCrates = ecosystem === "crates.io" ? activeCratesForHost(cwd) : null;
   const triple = hostCrates ? hostTriple() : null;
 

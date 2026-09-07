@@ -41,4 +41,13 @@ is_dev?: boolean | null,
  * `LensHints::other_build_target` so the lens groups + badges them as
  * "other build targets" — surfaced, never hidden.
  */
-platform_inactive: boolean, };
+platform_inactive: boolean, 
+/**
+ * True when the reason for `platform_inactive` is that cargo resolves the
+ * crate for NO target/feature combination this host builds — it is in the
+ * lockfile and has never been compiled here (2026-09-07 audit: a HIGH
+ * `quinn-proto` finding). Strictly narrower than `platform_inactive`,
+ * which also covers a dep gated to a build target the user does have.
+ * Only selects more precise copy; changes no urgency of its own.
+ */
+lockfile_only: boolean, };

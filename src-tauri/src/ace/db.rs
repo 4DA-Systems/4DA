@@ -38,6 +38,12 @@ pub fn migrate(arc_conn: &Arc<Mutex<Connection>>) -> Result<()> {
             dependencies TEXT,             -- JSON array
             last_activity TEXT,
             detection_confidence REAL DEFAULT 0.5,
+            -- 1 when the project directory is gitignored by the repository
+            -- that encloses it: a scratch tree, a gauntlet, a throwaway
+            -- fixture. It is still a real project with real dependencies —
+            -- this only lets the surfaces SAY so, so the user can tell a
+            -- scratch dir from a product. Never suppresses.
+            scratch INTEGER NOT NULL DEFAULT 0,
             created_at TEXT DEFAULT (datetime('now')),
             updated_at TEXT DEFAULT (datetime('now'))
         );
@@ -238,6 +244,19 @@ pub fn migrate(arc_conn: &Arc<Mutex<Connection>>) -> Result<()> {
     // it, apply_detected_tech_decay had no place to record when it last ran.
     conn.execute_batch("ALTER TABLE detected_tech ADD COLUMN last_decay_at TEXT DEFAULT NULL;")
         .ok(); // ok() because column may already exist on subsequent runs
+
+    // A project directory that its enclosing repository gitignores is a
+    // scratch tree, not a product. Live 2026-09-07: `D:\4DA\victauri-gauntlet`
+    // — gitignored, with its own Cargo.lock — was indistinguishable from a
+    // real project on every surface, so its `anyhow`/`openssl` advisories
+    // read as the user's own security posture. This LABELS it; it never
+    // suppresses it. `detected_projects` lives outside `schema_version`
+    // (ACE migrates on its own schedule), so the column is added here rather
+    // than in a numbered phase; the CREATE above carries it for fresh DBs.
+    conn.execute_batch(
+        "ALTER TABLE detected_projects ADD COLUMN scratch INTEGER NOT NULL DEFAULT 0;",
+    )
+    .ok(); // ok() because column may already exist on subsequent runs
 
     // Phase 1D migration: Ensure interactions table has ContextEngine columns
     // If the interactions table was created before the schema unification,

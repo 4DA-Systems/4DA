@@ -117,14 +117,12 @@ type PendingDir = (PathBuf, u8, RepoScope);
 
 /// Parse lockfiles for transitive dependency discovery and store in the database.
 ///
-/// Two gates that the manifest scan already had and this walk lacked
-/// (2026-09-04 audit — a nested third-party clone contributed 1,811 of 7,933
-/// `user_dependencies` rows and every `rkyv` advisory):
-/// - a subdirectory that is a checkout of a DIFFERENT repository than the one
-///   enclosing it is skipped as foreign code (`repo_identity`);
-/// - a project dir whose relevance is below `PROJECT_RELEVANCE_FLOOR` (example
-///   / fixture paths, repos or no-git projects idle 90+ days) is skipped, with
-///   the same strict-manifest override the manifest path honours.
+/// Two gates the manifest scan had and this walk lacked (2026-09-04 audit — a
+/// nested third-party clone contributed 1,811 of 7,933 `user_dependencies`
+/// rows and every `rkyv` advisory): a subdirectory that is a checkout of a
+/// DIFFERENT repository is skipped as foreign code (`repo_identity`), and
+/// scaffolding paths are skipped by relevance. Dormancy is NOT a skip reason
+/// — see [`lockfile_dir_is_relevant`].
 pub(super) fn store_lockfile_dependencies(db: &Database, scan_paths: &[PathBuf]) {
     let scanner = crate::ace::scanner::ProjectScanner::new();
     let mut lockfile_count = 0u32;
@@ -189,8 +187,19 @@ fn lockfile_probe(dir: &Path) -> Option<PathBuf> {
         .find(|p| p.exists())
 }
 
-/// The relevance gate the manifest scan applies (`ace/mod.rs`), applied to a
-/// lockfile's directory via its probe file.
+/// The manifest scan's relevance gate (`ace/mod.rs`) applied to a lockfile's
+/// directory — minus the dormancy half (AD-043).
+///
+/// The floor conflated two reasons for a low score (`scanner::path_relevance`),
+/// and the dormancy half made a repository the user still owns VANISH:
+/// `navcal`, dormant since ~2025-11, holds 31 packages with published
+/// advisories and 4DA said nothing about it anywhere (2026-09-07).
+///
+/// Indexing a dormant project does not make it urgent: `user_dependencies`
+/// carries no relevance, the gated reads (`project_dependencies`, still
+/// floored) are unchanged, and Preemption collapses the findings into ONE
+/// quiet notice (`evidence::collapse_dormant_alerts`). Scaffolding is still
+/// skipped — it is scaffolding whatever its git log says.
 fn lockfile_dir_is_relevant(dir: &Path, probe: &Path) -> bool {
     let relevance = crate::ace::scanner::compute_project_relevance(probe);
     if relevance >= crate::ace::scanner::PROJECT_RELEVANCE_FLOOR
@@ -198,12 +207,21 @@ fn lockfile_dir_is_relevant(dir: &Path, probe: &Path) -> bool {
     {
         return true;
     }
+    if crate::ace::scanner::path_relevance(probe) >= crate::ace::scanner::PROJECT_RELEVANCE_FLOOR {
+        info!(
+            target: "4da::ace",
+            dir = %dir.display(),
+            relevance,
+            "Lockfile walk: indexing a DORMANT project — it is still the user's, and its advisories are still true"
+        );
+        return true;
+    }
     info!(
         target: "4da::ace",
         dir = %dir.display(),
         relevance,
         floor = crate::ace::scanner::PROJECT_RELEVANCE_FLOOR,
-        "Lockfile walk: skipping low-relevance project (example/fixture path or dormant)"
+        "Lockfile walk: skipping example/fixture path"
     );
     false
 }
@@ -365,6 +383,16 @@ fn process_cargo_lock(
             scanner.parse_cargo_toml(&toml_content, &mut signal);
             let mut all = signal.dependencies;
             all.extend(signal.dev_dependencies);
+            // `[target.'cfg(...)'.dependencies]` entries are DIRECT deps —
+            // the manifest names them. Dropping them classified every
+            // cfg-gated crate as transitive, costing it the direct-dependency
+            // urgency rank. The manifest scan always counted them.
+            all.extend(
+                signal
+                    .target_dependencies
+                    .iter()
+                    .map(|(name, _)| name.clone()),
+            );
             all
         } else {
             Vec::new()
@@ -406,6 +434,7 @@ fn process_cargo_lock(
         }
     }
     prune_stale_rows(db, project_path, "rust", &packages, &direct_deps);
+    crate::ace::cargo_resolve::record_unreachable_crates(db, dir, project_path, &packages);
     count
 }
 
