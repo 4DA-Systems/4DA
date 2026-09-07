@@ -144,18 +144,6 @@ fn extract_affected_range(content: &str) -> Option<String> {
     None
 }
 
-/// OSV ecosystem name for a dependency's manifest language, as stored in
-/// `osv_advisories.ecosystem` by the mirror sync.
-fn osv_ecosystem_for(dep_ecosystem: &str) -> Option<&'static str> {
-    match dep_ecosystem.to_lowercase().as_str() {
-        "rust" => Some("crates.io"),
-        "javascript" | "typescript" | "node" => Some("npm"),
-        "python" => Some("PyPI"),
-        "go" | "golang" => Some("Go"),
-        _ => None,
-    }
-}
-
 /// The advisory ids an item carries: the id in its title and the GHSA id in
 /// its URL (cve items are keyed by CVE id but link to the GHSA advisory,
 /// which is the key the OSV mirror stores).
@@ -185,21 +173,44 @@ fn mirror_version_verdict(
     installed: &str,
     title_id: Option<&str>,
 ) -> Option<bool> {
-    let ecosystem = osv_ecosystem_for(&dep.ecosystem)?;
-    let ids = item_advisory_ids(input, title_id);
-    if ids.is_empty() {
+    let advisory = mirror_advisory_for_item(db, input, dep, title_id)?;
+    let lang = dependencies::manifest_language_for_osv_ecosystem(&advisory.ecosystem)?;
+    // The project copies in the ADVISORY's ecosystem decide when any is
+    // known (v34): a name-merged edge may carry another manifest's version.
+    if let Some(exposed) = mirror_affected_projects(db, input, dep, title_id) {
+        return Some(!exposed.is_empty());
+    }
+    // Otherwise the edge's own version — only when the edge lives in the
+    // advisory's ecosystem (an Elixir `tokio` is not the crates.io one).
+    if !dependencies::ecosystem_congruent(lang, &dep.ecosystem) {
         return None;
     }
-    let raw_name = dep.raw_name.as_deref().unwrap_or(&dep.package_name);
-    let advisories = db
-        .get_osv_advisories_for_package(raw_name, ecosystem)
-        .ok()?;
-    let advisory = advisories
-        .iter()
-        .find(|a| ids.iter().any(|id| a.advisory_id.eq_ignore_ascii_case(id)))?;
     let (affected, confirmed) =
         crate::osv::matching::check_version_affected(Some(installed), &advisory.affected_ranges);
     confirmed.then_some(affected)
+}
+
+/// The mirror row for the advisory this item is about, found BY ID (the id
+/// in the title, or the GHSA id in the URL; aliases count), and only when it
+/// is about the matched dependency's package. No ecosystem filter: the
+/// item's advisory names its own ecosystem, and the dependency edge the
+/// scorer holds is merged by NAME across manifests — for `jsonwebtoken`
+/// (Cargo 9.3.1 / 10.4.0 and npm 9.0.3 on the founder instance) the edge
+/// carried npm and the crates.io GHSA was never found (v34).
+fn mirror_advisory_for_item(
+    db: &Database,
+    input: &ScoringInput,
+    dep: &DepMatch,
+    title_id: Option<&str>,
+) -> Option<crate::osv::types::StoredAdvisory> {
+    let ids = item_advisory_ids(input, title_id);
+    let raw_name = dep.raw_name.as_deref().unwrap_or(&dep.package_name);
+    ids.iter()
+        .filter_map(|id| db.get_osv_advisory_by_id(id).ok().flatten())
+        .find(|a| {
+            crate::dep_linker::registry_names_equal(&a.package_name, raw_name)
+                || crate::dep_linker::registry_names_equal(&a.package_name, &dep.package_name)
+        })
 }
 
 /// Parse a `Fixed in:` value — one version, or RustSec's comma-separated
@@ -2326,6 +2337,27 @@ fn release_already_installed(
     input: &ScoringInput,
     matched_deps: &[DepMatch],
 ) -> bool {
+    // Route 1 (v34): the registry SUBJECT — the same route that grounds a
+    // registry row (`compute_grounding_verdict`). A crate named by an
+    // English word (`tracing`) never gets a corroborated edge, so the
+    // dependency route below found nothing and "crates.io: tracing v0.1.44"
+    // stayed a new release at 0.897 with 0.1.44 in every project (live after
+    // the v33 drain, 2026-09-08). The subject's installed copies are read in
+    // the registry's own manifest language, every included project.
+    if crate::dep_linker::is_registry_source(input.source_type) {
+        if let (Some((subject, Some(version))), Some(lang)) = (
+            crate::dep_linker::registry_title_subject(input.title),
+            dependencies::registry_manifest_language(input.source_type),
+        ) {
+            if let Some(announced) = super::release_version::lenient_semver(&version, None) {
+                let installed = installed_versions_for_subject(db, &subject, lang);
+                if !installed.is_empty() {
+                    return super::release_version::already_installed(&announced, &installed);
+                }
+            }
+        }
+    }
+    // Route 2: the strongest corroborated dependency edge (editorial titles).
     let Some(dep) = matched_deps
         .iter()
         .filter(|d| dependencies::is_strong_grounding_match(d))
@@ -2352,6 +2384,38 @@ fn release_already_installed(
     };
     let installed = installed_versions_for_dep(db, dep);
     super::release_version::already_installed(&announced, &installed)
+}
+
+/// Installed copies of a registry subject across every included project, in
+/// the registry's manifest language (`-`/`_` equivalent names). Empty when
+/// nothing is known — an unknown install never hides a release.
+fn installed_versions_for_subject(
+    db: &Database,
+    subject: &str,
+    lang: &str,
+) -> Vec<semver::Version> {
+    let conn = db.conn.lock();
+    let Ok(mut stmt) = conn.prepare_cached(
+        "SELECT project_path, version, ecosystem FROM user_dependencies
+         WHERE LOWER(REPLACE(package_name, '_', '-')) = LOWER(REPLACE(?1, '_', '-'))
+           AND version IS NOT NULL AND version <> ''",
+    ) else {
+        return Vec::new();
+    };
+    let rows: Vec<(String, String, String)> = stmt
+        .query_map(rusqlite::params![subject], |r| {
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?))
+        })
+        .map(|rs| rs.flatten().collect())
+        .unwrap_or_default();
+    let user_excluded = crate::project_inclusion::user_excluded_paths();
+    rows.into_iter()
+        .filter(|(path, _, eco)| {
+            dependencies::ecosystem_congruent(lang, eco)
+                && !crate::project_inclusion::is_excluded_from_intelligence(path, &user_excluded)
+        })
+        .filter_map(|(_, v, _)| super::release_version::lenient_semver(&v, None))
+        .collect()
 }
 
 fn installed_versions_for_dep(db: &Database, dep: &DepMatch) -> Vec<semver::Version> {
@@ -2405,36 +2469,34 @@ fn mirror_affected_projects(
     dep: &DepMatch,
     title_id: Option<&str>,
 ) -> Option<Vec<String>> {
-    let ecosystem = osv_ecosystem_for(&dep.ecosystem)?;
-    let ids = item_advisory_ids(input, title_id);
-    if ids.is_empty() {
-        return None;
-    }
+    let advisory = mirror_advisory_for_item(db, input, dep, title_id)?;
+    let lang = dependencies::manifest_language_for_osv_ecosystem(&advisory.ecosystem)?;
     let raw_name = dep.raw_name.as_deref().unwrap_or(&dep.package_name);
-    let advisories = db
-        .get_osv_advisories_for_package(raw_name, ecosystem)
-        .ok()?;
-    let advisory = advisories
-        .iter()
-        .find(|a| ids.iter().any(|id| a.advisory_id.eq_ignore_ascii_case(id)))?;
     let conn = db.conn.lock();
     let mut stmt = conn
         .prepare_cached(
-            "SELECT version FROM user_dependencies
+            "SELECT version, ecosystem FROM user_dependencies
              WHERE LOWER(REPLACE(project_path, '\\', '/')) = LOWER(REPLACE(?1, '\\', '/'))
                AND LOWER(package_name) IN (LOWER(?2), LOWER(?3))
-               AND version IS NOT NULL AND version <> ''
-             LIMIT 1",
+               AND version IS NOT NULL AND version <> ''",
         )
         .ok()?;
     let mut decided = 0usize;
     let mut exposed: Vec<String> = Vec::new();
     for path in &dep.project_paths {
+        // The project's copy in the ADVISORY's ecosystem: an npm
+        // jsonwebtoken 9.0.3 in the editor extension is not exposed to a
+        // crates.io bug fixed in 10.3.0.
         let version: Option<String> = stmt
-            .query_row(rusqlite::params![path, raw_name, dep.package_name], |r| {
-                r.get::<_, String>(0)
+            .query_map(rusqlite::params![path, raw_name, dep.package_name], |r| {
+                Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?))
             })
-            .ok();
+            .ok()
+            .and_then(|rows| {
+                rows.flatten()
+                    .find(|(_, eco)| dependencies::ecosystem_congruent(lang, eco))
+                    .map(|(v, _)| v)
+            });
         let Some(version) = version else {
             continue;
         };
@@ -2461,18 +2523,7 @@ fn mirror_severity_tier(
     dep: &DepMatch,
     title_id: Option<&str>,
 ) -> Option<&'static str> {
-    let ecosystem = osv_ecosystem_for(&dep.ecosystem)?;
-    let ids = item_advisory_ids(input, title_id);
-    if ids.is_empty() {
-        return None;
-    }
-    let raw_name = dep.raw_name.as_deref().unwrap_or(&dep.package_name);
-    let advisories = db
-        .get_osv_advisories_for_package(raw_name, ecosystem)
-        .ok()?;
-    let advisory = advisories
-        .iter()
-        .find(|a| ids.iter().any(|id| a.advisory_id.eq_ignore_ascii_case(id)))?;
+    let advisory = mirror_advisory_for_item(db, input, dep, title_id)?;
     if let Some(score) = advisory.cvss_score {
         return Some(crate::osv::types::cvss_band(score));
     }
@@ -6414,6 +6465,226 @@ mod tests {
             raw_name: Some("tokio".to_string()),
             project_paths: Vec::new(),
         }
+    }
+
+    /// v34, live after the v33 drain: "crates.io: tracing v0.1.44" stayed a
+    /// new release at 0.897 with 0.1.44 in every project. `tracing` is an
+    /// English word, so the matcher never corroborates it and the
+    /// dependency route found no edge — the registry-subject route (the one
+    /// that GROUNDS the row) must decide instead.
+    #[test]
+    fn registry_subject_route_ceilings_an_uncorroborated_installed_release() {
+        let db = crate::test_utils::test_db();
+        db.store_dependency(
+            "/proj/relay",
+            "tracing",
+            Some("0.1.44"),
+            "rust",
+            false,
+            None,
+        )
+        .unwrap();
+        db.store_dependency("/proj/app", "tracing", Some("0.1.44"), "rust", false, None)
+            .unwrap();
+        let zero = vec![0.0_f32; crate::EMBEDDING_DIMS];
+        let tags: Vec<String> = Vec::new();
+        let mut input = advisory_input(
+            "crates.io: tracing v0.1.44",
+            "https://crates.io/crates/tracing",
+            "Application-level tracing for Rust.",
+            "crates_io",
+            &zero,
+            &tags,
+        );
+        input.source_id = Some("crate-tracing");
+        // No corroborated edge at all: the subject route alone decides.
+        assert!(
+            release_already_installed(&db, &input, &[]),
+            "every project runs 0.1.44 — the announcement is not new"
+        );
+        // One project behind keeps it new.
+        db.store_dependency(
+            "/proj/tools",
+            "tracing",
+            Some("0.1.43"),
+            "rust",
+            false,
+            None,
+        )
+        .unwrap();
+        assert!(!release_already_installed(&db, &input, &[]));
+        // An npm package of the same name is another ecosystem: it neither
+        // hides nor reveals a crates.io release.
+        let db2 = crate::test_utils::test_db();
+        db2.store_dependency(
+            "/proj/web",
+            "tracing",
+            Some("0.1.44"),
+            "javascript",
+            false,
+            None,
+        )
+        .unwrap();
+        assert!(
+            !release_already_installed(&db2, &input, &[]),
+            "an npm `tracing` says nothing about the crates.io release"
+        );
+        // The -/_ equivalence of registry names holds on the subject route.
+        let db3 = crate::test_utils::test_db();
+        db3.store_dependency(
+            "/proj/app",
+            "serial_test",
+            Some("4.0.1"),
+            "rust",
+            false,
+            None,
+        )
+        .unwrap();
+        let mut serial = advisory_input(
+            "crates.io: serial-test v4.0.1",
+            "https://crates.io/crates/serial-test",
+            "",
+            "crates_io",
+            &zero,
+            &tags,
+        );
+        serial.source_id = Some("crate-serial-test");
+        assert!(release_already_installed(&db3, &serial, &[]));
+    }
+
+    /// v34, live after the v33 drain: the user has `jsonwebtoken` in Cargo
+    /// (relay 9.3.1, src-tauri 10.4.0) AND npm (the editor extension, 9.0.3).
+    /// The scorer's dependency edge is merged by name and carried npm, so
+    /// the crates.io GHSA (label medium) was looked up under npm, never
+    /// found, and the ungraded fallback graded it Critical. The advisory is
+    /// found by ID, and its OWN ecosystem picks which project copies count.
+    #[test]
+    fn advisory_lookups_follow_the_advisory_ecosystem_not_the_merged_edge() {
+        let db = crate::test_utils::test_db();
+        db.upsert_osv_advisory_with_meta(
+            "GHSA-h395-gr6q-cpjc",
+            "type confusion leads to authorization bypass",
+            None,
+            "jsonwebtoken",
+            "crates.io",
+            Some(r#"[{"type":"SEMVER","events":[{"introduced":"0"},{"fixed":"10.3.0"}]}]"#),
+            Some("10.3.0"),
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(r#"["CVE-2026-25537"]"#),
+            Some("medium"),
+        )
+        .unwrap();
+        db.upsert_osv_advisory_with_meta(
+            "GHSA-8cf7-32gw-wr33",
+            "npm jsonwebtoken insecure default algorithm",
+            None,
+            "jsonwebtoken",
+            "npm",
+            Some(r#"[{"type":"SEMVER","events":[{"introduced":"0"},{"fixed":"9.0.0"}]}]"#),
+            Some("9.0.0"),
+            Some("CVSS_V3"),
+            Some(8.1),
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some("high"),
+        )
+        .unwrap();
+        db.store_dependency(
+            "/proj/relay",
+            "jsonwebtoken",
+            Some("9.3.1"),
+            "rust",
+            false,
+            None,
+        )
+        .unwrap();
+        db.store_dependency(
+            "/proj/app",
+            "jsonwebtoken",
+            Some("10.4.0"),
+            "rust",
+            false,
+            None,
+        )
+        .unwrap();
+        db.store_dependency(
+            "/proj/ext",
+            "jsonwebtoken",
+            Some("9.0.3"),
+            "javascript",
+            false,
+            None,
+        )
+        .unwrap();
+        // The merged edge carries the WRONG ecosystem for this advisory.
+        let edge = DepMatch {
+            package_name: "jsonwebtoken".to_string(),
+            confidence: 0.9,
+            version_delta: dependencies::VersionDelta::Unknown,
+            is_dev: false,
+            is_direct: true,
+            version: Some("9.3.1".to_string()),
+            ecosystem: "javascript".to_string(),
+            corroborated: true,
+            raw_name: Some("jsonwebtoken".to_string()),
+            project_paths: vec![
+                "/proj/relay".to_string(),
+                "/proj/app".to_string(),
+                "/proj/ext".to_string(),
+            ],
+        };
+        let zero = vec![0.0_f32; crate::EMBEDDING_DIMS];
+        let tags: Vec<String> = Vec::new();
+        let input = advisory_input(
+            "[GHSA-h395-gr6q-cpjc] jsonwebtoken: type confusion leads to authorization bypass",
+            "https://github.com/advisories/GHSA-h395-gr6q-cpjc",
+            "",
+            "osv",
+            &zero,
+            &tags,
+        );
+        assert_eq!(
+            mirror_severity_tier(&db, &input, &edge, None),
+            Some("medium"),
+            "the crates.io label, not the npm twin's CVSS band and not Critical"
+        );
+        assert_eq!(
+            mirror_affected_projects(&db, &input, &edge, None),
+            Some(vec!["/proj/relay".to_string()]),
+            "only the Cargo copy below 10.3.0 is exposed; the npm 9.0.3 is another ecosystem"
+        );
+        assert_eq!(
+            mirror_version_verdict(&db, &input, &edge, "9.3.1", None),
+            Some(true)
+        );
+        // A cve-source row keyed by the CVE alias resolves to the same GHSA.
+        let by_alias = advisory_input(
+            "[CVE-2026-25537] jsonwebtoken: type confusion",
+            "https://nvd.nist.gov/vuln/detail/CVE-2026-25537",
+            "",
+            "cve",
+            &zero,
+            &tags,
+        );
+        assert_eq!(
+            mirror_severity_tier(&db, &by_alias, &edge, Some("CVE-2026-25537")),
+            Some("medium")
+        );
+        // An advisory about ANOTHER package is never this item's advisory.
+        let other = DepMatch {
+            package_name: "tokio".to_string(),
+            raw_name: Some("tokio".to_string()),
+            ..edge.clone()
+        };
+        assert_eq!(mirror_severity_tier(&db, &input, &other, None), None);
     }
 
     #[test]

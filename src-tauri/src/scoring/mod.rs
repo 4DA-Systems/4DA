@@ -609,7 +609,17 @@ pub(crate) use types::{ScoringInput, ScoringOptions};
 // verdicts and display classification on release, signal and every
 // context-matched row — no positive-form predicate is a provable superset.
 // The whole corpus drains (5 minutes live at v32).
-pub(crate) const PIPELINE_VERSION: i32 = 33;
+// v34 (2026-09-08, live after the v33 drain): (1) a registry release of a
+// dependency grounded through the registry-subject route — an uncorroborated
+// name such as `tracing` — never reached the already-installed ceiling,
+// which read only corroborated edges ("crates.io: tracing v0.1.44" stayed a
+// new release at 0.897 with 0.1.44 in every project); (2) the mirror lookups
+// filtered by the merged dependency edge's ecosystem, so a package the user
+// has in two ecosystems (jsonwebtoken: Cargo and npm) looked its crates.io
+// advisory up under npm, found nothing, and the ungraded fallback said
+// Critical for a medium-labelled bug. Both change what is asserted at score
+// time: the whole corpus re-judges.
+pub(crate) const PIPELINE_VERSION: i32 = 34;
 
 /// Parse the topic tags carried in the `source_items.tags` column.
 ///

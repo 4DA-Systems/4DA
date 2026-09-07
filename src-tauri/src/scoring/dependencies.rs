@@ -221,7 +221,7 @@ pub(crate) struct GroundingVerdict {
 /// against `user_dependencies.ecosystem` ("rust" / "javascript" / "python" /
 /// "go" — set by the manifest scanners). Registries whose language never
 /// appears in scanned manifests return None and cannot subject-ground.
-fn registry_manifest_language(source_type: &str) -> Option<&'static str> {
+pub(crate) fn registry_manifest_language(source_type: &str) -> Option<&'static str> {
     match source_type {
         "crates_io" | "crates" => Some("rust"),
         "npm_registry" | "npm" => Some("javascript"),
@@ -236,7 +236,21 @@ fn registry_manifest_language(source_type: &str) -> Option<&'static str> {
 /// so both spellings accept npm subjects. Unknown/empty dep ecosystems do NOT
 /// ground — cross-ecosystem name collisions are precisely the failure class
 /// this exists to stop (a Rust crate mentioning "react" grounding a JS dep).
-fn ecosystem_congruent(registry_lang: &str, dep_ecosystem: &str) -> bool {
+/// The manifest language an OSV mirror ecosystem maps to — the inverse of
+/// `osv_ecosystem_for` on the scoring side, for filtering the user's
+/// dependency rows by the ADVISORY's ecosystem rather than by whichever
+/// ecosystem a name-merged dependency edge happened to carry.
+pub(crate) fn manifest_language_for_osv_ecosystem(osv_ecosystem: &str) -> Option<&'static str> {
+    match osv_ecosystem {
+        "crates.io" => Some("rust"),
+        "npm" => Some("javascript"),
+        "PyPI" => Some("python"),
+        "Go" => Some("go"),
+        _ => None,
+    }
+}
+
+pub(crate) fn ecosystem_congruent(registry_lang: &str, dep_ecosystem: &str) -> bool {
     let dep = dep_ecosystem.to_lowercase();
     match registry_lang {
         "javascript" => dep == "javascript" || dep == "typescript",
