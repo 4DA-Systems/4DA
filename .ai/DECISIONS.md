@@ -573,6 +573,7 @@
   - *Collapsing the train at fetch time (skip pre-releases):* Rejected — the pre-release IS the news until the final ships; the verdict lane already knows how to hold and release a slot.
   - *Dropping ungrounded ToolDiscovery entirely:* Rejected — a fresh Rust testing framework for a declared Rust developer is a discovery with no dependency edge by construction; declared technology is the honest second route.
   - *Raising the KNN scoring threshold to 0.80:* Rejected — the score contribution is calibrated by the persona simulations at 0.45; only the displayed claim was dishonest.
+- **Amended (v34, 2026-09-08):** two live findings after the v33 drain. (a) The already-installed check reads the registry SUBJECT's installed copies first (the route that grounds the row), because a crate named by an English word (`tracing`) never gets a corroborated edge. (b) Mirror lookups are by advisory id, aliases included, and the ADVISORY's ecosystem selects which project copies count — the scorer's name-merged edge may carry another manifest's ecosystem (`jsonwebtoken` in Cargo and npm). PIPELINE_VERSION 34.
 - **Date:** 2026-09-08
 - **Status:** Final
 

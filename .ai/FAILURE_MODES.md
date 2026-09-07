@@ -1012,3 +1012,42 @@ projects are ALL dormant collapses into ONE `Watch` summary per project
 (`evidence::collapse_dormant_alerts`), because the opposite failure (31 rows
 about a repo nobody is deploying) buries today's work just as effectively.
 A dormant project with nothing wrong emits nothing at all.
+
+---
+
+### The subject grounds the row; the edge decides the ceiling (2026-09-08, AD-041)
+
+**Symptom.** After the v33 drain, "crates.io: tracing v0.1.44" stayed a
+"New release in your stack" at 0.897 with 0.1.44 installed in every
+project, while sha2 0.11.0 and ed25519-dalek 3.0.0 were ceilinged as
+designed.
+
+**Root cause.** `tracing` is an English word, so the dependency matcher never
+corroborates it; the row is grounded through the registry-subject route.
+The already-installed reader consulted only corroborated edges, found
+none, and returned "not installed".
+
+**The rule.** A registry row's installed copies are read through the same
+subject that grounds it (`pipeline_v2::release_already_installed`, route 1),
+in the registry's own manifest language, every included project. A rule
+that reads a different edge than the one that admitted the row measures a
+different item.
+
+---
+
+### One name, two ecosystems, the wrong mirror shelf (2026-09-08, AD-041)
+
+**Symptom.** After the v33 drain, the jsonwebtoken GHSA (GitHub label
+moderate) carried a Critical signal priority; Preemption and the knowledge
+gap said medium.
+
+**Root cause.** The scorer merges dependency edges by name across manifests.
+The user has `jsonwebtoken` in Cargo (relay 9.3.1, src-tauri 10.4.0) and
+npm (the editor extension, 9.0.3); the merged edge carried npm, and the
+mirror lookups filtered by the EDGE's ecosystem — the crates.io advisory
+was never found, and the ungraded fallback graded it Critical.
+
+**The rule.** An advisory is found by its id (`Database::get_osv_advisory_by_id`,
+aliases included), and its OWN ecosystem chooses which project copies
+count (`mirror_affected_projects`, `mirror_version_verdict`). An edge's
+ecosystem is a hint about one manifest, never a filter on the mirror.
