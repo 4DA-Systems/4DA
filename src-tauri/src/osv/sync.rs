@@ -521,7 +521,7 @@ pub(super) fn store_vulnerability(
         let ranges_json = serialize_ranges(affected);
         let fixed_json = extract_fixed_versions(affected);
 
-        db.upsert_osv_advisory(
+        db.upsert_osv_advisory_with_meta(
             &vuln.id,
             summary,
             vuln.details.as_deref(),
@@ -535,6 +535,8 @@ pub(super) fn store_vulnerability(
             vuln.published.as_deref(),
             vuln.modified.as_deref(),
             vuln.withdrawn.as_deref(),
+            vuln.aliases_json().as_deref(),
+            vuln.severity_label().as_deref(),
         )
         .map_err(|e| FourDaError::Internal(format!("Failed to store advisory: {e}")))?;
 
@@ -716,6 +718,8 @@ mod tests {
             published: None,
             modified: None,
             withdrawn: None,
+            aliases: None,
+            database_specific: None,
         };
 
         let stored1 = store_vulnerability(&db, &vuln, &mut seen).unwrap();

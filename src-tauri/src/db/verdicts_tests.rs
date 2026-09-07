@@ -1118,6 +1118,85 @@ fn rejected_items_are_not_twins() {
     );
 }
 
+/// 2026-09-07 live: "This Week in Rust 666" was `duplicate_curated` of a
+/// mirror that itself was `duplicate_curated` of a boost the UGC gate later
+/// removed — nobody held the slot and the issue vanished. A twin verdict is
+/// a claim about the twin; when the twin leaves the feed the verdict is
+/// withdrawn and the row is judged on its own score by the risen sweep.
+#[test]
+fn orphaned_duplicate_verdict_is_withdrawn_and_the_row_re_enters_on_its_own_score() {
+    use crate::test_utils::insert_test_item_with_url;
+    let db = test_db();
+    let version = crate::scoring::PIPELINE_VERSION;
+    let original = insert_test_item_with_url(
+        &db,
+        "mastodon",
+        "o1",
+        "https://this-week-in-rust.org/blog/2026/08/26/this-week-in-rust-666/",
+        "This Week in Rust 666",
+        "body",
+    );
+    let canonical = insert_test_item_with_url(
+        &db,
+        "rss",
+        "o2",
+        "https://this-week-in-rust.org/blog/2026/08/26/this-week-in-rust-666/",
+        "This Week in Rust 666",
+        "body",
+    );
+    db.persist_feed_verdicts(&[(original, true, VerdictSource::Score)], version)
+        .unwrap();
+    db.persist_feed_verdicts_with_reasons(
+        &[(
+            canonical,
+            false,
+            VerdictSource::Score,
+            Some(VerdictReason::DuplicateCurated),
+        )],
+        version,
+    )
+    .unwrap();
+    // Nothing to withdraw while the twin is curated.
+    assert_eq!(db.withdraw_orphaned_duplicate_verdicts().unwrap(), 0);
+
+    // The twin falls out of the feed (a reasoned demotion, e.g. the UGC gate).
+    db.persist_feed_verdicts_with_reasons(
+        &[(
+            original,
+            false,
+            VerdictSource::Score,
+            Some(VerdictReason::LlmReject),
+        )],
+        version,
+    )
+    .unwrap();
+    assert_eq!(db.withdraw_orphaned_duplicate_verdicts().unwrap(), 1);
+    let (relevant, version_stamp, source) = verdict_of(&db, canonical);
+    assert_eq!(
+        relevant, None,
+        "the duplicate verdict is withdrawn, not flipped"
+    );
+    assert_eq!(version_stamp, None);
+    assert_eq!(source, None);
+
+    // The risen sweep now grants a FIRST verdict on the row's own score.
+    db.conn
+        .lock()
+        .execute(
+            "UPDATE source_items SET relevance_score = 0.88, scored_pipeline_version = ?1 WHERE id = ?2",
+            rusqlite::params![version, canonical],
+        )
+        .unwrap();
+    let outcome = db.promote_risen_verdicts(version, 0.40, 50).unwrap();
+    assert_eq!(
+        outcome.promoted, 1,
+        "a withdrawn duplicate re-enters as a first verdict"
+    );
+    assert_eq!(verdict_of(&db, canonical).0, Some(1));
+    // Idempotent: nothing left to withdraw.
+    assert_eq!(db.withdraw_orphaned_duplicate_verdicts().unwrap(), 0);
+}
+
 #[test]
 fn twin_rule_is_stable_under_a_full_redrain() {
     use crate::test_utils::insert_test_item_with_url;

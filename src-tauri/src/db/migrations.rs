@@ -1430,7 +1430,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 119;
+        const TARGET_VERSION: i64 = 120;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -3148,6 +3148,8 @@ impl Database {
                                 published_at TEXT,
                                 modified_at TEXT,
                                 synced_at TEXT NOT NULL DEFAULT (datetime('now')),
+                                aliases TEXT,
+                                severity_label TEXT,
                                 UNIQUE(advisory_id, package_name, ecosystem)
                             );
                             CREATE INDEX IF NOT EXISTS idx_osv_advisories_package
@@ -5541,6 +5543,58 @@ impl Database {
                             target: "4da::db",
                             updated,
                             "Phase 119: content_type backfilled from the durable scoring breakdown"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
+            // Phase 120: the OSV mirror learns which rows are the SAME
+            // vulnerability and how severe the source says it is. One row per
+            // id meant a GHSA and its RUSTSEC twin counted as "2 version-
+            // confirmed advisories" on Preemption and the upgrade plan, and a
+            // GitHub-reviewed MODERATE advisory whose CVSS block is an
+            // unscorable v4 vector had no severity at all — so one surface
+            // called it Critical while the next called it medium (2026-09-07).
+            // Additive columns; the next sync fills them. The same phase
+            // downgrades the linker rows an EDITORIAL security story earned
+            // from a bare title word ("Security advisory from 'rss' references
+            // 'react' in title" on the Shai-Hulud codegen story): those are
+            // title heuristics, not advisory proof, and every strict consumer
+            // (`exact_registry`/`advisory`) was reading them as proof.
+            if current_version < 120 {
+                Self::run_versioned_migration(
+                    &conn,
+                    119,
+                    120,
+                    "Phase 120: osv_advisories.aliases + severity_label; editorial title links demoted",
+                    |c| {
+                        for column in ["aliases", "severity_label"] {
+                            let has_column: bool = c
+                                .query_row(
+                                    "SELECT COUNT(*) FROM pragma_table_info('osv_advisories') WHERE name=?1",
+                                    [column],
+                                    |row| row.get::<_, i64>(0).map(|n| n > 0),
+                                )
+                                .unwrap_or(false);
+                            if !has_column {
+                                c.execute(
+                                    &format!("ALTER TABLE osv_advisories ADD COLUMN {column} TEXT"),
+                                    [],
+                                )?;
+                            }
+                        }
+                        let demoted = c.execute(
+                            "UPDATE source_item_dependencies
+                             SET match_type = 'title_heuristic', confidence = MIN(confidence, 0.5)
+                             WHERE match_type = 'advisory'
+                               AND evidence_text LIKE 'Security advisory from % references % in title%'",
+                            [],
+                        )?;
+                        info!(
+                            target: "4da::db",
+                            demoted,
+                            "Phase 120: aliases/severity_label added; title-word advisory links demoted to title_heuristic"
                         );
                         Ok(())
                     },

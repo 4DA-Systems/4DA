@@ -541,24 +541,34 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
         .into_values()
         .map(|group| {
             let first = group[0];
-            let advisory_count = group.len();
+            // Phase 120: one cluster per VULNERABILITY. The mirror holds a
+            // row per id, and OSV publishes the same bug as GHSA + RUSTSEC
+            // (+ CVE); counting rows said "2 advisories" for one quinn-proto
+            // bug on every surface (2026-09-07). Everything below that counts,
+            // cites or grades reads the cluster representatives.
+            let clusters = crate::osv::identity::cluster_by_vulnerability(&group);
+            let representatives: Vec<&crate::osv::types::MatchedAdvisory> =
+                clusters.iter().map(|c| c[0]).collect();
+            let advisory_count = clusters.len();
 
-            // Highest urgency across all advisories for this package
-            let raw_urgency = group
+            // Most urgent vulnerability for this package: the shared tier
+            // (CVSS band, else the source's curated label — the same tier
+            // Blind Spots, the banner and the MCP read) before the summary
+            // heuristic, so a MODERATE type-confusion bug is medium here and
+            // medium everywhere, not "authorization bypass → High" on one
+            // surface and Critical on the next.
+            let raw_urgency = clusters
                 .iter()
-                .map(|m| {
-                    if let Some(s) = m.cvss_score {
-                        if s >= 9.0 {
-                            AlertUrgency::Critical
-                        } else if s >= 7.0 {
-                            AlertUrgency::High
-                        } else if s >= 4.0 {
-                            AlertUrgency::Medium
-                        } else {
-                            AlertUrgency::Watch
+                .map(|cluster| {
+                    match crate::osv::identity::cluster_severity_tier(cluster) {
+                        Some("critical") => AlertUrgency::Critical,
+                        Some("high") => AlertUrgency::High,
+                        Some("medium") => AlertUrgency::Medium,
+                        Some("low") => AlertUrgency::Watch,
+                        _ => {
+                            let rep = cluster[0];
+                            infer_urgency_from_summary(&rep.summary, &rep.advisory_id)
                         }
-                    } else {
-                        infer_urgency_from_summary(&m.summary, &m.advisory_id)
                     }
                 })
                 .min_by_key(|u| urgency_rank(u))
@@ -668,8 +678,11 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
                 )
             };
 
-            // Collect advisory IDs for explanation
-            let advisory_ids: Vec<&str> = group.iter().map(|m| m.advisory_id.as_str()).collect();
+            // Collect advisory IDs for explanation — one per vulnerability
+            let advisory_ids: Vec<&str> = representatives
+                .iter()
+                .map(|m| m.advisory_id.as_str())
+                .collect();
             let ids_display = if advisory_count <= 3 {
                 advisory_ids.join(", ")
             } else {
@@ -709,8 +722,8 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
                 )
             };
 
-            // Include top 3 advisories as evidence entries
-            let evidence: Vec<AlertEvidence> = group
+            // Include top 3 vulnerabilities as evidence entries
+            let evidence: Vec<AlertEvidence> = representatives
                 .iter()
                 .take(3)
                 .map(|m| AlertEvidence {
@@ -2805,6 +2818,8 @@ mod tests {
             is_version_confirmed: true,
             project_paths: vec!["/direct".into(), "/transitive".into()],
             published_at: None,
+            aliases: vec![],
+            severity_label: None,
             dependency_instances: vec![
                 crate::osv::types::MatchedDependency {
                     project_path: "/transitive".into(),

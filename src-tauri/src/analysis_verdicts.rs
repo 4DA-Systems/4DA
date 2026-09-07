@@ -156,6 +156,19 @@ pub(crate) async fn reconcile_stale_verdicts_cycle(budget: usize) -> Result<Verd
     let twins = db
         .demote_curated_twins(scoring::PIPELINE_VERSION)
         .map_err(|e| format!("Failed to demote curated twins: {e}"))?;
+    // A twin verdict whose curated original has since left the feed is a
+    // claim about nothing; withdraw it so the risen sweep below can judge the
+    // row on its own score (TWIR 666 class, 2026-09-07).
+    let orphaned = db
+        .withdraw_orphaned_duplicate_verdicts()
+        .map_err(|e| format!("Failed to withdraw orphaned duplicate verdicts: {e}"))?;
+    if orphaned > 0 {
+        info!(
+            target: "4da::verdicts",
+            withdrawn = orphaned,
+            "Orphaned duplicate verdicts withdrawn — their curated twin is no longer in the feed"
+        );
+    }
     let risen = db
         .promote_risen_verdicts(
             scoring::PIPELINE_VERSION,

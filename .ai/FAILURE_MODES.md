@@ -681,3 +681,103 @@ an exclusion that means "order" never shields a verdict that means "reject" (a
 durable rejection now replaces a `brief:` exclusion), and every list reads the
 one surfaced-signal predicate (`isSurfacedSignal`) that the header reads — a
 list that filters on `relevant` alone will show what an exclusion demoted.
+
+---
+
+### One advisory, four severities; one bug, two advisories (2026-09-07, AD-040)
+
+**Symptom.** The same jsonwebtoken advisory was "Critical" on the Brief banner,
+the knowledge gap and the Signal tab, and "medium" on Preemption and both MCP
+tools. Preemption's top item said "clears 2 advisories" for one quinn-proto bug.
+
+**Root cause.** The OSV mirror stored one row per id with no alias set (GHSA +
+RUSTSEC twins of one bug) and no severity label (GitHub-reviewed advisories
+carry `database_specific.severity`, which the mirror never read; a CVSS v4
+vector left `cvss_score` NULL). Each surface then graded the advisory by its
+own heuristic — summary keywords on Preemption, "security citation while
+exposed → Critical" on the gap, a hardcoded "Critical:" on the banner.
+
+**The rule.** Identity and severity come from the source, once:
+`osv::identity::cluster_by_vulnerability` (alias union-find) and
+`cluster_severity_tier` (CVSS band, else curated label). A surface may derive
+its own urgency ENUM from the tier; it may never grade an advisory the source
+has graded. Before trusting a severity, check the OSV record's
+`database_specific.severity` and its `aliases`.
+
+---
+
+### A security signal on a version that is not exposed (2026-09-07, AD-040)
+
+**Symptom.** Blind Spots: hono 4.13.3 "3 security signals unreviewed" (every
+advisory fixed ≤ 4.12.34), lettre 0.11.22 (= the fix), react 19.2.7 (OSV-clean)
+— all HIGH, and the AI triage then said "review before upgrading". The gap and
+the banner named "relay (+1 more)" for a bug only relay's 9.3.1 carries.
+
+**Root cause.** The coverage-gap counter counted every linked advisory row
+without asking whether the installed version was inside the range; the
+knowledge gap's project list merged every project declaring the NAME (any
+version); the Brief's project label read `DepMatch.project_paths` (all
+declaring projects). The affectedness check existed (`still_vulnerable`) but
+only one of four consumers called it.
+
+**The rule.** A security signal exists only while THAT project's install is
+exposed. Any count, label or tier that says "security" must pass through an
+affectedness check against the mirror's ranges for the installed version —
+and an unknown version stays conservatively exposed, never silently safe.
+
+---
+
+### A registry row for another package counted as this package's update (2026-09-07, AD-040)
+
+**Symptom.** "axum — 32 new releases in 30 days" (seven `axum-*` crates; axum
+shipped once, in April), "sha2 — 2 new releases" (the installed 0.11.0), and a
+stripe gap whose "notably" citation was a Mastodon post about another product
+classified "version update" by the word "updates" while `npm: stripe v22.6.1`
+was a "discussion".
+
+**Root cause.** Word-boundary matching treats `-` as a boundary, so a registry
+title for `axum-stack` matched `axum`; registry rows were classified by title
+keywords like any other text; nothing compared the announced version with the
+installed one.
+
+**The rule.** A registry row is a release of its SUBJECT
+(`dep_linker::registry_title_subject`, `registry_names_equal`) and a citation
+of nothing else; a release at or below the installed version is not new; an
+editorial title announces a version only when the literal follows THIS
+dependency's name. Classify by source before title.
+
+---
+
+### A twin verdict outliving its twin (2026-09-07, AD-040)
+
+**Symptom.** "This Week in Rust 666" vanished from a feed that lists 660–665
+and 667 (11 such rows, 4 scored ≥ 0.7).
+
+**Root cause.** `duplicate_curated` is a claim about an EARLIER copy holding
+the slot. The RSS row was the twin of a lemmy mirror, the mirror the twin of a
+Mastodon boost, and when the boost fell to the UGC gate nothing re-checked the
+chain — three copies, none curated.
+
+**The rule.** A verdict about another row is withdrawn when that row leaves
+(`Database::withdraw_orphaned_duplicate_verdicts`, every reconcile pass) and
+the row is judged on its own score by the risen sweep — cleared, never flipped.
+
+---
+
+### The AI brief keeps its own counter (2026-09-07, AD-040)
+
+**Symptom.** Five consecutive briefs, two to three hours apart, said the same
+advisory was "past day 20", 21, 22, 23, 24. No stored field held 24. The same
+brief said "bundle the rsa Marvin Attack fix" for an advisory with no fix.
+
+**Root cause.** Continuity feeds the previous brief's summary back; the
+prompt forbade carrying security CLAIMS forward but not numbers, and the
+model incremented its own phrasing each run. CONFIRMED SECURITY carried no
+first-seen date and no explicit "no fix" marker.
+
+**The rule.** Continuity text is stripped of age counters before it is fed
+back (`briefing_seals::strip_age_counters`); the only age the prompt carries
+is a dated fact ("first seen by 4DA <date>"); "no fix published" is stated
+where true and the prompt forbids fix instructions for it. A number the
+model could only have got from its own previous output is a hallucination
+in the making — remove it at the boundary, do not ask the model to ignore it.

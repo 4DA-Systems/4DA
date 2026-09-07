@@ -11,8 +11,10 @@ use crate::osv::types::{StoredAdvisory, SyncStatus};
 // ============================================================================
 
 impl Database {
-    /// Upsert an advisory into the local mirror.
-    /// Key: (advisory_id, package_name, ecosystem).
+    /// Upsert an advisory into the local mirror without alias/severity
+    /// metadata (the pre-Phase-120 shape; the columns stay NULL until a sync
+    /// that carries them). Key: (advisory_id, package_name, ecosystem).
+    #[allow(clippy::too_many_arguments)]
     pub fn upsert_osv_advisory(
         &self,
         advisory_id: &str,
@@ -29,12 +31,53 @@ impl Database {
         modified_at: Option<&str>,
         withdrawn_at: Option<&str>,
     ) -> SqliteResult<()> {
+        self.upsert_osv_advisory_with_meta(
+            advisory_id,
+            summary,
+            details,
+            package_name,
+            ecosystem,
+            affected_ranges,
+            fixed_versions,
+            severity_type,
+            cvss_score,
+            source_url,
+            published_at,
+            modified_at,
+            withdrawn_at,
+            None,
+            None,
+        )
+    }
+
+    /// Upsert an advisory into the local mirror, including the alias set and
+    /// the normalised severity label (Phase 120). `COALESCE` on conflict keeps
+    /// metadata a later sync omits.
+    #[allow(clippy::too_many_arguments)]
+    pub fn upsert_osv_advisory_with_meta(
+        &self,
+        advisory_id: &str,
+        summary: &str,
+        details: Option<&str>,
+        package_name: &str,
+        ecosystem: &str,
+        affected_ranges: Option<&str>,
+        fixed_versions: Option<&str>,
+        severity_type: Option<&str>,
+        cvss_score: Option<f64>,
+        source_url: Option<&str>,
+        published_at: Option<&str>,
+        modified_at: Option<&str>,
+        withdrawn_at: Option<&str>,
+        aliases_json: Option<&str>,
+        severity_label: Option<&str>,
+    ) -> SqliteResult<()> {
         let conn = self.conn.lock();
         conn.execute(
             "INSERT INTO osv_advisories (advisory_id, summary, details, package_name, ecosystem,
                 affected_ranges, fixed_versions, severity_type, cvss_score, source_url,
-                published_at, modified_at, withdrawn_at, synced_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, datetime('now'))
+                published_at, modified_at, withdrawn_at, aliases, severity_label, synced_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, datetime('now'))
              ON CONFLICT(advisory_id, package_name, ecosystem) DO UPDATE SET
                 summary = ?2,
                 details = COALESCE(?3, osv_advisories.details),
@@ -46,6 +89,8 @@ impl Database {
                 published_at = COALESCE(?11, osv_advisories.published_at),
                 modified_at = COALESCE(?12, osv_advisories.modified_at),
                 withdrawn_at = ?13,
+                aliases = COALESCE(?14, osv_advisories.aliases),
+                severity_label = COALESCE(?15, osv_advisories.severity_label),
                 synced_at = datetime('now')",
             params![
                 advisory_id,
@@ -61,6 +106,8 @@ impl Database {
                 published_at,
                 modified_at,
                 withdrawn_at,
+                aliases_json,
+                severity_label,
             ],
         )?;
         Ok(())
@@ -76,7 +123,8 @@ impl Database {
         let mut stmt = conn.prepare(
             "SELECT id, advisory_id, summary, details, package_name, ecosystem,
                     affected_ranges, fixed_versions, severity_type, cvss_score,
-                    source_url, published_at, modified_at, withdrawn_at, synced_at
+                    source_url, published_at, modified_at, withdrawn_at, synced_at,
+                    aliases, severity_label
              FROM osv_advisories
              WHERE package_name = ?1 AND ecosystem = ?2 AND withdrawn_at IS NULL
              ORDER BY cvss_score DESC NULLS LAST, published_at DESC",
@@ -92,7 +140,8 @@ impl Database {
         let mut stmt = conn.prepare(
             "SELECT id, advisory_id, summary, details, package_name, ecosystem,
                     affected_ranges, fixed_versions, severity_type, cvss_score,
-                    source_url, published_at, modified_at, withdrawn_at, synced_at
+                    source_url, published_at, modified_at, withdrawn_at, synced_at,
+                    aliases, severity_label
              FROM osv_advisories
              WHERE withdrawn_at IS NULL
              ORDER BY cvss_score DESC NULLS LAST, published_at DESC",
@@ -108,7 +157,8 @@ impl Database {
         let mut stmt = conn.prepare(
             "SELECT id, advisory_id, summary, details, package_name, ecosystem,
                     affected_ranges, fixed_versions, severity_type, cvss_score,
-                    source_url, published_at, modified_at, withdrawn_at, synced_at
+                    source_url, published_at, modified_at, withdrawn_at, synced_at,
+                    aliases, severity_label
              FROM osv_advisories
              ORDER BY cvss_score DESC NULLS LAST, published_at DESC",
         )?;
@@ -227,6 +277,11 @@ fn map_advisory_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<StoredAdvisory>
         modified_at: row.get(12)?,
         withdrawn_at: row.get(13)?,
         synced_at: row.get(14)?,
+        aliases: row
+            .get::<_, Option<String>>(15)?
+            .and_then(|s| serde_json::from_str::<Vec<String>>(&s).ok())
+            .unwrap_or_default(),
+        severity_label: row.get(16)?,
     })
 }
 

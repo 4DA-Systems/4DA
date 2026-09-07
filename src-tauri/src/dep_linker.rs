@@ -537,15 +537,16 @@ fn classify_item_dep_match(item: &UnlinkedItem, dep_name: &str) -> Option<(&'sta
             // Structured metadata exists but names a DIFFERENT package —
             // title fallback would produce a false positive.
             AffectedStatus::MetadataExistsNoMatch => return None,
-            // No structured metadata at all — allow title fallback for
-            // RSS/security posts that lack affected-package fields.
-            AffectedStatus::NoMetadata => {
-                if is_specific_title_match_candidate(dep_name)
-                    && matches_dep_in_title(&item.title, dep_name) == Some(0.50)
-                {
-                    return Some(("advisory", 0.75));
-                }
-            }
+            // No structured metadata at all (an editorial security story):
+            // fall through to the TITLE tier. This used to mint an
+            // `advisory` link at 0.75 from a bare title word, and every
+            // strict consumer (`match_type IN ('exact_registry','advisory')`)
+            // read it as proof of exposure — "OpenAPI React Query Codegen
+            // Compromised in Mini Shai-Hulud" became a react security
+            // signal on Blind Spots and "Security story names your
+            // dependency react" on the Brief, with Fixed / Not-affected
+            // actions on react (2026-09-07). A title word is a heuristic.
+            AffectedStatus::NoMetadata => {}
         }
     }
 
@@ -580,6 +581,34 @@ pub(crate) fn is_registry_source(source_type: &str) -> bool {
             | "rubygems"
             | "cocoapods"
     )
+}
+
+/// The subject of a registry row's TITLE — `("tauri", Some("2.11.5"))` from
+/// `crates.io: tauri v2.11.5`, `npm: react-dom v19.2.8`, `PyPI: x v1.2`,
+/// `Go: github.com/a/b v1.2.3` — and from the bare `name vX …` shape.
+/// `None` when the title has no leading name token. A registry row is a
+/// release of THIS subject and nothing else: `axum-stack` is not axum,
+/// `code-split-plugin-typescript` is not typescript (2026-09-07).
+pub(crate) fn registry_title_subject(title: &str) -> Option<(String, Option<String>)> {
+    let body = title
+        .split_once(": ")
+        .map(|(_, rest)| rest)
+        .unwrap_or(title)
+        .trim();
+    let mut parts = body.split_whitespace();
+    let name = parts.next()?.to_string();
+    let version = parts
+        .next()
+        .map(|v| v.trim_start_matches(['v', 'V']).to_string())
+        .filter(|v| v.chars().next().is_some_and(|c| c.is_ascii_digit()));
+    Some((name, version))
+}
+
+/// crates.io treats `-` and `_` as one namespace; npm names are exact but
+/// the comparison is case-insensitive.
+pub(crate) fn registry_names_equal(a: &str, b: &str) -> bool {
+    let norm = |s: &str| s.to_lowercase().replace('_', "-");
+    norm(a) == norm(b)
 }
 
 /// Is this source an advisory / security report?

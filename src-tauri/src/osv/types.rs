@@ -48,6 +48,17 @@ pub(crate) struct Vulnerability {
     /// ISO date string when the advisory was withdrawn by the source.
     /// Present only for advisories that have been retracted/withdrawn.
     pub withdrawn: Option<String>,
+    /// Other identifiers for the SAME vulnerability (a GHSA row lists its
+    /// CVE and RUSTSEC ids, a RUSTSEC row lists the GHSA and CVE). The mirror
+    /// stores one row per id, so without these a single quinn-proto bug read
+    /// as "2 version-confirmed advisories" on every surface (2026-09-07).
+    #[serde(default)]
+    pub aliases: Option<Vec<String>>,
+    /// Source-specific block. GitHub-reviewed advisories carry a curated
+    /// `severity` label here (`CRITICAL`/`HIGH`/`MODERATE`/`LOW`) even when
+    /// the CVSS block is a v4 vector the mirror cannot score.
+    #[serde(default)]
+    pub database_specific: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize, Clone)]
@@ -110,6 +121,15 @@ pub struct StoredAdvisory {
     /// from active counts but preserved in the database for audit trails.
     pub withdrawn_at: Option<String>,
     pub synced_at: String,
+    /// Other ids of the same vulnerability (Phase 120). Empty on rows
+    /// synced before the column existed until the next sync refreshes them.
+    #[serde(default)]
+    pub aliases: Vec<String>,
+    /// Normalised severity label — `critical` / `high` / `medium` / `low` —
+    /// from the source's curated label first, the CVSS band otherwise.
+    /// `None` when the source gives neither (RustSec maintenance notices).
+    #[serde(default)]
+    pub severity_label: Option<String>,
 }
 
 /// An advisory matched to a user dependency with version verification.
@@ -131,6 +151,37 @@ pub struct MatchedAdvisory {
     /// Exact affected dependency instances. This prevents project/version/scope
     /// metadata from being reconstructed later from an ambiguous package name.
     pub dependency_instances: Vec<MatchedDependency>,
+    /// See [`StoredAdvisory::aliases`].
+    #[serde(default)]
+    pub aliases: Vec<String>,
+    /// See [`StoredAdvisory::severity_label`].
+    #[serde(default)]
+    pub severity_label: Option<String>,
+}
+
+/// Normalise a source severity label to the four-tier vocabulary every
+/// surface shares. GitHub says `MODERATE`; the app says `medium`.
+pub fn normalize_severity_label(raw: &str) -> Option<String> {
+    match raw.trim().to_ascii_lowercase().as_str() {
+        "critical" => Some("critical".to_string()),
+        "high" => Some("high".to_string()),
+        "moderate" | "medium" => Some("medium".to_string()),
+        "low" => Some("low".to_string()),
+        _ => None,
+    }
+}
+
+/// CVSS base score → the same four-tier label (NVD bands).
+pub fn cvss_band(score: f64) -> &'static str {
+    if score >= 9.0 {
+        "critical"
+    } else if score >= 7.0 {
+        "high"
+    } else if score >= 4.0 {
+        "medium"
+    } else {
+        "low"
+    }
 }
 
 /// One installed dependency instance affected by an advisory.
@@ -199,6 +250,30 @@ impl Vulnerability {
         // per the CVSS v3.1 spec so severity isn't silently dropped for the common case.
         let score = sev.and_then(|s| crate::scoring::cvss::parse_cvss_score(&s.score));
         (sev_type, score)
+    }
+
+    /// The severity label the mirror stores: the source's curated label
+    /// (`database_specific.severity`, GitHub-reviewed advisories) first —
+    /// it is authoritative even when the CVSS block is an unscorable v4
+    /// vector — then the band of the best CVSS score. `None` when the
+    /// source gives neither.
+    pub(crate) fn severity_label(&self) -> Option<String> {
+        let curated = self
+            .database_specific
+            .as_ref()
+            .and_then(|d| d.get("severity"))
+            .and_then(|v| v.as_str())
+            .and_then(normalize_severity_label);
+        curated.or_else(|| self.best_cvss().1.map(|s| cvss_band(s).to_string()))
+    }
+
+    /// JSON array of alias ids, or `None` when the source lists none.
+    pub(crate) fn aliases_json(&self) -> Option<String> {
+        let aliases = self.aliases.as_ref()?;
+        if aliases.is_empty() {
+            return None;
+        }
+        serde_json::to_string(aliases).ok()
     }
 
     pub(crate) fn best_url(&self) -> Option<String> {

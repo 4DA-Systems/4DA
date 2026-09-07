@@ -197,4 +197,62 @@ impl Database {
         }
         self.persist_feed_verdicts_with_reasons(&demote, version)
     }
+
+    /// Withdraw `duplicate_curated` verdicts whose curated twin is gone.
+    ///
+    /// A twin verdict is a claim about ANOTHER row — "the story is already
+    /// in the feed under an earlier id" — and it stays true only while that
+    /// earlier copy is curated. Nothing re-checked it: "This Week in Rust
+    /// 666" lost both its RSS row (twin of a lemmy mirror) and the lemmy row
+    /// (twin of a Mastodon boost) when the boost fell to the UGC gate, and
+    /// the issue vanished from a feed that lists 660–665 and 667 (2026-09-07;
+    /// 11 such stories live, 4 scored ≥ 0.7).
+    ///
+    /// The verdict is cleared outright (no verdict, no reason, no pending
+    /// marker), never flipped: the row was never judged on its own merits,
+    /// so the next risen sweep grants it a FIRST verdict through the persist
+    /// boundary — immediate, and twin-checked again against whatever is
+    /// curated by then. Convergent: a row whose twin is back is re-written
+    /// `duplicate_curated` by that same sweep.
+    pub fn withdraw_orphaned_duplicate_verdicts(&self) -> SqliteResult<usize> {
+        let duplicates: Vec<(i64, Option<String>, String)> = {
+            let conn = self.read_conn();
+            let mut stmt = conn.prepare_cached(
+                "SELECT id, url, title FROM source_items
+                 WHERE feed_relevant = 0 AND feed_verdict_reason = 'duplicate_curated'
+                 ORDER BY id ASC",
+            )?;
+            let rows = stmt.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))?;
+            rows.collect::<SqliteResult<Vec<_>>>()?
+        };
+        let mut orphaned: Vec<i64> = Vec::new();
+        for (id, url, title) in &duplicates {
+            if self
+                .find_curated_twin(*id, url.as_deref(), title)?
+                .is_none()
+            {
+                orphaned.push(*id);
+            }
+        }
+        if orphaned.is_empty() {
+            return Ok(0);
+        }
+        let conn = self.conn.lock();
+        let tx = conn.unchecked_transaction()?;
+        let mut count = 0usize;
+        {
+            let mut stmt = tx.prepare_cached(
+                "UPDATE source_items
+                 SET feed_relevant = NULL, feed_verdict_at = NULL, feed_verdict_version = NULL,
+                     feed_verdict_source = NULL, feed_verdict_reason = NULL,
+                     feed_verdict_pending = NULL
+                 WHERE id = ?1 AND feed_verdict_reason = 'duplicate_curated'",
+            )?;
+            for id in &orphaned {
+                count += stmt.execute(params![id])?;
+            }
+        }
+        tx.commit()?;
+        Ok(count)
+    }
 }

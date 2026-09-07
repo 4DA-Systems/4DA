@@ -547,29 +547,55 @@ pub fn detect_knowledge_gaps(conn: &rusqlite::Connection) -> Result<Vec<Knowledg
         // the installed version is genuinely still inside its affected range
         // AND a registry advisory the linker bound to this dependency is among
         // the citations — an editorial story naming the package is a citation,
-        // never proof of exposure (2026-09-06).
+        // never proof of exposure (2026-09-06). The tier it escalates TO is
+        // the advisory's own (Phase 120).
+        let vulnerable = still_vulnerable(conn, &dep.package_name, dep.version.as_deref(), &paths)
+            && grounded_security_advisory(&candidates, &dep.package_name);
+        // Which of this dependency's projects actually carry the exposure.
+        // `seen_deps` merges every project declaring the name (any version,
+        // any ecosystem), so without this the gap said "relay (+1 more)"
+        // for a bug only relay's copy has (2026-09-07).
+        let exposed: Vec<(String, String)> = if vulnerable {
+            affected_project_paths(conn, &dep.package_name, &paths)
+        } else {
+            Vec::new()
+        };
+        let tier_versions: Vec<String> = if exposed.is_empty() {
+            dep.version.iter().cloned().collect()
+        } else {
+            exposed.iter().map(|(_, v)| v.clone()).collect()
+        };
         let severity = classify_severity(
             &missed,
             days_since,
             &dep.package_name,
-            still_vulnerable(conn, &dep.package_name, dep.version.as_deref(), &paths)
-                && grounded_security_advisory(&candidates, &dep.package_name),
+            vulnerable,
+            advisory_tier_for(conn, &dep.package_name, &tier_versions),
         );
 
         if severity == GapSeverity::Low && days_since < 14 {
             continue; // Skip low-severity recent items
         }
 
-        // Merge project paths for display
-        let project_display = if paths.len() == 1 {
-            paths[0].clone()
+        // Project paths for display: the exposed subset when the exposure is
+        // what makes this a gap, every declaring project otherwise.
+        let (display_paths, version): (Vec<String>, Option<String>) = if exposed.is_empty() {
+            (paths.clone(), dep.version.clone())
         } else {
-            format!("{} (+{} more)", paths[0], paths.len() - 1)
+            (
+                exposed.iter().map(|(p, _)| p.clone()).collect(),
+                exposed.first().map(|(_, v)| v.clone()),
+            )
+        };
+        let project_display = if display_paths.len() == 1 {
+            display_paths[0].clone()
+        } else {
+            format!("{} (+{} more)", display_paths[0], display_paths.len() - 1)
         };
 
         gaps.push(KnowledgeGap {
             dependency: dep.package_name.clone(),
-            version: dep.version.clone(),
+            version,
             project_path: project_display,
             missed_items: missed,
             gap_severity: severity,
@@ -914,8 +940,8 @@ fn days_since_last_engagement(conn: &rusqlite::Connection, package_name: &str) -
     }
 }
 
-fn quality_weight(title: &str) -> f32 {
-    match classify_missed_item(title) {
+fn quality_weight(m: &MissedItem, dep_name: &str) -> f32 {
+    match classify_missed_item(&m.title, &m.source_type, dep_name) {
         "security advisory" => 3.0,
         "breaking change" => 2.5,
         "version update" => 1.5,
@@ -994,7 +1020,7 @@ fn installed_versions_for(
 /// Conservative in every direction: no advisories stored for the package, an
 /// unreadable range, or NO resolvable installed version all count as STILL
 /// VULNERABLE. Safety is never claimed on missing information.
-fn still_vulnerable(
+pub(crate) fn still_vulnerable(
     conn: &rusqlite::Connection,
     package: &str,
     version: Option<&str>,
@@ -1037,25 +1063,32 @@ fn still_vulnerable(
     !saw_any
 }
 
+/// Does any missed item cite a security advisory ABOUT this dependency?
+/// The same classifier the weights and the substantive filter use — the old
+/// ad-hoc list knew "cve" but not "ghsa", so `[GHSA-h395-gr6q-cpjc]
+/// jsonwebtoken: … authorization bypass` was never a security citation here
+/// while it weighed 3.0 two lines down (2026-09-06).
+fn has_security_citation(missed: &[MissedItem], dep_name: &str) -> bool {
+    let dep_lower = dep_name.to_lowercase();
+    missed.iter().any(|item| {
+        let title_lower = item.title.to_lowercase();
+        (classify_missed_item(&item.title, &item.source_type, dep_name) == "security advisory"
+            || title_lower.contains("security")
+            || title_lower.contains("exploit"))
+            && title_lower.contains(&dep_lower)
+    })
+}
+
 fn classify_severity(
     missed: &[MissedItem],
     days_since: u32,
     dep_name: &str,
     still_vulnerable: bool,
+    advisory_tier: Option<&str>,
 ) -> GapSeverity {
     let dep_lower = dep_name.to_lowercase();
 
-    // The same classifier the weights and the substantive filter use — the
-    // old ad-hoc list knew "cve" but not "ghsa", so `[GHSA-h395-gr6q-cpjc]
-    // jsonwebtoken: … authorization bypass` was never a security citation
-    // here while it weighed 3.0 two lines down (2026-09-06).
-    let has_security = missed.iter().any(|item| {
-        let title_lower = item.title.to_lowercase();
-        (classify_missed_item(&item.title) == "security advisory"
-            || title_lower.contains("security")
-            || title_lower.contains("exploit"))
-            && title_lower.contains(&dep_lower)
-    });
+    let has_security = has_security_citation(missed, dep_name);
 
     let has_breaking = missed.iter().any(|item| {
         let title_lower = item.title.to_lowercase();
@@ -1068,7 +1101,7 @@ fn classify_severity(
 
     // Quality-weighted gap score: 1 security advisory (3.0) outweighs
     // 5 forum discussions (5 × 0.5 = 2.5).
-    let weighted_score: f32 = missed.iter().map(|m| quality_weight(&m.title)).sum();
+    let weighted_score: f32 = missed.iter().map(|m| quality_weight(m, dep_name)).sum();
     let days_factor = if days_since >= 999 {
         1.5
     } else if days_since > 30 {
@@ -1078,25 +1111,127 @@ fn classify_severity(
     };
     let gap_score = weighted_score * days_factor;
 
-    // A security advisory only escalates while the install is still exposed.
-    // An already-patched dependency can still be worth reading about, so the
-    // gap survives at its unweighted tier — it just stops shouting.
-    // Consequence, not volume, decides the tiers above Medium: a security or
-    // breaking citation is High; any number of discussions and version
-    // mentions caps at Medium. Live 2026-09-06, `stripe` reached High on five
-    // editorial mentions plus a mastodon post about ANOTHER product's release
+    // A security advisory escalates only while the install is still exposed,
+    // and then to the tier the ADVISORY carries — the same CVSS-band-or-
+    // curated-label every surface reads (Phase 120). Live 2026-09-07, the
+    // jsonwebtoken gap said Critical for a GitHub-MODERATE type-confusion
+    // bug that Preemption and the MCP both called medium: one advisory,
+    // three severities. A patched install with a security citation is no
+    // longer "High" either: an advisory you already carry the fix for is
+    // reading material, graded on volume like any other discussion.
+    // Consequence, not volume, decides the tiers above Medium: a breaking
+    // citation is High; any number of discussions and version mentions caps
+    // at Medium. Live 2026-09-06, `stripe` reached High on five editorial
+    // mentions plus a mastodon post about ANOTHER product's release
     // ("onecli v2.5.0 — Added Slack Stripe AWS billing fixes"), multiplied by
     // the never-engaged ×1.5 factor — unread volume masquerading as urgency,
     // the same class Blind Spots caps at Medium.
     if has_security && still_vulnerable {
-        GapSeverity::Critical
-    } else if has_security || has_breaking {
+        match advisory_tier {
+            Some("critical") | Some("high") => GapSeverity::Critical,
+            _ => GapSeverity::High,
+        }
+    } else if has_breaking {
         GapSeverity::High
     } else if gap_score >= 2.0 || days_since > 14 {
         GapSeverity::Medium
     } else {
         GapSeverity::Low
     }
+}
+
+/// The severity tier of the most severe stored advisory that still affects
+/// one of `versions` — CVSS band first, the source's curated label second
+/// (`None` when nothing affecting is graded). Mirrors
+/// `osv::identity::cluster_severity_tier` for rows read straight from the
+/// mirror.
+fn advisory_tier_for(
+    conn: &rusqlite::Connection,
+    package: &str,
+    versions: &[String],
+) -> Option<&'static str> {
+    let Ok(mut stmt) = conn.prepare(
+        "SELECT affected_ranges, cvss_score, severity_label FROM osv_advisories
+         WHERE lower(package_name) = lower(?1) AND withdrawn_at IS NULL",
+    ) else {
+        return None;
+    };
+    let Ok(rows) = stmt.query_map(params![package], |row| {
+        Ok((
+            row.get::<_, Option<String>>(0)?,
+            row.get::<_, Option<f64>>(1)?,
+            row.get::<_, Option<String>>(2)?,
+        ))
+    }) else {
+        return None;
+    };
+    let rank = |t: &str| match t {
+        "critical" => 0u8,
+        "high" => 1,
+        "medium" => 2,
+        "low" => 3,
+        _ => 4,
+    };
+    let mut best: Option<&'static str> = None;
+    for (ranges, cvss, label) in rows.flatten() {
+        let affects = versions
+            .iter()
+            .any(|v| crate::osv::matching::check_version_affected(Some(v.as_str()), &ranges).0);
+        if !affects {
+            continue;
+        }
+        let tier: Option<&'static str> = match (cvss, label.as_deref()) {
+            (Some(score), _) => Some(crate::osv::types::cvss_band(score)),
+            (None, Some("critical")) => Some("critical"),
+            (None, Some("high")) => Some("high"),
+            (None, Some("medium")) => Some("medium"),
+            (None, Some("low")) => Some("low"),
+            _ => None,
+        };
+        if let Some(t) = tier {
+            if best.is_none_or(|b| rank(t) < rank(b)) {
+                best = Some(t);
+            }
+        }
+    }
+    best
+}
+
+/// The subset of `project_paths` whose installed copy of `package` is inside
+/// a stored advisory range. Empty when nothing can be decided (no versions,
+/// no ranges) — the caller then keeps every path rather than claim safety.
+/// Live 2026-09-07: the jsonwebtoken gap named "relay (+1 more)" for a bug
+/// only relay's 9.3.1 carries; the other project runs the fixed 10.4.0.
+fn affected_project_paths(
+    conn: &rusqlite::Connection,
+    package: &str,
+    project_paths: &[String],
+) -> Vec<(String, String)> {
+    let Ok(mut stmt) = conn.prepare(
+        "SELECT affected_ranges FROM osv_advisories
+         WHERE lower(package_name) = lower(?1) AND withdrawn_at IS NULL",
+    ) else {
+        return Vec::new();
+    };
+    let ranges: Vec<Option<String>> = stmt
+        .query_map(params![package], |row| row.get::<_, Option<String>>(0))
+        .map(|rows| rows.flatten().collect())
+        .unwrap_or_default();
+    if ranges.is_empty() {
+        return Vec::new();
+    }
+    project_paths
+        .iter()
+        .filter_map(|path| {
+            let version = installed_versions_for(conn, package, std::slice::from_ref(path))
+                .into_iter()
+                .next()?;
+            let affected = ranges
+                .iter()
+                .any(|r| crate::osv::matching::check_version_affected(Some(version.as_str()), r).0);
+            affected.then(|| (path.clone(), version))
+        })
+        .collect()
 }
 
 fn severity_rank(severity: &GapSeverity) -> u8 {
@@ -1132,7 +1267,31 @@ fn truncate_gap_note(s: &str) -> String {
     crate::utils::truncate_display(s, 200)
 }
 
-fn classify_missed_item(title: &str) -> &'static str {
+/// What a missed item IS, for the gap's counts, citation notes, highlight and
+/// actions. The SOURCE decides first: a registry row (`crates.io: stripe
+/// v22.6.1`, `npm: …`) is a version update whatever its title words, and an
+/// osv/cve row is a security advisory. Only editorial rows fall through to
+/// the title, and a "version update" there must announce a version OF THIS
+/// dependency — a title merely containing the word "update" is not one.
+/// Live 2026-09-07: the stripe gap read "1 version update … notably '📢 New
+/// updates · onecli v2.5.0 — Added Slack Stripe AWS billing fixes'" — a
+/// Mastodon post about another product classified by the word "updates" —
+/// while the actual `npm: stripe v22.6.1` row was filed as a discussion.
+fn classify_missed_item(title: &str, source_type: &str, dep_name: &str) -> &'static str {
+    if matches!(source_type, "osv" | "cve") {
+        return "security advisory";
+    }
+    if crate::dep_linker::is_registry_source(source_type) {
+        // A registry row is a release of its SUBJECT. One for another crate
+        // that merely mentions this name (`code-split-plugin-typescript
+        // v1.0.0-alpha.4` cited on a typescript gap) is a passing mention.
+        return match crate::dep_linker::registry_title_subject(title) {
+            Some((subject, _)) if crate::dep_linker::registry_names_equal(&subject, dep_name) => {
+                "version update"
+            }
+            _ => "relevant discussion",
+        };
+    }
     let lower = title.to_lowercase();
     if lower.contains("cve")
         || lower.contains("ghsa")
@@ -1143,13 +1302,70 @@ fn classify_missed_item(title: &str) -> &'static str {
         "security advisory"
     } else if lower.contains("breaking") || lower.contains("deprecated") || lower.contains("eol") {
         "breaking change"
-    } else if lower.contains("release") || lower.contains("update") || lower.contains("upgrade") {
+    } else if title_announces_version_of(&lower, dep_name) {
         "version update"
     } else if lower.contains("rfc") || lower.contains("proposal") || lower.contains("roadmap") {
         "roadmap signal"
     } else {
         "relevant discussion"
     }
+}
+
+/// Does the (lowercased) title announce a version of `dep_name` — the
+/// dependency as a whole word followed, within a few tokens, by a version
+/// literal ("axum 0.8.0", "typescript v7.0", "Announcing tokio 1.53")?
+/// "onecli v2.5.0 … Stripe AWS billing fixes" does not: the version belongs
+/// to another product.
+fn title_announces_version_of(lower_title: &str, dep_name: &str) -> bool {
+    let dep = dep_name.to_lowercase();
+    if dep.is_empty() {
+        return false;
+    }
+    // `-` and `_` are name characters here: "react-query v5" announces
+    // react-query, not react; "code-split-plugin-typescript v1" is not a
+    // typescript release.
+    let is_boundary =
+        |c: Option<char>| c.is_none_or(|ch| !(ch.is_alphanumeric() || ch == '_' || ch == '-'));
+    for (pos, _) in lower_title.match_indices(&dep) {
+        // `match_indices` yields char-boundary offsets; `get` keeps the
+        // slices panic-free regardless.
+        let before = lower_title.get(..pos).and_then(|s| s.chars().next_back());
+        let after_str = lower_title.get(pos + dep.len()..).unwrap_or("");
+        let after = after_str.chars().next();
+        if !is_boundary(before) || !is_boundary(after) {
+            continue;
+        }
+        // A version literal in the next ~24 characters: v?\d+\.\d+
+        let window: String = after_str.chars().take(24).collect();
+        if window_has_version_literal(&window) {
+            return true;
+        }
+    }
+    false
+}
+
+fn window_has_version_literal(window: &str) -> bool {
+    let bytes: Vec<char> = window.chars().collect();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i].is_ascii_digit() {
+            let mut j = i;
+            while j < bytes.len() && bytes[j].is_ascii_digit() {
+                j += 1;
+            }
+            if j < bytes.len()
+                && bytes[j] == '.'
+                && j + 1 < bytes.len()
+                && bytes[j + 1].is_ascii_digit()
+            {
+                return true;
+            }
+            i = j;
+        } else {
+            i += 1;
+        }
+    }
+    false
 }
 
 /// A knowledge gap is substantive only if at least one missed item carries
@@ -1161,20 +1377,20 @@ fn classify_missed_item(title: &str) -> &'static str {
 fn gap_is_substantive(gap: &KnowledgeGap) -> bool {
     gap.missed_items.iter().any(|m| {
         matches!(
-            classify_missed_item(&m.title),
+            classify_missed_item(&m.title, &m.source_type, &gap.dependency),
             "security advisory" | "breaking change" | "version update"
         )
     })
 }
 
-fn missed_item_to_citation(m: &MissedItem) -> EvidenceCitation {
+fn missed_item_to_citation(m: &MissedItem, dep_name: &str) -> EvidenceCitation {
     let freshness_days = chrono::NaiveDateTime::parse_from_str(&m.created_at, "%Y-%m-%d %H:%M:%S")
         .map(|dt| {
             let secs = chrono::Utc::now().timestamp() - dt.and_utc().timestamp();
             (secs as f32 / 86_400.0).max(0.0)
         })
         .unwrap_or(0.0);
-    let category = classify_missed_item(&m.title);
+    let category = classify_missed_item(&m.title, &m.source_type, dep_name);
     EvidenceCitation {
         source: m.source_type.clone(),
         title: truncate_gap_title(&m.title),
@@ -1198,7 +1414,7 @@ fn build_gap_explanation(
     let mut updates = 0u32;
     let mut other = 0u32;
     for m in missed {
-        match classify_missed_item(&m.title) {
+        match classify_missed_item(&m.title, &m.source_type, dep) {
             "security advisory" => security += 1,
             "breaking change" => breaking += 1,
             "version update" => updates += 1,
@@ -1258,13 +1474,13 @@ fn build_gap_explanation(
     let highlight = missed
         .iter()
         .find(|m| {
-            let c = classify_missed_item(&m.title);
+            let c = classify_missed_item(&m.title, &m.source_type, dep);
             c == "security advisory" || c == "breaking change"
         })
         .or_else(|| {
             missed
                 .iter()
-                .find(|m| classify_missed_item(&m.title) == "version update")
+                .find(|m| classify_missed_item(&m.title, &m.source_type, dep) == "version update")
         })
         .or_else(|| missed.first());
 
@@ -1278,17 +1494,17 @@ fn build_gap_explanation(
     explanation
 }
 
-fn build_gap_actions(missed: &[MissedItem]) -> Vec<EvidenceAction> {
+fn build_gap_actions(missed: &[MissedItem], dep: &str) -> Vec<EvidenceAction> {
     let mut actions = Vec::with_capacity(3);
     let has_security = missed
         .iter()
-        .any(|m| classify_missed_item(&m.title) == "security advisory");
+        .any(|m| classify_missed_item(&m.title, &m.source_type, dep) == "security advisory");
     let has_breaking = missed
         .iter()
-        .any(|m| classify_missed_item(&m.title) == "breaking change");
+        .any(|m| classify_missed_item(&m.title, &m.source_type, dep) == "breaking change");
     let has_update = missed
         .iter()
-        .any(|m| classify_missed_item(&m.title) == "version update");
+        .any(|m| classify_missed_item(&m.title, &m.source_type, dep) == "version update");
 
     if has_security {
         actions.push(EvidenceAction {
@@ -1339,7 +1555,7 @@ impl KnowledgeGap {
             .missed_items
             .iter()
             .take(5)
-            .map(missed_item_to_citation)
+            .map(|m| missed_item_to_citation(m, &self.dependency))
             .collect();
 
         EvidenceItem {
@@ -1354,7 +1570,7 @@ impl KnowledgeGap {
             evidence_total: None,
             affected_projects: vec![self.project_path.clone()],
             affected_deps: vec![self.dependency.clone()],
-            suggested_actions: build_gap_actions(&self.missed_items),
+            suggested_actions: build_gap_actions(&self.missed_items, &self.dependency),
             precedents: Vec::new(),
             refutation_condition: None,
             lens_hints: LensHints {
@@ -1622,16 +1838,68 @@ mod tests {
                 created_at: "2026-09-04 00:00:00".to_string(),
             }];
             assert_eq!(
-                classify_severity(&missed, 999, "jsonwebtoken", false),
-                GapSeverity::High,
-                "{title}: an unread advisory is High even when the install is patched"
+                classify_severity(&missed, 999, "jsonwebtoken", false, None),
+                GapSeverity::Medium,
+                "{title}: an unread advisory for a PATCHED install is reading material, graded on volume"
             );
             assert_eq!(
-                classify_severity(&missed, 999, "jsonwebtoken", true),
+                classify_severity(&missed, 999, "jsonwebtoken", true, None),
+                GapSeverity::High,
+                "{title}: exposed but ungraded by the source → High, never invented Critical"
+            );
+            assert_eq!(
+                classify_severity(&missed, 999, "jsonwebtoken", true, Some("high")),
                 GapSeverity::Critical,
-                "{title}: and Critical while still exposed"
+                "{title}: exposed to a HIGH advisory → Critical"
+            );
+            assert_eq!(
+                classify_severity(&missed, 999, "jsonwebtoken", true, Some("medium")),
+                GapSeverity::High,
+                "{title}: exposed to a MODERATE advisory is High — the tier every surface shares"
             );
         }
+    }
+
+    /// Phase 120: the SOURCE classifies before the title does. The live stripe
+    /// gap cited a Mastodon post about another product as its "version
+    /// update" (the word "updates") while `npm: stripe v22.6.1` was filed as a
+    /// discussion.
+    #[test]
+    fn registry_rows_are_version_updates_and_other_products_versions_are_not() {
+        assert_eq!(
+            classify_missed_item("npm: stripe v22.6.1", "npm_registry", "stripe"),
+            "version update"
+        );
+        assert_eq!(
+            classify_missed_item(
+                "crates.io: jsonwebtoken v11.0.0",
+                "crates_io",
+                "jsonwebtoken"
+            ),
+            "version update"
+        );
+        assert_eq!(
+            classify_missed_item(
+                "📢 New updates · 3 Sept #15.1 · onecli v2.5.0 — Added Slack Stripe AWS billing fixes",
+                "mastodon",
+                "stripe"
+            ),
+            "relevant discussion",
+            "a version of ANOTHER product is not a stripe version update"
+        );
+        assert_eq!(
+            classify_missed_item("Announcing axum 0.8.0", "rss", "axum"),
+            "version update",
+            "an editorial announcement of THIS dependency's version still counts"
+        );
+        assert_eq!(
+            classify_missed_item("[GHSA-1] stripe: signature bypass", "osv", "stripe"),
+            "security advisory"
+        );
+        assert_eq!(
+            classify_missed_item("Stripe Payment Cloaking", "reddit", "stripe"),
+            "relevant discussion"
+        );
     }
 
     #[test]
@@ -1991,24 +2259,24 @@ mod tests {
             "New updates 3 Sept: onecli v2.5.0 — Added Slack Stripe AWS billing fixes",
         ]);
         assert_eq!(
-            classify_severity(&volume, 999, "stripe", true),
+            classify_severity(&volume, 999, "stripe", true, None),
             GapSeverity::Medium,
             "unread volume on a never-engaged dependency caps at Medium"
         );
         let breaking = missed(&["Stripe API breaking changes in the 2026 release"]);
         assert_eq!(
-            classify_severity(&breaking, 10, "stripe", true),
+            classify_severity(&breaking, 10, "stripe", true, None),
             GapSeverity::High,
             "a breaking-change citation is High on its own"
         );
         let advisory = missed(&["[CVE-2026-1] stripe: webhook signature bypass vulnerability"]);
         assert_eq!(
-            classify_severity(&advisory, 10, "stripe", false),
-            GapSeverity::High,
-            "a security citation on a patched install is High, never Critical"
+            classify_severity(&advisory, 10, "stripe", false, None),
+            GapSeverity::Medium,
+            "a security citation on a patched install is reading material, never High or Critical"
         );
         assert_eq!(
-            classify_severity(&advisory, 10, "stripe", true),
+            classify_severity(&advisory, 10, "stripe", true, Some("critical")),
             GapSeverity::Critical
         );
     }
@@ -2030,7 +2298,7 @@ mod tests {
         );
         // The call site ANDs `still_vulnerable` with the grounding check, so
         // an ungrounded story reaches the classifier as "not proven exposed".
-        let severity = classify_severity(&missed, 20, "axum", false);
+        let severity = classify_severity(&missed, 20, "axum", false, Some("critical"));
         assert_ne!(
             severity,
             GapSeverity::Critical,
@@ -2489,12 +2757,12 @@ mod tests {
         }];
 
         assert_eq!(
-            classify_severity(&missed, 13, "hono", true),
+            classify_severity(&missed, 13, "hono", true, Some("high")),
             GapSeverity::Critical,
             "a genuinely exposed install still escalates"
         );
         assert_ne!(
-            classify_severity(&missed, 13, "hono", false),
+            classify_severity(&missed, 13, "hono", false, Some("high")),
             GapSeverity::Critical,
             "an already-patched install must not be reported as critical"
         );

@@ -194,12 +194,74 @@ pub fn pending_monthly_rollup(conn: &Connection) -> Vec<Vec<String>> {
 // Briefing Context Injection
 // ============================================================================
 
+/// Strip self-made age counters from continuity text before it is fed back
+/// to the model. Five consecutive briefs (2026-09-06 19:39 → 09-07 02:38,
+/// two to three hours apart) said the same advisory was "past day 20", 21,
+/// 22, 23, 24 — one increment per brief, from nothing but the previous
+/// brief's own phrasing. No stored field held 24. A day count that survives
+/// the round trip is a counter the model keeps for itself; remove the number
+/// and the "day N" / "N days open" phrasing so age can only come from a
+/// dated fact in the current prompt.
+pub(crate) fn strip_age_counters(text: &str) -> String {
+    const AGE_NOUNS: [&str; 8] = [
+        "unpatched",
+        "open",
+        "old",
+        "overdue",
+        "outstanding",
+        "unresolved",
+        "running",
+        "stale",
+    ];
+    let tokens: Vec<&str> = text.split(' ').collect();
+    let mut out: Vec<String> = Vec::with_capacity(tokens.len());
+    let mut i = 0;
+    let clean = |t: &str| {
+        t.trim_matches(|c: char| !c.is_alphanumeric())
+            .to_lowercase()
+    };
+    while i < tokens.len() {
+        let t = clean(tokens[i]);
+        // "day 24" / "day 24," / "day-24"
+        if t == "day" && i + 1 < tokens.len() && clean(tokens[i + 1]).parse::<u32>().is_ok() {
+            out.push("[age omitted]".to_string());
+            i += 2;
+            continue;
+        }
+        if let Some(rest) = t.strip_prefix("day-") {
+            if rest.parse::<u32>().is_ok() {
+                out.push("[age omitted]".to_string());
+                i += 1;
+                continue;
+            }
+        }
+        // "24 days unpatched" / "24 days open" / "3 weeks old"
+        if t.parse::<u32>().is_ok() && i + 2 < tokens.len() {
+            let unit = clean(tokens[i + 1]);
+            let noun = clean(tokens[i + 2]);
+            if matches!(unit.as_str(), "day" | "days" | "week" | "weeks")
+                && AGE_NOUNS.contains(&noun.as_str())
+            {
+                out.push("[age omitted]".to_string());
+                i += 3;
+                continue;
+            }
+        }
+        out.push(tokens[i].to_string());
+        i += 1;
+    }
+    out.join(" ")
+}
+
 pub fn build_seal_context(conn: &Connection) -> String {
     let mut parts: Vec<String> = Vec::new();
 
     // Yesterday's daily seal
     if let Some(seal) = get_most_recent_seal(conn, SealLevel::Daily) {
-        let truncated = truncate_to_tokens(&seal.summary_text, MAX_DAILY_SEAL_TOKENS);
+        let truncated = strip_age_counters(&truncate_to_tokens(
+            &seal.summary_text,
+            MAX_DAILY_SEAL_TOKENS,
+        ));
         parts.push(format!(
             "Yesterday's briefing summary ({}):\n{}",
             seal.seal_date, truncated
@@ -208,7 +270,10 @@ pub fn build_seal_context(conn: &Connection) -> String {
 
     // Most recent weekly seal
     if let Some(seal) = get_most_recent_seal(conn, SealLevel::Weekly) {
-        let truncated = truncate_to_tokens(&seal.summary_text, MAX_WEEKLY_SEAL_TOKENS);
+        let truncated = strip_age_counters(&truncate_to_tokens(
+            &seal.summary_text,
+            MAX_WEEKLY_SEAL_TOKENS,
+        ));
         parts.push(format!(
             "This week's summary ({}):\n{}",
             seal.seal_date, truncated
@@ -217,7 +282,10 @@ pub fn build_seal_context(conn: &Connection) -> String {
 
     // Most recent monthly seal
     if let Some(seal) = get_most_recent_seal(conn, SealLevel::Monthly) {
-        let truncated = truncate_to_tokens(&seal.summary_text, MAX_MONTHLY_SEAL_TOKENS);
+        let truncated = strip_age_counters(&truncate_to_tokens(
+            &seal.summary_text,
+            MAX_MONTHLY_SEAL_TOKENS,
+        ));
         parts.push(format!(
             "Last month's summary ({}):\n{}",
             seal.seal_date, truncated
@@ -500,6 +568,36 @@ mod tests {
         let pending = pending_weekly_rollup(&conn);
         assert_eq!(pending.len(), 1);
         assert_eq!(pending[0].len(), 7);
+    }
+
+    /// Five consecutive briefs said "past day 20 … 24", one increment per
+    /// brief, from nothing but their own continuity text (2026-09-07). The
+    /// counter must not survive the round trip; dated facts and everything
+    /// else must.
+    #[test]
+    fn strip_age_counters_removes_self_made_day_counts_only() {
+        let text =
+            "jsonwebtoken 9.3.1 in relay is now past day 24 with a confirmed auth-bypass risk. \
+                    quinn-proto has been open 12 days unpatched; published 2026-02-03. \
+                    Day-3 of the incident. A 3 weeks old thread. Version 1.2.3 shipped in 2 days.";
+        let out = strip_age_counters(text);
+        assert!(!out.contains("day 24"), "{out}");
+        assert!(!out.contains("12 days unpatched"), "{out}");
+        assert!(!out.contains("Day-3"), "{out}");
+        assert!(!out.contains("3 weeks old"), "{out}");
+        assert!(
+            out.contains("published 2026-02-03"),
+            "dated facts survive: {out}"
+        );
+        assert!(
+            out.contains("Version 1.2.3"),
+            "version literals survive: {out}"
+        );
+        assert!(
+            out.contains("shipped in 2 days."),
+            "a plain duration that is not an age claim survives: {out}"
+        );
+        assert!(out.contains("[age omitted]"));
     }
 
     #[test]
