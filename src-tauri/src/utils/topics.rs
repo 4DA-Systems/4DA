@@ -275,6 +275,24 @@ const TITLE_STOPWORDS: &[&str] = &[
     "should",
     "could",
     "would",
+    // Sentence openers and adverbs (capitalised by position, never names)
+    "actually",
+    "act",
+    "action",
+    "actions",
+    "really",
+    "finally",
+    "today",
+    "inside",
+    "beyond",
+    "observation",
+    "observations",
+    "reminder",
+    "note",
+    "notes",
+    "updates",
+    "psa",
+    "til",
     // Generic verbs / gerunds (capitalized in titles, useless as topics)
     "using",
     "building",
@@ -415,21 +433,60 @@ pub(crate) fn extract_topics(title: &str, content: &str, source_tags: &[String])
         }
     }
 
-    // Phase 3: Capitalized words from title as potential topics
-    for word in title.split_whitespace() {
-        let clean = word.trim_matches(|c: char| !c.is_alphanumeric());
-        if clean.len() > 2 && clean.chars().next().is_some_and(char::is_uppercase) {
-            let lower = clean.to_lowercase();
-            if !seen.contains(&lower)
-                && !TITLE_STOPWORDS.contains(&lower.as_str())
-                && seen.insert(lower.clone())
-            {
-                topics.push(lower);
-            }
+    // Phase 3: Capitalized words from title as potential topics. A Title
+    // Case headline ("What Actually Becomes the Moat", "Privacy Act
+    // Reforms", "Quick thoughts on GitHub Actions") capitalises every word,
+    // so capitalisation carries no name signal there — live 2026-09-08 the
+    // brief's escalating section listed `act`, `action` and `actually`
+    // signal chains. In a Title Case title only a word something else marks
+    // as a name counts (an interior capital or a digit: TypeScript, GitHub,
+    // S3); in a sentence-case title any capitalised word does, minus the
+    // stopwords.
+    let words: Vec<&str> = title
+        .split_whitespace()
+        .map(|w| w.trim_matches(|c: char| !c.is_alphanumeric()))
+        .filter(|w| w.len() > 2)
+        .collect();
+    let title_case = is_title_case(&words);
+    for clean in words {
+        if !clean.chars().next().is_some_and(char::is_uppercase) {
+            continue;
+        }
+        if title_case && !is_marked_name(clean) {
+            continue;
+        }
+        let lower = clean.to_lowercase();
+        if !seen.contains(&lower)
+            && !TITLE_STOPWORDS.contains(&lower.as_str())
+            && seen.insert(lower.clone())
+        {
+            topics.push(lower);
         }
     }
 
     topics
+}
+
+/// A headline styled in Title Case: at least four significant words (four
+/// letters or more) of which at most one is lowercase-initial — "Getting
+/// Started with Rust" still qualifies, "Toasty is an async ORM for Rust"
+/// does not. There, capitalisation is typography, not naming.
+fn is_title_case(words: &[&str]) -> bool {
+    let significant: Vec<&&str> = words.iter().filter(|w| w.len() >= 4).collect();
+    if significant.len() < 4 {
+        return false;
+    }
+    let lowercase = significant
+        .iter()
+        .filter(|w| w.chars().next().is_some_and(char::is_lowercase))
+        .count();
+    lowercase <= 1
+}
+
+/// An interior capital or a digit marks a name regardless of typography
+/// (TypeScript, GitHub, S3, ZenHub).
+fn is_marked_name(word: &str) -> bool {
+    word.chars().skip(1).any(char::is_uppercase) || word.chars().any(|c| c.is_ascii_digit())
 }
 
 /// Detect trending topics from a batch of items.
@@ -604,6 +661,95 @@ mod tests {
     fn test_extract_topics_capitalized_words_from_title() {
         let topics = extract_topics("Building Tauri Desktop Apps", "", &[]);
         assert!(topics.contains(&"tauri".to_string()));
+    }
+
+    /// Live 2026-09-08: the brief's "escalating" section listed "act signal
+    /// chain (5 events)", "action …" and "actually …" — Title Case headline
+    /// words minted as topics ("What Actually Becomes the Moat", "Privacy
+    /// Act Reforms", "GitHub Actions"). In a Title Case headline
+    /// capitalisation is typography; sentence openers are stopwords anyway.
+    #[test]
+    fn title_case_headlines_mint_no_bare_capitalised_topics() {
+        for (title, words) in [
+            (
+                "Why Code Is About to Get Cheap — and What Actually Becomes the Moat",
+                &["actually", "moat", "code", "cheap"][..],
+            ),
+            (
+                "How AI Actually Changed My QA Workflow (Not the Sales Pitch Version)",
+                &["actually", "workflow", "sales", "pitch"][..],
+            ),
+            (
+                "Quick thoughts on GitHub Actions Aug 26 incident",
+                &["actions"][..],
+            ),
+            (
+                "Privacy Act Reforms: Government unveils tranche 2 proposals",
+                &["act"][..],
+            ),
+            (
+                "Actually, the borrow checker is your friend",
+                &["actually"][..],
+            ),
+        ] {
+            let topics = extract_topics(title, "", &[]);
+            for word in words {
+                assert!(
+                    !topics.contains(&(*word).to_string()),
+                    "{title:?} must not mint {word:?} (got {topics:?})"
+                );
+            }
+        }
+        // Vocabulary and marked names survive Title Case.
+        let topics = extract_topics("Quick thoughts on GitHub Actions Aug 26 incident", "", &[]);
+        assert!(topics.contains(&"github".to_string()));
+        let topics = extract_topics("How ZenHub Made My Board Fast Again", "", &[]);
+        assert!(
+            topics.contains(&"zenhub".to_string()),
+            "interior capital marks a name"
+        );
+        let topics = extract_topics("Why Deno2 Is Still The Default Runtime", "", &[]);
+        assert!(
+            topics.contains(&"deno2".to_string()),
+            "a digit marks a name"
+        );
+    }
+
+    /// Negative test for the gate: a sentence-case title still mints its
+    /// capitalised names, first word included.
+    #[test]
+    fn sentence_case_titles_still_mint_names() {
+        for (title, word) in [
+            ("Toasty is an async ORM for Rust", "toasty"),
+            ("Announcing Toasty, an async ORM", "toasty"),
+            (
+                "Rustls 0.23.44 released with ML-DSA certificates enabled by default",
+                "rustls",
+            ),
+            ("Image crate patch released", "image"),
+            (
+                "Privacy Act Reforms: Government unveils tranche 2 proposals",
+                "reforms",
+            ),
+        ] {
+            let topics = extract_topics(title, "", &[]);
+            assert!(
+                topics.contains(&word.to_string()),
+                "{title:?} must mint {word:?} (got {topics:?})"
+            );
+        }
+        assert!(!is_title_case(&["Toasty", "async", "ORM", "for", "Rust"]));
+        assert!(is_title_case(&[
+            "What", "Actually", "Becomes", "Moat", "Cheap"
+        ]));
+        assert!(
+            is_title_case(&["Getting", "Started", "with", "Rust", "Axum"]),
+            "one lowercase function word is still a headline"
+        );
+        assert!(
+            !is_title_case(&["Building", "Tauri", "Apps"]),
+            "three words are not a headline"
+        );
     }
 
     #[test]

@@ -536,6 +536,12 @@ pub fn detect_knowledge_gaps(conn: &rusqlite::Connection) -> Result<Vec<Knowledg
 
         // Unread items whose title names this dependency (word-boundary matched).
         let missed = keyword_misses_from(&candidates, &dep.package_name);
+        // A release every carrying project already runs is not a missed
+        // update (AD-041): "@modelcontextprotocol/node v2.0.0: 1 version
+        // update — notably npm: @modelcontextprotocol/node v2.0.0" against an
+        // installed 2.0.0 (live 2026-09-08).
+        let installed_here = installed_versions_for(conn, &dep.package_name, &paths);
+        let missed = drop_already_installed_releases(missed, &dep.package_name, &installed_here);
         if missed.is_empty() {
             continue;
         }
@@ -757,6 +763,33 @@ fn load_gap_candidates(conn: &rusqlite::Connection) -> Result<Vec<GapCandidate>>
 /// Word-boundary matching is what keeps short names honest — "next" matches
 /// "Next.js" and "next release" but never "unexpected". It is the reason the
 /// caller does not need to exclude dependencies by name length.
+/// Drop rows that announce a version every project in this gap already runs
+/// (or a lower one). Unknown installs drop nothing — a release we cannot
+/// compare is still worth a look.
+fn drop_already_installed_releases(
+    missed: Vec<MissedItem>,
+    dep_name: &str,
+    installed: &[String],
+) -> Vec<MissedItem> {
+    use crate::scoring::release_version::{
+        already_installed, announced_release_version, lenient_semver,
+    };
+    let installed: Vec<semver::Version> = installed
+        .iter()
+        .filter_map(|v| lenient_semver(v, None))
+        .collect();
+    if installed.is_empty() {
+        return missed;
+    }
+    missed
+        .into_iter()
+        .filter(|m| {
+            announced_release_version(&m.title, &m.source_type, dep_name)
+                .is_none_or(|announced| !already_installed(&announced, &installed))
+        })
+        .collect()
+}
+
 fn keyword_misses_from(candidates: &[GapCandidate], package_name: &str) -> Vec<MissedItem> {
     let dep_lower = package_name.to_lowercase();
 
@@ -1900,6 +1933,58 @@ mod tests {
             classify_missed_item("Stripe Payment Cloaking", "reddit", "stripe"),
             "relevant discussion"
         );
+    }
+
+    /// Live 2026-09-08: "@modelcontextprotocol/node v2.0.0: 1 version update
+    /// — notably npm: @modelcontextprotocol/node v2.0.0" against an
+    /// installed 2.0.0. A release every carrying project already runs is
+    /// not a missed update (AD-041); one project behind keeps it; an unknown
+    /// install drops nothing.
+    #[test]
+    fn releases_every_project_already_runs_are_not_missed_updates() {
+        let missed = |titles: &[(&str, &str)]| -> Vec<MissedItem> {
+            titles
+                .iter()
+                .enumerate()
+                .map(|(i, (title, source))| MissedItem {
+                    item_id: i as i64 + 1,
+                    title: (*title).to_string(),
+                    url: None,
+                    source_type: (*source).to_string(),
+                    created_at: "2026-09-08 00:00:00".to_string(),
+                })
+                .collect()
+        };
+        let rows = || {
+            missed(&[
+                ("npm: @modelcontextprotocol/node v2.0.0", "npm_registry"),
+                ("npm: @modelcontextprotocol/node v2.1.0", "npm_registry"),
+                ("Announcing @modelcontextprotocol/node 1.9.0", "rss"),
+                ("Why @modelcontextprotocol/node matters", "devto"),
+            ])
+        };
+        let dep = "@modelcontextprotocol/node";
+        let kept: Vec<String> = drop_already_installed_releases(rows(), dep, &["2.0.0".into()])
+            .into_iter()
+            .map(|m| m.title)
+            .collect();
+        assert_eq!(
+            kept,
+            vec![
+                "npm: @modelcontextprotocol/node v2.1.0".to_string(),
+                "Why @modelcontextprotocol/node matters".to_string(),
+            ],
+            "the installed 2.0.0 and the older 1.9.0 announcement are not missed updates"
+        );
+        let behind =
+            drop_already_installed_releases(rows(), dep, &["1.8.0".into(), "2.0.0".into()]);
+        assert_eq!(
+            behind.len(),
+            4,
+            "one project on 1.8.0 keeps every release new"
+        );
+        let unknown = drop_already_installed_releases(rows(), dep, &[]);
+        assert_eq!(unknown.len(), 4, "an unknown install drops nothing");
     }
 
     #[test]

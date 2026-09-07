@@ -836,3 +836,62 @@ the threshold at which a number becomes a CLAIM the user can act on.
 (`CODE_SIMILARITY_DISPLAY_FLOOR`); the score contribution is unchanged. When
 a factor appears on half of all items, check whether it discriminates before
 believing it explains.
+
+---
+
+### The rule was right, the wiring never supplied the input (2026-09-08, AD-040)
+
+**Symptom.** After Phase 120 shipped, Blind Spots still read HIGH "security
+signals unreviewed" for hono 4.13.3, lettre 0.11.22 and react 19.2.7, and
+"1 new release" for the sha2 0.11.0 the user runs — the exact rows the
+change was written for. Every unit test was green.
+
+**Root cause.** The counters were tested with explicit installed versions.
+Live, the version came from `project_dependencies.version`, which is NULL
+for every row (the manifest table never carries a resolved version; the
+knowledge gap had recorded the same measurement earlier). With no version,
+the exposure check took its conservative branch and the release check
+called everything new.
+
+**The rule.** Installed versions are read from the lockfile table
+(`blind_spots::installed_versions`, every included project, lowest first);
+exposure holds while ANY install is inside a range, and a release is new
+while the LOWEST install is below it. A rule verified only with hand-fed
+inputs is unverified until a test drives it from the table the product
+reads — and the live check after activation is the gate, not the suite.
+
+---
+
+### A version update for the version you run (2026-09-08, AD-041)
+
+**Symptom.** The knowledge gap for `@modelcontextprotocol/node` read
+"v2.0.0: 1 version update — notably npm: @modelcontextprotocol/node
+v2.0.0" against an installed 2.0.0.
+
+**Root cause.** The gap classifier reads rows directly; the scorer's
+already-installed rule (v33) never reached it.
+
+**The rule.** A release every project in the gap already runs is not a
+missed update (`knowledge_decay::drop_already_installed_releases`, on the
+same `release_version` reader as the scorer). One project behind keeps it;
+an unknown install drops nothing.
+
+---
+
+### "actually signal chain (5 events)" (2026-09-08)
+
+**Symptom.** The brief's escalating section listed chains named `act`,
+`action` and `actually` — "Multiple signals about actually - review the
+trend".
+
+**Root cause.** Topic extraction minted every capitalised title word not on
+a stopword list — and a Title Case headline ("What Actually Becomes the
+Moat", "Privacy Act Reforms", "GitHub Actions") capitalises every word.
+
+**The rule.** In a Title Case headline (`utils::topics::is_title_case`:
+four or more significant words, at most one lowercase-initial) only a word
+something else marks as a name counts — an interior capital or a digit
+(TypeScript, GitHub, Deno2). Sentence-case titles keep minting their
+capitalised names, first word included (a first-word rule was tried and
+cost the niche-specialist persona its recall floor). Sentence openers join
+the stopword list. Capitalisation is typography before it is naming.
