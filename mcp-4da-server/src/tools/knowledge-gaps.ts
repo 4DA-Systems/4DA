@@ -8,153 +8,30 @@
 import type { FourDADatabase } from "../db.js";
 import type { LiveIntelligence } from "../live/index.js";
 import type { DependencyWithProjectRow, SourceItemBriefRow } from "../types.js";
-import { compareSemver, parseSemver } from "../live/semver-utils.js";
+import { parseSemver } from "../live/semver-utils.js";
 import { mapEcosystem } from "../live/version-resolver.js";
+import {
+  advisorySubject,
+  gradeGap,
+  isAdvisoryItem,
+  mentionsPackage,
+  parsePublishedAt,
+  samePackage,
+  versionInAnyRange,
+  type AdvisoryRangeEvent,
+  type Exposure,
+} from "./knowledge-gap-grading.js";
 
-// Word-boundary matching prevents "cve" matching inside "achieve", "receiver", etc.
-function hasWordBoundary(text: string, term: string): boolean {
-  const regex = new RegExp(`\\b${escapeRegExp(term)}\\b`, 'i');
-  return regex.test(text);
-}
-
-// Package names can contain regex metacharacters (@scope/name, c++, next.js).
-function escapeRegExp(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\/]/g, "\\$&");
-}
-
-// True when `text` mentions the package name as a whole word. Word characters
-// for this purpose include - and _ (so dep "hono" does NOT match "hono-shim",
-// and never matches "in HONOr of"). @scope/name matches as the full literal.
-function mentionsPackage(text: string, pkg: string): boolean {
-  const regex = new RegExp(`(^|[^A-Za-z0-9_-])${escapeRegExp(pkg)}($|[^A-Za-z0-9_-])`, "i");
-  return regex.test(text);
-}
-
-/** One `introduced`/`fixed` event pair from an OSV affected range. */
-export interface AdvisoryRangeEvent {
-  introduced?: string;
-  fixed?: string;
-}
-
-/**
- * Is `installed` inside `[introduced, fixed)` for any of these advisory ranges?
- *
- * An advisory naming your dependency is only a gap if you are actually exposed.
- * Grading skipped this entirely: the live tool reported the three Hono CVEs as
- * a `critical` gap on hono **4.13.2**, when all three are fixed in **4.12.34** —
- * a version this repo had already pinned past via `pnpm.overrides`. The user
- * was told to worry about something they had already remediated.
- *
- * Conservative by construction: an unparseable installed version, or an
- * advisory whose range cannot be read, counts as AFFECTED. Never claim someone
- * is safe on missing information.
- */
-export function versionInAnyRange(
-  ranges: AdvisoryRangeEvent[][],
-  installed: string | null | undefined,
-): boolean {
-  if (!installed || parseSemver(installed) === null) return true;
-
-  for (const events of ranges) {
-    let introduced: string | null = null;
-    for (const event of events) {
-      if (typeof event.introduced === "string") introduced = event.introduced;
-      if (typeof event.fixed === "string" && introduced !== null) {
-        const atOrAfterIntroduced =
-          introduced === "0" || compareSemver(installed, introduced) >= 0;
-        const beforeFix = compareSemver(installed, event.fixed) < 0;
-        if (atOrAfterIntroduced && beforeFix) return true;
-        introduced = null;
-      }
-    }
-    // An `introduced` with no matching `fixed` means "affected from here on".
-    if (introduced !== null) {
-      if (introduced === "0" || compareSemver(installed, introduced) >= 0) return true;
-    }
-  }
-  return false;
-}
-
-/** The subset of an item this grading needs. */
-export interface GradableItem {
-  title: string | null;
-  source_type?: string | null;
-  content_type?: string | null;
-}
-
-/**
- * Grade a knowledge gap by CONSEQUENCE, never by volume.
- *
- * - `critical` — a real advisory whose TITLE names this dependency. The
- *   advisory is about the dep, not merely co-mentioning it in a body.
- * - `high` — a security-keyword item whose title names the dep.
- * - `medium` — an unread item that names the dep in its title and carries
- *   consequence: a breaking change, a deprecation, or a release.
- * - `low` — everything else, including a large pile of passing mentions.
- *
- * `medium` used to mean "3+ recent unread mentions", and a mention could match
- * on the content body rather than the title. That graded unread VOLUME as a
- * knowledge gap, and since `min_severity` defaults to medium it shipped: a
- * `tracing` gap evidenced by "The Matrix: Writing Code That Doesn't Need
- * Comments", a `typescript` gap evidenced by a Databricks job posting, a `uuid`
- * gap evidenced by Go's standard library, a `vite` gap evidenced by a
- * period-tracker app. Fourteen of fifteen gaps were noise.
- *
- * The Rust surface already draws exactly this line —
- * `knowledge_decay::gap_is_substantive` requires a security advisory, breaking
- * change, or version update, and calls anything else "unread VOLUME, not a
- * knowledge gap". Two implementations of one concept disagreeing is what let
- * this tool report 18 gaps while the app reported none.
- */
-export function gradeGap(
-  items: GradableItem[],
-  packageName: string,
-  /**
-   * False when every advisory for this package is already fixed at or below the
-   * installed version. Security tiers then cannot apply — you cannot be
-   * "critically behind" on something you have already patched. Defaults to
-   * `true` so callers without version data keep the conservative grade.
-   */
-  stillVulnerable = true,
-): string {
-  const namesDep = (item: GradableItem) => mentionsPackage(item.title || "", packageName);
-
-  const isAdvisory = (item: GradableItem) =>
-    item.source_type === "cve" ||
-    item.source_type === "osv" ||
-    item.content_type === "security_advisory";
-
-  const securityKeywords = (title: string) =>
-    hasWordBoundary(title, "cve") ||
-    hasWordBoundary(title, "security") ||
-    hasWordBoundary(title, "vulnerability");
-
-  // "Announcing <thing> <version>" is the canonical release phrasing and names
-  // no other keyword. The version token is REQUIRED, matching the rule
-  // `content_dna_classifiers` settled on: it keeps "Announcing axum 0.8.0" and
-  // rejects "Announcing Toasty, an async ORM" and "Announcing our Series B".
-  const announcesAVersion = (title: string) =>
-    (hasWordBoundary(title, "announcing") || hasWordBoundary(title, "introducing")) &&
-    /\bv?\d+\.\d+/.test(title);
-
-  const carriesConsequence = (title: string) =>
-    ["breaking", "deprecated", "eol", "release", "released", "update", "upgrade"].some((kw) =>
-      hasWordBoundary(title, kw),
-    ) || announcesAVersion(title);
-
-  if (stillVulnerable) {
-    if (items.some((item) => isAdvisory(item) && namesDep(item))) return "critical";
-    if (items.some((item) => namesDep(item) && securityKeywords(item.title || ""))) return "high";
-  }
-  if (items.some((item) => namesDep(item) && carriesConsequence(item.title || ""))) return "medium";
-  return "low";
-}
-
-// Escape SQL LIKE wildcards so a package name containing % or _ (npm names may
-// contain _) is matched literally rather than as a pattern. Paired with ESCAPE '\'.
-function escapeLike(s: string): string {
-  return s.replace(/[\\%_]/g, (c) => "\\" + c);
-}
+// The grading rules live in knowledge-gap-grading.ts; re-exported for existing importers.
+export {
+  advisorySubject,
+  gradeGap,
+  registryVersionFromTitle,
+  versionInAnyRange,
+  type AdvisoryRangeEvent,
+  type Exposure,
+  type GradableItem,
+} from "./knowledge-gap-grading.js";
 
 /**
  * Dependency names that are ordinary English words. A word-boundary match on
@@ -259,23 +136,32 @@ export function executeKnowledgeGaps(
   // patched. `osv_advisories` carries the affected ranges the OSV sync stored;
   // when it is absent or silent about a package, stay conservative and grade as
   // if still exposed — never claim someone is safe on missing data.
+  //
+  // Scoped to the dependency's ecosystem when the table records one: the
+  // sync stores the npm `jsonwebtoken` ([0, 9.0.0)) and the Rust crate
+  // `jsonwebtoken` ([0, 10.3.0)) under one package name, and an unscoped
+  // lookup graded the crate at 9.3.1 by the npm ranges.
   const hasOsvTable = db.hasColumn("osv_advisories", "affected_ranges");
+  const hasOsvEcosystem = hasOsvTable && db.hasColumn("osv_advisories", "ecosystem");
   const advisoryRanges = hasOsvTable
     ? rawDb.prepare(
         `SELECT affected_ranges FROM osv_advisories
-         WHERE lower(package_name) = lower(?) AND withdrawn_at IS NULL`,
+         WHERE lower(package_name) = lower(?) AND withdrawn_at IS NULL
+         ${hasOsvEcosystem ? "AND ecosystem = ?" : ""}`,
       )
     : null;
 
-  const stillVulnerable = (packageName: string, version: string | null): boolean => {
-    if (!advisoryRanges) return true;
+  const exposureFor = (packageName: string, ecosystem: string, version: string | null): Exposure => {
+    if (!advisoryRanges) return "unknown";
     let rows: Array<{ affected_ranges: string | null }>;
     try {
-      rows = advisoryRanges.all(packageName) as Array<{ affected_ranges: string | null }>;
+      rows = (
+        hasOsvEcosystem ? advisoryRanges.all(packageName, ecosystem) : advisoryRanges.all(packageName)
+      ) as Array<{ affected_ranges: string | null }>;
     } catch {
-      return true;
+      return "unknown";
     }
-    if (rows.length === 0) return true; // nothing known about this package
+    if (rows.length === 0) return "unknown"; // nothing known about this package
 
     const ranges: AdvisoryRangeEvent[][] = [];
     for (const row of rows) {
@@ -284,19 +170,22 @@ export function executeKnowledgeGaps(
         const parsed = JSON.parse(row.affected_ranges) as Array<{ events?: AdvisoryRangeEvent[] }>;
         for (const r of parsed) if (Array.isArray(r.events)) ranges.push(r.events);
       } catch {
-        return true; // unreadable range — assume exposed
+        return "unknown"; // unreadable range — no claim
       }
     }
-    if (ranges.length === 0) return true;
-    return versionInAnyRange(ranges, version);
+    if (ranges.length === 0) return "unknown";
+    if (!version || parseSemver(version) === null) return "unknown";
+    return versionInAnyRange(ranges, version) ? "exposed" : "safe";
   };
   const hasIsDirect = db.hasColumn("project_dependencies", "is_direct");
 
   // Direct dependencies only — a transitive dep's news is not the user's
   // reading backlog. Dev deps stay in: a vitest or eslint advisory is real.
+  // Every direct dependency is scanned: a `LIMIT 100` here silently left the
+  // 101st onward unexamined (143 direct deps live, 43 never looked at).
   const deps = rawDb
     .prepare(
-      `SELECT package_name, version, project_path, language FROM project_dependencies ${hasIsDirect ? "WHERE is_direct = 1 " : ""}LIMIT 100`,
+      `SELECT package_name, version, project_path, language FROM project_dependencies ${hasIsDirect ? "WHERE is_direct = 1" : ""}`,
     )
     .all() as DependencyWithProjectRow[];
 
@@ -306,6 +195,63 @@ export function executeKnowledgeGaps(
       summary: "No project dependencies tracked. Add context directories to enable knowledge gap detection.",
     };
   }
+
+  // Candidate source items, loaded ONCE and matched per dependency in JS.
+  // Engagement is recorded by the app in interactions.item_id / .action_type
+  // (the canonical columns; the older source_item_id / action columns are
+  // unused), so the NOT-IN suppression must read those or it silently never
+  // fires.
+  //
+  // Grounding (each guard killed an observed false-positive class):
+  // - relevance_score >= 0.2: the scoring pipeline's above-noise band — drops
+  //   off-topic chatter that merely contains the string (chocolate-bar class).
+  // - 30-day window: a "gap" is something you MISSED, not archaeology — a
+  //   2014 StackOverflow post is not missed intelligence.
+  // - The real mention test is the word-boundary check below ("invite" must
+  //   never evidence a vite gap); a cheap substring pre-check keeps the
+  //   per-dependency pass fast.
+  // - feed_relevant is deliberately NOT filtered here: an item the feed gate
+  //   rejected can still be a legitimate unread dep mention — surfacing those
+  //   is this tool's niche. The relevance floor already excludes noise.
+  // - published_at is applied per dependency below, because its exemption
+  //   depends on the dependency's installed version.
+  type Candidate = SourceItemBriefRow & {
+    content_type: string | null;
+    relevance_score: number | null;
+    published_at: string | null;
+    content_head: string;
+    haystack: string;
+  };
+  const candidates = (
+    rawDb
+      .prepare(`SELECT si.id, si.title, si.url, si.source_type, ${hasContentType ? "si.content_type" : "NULL AS content_type"}, si.created_at,
+               ${hasRelevance ? "si.relevance_score" : "NULL AS relevance_score"},
+               ${hasPublishedAt ? "si.published_at" : "NULL AS published_at"},
+               substr(COALESCE(si.content, ''), 1, 2000) AS content_head
+        FROM source_items si
+        WHERE si.created_at >= datetime('now', '-30 days')
+        ${hasRelevance ? "AND si.relevance_score IS NOT NULL AND si.relevance_score >= 0.2" : ""}
+        AND si.id NOT IN (SELECT item_id FROM interactions WHERE action_type IN ('click', 'save'))
+        ORDER BY si.created_at DESC`)
+      .all() as Omit<Candidate, "haystack">[]
+  ).map((row) => ({ ...row, haystack: `${row.title || ""} ${row.content_head || ""}`.toLowerCase() }));
+
+  // published_at guard: OSV/CVE backfills ingest decades-old advisories whose
+  // created_at (discovery) is days old but whose published_at is ancient. A
+  // 2021 advisory is not "missed intelligence" in 2026; keep NULL (many
+  // sources never set it) and anything published recently. EXCEPT an advisory
+  // the installed version is positively inside: a still-applying advisory is
+  // missed intelligence no matter when it was published (live: the
+  // jsonwebtoken crate advisory, published February, still open against
+  // relay/'s 9.3.1 in September). "Unknown" exposure does not exempt — the
+  // cut stays for advisories about the wrong ecosystem or an unpinned
+  // version, which is where the false criticals came from.
+  const publishedCutoff = Date.now() - 90 * 24 * 60 * 60 * 1000;
+  const passesPublishedCut = (item: Candidate, exposure: Exposure): boolean => {
+    const publishedAt = parsePublishedAt(item.published_at);
+    if (publishedAt === null || publishedAt >= publishedCutoff) return true;
+    return isAdvisoryItem(item) && exposure === "exposed";
+  };
 
   const gaps: KnowledgeGap[] = [];
   const seenPackages = new Set<string>();
@@ -320,62 +266,42 @@ export function executeKnowledgeGaps(
     if (seenPackages.has(pkgKey)) continue;
     seenPackages.add(pkgKey);
 
-    // Find source items mentioning this dependency. Engagement is recorded by the
-    // app in interactions.item_id / .action_type (the canonical columns; the older
-    // source_item_id / action columns are unused), so the NOT-IN suppression must
-    // read those or it silently never fires.
-    //
-    // Grounding (each guard killed an observed false-positive class):
-    // - relevance_score >= 0.2: the scoring pipeline's above-noise band — drops
-    //   off-topic chatter that merely contains the string (chocolate-bar class).
-    // - 30-day window: a "gap" is something you MISSED, not archaeology — a
-    //   2014 StackOverflow post is not missed intelligence.
-    // - LIKE is only a cheap candidate pre-filter; the real test is the
-    //   word-boundary check below ("invite" must never evidence a vite gap).
-    // - feed_relevant is deliberately NOT filtered here: an item the feed gate
-    //   rejected can still be a legitimate unread dep mention — surfacing those
-    //   is this tool's niche. The relevance floor already excludes noise.
-    const pattern = `%${escapeLike(dep.package_name)}%`;
-    // - published_at guard: OSV/CVE backfills ingest decades-old advisories
-    //   whose created_at (discovery) is days old but whose published_at is
-    //   ancient. A 2021 advisory is not "missed intelligence" in 2026; keep
-    //   NULL (many sources never set it) and anything published recently.
-    const candidates = rawDb
-      .prepare(`SELECT si.id, si.title, si.url, si.source_type, ${hasContentType ? "si.content_type" : "NULL AS content_type"}, si.created_at,
-               ${hasRelevance ? "si.relevance_score" : "NULL AS relevance_score"}, substr(COALESCE(si.content, ''), 1, 2000) AS content_head
-        FROM source_items si
-        WHERE (si.title LIKE ? ESCAPE '\\' OR si.content LIKE ? ESCAPE '\\')
-        ${hasRelevance ? "AND si.relevance_score IS NOT NULL AND si.relevance_score >= 0.2" : ""}
-        AND si.created_at >= datetime('now', '-30 days')
-        ${hasPublishedAt ? "AND (si.published_at IS NULL OR datetime(si.published_at) >= datetime('now', '-90 days'))" : ""}
-        AND si.id NOT IN (SELECT item_id FROM interactions WHERE action_type IN ('click', 'save'))
-        ORDER BY si.created_at DESC LIMIT 25`)
-      .all(pattern, pattern) as Array<SourceItemBriefRow & {
-        content_type: string | null;
-        relevance_score: number | null;
-        content_head: string;
-      }>;
-
     // Word-boundary verification: the mention must be the package name as a
     // whole word in the title or the content head, not a substring. For deps
     // named by ordinary English words, the text must also carry an ecosystem
     // cue — "one-tap tower stacker" mentions the word, not the crate.
-    const isGenericName = GENERIC_WORD_DEPS.has(dep.package_name.toLowerCase());
-    const mentionedItems = candidates
-      .filter(
-        (item) =>
-          mentionsPackage(item.title || "", dep.package_name) ||
-          mentionsPackage(item.content_head || "", dep.package_name),
-      )
-      .filter((item) => !isGenericName || hasEcosystemCue(item))
+    //
+    // An advisory row is a mention only when the dependency is its subject
+    // package: a SurrealDB advisory that says "via URL path" is not `url`
+    // intelligence, whatever its body goes on to mention.
+    const isGenericName = GENERIC_WORD_DEPS.has(pkgKey);
+    const spellings = [...new Set([pkgKey, pkgKey.replace(/_/g, "-"), pkgKey.replace(/-/g, "_")])];
+    const mentioned = candidates.filter((item) => {
+      if (!spellings.some((s) => item.haystack.includes(s))) return false;
+      if (isAdvisoryItem(item)) {
+        const subject = advisorySubject(item.title || "");
+        if (subject !== null) return samePackage(subject, dep.package_name);
+      }
+      return (
+        (mentionsPackage(item.title || "", dep.package_name) ||
+          mentionsPackage(item.content_head || "", dep.package_name)) &&
+        (!isGenericName || hasEcosystemCue(item))
+      );
+    });
+    if (mentioned.length === 0) continue;
+
+    const installedVersion = installedVersionFor(dep);
+    const exposure = exposureFor(dep.package_name, mapEcosystem(dep.language || ""), installedVersion);
+    const mentionedItems = mentioned
+      .filter((item) => passesPublishedCut(item, exposure))
       .slice(0, 5);
 
     if (mentionedItems.length > 0) {
-      const installedVersion = installedVersionFor(dep);
       const severity = gradeGap(
         mentionedItems,
         dep.package_name,
-        stillVulnerable(dep.package_name, installedVersion),
+        exposure !== "safe",
+        installedVersion,
       );
 
       gaps.push({

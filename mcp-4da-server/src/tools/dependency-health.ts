@@ -10,6 +10,7 @@
 import type { FourDADatabase } from "../db.js";
 import type { LiveIntelligence } from "../live/index.js";
 import type { DependencyHealthResult, RegistryPackageInfo } from "../live/types.js";
+import { isActionableVulnerability } from "../live/maintenance.js";
 
 export interface DependencyHealthParams {
   include_dev?: boolean;
@@ -63,6 +64,7 @@ export async function executeDependencyHealth(
       outdatedCount: 0,
       deprecatedCount: 0,
       vulnerableCount: 0,
+      advisoryCount: 0,
       healthScore: 0,
       dependencies: [],
       vulnerabilitySummary: null,
@@ -87,14 +89,21 @@ export async function executeDependencyHealth(
   // Fetch registry health for all deps
   const registryData = await liveIntel.fetchRegistryHealth(deps);
 
-  // Merge vulnerability data
+  // Merge vulnerability data. "Vulnerable" means the actionable set — built
+  // on this host and not a maintenance notice — which is exactly what
+  // vulnerability_scan reports as `total_vulnerable_packages`. Counting every
+  // row here made the two tools disagree over one scan (this one said 11
+  // vulnerable packages where the scan listed 5 and filed the rest under
+  // platform-inactive and maintenance notices). `advisoryCount` keeps the raw
+  // row count visible so the filter hides nothing.
   const vulnResult = liveIntel.getVulnerabilities();
+  const allVulns = vulnResult?.vulnerabilities ?? [];
+  const activeVulns = allVulns.filter(isActionableVulnerability);
   const vulnMap = new Map<string, number>();
-  if (vulnResult) {
-    for (const v of vulnResult.vulnerabilities) {
-      vulnMap.set(v.package, (vulnMap.get(v.package) || 0) + 1);
-    }
+  for (const v of activeVulns) {
+    vulnMap.set(v.package, (vulnMap.get(v.package) || 0) + 1);
   }
+  const advisoryCount = allVulns.length;
 
   // Compute stats
   let outdated = 0;
@@ -146,13 +155,13 @@ export async function executeDependencyHealth(
   // Vulnerabilities: severity-weighted; transitive findings at one-third
   // weight (their fix arrives via a parent bump — the direct surface is what
   // the user controls directly).
+  // Penalised over the same actionable set the count reports, so a score
+  // below 100 always has a vulnerable package beside it.
   const sevWeight: Record<string, number> = { critical: 20, high: 10, medium: 4, low: 1 };
   let vulnPenaltyRaw = 0;
-  if (vulnResult) {
-    for (const v of vulnResult.vulnerabilities) {
-      const w = sevWeight[v.severity] ?? 2; // "unknown" (mostly unmaintained-notices) counts low
-      vulnPenaltyRaw += v.isDirect ? w : w / 3;
-    }
+  for (const v of activeVulns) {
+    const w = sevWeight[v.severity] ?? 2; // "unknown" severity with a real (non-maintenance) advisory
+    vulnPenaltyRaw += v.isDirect ? w : w / 3;
   }
   const vulnPenalty = Math.min(Math.round(vulnPenaltyRaw), 55);
 
@@ -170,12 +179,13 @@ export async function executeDependencyHealth(
   const deprecatedPenalty = Math.min(deprecated * 8, 15);
   const healthScore = Math.max(0, 100 - vulnPenalty - deprecatedPenalty - outdatedPenalty);
 
-  const vulnSummary = vulnResult ? {
-    critical: vulnResult.bySeverity.critical,
-    high: vulnResult.bySeverity.high,
-    medium: vulnResult.bySeverity.medium,
-    low: vulnResult.bySeverity.low,
-  } : null;
+  // Severity breakdown over the actionable set, matching the count above.
+  const vulnSummary = vulnResult ? { critical: 0, high: 0, medium: 0, low: 0 } : null;
+  if (vulnSummary) {
+    for (const v of activeVulns) {
+      if (v.severity in vulnSummary) vulnSummary[v.severity as keyof typeof vulnSummary]++;
+    }
+  }
 
   // Summary
   const parts: string[] = [];
@@ -184,6 +194,10 @@ export async function executeDependencyHealth(
   if (deprecated > 0) parts.push(`${deprecated} deprecated`);
   if (outdated > 0) parts.push(`${outdated} outdated`);
   if (vulnerable === 0 && deprecated === 0 && outdated === 0) parts.push("all healthy");
+  const hidden = advisoryCount - activeVulns.length;
+  if (hidden > 0) {
+    parts.push(`${hidden} advisor${hidden !== 1 ? "ies" : "y"} not counted (platform-inactive or maintenance notices)`);
+  }
 
   return {
     scannedAt: new Date().toISOString(),
@@ -193,6 +207,7 @@ export async function executeDependencyHealth(
     outdatedCount: outdated,
     deprecatedCount: deprecated,
     vulnerableCount: vulnerable,
+    advisoryCount,
     healthScore,
     dependencies: limited,
     vulnerabilitySummary: vulnSummary,

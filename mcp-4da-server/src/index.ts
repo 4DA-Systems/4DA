@@ -133,11 +133,12 @@ function getDatabase(): FourDADatabase {
 
         if (liveIntel.isEnabled()) {
           console.error(`[4DA]   Live intelligence: enabled (OSV.dev + HN)`);
-          // Background prefetch — non-blocking, warms cache for first tool call
+          // Background prefetch — non-blocking, warms cache for first tool call.
+          // The vulnerability scan goes through the warmup so a briefing that
+          // arrives before it finishes can await it instead of reading nothing.
           const techStack = [...scan.languages, ...scan.frameworks];
-          liveIntel.scanVulnerabilities(cwd).catch((err) => {
-            console.error(`[4DA]   Vulnerability prefetch failed: ${err instanceof Error ? err.message : String(err)}. Will retry on first tool call.`);
-          });
+          liveIntel.startVulnerabilityWarmup(cwd);
+          console.error(`[4DA]   Vulnerability scan warming in background (OSV.dev).`);
           liveIntel.fetchHeadlines(techStack).catch((err) => {
             console.error(`[4DA]   Headline prefetch failed: ${err instanceof Error ? err.message : String(err)}.`);
           });
@@ -191,6 +192,19 @@ function getDatabase(): FourDADatabase {
         // standalone branch prefetched, so full-DB servers served an empty
         // cache forever. Non-blocking; the tool also fetches on demand now.
         if (liveIntel.isEnabled()) {
+          // Warm the vulnerability scan too. This branch never scanned: the
+          // dependency set was initialised, headlines were prefetched, and
+          // `lastVulnScan` stayed null until some tool called
+          // vulnerability_scan — so the first what_should_i_know of a session
+          // read an empty cache and answered "safe_to_delegate" for a task
+          // that named a package with an open advisory (verified live
+          // 2026-09-07: 0 advisories at t+0, 11 advisories at t+7min).
+          if (liveIntel.isInitialized()) {
+            liveIntel.startVulnerabilityWarmup(resolveProjectDir());
+            console.error(
+              `[4DA]   Vulnerability scan warming in background (OSV.dev) for ${liveIntel.getAuditDeps().length} resolved dependencies.`,
+            );
+          }
           const techStack = deriveTechStackForHeadlines(db);
           if (techStack.length > 0) {
             liveIntel.fetchHeadlines(techStack).catch((err) => {

@@ -1,5 +1,62 @@
 # Changelog
 
+## Unreleased
+
+### Fixed: the briefing never answers "safe" without a vulnerability scan
+
+`what_should_i_know` awaited nothing. In full-database mode the live layer was
+initialised without a vulnerability scan, so the first call after start read
+an empty cache and reported `safe_to_delegate` for a task that named a package
+with an open advisory (verified live 2026-09-07: 0 advisories at t+0, 11 at
+t+7 min). The scan now warms at server start, the briefing awaits it (bounded,
+8 s), and the result carries `scan_status` (`ready` | `unavailable` |
+`disabled`). Without a ready scan the delegation level is the new `"unknown"`
+— treat the task as unreviewed, never as safe; `safe_to_delegate` is only
+emitted over a ready scan. Existing `human_only` evidence still wins.
+
+Security signals now also come through a 30-day feed pass (`since_hours` max
+raised from 168 to 720; windows past 7 days keep the current-pipeline-version
+guard), so a three-day-old advisory is no longer cut by the 72-hour window. A
+relevant security or breaking-change advisory yields at least `review_needed`.
+
+### Fixed: one signal per vulnerability
+
+`get_actionable_signals` injected one live signal per OSV record, so a
+GHSA/RUSTSEC pair for one bug read as two problems. Alias-connected records
+are clustered (union-find, scoped to package + version) and emitted once,
+every id in `triggers`. Platform-inactive advisories and maintenance notices
+drop to `low` with an explanatory action, and the briefing does not read them.
+
+A `signal_type` filter is now pushed into the database read: the general read
+is capped at the top 200 ranked items across every type, and on the live
+corpus that cap starved a security-only pass (both in-window stored security
+alerts ranked 299th and 582nd). The pipeline's stored priority vocabulary
+(`critical` / `alert` / `advisory` / `watch`) is mapped onto the tool's tiers
+instead of cast through unchanged — 92 of 93 stamped rows carried a priority
+no filter, sort, or briefing rule recognised.
+
+### Fixed: knowledge_gaps coverage and grading
+
+- Every direct dependency is scanned (a `LIMIT 100` left 43 of 143 live
+  dependencies unexamined); candidate items are loaded once.
+- Registry rows (`crates_io`, `npm_registry`, `pypi`, `go_modules`) are version
+  updates and grade `medium` regardless of title words — when the row is newer
+  than the installed version (the row for the version you run is not a gap).
+- An advisory names a dependency when the dependency is its subject package
+  (`[ID] package: …`), not when the title merely contains the word: `url` was
+  graded critical on a SurrealDB advisory ("via URL path"), `hmac` on a
+  Phalcon one.
+- An advisory the installed version is positively inside survives the 90-day
+  publish-date cut; unknown exposure does not exempt.
+- `osv_advisories` is consulted for the dependency's own ecosystem (the npm
+  and crates.io `jsonwebtoken` were being conflated).
+
+### Fixed: dependency_health counts vulnerable packages the way vulnerability_scan does
+
+`vulnerableCount` is the actionable set (built on this host, not a maintenance
+notice); `advisoryCount` reports every row so nothing is hidden. The health
+penalty and severity breakdown follow the same set.
+
 ## 5.0.4 (2026-08-24)
 
 ### Fixed: vulnerability_scan could recommend a downgrade

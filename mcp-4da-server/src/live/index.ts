@@ -30,6 +30,9 @@ import type {
 
 export type { VulnerabilityScanResult, VulnerabilityEntry, LiveHeadline, LiveIntelligenceStatus, RegistryPackageInfo, DependencyHealthResult } from "./types.js";
 
+/** Minimum gap between vulnerability warmup attempts after an offline result. */
+const WARMUP_RETRY_MS = 60_000;
+
 export class LiveIntelligence {
   private cache: LiveCache;
   private rateLimiter: RateLimiter;
@@ -47,6 +50,14 @@ export class LiveIntelligence {
   private auditDeps: ResolvedDependency[] = [];
   private initialized = false;
   private projectRoot: string | null = null;
+  /**
+   * The background vulnerability scan started at server init. Tools that need
+   * scan data before answering (`what_should_i_know`) await this through
+   * `ensureVulnerabilities` instead of reading the cache and finding it empty.
+   */
+  private warmup: Promise<VulnerabilityScanResult> | null = null;
+  /** When the last warmup came back offline; gates the retry so an offline host is not re-probed on every call. */
+  private warmupFailedAt: number | null = null;
 
   constructor(db: Database.Database) {
     this.enabled = process.env.FOURDA_OFFLINE !== "true";
@@ -165,6 +176,71 @@ export class LiveIntelligence {
       // Network failure — return last known or empty
       if (this.lastVulnScan) return { ...this.lastVulnScan, offline: true, cached: true };
       return emptyVulnResult(projectPath, true);
+    }
+  }
+
+  /**
+   * Start the vulnerability scan in the background without blocking startup.
+   * Never rejects: a failed scan resolves to an empty OFFLINE result so the
+   * warmup can be awaited by anyone. Idempotent while a warmup is in flight.
+   *
+   * Before this existed, full-database mode initialised the dependency set
+   * and warmed headlines but never scanned, so `lastVulnScan` stayed null
+   * until some tool happened to call `vulnerability_scan` — and the first
+   * `what_should_i_know` of a session read an empty cache and reported
+   * "safe_to_delegate" for a task naming a package with an open advisory.
+   */
+  startVulnerabilityWarmup(projectPath: string): void {
+    if (this.warmup) return;
+    this.warmupFailedAt = null;
+    this.warmup = this.scanVulnerabilities(projectPath).catch(() =>
+      emptyVulnResult(projectPath, true),
+    );
+  }
+
+  /**
+   * A usable vulnerability scan, or null. Returns the stored scan when one
+   * exists, otherwise awaits the warmup (starting one if none is running)
+   * for at most `timeoutMs`. Null means the scan is not available: disabled,
+   * still running past the deadline, or finished offline (an offline scan
+   * makes no clean-dependency claims, so it cannot support a "safe" verdict).
+   * Never throws. A timed-out warmup keeps running so a later call can use it.
+   */
+  async ensureVulnerabilities(
+    projectPath: string,
+    timeoutMs: number,
+  ): Promise<VulnerabilityScanResult | null> {
+    if (!this.enabled) return null;
+    if (this.lastVulnScan && !this.lastVulnScan.offline) return this.lastVulnScan;
+
+    if (!this.warmup) {
+      if (this.warmupFailedAt !== null && Date.now() - this.warmupFailedAt < WARMUP_RETRY_MS) {
+        return null;
+      }
+      this.startVulnerabilityWarmup(projectPath);
+    }
+    const pending = this.warmup;
+    if (!pending) return null;
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<null>((resolve) => {
+      timer = setTimeout(() => resolve(null), Math.max(0, timeoutMs));
+    });
+    try {
+      const settled = await Promise.race([pending, deadline]);
+      if (settled === null) return null; // still scanning; keep the warmup alive
+      const result = this.lastVulnScan ?? settled;
+      if (result.offline) {
+        // Failed or rate-limited: allow a fresh attempt after the backoff.
+        this.warmup = null;
+        this.warmupFailedAt = Date.now();
+        return null;
+      }
+      return result;
+    } catch {
+      return null;
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
     }
   }
 

@@ -125,14 +125,15 @@ describe("what_should_i_know hybrid wisdom", () => {
     expect(subjects).not.toContain("Auth approach");
   });
 
-  it("stays lexical (sync) when no embedding provider is configured", () => {
+  it("stays lexical when no embedding provider is configured", async () => {
     process.env.FOURDA_OFFLINE = "true";
 
-    const res = executeWhatShouldIKnow(db, {
+    // The briefing is always async now (it awaits the vulnerability scan);
+    // what must hold is that wisdom retrieval stays lexical without a provider.
+    const res = await executeWhatShouldIKnow(db, {
       task: "plan a document database migration",
-    }) as { wisdom_recall_mode: string };
+    });
 
-    expect(res).not.toBeInstanceOf(Promise);
     expect(res.wisdom_recall_mode).toBe("ranked_lexical");
   });
 });

@@ -817,7 +817,15 @@ export class FourDADatabase {
     sourceType?: string,
     limit: number = 20,
     sinceHours: number = 24,
-    requireCurrentVersion: boolean = false
+    requireCurrentVersion: boolean = false,
+    /**
+     * Restrict to items the scoring pipeline stamped with this signal_type.
+     * Lets a type-specific read (a security-only pass) fill its limit with
+     * matches instead of competing for the top-N slots across every type.
+     * Only meaningful over pipeline-stamped rows: without Rust scores there
+     * are no stored types, so the read returns nothing rather than pretend.
+     */
+    signalType?: string,
   ): RelevantItem[] {
     const sinceDate = new Date(Date.now() - sinceHours * 60 * 60 * 1000)
       .toISOString()
@@ -832,9 +840,11 @@ export class FourDADatabase {
         sourceType,
         limit,
         sinceDate,
-        requireCurrentVersion
+        requireCurrentVersion,
+        signalType,
       );
     }
+    if (signalType) return [];
     // TypeScript fallback computes scores fresh per call — current by construction.
     return this.getRelevantContentFallback(minScore, sourceType, limit, sinceDate);
   }
@@ -969,6 +979,7 @@ export class FourDADatabase {
     limit: number,
     sinceDate: string,
     requireCurrentVersion: boolean = false,
+    signalType?: string,
   ): RelevantItem[] {
     // Grounding subquery — guarded: older/partial 4DA DBs may have relevance_score
     // (so the Rust path runs) but lack source_item_dependencies. Fall back to 0
@@ -1046,6 +1057,10 @@ export class FourDADatabase {
     if (sourceType) {
       query += ` AND source_type = ?`;
       params.push(sourceType);
+    }
+    if (signalType && this.hasColumn("source_items", "signal_type")) {
+      query += ` AND signal_type = ?`;
+      params.push(signalType);
     }
 
     // Ranked read (desktop audit items 12+26, schema 110): order by the

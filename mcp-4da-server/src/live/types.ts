@@ -160,7 +160,19 @@ export interface DependencyHealthResult {
   totalDeps: number;
   outdatedCount: number;
   deprecatedCount: number;
+  /**
+   * Distinct packages with an advisory that is built on this host and is not a
+   * maintenance notice — the same set `vulnerability_scan` reports as
+   * `total_vulnerable_packages`, so the two tools agree over one scan.
+   */
   vulnerableCount: number;
+  /**
+   * Every advisory row the scan returned, before the platform and maintenance
+   * splits and before alias collapsing. Present so nothing is hidden by the
+   * `vulnerableCount` filter: the difference is platform-inactive packages and
+   * unmaintained-dependency notices.
+   */
+  advisoryCount: number;
   healthScore: number;
   dependencies: RegistryPackageInfo[];
   vulnerabilitySummary: { critical: number; high: number; medium: number; low: number } | null;

@@ -125,6 +125,65 @@ describe("gradeGap — the noise that must not survive", () => {
   });
 });
 
+describe("gradeGap — registry rows are version updates", () => {
+  // A registry row carries no consequence keyword in its title ("crates.io:
+  // serde v1.0.220"), so it graded `low` and an unread release of a direct
+  // dependency — the thing the Rust surface counts as substantive — was
+  // invisible at the default `medium` floor.
+  it("grades a crates.io release of the dependency as medium", () => {
+    expect(gradeGap([item("crates.io: serde v1.0.220", "crates_io")], "serde")).toBe("medium");
+  });
+
+  it("grades npm, PyPI and Go registry rows the same way", () => {
+    expect(gradeGap([item("npm: react@19.3.0", "npm_registry")], "react")).toBe("medium");
+    expect(gradeGap([item("pypi: requests 2.33.0", "pypi")], "requests")).toBe("medium");
+    expect(gradeGap([item("go: golang.org/x/net v0.45.0", "go_modules")], "golang.org/x/net")).toBe("medium");
+  });
+
+  it("a registry row about a different package is not this dependency's gap", () => {
+    expect(gradeGap([item("crates.io: axum_marko_build v0.1.0", "crates_io")], "axum")).toBe("low");
+  });
+
+  it("an osv or cve row is an advisory regardless of its title words", () => {
+    expect(gradeGap([item("hono 4.12.34 memo() retains SSR output", "osv")], "hono")).toBe("critical");
+    expect(gradeGap([item("hono proxy helper header handling", "cve")], "hono")).toBe("critical");
+  });
+
+  it("a registry row for the installed version is not an update", () => {
+    // Live: "npm: @tauri-apps/api v2.11.1" graded a medium gap on 2.11.1.
+    expect(gradeGap([item("npm: @tauri-apps/api v2.11.1", "npm_registry")], "@tauri-apps/api", true, "2.11.1")).toBe("low");
+    expect(gradeGap([item("npm: @tauri-apps/api v2.11.1", "npm_registry")], "@tauri-apps/api", true, "2.12.0")).toBe("low");
+    expect(gradeGap([item("npm: @tauri-apps/api v2.11.2", "npm_registry")], "@tauri-apps/api", true, "2.11.1")).toBe("medium");
+    // Unknown installed version keeps the conservative grade.
+    expect(gradeGap([item("npm: @tauri-apps/api v2.11.1", "npm_registry")], "@tauri-apps/api")).toBe("medium");
+  });
+});
+
+describe("gradeGap — an advisory names the dependency by its SUBJECT package", () => {
+  // Live 2026-09-07: `url` graded critical on a SurrealDB advisory whose
+  // title said "via URL path"; `hmac` on a Phalcon advisory about HMAC
+  // verification. Both real advisories, neither about the dependency.
+  it("does not mint a critical gap from an advisory about another package", () => {
+    expect(
+      gradeGap([item("[CVE-2026-63735] SurrealDB: Custom API route lets authenticated callers override namespace/database scope via URL path", "cve")], "url"),
+    ).toBe("low");
+    expect(
+      gradeGap([item("[CVE-2026-54736] Phalcon: Non-constant-time HMAC verification in `Encryption\\Crypt::decrypt` (timing side-channel)", "cve")], "hmac"),
+    ).toBe("low");
+  });
+
+  it("still grades an advisory whose subject IS the dependency as critical", () => {
+    expect(gradeGap([item("[CVE-2026-71850] Hono: `memo()` retains SSR output across requests", "cve")], "hono")).toBe("critical");
+    expect(gradeGap([item("[RUSTSEC-2023-0071] rsa: Marvin Attack: potential key recovery through timing sidechannels", "osv")], "rsa")).toBe("critical");
+    // crates.io `-`/`_` are one namespace.
+    expect(gradeGap([item("[GHSA-x] http-body-util: unbounded buffering", "osv")], "http_body_util")).toBe("critical");
+  });
+
+  it("falls back to the word test when the title has another shape", () => {
+    expect(gradeGap([item("CVE-2024-1234: Critical security vulnerability in express", "cve")], "express")).toBe("critical");
+  });
+});
+
 describe("gradeGap — release announcements (aligned with content_dna_classifiers)", () => {
   it("keeps an announcement that carries a version", () => {
     expect(gradeGap([item("Announcing axum 0.8.0", "rss")], "axum")).toBe("medium");
