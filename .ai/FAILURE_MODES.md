@@ -1117,3 +1117,23 @@ Phase 120 unified the TIER; it did not unify the scope rules layered on it.
 (`evidence::upgrade_plan`: dev-only one level, transitive-only Critical →
 High). When two surfaces share a tier and still disagree, look for a rule
 one of them applies after the tier — and move it to both.
+
+---
+
+### The notice arrived; the rows it replaced stayed (2026-09-08, AD-043)
+
+**Symptom.** First activation of the dormant-project notice: navcal's
+23 upgrade-plan steps stayed in the Preemption feed at Medium and took
+the tab's first five rows above every live project, with the one Watch
+notice at the bottom — twenty-four rows for the project the notice exists
+to reduce to one.
+
+**Root cause.** The collapse exempted upgrade-plan steps to keep the feed
+consistent with the plan snapshot the MCP reads. That snapshot is
+persisted BEFORE the feed collapse runs, so the exemption bought no
+consistency and cost the whole point of the notice.
+
+**The rule.** A dormant project's alerts AND plan steps fold into its one
+notice (`evidence::dormant_notice::is_collapsible`); the persisted plan
+snapshot is untouched. When a rule exists "so two surfaces agree", check
+the ORDER the surfaces are built in before believing they would disagree.
