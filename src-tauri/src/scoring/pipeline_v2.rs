@@ -149,6 +149,17 @@ fn extract_affected_range(content: &str) -> Option<String> {
 /// which is the key the OSV mirror stores).
 fn item_advisory_ids(input: &ScoringInput, title_id: Option<&str>) -> Vec<String> {
     let mut ids: Vec<String> = title_id.map(str::to_string).into_iter().collect();
+    // The id in the title is always a candidate, whether or not the caller
+    // extracted it: the security fast path passed `None`, so an osv row
+    // ("[GHSA-h395-gr6q-cpjc] jsonwebtoken: …" linking to NVD) reached the
+    // mirror with NO id at all, and the ungraded fallback said Critical for a
+    // medium-labelled bug — on the founder instance after v33, and again on a
+    // v34 snapshot run that the unit tests (GitHub-advisory URLs) never saw.
+    if let Some(from_title) = extract_advisory_id(input.title) {
+        if !ids.iter().any(|id| id.eq_ignore_ascii_case(&from_title)) {
+            ids.push(from_title);
+        }
+    }
     if let Some(url) = input.url {
         if let Some(start) = url.find("GHSA-") {
             let rest = &url[start..];
@@ -6643,13 +6654,20 @@ mod tests {
         };
         let zero = vec![0.0_f32; crate::EMBEDDING_DIMS];
         let tags: Vec<String> = Vec::new();
+        // The live shape: the osv source links to NVD, so the ONLY advisory id
+        // is the one in the title — and the fast path passes no title id.
         let input = advisory_input(
             "[GHSA-h395-gr6q-cpjc] jsonwebtoken: type confusion leads to authorization bypass",
-            "https://github.com/advisories/GHSA-h395-gr6q-cpjc",
+            "https://nvd.nist.gov/vuln/detail/CVE-2026-25537",
             "",
             "osv",
             &zero,
             &tags,
+        );
+        assert_eq!(
+            item_advisory_ids(&input, None),
+            vec!["GHSA-h395-gr6q-cpjc".to_string()],
+            "the title's id is a candidate even when the caller extracted none"
         );
         assert_eq!(
             mirror_severity_tier(&db, &input, &edge, None),

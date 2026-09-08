@@ -1051,3 +1051,7 @@ was never found, and the ungraded fallback graded it Critical.
 aliases included), and its OWN ecosystem chooses which project copies
 count (`mirror_affected_projects`, `mirror_version_verdict`). An edge's
 ecosystem is a hint about one manifest, never a filter on the mirror.
+The id parsed from the TITLE is always a lookup candidate
+(`item_advisory_ids`): the security fast path passed none, so an osv row
+linking to NVD reached the mirror with no id at all — the v34 snapshot run
+caught what a unit fixture with a GitHub-advisory URL never could.
