@@ -619,7 +619,12 @@ pub(crate) use types::{ScoringInput, ScoringOptions};
 // advisory up under npm, found nothing, and the ungraded fallback said
 // Critical for a medium-labelled bug. Both change what is asserted at score
 // time: the whole corpus re-judges.
-pub(crate) const PIPELINE_VERSION: i32 = 34;
+// v35 (2026-09-08, snapshot run of v34 on the founder corpus): the security
+// fast path passed no title id into the mirror lookup, so an osv row linking
+// to NVD ("[GHSA-h395-gr6q-cpjc] jsonwebtoken: …") reached the mirror with no
+// id and the ungraded fallback said Critical for a medium-labelled bug. The
+// title's id is always a candidate now; every advisory row re-judges.
+pub(crate) const PIPELINE_VERSION: i32 = 35;
 
 /// Parse the topic tags carried in the `source_items.tags` column.
 ///
