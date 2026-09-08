@@ -300,9 +300,19 @@ fn aggregate_by_package(matches: &[MatchedAdvisory]) -> Vec<PackageGroup<'_>> {
                 .filter_map(|a| a.cvss_score)
                 .fold(0.0_f64, f64::max);
 
-            // Most-urgent vulnerability (alias clusters, Phase 120), then a
-            // one-level discount if the package is dev-only (labelled, never
-            // suppressed).
+            // Most-urgent vulnerability (alias clusters, Phase 120), then the
+            // SAME scope discounts the Brief's alert path applies
+            // (`preemption::rank_osv_urgency`): dev-only drops one level, and
+            // a transitive-only Critical is High. Live 2026-09-08 the plan
+            // said sandbox was Critical while the brief's alert and the AI
+            // synthesis said "high-severity" for the one advisory — one
+            // vulnerability, two severities, by a scope rule this side never
+            // had (AD-040).
+            let all_transitive = instances_exist
+                && advisories
+                    .iter()
+                    .flat_map(|a| a.dependency_instances.iter())
+                    .all(|d| !d.is_direct);
             let base_urgency = crate::osv::identity::cluster_by_vulnerability(&advisories)
                 .iter()
                 .map(|cluster| cluster_urgency(cluster))
@@ -310,6 +320,8 @@ fn aggregate_by_package(matches: &[MatchedAdvisory]) -> Vec<PackageGroup<'_>> {
                 .unwrap_or(Urgency::Medium);
             let urgency = if all_dev {
                 downrank(base_urgency)
+            } else if all_transitive && base_urgency == Urgency::Critical {
+                Urgency::High
             } else {
                 base_urgency
             };
