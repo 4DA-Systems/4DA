@@ -419,6 +419,45 @@ fn dev_only_package_is_downranked_but_still_present() {
     );
 }
 
+/// Live 2026-09-08: the plan graded sandbox (transitive in paddle-webhook,
+/// source label critical) as Critical while the Brief's alert path and the
+/// AI synthesis said "high-severity" — `preemption::rank_osv_urgency`
+/// discounts a transitive-only Critical to High and the plan did not. One
+/// vulnerability, one severity: the plan applies the same scope rule. A
+/// direct Critical stays Critical; a transitive High is not discounted.
+#[test]
+fn transitive_only_critical_is_high_like_the_brief_path() {
+    let db = test_db();
+    db.store_transitive_dependency("/proj/a", "sandbox", Some("3.1.2"), "npm", false)
+        .unwrap();
+    advisory(&db, "GHSA-sandbox", "sandbox", "npm", "3.2.0", 9.8);
+    db.store_dependency("/proj/a", "direct-crit", Some("1.0.0"), "npm", false, None)
+        .unwrap();
+    advisory(&db, "GHSA-direct", "direct-crit", "npm", "1.1.0", 9.8);
+    db.store_transitive_dependency("/proj/a", "trans-high", Some("1.0.0"), "npm", false)
+        .unwrap();
+    advisory(&db, "GHSA-trans-high", "trans-high", "npm", "1.1.0", 7.5);
+
+    let plan = build_upgrade_plan(&db);
+    let urgency_of = |pkg: &str| {
+        plan.iter()
+            .find(|s| s.affected_deps.iter().any(|d| d == pkg))
+            .unwrap_or_else(|| panic!("{pkg} missing from the plan"))
+            .urgency
+    };
+    assert_eq!(
+        urgency_of("sandbox"),
+        Urgency::High,
+        "a transitive-only Critical is High — the Brief's alert path's rule"
+    );
+    assert_eq!(urgency_of("direct-crit"), Urgency::Critical);
+    assert_eq!(
+        urgency_of("trans-high"),
+        Urgency::High,
+        "the transitive discount applies to Critical only, as in rank_osv_urgency"
+    );
+}
+
 #[test]
 fn cross_project_multiplicity_widens_blast_radius_and_ranks_up() {
     let db = test_db();

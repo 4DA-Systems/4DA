@@ -565,6 +565,24 @@ fn shares_active_root(a: &str, b: &str, active_roots: &[String]) -> bool {
 /// contains its subprojects (`d:/4da` covers `d:/4da/src-tauri`) and a dep
 /// path at or above a root still counts (a repo root recorded deeper than the
 /// manifest), but `d:/4da` must never match `d:/4da-experiments`.
+/// Paths 4DA has itself detected as the user's projects.
+///
+/// A second, dormancy-blind route into the audit scope. `active_repo_roots`
+/// asks "did you commit here in 60 days", which a dormant project fails BY
+/// DEFINITION — and a dormant project is still the user's (AD-043). A row
+/// here means the ACE scan found a manifest, cleared the inclusion tiers and
+/// the scaffolding gate, and was not a nested checkout of somebody else's
+/// repository (`repo_identity` skips those before they can become a signal),
+/// so it is a much narrower claim than "any path with a lockfile".
+pub(crate) fn detected_project_roots(conn: &rusqlite::Connection) -> Vec<String> {
+    conn.prepare("SELECT path FROM detected_projects")
+        .and_then(|mut stmt| {
+            let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
+            Ok(rows.filter_map(std::result::Result::ok).collect())
+        })
+        .unwrap_or_default()
+}
+
 pub(crate) fn dep_within_active_root(dep_path: &str, active_roots: &[String]) -> bool {
     let dep = crate::project_inclusion::comparison_form(dep_path);
     let dep = dep.trim_end_matches('/');

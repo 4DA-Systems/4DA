@@ -408,8 +408,25 @@ impl ACE {
                             }
 
                             // Populate project_dependencies table for innovation features.
-                            // Skip low-relevance projects (example/demo/test dirs)
-                            // to prevent irrelevant preemption alerts.
+                            // Skip SCAFFOLDING (example/demo/test dirs) to prevent
+                            // irrelevant preemption alerts — but NOT dormant
+                            // projects. `compute_project_relevance` is
+                            // `path_score * recency_score`, so a fresh
+                            // `examples/` dir and a real repo idle 90+ days both
+                            // land on 0.1 and this gate could not tell them
+                            // apart (AD-043). PR #649 separated the two for the
+                            // LOCKFILE walk and left this one — so `navcal`
+                            // wrote 707 `user_dependencies` rows and ZERO
+                            // `project_dependencies` rows, and Preemption's
+                            // grounding query reads only the second table.
+                            // The dormant project was indexed and still invisible.
+                            //
+                            // Rows land with their REAL low relevance (0.1), so
+                            // every other consumer's floor keeps holding them
+                            // back; only the grounding query admits them, and
+                            // the liveness policy caps them to Watch and
+                            // `collapse_dormant_alerts` folds them into one
+                            // notice per project.
                             let relevance = signal.project_relevance;
                             // Strict manifest mode (ledger): a user-configured
                             // context_dir is relevant by definition — see
@@ -418,8 +435,12 @@ impl ACE {
                             let force_persist = crate::ace::scanner::forced_relevant_by_context_dir(
                                 signal.manifest_path.as_path(),
                             );
+                            let scaffolding =
+                                crate::ace::scanner::path_relevance(signal.manifest_path.as_path())
+                                    < crate::ace::scanner::PROJECT_RELEVANCE_FLOOR;
                             if relevance >= crate::ace::scanner::PROJECT_RELEVANCE_FLOOR
                                 || force_persist
+                                || !scaffolding
                             {
                                 if let Ok(conn) = crate::open_db_connection() {
                                     // One vocabulary, shared with every reader that

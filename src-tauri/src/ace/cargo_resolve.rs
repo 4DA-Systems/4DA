@@ -222,10 +222,32 @@ fn write_cache(db: &Database, key: &str, lock_hash: &str, resolved: &HashSet<Str
     }
 }
 
-/// Ask cargo to resolve the host build. `--locked` and `--offline` make this
-/// strictly read-only: it can neither rewrite the user's `Cargo.lock` nor
-/// touch the network from a background scan.
-fn run_cargo_tree(dir: &Path) -> Option<String> {
+/// Where cargo may write its build metadata: OUTSIDE every scanned source
+/// tree, under the app's own data directory.
+///
+/// `--locked --offline` keeps this read-only with respect to `Cargo.lock`,
+/// but cargo still probes rustc and writes `<target>/.rustc_info.json`
+/// before it reads the lockfile at all — so even the runs that FAIL leave a
+/// `target/` behind in the scanned project. Live 2026-09-08 17:05: that
+/// created `src-tauri/fourda-macros/target/.rustc_info.json`, `tauri dev`'s
+/// file watcher saw a new file under its own crate, and the running app
+/// restarted mid-scan (PID changed, one ghost tray icon). A scan must not
+/// write into the code it is reading.
+fn cargo_resolve_target_dir() -> std::path::PathBuf {
+    let dir = crate::runtime_paths::RuntimePaths::get()
+        .data_dir
+        .join("cargo-resolve-target");
+    // Best-effort: if it cannot be created, cargo falls back to its default
+    // and the scan still answers — noisily, but correctly.
+    if let Err(e) = std::fs::create_dir_all(&dir) {
+        tracing::debug!(target: "4da::ace", error = %e, "could not create cargo-resolve target dir");
+    }
+    dir
+}
+
+/// Build the resolution command. Split from [`run_cargo_tree`] so the
+/// environment it carries is assertable without spawning cargo.
+fn cargo_tree_command(dir: &Path, target_dir: &Path) -> std::process::Command {
     let mut cmd = std::process::Command::new("cargo");
     cmd.args([
         "tree",
@@ -239,6 +261,8 @@ fn run_cargo_tree(dir: &Path) -> Option<String> {
         "normal,build,dev",
     ])
     .current_dir(dir)
+    // The whole point: cargo's scratch writes land here, never in `dir`.
+    .env("CARGO_TARGET_DIR", target_dir)
     .stdin(Stdio::null())
     .stdout(Stdio::piped())
     .stderr(Stdio::null());
@@ -247,7 +271,16 @@ fn run_cargo_tree(dir: &Path) -> Option<String> {
         use std::os::windows::process::CommandExt;
         cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
     }
-    let mut child = cmd.spawn().ok()?;
+    cmd
+}
+
+/// Ask cargo to resolve the host build. `--locked` and `--offline` make this
+/// strictly read-only: it can neither rewrite the user's `Cargo.lock` nor
+/// touch the network from a background scan, and `CARGO_TARGET_DIR` keeps
+/// its build metadata out of the scanned tree.
+fn run_cargo_tree(dir: &Path) -> Option<String> {
+    let target_dir = cargo_resolve_target_dir();
+    let mut child = cargo_tree_command(dir, &target_dir).spawn().ok()?;
     let output = read_bounded(&mut child);
     match output {
         Some(text) if child_succeeded(&mut child) => Some(text),
@@ -374,6 +407,48 @@ mod tests {
         // treated as an answer would bury every advisory in the tree.
         assert!(parse_tree_names("").is_empty());
         assert!(parse_tree_names("warning: nothing to print.\n").contains("warning:") == false);
+    }
+
+    #[test]
+    fn the_command_redirects_cargos_writes_out_of_the_scanned_tree() {
+        // Live 2026-09-08 17:05: cargo wrote `.rustc_info.json` into
+        // `src-tauri/fourda-macros/target/` — inside the crate `tauri dev`
+        // watches — and the running app restarted mid-scan. `--locked
+        // --offline` does not prevent this: cargo probes rustc and writes
+        // that file BEFORE it reads the lockfile, so even a run that fails
+        // leaves a `target/` behind.
+        let project = Path::new("C:/projects/app");
+        let target = Path::new("C:/appdata/cargo-resolve-target");
+        let cmd = cargo_tree_command(project, target);
+
+        let carried = cmd
+            .get_envs()
+            .find(|(k, _)| *k == std::ffi::OsStr::new("CARGO_TARGET_DIR"))
+            .and_then(|(_, v)| v);
+        assert_eq!(
+            carried,
+            Some(std::ffi::OsStr::new("C:/appdata/cargo-resolve-target")),
+            "the command must carry CARGO_TARGET_DIR"
+        );
+        assert_eq!(cmd.get_current_dir(), Some(project));
+        // The negative half: the target dir must not sit inside the tree
+        // being scanned, or the redirect buys nothing.
+        assert!(
+            !target.starts_with(project),
+            "cargo's scratch must live outside the scanned project"
+        );
+    }
+
+    #[test]
+    fn the_resolve_target_dir_is_outside_any_scanned_source_tree() {
+        // It lives under the app's own data dir, which no scan walks and no
+        // dev-server watcher watches.
+        let dir = cargo_resolve_target_dir();
+        assert!(dir.ends_with("cargo-resolve-target"));
+        assert!(
+            dir.starts_with(&crate::runtime_paths::RuntimePaths::get().data_dir),
+            "must live under the app data dir, not beside the user's code"
+        );
     }
 
     #[test]

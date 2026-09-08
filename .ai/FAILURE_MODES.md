@@ -1055,3 +1055,65 @@ The id parsed from the TITLE is always a lookup candidate
 (`item_advisory_ids`): the security fast path passed none, so an osv row
 linking to NVD reached the mirror with no id at all — the v34 snapshot run
 caught what a unit fixture with a GitHub-advisory URL never could.
+
+---
+
+### The walk indexed the dormant project; the matcher never saw it (2026-09-08, AD-043)
+
+**Symptom.** #649 shipped and the dormant-project notice never fired. The log
+said the walk had done its job — "Lockfile walk: indexing a DORMANT project …
+navcal relevance=0.1" — and 707 `user_dependencies` rows existed for
+`C:\Users\Administrator\Documents\navcal`, 92 of whose packages carry npm
+advisories already in the mirror. Preemption showed nothing. `collapse_dormant_alerts`
+was correct and had nothing to summarise, because no alert for navcal was
+ever built.
+
+**Root cause.** Two independent gates downstream of the walk, both of which
+are dormancy filters wearing other names, and only one of which was obvious.
+
+The obvious one: the MANIFEST scan still applied the conflated relevance
+floor the lockfile walk had just shed, so `project_dependencies` held ZERO
+rows for navcal and `detected_projects` had no row at all.
+
+The operative one: `scope_to_active_roots` restricts every audited dependency
+to repos with a commit in the last 60 days (`active_repo_roots`). A dormant
+project fails that BY DEFINITION. Measured on a snapshot of the founder DB:
+one active root (`D:\4DA`), navcal with zero `git_signals` rows, **707 rows
+dropped and 3,043 kept** — the whole project, silently, after the walk had
+gone to the trouble of indexing it.
+
+A third thing was wrong in the diagnosis itself and had to be checked before
+it was acted on: `osv_matches_to_alerts` does NOT read
+`preemption::load_direct_runtime_deps`. It reads `get_matched_advisories`.
+The grounding query feeds the LLM-judged lane. Fixing only the query would
+have shipped a change that left the reported symptom exactly where it was.
+
+**The rule.** When a pipeline stage is fixed to admit something, follow the
+value all the way to the surface and prove each hop — the next stage may
+filter on a synonym of the thing you just stopped filtering on. "Committed in
+60 days", "relevance >= 0.15" and "dormant" are three spellings of one
+predicate, applied at three different places by three different authors.
+Prove the chain against production shape, not fixtures: the founder DB is the
+only place this shape exists, and an `#[ignore]`d test driven by
+`FOURDA_VERIFY_DB` over a snapshot (writes wrapped in a transaction that is
+never committed, so the snapshot is byte-identical afterwards and the test is
+re-runnable) is what showed 707/0/64/92 and named the real gate.
+
+---
+
+### One advisory, two severities, by a scope rule (2026-09-08, AD-040)
+
+**Symptom.** After the v35 activation, the Preemption tab graded sandbox
+(transitive in paddle-webhook, source label critical) Critical, while the
+Brief's alert and the AI synthesis for the same advisory said
+"high-severity".
+
+**Root cause.** Both surfaces read the same source tier; the Brief's alert
+path (`preemption::rank_osv_urgency`) then discounts a transitive-only
+Critical to High, and the upgrade plan applied only its dev-only discount.
+Phase 120 unified the TIER; it did not unify the scope rules layered on it.
+
+**The rule.** The plan applies the same scope discounts as the alert path
+(`evidence::upgrade_plan`: dev-only one level, transitive-only Critical →
+High). When two surfaces share a tier and still disagree, look for a rule
+one of them applies after the tier — and move it to both.

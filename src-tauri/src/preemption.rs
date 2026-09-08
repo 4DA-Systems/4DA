@@ -374,12 +374,21 @@ fn infer_advisory_ecosystem(title_lower: &str, source_type: &str) -> Option<&'st
 fn load_direct_runtime_deps(conn: &rusqlite::Connection) -> Result<Vec<DirectRuntimeDep>> {
     // `is_direct` (Phase 53) and `project_relevance` (Phase 55) are guaranteed by
     // migrate(), which `Database::new` runs before any query path can execute.
+    // The relevance floor is NOT applied in SQL, because a single number
+    // cannot say WHY a project scored low: `compute_project_relevance` is
+    // `path_score * recency_score`, so scaffolding and a dormant real repo
+    // both land on 0.1 (AD-043). The scaffolding half is re-derived from the
+    // path below; the dormancy half is deliberately admitted, because a repo
+    // the user still owns having 91 packages with published advisories is
+    // exactly what Preemption exists to say. Nothing here makes it loud:
+    // `apply_liveness_policy` caps an all-dormant alert and
+    // `evidence::collapse_dormant_alerts` folds them into ONE Watch notice
+    // per project.
     let mut stmt = conn.prepare(
         "SELECT package_name, project_path, language
          FROM project_dependencies
          WHERE is_dev = 0
-           AND is_direct = 1
-           AND project_relevance >= 0.15",
+           AND is_direct = 1",
     )?;
     let rows = stmt.query_map([], |row| {
         Ok(DirectRuntimeDep {
@@ -403,7 +412,23 @@ fn load_direct_runtime_deps(conn: &rusqlite::Connection) -> Result<Vec<DirectRun
                 &user_excluded,
             )
         })
+        // The scaffolding half of the old SQL floor, re-derived from the path
+        // so dormancy can pass while `examples/`/`fixtures/` still cannot.
+        // Belt and braces: the writer (`ace::mod`) already refuses to persist
+        // scaffolding, and the live corpus carries no sub-floor rows at all
+        // (184 rows, every one at relevance 1.0, measured 2026-09-08) — this
+        // stops a row from another machine or a future writer from turning
+        // the admitted-dormancy path into an admitted-everything path.
+        .filter(|dep| dep_project_is_not_scaffolding(&dep.project_path))
         .collect())
+}
+
+/// True when the project path is not example/demo/fixture scaffolding.
+/// Mirrors the lockfile walk's gate (`ace_commands::dependencies`), which is
+/// the same rule stated in the same terms — see AD-043.
+fn dep_project_is_not_scaffolding(project_path: &str) -> bool {
+    crate::ace::scanner::path_relevance(std::path::Path::new(project_path))
+        >= crate::ace::scanner::PROJECT_RELEVANCE_FLOOR
 }
 
 fn matched_direct_runtime_deps(
@@ -2912,6 +2937,223 @@ mod tests {
                 "direct in at least one project; weaker scope in others"
             )
         );
+    }
+
+    /// Insert one direct runtime dep at a given relevance.
+    fn insert_direct_dep(conn: &rusqlite::Connection, project: &str, pkg: &str, relevance: f32) {
+        conn.execute(
+            "INSERT INTO project_dependencies
+                (project_path, manifest_type, package_name, version, is_dev, is_direct, language, project_relevance)
+             VALUES (?1, 'package.json', ?2, '1.0.0', 0, 1, 'javascript', ?3)",
+            rusqlite::params![project, pkg, relevance],
+        )
+        .unwrap();
+    }
+
+    /// THE live defect (2026-09-08, after #649 activated). The lockfile walk
+    /// wrote 707 `user_dependencies` rows for
+    /// `C:\Users\Administrator\Documents\navcal` — 92 of those packages have
+    /// npm advisories in the mirror — while `project_dependencies` held ZERO
+    /// rows for it and `detected_projects` had no row at all. The grounding
+    /// query reads `project_dependencies`, so no alert ever existed for the
+    /// dormant project, and `collapse_dormant_alerts` had nothing to
+    /// summarise: the notice could never fire.
+    #[test]
+    fn a_dormant_projects_direct_deps_reach_the_grounding_set() {
+        let db = crate::test_utils::test_db();
+        let conn = db.conn.lock();
+        // 1.0 * 0.1 recency — a real project idle 90+ days.
+        insert_direct_dep(&conn, "/home/dev/navcal", "lodash", 0.1);
+
+        let deps = load_direct_runtime_deps(&conn).unwrap();
+        assert_eq!(deps.len(), 1, "the dormant project grounds its own deps");
+        assert_eq!(deps[0].package_name, "lodash");
+        assert_eq!(deps[0].project_path, "/home/dev/navcal");
+    }
+
+    #[test]
+    fn an_active_projects_grounding_set_is_unchanged() {
+        // The negative half: admitting dormancy must not alter what a live
+        // project contributes.
+        let db = crate::test_utils::test_db();
+        let conn = db.conn.lock();
+        insert_direct_dep(&conn, "/home/dev/live-app", "axios", 1.0);
+        conn.execute(
+            "INSERT INTO project_dependencies
+                (project_path, manifest_type, package_name, version, is_dev, is_direct, language, project_relevance)
+             VALUES ('/home/dev/live-app', 'package.json', 'jest', '1.0.0', 1, 1, 'javascript', 1.0)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO project_dependencies
+                (project_path, manifest_type, package_name, version, is_dev, is_direct, language, project_relevance)
+             VALUES ('/home/dev/live-app', 'package.json', 'ms', '1.0.0', 0, 0, 'javascript', 1.0)",
+            [],
+        )
+        .unwrap();
+
+        let deps = load_direct_runtime_deps(&conn).unwrap();
+        assert_eq!(deps.len(), 1, "dev and transitive deps are still excluded");
+        assert_eq!(deps[0].package_name, "axios");
+    }
+
+    #[test]
+    fn scaffolding_is_still_kept_out_of_the_grounding_set() {
+        // Dormancy is admitted; scaffolding is not. Both score 0.1, so the
+        // reason has to be re-derived from the path (AD-043).
+        let db = crate::test_utils::test_db();
+        let conn = db.conn.lock();
+        insert_direct_dep(&conn, "/repo/examples/hello", "left-pad", 0.1);
+        insert_direct_dep(&conn, "/repo/fixtures/sample", "left-pad", 0.1);
+        insert_direct_dep(&conn, "/home/dev/navcal", "lodash", 0.1);
+
+        let deps = load_direct_runtime_deps(&conn).unwrap();
+        assert_eq!(deps.len(), 1, "only the dormant real project survives");
+        assert_eq!(deps[0].project_path, "/home/dev/navcal");
+    }
+
+    #[test]
+    fn a_dormant_project_with_no_advisories_grounds_nothing_to_alert_on() {
+        // The cold-start half: reaching the matcher is not the same as
+        // producing a finding. With no advisory rows, the grounding set is
+        // non-empty but `osv_matches_to_alerts` has nothing to match, so no
+        // alert exists and no notice is emitted.
+        let db = crate::test_utils::test_db();
+        let conn = db.conn.lock();
+        insert_direct_dep(&conn, "/home/dev/navcal", "a-package-nobody-audits", 0.1);
+
+        let deps = load_direct_runtime_deps(&conn).unwrap();
+        assert_eq!(deps.len(), 1);
+        let advisories: i64 = conn
+            .query_row("SELECT COUNT(*) FROM osv_advisories", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(advisories, 0, "nothing to match -> no alert -> no notice");
+    }
+
+    /// Production-shape verification against a SNAPSHOT of the founder
+    /// database (`recipe-live-verify-rust-on-db-snapshot`). The navcal shape
+    /// exists nowhere else: 707 `user_dependencies` rows written by the
+    /// lockfile walk, zero `project_dependencies` rows, no
+    /// `detected_projects` row, and 92 of those packages carrying npm
+    /// advisories in the mirror.
+    ///
+    /// Take the snapshot with better-sqlite3's online `.backup()` (never a
+    /// file copy — the live DB is WAL), then:
+    ///   `FOURDA_VERIFY_DB=<snapshot> cargo test --lib \
+    ///      navcal_shape_grounds_once_the_manifest_rows_exist -- --ignored --nocapture`
+    #[test]
+    #[ignore = "requires FOURDA_VERIFY_DB pointing at a founder-DB snapshot"]
+    fn navcal_shape_grounds_once_the_manifest_rows_exist() {
+        let Ok(path) = std::env::var("FOURDA_VERIFY_DB") else {
+            panic!("set FOURDA_VERIFY_DB to a snapshot path");
+        };
+        let conn = rusqlite::Connection::open(&path).expect("open snapshot");
+        // Every write below happens inside a transaction that is NEVER
+        // committed: the snapshot must stay byte-identical so the test is
+        // re-runnable and the recorded shape cannot drift under it.
+        let tx = conn.unchecked_transaction().expect("begin");
+
+        let lockfile_rows: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM user_dependencies WHERE project_path LIKE '%navcal%'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        let manifest_rows: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM project_dependencies WHERE project_path LIKE '%navcal%'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        println!("navcal: user_dependencies={lockfile_rows} project_dependencies={manifest_rows}");
+        assert!(lockfile_rows > 0, "the walk indexed it");
+        assert_eq!(
+            manifest_rows, 0,
+            "and the matcher never saw it — the defect"
+        );
+
+        // Simulate what the FIXED manifest scan writes: the project's direct
+        // runtime deps at their real low relevance.
+        let project: String = conn
+            .query_row(
+                "SELECT project_path FROM user_dependencies WHERE project_path LIKE '%navcal%' LIMIT 1",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        conn.execute(
+            "INSERT INTO project_dependencies
+                (project_path, manifest_type, package_name, version, is_dev, is_direct, language, project_relevance)
+             SELECT project_path, 'package.json', package_name, version, 0, 1, 'javascript', 0.1
+             FROM user_dependencies
+             WHERE project_path = ?1 AND is_direct = 1 AND is_dev = 0",
+            rusqlite::params![project],
+        )
+        .unwrap();
+
+        let deps = load_direct_runtime_deps(&conn).unwrap();
+        let navcal: Vec<_> = deps
+            .iter()
+            .filter(|d| d.project_path.contains("navcal"))
+            .collect();
+        println!("grounded navcal deps: {}", navcal.len());
+        assert!(
+            !navcal.is_empty(),
+            "the dormant project now reaches the matcher"
+        );
+
+        let with_advisories: i64 = conn
+            .query_row(
+                "SELECT COUNT(DISTINCT LOWER(u.package_name))
+                 FROM user_dependencies u
+                 JOIN osv_advisories a ON LOWER(a.package_name) = LOWER(u.package_name)
+                 WHERE u.project_path = ?1",
+                rusqlite::params![project],
+                |r| r.get(0),
+            )
+            .unwrap();
+        println!("navcal packages with advisories: {with_advisories}");
+        assert!(
+            with_advisories > 0,
+            "there is something real for the notice to count"
+        );
+
+        // ---- the OTHER half of the chain, and the operative one ----------
+        // The OSV lane does not read the grounding query at all: it reads
+        // `get_matched_advisories`, whose `user_dependencies` half is scoped
+        // by `scope_to_active_roots`. That asks "did you commit here in 60
+        // days" — which a dormant project fails by definition.
+        let active = crate::temporal::active_repo_roots(&conn);
+        println!("active repo roots: {active:?}");
+        assert!(
+            !crate::temporal::dep_within_active_root(&project, &active),
+            "navcal is outside every active root — this is what dropped all 707 rows"
+        );
+
+        // Fix 1 (`ace::mod`) gives the dormant project a detected_projects
+        // row; fix 2 admits detected projects to the AUDIT scope. Both are
+        // required — neither alone lets navcal through.
+        let detected_before = crate::temporal::detected_project_roots(&conn);
+        assert!(
+            !crate::temporal::dep_within_active_root(&project, &detected_before),
+            "and today it is not a detected project either"
+        );
+        conn.execute(
+            "INSERT OR IGNORE INTO detected_projects (path, name, last_activity)
+             VALUES (?1, 'navcal', '2025-11-01T00:00:00Z')",
+            rusqlite::params![project],
+        )
+        .unwrap();
+        let detected_after = crate::temporal::detected_project_roots(&conn);
+        assert!(
+            crate::temporal::dep_within_active_root(&project, &detected_after),
+            "with the manifest-scan fix in place, the audit reader admits it"
+        );
+
+        drop(tx); // rolls back — the snapshot is left exactly as found
     }
 
     #[test]

@@ -102,12 +102,33 @@ fn retain_included(deps: Vec<StoredDependency>) -> Vec<StoredDependency> {
 /// With no active roots at all (first run, no git analysis yet, or the table
 /// absent) the set is returned UNSCOPED and says so at warn — the same
 /// `dep_scope_degraded` posture temporal takes, never a silent widening.
+/// Scope a dependency set to code the user actually owns.
+///
+/// `include_dormant` adds a SECOND route: a project 4DA itself detected
+/// (`detected_projects`). `active_repo_roots` asks "did you commit here in
+/// 60 days", which a dormant project fails by definition — live 2026-09-08,
+/// that dropped exactly the 707 `user_dependencies` rows of
+/// `C:\Users\Administrator\Documents\navcal` (92 of whose packages carry npm
+/// advisories) while keeping every `D:\4DA` path, so the dormant project the
+/// walk had just indexed never reached the matcher and the dormant notice
+/// could never fire. The audit/security readers pass `true`; the "relevant
+/// runtime deps" reader stays strictly active-scoped, because that one
+/// answers "what are you working on", not "what do you own".
+///
+/// This does NOT reopen the 2026-09-04 hole (a nested third-party clone
+/// contributing 1,811 rows and every rkyv advisory): such a clone is skipped
+/// by `repo_identity` in both walks and never becomes a `detected_projects`
+/// row, so it is outside both routes.
 fn scope_to_active_roots(
     conn: &rusqlite::Connection,
     deps: Vec<StoredDependency>,
     reader: &str,
+    include_dormant: bool,
 ) -> Vec<StoredDependency> {
-    let roots = crate::temporal::active_repo_roots(conn);
+    let mut roots = crate::temporal::active_repo_roots(conn);
+    if include_dormant {
+        roots.extend(crate::temporal::detected_project_roots(conn));
+    }
     if roots.is_empty() {
         tracing::warn!(
             target: "4da::deps",
@@ -405,7 +426,9 @@ impl Database {
             })
             .collect(),
         );
-        Ok(scope_to_active_roots(&conn, included, "auditable"))
+        // Security/audit reader: a dormant project you own is still yours,
+        // and its advisories are still true (AD-043).
+        Ok(scope_to_active_roots(&conn, included, "auditable", true))
     }
 
     /// Get user dependencies filtered to relevant runtime deps only.
@@ -437,7 +460,8 @@ impl Database {
             })
             .collect(),
         );
-        Ok(scope_to_active_roots(&conn, included, "relevant"))
+        // "What are you working on" — strictly active-scoped, unchanged.
+        Ok(scope_to_active_roots(&conn, included, "relevant", false))
     }
 
     /// Delete `user_dependencies` rows of one (project, ecosystem) whose
