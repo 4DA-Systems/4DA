@@ -70,7 +70,7 @@ impl DevtoSource {
             .await
             .map_err(|e| SourceError::Network(e.to_string()))?;
 
-        super::classify_http_status(response.status(), "Dev.to API")?;
+        super::classify_http_response(&response, "Dev.to API")?;
 
         let articles: Vec<DevtoArticle> = response
             .json()

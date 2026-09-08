@@ -119,7 +119,7 @@ impl BlueskySource {
             .await
             .map_err(|e| SourceError::Network(e.to_string()))?;
 
-        super::classify_http_status(response.status(), "Bluesky API")?;
+        super::classify_http_response(&response, "Bluesky API")?;
 
         let bsky_resp: BskySearchResponse = response
             .json()

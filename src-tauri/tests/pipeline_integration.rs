@@ -191,7 +191,7 @@ fn test_source_health_recording() {
         .expect("register");
 
     // Record successful health
-    db.record_source_health("hackernews", true, 30, 450, None)
+    db.record_source_health("hackernews", true, 30, 450, None, None)
         .expect("record health");
 
     let sources = db.get_all_sources().expect("sources");

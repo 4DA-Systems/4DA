@@ -109,7 +109,7 @@ impl PypiSource {
                 "PyPI package not found: {package}"
             )));
         }
-        super::classify_http_status(status, "PyPI API")?;
+        super::classify_http_response(&response, "PyPI API")?;
 
         let pkg: PypiPackageInfo = response
             .json()
@@ -269,7 +269,7 @@ impl Source for PypiSource {
         for package in packages {
             match self.fetch_package(package).await {
                 Ok(item) => items.push(item),
-                Err(SourceError::RateLimited(_)) => break,
+                Err(SourceError::RateLimited { .. }) => break,
                 Err(e) => {
                     warn!(
                         target: "4da::sources",

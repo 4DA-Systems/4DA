@@ -29,7 +29,10 @@ fn test_source_error_display_variants() {
         "Parse variant should contain 'Parse error'"
     );
 
-    let rate_limited = SourceError::RateLimited("try again later".to_string());
+    let rate_limited = SourceError::RateLimited {
+        message: "try again later".to_string(),
+        retry_after_secs: None,
+    };
     assert!(
         rate_limited.to_string().contains("try again later"),
         "RateLimited variant should contain the message"

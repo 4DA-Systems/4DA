@@ -135,7 +135,7 @@ impl CratesIoSource {
         if status == reqwest::StatusCode::NOT_FOUND {
             return Err(SourceError::Other(format!("Crate not found: {name}")));
         }
-        super::classify_http_status(status, "crates.io API")?;
+        super::classify_http_response(&response, "crates.io API")?;
 
         let data: CratesIoResponse = response
             .json()
@@ -231,7 +231,7 @@ impl CratesIoSource {
             .await
             .map_err(|e| SourceError::Network(e.to_string()))?;
 
-        super::classify_http_status(response.status(), "crates.io API")?;
+        super::classify_http_response(&response, "crates.io API")?;
 
         let data: CratesSearchResponse = response
             .json()
@@ -352,7 +352,7 @@ impl Source for CratesIoSource {
                         items.push(item);
                     }
                 }
-                Err(SourceError::RateLimited(msg)) => {
+                Err(SourceError::RateLimited { message: msg, .. }) => {
                     warn!(crate_name = %name, "Rate limited by crates.io: {msg}");
                     break; // Stop hitting the API
                 }

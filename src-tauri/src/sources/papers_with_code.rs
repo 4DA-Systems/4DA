@@ -126,7 +126,7 @@ impl Source for PapersWithCodeSource {
             .await
             .map_err(|e| SourceError::Network(e.to_string()))?;
 
-        super::classify_http_status(response.status(), "Papers With Code API")?;
+        super::classify_http_response(&response, "Papers With Code API")?;
 
         // Try HuggingFace daily_papers format first (flat array of {paper: {...}})
         // Fall back to original PwC format ({results: [...]})

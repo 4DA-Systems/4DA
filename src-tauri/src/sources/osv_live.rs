@@ -84,7 +84,7 @@ async fn query_live_version_matched(
             .send()
             .await
             .map_err(|e| SourceError::Network(e.to_string()))?;
-        super::classify_http_status(response.status(), "OSV querybatch")?;
+        super::classify_http_response(&response, "OSV querybatch")?;
         let parsed: OsvBatchResponse = response
             .json()
             .await
@@ -117,7 +117,7 @@ async fn query_live_version_matched(
                 hydrated.insert(id.clone(), vuln);
             }
             Ok(None) => {}
-            Err(e @ SourceError::RateLimited(_)) => return Err(e),
+            Err(e @ SourceError::RateLimited { .. }) => return Err(e),
             Err(e) => {
                 warn!(target: "4da::sources", id = %id, error = %e, "OSV live: advisory hydrate failed — skipping");
             }
@@ -167,7 +167,7 @@ async fn hydrate_vuln(
     if status == reqwest::StatusCode::NOT_FOUND {
         return Ok(None);
     }
-    super::classify_http_status(status, "OSV vuln hydrate")?;
+    super::classify_http_response(&response, "OSV vuln hydrate")?;
     let vuln: OsvVulnerability = response
         .json()
         .await

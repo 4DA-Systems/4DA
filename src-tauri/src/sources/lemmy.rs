@@ -87,7 +87,7 @@ async fn fetch_api(
         .await
         .map_err(|e| SourceError::Network(e.to_string()))?;
 
-    super::classify_http_status(response.status(), "Lemmy API")?;
+    super::classify_http_response(&response, "Lemmy API")?;
 
     let list: LemmyPostList = response
         .json()
@@ -138,7 +138,7 @@ async fn fetch_rss(
         .await
         .map_err(|e| SourceError::Network(e.to_string()))?;
 
-    super::classify_http_status(response.status(), "Lemmy RSS")?;
+    super::classify_http_response(&response, "Lemmy RSS")?;
 
     let body = response
         .text()

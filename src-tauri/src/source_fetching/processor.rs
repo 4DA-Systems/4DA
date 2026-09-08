@@ -232,7 +232,7 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<super::Fetc
                 info!(target: "4da::cache", source = %st, fetched = filtered, "Fetched {name} items (quality-gated)");
                 summary.succeeded += 1;
 
-                db.record_source_health(&st, true, filtered as i64, 0, None)
+                db.record_source_health(&st, true, filtered as i64, 0, None, None)
                     .ok();
                 // I-5: stamp sources.last_fetch on the ACTIVE ingestion path. The legacy
                 // source_fetching/fetcher.rs path stamps it, but this parallel processor (the
@@ -310,8 +310,15 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<super::Fetc
                 warn!(target: "4da::cache", source = %st, error = %e, "Fetch failed after retries");
                 summary.failed += 1;
                 let err_msg = e.to_string();
-                db.record_source_health(&st, false, 0, 0, Some(&err_msg))
-                    .ok();
+                db.record_source_health(
+                    &st,
+                    false,
+                    0,
+                    0,
+                    Some(&err_msg),
+                    e.last_error.retry_after_secs(),
+                )
+                .ok();
                 // Record per-feed failure so circuit breaker and stale detection work
                 db.record_feed_failure(&st, &st, &err_msg).ok();
             }

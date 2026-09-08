@@ -31,6 +31,42 @@ pub(crate) fn invalidate_feedback_topic_cache() {
 }
 
 // ============================================================================
+// Circuit breaker cooldown ladder
+// ============================================================================
+
+/// Cooldown tiers, in seconds, indexed by how many times a circuit has
+/// half-opened WITHOUT an intervening success: 10 minutes, 1 hour, 6 hours.
+///
+/// A fixed cooldown is the wrong shape for a source that is deliberately
+/// refusing us. Retrying arXiv every 10 minutes forever is not resilience —
+/// it is the behaviour the rate limit exists to stop, and it kept the source
+/// pinned in `circuit_open` (observed live 2026-09-07). Each release that does
+/// not earn a success buys the source more room.
+const CIRCUIT_COOLDOWN_TIERS_SECS: [i64; 3] = [10 * 60, 60 * 60, 6 * 60 * 60];
+
+/// Highest tier index that is ever stored, so the column stays bounded.
+/// `CIRCUIT_COOLDOWN_TIERS_SECS` saturates at its last entry anyway.
+const MAX_CIRCUIT_REOPEN_TIER: i64 = 2;
+
+/// Seconds a circuit stays open before it half-opens.
+///
+/// The tier ladder sets the base; a server-announced `Retry-After` raises it
+/// but never lowers it. Honouring the announcement is the whole point — a
+/// source that told us "come back in an hour" and got a knock at 10 minutes
+/// learns nothing except that we do not listen.
+///
+/// Shared by BOTH breakers ([`Database::is_circuit_open`] for a source and
+/// [`Database::is_feed_circuit_open`] for one feed within a source) so the two
+/// cannot drift apart — they previously disagreed, 10 minutes against a hard
+/// 30, with nothing explaining why.
+pub(crate) fn circuit_cooldown_secs(reopen_count: i64, retry_after_secs: Option<i64>) -> i64 {
+    let tier = reopen_count.clamp(0, MAX_CIRCUIT_REOPEN_TIER) as usize;
+    let base = CIRCUIT_COOLDOWN_TIERS_SECS[tier];
+    let announced = retry_after_secs.unwrap_or(0).max(0);
+    base.max(announced)
+}
+
+// ============================================================================
 // Types
 // ============================================================================
 
@@ -1096,7 +1132,15 @@ impl Database {
     // Source Health
     // ========================================================================
 
-    /// Record source health after a fetch
+    // (circuit-breaker cooldown ladder lives in `circuit_cooldown_secs`, below
+    //  the impl block — both the source and the per-feed breaker call it.)
+
+    /// Record source health after a fetch.
+    ///
+    /// `retry_after_secs` is the server's announced cooldown when the failure
+    /// was a rate limit that carried a `Retry-After`. It is stored as a FLOOR
+    /// under the circuit-breaker cooldown — see [`Self::is_circuit_open`].
+    /// A success clears both it and the reopen escalation.
     pub fn record_source_health(
         &self,
         source_type: &str,
@@ -1104,6 +1148,7 @@ impl Database {
         items_fetched: i64,
         response_time_ms: i64,
         error_msg: Option<&str>,
+        retry_after_secs: Option<u64>,
     ) -> SqliteResult<()> {
         let conn = self.conn.lock();
 
@@ -1112,6 +1157,10 @@ impl Database {
             // previous failure text is a contradiction (live rows were observed
             // 2026-08-31 with status='healthy' + a stale error at the same
             // checked_at). error_count stays — it is cumulative history.
+            //
+            // circuit_reopen_count resets too: the escalation ladder measures
+            // reopens WITHOUT an intervening success, so one success returns
+            // the source to the 10-minute tier.
             conn.execute(
                 "INSERT INTO source_health (source_type, status, last_success, items_fetched, response_time_ms, consecutive_failures, checked_at)
                  VALUES (?1, 'healthy', datetime('now'), ?2, ?3, 0, datetime('now'))
@@ -1119,20 +1168,27 @@ impl Database {
                    status = 'healthy', last_success = datetime('now'),
                    items_fetched = ?2, response_time_ms = ?3,
                    consecutive_failures = 0, last_error = NULL,
+                   circuit_reopen_count = 0, retry_after_secs = NULL,
                    checked_at = datetime('now')",
                 params![source_type, items_fetched, response_time_ms],
             )?;
         } else {
+            // The hint is the LAST observation, not a running maximum: a 429
+            // announcing an hour followed by a plain timeout means we no longer
+            // have an announced cooldown, and pretending otherwise would park
+            // a recovering source for an hour on stale information.
+            let hint = retry_after_secs.map(|s| i64::try_from(s).unwrap_or(i64::MAX));
             conn.execute(
-                "INSERT INTO source_health (source_type, status, last_error, error_count, consecutive_failures, checked_at)
-                 VALUES (?1, 'error', ?2, 1, 1, datetime('now'))
+                "INSERT INTO source_health (source_type, status, last_error, error_count, consecutive_failures, retry_after_secs, checked_at)
+                 VALUES (?1, 'error', ?2, 1, 1, ?3, datetime('now'))
                  ON CONFLICT(source_type) DO UPDATE SET
                    status = CASE WHEN consecutive_failures + 1 >= 5 THEN 'circuit_open' ELSE 'error' END,
                    last_error = ?2,
                    error_count = error_count + 1,
                    consecutive_failures = consecutive_failures + 1,
+                   retry_after_secs = ?3,
                    checked_at = datetime('now')",
-                params![source_type, error_msg.unwrap_or("Unknown error")],
+                params![source_type, error_msg.unwrap_or("Unknown error"), hint],
             )?;
         }
 
@@ -1167,31 +1223,63 @@ impl Database {
     }
 
     /// Check if circuit breaker is open for a source (5+ consecutive failures).
-    /// Auto-resets after 10 minutes cooldown to allow retry after transient outages.
+    ///
+    /// The cooldown ESCALATES. A fixed 10-minute half-open meant a source that
+    /// is rate-limiting us — arXiv answers 429/503 with a `Retry-After` — got
+    /// hammered every 10 minutes forever: fail 5×, park 10 min, fail 5× again,
+    /// park 10 min again. Live on the founder instance 2026-09-07, arXiv had
+    /// been cycling `circuit_open` on that loop indefinitely.
+    ///
+    /// Now each half-open that is NOT followed by a success lengthens the next
+    /// cooldown — 10 min, then 60 min, then 6 h — and the server's announced
+    /// `Retry-After` acts as a floor. One success resets the ladder.
+    /// See [`circuit_cooldown_secs`].
     pub fn is_circuit_open(&self, source_type: &str) -> bool {
         let conn = self.conn.lock();
         let result = conn.query_row(
-            "SELECT consecutive_failures, checked_at FROM source_health WHERE source_type = ?1",
+            "SELECT consecutive_failures, checked_at, circuit_reopen_count, retry_after_secs
+             FROM source_health WHERE source_type = ?1",
             params![source_type],
-            |row| Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?)),
+            |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, i64>(2)?,
+                    row.get::<_, Option<i64>>(3)?,
+                ))
+            },
         );
         match result {
-            Ok((failures, checked_at)) if failures >= 5 => {
+            Ok((failures, checked_at, reopen_count, retry_after)) if failures >= 5 => {
+                let cooldown_secs = circuit_cooldown_secs(reopen_count, retry_after);
                 let stale = conn
                     .query_row(
-                        "SELECT datetime(?1, '+10 minutes') <= datetime('now')",
-                        params![checked_at],
+                        "SELECT datetime(?1, ?2) <= datetime('now')",
+                        params![checked_at, format!("+{cooldown_secs} seconds")],
                         |row| row.get::<_, bool>(0),
                     )
                     .unwrap_or(false);
                 if stale {
+                    // The reopen count is bumped HERE, at the half-open, not at
+                    // the reopen: this is the moment we know the breaker is
+                    // being released without having seen a success. A success
+                    // (record_source_health) is the only thing that clears it.
                     if let Err(e) = conn.execute(
-                        "UPDATE source_health SET consecutive_failures = 0, status = 'error' WHERE source_type = ?1",
-                        params![source_type],
+                        "UPDATE source_health
+                         SET consecutive_failures = 0, status = 'error',
+                             circuit_reopen_count = MIN(circuit_reopen_count + 1, ?2)
+                         WHERE source_type = ?1",
+                        params![source_type, MAX_CIRCUIT_REOPEN_TIER],
                     ) {
                         tracing::warn!(target: "4da::db", error = %e, source = source_type, "Failed to auto-reset circuit breaker");
                     }
-                    tracing::info!(target: "4da::health", source = source_type, "Circuit breaker auto-reset after cooldown");
+                    tracing::info!(
+                        target: "4da::health",
+                        source = source_type,
+                        cooldown_secs,
+                        reopen_count,
+                        "Circuit breaker half-open after escalating cooldown"
+                    );
                     false
                 } else {
                     true
@@ -1218,6 +1306,7 @@ impl Database {
                last_success_at = datetime('now'),
                circuit_open = 0,
                circuit_opened_at = NULL,
+               circuit_reopen_count = 0,
                updated_at = datetime('now')",
             params![feed_origin, source_type],
         )?;
@@ -1254,23 +1343,38 @@ impl Database {
     pub fn is_feed_circuit_open(&self, feed_origin: &str, source_type: &str) -> bool {
         let conn = self.conn.lock();
         let result = conn.query_row(
-            "SELECT circuit_open, circuit_opened_at FROM feed_health WHERE feed_origin = ?1 AND source_type = ?2",
+            "SELECT circuit_open, circuit_opened_at, circuit_reopen_count
+             FROM feed_health WHERE feed_origin = ?1 AND source_type = ?2",
             params![feed_origin, source_type],
-            |row| Ok((row.get::<_, i64>(0)?, row.get::<_, Option<String>>(1)?)),
+            |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, Option<String>>(1)?,
+                    row.get::<_, i64>(2)?,
+                ))
+            },
         );
         match result {
-            Ok((1, Some(opened_at))) => {
+            Ok((1, Some(opened_at), reopen_count)) => {
+                // Same ladder as the source-level breaker. A feed has no
+                // Retry-After of its own — the header belongs to the HTTP
+                // response the whole source shares — so the floor is None.
+                let cooldown_secs = circuit_cooldown_secs(reopen_count, None);
                 let stale = conn
                     .query_row(
-                        "SELECT datetime(?1, '+30 minutes') <= datetime('now')",
-                        params![opened_at],
+                        "SELECT datetime(?1, ?2) <= datetime('now')",
+                        params![opened_at, format!("+{cooldown_secs} seconds")],
                         |row| row.get::<_, bool>(0),
                     )
                     .unwrap_or(false);
                 if stale {
                     let _ = conn.execute(
-                        "UPDATE feed_health SET circuit_open = 0, consecutive_failures = 0, updated_at = datetime('now') WHERE feed_origin = ?1 AND source_type = ?2",
-                        params![feed_origin, source_type],
+                        "UPDATE feed_health
+                         SET circuit_open = 0, consecutive_failures = 0,
+                             circuit_reopen_count = MIN(circuit_reopen_count + 1, ?3),
+                             updated_at = datetime('now')
+                         WHERE feed_origin = ?1 AND source_type = ?2",
+                        params![feed_origin, source_type, MAX_CIRCUIT_REOPEN_TIER],
                     );
                     false
                 } else {
@@ -1580,7 +1684,9 @@ impl Database {
 
 #[cfg(test)]
 mod tests {
+    use super::{circuit_cooldown_secs, MAX_CIRCUIT_REOPEN_TIER};
     use crate::test_utils::{insert_test_item, seed_embedding, test_db};
+    use rusqlite::params;
 
     /// REGRESSION GUARD — the silent re-embed deadlock.
     ///
@@ -2023,6 +2129,209 @@ mod tests {
         );
     }
 
+    // ========================================================================
+    // Source circuit breaker — escalating cooldown
+    //
+    // The 10-minute source breaker shipped with NO direct test, which is how a
+    // source could sit in a circuit_open/reset loop indefinitely (arXiv, live
+    // on the founder instance 2026-09-07) without anything failing.
+    // ========================================================================
+
+    /// Drive a source to the 5-consecutive-failure threshold that opens the circuit.
+    fn open_the_circuit(db: &crate::db::Database, source: &str, retry_after: Option<u64>) {
+        for _ in 0..5 {
+            db.record_source_health(source, false, 0, 0, Some("boom"), retry_after)
+                .unwrap();
+        }
+    }
+
+    /// Backdate `checked_at` so the cooldown arithmetic sees elapsed time.
+    fn age_health_row(db: &crate::db::Database, source: &str, minutes: i64) {
+        db.conn
+            .lock()
+            .execute(
+                "UPDATE source_health SET checked_at = datetime('now', ?2) WHERE source_type = ?1",
+                params![source, format!("-{minutes} minutes")],
+            )
+            .unwrap();
+    }
+
+    fn reopen_count(db: &crate::db::Database, source: &str) -> i64 {
+        db.conn
+            .lock()
+            .query_row(
+                "SELECT circuit_reopen_count FROM source_health WHERE source_type = ?1",
+                params![source],
+                |r| r.get(0),
+            )
+            .unwrap()
+    }
+
+    #[test]
+    fn circuit_opens_at_five_failures_and_half_opens_after_ten_minutes() {
+        let db = test_db();
+        open_the_circuit(&db, "arxiv", None);
+
+        assert!(
+            db.is_circuit_open("arxiv"),
+            "5 failures must open the circuit"
+        );
+
+        // NEGATIVE TEST: the escalation must not park a first-time failure.
+        // Nine minutes in, still open; at eleven, the first tier has elapsed.
+        age_health_row(&db, "arxiv", 9);
+        assert!(
+            db.is_circuit_open("arxiv"),
+            "must stay open inside the 10-minute first tier"
+        );
+
+        age_health_row(&db, "arxiv", 11);
+        assert!(
+            !db.is_circuit_open("arxiv"),
+            "first tier is 10 minutes — must half-open at 11"
+        );
+        assert_eq!(
+            reopen_count(&db, "arxiv"),
+            1,
+            "a half-open without a success advances the ladder"
+        );
+    }
+
+    #[test]
+    fn circuit_cooldown_escalates_when_reopened_without_a_success() {
+        let db = test_db();
+
+        // First open -> half-open after 10 minutes.
+        open_the_circuit(&db, "arxiv", None);
+        age_health_row(&db, "arxiv", 11);
+        assert!(!db.is_circuit_open("arxiv"));
+
+        // It fails again without ever succeeding: the circuit reopens on tier 1.
+        open_the_circuit(&db, "arxiv", None);
+        assert!(db.is_circuit_open("arxiv"));
+
+        age_health_row(&db, "arxiv", 11);
+        assert!(
+            db.is_circuit_open("arxiv"),
+            "the SECOND open must NOT half-open at 11 minutes — this is the \
+             10-minute hammering loop the escalation exists to stop"
+        );
+
+        age_health_row(&db, "arxiv", 61);
+        assert!(
+            !db.is_circuit_open("arxiv"),
+            "second tier is 60 minutes — must half-open at 61"
+        );
+        assert_eq!(reopen_count(&db, "arxiv"), 2);
+
+        // Third open sits on the 6-hour cap.
+        open_the_circuit(&db, "arxiv", None);
+        age_health_row(&db, "arxiv", 61);
+        assert!(
+            db.is_circuit_open("arxiv"),
+            "third open is on the 6-hour tier, not 60 minutes"
+        );
+        age_health_row(&db, "arxiv", 6 * 60 + 1);
+        assert!(
+            !db.is_circuit_open("arxiv"),
+            "6-hour cap must eventually release"
+        );
+        assert_eq!(
+            reopen_count(&db, "arxiv"),
+            MAX_CIRCUIT_REOPEN_TIER,
+            "the stored tier saturates rather than growing without bound"
+        );
+    }
+
+    #[test]
+    fn a_success_resets_the_escalation_to_the_ten_minute_tier() {
+        let db = test_db();
+
+        open_the_circuit(&db, "arxiv", None);
+        age_health_row(&db, "arxiv", 11);
+        assert!(!db.is_circuit_open("arxiv"));
+        assert_eq!(reopen_count(&db, "arxiv"), 1);
+
+        // One good fetch wipes the ladder — the escalation measures reopens
+        // WITHOUT an intervening success, not lifetime failures.
+        db.record_source_health("arxiv", true, 10, 50, None, None)
+            .unwrap();
+        assert_eq!(reopen_count(&db, "arxiv"), 0);
+
+        open_the_circuit(&db, "arxiv", None);
+        age_health_row(&db, "arxiv", 11);
+        assert!(
+            !db.is_circuit_open("arxiv"),
+            "after a success the source is back on the 10-minute tier"
+        );
+    }
+
+    #[test]
+    fn a_stored_retry_after_larger_than_the_tier_is_honoured() {
+        let db = test_db();
+
+        // The server asked for two hours; tier 0 is ten minutes. The
+        // announcement wins — knocking at 11 minutes is what gets us banned.
+        open_the_circuit(&db, "arxiv", Some(2 * 60 * 60));
+        age_health_row(&db, "arxiv", 11);
+        assert!(
+            db.is_circuit_open("arxiv"),
+            "an announced 2h cooldown must outrank the 10-minute tier"
+        );
+
+        age_health_row(&db, "arxiv", 121);
+        assert!(
+            !db.is_circuit_open("arxiv"),
+            "the circuit must release once the announced window elapses"
+        );
+    }
+
+    #[test]
+    fn a_stored_retry_after_smaller_than_the_tier_does_not_shorten_it() {
+        // NEGATIVE TEST: Retry-After is a FLOOR, not an override. A server
+        // asking for 30s must not talk a repeatedly-failing source out of its
+        // escalated cooldown.
+        let db = test_db();
+        open_the_circuit(&db, "arxiv", Some(30));
+        age_health_row(&db, "arxiv", 5);
+        assert!(
+            db.is_circuit_open("arxiv"),
+            "a 30s announcement must not undercut the 10-minute tier"
+        );
+    }
+
+    #[test]
+    fn circuit_stays_closed_below_the_failure_threshold() {
+        // NEGATIVE TEST: what the breaker does NOT block.
+        let db = test_db();
+        for _ in 0..4 {
+            db.record_source_health("arxiv", false, 0, 0, Some("boom"), None)
+                .unwrap();
+        }
+        assert!(
+            !db.is_circuit_open("arxiv"),
+            "4 failures must leave the circuit closed"
+        );
+        assert!(
+            !db.is_circuit_open("never-seen"),
+            "an unknown source has no open circuit"
+        );
+    }
+
+    #[test]
+    fn cooldown_ladder_tiers_and_floor() {
+        assert_eq!(circuit_cooldown_secs(0, None), 10 * 60);
+        assert_eq!(circuit_cooldown_secs(1, None), 60 * 60);
+        assert_eq!(circuit_cooldown_secs(2, None), 6 * 60 * 60);
+        // Saturates rather than panicking on an out-of-range stored value.
+        assert_eq!(circuit_cooldown_secs(99, None), 6 * 60 * 60);
+        assert_eq!(circuit_cooldown_secs(-1, None), 10 * 60);
+        // Announced cooldown is a floor, never a ceiling.
+        assert_eq!(circuit_cooldown_secs(0, Some(3600)), 3600);
+        assert_eq!(circuit_cooldown_secs(2, Some(3600)), 6 * 60 * 60);
+        assert_eq!(circuit_cooldown_secs(0, Some(-5)), 10 * 60);
+    }
+
     #[test]
     fn test_analysis_window_excludes_stale_published_items() {
         // The "TypeScript 5.1 Beta" leak: an old article a feed keeps serving
@@ -2065,7 +2374,7 @@ mod tests {
         let db = test_db();
 
         // Record a healthy fetch
-        db.record_source_health("hackernews", true, 25, 150, None)
+        db.record_source_health("hackernews", true, 25, 150, None, None)
             .unwrap();
 
         let health = db.get_source_health().unwrap();
@@ -2076,7 +2385,7 @@ mod tests {
         assert_eq!(health[0].consecutive_failures, 0);
 
         // Record an error
-        db.record_source_health("hackernews", false, 0, 0, Some("timeout"))
+        db.record_source_health("hackernews", false, 0, 0, Some("timeout"), None)
             .unwrap();
 
         let health = db.get_source_health().unwrap();
@@ -2088,7 +2397,7 @@ mod tests {
         // A later successful check must clear the stale error text — a
         // 'healthy' row still carrying the old failure is a contradiction
         // (observed live 2026-08-31). error_count stays cumulative.
-        db.record_source_health("hackernews", true, 10, 90, None)
+        db.record_source_health("hackernews", true, 10, 90, None, None)
             .unwrap();
 
         let health = db.get_source_health().unwrap();
@@ -2388,8 +2697,12 @@ mod tests {
         assert!(!db.is_feed_circuit_open("https://bad.com/feed", "rss"));
     }
 
+    /// RENAMED 2026-09-08: was `test_circuit_auto_resets_after_30_minutes`.
+    /// The feed breaker's first tier is now 10 minutes (shared ladder), so 31
+    /// minutes still half-opens — the assertion is unchanged, only the name
+    /// stopped naming a constant that no longer exists.
     #[test]
-    fn test_circuit_auto_resets_after_30_minutes() {
+    fn test_feed_circuit_auto_resets_once_the_cooldown_elapses() {
         let db = test_db();
         for _ in 0..5 {
             db.record_feed_failure("https://stale.com/feed", "rss", "timeout")
@@ -2415,8 +2728,12 @@ mod tests {
         assert_eq!(health.consecutive_failures, 0);
     }
 
+    /// UPDATED 2026-09-08: the per-feed breaker now shares the source
+    /// breaker's escalating ladder, so its first tier is 10 minutes, not a
+    /// hard 30 — the two constants previously disagreed with nothing
+    /// explaining why. 9 minutes is the new "still inside the first tier".
     #[test]
-    fn test_circuit_stays_open_before_30_minutes() {
+    fn test_feed_circuit_stays_open_inside_the_first_tier() {
         let db = test_db();
         for _ in 0..5 {
             db.record_feed_failure("https://recent.com/feed", "rss", "timeout")
@@ -2424,15 +2741,65 @@ mod tests {
         }
         assert!(db.is_feed_circuit_open("https://recent.com/feed", "rss"));
 
-        // Backdate to only 29 minutes ago — should still be open
         let conn = db.conn.lock();
         conn.execute(
-            "UPDATE feed_health SET circuit_opened_at = datetime('now', '-29 minutes') WHERE feed_origin = ?1",
+            "UPDATE feed_health SET circuit_opened_at = datetime('now', '-9 minutes') WHERE feed_origin = ?1",
             rusqlite::params!["https://recent.com/feed"],
         )
         .unwrap();
         drop(conn);
 
         assert!(db.is_feed_circuit_open("https://recent.com/feed", "rss"));
+    }
+
+    /// The per-feed breaker escalates like the source breaker: a feed that
+    /// never recovers is not re-tried on the same short cycle forever.
+    #[test]
+    fn feed_circuit_cooldown_escalates_without_a_success() {
+        let db = test_db();
+        let feed = "https://escalating.com/feed";
+
+        let open_it = || {
+            for _ in 0..5 {
+                db.record_feed_failure(feed, "rss", "timeout").unwrap();
+            }
+        };
+        let backdate = |minutes: i64| {
+            db.conn
+                .lock()
+                .execute(
+                    "UPDATE feed_health SET circuit_opened_at = datetime('now', ?2) WHERE feed_origin = ?1",
+                    params![feed, format!("-{minutes} minutes")],
+                )
+                .unwrap();
+        };
+
+        open_it();
+        backdate(11);
+        assert!(
+            !db.is_feed_circuit_open(feed, "rss"),
+            "first tier is 10 minutes"
+        );
+
+        open_it();
+        backdate(11);
+        assert!(
+            db.is_feed_circuit_open(feed, "rss"),
+            "a reopen without a success must not release again at 11 minutes"
+        );
+        backdate(61);
+        assert!(
+            !db.is_feed_circuit_open(feed, "rss"),
+            "second tier is 60 minutes"
+        );
+
+        // A success wipes the ladder — same rule as the source breaker.
+        db.record_feed_success(feed, "rss").unwrap();
+        open_it();
+        backdate(11);
+        assert!(
+            !db.is_feed_circuit_open(feed, "rss"),
+            "after a success the feed is back on the 10-minute tier"
+        );
     }
 }

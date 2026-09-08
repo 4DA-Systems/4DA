@@ -171,7 +171,7 @@ async fn fetch_fallback(
         .await
         .map_err(|e| SourceError::Network(format!("{}: {}", endpoint.name, e)))?;
 
-    crate::sources::classify_http_status(response.status(), &endpoint.name)?;
+    crate::sources::classify_http_response(&response, &endpoint.name)?;
 
     let body = response
         .text()

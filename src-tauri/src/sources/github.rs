@@ -189,7 +189,7 @@ impl Source for GitHubSource {
                 "GitHub forbidden (HTTP 403) — check API rate limits or auth".to_string(),
             ));
         }
-        super::classify_http_status(status, "GitHub API")?;
+        super::classify_http_response(&response, "GitHub API")?;
 
         let search_result: GitHubSearchResponse = response
             .json()
@@ -263,7 +263,7 @@ impl Source for GitHubSource {
 
         let readme_status = response.status();
         if readme_status == reqwest::StatusCode::TOO_MANY_REQUESTS {
-            return Err(SourceError::RateLimited(
+            return Err(SourceError::rate_limited(
                 "GitHub README rate limited (HTTP 429)".to_string(),
             ));
         }

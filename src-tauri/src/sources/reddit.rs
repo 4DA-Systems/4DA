@@ -69,7 +69,7 @@ async fn fetch_subreddit_json(
         .await
         .map_err(|e| SourceError::Network(e.to_string()))?;
 
-    super::classify_http_status(response.status(), "Reddit API")?;
+    super::classify_http_response(&response, "Reddit API")?;
 
     let listing: RedditListing = response
         .json()
@@ -122,7 +122,7 @@ async fn fetch_subreddit_rss(
         .await
         .map_err(|e| SourceError::Network(e.to_string()))?;
 
-    super::classify_http_status(response.status(), "Reddit RSS")?;
+    super::classify_http_response(&response, "Reddit RSS")?;
 
     let body = response
         .text()
@@ -194,7 +194,7 @@ fn aggregate(
             }
             Err(e) => {
                 match &e {
-                    SourceError::Forbidden(_) | SourceError::RateLimited(_) => {
+                    SourceError::Forbidden(_) | SourceError::RateLimited { .. } => {
                         debug!(subreddit = sub, error = %e, "Skipped subreddit (auth/rate-limit)");
                     }
                     _ => warn!(subreddit = sub, error = %e, "Failed to fetch subreddit"),
@@ -272,7 +272,7 @@ async fn fetch_via(
         };
         let whole_source_block = matches!(
             result,
-            Err(SourceError::Forbidden(_)) | Err(SourceError::RateLimited(_))
+            Err(SourceError::Forbidden(_)) | Err(SourceError::RateLimited { .. })
         );
         results.push((sub.as_str(), result));
         if whole_source_block {
@@ -662,7 +662,10 @@ mod tests {
             }
             Err(e) => {
                 assert!(
-                    matches!(e, SourceError::Forbidden(_) | SourceError::RateLimited(_)),
+                    matches!(
+                        e,
+                        SourceError::Forbidden(_) | SourceError::RateLimited { .. }
+                    ),
                     "credential-free paths must fail with an ACTIONABLE error, got {e:?}"
                 );
                 println!("LIVE reddit: credential-free paths walled -> surfaced {e:?} (needs reddit:oauth)");

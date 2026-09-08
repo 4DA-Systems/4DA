@@ -76,8 +76,8 @@ pub(crate) fn extract_tag(xml: &str, tag: &str) -> Option<String> {
 /// Check HTTP response status and return a `SourceError::Network` on failure.
 /// Replaces the duplicated `if !status.is_success()` pattern across adapters.
 ///
-/// Prefer [`classify_http_status`] — it triages 429/403 into the retry-aware
-/// variants first and falls through to this for everything else.
+/// Prefer [`classify_http_response`] — it triages 429/503/403 into the
+/// retry-aware variants first and falls through to this for everything else.
 pub(crate) fn check_http_status(
     status: reqwest::StatusCode,
     source_name: &str,
@@ -92,13 +92,85 @@ pub(crate) fn check_http_status(
     Ok(())
 }
 
-/// Triage an HTTP response status into the shared [`SourceError`] taxonomy.
+/// Upper bound on any honoured `Retry-After`, in seconds (6 hours).
+///
+/// A server can announce an arbitrarily distant cooldown (arXiv has been seen
+/// to return a date days out during an outage). We record the hint but never
+/// let it park a source beyond one escalation cycle — the circuit breaker's own
+/// ceiling is the same 6 hours, so the two agree.
+pub(crate) const MAX_RETRY_AFTER_SECS: u64 = 6 * 60 * 60;
+
+/// Parse an HTTP `Retry-After` value into seconds from now.
+///
+/// RFC 9110 §10.2.3 allows two forms and both appear in the wild:
+/// - delta-seconds: `Retry-After: 120`
+/// - an HTTP-date:  `Retry-After: Wed, 21 Oct 2015 07:28:00 GMT`
+///
+/// A date already in the past yields `Some(0)` (retry immediately), NOT `None`
+/// — the server did announce a cooldown, it has simply already elapsed.
+/// Unparseable input yields `None`. The result is capped at
+/// [`MAX_RETRY_AFTER_SECS`].
+pub(crate) fn parse_retry_after(value: &str) -> Option<u64> {
+    let trimmed = value.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+
+    // Form 1: delta-seconds.
+    if let Ok(secs) = trimmed.parse::<u64>() {
+        return Some(secs.min(MAX_RETRY_AFTER_SECS));
+    }
+
+    // Form 2: HTTP-date. chrono's RFC-2822 parser covers IMF-fixdate
+    // ("Wed, 21 Oct 2015 07:28:00 GMT"); the explicit format string is the
+    // fallback for servers that omit the zone entirely.
+    let target = chrono::DateTime::parse_from_rfc2822(trimmed)
+        .map(|dt| dt.with_timezone(&chrono::Utc))
+        .or_else(|_| {
+            chrono::NaiveDateTime::parse_from_str(trimmed, "%a, %d %b %Y %H:%M:%S GMT")
+                .map(|naive| naive.and_utc())
+        })
+        .ok()?;
+
+    let delta = target
+        .signed_duration_since(chrono::Utc::now())
+        .num_seconds();
+    // A past date is a real (already-elapsed) announcement, not a parse failure.
+    Some(u64::try_from(delta).unwrap_or(0).min(MAX_RETRY_AFTER_SECS))
+}
+
+/// Read the `Retry-After` header out of a response's headers, if present and parseable.
+pub(crate) fn retry_after_from_headers(headers: &reqwest::header::HeaderMap) -> Option<u64> {
+    headers
+        .get(reqwest::header::RETRY_AFTER)
+        .and_then(|v| v.to_str().ok())
+        .and_then(parse_retry_after)
+}
+
+/// Triage an HTTP response into the shared [`SourceError`] taxonomy.
 ///
 /// This is THE status gate for source adapters — every adapter previously
 /// re-implemented the same 429/403 preamble before delegating the generic tail
-/// to [`check_http_status`]. The mapping:
+/// to [`check_http_status`]. It takes the whole response, not just the status,
+/// because the status alone throws away the one thing a rate-limiting server
+/// tells us that we cannot guess: how long to stay away.
+///
+/// See [`classify_http_status_with_retry_after`] for the mapping.
+pub(crate) fn classify_http_response(
+    response: &reqwest::Response,
+    source_name: &str,
+) -> SourceResult<()> {
+    classify_http_status_with_retry_after(
+        response.status(),
+        retry_after_from_headers(response.headers()),
+        source_name,
+    )
+}
+
+/// Shared body of [`classify_http_response`]. The mapping:
 ///
 /// - `429 Too Many Requests` → [`SourceError::RateLimited`] (retryable, backs off)
+/// - `503 Service Unavailable` WITH a `Retry-After` → [`SourceError::RateLimited`]
 /// - `403 Forbidden` → [`SourceError::Forbidden`] (NOT retryable — needs a credential)
 /// - any other non-2xx → [`SourceError::Network`] via [`check_http_status`]
 /// - 2xx → `Ok(())`
@@ -108,14 +180,27 @@ pub(crate) fn check_http_status(
 /// Status codes an adapter treats specially (404 → `Ok(None)`, 410 → skip, 401 →
 /// auth prompt) must be checked BEFORE calling this, since the generic tail
 /// would otherwise claim them as a network error.
-pub(crate) fn classify_http_status(
+///
+/// The 503 split is deliberate: a bare 503 is an outage — a network error, and
+/// the escalating breaker is the right response. A 503 that names a cooldown is
+/// a server explicitly asking us to wait, which is what arXiv returns under
+/// load, and honouring it is cheaper than being banned.
+pub(crate) fn classify_http_status_with_retry_after(
     status: reqwest::StatusCode,
+    retry_after_secs: Option<u64>,
     source_name: &str,
 ) -> SourceResult<()> {
     if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
-        return Err(SourceError::RateLimited(format!(
-            "{source_name} rate limited (HTTP 429)"
-        )));
+        return Err(SourceError::rate_limited_after(
+            format!("{source_name} rate limited (HTTP 429)"),
+            retry_after_secs,
+        ));
+    }
+    if status == reqwest::StatusCode::SERVICE_UNAVAILABLE && retry_after_secs.is_some() {
+        return Err(SourceError::rate_limited_after(
+            format!("{source_name} unavailable (HTTP 503, Retry-After honoured)"),
+            retry_after_secs,
+        ));
     }
     if status == reqwest::StatusCode::FORBIDDEN {
         return Err(SourceError::Forbidden(format!(
@@ -331,8 +416,17 @@ pub enum SourceError {
     Network(String),
     /// Error parsing response
     Parse(String),
-    /// Rate limited by source (HTTP 429)
-    RateLimited(String),
+    /// Rate limited by source (HTTP 429, or 503 with a `Retry-After`).
+    ///
+    /// `retry_after_secs` is the server's OWN announced cooldown when it sent
+    /// one. It is the single most useful number a rate-limiting source gives
+    /// us: the retry layer sleeps for it instead of guessing, and the circuit
+    /// breaker stores it as a floor under the reopen cooldown. `None` means the
+    /// server said nothing — fall back to the fixed backoff.
+    RateLimited {
+        message: String,
+        retry_after_secs: Option<u64>,
+    },
     /// Forbidden / auth error (HTTP 403) — not retryable
     Forbidden(String),
     /// Source is disabled
@@ -341,12 +435,47 @@ pub enum SourceError {
     Other(String),
 }
 
+impl SourceError {
+    /// A rate-limit error with no server-announced cooldown.
+    pub(crate) fn rate_limited(message: impl Into<String>) -> Self {
+        SourceError::RateLimited {
+            message: message.into(),
+            retry_after_secs: None,
+        }
+    }
+
+    /// A rate-limit error carrying the server's announced cooldown, if any.
+    pub(crate) fn rate_limited_after(
+        message: impl Into<String>,
+        retry_after_secs: Option<u64>,
+    ) -> Self {
+        SourceError::RateLimited {
+            message: message.into(),
+            retry_after_secs: retry_after_secs.map(|s| s.min(MAX_RETRY_AFTER_SECS)),
+        }
+    }
+
+    /// The server-announced cooldown in seconds, if this error carries one.
+    pub(crate) fn retry_after_secs(&self) -> Option<u64> {
+        match self {
+            SourceError::RateLimited {
+                retry_after_secs, ..
+            } => *retry_after_secs,
+            _ => None,
+        }
+    }
+}
+
 impl std::fmt::Display for SourceError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             SourceError::Network(msg) => write!(f, "Network error: {msg}"),
             SourceError::Parse(msg) => write!(f, "Parse error: {msg}"),
-            SourceError::RateLimited(msg) => write!(f, "Rate limited: {msg}"),
+            SourceError::RateLimited {
+                message,
+                retry_after_secs: Some(secs),
+            } => write!(f, "Rate limited: {message} (retry after {secs}s)"),
+            SourceError::RateLimited { message, .. } => write!(f, "Rate limited: {message}"),
             SourceError::Forbidden(msg) => write!(f, "Forbidden: {msg}"),
             SourceError::Disabled => write!(f, "Source disabled"),
             SourceError::Other(msg) => write!(f, "Error: {msg}"),
@@ -690,6 +819,9 @@ pub fn build_all_sources() -> Vec<Box<dyn Source>> {
 
 #[cfg(test)]
 mod adapter_resilience_tests;
+
+#[cfg(test)]
+mod http_status_tests;
 
 #[cfg(test)]
 mod tests {

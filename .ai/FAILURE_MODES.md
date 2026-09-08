@@ -895,3 +895,34 @@ something else marks as a name counts — an interior capital or a digit
 capitalised names, first word included (a first-word rule was tried and
 cost the niche-specialist persona its recall floor). Sentence openers join
 the stopword list. Capitalisation is typography before it is naming.
+
+---
+
+### A fixed cooldown retries a rate limit forever (2026-09-08, AD-042)
+
+**Symptom.** `source_health` showed arXiv cycling `circuit_open` indefinitely
+on the founder instance. The breaker opened at 5 consecutive failures,
+half-opened after exactly 10 minutes, failed again, re-opened — with no end
+state and no escalation. arXiv rate-limits with 429/503 and a `Retry-After`,
+so every knock was answered the same way.
+
+**Root cause.** Two guesses standing in for a number the server was already
+sending. `classify_http_status` took a bare `StatusCode`, so the headers —
+and with them `Retry-After` — were discarded before any adapter could see
+them; nothing in the source layer read that header at all. The retry layer
+then used a fixed `RATE_LIMIT_BACKOFF_SECS = 30`, and the breaker a fixed
+10-minute half-open, no matter how many times the source had already refused
+us. The per-feed breaker used a hard 30 minutes for the same idea, with
+nothing explaining the disagreement. The 10-minute source breaker had no
+direct test, so a permanent retry loop was invisible.
+
+**The rule.** When a server announces a cooldown, read it and honour it:
+`classify_http_response` carries `Retry-After` into
+`SourceError::RateLimited { retry_after_secs }`, the retry layer sleeps for
+the announcement instead of a guess, and the breaker uses it as a FLOOR under
+`circuit_cooldown_secs` — one ladder (10 min, 60 min, 6 h) shared by both
+breakers, indexed by half-opens that earned no success, reset by one success.
+A wait too long to afford is handed to the breaker rather than slept through.
+Retrying on a fixed interval forever is not resilience; it is the behaviour
+the rate limit exists to stop. Any breaker whose cooldown does not escalate
+needs a test proving it eventually gives up, or it does not.

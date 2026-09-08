@@ -93,7 +93,7 @@ impl GoModulesSource {
             match self.fetch_module_latest(module).await {
                 Ok(Some(item)) => items.push(item),
                 Ok(None) => {}
-                Err(SourceError::RateLimited(msg)) => {
+                Err(SourceError::RateLimited { message: msg, .. }) => {
                     warn!(module = %module, "Rate limited by Go proxy: {msg}");
                     break;
                 }
@@ -129,7 +129,7 @@ impl GoModulesSource {
             // shared gate, which would otherwise classify it as a network error.
             return Ok(None);
         }
-        super::classify_http_status(status, "Go module proxy")?;
+        super::classify_http_response(&response, "Go module proxy")?;
 
         let info: GoLatestInfo = response
             .json()
@@ -231,7 +231,7 @@ impl Source for GoModulesSource {
             .await
             .map_err(|e| SourceError::Network(e.to_string()))?;
 
-        super::classify_http_status(response.status(), "Go modules proxy")?;
+        super::classify_http_response(&response, "Go modules proxy")?;
 
         let body = response
             .text()

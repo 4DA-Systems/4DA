@@ -1696,7 +1696,7 @@ fn source_error_display_messages() {
     let err = SourceError::Parse("unexpected token".to_string());
     assert!(err.to_string().contains("unexpected token"));
 
-    let err = SourceError::RateLimited("test source".to_string());
+    let err = SourceError::rate_limited("test source".to_string());
     assert!(err.to_string().contains("Rate limited"));
 
     let err = SourceError::Forbidden("auth issue".to_string());

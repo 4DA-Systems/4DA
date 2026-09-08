@@ -59,7 +59,7 @@ pub trait AccessStrategy: Send + Sync {
 pub(crate) fn actionability(e: &SourceError) -> u8 {
     match e {
         SourceError::Forbidden(_) => 5,
-        SourceError::RateLimited(_) => 4,
+        SourceError::RateLimited { .. } => 4,
         SourceError::Parse(_) => 3,
         SourceError::Network(_) => 2,
         SourceError::Other(_) => 1,
@@ -250,7 +250,7 @@ mod tests {
     #[tokio::test]
     async fn fails_over_from_error_to_success() {
         let strategies = vec![
-            Canned::err("primary", SourceError::RateLimited("429".into())),
+            Canned::err("primary", SourceError::rate_limited("429")),
             Canned::ok("fallback", 2),
         ];
         let out = resilient_fetch("test", &strategies).await.unwrap();
@@ -294,10 +294,10 @@ mod tests {
     fn actionability_ranks_forbidden_highest() {
         assert!(
             actionability(&SourceError::Forbidden("".into()))
-                > actionability(&SourceError::RateLimited("".into()))
+                > actionability(&SourceError::rate_limited(""))
         );
         assert!(
-            actionability(&SourceError::RateLimited("".into()))
+            actionability(&SourceError::rate_limited(""))
                 > actionability(&SourceError::Network("".into()))
         );
         assert!(

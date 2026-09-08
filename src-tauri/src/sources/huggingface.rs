@@ -77,7 +77,7 @@ impl HuggingFaceSource {
             .await
             .map_err(|e| SourceError::Network(e.to_string()))?;
 
-        super::classify_http_status(response.status(), "HuggingFace API")?;
+        super::classify_http_response(&response, "HuggingFace API")?;
 
         let models: Vec<HfModel> = response
             .json()

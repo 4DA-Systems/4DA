@@ -1430,7 +1430,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 120;
+        const TARGET_VERSION: i64 = 121;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -1523,7 +1523,9 @@ impl Database {
                             consecutive_failures INTEGER NOT NULL DEFAULT 0,
                             items_fetched INTEGER NOT NULL DEFAULT 0,
                             response_time_ms INTEGER NOT NULL DEFAULT 0,
-                            checked_at TEXT NOT NULL DEFAULT (datetime('now'))
+                            checked_at TEXT NOT NULL DEFAULT (datetime('now')),
+                            circuit_reopen_count INTEGER NOT NULL DEFAULT 0,
+                            retry_after_secs INTEGER
                         )",
                     )
                 })?;
@@ -3085,6 +3087,7 @@ impl Database {
                                 last_error TEXT,
                                 circuit_open INTEGER NOT NULL DEFAULT 0,
                                 circuit_opened_at TEXT,
+                                circuit_reopen_count INTEGER NOT NULL DEFAULT 0,
                                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                                 updated_at TEXT NOT NULL DEFAULT (datetime('now')),
                                 PRIMARY KEY (feed_origin, source_type)
@@ -5601,6 +5604,63 @@ impl Database {
                 )?;
             }
 
+            // Phase 121: the circuit breakers learn how long they have been
+            // failing and what the server asked for. The source breaker
+            // half-opened after a FIXED 10 minutes, every time, forever — so a
+            // source that rate-limits us (arXiv answers 429/503 with a
+            // `Retry-After`) was knocked on every 10 minutes indefinitely:
+            // fail 5x, park 10 min, fail 5x, park 10 min. Live on the founder
+            // instance 2026-09-07, arXiv had been cycling `circuit_open` on
+            // that loop. `circuit_reopen_count` counts half-opens that earned
+            // no success and drives an escalating cooldown (10 min -> 1 h ->
+            // 6 h); `retry_after_secs` stores the server's own announcement as
+            // a floor under it. The per-feed breaker gets the same counter so
+            // the two breakers stop disagreeing (it had a hard 30 minutes
+            // against the source breaker's 10, unexplained). Additive columns;
+            // existing rows start at tier 0, which is the old behaviour.
+            if current_version < 121 {
+                Self::run_versioned_migration(
+                    &conn,
+                    120,
+                    121,
+                    "Phase 121: escalating circuit-breaker cooldown + Retry-After floor",
+                    |c| {
+                        for (table, column, ddl) in [
+                            (
+                                "source_health",
+                                "circuit_reopen_count",
+                                "INTEGER NOT NULL DEFAULT 0",
+                            ),
+                            ("source_health", "retry_after_secs", "INTEGER"),
+                            (
+                                "feed_health",
+                                "circuit_reopen_count",
+                                "INTEGER NOT NULL DEFAULT 0",
+                            ),
+                        ] {
+                            let has_column: bool = c
+                                .query_row(
+                                    "SELECT COUNT(*) FROM pragma_table_info(?1) WHERE name=?2",
+                                    [table, column],
+                                    |row| row.get::<_, i64>(0).map(|n| n > 0),
+                                )
+                                .unwrap_or(false);
+                            if !has_column {
+                                c.execute(
+                                    &format!("ALTER TABLE {table} ADD COLUMN {column} {ddl}"),
+                                    [],
+                                )?;
+                            }
+                        }
+                        info!(
+                            target: "4da::db",
+                            "Phase 121: circuit_reopen_count + retry_after_secs added — a repeatedly failing source now backs off instead of being retried every 10 minutes forever"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }
@@ -7288,6 +7348,110 @@ mod tests {
             Some("discussion"),
             "the scorer's classification supersedes the ingest default"
         );
+    }
+
+    /// Phase 121 lifts TARGET_VERSION to 121 and gives both circuit breakers
+    /// the state an escalating cooldown needs: how many times the circuit has
+    /// half-opened without earning a success, and the cooldown the server
+    /// itself announced. Without them the source breaker half-opened after a
+    /// fixed 10 minutes forever, so arXiv — which answers 429/503 with a
+    /// `Retry-After` — was knocked on every 10 minutes indefinitely.
+    #[test]
+    fn test_phase_121_circuit_breaker_columns_on_fresh_and_existing_dbs() {
+        let db = test_db();
+
+        let has_column = |table: &str, column: &str| -> bool {
+            db.conn
+                .lock()
+                .query_row(
+                    "SELECT COUNT(*) FROM pragma_table_info(?1) WHERE name=?2",
+                    [table, column],
+                    |r| r.get::<_, i64>(0).map(|n| n > 0),
+                )
+                .unwrap_or(false)
+        };
+
+        // 1. A FRESH database gets the columns from the CREATE TABLE.
+        let conn = db.conn.lock();
+        let version: i64 = conn
+            .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
+            .unwrap();
+        assert!(
+            version >= 121,
+            "schema_version should be >= 121 after migration; got {version}"
+        );
+        drop(conn);
+
+        for (table, column) in [
+            ("source_health", "circuit_reopen_count"),
+            ("source_health", "retry_after_secs"),
+            ("feed_health", "circuit_reopen_count"),
+        ] {
+            assert!(
+                has_column(table, column),
+                "fresh DB must have {table}.{column}"
+            );
+        }
+
+        // 2. An EXISTING pre-121 database gets them from the ALTER path. Drop
+        //    the columns to genuinely reproduce a v120 database, rather than
+        //    relying on the pragma guard turning the phase into a no-op.
+        {
+            let conn = db.conn.lock();
+            conn.execute_batch(
+                "ALTER TABLE source_health DROP COLUMN circuit_reopen_count;
+                 ALTER TABLE source_health DROP COLUMN retry_after_secs;
+                 ALTER TABLE feed_health DROP COLUMN circuit_reopen_count;
+                 UPDATE schema_version SET version = 120;",
+            )
+            .unwrap();
+        }
+        assert!(
+            !has_column("source_health", "circuit_reopen_count"),
+            "precondition: the column must actually be gone"
+        );
+
+        db.migrate().expect("re-running migrations from v120");
+
+        for (table, column) in [
+            ("source_health", "circuit_reopen_count"),
+            ("source_health", "retry_after_secs"),
+            ("feed_health", "circuit_reopen_count"),
+        ] {
+            assert!(
+                has_column(table, column),
+                "phase 121 must add {table}.{column} to an existing database"
+            );
+        }
+
+        // Existing rows land on tier 0 — the old 10-minute behaviour — and the
+        // NOT NULL DEFAULT holds for rows written before the column existed.
+        {
+            let conn = db.conn.lock();
+            conn.execute(
+                "INSERT INTO source_health (source_type, status) VALUES ('arxiv', 'error')",
+                [],
+            )
+            .unwrap();
+            let (tier, hint): (i64, Option<i64>) = conn
+                .query_row(
+                    "SELECT circuit_reopen_count, retry_after_secs FROM source_health WHERE source_type='arxiv'",
+                    [],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .unwrap();
+            assert_eq!(tier, 0, "migrated rows start on the 10-minute tier");
+            assert_eq!(hint, None, "no announced cooldown until one is observed");
+        }
+
+        // 3. Idempotent: replaying the phase must not fail on existing columns.
+        {
+            let conn = db.conn.lock();
+            conn.execute_batch("UPDATE schema_version SET version = 120;")
+                .unwrap();
+        }
+        db.migrate().expect("phase 121 must be idempotent");
+        assert!(has_column("source_health", "retry_after_secs"));
     }
 
     /// Phase 112 lifts TARGET_VERSION to 112 and adds `identity_ledger` — the
