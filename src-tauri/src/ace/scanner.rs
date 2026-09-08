@@ -2002,10 +2002,29 @@ impl Default for ProjectScanner {
 /// Compute relevance score for a project based on path patterns and git recency.
 /// Projects in example/demo/test directories or with no recent activity get low scores.
 pub(crate) fn compute_project_relevance(manifest_path: &Path) -> f32 {
+    // Git recency: check for .git directory in parent chain
+    let recency_score = compute_git_recency(manifest_path);
+
+    (path_relevance(manifest_path) * recency_score).clamp(0.0, 1.0)
+}
+
+/// The PATH half of [`compute_project_relevance`], on its own.
+///
+/// `compute_project_relevance` multiplies two independent judgements and the
+/// product loses which one fired: a fresh example dir and a dormant real
+/// project both score 0.1. That mattered on 2026-09-07 — the lockfile walk
+/// skipped `D:\runyourempire\navcal` (31 known-vulnerable packages, dormant
+/// since ~2025-11) with exactly the reasoning it uses to skip a fixture.
+/// "This path is scaffolding" and "nobody has touched this lately" are
+/// different claims and only the first should keep a real project's
+/// dependencies out of the corpus entirely.
+///
+/// 1.0 for a real project path, 0.1 for example/demo/test/fixture scaffolding.
+pub(crate) fn path_relevance(manifest_path: &Path) -> f32 {
     let path_str = manifest_path.to_string_lossy().to_lowercase();
 
     // Path pattern penalty: example/demo/test/tutorial directories -> 0.1x
-    let path_score = if path_str.contains("/example")
+    if path_str.contains("/example")
         || path_str.contains("/demo")
         || path_str.contains("/test/") // Not /testing/ -- that's different
         || path_str.contains("/tests/")
@@ -2027,12 +2046,7 @@ pub(crate) fn compute_project_relevance(manifest_path: &Path) -> f32 {
         0.1
     } else {
         1.0
-    };
-
-    // Git recency: check for .git directory in parent chain
-    let recency_score = compute_git_recency(manifest_path);
-
-    (path_score * recency_score).clamp(0.0, 1.0)
+    }
 }
 
 /// Compute a recency score based on how recently the nearest git repository
@@ -3980,6 +3994,43 @@ serde = "1.0"
     }
 
     // ─── Project relevance scoring ──────────────────────────────────
+
+    /// `compute_project_relevance` is a PRODUCT of two independent
+    /// judgements, and the product cannot say which one fired: a fresh
+    /// example dir and a dormant real project both land on 0.1. The lockfile
+    /// walk read that single number and skipped `navcal` — 31 known-vulnerable
+    /// packages, dormant since ~2025-11 — with the reasoning it uses for a
+    /// fixture. `path_relevance` is the half that means "this is scaffolding".
+    #[test]
+    fn path_relevance_separates_scaffolding_from_dormancy() {
+        // Scaffolding, whatever its git log says.
+        for scaffold in [
+            "/home/user/vercel-workflow/example/package.json",
+            "/projects/demo/my-app/Cargo.toml",
+            "D:\\work\\fixtures\\sample\\Cargo.toml",
+            "/repo/tests/harness/Cargo.toml",
+        ] {
+            let score = path_relevance(&PathBuf::from(scaffold));
+            assert!(
+                score <= 0.1,
+                "{scaffold} is scaffolding by path, got {score}"
+            );
+        }
+
+        // A real project path scores 1.0 on the PATH axis no matter how long
+        // it has been idle — dormancy lives entirely in the recency half.
+        for real in [
+            "/home/dev/navcal/package.json",
+            "D:\\runyourempire\\navcal\\Cargo.toml",
+            "/repo/crates/core/Cargo.toml",
+        ] {
+            let score = path_relevance(&PathBuf::from(real));
+            assert!(
+                (score - 1.0).abs() < f32::EPSILON,
+                "{real} is a real project path, got {score}"
+            );
+        }
+    }
 
     #[test]
     fn test_relevance_example_dirs_get_low_score() {

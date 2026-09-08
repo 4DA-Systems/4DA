@@ -134,6 +134,36 @@ impl Database {
         Ok(rows.filter_map(|r| r.ok()).collect())
     }
 
+    /// The active advisory carrying `advisory_id` — as its own id or as an
+    /// alias (a cve-source row keyed by CVE links the GHSA record the mirror
+    /// stores). Advisory ids are unique across ecosystems, so no ecosystem
+    /// argument: the row's own `ecosystem` tells the caller which of the
+    /// user's manifests it is about. Live 2026-09-08: `jsonwebtoken` exists
+    /// in the user's Cargo AND npm manifests, the scorer's merged edge
+    /// carried the npm ecosystem, and the crates.io GHSA (label medium) was
+    /// looked up under npm — not found, so the ungraded fallback said
+    /// Critical. A GHSA-led row wins over its RUSTSEC/CVE twins.
+    pub fn get_osv_advisory_by_id(
+        &self,
+        advisory_id: &str,
+    ) -> SqliteResult<Option<StoredAdvisory>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare(
+            "SELECT id, advisory_id, summary, details, package_name, ecosystem,
+                    affected_ranges, fixed_versions, severity_type, cvss_score,
+                    source_url, published_at, modified_at, withdrawn_at, synced_at,
+                    aliases, severity_label
+             FROM osv_advisories
+             WHERE withdrawn_at IS NULL
+               AND (advisory_id = ?1 COLLATE NOCASE
+                    OR aliases LIKE '%\"' || ?1 || '\"%')
+             ORDER BY (advisory_id LIKE 'GHSA-%') DESC, cvss_score DESC NULLS LAST
+             LIMIT 1",
+        )?;
+        let mut rows = stmt.query_map(params![advisory_id], map_advisory_row)?;
+        rows.next().transpose()
+    }
+
     /// Get all active (non-withdrawn) stored advisories.
     pub fn get_all_osv_advisories(&self) -> SqliteResult<Vec<StoredAdvisory>> {
         let conn = self.conn.lock();

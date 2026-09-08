@@ -1618,6 +1618,11 @@ impl KnowledgeGap {
                 // Decay gaps track ENGAGEMENT drift, not signal availability —
                 // the zero-signal-coverage classification never applies here.
                 no_coverage: false,
+                // Host reachability is a property of an ADVISORY against an
+                // installed crate; a decay gap is about the user's reading,
+                // so neither 2026-09-07 hint applies here.
+                lockfile_only: false,
+                dormant_notice: false,
             },
             created_at: chrono::Utc::now().timestamp_millis(),
             expires_at: None,

@@ -5103,6 +5103,7 @@ mod tests {
             is_direct: Some(true),
             is_dev: Some(false),
             platform_inactive: false,
+            lockfile_only: false,
         };
 
         let briefing = BriefingPreemptionAlert::from_preemption_alert(&alert);

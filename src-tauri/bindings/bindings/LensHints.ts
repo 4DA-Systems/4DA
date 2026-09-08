@@ -31,4 +31,31 @@ upgrade_plan?: boolean,
  * `uncovered_dep_to_evidence_item` when `available_signal_count == 0`.
  * `false` for all normal items; defaults `false` for back-compat.
  */
-no_coverage?: boolean, };
+no_coverage?: boolean, 
+/**
+ * Rendering hint (2026-09-07 adversarial audit): the dependency is in the
+ * lockfile but this host NEVER COMPILES it — cargo resolves it for no
+ * target/feature combination the user builds. A strictly stronger claim
+ * than [`Self::other_build_target`], which says the dep belongs to a
+ * build target the user does have. Live cause: a HIGH "version-confirmed"
+ * advisory for `quinn-proto`, an optional dependency of a `reqwest`
+ * feature this tree does not enable. Always accompanies
+ * `other_build_target` (both mean "de-prioritised, still surfaced"); this
+ * one only selects the more precise copy. Set by the preemption +
+ * blind-spots materializers from
+ * `platform_filter::PlatformInactivePackages::is_lockfile_only`.
+ * `false` for all normal items; defaults `false` for back-compat.
+ */
+lockfile_only?: boolean, 
+/**
+ * Rendering hint (2026-09-07 adversarial audit): the item is the single
+ * summary standing in for every finding against ONE dormant project.
+ * A repo the user still owns but has not touched in months was silently
+ * absent from Preemption — the relevance floor kept its lockfile out of
+ * the walk entirely, so 31 known-vulnerable packages in `navcal` showed
+ * up nowhere at all. It is now named once, quietly, as a footer row
+ * rather than as N alarming rows about a repo nobody is deploying. Set by
+ * `evidence::dormant_notice::collapse_dormant_alerts`. `false` for all
+ * normal items; defaults `false` for back-compat.
+ */
+dormant_notice?: boolean, };

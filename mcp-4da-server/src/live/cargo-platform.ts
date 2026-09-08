@@ -15,10 +15,26 @@
  * which covers DIRECT platform-gated deps and cannot see transitives — and the
  * GTK3 cluster is entirely transitive.
  *
- * `cargo metadata --filter-platform <triple>` resolves the graph for one target
- * and is authoritative: no curation, no heuristics, no guessing. Measured on
- * this repo it returns 561 packages for `x86_64-pc-windows-msvc` against 904 in
- * the lockfile, in ~1.1s, fully offline.
+ * Cargo.lock is also FEATURE-agnostic: it lists every optional dependency,
+ * including the ones no enabled feature turns on. `cargo tree` resolves both
+ * axes — target AND features — and is what the build itself does.
+ *
+ * This used `cargo metadata --filter-platform <triple>`, which resolves only
+ * the target axis. Measured on 4DA's own workspace, 2026-09-08, host
+ * `x86_64-pc-windows-msvc`:
+ *
+ * | mechanism                                   | distinct crates | `quinn-proto` |
+ * |---------------------------------------------|-----------------|---------------|
+ * | `Cargo.lock`                                | 788             | present       |
+ * | `cargo metadata --filter-platform <triple>` | 560             | **present**   |
+ * | `cargo tree` (host, default features)       | 538             | absent        |
+ *
+ * `cargo metadata` keeps the `reqwest -> quinn` edge even though `reqwest`'s
+ * enabled feature set contains no `http3` — so `quinn-proto`, a crate that has
+ * never been compiled on this machine, counted as built-on-host. It was
+ * Preemption's #1 item on 2026-09-07 (HIGH, "version-confirmed"). `cargo tree`
+ * excludes it. Same predicate, same answer, as the app's
+ * `src-tauri/src/ace/cargo_resolve.rs`.
  *
  * When cargo is unavailable the answer is `null` — *unknown*, never "nothing is
  * inactive". Callers surface that distinction rather than quietly asserting a
@@ -73,8 +89,7 @@ export function activeCratesForHost(dir: string): Set<string> | null {
 }
 
 function computeActiveCrates(dir: string): Set<string> | null {
-  const triple = hostTriple();
-  if (!triple) return null;
+  if (!hostTriple()) return null;
   if (!fs.existsSync(path.join(dir, "Cargo.toml"))) return null;
 
   let raw: string;
@@ -82,13 +97,19 @@ function computeActiveCrates(dir: string): Set<string> | null {
     raw = execFileSync(
       "cargo",
       [
-        "metadata",
-        "--format-version",
-        "1",
-        // Never touch the network or mutate the lockfile from a read-only scan.
+        "tree",
+        // Never touch the network or mutate the lockfile from a read-only
+        // scan. `--locked` also means a lockfile out of step with the manifest
+        // fails loudly here rather than being silently re-resolved.
         "--offline",
-        "--filter-platform",
-        triple,
+        "--locked",
+        // One package per line, no tree glyphs: `name vX.Y.Z [(...)]`.
+        "--prefix",
+        "none",
+        // dev-dependencies are compiled by `cargo test`, so an advisory
+        // against one is reachable. proc-macro deps ride along with normal.
+        "--edges",
+        "normal,build,dev",
       ],
       {
         cwd: dir,
@@ -100,19 +121,30 @@ function computeActiveCrates(dir: string): Set<string> | null {
       },
     );
   } catch {
-    // cargo absent, not a workspace, offline resolution impossible, or timeout.
+    // cargo absent, not a workspace, offline resolution impossible, a stale
+    // lockfile, a held package-cache lock, or a timeout.
     return null;
   }
 
-  try {
-    const meta = JSON.parse(raw) as { packages?: Array<{ name?: string }> };
-    const names = (meta.packages ?? [])
-      .map((p) => p.name)
-      .filter((n): n is string => typeof n === "string" && n.length > 0);
-    // An empty result is not a credible answer for a real workspace; treat it
-    // as unknown so nothing gets marked inactive on a parse quirk.
-    return names.length > 0 ? new Set(names) : null;
-  } catch {
-    return null;
+  const names = parseTreeNames(raw);
+  // An empty result is not a credible answer for a real workspace; treat it
+  // as unknown so nothing gets marked inactive on a parse quirk.
+  return names.size > 0 ? names : null;
+}
+
+/**
+ * Crate names from `cargo tree --prefix none` output.
+ *
+ * Exported for tests: the parser is the part that can silently degrade to an
+ * empty set, and an empty set is the one answer that must never be believed.
+ */
+export function parseTreeNames(stdout: string): Set<string> {
+  const names = new Set<string>();
+  for (const line of stdout.split(/\r?\n/)) {
+    const token = line.split(/\s+/).find((t) => t.length > 0);
+    // A package line starts with a crate name. Anything else — a blank line,
+    // a `[dev-dependencies]` header from a future cargo, a warning — is not.
+    if (token && /^[A-Za-z0-9._+-]+$/.test(token)) names.add(token);
   }
+  return names;
 }

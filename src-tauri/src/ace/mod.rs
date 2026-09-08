@@ -14,6 +14,7 @@
 
 pub mod behavior;
 pub(crate) mod builtin_modules;
+pub(crate) mod cargo_resolve;
 pub mod context;
 pub mod db;
 pub mod dormancy;
@@ -23,6 +24,7 @@ pub(crate) mod platform_cfg;
 pub(crate) mod readme_indexing;
 pub(crate) mod repo_identity;
 pub mod scanner;
+pub(crate) mod scratch;
 pub mod topic_embeddings;
 pub(crate) mod topic_hygiene;
 pub mod watcher;
@@ -299,6 +301,9 @@ impl ACE {
         // to intelligence: no detected_tech evidence, no active topics, no
         // dependency snapshots.
         let user_excluded = crate::project_inclusion::user_excluded_paths();
+        // Per-scan memo for the `git check-ignore` probe: a project a repo
+        // gitignores is a scratch tree, and the surfaces label it as one.
+        let mut scratch_probe = crate::ace::scratch::ScratchProbe::new();
 
         for path in scan_paths {
             if !path.exists() {
@@ -447,6 +452,13 @@ impl ACE {
                                         std::path::Path::new(&project_path),
                                     )
                                     .unwrap_or_else(|| signal.detected_at.clone());
+                                    // A project its own repository gitignores
+                                    // is a scratch tree (`victauri-gauntlet`,
+                                    // 2026-09-07). Recorded, never hidden —
+                                    // the surfaces say "(scratch, gitignored)"
+                                    // so the user can tell it from a product.
+                                    let is_scratch = scratch_probe
+                                        .is_scratch(std::path::Path::new(&project_path));
                                     if let Err(e) = upsert_detected_project(
                                         &conn,
                                         &project_path,
@@ -456,6 +468,7 @@ impl ACE {
                                         &signal.dependencies,
                                         &last_activity,
                                         relevance,
+                                        is_scratch,
                                     ) {
                                         tracing::warn!(target: "4da::ace", error = %e, path = %project_path, "Failed to upsert detected_project");
                                     }
@@ -1040,12 +1053,13 @@ fn upsert_detected_project(
     dependencies: &[String],
     last_activity: &str,
     confidence: f32,
+    scratch: bool,
 ) -> rusqlite::Result<()> {
     let to_json = |v: &[String]| serde_json::to_string(v).unwrap_or_else(|_| "[]".to_string());
     conn.execute(
         "INSERT INTO detected_projects \
-            (path, name, languages, frameworks, dependencies, last_activity, detection_confidence, updated_at) \
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, datetime('now')) \
+            (path, name, languages, frameworks, dependencies, last_activity, detection_confidence, scratch, updated_at) \
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, datetime('now')) \
          ON CONFLICT(path) DO UPDATE SET \
             name = excluded.name, \
             languages = excluded.languages, \
@@ -1053,6 +1067,7 @@ fn upsert_detected_project(
             dependencies = excluded.dependencies, \
             last_activity = excluded.last_activity, \
             detection_confidence = excluded.detection_confidence, \
+            scratch = excluded.scratch, \
             updated_at = datetime('now')",
         rusqlite::params![
             path,
@@ -1062,6 +1077,7 @@ fn upsert_detected_project(
             to_json(dependencies),
             last_activity,
             confidence,
+            i64::from(scratch),
         ],
     )?;
     Ok(())
@@ -1109,6 +1125,7 @@ mod tests {
                 name TEXT NOT NULL,
                 languages TEXT, frameworks TEXT, dependencies TEXT,
                 last_activity TEXT, detection_confidence REAL DEFAULT 0.5,
+                scratch INTEGER NOT NULL DEFAULT 0,
                 created_at TEXT DEFAULT (datetime('now')),
                 updated_at TEXT DEFAULT (datetime('now'))
             );",
@@ -1127,6 +1144,7 @@ mod tests {
             &deps,
             "2026-06-09 10:00:00",
             0.8,
+            false,
         )
         .unwrap();
 
@@ -1151,6 +1169,7 @@ mod tests {
             &deps,
             "2026-06-10 10:00:00",
             0.9,
+            true,
         )
         .unwrap();
         let total: i64 = conn
@@ -1165,6 +1184,17 @@ mod tests {
             )
             .unwrap();
         assert_eq!(new_name, "alpha-renamed");
+        // The scratch verdict is refreshed by a rescan like every other
+        // column — a directory the user newly gitignores becomes labelled
+        // without waiting for the row to be deleted.
+        let scratch: i64 = conn
+            .query_row(
+                "SELECT scratch FROM detected_projects WHERE path = '/proj/a'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(scratch, 1, "rescan refreshes the scratch label");
     }
 
     // Temporal decay tests

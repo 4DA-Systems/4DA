@@ -337,6 +337,39 @@ fn plan_covered_osv_alert_is_regrouped_out_of_items_and_counts() {
 }
 
 #[test]
+fn a_dormant_project_notice_survives_a_plan_that_covers_its_packages() {
+    // The dormant summary is osv_verified and lists EVERY affected package, so
+    // the plan-coverage filter would drop it exactly when the plan happens to
+    // cover them all — re-silencing the dead repo at the last step, which is
+    // the failure AD-043 exists to end. It is a statement about a PROJECT, not
+    // a per-package advisory the plan can subsume.
+    let plan = EvidenceItem {
+        affected_deps: vec!["lodash".to_string(), "axios".to_string()],
+        lens_hints: LensHints::upgrade_plan(),
+        ..simple_item("plan-step", Urgency::High, Confidence::heuristic(0.9))
+    };
+    let notice = EvidenceItem {
+        affected_deps: vec!["lodash".to_string(), "axios".to_string()],
+        affected_projects: vec!["/dev/navcal".to_string()],
+        lens_hints: LensHints {
+            dormant_notice: true,
+            ..LensHints::preemption_only()
+        },
+        ..simple_item(
+            "dormant-notice:/dev/navcal",
+            Urgency::Watch,
+            Confidence::osv_verified(0.9),
+        )
+    };
+    let out = preemption_visible_feed(EvidenceFeed::from_items(vec![plan, notice]), &[]);
+    assert_eq!(out.total, 2);
+    assert!(
+        out.items.iter().any(|i| i.lens_hints.dormant_notice),
+        "the dormant notice is never regrouped away by plan coverage"
+    );
+}
+
+#[test]
 fn partially_covered_and_non_osv_items_are_never_regrouped() {
     let plan = EvidenceItem {
         affected_deps: vec!["lodash".to_string()],

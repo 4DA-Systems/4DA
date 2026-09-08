@@ -65,7 +65,14 @@ const PreemptionView = memo(function PreemptionView() {
   // (AD-035). Every item received here is rendered in exactly one section;
   // filtering or re-counting client-side would recreate the count drift the
   // 2026-08-31 audit caught (header 12/41/120 vs payload 15/67/149).
-  const { planItems, verifiedItems, assessedItems, developingItems, otherTargetItems } = useMemo(() => {
+  const {
+    planItems,
+    verifiedItems,
+    assessedItems,
+    developingItems,
+    otherTargetItems,
+    dormantNoticeItems,
+  } = useMemo(() => {
     const sorted = (feed?.items ?? [])
       .slice()
       .sort(
@@ -76,8 +83,14 @@ const PreemptionView = memo(function PreemptionView() {
     const assessed: EvidenceItem[] = [];
     const developing: EvidenceItem[] = [];
     const otherTarget: EvidenceItem[] = [];
+    // One quiet row per dormant project, rendered as a footer rather than
+    // among today's work. Checked FIRST: a dormant notice is an Alert with
+    // osv_verified provenance, so every later branch would claim it.
+    const dormant: EvidenceItem[] = [];
     for (const item of sorted) {
-      if (item.lens_hints.upgrade_plan) {
+      if (item.lens_hints.dormant_notice) {
+        dormant.push(item);
+      } else if (item.lens_hints.upgrade_plan) {
         plan.push(item);
       } else if (item.lens_hints.other_build_target) {
         otherTarget.push(item);
@@ -95,6 +108,7 @@ const PreemptionView = memo(function PreemptionView() {
       assessedItems: assessed,
       developingItems: developing,
       otherTargetItems: otherTarget,
+      dormantNoticeItems: dormant,
     };
   }, [feed]);
 
@@ -295,6 +309,33 @@ const PreemptionView = memo(function PreemptionView() {
             </section>
           )}
         </>
+      )}
+
+      {/* Dormant projects: named once, quietly, at the foot of the tab. A repo
+          the user still owns but has not touched was previously invisible
+          here (its lockfile fell below the relevance floor), and the fix must
+          not swing to N alarming rows about a repo nobody is deploying. */}
+      {dormantNoticeItems.length > 0 && (
+        <section
+          className="rounded-lg border border-border bg-bg-secondary px-4 py-3"
+          aria-label={t('preemption.dormant.title')}
+          data-testid="dormant-notices"
+        >
+          <h3 className="text-[11px] font-medium uppercase tracking-wider text-text-muted mb-2">
+            {t('preemption.dormant.title')}
+          </h3>
+          <ul className="space-y-1">
+            {dormantNoticeItems.map(item => (
+              <li
+                key={item.id}
+                className="text-xs text-text-secondary leading-relaxed"
+                title={item.explanation}
+              >
+                {item.title}
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       {feed && isFreeFloor && !isColdStart && <PreemptionFreeFloorNotice />}
