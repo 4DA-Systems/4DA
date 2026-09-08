@@ -89,14 +89,16 @@ pub fn collapse_dormant_alerts(items: &mut Vec<EvidenceItem>, liveness: &Project
 }
 
 fn is_collapsible(item: &EvidenceItem, liveness: &ProjectLiveness) -> bool {
+    // Upgrade-plan steps collapse too. Live 2026-09-08, first activation of
+    // the notice: navcal's 23 plan steps stayed in the feed at Medium and
+    // took the tab's first five rows above every live project, with the one
+    // Watch notice at the bottom — twenty-four rows for the project the
+    // notice exists to reduce to one. The plan snapshot the MCP reads is
+    // persisted BEFORE this collapse (`preemption::append_upgrade_plan_items`
+    // caps and persists first), so the in-app feed folding the steps changes
+    // nothing the MCP sees; the steps' packages are counted in the notice.
     matches!(item.kind, EvidenceKind::Alert)
         && !item.lens_hints.dormant_notice
-        // The Upgrade Plan is its own ranked lane with its own dormancy cap
-        // (`cap_dormant_items`, applied before the plan is persisted for the
-        // MCP to read). Folding a ranked "upgrade X" step into a security
-        // summary would misreport what it is, and would make the in-app feed
-        // disagree with the persisted snapshot.
-        && !item.lens_hints.upgrade_plan
         && liveness.all_dormant(&item.affected_projects)
 }
 
@@ -332,19 +334,43 @@ mod tests {
         assert_eq!(items.len(), 1);
     }
 
+    /// Live 2026-09-08: navcal's 23 upgrade-plan steps stayed in the feed at
+    /// Medium above every live project while the notice sat at the bottom.
+    /// A dormant project's plan steps fold into its notice (their packages
+    /// counted); an active project's plan step is never touched.
     #[test]
-    fn an_upgrade_plan_step_is_left_in_its_own_lane() {
-        // The plan has its own dormancy cap and its own persisted snapshot;
-        // folding a ranked step into a security summary would misreport it
-        // and make the feed disagree with what the MCP reads.
-        let mut items = vec![alert("a", "/dev/navcal", "lodash")];
-        items[0].lens_hints.upgrade_plan = true;
+    fn a_dormant_projects_upgrade_plan_steps_fold_into_its_notice() {
+        let mut items = vec![
+            alert("a", "/dev/navcal", "lodash"),
+            alert("b", "/dev/navcal", "vitest"),
+            alert("c", "/dev/live", "axios"),
+        ];
+        items[1].lens_hints.upgrade_plan = true;
+        items[2].lens_hints.upgrade_plan = true;
+        let collapsed = collapse_dormant_alerts(&mut items, &dormant(&["/dev/navcal"]));
         assert_eq!(
-            collapse_dormant_alerts(&mut items, &dormant(&["/dev/navcal"])),
-            0
+            collapsed, 2,
+            "the dormant project's alert AND its plan step collapse"
         );
-        assert_eq!(items.len(), 1);
-        assert!(items[0].lens_hints.upgrade_plan);
+        assert_eq!(items.len(), 2, "one live plan step plus one notice");
+        let live = items
+            .iter()
+            .find(|i| i.affected_projects == vec!["/dev/live".to_string()])
+            .expect("the active project's plan step survives");
+        assert!(live.lens_hints.upgrade_plan && !live.lens_hints.dormant_notice);
+        let notice = items
+            .iter()
+            .find(|i| i.lens_hints.dormant_notice)
+            .expect("one notice for the dormant project");
+        assert_eq!(
+            notice.affected_deps,
+            vec!["lodash".to_string(), "vitest".to_string()]
+        );
+        assert!(notice.title.contains("2 known vulnerable packages"));
+        assert!(
+            !notice.lens_hints.upgrade_plan,
+            "the notice is not a plan step"
+        );
     }
 
     #[test]
