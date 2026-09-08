@@ -1055,3 +1055,22 @@ The id parsed from the TITLE is always a lookup candidate
 (`item_advisory_ids`): the security fast path passed none, so an osv row
 linking to NVD reached the mirror with no id at all — the v34 snapshot run
 caught what a unit fixture with a GitHub-advisory URL never could.
+
+---
+
+### One advisory, two severities, by a scope rule (2026-09-08, AD-040)
+
+**Symptom.** After the v35 activation, the Preemption tab graded sandbox
+(transitive in paddle-webhook, source label critical) Critical, while the
+Brief's alert and the AI synthesis for the same advisory said
+"high-severity".
+
+**Root cause.** Both surfaces read the same source tier; the Brief's alert
+path (`preemption::rank_osv_urgency`) then discounts a transitive-only
+Critical to High, and the upgrade plan applied only its dev-only discount.
+Phase 120 unified the TIER; it did not unify the scope rules layered on it.
+
+**The rule.** The plan applies the same scope discounts as the alert path
+(`evidence::upgrade_plan`: dev-only one level, transitive-only Critical →
+High). When two surfaces share a tier and still disagree, look for a rule
+one of them applies after the tier — and move it to both.
