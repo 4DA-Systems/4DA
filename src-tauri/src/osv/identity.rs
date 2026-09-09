@@ -147,6 +147,88 @@ pub fn cluster_severity_tier(cluster: &[&MatchedAdvisory]) -> Option<&'static st
         .min_by_key(|t| tier_rank(t))
 }
 
+// ============================================================================
+// Exposure identity (AD-044)
+// ============================================================================
+
+/// Split one package's matched advisories into groups that are each true on
+/// their own — the projects sharing a group all carry exactly its advisories.
+///
+/// A package is installed at whatever version each project pinned, so an
+/// advisory applies per PROJECT. Folding all of a package's advisories into one
+/// row and grading it by the most urgent lends that severity to every project
+/// the row names. Live 2026-09-09, Preemption's #1 row: "Upgrade vitest to
+/// >= 4.1.11 — clears 2 advisories across 2 projects", **critical**, naming
+/// `navcal` (3.2.4) and `D:\4DA` (3.2.6) — GHSA-5xrq-8626-4rwp is fixed in
+/// exactly 3.2.6, so D:\4DA was never exposed to the critical. The AI brief then
+/// told the reader to "bump to a clean version of `vitest@2` or above": 2.x is
+/// affected by BOTH advisories.
+///
+/// Both aggregators over `MatchedAdvisory` use this — the upgrade plan
+/// (`evidence::upgrade_plan`) and the alert path (`preemption`) — so the
+/// Signal-tier feed, the free floor and the Brief cannot disagree about who is
+/// exposed to what.
+///
+/// One group — one version, or several versions the same advisories cover — is
+/// the un-split behavior. Groups and their project lists are sorted, so the
+/// output is deterministic.
+pub fn split_by_exposure<'a>(
+    advisories: &[&'a MatchedAdvisory],
+) -> Vec<(Vec<String>, Vec<&'a MatchedAdvisory>)> {
+    use std::collections::{BTreeMap, BTreeSet};
+
+    // A match always names at least one affected project — the matcher emits one
+    // only when an instance matched. If that ever stops holding, keep the single
+    // group so no advisory is dropped on the floor.
+    if advisories.iter().any(|a| a.project_paths.is_empty()) {
+        let mut projects: Vec<String> = advisories
+            .iter()
+            .flat_map(|a| a.project_paths.iter().cloned())
+            .collect();
+        projects.sort();
+        projects.dedup();
+        return vec![(projects, advisories.to_vec())];
+    }
+
+    let mut per_project: BTreeMap<&str, BTreeSet<usize>> = BTreeMap::new();
+    for (idx, adv) in advisories.iter().enumerate() {
+        for project in &adv.project_paths {
+            per_project.entry(project.as_str()).or_default().insert(idx);
+        }
+    }
+
+    let mut by_advisory_set: BTreeMap<BTreeSet<usize>, Vec<String>> = BTreeMap::new();
+    for (project, applicable) in per_project {
+        by_advisory_set
+            .entry(applicable)
+            .or_default()
+            .push(project.to_string());
+    }
+
+    by_advisory_set
+        .into_iter()
+        .map(|(applicable, projects)| {
+            (
+                projects,
+                applicable.iter().map(|&idx| advisories[idx]).collect(),
+            )
+        })
+        .collect()
+}
+
+/// The id discriminator for a package that split into several groups: the
+/// alphabetically-first advisory id of THIS group. `None` keeps the id a
+/// package's row has always had, so triage state on every unsplit row survives.
+pub fn exposure_key(split: bool, advisories: &[&MatchedAdvisory]) -> Option<String> {
+    split.then(|| {
+        advisories
+            .iter()
+            .map(|a| a.advisory_id.to_lowercase())
+            .min()
+            .unwrap_or_default()
+    })
+}
+
 fn canonical_tier(label: &str) -> Option<&'static str> {
     match label {
         "critical" => Some("critical"),
@@ -198,6 +280,106 @@ mod tests {
             aliases: aliases.iter().map(|s| s.to_string()).collect(),
             severity_label: label.map(str::to_string),
         }
+    }
+
+    /// AD-044: `vitest` live 2026-09-09 — the critical advisory reaches only
+    /// the project on 3.2.4; the medium reaches both. Two exposures, and the
+    /// project on the critical's own fix version is not in the critical's group.
+    #[test]
+    fn split_by_exposure_separates_projects_with_different_advisory_sets() {
+        let mut crit = adv(
+            "GHSA-crit",
+            "vitest",
+            Some("3.2.6"),
+            "crit",
+            &[],
+            Some(9.8),
+            None,
+        );
+        crit.project_paths = vec!["/behind".to_string()];
+        let mut med = adv(
+            "GHSA-med",
+            "vitest",
+            Some("4.1.11"),
+            "med",
+            &[],
+            Some(5.9),
+            None,
+        );
+        med.project_paths = vec!["/behind".to_string(), "/current".to_string()];
+
+        let groups = split_by_exposure(&[&crit, &med]);
+        assert_eq!(groups.len(), 2, "two exposures");
+
+        let (behind_projects, behind_advs) = groups
+            .iter()
+            .find(|(p, _)| p == &vec!["/behind".to_string()])
+            .expect("the exposed project has its own group");
+        assert_eq!(behind_projects.len(), 1);
+        assert_eq!(behind_advs.len(), 2, "it carries both advisories");
+
+        let (_, current_advs) = groups
+            .iter()
+            .find(|(p, _)| p == &vec!["/current".to_string()])
+            .expect("the project on the fix version has its own group");
+        assert_eq!(current_advs.len(), 1, "only the advisory it is exposed to");
+        assert_eq!(current_advs[0].advisory_id, "GHSA-med");
+
+        // Split -> a discriminator; unsplit -> the id the row always had.
+        assert_eq!(
+            exposure_key(true, current_advs),
+            Some("ghsa-med".to_string())
+        );
+        assert_eq!(exposure_key(false, current_advs), None);
+    }
+
+    /// The common case: every project carries the same advisories, so nothing
+    /// splits and the caller keeps its single row and its stable id.
+    #[test]
+    fn split_by_exposure_keeps_one_group_when_every_project_shares_the_set() {
+        let mut a = adv(
+            "GHSA-a",
+            "lodash",
+            Some("4.17.21"),
+            "a",
+            &[],
+            Some(7.5),
+            None,
+        );
+        a.project_paths = vec!["/x".to_string(), "/y".to_string()];
+        let mut b = adv(
+            "GHSA-b",
+            "lodash",
+            Some("4.17.21"),
+            "b",
+            &[],
+            Some(5.0),
+            None,
+        );
+        b.project_paths = vec!["/y".to_string(), "/x".to_string()];
+
+        let groups = split_by_exposure(&[&a, &b]);
+        assert_eq!(groups.len(), 1);
+        assert_eq!(
+            groups[0].0,
+            vec!["/x".to_string(), "/y".to_string()],
+            "projects come back sorted"
+        );
+        assert_eq!(groups[0].1.len(), 2);
+    }
+
+    /// A match with no project attribution must never disappear: fall back to
+    /// one group holding every advisory.
+    #[test]
+    fn split_by_exposure_never_drops_an_unattributed_advisory() {
+        let mut a = adv("GHSA-a", "pkg", Some("2.0.0"), "a", &[], Some(7.5), None);
+        a.project_paths = vec![];
+        let b = adv("GHSA-b", "pkg", Some("2.0.0"), "b", &[], Some(5.0), None);
+
+        let groups = split_by_exposure(&[&a, &b]);
+        assert_eq!(groups.len(), 1, "one group, nothing lost");
+        assert_eq!(groups[0].1.len(), 2);
+        assert_eq!(groups[0].0, vec!["/p".to_string()]);
     }
 
     /// Phase 120: the GHSA row lists the RUSTSEC id as an alias; the RUSTSEC

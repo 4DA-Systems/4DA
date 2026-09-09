@@ -492,6 +492,234 @@ fn cross_project_multiplicity_widens_blast_radius_and_ranks_up() {
     );
 }
 
+// ---------------------------------------------------------------------------
+// One row, one situation (live 2026-09-09). `vitest` was the tab's #1 row —
+// "Upgrade vitest to >= 4.1.11 — clears 2 advisories across 2 projects",
+// CRITICAL, naming navcal (3.2.4) and D:\4DA (3.2.6). The critical advisory is
+// fixed in exactly 3.2.6, so D:\4DA was never affected by it; the AI brief then
+// told the reader to "bump to vitest@2 or above" — into versions that ARE
+// affected. A row must be true for every project it names.
+// ---------------------------------------------------------------------------
+
+#[test]
+fn an_advisory_only_one_project_is_exposed_to_does_not_grade_the_others() {
+    let db = test_db();
+    // Same package, two versions. The critical advisory is fixed at the version
+    // the second project already runs; the medium one covers both.
+    db.store_dependency("/proj/behind", "vitest", Some("3.2.4"), "npm", false, None)
+        .unwrap();
+    db.store_dependency("/proj/current", "vitest", Some("3.2.6"), "npm", false, None)
+        .unwrap();
+    advisory(&db, "GHSA-crit-5xrq", "vitest", "npm", "3.2.6", 9.8);
+    advisory(&db, "GHSA-med-82fw", "vitest", "npm", "4.1.11", 5.9);
+
+    let plan = build_upgrade_plan(&db);
+    for item in &plan {
+        validate_item(item).unwrap_or_else(|e| panic!("invalid item {}: {e:?}", item.id));
+    }
+    assert_eq!(
+        plan.len(),
+        2,
+        "two exposures -> two rows: {:?}",
+        plan.iter().map(|i| &i.title).collect::<Vec<_>>()
+    );
+
+    let behind = plan
+        .iter()
+        .find(|i| i.affected_projects == vec!["/proj/behind".to_string()])
+        .expect("the project on 3.2.4 has its own row");
+    assert_eq!(
+        behind.urgency,
+        Urgency::Critical,
+        "3.2.4 IS exposed to the critical advisory"
+    );
+    assert!(
+        behind.title.contains("clears 2 advisories"),
+        "title: {}",
+        behind.title
+    );
+
+    let current = plan
+        .iter()
+        .find(|i| i.affected_projects == vec!["/proj/current".to_string()])
+        .expect("the project on 3.2.6 has its own row");
+    assert_eq!(
+        current.urgency,
+        Urgency::Medium,
+        "3.2.6 is the critical advisory's FIX version — only the medium applies"
+    );
+    assert!(
+        current.title.contains("clears 1 advisory"),
+        "title: {}",
+        current.title
+    );
+    assert!(
+        current.explanation.contains("GHSA-med-82fw")
+            && !current.explanation.contains("GHSA-crit-5xrq"),
+        "a row cites only the advisories it is exposed to: {}",
+        current.explanation
+    );
+
+    // Distinct ids, so triage/snooze on one exposure never silences the other.
+    assert_ne!(behind.id, current.id, "split rows need distinct ids");
+    assert!(
+        behind.id.starts_with("upgrade-plan:npm:vitest"),
+        "id: {}",
+        behind.id
+    );
+}
+
+#[test]
+fn a_package_at_one_version_everywhere_keeps_its_single_row_and_id() {
+    let db = test_db();
+    for p in ["/proj/a", "/proj/b"] {
+        db.store_dependency(p, "lodash", Some("4.17.20"), "npm", false, None)
+            .unwrap();
+    }
+    advisory(&db, "GHSA-lodash-1", "lodash", "npm", "4.17.21", 7.5);
+    advisory(&db, "GHSA-lodash-2", "lodash", "npm", "4.17.21", 5.0);
+
+    let plan = build_upgrade_plan(&db);
+    assert_eq!(plan.len(), 1, "one exposure -> one row, as before");
+    assert_eq!(
+        plan[0].id, "upgrade-plan:npm:lodash",
+        "an unsplit package keeps the id it always had"
+    );
+    assert_eq!(
+        plan[0].affected_projects,
+        vec!["/proj/a".to_string(), "/proj/b".to_string()]
+    );
+    assert!(
+        plan[0].title.contains("across 2 projects"),
+        "title: {}",
+        plan[0].title
+    );
+}
+
+#[test]
+fn a_dev_only_install_elsewhere_does_not_discount_a_row_it_is_not_part_of() {
+    let db = test_db();
+    // Exposed at 1.0.0 as a RUNTIME dep here …
+    db.store_dependency("/proj/runtime", "pkg", Some("1.0.0"), "npm", false, None)
+        .unwrap();
+    // … and as a dev dep there, at a version only the wider advisory reaches.
+    db.store_dependency("/proj/dev", "pkg", Some("2.0.0"), "npm", true, None)
+        .unwrap();
+    advisory(&db, "GHSA-narrow", "pkg", "npm", "2.0.0", 9.8);
+    advisory(&db, "GHSA-wide", "pkg", "npm", "3.0.0", 9.8);
+
+    let plan = build_upgrade_plan(&db);
+    let runtime = plan
+        .iter()
+        .find(|i| i.affected_projects == vec!["/proj/runtime".to_string()])
+        .expect("the runtime exposure has its own row");
+    assert_eq!(
+        runtime.urgency,
+        Urgency::Critical,
+        "the dev-only install in the OTHER project must not downrank this row"
+    );
+    let dev = plan
+        .iter()
+        .find(|i| i.affected_projects == vec!["/proj/dev".to_string()])
+        .expect("the dev exposure has its own row");
+    assert_eq!(
+        dev.urgency,
+        Urgency::High,
+        "dev-only here -> the labelled one-level discount still applies"
+    );
+}
+
+/// Production-shape verification against a SNAPSHOT of the founder database
+/// (`recipe-live-verify-rust-on-db-snapshot`). Fixtures cannot reproduce this:
+/// it needs a real mirror, a real multi-version inventory, and a package whose
+/// advisories reach some projects and not others.
+///
+/// Take the snapshot with better-sqlite3's online `.backup()` (never a file
+/// copy — the live DB is WAL), then:
+///   `FOURDA_VERIFY_DB=<snapshot> cargo test --lib \
+///      every_plan_row_is_true_for_every_project_it_names -- --ignored --nocapture`
+#[test]
+#[ignore = "requires FOURDA_VERIFY_DB pointing at a founder-DB snapshot"]
+fn every_plan_row_is_true_for_every_project_it_names() {
+    let Ok(path) = std::env::var("FOURDA_VERIFY_DB") else {
+        panic!("set FOURDA_VERIFY_DB to a snapshot path");
+    };
+    crate::register_sqlite_vec_extension();
+    let db = Database::new(std::path::Path::new(&path)).expect("open snapshot");
+    let matches = crate::osv::matching::get_matched_advisories(&db).expect("matcher");
+    let plan = build_upgrade_plan(&db);
+
+    // Index the matcher's own attribution: (ecosystem, package) -> project -> ids.
+    use std::collections::{BTreeMap, BTreeSet};
+    let mut exposure: BTreeMap<(String, String), BTreeMap<String, BTreeSet<String>>> =
+        BTreeMap::new();
+    for m in &matches {
+        if !m.is_version_confirmed {
+            continue;
+        }
+        let key = (m.ecosystem.to_lowercase(), m.package_name.to_lowercase());
+        for project in &m.project_paths {
+            exposure
+                .entry(key.clone())
+                .or_default()
+                .entry(project.clone())
+                .or_default()
+                .insert(m.advisory_id.clone());
+        }
+    }
+
+    let mut checked = 0usize;
+    for item in &plan {
+        validate_item(item).unwrap_or_else(|e| panic!("invalid item {}: {e:?}", item.id));
+        // The folded maintenance item speaks for many packages by design.
+        if item.id == "upgrade-plan:informational" || item.affected_projects.len() < 2 {
+            continue;
+        }
+        let pkg = item.affected_deps[0].to_lowercase();
+        let Some(per_project) = exposure
+            .iter()
+            .find(|((_, p), _)| p == &pkg)
+            .map(|(_, v)| v)
+        else {
+            continue;
+        };
+        let sets: Vec<&BTreeSet<String>> = item
+            .affected_projects
+            .iter()
+            .filter_map(|p| per_project.get(p))
+            .collect();
+        if sets.len() < 2 {
+            continue;
+        }
+        checked += 1;
+        let first = sets[0];
+        for (i, s) in sets.iter().enumerate() {
+            assert_eq!(
+                *s,
+                first,
+                "row {} names {} projects with DIFFERENT advisory sets \
+                 (project {} carries {:?}, the first carries {:?}) — its severity \
+                 is therefore wrong for at least one of them",
+                item.id,
+                item.affected_projects.len(),
+                item.affected_projects[i],
+                s,
+                first,
+            );
+        }
+    }
+    println!(
+        "plan rows: {}, multi-project rows cross-checked against the matcher: {checked}",
+        plan.len()
+    );
+    for item in &plan {
+        println!(
+            "  {:?} {} — {:?}",
+            item.urgency, item.title, item.affected_projects
+        );
+    }
+}
+
 #[test]
 fn long_project_list_never_produces_an_over_length_citation_note() {
     // Regression for the CitationNoteTooLong bug fixed in #316 (truncate budgeted

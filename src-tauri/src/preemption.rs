@@ -476,12 +476,41 @@ fn collapse_direct_dep_targets(matches: &[DirectRuntimeDep]) -> (Vec<String>, Ve
     (projects.into_iter().collect(), deps.into_iter().collect())
 }
 
+/// How an OSV alert names what it is about.
+///
+/// NEVER interpolate a non-version where a version goes. The old form was
+/// always `"{pkg}@{version_str}"`, and with several installed versions
+/// `version_str` was the prose "2 affected installed versions" — so the alert
+/// read *"vitest@2 affected installed versions: 2 known vulnerabilities"*. Live
+/// 2026-09-09 the Brief's model read the `vitest@2` out of that and wrote "bump
+/// to a clean version of `vitest@2` or above"; vitest 2.x is affected by BOTH
+/// advisories, so the product advised installing the vulnerability. A subject is
+/// either `pkg@<a real version>` or it carries no `@` at all.
+fn alert_subject(package: &str, installed_versions: &std::collections::BTreeSet<String>) -> String {
+    match installed_versions.len() {
+        0 => package.to_string(),
+        1 => format!(
+            "{package}@{}",
+            installed_versions
+                .first()
+                .map(String::as_str)
+                .unwrap_or("unknown")
+        ),
+        count => format!("{package} (across {count} installed versions)"),
+    }
+}
+
 fn osv_group_scope(
     group: &[&crate::osv::types::MatchedAdvisory],
+    projects: &[String],
 ) -> (Option<bool>, Option<bool>, &'static str) {
+    // Scoped to the projects the alert names (AD-044): an install in a project
+    // this alert does not speak for must not set its scope label or its
+    // dev/transitive discount.
     let instances = group
         .iter()
         .flat_map(|matched| matched.dependency_instances.iter())
+        .filter(|instance| projects.iter().any(|p| p == &instance.project_path))
         .filter(|instance| instance.is_version_confirmed);
 
     let mut has_direct_runtime = false;
@@ -572,7 +601,19 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
 
     pkg_groups
         .into_values()
-        .map(|group| {
+        .flat_map(|group| {
+            // One alert per EXPOSURE, not per package name (AD-044): projects
+            // sharing a package but not its advisory set get their own alert, so
+            // a version that is not affected never carries another version's
+            // severity. One group is the previous behavior and the previous id.
+            let exposures = crate::osv::identity::split_by_exposure(&group);
+            let split = exposures.len() > 1;
+            exposures
+                .into_iter()
+                .map(move |(all_projects, group)| (all_projects, group, split))
+                .collect::<Vec<_>>()
+        })
+        .map(|(all_projects, group, split)| {
             let first = group[0];
             // Phase 120: one cluster per VULNERABILITY. The mirror holds a
             // row per id, and OSV publishes the same bug as GHSA + RUSTSEC
@@ -606,7 +647,7 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
                 })
                 .min_by_key(|u| urgency_rank(u))
                 .unwrap_or(AlertUrgency::Watch);
-            let (dep_is_direct, dep_is_dev, scope_label) = osv_group_scope(&group);
+            let (dep_is_direct, dep_is_dev, scope_label) = osv_group_scope(&group, &all_projects);
             let urgency = rank_osv_urgency(raw_urgency, dep_is_direct, dep_is_dev);
             // De-prioritise advisories for deps not built on the host platform
             // (e.g. a Linux-only crate on Windows). Never hidden — capped to Watch,
@@ -656,14 +697,6 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
                 })
                 .cloned();
 
-            // Merge all project paths
-            let mut all_projects: Vec<String> = group
-                .iter()
-                .flat_map(|m| m.project_paths.iter().cloned())
-                .collect();
-            all_projects.sort();
-            all_projects.dedup();
-
             let project_display = if all_projects.is_empty() {
                 "your projects".to_string()
             } else {
@@ -676,9 +709,12 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
                 names.join(", ")
             };
 
+            // Versions of the projects this alert names, not of every project
+            // that happens to hold the package (AD-044).
             let installed_versions: std::collections::BTreeSet<String> = group
                 .iter()
                 .flat_map(|matched| matched.dependency_instances.iter())
+                .filter(|instance| all_projects.iter().any(|p| p == &instance.project_path))
                 .filter(|instance| instance.is_version_confirmed)
                 .filter_map(|instance| instance.installed_version.clone())
                 .collect();
@@ -687,14 +723,7 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
             } else {
                 None
             };
-            let version_str = match installed_versions.len() {
-                0 => "unknown".to_string(),
-                1 => installed_versions
-                    .first()
-                    .cloned()
-                    .unwrap_or_else(|| "unknown".to_string()),
-                count => format!("{count} affected installed versions"),
-            };
+            let subject = alert_subject(&first.package_name, &installed_versions);
             let fix_str = best_fix
                 .as_deref()
                 .map(|f| format!(" Update to >= {f}."))
@@ -710,9 +739,8 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
                 truncate(&first.summary, 120).to_string()
             } else {
                 format!(
-                    "{pkg}@{ver}: {count} known {vuln_word}",
-                    pkg = first.package_name,
-                    ver = version_str,
+                    "{subject}: {count} known {vuln_word}",
+                    subject = subject,
                     count = advisory_count,
                     vuln_word = vuln_word,
                 )
@@ -744,12 +772,11 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
                 ""
             };
             let explanation = format!(
-                "{ids} ({count} {vuln_word}) affect {pkg}@{ver} in {projects}. Scope: {scope}.{fix}{reach}",
+                "{ids} ({count} {vuln_word}) affect {subject} in {projects}. Scope: {scope}.{fix}{reach}",
                 ids = ids_display,
                 count = advisory_count,
                 vuln_word = vuln_word,
-                pkg = first.package_name,
-                ver = version_str,
+                subject = subject,
                 projects = project_display,
                 scope = scope_label,
                 fix = fix_str,
@@ -807,8 +834,19 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
                 },
             ];
 
+            // An unsplit package keeps the id it has always had; only a package
+            // that split needs a discriminator, so triage on one exposure can
+            // never silence the other.
+            let id = match crate::osv::identity::exposure_key(split, &group) {
+                Some(key) => format!(
+                    "osv-pkg-{}-{}-{}",
+                    first.package_name, first.ecosystem, key
+                ),
+                None => format!("osv-pkg-{}-{}", first.package_name, first.ecosystem),
+            };
+
             PreemptionAlert {
-                id: format!("osv-pkg-{}-{}", first.package_name, first.ecosystem),
+                id,
                 alert_type: PreemptionType::SecurityAdvisory,
                 title,
                 explanation,
@@ -2893,6 +2931,35 @@ mod tests {
         ));
     }
 
+    /// AD-044: the multi-version subject must never read as a version. The old
+    /// form was always "{pkg}@{version_str}", and `version_str` for several
+    /// versions was the prose "2 affected installed versions" — so the alert
+    /// said "vitest@2 affected installed versions: 2 known vulnerabilities" and
+    /// the Brief's model read "vitest@2" out of it, advising a bump to a version
+    /// line that IS affected. A subject is either `pkg@<a real version>` or it
+    /// carries no `@` at all.
+    #[test]
+    fn a_multi_version_subject_never_reads_as_a_version() {
+        use std::collections::BTreeSet;
+        let set = |vs: &[&str]| -> BTreeSet<String> { vs.iter().map(|v| v.to_string()).collect() };
+
+        assert_eq!(alert_subject("vitest", &set(&["3.2.6"])), "vitest@3.2.6");
+
+        let many = alert_subject("vitest", &set(&["3.2.4", "3.2.6"]));
+        assert_eq!(many, "vitest (across 2 installed versions)");
+        assert!(
+            !many.contains('@'),
+            "a subject with no single version must not fake one: {many}"
+        );
+        // The exact shape the Brief mis-read, pinned as gone.
+        assert!(
+            !many.contains("vitest@2"),
+            "the old form produced 'vitest@2 affected installed versions': {many}"
+        );
+
+        assert_eq!(alert_subject("vitest", &set(&[])), "vitest");
+    }
+
     #[test]
     fn osv_group_scope_prefers_direct_runtime_over_weaker_scopes() {
         let matched = crate::osv::types::MatchedAdvisory {
@@ -2929,12 +2996,25 @@ mod tests {
             ],
         };
 
+        let both = vec!["/direct".to_string(), "/transitive".to_string()];
         assert_eq!(
-            osv_group_scope(&[&matched]),
+            osv_group_scope(&[&matched], &both),
             (
                 Some(true),
                 Some(false),
                 "direct in at least one project; weaker scope in others"
+            )
+        );
+
+        // AD-044: the scope is the scope of the projects the alert NAMES. An
+        // alert speaking only for /transitive must not inherit /direct's
+        // "direct dependency" label — nor its absence of a discount.
+        assert_eq!(
+            osv_group_scope(&[&matched], &["/transitive".to_string()]),
+            (
+                Some(false),
+                Some(false),
+                "transitive dependency (dev/runtime reachability unknown)"
             )
         );
     }

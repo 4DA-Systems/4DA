@@ -1137,3 +1137,65 @@ consistency and cost the whole point of the notice.
 notice (`evidence::dormant_notice::is_collapsible`); the persisted plan
 snapshot is untouched. When a rule exists "so two surfaces agree", check
 the ORDER the surfaces are built in before believing they would disagree.
+
+---
+
+### One row, two truths: a shared package graded by the worst project (2026-09-09, AD-044)
+
+**Symptom.** The Preemption tab's #1 row: "Upgrade vitest to >= 4.1.11 —
+clears 2 advisories across 2 projects", **critical**, naming `navcal`
+(3.2.4) and `D:\4DA` (3.2.6). The critical advisory
+(GHSA-5xrq-8626-4rwp) is fixed in exactly 3.2.6 — D:\4DA was never
+exposed to it. The AI brief then read the row back as "vitest in d:/4da
+has 2 known vulnerabilities at CRITICAL severity … bump to a clean
+version of `vitest@2` or above": 2.x is affected by BOTH advisories, so
+the product advised a downgrade INTO the vulnerability. The same row also
+escaped the dormant collapse (AD-043), which folds a row only when EVERY
+project it names is dormant — so a project quiet for 295 days put a
+Critical at the top of a live feed.
+
+**Root cause.** `evidence::upgrade_plan::aggregate_by_package` folded a
+package's advisories across projects "so the same package across projects
+folds into one step", then graded the row by the most urgent of them and
+named the union of their projects. A package is installed at whatever
+version each project pinned, so an advisory applies per PROJECT — the
+aggregation discarded the very attribution (`MatchedAdvisory::project_paths`,
+`dependency_instances`) the matcher had already computed correctly.
+
+**The mechanism of the bad advice, measured.** The alert's title was
+always `"{pkg}@{version_str}"`, and `version_str` for several installed
+versions was the prose `"{count} affected installed versions"` — so the
+alert literally read *"vitest@2 affected installed versions: 2 known
+vulnerabilities"*. The model read the `vitest@2` out of it. **A version
+slot holds a version or nothing** (`alert_subject`): `pkg@<a real
+version>`, else a form with no `@` at all. Do not fix a model's misread
+in the prompt when the string it misread is wrong.
+
+**The rule.** Projects carrying the identical advisory set share a row;
+a project with a different set gets its own
+(`osv::identity::split_by_exposure`), and every instance-derived judgement
+(dev-only, transitive-only, fixable-now) is scoped to the projects the row
+names. One cohort — one version, or several the same advisories cover —
+is the previous behavior, and keeps the previous item id. **An aggregate
+row must be true for every member it names; if it cannot be, it is two
+rows.**
+
+---
+
+### A gap counted the signals it had already disqualified (2026-09-09)
+
+**Symptom.** Blind Spots: "sha2 (crates.io) — 2 updates to review" and
+"ed25519-dalek (crates.io) — 2 updates to review", for deps whose only
+rows were registry releases announcing a version already installed.
+
+**Root cause.** `count_signal_types_for_dep_conn` correctly counts such a
+row in no bucket (the 2026-09-07 fix), but `uncovered_dep_to_evidence_item`
+falls back to the RAW `available_signal_count` when every bucket is zero —
+so the row asserted work the breakdown had just disproved.
+
+**The rule.** A dep whose every signal the breakdown disqualified is not a
+coverage gap and is dropped before recommendations, the score and the
+counts (`is_still_a_coverage_gap`). A dep with NO signals at all is a
+different, real gap ("unmonitored") and is always kept. **When a
+narrowing rule and a raw count disagree, the raw count is not a fallback —
+it is the bug the narrowing rule was written to fix.**

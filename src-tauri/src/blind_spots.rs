@@ -444,6 +444,22 @@ fn generate_blind_spot_report_uncached() -> Result<BlindSpotReport> {
         (uc, wm, ms)
     };
 
+    // 6c. Drop the deps whose every signal the breakdown already disqualified —
+    // BEFORE recommendations, the score and the counts, so no surface claims a
+    // gap the item builder would render as "N updates to review" with nothing
+    // behind it. Runs on both scoping branches. See `is_still_a_coverage_gap`.
+    let reviewable_pre = uncovered.len();
+    let uncovered: Vec<UncoveredDep> = uncovered
+        .into_iter()
+        .filter(is_still_a_coverage_gap)
+        .collect();
+    info!(
+        target: "4da::blind_spots",
+        before = reviewable_pre,
+        after = uncovered.len(),
+        "nothing-left-to-review filter: uncovered deps"
+    );
+
     // 7. Generate recommendations
     let recommendations = generate_recommendations(&uncovered, &stale, &gaps);
 
@@ -2986,6 +3002,35 @@ fn consequence_urgency(d: &UncoveredDep, breakdown: Option<DepSignalBreakdown>) 
     } else {
         Urgency::Watch
     }
+}
+
+/// Does anything survive the breakdown's scrutiny?
+///
+/// `available_signal_count` is a RAW count of rows that mention the package.
+/// [`count_signal_types_for_dep_conn`] is what decides which of those rows are
+/// actually ABOUT it and actually new: a registry release of a different crate,
+/// or of a version the reader already runs, is counted in no bucket at all.
+fn breakdown_total(b: DepSignalBreakdown) -> u32 {
+    b.releases + b.analyses + b.security + b.other
+}
+
+/// Is this still a coverage gap once the breakdown has spoken?
+///
+/// Live 2026-09-08/09, Blind Spots: "sha2 (crates.io) — 2 updates to review" and
+/// "ed25519-dalek (crates.io) — 2 updates to review". Both deps' only rows were
+/// registry releases announcing a version already installed — which the breakdown
+/// correctly counts as nothing, so the item fell through to the raw-count fallback
+/// title and reported work that does not exist (doctrine rule 3: a number must
+/// inform an action; here the action is "review 2 updates" and there are none).
+///
+/// A dep with NO signals at all is a different and real gap — it is unmonitored,
+/// gets its own title, and is always kept.
+fn is_still_a_coverage_gap(d: &UncoveredDep) -> bool {
+    if d.available_signal_count == 0 {
+        return true;
+    }
+    let bare = bare_package_name(&d.name);
+    breakdown_total(count_signal_types_for_dep(bare, &installed_versions(bare))) > 0
 }
 
 /// The urgency a coverage gap will display, computed the way
@@ -6407,6 +6452,53 @@ mod tests {
         assert_eq!(
             count_signal_types_for_dep_conn(&conn, "axum", &[]).releases,
             1
+        );
+    }
+
+    /// 2026-09-08/09 live: with those same rules doing their job, `sha2` and
+    /// `ed25519-dalek` still showed as gaps — "sha2 (crates.io) — 2 updates to
+    /// review" — because the ITEM fell through to the raw `available_signal_count`
+    /// when every bucket came back zero. Nothing was left to review; the gap is
+    /// not a gap. A dep with no signals at all is a different, real gap.
+    #[test]
+    fn a_dep_whose_every_signal_was_disqualified_is_no_longer_a_gap() {
+        let base = UncoveredDep {
+            name: "sha2 (crates.io)".to_string(),
+            dep_type: "cargo".to_string(),
+            projects_using: vec!["d:/app".to_string()],
+            days_since_last_signal: 3,
+            available_signal_count: 2,
+            risk_level: "medium".to_string(),
+            match_type: "exact_registry".to_string(),
+            coverage_reason: None,
+            adapters_searched: vec![],
+            platform_active: true,
+        };
+
+        // The breakdown is what decides. Every bucket zero -> nothing to review.
+        assert_eq!(breakdown_total(DepSignalBreakdown::default()), 0);
+        assert!(
+            !is_still_a_coverage_gap(&base),
+            "2 raw signals the breakdown disqualified are not 2 updates to review"
+        );
+
+        // One general-discussion row is thin, but it IS something unread.
+        assert_eq!(
+            breakdown_total(DepSignalBreakdown {
+                other: 1,
+                ..Default::default()
+            }),
+            1
+        );
+
+        // No signals at all is the "unmonitored" gap — always kept.
+        let unmonitored = UncoveredDep {
+            available_signal_count: 0,
+            ..base
+        };
+        assert!(
+            is_still_a_coverage_gap(&unmonitored),
+            "a dep with no coverage at all is a real gap"
         );
     }
 

@@ -68,6 +68,14 @@ data/cache/
 # Local diagnostic report exports (Settings -> Privacy -> Export diagnostics)
 data/diagnostics/
 
+# Cargo's scratch for the ACE dependency-reachability walk. #653 moved cargo's
+# build metadata OUT of the scanned source trees (a `cargo tree` run wrote
+# `src-tauri/fourda-macros/target/.rustc_info.json`, the dev watcher saw a new
+# file under its own crate, and the running app restarted mid-scan) and into the
+# app data dir — but only the OLD location was ignored, so the new one has shown
+# as untracked in every `git status` since.
+data/cargo-resolve-target/
+
 # SQLite database files
 data/*.db
 data/*.db-shm
