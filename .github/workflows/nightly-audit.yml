@@ -5,14 +5,17 @@
 #      in the repo: src-tauri/ (desktop app) and relay/ (Team Relay server,
 #      a standalone crate that is not a src-tauri workspace member).
 #   2. cargo deny check          — licence/source/advisory policy (src-tauri)
-#   3. pnpm audit                — npm advisories against EVERY pnpm-lock.yaml
-#      in the repo: root (production deps only) plus each sub-project with
-#      its own lockfile (site/, paddle-webhook/, mcp-4da-server/).
-#      Sub-projects are audited with dev deps
-#      included: their trees are almost entirely devDependencies
-#      (eleventy, vercel CLI, tsc) and that build/deploy tooling IS the
-#      supply chain for what they ship — a --prod audit there would scan
-#      a near-empty set and stay blind to advisories Dependabot reports.
+#   3. scripts/audit-lockfiles.cjs — npm advisories against EVERY lockfile
+#      `git ls-files` reports, discovered rather than listed, using pnpm audit
+#      or npm audit per format. Root is production-only; sub-projects are
+#      audited with dev deps included, because their trees are almost entirely
+#      devDependencies (eleventy, vercel CLI, tsc) and that build/deploy
+#      tooling IS the supply chain for what they ship — a --prod audit there
+#      would scan a near-empty set and stay blind to advisories Dependabot
+#      reports. Do not reintroduce a hardcoded directory list: the one this
+#      replaced named four dirs while the repo tracked six lockfiles, and the
+#      two npm ones went unaudited until 4DA's own Preemption tab found a high
+#      js-yaml advisory in the vscode extension (2026-09-09).
 #
 # If ANY of the three fire, an issue is opened (or an existing
 # open one is reused) labelled `security` / `supply-chain` so it
@@ -129,7 +132,7 @@ jobs:
             echo "CARGO_DENY_EOF"
           } >> "$GITHUB_OUTPUT"
 
-      - name: pnpm audit (root + sub-lockfiles, high+)
+      - name: Dependency audit (every tracked lockfile, high+)
         id: pnpm_audit
         # No `pnpm install` needed: `pnpm audit` reads pnpm-lock.yaml only.
         # pnpm_config_pm_on_fail=ignore stops pnpm 11 from silently
@@ -140,27 +143,16 @@ jobs:
         continue-on-error: true
         run: |
           set +e
-          EXIT_CODE=0
-          OUTPUT=""
-          # ".:--prod" = root, production deps only (unchanged policy).
-          # Sub-projects include dev deps — see header comment for why.
-          for entry in ".:--prod" "site:" "paddle-webhook:" "mcp-4da-server:"; do
-            dir="${entry%%:*}"
-            flags="${entry#*:}"
-            RESULT=$(pnpm --dir "$dir" audit $flags --audit-level=high 2>&1)
-            CODE=$?
-            echo "=== pnpm audit $dir ${flags:+($flags)} — exit $CODE ==="
-            echo "$RESULT"
-            if [ "$CODE" -eq 0 ]; then
-              OUTPUT="${OUTPUT}[$dir] clean"$'\n'
-            else
-              EXIT_CODE=1
-              # Per-directory bound — see the cargo-audit step for why the single
-              # trailing `tail -c` silently discarded all but the last failure.
-              OUTPUT="${OUTPUT}[$dir] FAILED (exit $CODE):"$'\n'"$(printf '%s' "$RESULT" | tail -c 1200)"$'\n'
-            fi
-          done
+          # Discovery, not a list — the same script the merge gate runs, so the
+          # nightly can never report something that gate would have allowed.
+          # It covers every lockfile `git ls-files` reports (root pnpm stays
+          # --prod; sub-projects include dev deps) and picks pnpm audit or npm
+          # audit by format. The four-directory loop this replaces never saw
+          # the two tracked npm lockfiles.
+          OUTPUT=$(node scripts/audit-lockfiles.cjs 2>&1)
+          EXIT_CODE=$?
           set -e
+          printf '%s\n' "$OUTPUT"
           {
             echo "exit_code=$EXIT_CODE"
             echo "output<<PNPM_AUDIT_EOF"
@@ -244,7 +236,7 @@ jobs:
               '',
               section('cargo audit',     process.env.CARGO_AUDIT_EXIT, process.env.CARGO_AUDIT_OUT),
               section('cargo deny check', process.env.CARGO_DENY_EXIT, process.env.CARGO_DENY_OUT),
-              section('pnpm audit (root --prod + sub-lockfiles, high+)', process.env.PNPM_AUDIT_EXIT, process.env.PNPM_AUDIT_OUT),
+              section('dependency audit (every tracked lockfile, high+)', process.env.PNPM_AUDIT_EXIT, process.env.PNPM_AUDIT_OUT),
             ].join('\n');
 
             const title = streak === 1
@@ -323,7 +315,7 @@ jobs:
 
           [ "${CARGO_AUDIT_EXIT}" = "0" ] || annotate "cargo audit" "${CARGO_AUDIT_OUT}"
           [ "${CARGO_DENY_EXIT}"  = "0" ] || annotate "cargo deny check" "${CARGO_DENY_OUT}"
-          [ "${PNPM_AUDIT_EXIT}"  = "0" ] || annotate "pnpm audit" "${PNPM_AUDIT_OUT}"
+          [ "${PNPM_AUDIT_EXIT}"  = "0" ] || annotate "dependency audit" "${PNPM_AUDIT_OUT}"
 
           # Also mirror the whole thing into the run summary, which survives log
           # retention rules and is readable without expanding a failed step.
