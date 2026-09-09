@@ -3114,6 +3114,87 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
         })
         .collect();
 
+    // Ground truth for every package the brief can NAME, not just the handful
+    // it carries as alerts.
+    //
+    // Live 2026-09-09, brief 170: the brief held 2 alerts (js-yaml, sandbox)
+    // and wrote "Bump `hono` to >= 4.7.5". The true fix is 4.13.5 and the
+    // installed version is 4.13.3 — 4.7.5 is BELOW what is installed, i.e.
+    // advice to move INTO the vulnerability, and it appears in no source on
+    // record. `hono` reached the synthesis through `items[].matched_deps` (the
+    // CVE rows), so it had no `PackageFact` and the backstop had nothing to
+    // contradict. The control group is in the same data: `js-yaml`, which DID
+    // have a fact, stated the right version in 4 of 4 briefs while `hono`
+    // was wrong in 1 of 8.
+    //
+    // The allowlist above already admits `items[].matched_deps`; the version
+    // check must cover the same universe or it is a backstop with a hole the
+    // size of the brief's actual subject matter. Safe to widen only because
+    // `check_factual_claims` now faults an UPGRADE TARGET and not a release
+    // mention — see `sentence_has_upgrade_intent`.
+    //
+    // Versions MERGE per package. `check_factual_claims` resolves a package
+    // with `position()`, i.e. FIRST match wins, so pushing a second fact for
+    // the same name would hide it — and a legitimate fix version carried by a
+    // second advisory would then read as a fabrication and abstain a CORRECT
+    // brief. That is the worse failure, so the map is keyed by lowercase name.
+    let package_facts: Vec<crate::briefing_groundedness::PackageFact> = {
+        use std::collections::{BTreeMap, BTreeSet};
+        let mut merged: BTreeMap<String, (String, BTreeSet<String>)> = BTreeMap::new();
+        let mut absorb = |name: &str, versions: Vec<String>| {
+            let key = name.to_lowercase();
+            if key.is_empty() {
+                return;
+            }
+            let slot = merged
+                .entry(key)
+                .or_insert_with(|| (name.to_string(), BTreeSet::new()));
+            slot.1
+                .extend(versions.into_iter().filter(|v| !v.is_empty()));
+        };
+        for f in package_facts {
+            absorb(&f.name, f.versions);
+        }
+        // Advisory-bearing packages the brief may name. Same matcher the
+        // Preemption tab reads, so the facts and the tab cannot disagree.
+        match crate::get_database().and_then(|db| crate::osv::matching::get_matched_advisories(&db))
+        {
+            Ok(matches) => {
+                for m in &matches {
+                    if !packages.contains(&m.package_name.to_lowercase()) {
+                        continue; // the brief cannot name it; no need for a fact
+                    }
+                    absorb(
+                        &m.package_name,
+                        [
+                            m.installed_version.clone().unwrap_or_default(),
+                            m.fixed_version.clone().unwrap_or_default(),
+                        ]
+                        .to_vec(),
+                    );
+                }
+            }
+            // Fail OPEN: without the matcher we keep the alert-derived facts
+            // and check what we can. A brief with a narrower backstop beats no
+            // brief at all.
+            Err(e) => tracing::warn!(
+                target: "4da::briefing",
+                error = %e,
+                "could not widen version facts — checking alert packages only"
+            ),
+        }
+        merged
+            .into_values()
+            .filter(|(_, versions)| !versions.is_empty())
+            .map(
+                |(name, versions)| crate::briefing_groundedness::PackageFact {
+                    name,
+                    versions: versions.into_iter().collect(),
+                },
+            )
+            .collect()
+    };
+
     const GROUNDEDNESS_THRESHOLD: f32 = 0.65;
 
     let mut last_error: Option<String> = None;
