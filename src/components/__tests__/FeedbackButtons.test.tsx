@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { Mock } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 
 // ---------------------------------------------------------------------------
@@ -21,13 +22,31 @@ import { FeedbackButtons } from '../result-item/FeedbackButtons';
 import { makeItem } from '../../test/factories';
 import type { SourceRelevance, FeedbackAction } from '../../types';
 
+/**
+ * The prop's real signature. vitest 4 narrowed `vi.fn()`'s return from the
+ * permissive v3 shape to `Mock<Procedure | Constructable>`, which is NOT
+ * assignable to a specific callback type — so the old
+ * `ReturnType<typeof vi.fn>` produced 17× TS2322 here and nowhere else in the
+ * suite. Naming the signature once fixes every use site and documents what the
+ * component actually calls back with.
+ *
+ * Written in vitest 4's `vi.fn<(args) => ret>()` form; v3's was
+ * `vi.fn<[args], ret>()`, so this file cannot satisfy both majors at once —
+ * which is why it lands WITH the bump rather than ahead of it.
+ */
+type RecordInteraction = (
+  itemId: number,
+  actionType: FeedbackAction,
+  item: SourceRelevance,
+) => void;
+
 describe('FeedbackButtons', () => {
-  let mockOnRecordInteraction: ReturnType<typeof vi.fn>;
+  let mockOnRecordInteraction: Mock<RecordInteraction>;
   let defaultItem: SourceRelevance;
 
   beforeEach(() => {
     vi.clearAllMocks();
-    mockOnRecordInteraction = vi.fn();
+    mockOnRecordInteraction = vi.fn<RecordInteraction>();
     defaultItem = makeItem();
   });
 
