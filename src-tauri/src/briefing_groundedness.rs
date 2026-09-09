@@ -292,6 +292,15 @@ pub fn check_factual_claims(prose: &str, facts: &[PackageFact]) -> Vec<String> {
         if tokens[i].ends_with(|c: char| matches!(c, '.' | '!' | '?')) {
             continue;
         }
+        // Only an UPGRADE TARGET is faultable. A violation abstains the whole
+        // brief, so the check must fire exactly where the harm is — "bump X to
+        // <version>" — and nowhere else. A release mention for the same package
+        // ("hono 4.14.0 shipped") is legitimate news whose version is neither
+        // installed nor a fix, and faulting it would cost the reader a correct
+        // brief. Scoping to intent is what makes it safe to give MORE packages
+        // ground truth (see `monitoring_briefing`'s fact set): coverage goes up
+        // while the false-abstention surface goes down.
+        let upgrade_intent = sentence_has_upgrade_intent(&tokens, i);
         // Scan forward within the SAME sentence, stopping at the next package
         // mention, for version tokens to attribute to this package. Bounding to
         // the sentence prevents a version in a later sentence from being
@@ -305,13 +314,14 @@ pub fn check_factual_claims(prose: &str, facts: &[PackageFact]) -> Vec<String> {
                 .trim_matches(|c: char| !c.is_ascii_digit() && c != '.')
                 .trim_matches('.');
             if looks_like_version_token(v)
+                && upgrade_intent
                 && !fact
                     .versions
                     .iter()
                     .any(|allowed| version_matches(v, allowed))
             {
                 violations.push(format!(
-                    "{} cited version {} (on record: {})",
+                    "{} cited version {} as an upgrade target (on record: {})",
                     fact.name,
                     v,
                     fact.versions.join(", ")
@@ -324,6 +334,47 @@ pub fn check_factual_claims(prose: &str, facts: &[PackageFact]) -> Vec<String> {
         }
     }
     violations
+}
+
+/// Does the sentence containing token `i` tell the reader to MOVE to a version?
+///
+/// Scans the sentence the package mention sits in — backwards to the previous
+/// sentence end, forwards to this one's — for an upgrade verb. "Bump", "upgrade",
+/// "update", "pin", "move to", ">=" and "≥" are the shapes the synthesis uses
+/// when it is prescribing a target; a bare release mention has none of them.
+fn sentence_has_upgrade_intent(tokens: &[&str], i: usize) -> bool {
+    const VERBS: &[&str] = &[
+        "bump",
+        "bumping",
+        "upgrade",
+        "upgrading",
+        "update",
+        "updating",
+        "pin",
+        "pinning",
+        "downgrade",
+        "patch",
+        "patching",
+    ];
+    let ends_sentence = |t: &str| t.ends_with(|c: char| matches!(c, '.' | '!' | '?'));
+    // Back to the start of this sentence.
+    let mut start = i;
+    while start > 0 && !ends_sentence(tokens[start - 1]) {
+        start -= 1;
+    }
+    // Forward to the end of it.
+    let mut end = i;
+    while end < tokens.len() && !ends_sentence(tokens[end]) {
+        end += 1;
+    }
+    tokens[start..end.min(tokens.len())].iter().any(|t| {
+        let bare: String = t
+            .chars()
+            .filter(|c| c.is_alphanumeric() || *c == '>' || *c == '=' || *c == '≥')
+            .collect::<String>()
+            .to_lowercase();
+        VERBS.iter().any(|v| bare == *v) || bare.contains(">=") || bare.contains('≥')
+    })
 }
 
 /// A token like "1.16", "10.3.0", "1.12.2" — at least one dot between digits.
@@ -643,6 +694,50 @@ mod tests {
         let v = check_factual_claims(prose, &f);
         assert!(!v.is_empty(), "fabricated version should be flagged");
         assert!(v[0].contains("axios"), "got {v:?}");
+    }
+
+    /// THE case, live 2026-09-09 (brief 170): "Bump `hono` to >= 4.7.5" when
+    /// the fix is 4.13.5 and 4.13.3 is installed — a target BELOW the installed
+    /// version, appearing in no source on record. It shipped because `hono` had
+    /// no `PackageFact`; with one, the backstop must catch it.
+    #[test]
+    fn factual_check_flags_an_upgrade_target_below_the_installed_version() {
+        let prose = "**Bump `hono` to >= 4.7.5 in `d:/4da/mcp-4da-server` — still unpatched.**";
+        let f = facts(&[("hono", &["4.13.3", "4.13.5"])]);
+        let v = check_factual_claims(prose, &f);
+        assert!(!v.is_empty(), "a fabricated upgrade target must be flagged");
+        assert!(v[0].contains("hono") && v[0].contains("4.7.5"), "got {v:?}");
+    }
+
+    /// The other half: widening the fact set is only safe if a RELEASE mention
+    /// is not an upgrade target. A violation abstains the entire brief, so
+    /// faulting legitimate news would cost the reader a correct brief — the
+    /// worse failure. "hono 4.14.0 shipped" is neither installed nor a fix and
+    /// must pass.
+    #[test]
+    fn factual_check_ignores_a_release_mention_that_is_not_an_upgrade_target() {
+        let f = facts(&[("hono", &["4.13.3", "4.13.5"])]);
+        for prose in [
+            "hono 4.14.0 shipped this week, worth a look.",
+            "The hono 4.20.1 release notes cover the router rewrite.",
+        ] {
+            assert!(
+                check_factual_claims(prose, &f).is_empty(),
+                "a release mention is not an upgrade target: {prose}"
+            );
+        }
+        // …but the same package in a prescribing sentence is still caught.
+        assert!(
+            !check_factual_claims("Upgrade hono to 4.14.0.", &f).is_empty(),
+            "an upgrade verb makes the same version faultable"
+        );
+    }
+
+    #[test]
+    fn factual_check_still_passes_the_correct_upgrade_target() {
+        let f = facts(&[("hono", &["4.13.3", "4.13.5"])]);
+        assert!(check_factual_claims("Bump hono to >= 4.13.5 today.", &f).is_empty());
+        assert!(check_factual_claims("hono is on 4.13.3 — upgrade it.", &f).is_empty());
     }
 
     #[test]
