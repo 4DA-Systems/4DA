@@ -629,6 +629,97 @@ fn a_dev_only_install_elsewhere_does_not_discount_a_row_it_is_not_part_of() {
     );
 }
 
+/// Production-shape verification against a SNAPSHOT of the founder database
+/// (`recipe-live-verify-rust-on-db-snapshot`). Fixtures cannot reproduce this:
+/// it needs a real mirror, a real multi-version inventory, and a package whose
+/// advisories reach some projects and not others.
+///
+/// Take the snapshot with better-sqlite3's online `.backup()` (never a file
+/// copy — the live DB is WAL), then:
+///   `FOURDA_VERIFY_DB=<snapshot> cargo test --lib \
+///      every_plan_row_is_true_for_every_project_it_names -- --ignored --nocapture`
+#[test]
+#[ignore = "requires FOURDA_VERIFY_DB pointing at a founder-DB snapshot"]
+fn every_plan_row_is_true_for_every_project_it_names() {
+    let Ok(path) = std::env::var("FOURDA_VERIFY_DB") else {
+        panic!("set FOURDA_VERIFY_DB to a snapshot path");
+    };
+    crate::register_sqlite_vec_extension();
+    let db = Database::new(std::path::Path::new(&path)).expect("open snapshot");
+    let matches = crate::osv::matching::get_matched_advisories(&db).expect("matcher");
+    let plan = build_upgrade_plan(&db);
+
+    // Index the matcher's own attribution: (ecosystem, package) -> project -> ids.
+    use std::collections::{BTreeMap, BTreeSet};
+    let mut exposure: BTreeMap<(String, String), BTreeMap<String, BTreeSet<String>>> =
+        BTreeMap::new();
+    for m in &matches {
+        if !m.is_version_confirmed {
+            continue;
+        }
+        let key = (m.ecosystem.to_lowercase(), m.package_name.to_lowercase());
+        for project in &m.project_paths {
+            exposure
+                .entry(key.clone())
+                .or_default()
+                .entry(project.clone())
+                .or_default()
+                .insert(m.advisory_id.clone());
+        }
+    }
+
+    let mut checked = 0usize;
+    for item in &plan {
+        validate_item(item).unwrap_or_else(|e| panic!("invalid item {}: {e:?}", item.id));
+        // The folded maintenance item speaks for many packages by design.
+        if item.id == "upgrade-plan:informational" || item.affected_projects.len() < 2 {
+            continue;
+        }
+        let pkg = item.affected_deps[0].to_lowercase();
+        let Some(per_project) = exposure
+            .iter()
+            .find(|((_, p), _)| p == &pkg)
+            .map(|(_, v)| v)
+        else {
+            continue;
+        };
+        let sets: Vec<&BTreeSet<String>> = item
+            .affected_projects
+            .iter()
+            .filter_map(|p| per_project.get(p))
+            .collect();
+        if sets.len() < 2 {
+            continue;
+        }
+        checked += 1;
+        let first = sets[0];
+        for (i, s) in sets.iter().enumerate() {
+            assert_eq!(
+                *s,
+                first,
+                "row {} names {} projects with DIFFERENT advisory sets \
+                 (project {} carries {:?}, the first carries {:?}) — its severity \
+                 is therefore wrong for at least one of them",
+                item.id,
+                item.affected_projects.len(),
+                item.affected_projects[i],
+                s,
+                first,
+            );
+        }
+    }
+    println!(
+        "plan rows: {}, multi-project rows cross-checked against the matcher: {checked}",
+        plan.len()
+    );
+    for item in &plan {
+        println!(
+            "  {:?} {} — {:?}",
+            item.urgency, item.title, item.affected_projects
+        );
+    }
+}
+
 #[test]
 fn long_project_list_never_produces_an_over_length_citation_note() {
     // Regression for the CitationNoteTooLong bug fixed in #316 (truncate budgeted
