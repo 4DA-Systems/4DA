@@ -227,7 +227,8 @@ struct PackageGroup<'a> {
     package: String,
     ecosystem_norm: String,
     advisories: Vec<&'a MatchedAdvisory>,
-    /// Union of every affected project across the group's advisories (sorted).
+    /// The projects this row speaks for — every one of them carries exactly the
+    /// row's advisories (sorted). See [`split_by_applicable_advisories`].
     projects: Vec<String>,
     any_confirmed: bool,
     /// At least one affected instance is a DIRECT dep — the user can bump it now.
@@ -246,12 +247,18 @@ struct PackageGroup<'a> {
     /// Every advisory is a maintenance notice (unmaintained / deprecated: no
     /// fix, no CVSS). Folded into ONE Watch item, never an upgrade step.
     informational: bool,
+    /// Set only when this package produced MORE than one row, to keep the item
+    /// ids distinct: the alphabetically-first advisory id of this row's set.
+    /// `None` — the overwhelmingly common case — leaves the id untouched.
+    cohort_key: Option<String>,
 }
 
 fn aggregate_by_package(matches: &[MatchedAdvisory]) -> Vec<PackageGroup<'_>> {
     use std::collections::BTreeMap;
     // Key by normalized (ecosystem, package) so npm/crates.io/etc. don't collide
-    // and the same package across projects folds into one step.
+    // and the same package across projects folds into one step — then split that
+    // step per EXPOSURE, so the row is true for every project it names
+    // (`osv::identity::split_by_exposure`, AD-044).
     let mut by_key: BTreeMap<(String, String), Vec<&MatchedAdvisory>> = BTreeMap::new();
     for adv in matches {
         let key = (
@@ -263,85 +270,90 @@ fn aggregate_by_package(matches: &[MatchedAdvisory]) -> Vec<PackageGroup<'_>> {
 
     by_key
         .into_iter()
-        .map(|((ecosystem_norm, _pkg_lower), advisories)| {
-            // Display name from the first advisory (preserves original casing).
-            let package = advisories[0].package_name.clone();
-
-            let mut projects: Vec<String> = advisories
-                .iter()
-                .flat_map(|a| a.project_paths.iter().cloned())
-                .collect();
-            projects.sort();
-            projects.dedup();
-
-            let any_confirmed = advisories.iter().any(|a| a.is_version_confirmed);
-            let target_version = highest_fixed_version(&advisories);
-            let has_fix = target_version.is_some();
-            // "Fixable now" needs something to bump TO: rsa's Marvin attack
-            // (no fix exists) read "Fixable now via a direct dependency bump"
-            // on the live plan (2026-09-06).
-            let fixable_now = has_fix
-                && advisories
-                    .iter()
-                    .flat_map(|a| a.dependency_instances.iter())
-                    .any(|d| d.is_direct);
-            let informational = !has_fix && advisories.iter().all(|a| is_informational(a));
-            let instances_exist = advisories
-                .iter()
-                .any(|a| !a.dependency_instances.is_empty());
-            let all_dev = instances_exist
-                && advisories
-                    .iter()
-                    .flat_map(|a| a.dependency_instances.iter())
-                    .all(|d| d.is_dev);
-
-            let max_cvss = advisories
-                .iter()
-                .filter_map(|a| a.cvss_score)
-                .fold(0.0_f64, f64::max);
-
-            // Most-urgent vulnerability (alias clusters, Phase 120), then the
-            // SAME scope discounts the Brief's alert path applies
-            // (`preemption::rank_osv_urgency`): dev-only drops one level, and
-            // a transitive-only Critical is High. Live 2026-09-08 the plan
-            // said sandbox was Critical while the brief's alert and the AI
-            // synthesis said "high-severity" for the one advisory — one
-            // vulnerability, two severities, by a scope rule this side never
-            // had (AD-040).
-            let all_transitive = instances_exist
-                && advisories
-                    .iter()
-                    .flat_map(|a| a.dependency_instances.iter())
-                    .all(|d| !d.is_direct);
-            let base_urgency = crate::osv::identity::cluster_by_vulnerability(&advisories)
-                .iter()
-                .map(|cluster| cluster_urgency(cluster))
-                .min()
-                .unwrap_or(Urgency::Medium);
-            let urgency = if all_dev {
-                downrank(base_urgency)
-            } else if all_transitive && base_urgency == Urgency::Critical {
-                Urgency::High
-            } else {
-                base_urgency
-            };
-
-            PackageGroup {
-                package,
-                ecosystem_norm,
-                advisories,
-                projects,
-                any_confirmed,
-                fixable_now,
-                all_dev,
-                urgency,
-                max_cvss,
-                target_version,
-                has_fix,
-                informational,
-            }
+        .flat_map(|((ecosystem_norm, _pkg_lower), advisories)| {
+            let cohorts = crate::osv::identity::split_by_exposure(&advisories);
+            let split = cohorts.len() > 1;
+            cohorts
+                .into_iter()
+                .map(|cohort| package_group(&ecosystem_norm, cohort, split))
+                .collect::<Vec<_>>()
         })
         .collect()
+}
+
+/// Build one row from one cohort. Every instance-derived judgement is scoped to
+/// the projects the row names, so an install in a project this row does not
+/// speak for can neither discount it nor withhold a discount from it.
+fn package_group<'a>(
+    ecosystem_norm: &str,
+    (projects, advisories): (Vec<String>, Vec<&'a MatchedAdvisory>),
+    split: bool,
+) -> PackageGroup<'a> {
+    // Display name from the first advisory (preserves original casing).
+    let package = advisories[0].package_name.clone();
+
+    let instances = || {
+        advisories
+            .iter()
+            .flat_map(|a| a.dependency_instances.iter())
+            .filter(|d| projects.iter().any(|p| p == &d.project_path))
+    };
+
+    let any_confirmed = advisories.iter().any(|a| a.is_version_confirmed);
+    let target_version = highest_fixed_version(&advisories);
+    let has_fix = target_version.is_some();
+    // "Fixable now" needs something to bump TO: rsa's Marvin attack
+    // (no fix exists) read "Fixable now via a direct dependency bump"
+    // on the live plan (2026-09-06).
+    let fixable_now = has_fix && instances().any(|d| d.is_direct);
+    let informational = !has_fix && advisories.iter().all(|a| is_informational(a));
+    let instances_exist = instances().next().is_some();
+    let all_dev = instances_exist && instances().all(|d| d.is_dev);
+
+    let max_cvss = advisories
+        .iter()
+        .filter_map(|a| a.cvss_score)
+        .fold(0.0_f64, f64::max);
+
+    // Most-urgent vulnerability (alias clusters, Phase 120), then the
+    // SAME scope discounts the Brief's alert path applies
+    // (`preemption::rank_osv_urgency`): dev-only drops one level, and
+    // a transitive-only Critical is High. Live 2026-09-08 the plan
+    // said sandbox was Critical while the brief's alert and the AI
+    // synthesis said "high-severity" for the one advisory — one
+    // vulnerability, two severities, by a scope rule this side never
+    // had (AD-040).
+    let all_transitive = instances_exist && instances().all(|d| !d.is_direct);
+    let base_urgency = crate::osv::identity::cluster_by_vulnerability(&advisories)
+        .iter()
+        .map(|cluster| cluster_urgency(cluster))
+        .min()
+        .unwrap_or(Urgency::Medium);
+    let urgency = if all_dev {
+        downrank(base_urgency)
+    } else if all_transitive && base_urgency == Urgency::Critical {
+        Urgency::High
+    } else {
+        base_urgency
+    };
+
+    let cohort_key = crate::osv::identity::exposure_key(split, &advisories);
+
+    PackageGroup {
+        package,
+        ecosystem_norm: ecosystem_norm.to_string(),
+        advisories,
+        projects,
+        any_confirmed,
+        fixable_now,
+        all_dev,
+        urgency,
+        max_cvss,
+        target_version,
+        has_fix,
+        informational,
+        cohort_key,
+    }
 }
 
 impl PackageGroup<'_> {
@@ -364,7 +376,13 @@ impl PackageGroup<'_> {
             !self.fixable_now,   // fixable-now sorts before waiting-on-upstream
             std::cmp::Reverse(self.projects.len()), // widest blast radius first
             std::cmp::Reverse((self.max_cvss * 1000.0) as i64), // higher CVSS first
-            self.package.to_lowercase(), // stable final tiebreak
+            // Stable final tiebreak. The cohort key is part of it so a package
+            // that produced several rows still orders deterministically.
+            format!(
+                "{}|{}",
+                self.package.to_lowercase(),
+                self.cohort_key.as_deref().unwrap_or("")
+            ),
         )
     }
 
@@ -504,12 +522,25 @@ impl PackageGroup<'_> {
             pkg = self.package
         ));
 
-        EvidenceItem {
-            id: format!(
+        // A package that speaks for one situation keeps the id it always had;
+        // only a package that split needs a discriminator, so triage state on
+        // every other row survives this change untouched.
+        let id = match &self.cohort_key {
+            Some(key) => format!(
+                "upgrade-plan:{}:{}:{}",
+                self.ecosystem_norm,
+                self.package.to_lowercase(),
+                key
+            ),
+            None => format!(
                 "upgrade-plan:{}:{}",
                 self.ecosystem_norm,
                 self.package.to_lowercase()
             ),
+        };
+
+        EvidenceItem {
+            id,
             kind: EvidenceKind::Alert,
             title,
             explanation,
@@ -536,8 +567,17 @@ impl PackageGroup<'_> {
 /// version to upgrade to (live 2026-09-06: gtk ×10, paste, proc-macro-error
 /// ×2, ttf-parser — Tauri's Linux GTK3 bindings and their transitive tail).
 fn informational_item(groups: Vec<PackageGroup<'_>>, now_millis: i64) -> EvidenceItem {
-    let k = groups.len();
-    let names: Vec<String> = groups.iter().map(|g| g.package.clone()).collect();
+    // Count DEPENDENCIES, not rows: a package that split into several rows
+    // (`split_by_applicable_advisories`) must still be named once and counted
+    // once — "7 unmaintained dependencies" is a claim about dependencies. The
+    // rows are ranked, not grouped by package, so dedup by first sighting.
+    let mut seen: std::collections::HashSet<&str> = std::collections::HashSet::new();
+    let names: Vec<String> = groups
+        .iter()
+        .filter(|g| seen.insert(g.package.as_str()))
+        .map(|g| g.package.clone())
+        .collect();
+    let k = names.len();
     let mut projects: Vec<String> = groups
         .iter()
         .flat_map(|g| g.projects.iter().cloned())
