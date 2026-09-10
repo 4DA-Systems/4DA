@@ -156,6 +156,47 @@ pub(crate) fn check_engine_block(data_dir: &Path, issues: &mut Vec<HealthIssue>)
     }
 }
 
+/// The health issue for a recovery the headless background refresh performed
+/// (it has no UI, so it leaves `data/.db-recovered` — see `db_recovery_marker`).
+pub(crate) fn recovery_marker_issue(m: &crate::db_recovery_marker::RecoveryMarker) -> HealthIssue {
+    let (severity, what) = match m.kind.as_str() {
+        "restored_from_backup" => (
+            HealthSeverity::Warning,
+            format!(
+                "found the database corrupt and restored it from a backup ({}) — changes made \
+                 after that backup may be missing",
+                m.detail
+            ),
+        ),
+        "quarantined_no_backup" => (
+            HealthSeverity::Error,
+            format!(
+                "found the database corrupt with no backup to restore, so a fresh database was \
+                 created — the corrupted file is preserved at {}",
+                m.detail
+            ),
+        ),
+        "recovery_failed" => (
+            HealthSeverity::Error,
+            format!(
+                "found the database corrupt and could not recover it: {}",
+                m.detail
+            ),
+        ),
+        _ => (
+            HealthSeverity::Error,
+            "left a database-recovery record that could not be read — check the data directory \
+             for *.db.corrupt files"
+                .to_string(),
+        ),
+    };
+    HealthIssue {
+        component: "database",
+        severity,
+        message: format!("The background refresh {what} (at {}).", m.at),
+    }
+}
+
 /// Check 1: Database file exists and is readable.
 pub(crate) fn check_database(data_dir: &Path, issues: &mut Vec<HealthIssue>) {
     // First, surface any cold-boot recovery notice. `state.rs::get_database`
@@ -203,6 +244,11 @@ pub(crate) fn check_database(data_dir: &Path, issues: &mut Vec<HealthIssue>) {
                 });
             }
         }
+    }
+
+    // A restore or quarantine the headless background refresh performed.
+    if let Some(marker) = crate::db_recovery_marker::take(data_dir) {
+        issues.push(recovery_marker_issue(&marker));
     }
 
     let db_path = data_dir.join("4da.db");

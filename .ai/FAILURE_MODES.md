@@ -1199,3 +1199,120 @@ counts (`is_still_a_coverage_gap`). A dep with NO signals at all is a
 different, real gap ("unmonitored") and is always kept. **When a
 narrowing rule and a raw count disagree, the raw count is not a fallback —
 it is the bug the narrowing rule was written to fix.**
+
+---
+
+### A fix scoped to the surfaces where the symptom appeared (2026-09-10)
+
+**Symptom.** Nine days after AD-044 ("an aggregate row is true for every
+member it names"), the Blind Spots row for `jsonwebtoken (crates.io)` named
+`relay` and `src-tauri` and said "you're on 9.0.3 – 10.4.0".
+
+**Root cause.** #655 applied the rule to the two aggregators that produced the
+vitest row (`upgrade_plan::aggregate_by_package`,
+`preemption::osv_matches_to_alerts`). Blind Spots has its own version lookup
+and its own coverage map; knowledge gaps have their own advisory queries.
+Nobody enumerated them.
+
+**The rule.** When a doctrine rule lands, enumerate every materializer that
+makes the kind of claim it governs — grep for the QUERY SHAPE, not for the
+surface the symptom appeared on — and fix or explicitly exempt each one in the
+same PR.
+
+---
+
+### Two packages, one name (2026-09-10)
+
+**Symptom.** "you're on 9.0.3 – 10.4.0" for a crate installed at 9.3.1 and
+10.4.0; no Blind Spots row at all for the npm `jsonwebtoken`; an npm install
+judged against a crates.io advisory's range.
+
+**Root cause.** Lookups keyed by `lower(package_name)` over tables that hold
+both ecosystems, and a `HashMap<name, &DepCoverage>` that kept whichever
+same-named entry came last.
+
+**The rule.** A package is (ecosystem, name). Canonicalize through
+`osv::exposure::canonical`: the tables store three vocabularies
+(`rust`/`javascript`, `crates.io`/`npm`, and the linker's placeholder
+`advisory`).
+
+---
+
+### A stored verdict outlived the install it judged (2026-09-10)
+
+**Symptom.** Knowledge gaps (rendered on the Blind Spots tab): "hono v4.13.5: 3
+unread security advisories" — all three fixed in 4.13.5 — with a "Review
+advisories" action.
+
+**Root cause.** The gap's filter trusted `is_version_affected` from the stored
+scoring breakdown, computed when the rows were scored against 4.13.3. The
+severity path re-checked the version (Medium, not High); the count and the
+action did not.
+
+**The rule.** A claim about exposure is computed against the install as it is
+NOW (`osv::exposure::advisory_row_reaches`). A stored verdict is a fallback
+for rows the mirror cannot resolve, never the authority.
+
+---
+
+### Merged, not installed (2026-09-10)
+
+**Symptom.** Every 4DA surface reported `hono` patched at 4.13.5 while
+`mcp-4da-server/node_modules/hono` was 4.13.1 — vulnerable to
+CVE-2026-84363/-84364/-84365 — for 25 days.
+
+**Root cause.** Activation after #632 ran `pnpm install` at the repository
+root; `mcp-4da-server` has its own lockfile and `node_modules`. Every surface
+reads lockfiles, so the product reported a fix it had no way to see was
+missing.
+
+**The rule.** Activation installs every lockfile the merge touched
+(`git diff --name-only <old>..<new> -- '**/pnpm-lock.yaml' '**/package-lock.json'`).
+The install-drift surfaces (AD-046 and the MCP server's `install_drift`) are
+the backstop, not the procedure.
+
+---
+
+### The 0-day retention delete (2026-09-10)
+
+**Symptom.** `cleanup_max_age_days: 0` in a hand-edited `settings.json` made
+the daily maintenance delete every source item not written in the current
+second, then VACUUM — unattended, with no backup on that path.
+
+**Root cause.** `run_maintenance` compared against `datetime('now', '-0 days')`
+("before this instant"); `Settings::validate` did not clamp the field; only
+the Tauri command did.
+
+**The rule.** A destructive window is clamped where it is READ
+(`MonitoringConfig::retention_days`), not only where a UI writes it, and the
+delete primitives share one day boundary.
+
+---
+
+### The engine that could not say it lost the corpus (2026-09-10)
+
+**Symptom.** A restore-from-backup or quarantine performed by the scheduled
+background refresh reached no user and no reader of any surface.
+
+**Root cause.** `take_db_recovery_notice` had one consumer — the GUI's
+startup health check — and the headless engine opens (and can repair) the
+database in its own process.
+
+**The rule.** Every process that can open, and therefore repair, the database
+persists the outcome where the other processes look: `data/.db-recovered`,
+reported once by the app and surfaced by the MCP server while it stands.
+
+---
+
+### Paths in the prompt (2026-09-10)
+
+**Symptom.** All ten stored briefs contained `d:/4da/...` project paths; a
+project under the home directory would have sent the OS username to the LLM
+provider.
+
+**Root cause.** The CONFIRMED SECURITY builder named projects by absolute path,
+and the egress gate guards raw-content columns — a path is not one.
+
+**The rule.** Builders pass `privacy_egress::project_label`, and every prompt
+passes `privacy_egress::scrub_prompt` at the `LLMClient` entry points; a test
+fails if an entry point dispatches without it.

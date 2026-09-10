@@ -534,13 +534,33 @@ pub fn detect_knowledge_gaps(conn: &rusqlite::Connection) -> Result<Vec<Knowledg
             continue;
         }
 
+        // Each named project's install WITH its ecosystem (AD-045): the gap
+        // merges projects by name, its judgements must not.
+        let installs_here = installs_for(conn, &dep.package_name, &paths);
+        let dep_lower = dep.package_name.to_lowercase();
+        let live = |c: &GapCandidate| -> Option<bool> {
+            if is_advisory_row(c) && linked_to(c, &dep_lower) {
+                crate::osv::exposure::advisory_row_reaches(
+                    conn,
+                    &c.source_id,
+                    &dep.package_name,
+                    &installs_here,
+                )
+            } else {
+                None
+            }
+        };
+
         // Unread items whose title names this dependency (word-boundary matched).
-        let missed = keyword_misses_from(&candidates, &dep.package_name);
+        let missed = keyword_misses_from(&candidates, &dep.package_name, &live);
         // A release every carrying project already runs is not a missed
         // update (AD-041): "@modelcontextprotocol/node v2.0.0: 1 version
         // update — notably npm: @modelcontextprotocol/node v2.0.0" against an
         // installed 2.0.0 (live 2026-09-08).
-        let installed_here = installed_versions_for(conn, &dep.package_name, &paths);
+        let installed_here: Vec<String> = installs_here
+            .iter()
+            .map(|install| install.version.clone())
+            .collect();
         let missed = drop_already_installed_releases(missed, &dep.package_name, &installed_here);
         if missed.is_empty() {
             continue;
@@ -556,27 +576,30 @@ pub fn detect_knowledge_gaps(conn: &rusqlite::Connection) -> Result<Vec<Knowledg
         // never proof of exposure (2026-09-06). The tier it escalates TO is
         // the advisory's own (Phase 120).
         let vulnerable = still_vulnerable(conn, &dep.package_name, dep.version.as_deref(), &paths)
-            && grounded_security_advisory(&candidates, &dep.package_name);
+            && grounded_security_advisory(&candidates, &dep.package_name, &live);
         // Which of this dependency's projects actually carry the exposure.
         // `seen_deps` merges every project declaring the name (any version,
         // any ecosystem), so without this the gap said "relay (+1 more)"
         // for a bug only relay's copy has (2026-09-07).
-        let exposed: Vec<(String, String)> = if vulnerable {
+        let exposed: Vec<(String, crate::osv::exposure::Install)> = if vulnerable {
             affected_project_paths(conn, &dep.package_name, &paths)
         } else {
             Vec::new()
         };
-        let tier_versions: Vec<String> = if exposed.is_empty() {
-            dep.version.iter().cloned().collect()
+        let tier_installs: Vec<crate::osv::exposure::Install> = if exposed.is_empty() {
+            dep.version
+                .iter()
+                .map(|v| crate::osv::exposure::Install::new(Some(dep.language.as_str()), v.clone()))
+                .collect()
         } else {
-            exposed.iter().map(|(_, v)| v.clone()).collect()
+            exposed.iter().map(|(_, install)| install.clone()).collect()
         };
         let severity = classify_severity(
             &missed,
             days_since,
             &dep.package_name,
             vulnerable,
-            advisory_tier_for(conn, &dep.package_name, &tier_versions),
+            advisory_tier_for(conn, &dep.package_name, &tier_installs),
         );
 
         if severity == GapSeverity::Low && days_since < 14 {
@@ -590,7 +613,7 @@ pub fn detect_knowledge_gaps(conn: &rusqlite::Connection) -> Result<Vec<Knowledg
         } else {
             (
                 exposed.iter().map(|(p, _)| p.clone()).collect(),
-                exposed.first().map(|(_, v)| v.clone()),
+                exposed.first().map(|(_, install)| install.version.clone()),
             )
         };
         let project_display = if display_paths.len() == 1 {
@@ -647,6 +670,9 @@ fn finalize_gaps(mut gaps: Vec<KnowledgeGap>) -> Vec<KnowledgeGap> {
 /// pre-lowercased for matching.
 struct GapCandidate {
     item: MissedItem,
+    /// `source_items.source_id`. For an osv/cve row it is the advisory or CVE
+    /// id the local mirror resolves for a LIVE version verdict (AD-045).
+    source_id: String,
     content_type: Option<String>,
     /// Lowercased title. Precomputed because the word-boundary matcher is
     /// applied once per (candidate, dependency) pair — lowercasing inside that
@@ -682,12 +708,26 @@ fn linked_to(c: &GapCandidate, dep_lower: &str) -> bool {
 /// dependency and whose installed version is not confirmed clear — the only
 /// evidence that may escalate a gap to Critical. An editorial story that
 /// names the package is a citation, not proof of exposure.
-fn grounded_security_advisory(candidates: &[GapCandidate], package_name: &str) -> bool {
+fn grounded_security_advisory(
+    candidates: &[GapCandidate],
+    package_name: &str,
+    live: LiveVerdict<'_>,
+) -> bool {
     let dep_lower = package_name.to_lowercase();
     candidates.iter().any(|c| {
-        is_advisory_row(c) && linked_to(c, &dep_lower) && c.version_affected != Some(false)
+        is_advisory_row(c)
+            && linked_to(c, &dep_lower)
+            && live(c).or(c.version_affected) != Some(false)
     })
 }
+
+/// A LIVE version verdict for a candidate against one dependency's installs:
+/// `Some` when the local mirror can judge the row (AD-045), `None` to fall
+/// back to the scoring pipeline's stored verdict. The stored verdict goes
+/// stale the moment the user upgrades: live 2026-09-10, `hono` 4.13.5 read
+/// "3 unread security advisories" for three advisories fixed IN 4.13.5,
+/// because the rows were scored while 4.13.3 was installed.
+type LiveVerdict<'a> = &'a dyn Fn(&GapCandidate) -> Option<bool>;
 
 /// Load every unread, un-dismissed candidate item ONCE per detection pass.
 ///
@@ -713,7 +753,8 @@ fn load_gap_candidates(conn: &rusqlite::Connection) -> Result<Vec<GapCandidate>>
                     AND sid.match_type IN ('exact_registry', 'advisory')),
                 (SELECT json_extract(se.breakdown, '$.breakdown.is_version_affected')
                    FROM scoring_explanations se
-                  WHERE se.source_item_id = si.id)
+                  WHERE se.source_item_id = si.id),
+                si.source_id
              FROM source_items si
              LEFT JOIN feedback f ON f.source_item_id = si.id
              WHERE si.created_at >= datetime('now', '-30 days')
@@ -738,6 +779,7 @@ fn load_gap_candidates(conn: &rusqlite::Connection) -> Result<Vec<GapCandidate>>
                     source_type: row.get(3)?,
                     created_at: row.get(4)?,
                 },
+                source_id: row.get::<_, Option<String>>(8)?.unwrap_or_default(),
                 content_type: row.get::<_, Option<String>>(5)?,
                 linked_packages: linked
                     .map(|s| s.split(',').map(str::to_string).collect())
@@ -790,7 +832,11 @@ fn drop_already_installed_releases(
         .collect()
 }
 
-fn keyword_misses_from(candidates: &[GapCandidate], package_name: &str) -> Vec<MissedItem> {
+fn keyword_misses_from(
+    candidates: &[GapCandidate],
+    package_name: &str,
+    live: LiveVerdict<'_>,
+) -> Vec<MissedItem> {
     let dep_lower = package_name.to_lowercase();
 
     // Deduplicate by normalized title (first 10 words, lowercased, stripped punctuation)
@@ -800,11 +846,15 @@ fn keyword_misses_from(candidates: &[GapCandidate], package_name: &str) -> Vec<M
         // Cheap substring reject first; the boundary walk only runs on hits.
         .filter(|c| c.title_lower.contains(&dep_lower))
         .filter(|c| crate::utils::has_word_boundary_match_with_ext(&c.title_lower, &dep_lower))
-        // A resolved advisory (installed version confirmed not affected) is
-        // not a gap; a registry advisory cites a dependency only through the
-        // linker's `Affected:` proof, never a title word (2026-09-06).
-        .filter(|c| c.version_affected != Some(false))
+        // A registry advisory cites a dependency only through the linker's
+        // `Affected:` proof, never a title word (2026-09-06).
         .filter(|c| !is_advisory_row(c) || linked_to(c, &dep_lower))
+        // A resolved advisory (every install past its fix, or another
+        // ecosystem's package) is not a gap: judged LIVE against this
+        // dependency's installs where the mirror can, else by the stored
+        // scoring-time verdict. Runs after the cheap filters, so the live
+        // lookup only ever sees rows already bound to this dependency.
+        .filter(|c| live(c).or(c.version_affected) != Some(false))
         .filter(|c| seen_titles.insert(normalize_gap_title(&c.item.title)))
         // Title-based fallback only for legacy items without stored content_type
         .filter(|c| c.content_type.is_some() || !is_low_quality_signal(&c.item.title))
@@ -1013,22 +1063,31 @@ fn quality_weight(m: &MissedItem, dep_name: &str) -> f32 {
 /// 4.9.10 and 4.11.1 in two unrelated repos — and a gap that names one project
 /// must be judged on THAT project's install, not on the worst copy anywhere on
 /// the machine.
-fn installed_versions_for(
+///
+/// Each version keeps its ECOSYSTEM (AD-045). A
+/// gap merges every project declaring the NAME, and `jsonwebtoken` in a Rust
+/// project and in an npm project are two packages with unrelated advisories:
+/// each install must be judged only against its own ecosystem's records.
+fn installs_for(
     conn: &rusqlite::Connection,
     package: &str,
     project_paths: &[String],
-) -> Vec<String> {
+) -> Vec<crate::osv::exposure::Install> {
     if project_paths.is_empty() {
         return Vec::new();
     }
     let Ok(mut stmt) = conn.prepare(
-        "SELECT project_path, version FROM user_dependencies
+        "SELECT project_path, version, ecosystem FROM user_dependencies
          WHERE lower(package_name) = lower(?1) AND version IS NOT NULL AND version != ''",
     ) else {
         return Vec::new();
     };
     let Ok(rows) = stmt.query_map(params![package], |row| {
-        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, Option<String>>(2)?,
+        ))
     }) else {
         return Vec::new();
     };
@@ -1039,11 +1098,13 @@ fn installed_versions_for(
         .collect();
 
     rows.flatten()
-        .filter(|(path, _)| {
+        .filter(|(path, _, _)| {
             let p = normalize_project_path(path);
             wanted.iter().any(|w| &p == w)
         })
-        .map(|(_, version)| version)
+        .map(|(_, version, ecosystem)| {
+            crate::osv::exposure::Install::new(ecosystem.as_deref(), version)
+        })
         .collect()
 }
 
@@ -1059,41 +1120,73 @@ pub(crate) fn still_vulnerable(
     version: Option<&str>,
     project_paths: &[String],
 ) -> bool {
-    // Prefer the version the caller already has; otherwise resolve it from the
-    // lockfile-backed table for the projects this gap is about.
-    let resolved: Vec<String> = match version {
-        Some(v) if !v.trim().is_empty() => vec![v.to_string()],
-        _ => installed_versions_for(conn, package, project_paths),
+    // Prefer the version the caller already has (its ecosystem is not known,
+    // so it is judged against every stored record); otherwise resolve each
+    // named project's install WITH its ecosystem from the lockfile table.
+    let installs: Vec<crate::osv::exposure::Install> = match version {
+        Some(v) if !v.trim().is_empty() => vec![crate::osv::exposure::Install::new(None, v)],
+        _ => installs_for(conn, package, project_paths),
     };
-    if resolved.is_empty() {
+    installs_still_vulnerable(conn, package, &installs)
+}
+
+/// Is any of `installs` inside the affected range of a stored advisory for its
+/// OWN ecosystem (AD-045)? A `jsonwebtoken` npm install at 9.0.3 is not exposed
+/// by the crates.io advisory whose range ends at 10.3.0.
+///
+/// Conservative in every direction: no installs, no readable advisory table,
+/// or no advisory stored for any install's ecosystem all count as STILL
+/// VULNERABLE. Safety is never claimed on missing information.
+pub(crate) fn installs_still_vulnerable(
+    conn: &rusqlite::Connection,
+    package: &str,
+    installs: &[crate::osv::exposure::Install],
+) -> bool {
+    if installs.is_empty() {
         return true; // no version anywhere -> cannot prove safety
     }
 
     let Ok(mut stmt) = conn.prepare(
-        "SELECT affected_ranges FROM osv_advisories
+        "SELECT affected_ranges, ecosystem FROM osv_advisories
          WHERE lower(package_name) = lower(?1) AND withdrawn_at IS NULL",
     ) else {
         return true;
     };
-    let Ok(rows) = stmt.query_map(params![package], |row| row.get::<_, Option<String>>(0)) else {
+    let Ok(rows) = stmt.query_map(params![package], |row| {
+        Ok((
+            row.get::<_, Option<String>>(0)?,
+            row.get::<_, Option<String>>(1)?,
+        ))
+    }) else {
         return true;
     };
 
-    let mut saw_any = false;
-    for ranges in rows.flatten() {
-        saw_any = true;
-        // ANY installed copy still in range keeps the whole gap live.
-        for v in &resolved {
-            let (affected, _confirmed) =
-                crate::osv::matching::check_version_affected(Some(v.as_str()), &ranges);
+    let mut saw_relevant = false;
+    for (ranges, ecosystem) in rows.flatten() {
+        let advisory_ecosystem = ecosystem
+            .as_deref()
+            .and_then(crate::osv::exposure::canonical);
+        // ANY installed copy still in range of ITS OWN ecosystem's advisory
+        // keeps the whole gap live.
+        for install in installs {
+            if let (Some(a), Some(b)) = (install.ecosystem, advisory_ecosystem) {
+                if a != b {
+                    continue;
+                }
+            }
+            saw_relevant = true;
+            let (affected, _confirmed) = crate::osv::matching::check_version_affected(
+                Some(install.version.as_str()),
+                &ranges,
+            );
             if affected {
                 return true;
             }
         }
     }
 
-    // Nothing stored about this package — say nothing about its safety.
-    !saw_any
+    // Nothing stored for this package in its ecosystem — say nothing about its safety.
+    !saw_relevant
 }
 
 /// Does any missed item cite a security advisory ABOUT this dependency?
@@ -1181,19 +1274,23 @@ fn classify_severity(
 fn advisory_tier_for(
     conn: &rusqlite::Connection,
     package: &str,
-    versions: &[String],
+    installs: &[crate::osv::exposure::Install],
 ) -> Option<&'static str> {
     let Ok(mut stmt) = conn.prepare(
-        "SELECT affected_ranges, cvss_score, severity_label FROM osv_advisories
+        "SELECT affected_ranges, cvss_score, severity_label, ecosystem FROM osv_advisories
          WHERE lower(package_name) = lower(?1) AND withdrawn_at IS NULL",
     ) else {
         return None;
     };
     let Ok(rows) = stmt.query_map(params![package], |row| {
+        let ecosystem: Option<String> = row.get(3)?;
         Ok((
             row.get::<_, Option<String>>(0)?,
             row.get::<_, Option<f64>>(1)?,
             row.get::<_, Option<String>>(2)?,
+            ecosystem
+                .as_deref()
+                .and_then(crate::osv::exposure::canonical),
         ))
     }) else {
         return None;
@@ -1206,10 +1303,20 @@ fn advisory_tier_for(
         _ => 4,
     };
     let mut best: Option<&'static str> = None;
-    for (ranges, cvss, label) in rows.flatten() {
-        let affects = versions
-            .iter()
-            .any(|v| crate::osv::matching::check_version_affected(Some(v.as_str()), &ranges).0);
+    for (ranges, cvss, label, advisory_ecosystem) in rows.flatten() {
+        // Only an advisory for an install's OWN ecosystem can grade it (AD-045).
+        let affects = installs.iter().any(|install| {
+            let same_ecosystem = match (install.ecosystem, advisory_ecosystem) {
+                (Some(a), Some(b)) => a == b,
+                _ => true,
+            };
+            same_ecosystem
+                && crate::osv::matching::check_version_affected(
+                    Some(install.version.as_str()),
+                    &ranges,
+                )
+                .0
+        });
         if !affects {
             continue;
         }
@@ -1239,30 +1346,56 @@ fn affected_project_paths(
     conn: &rusqlite::Connection,
     package: &str,
     project_paths: &[String],
-) -> Vec<(String, String)> {
+) -> Vec<(String, crate::osv::exposure::Install)> {
     let Ok(mut stmt) = conn.prepare(
-        "SELECT affected_ranges FROM osv_advisories
+        "SELECT affected_ranges, ecosystem FROM osv_advisories
          WHERE lower(package_name) = lower(?1) AND withdrawn_at IS NULL",
     ) else {
         return Vec::new();
     };
-    let ranges: Vec<Option<String>> = stmt
-        .query_map(params![package], |row| row.get::<_, Option<String>>(0))
-        .map(|rows| rows.flatten().collect())
+    let advisories: Vec<(Option<String>, Option<&'static str>)> = stmt
+        .query_map(params![package], |row| {
+            Ok((
+                row.get::<_, Option<String>>(0)?,
+                row.get::<_, Option<String>>(1)?,
+            ))
+        })
+        .map(|rows| {
+            rows.flatten()
+                .map(|(ranges, ecosystem)| {
+                    (
+                        ranges,
+                        ecosystem
+                            .as_deref()
+                            .and_then(crate::osv::exposure::canonical),
+                    )
+                })
+                .collect()
+        })
         .unwrap_or_default();
-    if ranges.is_empty() {
+    if advisories.is_empty() {
         return Vec::new();
     }
     project_paths
         .iter()
         .filter_map(|path| {
-            let version = installed_versions_for(conn, package, std::slice::from_ref(path))
+            let install = installs_for(conn, package, std::slice::from_ref(path))
                 .into_iter()
                 .next()?;
-            let affected = ranges
-                .iter()
-                .any(|r| crate::osv::matching::check_version_affected(Some(version.as_str()), r).0);
-            affected.then(|| (path.clone(), version))
+            // Only this project's OWN ecosystem's advisories expose it (AD-045).
+            let affected = advisories.iter().any(|(ranges, advisory_ecosystem)| {
+                let same_ecosystem = match (install.ecosystem, *advisory_ecosystem) {
+                    (Some(a), Some(b)) => a == b,
+                    _ => true,
+                };
+                same_ecosystem
+                    && crate::osv::matching::check_version_affected(
+                        Some(install.version.as_str()),
+                        ranges,
+                    )
+                    .0
+            });
+            affected.then(|| (path.clone(), install))
         })
         .collect()
 }
@@ -2224,10 +2357,17 @@ mod tests {
                 source_type: source_type.to_string(),
                 created_at: "2026-08-12 01:34:41".to_string(),
             },
+            source_id: String::new(),
             content_type: None,
             linked_packages: linked.iter().map(|s| s.to_string()).collect(),
             version_affected,
         }
+    }
+
+    /// No live mirror verdict: the historical fixtures exercise the stored
+    /// scoring-time verdict on its own.
+    fn no_live(_: &GapCandidate) -> Option<bool> {
+        None
     }
 
     // -----------------------------------------------------------------------
@@ -2265,17 +2405,17 @@ mod tests {
                 None,
             ),
         ];
-        let ids: Vec<i64> = keyword_misses_from(&candidates, "hmac")
+        let ids: Vec<i64> = keyword_misses_from(&candidates, "hmac", &no_live)
             .iter()
             .map(|m| m.item_id)
             .collect();
         assert_eq!(ids, vec![2], "only the linker-bound advisory cites hmac");
         assert!(
-            keyword_misses_from(&candidates, "hono").is_empty(),
+            keyword_misses_from(&candidates, "hono", &no_live).is_empty(),
             "@hono/oauth-providers is not hono"
         );
-        assert!(grounded_security_advisory(&candidates, "hmac"));
-        assert!(!grounded_security_advisory(&candidates, "hono"));
+        assert!(grounded_security_advisory(&candidates, "hmac", &no_live));
+        assert!(!grounded_security_advisory(&candidates, "hono", &no_live));
     }
 
     #[test]
@@ -2303,12 +2443,12 @@ mod tests {
                 None,
             ),
         ];
-        let ids: Vec<i64> = keyword_misses_from(&candidates, "lettre")
+        let ids: Vec<i64> = keyword_misses_from(&candidates, "lettre", &no_live)
             .iter()
             .map(|m| m.item_id)
             .collect();
         assert_eq!(ids, vec![11, 12], "the resolved advisory is not a gap");
-        assert!(grounded_security_advisory(&candidates, "lettre"));
+        assert!(grounded_security_advisory(&candidates, "lettre", &no_live));
         let resolved_only = vec![cand_from(
             10,
             "[CVE-2026-46428] lettre: header injection",
@@ -2317,7 +2457,7 @@ mod tests {
             Some(false),
         )];
         assert!(
-            !grounded_security_advisory(&resolved_only, "lettre"),
+            !grounded_security_advisory(&resolved_only, "lettre", &no_live),
             "a resolved advisory never escalates a gap"
         );
     }
@@ -2380,10 +2520,10 @@ mod tests {
             &[],
             None,
         )];
-        let missed = keyword_misses_from(&candidates, "axum");
+        let missed = keyword_misses_from(&candidates, "axum", &no_live);
         assert_eq!(missed.len(), 1, "the story still cites axum");
         assert!(
-            !grounded_security_advisory(&candidates, "axum"),
+            !grounded_security_advisory(&candidates, "axum", &no_live),
             "a story is not a registry advisory"
         );
         // The call site ANDs `still_vulnerable` with the grounding check, so
@@ -2461,7 +2601,7 @@ mod tests {
             cand(901, "Building a phonograph simulator in Rust", None),
         ];
 
-        let missed = keyword_misses_from(&candidates, "hono");
+        let missed = keyword_misses_from(&candidates, "hono", &no_live);
         let ids: Vec<i64> = missed.iter().map(|m| m.item_id).collect();
         assert_eq!(
             ids,
@@ -2476,7 +2616,7 @@ mod tests {
             cand(1, "Unexpected panic in the parser", None),
             cand(2, "Next.js 15 release notes", None),
         ];
-        let missed = keyword_misses_from(&candidates, "next");
+        let missed = keyword_misses_from(&candidates, "next", &no_live);
         assert_eq!(missed.len(), 1, "next matches Next.js but not 'unexpected'");
         assert_eq!(missed[0].item_id, 2);
     }
@@ -2489,7 +2629,7 @@ mod tests {
         // An identical title must collapse into the first.
         candidates.push(cand(100, "hono security advisory number 0", None));
 
-        let missed = keyword_misses_from(&candidates, "hono");
+        let missed = keyword_misses_from(&candidates, "hono", &no_live);
         assert_eq!(missed.len(), 5, "capped at five citations");
         let unique: std::collections::HashSet<String> = missed
             .iter()
@@ -2547,7 +2687,7 @@ mod tests {
             dependency: "hono".to_string(),
             version: Some("4.13.2".to_string()),
             project_path: "d:/4da/mcp-4da-server".to_string(),
-            missed_items: keyword_misses_from(&candidates, "hono"),
+            missed_items: keyword_misses_from(&candidates, "hono", &no_live),
             gap_severity: GapSeverity::Critical,
             days_since_last_engagement: 13,
         };
@@ -2781,6 +2921,161 @@ mod tests {
         );
     }
 
+    /// AD-045: `jsonwebtoken` the crate and `jsonwebtoken` the npm package share
+    /// a name and nothing else. A gap that merges projects of both judges each
+    /// install only against its OWN ecosystem's advisories.
+    #[test]
+    fn an_install_is_judged_only_by_its_own_ecosystems_advisories() {
+        let conn = osv_conn();
+        let range = |fixed: &str| {
+            format!(
+                r#"[{{"type":"SEMVER","events":[{{"introduced":"0"}},{{"fixed":"{fixed}"}}]}}]"#
+            )
+        };
+        conn.execute(
+            "INSERT INTO osv_advisories (advisory_id, package_name, ecosystem, affected_ranges)
+             VALUES ('GHSA-h395-gr6q-cpjc', 'jsonwebtoken', 'crates.io', ?1),
+                    ('GHSA-27h2-hvpr-p74q', 'jsonwebtoken', 'npm', ?2)",
+            params![range("10.3.0"), range("9.0.0")],
+        )
+        .unwrap();
+        conn.execute_batch(
+            "INSERT INTO user_dependencies (project_path, package_name, version, ecosystem) VALUES
+                 ('d:/4da/relay', 'jsonwebtoken', '9.3.1', 'rust'),
+                 ('d:/4da/src-tauri', 'jsonwebtoken', '10.4.0', 'rust'),
+                 ('d:/kairos/backend', 'jsonwebtoken', '9.0.2', 'javascript');",
+        )
+        .unwrap();
+
+        assert!(
+            !still_vulnerable(
+                &conn,
+                "jsonwebtoken",
+                None,
+                &["d:/kairos/backend".to_string()]
+            ),
+            "npm 9.0.2 is past every npm fix; the crates.io range must not reach it"
+        );
+        assert!(still_vulnerable(
+            &conn,
+            "jsonwebtoken",
+            None,
+            &["d:/4da/relay".to_string()]
+        ));
+
+        let paths = vec![
+            "d:/4da/relay".to_string(),
+            "d:/4da/src-tauri".to_string(),
+            "d:/kairos/backend".to_string(),
+        ];
+        let exposed: Vec<String> = affected_project_paths(&conn, "jsonwebtoken", &paths)
+            .into_iter()
+            .map(|(project, _)| project)
+            .collect();
+        assert_eq!(
+            exposed,
+            vec!["d:/4da/relay".to_string()],
+            "only relay's copy is exposed"
+        );
+    }
+
+    /// The live defect (2026-09-10): `hono` 4.13.5 carried "3 unread security
+    /// advisories" for three advisories fixed IN 4.13.5, because the only
+    /// version verdict consulted was the one stored when the rows were scored
+    /// against 4.13.3. The live verdict drops them; nothing actionable is left.
+    #[test]
+    fn advisories_fixed_in_the_installed_version_are_not_unread_advisories() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE osv_advisories (
+                 advisory_id TEXT, package_name TEXT, ecosystem TEXT,
+                 affected_ranges TEXT, aliases TEXT, withdrawn_at TEXT
+             );",
+        )
+        .unwrap();
+        let fixed = r#"[{"type":"SEMVER","events":[{"introduced":"0"},{"fixed":"4.13.5"}]}]"#;
+        let cves = ["CVE-2026-84363", "CVE-2026-84364", "CVE-2026-84365"];
+        for (id, cve) in [
+            "GHSA-crvj-82cr-hjcx",
+            "GHSA-g6gw-c38x-mqfc",
+            "GHSA-gqvv-2mrq-wpjv",
+        ]
+        .iter()
+        .zip(cves)
+        {
+            conn.execute(
+                "INSERT INTO osv_advisories VALUES (?1, 'hono', 'npm', ?2, ?3, NULL)",
+                params![id, fixed, format!("[\"{cve}\"]")],
+            )
+            .unwrap();
+        }
+        let mut candidates: Vec<GapCandidate> = cves
+            .iter()
+            .enumerate()
+            .map(|(i, cve)| {
+                // The stale scoring-time verdict says "affected" (scored against 4.13.3).
+                let mut c = cand_from(
+                    i as i64,
+                    &format!("[{cve}] Hono: advisory {i}"),
+                    "cve",
+                    &["hono"],
+                    Some(true),
+                );
+                c.source_id = (*cve).to_string();
+                c.content_type = Some("security_advisory".to_string());
+                c
+            })
+            .collect();
+        let mut discussion = cand_from(
+            9,
+            "Onefold + Hono + Cloudflare edge rendering",
+            "devto",
+            &[],
+            None,
+        );
+        discussion.content_type = Some("discussion".to_string());
+        candidates.push(discussion);
+
+        let verdict_for = |installs: Vec<crate::osv::exposure::Install>| {
+            let conn = &conn;
+            move |c: &GapCandidate| -> Option<bool> {
+                if is_advisory_row(c) && linked_to(c, "hono") {
+                    crate::osv::exposure::advisory_row_reaches(
+                        conn,
+                        &c.source_id,
+                        "hono",
+                        &installs,
+                    )
+                } else {
+                    None
+                }
+            }
+        };
+        let patched = verdict_for(vec![crate::osv::exposure::Install::new(
+            Some("javascript"),
+            "4.13.5",
+        )]);
+        let ids: Vec<i64> = keyword_misses_from(&candidates, "hono", &patched)
+            .iter()
+            .map(|m| m.item_id)
+            .collect();
+        assert_eq!(ids, vec![9], "only the discussion remains");
+        assert!(
+            !grounded_security_advisory(&candidates, "hono", &patched),
+            "a fixed advisory never escalates"
+        );
+
+        let behind = verdict_for(vec![crate::osv::exposure::Install::new(
+            Some("javascript"),
+            "4.13.3",
+        )]);
+        assert_eq!(
+            keyword_misses_from(&candidates, "hono", &behind).len(),
+            4,
+            "an install behind the fix keeps all three"
+        );
+    }
+
     /// Live check against the real database, opt-in and READ-ONLY.
     ///
     /// The previous version of this fix passed every unit test and was still
@@ -2814,8 +3109,11 @@ mod tests {
             .unwrap_or(None);
         println!("project_dependencies.hono.version = {manifest_version:?}");
 
-        let installed =
-            installed_versions_for(&conn, "hono", &["d:/4da/mcp-4da-server".to_string()]);
+        let installed: Vec<String> =
+            installs_for(&conn, "hono", &["d:/4da/mcp-4da-server".to_string()])
+                .into_iter()
+                .map(|install| install.version)
+                .collect();
         println!("resolved installed versions       = {installed:?}");
         assert!(
             !installed.is_empty(),

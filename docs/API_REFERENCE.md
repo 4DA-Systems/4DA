@@ -301,22 +301,6 @@ Get available sources.
 invoke('get_sources'): Promise<SourceInfo[]>
 ```
 
-### `enable_source`
-
-Enable a source.
-
-```typescript
-invoke('enable_source', { source: string }): Promise<void>
-```
-
-### `disable_source`
-
-Disable a source.
-
-```typescript
-invoke('disable_source', { source: string }): Promise<void>
-```
-
 ### `fetch_source`
 
 Fetch items from a source.

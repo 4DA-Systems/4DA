@@ -178,6 +178,9 @@ pub fn run_headless(mode: HeadlessMode, force: bool) -> ! {
     // its running marker — so every headless drain made the NEXT GUI start
     // report "Previous session exited uncleanly" (2026-09-06, after the v30
     // and v31 drains) and flag crash recovery to the frontend.
+    // Every mode, including the "already fresh" early exit that opens the
+    // database without running a cycle.
+    crate::db_recovery_marker::persist_pending_notice();
     crate::startup_watchdog::mark_clean_shutdown();
     std::process::exit(code);
 }
@@ -351,6 +354,9 @@ async fn run_one_cycle(handle: &AppHandle, trigger: &'static str, force_osv: boo
             crate::engine_block::note_db_error(&e.to_string());
         }
     }
+    // A restore or quarantine that opening the database just performed must
+    // outlive this process — this engine has no UI (`db_recovery_marker`).
+    crate::db_recovery_marker::persist_pending_notice();
 
     // Step 0b — refresh the dependency profile if a manifest changed or it has gone stale.
     // Decoupled from the context cold-start gate so a dep added or a version bumped on a LIVE

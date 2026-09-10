@@ -304,6 +304,25 @@ fn default_notification_style() -> String {
     "custom".to_string()
 }
 
+/// Retention bounds for `monitoring.cleanup_max_age_days`, shared by the
+/// settings command (`set_cleanup_retention`), `Settings::validate`, and every
+/// reader through [`MonitoringConfig::retention_days`].
+pub const RETENTION_MIN_DAYS: u32 = 7;
+pub const RETENTION_MAX_DAYS: u32 = 365;
+pub const RETENTION_DEFAULT_DAYS: u32 = 30;
+
+impl MonitoringConfig {
+    /// The retention window every destructive prune uses — clamped HERE, not
+    /// only at the settings command. A hand-edited `settings.json` bypassed the
+    /// command's 7..=365 check, and `cleanup_max_age_days: 0` made the daily
+    /// maintenance delete every item not re-seen that day (2026-09-10 audit).
+    pub fn retention_days(&self) -> u32 {
+        self.cleanup_max_age_days
+            .unwrap_or(RETENTION_DEFAULT_DAYS)
+            .clamp(RETENTION_MIN_DAYS, RETENTION_MAX_DAYS)
+    }
+}
+
 impl Default for MonitoringConfig {
     fn default() -> Self {
         Self {
@@ -795,6 +814,16 @@ impl Settings {
             self.monitoring.interval_minutes = old.clamp(1, 1440);
             if self.monitoring.interval_minutes != old {
                 tracing::warn!(target: "4da::settings", field = "monitoring.interval_minutes", old, new = self.monitoring.interval_minutes, "Clamped invalid value");
+            }
+        }
+
+        // monitoring.cleanup_max_age_days drives the daily DELETE of source_items;
+        // 0 would prune everything not re-seen today. Same bounds as the command.
+        if let Some(old) = self.monitoring.cleanup_max_age_days {
+            let new = old.clamp(RETENTION_MIN_DAYS, RETENTION_MAX_DAYS);
+            if new != old {
+                tracing::warn!(target: "4da::settings", field = "monitoring.cleanup_max_age_days", old, new, "Clamped invalid value");
+                self.monitoring.cleanup_max_age_days = Some(new);
             }
         }
 

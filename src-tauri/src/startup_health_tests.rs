@@ -51,6 +51,57 @@ fn test_check_engine_block_silent_without_marker() {
     let _ = fs::remove_dir_all(&tmp);
 }
 
+/// 2026-09-10 audit: a recovery performed by the headless background refresh
+/// (its own process, no UI) reached nobody. The marker it leaves must surface
+/// on the next app start exactly once, at the severity of what happened.
+#[test]
+fn test_check_database_surfaces_a_headless_recovery_once() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    crate::db_recovery_marker::record_in(
+        tmp.path(),
+        &crate::db::migrations::CorruptionRecovery::QuarantinedNoBackup {
+            quarantined_to: tmp.path().join("4da.db.corrupt"),
+        },
+    );
+
+    let mut issues = Vec::new();
+    check_database(tmp.path(), &mut issues);
+    let recovery: Vec<&HealthIssue> = issues
+        .iter()
+        .filter(|i| i.message.contains("background refresh"))
+        .collect();
+    assert_eq!(recovery.len(), 1, "{issues:?}");
+    assert_eq!(recovery[0].component, "database");
+    assert_eq!(recovery[0].severity, HealthSeverity::Error);
+    assert!(
+        recovery[0].message.contains("4da.db.corrupt"),
+        "{}",
+        recovery[0].message
+    );
+
+    let mut again = Vec::new();
+    check_database(tmp.path(), &mut again);
+    assert!(
+        !again
+            .iter()
+            .any(|i| i.message.contains("background refresh")),
+        "the marker is consumed: reported once, not on every poll"
+    );
+}
+
+#[test]
+fn test_a_restore_by_the_background_refresh_is_a_warning() {
+    let marker = crate::db_recovery_marker::RecoveryMarker {
+        at: "2026-09-10T03:00:00Z".to_string(),
+        kind: "restored_from_backup".to_string(),
+        detail: "4da.db.backup.v121".to_string(),
+    };
+    let issue = recovery_marker_issue(&marker);
+    assert_eq!(issue.severity, HealthSeverity::Warning);
+    assert!(issue.message.contains("4da.db.backup.v121"));
+    assert!(issue.message.contains("2026-09-10T03:00:00Z"));
+}
+
 #[test]
 fn test_check_database_missing() {
     let tmp = std::env::temp_dir().join("4da_health_test_db_missing");

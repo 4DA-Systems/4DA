@@ -2554,21 +2554,14 @@ pub(crate) struct SynthesisResult {
     pub synthesis_tier: String,
 }
 
-/// Short, human-readable label for a project path: the last one or two path
-/// components (e.g. "c:/users/.../kairos-mvp/backend" -> "kairos-mvp/backend").
-/// Gives the synthesizer a concrete project to name instead of inventing one.
+/// Short, human-readable label for a project path (e.g.
+/// "c:/users/.../kairos-mvp/backend" -> "kairos-mvp/backend"). Gives the
+/// synthesizer a concrete project to name instead of inventing one. Delegates
+/// to the one home-aware label: the plain last-two-segments rule turned a
+/// project directly under the home directory into "<username>/project" —
+/// inside a prompt bound for the user's LLM provider.
 fn project_label(path: &str) -> String {
-    let norm = path.replace('\\', "/");
-    let parts: Vec<&str> = norm
-        .trim_end_matches('/')
-        .split('/')
-        .filter(|s| !s.is_empty())
-        .collect();
-    match parts.len() {
-        0 => path.to_string(),
-        1 => parts[0].to_string(),
-        n => format!("{}/{}", parts[n - 2], parts[n - 1]),
-    }
+    crate::privacy_egress::project_label(path)
 }
 
 /// The canonical abstention prose the synthesis gates emit on rejection (failed

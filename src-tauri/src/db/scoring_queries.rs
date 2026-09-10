@@ -41,12 +41,17 @@ pub const SCORE_WRITE_HYSTERESIS: f64 = 0.05;
 ///
 /// SQLite sorts NULLs last under DESC, so items with neither column set sink
 /// to the bottom without extra clauses.
-pub const RANKED_ORDER_EXPR: &str = "COALESCE(rank_score, relevance_score) DESC";
+///
+/// `id DESC` is the terminal tie-break. Measured 2026-09-10: 100 of the 651
+/// surfaced items sat at exactly 0.5000 (the low-community UGC cap), and
+/// without a tie-break their order was whatever SQLite emitted. Newest first
+/// is the honest order among equals.
+pub const RANKED_ORDER_EXPR: &str = "COALESCE(rank_score, relevance_score) DESC, id DESC";
 
-/// [`RANKED_ORDER_EXPR`] with a table alias, for joined queries
-/// (e.g. `ranked_order_expr("si")` → `COALESCE(si.rank_score, si.relevance_score) DESC`).
+/// [`RANKED_ORDER_EXPR`] with a table alias, for joined queries (e.g.
+/// `ranked_order_expr("si")` → `COALESCE(si.rank_score, si.relevance_score) DESC, si.id DESC`).
 pub fn ranked_order_expr(alias: &str) -> String {
-    format!("COALESCE({alias}.rank_score, {alias}.relevance_score) DESC")
+    format!("COALESCE({alias}.rank_score, {alias}.relevance_score) DESC, {alias}.id DESC")
 }
 
 /// One durable score row for [`Database::persist_analysis_scores`]:
