@@ -26,7 +26,10 @@ is patched but node_modules still has 4.13.1 — run `pnpm install`"), and the
 recommendation is the reinstall, not an upgrade the lockfile is already past.
 `what_should_i_know` names a vulnerable installed copy with its reinstall
 command whatever the task, so the verdict is at least `review_needed` and
-never clean. `dependency_health` and `upgrade_planner` show `installedVersion`
+never clean. That advisory is graded the way the app grades its install-drift
+row: high when the reinstall clears an advisory the running copy has (the
+hono case, though its three advisories are medium on their own), medium when
+the lockfile's pinned version is exposed too. `dependency_health` and `upgrade_planner` show `installedVersion`
 beside `currentVersion`, and `upgrade_planner` turns a drift-only row into a
 `reinstall` step. Expect `install_drift: []` on a healthy checkout.
 

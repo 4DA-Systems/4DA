@@ -82,23 +82,33 @@ export interface DriftAdvisory {
 
 /**
  * One briefing advisory per drifted package whose installed copy OSV lists as
- * vulnerable. Always a security alert, so the briefing's verdict is at least
+ * vulnerable, graded the way the app grades its install-drift Preemption row
+ * (`evidence::install_drift`): high when the reinstall clears an advisory the
+ * running copy has, medium when the lockfile's pinned version is exposed too
+ * (the reinstall alone is then not the fix, and each advisory's own signal
+ * carries its grade). Always a security alert, so the verdict is at least
  * review_needed and a vulnerable installed copy is never reported clean.
+ *
+ * Measured 2026-09-10: the hono incident's three advisories are medium on
+ * their own, and the installed copy stayed vulnerable for 25 days while a
+ * one-line reinstall would have cleared all three.
  */
 export function installDriftAdvisories(scan: VulnerabilityScanResult): DriftAdvisory[] {
   return groupDriftRows(scan.vulnerabilities).map((entries) => {
     const first = entries[0];
-    const tier = topTier(entries);
     const count = entries.length;
-    const patched = !entries.some((e) => lockfileAlsoAffected(e, scan.vulnerabilities));
+    const pinExposed = entries.some((e) => lockfileAlsoAffected(e, scan.vulnerabilities));
+    const clearsAny = entries.some((e) => !lockfileAlsoAffected(e, scan.vulnerabilities));
     return {
       title: `${first.package}: the installed ${first.currentVersion} in node_modules has ${count} known vulnerabilit${count === 1 ? "y" : "ies"}; the lockfile pins ${first.installDriftOf}`,
       signal_type: "security_alert",
-      priority: tier === "critical" ? "critical" : tier === "high" ? "high" : "medium",
+      priority: clearsAny ? "high" : "medium",
       action: `${driftAction(first)}${
-        patched
+        !pinExposed
           ? " (the lockfile version is not affected; the reinstall is the whole fix)"
-          : " (the lockfile version is also affected; upgrade it, then reinstall)"
+          : clearsAny
+            ? " (the reinstall clears some of these; the lockfile version is still affected by the rest, so upgrade it too)"
+            : " (the lockfile version is also affected; upgrade it, then reinstall)"
       }`,
       url: null,
     };

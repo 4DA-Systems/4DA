@@ -628,8 +628,31 @@ describe("the briefing and live signals grade by the shared rule and name instal
     expect(drift!.signal_type).toBe("security_alert");
     expect(drift!.action).toContain("Run `pnpm install` in d:/proj/mcp-4da-server");
     expect(drift!.action).toContain("the lockfile version is not affected");
+    // Graded like the app's install-drift row: the reinstall clears an
+    // advisory the running copy has, so high, though the advisory is medium.
+    expect(drift!.priority).toBe("high");
     expect(["review_needed", "human_only"]).toContain(result.delegation_assessment.level);
     expect(result.summary).not.toContain("No active advisories");
+  });
+
+  it("drift whose lockfile version is exposed too is medium, and says to upgrade before reinstalling", async () => {
+    const lockfileRow = entry({
+      ...drifted,
+      currentVersion: "4.13.5",
+      installDriftOf: undefined,
+      installFix: undefined,
+    });
+    const result = await executeWhatShouldIKnow(
+      db,
+      { task: "Tidy the README" },
+      stubIntel(scanOf([drifted, lockfileRow])),
+    );
+
+    const drift = result.advisories.find((a) => a.title.startsWith("hono: the installed 4.13.1"));
+    expect(drift).toBeDefined();
+    expect(drift!.priority).toBe("medium");
+    expect(drift!.action).toContain("the lockfile version is also affected; upgrade it, then reinstall");
+    expect(result.delegation_assessment.level).toBe("review_needed");
   });
 
   it("get_actionable_signals advises the reinstall, not an upgrade, for the installed copy", () => {
