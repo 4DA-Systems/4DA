@@ -11,7 +11,9 @@ import type { FourDADatabase } from "../db.js";
 import type { LiveIntelligence } from "../live/index.js";
 import type { VulnerabilityEntry } from "../live/types.js";
 import { isMaintenanceNotice } from "../live/maintenance.js";
+import { presentedSeverity, scopeAdjustmentReason } from "../live/severity-scope.js";
 import { getLiveIntelligence } from "../live-singleton.js";
+import { driftAction } from "./install-drift-notes.js";
 import {
   classify,
   normalizeStoredPriority,
@@ -274,14 +276,27 @@ export function executeGetActionableSignals(
   if (vulnResult && vulnResult.vulnerabilities.length > 0) {
     if (!params.signal_type || params.signal_type === "security_alert") {
       for (const { representative: vuln, ids } of clusterVulnerabilities(vulnResult.vulnerabilities)) {
+        // The grade every surface shares (AD-046; twin of the app's
+        // `osv::identity::scope_adjusted_urgency`), not the raw advisory tier:
+        // a transitive of unknown scope read "CRITICAL: Sandbox Breakout" here
+        // while the app graded it High (sandbox@3.1.2, 2026-09-10).
+        const presented = presentedSeverity(vuln);
         let priority: SignalPriority =
-          vuln.severity === "critical" ? "critical" :
-          vuln.severity === "high" ? "high" : "medium";
-        let relevance = vuln.severity === "critical" ? 1.0 : vuln.severity === "high" ? 0.9 : 0.7;
-        let action = vuln.fixedVersion
-          ? `Upgrade ${vuln.package} to ${vuln.fixedVersion}`
-          : `Review ${vuln.package} — no fix version published`;
-        let label = vuln.severity.toUpperCase();
+          presented === "critical" ? "critical" :
+          presented === "high" ? "high" : "medium";
+        let relevance = presented === "critical" ? 1.0 : presented === "high" ? 0.9 : 0.7;
+        // An installed copy the lockfile does not pin is fixed by a reinstall,
+        // not an upgrade: the lockfile is already where it should be.
+        let action = vuln.installDriftOf
+          ? driftAction(vuln)
+          : vuln.fixedVersion
+            ? `Upgrade ${vuln.package} to ${vuln.fixedVersion}`
+            : `Review ${vuln.package} — no fix version published`;
+        const adjusted = scopeAdjustmentReason(vuln);
+        if (adjusted) {
+          action += ` (the advisory rates it ${vuln.severity}; graded ${presented} as a ${adjusted})`;
+        }
+        let label = presented.toUpperCase();
 
         // "X is unmaintained" is information to plan around, not a fix to
         // apply today; an advisory against a crate this host never builds is

@@ -14,13 +14,18 @@ import { LiveCache } from "./cache.js";
 import { RateLimiter, DEFAULT_RATE_LIMITS } from "./rate-limiter.js";
 import { OsvScanner } from "./osv-scanner.js";
 import { HNFetcher } from "./hn-fetcher.js";
-import { resolveAuditVersions, resolveVersions, mapEcosystem } from "./version-resolver.js";
-import { computeSemverDistance } from "./semver-utils.js";
 import { NpmRegistry } from "./npm-registry.js";
 import { CratesRegistry } from "./crates-registry.js";
 import { PyPIRegistry } from "./pypi-registry.js";
 import { GoRegistry } from "./go-registry.js";
+import { fetchRegistryHealthFor } from "./registry-health.js";
+import { commonPathRoot, dedupeDependencies, emptyVulnResult } from "./dependency-set.js";
+import { groupIsStale, resolveGroup, type GroupResolution, type ResolutionGroup } from "./resolution.js";
+import { applyInstanceDevScope } from "./dev-scope.js";
 import type {
+  InstallDriftRecord,
+  ResolutionProvenance,
+  ResolutionSourceRecord,
   ResolvedDependency,
   RegistryPackageInfo,
   VulnerabilityScanResult,
@@ -28,12 +33,22 @@ import type {
   LiveIntelligenceStatus,
 } from "./types.js";
 
-export type { VulnerabilityScanResult, VulnerabilityEntry, LiveHeadline, LiveIntelligenceStatus, RegistryPackageInfo, DependencyHealthResult } from "./types.js";
+export type {
+  VulnerabilityScanResult,
+  VulnerabilityEntry,
+  LiveHeadline,
+  LiveIntelligenceStatus,
+  RegistryPackageInfo,
+  DependencyHealthResult,
+  InstallDriftRecord,
+  ResolutionProvenance,
+} from "./types.js";
 
 /** Minimum gap between vulnerability warmup attempts after an offline result. */
 const WARMUP_RETRY_MS = 60_000;
 
 export class LiveIntelligence {
+  private db: Database.Database;
   private cache: LiveCache;
   private rateLimiter: RateLimiter;
   private osvScanner: OsvScanner;
@@ -50,6 +65,16 @@ export class LiveIntelligence {
   private auditDeps: ResolvedDependency[] = [];
   private initialized = false;
   private projectRoot: string | null = null;
+  /** One entry per resolution group: its inputs, result, and the file signatures that say when it went stale. */
+  private groupResults: GroupResolution[] = [];
+  /** When the dependency set in use was assembled: at init, or at the last re-resolution. */
+  private resolvedAt: string | null = null;
+  /**
+   * Bumped by every re-resolution. A scan started under an older generation
+   * describes a dependency set that no longer exists: it may still be handed
+   * to the call that asked for it, but it is never stored or served later.
+   */
+  private generation = 0;
   /**
    * The background vulnerability scan started at server init. Tools that need
    * scan data before answering (`what_should_i_know`) await this through
@@ -60,6 +85,7 @@ export class LiveIntelligence {
   private warmupFailedAt: number | null = null;
 
   constructor(db: Database.Database) {
+    this.db = db;
     this.enabled = process.env.FOURDA_OFFLINE !== "true";
     this.cache = new LiveCache(db);
     this.rateLimiter = new RateLimiter(DEFAULT_RATE_LIMITS);
@@ -81,10 +107,7 @@ export class LiveIntelligence {
     devDeps: string[],
     language: string,
   ): void {
-    this.resolvedDeps = resolveVersions(projectPath, deps, devDeps, language);
-    this.auditDeps = resolveAuditVersions(projectPath, deps, devDeps, language);
-    this.projectRoot = projectPath;
-    this.initialized = true;
+    this.applyGroups([{ dir: projectPath, language, deps, devDeps, targets: {} }], projectPath);
   }
 
   /**
@@ -97,16 +120,14 @@ export class LiveIntelligence {
     depsByEcosystem: Record<string, { deps: string[]; devDeps: string[] }>,
     depTargets: Record<string, string> = {},
   ): void {
-    const allResolved: ResolvedDependency[] = [];
-    const allAudit: ResolvedDependency[] = [];
-    for (const [language, { deps, devDeps }] of Object.entries(depsByEcosystem)) {
-      allResolved.push(...resolveVersions(projectPath, deps, devDeps, language, depTargets));
-      allAudit.push(...resolveAuditVersions(projectPath, deps, devDeps, language, depTargets));
-    }
-    this.resolvedDeps = dedupeDependencies(allResolved);
-    this.auditDeps = dedupeDependencies(allAudit);
-    this.projectRoot = projectPath;
-    this.initialized = true;
+    const groups = Object.entries(depsByEcosystem).map(([language, { deps, devDeps }]) => ({
+      dir: projectPath,
+      language,
+      deps,
+      devDeps,
+      targets: depTargets,
+    }));
+    this.applyGroups(groups, projectPath);
   }
 
   /**
@@ -122,18 +143,69 @@ export class LiveIntelligence {
   initFromDependencyGroups(
     groups: Array<{ dir: string; language: string; deps: string[]; devDeps: string[] }>,
   ): void {
-    const allResolved: ResolvedDependency[] = [];
-    const allAudit: ResolvedDependency[] = [];
-    for (const { dir, language, deps, devDeps } of groups) {
-      // Each resolver stamps `sourceDirs: [dir]` at the point of resolution, so
-      // the dedupe below can union provenance instead of discarding it.
-      allResolved.push(...resolveVersions(dir, deps, devDeps, language));
-      allAudit.push(...resolveAuditVersions(dir, deps, devDeps, language));
-    }
-    this.resolvedDeps = dedupeDependencies(allResolved);
-    this.auditDeps = dedupeDependencies(allAudit);
-    this.projectRoot = commonPathRoot(groups.map((g) => g.dir));
+    // Each resolver stamps `sourceDirs: [dir]` at the point of resolution, so
+    // the dedupe can union provenance instead of discarding it.
+    this.applyGroups(
+      groups.map((g) => ({ ...g, targets: {} })),
+      commonPathRoot(groups.map((g) => g.dir)),
+    );
+  }
+
+  private applyGroups(groups: ResolutionGroup[], projectRoot: string | null): void {
+    this.groupResults = groups.map(resolveGroup);
+    this.rebuildDependencySet();
+    this.projectRoot = projectRoot;
     this.initialized = true;
+  }
+
+  private rebuildDependencySet(): void {
+    this.resolvedDeps = dedupeDependencies(this.groupResults.flatMap((r) => r.resolved));
+    this.auditDeps = dedupeDependencies(this.groupResults.flatMap((r) => r.audit));
+    this.resolvedAt = new Date().toISOString();
+  }
+
+  /**
+   * Re-resolve every group whose inputs changed since they were read (a
+   * lockfile rewritten, created or deleted; the fallback manifest; for npm,
+   * the node_modules install state), and drop every answer that described the
+   * old set: the stored scan and the warmup. Returns true when anything was
+   * re-resolved. Stat calls only, so it is cheap enough for the top of every
+   * tool call. A process that started before a `git pull` no longer answers
+   * for the dependency set it saw at startup.
+   */
+  refreshIfLockfilesChanged(): boolean {
+    if (!this.initialized || this.groupResults.length === 0) return false;
+    let changed = false;
+    this.groupResults = this.groupResults.map((result) => {
+      if (!groupIsStale(result)) return result;
+      changed = true;
+      return resolveGroup(result.group);
+    });
+    if (!changed) return false;
+    this.rebuildDependencySet();
+    this.generation++;
+    this.lastVulnScan = null;
+    this.warmup = null;
+    this.warmupFailedAt = null;
+    return true;
+  }
+
+  /** When the dependency set in use was resolved, and from which files. Null before init. */
+  getResolutionProvenance(): ResolutionProvenance | null {
+    if (!this.initialized || !this.resolvedAt) return null;
+    const seen = new Set<string>();
+    const sources: ResolutionSourceRecord[] = [];
+    for (const result of this.groupResults) {
+      if (!result.source || seen.has(result.source.path)) continue;
+      seen.add(result.source.path);
+      sources.push(result.source);
+    }
+    return { resolvedAt: this.resolvedAt, sources };
+  }
+
+  /** npm direct dependencies whose installed copy differs from the lockfile, per manifest directory. */
+  getInstallDrift(): InstallDriftRecord[] {
+    return this.groupResults.flatMap((r) => r.drift);
   }
 
   /**
@@ -148,6 +220,11 @@ export class LiveIntelligence {
 
   /**
    * Run vulnerability scan (returns cached if fresh, fetches otherwise).
+   *
+   * Without `includeDev`, only DIRECT devDependencies are left out (the
+   * documented contract). A transitive stays in whatever its scope: an
+   * unknown scope must not be hidden, and a known dev-only one is graded
+   * down by the shared severity rule, not dropped.
    */
   async scanVulnerabilities(
     projectPath: string,
@@ -157,9 +234,12 @@ export class LiveIntelligence {
       return emptyVulnResult(projectPath, true);
     }
 
-    const deps = options?.includeDev
+    const scoped = options?.includeDev
       ? this.auditDeps
-      : this.auditDeps.filter((d) => !d.isDev);
+      : this.auditDeps.filter((d) => !(d.isDirect && d.isDev));
+    // Read at scan time, not init time: the app rewrites its inventory on
+    // every rescan, and the freshest determination is the one to grade by.
+    const deps = applyInstanceDevScope(this.db, scoped);
 
     if (deps.length === 0) {
       return emptyVulnResult(projectPath, false);
@@ -169,12 +249,16 @@ export class LiveIntelligence {
       this.cache.invalidateSource("osv");
     }
 
+    const generation = this.generation;
     try {
-      this.lastVulnScan = await this.osvScanner.scan(deps, projectPath);
-      return this.lastVulnScan;
+      const result = await this.osvScanner.scan(deps, projectPath);
+      if (generation === this.generation) this.lastVulnScan = result;
+      return result;
     } catch {
       // Network failure — return last known or empty
-      if (this.lastVulnScan) return { ...this.lastVulnScan, offline: true, cached: true };
+      if (generation === this.generation && this.lastVulnScan) {
+        return { ...this.lastVulnScan, offline: true, cached: true };
+      }
       return emptyVulnResult(projectPath, true);
     }
   }
@@ -199,18 +283,21 @@ export class LiveIntelligence {
   }
 
   /**
-   * A usable vulnerability scan, or null. Returns the stored scan when one
-   * exists, otherwise awaits the warmup (starting one if none is running)
-   * for at most `timeoutMs`. Null means the scan is not available: disabled,
-   * still running past the deadline, or finished offline (an offline scan
-   * makes no clean-dependency claims, so it cannot support a "safe" verdict).
-   * Never throws. A timed-out warmup keeps running so a later call can use it.
+   * A usable vulnerability scan, or null. Re-resolves first when a lockfile
+   * changed. Returns the stored scan when one exists, otherwise awaits the
+   * warmup (starting one if none is running) for at most `timeoutMs`. Null
+   * means the scan is not available: disabled, still running past the
+   * deadline, finished offline (an offline scan makes no clean-dependency
+   * claims, so it cannot support a "safe" verdict), or overtaken by a
+   * re-resolution while it ran. Never throws. A timed-out warmup keeps running
+   * so a later call can use it.
    */
   async ensureVulnerabilities(
     projectPath: string,
     timeoutMs: number,
   ): Promise<VulnerabilityScanResult | null> {
     if (!this.enabled) return null;
+    this.refreshIfLockfilesChanged();
     if (this.lastVulnScan && !this.lastVulnScan.offline) return this.lastVulnScan;
 
     if (!this.warmup) {
@@ -221,6 +308,7 @@ export class LiveIntelligence {
     }
     const pending = this.warmup;
     if (!pending) return null;
+    const generation = this.generation;
 
     let timer: ReturnType<typeof setTimeout> | undefined;
     const deadline = new Promise<null>((resolve) => {
@@ -229,6 +317,8 @@ export class LiveIntelligence {
     try {
       const settled = await Promise.race([pending, deadline]);
       if (settled === null) return null; // still scanning; keep the warmup alive
+      // Re-resolved while waiting: that scan describes a set that no longer exists.
+      if (generation !== this.generation) return null;
       const result = this.lastVulnScan ?? settled;
       if (result.offline) {
         // Failed or rate-limited: allow a fresh attempt after the backoff.
@@ -292,68 +382,13 @@ export class LiveIntelligence {
   }
 
   async fetchRegistryHealth(deps: ResolvedDependency[]): Promise<RegistryPackageInfo[]> {
-    if (!this.enabled) {
-      return deps.map((d) => ({
-        name: d.name, ecosystem: d.ecosystem, currentVersion: d.version,
-        latestVersion: null, latestStableVersion: null, versionsBehind: null,
-        deprecated: false, deprecationMessage: null, lastPublished: null,
-        license: null, weeklyDownloads: null, isDev: d.isDev, fetchError: "Offline mode",
-      }));
-    }
-
-    const registryForEcosystem = (eco: string) => {
-      switch (eco) {
-        case "npm": return this.npmRegistry;
-        case "crates.io": return this.cratesRegistry;
-        case "PyPI": return this.pypiRegistry;
-        case "Go": return this.goRegistry;
-        default: return null;
-      }
-    };
-
-    const results = await Promise.all(
-      deps.map(async (dep) => {
-        const registry = registryForEcosystem(dep.ecosystem);
-        if (!registry) {
-          return {
-            name: dep.name, ecosystem: dep.ecosystem, currentVersion: dep.version,
-            latestVersion: null, latestStableVersion: null, versionsBehind: null,
-            deprecated: false, deprecationMessage: null, lastPublished: null,
-            license: null, weeklyDownloads: null, isDev: dep.isDev,
-            fetchError: `No registry fetcher for ${dep.ecosystem}`,
-          } as RegistryPackageInfo;
-        }
-        try {
-          const info = await registry.getPackageInfo(dep.name, dep.version, dep.isDev);
-          return restampRegistryContext(info, dep);
-        } catch {
-          return {
-            name: dep.name, ecosystem: dep.ecosystem, currentVersion: dep.version,
-            latestVersion: null, latestStableVersion: null, versionsBehind: null,
-            deprecated: false, deprecationMessage: null, lastPublished: null,
-            license: null, weeklyDownloads: null, isDev: dep.isDev,
-            fetchError: "Registry fetch failed",
-          } as RegistryPackageInfo;
-        }
-      }),
+    // Registries are read at call time (not captured at construction) so a
+    // test can substitute one.
+    return fetchRegistryHealthFor(
+      deps,
+      { npm: this.npmRegistry, crates: this.cratesRegistry, pypi: this.pypiRegistry, go: this.goRegistry },
+      this.enabled,
     );
-
-    // Bulk fetch npm downloads for npm deps
-    const npmDeps = deps.filter((d) => d.ecosystem === "npm");
-    if (npmDeps.length > 0) {
-      try {
-        const downloads = await this.npmRegistry.getBulkDownloads(npmDeps.map((d) => d.name));
-        for (const result of results) {
-          if (result.ecosystem === "npm" && downloads.has(result.name)) {
-            result.weeklyDownloads = downloads.get(result.name) || null;
-          }
-        }
-      } catch {
-        // Downloads are nice-to-have, not critical
-      }
-    }
-
-    return results;
   }
 
   getStatus(): LiveIntelligenceStatus {
@@ -366,87 +401,4 @@ export class LiveIntelligence {
       cachedHeadlineCount: this.lastHeadlines.length,
     };
   }
-}
-
-/**
- * Deepest common ancestor of a set of directories (segment-wise, both slash
- * styles). Null for an empty set; a single dir is its own root.
- */
-function commonPathRoot(dirs: string[]): string | null {
-  if (dirs.length === 0) return null;
-  const split = (p: string) => p.replace(/\\/g, "/").replace(/\/+$/, "").split("/");
-  let common = split(dirs[0]);
-  for (const dir of dirs.slice(1)) {
-    const parts = split(dir);
-    let i = 0;
-    while (i < common.length && i < parts.length && common[i].toLowerCase() === parts[i].toLowerCase()) i++;
-    common = common.slice(0, i);
-    if (common.length === 0) break;
-  }
-  return common.length > 0 ? common.join("/") : null;
-}
-
-/**
- * Registry caches key by package NAME, but the cached record embeds the
- * QUERYING dependency's `currentVersion`, `versionsBehind`, and `isDev`. Two
- * instances of one package at different versions (better-sqlite3 11.10.0 and
- * 12.11.1 across workspaces) therefore both came back wearing the first
- * instance's version — the upgrade planner then showed two identical rows and
- * lost the older instance entirely. Registry facts (latest version,
- * deprecation, downloads) are per-package and cacheable; the per-instance
- * fields are re-stamped here from the dep actually being asked about.
- */
-function restampRegistryContext(
-  info: RegistryPackageInfo,
-  dep: ResolvedDependency,
-): RegistryPackageInfo {
-  const latest = info.latestStableVersion || info.latestVersion;
-  return {
-    ...info,
-    currentVersion: dep.version,
-    isDev: dep.isDev,
-    versionsBehind: dep.version && latest ? computeSemverDistance(dep.version, latest) : null,
-  };
-}
-
-function dedupeDependencies(deps: ResolvedDependency[]): ResolvedDependency[] {
-  const unique = new Map<string, ResolvedDependency>();
-  for (const dep of deps) {
-    const key = `${dep.ecosystem}\0${dep.name}\0${dep.version ?? ""}`;
-    const existing = unique.get(key);
-    if (existing) {
-      existing.isDirect ||= dep.isDirect;
-      existing.devScopeKnown &&= dep.devScopeKnown;
-      existing.isDev = existing.devScopeKnown && existing.isDev && dep.isDev;
-      // A crate reachable via ANY active path is active; keep a target label if present.
-      existing.platformActive ||= dep.platformActive;
-      existing.target = existing.target ?? dep.target;
-      // Union the provenance rather than discarding it — the same version can
-      // legitimately be pinned by several workspaces, and the reader needs all
-      // of them to know where to apply the fix.
-      for (const dir of dep.sourceDirs ?? []) {
-        if (!existing.sourceDirs.includes(dir)) existing.sourceDirs.push(dir);
-      }
-    } else {
-      unique.set(key, { ...dep, sourceDirs: [...(dep.sourceDirs ?? [])] });
-    }
-  }
-  return [...unique.values()];
-}
-
-function emptyVulnResult(projectPath: string, offline: boolean): VulnerabilityScanResult {
-  return {
-    scannedAt: new Date().toISOString(),
-    projectPath,
-    ecosystemsScanned: [],
-    totalScanned: 0,
-    totalVulnerable: 0,
-    platformInactiveVulnerable: 0,
-    bySeverity: { critical: 0, high: 0, medium: 0, low: 0, unknown: 0 },
-    vulnerabilities: [],
-    cleanCount: 0,
-    scanDurationMs: 0,
-    cached: false,
-    offline,
-  };
 }

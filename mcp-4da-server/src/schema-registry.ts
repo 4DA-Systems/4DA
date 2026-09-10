@@ -61,7 +61,7 @@ export interface ToolRegistryEntry {
 export const TOOL_REGISTRY: Record<string, ToolRegistryEntry> = {
   // --- Dependency Security (standalone) ---
   vulnerability_scan: {
-    summary: "Scan dependencies for known CVEs via OSV.dev across npm/Rust/Python/Go, zero config. Call when the user asks about security, vulnerabilities, or CVEs, or before you recommend a dependency.",
+    summary: "Scan dependencies for known CVEs via OSV.dev across npm/Rust/Python/Go, zero config; `cached` means the OSV lookup only. Call when the user asks about security, vulnerabilities, or CVEs, or before you recommend a dependency.",
     schemaFile: "vulnerability-scan.json",
     category: "security",
     tags: ["security", "vulnerabilities", "cve", "dependencies", "osv"],

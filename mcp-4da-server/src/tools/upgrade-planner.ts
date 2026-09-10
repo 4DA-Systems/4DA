@@ -16,11 +16,16 @@
  *   resolved from, not whatever `process.cwd()` happens to be.
  * - When no vulnerability scan has run, the plan says so instead of silently
  *   producing a CVE-blind ranking.
+ * - When node_modules holds a different version than the lockfile, the row
+ *   says so (`installedVersion`) and a reinstall is the step when nothing
+ *   else about the lockfile's version needs changing.
  */
 
 import type { FourDADatabase } from "../db.js";
 import type { LiveIntelligence } from "../live/index.js";
 import { compareSemver, maxSemver } from "../live/semver-utils.js";
+import { dirsLabel, driftFor } from "./install-drift-notes.js";
+import { relativeDir } from "./vulnerability-scan-format.js";
 
 export interface UpgradePlannerParams {
   include_dev?: boolean;
@@ -40,10 +45,18 @@ interface UpgradeRecommendation {
   isDev: boolean;
   /** Whether this package is declared in a manifest (direct) or only present via the lockfile (transitive). */
   scope: "direct" | "transitive";
-  /** Direct deps you can bump yourself; transitive fixes arrive via a parent update or lockfile refresh. */
-  action: "upgrade_direct" | "waiting_on_upstream";
+  /**
+   * Direct deps you can bump yourself; transitive fixes arrive via a parent
+   * update or lockfile refresh; `reinstall` = the lockfile's version is fine
+   * but node_modules holds another one, so the fix is `installFix`.
+   */
+  action: "upgrade_direct" | "waiting_on_upstream" | "reinstall";
   /** False when the dependency is gated behind a target spec not active on this host (label, never suppressed). */
   platformActive: boolean;
+  /** npm: the version node_modules holds, when it differs from `currentVersion` (the lockfile's). */
+  installedVersion?: string;
+  /** npm: the command that reinstalls from the lockfile, when `installedVersion` is set. */
+  installFix?: string;
 }
 
 interface UpgradePlanResult {
@@ -99,6 +112,13 @@ function severityToRisk(severities: string[]): UpgradeRecommendation["risk"] {
   return "medium";
 }
 
+function higherRisk(
+  a: UpgradeRecommendation["risk"],
+  b: UpgradeRecommendation["risk"],
+): UpgradeRecommendation["risk"] {
+  return RISK_LEVELS[b] > RISK_LEVELS[a] ? b : a;
+}
+
 export async function executeUpgradePlanner(
   _db: FourDADatabase,
   params: UpgradePlannerParams,
@@ -119,12 +139,18 @@ export async function executeUpgradePlanner(
     };
   }
 
+  // A long-lived server must not plan from the versions it read at startup:
+  // re-resolve if a lockfile (or node_modules) changed. Stat calls only.
+  liveIntel.refreshIfLockfilesChanged();
+
   const includeDev = params.include_dev ?? false;
   let deps = liveIntel.getResolvedDeps();
   if (!includeDev) deps = deps.filter((d) => !d.isDev);
 
   // Fetch registry data (live lookups for direct deps; cached where fresh)
   const registryData = await liveIntel.fetchRegistryHealth(deps);
+  const drift = liveIntel.getInstallDrift();
+  const root = liveIntel.getProjectRoot() ?? process.cwd();
 
   // Vulnerability data from the last scan this session (no network here).
   const vulnResult = liveIntel.getVulnerabilities();
@@ -202,7 +228,31 @@ export async function executeUpgradePlanner(
       }
     }
 
-    // Skip if no upgrade needed (no vuln, not deprecated, not behind => no reasons)
+    // Install drift: node_modules holds another version than this lockfile
+    // row, and until a reinstall the installed copy's advisories are the real
+    // exposure. Without this, a patched, up-to-date lockfile version had no
+    // reasons and the row was skipped, so a vulnerable installed copy never
+    // appeared in the plan at all.
+    const lockfileReasons = reasons.length;
+    const drifted = dep.ecosystem === "npm" ? driftFor(drift, dep.name, dep.currentVersion) : [];
+    let installedVersion: string | undefined;
+    let installFix: string | undefined;
+    if (drifted.length > 0) {
+      installedVersion = [...new Set(drifted.map((r) => r.installedVersion))].join(", ");
+      installFix = drifted[0].fix;
+      const where = dirsLabel(drifted.map((r) => r.dir), (d) => relativeDir(d, root));
+      reasons.push(`node_modules has ${installedVersion}, not the lockfile's ${dep.currentVersion} — run \`${installFix}\` in ${where}`);
+      for (const installed of new Set(drifted.map((r) => r.installedVersion))) {
+        const installedVulns = vulnsByPackage.get(instanceKey("npm", dep.name, installed));
+        if (!installedVulns || installedVulns.length === 0) continue;
+        reasons.push(
+          `The installed ${installed} has ${installedVulns.length} known CVE${installedVulns.length !== 1 ? "s" : ""} (${installedVulns.map((v) => v.vulnId).join(", ")})`,
+        );
+        risk = higherRisk(risk, severityToRisk(installedVulns.map((v) => v.severity)));
+      }
+    }
+
+    // Skip if no upgrade needed (no vuln, not deprecated, not behind, no drift => no reasons)
     if (reasons.length === 0) continue;
 
     // Never recommend a downgrade: when the current version is a prerelease
@@ -224,20 +274,24 @@ export async function executeUpgradePlanner(
     const label = dep.versionsBehind?.label;
     const upgradeType: UpgradeRecommendation["upgradeType"] =
       !label || label === "up-to-date" ? "unknown" : label;
+    // Drift is the only problem: the lockfile's version is the target, and
+    // reinstalling it is the whole step.
+    const reinstallOnly = drifted.length > 0 && lockfileReasons === 0;
 
     recommendations.push({
       package: dep.name,
       ecosystem: dep.ecosystem,
       currentVersion: dep.currentVersion,
-      targetVersion,
+      targetVersion: reinstallOnly ? dep.currentVersion : targetVersion,
       upgradeType,
       risk,
       reasons,
       breaking: dep.versionsBehind?.label === "major",
       isDev: dep.isDev,
       scope: "direct",
-      action: "upgrade_direct",
+      action: reinstallOnly ? "reinstall" : "upgrade_direct",
       platformActive,
+      ...(installedVersion ? { installedVersion, installFix } : {}),
     });
   }
 
@@ -318,11 +372,13 @@ export async function executeUpgradePlanner(
   const quickWins = direct.filter((r) => !r.breaking).length;
   const breakingChanges = direct.filter((r) => r.breaking).length;
   const waitingOnUpstream = limited.filter((r) => r.scope === "transitive").length;
+  const reinstalls = limited.filter((r) => r.action === "reinstall").length;
 
   // Summary
   const parts: string[] = [];
   parts.push(`${limited.length} recommendation${limited.length !== 1 ? "s" : ""}`);
   if (direct.length > 0) parts.push(`${direct.length} fixable directly (${quickWins} quick win${quickWins !== 1 ? "s" : ""}, ${breakingChanges} breaking)`);
+  if (reinstalls > 0) parts.push(`${reinstalls} need only a reinstall (node_modules behind the lockfile)`);
   if (waitingOnUpstream > 0) parts.push(`${waitingOnUpstream} transitive, waiting on upstream`);
   const criticalCount = limited.filter((r) => r.risk === "critical").length;
   if (criticalCount > 0) parts.push(`${criticalCount} critical`);

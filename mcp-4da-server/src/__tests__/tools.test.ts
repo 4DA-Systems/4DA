@@ -640,6 +640,33 @@ describe("4DA MCP Tool Handlers", () => {
       expect(second.map((r) => r.id)).not.toContain(noiseWithRank);
     });
 
+    it("breaks ordering ties by id, newest first (RANKED_ORDER_EXPR's `, id DESC`)", () => {
+      // 100 of 651 surfaced items sat at exactly 0.5000 (a hard score cap), and
+      // without a tie-break their order was whatever SQLite emitted. The Rust
+      // RANKED_ORDER_EXPR gained `, id DESC`; this mirror must order the same.
+      seedUserContext(db);
+      const raw = db.getRawDb();
+      raw.exec("ALTER TABLE source_items ADD COLUMN relevance_score REAL");
+      raw.exec("ALTER TABLE source_items ADD COLUMN content_type TEXT");
+      raw.exec("ALTER TABLE source_items ADD COLUMN signal_type TEXT");
+      raw.exec("ALTER TABLE source_items ADD COLUMN signal_priority TEXT");
+      raw.exec("ALTER TABLE source_items ADD COLUMN rank_score REAL");
+
+      const oldest = insertSourceItem(db, { title: "Tokio scheduler internals deep dive", content: "rust" });
+      const middle = insertSourceItem(db, { title: "SQLite WAL checkpoint tuning guide", content: "rust" });
+      const newest = insertSourceItem(db, { title: "Kubernetes operator reconciliation patterns", content: "rust" });
+      // All three land on the same ordering value: two by evidence, one by rank.
+      raw
+        .prepare("UPDATE source_items SET relevance_score = 0.5, rank_score = NULL WHERE id IN (?, ?)")
+        .run(oldest, newest);
+      raw
+        .prepare("UPDATE source_items SET relevance_score = 0.45, rank_score = 0.5 WHERE id = ?")
+        .run(middle);
+
+      const ids = executeGetRelevantContent(db, { min_score: 0.35, since_hours: 24, limit: 50 }).map((r) => r.id);
+      expect(ids).toEqual([newest, middle, oldest]);
+    });
+
     it("deep-fallback actionable signals never trust stale-version stored signals", () => {
       // get_actionable_signals trusts persisted signal_type/signal_priority at
       // confidence 0.90 — on the deep fallback those columns MUST come from the

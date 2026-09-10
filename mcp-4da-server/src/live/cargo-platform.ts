@@ -43,6 +43,7 @@
 import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { fileSignature } from "./file-signature.js";
 
 /** Rust target triple for the current host, or null for a platform we do not map. */
 export function hostTriple(): string | null {
@@ -62,10 +63,18 @@ export function hostTriple(): string | null {
   }
 }
 
-/** Per-directory memo. A scan touches the same workspace once per group. */
-const cache = new Map<string, Set<string> | null>();
+/**
+ * Per-directory memo, valid only while the workspace's Cargo.lock and
+ * Cargo.toml are unchanged. The MCP server now re-resolves dependencies when a
+ * lockfile changes, and server processes live for days (2026-09-10: two were
+ * older than the lockfile they answered for). A memo keyed on the directory
+ * alone would hand a re-resolution the OLD crate set, and every crate the new
+ * lockfile added would read as not-built-on-host, hiding its advisories under
+ * platform_inactive.
+ */
+const cache = new Map<string, { signature: string; crates: Set<string> | null }>();
 
-/** Reset the memo. Tests only — the process is short-lived in production. */
+/** Reset the memo. Tests only. */
 export function _resetCargoPlatformCache(): void {
   cache.clear();
 }
@@ -80,12 +89,13 @@ export function _resetCargoPlatformCache(): void {
  */
 export function activeCratesForHost(dir: string): Set<string> | null {
   const key = path.resolve(dir);
+  const signature = `${fileSignature(path.join(key, "Cargo.lock"))}|${fileSignature(path.join(key, "Cargo.toml"))}`;
   const memo = cache.get(key);
-  if (memo !== undefined) return memo;
+  if (memo !== undefined && memo.signature === signature) return memo.crates;
 
-  const result = computeActiveCrates(key);
-  cache.set(key, result);
-  return result;
+  const crates = computeActiveCrates(key);
+  cache.set(key, { signature, crates });
+  return crates;
 }
 
 function computeActiveCrates(dir: string): Set<string> | null {

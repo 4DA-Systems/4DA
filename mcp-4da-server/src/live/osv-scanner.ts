@@ -240,6 +240,10 @@ export function restampDepContext(
     target: dep.target,
     platformActive: dep.platformActive,
     sourceDirs: dep.sourceDirs ?? [],
+    // Install drift is today's node_modules state, not an advisory fact:
+    // stamped from the current dep, so a cached row never carries it forward.
+    installDriftOf: dep.installDriftOf,
+    installFix: dep.installFix,
   };
 }
 
@@ -271,6 +275,8 @@ function mapVulnerability(
     target: dep.target,
     platformActive: dep.platformActive,
     sourceDirs: dep.sourceDirs ?? [],
+    installDriftOf: dep.installDriftOf,
+    installFix: dep.installFix,
   };
 }
 
