@@ -496,6 +496,66 @@ fn normalize_dep_name(name: &str) -> String {
     name.to_lowercase().replace('-', "_")
 }
 
+/// The ecosystem half of a coverage identity, canonical (`rust` and
+/// `crates.io` are one ecosystem). A dependency is (name, ecosystem):
+/// `jsonwebtoken` the crate and `jsonwebtoken` the npm package share a name
+/// and nothing else (AD-045).
+fn coverage_ecosystem(dep: &DepCoverage) -> String {
+    crate::osv::exposure::canonical(&dep.ecosystem)
+        .map(str::to_string)
+        .unwrap_or_else(|| dep.ecosystem.to_lowercase())
+}
+
+/// Which of the ecosystems carrying `name` a signal row speaks for. A registry
+/// row speaks for its registry's ecosystem, an advisory row the mirror can
+/// resolve for its advisory's; anything else — editorial, or an advisory the
+/// mirror cannot resolve — for every ecosystem carrying the name, because it
+/// cannot say which.
+fn signal_ecosystems(
+    conn: &rusqlite::Connection,
+    name: &str,
+    source_type: &str,
+    source_id: &str,
+    match_source: &str,
+    carrying: &[String],
+    advisory_memo: &mut std::collections::HashMap<String, Vec<String>>,
+) -> Vec<String> {
+    if let Some(registry) = crate::osv::exposure::registry_source_ecosystem(source_type) {
+        return carrying
+            .iter()
+            .filter(|e| e.as_str() == registry)
+            .cloned()
+            .collect();
+    }
+    if match_source != "title_heuristic" && matches!(source_type, "osv" | "cve") {
+        let resolved = advisory_memo
+            .entry(format!("{name}\u{0}{source_id}"))
+            .or_insert_with(|| {
+                crate::osv::exposure::advisory_records(conn, source_id, name)
+                    .into_iter()
+                    .filter_map(|(e, _)| crate::osv::exposure::canonical(&e).map(str::to_string))
+                    .collect()
+            });
+        if !resolved.is_empty() {
+            return carrying
+                .iter()
+                .filter(|e| resolved.contains(e))
+                .cloned()
+                .collect();
+        }
+    }
+    carrying.to_vec()
+}
+
+/// Lowercase, forward slashes, no trailing slash — the form
+/// `user_dependencies.project_path` and `project_dependencies` store.
+fn normalize_project_path(path: &str) -> String {
+    path.replace('\\', "/")
+        .to_lowercase()
+        .trim_end_matches('/')
+        .to_string()
+}
+
 /// Query `project_dependencies` to get a coverage view of the user's stack.
 ///
 /// Uses `project_dependencies` (not `user_dependencies`) because:
@@ -895,8 +955,14 @@ fn find_uncovered_deps(
                 return Ok((Vec::new(), Vec::new()));
             }
         };
+        // One row per NAME: a name two ecosystems share would otherwise join
+        // every signal twice (rows are credited per ecosystem below).
+        let mut inserted: std::collections::HashSet<String> = std::collections::HashSet::new();
         for dep in &eligible_deps {
             let norm = normalize_dep_name(&dep.package_name);
+            if !inserted.insert(norm.clone()) {
+                continue;
+            }
             if let Err(e) = insert_stmt.execute(params![norm]) {
                 warn!(
                     target: "4da::blind_spots",
@@ -940,7 +1006,8 @@ fn find_uncovered_deps(
                 ) THEN 1
                 ELSE 0
             END AS interacted,
-            sid.match_type AS match_source
+            sid.match_type AS match_source,
+            si.source_id
         FROM _blind_spot_deps bd
         JOIN source_item_dependencies sid
             ON LOWER(REPLACE(sid.package_name, '-', '_')) = bd.name
@@ -967,7 +1034,8 @@ fn find_uncovered_deps(
                 ) THEN 1
                 ELSE 0
             END AS interacted,
-            'title_heuristic' AS match_source
+            'title_heuristic' AS match_source,
+            si.source_id
         FROM _blind_spot_deps bd
         JOIN source_items si ON (si.title LIKE '%' || bd.name || '%'
                                  OR si.title LIKE '%' || REPLACE(bd.name, '_', '-') || '%')
@@ -990,7 +1058,8 @@ fn find_uncovered_deps(
             si.source_type,
             si.content_type,
             CAST(julianday('now') - julianday(MAX(i.timestamp)) AS INTEGER) AS days_since,
-            sid.match_type AS match_source
+            sid.match_type AS match_source,
+            si.source_id
         FROM _blind_spot_deps bd
         JOIN source_item_dependencies sid
             ON LOWER(REPLACE(sid.package_name, '-', '_')) = bd.name
@@ -1008,7 +1077,8 @@ fn find_uncovered_deps(
             si.source_type,
             si.content_type,
             CAST(julianday('now') - julianday(MAX(i.timestamp)) AS INTEGER) AS days_since,
-            'title_heuristic' AS match_source
+            'title_heuristic' AS match_source,
+            si.source_id
         FROM _blind_spot_deps bd
         JOIN source_items si ON (si.title LIKE '%' || bd.name || '%'
                                  OR si.title LIKE '%' || REPLACE(bd.name, '_', '-') || '%')
@@ -1022,19 +1092,33 @@ fn find_uncovered_deps(
         GROUP BY bd.name, si.id, si.title, si.source_type, si.content_type
     ";
 
-    let dep_lookup: std::collections::HashMap<String, &DepCoverage> = eligible_deps
-        .iter()
-        .map(|d| (normalize_dep_name(&d.package_name), *d))
-        .collect();
-    let mut coverage: std::collections::HashMap<String, DepSignalCoverage> = eligible_deps
-        .iter()
-        .map(|dep| {
-            (
-                normalize_dep_name(&dep.package_name),
-                DepSignalCoverage::default(),
-            )
-        })
-        .collect();
+    // Coverage is keyed by (name, ecosystem) — AD-045. Keyed by name alone,
+    // `jsonwebtoken` the crate and `jsonwebtoken` the npm package collapsed
+    // into one entry and the last one iterated won: live 2026-09-10 the npm
+    // row was silently absent and the crates.io row borrowed its version.
+    let mut ecosystems_by_name: std::collections::HashMap<String, Vec<String>> =
+        std::collections::HashMap::new();
+    for dep in &eligible_deps {
+        ecosystems_by_name
+            .entry(normalize_dep_name(&dep.package_name))
+            .or_default()
+            .push(coverage_ecosystem(dep));
+    }
+    let mut coverage: std::collections::HashMap<(String, String), DepSignalCoverage> =
+        eligible_deps
+            .iter()
+            .map(|dep| {
+                (
+                    (
+                        normalize_dep_name(&dep.package_name),
+                        coverage_ecosystem(dep),
+                    ),
+                    DepSignalCoverage::default(),
+                )
+            })
+            .collect();
+    let mut advisory_memo: std::collections::HashMap<String, Vec<String>> =
+        std::collections::HashMap::new();
 
     {
         let mut stmt = match conn.prepare(recent_sql) {
@@ -1056,6 +1140,7 @@ fn find_uncovered_deps(
                 row.get::<_, Option<String>>(3)?,
                 row.get::<_, i64>(4)?,
                 row.get::<_, String>(5)?,
+                row.get::<_, Option<String>>(6)?.unwrap_or_default(),
             ))
         }) {
             Ok(r) => r,
@@ -1070,7 +1155,7 @@ fn find_uncovered_deps(
         };
 
         for row_result in rows {
-            let (name, title, source_type, content_type, interacted, match_source) =
+            let (name, title, source_type, content_type, interacted, match_source, source_id) =
                 match row_result {
                     Ok(r) => r,
                     Err(e) => {
@@ -1111,16 +1196,30 @@ fn find_uncovered_deps(
             // "image" through — "58 security/breaking-change signals, 460 new
             // releases" (2026-09-06).
             let weak_hit = mt == "title_heuristic" && is_ambiguous_package_name(&name);
-            let entry = coverage.entry(name).or_default();
-            if weak_hit {
-                entry.weak += 1;
-                continue;
+            let carrying: &[String] = ecosystems_by_name
+                .get(&name)
+                .map(Vec::as_slice)
+                .unwrap_or(&[]);
+            for ecosystem in signal_ecosystems(
+                conn,
+                &name,
+                &source_type,
+                &source_id,
+                &match_source,
+                carrying,
+                &mut advisory_memo,
+            ) {
+                let entry = coverage.entry((name.clone(), ecosystem)).or_default();
+                if weak_hit {
+                    entry.weak += 1;
+                    continue;
+                }
+                entry.available += 1;
+                if interacted > 0 {
+                    entry.interacted += 1;
+                }
+                upgrade_match_type(&mut entry.best_match_type, mt);
             }
-            entry.available += 1;
-            if interacted > 0 {
-                entry.interacted += 1;
-            }
-            upgrade_match_type(&mut entry.best_match_type, mt);
         }
     }
 
@@ -1144,6 +1243,7 @@ fn find_uncovered_deps(
                 row.get::<_, Option<String>>(3)?,
                 row.get::<_, u32>(4)?,
                 row.get::<_, String>(5)?,
+                row.get::<_, Option<String>>(6)?.unwrap_or_default(),
             ))
         }) {
             Ok(r) => r,
@@ -1158,7 +1258,7 @@ fn find_uncovered_deps(
         };
 
         for row_result in rows {
-            let (name, title, source_type, content_type, days_since, match_source) =
+            let (name, title, source_type, content_type, days_since, match_source, source_id) =
                 match row_result {
                     Ok(r) => r,
                     Err(e) => {
@@ -1187,12 +1287,26 @@ fn find_uncovered_deps(
             } else {
                 "title_heuristic"
             };
-            let entry = coverage.entry(name).or_default();
-            entry.days_since_last_signal = Some(match entry.days_since_last_signal {
-                Some(existing) => existing.min(days_since),
-                None => days_since,
-            });
-            upgrade_match_type(&mut entry.best_match_type, mt);
+            let carrying: &[String] = ecosystems_by_name
+                .get(&name)
+                .map(Vec::as_slice)
+                .unwrap_or(&[]);
+            for ecosystem in signal_ecosystems(
+                conn,
+                &name,
+                &source_type,
+                &source_id,
+                &match_source,
+                carrying,
+                &mut advisory_memo,
+            ) {
+                let entry = coverage.entry((name.clone(), ecosystem)).or_default();
+                entry.days_since_last_signal = Some(match entry.days_since_last_signal {
+                    Some(existing) => existing.min(days_since),
+                    None => days_since,
+                });
+                upgrade_match_type(&mut entry.best_match_type, mt);
+            }
         }
     }
 
@@ -1215,13 +1329,16 @@ fn find_uncovered_deps(
     let mut uncovered = Vec::new();
     let mut weak_match_deps: Vec<UncoveredDep> = Vec::new();
     for dep in &eligible_deps {
-        let norm = normalize_dep_name(&dep.package_name);
-        let Some(metrics) = coverage.get(&norm) else {
+        let key = (
+            normalize_dep_name(&dep.package_name),
+            coverage_ecosystem(dep),
+        );
+        let Some(metrics) = coverage.get(&key) else {
             continue;
         };
-        let Some(dep_info) = dep_lookup.get(&norm) else {
-            continue;
-        };
+        // This row's own dependency — never a same-named one from another
+        // ecosystem (the name-keyed lookup this replaced let the last win).
+        let dep_info: &DepCoverage = dep;
 
         // ── Match-type gate: ambiguous names with only title-heuristic hits ──
         // Ambiguous names (common English words like "image", "config", "log")
@@ -2713,9 +2830,13 @@ pub(crate) mod test_support {
 }
 
 /// The LOWEST installed version of `dep_name` (display only — the counters
-/// take every version).
-fn lookup_installed_version(dep_name: &str) -> Option<String> {
-    installed_versions(dep_name).into_iter().next()
+/// take every version). `ecosystem` is the signal's registry when known;
+/// without it, a name two ecosystems carry has no single installed version to
+/// report, so none is reported (AD-045).
+fn lookup_installed_version(dep_name: &str, ecosystem: Option<&str>) -> Option<String> {
+    installed_versions(dep_name, ecosystem, &[])
+        .into_iter()
+        .next()
 }
 
 /// Installed versions of `dep_name` across the user's included projects,
@@ -2729,11 +2850,19 @@ fn lookup_installed_version(dep_name: &str) -> Option<String> {
 /// unreviewed" against advisories they had all outgrown, and sha2's own
 /// 0.11.0 was "1 new release" — with the Phase 120 rules in place and unit
 /// tested against explicit versions the wiring never supplied.
-fn installed_versions(dep_name: &str) -> Vec<String> {
+///
+/// Keyed by ECOSYSTEM and scoped to the PROJECTS the row names (AD-045): live
+/// 2026-09-10, the `jsonwebtoken (crates.io)` row naming `relay` and
+/// `src-tauri` read "you're on 9.0.3 – 10.4.0", where 9.0.3 is the unrelated
+/// npm package of the same name in the VS Code extension — an aggregate true
+/// for neither project it named. `projects` empty means every project.
+fn installed_versions(dep_name: &str, ecosystem: Option<&str>, projects: &[String]) -> Vec<String> {
     #[cfg(test)]
     {
-        test_support::with_test_conn(|conn| installed_versions_conn(conn, dep_name))
-            .unwrap_or_default()
+        test_support::with_test_conn(|conn| {
+            installed_versions_conn(conn, dep_name, ecosystem, projects)
+        })
+        .unwrap_or_default()
     }
     #[cfg(not(test))]
     {
@@ -2741,30 +2870,57 @@ fn installed_versions(dep_name: &str) -> Vec<String> {
             return Vec::new();
         };
         let conn = db.conn.lock();
-        installed_versions_conn(&conn, dep_name)
+        installed_versions_conn(&conn, dep_name, ecosystem, projects)
     }
 }
 
-fn installed_versions_conn(conn: &rusqlite::Connection, dep_name: &str) -> Vec<String> {
+fn installed_versions_conn(
+    conn: &rusqlite::Connection,
+    dep_name: &str,
+    ecosystem: Option<&str>,
+    projects: &[String],
+) -> Vec<String> {
     let Ok(mut stmt) = conn.prepare(
-        "SELECT project_path, version FROM user_dependencies
+        "SELECT project_path, version, ecosystem FROM user_dependencies
          WHERE lower(package_name) = lower(?1)
            AND version IS NOT NULL AND version != ''",
     ) else {
         return Vec::new();
     };
     let Ok(rows) = stmt.query_map(params![dep_name], |row| {
-        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, Option<String>>(2)?,
+        ))
     }) else {
         return Vec::new();
     };
     let user_excluded = crate::project_inclusion::user_excluded_paths();
-    let mut versions: Vec<String> = rows
+    let wanted_ecosystem = ecosystem.and_then(crate::osv::exposure::canonical);
+    let wanted_projects: Vec<String> = projects.iter().map(|p| normalize_project_path(p)).collect();
+    let rows: Vec<(String, Option<&'static str>)> = rows
         .flatten()
-        .filter(|(path, _)| {
+        .filter(|(path, _, _)| {
             !crate::project_inclusion::is_excluded_from_intelligence(path, &user_excluded)
         })
-        .map(|(_, v)| v)
+        .filter(|(path, _, _)| {
+            wanted_projects.is_empty() || wanted_projects.contains(&normalize_project_path(path))
+        })
+        .map(|(_, v, e)| (v, e.as_deref().and_then(crate::osv::exposure::canonical)))
+        .collect();
+    if wanted_ecosystem.is_none() {
+        // No ecosystem named: a name two ecosystems carry has no one version.
+        let ecosystems: std::collections::HashSet<Option<&'static str>> =
+            rows.iter().map(|(_, e)| *e).collect();
+        if ecosystems.len() > 1 {
+            return Vec::new();
+        }
+    }
+    let mut versions: Vec<String> = rows
+        .into_iter()
+        .filter(|(_, e)| wanted_ecosystem.is_none() || *e == wanted_ecosystem)
+        .map(|(v, _)| v)
         .collect();
     versions.sort_by(|a, b| {
         let pa = semver::Version::parse(a.trim_start_matches(['v', 'V']));
@@ -2805,11 +2961,15 @@ struct DepSignalBreakdown {
     other: u32,
 }
 
-fn count_signal_types_for_dep(dep_name: &str, installed: &[String]) -> DepSignalBreakdown {
+fn count_signal_types_for_dep(
+    dep_name: &str,
+    ecosystem: Option<&str>,
+    installed: &[String],
+) -> DepSignalBreakdown {
     #[cfg(test)]
     {
         test_support::with_test_conn(|conn| {
-            count_signal_types_for_dep_conn(conn, dep_name, installed)
+            count_signal_types_for_dep_conn(conn, dep_name, ecosystem, installed)
         })
         .unwrap_or_default()
     }
@@ -2821,7 +2981,11 @@ fn count_signal_types_for_dep(dep_name: &str, installed: &[String]) -> DepSignal
         static MEMO: std::sync::Mutex<
             Option<std::collections::HashMap<String, (std::time::Instant, DepSignalBreakdown)>>,
         > = std::sync::Mutex::new(None);
-        let key = format!("{dep_name}\u{0}{}", installed.join(","));
+        let key = format!(
+            "{dep_name}\u{0}{}\u{0}{}",
+            ecosystem.unwrap_or_default(),
+            installed.join(",")
+        );
         if let Ok(guard) = MEMO.lock() {
             if let Some((at, cached)) = guard.as_ref().and_then(|m| m.get(&key)) {
                 if at.elapsed() < std::time::Duration::from_mins(2) {
@@ -2835,7 +2999,7 @@ fn count_signal_types_for_dep(dep_name: &str, installed: &[String]) -> DepSignal
         };
         let computed = {
             let conn = db.conn.lock();
-            count_signal_types_for_dep_conn(&conn, dep_name, installed)
+            count_signal_types_for_dep_conn(&conn, dep_name, ecosystem, installed)
         };
         if let Ok(mut guard) = MEMO.lock() {
             guard
@@ -2865,6 +3029,7 @@ fn release_is_newer_than_installed(announced: Option<&str>, installed: Option<&s
 fn count_signal_types_for_dep_conn(
     conn: &rusqlite::Connection,
     dep_name: &str,
+    ecosystem: Option<&str>,
     installed: &[String],
 ) -> DepSignalBreakdown {
     let mut b = DepSignalBreakdown::default();
@@ -2878,10 +3043,18 @@ fn count_signal_types_for_dep_conn(
     // installed version stays exposed. `installed` is lowest-first (see
     // `installed_versions`), so a release is NEW when the lowest install is
     // below it — one project behind keeps it new.
-    let exposed = installed.is_empty()
-        || installed
-            .iter()
-            .any(|v| crate::knowledge_decay::still_vulnerable(conn, dep_name, Some(v), &[]));
+    // Installs carry this row's ecosystem (AD-045): an npm `jsonwebtoken` is
+    // never exposed by the crates.io advisory of the same name.
+    let wanted_ecosystem = ecosystem.and_then(crate::osv::exposure::canonical);
+    let installs: Vec<crate::osv::exposure::Install> = installed
+        .iter()
+        .map(|v| crate::osv::exposure::Install {
+            ecosystem: wanted_ecosystem,
+            version: v.clone(),
+        })
+        .collect();
+    let exposed = installs.is_empty()
+        || crate::knowledge_decay::installs_still_vulnerable(conn, dep_name, &installs);
     let lowest_installed = installed.first().map(String::as_str);
     // Candidates: everything the linker bound to this package with
     // registry/advisory proof, plus title substring hits — re-checked below.
@@ -2893,7 +3066,8 @@ fn count_signal_types_for_dep_conn(
                       EXISTS(SELECT 1 FROM source_item_dependencies sid
                               WHERE sid.source_item_id = si.id
                                 AND LOWER(sid.package_name) = LOWER(?1)
-                                AND sid.match_type IN ('exact_registry', 'advisory')) AS linked
+                                AND sid.match_type IN ('exact_registry', 'advisory')) AS linked,
+                      si.source_id
                FROM source_items si
                WHERE si.created_at >= datetime('now', '-30 days')
                  AND (si.title LIKE '%' || ?1 || '%'
@@ -2910,11 +3084,12 @@ fn count_signal_types_for_dep_conn(
             row.get::<_, Option<String>>(1)?,
             row.get::<_, String>(2)?,
             row.get::<_, i64>(3)? != 0,
+            row.get::<_, Option<String>>(4)?.unwrap_or_default(),
         ))
     }) else {
         return b;
     };
-    for (title, content_type, source_type, linked) in rows.flatten() {
+    for (title, content_type, source_type, linked, source_id) in rows.flatten() {
         // A REGISTRY row is a release of its SUBJECT crate, nothing else: the
         // subject must be this dependency (axum-stack, axum-serde-boundary
         // and tauri-plugin-* are not releases of axum or tauri — live
@@ -2922,6 +3097,16 @@ fn count_signal_types_for_dep_conn(
         // shipped once, in April), and a version the user already runs is
         // not a NEW release ("sha2 — 2 new releases" for the installed 0.11.0).
         if crate::dep_linker::is_registry_source(&source_type) {
+            // A registry row speaks for ITS registry's package: a crates.io
+            // `jsonwebtoken` release is no news about the npm one (AD-045).
+            if let (Some(want), Some(row_ecosystem)) = (
+                wanted_ecosystem,
+                crate::osv::exposure::registry_source_ecosystem(&source_type),
+            ) {
+                if want != row_ecosystem {
+                    continue;
+                }
+            }
             let Some((subject, version)) = crate::dep_linker::registry_title_subject(&title) else {
                 continue;
             };
@@ -2936,7 +3121,13 @@ fn count_signal_types_for_dep_conn(
         // An ADVISORY row counts only through the linker's `Affected:` proof
         // and only while the install is exposed; its title is never the link.
         if matches!(source_type.as_str(), "osv" | "cve") {
-            if linked && exposed {
+            // Judged per ADVISORY where the mirror can resolve the row — its
+            // own ecosystem, its own range, against these installs (AD-045) —
+            // else by whether any install is exposed to anything at all.
+            if linked
+                && crate::osv::exposure::advisory_row_reaches(conn, &source_id, dep_name, &installs)
+                    .unwrap_or(exposed)
+            {
                 b.security += 1;
             }
             continue;
@@ -3029,18 +3220,26 @@ fn is_still_a_coverage_gap(d: &UncoveredDep) -> bool {
     if d.available_signal_count == 0 {
         return true;
     }
+    gap_row_breakdown(d)
+        .1
+        .is_some_and(|b| breakdown_total(b) > 0)
+}
+
+/// A coverage-gap row's installed versions and consequence breakdown — its
+/// OWN ecosystem, its OWN projects' installs (AD-045). One place, so the
+/// title, the urgency and the gap filter can never judge different installs.
+fn gap_row_breakdown(d: &UncoveredDep) -> (Vec<String>, Option<DepSignalBreakdown>) {
     let bare = bare_package_name(&d.name);
-    breakdown_total(count_signal_types_for_dep(bare, &installed_versions(bare))) > 0
+    let installed = installed_versions(bare, Some(d.dep_type.as_str()), &d.projects_using);
+    let breakdown = (d.available_signal_count > 0)
+        .then(|| count_signal_types_for_dep(bare, Some(d.dep_type.as_str()), &installed));
+    (installed, breakdown)
 }
 
 /// The urgency a coverage gap will display, computed the way
 /// [`uncovered_dep_to_evidence_item`] computes it (memoised breakdown).
 fn uncovered_dep_display_urgency(d: &UncoveredDep) -> Urgency {
-    let bare = bare_package_name(&d.name);
-    let installed = installed_versions(bare);
-    let breakdown =
-        (d.available_signal_count > 0).then(|| count_signal_types_for_dep(bare, &installed));
-    consequence_urgency(d, breakdown)
+    consequence_urgency(d, gap_row_breakdown(d).1)
 }
 
 fn uncovered_dep_to_evidence_item(d: &UncoveredDep) -> EvidenceItem {
@@ -3049,10 +3248,7 @@ fn uncovered_dep_to_evidence_item(d: &UncoveredDep) -> EvidenceItem {
     // strip it first. Compute the consequence breakdown once (only when there are
     // unseen signals) — it drives the title, the explanation, AND the consequence-
     // weighted confidence/urgency below (#2b: rank by what changed, not by volume).
-    let bare = bare_package_name(&d.name);
-    let installed = installed_versions(bare);
-    let breakdown =
-        (d.available_signal_count > 0).then(|| count_signal_types_for_dep(bare, &installed));
+    let (installed, breakdown) = gap_row_breakdown(d);
 
     // Zero-signal deps get a distinct title and explanation — they have
     // NO coverage at all, which is qualitatively different from "has signals
@@ -3243,7 +3439,7 @@ fn stale_topic_to_evidence_item(t: &StaleTopic) -> EvidenceItem {
     // releases, then analyses) rather than the raw unread count.
     // DepSignalBreakdown is Copy, so both matches read it freely.
     let signal_breakdown =
-        (t.missed_signal_count > 0).then(|| count_signal_types_for_dep(&t.topic, &[]));
+        (t.missed_signal_count > 0).then(|| count_signal_types_for_dep(&t.topic, None, &[]));
     let title = match signal_breakdown {
         Some(b) if b.security > 0 => truncate_title(&format!(
             "{} — {} security/breaking-change signal{} unreviewed",
@@ -3374,7 +3570,10 @@ fn missed_signal_to_evidence_item(m: &MissedSignal) -> EvidenceItem {
     // Enrich relevance_note with installed version for release_notes signals
     let relevance_note = if m.content_type.as_deref() == Some("release_notes") {
         if let Some(ref dep) = m.dep_name {
-            if let Some(ver) = lookup_installed_version(dep) {
+            if let Some(ver) = lookup_installed_version(
+                dep,
+                crate::osv::exposure::registry_source_ecosystem(&m.source_type),
+            ) {
                 truncate_note(&format!("You're on {dep} {ver}"))
             } else {
                 truncate_note(&m.why_relevant)
@@ -4560,6 +4759,9 @@ mod tests {
                 title TEXT NOT NULL,
                 url TEXT,
                 source_type TEXT NOT NULL,
+                -- Mirrors the real NOT NULL column: an osv/cve row carries the
+                -- advisory/CVE id the mirror resolves for a live verdict (AD-045).
+                source_id TEXT NOT NULL DEFAULT '',
                 content TEXT,
                 relevance_score REAL DEFAULT 0.0,
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -6434,7 +6636,7 @@ mod tests {
         );
         assert!(!weak.iter().any(|d| d.name.contains("image")));
 
-        let b = count_signal_types_for_dep_conn(&conn, "image", &[]);
+        let b = count_signal_types_for_dep_conn(&conn, "image", None, &[]);
         assert_eq!(b.security, 1);
         assert_eq!(
             b.releases, 0,
@@ -6450,7 +6652,7 @@ mod tests {
             1,
         );
         assert_eq!(
-            count_signal_types_for_dep_conn(&conn, "axum", &[]).releases,
+            count_signal_types_for_dep_conn(&conn, "axum", None, &[]).releases,
             1
         );
     }
@@ -6518,17 +6720,17 @@ mod tests {
             insert_source_item_with_meta(&conn, title, "crates_io", Some("release_notes"), 0.7, 1);
         }
         assert_eq!(
-            count_signal_types_for_dep_conn(&conn, "axum", &[]).releases,
+            count_signal_types_for_dep_conn(&conn, "axum", None, &[]).releases,
             1,
             "axum-stack, axum-serde-boundary and axum_marko_build are not axum releases"
         );
         assert_eq!(
-            count_signal_types_for_dep_conn(&conn, "axum", &["0.8.9".to_string()]).releases,
+            count_signal_types_for_dep_conn(&conn, "axum", None, &["0.8.9".to_string()]).releases,
             0,
             "the release the user already runs is not a NEW release"
         );
         assert_eq!(
-            count_signal_types_for_dep_conn(&conn, "axum", &["0.8.6".to_string()]).releases,
+            count_signal_types_for_dep_conn(&conn, "axum", None, &["0.8.6".to_string()]).releases,
             1,
             "a newer release than the installed one counts"
         );
@@ -6542,7 +6744,8 @@ mod tests {
             1,
         );
         assert_eq!(
-            count_signal_types_for_dep_conn(&conn, "serial_test", &["3.4.0".to_string()]).releases,
+            count_signal_types_for_dep_conn(&conn, "serial_test", None, &["3.4.0".to_string()])
+                .releases,
             1
         );
     }
@@ -6599,18 +6802,18 @@ mod tests {
             1,
         );
 
-        let exposed = count_signal_types_for_dep_conn(&conn, "hono", &["4.11.0".to_string()]);
+        let exposed = count_signal_types_for_dep_conn(&conn, "hono", None, &["4.11.0".to_string()]);
         assert_eq!(exposed.security, 1, "4.11.0 is inside the range");
         assert_eq!(
             exposed.other, 1,
             "the editorial story is a citation, never a security signal"
         );
-        let patched = count_signal_types_for_dep_conn(&conn, "hono", &["4.13.3".to_string()]);
+        let patched = count_signal_types_for_dep_conn(&conn, "hono", None, &["4.13.3".to_string()]);
         assert_eq!(
             patched.security, 0,
             "4.13.3 is past the fix — no security signal to review"
         );
-        let unknown = count_signal_types_for_dep_conn(&conn, "hono", &[]);
+        let unknown = count_signal_types_for_dep_conn(&conn, "hono", None, &[]);
         assert_eq!(
             unknown.security, 1,
             "an unknown installed version stays conservatively exposed"
@@ -6620,12 +6823,14 @@ mod tests {
         let mixed = count_signal_types_for_dep_conn(
             &conn,
             "hono",
+            None,
             &["4.11.0".to_string(), "4.13.3".to_string()],
         );
         assert_eq!(mixed.security, 1, "the 4.11.0 install is still exposed");
         let all_patched = count_signal_types_for_dep_conn(
             &conn,
             "hono",
+            None,
             &["4.12.34".to_string(), "4.13.3".to_string()],
         );
         assert_eq!(all_patched.security, 0);
@@ -6656,24 +6861,24 @@ mod tests {
         )
         .unwrap();
         assert_eq!(
-            installed_versions_conn(&conn, "sha2"),
+            installed_versions_conn(&conn, "sha2", None, &[]),
             vec!["0.10.9".to_string(), "0.11.0".to_string()],
             "lockfile versions, deduplicated, lowest first"
         );
         assert_eq!(
-            installed_versions_conn(&conn, "SHA2"),
-            installed_versions_conn(&conn, "sha2")
+            installed_versions_conn(&conn, "SHA2", None, &[]),
+            installed_versions_conn(&conn, "sha2", None, &[])
         );
         assert!(
-            installed_versions_conn(&conn, "tokio").is_empty(),
+            installed_versions_conn(&conn, "tokio", None, &[]).is_empty(),
             "a package with no lockfile row has no known version"
         );
         assert_eq!(
-            installed_note(&installed_versions_conn(&conn, "hono")),
+            installed_note(&installed_versions_conn(&conn, "hono", None, &[])),
             " (you're on 4.13.3)"
         );
         assert_eq!(
-            installed_note(&installed_versions_conn(&conn, "sha2")),
+            installed_note(&installed_versions_conn(&conn, "sha2", None, &[])),
             " (you're on 0.10.9 – 0.11.0)"
         );
 
@@ -6687,9 +6892,9 @@ mod tests {
             0.7,
             1,
         );
-        let installed = installed_versions_conn(&conn, "sha2");
+        let installed = installed_versions_conn(&conn, "sha2", None, &[]);
         assert_eq!(
-            count_signal_types_for_dep_conn(&conn, "sha2", &installed).releases,
+            count_signal_types_for_dep_conn(&conn, "sha2", None, &installed).releases,
             1
         );
         conn.execute(
@@ -6697,12 +6902,194 @@ mod tests {
             [],
         )
         .unwrap();
-        let installed = installed_versions_conn(&conn, "sha2");
+        let installed = installed_versions_conn(&conn, "sha2", None, &[]);
         assert_eq!(installed, vec!["0.11.0".to_string()]);
         assert_eq!(
-            count_signal_types_for_dep_conn(&conn, "sha2", &installed).releases,
+            count_signal_types_for_dep_conn(&conn, "sha2", None, &installed).releases,
             0,
             "the release every project already runs is not new"
+        );
+    }
+
+    /// AD-045, the audit's headline defect: `jsonwebtoken` the crate (relay
+    /// 9.3.1, src-tauri 10.4.0) and `jsonwebtoken` the npm package (the VS Code
+    /// extension, 9.0.3) are two dependencies. Live 2026-09-10 the crates.io
+    /// row naming relay and src-tauri read "you're on 9.0.3 – 10.4.0".
+    #[test]
+    fn installed_versions_are_keyed_by_ecosystem_and_scoped_to_the_row() {
+        let conn = setup_test_db();
+        conn.execute_batch(
+            "INSERT INTO user_dependencies (project_path, package_name, version, ecosystem) VALUES
+                 ('d:/4da/relay', 'jsonwebtoken', '9.3.1', 'rust'),
+                 ('d:/4da/src-tauri', 'jsonwebtoken', '10.4.0', 'rust'),
+                 ('d:/4da/editors/vscode/4da', 'jsonwebtoken', '9.0.3', 'javascript');",
+        )
+        .unwrap();
+        let rust_projects = vec!["d:/4da/relay".to_string(), r"D:\4DA\src-tauri".to_string()];
+        let crates =
+            installed_versions_conn(&conn, "jsonwebtoken", Some("crates.io"), &rust_projects);
+        assert_eq!(crates, vec!["9.3.1".to_string(), "10.4.0".to_string()]);
+        assert_eq!(installed_note(&crates), " (you're on 9.3.1 – 10.4.0)");
+        assert_eq!(
+            installed_versions_conn(&conn, "jsonwebtoken", Some("npm"), &[]),
+            vec!["9.0.3".to_string()]
+        );
+        assert!(
+            installed_versions_conn(&conn, "jsonwebtoken", None, &[]).is_empty(),
+            "with no ecosystem named, a name two ecosystems carry has no one version"
+        );
+        assert_eq!(
+            installed_versions_conn(
+                &conn,
+                "jsonwebtoken",
+                Some("rust"),
+                &["d:/4da/relay".to_string()]
+            ),
+            vec!["9.3.1".to_string()],
+            "scoped to the projects the row names"
+        );
+    }
+
+    #[test]
+    fn find_uncovered_deps_keeps_same_named_dependencies_apart() {
+        let conn = setup_test_db();
+        let release = insert_source_item_with_meta(
+            &conn,
+            "crates.io: jsonwebtoken v11.0.0",
+            "crates_io",
+            Some("release_notes"),
+            0.7,
+            1,
+        );
+        conn.execute(
+            "INSERT INTO source_item_dependencies
+                 (source_item_id, package_name, ecosystem, match_type, confidence)
+             VALUES (?1, 'jsonwebtoken', 'crates.io', 'exact_registry', 0.95)",
+            params![release],
+        )
+        .unwrap();
+        let deps = vec![
+            DepCoverage {
+                package_name: "jsonwebtoken".to_string(),
+                ecosystem: "crates.io".to_string(),
+                projects: vec!["d:/4da/relay".to_string(), "d:/4da/src-tauri".to_string()],
+            },
+            DepCoverage {
+                package_name: "jsonwebtoken".to_string(),
+                ecosystem: "npm".to_string(),
+                projects: vec!["d:/4da/editors/vscode/4da".to_string()],
+            },
+        ];
+        let (uncovered, _weak) = find_uncovered_deps(&conn, &deps, 14).expect("no SQL error");
+        let crates = uncovered
+            .iter()
+            .find(|u| u.dep_type == "crates.io")
+            .expect("the crate keeps its own row");
+        let npm = uncovered
+            .iter()
+            .find(|u| u.dep_type == "npm")
+            .expect("the npm package keeps its own row — it used to vanish");
+        assert_eq!(
+            crates.available_signal_count, 1,
+            "the crates.io release is the crate's news"
+        );
+        assert_eq!(
+            npm.available_signal_count, 0,
+            "and no news about the npm package"
+        );
+        assert_eq!(
+            crates.projects_using,
+            vec!["d:/4da/relay".to_string(), "d:/4da/src-tauri".to_string()]
+        );
+    }
+
+    #[test]
+    fn a_registry_release_counts_only_for_its_own_ecosystem() {
+        let conn = setup_test_db();
+        insert_source_item_with_meta(
+            &conn,
+            "crates.io: jsonwebtoken v11.0.0",
+            "crates_io",
+            Some("release_notes"),
+            0.7,
+            1,
+        );
+        let installed = ["9.3.1".to_string()];
+        assert_eq!(
+            count_signal_types_for_dep_conn(&conn, "jsonwebtoken", Some("crates.io"), &installed)
+                .releases,
+            1
+        );
+        assert_eq!(
+            count_signal_types_for_dep_conn(
+                &conn,
+                "jsonwebtoken",
+                Some("npm"),
+                &["9.0.3".to_string()]
+            )
+            .releases,
+            0,
+            "a crates.io release is no news about the npm package"
+        );
+    }
+
+    /// Live 2026-09-10: three hono advisories fixed IN 4.13.5 still counted as
+    /// "security signals" against an install at 4.13.5. The advisory row is now
+    /// judged against the installs through the mirror (its own ecosystem, its
+    /// own range) whenever the mirror can resolve it.
+    #[test]
+    fn an_advisory_fixed_in_the_installed_version_is_not_a_security_signal() {
+        let conn = setup_test_db();
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS osv_advisories (
+                 id INTEGER PRIMARY KEY AUTOINCREMENT,
+                 advisory_id TEXT NOT NULL, summary TEXT NOT NULL, details TEXT,
+                 package_name TEXT NOT NULL, ecosystem TEXT NOT NULL,
+                 affected_ranges TEXT, fixed_versions TEXT, severity_type TEXT,
+                 cvss_score REAL, source_url TEXT, published_at TEXT, modified_at TEXT,
+                 synced_at TEXT NOT NULL DEFAULT (datetime('now')),
+                 withdrawn_at TEXT, aliases TEXT, severity_label TEXT
+             );",
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO osv_advisories (advisory_id, summary, package_name, ecosystem, affected_ranges, aliases)
+             VALUES ('GHSA-crvj-82cr-hjcx', 'query parser', 'hono', 'npm',
+                     '[{\"type\":\"SEMVER\",\"events\":[{\"introduced\":\"0\"},{\"fixed\":\"4.13.5\"}]}]',
+                     '[\"CVE-2026-84363\"]')",
+            [],
+        )
+        .unwrap();
+        let cve = insert_source_item_with_meta(
+            &conn,
+            "[CVE-2026-84363] Hono: Query parser reads parameters after the URL fragment",
+            "cve",
+            Some("security_advisory"),
+            0.9,
+            1,
+        );
+        conn.execute(
+            "UPDATE source_items SET source_id = 'CVE-2026-84363' WHERE id = ?1",
+            params![cve],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO source_item_dependencies
+                 (source_item_id, package_name, ecosystem, match_type, confidence)
+             VALUES (?1, 'hono', 'advisory', 'advisory', 0.90)",
+            params![cve],
+        )
+        .unwrap();
+        let count = |eco: &str, version: &str| {
+            count_signal_types_for_dep_conn(&conn, "hono", Some(eco), &[version.to_string()])
+                .security
+        };
+        assert_eq!(count("npm", "4.13.5"), 0, "4.13.5 IS the fix");
+        assert_eq!(count("npm", "4.13.3"), 1, "4.13.3 is still exposed");
+        assert_eq!(
+            count("crates.io", "0.1.0"),
+            0,
+            "an npm advisory never reaches a crate of the same name"
         );
     }
 
@@ -6788,7 +7175,7 @@ mod tests {
             1,
         );
 
-        let stripe = count_signal_types_for_dep_conn(&conn, "stripe", &[]);
+        let stripe = count_signal_types_for_dep_conn(&conn, "stripe", None, &[]);
         assert_eq!(
             (
                 stripe.security,
@@ -6799,12 +7186,12 @@ mod tests {
             (0, 0, 0, 0),
             "silverstripe is not stripe"
         );
-        let hono = count_signal_types_for_dep_conn(&conn, "hono", &[]);
+        let hono = count_signal_types_for_dep_conn(&conn, "hono", None, &[]);
         assert_eq!(
             hono.security, 1,
             "only the linker-bound Hono CVE counts — not 'honors', not @hono/oauth-providers"
         );
-        let react = count_signal_types_for_dep_conn(&conn, "react", &[]);
+        let react = count_signal_types_for_dep_conn(&conn, "react", None, &[]);
         assert_eq!(
             react.security, 0,
             "'reacted' and an unlinked Next.js advisory are not react security signals"

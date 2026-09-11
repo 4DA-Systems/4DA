@@ -1081,7 +1081,7 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                         info!(target: "4da::monitor", feedback_count, "Mini-autophagy: enough feedback for first cycle");
                         let max_age_days = {
                             let sm = crate::get_settings_manager().lock();
-                            sm.get().monitoring.cleanup_max_age_days.unwrap_or(30)
+                            sm.get().monitoring.retention_days()
                         };
                         match crate::autophagy::run_autophagy_cycle(&db_conn, max_age_days as i64) {
                             Ok(cycle) => {
@@ -1177,7 +1177,7 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
 
                     let max_age_days = {
                         let sm = crate::get_settings_manager().lock();
-                        sm.get().monitoring.cleanup_max_age_days.unwrap_or(30)
+                        sm.get().monitoring.retention_days()
                     };
 
                     // Intelligence Metabolism: Autophagy-powered cleanup.

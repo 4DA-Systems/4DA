@@ -257,6 +257,9 @@ impl LLMClient {
     /// Send a completion request.
     /// Enforces daily token and cost limits — returns an error if the budget is exhausted.
     pub async fn complete(&self, system: &str, messages: Vec<Message>) -> Result<LLMResponse> {
+        // Egress boundary: the user's local paths never reach a provider.
+        let (system, messages) = crate::privacy_egress::scrub_prompt(system, messages);
+        let system = system.as_str();
         // Hard cutoff: refuse to call the LLM if daily limit is already reached
         if is_llm_limit_reached() {
             let (tokens_used, tokens_limit) = crate::state::get_llm_token_usage();
@@ -344,6 +347,9 @@ impl LLMClient {
         messages: Vec<Message>,
         mode: &StructuredOutputMode,
     ) -> Result<LLMResponse> {
+        // Egress boundary: the user's local paths never reach a provider.
+        let (system, messages) = crate::privacy_egress::scrub_prompt(system, messages);
+        let system = system.as_str();
         if is_llm_limit_reached() {
             let (tokens_used, tokens_limit) = crate::state::get_llm_token_usage();
             let (cost_used, cost_limit) = crate::state::get_llm_cost_usage();
@@ -426,6 +432,9 @@ impl LLMClient {
         system: &str,
         messages: Vec<Message>,
     ) -> Result<LLMResponse> {
+        // Egress boundary: the user's local paths never reach a provider.
+        let (system, messages) = crate::privacy_egress::scrub_prompt(system, messages);
+        let system = system.as_str();
         // First attempt — NO limit check (translation is infrastructure)
         let result = match self.provider.provider.as_str() {
             "anthropic" => self.complete_anthropic(system, messages.clone()).await,
@@ -957,6 +966,9 @@ impl LLMClient {
     where
         F: Fn(&str) + Send + 'static,
     {
+        // Egress boundary: the user's local paths never reach a provider.
+        let (system, messages) = crate::privacy_egress::scrub_prompt(system, messages);
+        let system = system.as_str();
         // Hard cutoff: refuse to call the LLM if daily limit is already reached
         if is_llm_limit_reached() {
             let (tokens_used, tokens_limit) = crate::state::get_llm_token_usage();

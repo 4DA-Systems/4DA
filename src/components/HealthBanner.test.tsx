@@ -105,4 +105,20 @@ describe('HealthBanner', () => {
     expect(screen.getByText(/ollama pull/i)).toBeInTheDocument();
     expect(screen.getByText(/restarting the app/i)).toBeInTheDocument();
   });
+
+  it('does not send a sources fault to Settings, where no source toggle exists', async () => {
+    mockCmd.mockResolvedValueOnce([
+      { component: 'sources', severity: 'error', message: 'No content sources registered.' },
+      { component: 'database', severity: 'error', message: 'DB issue' },
+    ]);
+    render(<HealthBanner />);
+    await waitFor(() => {
+      expect(screen.getByText('health.issueCount')).toBeInTheDocument();
+    });
+
+    fireEvent.click(screen.getByText('health.issueCount'));
+
+    expect(screen.getByText(/installation fault/i)).toBeInTheDocument();
+    expect(screen.queryByText('health.openSettings')).not.toBeInTheDocument();
+  });
 });

@@ -260,6 +260,43 @@ mod tests {
         assert_eq!(settings.monitoring.interval_minutes, 1);
     }
 
+    /// 2026-09-10 audit: a hand-edited `cleanup_max_age_days: 0` bypassed the
+    /// settings command's 7..=365 check and reached the daily DELETE.
+    #[test]
+    fn test_validate_clamps_cleanup_retention() {
+        let mut settings = Settings::default();
+        settings.monitoring.cleanup_max_age_days = Some(0);
+        settings.validate();
+        assert_eq!(
+            settings.monitoring.cleanup_max_age_days,
+            Some(7),
+            "0 would prune everything not re-seen today"
+        );
+        settings.monitoring.cleanup_max_age_days = Some(9_999);
+        settings.validate();
+        assert_eq!(settings.monitoring.cleanup_max_age_days, Some(365));
+        settings.monitoring.cleanup_max_age_days = None;
+        settings.validate();
+        assert_eq!(
+            settings.monitoring.cleanup_max_age_days, None,
+            "unset stays unset; the default applies at the read"
+        );
+    }
+
+    #[test]
+    fn test_retention_days_never_leaves_its_bounds() {
+        let mut monitoring = MonitoringConfig::default();
+        assert_eq!(monitoring.retention_days(), 30);
+        monitoring.cleanup_max_age_days = Some(0);
+        assert_eq!(
+            monitoring.retention_days(),
+            7,
+            "even a value that skipped validate() is clamped where it is read"
+        );
+        monitoring.cleanup_max_age_days = Some(10_000);
+        assert_eq!(monitoring.retention_days(), 365);
+    }
+
     #[test]
     fn test_validate_removes_empty_context_dirs() {
         let mut settings = Settings::default();

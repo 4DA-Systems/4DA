@@ -5,6 +5,7 @@
 //! then cross-references with version matching to produce verified alerts.
 
 pub(crate) mod cache;
+pub(crate) mod exposure;
 pub(crate) mod identity;
 pub(crate) mod matching;
 pub(crate) mod sync;

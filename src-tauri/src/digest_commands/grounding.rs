@@ -162,11 +162,19 @@ pub(super) fn build_grounded_security_section() -> String {
             let named: Vec<String> = a
                 .affected_projects
                 .iter()
-                .map(|p| match liveness.dormant_days(p) {
-                    Some(days) if crate::ace::dormancy::is_dormant_days(days) => {
-                        format!("{p} {}", crate::evidence::inactive_label(days))
+                // A label, never the absolute path: this text goes to the
+                // user's LLM provider, and a path under the home directory
+                // carries the OS username (NETWORK.md). `privacy_egress`
+                // rewrites any path that slips through; this keeps the prompt
+                // readable in the first place.
+                .map(|p| {
+                    let label = crate::privacy_egress::project_label(p);
+                    match liveness.dormant_days(p) {
+                        Some(days) if crate::ace::dormancy::is_dormant_days(days) => {
+                            format!("{label} {}", crate::evidence::inactive_label(days))
+                        }
+                        _ => label,
                     }
-                    _ => p.clone(),
                 })
                 .collect();
             format!(" -- affects: {}", named.join(", "))

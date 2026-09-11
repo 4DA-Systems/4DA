@@ -124,7 +124,7 @@ pub async fn get_autophagy_history(limit: Option<i64>) -> Result<Vec<AutophagyCy
 pub async fn trigger_autophagy_cycle() -> Result<AutophagyCycleResult> {
     let max_age_days = {
         let sm = crate::get_settings_manager().lock();
-        sm.get().monitoring.cleanup_max_age_days.unwrap_or(30)
+        sm.get().monitoring.retention_days()
     };
 
     let conn = crate::open_db_connection()?;
@@ -215,7 +215,7 @@ pub async fn get_data_health() -> Result<DataHealth> {
 
     let retention_days = {
         let sm = crate::get_settings_manager().lock();
-        sm.get().monitoring.cleanup_max_age_days.unwrap_or(30)
+        sm.get().monitoring.retention_days()
     };
 
     let db_size_mb = stats.db_size_bytes as f64 / (1024.0 * 1024.0);
@@ -237,7 +237,7 @@ pub async fn get_data_health() -> Result<DataHealth> {
 pub async fn run_deep_clean() -> Result<crate::db::MaintenanceResult> {
     let retention_days = {
         let sm = crate::get_settings_manager().lock();
-        sm.get().monitoring.cleanup_max_age_days.unwrap_or(30)
+        sm.get().monitoring.retention_days()
     };
 
     let db = crate::get_database().context("database not initialized")?;
@@ -261,10 +261,11 @@ pub async fn run_deep_clean() -> Result<crate::db::MaintenanceResult> {
 /// Update the data retention period (days).
 #[tauri::command]
 pub async fn set_cleanup_retention(days: u32) -> Result<()> {
-    if !(7..=365).contains(&days) {
-        return Err(FourDaError::Internal(
-            "Retention must be between 7 and 365 days".into(),
-        ));
+    use crate::settings::{RETENTION_MAX_DAYS, RETENTION_MIN_DAYS};
+    if !(RETENTION_MIN_DAYS..=RETENTION_MAX_DAYS).contains(&days) {
+        return Err(FourDaError::Internal(format!(
+            "Retention must be between {RETENTION_MIN_DAYS} and {RETENTION_MAX_DAYS} days"
+        )));
     }
     let sm = crate::get_settings_manager();
     let mut guard = sm.lock();

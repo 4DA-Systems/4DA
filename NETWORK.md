@@ -279,6 +279,12 @@ use (`src-tauri/src/embeddings_providers/fastembed.rs`):
   the LLM reranker was including your five most recent commit messages in the context summary it
   sends to your configured cloud provider, and it is on by default. That is removed, and the gate
   exists so the claim is tested rather than asserted.
+- **No local paths.** Prompts name your projects by short labels (`4da/relay`, `documents/navcal`),
+  never by absolute path. Every prompt passes `src-tauri/src/privacy_egress.rs` at the LLM client
+  boundary, which rewrites your home directory, configured context directories and detected project
+  roots to those labels — whichever module built the prompt, including ones written later (a test
+  fails if an LLM entry point skips it). Until 2026-09-10 the AI briefing named affected projects by
+  absolute path, so a project under your home directory would have sent your OS username.
 - **What IS derived from local content and does leave, when the relevant feature runs.** This list
   is exhaustive; if you find something not on it, that is a bug, not an omission.
 

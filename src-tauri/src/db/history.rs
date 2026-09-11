@@ -90,18 +90,26 @@ pub struct HttpHistoryRow {
 // ============================================================================
 
 impl Database {
-    /// Run database maintenance: cleanup old items, optimize, vacuum
+    /// Run database maintenance: cleanup old items, optimize, vacuum.
+    ///
+    /// Age is measured in whole DAYS against a DATE (midnight) boundary — the
+    /// same rule as [`Database::cleanup_old_items`]. `datetime('now', '-0 days')`
+    /// means "before this instant", which deletes every row not written in the
+    /// current second. This is the storage primitive, not the policy: callers
+    /// pass the clamped retention (`MonitoringConfig::retention_days`, never
+    /// below 7). A hand-edited `cleanup_max_age_days: 0` used to reach here
+    /// unclamped (2026-09-10 audit).
     pub fn run_maintenance(&self, retention_days: i64) -> SqliteResult<MaintenanceResult> {
         let conn = self.conn.lock();
         let tx = conn.unchecked_transaction()?;
 
         let deleted_items: usize = tx.execute(
-            "DELETE FROM source_items WHERE last_seen < datetime('now', ?1)",
+            "DELETE FROM source_items WHERE last_seen < date('now', ?1)",
             params![format!("-{} days", retention_days)],
         )?;
 
         let deleted_feedback: usize = tx.execute(
-            "DELETE FROM feedback WHERE created_at < datetime('now', ?1)",
+            "DELETE FROM feedback WHERE created_at < date('now', ?1)",
             params![format!("-{} days", retention_days * 2)],
         )?;
 
@@ -723,6 +731,51 @@ mod tests {
         // vacuum_if_needed should not error
         db.vacuum_if_needed(deleted, 100).unwrap(); // threshold not met, no vacuum
         db.vacuum_if_needed(deleted, 1).unwrap(); // threshold met, runs vacuum
+    }
+
+    /// `run_maintenance` shares `cleanup_old_items`' day boundary. With
+    /// `datetime()` the window was "before this instant": an item seen earlier
+    /// today was deleted by a 0-day window, and so was everything else the
+    /// daily job had not touched in the current second (2026-09-10 audit).
+    #[test]
+    fn test_run_maintenance_uses_the_day_boundary() {
+        let db = test_db();
+        insert_test_item(
+            &db,
+            "hackernews",
+            "seen_today",
+            "Seen Today",
+            "fresh content",
+        );
+        insert_test_item(&db, "hackernews", "aged", "Aged Item", "aged content");
+        {
+            let conn = db.conn.lock();
+            conn.execute(
+                "UPDATE source_items SET last_seen = datetime('now', 'start of day', '+1 second')
+                 WHERE source_id = 'seen_today'",
+                [],
+            )
+            .unwrap();
+            conn.execute(
+                "UPDATE source_items SET last_seen = datetime('now', '-40 days') WHERE source_id = 'aged'",
+                [],
+            )
+            .unwrap();
+        }
+
+        let result = db.run_maintenance(30).unwrap();
+        assert_eq!(
+            result.deleted_items, 1,
+            "only the item older than 30 days goes"
+        );
+        assert_eq!(db.total_item_count().unwrap(), 1);
+
+        let result = db.run_maintenance(0).unwrap();
+        assert_eq!(
+            result.deleted_items, 0,
+            "an item seen earlier today survives even a 0-day window"
+        );
+        assert_eq!(db.total_item_count().unwrap(), 1);
     }
 
     /// Relevance-aware forgetting must delete ONLY confirmed old noise, and must

@@ -13,7 +13,9 @@ const FIX_HINTS: Record<string, string> = {
   embedding: 'Run "ollama pull nomic-embed-text" in your terminal, or add an API key in Settings.',
   database: 'Try restarting the app. If the issue persists, check file permissions on the data/ folder.',
   settings: 'Your settings file may be corrupted. Delete data/settings.json and restart (you\'ll need to re-enter your API keys).',
-  sources: 'Go to Settings > Sources and ensure at least one source is enabled.',
+  // There is no source on/off control anywhere in the app: this issue fires only
+  // when the source registry is empty, which is an installation fault.
+  sources: 'No content sources are registered. That is an installation fault, not a setting — reinstall 4DA, and report it if it persists.',
   disk: 'Check that the app has write permissions to its data directory.',
 };
 
@@ -105,7 +107,7 @@ export function HealthBanner() {
                 {FIX_HINTS[issue.component] && (
                   <p className="text-[10px] text-text-muted mt-0.5">
                     {FIX_HINTS[issue.component]}
-                    {(issue.component === 'embedding' || issue.component === 'sources' || issue.component === 'settings') && (
+                    {(issue.component === 'embedding' || issue.component === 'settings') && (
                       <button
                         onClick={() => setShowSettings(true)}
                         className="ml-1 text-amber-400 hover:text-amber-300 underline transition-colors"

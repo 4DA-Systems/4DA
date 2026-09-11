@@ -447,7 +447,34 @@ fn ranked_order_expr_coalesces_rank_over_evidence() {
     // The aliased form stays textually consistent with the const.
     assert_eq!(
         ranked_order_expr("si"),
-        "COALESCE(si.rank_score, si.relevance_score) DESC"
+        "COALESCE(si.rank_score, si.relevance_score) DESC, si.id DESC"
+    );
+}
+
+/// Equal scores order by id, newest first — never by SQLite's row order.
+/// Live 2026-09-10: 100 of 651 surfaced items sat at exactly 0.5000.
+#[test]
+fn ranked_order_breaks_ties_by_id_newest_first() {
+    let conn = rusqlite::Connection::open_in_memory().unwrap();
+    conn.execute_batch(
+        "CREATE TABLE source_items (id INTEGER PRIMARY KEY, relevance_score REAL, rank_score REAL);
+         INSERT INTO source_items (id, relevance_score, rank_score) VALUES
+             (1, 0.5, NULL), (2, 0.5, NULL), (3, 0.7, NULL), (4, 0.5, NULL), (5, 0.1, 0.5);",
+    )
+    .unwrap();
+    let ids: Vec<i64> = conn
+        .prepare(&format!(
+            "SELECT id FROM source_items ORDER BY {RANKED_ORDER_EXPR}"
+        ))
+        .unwrap()
+        .query_map([], |r| r.get(0))
+        .unwrap()
+        .collect::<Result<_, _>>()
+        .unwrap();
+    assert_eq!(
+        ids,
+        vec![3, 5, 4, 2, 1],
+        "0.7 first, then every 0.5 (rank or evidence) newest first"
     );
 }
 
