@@ -2,6 +2,23 @@
 
 ## 5.1.0 — 2026-09-11
 
+### Fixed: scoped packages in pnpm and yarn lockfiles were never scanned
+
+`vulnerability_scan` asked OSV about `'@humanfs/node`, with a leading quote,
+instead of `@humanfs/node`. So GHSA-p498-v437-472g never appeared, although it
+was open as Dependabot alert 340 on this repository and the app showed it. The
+pnpm reader matched package keys with a pattern whose `\s` crossed the blank
+line pnpm writes between entries, and so kept the next key's quote. Every
+scoped package outside the importer blocks was affected: 525 names across five
+lockfiles in this repository (measured 2026-09-11). The test fixture had no
+blank lines, so it passed. The reader now matches keys by column on whole
+lines, reads pnpm lockfile v5, v6 and v9, and drops keys that pin no registry
+version (git, tarball, file) instead of querying them as names. The yarn
+reader could not match a header that starts with `@`, so it dropped every
+scoped package, and it never read yarn berry's `version: x` lines. Both are
+fixed. Expect more findings on a pnpm or yarn project after upgrading; they
+were always there.
+
 ### Fixed: a patched lockfile no longer hides a vulnerable node_modules
 
 `mcp-4da-server/pnpm-lock.yaml` pinned hono 4.13.5 (the fix for
