@@ -9,11 +9,14 @@
  * is what lets the live layer notice when that file changes and re-resolve,
  * instead of answering for the whole process lifetime from the versions it
  * read at startup (measured 2026-09-10: a server started before a lockfile
- * bump kept reporting hono 4.13.3 after the lockfile said 4.13.5).
+ * bump kept reporting hono 4.13.3 after the lockfile said 4.13.5). The pnpm
+ * and yarn readers have since moved to js-lockfile-readers.ts, rewritten after
+ * the old pnpm pattern was found to mangle every scoped name (2026-09-11).
  */
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { readPnpmLock, readYarnLock } from "./js-lockfile-readers.js";
 import type { OsvEcosystem } from "./types.js";
 
 /** Versions read from one directory, and the file they came from. */
@@ -104,73 +107,20 @@ function resolveNpm(cwd: string): VersionSource {
     } catch { /* fall through */ }
   }
 
-  // Try pnpm-lock.yaml (line-by-line, no YAML parser)
+  // Try pnpm-lock.yaml (v5.x, v6 and v9, read by column; see js-lockfile-readers.ts)
   const pnpmLockPath = path.join(cwd, "pnpm-lock.yaml");
   if (fs.existsSync(pnpmLockPath)) {
     try {
-      const content = fs.readFileSync(pnpmLockPath, "utf-8");
-
-      // pnpm v9 importers format: dependency name on one line, version on the next
-      // Example:
-      //   '@modelcontextprotocol/sdk':
-      //     specifier: ^1.10.0
-      //     version: 1.26.0(zod@4.3.6)
-      const lines = content.split("\n");
-      let currentPkg: string | null = null;
-
-      for (const line of lines) {
-        // Match dependency name (with or without quotes, scoped packages)
-        const pkgMatch = line.match(/^\s{4,8}'?(@?[^':]+)'?:\s*$/);
-        if (pkgMatch) {
-          currentPkg = pkgMatch[1].trim();
-          continue;
-        }
-        // Match version line under a dependency
-        if (currentPkg) {
-          const versionMatch = line.match(/^\s+version:\s+['"]?(\d+\.\d+[^('"\s]*)['"]?/);
-          if (versionMatch) {
-            versions.set(currentPkg, versionMatch[1]);
-            currentPkg = null;
-            continue;
-          }
-          // specifier line — skip, wait for version
-          if (line.match(/^\s+specifier:/)) continue;
-          // Any other line resets current package context
-          if (!line.match(/^\s/)) currentPkg = null;
-        }
-      }
-
-      // Also parse package/snapshot keys. Requiring a numeric version after
-      // the separator handles scoped packages without splitting at their
-      // leading `@` (for example '@scope/pkg@1.2.3').
-      const pkgRegex = /^\s{2}'?(.+?)@(\d+[^:('"]*)[^:]*'?:\s*$/gm;
-      let match;
-      while ((match = pkgRegex.exec(content)) !== null) {
-        const name = match[1].replace(/^\//, "").trim();
-        const version = match[2].trim().replace(/['":]/g, "");
-        if (name && version && /^\d/.test(version) && !versions.has(name)) {
-          versions.set(name, version);
-        }
-      }
-
+      readPnpmLock(fs.readFileSync(pnpmLockPath, "utf-8"), versions);
       if (versions.size > 0) return found(versions, pnpmLockPath, "lockfile");
     } catch { /* fall through */ }
   }
 
-  // Try yarn.lock
+  // Try yarn.lock (v1 and berry)
   const yarnLockPath = path.join(cwd, "yarn.lock");
   if (fs.existsSync(yarnLockPath)) {
     try {
-      const content = fs.readFileSync(yarnLockPath, "utf-8");
-      // Format: "name@range":\n  version "x.y.z"
-      const blocks = content.split(/\n(?=\S)/);
-      for (const block of blocks) {
-        const headerMatch = block.match(/^"?([^@\s"]+)@/);
-        const versionMatch = block.match(/^\s+version\s+"([^"]+)"/m);
-        if (headerMatch && versionMatch) {
-          versions.set(headerMatch[1], versionMatch[1]);
-        }
-      }
+      readYarnLock(fs.readFileSync(yarnLockPath, "utf-8"), versions);
       if (versions.size > 0) return found(versions, yarnLockPath, "lockfile");
     } catch { /* fall through */ }
   }
