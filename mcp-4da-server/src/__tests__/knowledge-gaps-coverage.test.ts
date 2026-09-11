@@ -8,6 +8,10 @@
  * February, still open against relay/'s 9.3.1) was cut by the 90-day
  * published_at guard, and `osv_advisories` was consulted by package name
  * alone, so the Rust crate was graded by the npm package's ranges.
+ *
+ * This fixture's `osv_advisories` carries no CVSS score or severity label, so
+ * every advisory here is ungraded: a still-reaching one is `high`, never
+ * `critical` (AD-040 rule 2 — the tier comes from the advisory itself).
  */
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import Database from "better-sqlite3";
@@ -95,7 +99,8 @@ describe("knowledge_gaps — coverage and advisory freshness", () => {
     const gap = result.gaps?.find((g) => g.dependency === "hono");
 
     expect(gap).toBeDefined();
-    expect(gap!.gap_severity).toBe("critical");
+    // Ungraded here; the real GHSA-f23p is CVSS 4.8 (medium), which is `high` too.
+    expect(gap!.gap_severity).toBe("high");
     expect(gap!.missed_items[0].title).toContain("GHSA-f23p");
   });
 
@@ -133,12 +138,14 @@ describe("knowledge_gaps — coverage and advisory freshness", () => {
     const result = executeKnowledgeGaps(db, {});
     const gap = result.gaps?.find((g) => g.dependency === "jsonwebtoken");
     expect(gap).toBeDefined();
-    expect(gap!.gap_severity).toBe("critical");
+    // Exposed, at an ungraded tier: `high`. The live advisory is medium, and
+    // the app grades this gap High; it was `critical` here (measured 2026-09-11).
+    expect(gap!.gap_severity).toBe("high");
   });
 
   it("never grades a crate safe on another ecosystem's ranges", () => {
     // Only the npm ranges are stored; for the Rust crate that is no data,
-    // and no data keeps the conservative grade for a recent advisory.
+    // and no data keeps the conservative security grade for a recent advisory.
     addDep("jsonwebtoken", "9.3.1", "rust");
     addAdvisory("jsonwebtoken", "npm", '[{"events":[{"introduced":"0"},{"fixed":"9.0.0"}]}]');
     addItem({
@@ -151,7 +158,7 @@ describe("knowledge_gaps — coverage and advisory freshness", () => {
     const result = executeKnowledgeGaps(db, {});
     const gap = result.gaps?.find((g) => g.dependency === "jsonwebtoken");
     expect(gap).toBeDefined();
-    expect(gap!.gap_severity).toBe("critical");
+    expect(gap!.gap_severity).toBe("high");
   });
 
   it("an advisory about another package is not a mention of a generic-word dependency", () => {

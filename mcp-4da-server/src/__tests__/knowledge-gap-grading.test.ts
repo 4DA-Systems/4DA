@@ -10,6 +10,13 @@
  * The noise came from grading `medium` on mention COUNT, where a mention could
  * match the content body rather than the title. Every fixture below is a real
  * title copied from the live corpus at the ids named in the comments.
+ *
+ * 2026-09-11: the security tier now comes from the advisory itself
+ * (`knowledge_decay::classify_severity` + `advisory_tier_for`, AD-040 rule 2):
+ * a still-reaching advisory is `critical` only when the most severe advisory
+ * reaching an install is critical or high, and `high` otherwise — ungraded
+ * included. Expectations that assumed "any advisory is critical" now pass
+ * that tier explicitly.
  */
 import { describe, it, expect } from "vitest";
 import { gradeGap, type GradableItem } from "../tools/knowledge-gaps.js";
@@ -21,24 +28,31 @@ const item = (title: string, source_type = "hackernews", content_type: string | 
 });
 
 describe("gradeGap — the signal that must survive", () => {
-  it("grades a real advisory about the dependency as critical", () => {
+  it("grades a real advisory about the dependency at the security tier", () => {
     // ids 192/193/194: the Hono CVEs the app reported as "no gaps".
     const items = [
       item("[CVE-2026-71850] Hono: `memo()` retains SSR output across requests", "cve"),
       item("[CVE-2026-71849] Hono: Proxy Helper does not remove response headers", "cve"),
       item("[CVE-2026-71848] Hono: Algorithmic Complexity DoS in Language Middleware", "cve"),
     ];
-    expect(gradeGap(items, "hono")).toBe("critical");
+    // Ungraded it is `high`; `critical` needs the advisory's own critical or high tier.
+    expect(gradeGap(items, "hono")).toBe("high");
+    expect(gradeGap(items, "hono", true, null, "high")).toBe("critical");
+    expect(gradeGap(items, "hono", true, null, "medium")).toBe("high");
   });
 
-  it("grades an OSV advisory as critical too", () => {
+  it("grades an OSV advisory the same way", () => {
     const items = [item("[GHSA-gcfj-64vw-6mp9] axios: inherited proxy after config cloning", "osv")];
-    expect(gradeGap(items, "axios")).toBe("critical");
+    expect(gradeGap(items, "axios")).toBe("high");
+    expect(gradeGap(items, "axios", true, null, "critical")).toBe("critical");
   });
 
-  it("grades a security-keyword item naming the dep as high", () => {
+  it("an editorial security story is a citation, never proof of exposure", () => {
+    // AD-040 rule 4 / `knowledge_decay::grounded_security_advisory`: only an
+    // osv/cve advisory can carry a gap to the security tiers. This mastodon
+    // post used to grade `high` on the word "Security".
     const items = [item("This Week in Security: Stripe Merchants Leak Keys", "mastodon")];
-    expect(gradeGap(items, "stripe")).toBe("high");
+    expect(gradeGap(items, "stripe")).toBe("low");
   });
 
   it("grades a release that names the dep as medium", () => {
@@ -46,11 +60,12 @@ describe("gradeGap — the signal that must survive", () => {
     expect(gradeGap(items, "axum")).toBe("medium");
   });
 
-  it("grades a breaking change as medium", () => {
+  it("grades a breaking change as high", () => {
+    // `knowledge_decay::classify_severity`: a breaking citation is High.
     const items = [
       item("TypeScript 6.0 Strict Function Types: Why Contravariance Breaking Your Callbacks", "devto"),
     ];
-    expect(gradeGap(items, "typescript")).toBe("medium");
+    expect(gradeGap(items, "typescript")).toBe("high");
   });
 });
 
@@ -145,8 +160,9 @@ describe("gradeGap — registry rows are version updates", () => {
   });
 
   it("an osv or cve row is an advisory regardless of its title words", () => {
-    expect(gradeGap([item("hono 4.12.34 memo() retains SSR output", "osv")], "hono")).toBe("critical");
-    expect(gradeGap([item("hono proxy helper header handling", "cve")], "hono")).toBe("critical");
+    // The SOURCE makes it an advisory, not a security keyword in the title.
+    expect(gradeGap([item("[GHSA-f23p-vx2j-j53r] hono: memo() retains SSR output across requests", "osv")], "hono")).toBe("high");
+    expect(gradeGap([item("[CVE-2026-71849] Hono: Proxy Helper does not remove response headers", "cve")], "hono")).toBe("high");
   });
 
   it("a registry row for the installed version is not an update", () => {
@@ -157,13 +173,21 @@ describe("gradeGap — registry rows are version updates", () => {
     // Unknown installed version keeps the conservative grade.
     expect(gradeGap([item("npm: @tauri-apps/api v2.11.1", "npm_registry")], "@tauri-apps/api")).toBe("medium");
   });
+
+  it("a release is new while any carrying project runs an older version, by semver precedence", () => {
+    // AD-041: new against EVERY install; 0.10.0-rc.19 is newer than rc.18.
+    const rc19 = [item("crates.io: rsa v0.10.0-rc.19", "crates_io")];
+    expect(gradeGap(rc19, "rsa", true, ["0.10.0-rc.18"])).toBe("medium");
+    expect(gradeGap(rc19, "rsa", true, ["0.10.0-rc.19", "0.10.0"])).toBe("low");
+    expect(gradeGap(rc19, "rsa", true, ["0.10.0", "0.9.10"])).toBe("medium");
+  });
 });
 
 describe("gradeGap — an advisory names the dependency by its SUBJECT package", () => {
   // Live 2026-09-07: `url` graded critical on a SurrealDB advisory whose
   // title said "via URL path"; `hmac` on a Phalcon advisory about HMAC
   // verification. Both real advisories, neither about the dependency.
-  it("does not mint a critical gap from an advisory about another package", () => {
+  it("does not mint a security gap from an advisory about another package", () => {
     expect(
       gradeGap([item("[CVE-2026-63735] SurrealDB: Custom API route lets authenticated callers override namespace/database scope via URL path", "cve")], "url"),
     ).toBe("low");
@@ -172,15 +196,23 @@ describe("gradeGap — an advisory names the dependency by its SUBJECT package",
     ).toBe("low");
   });
 
-  it("still grades an advisory whose subject IS the dependency as critical", () => {
-    expect(gradeGap([item("[CVE-2026-71850] Hono: `memo()` retains SSR output across requests", "cve")], "hono")).toBe("critical");
-    expect(gradeGap([item("[RUSTSEC-2023-0071] rsa: Marvin Attack: potential key recovery through timing sidechannels", "osv")], "rsa")).toBe("critical");
+  it("still grades an advisory whose subject IS the dependency at the security tier", () => {
+    expect(gradeGap([item("[CVE-2026-71850] Hono: `memo()` retains SSR output across requests", "cve")], "hono")).toBe("high");
+    expect(gradeGap([item("[RUSTSEC-2023-0071] rsa: Marvin Attack: potential key recovery through timing sidechannels", "osv")], "rsa")).toBe("high");
     // crates.io `-`/`_` are one namespace.
-    expect(gradeGap([item("[GHSA-x] http-body-util: unbounded buffering", "osv")], "http_body_util")).toBe("critical");
+    expect(gradeGap([item("[GHSA-x] http-body-util: unbounded buffering", "osv")], "http_body_util", true, null, "critical")).toBe("critical");
   });
 
-  it("falls back to the word test when the title has another shape", () => {
-    expect(gradeGap([item("CVE-2024-1234: Critical security vulnerability in express", "cve")], "express")).toBe("critical");
+  it("never falls back to a title word for an advisory row", () => {
+    // Measured 2026-09-11: "[CVE-2026-63642] MagicMirror newsfeed Socket.IO
+    // notification ..." has no subject package, and the word fallback minted
+    // a critical socket.io gap from it. An advisory row with no readable
+    // subject cites a dependency only through the linker's structured proof.
+    expect(gradeGap([item("CVE-2024-1234: Critical security vulnerability in express", "cve")], "express")).toBe("low");
+    expect(
+      gradeGap([item("[CVE-2026-63642] MagicMirror newsfeed Socket.IO notification allows blind server-side request forgery", "cve")], "socket.io"),
+    ).toBe("low");
+    expect(gradeGap([item("hono 4.12.34 memo() retains SSR output", "osv")], "hono")).toBe("low");
   });
 });
 
@@ -273,12 +305,13 @@ describe("gradeGap — already-patched dependencies", () => {
     expect(gradeGap(honoCves, "hono", versionInAnyRange(HONO_RANGES, "4.13.2"))).toBe("low");
   });
 
-  it("still raises critical when the install really is behind", () => {
-    expect(gradeGap(honoCves, "hono", versionInAnyRange(HONO_RANGES, "4.12.0"))).toBe("critical");
+  it("still raises the security tier when the install really is behind", () => {
+    expect(gradeGap(honoCves, "hono", versionInAnyRange(HONO_RANGES, "4.12.0"))).toBe("high");
+    expect(gradeGap(honoCves, "hono", versionInAnyRange(HONO_RANGES, "4.12.0"), "4.12.0", "critical")).toBe("critical");
   });
 
   it("defaults to the conservative grade when no version data is passed", () => {
     // Callers without version information must not silently lose the alert.
-    expect(gradeGap(honoCves, "hono")).toBe("critical");
+    expect(gradeGap(honoCves, "hono")).toBe("high");
   });
 });

@@ -1103,7 +1103,7 @@ describe("4DA MCP Tool Handlers", () => {
       expect(result.gaps_found).toBe(0);
     });
 
-    it("classifies security-related gaps as critical", () => {
+    it("does not cite a dependency from a word in an advisory title", () => {
       const rawDb = db.getRawDb();
 
       rawDb
@@ -1112,8 +1112,8 @@ describe("4DA MCP Tool Handlers", () => {
         )
         .run("/home/user/project", "package.json", "express", "4.18.0", "javascript");
 
-      // critical requires an actual ADVISORY (cve/osv source or
-      // security_advisory content_type) whose TITLE names the dependency.
+      // An advisory row cites a dependency through the linker's structured
+      // proof or its "[ID] package:" subject, never a title word (#618).
       insertSourceItem(db, {
         title: "CVE-2024-1234: Critical security vulnerability in express",
         content: "A critical security vulnerability found in express framework.",
@@ -1121,9 +1121,8 @@ describe("4DA MCP Tool Handlers", () => {
         source_type: "cve",
       });
 
-      const result = executeKnowledgeGaps(db, { min_severity: "critical" });
-      expect(result.gaps_found).toBeGreaterThan(0);
-      expect(result.gaps[0].gap_severity).toBe("critical");
+      const result = executeKnowledgeGaps(db, { min_severity: "low" });
+      expect(result.gaps_found).toBe(0);
     });
 
     // -------------------------------------------------------------------------
@@ -1166,9 +1165,10 @@ describe("4DA MCP Tool Handlers", () => {
         source_type: "cve",
       });
 
+      // An advisory row cites only its subject package or a linker-proven one:
+      // a body co-mention is no citation at all.
       const result = executeKnowledgeGaps(db, { min_severity: "low" });
-      expect(result.gaps_found).toBe(1);
-      expect(result.gaps[0].gap_severity).toBe("low");
+      expect(result.gaps_found).toBe(0);
     });
 
     it("ignores mentions older than the 30-day window", () => {
