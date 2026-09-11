@@ -1,11 +1,12 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
  * Knowledge-gap grading: the pure rules that decide whether an unread item is
- * a gap for a dependency and how severe it is. Split out of knowledge-gaps.ts,
- * which owns the database walk.
+ * evidence about a dependency and how severe the gap is. The database walk
+ * lives in knowledge-gaps.ts; advisory ranges in knowledge-gap-ranges.ts.
  */
 
-import { compareSemver, parseSemver } from "../live/semver-utils.js";
+import { comparePrecedence, parseSemverPrecedence, type SemverPrecedence } from "../live/semver-precedence.js";
+import type { AdvisoryTier } from "./knowledge-gap-ranges.js";
 
 // Word-boundary matching prevents "cve" matching inside "achieve", "receiver", etc.
 function hasWordBoundary(text: string, term: string): boolean {
@@ -26,56 +27,20 @@ export function mentionsPackage(text: string, pkg: string): boolean {
   return regex.test(text);
 }
 
-/** One `introduced`/`fixed` event pair from an OSV affected range. */
-export interface AdvisoryRangeEvent {
-  introduced?: string;
-  fixed?: string;
-}
-
-/**
- * Is `installed` inside `[introduced, fixed)` for any of these advisory ranges?
- *
- * An advisory naming your dependency is only a gap if you are actually exposed.
- * Grading skipped this entirely: the live tool reported the three Hono CVEs as
- * a `critical` gap on hono **4.13.2**, when all three are fixed in **4.12.34** —
- * a version this repo had already pinned past via `pnpm.overrides`. The user
- * was told to worry about something they had already remediated.
- *
- * Conservative by construction: an unparseable installed version, or an
- * advisory whose range cannot be read, counts as AFFECTED. Never claim someone
- * is safe on missing information.
- */
-export function versionInAnyRange(
-  ranges: AdvisoryRangeEvent[][],
-  installed: string | null | undefined,
-): boolean {
-  if (!installed || parseSemver(installed) === null) return true;
-
-  for (const events of ranges) {
-    let introduced: string | null = null;
-    for (const event of events) {
-      if (typeof event.introduced === "string") introduced = event.introduced;
-      if (typeof event.fixed === "string" && introduced !== null) {
-        const atOrAfterIntroduced =
-          introduced === "0" || compareSemver(installed, introduced) >= 0;
-        const beforeFix = compareSemver(installed, event.fixed) < 0;
-        if (atOrAfterIntroduced && beforeFix) return true;
-        introduced = null;
-      }
-    }
-    // An `introduced` with no matching `fixed` means "affected from here on".
-    if (introduced !== null) {
-      if (introduced === "0" || compareSemver(installed, introduced) >= 0) return true;
-    }
-  }
-  return false;
-}
+/** A knowledge gap's severity. */
+export type GapSeverity = "critical" | "high" | "medium" | "low";
 
 /** The subset of an item this grading needs. */
 export interface GradableItem {
   title: string | null;
   source_type?: string | null;
   content_type?: string | null;
+  /**
+   * Set by a caller that has already decided whether this item cites the
+   * dependency: the dependency linker's structured proof says what a title
+   * cannot. Unset, the title decides.
+   */
+  cites?: boolean;
 }
 
 /** Package-registry sources: every row is a published version of a package. */
@@ -84,9 +49,13 @@ export const REGISTRY_SOURCES = new Set(["crates_io", "npm_registry", "pypi", "g
 /** Advisory sources: every row is a security advisory. */
 export const ADVISORY_SOURCES = new Set(["osv", "cve"]);
 
-/** An advisory row: an advisory source, or anything the pipeline typed as one. */
-export function isAdvisoryItem(item: GradableItem): boolean {
-  return ADVISORY_SOURCES.has(item.source_type ?? "") || item.content_type === "security_advisory";
+/**
+ * A registry advisory row (`knowledge_decay::is_advisory_row`). An editorial
+ * story the pipeline typed `security_advisory` is not one: it cites by title
+ * like any other story and is never proof of exposure (AD-040 rule 4).
+ */
+export function isAdvisoryRow(item: GradableItem): boolean {
+  return ADVISORY_SOURCES.has(item.source_type ?? "");
 }
 
 /**
@@ -113,11 +82,11 @@ export function registryVersionFromTitle(title: string): string | null {
 }
 
 /**
- * Is the installed version inside a known advisory range?
- * - exposed: the stored ranges contain the installed version
- * - safe:    the stored ranges are all fixed at or below it
- * - unknown: nothing stored for the package, an unreadable range, or no
- *            parseable installed version — no claim either way
+ * Is an install inside a known advisory range?
+ * - exposed: a readable same-ecosystem advisory range contains the version
+ * - safe:    every readable same-ecosystem range excludes it
+ * - unknown: nothing readable stored for its ecosystem, or no readable
+ *            installed version — no claim either way
  */
 export type Exposure = "exposed" | "safe" | "unknown";
 
@@ -130,99 +99,105 @@ export function parsePublishedAt(value: string | null | undefined): number | nul
 }
 
 /**
- * Grade a knowledge gap by CONSEQUENCE, never by volume.
+ * Does `item` cite `packageName` by its title alone? An advisory row cites
+ * only its SUBJECT package and never falls back to a word in its title
+ * ("[CVE-2026-63642] MagicMirror newsfeed Socket.IO notification ..." is not
+ * a socket.io advisory); every other row names the package in its title.
+ */
+function citesByTitle(item: GradableItem, packageName: string): boolean {
+  const title = item.title || "";
+  if (isAdvisoryRow(item)) {
+    const subject = advisorySubject(title);
+    return subject !== null && samePackage(subject, packageName);
+  }
+  return mentionsPackage(title, packageName);
+}
+
+const RETIREMENT_KEYWORDS = ["breaking", "deprecated", "deprecation", "eol"];
+const CONSEQUENCE_KEYWORDS = ["release", "released", "update", "upgrade"];
+
+/**
+ * Grade a knowledge gap by CONSEQUENCE, never by volume, on the tiers the
+ * desktop app draws (`knowledge_decay::classify_severity`):
  *
- * - `critical` — a real advisory whose TITLE names this dependency. The
- *   advisory is about the dep, not merely co-mentioning it in a body.
- * - `high` — a security-keyword item whose title names the dep.
- * - `medium` — an unread item that names the dep in its title and carries
- *   consequence: a breaking change, a deprecation, or a release.
- * - `low` — everything else, including a large pile of passing mentions.
+ * - `critical`: an advisory citing the dependency still reaches an install,
+ *   and the most severe advisory reaching an install is critical or high by
+ *   its OWN grade — CVSS band, else the source's curated label (AD-040 rule 2).
+ * - `high`: the same with a medium, low or ungraded advisory; or a title
+ *   naming the dependency with a breaking change, deprecation or end of life.
+ * - `medium`: a registry release newer than an install, or a title naming the
+ *   dependency with a release, update or upgrade.
+ * - `low`: everything else, including a large pile of passing mentions.
  *
- * `medium` used to mean "3+ recent unread mentions", and a mention could match
- * on the content body rather than the title. That graded unread VOLUME as a
- * knowledge gap, and since `min_severity` defaults to medium it shipped: a
- * `tracing` gap evidenced by "The Matrix: Writing Code That Doesn't Need
- * Comments", a `typescript` gap evidenced by a Databricks job posting, a `uuid`
- * gap evidenced by Go's standard library, a `vite` gap evidenced by a
- * period-tracker app. Fourteen of fifteen gaps were noise.
- *
- * The Rust surface already draws exactly this line —
- * `knowledge_decay::gap_is_substantive` requires a security advisory, breaking
- * change, or version update, and calls anything else "unread VOLUME, not a
- * knowledge gap". Two implementations of one concept disagreeing is what let
- * this tool report 18 gaps while the app reported none.
+ * `critical` used to mean "an advisory names the dependency", whatever the
+ * advisory's own tier: the jsonwebtoken crate's GHSA-h395-gr6q-cpjc, graded
+ * medium by its source and High by the app, was a critical gap here (measured
+ * 2026-09-11). Earlier still, `medium` meant "3+ recent unread mentions"
+ * matched on the content body: a `tracing` gap evidenced by "The Matrix:
+ * Writing Code That Doesn't Need Comments", a `typescript` gap by a
+ * Databricks job posting, fourteen of fifteen gaps noise. Two implementations
+ * of one concept disagreeing is what this mirrors the app to avoid.
  */
 export function gradeGap(
   items: GradableItem[],
   packageName: string,
   /**
-   * False when every advisory for this package is already fixed at or below the
-   * installed version. Security tiers then cannot apply — you cannot be
-   * "critically behind" on something you have already patched. Defaults to
-   * `true` so callers without version data keep the conservative grade.
+   * An advisory citing this dependency still reaches an install, or cannot be
+   * ruled out. False when every such advisory is fixed at or below the
+   * installed versions: you cannot be "critically behind" on something you
+   * already patched. Defaults to true so callers without version data keep
+   * the conservative grade.
    */
   stillVulnerable = true,
   /**
-   * The installed version, when known. A registry row is only a version
-   * UPDATE when it is newer than this; the row for the version you already
-   * run is not missed intelligence. Unknown keeps the conservative grade.
+   * The installed version(s), when known. A registry row is only a version
+   * UPDATE when it is newer than an install (AD-041): the row for the version
+   * every project already runs is not missed intelligence. Unknown keeps the
+   * conservative grade.
    */
-  installedVersion: string | null = null,
-): string {
-  // An advisory names the dependency when the dependency is its SUBJECT
-  // package. Word matching on advisory titles minted critical gaps for `url`
-  // from "[CVE-2026-63735] SurrealDB: ... via URL path" and for `hmac` from
-  // "[CVE-2026-54736] Phalcon: Non-constant-time HMAC verification" — real
-  // advisories, about other packages. Titles of another shape keep the
-  // word-boundary test.
-  const namesDep = (item: GradableItem) => {
-    const title = item.title || "";
-    if (isAdvisoryItem(item)) {
-      const subject = advisorySubject(title);
-      if (subject !== null) return samePackage(subject, packageName);
-    }
-    return mentionsPackage(title, packageName);
-  };
-
-  const securityKeywords = (title: string) =>
-    hasWordBoundary(title, "cve") ||
-    hasWordBoundary(title, "security") ||
-    hasWordBoundary(title, "vulnerability");
+  installedVersion: string | readonly string[] | null = null,
+  /** The tier of the most severe stored advisory reaching an install; null when ungraded. */
+  advisoryTier: AdvisoryTier | null = null,
+): GapSeverity {
+  const cites = (item: GradableItem) => item.cites ?? citesByTitle(item, packageName);
+  // The tiers below the security tier read the TITLE, as the app's do: it
+  // must name the dependency (an advisory's subject counts).
+  const titleNames = (item: GradableItem) =>
+    mentionsPackage(item.title || "", packageName) || (isAdvisoryRow(item) && citesByTitle(item, packageName));
 
   // "Announcing <thing> <version>" is the canonical release phrasing and names
   // no other keyword. The version token is REQUIRED, matching the rule
   // `content_dna_classifiers` settled on: it keeps "Announcing axum 0.8.0" and
   // rejects "Announcing Toasty, an async ORM" and "Announcing our Series B".
   const announcesAVersion = (title: string) =>
-    (hasWordBoundary(title, "announcing") || hasWordBoundary(title, "introducing")) &&
-    /\bv?\d+\.\d+/.test(title);
-
+    (hasWordBoundary(title, "announcing") || hasWordBoundary(title, "introducing")) && /\bv?\d+\.\d+/.test(title);
+  const retires = (title: string) =>
+    RETIREMENT_KEYWORDS.some((kw) => hasWordBoundary(title, kw)) || /\bend[\s-]of[\s-]life\b/i.test(title);
   const carriesConsequence = (title: string) =>
-    ["breaking", "deprecated", "eol", "release", "released", "update", "upgrade"].some((kw) =>
-      hasWordBoundary(title, kw),
-    ) || announcesAVersion(title);
+    CONSEQUENCE_KEYWORDS.some((kw) => hasWordBoundary(title, kw)) || announcesAVersion(title);
 
-  // A registry row IS a version update — "crates.io: serde v1.0.220" names no
+  // A registry row IS a version update: "crates.io: serde v1.0.220" names no
   // consequence keyword, but an unread release of a direct dependency is the
-  // exact thing `knowledge_decay::gap_is_substantive` counts. Graded on the
-  // source, not on the title's vocabulary — provided the row is newer than
-  // what is installed (live: "npm: @tauri-apps/api v2.11.1" on 2.11.1).
-  const isRegistryRelease = (item: GradableItem) => {
+  // exact thing `knowledge_decay::gap_is_substantive` counts — provided it is
+  // newer than an install (live: "npm: @tauri-apps/api v2.11.1" on 2.11.1).
+  // Compared by semver precedence, so 0.10.0-rc.19 is newer than rc.18.
+  const installed = (typeof installedVersion === "string" ? [installedVersion] : (installedVersion ?? []))
+    .map((v) => parseSemverPrecedence(v))
+    .filter((v): v is SemverPrecedence => v !== null);
+  const isNewerRelease = (item: GradableItem) => {
     if (!REGISTRY_SOURCES.has(item.source_type ?? "")) return false;
-    const released = registryVersionFromTitle(item.title || "");
-    if (!installedVersion || !released) return true;
-    if (parseSemver(installedVersion) === null || parseSemver(released) === null) return true;
-    return compareSemver(released, installedVersion) > 0;
+    const released = parseSemverPrecedence(registryVersionFromTitle(item.title || "") ?? "");
+    if (released === null || installed.length === 0) return true;
+    return installed.some((v) => comparePrecedence(released, v) > 0);
   };
 
-  if (stillVulnerable) {
-    if (items.some((item) => isAdvisoryItem(item) && namesDep(item))) return "critical";
-    if (items.some((item) => namesDep(item) && securityKeywords(item.title || ""))) return "high";
+  if (stillVulnerable && items.some((item) => isAdvisoryRow(item) && cites(item))) {
+    return advisoryTier === "critical" || advisoryTier === "high" ? "critical" : "high";
   }
+  if (items.some((item) => cites(item) && titleNames(item) && retires(item.title || ""))) return "high";
   if (
     items.some(
-      (item) => namesDep(item) && (isRegistryRelease(item) || carriesConsequence(item.title || "")),
+      (item) => cites(item) && (isNewerRelease(item) || (titleNames(item) && carriesConsequence(item.title || ""))),
     )
   ) {
     return "medium";
