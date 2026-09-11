@@ -61,8 +61,9 @@ pub struct DependencyInstanceRow {
     pub version: String,
     pub is_direct: bool,
     pub is_dev: bool,
-    /// One of `runtime` | `dev` | `build` | `unknown`. `unknown` today —
-    /// lockfile processors do not yet resolve scope; refinement is future work.
+    /// One of `runtime` | `dev` | `build` | `unknown`. npm lockfiles resolve
+    /// `runtime`/`dev` from the lockfile graph (`ace::dep_scope`, AD-046);
+    /// the other ecosystems still write `unknown`.
     pub scope: String,
     pub detected_at: String,
 }

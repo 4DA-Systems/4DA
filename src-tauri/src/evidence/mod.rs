@@ -21,6 +21,9 @@
 //! Doctrine: `.claude/rules/intelligence-doctrine.md`.
 
 mod dormant_notice;
+// Pinned is not installed (AD-046): a live read of what `node_modules` holds.
+// `pub(crate)`: Preemption appends its rows and projects them for the brief.
+pub(crate) mod install_drift;
 mod list_transport;
 mod liveness;
 mod materializer;

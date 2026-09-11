@@ -34,6 +34,10 @@ use crate::package_ambiguity::has_word_boundary_match;
 use crate::scoring_config;
 use crate::signal_chains::ChainResolution;
 
+// Install drift (AD-046) — split out: this file is past the size ceiling.
+#[path = "preemption_drift.rs"]
+mod drift;
+
 // ============================================================================
 // Feed cache (first-paint latency fix)
 // ============================================================================
@@ -500,63 +504,112 @@ fn alert_subject(package: &str, installed_versions: &std::collections::BTreeSet<
     }
 }
 
+/// An OSV alert's `is_direct`/`is_dev` fields and scope label, read from the
+/// same `ExposureScope` its urgency is graded from (AD-044 scoping, AD-046).
+#[derive(Debug, PartialEq, Eq)]
+struct OsvGroupScope {
+    is_direct: Option<bool>,
+    is_dev: Option<bool>,
+    label: &'static str,
+}
+
 fn osv_group_scope(
     group: &[&crate::osv::types::MatchedAdvisory],
     projects: &[String],
-) -> (Option<bool>, Option<bool>, &'static str) {
+) -> OsvGroupScope {
     // Scoped to the projects the alert names (AD-044): an install in a project
     // this alert does not speak for must not set its scope label or its
     // dev/transitive discount.
-    let instances = group
-        .iter()
-        .flat_map(|matched| matched.dependency_instances.iter())
-        .filter(|instance| projects.iter().any(|p| p == &instance.project_path))
-        .filter(|instance| instance.is_version_confirmed);
-
-    let mut has_direct_runtime = false;
-    let mut has_transitive = false;
-    let mut has_dev = false;
-    for instance in instances {
-        if instance.is_dev {
-            has_dev = true;
-        } else if instance.is_direct {
-            has_direct_runtime = true;
-        } else {
-            has_transitive = true;
-        }
-    }
-
-    if has_direct_runtime {
-        let label = if has_transitive || has_dev {
+    let scope = crate::osv::identity::ExposureScope::of(group, projects);
+    let any_dev = scope.direct_dev || scope.transitive_dev;
+    let (is_direct, is_dev, label) = if scope.direct_runtime {
+        let label = if scope.transitive_runtime || any_dev {
             "direct in at least one project; weaker scope in others"
         } else {
             "direct dependency"
         };
         (Some(true), Some(false), label)
-    } else if has_transitive {
-        let label = if has_dev {
+    } else if scope.transitive_runtime {
+        let label = if any_dev {
             "transitive or dev dependency (runtime reachability unknown)"
         } else {
             "transitive dependency (dev/runtime reachability unknown)"
         };
         (Some(false), Some(false), label)
-    } else if has_dev {
+    } else if scope.direct_dev {
         (Some(true), Some(true), "dev dependency")
+    } else if scope.transitive_dev {
+        // The lockfile graph proves it ships only with dev tooling (AD-046).
+        // The old encoding called this "(direct) [dev]".
+        (
+            Some(false),
+            Some(true),
+            "transitive dev dependency (reached only through development tooling)",
+        )
     } else {
         (None, None, "dependency scope unavailable")
+    };
+    OsvGroupScope {
+        is_direct,
+        is_dev,
+        label,
     }
 }
 
+/// The urgency an OSV alert for `group` in `projects` carries: its most
+/// urgent vulnerability's shared tier, then the ONE scope rule every surface
+/// grades by (AD-046). `pub(crate)` so the upgrade plan's parity test drives
+/// the very function this path runs.
+pub(crate) fn osv_alert_urgency(
+    group: &[&crate::osv::types::MatchedAdvisory],
+    projects: &[String],
+) -> AlertUrgency {
+    let scope = crate::osv::identity::ExposureScope::of(group, projects);
+    rank_osv_urgency(
+        most_urgent_tier(group),
+        scope.all_transitive(),
+        scope.all_dev(),
+    )
+}
+
+/// Most urgent vulnerability for this package: the shared tier (CVSS band,
+/// else the source's curated label — the same tier Blind Spots, the banner and
+/// the MCP read) before the summary heuristic, so a MODERATE type-confusion
+/// bug is medium here and medium everywhere, not "authorization bypass → High"
+/// on one surface and Critical on the next.
+fn most_urgent_tier(group: &[&crate::osv::types::MatchedAdvisory]) -> AlertUrgency {
+    crate::osv::identity::cluster_by_vulnerability(group)
+        .iter()
+        .map(
+            |cluster| match crate::osv::identity::cluster_severity_tier(cluster) {
+                Some("critical") => AlertUrgency::Critical,
+                Some("high") => AlertUrgency::High,
+                Some("medium") => AlertUrgency::Medium,
+                Some("low") => AlertUrgency::Watch,
+                _ => {
+                    let rep = cluster[0];
+                    infer_urgency_from_summary(&rep.summary, &rep.advisory_id)
+                }
+            },
+        )
+        .min_by_key(urgency_rank)
+        .unwrap_or(AlertUrgency::Watch)
+}
+
+/// The Preemption boundary of the ONE scope rule
+/// (`osv::identity::scope_adjusted_urgency`, AD-046): the free floor and the
+/// brief grade an install exactly as the upgrade plan does. It used to drop a
+/// dev-only Critical straight to Medium while the plan said High.
 fn rank_osv_urgency(
     urgency: AlertUrgency,
-    is_direct: Option<bool>,
-    is_dev: Option<bool>,
+    all_transitive: Option<bool>,
+    all_dev: Option<bool>,
 ) -> AlertUrgency {
-    match (is_direct, is_dev, urgency) {
-        (_, Some(true), AlertUrgency::Critical | AlertUrgency::High) => AlertUrgency::Medium,
-        (Some(false), _, AlertUrgency::Critical) => AlertUrgency::High,
-        (_, _, urgency) => urgency,
-    }
+    canonical_to_alert_urgency(crate::osv::identity::scope_adjusted_urgency(
+        alert_urgency_to_canonical(&urgency),
+        all_transitive,
+        all_dev,
+    ))
 }
 
 fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
@@ -625,30 +678,14 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
                 clusters.iter().map(|c| c[0]).collect();
             let advisory_count = clusters.len();
 
-            // Most urgent vulnerability for this package: the shared tier
-            // (CVSS band, else the source's curated label — the same tier
-            // Blind Spots, the banner and the MCP read) before the summary
-            // heuristic, so a MODERATE type-confusion bug is medium here and
-            // medium everywhere, not "authorization bypass → High" on one
-            // surface and Critical on the next.
-            let raw_urgency = clusters
-                .iter()
-                .map(|cluster| {
-                    match crate::osv::identity::cluster_severity_tier(cluster) {
-                        Some("critical") => AlertUrgency::Critical,
-                        Some("high") => AlertUrgency::High,
-                        Some("medium") => AlertUrgency::Medium,
-                        Some("low") => AlertUrgency::Watch,
-                        _ => {
-                            let rep = cluster[0];
-                            infer_urgency_from_summary(&rep.summary, &rep.advisory_id)
-                        }
-                    }
-                })
-                .min_by_key(|u| urgency_rank(u))
-                .unwrap_or(AlertUrgency::Watch);
-            let (dep_is_direct, dep_is_dev, scope_label) = osv_group_scope(&group, &all_projects);
-            let urgency = rank_osv_urgency(raw_urgency, dep_is_direct, dep_is_dev);
+            // Most urgent vulnerability, then the ONE scope rule every
+            // surface grades by (AD-046) — see `osv_alert_urgency`.
+            let urgency = osv_alert_urgency(&group, &all_projects);
+            let OsvGroupScope {
+                is_direct: dep_is_direct,
+                is_dev: dep_is_dev,
+                label: scope_label,
+            } = osv_group_scope(&group, &all_projects);
             // De-prioritise advisories for deps not built on the host platform
             // (e.g. a Linux-only crate on Windows). Never hidden — capped to Watch,
             // and tagged platform_inactive so the lens groups it under "other build
@@ -1059,6 +1096,13 @@ pub fn get_preemption_feed() -> Result<PreemptionFeed> {
     debug!(target: "4da::preemption", tier2_count = tier2.len(), "Tier 2 LLM alerts");
     alerts.extend(tier2);
 
+    // ─── 0.75. Install drift (AD-046): the fix is merged but not running ──
+    // Only rows with a true fix to state reach this legacy feed: the brief
+    // reads it, and prints every security line with a fix or "no fix".
+    let drift_alerts = drift::legacy_alerts(&conn);
+    debug!(target: "4da::preemption", drift_count = drift_alerts.len(), "install-drift alerts");
+    alerts.extend(drift_alerts);
+
     // ─── 1. Signal chain predictions (single call, bounded LIMIT 200) ────
     match crate::signal_chains::detect_and_record_chains(&conn) {
         Ok(chains) => {
@@ -1439,6 +1483,13 @@ fn infer_urgency_from_summary(summary: &str, advisory_id: &str) -> AlertUrgency 
 /// LLM (Tier 2) collapses to one entry. Tier 1 entries appear first in
 /// the alerts vec, so `retain()` keeps them over Tier 2/3 duplicates.
 fn cross_tier_dedup_key(alert: &PreemptionAlert) -> String {
+    // An install-drift row is about a PROJECT's node_modules, not an
+    // advisory. Keyed by the advisory id its explanation cites, it would
+    // collide with — and be dropped in favour of — the OSV alert for the same
+    // package in another project (AD-046).
+    if drift::is_install_drift(&alert.id) {
+        return alert.id.clone();
+    }
     let pkg = alert
         .affected_dependencies
         .first()
@@ -1657,12 +1708,21 @@ fn is_advisory_subject_match(title_lower: &str, dep: &str) -> bool {
 // (e.g. `monitoring_briefing.rs`) still use `PreemptionAlert` until their
 // own materializers land in later phases.
 
-fn alert_urgency_to_canonical(u: &AlertUrgency) -> Urgency {
+pub(crate) fn alert_urgency_to_canonical(u: &AlertUrgency) -> Urgency {
     match u {
         AlertUrgency::Critical => Urgency::Critical,
         AlertUrgency::High => Urgency::High,
         AlertUrgency::Medium => Urgency::Medium,
         AlertUrgency::Watch => Urgency::Watch,
+    }
+}
+
+fn canonical_to_alert_urgency(u: Urgency) -> AlertUrgency {
+    match u {
+        Urgency::Critical => AlertUrgency::Critical,
+        Urgency::High => AlertUrgency::High,
+        Urgency::Medium => AlertUrgency::Medium,
+        Urgency::Watch => AlertUrgency::Watch,
     }
 }
 
@@ -1980,9 +2040,7 @@ async fn compute_preemption_evidence_feed() -> std::result::Result<EvidenceFeed,
     let mut items = items;
     append_upgrade_plan_items(&mut items);
 
-    let mut feed = feed_with_dormant_notices(items);
-    feed.tier_scope = Some(TierScope::Full);
-    Ok(feed)
+    Ok(assemble_feed(items, TierScope::Full))
 }
 
 fn compute_preemption_fast_full_feed() -> std::result::Result<EvidenceFeed, String> {
@@ -2006,9 +2064,7 @@ fn compute_preemption_fast_full_feed() -> std::result::Result<EvidenceFeed, Stri
         );
     }
     append_upgrade_plan_items(&mut items);
-    let mut feed = feed_with_dormant_notices(items);
-    feed.tier_scope = Some(TierScope::Full);
-    Ok(feed)
+    Ok(assemble_feed(items, TierScope::Full))
 }
 
 // Upgrade Plan (Phase 1 dependency intelligence): append the ranked
@@ -2060,19 +2116,30 @@ fn append_upgrade_plan_items(items: &mut Vec<EvidenceItem>) {
     }
 }
 
-/// Build the feed, collapsing every finding whose affected projects are ALL
-/// dormant into one quiet summary row per project.
+/// The last steps before a lens feed exists, applied on all three paths (full,
+/// fast, free floor) so a cache miss and a cache hit never disagree:
 ///
-/// The LAST step before the feed exists, so it runs after `cap_dormant_items`
-/// and `apply_liveness_policy` have already done their capping — the many-rows
-/// outcome those produce is exactly what this replaces. Applied on all three
-/// feed paths (full, fast, free floor) so a cache miss and a cache hit never
-/// disagree about how a dead repo is presented.
+/// 1. Append the live install-drift rows (AD-046, `evidence::install_drift`)
+///    — after adversarial filtering, because a filesystem fact has nothing for
+///    an LLM to second-guess. The free floor admits only the rows whose
+///    urgency rests on an OSV range match.
+/// 2. Collapse every finding whose affected projects are ALL dormant into one
+///    quiet summary row per project (AD-043). This runs after
+///    `cap_dormant_items` and `apply_liveness_policy` have done their capping
+///    — the many-rows outcome those produce is exactly what it replaces.
 ///
 /// A dormant project with no findings produces nothing (doctrine rule 6), and
 /// an unreadable database leaves every item exactly as it was.
-fn feed_with_dormant_notices(mut items: Vec<EvidenceItem>) -> EvidenceFeed {
+fn assemble_feed(mut items: Vec<EvidenceItem>, scope: TierScope) -> EvidenceFeed {
     if let Ok(conn) = crate::open_db_connection() {
+        let drifted = drift::append_to_feed(&mut items, &conn, scope);
+        if drifted > 0 {
+            info!(
+                target: "4da::preemption",
+                drifted,
+                "install-drift rows appended: node_modules disagrees with the lockfile"
+            );
+        }
         let liveness = crate::evidence::ProjectLiveness::load(&conn);
         let collapsed = crate::evidence::collapse_dormant_alerts(&mut items, &liveness);
         if collapsed > 0 {
@@ -2083,7 +2150,9 @@ fn feed_with_dormant_notices(mut items: Vec<EvidenceItem>) -> EvidenceFeed {
             );
         }
     }
-    EvidenceFeed::from_items(items)
+    let mut feed = EvidenceFeed::from_items(items);
+    feed.tier_scope = Some(scope);
+    feed
 }
 
 /// Compute the free-tier security floor: Tier 1 (OSV-verified) items only.
@@ -2098,9 +2167,7 @@ fn compute_preemption_free_floor_feed() -> std::result::Result<EvidenceFeed, Str
         tier1 = items.len(),
         "preemption free-floor feed recomputed"
     );
-    let mut feed = feed_with_dormant_notices(items);
-    feed.tier_scope = Some(TierScope::FreeFloor);
-    Ok(feed)
+    Ok(assemble_feed(items, TierScope::FreeFloor))
 }
 
 fn validated_osv_preemption_items() -> Vec<EvidenceItem> {
@@ -2145,6 +2212,10 @@ fn validated_preemption_items() -> std::result::Result<Vec<EvidenceItem>, String
     Ok(feed
         .alerts
         .iter()
+        // Install drift reaches the lens feeds in its canonical form
+        // (`assemble_feed`, after adversarial filtering); the legacy alert is
+        // the brief's projection of it, not a second row.
+        .filter(|a| !drift::is_install_drift(&a.id))
         .map(|a| a.to_evidence_item())
         .filter(|item| match crate::evidence::validate_item(item) {
             Ok(()) => true,
@@ -2915,20 +2986,28 @@ mod tests {
         assert!(confirmed - unconfirmed > 0.3);
     }
 
+    /// AD-046: the alert path grades by the ONE scope rule. Arguments are now
+    /// (all_transitive, all_dev); a dev-only Critical is High here exactly as
+    /// on the plan — it used to be Medium here and High there.
     #[test]
-    fn osv_scope_ranking_caps_unproven_reachability() {
-        assert!(matches!(
-            rank_osv_urgency(AlertUrgency::Critical, Some(false), Some(false)),
-            AlertUrgency::High
-        ));
-        assert!(matches!(
-            rank_osv_urgency(AlertUrgency::Critical, Some(true), Some(true)),
-            AlertUrgency::Medium
-        ));
-        assert!(matches!(
-            rank_osv_urgency(AlertUrgency::Critical, Some(true), Some(false)),
-            AlertUrgency::Critical
-        ));
+    fn osv_scope_ranking_is_the_one_scope_rule() {
+        let cases = [
+            (AlertUrgency::Critical, Some(true), Some(false), "high"),
+            (AlertUrgency::Critical, Some(false), Some(true), "high"),
+            (AlertUrgency::Critical, Some(true), Some(true), "medium"),
+            (AlertUrgency::Critical, Some(false), Some(false), "critical"),
+            (AlertUrgency::High, Some(false), Some(true), "medium"),
+            (AlertUrgency::Medium, Some(false), Some(true), "watch"),
+            (AlertUrgency::Critical, None, None, "critical"),
+        ];
+        for (base, transitive, dev, expected) in cases {
+            let got =
+                format!("{:?}", rank_osv_urgency(base.clone(), transitive, dev)).to_lowercase();
+            assert_eq!(
+                got, expected,
+                "{base:?} all_transitive={transitive:?} all_dev={dev:?}"
+            );
+        }
     }
 
     /// AD-044: the multi-version subject must never read as a version. The old
@@ -2999,11 +3078,11 @@ mod tests {
         let both = vec!["/direct".to_string(), "/transitive".to_string()];
         assert_eq!(
             osv_group_scope(&[&matched], &both),
-            (
-                Some(true),
-                Some(false),
-                "direct in at least one project; weaker scope in others"
-            )
+            OsvGroupScope {
+                is_direct: Some(true),
+                is_dev: Some(false),
+                label: "direct in at least one project; weaker scope in others",
+            }
         );
 
         // AD-044: the scope is the scope of the projects the alert NAMES. An
@@ -3011,12 +3090,57 @@ mod tests {
         // "direct dependency" label — nor its absence of a discount.
         assert_eq!(
             osv_group_scope(&[&matched], &["/transitive".to_string()]),
-            (
-                Some(false),
-                Some(false),
-                "transitive dependency (dev/runtime reachability unknown)"
-            )
+            OsvGroupScope {
+                is_direct: Some(false),
+                is_dev: Some(false),
+                label: "transitive dependency (dev/runtime reachability unknown)",
+            }
         );
+    }
+
+    /// The sandbox shape (AD-046): transitive, and reached only through dev
+    /// tooling. The old encoding labelled every dev-only install "(direct)
+    /// [dev]" and graded a Critical straight to Medium by a rule of its own;
+    /// now the label is true and the grade is the one rule's.
+    #[test]
+    fn a_transitive_dev_only_install_is_labelled_and_graded_as_one() {
+        let sandbox = crate::osv::types::MatchedAdvisory {
+            advisory_id: "GHSA-sandbox".into(),
+            summary: "Sandbox escape".into(),
+            details: None,
+            package_name: "sandbox".into(),
+            ecosystem: "npm".into(),
+            installed_version: Some("3.1.2".into()),
+            fixed_version: None,
+            severity_type: None,
+            cvss_score: None,
+            source_url: None,
+            is_version_confirmed: true,
+            project_paths: vec!["/paddle-webhook".into()],
+            published_at: None,
+            aliases: vec![],
+            severity_label: Some("critical".into()),
+            dependency_instances: vec![crate::osv::types::MatchedDependency {
+                project_path: "/paddle-webhook".into(),
+                installed_version: Some("3.1.2".into()),
+                is_direct: false,
+                is_dev: true,
+                is_version_confirmed: true,
+            }],
+        };
+        let projects = vec!["/paddle-webhook".to_string()];
+        assert_eq!(
+            osv_group_scope(&[&sandbox], &projects),
+            OsvGroupScope {
+                is_direct: Some(false),
+                is_dev: Some(true),
+                label: "transitive dev dependency (reached only through development tooling)",
+            }
+        );
+        assert!(matches!(
+            osv_alert_urgency(&[&sandbox], &projects),
+            AlertUrgency::Medium
+        ));
     }
 
     /// Insert one direct runtime dep at a given relevance.

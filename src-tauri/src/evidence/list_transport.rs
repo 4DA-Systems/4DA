@@ -145,9 +145,15 @@ fn is_plan_covered(item: &EvidenceItem, plan_packages: &HashSet<String>) -> bool
     // so without this it would be dropped here exactly when the plan happens
     // to cover them all: the same silence AD-043 exists to end, arriving at
     // the last step instead of the first.
+    //
+    // An install-drift row (AD-046) is the same kind of statement — what a
+    // PROJECT's node_modules holds — and the plan's action cannot subsume it:
+    // the pin is already right, the running copy is not. Regrouped under an
+    // "Upgrade hono" step, "the fix is merged but not running" would vanish.
     if item.lens_hints.upgrade_plan
         || item.lens_hints.other_build_target
         || item.lens_hints.dormant_notice
+        || super::install_drift::is_install_drift_id(&item.id)
     {
         return false;
     }

@@ -458,6 +458,231 @@ fn transitive_only_critical_is_high_like_the_brief_path() {
     );
 }
 
+// ---------------------------------------------------------------------------
+// One scope rule (AD-046). The alert path (the free floor, and through
+// `get_preemption_feed` the brief) and this plan applied two different
+// dev-only discounts to one advisory, over two different instance sets. Both
+// now call `osv::identity::scope_adjusted_urgency` on `ExposureScope`.
+// ---------------------------------------------------------------------------
+
+/// One advisory on `pkg` in `/p`, with the given installs
+/// `(is_direct, is_dev, version_confirmed)`.
+fn matched(cvss: f64, installs: &[(bool, bool, bool)]) -> crate::osv::types::MatchedAdvisory {
+    crate::osv::types::MatchedAdvisory {
+        advisory_id: "GHSA-parity".to_string(),
+        summary: "parity".to_string(),
+        details: None,
+        package_name: "pkg".to_string(),
+        ecosystem: "npm".to_string(),
+        installed_version: Some("1.0.0".to_string()),
+        fixed_version: Some("2.0.0".to_string()),
+        severity_type: Some("CVSS_V3".to_string()),
+        cvss_score: Some(cvss),
+        source_url: None,
+        is_version_confirmed: true,
+        project_paths: vec!["/p".to_string()],
+        published_at: None,
+        dependency_instances: installs
+            .iter()
+            .map(
+                |&(is_direct, is_dev, confirmed)| crate::osv::types::MatchedDependency {
+                    project_path: "/p".to_string(),
+                    installed_version: Some("1.0.0".to_string()),
+                    is_direct,
+                    is_dev,
+                    is_version_confirmed: confirmed,
+                },
+            )
+            .collect(),
+        aliases: vec![],
+        severity_label: None,
+    }
+}
+
+/// Both surfaces, one cohort: the plan's row and the alert path's grade.
+fn both_grades(advisory: &crate::osv::types::MatchedAdvisory) -> (Urgency, Urgency) {
+    let advisories = vec![advisory];
+    let projects = vec!["/p".to_string()];
+    let plan = super::package_group("npm", (projects.clone(), advisories.clone()), false).urgency;
+    let alert = crate::preemption::alert_urgency_to_canonical(
+        &crate::preemption::osv_alert_urgency(&advisories, &projects),
+    );
+    (plan, alert)
+}
+
+#[test]
+fn the_plan_and_the_alert_path_grade_every_scope_combination_identically() {
+    use Urgency::{Critical, High, Medium, Watch};
+    // The specified table, written out independently of the implementation.
+    let expected = |base: Urgency, transitive: bool, dev: bool| match (base, transitive, dev) {
+        (Critical, false, false) => Critical,
+        (Critical, true, false) | (Critical, false, true) => High,
+        (Critical, true, true) => Medium,
+        (High, _, false) => High,
+        (High, _, true) => Medium,
+        (Medium, _, false) => Medium,
+        (Medium, _, true) | (Watch, _, _) => Watch,
+    };
+    for (cvss, base) in [(9.8, Critical), (7.5, High), (5.0, Medium), (2.0, Watch)] {
+        for transitive in [false, true] {
+            for dev in [false, true] {
+                let advisory = matched(cvss, &[(!transitive, dev, true)]);
+                let (plan, alert) = both_grades(&advisory);
+                let want = expected(base, transitive, dev);
+                assert_eq!(
+                    plan, want,
+                    "plan: {base:?} transitive={transitive} dev={dev}"
+                );
+                assert_eq!(
+                    alert, want,
+                    "alert path: {base:?} transitive={transitive} dev={dev}"
+                );
+            }
+        }
+    }
+    // The two named live shapes.
+    assert_eq!(
+        both_grades(&matched(9.8, &[(false, true, true)])),
+        (Medium, Medium),
+        "sandbox: transitive, dev-only, Critical"
+    );
+    assert_eq!(
+        both_grades(&matched(5.0, &[(true, false, true)])),
+        (Medium, Medium),
+        "jsonwebtoken: direct, runtime, Medium"
+    );
+}
+
+/// The instance set is shared too: an unconfirmed install can neither grant
+/// nor withhold a discount on either surface. Before AD-046 the plan counted
+/// it (so this cohort read Critical) and the alert path did not (Medium).
+#[test]
+fn an_unconfirmed_install_moves_neither_surface() {
+    let advisory = matched(9.8, &[(false, true, true), (true, false, false)]);
+    assert_eq!(both_grades(&advisory), (Urgency::Medium, Urgency::Medium));
+}
+
+/// An advisory graded only by its source label (no CVSS), `fixed` or no fix.
+#[allow(clippy::too_many_arguments)]
+fn labelled_advisory(
+    db: &Database,
+    id: &str,
+    package: &str,
+    ecosystem: &str,
+    fixed: Option<&str>,
+    label: &str,
+    summary: &str,
+) {
+    let ranges = match fixed {
+        Some(f) => {
+            format!(r#"[{{"type":"SEMVER","events":[{{"introduced":"0"}},{{"fixed":"{f}"}}]}}]"#)
+        }
+        None => r#"[{"type":"SEMVER","events":[{"introduced":"0"}]}]"#.to_string(),
+    };
+    let fixed_json = fixed.map(|f| format!(r#"["{f}"]"#));
+    db.upsert_osv_advisory_with_meta(
+        id,
+        summary,
+        None,
+        package,
+        ecosystem,
+        Some(&ranges),
+        fixed_json.as_deref(),
+        None,
+        None,
+        Some(&format!("https://osv.dev/{id}")),
+        Some("2026-09-01T00:00:00Z"),
+        None,
+        None,
+        None,
+        Some(label),
+    )
+    .unwrap();
+}
+
+/// Live 2026-09-10: Preemption's #1 row was "No fix published for sandbox"
+/// HIGH — reached by paddle-webhook only through vercel's DEV tree — above
+/// relay's jsonwebtoken MEDIUM, a live auth bypass fixable now with a one-line
+/// bump to 10.3.0. With the lockfile's dev scope recorded, sandbox is
+/// transitive AND dev-only: Critical -> High (AD-040) -> Medium (dev), and the
+/// existing sort key (urgency, !confirmed, !fixable_now, ...) puts the
+/// fixable-now bump first.
+#[test]
+fn a_dev_only_transitive_critical_ranks_below_a_fixable_direct_medium() {
+    use crate::db::DependencyInstanceInput;
+    let db = test_db();
+    db.store_transitive_dependency("/p/paddle-webhook", "sandbox", Some("3.1.2"), "npm", true)
+        .unwrap();
+    db.store_dependency_instances(
+        "/p/paddle-webhook",
+        "npm",
+        &[DependencyInstanceInput {
+            package_name: "sandbox".to_string(),
+            version: "3.1.2".to_string(),
+            is_direct: false,
+            is_dev: true,
+            scope: "dev".to_string(),
+        }],
+    )
+    .unwrap();
+    labelled_advisory(
+        &db,
+        "GHSA-sandbox-escape",
+        "sandbox",
+        "npm",
+        None,
+        "critical",
+        "Sandbox escape in sandbox",
+    );
+    db.store_dependency(
+        "/p/relay",
+        "jsonwebtoken",
+        Some("9.3.1"),
+        "rust",
+        false,
+        None,
+    )
+    .unwrap();
+    labelled_advisory(
+        &db,
+        "GHSA-h395-gr6q-cpjc",
+        "jsonwebtoken",
+        "crates.io",
+        Some("10.3.0"),
+        "medium",
+        "Type confusion leads to authorization bypass",
+    );
+
+    let plan = build_upgrade_plan(&db);
+    let position = |pkg: &str| {
+        plan.iter()
+            .position(|i| i.affected_deps == vec![pkg.to_string()])
+            .unwrap_or_else(|| {
+                panic!(
+                    "{pkg} missing: {:?}",
+                    plan.iter().map(|i| &i.title).collect::<Vec<_>>()
+                )
+            })
+    };
+    let sandbox = &plan[position("sandbox")];
+    assert_eq!(
+        sandbox.urgency,
+        Urgency::Medium,
+        "transitive + dev-only Critical"
+    );
+    assert!(
+        sandbox.explanation.contains("dev-only"),
+        "the discount is labelled: {}",
+        sandbox.explanation
+    );
+    assert_eq!(plan[position("jsonwebtoken")].urgency, Urgency::Medium);
+    assert!(
+        position("jsonwebtoken") < position("sandbox"),
+        "the fixable-now auth bypass leads: {:?}",
+        plan.iter().map(|i| &i.title).collect::<Vec<_>>()
+    );
+}
+
 #[test]
 fn cross_project_multiplicity_widens_blast_radius_and_ranks_up() {
     let db = test_db();

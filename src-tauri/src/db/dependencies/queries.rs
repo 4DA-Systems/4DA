@@ -253,6 +253,12 @@ impl Database {
     /// Lockfile version is preferred (it's the actual resolved/installed version).
     /// Provenance mirrors [`Self::store_dependency`]: insert as 'lockfile',
     /// upgrade only legacy 'unknown' on conflict.
+    ///
+    /// `is_dev` on a transitive row is the lockfile's LATEST verdict; on a row
+    /// the manifest marked direct it is left to the manifest (AD-046). The old
+    /// `MIN(existing, new)` could only ever clear the flag — and every row was
+    /// written `0` before the npm walk could tell dev from runtime, so no
+    /// transitive row could ever become dev-only.
     pub fn store_transitive_dependency(
         &self,
         project_path: &str,
@@ -274,7 +280,8 @@ impl Database {
              ON CONFLICT(project_path, package_name, ecosystem)
              DO UPDATE SET
                 version = COALESCE(?3, user_dependencies.version),
-                is_dev = MIN(user_dependencies.is_dev, ?5),
+                is_dev = CASE WHEN user_dependencies.is_direct = 1
+                              THEN user_dependencies.is_dev ELSE ?5 END,
                 detected_from = CASE WHEN user_dependencies.detected_from = 'unknown'
                                      THEN 'lockfile' ELSE user_dependencies.detected_from END,
                 last_seen_at = datetime('now')",

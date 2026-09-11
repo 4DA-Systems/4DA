@@ -443,3 +443,50 @@ fn excluded_project_rows_and_orphan_alerts_are_purged() {
         "no exclusions, no work — orphans are not this function's job"
     );
 }
+
+/// AD-046: a transitive row's `is_dev` follows the lockfile's LATEST verdict,
+/// in both directions; a row the manifest marked direct keeps the manifest's.
+/// The old `MIN(existing, new)` could only ever clear the flag — every row was
+/// written 0 before the npm walk knew better, so none could become dev-only.
+#[test]
+fn transitive_dev_verdict_follows_the_lockfile_but_never_overrides_a_direct_row() {
+    let db = test_db();
+    let project = "/projects/webhook";
+    let is_dev = |name: &str| {
+        db.get_project_dependencies(project)
+            .unwrap()
+            .into_iter()
+            .find(|d| d.package_name == name)
+            .unwrap_or_else(|| panic!("{name} row"))
+            .is_dev
+    };
+
+    db.store_transitive_dependency(project, "sandbox", Some("3.1.2"), "npm", false)
+        .unwrap();
+    db.store_transitive_dependency(project, "sandbox", Some("3.1.2"), "npm", true)
+        .unwrap();
+    assert!(
+        is_dev("sandbox"),
+        "a transitive recorded runtime heals to dev-only"
+    );
+    db.store_transitive_dependency(project, "sandbox", Some("3.1.2"), "npm", false)
+        .unwrap();
+    assert!(!is_dev("sandbox"), "and back, once a runtime path appears");
+
+    db.store_manifest_dependency(
+        project,
+        "vercel",
+        Some("54.20.1"),
+        "npm",
+        true,
+        true,
+        "manifest",
+    )
+    .unwrap();
+    db.store_transitive_dependency(project, "vercel", Some("54.20.1"), "npm", false)
+        .unwrap();
+    assert!(
+        is_dev("vercel"),
+        "the manifest owns a direct row's dev flag"
+    );
+}

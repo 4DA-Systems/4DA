@@ -370,6 +370,35 @@ fn a_dormant_project_notice_survives_a_plan_that_covers_its_packages() {
 }
 
 #[test]
+fn an_install_drift_row_survives_a_plan_that_covers_its_package() {
+    // AD-046: the plan says "upgrade hono"; the drift row says the pin is
+    // already right and the running copy is not. It is osv_verified and names
+    // only `hono`, so plan coverage would regroup it away — and "the fix is
+    // merged but not running" would vanish from the one surface that knows.
+    let plan = EvidenceItem {
+        affected_deps: vec!["hono".to_string()],
+        lens_hints: LensHints::upgrade_plan(),
+        ..simple_item("plan-hono", Urgency::Medium, Confidence::heuristic(0.9))
+    };
+    let drift = EvidenceItem {
+        affected_deps: vec!["hono".to_string()],
+        affected_projects: vec!["/dev/mcp-server".to_string()],
+        ..simple_item(
+            "install-drift:/dev/mcp-server",
+            Urgency::High,
+            Confidence::osv_verified(0.95),
+        )
+    };
+    let out = preemption_visible_feed(EvidenceFeed::from_items(vec![plan, drift]), &[]);
+    assert_eq!(out.total, 2);
+    assert!(out
+        .items
+        .iter()
+        .any(|i| i.id == "install-drift:/dev/mcp-server"));
+    assert_eq!(out.high_count, 1, "and it counts toward the urgency bar");
+}
+
+#[test]
 fn partially_covered_and_non_osv_items_are_never_regrouped() {
     let plan = EvidenceItem {
         affected_deps: vec!["lodash".to_string()],
