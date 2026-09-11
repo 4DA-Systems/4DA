@@ -338,7 +338,7 @@ jobs:
       # every leg and running it four times would only burn minutes.
       - name: Install cargo-deny (prebuilt)
         if: matrix.label == 'Linux'
-        uses: taiki-e/install-action@b20dedce73af6905cdc30d6611090c9b67557c8d # v2
+        uses: taiki-e/install-action@5bf6ce016fd2e72eefc647cbca1e4213f65955b8 # v2
         with:
           tool: cargo-deny
 
