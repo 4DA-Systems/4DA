@@ -53,6 +53,7 @@ import type {
 } from "./types.js";
 
 import type { ProjectScanResult } from "./project-scanner.js";
+import { dbRecoveryNote, readDbRecoveredMarker, readEngineBlockMarker } from "./freshness-markers.js";
 
 /**
  * Resolve the database path by checking multiple locations in priority order:
@@ -158,6 +159,15 @@ export interface DataFreshness {
   engine_blocked_at?: string;
   /** The refusal error recorded by the blocked engine. */
   engine_blocked_error?: string;
+  /**
+   * Set when `data/.db-recovered` reports that the headless refresh engine
+   * restored the database from a backup or quarantined it: when it happened.
+   */
+  db_recovered_at?: string;
+  /** `restored_from_backup` | `quarantined_no_backup` | `recovery_failed` (a newer engine may add kinds). */
+  db_recovery_kind?: string;
+  /** The preserved file's path, or the failure reason. */
+  db_recovery_detail?: string;
 }
 
 /** Minutes a feed may go without a fetch before DB-backed tools flag it stale. */
@@ -898,9 +908,20 @@ export class FourDADatabase {
     // failure froze the feed for two days (2026-08-28→30) with ERROR-log-only
     // symptoms; this reader is the one that caught it, so it now names the
     // cause instead of just the staleness.
-    const engineBlock = this.readEngineBlockMarker();
+    const engineBlock = readEngineBlockMarker(this.db.name);
     if (engineBlock) {
       note += ` ENGINE BLOCKED since ${engineBlock.at}: ${engineBlock.error} — a rebuilt/updated 4DA binary is required; a plain refresh will keep refusing.`;
+    }
+
+    // Database-recovery marker: when the headless refresh engine restores the
+    // database from a backup, or quarantines it and starts a fresh empty one,
+    // every answer read from it may be incomplete or empty, and a fresh
+    // database looks "fresh" by every other field here. The engine leaves
+    // `data/.db-recovered` beside the DB; it is surfaced on every DB-backed
+    // answer until the desktop app has shown it and deleted it. Read-only.
+    const recovered = readDbRecoveredMarker(this.db.name);
+    if (recovered) {
+      note += ` ${dbRecoveryNote(recovered)}`;
     }
 
     return {
@@ -916,26 +937,14 @@ export class FourDADatabase {
       ...(engineBlock
         ? { engine_blocked_at: engineBlock.at, engine_blocked_error: engineBlock.error }
         : {}),
+      ...(recovered
+        ? {
+            db_recovered_at: recovered.at,
+            db_recovery_kind: recovered.kind,
+            db_recovery_detail: recovered.detail,
+          }
+        : {}),
     };
-  }
-
-  /**
-   * Read `data/.engine-blocked` beside the database file, if present. Written
-   * by the Rust engine (`engine_block.rs`) when a scheduled refresh is refused
-   * by a newer database schema; cleared the moment a cycle opens the DB again.
-   */
-  private readEngineBlockMarker(): { at: string; error: string } | null {
-    try {
-      const markerPath = path.join(path.dirname(this.db.name), ".engine-blocked");
-      const raw = fs.readFileSync(markerPath, "utf-8");
-      const v = JSON.parse(raw) as { at?: unknown; error?: unknown };
-      if (typeof v.at === "string" && typeof v.error === "string") {
-        return { at: v.at, error: v.error };
-      }
-      return null;
-    } catch {
-      return null;
-    }
   }
 
   /** `MAX(sources.last_fetch)`, tolerant of a missing `sources` table (returns null). */
@@ -1070,9 +1079,13 @@ export class FourDADatabase {
     // stay textually in sync with it. The `relevance_score >= ?` membership
     // filter above deliberately stays on evidence: evidence decides membership,
     // rank decides order. Guarded on column existence for pre-110 DBs.
+    // `id DESC` breaks ties deterministically: a hard score cap parks many
+    // items at exactly the same value (100 of 651 surfaced items sat at
+    // 0.5000), and without a tie-break their order was whatever SQLite
+    // emitted. The pre-110 fallback gets the same tie-break.
     const rankedOrder = this.hasColumn("source_items", "rank_score")
-      ? `COALESCE(rank_score, relevance_score) DESC`
-      : `relevance_score DESC`;
+      ? `COALESCE(rank_score, relevance_score) DESC, id DESC`
+      : `relevance_score DESC, id DESC`;
     query += ` ORDER BY ${rankedOrder} LIMIT ?`;
     // Over-fetch so near-duplicate collapsing below can still fill `limit`
     // (the same story arrives via reddit + rss + mastodon: live feeds showed

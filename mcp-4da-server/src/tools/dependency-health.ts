@@ -9,8 +9,9 @@
 
 import type { FourDADatabase } from "../db.js";
 import type { LiveIntelligence } from "../live/index.js";
-import type { DependencyHealthResult, RegistryPackageInfo } from "../live/types.js";
+import type { DependencyHealthResult, InstallDriftRecord, RegistryPackageInfo } from "../live/types.js";
 import { isActionableVulnerability } from "../live/maintenance.js";
+import { driftFor } from "./install-drift-notes.js";
 
 export interface DependencyHealthParams {
   include_dev?: boolean;
@@ -22,7 +23,7 @@ export interface DependencyHealthParams {
 export const dependencyHealthTool = {
   name: "dependency_health",
   description:
-    "Assess health of project dependencies — version freshness, deprecation status, known CVEs. Auto-detects stack from lock files. Covers npm, Rust, Python, and Go.",
+    "Assess health of project dependencies — version freshness, deprecation status, known CVEs. Auto-detects stack from lock files. Covers npm, Rust, Python, and Go. For npm, `installedVersion` appears beside `currentVersion` when node_modules holds a different version than the lockfile.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -47,6 +48,17 @@ export const dependencyHealthTool = {
     },
   },
 };
+
+/** Stamp each npm row with the version node_modules holds, where it differs from the lockfile's. */
+function withInstalledVersions(rows: RegistryPackageInfo[], drift: InstallDriftRecord[]): RegistryPackageInfo[] {
+  if (drift.length === 0) return rows;
+  return rows.map((row) => {
+    if (row.ecosystem !== "npm") return row;
+    const records = driftFor(drift, row.name, row.currentVersion);
+    if (records.length === 0) return row;
+    return { ...row, installedVersion: [...new Set(records.map((r) => r.installedVersion))].join(", ") };
+  });
+}
 
 export async function executeDependencyHealth(
   _db: FourDADatabase,
@@ -74,6 +86,10 @@ export async function executeDependencyHealth(
     };
   }
 
+  // A long-lived server must not answer from the versions it read at startup:
+  // re-resolve if a lockfile (or node_modules) changed. Stat calls only.
+  liveIntel.refreshIfLockfilesChanged();
+
   // Get resolved deps
   const includeDev = params.include_dev ?? false;
   let deps = liveIntel.getResolvedDeps();
@@ -87,7 +103,10 @@ export async function executeDependencyHealth(
   const ecosystems = [...new Set(deps.map((d) => d.ecosystem))];
 
   // Fetch registry health for all deps
-  const registryData = await liveIntel.fetchRegistryHealth(deps);
+  const registryData = withInstalledVersions(
+    await liveIntel.fetchRegistryHealth(deps),
+    liveIntel.getInstallDrift(),
+  );
 
   // Merge vulnerability data. "Vulnerable" means the actionable set — built
   // on this host and not a maintenance notice — which is exactly what
@@ -119,6 +138,7 @@ export async function executeDependencyHealth(
   // breakdown shown beside it. registryData is direct deps only — counting there
   // undercounts CVEs that live in transitive dependencies.
   const vulnerable = vulnMap.size;
+  const drifted = registryData.filter((d) => d.installedVersion).length;
 
   // Sort
   const sortBy = params.sort_by ?? "risk";
@@ -193,10 +213,19 @@ export async function executeDependencyHealth(
   if (vulnerable > 0) parts.push(`${vulnerable} vulnerable`);
   if (deprecated > 0) parts.push(`${deprecated} deprecated`);
   if (outdated > 0) parts.push(`${outdated} outdated`);
-  if (vulnerable === 0 && deprecated === 0 && outdated === 0) parts.push("all healthy");
+  if (drifted > 0) {
+    parts.push(`${drifted} installed at a different version than the lockfile pins (see installedVersion; vulnerability_scan lists install_drift)`);
+  }
+  // "All healthy" is a claim about CVEs too; it needs a scan behind it.
+  if (vulnResult && vulnerable === 0 && deprecated === 0 && outdated === 0 && drifted === 0) {
+    parts.push("all healthy");
+  }
   const hidden = advisoryCount - activeVulns.length;
   if (hidden > 0) {
     parts.push(`${hidden} advisor${hidden !== 1 ? "ies" : "y"} not counted (platform-inactive or maintenance notices)`);
+  }
+  if (!vulnResult) {
+    parts.push("CVE data not loaded (no scan yet, or dependencies changed since the last one) — run vulnerability_scan first");
   }
 
   return {

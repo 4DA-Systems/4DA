@@ -553,3 +553,131 @@ describe("get_actionable_signals — one signal per vulnerability", () => {
     expect(signals.map((s) => s.id)).toContain(old);
   });
 });
+
+// ---------------------------------------------------------------------------
+// 5.1.0 — one severity rule with the app, and install drift in the briefing
+// ---------------------------------------------------------------------------
+
+describe("the briefing and live signals grade by the shared rule and name install drift", () => {
+  let db: FourDADatabase;
+
+  beforeEach(() => {
+    db = createTestDatabase();
+  });
+
+  afterEach(() => {
+    db.close();
+  });
+
+  // Measured 2026-09-10: this read "CRITICAL: Sandbox Breakout" in the
+  // briefing while the app graded the same advisory High.
+  const sandbox = entry({
+    package: "sandbox",
+    currentVersion: "3.1.2",
+    ecosystem: "npm",
+    isDirect: false,
+    devScopeKnown: false,
+    vulnId: "GHSA-sbx-0001",
+    aliases: [],
+    severity: "critical",
+    cvssScore: 9.8,
+    summary: "Sandbox Breakout",
+    fixedVersion: "3.1.3",
+    sourceDirs: ["d:/proj/paddle-webhook"],
+  });
+
+  it("get_actionable_signals presents a transitive critical of unknown scope as HIGH, and says why", () => {
+    const { signals } = executeGetActionableSignals(db, { limit: 50 }, { getVulnerabilities: () => scanOf([sandbox]) });
+    const row = signals.find((s) => s.source_type === "osv_live");
+    expect(row).toBeDefined();
+    expect(row!.signal_priority).toBe("high");
+    expect(row!.title.startsWith("HIGH: Sandbox Breakout")).toBe(true);
+    expect(row!.action).toContain("the advisory rates it critical; graded high as a transitive-only dependency");
+  });
+
+  it("what_should_i_know no longer calls it critical", async () => {
+    const result = await executeWhatShouldIKnow(db, { task: "Tidy the README" }, stubIntel(scanOf([sandbox])));
+    const summaryRow = result.advisories.find((a) => a.title.includes("known vulnerabilities"));
+    expect(summaryRow?.priority).toBe("high");
+    expect(result.advisories.some((a) => /CRITICAL/.test(a.title))).toBe(false);
+  });
+
+  // The installed copy in node_modules, not what the lockfile pins (hono
+  // 4.13.1 installed under a 4.13.5 lockfile for 25 days).
+  const drifted = entry({
+    package: "hono",
+    currentVersion: "4.13.1",
+    ecosystem: "npm",
+    vulnId: "GHSA-hono-0003",
+    aliases: ["CVE-2026-84365"],
+    severity: "medium",
+    cvssScore: 5.3,
+    summary: "hono: cookie parsing",
+    fixedVersion: "4.13.4",
+    sourceDirs: ["d:/proj/mcp-4da-server"],
+    installDriftOf: "4.13.5",
+    installFix: "pnpm install",
+  });
+
+  it("a vulnerable installed copy yields at least review_needed and names the reinstall, whatever the task", async () => {
+    const result = await executeWhatShouldIKnow(db, { task: "Tidy the README" }, stubIntel(scanOf([drifted])));
+
+    expect(result.scan_status).toBe("ready");
+    const drift = result.advisories.find((a) => a.title.startsWith("hono: the installed 4.13.1"));
+    expect(drift).toBeDefined();
+    expect(drift!.signal_type).toBe("security_alert");
+    expect(drift!.action).toContain("Run `pnpm install` in d:/proj/mcp-4da-server");
+    expect(drift!.action).toContain("the lockfile version is not affected");
+    // Graded like the app's install-drift row: the reinstall clears an
+    // advisory the running copy has, so high, though the advisory is medium.
+    expect(drift!.priority).toBe("high");
+    expect(["review_needed", "human_only"]).toContain(result.delegation_assessment.level);
+    expect(result.summary).not.toContain("No active advisories");
+  });
+
+  it("drift whose lockfile version is exposed too is medium, and says to upgrade before reinstalling", async () => {
+    const lockfileRow = entry({
+      ...drifted,
+      currentVersion: "4.13.5",
+      installDriftOf: undefined,
+      installFix: undefined,
+    });
+    const result = await executeWhatShouldIKnow(
+      db,
+      { task: "Tidy the README" },
+      stubIntel(scanOf([drifted, lockfileRow])),
+    );
+
+    const drift = result.advisories.find((a) => a.title.startsWith("hono: the installed 4.13.1"));
+    expect(drift).toBeDefined();
+    expect(drift!.priority).toBe("medium");
+    expect(drift!.action).toContain("the lockfile version is also affected; upgrade it, then reinstall");
+    expect(result.delegation_assessment.level).toBe("review_needed");
+  });
+
+  it("get_actionable_signals advises the reinstall, not an upgrade, for the installed copy", () => {
+    const { signals } = executeGetActionableSignals(db, { limit: 50 }, { getVulnerabilities: () => scanOf([drifted]) });
+    const row = signals.find((s) => s.source_type === "osv_live");
+    expect(row!.action).toBe(
+      "Run `pnpm install` in d:/proj/mcp-4da-server — node_modules has hono@4.13.1; the lockfile pins 4.13.5",
+    );
+  });
+
+  it("the briefing's scan block says when the versions it covers were resolved", async () => {
+    const result = await executeWhatShouldIKnow(
+      db,
+      { task: TASK },
+      stubIntel(scanOf([entry()]), {
+        refreshIfLockfilesChanged: () => true,
+        getResolutionProvenance: () => ({ resolvedAt: "2026-09-10T21:43:00.000Z", sources: [] }),
+      }),
+    );
+    expect(result.scan).toEqual({
+      status: "ready",
+      scanned_at: expect.any(String),
+      resolved_at: "2026-09-10T21:43:00.000Z",
+      re_resolved_this_call: true,
+    });
+    expect(result.scan_status).toBe("ready");
+  });
+});

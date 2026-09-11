@@ -1,6 +1,112 @@
 # Changelog
 
-## Unreleased
+## 5.1.0 — 2026-09-11
+
+### Fixed: a patched lockfile no longer hides a vulnerable node_modules
+
+`mcp-4da-server/pnpm-lock.yaml` pinned hono 4.13.5 (the fix for
+CVE-2026-84363/-84364/-84365) while `mcp-4da-server/node_modules` held 4.13.1
+for 25 days, because activation ran `pnpm install` only at the repo root.
+Every 4DA surface reads the lockfile, so every surface reported hono fixed
+while the vulnerable copy was the one that ran (measured 2026-09-10). For npm
+direct dependencies resolved from a lockfile, the server now reads
+`node_modules/<name>/package.json` (scoped names included; hoisted workspaces
+by walking up to the repository root, at most six levels). A directory with
+no `node_modules` of its own is skipped, and a manifest-only resolution is
+never compared, because a specifier floor is not a pin. When the installed
+version differs, OSV is asked about the installed version too, so the answer
+is OSV's, not a guess.
+
+`vulnerability_scan` gains `install_drift: [{ package, dir, lockfile_version,
+installed_version, vulnerable_installed, lockfile_version_vulnerable, fix,
+note }]`, where `fix` is `pnpm install`, `npm ci` or `yarn install` according
+to the lockfile that pinned the version. Each affected vulnerability carries
+`installed_version`, `lockfile_version` and an `install_note` ("the lockfile
+is patched but node_modules still has 4.13.1 — run `pnpm install`"), and the
+recommendation is the reinstall, not an upgrade the lockfile is already past.
+`what_should_i_know` names a vulnerable installed copy with its reinstall
+command whatever the task, so the verdict is at least `review_needed` and
+never clean. That advisory is graded the way the app grades its install-drift
+row: high when the reinstall clears an advisory the running copy has (the
+hono case, though its three advisories are medium on their own), medium when
+the lockfile's pinned version is exposed too. `dependency_health` and `upgrade_planner` show `installedVersion`
+beside `currentVersion`, and `upgrade_planner` turns a drift-only row into a
+`reinstall` step. Expect `install_drift: []` on a healthy checkout.
+
+### Fixed: a long-running server answered for the dependency set it saw at startup
+
+Three server processes were live on the founder machine. Two had started
+before the pull that brought hono 4.13.5, and `vulnerability_scan` from one
+of them reported hono 4.13.3 (the lockfile at its start) with
+`_meta.cached: false`: versions were resolved once at init and never again,
+and `cached` only ever described the OSV lookup. Each resolution group now
+records the files it read as stat signatures (every lockfile candidate,
+present or absent; the manifest when the resolver fell back to it; for npm,
+the node_modules install state). `vulnerability_scan`, `what_should_i_know`,
+`dependency_health`, `upgrade_planner` and the briefing's scan wait re-run the
+same resolution when one changes, and drop the stored scan and the warmup so
+no answer describes a dependency set that no longer exists. Stat calls only:
+no timers, no watchers. The cargo host-platform memo is keyed on
+`Cargo.lock`/`Cargo.toml` too, so a re-resolution cannot mark newly added
+crates as not built on this host.
+
+### Added: resolution provenance
+
+`vulnerability_scan`'s `_meta` gains `resolution: { resolved_at, lockfiles:
+[{ path, kind, mtime }], re_resolved_this_call, note }` and `osv_cached` (the
+same value as `cached`, which stays for compatibility). The tool description
+now says that `cached` refers to the OSV advisory lookup, not to dependency
+resolution. `what_should_i_know` gains a `scan` block (`status`,
+`scanned_at`, `resolved_at`, `re_resolved_this_call`); `scan_status` stays.
+
+### Changed: one severity rule with the desktop app (AD-046)
+
+`vulnerability_scan` graded `sandbox@3.1.2`, a transitive of paddle-webhook
+whose dev/runtime scope is unknown, critical (`by_severity.critical: 1`; the
+briefing said "CRITICAL: Sandbox Breakout"), while the app graded the same
+advisory High. Every surface now presents one grade, the rule the app uses
+(`osv::identity::scope_adjusted_urgency`): a transitive-only dependency caps
+critical at high, then a dev-only dependency drops one level (critical to
+high, high to medium, medium to low; low and unknown stay). Unknown dev scope
+gets no discount. Applied in `vulnerability_scan`, `what_should_i_know` and
+`get_actionable_signals`; `severity_filter` and sorting use the presented
+grade. Nothing is hidden: every entry keeps the advisory's own tier as
+`advisory_severity` (with a `severity_note` when the two differ),
+`by_severity` counts the presented grade, and the new `advisory_by_severity`
+counts the raw tiers.
+
+In full-database mode a transitive's dev scope comes from the app's
+`dependency_instances` table. Only a real determination counts (`is_dev = 1`,
+or a `scope` of runtime, dev or build); the app's placeholder rows
+(`is_dev = 0, scope = 'unknown'`) stay unknown. Without `include_dev`, only
+direct devDependencies are left out of the scan: a transitive of known dev
+scope is graded down, not dropped, and one of unknown scope is no longer
+hidden because a direct devDependency shares its name.
+
+### Added: the database-recovery voice in data_freshness
+
+When the headless refresh engine restores `4da.db` from a backup, or
+quarantines it and starts a fresh empty one, it leaves `data/.db-recovered`
+beside it. A fresh database looks fresh by every other freshness field.
+`data_freshness` now surfaces the marker the way it surfaces `.engine-blocked`:
+`db_recovered_at`, `db_recovery_kind`, `db_recovery_detail`, and a note ("The
+database was restored from a backup / replaced with a fresh empty database by
+the background refresh at … — results may be incomplete or empty; the
+preserved file is …"). Read-only: the desktop app shows the marker once and
+deletes it.
+
+### Changed: ranked reads break ties by id
+
+`get_relevant_content` orders by `COALESCE(rank_score, relevance_score) DESC,
+id DESC`, mirroring the app's `RANKED_ORDER_EXPR`. 100 of 651 surfaced items
+sat at exactly 0.5000 (a hard score cap), and their order was whatever SQLite
+emitted.
+
+### Changed: dependency_health says when it has no CVE data
+
+`dependency_health` no longer says "all healthy" without a vulnerability scan
+behind it, and says so when CVE data is not loaded (no scan yet, or the
+dependencies changed since the last one).
 
 ### Fixed: the briefing never answers "safe" without a vulnerability scan
 

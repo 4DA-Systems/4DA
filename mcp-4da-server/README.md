@@ -87,7 +87,7 @@ Then ask your AI: **"Check my dependency health"** or **"Scan for vulnerabilitie
 
 ## How It Works
 
-On startup, the server reads your manifest and lock files (`package.json`, `Cargo.toml`, `go.mod`, `pyproject.toml`), resolves exact dependency versions, and queries live APIs:
+On startup, the server reads your manifest and lock files (`package.json`, `Cargo.toml`, `go.mod`, `pyproject.toml`), resolves exact dependency versions, and queries live APIs. It re-reads them whenever a lockfile changes, so a long-running server never answers for yesterday's dependency set. For npm it also checks what `node_modules` actually holds: an installed copy that differs from the lockfile is reported with its reinstall command, instead of hiding behind a patched lockfile.
 
 - **OSV.dev** for known CVEs across all ecosystems
 - **npm registry** for version freshness, deprecation status, and weekly downloads

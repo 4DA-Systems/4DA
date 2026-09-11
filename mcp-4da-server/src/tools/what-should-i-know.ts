@@ -13,7 +13,9 @@
 import type { FourDADatabase } from "../db.js";
 import type { LiveIntelligence } from "../live/index.js";
 import { isActionableVulnerability } from "../live/maintenance.js";
+import { presentedSeverity } from "../live/severity-scope.js";
 import { executeGetActionableSignals } from "./get-actionable-signals.js";
+import { installDriftAdvisories } from "./install-drift-notes.js";
 import { getLiveIntelligence } from "../live-singleton.js";
 import { createRelevanceScorer } from "./recall.js";
 import { getEmbeddingConfig } from "../embeddings.js";
@@ -73,6 +75,17 @@ export type DelegationLevel = "safe_to_delegate" | "review_needed" | "human_only
  */
 export type ScanStatus = "ready" | "unavailable" | "disabled";
 
+/** What backed the briefing's vulnerability claims, and how current it is. */
+export interface BriefingScan {
+  status: ScanStatus;
+  /** When the scan the briefing read ran, or null when none backed it. */
+  scanned_at: string | null;
+  /** When the dependency versions it covers were read from the lockfiles. */
+  resolved_at: string | null;
+  /** True when this call noticed a changed lockfile and re-resolved first. */
+  re_resolved_this_call: boolean;
+}
+
 export interface WhatShouldIKnowResult {
   task: string;
   files: string[];
@@ -84,17 +97,23 @@ export interface WhatShouldIKnowResult {
     level: DelegationLevel;
     reason: string;
   };
+  /** Kept for existing callers; `scan.status` carries the same value. */
   scan_status: ScanStatus;
+  scan: BriefingScan;
   summary: string;
   /** How relevant_wisdom was retrieved: "hybrid" when an embedding provider is active. */
   wisdom_recall_mode: WisdomRecallMode;
 }
 
-/** The slice of the live layer the briefing reads; a stub suffices in tests. */
+/**
+ * The slice of the live layer the briefing reads; a stub suffices in tests.
+ * Re-resolution and provenance are optional so a minimal stub still works.
+ */
 export type BriefingLiveIntel = Pick<
   LiveIntelligence,
   "ensureVulnerabilities" | "isEnabled" | "getProjectRoot" | "getHeadlines" | "getVulnerabilities"
->;
+> &
+  Partial<Pick<LiveIntelligence, "refreshIfLockfilesChanged" | "getResolutionProvenance">>;
 
 /**
  * How long a briefing waits for the startup vulnerability scan. OSV's batch
@@ -188,7 +207,15 @@ export async function executeWhatShouldIKnow(
   // the warmup, and records whether a scan actually backed the answer.
   let scanStatus: ScanStatus = "disabled";
   let scan: Awaited<ReturnType<BriefingLiveIntel["ensureVulnerabilities"]>> = null;
+  let reResolvedThisCall = false;
   if (liveIntel && liveIntel.isEnabled()) {
+    try {
+      // A lockfile changed since the versions were read? Re-resolve before
+      // anything answers from them (stat calls only).
+      reResolvedThisCall = liveIntel.refreshIfLockfilesChanged?.() ?? false;
+    } catch {
+      reResolvedThisCall = false;
+    }
     try {
       const projectRoot = liveIntel.getProjectRoot() ?? process.cwd();
       scan = await liveIntel.ensureVulnerabilities(projectRoot, SCAN_WAIT_MS);
@@ -197,6 +224,12 @@ export async function executeWhatShouldIKnow(
     }
     // A scan that resolved no dependency versions checked nothing.
     scanStatus = scan && scan.totalScanned > 0 ? "ready" : "unavailable";
+  }
+  let resolvedAt: string | null = null;
+  try {
+    resolvedAt = liveIntel?.getResolutionProvenance?.()?.resolvedAt ?? null;
+  } catch {
+    resolvedAt = null;
   }
 
   // ── 1. Actionable Signals (security, breaking changes, etc.) ──────────
@@ -255,7 +288,8 @@ export async function executeWhatShouldIKnow(
 
   // ── 1b. Live vulnerability summary ───────────────────────────────────
   // Counted over the actionable set only (built on this host, not a
-  // maintenance notice) — the same set vulnerability_scan reports.
+  // maintenance notice) — the same set vulnerability_scan reports. Graded by
+  // the presented severity every surface shares, not the raw advisory tier.
   if (scan) {
     const actionable = scan.vulnerabilities.filter(isActionableVulnerability);
     const packages = new Set(actionable.map((v) => v.package));
@@ -264,7 +298,7 @@ export async function executeWhatShouldIKnow(
         .slice(0, 3)
         .map((v) => `${v.package}@${v.currentVersion}: ${v.summary}`)
         .join("; ");
-      const severities = new Set(actionable.map((v) => v.severity));
+      const severities = new Set(actionable.map((v) => presentedSeverity(v)));
       advisories.unshift({
         title: `${packages.size} dependenc${packages.size !== 1 ? "ies have" : "y has"} known vulnerabilities`,
         signal_type: "security_alert",
@@ -273,6 +307,11 @@ export async function executeWhatShouldIKnow(
         url: null,
       });
     }
+    // An installed copy that the lockfile does not pin, and that OSV lists as
+    // vulnerable, is named with its reinstall command whatever the task: a
+    // relevance filter must not be what stands between the reader and a
+    // vulnerable copy that is actually running.
+    advisories.splice(1, 0, ...installDriftAdvisories(scan));
   }
 
   // ── 2. Decision Windows ───────────────────────────────────────────────
@@ -310,6 +349,13 @@ export async function executeWhatShouldIKnow(
   } catch {
     // Headlines unavailable — non-fatal
   }
+
+  const scanBlock: BriefingScan = {
+    status: scanStatus,
+    scanned_at: scan?.scannedAt ?? null,
+    resolved_at: resolvedAt,
+    re_resolved_this_call: reResolvedThisCall,
+  };
 
   // ── 4. Assembly ────────────────────────────────────────────────────────
   const finalize = (
@@ -391,6 +437,7 @@ export async function executeWhatShouldIKnow(
         reason: delegationReason,
       },
       scan_status: scanStatus,
+      scan: scanBlock,
       summary,
       wisdom_recall_mode: wisdomMode,
     };

@@ -11,6 +11,9 @@ export type OsvEcosystem =
   | "Packagist"
   | "Pub";
 
+/** The reinstall command that brings node_modules back in line with a directory's lockfile. */
+export type InstallFixCommand = "pnpm install" | "npm ci" | "yarn install";
+
 export interface ResolvedDependency {
   name: string;
   version: string | null;
@@ -32,6 +35,49 @@ export interface ResolvedDependency {
    * patched primary crate looked vulnerable because a sibling lagged.
    */
   sourceDirs: string[];
+  /**
+   * npm DIRECT deps resolved from a lockfile only: the version node_modules
+   * actually holds (walking up for hoisted workspaces), or null when it is not
+   * installed or unreadable. Undefined when the check did not run (another
+   * ecosystem, no node_modules, or versions read from a manifest).
+   */
+  installedVersion?: string | null;
+  /**
+   * Set on the extra audit entry that asks OSV about an INSTALLED version the
+   * lockfile does not pin: the lockfile's version of the same package. The
+   * entry exists so `vulnerable_installed` is OSV's answer, not a guess.
+   */
+  installDriftOf?: string;
+  /** On drift entries: the command that reinstalls from the lockfile. */
+  installFix?: InstallFixCommand;
+}
+
+/**
+ * One npm direct dependency whose installed copy differs from its lockfile.
+ * `dir` is the manifest directory, spelled as the resolution group spells it.
+ */
+export interface InstallDriftRecord {
+  package: string;
+  dir: string;
+  lockfileVersion: string;
+  installedVersion: string;
+  fix: InstallFixCommand;
+  isDev: boolean;
+}
+
+/** A file one resolution group read its versions from. */
+export interface ResolutionSourceRecord {
+  /** Absolute path. */
+  path: string;
+  kind: "lockfile" | "manifest";
+  /** Modification time when it was read, or null if it vanished since. */
+  mtimeMs: number | null;
+}
+
+/** When the dependency set in use was assembled, and from which files. */
+export interface ResolutionProvenance {
+  resolvedAt: string;
+  sources: ResolutionSourceRecord[];
 }
 
 /**
@@ -87,6 +133,13 @@ export interface VulnerabilityEntry {
    * package-name list cannot.
    */
   sourceDirs: string[];
+  /**
+   * Set when this row is about an INSTALLED version the lockfile does not pin
+   * (node_modules drift): the lockfile's version of the same package.
+   */
+  installDriftOf?: string;
+  /** On drift rows: the command that reinstalls from the lockfile. */
+  installFix?: InstallFixCommand;
 }
 
 export interface VulnerabilityScanResult {
@@ -144,6 +197,12 @@ export interface RegistryPackageInfo {
   weeklyDownloads: number | null;
   isDev: boolean;
   fetchError: string | null;
+  /**
+   * The version node_modules actually holds, present only when it differs
+   * from `currentVersion` (the lockfile's). Several differing installs across
+   * workspaces are listed comma-separated.
+   */
+  installedVersion?: string;
 }
 
 export interface SemverDistance {
