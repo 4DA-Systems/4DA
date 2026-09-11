@@ -307,35 +307,32 @@ fn package_group<'a>(
     // on the live plan (2026-09-06).
     let fixable_now = has_fix && instances().any(|d| d.is_direct);
     let informational = !has_fix && advisories.iter().all(|a| is_informational(a));
-    let instances_exist = instances().next().is_some();
-    let all_dev = instances_exist && instances().all(|d| d.is_dev);
+    // The inputs of the ONE scope rule (AD-046): version-confirmed installs in
+    // the projects this row names — the set the alert path reads too.
+    let scope = crate::osv::identity::ExposureScope::of(&advisories, &projects);
+    let all_dev = scope.all_dev() == Some(true);
 
     let max_cvss = advisories
         .iter()
         .filter_map(|a| a.cvss_score)
         .fold(0.0_f64, f64::max);
 
-    // Most-urgent vulnerability (alias clusters, Phase 120), then the
-    // SAME scope discounts the Brief's alert path applies
-    // (`preemption::rank_osv_urgency`): dev-only drops one level, and
-    // a transitive-only Critical is High. Live 2026-09-08 the plan
-    // said sandbox was Critical while the brief's alert and the AI
-    // synthesis said "high-severity" for the one advisory — one
-    // vulnerability, two severities, by a scope rule this side never
-    // had (AD-040).
-    let all_transitive = instances_exist && instances().all(|d| !d.is_direct);
+    // Most-urgent vulnerability (alias clusters, Phase 120), then the ONE
+    // scope rule every surface grades by (`osv::identity::
+    // scope_adjusted_urgency`, AD-046). Two copies of it drifted: the alert
+    // path dropped a dev-only Critical to Medium and this one to High, and
+    // before AD-040 a transitive-only Critical was High on one surface and
+    // Critical on the other. One function, one input set.
     let base_urgency = crate::osv::identity::cluster_by_vulnerability(&advisories)
         .iter()
         .map(|cluster| cluster_urgency(cluster))
         .min()
         .unwrap_or(Urgency::Medium);
-    let urgency = if all_dev {
-        downrank(base_urgency)
-    } else if all_transitive && base_urgency == Urgency::Critical {
-        Urgency::High
-    } else {
-        base_urgency
-    };
+    let urgency = crate::osv::identity::scope_adjusted_urgency(
+        base_urgency,
+        scope.all_transitive(),
+        scope.all_dev(),
+    );
 
     let cohort_key = crate::osv::identity::exposure_key(split, &advisories);
 
@@ -738,16 +735,6 @@ fn cluster_urgency(cluster: &[&MatchedAdvisory]) -> Urgency {
     }
 }
 
-/// One-level urgency discount (labelled dev-only scope). Never below `Watch`.
-fn downrank(u: Urgency) -> Urgency {
-    match u {
-        Urgency::Critical => Urgency::High,
-        Urgency::High => Urgency::Medium,
-        Urgency::Medium => Urgency::Watch,
-        Urgency::Watch => Urgency::Watch,
-    }
-}
-
 /// Highest fixed version across the advisories (semver-aware; falls back to a
 /// lexicographic max for non-semver strings, then to the first fix seen).
 fn highest_fixed_version(advisories: &[&MatchedAdvisory]) -> Option<String> {
@@ -801,7 +788,8 @@ fn clamp_title(s: String) -> String {
 }
 
 /// Truncate to at most `max` bytes on a char boundary (adds an ellipsis if cut).
-fn truncate(s: &str, max: usize) -> String {
+/// Shared with `install_drift`, whose citations obey the same 200-byte bound.
+pub(super) fn truncate(s: &str, max: usize) -> String {
     if s.len() <= max {
         return s.to_string();
     }

@@ -1316,3 +1316,47 @@ and the egress gate guards raw-content columns — a path is not one.
 **The rule.** Builders pass `privacy_egress::project_label`, and every prompt
 passes `privacy_egress::scrub_prompt` at the `LLMClient` entry points; a test
 fails if an entry point dispatches without it.
+
+---
+
+### pnpm v9 edges were never read (2026-09-10, AD-046)
+
+**Symptom.** Preemption's #1 row was `sandbox` HIGH in paddle-webhook — a
+project with no runtime dependencies at all — above a live, fixable-now
+auth bypass in `jsonwebtoken`. `dependency_instances` said `sandbox` was
+runtime (`is_dev = 0`), and so did every one of its 8,346 rows.
+
+**Root cause.** pnpm 9 moved every dependency map out of `packages:` into
+`snapshots:`. `parse_pnpm_lock_edges` read `packages:` and stopped at the
+next top-level key — in v9, `snapshots:` itself — so every v9 lockfile
+yielded zero edges and nothing could compute dev reachability. The walk
+wrote `is_dev = false` for every instance anyway, and its direct-dependency
+upsert overwrote the manifest's dev flag, so even `vercel`, a declared
+devDependency, read runtime.
+
+**The rule.** A parser that returns nothing on a format's newest version
+has silently switched a feature off: test every generation you claim to
+read (`pnpm_v9_edges_are_read_from_snapshots`, `pnpm_v6_still_works`, the
+v5 fixture). Unknown scope stays runtime; only a proven dev-only path
+discounts (`ace::dep_scope`).
+
+---
+
+### Two scope rules for one advisory (2026-09-10, AD-046)
+
+**Symptom.** A dev-only direct Critical graded Medium in the brief and High
+on the Preemption tab. Invisible only because every install read runtime —
+fixing that data alone would have shown `sandbox` Medium in the brief and
+High on the tab.
+
+**Root cause.** `preemption::rank_osv_urgency` dropped a dev-only Critical
+or High straight to Medium; `upgrade_plan` dropped a dev-only row one level.
+The plan's comment said it applied "the SAME scope discounts" as the alert
+path — two implementations kept in sync by a comment, already out of sync.
+They also read different instance sets: the plan counted unconfirmed
+installs, the alert path did not.
+
+**The rule.** One rule is one function with one input set
+(`osv::identity::scope_adjusted_urgency` over `ExposureScope`), and a parity
+test drives BOTH call paths over every combination. A comment saying two
+implementations match is a bug report waiting for its first reader.

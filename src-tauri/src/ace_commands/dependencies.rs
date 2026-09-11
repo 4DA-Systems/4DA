@@ -10,13 +10,17 @@ use crate::db::Database;
 use crate::db::DependencyInstanceInput;
 use crate::get_ace_engine;
 
+#[path = "dependencies_npm.rs"]
+mod npm;
+
 /// Build the multi-version instance list (`dependency_instances`, Phase 92)
 /// from a parsed lockfile's `(name, version)` pairs, classifying `is_direct`
 /// by manifest membership. A lockfile that resolves a package at multiple
 /// versions yields multiple instances here — the data the collapsing
-/// `store_dependency` upsert discards. `is_dev`/`scope` are not resolved at the
-/// lockfile layer today (processors pass `is_dev = false`), so they are
-/// recorded honestly as `false` / `"unknown"` pending scope refinement.
+/// `store_dependency` upsert discards. `is_dev`/`scope` start as `false` /
+/// `"unknown"`; the npm processors (`dependencies_npm.rs`) then fill them
+/// from the lockfile graph (AD-046). Ecosystems whose lockfiles do not
+/// separate dev from runtime keep the honest `unknown`.
 fn instances_from_packages(
     packages: &[(String, String)],
     direct_deps: &[String],
@@ -235,8 +239,8 @@ fn process_lockfile_dir(
 ) -> u32 {
     let mut count = 0u32;
     count += process_cargo_lock(db, scanner, dir, project_path);
-    count += process_package_lock(db, scanner, dir, project_path);
-    count += process_pnpm_lock(db, scanner, dir, project_path);
+    count += npm::process_package_lock(db, scanner, dir, project_path);
+    count += npm::process_pnpm_lock(db, scanner, dir, project_path);
     count += process_yarn_lock(db, scanner, dir, project_path);
     count += process_poetry_lock(db, scanner, dir, project_path);
     count += process_requirements_txt(db, dir, project_path);
@@ -435,121 +439,6 @@ fn process_cargo_lock(
     }
     prune_stale_rows(db, project_path, "rust", &packages, &direct_deps);
     crate::ace::cargo_resolve::record_unreachable_crates(db, dir, project_path, &packages);
-    count
-}
-
-/// Process a package-lock.json file, storing transitive deps and updating direct dep versions.
-/// Returns the number of transitive dependencies stored.
-fn process_package_lock(
-    db: &Database,
-    scanner: &crate::ace::scanner::ProjectScanner,
-    dir: &PathBuf,
-    project_path: &str,
-) -> u32 {
-    let pkg_lock = dir.join("package-lock.json");
-    if !pkg_lock.exists() {
-        return 0;
-    }
-    let Ok(content) = std::fs::read_to_string(&pkg_lock) else {
-        return 0;
-    };
-
-    let direct_deps = read_package_json_deps(scanner, dir);
-
-    // Capture the parent->child graph for reachability (Step 1, silent).
-    let edges = crate::ace::scanner::ProjectScanner::parse_package_lock_edges(&content);
-    db.store_dependency_edges(project_path, "javascript", &edges)
-        .ok();
-
-    let mut count = 0u32;
-    let packages = crate::ace::scanner::ProjectScanner::parse_package_lock_json(&content);
-    db.store_dependency_instances(
-        project_path,
-        "javascript",
-        &instances_from_packages(&packages, &direct_deps, false),
-    )
-    .ok();
-    for (name, version) in &packages {
-        if direct_deps.is_empty() || !direct_deps.iter().any(|d| d == name) {
-            db.store_transitive_dependency(
-                project_path,
-                name,
-                Some(version.as_str()),
-                "javascript",
-                false,
-            )
-            .ok();
-            count += 1;
-        } else {
-            db.store_dependency(
-                project_path,
-                name,
-                Some(version.as_str()),
-                "javascript",
-                false,
-                None,
-            )
-            .ok();
-        }
-    }
-    prune_stale_rows(db, project_path, "javascript", &packages, &direct_deps);
-    count
-}
-
-/// Process a pnpm-lock.yaml file, storing transitive deps and updating direct dep versions.
-fn process_pnpm_lock(
-    db: &Database,
-    scanner: &crate::ace::scanner::ProjectScanner,
-    dir: &PathBuf,
-    project_path: &str,
-) -> u32 {
-    let pnpm_lock = dir.join("pnpm-lock.yaml");
-    if !pnpm_lock.exists() {
-        return 0;
-    }
-    let Ok(content) = std::fs::read_to_string(&pnpm_lock) else {
-        return 0;
-    };
-
-    let direct_deps = read_package_json_deps(scanner, dir);
-
-    // Capture the parent->child graph for reachability (Step 1, silent).
-    let edges = crate::ace::scanner::ProjectScanner::parse_pnpm_lock_edges(&content);
-    db.store_dependency_edges(project_path, "javascript", &edges)
-        .ok();
-
-    let mut count = 0u32;
-    let packages = crate::ace::scanner::ProjectScanner::parse_pnpm_lock_yaml(&content);
-    db.store_dependency_instances(
-        project_path,
-        "javascript",
-        &instances_from_packages(&packages, &direct_deps, false),
-    )
-    .ok();
-    for (name, version) in &packages {
-        if direct_deps.is_empty() || !direct_deps.iter().any(|d| d == name) {
-            db.store_transitive_dependency(
-                project_path,
-                name,
-                Some(version.as_str()),
-                "javascript",
-                false,
-            )
-            .ok();
-            count += 1;
-        } else {
-            db.store_dependency(
-                project_path,
-                name,
-                Some(version.as_str()),
-                "javascript",
-                false,
-                None,
-            )
-            .ok();
-        }
-    }
-    prune_stale_rows(db, project_path, "javascript", &packages, &direct_deps);
     count
 }
 

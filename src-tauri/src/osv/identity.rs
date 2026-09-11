@@ -1,10 +1,13 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Vulnerability identity (Phase 120): which OSV rows are the SAME bug, and
-//! the severity tier every surface shares for one such bug.
+//! the severity tier every surface shares for one such bug — plus (AD-046)
+//! the one scope rule every surface grades an install of it by.
 //!
 //! Split out of `matching.rs` (file-size gate).
 
 use std::collections::HashMap;
+
+use crate::evidence::Urgency;
 
 use super::types::MatchedAdvisory;
 
@@ -227,6 +230,99 @@ pub fn exposure_key(split: bool, advisories: &[&MatchedAdvisory]) -> Option<Stri
             .min()
             .unwrap_or_default()
     })
+}
+
+// ============================================================================
+// Exposure scope (AD-046)
+// ============================================================================
+
+/// The ONE scope rule every dependency surface grades an advisory by (AD-046).
+///
+/// Two copies existed and disagreed, although AD-040 said they matched:
+/// `preemption::rank_osv_urgency` (the free floor, and through
+/// `get_preemption_feed` the AI brief) dropped a dev-only Critical or High
+/// straight to Medium, while `evidence::upgrade_plan` dropped a dev-only row
+/// ONE level (Critical -> High). A dev-only direct Critical read Medium in the
+/// brief and High on the tab. Nobody saw it only because the lockfile walk
+/// recorded every install `is_dev = 0` — fixing that alone would have made
+/// `sandbox` Medium in the brief and High on the tab.
+///
+/// Applied in order:
+/// 1. a transitive-only install clamps Critical to High (AD-040: reachability
+///    through a parent is unproven);
+/// 2. a dev-only install then drops ONE level — Critical -> High, High ->
+///    Medium, Medium -> Watch; Watch stays.
+///
+/// `None` is unknown and discounts nothing. The MCP server's TypeScript twin
+/// carries the same name: change both or neither.
+pub fn scope_adjusted_urgency(
+    base: Urgency,
+    all_transitive: Option<bool>,
+    all_dev: Option<bool>,
+) -> Urgency {
+    let reachable = if all_transitive == Some(true) && base == Urgency::Critical {
+        Urgency::High
+    } else {
+        base
+    };
+    if all_dev != Some(true) {
+        return reachable;
+    }
+    match reachable {
+        Urgency::Critical => Urgency::High,
+        Urgency::High => Urgency::Medium,
+        Urgency::Medium | Urgency::Watch => Urgency::Watch,
+    }
+}
+
+/// Which kinds of install an aggregate row speaks for: the version-CONFIRMED
+/// instances in the projects it names (AD-044). Both aggregators — the
+/// upgrade plan and the alert path — read the inputs of
+/// [`scope_adjusted_urgency`] from here, so one rule is never again applied
+/// to two different instance sets (the plan counted unconfirmed instances;
+/// the alert path did not).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct ExposureScope {
+    pub direct_runtime: bool,
+    pub transitive_runtime: bool,
+    pub direct_dev: bool,
+    pub transitive_dev: bool,
+}
+
+impl ExposureScope {
+    pub fn of(advisories: &[&MatchedAdvisory], projects: &[String]) -> Self {
+        let mut scope = Self::default();
+        let instances = advisories
+            .iter()
+            .flat_map(|advisory| advisory.dependency_instances.iter())
+            .filter(|instance| instance.is_version_confirmed)
+            .filter(|instance| projects.iter().any(|p| p == &instance.project_path));
+        for instance in instances {
+            match (instance.is_direct, instance.is_dev) {
+                (true, false) => scope.direct_runtime = true,
+                (false, false) => scope.transitive_runtime = true,
+                (true, true) => scope.direct_dev = true,
+                (false, true) => scope.transitive_dev = true,
+            }
+        }
+        scope
+    }
+
+    fn is_known(&self) -> bool {
+        self.direct_runtime || self.transitive_runtime || self.direct_dev || self.transitive_dev
+    }
+
+    /// Every install is transitive; `None` when there is no install to judge.
+    pub fn all_transitive(&self) -> Option<bool> {
+        self.is_known()
+            .then_some(!self.direct_runtime && !self.direct_dev)
+    }
+
+    /// Every install is dev-only; `None` when there is no install to judge.
+    pub fn all_dev(&self) -> Option<bool> {
+        self.is_known()
+            .then_some(!self.direct_runtime && !self.transitive_runtime)
+    }
 }
 
 fn canonical_tier(label: &str) -> Option<&'static str> {
@@ -515,5 +611,64 @@ mod tests {
             None,
         );
         assert_eq!(cluster_severity_tier(&[&bare]), None);
+    }
+
+    /// AD-046: the specified table, row for row.
+    #[test]
+    fn scope_adjusted_urgency_matches_the_table() {
+        use crate::evidence::Urgency::{Critical, High, Medium, Watch};
+        let cases = [
+            // (base, all_transitive, all_dev) -> expected
+            (Critical, Some(false), Some(false), Critical), // direct runtime
+            (Critical, Some(true), Some(false), High),      // transitive runtime (AD-040)
+            (Critical, Some(false), Some(true), High),      // direct dev
+            (Critical, Some(true), Some(true), Medium),     // transitive dev: sandbox
+            (High, Some(false), Some(true), Medium),        // direct dev
+            (High, Some(true), Some(true), Medium),         // transitive dev
+            (High, Some(true), Some(false), High),          // the clamp is Critical-only
+            (Medium, Some(false), Some(false), Medium),     // jsonwebtoken
+            (Medium, Some(true), Some(true), Watch),
+            (Watch, Some(true), Some(true), Watch), // never below Watch
+            (Critical, None, None, Critical),       // unknown discounts nothing
+        ];
+        for (base, transitive, dev, expected) in cases {
+            assert_eq!(
+                scope_adjusted_urgency(base, transitive, dev),
+                expected,
+                "{base:?} all_transitive={transitive:?} all_dev={dev:?}"
+            );
+        }
+    }
+
+    /// The inputs come from version-confirmed installs in the NAMED projects
+    /// only — an unconfirmed copy, or a copy in a project the row does not
+    /// speak for, can neither grant nor withhold a discount (AD-044).
+    #[test]
+    fn exposure_scope_reads_only_confirmed_installs_in_the_named_projects() {
+        use crate::osv::types::MatchedDependency;
+        let install = |project: &str, direct: bool, dev: bool, confirmed: bool| MatchedDependency {
+            project_path: project.to_string(),
+            installed_version: Some("3.1.2".to_string()),
+            is_direct: direct,
+            is_dev: dev,
+            is_version_confirmed: confirmed,
+        };
+        let mut sandbox = adv("GHSA-s", "sandbox", None, "s", &[], Some(9.8), None);
+        sandbox.dependency_instances = vec![
+            install("/webhook", false, true, true),
+            install("/webhook", true, false, false),
+            install("/other", true, false, true),
+        ];
+
+        let webhook = ExposureScope::of(&[&sandbox], &["/webhook".to_string()]);
+        assert_eq!(webhook.all_transitive(), Some(true));
+        assert_eq!(webhook.all_dev(), Some(true));
+
+        let both = ExposureScope::of(&[&sandbox], &["/webhook".to_string(), "/other".to_string()]);
+        assert_eq!(both.all_transitive(), Some(false));
+        assert_eq!(both.all_dev(), Some(false));
+
+        let nowhere = ExposureScope::of(&[&sandbox], &["/nowhere".to_string()]);
+        assert_eq!((nowhere.all_transitive(), nowhere.all_dev()), (None, None));
     }
 }

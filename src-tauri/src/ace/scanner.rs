@@ -1799,106 +1799,78 @@ impl ProjectScanner {
         edges
     }
 
-    /// Parse a pnpm-lock.yaml and return parent->child edges. Each top-level
-    /// package entry's nested `dependencies:` sub-map yields `Runtime` children;
-    /// `devDependencies:`/`optionalDependencies:` yield `Dev` children. Reuses the
-    /// same 2-space top-level indent convention as [`Self::parse_pnpm_lock_yaml`].
-    /// Robust to malformed input.
+    /// Parse a pnpm-lock.yaml and return parent->child edges. An entry's nested
+    /// `dependencies:` sub-map yields `Runtime` children;
+    /// `devDependencies:`/`optionalDependencies:` yield `Dev` children.
+    ///
+    /// The child maps live in `packages:` for v5/v6 and in `snapshots:` for v9,
+    /// which moved every dependency map out of `packages:` (a v9 `packages:`
+    /// entry carries only resolution/engines metadata). Reading `packages:`
+    /// alone and stopping at the next top-level key found ZERO edges in every
+    /// v9 lockfile — live 2026-09-10, `paddle-webhook`, so `sandbox`, reached
+    /// only through `vercel`'s dev tree, could never be shown to be dev-only
+    /// (AD-046). Both sections are read now.
+    ///
+    /// Line-based on pnpm's fixed layout: entries at indent 2 (`key:`, or
+    /// `key: {}` for a v9 snapshot with no fields), an entry's fields at 4, a
+    /// child map's entries at 6. A scalar field that follows a child map
+    /// (`dev: false`, `optional: true`) ends the map — it is not an edge to a
+    /// package named `dev`. The raw child reference is kept as the best-effort
+    /// `child_version` hint (peer suffix included). Robust to malformed input.
     pub(crate) fn parse_pnpm_lock_edges(content: &str) -> Vec<DependencyEdge> {
         let mut edges = Vec::new();
-        let mut in_packages = false;
+        let mut in_graph = false;
         let mut current_parent: Option<(String, Option<String>)> = None;
         let mut current_scope: Option<EdgeScope> = None;
 
         for line in content.lines() {
-            if line.starts_with("packages:") {
-                in_packages = true;
-                continue;
-            }
-            if !in_packages {
-                continue;
-            }
-            // A new top-level (zero-indent) key ends the packages section.
-            if !line.is_empty() && !line.starts_with(' ') && !line.starts_with('\t') {
-                break;
-            }
-
             let trimmed = line.trim();
             if trimmed.is_empty() {
                 continue;
             }
-
-            // Top-level package key: exactly 2 spaces (or 1 tab) + ends with ':'.
-            let is_package_key = (line.starts_with("  ") && !line.starts_with("   "))
-                || (line.starts_with('\t') && !line.starts_with("\t\t"));
-
-            if is_package_key && trimmed.ends_with(':') {
-                let key = trimmed.trim_end_matches(':');
-                let key = key.trim_matches('\'').trim_matches('"');
-                let (name, version) = match parse_pnpm_package_key(key) {
-                    Some((n, v)) => (n, Some(v)),
-                    None => {
-                        // v5/v6 single-segment form like `/express@4.18.2` (no
-                        // nested `/version`) isn't handled by the key parser; split
-                        // on the last `@` after stripping the leading slash.
-                        let bare = key.trim_start_matches('/');
-                        match bare.rfind('@').filter(|&p| p > 0) {
-                            Some(at) => (bare[..at].to_string(), Some(bare[at + 1..].to_string())),
-                            None => (bare.to_string(), None),
-                        }
-                    }
-                };
-                current_parent = if name.is_empty() {
-                    None
-                } else {
-                    Some((name, version))
-                };
-                current_scope = None;
-                continue;
-            }
-
-            // A sub-section header introduces a child map.
-            let scope = match trimmed.trim_end_matches(':') {
-                "dependencies" => Some(EdgeScope::Runtime),
-                "devDependencies" | "optionalDependencies" => Some(EdgeScope::Dev),
-                _ => None,
-            };
-            if trimmed.ends_with(':') && scope.is_some() {
-                current_scope = scope;
-                continue;
-            }
-            // Any other section header (resolution, engines, peerDependencies, ...)
-            // ends the current child map.
-            if trimmed.ends_with(':') && !trimmed.contains(' ') {
-                current_scope = None;
-                continue;
-            }
-
-            // A `child: specifier` line within an active dependency sub-map.
-            if let (Some((parent, parent_version)), Some(scope)) =
-                (current_parent.as_ref(), current_scope)
-            {
-                if let Some((child, spec)) = trimmed.split_once(':') {
+            match pnpm_indent(line) {
+                0 => {
+                    // A top-level key opens (or closes) a graph section.
+                    in_graph = matches!(trimmed, "packages:" | "snapshots:");
+                    current_parent = None;
+                    current_scope = None;
+                }
+                _ if !in_graph => {}
+                2 => {
+                    current_parent = pnpm_entry_key(trimmed);
+                    current_scope = None;
+                }
+                4 => {
+                    // Any field other than a dependency map ends the child map.
+                    current_scope = match trimmed {
+                        "dependencies:" => Some(EdgeScope::Runtime),
+                        "devDependencies:" | "optionalDependencies:" => Some(EdgeScope::Dev),
+                        _ => None,
+                    };
+                }
+                6 => {
+                    let (Some((parent, parent_version)), Some(scope)) =
+                        (current_parent.as_ref(), current_scope)
+                    else {
+                        continue;
+                    };
+                    let Some((child, spec)) = trimmed.split_once(':') else {
+                        continue;
+                    };
                     let child = child.trim().trim_matches('\'').trim_matches('"');
                     if child.is_empty() {
                         continue;
                     }
-                    let spec = spec.trim();
-                    // pnpm v9 inline form: `specifier: ^1.0.0` then `version: 1.0.0`
-                    // we keep the raw specifier as a best-effort child_version hint.
-                    let child_version = if spec.is_empty() {
-                        None
-                    } else {
-                        Some(spec.trim_matches('\'').trim_matches('"').to_string())
-                    };
+                    let spec = spec.trim().trim_matches('\'').trim_matches('"');
                     edges.push(DependencyEdge {
                         parent: parent.clone(),
                         parent_version: parent_version.clone(),
                         child: child.to_string(),
-                        child_version,
+                        child_version: (!spec.is_empty()).then(|| spec.to_string()),
                         scope,
                     });
                 }
+                _ => {}
             }
         }
 
@@ -1906,34 +1878,89 @@ impl ProjectScanner {
     }
 }
 
-/// Parse pnpm package key formats:
-/// - v9: `@scope/pkg@1.2.3` or `pkg@1.2.3`
-/// - v5/v6: `/@scope/pkg/1.2.3` or `/pkg/1.2.3`
-fn parse_pnpm_package_key(key: &str) -> Option<(String, String)> {
-    // v5/v6: starts with `/`, segments separated by `/`
-    if let Some(rest) = key.strip_prefix('/') {
-        let parts: Vec<&str> = rest.splitn(3, '/').collect();
-        return match parts.len() {
-            // /pkg/1.2.3
-            2 => Some((parts[0].to_string(), parts[1].to_string())),
-            // /@scope/pkg/1.2.3
-            3 if parts[0].starts_with('@') => {
-                let name = format!("{}/{}", parts[0], parts[1]);
-                Some((name, parts[2].to_string()))
-            }
-            _ => None,
-        };
-    }
+/// Leading indentation of a pnpm-lock line, a tab counting as two spaces.
+fn pnpm_indent(line: &str) -> usize {
+    line.chars()
+        .take_while(|c| *c == ' ' || *c == '\t')
+        .map(|c| if c == '\t' { 2 } else { 1 })
+        .sum()
+}
 
-    // v9: `pkg@1.2.3` or `@scope/pkg@1.2.3`
-    // Find the last `@` that isn't the scope prefix
-    let at_pos = key.rfind('@').filter(|&p| p > 0)?;
-    let name = &key[..at_pos];
-    let version = &key[at_pos + 1..];
+/// A `packages:`/`snapshots:` entry line (`key:` or `key: {}`, optionally
+/// quoted) as `(name, version)`. A key the parser cannot split keeps its name
+/// with no version rather than being dropped.
+fn pnpm_entry_key(trimmed: &str) -> Option<(String, Option<String>)> {
+    let key = trimmed
+        .strip_suffix(": {}")
+        .or_else(|| trimmed.strip_suffix(':'))?;
+    let key = key.trim().trim_matches('\'').trim_matches('"');
+    let (name, version) = match parse_pnpm_package_key(key) {
+        Some((name, version)) => (name, Some(version)),
+        None => (key.trim_start_matches('/').to_string(), None),
+    };
+    (!name.is_empty()).then_some((name, version))
+}
+
+/// Parse pnpm package key formats:
+/// - v9: `@scope/pkg@1.2.3` or `pkg@1.2.3` (`snapshots:` keys add `(peer@x)`)
+/// - v6: `/@scope/pkg@1.2.3` or `/pkg@1.2.3`, peers as `(peer@x)`
+/// - v5: `/@scope/pkg/1.2.3` or `/pkg/1.2.3`, peers as `_peer@x`
+///
+/// The peer suffix is never part of the identity: `@hono/node-server@2.1.0(hono@4.13.5)`
+/// is `@hono/node-server` 2.1.0. Read with the old `rfind('@')` it was the package
+/// `@hono/node-server@2.1.0(hono`, version `4.13.5)` — and a v6 scoped key
+/// `/@babel/core@7.24.0` was the package `@babel`, version `core@7.24.0`.
+pub(crate) fn parse_pnpm_package_key(key: &str) -> Option<(String, String)> {
+    let key = strip_pnpm_peer_suffix(key);
+    match key.strip_prefix('/') {
+        Some(rest) => parse_pnpm_slash_key(rest),
+        None => split_pnpm_name_at_version(key),
+    }
+}
+
+/// Drop pnpm's peer-resolution suffix (`(react@18.2.0)`, v6/v9): everything
+/// from the first `(` on. v5's `_peer` form is handled where versions are read.
+pub(crate) fn strip_pnpm_peer_suffix(s: &str) -> &str {
+    s.split('(').next().unwrap_or(s).trim()
+}
+
+/// `name@version`, scope-aware (`@scope/name@1.0.0`): the LAST `@` past the
+/// scope marker separates the two.
+pub(crate) fn split_pnpm_name_at_version(s: &str) -> Option<(String, String)> {
+    let at = s.rfind('@').filter(|&p| p > 0)?;
+    let (name, version) = (&s[..at], &s[at + 1..]);
     if name.is_empty() || version.is_empty() {
         return None;
     }
     Some((name.to_string(), version.to_string()))
+}
+
+/// A v5/v6 key after its leading `/`: v5 puts the version after a `/` (with
+/// peers after `_`), v6 after an `@`. The scope segment belongs to the name in
+/// both.
+fn parse_pnpm_slash_key(rest: &str) -> Option<(String, String)> {
+    let (scope, body) = match rest.strip_prefix('@') {
+        Some(scoped) => {
+            let (scope, body) = scoped.split_once('/')?;
+            (Some(scope), body)
+        }
+        None => (None, rest),
+    };
+    let (name, version) = match body.split_once('/') {
+        Some((name, version)) => (name, version.split('_').next().unwrap_or(version)),
+        None => {
+            let at = body.rfind('@').filter(|&p| p > 0)?;
+            (&body[..at], &body[at + 1..])
+        }
+    };
+    if name.is_empty() || version.is_empty() {
+        return None;
+    }
+    let name = match scope {
+        Some(scope) => format!("@{scope}/{name}"),
+        None => name.to_string(),
+    };
+    Some((name, version.to_string()))
 }
 
 // ============================================================================
@@ -2869,6 +2896,149 @@ packages:
         assert!(ProjectScanner::parse_cargo_lock_edges("not a lockfile").is_empty());
         assert!(ProjectScanner::parse_package_lock_edges("{ broken json").is_empty());
         assert!(ProjectScanner::parse_pnpm_lock_edges("random: text").is_empty());
+    }
+
+    /// pnpm v9 moved every dependency map into `snapshots:`; the parser read
+    /// only `packages:` and found ZERO edges in every v9 lockfile (AD-046,
+    /// live 2026-09-10: paddle-webhook).
+    #[test]
+    fn pnpm_v9_edges_are_read_from_snapshots() {
+        let content = "\
+lockfileVersion: '9.0'
+
+importers:
+
+  .:
+    devDependencies:
+      vercel:
+        specifier: ^54.20.1
+        version: 54.20.1(@emnapi/core@1.10.0)
+
+packages:
+
+  sandbox@3.1.2:
+    resolution: {integrity: sha512-a}
+
+  vercel@54.20.1:
+    resolution: {integrity: sha512-b}
+
+snapshots:
+
+  '@hono/node-server@2.1.0(hono@4.13.5)':
+    dependencies:
+      hono: 4.13.5
+
+  safer-buffer@2.1.2: {}
+
+  sandbox@3.1.2:
+    dependencies:
+      '@vercel/sandbox': 2.1.1
+    transitivePeerDependencies:
+      - supports-color
+
+  vercel@54.20.1(@emnapi/core@1.10.0):
+    dependencies:
+      sandbox: 3.1.2
+    optionalDependencies:
+      fsevents: 2.3.3
+    optional: true
+";
+        let edges = ProjectScanner::parse_pnpm_lock_edges(content);
+        let has = |parent: &str, version: &str, child: &str| {
+            edges.iter().any(|e| {
+                e.parent == parent
+                    && e.parent_version.as_deref() == Some(version)
+                    && e.child == child
+            })
+        };
+        assert!(
+            has("vercel", "54.20.1", "sandbox"),
+            "the key's peer suffix is not part of the version: {edges:?}"
+        );
+        assert!(has("sandbox", "3.1.2", "@vercel/sandbox"));
+        assert!(has("@hono/node-server", "2.1.0", "hono"));
+        assert!(has("vercel", "54.20.1", "fsevents"));
+        assert_eq!(
+            edges.len(),
+            4,
+            "fields, `{{}}` entries and list items are not edges: {edges:?}"
+        );
+    }
+
+    /// v5/v6 write `dev: false` after an entry's `dependencies:` map. It ends
+    /// the map; it is not an edge to a package named `dev`.
+    #[test]
+    fn pnpm_scalar_field_after_a_child_map_is_not_an_edge() {
+        let content = "\
+lockfileVersion: '6.0'
+
+packages:
+
+  /express@4.18.2:
+    resolution: {integrity: sha512-a}
+    dependencies:
+      body-parser: 1.20.1
+    dev: false
+    engines: {node: '>= 0.10.0'}
+";
+        let edges = ProjectScanner::parse_pnpm_lock_edges(content);
+        assert_eq!(edges.len(), 1, "{edges:?}");
+        assert_eq!(edges[0].child, "body-parser");
+    }
+
+    #[test]
+    fn pnpm_package_keys_parse_in_every_lockfile_generation() {
+        let cases = [
+            ("lodash@4.17.21", "lodash", "4.17.21"),
+            ("@babel/core@7.24.0", "@babel/core", "7.24.0"),
+            (
+                "@hono/node-server@2.1.0(hono@4.13.5)",
+                "@hono/node-server",
+                "2.1.0",
+            ),
+            ("/express@4.18.2", "express", "4.18.2"),
+            ("/@babel/core@7.24.0", "@babel/core", "7.24.0"),
+            ("/react-dom@18.2.0(react@18.2.0)", "react-dom", "18.2.0"),
+            ("/lodash/4.17.21", "lodash", "4.17.21"),
+            ("/@types/node/20.11.0", "@types/node", "20.11.0"),
+            ("/react-dom/18.2.0_react@18.2.0", "react-dom", "18.2.0"),
+        ];
+        for (key, name, version) in cases {
+            assert_eq!(
+                parse_pnpm_package_key(key),
+                Some((name.to_string(), version.to_string())),
+                "{key}"
+            );
+        }
+    }
+
+    /// A v6 scoped key parsed as the package `@babel` at version
+    /// `core@7.24.0`, and a peer-suffixed key was dropped — neither could ever
+    /// match an advisory.
+    #[test]
+    fn pnpm_v6_scoped_and_peer_suffixed_packages_keep_their_names() {
+        let content = "\
+lockfileVersion: '6.0'
+
+packages:
+
+  /@babel/core@7.24.0:
+    resolution: {integrity: sha512-a}
+    dev: true
+
+  /react-dom@18.2.0(react@18.2.0):
+    resolution: {integrity: sha512-b}
+    dev: false
+";
+        let packages = ProjectScanner::parse_pnpm_lock_yaml(content);
+        assert!(
+            packages.contains(&("@babel/core".to_string(), "7.24.0".to_string())),
+            "{packages:?}"
+        );
+        assert!(
+            packages.contains(&("react-dom".to_string(), "18.2.0".to_string())),
+            "{packages:?}"
+        );
     }
 
     #[test]

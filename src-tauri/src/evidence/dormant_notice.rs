@@ -184,8 +184,9 @@ fn summarise(
     })
 }
 
-/// The last path segment — "navcal", not the whole absolute path.
-fn project_leaf(path: &str) -> &str {
+/// The last path segment — "navcal", not the whole absolute path. Shared
+/// with `install_drift`, which names projects the same way.
+pub(super) fn project_leaf(path: &str) -> &str {
     path.trim_end_matches(['/', '\\'])
         .rsplit(['/', '\\'])
         .find(|s| !s.is_empty())
@@ -197,8 +198,8 @@ fn project_leaf(path: &str) -> &str {
 /// Cuts on a char boundary — a slice through a multi-byte project name would
 /// panic — and appends no ellipsis: "..." ends in a period, which validation
 /// rejects, and "…" is three bytes that would push the result back over the
-/// byte budget it was cut to fit.
-fn truncate_title(title: String) -> String {
+/// byte budget it was cut to fit. Shared with `install_drift`.
+pub(super) fn truncate_title(title: String) -> String {
     if title.len() <= MAX_TITLE_BYTES {
         return title;
     }
