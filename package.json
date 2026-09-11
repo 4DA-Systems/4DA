@@ -112,7 +112,7 @@
     "@xyflow/react": "^12.11.2",
     "i18next": "^26.3.3",
     "i18next-resources-to-backend": "^1.2.1",
-    "react": "^19.2.7",
+    "react": "^19.2.8",
     "react-dom": "^19.2.7",
     "react-i18next": "^17.0.8",
     "zustand": "^5.0.14"
@@ -127,7 +127,7 @@
     "@testing-library/react": "^16.3.2",
     "@types/better-sqlite3": "^7.6.13",
     "@types/jest-axe": "^3.5.9",
-    "@types/react": "^19.2.17",
+    "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.3",
     "@typescript-eslint/eslint-plugin": "^8.60.0",
     "@typescript-eslint/parser": "^8.62.0",
