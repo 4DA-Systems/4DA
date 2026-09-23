@@ -682,11 +682,11 @@ jobs:
   #   reads the PR's head SHA. workflow_dispatch is the documented exception
   #   to that guard, and this workflow already runs its full suite on
   #   dispatch, so the job re-dispatches Validate on the healed branch tip.
-  #   Hermetic is deliberately NOT re-dispatched: the healed commit differs
-  #   from the already-hermetic-tested head by NOTICE text only, which cannot
-  #   affect a fresh-clone build, and `Hermetic Success` is not a required
-  #   check — re-running a ~20-min two-OS matrix would spend metered hosted
-  #   minutes to learn nothing.
+  #   Hermetic is re-dispatched too. It used to be skipped because the healed
+  #   commit differs only in NOTICE text and `Hermetic Success` was advisory.
+  #   Since 2026-09-24 it is a REQUIRED check, read from the PR's HEAD commit,
+  #   so a healed PR without a Hermetic run on that commit can never merge
+  #   (hit live on the first grouped Dependabot PRs, #693 and #695).
   #
   # No loop is possible: the heal push triggers nothing (recursion guard), and
   # in the dispatched run this job skips (both `pull_request` and the
@@ -700,7 +700,7 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: write # push the regenerated NOTICE to the PR branch
-      actions: write # re-dispatch Validate on the healed head
+      actions: write # re-dispatch Validate and Hermetic on the healed head
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
         with:
@@ -750,7 +750,8 @@ jobs:
           # rebase's own pull_request run re-heals against the new head.
           git push origin "HEAD:$HEAD_REF"
           gh workflow run validate.yml --repo "$GITHUB_REPOSITORY" --ref "$HEAD_REF"
-          echo "NOTICE healed and pushed. This run's repo-guards may still fail against the pre-heal commit; the dispatched Validate on the healed head is the run the merge gate reads."
+          gh workflow run hermetic.yml --repo "$GITHUB_REPOSITORY" --ref "$HEAD_REF"
+          echo "NOTICE healed and pushed. This run's repo-guards may still fail against the pre-heal commit; the dispatched Validate and Hermetic runs on the healed head are the ones the merge gate reads."
 
   rust:
     name: Rust (${{ matrix.label }})
