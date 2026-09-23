@@ -383,6 +383,14 @@ pub(crate) struct ScoringWatermark {
     /// Negative means the receipt claims a future completion (clock skew);
     /// callers must treat that as "no usable watermark".
     pub completed_age_minutes: i64,
+    /// Minutes since the last FULL-window scoring pass (`scoring_stats`
+    /// `run_type = 'cached_full'`). `None` = never recorded or unparseable.
+    /// Tracked apart from the watermark because the watermark accepts any
+    /// run, and differential runs happen every ~30 minutes — so "the last run
+    /// is under 24h old" was always true and the daily full window (the only
+    /// place dedup, diversity, percentile and decay re-rank the corpus) never
+    /// came due. Measured live: no full pass from 2026-09-13 to 2026-09-24.
+    pub full_window_age_minutes: Option<i64>,
 }
 
 /// Read the differential watermark: the newest `engine_runs` row that recorded a
@@ -402,7 +410,28 @@ pub(crate) fn last_scoring_watermark() -> Option<ScoringWatermark> {
             |r| Ok((r.get(0)?, r.get(1)?)),
         )
         .ok()?;
-    watermark_from_run(&started_at, &completed_at, chrono::Utc::now())
+    // Missing table / NULL / query error all read as "no full pass on record"
+    // — the admission rule then takes the full window, which is always safe.
+    let last_full: Option<String> = conn
+        .query_row(
+            "SELECT MAX(created_at) FROM scoring_stats WHERE run_type = 'cached_full'",
+            [],
+            |r| r.get(0),
+        )
+        .ok()
+        .flatten();
+    let now = chrono::Utc::now();
+    let mut watermark = watermark_from_run(&started_at, &completed_at, now)?;
+    watermark.full_window_age_minutes = full_window_age(last_full.as_deref(), now);
+    Some(watermark)
+}
+
+/// Minutes between the last full-window pass (`scoring_stats.created_at`,
+/// SQLite `CURRENT_TIMESTAMP` UTC) and `now`. `None` when there is none or it
+/// does not parse.
+fn full_window_age(last_full: Option<&str>, now: chrono::DateTime<chrono::Utc>) -> Option<i64> {
+    let at = parse_receipt_time(last_full?)?;
+    Some(now.signed_duration_since(at).num_minutes())
 }
 
 /// Parse a receipt timestamp: RFC3339 (what [`now_rfc3339`] writes) with a
@@ -429,12 +458,18 @@ fn watermark_from_run(
     Some(ScoringWatermark {
         since_utc: started.format("%Y-%m-%d %H:%M:%S").to_string(),
         completed_age_minutes: now.signed_duration_since(completed).num_minutes(),
+        full_window_age_minutes: None,
     })
 }
 
 /// A watermark older than this cannot bound a differential run — after a day
 /// of downtime the corpus needs the full window (staleness, decay, drift).
 pub(crate) const DIFFERENTIAL_WATERMARK_MAX_AGE_MINUTES: i64 = 24 * 60;
+
+/// The corpus must take the full window at least this often: only a full pass
+/// runs the batch-relative layer (dedup, diversity, per-source percentile,
+/// serendipity) and re-applies time decay to items that arrived days ago.
+pub(crate) const FULL_WINDOW_MAX_AGE_MINUTES: i64 = 24 * 60;
 
 /// The largest pending stale-version drain a differential run may absorb —
 /// exactly one drain batch (`get_stale_scored_items`' 500 cap), which the
@@ -449,6 +484,9 @@ pub(crate) const DIFFERENTIAL_MAX_STALE_BACKLOG: i64 = 500;
 ///
 /// Pure — DB facts come in as arguments — so the decision table is testable:
 /// - No watermark / stale (>24h) / future-dated (clock skew) → full window.
+/// - No full-window pass within the last 24h (or none on record) → full
+///   window. Without this the daily full pass never came due in continuous
+///   operation, since a differential run refreshes the watermark every cycle.
 /// - Pending stale-version drain beyond one batch (version bump) → full
 ///   window. The FIRST run after activating a scoring change is therefore
 ///   full, which is correct — and version-stale items within the bound still
@@ -471,6 +509,10 @@ pub(crate) fn differential_since(
         || w.completed_age_minutes > DIFFERENTIAL_WATERMARK_MAX_AGE_MINUTES
     {
         return None;
+    }
+    match w.full_window_age_minutes {
+        Some(age) if (0..=FULL_WINDOW_MAX_AGE_MINUTES).contains(&age) => {}
+        _ => return None,
     }
     if stale_backlog > DIFFERENTIAL_MAX_STALE_BACKLOG {
         return None;
@@ -736,6 +778,7 @@ mod tests {
         ScoringWatermark {
             since_utc: "2026-08-23 14:04:40".into(),
             completed_age_minutes: age_minutes,
+            full_window_age_minutes: Some(60),
         }
     }
 
@@ -776,6 +819,39 @@ mod tests {
             true
         )
         .is_none());
+    }
+
+    /// The 2026-09-13 → 09-24 defect: a fresh watermark (a differential run 30
+    /// minutes ago) must NOT keep admitting differential runs once the last
+    /// full-window pass is more than a day old, or was never recorded.
+    #[test]
+    fn overdue_or_missing_full_window_pass_forces_full_window() {
+        let mut w = wm(30);
+        w.full_window_age_minutes = Some(FULL_WINDOW_MAX_AGE_MINUTES);
+        assert!(differential_since(Some(&w), 0, true, true).is_some());
+        w.full_window_age_minutes = Some(FULL_WINDOW_MAX_AGE_MINUTES + 1);
+        assert!(differential_since(Some(&w), 0, true, true).is_none());
+        w.full_window_age_minutes = Some(11 * 24 * 60);
+        assert!(differential_since(Some(&w), 0, true, true).is_none());
+        w.full_window_age_minutes = None;
+        assert!(differential_since(Some(&w), 0, true, true).is_none());
+        // Clock skew on the full-pass row is not "fresh".
+        w.full_window_age_minutes = Some(-5);
+        assert!(differential_since(Some(&w), 0, true, true).is_none());
+    }
+
+    /// `scoring_stats.created_at` is SQLite `CURRENT_TIMESTAMP` (canonical
+    /// UTC, no `T`); it must parse, and absence must read as `None`.
+    #[test]
+    fn full_window_age_parses_scoring_stats_timestamps() {
+        let now = utc("2026-09-24 01:00:00");
+        assert_eq!(full_window_age(Some("2026-09-23 23:00:00"), now), Some(120));
+        assert_eq!(
+            full_window_age(Some("2026-09-13 06:11:07"), now).map(|m| m / 60 / 24),
+            Some(10)
+        );
+        assert_eq!(full_window_age(None, now), None);
+        assert_eq!(full_window_age(Some("garbage"), now), None);
     }
 
     /// A foreground run without in-memory previous results REPLACES the

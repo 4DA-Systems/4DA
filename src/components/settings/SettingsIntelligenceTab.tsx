@@ -109,10 +109,6 @@ export const SettingsIntelligenceTab = memo(function SettingsIntelligenceTab({
               <span className="text-xs text-purple-300 font-mono">{t('settings.ai.engineEmbeddingValue')}</span>
             </div>
             <div className="flex items-center justify-between px-3 py-2 bg-bg-secondary rounded-lg">
-              <span className="text-xs text-text-muted">{t('settings.ai.engineReranker')}</span>
-              <span className="text-xs text-purple-300 font-mono">{t('settings.ai.engineRerankerValue')}</span>
-            </div>
-            <div className="flex items-center justify-between px-3 py-2 bg-bg-secondary rounded-lg">
               <span className="text-xs text-text-muted">{t('settings.ai.engineTopics')}</span>
               <span className="text-xs text-purple-300 font-mono">{t('settings.ai.engineTopicsValue', { count: 100 })}</span>
             </div>

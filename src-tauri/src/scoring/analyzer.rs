@@ -275,17 +275,18 @@ pub(crate) async fn score_items_full(
         }
     }
 
-    crate::diagnostics::log_rss("scoring:loop_done_before_cross_encoder");
+    crate::diagnostics::log_rss("scoring:loop_done");
     let post_score_started = Instant::now();
     // Everything below this line is the BATCH-RELATIVE layer: it may reorder
     // and rewrite `top_score` (the rank value) but never `evidence_score`
     // (the pure score_item output, set at construction), which is what
     // persists as `relevance_score`. RankProvenance diffs `top_score` around
     // each stage so the persisted rank carries honest provenance.
+    //
+    // No cross-encoder stage (retired 2026-09-24): the BGE reranker measured
+    // AUC 0.68 on the 128 human labels and 0.64 against live judge verdicts,
+    // below the pipeline score it was blended over at 0.6 weight (0.72).
     let mut rank_prov = crate::analysis::RankProvenance::begin(&results);
-    crate::cross_encoder_rerank::apply_cross_encoder_reranking(&mut results, &scoring_ctx);
-    rank_prov.record(&results, "ce");
-    crate::diagnostics::log_rss("scoring:after_cross_encoder");
 
     scoring::sort_results(&mut results);
     let pre_dedup = results.len();

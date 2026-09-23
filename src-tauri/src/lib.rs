@@ -204,7 +204,6 @@ mod content_sophistication;
 mod context_commands;
 mod context_engine;
 mod crash_guard;
-mod cross_encoder_rerank;
 pub(crate) mod curated_feeds;
 mod data_export;
 pub mod db;
