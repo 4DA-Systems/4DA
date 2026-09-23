@@ -25,10 +25,10 @@ const RANK_FACTOR_FIRED_EPSILON: f32 = 5e-4;
 /// (`top_score`) away from its evidence score this run, by diffing `top_score`
 /// snapshots around each stage. `finish` serializes the fired factors into
 /// [`SourceRelevance::rank_factors`] as compact JSON
-/// (e.g. `{"ce":-0.12,"percentile":0.03}`), which [`persist_cycle_results`]
+/// (e.g. `{"corroboration":0.09,"percentile":0.03}`), which [`persist_cycle_results`]
 /// stamps into `source_items.rank_factors` next to `rank_score`.
 ///
-/// Factor names in use: `"ce"` (cross-encoder blend), `"corroboration"`
+/// Factor names in use: `"corroboration"`
 /// (dedup/cluster boosts), `"diversity"` (domain + source-topic decay),
 /// `"percentile"` (per-source normalization), `"llm"` (LLM advisor delta),
 /// `"cap"` (final ceiling reassertion).

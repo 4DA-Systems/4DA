@@ -476,14 +476,6 @@ trend_boost {
     min_batch_items: 30     # [10, 500]
 }
 
-# Cross-encoder rerank bound — the reranker blends 0.4*evidence + 0.6*ce, which
-# could lift an item up to +0.6 above its evidence (live: a 0.494 duplicate
-# ranked 0.815). Rank may refine order, not overrule evidence: bounded like the
-# LLM reconciler.
-cross_encoder {
-    max_adjustment: 0.15    # [0.05, 0.40]
-}
-
 # Unified engagement formula — replaces separate multiplicative
 # anti/community and additive feedback/taste signals with
 # a single weighted sum converted to a multiplier.

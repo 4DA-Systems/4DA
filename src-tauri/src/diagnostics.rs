@@ -103,8 +103,7 @@ pub fn collect_diagnostics(db: &Database, db_path: &std::path::Path) -> Diagnost
 pub(crate) fn log_rss(stage: &str) {
     let mb = get_process_memory() / (1024 * 1024);
     // Debug-level by default (enable with RUST_LOG=4da::rss=debug to bisect
-    // memory). Only a genuinely dangerous level warns — above the normal
-    // cross-encoder reranker peak (~1.7 GB on capable machines).
+    // memory). Only a genuinely dangerous level warns.
     tracing::debug!(target: "4da::rss", stage, rss_mb = mb, "scoring memory checkpoint");
     if mb > 2500 {
         tracing::warn!(target: "4da::rss", stage, rss_mb = mb, "HIGH RSS — possible OOM approaching");
