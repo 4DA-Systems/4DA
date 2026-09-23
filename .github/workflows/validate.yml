@@ -12,6 +12,20 @@ on:
   # and a batch may combine PRs whose union touches everything.
   merge_group: {}
   workflow_dispatch: {}
+  # Daily main-health canary. Before this, Validate NEVER ran on main itself —
+  # only on PRs and queue entries — so main could go red with no commit at all
+  # and nobody would learn it until the next PR hit the wall. Both halves of the
+  # 2026-09-23 lock-up were exactly that: seven `REMOVE BY 2026-09-15` markers
+  # expired (Repo guards red for every PR) and RUSTSEC-2026-0285 landed against
+  # relay/Cargo.lock (Relay is path-filtered on PRs, so the FIRST run to see it
+  # was #681's merge-queue entry, which it ejected). main sat untouched for 13
+  # days while both accumulated. A scheduled run executes every leg, reports into
+  # a `main-health` issue (see `main-health` below), and is also the only event
+  # that runs on refs/heads/main — so it is what writes the main-scoped caches
+  # every PR and queue entry can read (see the Rust and model cache steps).
+  # 05:00 UTC: before nightly-audit (06:00) and hermetic (07:00).
+  schedule:
+    - cron: '0 5 * * *'
 
 # Cancel superseded runs on the same ref. A new push to a PR makes the
 # in-flight run moot — cancelling it frees the shared self-hosted runner
@@ -162,16 +176,18 @@ jobs:
   # unconditional on pull_request (no `needs: changes` path filter) and wired
   # into Validate Success below.
   #
-  # PR-ONLY, like the `changes` detector above: on merge_group and
-  # workflow_dispatch there is no `github.event.pull_request` — no title, no
-  # body, no base/head pair — so this job SKIPS there, and Validate Success
-  # counts a skipped leg as pass (see its allowlist). The queue therefore never
-  # waits on it: by the time a PR enters the merge queue, its metadata has
-  # already been scanned by the pull_request run that armed the merge.
+  # It ALSO runs on merge_group, and there it scans the thing that actually
+  # lands. The pull_request run only fires on opened/synchronize/reopened — NOT
+  # on `edited` — so a title or body edited after the last push was never
+  # re-scanned, and the squash message is composed from the text at MERGE time.
+  # A queue entry's commits (merge_group base..head) are the finished squash
+  # commits, message included, so scanning them closes that window with no
+  # extra PR-side runs. On workflow_dispatch/schedule there is no PR and no
+  # queue range, so the job skips (skipped == pass in Validate Success).
   # ─────────────────────────────────────────────────────────────────────
   pr-metadata:
     name: PR metadata scan
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -189,12 +205,23 @@ jobs:
         # Title and body go through the ENVIRONMENT, never `${{ }}` inlined into
         # the run block — PR text is attacker-controlled and inlining it is a
         # script-injection primitive.
+        #
+        # On merge_group the title/body are empty (there is no PR payload) and
+        # the range is the queue's base..head, i.e. the final squash commits.
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_BODY: ${{ github.event.pull_request.body }}
-          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: node scripts/check-pr-metadata.cjs
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha || github.event.merge_group.head_sha }}
+        shell: bash
+        run: |
+          # Fail closed: an empty range makes the script scan zero commits and
+          # report clean, which on merge_group would mean nothing was checked.
+          if [ -z "$PR_BASE_SHA" ] || [ -z "$PR_HEAD_SHA" ]; then
+            echo "::error::no commit range to scan (base='$PR_BASE_SHA' head='$PR_HEAD_SHA')"
+            exit 1
+          fi
+          node scripts/check-pr-metadata.cjs
 
   frontend:
     name: Frontend
@@ -213,7 +240,7 @@ jobs:
     # rather than passing with nothing run. It deliberately does NOT trigger the
     # Rust matrix or MCP legs; those are 30-minute builds and an unrecognised
     # path is far more likely to be JS/config than Rust.
-    if: ${{ !cancelled() && (needs.changes.outputs.frontend == 'true' || needs.changes.outputs.workflows == 'true' || needs.changes.outputs.uncovered == 'true' || github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group') }}
+    if: ${{ !cancelled() && (needs.changes.outputs.frontend == 'true' || needs.changes.outputs.workflows == 'true' || needs.changes.outputs.uncovered == 'true' || github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group' || github.event_name == 'schedule') }}
     # GitHub-HOSTED windows, not the self-hosted box. This job and `MCP Server`
     # were the last two on `[self-hosted, windows, 4da]`, and that single runner
     # was the merge queue's throughput ceiling: `merge_group` deliberately
@@ -387,7 +414,7 @@ jobs:
     needs: changes
     # See the `!cancelled()` note on the frontend job — without it the
     # workflow_dispatch clause is unreachable.
-    if: ${{ !cancelled() && (needs.changes.outputs.mcp == 'true' || needs.changes.outputs.workflows == 'true' || github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group') }}
+    if: ${{ !cancelled() && (needs.changes.outputs.mcp == 'true' || needs.changes.outputs.workflows == 'true' || github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group' || github.event_name == 'schedule') }}
     # GitHub-HOSTED windows — see the runner note on the `frontend` job above.
     # Kept on Windows rather than ubuntu so `better-sqlite3` is exercised on the
     # platform 4DA ships; Node 22 has a published prebuilt for it, so no node-gyp
@@ -431,7 +458,7 @@ jobs:
     needs: changes
     # See the `!cancelled()` note on the frontend job — without it the
     # workflow_dispatch clause is unreachable.
-    if: ${{ !cancelled() && (needs.changes.outputs.relay == 'true' || needs.changes.outputs.workflows == 'true' || github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group') }}
+    if: ${{ !cancelled() && (needs.changes.outputs.relay == 'true' || needs.changes.outputs.workflows == 'true' || github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group' || github.event_name == 'schedule') }}
     runs-on: ubuntu-latest
     timeout-minutes: 20
     defaults:
@@ -720,7 +747,7 @@ jobs:
     needs: changes
     # See the `!cancelled()` note on the frontend job — without it the
     # workflow_dispatch clause is unreachable.
-    if: ${{ !cancelled() && (needs.changes.outputs.rust == 'true' || needs.changes.outputs.workflows == 'true' || github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group') }}
+    if: ${{ !cancelled() && (needs.changes.outputs.rust == 'true' || needs.changes.outputs.workflows == 'true' || github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group' || github.event_name == 'schedule') }}
     # GitHub-HOSTED ubuntu, NOT the self-hosted box. The self-hosted Windows
     # runner shares 16 cores with the whole fleet's dev/cargo churn, so Rust
     # compiles there crawl under contention (a cold leg false-timed-out at 45m,
@@ -814,7 +841,15 @@ jobs:
       - uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2.7.8
         with:
           workspaces: src-tauri
+          # One entry per matrix leg: each leg compiles a different feature set,
+          # so a shared key would let whichever leg saved first serve the wrong
+          # artifacts to the other four.
+          key: ${{ matrix.label }}
           # Save the cache only from main — PR builds reuse it but don't churn it.
+          # Until the daily `schedule` trigger existed this condition was NEVER
+          # true (no event ran on refs/heads/main), so the cache was never
+          # written: measured 2026-09-24, zero rust-cache entries existed and
+          # every leg of every PR and queue entry compiled cold.
           save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Setup Node.js
@@ -922,7 +957,10 @@ jobs:
       # miss, and the fetch step below re-downloads for real.
       - name: Resolve embedding-model revision (cache key input)
         id: model-rev
-        if: matrix.label == 'default' && github.event_name == 'pull_request'
+        # Must match the cache step's condition below: its key reads this
+        # step's output, and an empty SHA would silently collapse every
+        # revision onto one key.
+        if: matrix.label == 'default'
         working-directory: .
         run: |
           api=https://huggingface.co/api/models/Snowflake/snowflake-arctic-embed-m/revision/main
@@ -936,21 +974,18 @@ jobs:
           fi
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
-      # PR events only, deliberately. A cache is readable from the ref that
-      # created it or from the DEFAULT branch — and this workflow has no
-      # `push: main` trigger, so nothing here ever writes a main-scoped entry.
-      # Measured 2026-09-01 on the live repo: all 26 cache entries sit on
-      # `refs/pull/N/merge`, `refs/heads/gh-readonly-queue/...` or a dependabot
-      # branch, NONE on `refs/heads/main`, and the relay job's single key had
-      # been re-saved on 25 different ephemeral refs — i.e. missed and re-uploaded
-      # every time. A merge_group run gets a brand-new queue ref, so it could
-      # only ever MISS and then pay ~15s uploading 127 MB it will never read
-      # back: a net loss on the exact critical path this PR is shortening.
-      # On a PR ref the entry survives across pushes to the same PR, which is
-      # where it actually pays. Widen this `if:` the day validate.yml gains a
-      # main-scoped run, and not before.
+      # Every event. A cache is readable from the ref that created it or from the
+      # DEFAULT branch. This step used to be PR-only because nothing wrote a
+      # main-scoped entry (measured 2026-09-01: all 26 entries on PR / queue /
+      # dependabot refs, none on main), so a merge_group run — always a brand-new
+      # queue ref — could only MISS and pay ~15s uploading 127 MB it never read
+      # back. The daily `schedule` run executes on refs/heads/main and saves the
+      # entry there, which every PR and queue entry can then RESTORE: the queue
+      # stops paying the model download on its critical path. A queue-side miss
+      # (model revision moved since the last scheduled run) costs the same ~15s
+      # it always did.
       - name: Cache embedding model + ORT runtime
-        if: matrix.label == 'default' && github.event_name == 'pull_request'
+        if: matrix.label == 'default'
         uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
         with:
           # Exactly the two destination dirs the fetchers write. NOT all of
@@ -1026,9 +1061,9 @@ jobs:
     # must be visible here rather than vanish behind an unrelated green.
     # `pr-metadata` is included so the squash-merge guard actually gates the
     # merge — it is already a required check via this job, so no branch-
-    # protection change is needed to enforce it. It is PR-only and SKIPS on
-    # merge_group/workflow_dispatch (skipped == pass below), so the queue
-    # never waits on metadata that does not exist on those events.
+    # protection change is needed to enforce it. It runs on pull_request AND
+    # merge_group (where it scans the final squash commits) and SKIPS on
+    # workflow_dispatch/schedule (skipped == pass below).
     needs: [changes, pr-metadata, repo-guards, dependabot-notice, frontend, mcp-server, relay, rust]
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -1066,6 +1101,98 @@ jobs:
             exit 1
           fi
           echo "all required Validate jobs succeeded (or were skipped as not-applicable)"
+
+  # ─────────────────────────────────────────────────────────────────────
+  # main-health: turn the daily scheduled run into ONE issue that tracks
+  # whether main can still merge.
+  #
+  # Two conditions are reported:
+  #   RED     — Validate Success failed on main itself. Every PR is blocked
+  #             until this is fixed, whatever the PR touches.
+  #   WARNING — a REMOVE BY deadline lands within the gate's 14-day runway. The
+  #             gate prints that warning only on PR runs, so when no PR runs
+  #             (main was untouched 2026-09-11 → 09-23) the runway elapses
+  #             unseen and the first anyone hears of it is a red gate.
+  #
+  # The issue CLOSES ITSELF when both clear. nightly-audit's issue (#610) only
+  # ever gained comments — 10 of them, while the fix sat undone — so an open
+  # issue here must always mean "main is broken right now", never history.
+  # ─────────────────────────────────────────────────────────────────────
+  main-health:
+    name: main health report
+    needs: [validate-success]
+    if: ${{ always() && github.event_name == 'schedule' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+        with:
+          node-version: '22'
+
+      - name: Open, update or close the main-health issue
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v7
+        env:
+          VALIDATE_RESULT: ${{ needs.validate-success.result }}
+        with:
+          script: |
+            const path = require('path');
+            const { scanRepo } = require(path.join(process.env.GITHUB_WORKSPACE, 'scripts', 'check-remove-by.cjs'));
+            const { today, expired, dueSoon } = scanRepo(process.env.GITHUB_WORKSPACE);
+            const blocking = expired.filter((e) => !e.allowlisted);
+            const red = process.env.VALIDATE_RESULT !== 'success';
+            const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+            const LABEL = 'main-health';
+
+            const { data: open } = await github.rest.issues.listForRepo({
+              ...context.repo, state: 'open', labels: LABEL, per_page: 10,
+            });
+            const issue = open[0];
+
+            if (!red && dueSoon.length === 0) {
+              if (issue) {
+                await github.rest.issues.createComment({ ...context.repo, issue_number: issue.number,
+                  body: `Resolved on ${today}: scheduled Validate is green on main and no REMOVE BY deadline is within the runway. ${runUrl}` });
+                await github.rest.issues.update({ ...context.repo, issue_number: issue.number, state: 'closed', state_reason: 'completed' });
+                core.info(`Closed #${issue.number}`);
+              }
+              return;
+            }
+
+            const lines = [];
+            if (red) {
+              lines.push(`## RED: Validate fails on main (${process.env.VALIDATE_RESULT})`,
+                'Every PR is blocked until main is fixed, whatever it touches. Failing legs are in the run:', runUrl, '');
+              if (blocking.length) {
+                lines.push('Expired REMOVE BY markers (Repo guards):');
+                for (const e of blocking) lines.push(`- \`${e.rel}:${e.lineNo}\` due ${e.date}`);
+                lines.push('');
+              }
+            }
+            if (dueSoon.length) {
+              lines.push('## Due soon: REMOVE BY deadlines inside the 14-day runway',
+                'Each one turns Repo guards red for EVERY PR on its date. Delete the code, or move the date with a written reason.', '');
+              for (const e of dueSoon.sort((a, b) => a.date.localeCompare(b.date))) lines.push(`- \`${e.rel}:${e.lineNo}\` due **${e.date}**`);
+            }
+            const body = lines.join('\n');
+            const title = red
+              ? `main is RED: required Validate fails on main (${today})`
+              : `main health: ${dueSoon.length} REMOVE BY deadline(s) due within 14 days`;
+
+            if (issue) {
+              await github.rest.issues.createComment({ ...context.repo, issue_number: issue.number, body: `Scheduled check ${today}:\n\n${body}` });
+              if (issue.title !== title) await github.rest.issues.update({ ...context.repo, issue_number: issue.number, title });
+              core.info(`Updated #${issue.number}`);
+            } else {
+              const { data } = await github.rest.issues.create({ ...context.repo, title, body, labels: [LABEL] });
+              core.info(`Opened #${data.number}`);
+            }
+            if (red) core.setFailed('main is red; see the main-health issue');
 
   # ── Cross-platform validation ──
   # Moved to .github/workflows/hermetic.yml (the "Hermetic Fresh-Clone" gate).

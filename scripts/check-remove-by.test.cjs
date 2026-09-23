@@ -185,3 +185,45 @@ test('production files are NOT skipped', () => {
   assert.strictEqual(isSkippedFile('scripts/check-file-sizes.cjs'), false);
   assert.strictEqual(isSkippedFile('src/latest/thing.ts'), false, '"latest" must not match /tests?/');
 });
+
+// scanRepo() is what the scheduled main-health job and the sentinel scanner
+// call, so it must judge a real tree exactly like the CLI: same dirs, same
+// test-file skip, same allowlist file relative to the scanned root.
+test('scanRepo reads the tree and allowlist relative to the given root', () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const { scanRepo } = require('./check-remove-by.cjs');
+
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'remove-by-'));
+  try {
+    const src = path.join(root, 'src-tauri', 'src');
+    fs.mkdirSync(src, { recursive: true });
+    fs.mkdirSync(path.join(root, 'scripts'), { recursive: true });
+    fs.writeFileSync(path.join(src, 'a.rs'), '// REMOVE BY 2026-08-01\n');
+    fs.writeFileSync(path.join(src, 'b.rs'), '// REMOVE BY 2026-08-02\n');
+    fs.writeFileSync(path.join(src, 'c.rs'), '// REMOVE BY 2026-08-20\n');
+    // A test fixture is skipped, exactly as the CLI skips it.
+    fs.writeFileSync(path.join(src, 'x_tests.rs'), '// REMOVE BY 2026-01-01\n');
+    fs.writeFileSync(
+      path.join(root, 'scripts', 'remove-by-allowlist.json'),
+      JSON.stringify({ allow: [{ file: 'src-tauri/src/b.rs', date: '2026-08-02', ticket: '#1' }] })
+    );
+
+    const r = scanRepo(root, TODAY);
+    assert.strictEqual(r.today, TODAY);
+    assert.deepStrictEqual(
+      r.expired.map((e) => [e.rel, e.allowlisted]).sort(),
+      [
+        ['src-tauri/src/a.rs', false],
+        ['src-tauri/src/b.rs', true],
+      ]
+    );
+    assert.deepStrictEqual(
+      r.dueSoon.map((e) => e.rel),
+      ['src-tauri/src/c.rs']
+    );
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});

@@ -13,6 +13,8 @@
  *   4. Test count regression (vs ops-state history)
  *   5. Sovereignty score delta
  *   6. File size compliance
+ *   7. Git hygiene
+ *   8. Merge-gate health (expired/imminent REMOVE BY, main + nightly CI red)
  *
  * Output: JSON to stdout (structured signals array)
  * Usage:  node scripts/sentinel-scan.cjs [--json] [--quick]
@@ -727,6 +729,93 @@ function checkGitHygiene() {
 }
 
 // ---------------------------------------------------------------------------
+// CHECK 8: Merge-gate health — can main still merge?
+// ---------------------------------------------------------------------------
+//
+// Origin 2026-09-23/24: main's required gate was red on two counts — seven
+// expired REMOVE BY markers failing Repo guards on every PR, and
+// RUSTSEC-2026-0285 failing cargo audit — while this scanner printed
+// "Sentinel: all clear" on every prompt of every terminal. The nightly audit had
+// been red for 20 nights into an issue nobody read. The fleet looks HERE, so
+// this is where "main cannot merge" has to surface.
+
+/// Pure classifier — exported for negative tests. `null` for a CI conclusion
+/// means UNKNOWN (gh missing, offline, no completed run); unknown is never a
+/// finding, same rule as classifyTscResult: a detector must not report what it
+/// did not observe.
+function classifyMergeGateHealth({ blockingExpired = [], dueSoon = [], scheduledValidate = null, nightlyAudit = null }) {
+  const out = [];
+  if (blockingExpired.length > 0) {
+    out.push({
+      severity: "critical",
+      message: `main's required gate is red: ${blockingExpired.length} expired REMOVE BY marker(s) fail Repo guards on EVERY PR`,
+      detail: blockingExpired.slice(0, 5).map((e) => `${e.rel}:${e.lineNo} due ${e.date}`).join("\n"),
+    });
+  }
+  if (scheduledValidate === "failure") {
+    out.push({
+      severity: "critical",
+      message: "Validate fails on main itself (latest scheduled run) — every PR is blocked until main is fixed",
+      detail: "gh run list --workflow validate.yml --event schedule -L 1",
+    });
+  }
+  if (nightlyAudit === "failure") {
+    out.push({
+      severity: "warning",
+      message: "Nightly supply-chain audit is red — an advisory affects main (see the nightly-audit issue)",
+      detail: "gh run list --workflow nightly-audit.yml -L 1",
+    });
+  }
+  if (dueSoon.length > 0) {
+    const sorted = [...dueSoon].sort((a, b) => a.date.localeCompare(b.date));
+    out.push({
+      severity: "warning",
+      message: `${dueSoon.length} REMOVE BY deadline(s) within 14 days (earliest ${sorted[0].date}) — each turns every PR red on its date`,
+      detail: sorted.slice(0, 5).map((e) => `${e.rel}:${e.lineNo} due ${e.date}`).join("\n"),
+    });
+  }
+  return out;
+}
+
+/// Latest COMPLETED conclusion of a workflow, or null when it cannot be known.
+function latestConclusion(workflow, extraArgs = "") {
+  const result = safeExec(
+    `gh run list --workflow ${workflow} ${extraArgs} --status completed -L 1 --json conclusion`,
+    { timeout: 15000 }
+  );
+  if (!result.ok || result.timedOut) return null;
+  try {
+    const runs = JSON.parse(result.output);
+    return runs.length > 0 && runs[0].conclusion ? runs[0].conclusion : null;
+  } catch {
+    return null;
+  }
+}
+
+function checkMergeGateHealth() {
+  let blockingExpired = [];
+  let dueSoon = [];
+  try {
+    const scan = require("./check-remove-by.cjs").scanRepo(ROOT);
+    blockingExpired = scan.expired.filter((e) => !e.allowlisted);
+    dueSoon = scan.dueSoon;
+  } catch {
+    // Unreadable tree or a broken gate script: unknown, not healthy and not red.
+  }
+  const findings = classifyMergeGateHealth({
+    blockingExpired,
+    dueSoon,
+    scheduledValidate: latestConclusion("validate.yml", "--event schedule --branch main"),
+    nightlyAudit: latestConclusion("nightly-audit.yml", "--branch main"),
+  });
+  if (findings.length === 0) {
+    addSignal("merge_gate", "ok", "CI", "", "Merge gate healthy (no expired or imminent deadlines, main not known red)");
+    return;
+  }
+  for (const f of findings) addSignal("merge_gate", f.severity, "CI", "", f.message, f.detail);
+}
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
@@ -742,6 +831,7 @@ function main() {
   checkSovereignty();
   checkFileSizes();
   checkGitHygiene();
+  checkMergeGateHealth();
 
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
 
@@ -825,5 +915,5 @@ if (require.main === module) {
   // Exported for negative tests (scripts/sentinel-scan.test.cjs) — a
   // detector fix without a negative test is how the last five detector
   // bugs shipped (recipe-gate-precision-negative-test).
-  module.exports = { classifyTscResult, safeExec };
+  module.exports = { classifyTscResult, classifyMergeGateHealth, safeExec };
 }

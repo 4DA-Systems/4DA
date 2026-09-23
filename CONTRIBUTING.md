@@ -85,8 +85,10 @@ pub trait Source: Send + Sync {
 ## File Size Limits
 
 New source files must stay within limits:
-- **TypeScript/TSX**: 350 lines (warn), 500 lines (error)
-- **Rust**: 800 lines (warn), 1500 lines (error)
+- **TypeScript (`.ts`)**: 300 lines (warn), 500 lines (error)
+- **TSX**: 350 lines (warn), 500 lines (error)
+- **Rust**: 700 lines (warn), 1000 lines (error)
+- **Test files** (`*.test.*`, `*_tests.rs`): no warnings, error at 2x the normal limit
 
 If your file exceeds limits, split it. Run `pnpm run validate:sizes` to check.
 
@@ -103,6 +105,31 @@ If your file exceeds limits, split it. Run `pnpm run validate:sizes` to check.
 3. Run `pnpm run validate:all` — all checks must pass
 4. Submit a PR using the template
 5. Address review feedback
+
+### How a PR reaches `main`
+
+`main` accepts changes only through pull requests and the **merge queue**. There
+are no direct pushes, no force pushes, and no bypass actors, including for
+maintainers.
+
+- **Squash only.** The PR title becomes the commit subject on `main`, and the PR
+  body becomes the commit message, word for word. Use a
+  [Conventional Commit](https://www.conventionalcommits.org/) title
+  (`fix(scoring): …`, `feat(mcp): …`, `chore(deps): …`) and write the body for
+  someone reading `git log` later.
+- **Required checks.** `Validate Success` gates every PR. It aggregates lint,
+  types, tests, Rust clippy/tests/audit across feature sets, the MCP server, the
+  relay, repo-wide guards, and a scan of PR metadata. Path filters skip legs a
+  PR does not touch.
+- **The queue re-tests everything.** When a PR enters the queue, CI runs the
+  *full* suite, with no path filters, against the latest `main` plus everything
+  ahead of it in the queue. A PR can be green on its own and still be ejected
+  from the queue if `main` has moved or rotted. If that happens, read the queue
+  run before re-queueing.
+- **External contributors:** workflows on fork PRs start only after a
+  maintainer approves them.
+
+Security reports go through [SECURITY.md](SECURITY.md), not public issues.
 
 ## CLA
 

@@ -43,6 +43,17 @@ name: Hermetic Fresh-Clone
 on:
   pull_request:
     branches: [main]
+  # Merge-queue entries. Without this trigger `Hermetic Success` can never be a
+  # REQUIRED check (the queue would wait forever for a context that never
+  # reports), and while it was advisory a PR could merge with the fresh-clone
+  # canary red: #635 (vitest 5 in mcp-4da-server) sat with Validate green,
+  # `Fresh clone (windows-latest)` failing, and a mergeable state of UNSTABLE.
+  # On merge_group the `changes` detector skips (it is PR-only), so the
+  # `github.event_name != 'pull_request'` clause below runs the full canary —
+  # right for the last gate before main. Cost: the queue waits for
+  # max(Validate, Hermetic) instead of Validate alone — measured ~16-20 min vs
+  # ~23 min on 2026-09-11/23, so roughly +3-5 min per entry.
+  merge_group: {}
   push:
     branches: [main]
   schedule:
@@ -53,7 +64,10 @@ on:
 
 concurrency:
   group: hermetic-${{ github.ref }}
-  cancel-in-progress: true
+  # Cancel superseded PR runs only. On main, a cancelled push run means that
+  # commit is never fresh-clone-verified at all: 8a6d5995 (#666) was cancelled
+  # by #667's push eight minutes later and has no post-merge canary result.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   CARGO_TERM_COLOR: always
@@ -291,14 +305,27 @@ jobs:
       - name: Verify the fresh-clone matrix succeeded
         shell: bash
         run: |
+          # ALLOWLIST, not a denylist — the same fix #485 made to Validate
+          # Success after a Relay job reported `abandoned` and the denylist
+          # (`failure|cancelled` only) passed it GREEN. GitHub emits more
+          # results than the documented four; only `success` and `skipped`
+          # (a path-filtered PR leg) may pass.
           results='${{ join(needs.*.result, ',') }}'
           echo "dependency results: $results"
-          case ",$results," in
-            *,failure,* | *,cancelled,*)
-              echo "::error::a Hermetic Fresh-Clone leg failed or was cancelled ($results)"
-              exit 1
-              ;;
-            *)
-              echo "all Hermetic Fresh-Clone legs succeeded"
-              ;;
-          esac
+          if [ -z "$results" ]; then
+            echo "::error::no dependency results were reported — refusing to pass a gate that measured nothing"
+            exit 1
+          fi
+          bad=''
+          IFS=',' read -ra parsed <<< "$results"
+          for r in "${parsed[@]}"; do
+            case "$r" in
+              success|skipped) ;;
+              *) bad="$bad $r" ;;
+            esac
+          done
+          if [ -n "$bad" ]; then
+            echo "::error::a Hermetic Fresh-Clone leg did not succeed ($results) — offending results:$bad"
+            exit 1
+          fi
+          echo "all Hermetic Fresh-Clone legs succeeded (or were skipped as not-applicable)"

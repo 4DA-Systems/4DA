@@ -15,7 +15,12 @@ Only the latest release in the 1.x series receives security updates. Users shoul
 
 **Do not open a public GitHub issue for security vulnerabilities.**
 
-Send vulnerability reports to **security@4da.ai**. Include:
+Report privately through either channel:
+
+- **GitHub private vulnerability reporting:** open the repository's **Security** tab and choose **Report a vulnerability**. This creates a private advisory that only you and the maintainers can see.
+- **Email:** **security@4da.ai**
+
+Include:
 
 - A clear description of the vulnerability
 - Steps to reproduce the issue

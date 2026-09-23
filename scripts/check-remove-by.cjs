@@ -193,23 +193,30 @@ function analyzeSources(sources, today, allow = []) {
 // CLI
 // ---------------------------------------------------------------------------
 
+/**
+ * Scan the working tree exactly as the gate does. Shared with the scheduled
+ * main-health job (validate.yml) and the sentinel scanner, so a deadline is
+ * judged by one implementation everywhere rather than re-parsed from CLI text.
+ */
+function scanRepo(root = ROOT, today = resolveToday()) {
+  const allow = loadAllowlist(path.join(root, 'scripts', 'remove-by-allowlist.json'));
+  const all = [];
+  for (const dir of SCAN_DIRS) collectFiles(path.join(root, dir), all);
+  const files = all.filter((f) => !isSkippedFile(path.relative(root, f)));
+
+  const sources = files.map((f) => ({
+    rel: path.relative(root, f).replace(/\\/g, '/'),
+    src: fs.readFileSync(f, 'utf8'),
+  }));
+
+  return { today, ...analyzeSources(sources, today, allow) };
+}
+
 /** CLI entry point. Returns the process exit code. */
 function main(argv) {
   const ciMode = argv.includes('--ci');
   const verbose = argv.includes('--verbose');
-  const today = resolveToday();
-  const allow = loadAllowlist();
-
-  const all = [];
-  for (const dir of SCAN_DIRS) collectFiles(path.join(ROOT, dir), all);
-  const files = all.filter((f) => !isSkippedFile(path.relative(ROOT, f)));
-
-  const sources = files.map((f) => ({
-    rel: path.relative(ROOT, f).replace(/\\/g, '/'),
-    src: fs.readFileSync(f, 'utf8'),
-  }));
-
-  const { expired, dueSoon, upcoming } = analyzeSources(sources, today, allow);
+  const { today, expired, dueSoon, upcoming } = scanRepo();
   const blocking = expired.filter((e) => !e.allowlisted);
   const excused = expired.filter((e) => e.allowlisted);
 
@@ -279,7 +286,15 @@ ${dueSoon.length} REMOVE BY deadline(s) land within ${DUE_SOON_DAYS} days — ` 
   return 1;
 }
 
-module.exports = { analyzeSources, resolveToday, collectFiles, isSkippedFile, SCAN_DIRS };
+module.exports = {
+  analyzeSources,
+  resolveToday,
+  collectFiles,
+  isSkippedFile,
+  scanRepo,
+  SCAN_DIRS,
+  DUE_SOON_DAYS,
+};
 
 if (require.main === module) {
   process.exit(main(process.argv));
