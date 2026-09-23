@@ -1,0 +1,102 @@
+# AI Review — an independent reviewer on every pull request.
+#
+# Why this exists: on 2026-09-24 every one of the 25 most recent merges to main
+# had zero reviews. Most code here is written by automated agents and checked by
+# the same agent that wrote it; the merge gate proves the code builds and its
+# tests pass, not that the change is right. An independent read catches the
+# class of defect the author's own context hides (the #682 refactor carried a
+# latent crash that all of its author's own tests passed; only an extra test,
+# added after a rebase exposed it, caught it before merge).
+#
+# ADVISORY, NOT REQUIRED. It is deliberately not in the ruleset's required
+# checks: a model outage or an API-key problem must never block main. It
+# comments; humans (or the authoring agent) decide.
+#
+# DORMANT UNTIL ENABLED. It needs an Anthropic API key (BYOK — spend is the
+# repo owner's decision). Until the `ANTHROPIC_API_KEY` repository secret
+# exists, the job logs a notice and exits green without calling anything.
+# Enable: Settings -> Secrets and variables -> Actions -> New repository
+# secret -> ANTHROPIC_API_KEY.
+#
+# Scope: same-repository, non-draft PRs. Fork PRs never receive secrets, and
+# Dependabot-triggered runs only receive Dependabot secrets, so both skip
+# cleanly. Only the PR number and repo name reach the prompt — never the
+# attacker-controllable title or body.
+
+name: AI Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, ready_for_review, reopened]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ai-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    name: AI review (advisory)
+    if: github.event.pull_request.draft == false && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: write
+      id-token: write
+    steps:
+      - name: Check whether AI review is enabled
+        id: key
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        shell: bash
+        run: |
+          if [ -n "$ANTHROPIC_API_KEY" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice title=AI review disabled::Add an ANTHROPIC_API_KEY repository secret to enable the advisory AI review."
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        if: steps.key.outputs.enabled == 'true'
+        with:
+          fetch-depth: 1
+
+      - name: Review
+        if: steps.key.outputs.enabled == 'true'
+        uses: anthropics/claude-code-action@46a42b43239748e5b25771606bf1f551c3b1b517 # v1.0.232
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          github_token: ${{ github.token }}
+          use_sticky_comment: true
+          prompt: |
+            REPO: ${{ github.repository }}
+            PR NUMBER: ${{ github.event.pull_request.number }}
+
+            You are an independent reviewer for 4DA, a privacy-first local desktop
+            app (Tauri 2: Rust backend in src-tauri/, React/TypeScript in src/).
+            Read CLAUDE.md and .ai/INVARIANTS.md first; they are the project's rules.
+
+            Review ONLY the diff of this pull request (`gh pr diff`). Report
+            problems that matter, most severe first:
+              1. Correctness: logic errors, broken edge cases, error paths that
+                 silently succeed, races, data loss.
+              2. Security and privacy: raw user data leaving the machine, secrets
+                 in code or logs, injection, fail-open checks.
+              3. Invariant and doctrine violations: rules in INVARIANTS.md and
+                 .claude/rules/ (for example, no unwrap()/panic! in production
+                 Rust, schema changes without migration safety).
+              4. Missing or weak tests for the behaviour that changed.
+            Do NOT comment on formatting, naming taste, or anything CI already
+            enforces (fmt, clippy, eslint, file sizes). Do not praise. Do not
+            restate the diff.
+
+            Use an inline comment for each concrete finding, stating the failure
+            scenario (input or state -> wrong result). Then post ONE summary
+            comment: the findings ranked by severity, or exactly
+            "No significant issues found." when there are none.
+          claude_args: |
+            --model claude-sonnet-5
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"

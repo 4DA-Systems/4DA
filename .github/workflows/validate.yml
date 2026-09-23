@@ -32,6 +32,16 @@ on:
 # immediately instead of queueing redundant work behind it. merge_group refs
 # are unique per queue entry, so queue runs never cancel each other here
 # (GitHub retires superseded queue entries itself).
+# Least privilege, stated explicitly (CodeQL actions/missing-workflow-permissions).
+# The repo default is already read-only; declaring it here means a change to
+# that default can never silently widen every job. `pull-requests: read` is
+# what dorny/paths-filter needs to list a PR's files through the API. Jobs that
+# need more (dependabot-notice, main-health) declare their own block, which
+# replaces this one for that job.
+permissions:
+  contents: read
+  pull-requests: read
+
 concurrency:
   group: validate-${{ github.ref }}
   cancel-in-progress: true

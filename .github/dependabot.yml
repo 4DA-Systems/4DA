@@ -157,6 +157,17 @@ updates:
     commit-message:
       prefix: "chore(mcp-4da)"
       include: "scope"
+    ignore:
+      # DEFERRED 2026-09-24 (#446). better-sqlite3 13 declares engines
+      # node >=22, dropping Node 20. `@4da/mcp-server` is PUBLISHED to npm with
+      # engines node >=20.0.0, so adopting it breaks every Node 20 user of a
+      # released package: a semver-major decision for the product, not a
+      # routine bump. It also has no Windows prebuild for the Node 22 ABI CI
+      # uses, so install falls back to node-gyp and fails without Visual Studio
+      # (MCP Server + Fresh clone windows red on #446). Lift this when the
+      # package's own engines floor moves to 22.
+      - dependency-name: "better-sqlite3"
+        versions: [">=13"]
 
   # ── MCP memory server ─────────────────────────────────────────────
   - package-ecosystem: "npm"
@@ -180,6 +191,14 @@ updates:
     commit-message:
       prefix: "chore(mcp-memory)"
       include: "scope"
+    ignore:
+      # DEFERRED 2026-09-24 (#442), same reason as mcp-4da-server above. This
+      # package is not built by any CI job (only audited), so #442's green
+      # checks never installed it. On the operator's Windows / Node 22 machine
+      # a v13 install needs node-gyp + Visual Studio, which would break the dev
+      # memory server. Lift together with the mcp-4da-server entry.
+      - dependency-name: "better-sqlite3"
+        versions: [">=13"]
 
   # ── VS Code extension ─────────────────────────────────────────────
   - package-ecosystem: "npm"
