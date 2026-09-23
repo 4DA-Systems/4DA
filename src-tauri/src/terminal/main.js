@@ -85,6 +85,7 @@ var THEMES={
   ember:  {gold:'#FF6B35',fg:'#D0D0D0',green:'#FF6B35',muted:'#8A6A5A',dim:'#3A2A1F',cyan:'#FFB088',red:'#EF4444'}
 };
 var currentTheme=localStorage.getItem('4da_term_theme')||'gold';
+if(!Object.prototype.hasOwnProperty.call(THEMES,currentTheme))currentTheme='gold';
 
 /* ── Fortune quotes ── */
 var FORTUNES=[
@@ -100,15 +101,66 @@ var FORTUNES=[
   'Measuring programming progress by lines of code is like measuring aircraft building progress by weight. \u2014 Bill Gates'
 ];
 
+/* ── HTML sink ──
+   setHtml() is the ONLY place this file turns a string into markup. Every
+   renderer (wh, w, cards, ambient panels, crucible steps) goes through it.
+
+   Callers still escape what they interpolate (esc/link below) — that keeps
+   text readable. setHtml() is the backstop that makes a missed esc() harmless:
+   the string is parsed into an inert <template> (no browsing context, so no
+   script runs and no resource loads during parsing), then every element that
+   is not in SAFE_TAGS is replaced by its plain text, every attribute outside
+   the allowlist is dropped, and <a href> survives only as http(s). Only then
+   is the cleaned fragment moved into the live document.
+
+   Why it matters: this page is a browser tab on 127.0.0.1 holding the API
+   token in localStorage, and it renders source titles, URLs, explanations and
+   Crucible (localhost:3001) output — all text that originates outside 4DA. */
+var SAFE_TAGS={SPAN:1,DIV:1,PRE:1,A:1,H3:1,BR:1,B:1,STRONG:1,EM:1,CODE:1};
+var SAFE_ATTRS={'class':1,id:1,title:1,style:1};
+var UNSAFE_STYLE=/url\s*\(|expression|@import|javascript:|\\/i;
+function safeUrl(u){
+  var s=String(u==null?'':u).trim();
+  return /^https?:\/\//i.test(s)?s:'';
+}
+function cleanTree(node){
+  var kids=Array.prototype.slice.call(node.childNodes);
+  for(var i=0;i<kids.length;i++){
+    var c=kids[i];
+    if(c.nodeType===3)continue;
+    if(c.nodeType!==1){node.removeChild(c);continue}
+    if(!SAFE_TAGS[c.tagName]){node.replaceChild(document.createTextNode(c.textContent||''),c);continue}
+    var attrs=Array.prototype.slice.call(c.attributes);
+    for(var j=0;j<attrs.length;j++){
+      var name=attrs[j].name.toLowerCase(),val=attrs[j].value;
+      var keep=SAFE_ATTRS[name]===1&&!(name==='style'&&UNSAFE_STYLE.test(val));
+      if(c.tagName==='A'){
+        if(name==='href')keep=safeUrl(val)!=='';
+        else if(name==='target')keep=val==='_blank';
+      }
+      if(!keep)c.removeAttribute(attrs[j].name);
+    }
+    if(c.tagName==='A')c.setAttribute('rel','noopener noreferrer');
+    cleanTree(c);
+  }
+}
+function setHtml(el,html){
+  var t=document.createElement('template');
+  t.innerHTML=String(html==null?'':html);
+  cleanTree(t.content);
+  el.textContent='';
+  el.appendChild(t.content);
+}
+
 /* ── Helpers ── */
 function w(text,cls){
   var d=document.createElement('div');d.className='out-line';
-  if(cls)d.innerHTML='<span class="'+cls+'">'+esc(text)+'</span>';
+  if(cls)setHtml(d,'<span class="'+esc(cls)+'">'+esc(text)+'</span>');
   else d.textContent=text;
   out.appendChild(d);scroll();
 }
-function wh(html){var d=document.createElement('div');d.className='out-line';d.innerHTML=html;out.appendChild(d);scroll()}
-function wcmd(text){var d=document.createElement('div');d.className='out-line out-cmd';d.innerHTML='<span class="g">&gt; '+esc(text)+'</span>';out.appendChild(d);scroll()}
+function wh(html){var d=document.createElement('div');d.className='out-line';setHtml(d,html);out.appendChild(d);scroll()}
+function wcmd(text){var d=document.createElement('div');d.className='out-line out-cmd';setHtml(d,'<span class="g">&gt; '+esc(text)+'</span>');out.appendChild(d);scroll()}
 function wsep(label){wh('<span class="m">\u2500\u2500 '+esc(label)+' \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500</span>')}
 function wkv(key,val,cls){
   var v=cls?'<span class="'+cls+'">'+esc(String(val))+'</span>':esc(String(val));
@@ -137,9 +189,19 @@ function sparkbar(value,max,len){
   return result;
 }
 function scroll(){out.scrollTop=out.scrollHeight}
-function esc(s){if(s==null)return'';s=String(s);var d=document.createElement('div');d.textContent=s;return d.innerHTML}
-function escAttr(s){return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')}
-function link(url,text){return'<a href="'+escAttr(url)+'" target="_blank" rel="noopener">'+esc(text)+'</a>'}
+/* Escapes for BOTH text and attribute context. The previous DOM-based version
+   (textContent -> innerHTML) left quotes unescaped, so esc() inside title="..."
+   let a Crucible summary break out of the attribute. */
+function esc(s){
+  if(s==null)return'';
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+/* A non-http(s) URL (javascript:, data:, vbscript:) renders as plain text. */
+function link(url,text){
+  var u=safeUrl(url);
+  if(!u)return esc(text);
+  return'<a href="'+esc(u)+'" target="_blank" rel="noopener noreferrer">'+esc(text)+'</a>';
+}
 function rmLast(){var lines=out.querySelectorAll('.out-line');if(lines.length)lines[lines.length-1].remove()}
 
 /* ── Phase 1.7: Better error messages ── */
@@ -360,7 +422,7 @@ function intelligenceBrief(){
 
     // ── Scan stats ──
     var rejection = status.total_scanned > 0 ? Math.round((1 - (status.total_relevant||0)/(status.total_scanned||1)) * 100) : 0;
-    wh('<span class="d">' + (status.total_scanned||0) + ' scanned \u00B7 ' + rejection + '% noise eliminated \u00B7 last scan ' + (status.last_analysis||'never') + '</span>');
+    wh('<span class="d">' + esc(status.total_scanned||0) + ' scanned \u00B7 ' + rejection + '% noise eliminated \u00B7 last scan ' + esc(status.last_analysis||'never') + '</span>');
 
     // ── Separator + prompt hint ──
     w('');
@@ -371,7 +433,7 @@ function intelligenceBrief(){
 
 /* ── Boot sequence ── */
 function bootSequence(){
-  out.innerHTML='';
+  out.textContent='';
   var bootLines=[];
 
   api('/api/boot').then(function(d){
@@ -500,11 +562,11 @@ function connectStream() {
     try {
       var evt = JSON.parse(e.data);
       if (evt.type === 'AnalysisComplete') {
-        wh('<span class="gr">[LIVE] Analysis complete: ' + evt.relevant_count + ' relevant / ' + evt.total_count + ' total</span>');
+        wh('<span class="gr">[LIVE] Analysis complete: ' + esc(evt.relevant_count) + ' relevant / ' + esc(evt.total_count) + ' total</span>');
         refreshStatus();
         // Refresh the brief with new data
         setTimeout(function(){
-          out.innerHTML='';
+          out.textContent='';
           intelligenceBrief();
         }, 1000);
       } else if (evt.type === 'AnalysisProgress') {
@@ -584,7 +646,7 @@ inp.addEventListener('keydown',function(e){
     e.preventDefault();
     if(histIdx>0){histIdx--;this.value=history[history.length-1-histIdx]}
     else if(histIdx===0){histIdx=-1;this.value=histBuf}
-  } else if(e.key==='l'&&e.ctrlKey){e.preventDefault();out.innerHTML=''}
+  } else if(e.key==='l'&&e.ctrlKey){e.preventDefault();out.textContent=''}
   else if(e.key==='k'&&e.ctrlKey){e.preventDefault();inp.focus()}
 });
 
@@ -643,7 +705,7 @@ function execSingle(raw){
     case'dna':cmdDna();break;
     case'gaps':cmdGaps();break;
     case'status':cmdStatus();break;
-    case'clear':out.innerHTML='';intelligenceBrief();break;
+    case'clear':out.textContent='';intelligenceBrief();break;
     case'ambient':enterAmbient();break;
     case'token':showAuth();break;
     case'theme':cmdTheme(arg);break;
@@ -768,7 +830,7 @@ function crucibleBadge(scan){
             scan.unvalidated>0?scan.unvalidated+' unvalidated':
             scan.contested>0?scan.contested+' contested':
             scan.validated+' validated';
-  return ' <span class="'+cls+'" title="'+esc(scan.summary||'')+'">'+icon+' '+label+'</span>';
+  return ' <span class="'+cls+'" title="'+esc(scan.summary||'')+'">'+icon+' '+esc(label)+'</span>';
 }
 
 /* Sources that contain IDEAS worth scanning (skip CVEs, package updates, etc.) */
@@ -839,10 +901,10 @@ function renderSignal(s){
     if(s.signal_type)meta.push(s.signal_type);
     if(s.source)meta.push(s.source);
     if(s.signal_action)meta.push('Act: '+s.signal_action);
-    cardDiv.innerHTML=
+    setHtml(cardDiv,
       '<div class="sc-title">'+icon+' '+title+' <span class="g">['+scr+'%]</span>'+badge+'</div>'+
       (meta.length?'<div class="sc-meta">'+esc(meta.join(' \u00B7 '))+'</div>':'')+
-      '<div class="sc-bar">'+bar(s.score_raw||0,20)+'</div>';
+      '<div class="sc-bar">'+bar(s.score_raw||0,20)+'</div>');
     out.appendChild(cardDiv);scroll();
   } else {
     wh('\u25C7 <span class="g">['+scr+']</span> '+title+badge);
@@ -1181,7 +1243,7 @@ function cmdTheme(name){
     names.forEach(function(n){
       var marker=n===currentTheme?' <span class="gr">\u25C0 active</span>':'';
       var t=THEMES[n];
-      wh('  <span style="color:'+t.gold+'">\u25A0</span> <span class="m">'+n+'</span>'+marker);
+      wh('  <span style="color:'+esc(t.gold)+'">\u25A0</span> <span class="m">'+esc(n)+'</span>'+marker);
     });
     w('');wh('<span class="d">  Usage: theme &lt;name&gt;</span>');
     showTiming();
@@ -1211,13 +1273,13 @@ function cmdWhoami(){
     var rejection=d.stats?d.stats.rejection_rate||0:0;
 
     var box=document.createElement('div');box.className='info-box';
-    box.innerHTML=
+    setHtml(box,
       '<div class="ib-title">\u25C9 DEVELOPER DNA</div>'+
       '<div class="ib-row"><span class="ib-key">Stack:     </span>'+esc(stack)+'</div>'+
       '<div class="ib-row"><span class="ib-key">Focus:     </span>'+esc(focus)+'</div>'+
-      '<div class="ib-row"><span class="ib-key">Projects:  </span>'+projects+' \u00B7 Deps: '+deps+'</div>'+
-      '<div class="ib-row"><span class="ib-key">Rejection: </span>'+rejection+'%</div>'+
-      '<div class="ib-footer">All signal. No feed.</div>';
+      '<div class="ib-row"><span class="ib-key">Projects:  </span>'+esc(projects)+' \u00B7 Deps: '+esc(deps)+'</div>'+
+      '<div class="ib-row"><span class="ib-key">Rejection: </span>'+esc(rejection)+'%</div>'+
+      '<div class="ib-footer">All signal. No feed.</div>');
     out.appendChild(box);scroll();
     showTiming();
   }).catch(function(e){
@@ -1317,7 +1379,7 @@ function cmdNeofetch(){
       '             <span class="m">Threshold:</span> '+(d.threshold||0.35),
       '             <span class="m">Monitoring:</span> <span class="'+(d.monitoring?'gr':'r')+'">'+(d.monitoring?'active':'off')+'</span>',
       '             <span class="m">Uptime:</span> '+fmtUptime(elapsed),
-      '             <span class="m">Theme:</span> '+currentTheme
+      '             <span class="m">Theme:</span> '+esc(currentTheme)
     ];
     lines.forEach(function(l){wh(l)});
     showTiming();
@@ -1439,7 +1501,7 @@ function cmdWatch(arg){
   w('Watching "'+arg+'" every 30s. Type watch to stop.','m');
   execSingle(arg);
   watchInterval=setInterval(function(){
-    out.innerHTML='';
+    out.textContent='';
     wh('<span class="d">\u2500\u2500 watch: '+esc(arg)+' (refreshing every 30s, type watch to stop) \u2500\u2500</span>');
     w('');
     execSingle(arg);
@@ -1487,12 +1549,12 @@ function showPalette(){
         return c.indexOf(lower)!==-1||(CMD_HELP[c]||'').toLowerCase().indexOf(lower)!==-1;
       });
     }
-    list.innerHTML='';
+    list.textContent='';
     selectedIdx=0;
     filtered.forEach(function(c,i){
       var item=document.createElement('div');
       item.className='palette-item'+(i===0?' selected':'');
-      item.innerHTML='<span class="pi-cmd">'+esc(c)+'</span><span class="pi-desc">'+esc(CMD_HELP[c]||'')+'</span>';
+      setHtml(item,'<span class="pi-cmd">'+esc(c)+'</span><span class="pi-desc">'+esc(CMD_HELP[c]||'')+'</span>');
       item.setAttribute('data-cmd',c);
       item.addEventListener('click',function(){
         closePalette();
@@ -1684,8 +1746,8 @@ function cmdRead(arg){
     return;
   }
   var item=readingQueue[idx];
-  if(item.url){
-    window.open(item.url,'_blank','noopener');
+  if(safeUrl(item.url)){
+    window.open(safeUrl(item.url),'_blank','noopener');
     w('Opened: '+item.title,'gr');
   } else {
     w('No URL for this item: '+item.title,'m');
@@ -1798,8 +1860,8 @@ function cmdOpen(arg){
     w('No signals cached. Run signals first.','r');showTiming();return;
   }
   var signal=cachedSignals[idx];
-  if(signal.url){
-    window.open(signal.url,'_blank','noopener');
+  if(safeUrl(signal.url)){
+    window.open(safeUrl(signal.url),'_blank','noopener');
     w('Opened: '+signal.title,'gr');
     recordSearch(signal.title.split(' ').slice(0,3).join(' '));
   } else {
@@ -1822,10 +1884,10 @@ function cmdOpen(arg){
 function renderQuickScan(scan,idx){
   w('');
   wsep('CRUCIBLE QUICK SCAN');
-  var vBadge=scan.validated>0?'<span class="gr">'+scan.validated+' validated</span>':'';
-  var cBadge=scan.contested>0?'<span class="g">'+scan.contested+' contested</span>':'';
-  var uBadge=scan.unvalidated>0?'<span class="c">'+scan.unvalidated+' unvalidated</span>':'';
-  var xBadge=scan.contradicted>0?'<span class="r">'+scan.contradicted+' contradicted</span>':'';
+  var vBadge=scan.validated>0?'<span class="gr">'+esc(scan.validated)+' validated</span>':'';
+  var cBadge=scan.contested>0?'<span class="g">'+esc(scan.contested)+' contested</span>':'';
+  var uBadge=scan.unvalidated>0?'<span class="c">'+esc(scan.unvalidated)+' unvalidated</span>':'';
+  var xBadge=scan.contradicted>0?'<span class="r">'+esc(scan.contradicted)+' contradicted</span>':'';
   wh('  Assumptions: '+[vBadge,cBadge,uBadge,xBadge].filter(Boolean).join(' \u2502 '));
   if(scan.top_risk)wh('  <span class="r">\u26A0 Risk:</span> '+esc(scan.top_risk));
   if(scan.competitors&&scan.competitors.length>0)wh('  <span class="m">Competitors:</span> '+esc(scan.competitors.join(', ')));
@@ -1953,7 +2015,7 @@ function cmdCompare(arg) {
     w('');
 
     // Header
-    wh('  <span class="m">' + ''.padEnd(14) + tech1.padEnd(16) + tech2.padEnd(16) + '</span>');
+    wh('  <span class="m">' + ''.padEnd(14) + esc(tech1.padEnd(16)) + esc(tech2.padEnd(16)) + '</span>');
     w('');
 
     // Radar score
@@ -1964,12 +2026,12 @@ function cmdCompare(arg) {
     // Ring
     var ring1 = e1 ? e1.ring : 'n/a';
     var ring2 = e2 ? e2.ring : 'n/a';
-    wh('  <span class="d">Ring          </span><span class="m">' + ring1.padEnd(16) + ring2.padEnd(16) + '</span>');
+    wh('  <span class="d">Ring          </span><span class="m">' + esc(String(ring1).padEnd(16)) + esc(String(ring2).padEnd(16)) + '</span>');
 
     // Movement
     var mov1 = e1 ? e1.movement : 'n/a';
     var mov2 = e2 ? e2.movement : 'n/a';
-    wh('  <span class="d">Movement      </span><span class="m">' + mov1.padEnd(16) + mov2.padEnd(16) + '</span>');
+    wh('  <span class="d">Movement      </span><span class="m">' + esc(String(mov1).padEnd(16)) + esc(String(mov2).padEnd(16)) + '</span>');
 
     // Signal count
     wh('  <span class="d">Signals       </span><span class="' + (s1 > s2 ? 'g' : 'm') + '">' + String(s1).padEnd(16) + '</span><span class="' + (s2 > s1 ? 'g' : 'm') + '">' + String(s2).padEnd(16) + '</span>');
@@ -1977,7 +2039,7 @@ function cmdCompare(arg) {
     // Quadrant
     var q1 = e1 ? e1.quadrant : 'n/a';
     var q2 = e2 ? e2.quadrant : 'n/a';
-    wh('  <span class="d">Category      </span><span class="m">' + q1.padEnd(16) + q2.padEnd(16) + '</span>');
+    wh('  <span class="d">Category      </span><span class="m">' + esc(String(q1).padEnd(16)) + esc(String(q2).padEnd(16)) + '</span>');
 
     w('');
 
@@ -1985,7 +2047,7 @@ function cmdCompare(arg) {
     if (e1 && e2) {
       var winner = e1.score > e2.score ? tech1 : e2.score > e1.score ? tech2 : 'tied';
       if (winner !== 'tied') {
-        wh('<span class="g">  ' + winner + ' leads</span> <span class="d">by ' + Math.abs(e1.score - e2.score).toFixed(2) + ' score points and ' + Math.abs(s1 - s2) + ' signal' + (Math.abs(s1 - s2) !== 1 ? 's' : '') + '</span>');
+        wh('<span class="g">  ' + esc(winner) + ' leads</span> <span class="d">by ' + Math.abs(e1.score - e2.score).toFixed(2) + ' score points and ' + Math.abs(s1 - s2) + ' signal' + (Math.abs(s1 - s2) !== 1 ? 's' : '') + '</span>');
       } else {
         wh('<span class="g">  Tied</span> <span class="d">\u2014 equal radar scores</span>');
       }
@@ -2003,9 +2065,9 @@ function cmdCompare(arg) {
 }
 
 function padScore(score, entry) {
-  if (!entry) return '<span class="d">' + score.padEnd(16) + '</span>';
+  if (!entry) return '<span class="d">' + esc(score.padEnd(16)) + '</span>';
   var cls = entry.score >= 0.7 ? 'gr' : entry.score >= 0.4 ? 'g' : 'm';
-  return '<span class="' + cls + '">' + score.padEnd(16) + '</span>';
+  return '<span class="' + cls + '">' + esc(score.padEnd(16)) + '</span>';
 }
 
 /* ── Focus command ── */
@@ -2092,22 +2154,22 @@ function cmdExport(arg) {
 
 /* ── Ambient mode ── */
 function enterAmbient(){
-  isAmbient=true;document.body.classList.add('ambient');out.innerHTML='';
+  isAmbient=true;document.body.classList.add('ambient');out.textContent='';
   var grid=document.createElement('div');grid.className='amb-grid';
-  grid.innerHTML=
+  setHtml(grid,
     '<div class="amb-section" style="grid-column:1/-1;text-align:center;padding:32px">' +
     '<div id="amb-health" style="font-size:64px;font-weight:700;color:var(--gold)">--</div>' +
     '<div style="font-size:11px;color:var(--muted);margin-top:4px">STACK HEALTH</div></div>' +
     '<div class="amb-section" id="amb-sig"><h3>Signals</h3><div class="amb-content"></div></div>'+
     '<div class="amb-section" id="amb-radar"><h3>Stack Intelligence</h3><div class="amb-content"></div></div>'+
     '<div class="amb-section" id="amb-dec"><h3>Decision Windows</h3><div class="amb-content"></div></div>'+
-    '<div class="amb-section" id="amb-status"><h3>System</h3><div class="amb-content"></div></div>';
+    '<div class="amb-section" id="amb-status"><h3>System</h3><div class="amb-content"></div></div>');
   out.appendChild(grid);refreshAmbient();ambInterval=setInterval(refreshAmbient,60000);
 }
 function exitAmbient(){
   isAmbient=false;document.body.classList.remove('ambient');
   if(ambInterval){clearInterval(ambInterval);ambInterval=null}
-  out.innerHTML='';
+  out.textContent='';
   bootSequence();
   inp.focus();
 }
@@ -2120,16 +2182,16 @@ function refreshAmbient(){
   ]).then(function(res){
     var sigs=res[0],radar=res[1],decs=res[2],status=res[3];
     var sc=document.querySelector('#amb-sig .amb-content');if(sc){
-      sc.innerHTML=(sigs.signals||[]).slice(0,10).map(function(s){
+      setHtml(sc,(sigs.signals||[]).slice(0,10).map(function(s){
         var icon=s.signal_priority==='critical'?'\u26A1':s.signal_priority==='high'?'\u25C6':'\u25C7';
         return'<div class="out-line">'+icon+' <span class="g">['+Math.round((s.score_raw||0)*100)+']</span> '+esc(s.title)+'</div>';
-      }).join('')||'<div class="out-line d">No signals</div>'}
+      }).join('')||'<div class="out-line d">No signals</div>')}
     var rc=document.querySelector('#amb-radar .amb-content');if(rc){
       var rings=['adopt','trial','assess','hold'],colors={adopt:'gr',trial:'g',assess:'m',hold:'r'};
-      rc.innerHTML=rings.map(function(ring){
+      setHtml(rc,rings.map(function(ring){
         var items=(radar.entries||[]).filter(function(e){return e.ring===ring});if(!items.length)return'';
         return'<div class="out-line"><span class="'+colors[ring]+'">'+ring.toUpperCase()+'</span> '+items.map(function(e){return esc(e.name)}).join(' \u00B7 ')+'</div>';
-      }).join('')||'<div class="out-line d">No entries</div>'}
+      }).join('')||'<div class="out-line d">No entries</div>')}
     /* Health grade computation */
     var total = (radar.entries||[]).length;
     var adoptCount = (radar.entries||[]).filter(function(e){return e.ring==='adopt'}).length;
@@ -2142,14 +2204,14 @@ function refreshAmbient(){
       healthEl.style.color = healthScore >= 70 ? 'var(--green)' : healthScore >= 50 ? 'var(--gold)' : 'var(--red)';
     }
     var dc=document.querySelector('#amb-dec .amb-content');if(dc){
-      dc.innerHTML=(decs.windows||[]).map(function(w2){
+      setHtml(dc,(decs.windows||[]).map(function(w2){
         return'<div class="out-line">\u231B <span class="g">'+esc(w2.title)+'</span></div>';
-      }).join('')||'<div class="out-line d">No open windows</div>'}
+      }).join('')||'<div class="out-line d">No open windows</div>')}
     var stc=document.querySelector('#amb-status .amb-content');if(stc){
-      stc.innerHTML='<div class="out-line"><span class="d">Monitoring:</span> <span class="'+(status.monitoring?'gr':'r')+'">'+(status.monitoring?'active':'off')+'</span></div>'+
-        '<div class="out-line"><span class="d">Scanned:</span> '+(status.total_scanned||0)+'</div>'+
-        '<div class="out-line"><span class="d">Relevant:</span> '+(status.total_relevant||0)+'</div>'+
-        '<div class="out-line"><span class="d">Last:</span> '+esc(status.last_analysis||'never')+'</div>'}
+      setHtml(stc,'<div class="out-line"><span class="d">Monitoring:</span> <span class="'+(status.monitoring?'gr':'r')+'">'+(status.monitoring?'active':'off')+'</span></div>'+
+        '<div class="out-line"><span class="d">Scanned:</span> '+esc(status.total_scanned||0)+'</div>'+
+        '<div class="out-line"><span class="d">Relevant:</span> '+esc(status.total_relevant||0)+'</div>'+
+        '<div class="out-line"><span class="d">Last:</span> '+esc(status.last_analysis||'never')+'</div>')}
   });
 }
 
@@ -2230,7 +2292,7 @@ function cmdCrucible(arg){
   steps.forEach(function(s,i){
     var d=document.createElement('div');
     d.className='out-line';
-    d.innerHTML='<span class="d">  '+(i+1)+'. '+s+'</span>';
+    setHtml(d,'<span class="d">  '+(i+1)+'. '+esc(s)+'</span>');
     d.id='crucible-step-'+i;
     out.appendChild(d);
     stepEls.push(d);
@@ -2241,8 +2303,8 @@ function cmdCrucible(arg){
   var delays=[0,3000,8000,20000,50000,70000];
   delays.forEach(function(delay,i){
     setTimeout(function(){
-      if(stepEls[i])stepEls[i].innerHTML='<span class="g">  '+(i+1)+'. '+steps[i]+'</span>';
-      if(i>0&&stepEls[i-1])stepEls[i-1].innerHTML='<span class="gr">  \u2713 '+steps[i-1]+'</span>';
+      if(stepEls[i])setHtml(stepEls[i],'<span class="g">  '+(i+1)+'. '+esc(steps[i])+'</span>');
+      if(i>0&&stepEls[i-1])setHtml(stepEls[i-1],'<span class="gr">  \u2713 '+esc(steps[i-1])+'</span>');
     },delay);
   });
   cmdStartTime=performance.now();
@@ -2284,7 +2346,7 @@ function cmdCrucible(arg){
       else w(line);
     });
     w('');
-    wh('<span class="d">Score: '+data.composite_score.toFixed(1)+'/10 | Confidence: '+Math.round(data.composite_confidence*100)+'% | ID: '+data.id+'</span>');
+    wh('<span class="d">Score: '+esc(Number(data.composite_score).toFixed(1))+'/10 | Confidence: '+esc(Math.round(data.composite_confidence*100))+'% | ID: '+esc(data.id)+'</span>');
     showTiming();
     lastOutput=data.report;
   }).catch(function(e){

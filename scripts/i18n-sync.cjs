@@ -246,8 +246,7 @@ Rules:
 - Return ONLY a JSON object: {"key":"translation","key2":"translation2"}
 - No markdown fences, no explanation`;
 
-      const pairs = batch.map(item => `"${item.key}": "${item.en.replace(/"/g, '\\"')}"`).join(',\n');
-      const userContent = `Translate these ${batch.length} strings to ${langName}:\n\n{\n${pairs}\n}`;
+      const userContent = `Translate these ${batch.length} strings to ${langName}:\n\n${translationRequestJson(batch)}`;
 
       try {
         const response = await callApi(systemPrompt, userContent);
@@ -410,19 +409,36 @@ npm scripts:
 `);
 }
 
+/**
+ * The `{"key": "English source", ...}` object sent to the translator, as valid
+ * JSON. It used to be hand-assembled with only `"` escaped, so a source string
+ * containing a backslash (`C:\Users`, a literal `\n`, a regex) or a key
+ * containing a quote produced an object that was not valid JSON — the model
+ * was shown a different string than the one in en/*.json.
+ */
+function translationRequestJson(batch) {
+  const obj = {};
+  for (const item of batch) obj[item.key] = item.en;
+  return JSON.stringify(obj, null, 2);
+}
+
+module.exports = { translationRequestJson };
+
 // ============================================================================
 // Main
 // ============================================================================
 
-const command = process.argv[2] || 'help';
+if (require.main === module) {
+  const command = process.argv[2] || 'help';
 
-switch (command) {
-  case 'status': cmdStatus(); break;
-  case 'check': cmdCheck(); break;
-  case 'fill': cmdFill().catch(e => { console.error(e.message); process.exit(1); }); break;
-  case 'quality': cmdQuality(); break;
-  case 'fix': cmdFix(); break;
-  case 'add-lang': cmdAddLang(process.argv[3]).catch(e => { console.error(e.message); process.exit(1); }); break;
-  case 'help': case '--help': case '-h': cmdHelp(); break;
-  default: console.error(`Unknown command: ${command}`); cmdHelp(); process.exit(1);
+  switch (command) {
+    case 'status': cmdStatus(); break;
+    case 'check': cmdCheck(); break;
+    case 'fill': cmdFill().catch(e => { console.error(e.message); process.exit(1); }); break;
+    case 'quality': cmdQuality(); break;
+    case 'fix': cmdFix(); break;
+    case 'add-lang': cmdAddLang(process.argv[3]).catch(e => { console.error(e.message); process.exit(1); }); break;
+    case 'help': case '--help': case '-h': cmdHelp(); break;
+    default: console.error(`Unknown command: ${command}`); cmdHelp(); process.exit(1);
+  }
 }

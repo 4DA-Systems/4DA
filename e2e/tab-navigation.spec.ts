@@ -34,24 +34,19 @@ test.describe('Tab navigation', () => {
   // Every visible tab must be clickable and change aria-selected state.
   // If this fails for a tab, either TIER_VIEWS has drifted OR the tab is
   // rendered but setActiveView is rejecting it.
-  const ALL_NAVIGABLE_TABS = [
-    'briefing',
-    'preemption',
-    'blindspots',
-    'chapters',
-    'results',
-    'playbook',
-    'insights',
-    'saved',
-    'profile',
-    'console',
-  ];
+  //
+  // The ids are ViewTabBar.tsx's TABS (main nav is locked at four tabs), and
+  // each tab is located by the `id="tab-<id>"` it renders. The previous
+  // locator filtered on the text `nav.<id>` — an i18n KEY, never the rendered
+  // label ("Brief", "Blind Spots", ...) — so it matched nothing, every case hit
+  // the "not visible" skip, and the suite could not fail. (CodeQL
+  // js/identity-replacement flagged the `.replace('blindspots', 'blindspots')`
+  // no-op inside that dead filter.)
+  const ALL_NAVIGABLE_TABS = ['briefing', 'preemption', 'blindspots', 'results'];
 
   for (const tabId of ALL_NAVIGABLE_TABS) {
     test(`clicking tab "${tabId}" changes selection`, async ({ page }) => {
-      const tab = page.getByRole('tab', { selected: false }).filter({
-        hasText: new RegExp(`nav\\.${tabId.replace('blindspots', 'blindspots')}`, 'i'),
-      }).first();
+      const tab = page.getByRole('tablist', { name: /content views/i }).locator(`#tab-${tabId}`);
 
       // If the tab isn't visible (user on a lower tier that doesn't include
       // this view), skip — that's a valid state.
