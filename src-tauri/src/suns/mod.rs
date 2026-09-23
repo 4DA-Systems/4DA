@@ -47,7 +47,6 @@ pub struct SunResult {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SunStatus {
     pub id: String,
-    pub name: String,
     pub module_id: String,
     pub enabled: bool,
     pub interval_secs: u64,
@@ -83,10 +82,6 @@ pub struct SunRegistry {
 
 struct SunDef {
     id: String,
-    /// Display name. Read only by `get_statuses` (test-gated), but the field is
-    /// populated unconditionally in `new()`, so it cannot be `cfg`-gated with it.
-    #[allow(dead_code)] // REMOVE BY 2026-11-12
-    name: String,
     module_id: String,
     interval_secs: u64,
     execute: fn() -> SunResult,
@@ -104,88 +99,27 @@ impl SunRegistry {
 
         // Register all suns
         // S = Sovereignty module, R = Revenue module
-        registry.register(
-            "hardware_monitor",
-            "Hardware Monitor",
-            "S",
-            86400,
-            hardware_monitor::execute,
-        ); // 24h
-        registry.register(
-            "price_tracker",
-            "Price Tracker",
-            "S",
-            604800,
-            price_tracker::execute,
-        ); // 7 days
-        registry.register(
-            "uptime_monitor",
-            "Uptime Monitor",
-            "S",
-            300,
-            uptime_monitor::execute,
-        ); // 5 min
-        registry.register(
-            "market_tracker",
-            "Market Tracker",
-            "R",
-            86400,
-            market_tracker::execute,
-        ); // 24h
-        registry.register(
-            "api_cost_monitor",
-            "API Cost Monitor",
-            "R",
-            3600,
-            api_cost_monitor::execute,
-        ); // 1h
-        registry.register(
-            "engine_watchdog",
-            "Engine Watchdog",
-            "S",
-            900,
-            engine_watchdog::execute,
-        ); // 15 min — a quiet engine must name itself within one refresh-multiple
-           // T = Technical Moats module
-        registry.register(
-            "tech_moat_scanner",
-            "Tech Moat Scanner",
-            "T",
-            86400,
-            tech_moat_scanner::execute,
-        ); // 24h
-           // E1 = Execution Playbook module
-        registry.register(
-            "execution_tracker",
-            "Execution Tracker",
-            "E1",
-            43200,
-            execution_tracker::execute,
-        ); // 12h
-           // E2 = Evolving Edge module
-        registry.register(
-            "edge_detector",
-            "Edge Detector",
-            "E2",
-            86400,
-            edge_detector::execute,
-        ); // 24h
-           // T2 = Tactical Automation module
+        registry.register("hardware_monitor", "S", 86400, hardware_monitor::execute); // 24h
+        registry.register("price_tracker", "S", 604800, price_tracker::execute); // 7 days
+        registry.register("uptime_monitor", "S", 300, uptime_monitor::execute); // 5 min
+        registry.register("market_tracker", "R", 86400, market_tracker::execute); // 24h
+        registry.register("api_cost_monitor", "R", 3600, api_cost_monitor::execute); // 1h
+        registry.register("engine_watchdog", "S", 900, engine_watchdog::execute); // 15 min — a quiet engine must name itself within one refresh-multiple
+                                                                                  // T = Technical Moats module
+        registry.register("tech_moat_scanner", "T", 86400, tech_moat_scanner::execute); // 24h
+                                                                                        // E1 = Execution Playbook module
+        registry.register("execution_tracker", "E1", 43200, execution_tracker::execute); // 12h
+                                                                                         // E2 = Evolving Edge module
+        registry.register("edge_detector", "E2", 86400, edge_detector::execute); // 24h
+                                                                                 // T2 = Tactical Automation module
         registry.register(
             "automation_auditor",
-            "Automation Auditor",
             "T2",
             86400,
             automation_auditor::execute,
         ); // 24h
            // S2 = Stacking Streams module
-        registry.register(
-            "stream_monitor",
-            "Stream Monitor",
-            "S2",
-            21600,
-            stream_monitor::execute,
-        ); // 6h
+        registry.register("stream_monitor", "S2", 21600, stream_monitor::execute); // 6h
 
         registry
     }
@@ -193,14 +127,12 @@ impl SunRegistry {
     fn register(
         &mut self,
         id: &str,
-        name: &str,
         module_id: &str,
         interval_secs: u64,
         execute: fn() -> SunResult,
     ) {
         self.suns.push(SunDef {
             id: id.to_string(),
-            name: name.to_string(),
             module_id: module_id.to_string(),
             interval_secs,
             execute,
@@ -259,7 +191,6 @@ impl SunRegistry {
 
                 SunStatus {
                     id: sun.id.clone(),
-                    name: sun.name.clone(),
                     module_id: sun.module_id.clone(),
                     enabled,
                     interval_secs: sun.interval_secs,

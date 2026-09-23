@@ -439,13 +439,6 @@ fn corpus_item_spec(item_id: u64) -> &'static EmbeddingSpec {
 // Backward-compatible API (used by existing callers)
 // ============================================================================
 
-/// Generate a domain-specific embedding for a persona domain index (0-8).
-/// Backward compatible with the band-based approach.
-#[allow(dead_code)] // REMOVE BY 2026-11-26 — reserved for future domain embedding lookup
-pub(super) fn domain_embedding(domain_idx: usize) -> Vec<f32> {
-    interest_embedding(domain_idx)
-}
-
 /// Generate a content embedding similar to a given domain.
 /// Adds controlled noise via item_seed so it is close but not identical.
 pub(super) fn content_embedding_for_domain(domain_idx: usize, item_seed: u64) -> Vec<f32> {

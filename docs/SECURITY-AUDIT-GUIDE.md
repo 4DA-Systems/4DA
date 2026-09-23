@@ -553,21 +553,7 @@ grep "keygen.sh" src-tauri/src/settings/license/keygen.rs
 
 ---
 
-### 4.13 Community Intelligence
-
-**File:** `src-tauri/src/community_intelligence.rs`
-
-Opt-in feature (disabled by default, see `CommunityIntelligenceConfig::default()` at line 24: `enabled: false`). When enabled, shares anonymous scoring patterns -- never content, URLs, identity, preferences, or tech stack (as stated in the module docstring, lines 1-4).
-
-**Verification:**
-```bash
-# Confirm opt-in default
-grep -A 5 "impl Default for CommunityIntelligenceConfig" src-tauri/src/community_intelligence.rs
-```
-
----
-
-### 4.14 Waitlist Signups
+### 4.13 Waitlist Signups
 
 **File:** `src-tauri/src/waitlist.rs`
 
@@ -741,7 +727,6 @@ Quick reference for all security-relevant files:
 | `src-tauri/src/webhooks/dispatch.rs` | ~640 | Enterprise webhook dispatch (HMAC-SHA256) |
 | `src-tauri/src/sso_crypto.rs` | ~200 | OIDC JWKS / SAML signature verification |
 | `src-tauri/src/toolkit_http.rs` | ~200 | HTTP probe with domain allowlist |
-| `src-tauri/src/community_intelligence.rs` | ~200 | Opt-in pattern sharing (disabled by default) |
 | `src-tauri/src/waitlist.rs` | ~60 | Local-only waitlist storage |
 | `src-tauri/src/audit.rs` | ~200 | Enterprise audit log |
 | `src-tauri/src/lib.rs` | ~897 | IPC handler registration (lines 471-891) |

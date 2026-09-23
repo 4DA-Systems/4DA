@@ -470,12 +470,10 @@ mod tests {
             OsvAffected {
                 package: Some(pkg("next", "npm")),
                 ranges: Some(vec![semver("13.4.6", "15.5.16")]),
-                versions: None,
             },
             OsvAffected {
                 package: Some(pkg("next", "npm")),
                 ranges: Some(vec![semver("16.0.0", "16.2.5")]),
-                versions: None,
             },
         ]);
         let merged = merged_ranges_by_package(&v);
@@ -500,7 +498,6 @@ mod tests {
         let v = vuln_with(vec![OsvAffected {
             package: Some(pkg("js-yaml", "npm")),
             ranges: Some(vec![semver("0", "4.2.0")]),
-            versions: None,
         }]);
         let item = live_vuln_to_grounded_item(&v, "js-yaml", "npm", "4.1.1");
         assert_eq!(item.source_type, "osv");
@@ -534,7 +531,6 @@ mod tests {
                 },
                 semver("0", "2.2.0"),
             ]),
-            versions: None,
         }]);
         assert_eq!(
             fixed_version_for(&v, "torch", "PyPI").as_deref(),

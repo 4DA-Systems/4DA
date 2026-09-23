@@ -28,13 +28,10 @@ pub use crate::monitoring_notifications::{
 
 /// A notification that was below the quality threshold and batched for the next briefing
 #[derive(Debug, Clone)]
-// REMOVE BY 2026-11-15 — extended 2026-09-24 in #681: the expired date failed the CI date gate on every PR; the dedicated dead-code pass decides delete-vs-wire (was: file touched for the tuner freeze): struct is production-live, only signal_priority is test-only; owner to trim the field
-#[allow(dead_code)] // Reason: signal_priority field only read in tests; other fields used in production
 pub struct BatchedNotification {
     pub title: String,
     pub source_type: String,
     pub score: f32,
-    pub signal_priority: Option<String>,
 }
 
 /// Global monitoring state

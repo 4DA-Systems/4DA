@@ -1274,23 +1274,20 @@ fn apply_topic_clustering(items: &mut Vec<BriefingItem>) -> bool {
     }
 
     // Build cluster candidates by joining briefing items with their embeddings
-    let embedding_map: std::collections::HashMap<i64, (Vec<f32>, Option<String>)> = embedding_data
-        .into_iter()
-        .map(|(id, _title, _source, emb, ct)| (id, (emb, ct)))
-        .collect();
+    let embedding_map: std::collections::HashMap<i64, Vec<f32>> =
+        embedding_data.into_iter().collect();
 
     let candidates: Vec<crate::topic_clustering::ClusterCandidate> = items
         .iter()
         .filter_map(|item| {
             let id = item.item_id?;
-            let (embedding, content_type) = embedding_map.get(&id)?.clone();
+            let embedding = embedding_map.get(&id)?.clone();
             Some(crate::topic_clustering::ClusterCandidate {
                 id,
                 score: item.score,
                 source_type: item.source_type.clone(),
                 embedding,
                 title: item.title.clone(),
-                content_type,
             })
         })
         .collect();

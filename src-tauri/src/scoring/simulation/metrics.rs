@@ -65,13 +65,6 @@ impl SimMetrics {
                     self.tn += 1;
                 }
             }
-            ExpectedOutcome::Excluded => {
-                if result.excluded {
-                    self.tn += 1;
-                } else {
-                    self.fp += 1;
-                }
-            }
             ExpectedOutcome::MildBorderline => {}
         }
     }

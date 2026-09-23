@@ -46,26 +46,14 @@ pub const ADVISOR_ADJUSTMENT_CAP: f32 = 0.15;
 /// disagreements are visible without being acted on.
 pub const DISAGREEMENT_THRESHOLD: f32 = 0.30;
 
-/// Output of reconciling pipeline + advisors.
-///
-/// `pipeline_score` and `applied_adjustment` are currently unread by the
-/// callers wired in Phase 2 (the rerank path only needs `final_rank` and
-/// `disagreement`). They are kept on the struct because the Phase 7
-/// receipts UI ("Why this score?") will render the adjustment explicitly,
-/// and the tests exercise them as a regression guard for the math.
+/// Output of reconciling pipeline + advisors. The applied adjustment is
+/// `final_rank - pipeline_score` (before the [0, 1] clamp) and is not carried
+/// separately: no caller reads it (the rerank path needs only `final_rank`
+/// and `disagreement`).
 #[derive(Debug, Clone)]
-// Expired removal marker dated 2026-08-01 cleared 2026-08-12: the Phase 7 receipts UI that
-// consumes `pipeline_score`/`applied_adjustment` has not landed, so retention is an
-// owner call rather than a rolled-forward date. The tests below still guard the math.
-#[allow(dead_code)] // REMOVE BY 2026-11-12
 pub struct Reconciled {
     /// The final rank. `pipeline_score + clamped_adjustment`, in [0.0, 1.0].
     pub final_rank: f32,
-    /// `pipeline_score` as provided (for caller's explanation code).
-    pub pipeline_score: f32,
-    /// The adjustment actually applied (post-clamp). Negative means
-    /// advisors pushed the rank down; positive means up.
-    pub applied_adjustment: f32,
     /// `Some(kind)` when pipeline and advisor(s) disagreed by more than
     /// the threshold; `None` when they agreed or no advisor spoke.
     pub disagreement: Option<DisagreementKind>,
@@ -81,8 +69,6 @@ pub fn reconcile(pipeline_score: f32, advisors: &[AdvisorSignal]) -> Reconciled 
     if advisors.is_empty() {
         return Reconciled {
             final_rank: pipeline_score.clamp(0.0, 1.0),
-            pipeline_score,
-            applied_adjustment: 0.0,
             disagreement: None,
         };
     }
@@ -106,8 +92,6 @@ pub fn reconcile(pipeline_score: f32, advisors: &[AdvisorSignal]) -> Reconciled 
 
     Reconciled {
         final_rank,
-        pipeline_score,
-        applied_adjustment,
         disagreement,
     }
 }
@@ -179,7 +163,6 @@ mod tests {
     fn no_advisors_returns_pipeline_score_unchanged() {
         let r = reconcile(0.73, &[]);
         assert!((r.final_rank - 0.73).abs() < 1e-5);
-        assert!((r.applied_adjustment - 0.0).abs() < 1e-5);
         assert!(r.disagreement.is_none());
     }
 
@@ -188,7 +171,6 @@ mod tests {
         // Pipeline 0.70, advisor 0.75 → delta +0.05, within cap → final 0.75.
         let r = reconcile(0.70, &[advisor(0.75)]);
         assert!((r.final_rank - 0.75).abs() < 1e-5);
-        assert!((r.applied_adjustment - 0.05).abs() < 1e-5);
         assert!(r.disagreement.is_none());
     }
 
@@ -198,7 +180,6 @@ mod tests {
         // Disagreement fires because |delta| > 0.30.
         let r = reconcile(0.50, &[advisor(0.95)]);
         assert!((r.final_rank - 0.65).abs() < 1e-5);
-        assert!((r.applied_adjustment - 0.15).abs() < 1e-5);
         assert_eq!(r.disagreement, Some(DisagreementKind::AdvisorEnthusiastic));
     }
 
@@ -208,7 +189,6 @@ mod tests {
         // Disagreement fires (advisor skeptical).
         let r = reconcile(0.80, &[advisor(0.20)]);
         assert!((r.final_rank - 0.65).abs() < 1e-5);
-        assert!((r.applied_adjustment - (-0.15)).abs() < 1e-5);
         assert_eq!(r.disagreement, Some(DisagreementKind::AdvisorSkeptical));
     }
 

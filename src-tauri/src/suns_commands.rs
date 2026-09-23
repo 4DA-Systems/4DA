@@ -57,7 +57,6 @@ mod tests {
     fn test_sun_status_construction() {
         let status = SunStatus {
             id: "hardware_monitor".to_string(),
-            name: "Hardware Monitor".to_string(),
             module_id: "S".to_string(),
             enabled: true,
             interval_secs: 86400,
@@ -78,7 +77,6 @@ mod tests {
     fn test_sun_status_with_none_fields() {
         let status = SunStatus {
             id: "test_sun".to_string(),
-            name: "Test Sun".to_string(),
             module_id: "T".to_string(),
             enabled: false,
             interval_secs: 3600,

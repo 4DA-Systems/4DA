@@ -20,8 +20,6 @@ pub struct SimulatedPersona {
     pub interests: Vec<(&'static str, f32)>,
     pub tech_stack: Vec<&'static str>,
     pub dependencies: Vec<&'static str>,
-    #[allow(dead_code)] // REMOVE BY 2026-11-26 — persona metadata for test reporting
-    pub role: &'static str,
     pub expected_topics: Vec<&'static str>,
     pub anti_topics: Vec<&'static str>,
 }
@@ -145,7 +143,6 @@ fn rust_systems_dev() -> SimulatedPersona {
         ],
         tech_stack: vec!["rust", "tokio", "serde", "wasm"],
         dependencies: vec!["tokio", "serde", "axum", "sqlx", "tracing"],
-        role: "systems",
         expected_topics: vec![
             "rust",
             "cargo",
@@ -188,7 +185,6 @@ fn react_frontend_dev() -> SimulatedPersona {
         ],
         tech_stack: vec!["react", "typescript", "nextjs", "tailwind"],
         dependencies: vec!["react", "next", "typescript", "tailwindcss", "prisma"],
-        role: "frontend",
         expected_topics: vec![
             "react",
             "typescript",
@@ -230,7 +226,6 @@ fn ml_engineer() -> SimulatedPersona {
         ],
         tech_stack: vec!["python", "pytorch", "cuda", "huggingface"],
         dependencies: vec!["torch", "transformers", "numpy", "pandas", "scikit-learn"],
-        role: "ml",
         expected_topics: vec![
             "python",
             "pytorch",
@@ -273,7 +268,6 @@ fn devops_platform() -> SimulatedPersona {
         ],
         tech_stack: vec!["kubernetes", "docker", "terraform", "prometheus"],
         dependencies: vec!["helm", "terraform", "prometheus", "grafana", "ansible"],
-        role: "devops",
         expected_topics: vec![
             "kubernetes",
             "docker",
@@ -308,7 +302,6 @@ fn mobile_dev() -> SimulatedPersona {
         ],
         tech_stack: vec!["react native", "swift", "kotlin", "flutter"],
         dependencies: vec!["react-native", "expo", "swift", "kotlin"],
-        role: "mobile",
         expected_topics: vec![
             "mobile",
             "ios",
@@ -349,7 +342,6 @@ fn security_engineer() -> SimulatedPersona {
         ],
         tech_stack: vec!["security", "cryptography", "pentest", "sast"],
         dependencies: vec!["openssl", "ring", "rustls", "nmap"],
-        role: "security",
         expected_topics: vec![
             "security",
             "vulnerability",
@@ -384,7 +376,6 @@ fn data_engineer() -> SimulatedPersona {
         ],
         tech_stack: vec!["sql", "spark", "kafka", "dbt"],
         dependencies: vec!["pyspark", "kafka", "dbt-core", "airflow", "snowflake"],
-        role: "data",
         expected_topics: vec![
             "sql",
             "data pipeline",
@@ -425,7 +416,6 @@ fn indie_hacker() -> SimulatedPersona {
         ],
         tech_stack: vec!["typescript", "stripe", "vercel", "postgres"],
         dependencies: vec!["stripe", "next", "supabase", "resend"],
-        role: "indie",
         expected_topics: vec![
             "saas",
             "pricing",
@@ -465,7 +455,6 @@ fn game_dev() -> SimulatedPersona {
         ],
         tech_stack: vec!["unity", "godot", "opengl", "vulkan"],
         dependencies: vec!["unity", "godot", "glfw", "sdl2"],
-        role: "gamedev",
         expected_topics: vec![
             "game",
             "unity",
@@ -506,7 +495,6 @@ fn backend_java_go() -> SimulatedPersona {
         ],
         tech_stack: vec!["go", "java", "grpc", "postgres"],
         dependencies: vec!["gin", "spring", "grpc", "postgres", "redis"],
-        role: "backend",
         expected_topics: vec![
             "go",
             "golang",

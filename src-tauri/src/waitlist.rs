@@ -4,23 +4,9 @@
 //! Privacy-first: signups stored in local SQLite, never sent externally.
 //! When tiers activate, these contacts are the first to be notified.
 
-use serde::{Deserialize, Serialize};
 use tracing::info;
 
 use crate::error::Result;
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct WaitlistEntry {
-    pub id: i64,
-    pub tier: String,
-    pub email: String,
-    pub name: Option<String>,
-    pub team_size: Option<String>,
-    pub company: Option<String>,
-    pub role: Option<String>,
-    pub source: String,
-    pub signed_up_at: String,
-}
 
 #[tauri::command]
 pub fn save_waitlist_signup(
@@ -47,27 +33,4 @@ pub fn save_waitlist_signup(
         "tier": tier,
         "email": email,
     }))
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_waitlist_entry_serialization() {
-        let entry = WaitlistEntry {
-            id: 1,
-            tier: "team".to_string(),
-            email: "dev@company.com".to_string(),
-            name: Some("Jane".to_string()),
-            team_size: Some("10".to_string()),
-            company: Some("Acme".to_string()),
-            role: Some("Eng Manager".to_string()),
-            source: "in-app".to_string(),
-            signed_up_at: "2026-03-19T00:00:00Z".to_string(),
-        };
-        let json = serde_json::to_value(&entry).unwrap();
-        assert_eq!(json["tier"], "team");
-        assert_eq!(json["email"], "dev@company.com");
-    }
 }

@@ -16,16 +16,16 @@
 //!     the same `JudgeRequest` in parallel, their `Validated<...>`
 //!     outputs feed a disagreement analyzer. No model-specific code.
 //!
-//!   - Phase 7 (Receipts UI): the UI renders `Validated<JudgeResponse>`
+//!   - Phase 7 (Receipts UI): the UI renders the persisted provenance rows
 //!     — identity, prompt_version, calibration_id — as a "why this
 //!     score?" drawer. The user sees which model judged each item.
 //!
 //! Today there is ONE concrete impl (`LlmJudgeCore`) wrapping the existing
 //! `RelevanceJudge`. That is intentionally minimal: the trait exists so we
 //! can introduce the second and third impls without re-plumbing the rerank
-//! loop each time. The shape of `Validated<T>` already carries the provenance
-//! fields Phase 3 wrote into the DB; the trait is the runtime counterpart
-//! of that persisted record.
+//! loop each time. The trait's `identity()` / `prompt_version()` /
+//! `calibration_id()` are the runtime counterpart of the provenance record
+//! Phase 3 writes into the DB.
 //!
 //! See `docs/strategy/INTELLIGENCE-MESH.md` §2 Layer 2 for the full design.
 
@@ -59,30 +59,18 @@ pub struct JudgeResponse {
     pub output_tokens: u64,
 }
 
-/// A value produced by an `IntelligenceCore`, stamped with the provenance
-/// needed for receipts, audit, and calibration cohort queries.
+/// A value produced by an `IntelligenceCore`.
 ///
-/// `raw_response_hash` is reserved for Phase 6 (Shadow Arena) where two
-/// peers' raw responses need stable IDs for comparison. Until then it's
-/// `None`; callers should not rely on its presence.
-///
-/// The metadata fields (`identity`, `prompt_version`, `calibration_id`,
-/// `raw_response_hash`) are populated today but not yet read by the
-/// rerank loop — it captures identity/prompt_version once up front and
-/// trusts them to be stable for the call. Phase 7 receipts UI will read
-/// them per-response to render "Why this score?", at which point the
-/// `allow(dead_code)` here becomes removable.
+/// Provenance is NOT carried per response. The rerank loop reads it once per
+/// pass from the core itself (`identity()`, `prompt_version()`,
+/// `calibration_id()` — `CalibratedCore` overrides the last) and persists it
+/// through `provenance::record_batch`; that table is what a receipts view
+/// reads. Per-response copies of those fields were populated but never read,
+/// and were deleted 2026-09-24. Add a field here only together with its first
+/// reader (e.g. a Phase 6 shadow-arena response hash).
 #[derive(Debug, Clone)]
-// The provenance fields below are populated on every advisor response but not yet
-// read anywhere (the Phase 7 receipts UI is their consumer). Expired
-// removal marker dated 2026-08-01 cleared 2026-08-12 rather than rolled forward.
-#[allow(dead_code)] // REMOVE BY 2026-11-12
 pub struct Validated<T> {
     pub value: T,
-    pub identity: ModelIdentity,
-    pub prompt_version: String,
-    pub calibration_id: Option<String>,
-    pub raw_response_hash: Option<String>,
 }
 
 /// The Advisory Mesh trait. Every LLM-backed advisor in 4DA implements this.
@@ -165,10 +153,6 @@ impl IntelligenceCore for LlmJudgeCore {
                 input_tokens,
                 output_tokens,
             },
-            identity: self.identity.clone(),
-            prompt_version: crate::llm_judge::PROMPT_VERSION.to_string(),
-            calibration_id: Some(PRE_MESH_CALIBRATION_ID.to_string()),
-            raw_response_hash: None, // Phase 6
         })
     }
 
@@ -218,10 +202,6 @@ mod tests {
                     input_tokens: self.input_tokens,
                     output_tokens: self.output_tokens,
                 },
-                identity: self.identity.clone(),
-                prompt_version: "mock-v0".to_string(),
-                calibration_id: None,
-                raw_response_hash: None,
             })
         }
         fn estimate_cost_cents(&self, _i: u64, _o: u64) -> u64 {
@@ -273,20 +253,12 @@ mod tests {
         assert!(!validated.value.judgments[1].relevant);
     }
 
-    #[tokio::test]
-    async fn mock_core_stamps_identity_and_prompt_version() {
+    #[test]
+    fn mock_core_reports_identity_and_prompt_version() {
         let core = MockJudgeCore::new("ollama", "llama3.2", vec![]);
-        let req = JudgeRequest {
-            context_summary: "x".to_string(),
-            items: vec![],
-        };
-        let validated = core.judge(req).await.unwrap();
-
-        assert_eq!(validated.identity.provider, "ollama");
-        assert_eq!(validated.identity.model, "llama3.2");
-        assert_eq!(validated.prompt_version, "mock-v0");
-        assert!(validated.calibration_id.is_none());
-        assert!(validated.raw_response_hash.is_none());
+        assert_eq!(core.identity().provider, "ollama");
+        assert_eq!(core.identity().model, "llama3.2");
+        assert_eq!(core.prompt_version(), "mock-v0");
     }
 
     #[tokio::test]
@@ -316,36 +288,11 @@ mod tests {
         let v_b = core_b.judge(req).await.unwrap();
 
         // Identities distinct — this is what the shadow arena will join on.
-        assert_ne!(v_a.identity.hash(), v_b.identity.hash());
+        assert_ne!(core_a.identity().hash(), core_b.identity().hash());
         // Different judgments — peers disagreed, which is the whole point.
         assert_ne!(
             v_a.value.judgments[0].confidence,
             v_b.value.judgments[0].confidence
-        );
-    }
-
-    #[test]
-    fn validated_exposes_provenance_fields_expected_by_receipts_ui() {
-        // Phase 7 reads these four fields to render "Why this score?".
-        // Guard: if any is renamed, a huge surface renames silently —
-        // tests pin the field names.
-        let v = Validated {
-            value: JudgeResponse {
-                judgments: vec![],
-                input_tokens: 0,
-                output_tokens: 0,
-            },
-            identity: ModelIdentity::new("p", "m"),
-            prompt_version: "judge-v1-2026-04-15".to_string(),
-            calibration_id: Some("pre-mesh".to_string()),
-            raw_response_hash: None,
-        };
-        let _ = (
-            &v.value,
-            &v.identity,
-            &v.prompt_version,
-            &v.calibration_id,
-            &v.raw_response_hash,
         );
     }
 }

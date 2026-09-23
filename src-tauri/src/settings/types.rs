@@ -4,7 +4,6 @@
 //! All struct and enum definitions, Default impls, serde helpers,
 //! and simple impl blocks for settings types.
 
-use crate::community_intelligence::CommunityIntelligenceConfig;
 use crate::digest::DigestConfig;
 use serde::{Deserialize, Serialize};
 use zeroize::Zeroize;
@@ -711,9 +710,6 @@ pub struct Settings {
     /// Dedicated translation provider configuration (DeepL, Google, Azure)
     #[serde(default)]
     pub translation: TranslationConfig,
-    /// Community intelligence configuration (opt-in anonymous pattern sharing)
-    #[serde(default)]
-    pub community_intelligence: Option<CommunityIntelligenceConfig>,
     /// Team relay configuration (encrypted metadata sync between team members)
     #[serde(default)]
     pub team_relay: Option<crate::team_sync_types::TeamRelayConfig>,
@@ -773,10 +769,6 @@ impl std::fmt::Debug for Settings {
             .field("license", &self.license)
             .field("locale", &self.locale)
             .field("translation", &self.translation)
-            .field(
-                "community_intelligence",
-                &self.community_intelligence.is_some(),
-            )
             .field("team_relay", &self.team_relay.is_some())
             .field("network", &self.network)
             .field("privacy", &self.privacy)
@@ -961,7 +953,6 @@ impl Default for Settings {
             license: LicenseConfig::default(),
             locale: LocaleConfig::default(),
             translation: TranslationConfig::default(),
-            community_intelligence: None,
             team_relay: None,
             network: NetworkConfig::default(),
             privacy: PrivacyConfig::default(),

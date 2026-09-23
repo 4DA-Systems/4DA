@@ -66,15 +66,6 @@ const PHASE1_BUDGET_SECS: u64 = 10;
 /// How often to write the heartbeat file (steady state).
 const HEARTBEAT_INTERVAL_SECS: u64 = 60;
 
-/// Heartbeat is considered stale if the file is older than this. The
-/// frontend uses this threshold when deciding whether to show the
-/// recovery panel.
-/// Test-only in Rust: the frontend carries its own copy of this threshold, so
-/// nothing here reads it outside the invariant test that keeps it above
-/// `HEARTBEAT_INTERVAL_SECS`. (Expired removal marker dated 2026-08-01 cleared 2026-08-12.)
-#[allow(dead_code)] // REMOVE BY 2026-11-12
-pub const HEARTBEAT_STALE_SECS: u64 = 180;
-
 /// One-shot guard so phase-0 logging fires exactly once regardless of how
 /// many times `mark_phase0_complete` gets called (defensive).
 static PHASE0_MARKED: AtomicBool = AtomicBool::new(false);
@@ -472,14 +463,6 @@ fn write_crash_history(path: &Path, history: &[u64]) -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn heartbeat_stale_threshold_is_longer_than_interval() {
-        // If the stale threshold were <= the write interval, the frontend
-        // would occasionally see the heartbeat as stale even when the
-        // backend is healthy. Enforce the invariant.
-        assert!(HEARTBEAT_STALE_SECS > HEARTBEAT_INTERVAL_SECS * 2);
-    }
 
     #[test]
     fn phase0_budget_is_reasonable() {

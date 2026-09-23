@@ -172,7 +172,6 @@ fn test_vuln_to_source_item_full() {
                     serde_json::json!({"fixed": "6.4.5"}),
                 ]),
             }]),
-            versions: None,
         }]),
         references: Some(vec![
             OsvReference {
@@ -447,7 +446,6 @@ fn test_multiple_affected_packages() {
                     ecosystem: "npm".to_string(),
                 }),
                 ranges: None,
-                versions: None,
             },
             OsvAffected {
                 package: Some(OsvPackage {
@@ -455,7 +453,6 @@ fn test_multiple_affected_packages() {
                     ecosystem: "PyPI".to_string(),
                 }),
                 ranges: None,
-                versions: None,
             },
         ]),
         references: None,

@@ -396,7 +396,7 @@ pub(crate) async fn apply_llm_reranking(
     //   3. Wrap with CalibratedCore. When no curve exists, CalibratedCore
     //      is a transparent pass-through — matches pre-mesh behavior
     //      exactly, so zero risk. When a curve exists, it applies and
-    //      overrides calibration_id on each Validated response.
+    //      overrides the core's calibration_id().
     //
     // The fitter that PRODUCES curves (Phase 5b.2) is not yet built, so in
     // practice every rerank today is pass-through. This commit lands the
