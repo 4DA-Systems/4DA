@@ -46,3 +46,46 @@ test("spawn failure (ENOENT) is inconclusive and names the cause", () => {
   assert.strictEqual(o.severity, "warning");
   assert.match(o.message, /inconclusive/);
 });
+
+// ── Merge-gate health (2026-09-24: "all clear" while main could not merge) ──
+const { classifyMergeGateHealth } = require("./sentinel-scan.cjs");
+const marker = (rel, date) => ({ rel, lineNo: 1, date });
+
+test("merge gate: nothing known and nothing due is healthy (no findings)", () => {
+  assert.deepStrictEqual(classifyMergeGateHealth({}), []);
+});
+
+test("merge gate: UNKNOWN CI state is never reported (gh offline must not page)", () => {
+  const out = classifyMergeGateHealth({ scheduledValidate: null, nightlyAudit: null });
+  assert.deepStrictEqual(out, []);
+});
+
+test("merge gate: green CI is not a finding", () => {
+  const out = classifyMergeGateHealth({ scheduledValidate: "success", nightlyAudit: "success" });
+  assert.deepStrictEqual(out, []);
+});
+
+test("merge gate: an expired unallowlisted marker is CRITICAL (it blocks every PR)", () => {
+  const out = classifyMergeGateHealth({ blockingExpired: [marker("src-tauri/src/lib.rs", "2026-09-15")] });
+  assert.strictEqual(out.length, 1);
+  assert.strictEqual(out[0].severity, "critical");
+  assert.match(out[0].detail, /lib\.rs:1 due 2026-09-15/);
+});
+
+test("merge gate: red scheduled Validate on main is CRITICAL; red nightly is a WARNING", () => {
+  const out = classifyMergeGateHealth({ scheduledValidate: "failure", nightlyAudit: "failure" });
+  assert.deepStrictEqual(out.map((f) => f.severity), ["critical", "warning"]);
+});
+
+test("merge gate: a cancelled scheduled run is not 'main is red'", () => {
+  assert.deepStrictEqual(classifyMergeGateHealth({ scheduledValidate: "cancelled" }), []);
+});
+
+test("merge gate: due-soon deadlines warn and name the EARLIEST date", () => {
+  const out = classifyMergeGateHealth({
+    dueSoon: [marker("b.rs", "2026-10-05"), marker("a.rs", "2026-10-01")],
+  });
+  assert.strictEqual(out.length, 1);
+  assert.strictEqual(out[0].severity, "warning");
+  assert.match(out[0].message, /2 REMOVE BY deadline\(s\).*earliest 2026-10-01/);
+});

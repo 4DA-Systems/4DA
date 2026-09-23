@@ -22,6 +22,14 @@
 # Labels route PRs to the right triage lane. Reviewers/assignees default
 # to the sole maintainer until the team expands (see CODEOWNERS).
 #
+# Grouping: every block batches its minor + patch bumps into ONE weekly PR
+# (`minor-and-patch`); majors still arrive one PR each, because a major is a
+# decision, not a chore. Before this, 36 Dependabot PRs sat open (the oldest
+# from 2026-07-13), 18 of them green and mergeable yet never merged — one PR per
+# package per week outran a single maintainer, and each PR also pays a full
+# merge-queue run. Security updates are not grouped (groups default to
+# version updates), so an advisory fix still lands as its own small PR.
+#
 # Adding a new workspace: drop it in with its own `- package-ecosystem:`
 # block. Do NOT omit a maintainer-owned package.json just to keep the
 # queue short — that defeats the purpose of the gate.
@@ -37,6 +45,9 @@ updates:
       time: "06:00"
       timezone: "Etc/UTC"
     open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
     labels:
       - "dependencies"
       - "github-actions"
@@ -57,6 +68,9 @@ updates:
       time: "06:00"
       timezone: "Etc/UTC"
     open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
     labels:
       - "dependencies"
       - "rust"
@@ -83,6 +97,9 @@ updates:
       time: "06:00"
       timezone: "Etc/UTC"
     open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
     labels:
       - "dependencies"
       - "rust"
@@ -104,6 +121,9 @@ updates:
       time: "06:00"
       timezone: "Etc/UTC"
     open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
     labels:
       - "dependencies"
       - "frontend"
@@ -124,6 +144,9 @@ updates:
       time: "06:00"
       timezone: "Etc/UTC"
     open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
     labels:
       - "dependencies"
       - "mcp"
@@ -144,6 +167,9 @@ updates:
       time: "06:00"
       timezone: "Etc/UTC"
     open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
     labels:
       - "dependencies"
       - "mcp"
@@ -164,6 +190,9 @@ updates:
       time: "06:00"
       timezone: "Etc/UTC"
     open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
     labels:
       - "dependencies"
       - "vscode"
@@ -184,6 +213,9 @@ updates:
       time: "06:00"
       timezone: "Etc/UTC"
     open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
     labels:
       - "dependencies"
       - "paddle"
