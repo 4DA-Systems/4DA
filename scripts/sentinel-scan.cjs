@@ -210,6 +210,50 @@ function classifyErrorDomain(filePath) {
   return { domain: "Rust Systems", expert: "4da-rust-expert" };
 }
 
+/// Pull error messages and their source locations out of cargo output, in
+/// EITHER message format. Pure — exported for tests.
+///
+/// The scan runs `cargo check --message-format=short`, which prints each
+/// diagnostic on one line: `src/x.rs:12:5: error[E0425]: cannot find ...`.
+/// The old parser expected the human format (`error[...]` then `  --> file`),
+/// so under `short` it never saw a location. Every real compile error was
+/// reduced to cargo's generic "could not compile" summary, with no file and no
+/// per-domain routing, and the GAP 3 routing below never fired.
+function parseCargoDiagnostics(output) {
+  const lines = String(output || "").split("\n").map((l) => l.replace(/\r$/, ""));
+  const errors = [];
+  const errorFiles = [];
+  const SHORT = /^(.+?\.rs):(\d+):(\d+): (error(?:\[E\d+\])?: .*)$/;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const short = SHORT.exec(line);
+    if (short) {
+      errors.push(short[4]);
+      // cargo on Windows prints `src\scoring\x.rs`; classifyErrorDomain matches
+      // forward-slash segments, so normalise or every error routes to the default.
+      errorFiles.push(`${short[1].replace(/\\/g, "/")}:${short[2]}:${short[3]}`);
+      continue;
+    }
+    // Human format: an `error...` header, its location on a following `-->` line.
+    if (/^error(\[E\d+\])?: /.test(line) && !/^error: (could not compile|aborting due to)/.test(line)) {
+      errors.push(line);
+      for (let j = i + 1; j < Math.min(i + 6, lines.length); j++) {
+        const loc = /^\s*-->\s*(.+)$/.exec(lines[j]);
+        if (loc) {
+          errorFiles.push(loc[1].trim().replace(/\\/g, "/"));
+          break;
+        }
+      }
+    }
+  }
+  // Cargo's own summary is kept only when nothing more specific was found, so
+  // a failure is never reported as "0 errors".
+  if (errors.length === 0) {
+    for (const line of lines) if (/^error: (could not compile|aborting due to)/.test(line)) errors.push(line);
+  }
+  return { errors: errors.slice(0, 5), errorFiles: errorFiles.slice(0, 10) };
+}
+
 function checkCompilation() {
   if (QUICK_MODE) return;
 
@@ -231,16 +275,7 @@ function checkCompilation() {
   });
 
   if (!result.ok) {
-    const errors = result.output
-      .split("\n")
-      .filter((l) => /^error/.test(l))
-      .slice(0, 5);
-
-    const errorFiles = result.output
-      .split("\n")
-      .filter((l) => /^\s*-->/.test(l))
-      .map((l) => l.trim().replace(/^-->\s*/, ""))
-      .slice(0, 10);
+    const { errors, errorFiles } = parseCargoDiagnostics(result.output);
 
     // GAP 3 fix: route to ALL affected domains, not just the first
     const domainExperts = new Map();
@@ -743,7 +778,7 @@ function checkGitHygiene() {
 /// means UNKNOWN (gh missing, offline, no completed run); unknown is never a
 /// finding, same rule as classifyTscResult: a detector must not report what it
 /// did not observe.
-function classifyMergeGateHealth({ blockingExpired = [], dueSoon = [], scheduledValidate = null, nightlyAudit = null }) {
+function classifyMergeGateHealth({ blockingExpired = [], dueSoon = [], scheduledValidate = null, nightlyAudit = null, stalePrs = null }) {
   const out = [];
   if (blockingExpired.length > 0) {
     out.push({
@@ -766,6 +801,21 @@ function classifyMergeGateHealth({ blockingExpired = [], dueSoon = [], scheduled
       detail: "gh run list --workflow nightly-audit.yml -L 1",
     });
   }
+  // Stranded work: finished-looking PRs nobody decided on. 36 Dependabot PRs
+  // (the oldest 73 days) and a 66-day-old feature PR sat open on 2026-09-24,
+  // 18 of them green. `null` = could not ask GitHub: unknown, never a finding.
+  if (Array.isArray(stalePrs) && stalePrs.length > 0) {
+    const oldest = [...stalePrs].sort((a, b) => b.ageDays - a.ageDays)[0];
+    out.push({
+      severity: "warning",
+      message: `${stalePrs.length} open PR(s) older than ${STALE_PR_DAYS} days (oldest #${oldest.number}, ${oldest.ageDays}d) — merge or close each`,
+      detail: [...stalePrs]
+        .sort((a, b) => b.ageDays - a.ageDays)
+        .slice(0, 5)
+        .map((p) => `#${p.number} ${p.ageDays}d ${p.title || ""}`.trim())
+        .join("\n"),
+    });
+  }
   if (dueSoon.length > 0) {
     const sorted = [...dueSoon].sort((a, b) => a.date.localeCompare(b.date));
     out.push({
@@ -775,6 +825,28 @@ function classifyMergeGateHealth({ blockingExpired = [], dueSoon = [], scheduled
     });
   }
   return out;
+}
+
+const STALE_PR_DAYS = 14;
+
+/// Non-draft open PRs older than STALE_PR_DAYS, or null when GitHub cannot be asked.
+function stalePullRequests(now = Date.now()) {
+  const result = safeExec("gh pr list --state open --limit 200 --json number,title,createdAt,isDraft", {
+    timeout: 15000,
+  });
+  if (!result.ok || result.timedOut) return null;
+  try {
+    return JSON.parse(result.output)
+      .filter((p) => !p.isDraft)
+      .map((p) => ({
+        number: p.number,
+        title: String(p.title || "").slice(0, 60),
+        ageDays: Math.floor((now - Date.parse(p.createdAt)) / 86400000),
+      }))
+      .filter((p) => p.ageDays > STALE_PR_DAYS);
+  } catch {
+    return null;
+  }
 }
 
 /// Latest COMPLETED conclusion of a workflow, or null when it cannot be known.
@@ -807,6 +879,7 @@ function checkMergeGateHealth() {
     dueSoon,
     scheduledValidate: latestConclusion("validate.yml", "--event schedule --branch main"),
     nightlyAudit: latestConclusion("nightly-audit.yml", "--branch main"),
+    stalePrs: stalePullRequests(),
   });
   if (findings.length === 0) {
     addSignal("merge_gate", "ok", "CI", "", "Merge gate healthy (no expired or imminent deadlines, main not known red)");
@@ -915,5 +988,5 @@ if (require.main === module) {
   // Exported for negative tests (scripts/sentinel-scan.test.cjs) — a
   // detector fix without a negative test is how the last five detector
   // bugs shipped (recipe-gate-precision-negative-test).
-  module.exports = { classifyTscResult, classifyMergeGateHealth, safeExec };
+  module.exports = { classifyTscResult, classifyMergeGateHealth, parseCargoDiagnostics, safeExec };
 }
