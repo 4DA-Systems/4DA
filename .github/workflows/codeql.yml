@@ -1,0 +1,69 @@
+# CodeQL — code scanning that can GATE the merge queue.
+#
+# Replaces CodeQL "default setup" (enabled 2026-09-24). Default setup analyses
+# push and pull_request only. It never posts a result on the temporary commit a
+# merge queue builds, so a ruleset `code_scanning` rule would leave every queued
+# PR waiting forever for a result that never arrives. This advanced-setup
+# workflow adds `merge_group`, which is the one thing that makes enforcement
+# possible: a PR that introduces a high/critical alert cannot reach main.
+#
+# Same languages and query suite as the default setup it replaces. Every
+# language uses build-mode `none`, so nothing is compiled and no build
+# toolchain is needed.
+#
+# Timing (measured on the default-setup run 35894846966): rust ~18 min,
+# javascript-typescript ~2 min, actions <1 min. That is under Hermetic's
+# ~23 min, so the queue's wall-clock does not grow.
+#
+# Activation order matters (see the PR body): merge this, switch the repo's
+# default setup OFF (the two cannot both own these languages), then add the
+# ruleset `code_scanning` rule.
+
+name: CodeQL
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  merge_group: {}
+  schedule:
+    # Weekly, so newly published queries find old code even when nothing merges.
+    - cron: '30 4 * * 1'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      security-events: write
+      actions: read
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [actions, javascript-typescript, rust]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: none
+          # The `default` suite, which is what default setup ran and what the
+          # 2026-09-24 triage cleared. `security-extended` finds more, but
+          # adopting it should be its own triage, not a side effect of the gate.
+
+      - name: Analyze
+        uses: github/codeql-action/analyze@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
+        with:
+          category: /language:${{ matrix.language }}
