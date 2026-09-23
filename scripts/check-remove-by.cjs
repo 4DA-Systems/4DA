@@ -209,19 +209,19 @@ function scanRepo(root = ROOT, today = resolveToday()) {
     src: fs.readFileSync(f, 'utf8'),
   }));
 
-  return { today, ...analyzeSources(sources, today, allow) };
+  return { today, filesScanned: files.length, ...analyzeSources(sources, today, allow) };
 }
 
 /** CLI entry point. Returns the process exit code. */
 function main(argv) {
   const ciMode = argv.includes('--ci');
   const verbose = argv.includes('--verbose');
-  const { today, expired, dueSoon, upcoming } = scanRepo();
+  const { today, filesScanned, expired, dueSoon, upcoming } = scanRepo();
   const blocking = expired.filter((e) => !e.allowlisted);
   const excused = expired.filter((e) => e.allowlisted);
 
   console.log(
-    `remove-by gate: scanned ${files.length} files, ` +
+    `remove-by gate: scanned ${filesScanned} files, ` +
       `${expired.length + dueSoon.length + upcoming.length} REMOVE BY marker(s) ` +
       `(${upcoming.length} upcoming, ${dueSoon.length} due within ${DUE_SOON_DAYS}d, ` +
       `${excused.length} allowlisted, ${blocking.length} expired) ` +

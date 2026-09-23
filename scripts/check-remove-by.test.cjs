@@ -186,6 +186,21 @@ test('production files are NOT skipped', () => {
   assert.strictEqual(isSkippedFile('src/latest/thing.ts'), false, '"latest" must not match /tests?/');
 });
 
+// The CLI's SUCCESS path must run end to end. When scanRepo() was factored out,
+// the summary line kept a stale `files` reference that only the no-expired path
+// reaches; every existing test used the pure functions or an expired tree, so
+// the gate would have thrown (exit 1) on a clean main with all tests green.
+test('CLI success path exits 0 and reports what it scanned', () => {
+  const { spawnSync } = require('node:child_process');
+  const path = require('node:path');
+  const r = spawnSync(process.execPath, [path.join(__dirname, 'check-remove-by.cjs'), '--ci'], {
+    env: { ...process.env, REMOVE_BY_TODAY: '2000-01-01' },
+    encoding: 'utf8',
+  });
+  assert.strictEqual(r.status, 0, r.stderr);
+  assert.match(r.stdout + r.stderr, /scanned \d+ files/);
+});
+
 // scanRepo() is what the scheduled main-health job and the sentinel scanner
 // call, so it must judge a real tree exactly like the CLI: same dirs, same
 // test-file skip, same allowlist file relative to the scanned root.
