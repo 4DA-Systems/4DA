@@ -10,7 +10,11 @@ axum = { version = "0.7", features = ["ws"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "signal"] }
 sqlx = { version = "0.8", features = ["sqlite", "runtime-tokio-rustls"] }
 tower-http = { version = "0.6", features = ["cors", "trace", "compression-gzip"] }
-jsonwebtoken = "9"
+# jsonwebtoken >=10 has no default crypto backend; with none selected, every
+# encode/decode PANICS at runtime (#687: 10 of 11 relay tests). `rust_crypto`
+# is pure Rust, covers the HS256 the relay uses, and needs no C toolchain (the
+# Dockerfile's builder has neither cmake nor clang, which aws_lc_rs requires).
+jsonwebtoken = { version = "11", features = ["rust_crypto"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
