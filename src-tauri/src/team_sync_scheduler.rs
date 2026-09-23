@@ -205,14 +205,23 @@ async fn run_sync_cycle(http: &reqwest::Client, state: &TeamSyncState) -> Result
     let client_id = state.client_id.lock().clone().unwrap_or_default();
     let relay_url = state.relay_url.lock().clone().unwrap_or_default();
     let auth_token = state.auth_token.lock().clone().unwrap_or_default();
-    let team_key = state.team_key.lock().unwrap_or([0u8; 32]);
+    // Fail closed. This used to fall back to an all-zero key, so a key cleared
+    // between the caller's `is_configured()` check and this snapshot (a separate
+    // lock acquisition) would encrypt outbound metadata under a publicly known
+    // key and hand that key to members via `auto_deliver_team_keys`
+    // (CodeQL rust/hard-coded-cryptographic-value, alert #28).
+    let team_key = *state.team_key.lock();
+    let idle = SyncStats {
+        pushed: 0,
+        pulled: 0,
+        applied: 0,
+    };
 
+    let Some(team_key) = team_key else {
+        return Ok(idle);
+    };
     if team_id.is_empty() || relay_url.is_empty() {
-        return Ok(SyncStats {
-            pushed: 0,
-            pulled: 0,
-            applied: 0,
-        });
+        return Ok(idle);
     }
 
     // Phase 1: Push pending local entries to the relay
@@ -609,4 +618,27 @@ fn process_team_key_delivery(team_id: &str, state: &TeamSyncState) {
     // the encrypted team key hasn't been decrypted yet.
     // We'll handle this by checking for the raw delivery in the future.
     let _ = delivery; // Consumed above or deferred
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A configured team with NO key must sync nothing. The old fallback
+    /// encrypted under `[0u8; 32]` (CodeQL alert #28). The relay URL points at
+    /// the discard port, so if the cycle tried to push it would fail rather
+    /// than return clean idle stats.
+    #[tokio::test]
+    async fn missing_team_key_fails_closed_without_syncing() {
+        let state = TeamSyncState::default();
+        *state.team_id.lock() = Some("team-1".into());
+        *state.client_id.lock() = Some("client-1".into());
+        *state.relay_url.lock() = Some("http://127.0.0.1:9".into());
+        assert!(state.team_key.lock().is_none());
+
+        let stats = run_sync_cycle(&reqwest::Client::new(), &state)
+            .await
+            .expect("a missing key is an idle cycle, not an error");
+        assert_eq!((stats.pushed, stats.pulled, stats.applied), (0, 0, 0));
+    }
 }
