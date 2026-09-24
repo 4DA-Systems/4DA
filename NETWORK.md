@@ -134,7 +134,11 @@ embeddings) — with no key configured, zero LLM network calls leave the machine
   Content per item is **capped at 2000 characters** (`llm_judge.rs`). **No raw project code, file
   contents, or git history is ever sent.**
 - **Privacy control:** Settings → Privacy → `llm_content_level`. Set to `titles_only` to send
-  titles with **no** snippet body; default `full` sends the 2000-char-capped snippet.
+  titles with **no** snippet body; default `full` sends the 2000-char-capped snippet. The setting
+  covers every prompt that carries item text: the ingest and rerank judges, the verdict re-judge
+  drain, search synthesis, briefings and channels (`src-tauri/src/llm_egress.rs`; a pre-commit gate
+  fails any new model call that bypasses it). A model on this machine (Ollama, or a `base_url` on
+  localhost) is exempt, because nothing leaves the machine.
 - **Auth:** your key, sent as `x-api-key` (Anthropic) or `Authorization: Bearer` (OpenAI-compatible).
   Keys are stored only on your machine (keychain) and never sent anywhere but the provider you chose.
 - **Retention (zero-retention defaults):** first-party **OpenAI** requests send `store: false`,

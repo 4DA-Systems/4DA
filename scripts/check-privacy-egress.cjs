@@ -118,17 +118,6 @@ const EGRESS_ROUTED = /llm_egress::/;
 const EGRESS_DECLARED = /llm-egress:[ \t]*(no-item-body|exempt)[ \t]+\S/;
 
 /**
- * Temporarily not routed, with the reason. Every entry must be removed by the
- * change that routes the module; this list is meant to be empty.
- */
-const EGRESS_PENDING = {
-  'src-tauri/src/llm_judgments.rs':
-    'claimed by the judge-capability-routing change; routed in its follow-up',
-  'src-tauri/src/llm_judge_drain.rs':
-    'claimed by the judge-capability-routing change; routed in its follow-up',
-};
-
-/**
  * A Rust file with every `#[cfg(test)] mod … { … }` body removed. Test modules
  * can sit mid-file with production code after them, so this removes only the
  * braced body (by brace depth), not everything below the first one. Braces in
@@ -168,7 +157,6 @@ function productionPart(text) {
 /** Rule 2 for one file. Exported so the test can drive it without git. */
 function scanLlmCallSites(file, text) {
   if (/_tests?\.rs$/.test(file) || file.includes('/tests/')) return [];
-  if (EGRESS_PENDING[file]) return [];
   const code = productionPart(text)
     .split('\n')
     .filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l))
@@ -189,13 +177,9 @@ function main() {
   }
 
   if (findings.length === 0) {
-    const pending = Object.keys(EGRESS_PENDING);
     console.log(
-      '[check-privacy-egress] OK — raw local content is confined to the modules that mine and store it, and every LLM caller outside the pending list honours titles_only.'
+      '[check-privacy-egress] OK — raw local content is confined to the modules that mine and store it, and every LLM caller honours titles_only.'
     );
-    if (pending.length) {
-      console.log(`[check-privacy-egress] titles_only still pending in: ${pending.join(', ')}`);
-    }
     return 0;
   }
 
@@ -222,5 +206,4 @@ module.exports = {
   productionPart,
   RAW_CONTENT_TOKENS,
   ALLOWLIST,
-  EGRESS_PENDING,
 };
