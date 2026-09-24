@@ -5,17 +5,17 @@
 //!
 //! API:
 //!   POST /teams                                     -- create a new team
-//!   GET  /teams/:team_id                           -- get team info
-//!   POST /teams/:team_id/entries                   -- push encrypted entry
-//!   GET  /teams/:team_id/entries                   -- pull entries since sequence
-//!   GET  /teams/:team_id/clients                   -- list team members
-//!   POST /teams/:team_id/clients                   -- register client
-//!   DELETE /teams/:team_id/clients/:client_id     -- remove member (admin)
-//!   PATCH  /teams/:team_id/clients/:client_id     -- change role (admin)
-//!   POST /teams/:team_id/leave                     -- leave team
-//!   POST /teams/:team_id/invites                   -- generate invite code (admin)
+//!   GET  /teams/{team_id}                           -- get team info
+//!   POST /teams/{team_id}/entries                   -- push encrypted entry
+//!   GET  /teams/{team_id}/entries                   -- pull entries since sequence
+//!   GET  /teams/{team_id}/clients                   -- list team members
+//!   POST /teams/{team_id}/clients                   -- register client
+//!   DELETE /teams/{team_id}/clients/{client_id}     -- remove member (admin)
+//!   PATCH  /teams/{team_id}/clients/{client_id}     -- change role (admin)
+//!   POST /teams/{team_id}/leave                     -- leave team
+//!   POST /teams/{team_id}/invites                   -- generate invite code (admin)
 //!   POST /auth/invite                               -- join team via invite code
-//!   GET  /teams/:team_id/stream                    -- SSE notification stream
+//!   GET  /teams/{team_id}/stream                    -- SSE notification stream
 //!   GET  /health                                    -- health check
 
 mod auth;
@@ -75,27 +75,27 @@ async fn main() {
         .route("/auth/invite", post(clients::join_via_invite))
         // Teams
         .route("/teams", post(clients::create_team))
-        .route("/teams/:team_id", get(clients::get_team_info))
+        .route("/teams/{team_id}", get(clients::get_team_info))
         // Team entries
-        .route("/teams/:team_id/entries", post(entries::push_entry))
-        .route("/teams/:team_id/entries", get(entries::pull_entries))
+        .route("/teams/{team_id}/entries", post(entries::push_entry))
+        .route("/teams/{team_id}/entries", get(entries::pull_entries))
         // Team clients
-        .route("/teams/:team_id/clients", get(clients::list_clients))
-        .route("/teams/:team_id/clients", post(clients::register_client))
+        .route("/teams/{team_id}/clients", get(clients::list_clients))
+        .route("/teams/{team_id}/clients", post(clients::register_client))
         .route(
-            "/teams/:team_id/clients/:client_id",
+            "/teams/{team_id}/clients/{client_id}",
             delete(clients::remove_member),
         )
         .route(
-            "/teams/:team_id/clients/:client_id",
+            "/teams/{team_id}/clients/{client_id}",
             patch(clients::update_role),
         )
         // Team leave
-        .route("/teams/:team_id/leave", post(clients::leave_team))
+        .route("/teams/{team_id}/leave", post(clients::leave_team))
         // Team invites
-        .route("/teams/:team_id/invites", post(clients::create_invite))
+        .route("/teams/{team_id}/invites", post(clients::create_invite))
         // SSE stream
-        .route("/teams/:team_id/stream", get(stream::event_stream))
+        .route("/teams/{team_id}/stream", get(stream::event_stream))
         // Middleware
         .layer(TraceLayer::new_for_http())
         .layer(
