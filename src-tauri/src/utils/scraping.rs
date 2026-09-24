@@ -62,13 +62,7 @@ pub(crate) async fn scrape_article_content(url: &str) -> Option<String> {
     for selector_str in selectors {
         if let Ok(selector) = Selector::parse(selector_str) {
             if let Some(element) = document.select(&selector).next() {
-                let text: String = element
-                    .text()
-                    .collect::<Vec<_>>()
-                    .join(" ")
-                    .split_whitespace()
-                    .collect::<Vec<_>>()
-                    .join(" ");
+                let text = visible_text(element);
 
                 // Only use if we got meaningful content (at least 100 chars)
                 if text.len() > 100 {
@@ -85,4 +79,48 @@ pub(crate) async fn scrape_article_content(url: &str) -> Option<String> {
     }
 
     None
+}
+
+/// Elements whose text is code or markup, never prose: JSON-LD metadata,
+/// scripts and styles otherwise came through as the "article" (a live
+/// enrichment pass stored a page's `{"@context":"https://schema.org"...}`).
+const NON_PROSE_ELEMENTS: &[&str] = &["script", "style", "noscript", "template", "svg"];
+
+/// The element's text with non-prose descendants skipped, whitespace collapsed.
+fn visible_text(element: scraper::ElementRef<'_>) -> String {
+    let mut words: Vec<&str> = Vec::new();
+    for node in element.descendants() {
+        let Some(text) = node.value().as_text() else {
+            continue;
+        };
+        let hidden = node.ancestors().any(|a| {
+            a.value()
+                .as_element()
+                .is_some_and(|e| NON_PROSE_ELEMENTS.contains(&e.name()))
+        });
+        if !hidden {
+            words.extend(text.split_whitespace());
+        }
+    }
+    words.join(" ")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use scraper::{Html, Selector};
+
+    #[test]
+    fn scripts_and_styles_are_not_article_text() {
+        let html = Html::parse_document(
+            r#"<body><script type="application/ld+json">{"@context":"https://schema.org"}</script>
+               <style>p { color: red }</style><article><p>Real words here.</p>
+               <noscript>Enable JS</noscript></article></body>"#,
+        );
+        let body = html
+            .select(&Selector::parse("body").unwrap())
+            .next()
+            .unwrap();
+        assert_eq!(visible_text(body), "Real words here.");
+    }
 }

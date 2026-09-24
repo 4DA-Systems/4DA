@@ -334,6 +334,12 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<super::Fetc
         warn!(target: "4da::dep_linker", "Failed to link source items to deps: {e}");
     }
 
+    // Fetch readable text for new items that arrived as a bare title or a
+    // teaser. This fill is the one path every ingest takes (headless engine,
+    // scheduled refresh, post-analysis refresh), and it runs before the next
+    // scoring pass, which re-embeds the enriched items first.
+    crate::content_enrichment::enrich_thin_items(db).await;
+
     void_signal_cache_filled(app);
 
     // Sources just fetched over the network, so the network works: clear any
