@@ -520,6 +520,17 @@ export class FourDADatabase {
       CREATE INDEX IF NOT EXISTS idx_interactions_timestamp ON interactions(timestamp);
       CREATE INDEX IF NOT EXISTS idx_interactions_item ON interactions(source_item_id);
 
+      -- Explicit relevance labels — written by record_feedback (save / mark_irrelevant);
+      -- the desktop calibration fitter reads this table as ground truth. Same DDL as desktop.
+      CREATE TABLE IF NOT EXISTS feedback (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        source_item_id INTEGER NOT NULL,
+        relevant INTEGER NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (source_item_id) REFERENCES source_items(id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_feedback_item ON feedback(source_item_id);
+
       -- Project dependencies — queried by project_health, tech_radar, developer_dna, knowledge_gaps
       CREATE TABLE IF NOT EXISTS project_dependencies (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1486,15 +1497,22 @@ export class FourDADatabase {
    */
   recordFeedback(
     itemId: number,
-    sourceType: string,
+    sourceType: string | undefined,
     action: FeedbackAction
   ): FeedbackResult {
-    // Verify item exists
-    const item = this.getSourceItem(itemId, sourceType);
-    if (!item) {
+    // Look the item up by id. source_type is optional and, when given, must
+    // match. It used to be a required filter restricted to three sources
+    // (hackernews / arxiv / reddit), so an agent could not rate an item from
+    // any of the other sources — about 75% of the corpus (measured 2026-09-24).
+    const row = this.db
+      .prepare(`SELECT id, source_type FROM source_items WHERE id = ?`)
+      .get(itemId) as { id: number; source_type: string } | undefined;
+    if (!row || (sourceType && row.source_type !== sourceType)) {
       return {
         success: false,
-        message: `Item ${itemId} of type ${sourceType} not found`,
+        message: sourceType
+          ? `Item ${itemId} of type ${sourceType} not found`
+          : `Item ${itemId} not found`,
       };
     }
 
@@ -1511,18 +1529,41 @@ export class FourDADatabase {
       mark_irrelevant: -1.0,
     };
 
+    // Only an explicit relevance statement becomes a label in `feedback` (the
+    // table the desktop calibration fitter treats as ground truth). A click or
+    // a dismiss is interaction history, not a relevance judgment. Mirrors the
+    // desktop rule in src/store/feedback-slice.ts.
+    const relevanceLabel: Partial<Record<FeedbackAction, number>> = {
+      save: 1,
+      mark_irrelevant: 0,
+    };
+    const label = relevanceLabel[action];
+
     try {
-      const stmt = this.db.prepare(`
+      if (label !== undefined) this.ensureFeedbackTable();
+      const insertInteraction = this.db.prepare(`
         INSERT INTO interactions (item_id, action_type, item_source, signal_strength, timestamp)
         VALUES (?, ?, ?, ?, datetime('now'))
       `);
-
-      const result = stmt.run(itemId, action, sourceType, signalStrength[action]);
+      const write = this.db.transaction(() => {
+        const r = insertInteraction.run(itemId, action, row.source_type, signalStrength[action]);
+        if (label !== undefined) {
+          this.db
+            .prepare(`INSERT INTO feedback (source_item_id, relevant) VALUES (?, ?)`)
+            .run(itemId, label);
+        }
+        return r;
+      });
+      const result = write();
 
       return {
         success: true,
-        message: `Recorded ${action} feedback for item ${itemId}`,
+        message:
+          label === undefined
+            ? `Recorded ${action} feedback for item ${itemId}`
+            : `Recorded ${action} feedback for item ${itemId} (relevance label: ${label === 1 ? "relevant" : "not relevant"})`,
         interaction_id: result.lastInsertRowid as number,
+        relevance_label: label === undefined ? null : label === 1,
       };
     } catch (error) {
       return {
@@ -1530,6 +1571,25 @@ export class FourDADatabase {
         message: `Failed to record feedback: ${error instanceof Error ? error.message : String(error)}`,
       };
     }
+  }
+
+  /**
+   * Ensure the `feedback` table exists. The desktop app always has it; a
+   * standalone database created before record_feedback wrote labels does not
+   * (createMinimalSchema runs only for brand-new files). Same DDL as desktop,
+   * so against the desktop database this is a no-op.
+   */
+  private ensureFeedbackTable(): void {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS feedback (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        source_item_id INTEGER NOT NULL,
+        relevant INTEGER NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        FOREIGN KEY (source_item_id) REFERENCES source_items(id)
+      );
+      CREATE INDEX IF NOT EXISTS idx_feedback_item ON feedback(source_item_id);
+    `);
   }
 
   // ===========================================================================

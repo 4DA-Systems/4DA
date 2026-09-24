@@ -163,4 +163,44 @@ describe('feedback-slice', () => {
       expect(warning!.message).toContain('record_item_feedback');
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // recordInteraction — only explicit relevance statements become labels
+  // ---------------------------------------------------------------------------
+  describe('recordInteraction relevance labels', () => {
+    const sampleItem = {
+      id: 7,
+      title: 'Tokio 1.48 released',
+      source_type: 'lobsters',
+      top_score: 0.5,
+    } as never;
+
+    beforeEach(() => {
+      cmdMock.mockReset();
+      cmdMock.mockResolvedValue({});
+    });
+
+    const labelCalls = () => cmdMock.mock.calls.filter(c => c[0] === 'record_item_feedback');
+
+    it('records save as relevant', async () => {
+      await useAppStore.getState().recordInteraction(7, 'save', sampleItem);
+      expect(labelCalls()).toEqual([['record_item_feedback', { itemId: 7, relevant: true }]]);
+    });
+
+    it('records mark_irrelevant as not relevant', async () => {
+      await useAppStore.getState().recordInteraction(7, 'mark_irrelevant', sampleItem);
+      expect(labelCalls()).toEqual([['record_item_feedback', { itemId: 7, relevant: false }]]);
+    });
+
+    it.each(['click', 'dismiss', 'snooze'] as const)(
+      'writes no relevance label for %s, but still records the interaction',
+      async action => {
+        await useAppStore.getState().recordInteraction(7, action, sampleItem);
+        expect(labelCalls()).toEqual([]);
+        const names = cmdMock.mock.calls.map(c => c[0]);
+        expect(names).toContain('ace_record_interaction');
+        expect(names).toContain('ace_record_accuracy_feedback');
+      },
+    );
+  });
 });
