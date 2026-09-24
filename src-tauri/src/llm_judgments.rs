@@ -123,10 +123,11 @@ const MEASURED_LOCAL_JUDGES: &[&str] = &["qwen2.5:14b"];
 /// pipeline (+0.001 [-0.009, +0.012] one per call, +0.008 batched) — a lane
 /// that burns GPU every cycle and can still remove items, for no signal.
 ///
-/// Items per call: cloud keeps [`BATCH_SIZE`] — Haiku at 1 vs 10 per call
-/// differs by +0.009 AUC [-0.049, +0.071] while costing ~2.3x (the ~940-token
-/// prefix is under Haiku 4.5's 4,096-token cache minimum). Local models judge
-/// one per call: their batching penalty is large and local calls cost only GPU.
+/// Items per call: cloud keeps [`BATCH_SIZE`]. Haiku 1 vs 10 per call: +0.009
+/// AUC [-0.049, +0.071]; in rank order +0.051 [-0.016, +0.133] — unproven, and
+/// one per call measured 2.6x the spend (the ~940-token prefix is under Haiku
+/// 4.5's 4,096-token cache minimum). Local models judge one per call: their
+/// batching penalty is large and significant, and local calls cost only GPU.
 pub(crate) fn judge_items_per_call(provider: &LLMProvider) -> Option<usize> {
     let tier = crate::llm_capability::get_model_tier(provider);
     let local = provider.provider == "ollama";
