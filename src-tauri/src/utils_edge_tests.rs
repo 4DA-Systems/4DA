@@ -2,9 +2,24 @@
 #[cfg(test)]
 mod tests {
     use crate::utils::{
-        cosine_similarity, cosine_similarity_with_norm, decode_html_entities, preprocess_content,
-        truncate_utf8, vector_norm,
+        cosine_similarity, cosine_similarity_with_norm, decode_html_entities, html_to_text,
+        preprocess_content, truncate_utf8, vector_norm,
     };
+
+    #[test]
+    fn numeric_references_decode_and_malformed_ones_are_kept() {
+        assert_eq!(decode_html_entities("a&#32;b&#x2014;c"), "a b\u{2014}c");
+        assert_eq!(
+            decode_html_entities("&#; &#12 &#xZZ; &#99999999;"),
+            "&#; &#12 &#xZZ; &#99999999;"
+        );
+    }
+
+    #[test]
+    fn reddit_link_post_boilerplate_reads_as_text() {
+        let raw = "&#32; submitted by &#32; <a href=\"https://www.reddit.com/user/x\"> /u/x </a>";
+        assert_eq!(html_to_text(raw, 100), "submitted by /u/x");
+    }
 
     // ========================================================================
     // Vector math edge cases — these are the scoring hot path

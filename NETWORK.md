@@ -79,7 +79,7 @@ All retrieve **public** developer content. Trigger cadence is the default fetch 
 | PyPI | `pypi.org` | `/pypi/{package}/json` | auto | None |
 | HuggingFace | `huggingface.co` | `/api/models` | auto | None |
 | PapersWithCode | `huggingface.co` | `/api/daily_papers` (PwC API now redirects here) | auto | None |
-| Stack Overflow | `api.stackexchange.com` | `/2.3/questions?...&site=stackoverflow&tagged={tag}` | auto | None |
+| Stack Overflow | `api.stackexchange.com` | `/2.3/questions?...&site=stackoverflow&tagged={tag}&filter=withbody` | auto | None |
 | Go modules | `index.golang.org` | `/index?limit={n}` | auto | None |
 
 **RSS default hosts** (`sources/rss.rs`, user-customizable): `feeds.arstechnica.com`,
@@ -91,12 +91,23 @@ All retrieve **public** developer content. Trigger cadence is the default fetch 
 
 ### 1c. Article scraping
 
-After fetching items, 4DA scrapes the linked article URL to extract **text only** (no images or
-media) for HN, Reddit link posts, Lobsters, and RSS items.
+Many items arrive as a bare title or a short teaser. After each background fetch
+(`content_enrichment.rs`, run at the end of every cache fill), 4DA fetches readable **text only**
+(no images or media) for recent items that are still thin, so they are scored on what they say:
 
-- **Hosts:** any domain linked by the sources above.
-- **Data sent:** a plain `GET` with the default User-Agent. No cookies, no login.
-- **Rate limit:** ~100 ms between requests; 2–10 s per-article timeout.
+- **What is fetched:** the story link for HN, Lobsters, RSS and Lemmy items; the `[link]` target of
+  a Reddit link post; the first outbound link in a Mastodon or Bluesky post (not mentions or
+  hashtags); a dev.to post's full text from `dev.to/api/articles/{user}/{slug}`. Stack Overflow
+  question bodies come with the list call above (`filter=withbody`), with no extra request.
+- **Never fetched:** items that already carry their text (arXiv, CVE/OSV, registries, GitHub), and
+  X/Twitter, Facebook, Instagram, LinkedIn, YouTube, Reddit and HN discussion pages.
+- **Hosts:** any domain linked by the sources above, plus `dev.to`.
+- **Data sent:** a plain `GET` with the default User-Agent. No cookies, no login. Internal and
+  private network addresses are refused (SSRF guard).
+- **Budget:** at most 60 fetches per cycle, 4 at a time, only for items from the last 48 hours; the
+  same host is spaced 0.5 s apart (dev.to 1.1 s); 10 s timeout per page; a failed page is retried
+  once, 6 hours later.
+- **Scope:** only items from enabled sources are ever fetched, so disabling a source stops this too.
 
 ### 1d. Model-pricing refresh
 

@@ -50,6 +50,8 @@ struct SoQuestion {
     tags: Option<Vec<String>>,
     creation_date: Option<u64>,
     is_answered: Option<bool>,
+    /// Question body (HTML), present because the query asks for `filter=withbody`.
+    body: Option<String>,
 }
 
 // ============================================================================
@@ -272,7 +274,7 @@ impl StackOverflowSource {
         }
 
         let url = format!(
-            "https://api.stackexchange.com/2.3/questions?order=desc&sort=activity&site=stackoverflow&tagged={}&pagesize=10",
+            "https://api.stackexchange.com/2.3/questions?order=desc&sort=activity&site=stackoverflow&tagged={}&pagesize=10&filter=withbody",
             urlencoding::encode(tag)
         );
 
@@ -323,8 +325,13 @@ impl StackOverflowSource {
                 let question_tags = q.tags.clone().unwrap_or_default();
                 let answer_count = q.answer_count.unwrap_or(0);
                 // Tags flow through metadata → extract_structured_tags() → extract_topics().
-                // Content is empty because SO API doesn't return question body in list endpoints.
-                let content = String::new();
+                // The body comes with the list call (`filter=withbody`, no extra
+                // request). Without it every question was stored as a bare title.
+                let content = q
+                    .body
+                    .as_deref()
+                    .map(|html| crate::utils::html_to_text(html, crate::utils::MAX_CONTENT_LENGTH))
+                    .unwrap_or_default();
 
                 let mut metadata = serde_json::json!({
                     "score": q.score,
