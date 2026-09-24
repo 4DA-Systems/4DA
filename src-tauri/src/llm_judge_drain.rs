@@ -158,6 +158,13 @@ fn drain_provider() -> Option<LLMProvider> {
     if provider.provider != "ollama" && provider.api_key.is_empty() {
         return None;
     }
+    // The drain DEMOTES on the model's say-so, so it holds the ingest judge's
+    // bar (`llm_judgments::judge_items_per_call`): a model below it is treated
+    // as no provider — phase A and free reuse still run, the paid lane does not.
+    if crate::llm_judgments::judge_items_per_call(&provider).is_none() {
+        debug!(target: "4da::verdict_drain", model = %provider.model, "Judge model is below the feed-judging bar — drain re-judging disabled");
+        return None;
+    }
     Some(provider)
 }
 
@@ -274,11 +281,15 @@ async fn run_drain_with(
             summary.skipped = Some("llm_budget_reached");
         } else if let Some(provider) = provider {
             let model_name = provider.model.clone();
+            // Local models judge one item per call (see
+            // `llm_judgments::judge_items_per_call`); cloud keeps the slice.
+            let per_call = crate::llm_judgments::judge_items_per_call(&provider)
+                .map_or(DRAIN_SLICE, |n| n.min(DRAIN_SLICE));
             let client = LLMClient::with_purpose(provider, "verdict_drain");
             // One call per DRAIN_SLICE items — the size every call had before
             // the surge slice existed. A truncated or malformed reply then
             // costs at most one chunk's evidence, never the whole pass.
-            for chunk in needs_llm.chunks(DRAIN_SLICE) {
+            for chunk in needs_llm.chunks(per_call.max(1)) {
                 let ids: Vec<i64> = chunk.iter().map(|r| r.id).collect();
                 let items = match load_items(db, &ids) {
                     Ok(items) => items,

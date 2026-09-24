@@ -96,6 +96,50 @@ const INGESTION_THRESHOLD: f64 = 0.25;
 /// Was 5 — measured 2026-08-31, the fixed overhead was ~40% of input spend.
 pub(crate) const BATCH_SIZE: usize = 10;
 
+/// Local models that have PASSED a real-item measurement as a feed judge,
+/// despite sitting in the Basic capability tier (every unlisted Ollama model
+/// defaults to Basic, `llm_capability::get_model_tier`). Deliberately a
+/// judge-lane allowlist, not a tier promotion: a tier change would also turn
+/// on reranking (batched), adversarial deliberation and LLM explanations for
+/// the model, none of which were measured.
+///
+/// qwen2.5:14b (blind gold, v6 prompt, 2026-09-24): one item per call AUC
+/// 0.964, level with Haiku (+0.009 [-0.028, +0.054]). Batched at 10 it fell
+/// to 0.82-0.90 in all five item orders tried (every CI excluding 0), dropped
+/// up to 7 of 160 items, and in rank order wrongly rejected 4 of 19 relevant
+/// items against 0 of 19 — hence one item per call for local judges below.
+const MEASURED_LOCAL_JUDGES: &[&str] = &["qwen2.5:14b"];
+
+/// How the ingest judge (and the pending-verdict drain, which shares its
+/// provider gate) may run for this provider: `Some(items_per_call)`, or
+/// `None` when the model must not judge at all.
+///
+/// Both lanes REMOVE items from the feed (`llm_reject`), so the bar is the
+/// rerank lane's (`ModelTier::supports_reranking`) — which the demotion lanes
+/// never checked. The onboarding default for Ollama is `llama3.2` (3B, Basic),
+/// so every Ollama user without a larger model ran a 3B feed judge, while the
+/// far gentler rerank lane (±0.15, never removes) refused the same model.
+/// Measured 2026-09-24 on the blind gold: llama3.2 + v6 adds nothing over the
+/// pipeline (+0.001 [-0.009, +0.012] one per call, +0.008 batched) — a lane
+/// that burns GPU every cycle and can still remove items, for no signal.
+///
+/// Items per call: cloud keeps [`BATCH_SIZE`] — Haiku at 1 vs 10 per call
+/// differs by +0.009 AUC [-0.049, +0.071] while costing ~2.3x (the ~940-token
+/// prefix is under Haiku 4.5's 4,096-token cache minimum). Local models judge
+/// one per call: their batching penalty is large and local calls cost only GPU.
+pub(crate) fn judge_items_per_call(provider: &LLMProvider) -> Option<usize> {
+    let tier = crate::llm_capability::get_model_tier(provider);
+    let local = provider.provider == "ollama";
+    let measured_local = local && {
+        let model = provider.model.to_lowercase();
+        MEASURED_LOCAL_JUDGES.iter().any(|m| model.starts_with(m))
+    };
+    if !tier.supports_reranking() && !measured_local {
+        return None;
+    }
+    Some(if local { 1 } else { BATCH_SIZE })
+}
+
 /// Demote-only verdict feedback: judged relevance strictly below this…
 ///
 /// Was 0.25, and demoted NOTHING — ever. The bound is a strict "<" and the
@@ -236,8 +280,12 @@ pub(crate) async fn evaluate_pending_items(db: &Database) -> Result<usize> {
         debug!(target: "4da::llm_judgments", "No LLM provider configured, skipping judgments");
         return Ok(0);
     };
+    let Some(per_call) = judge_items_per_call(&provider) else {
+        debug!(target: "4da::llm_judgments", model = %provider.model, "Judge model is below the feed-judging bar, skipping judgments");
+        return Ok(0);
+    };
 
-    Ok(evaluate_with_provider(db, provider).await?.judged)
+    Ok(evaluate_with_provider(db, provider, per_call).await?.judged)
 }
 
 // ============================================================================
@@ -252,7 +300,8 @@ pub(crate) struct PostCycleLlmSummary {
     pub judged: usize,
     pub analyses_stored: usize,
     pub demoted: usize,
-    /// Why the pass was a no-op (`"llm_budget_reached"` / `"no_llm_provider"`),
+    /// Why the pass was a no-op (`"llm_budget_reached"` / `"no_llm_provider"` /
+    /// `"judge_model_below_bar"`),
     /// if it was.
     pub skipped: Option<&'static str>,
 }
@@ -294,8 +343,15 @@ async fn run_post_cycle_with(
         summary.skipped = Some("no_llm_provider");
         return summary;
     };
+    // Below the bar: skip the demotion pass too — the judgments it would act
+    // on came from the same model.
+    let Some(per_call) = judge_items_per_call(&provider) else {
+        debug!(target: "4da::llm_judgments", model = %provider.model, "Judge model is below the feed-judging bar — skipping post-cycle LLM passes");
+        summary.skipped = Some("judge_model_below_bar");
+        return summary;
+    };
 
-    match evaluate_with_provider(db, provider).await {
+    match evaluate_with_provider(db, provider, per_call).await {
         Ok(outcome) => {
             summary.judged = outcome.judged;
             summary.analyses_stored = outcome.analyses_stored;
@@ -333,7 +389,11 @@ struct JudgeOutcome {
     analyses_stored: usize,
 }
 
-async fn evaluate_with_provider(db: &Database, provider: LLMProvider) -> Result<JudgeOutcome> {
+async fn evaluate_with_provider(
+    db: &Database,
+    provider: LLMProvider,
+    items_per_call: usize,
+) -> Result<JudgeOutcome> {
     let mut outcome = JudgeOutcome {
         judged: 0,
         analyses_stored: 0,
@@ -358,7 +418,7 @@ async fn evaluate_with_provider(db: &Database, provider: LLMProvider) -> Result<
     let client = LLMClient::with_purpose(provider, "ingest_judge");
     let user_context = crate::adversarial::build_user_context_summary();
 
-    for chunk in unjudged.chunks(BATCH_SIZE) {
+    for chunk in unjudged.chunks(items_per_call.max(1)) {
         let items = load_items_for_judgment(db, chunk)?;
         if items.is_empty() {
             continue;

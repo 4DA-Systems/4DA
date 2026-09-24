@@ -582,6 +582,74 @@ async fn post_cycle_no_op_without_provider() {
     );
 }
 
+fn provider_of(kind: &str, model: &str) -> crate::settings::LLMProvider {
+    let mut p = crate::settings::LLMProvider::default();
+    p.provider = kind.into();
+    p.api_key = if kind == "ollama" {
+        String::new()
+    } else {
+        "test-key".into()
+    };
+    p.model = model.into();
+    p
+}
+
+/// The demotion lanes hold the rerank lane's capability bar, with a measured
+/// local allowlist, and local models judge one item per call.
+#[test]
+fn judge_items_per_call_gates_and_sizes_by_model() {
+    // Cloud: batched (Haiku measured flat across 1/3/10 items per call).
+    assert_eq!(
+        judge_items_per_call(&provider_of("anthropic", "claude-haiku-4-5")),
+        Some(BATCH_SIZE)
+    );
+    assert_eq!(
+        judge_items_per_call(&provider_of("openai", "gpt-4o-mini")),
+        Some(BATCH_SIZE)
+    );
+    // The Ollama onboarding default (3B, Basic) must never demote feed items.
+    assert_eq!(
+        judge_items_per_call(&provider_of("ollama", "llama3.2")),
+        None
+    );
+    assert_eq!(
+        judge_items_per_call(&provider_of("ollama", "llama3.2:latest")),
+        None
+    );
+    assert_eq!(
+        judge_items_per_call(&provider_of("ollama", "some-unknown-model")),
+        None
+    );
+    // Measured local judge: allowed, one item per call.
+    assert_eq!(
+        judge_items_per_call(&provider_of("ollama", "qwen2.5:14b")),
+        Some(1)
+    );
+    // Good-tier local model: allowed, still one item per call.
+    assert_eq!(
+        judge_items_per_call(&provider_of("ollama", "qwen2.5:72b")),
+        Some(1)
+    );
+}
+
+#[tokio::test]
+async fn post_cycle_no_op_when_judge_model_below_bar() {
+    let db = test_db();
+    let id = seed_feed_item(&db, "g4", "Would-be demotion from a 3B judge");
+    db.upsert_llm_judgment(id, 0.05, "junk", None, 0.95, "llama3.2", PROMPT_VERSION)
+        .unwrap();
+
+    let summary = run_post_cycle_with(&db, false, Some(provider_of("ollama", "llama3.2"))).await;
+    assert_eq!(summary.skipped, Some("judge_model_below_bar"));
+    assert_eq!(summary.judged, 0);
+    assert_eq!(summary.demoted, 0);
+    assert_eq!(
+        feed_relevant_of(&db, id),
+        1,
+        "a below-bar judge must not remove items from the feed"
+    );
+}
+
 #[tokio::test]
 async fn post_cycle_runs_demotions_without_llm_calls() {
     // Provider present, budget fine — but nothing is unjudged (the seeded item
