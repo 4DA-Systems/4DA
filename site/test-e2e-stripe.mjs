@@ -90,6 +90,18 @@ function assert(condition, msg) {
   }
 }
 
+// The checkout handler must hand back a real Stripe Checkout URL. Compare the
+// parsed host — a substring test would also accept
+// https://evil.example/?next=checkout.stripe.com.
+function isStripeCheckoutUrl(value) {
+  try {
+    const u = new URL(value);
+    return u.protocol === 'https:' && u.hostname === 'checkout.stripe.com';
+  } catch {
+    return false;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Ed25519 license generation (mirrors activate.js)
 // ---------------------------------------------------------------------------
@@ -173,7 +185,7 @@ for (const plan of ['monthly', 'annual', 'lifetime']) {
       body: JSON.stringify({ plan }),
     });
     const data = await resp.json();
-    assert(resp.ok && data.url && data.url.includes('checkout.stripe.com'), `${plan} checkout returns Stripe URL`);
+    assert(resp.ok && isStripeCheckoutUrl(data.url), `${plan} checkout returns Stripe URL`);
   } catch (err) {
     assert(false, `${plan} checkout: ${err.message}`);
   }

@@ -380,7 +380,7 @@ test('recovery for a REFUNDED customer sends a notice, never the key', async () 
     assert.ok(!text.includes(KEY), 'the key must not be in the plaintext part');
     assert.ok(!html.includes(KEY), 'nor in the HTML part');
     assert.match(subject, /no longer active/);
-    assert.ok(text.includes('https://4da.ai/signal'), 'and it offers the way back');
+    assert.match(text, /https:\/\/4da\.ai\/signal\b/, 'and it offers the way back');
   } finally { f.restore(); c.restore(); }
 });
 

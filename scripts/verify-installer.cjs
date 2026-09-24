@@ -30,16 +30,20 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const { execSync } = require('node:child_process');
+const { execFileSync } = require('node:child_process');
 
-const args = parseArgs(process.argv.slice(2));
+const args = require.main === module ? parseArgs(process.argv.slice(2)) : { path: null, expected: null, unsignedOk: false };
 const result = { passes: [], warnings: [], failures: [] };
 
-main().catch((e) => {
-  result.failures.push(`Uncaught error: ${e.message}`);
-  report();
-  process.exit(1);
-});
+if (require.main === module) {
+  main().catch((e) => {
+    result.failures.push(`Uncaught error: ${e.message}`);
+    report();
+    process.exit(1);
+  });
+}
+
+module.exports = { authenticodeStatus };
 
 function parseArgs(argv) {
   const out = { path: null, expected: null, unsignedOk: false };
@@ -160,15 +164,7 @@ function checkSignature(p) {
     return;
   }
   try {
-    // PowerShell single-quoted strings are literal; any embedded single quote
-    // is escaped by doubling. This is the only quoting form that survives
-    // filenames with spaces AND with weird characters without mangling.
-    const psPath = p.replace(/'/g, "''");
-    const ps = `(Get-AuthenticodeSignature -FilePath '${psPath}').Status`;
-    const out = execSync(`powershell.exe -NoProfile -Command "${ps.replace(/"/g, '\\"')}"`, {
-      encoding: 'utf8',
-      timeout: 30000,
-    }).trim();
+    const out = authenticodeStatus(p);
     if (out === 'Valid') {
       result.passes.push('Authenticode signature: Valid');
     } else if (args.unsignedOk && (out === 'NotSigned' || out === 'HashMismatch')) {
@@ -177,10 +173,45 @@ function checkSignature(p) {
       result.failures.push(`Authenticode status: ${out} (use --unsigned-ok for dev builds)`);
     }
   } catch (e) {
-    // PowerShell invocation itself failed. Treat as a warning so the script
-    // doesn't fail on hosts where powershell is unavailable for any reason.
-    result.warnings.push(`Could not run Get-AuthenticodeSignature: ${e.message.split('\n')[0]}`);
+    // The signature could not be read, so it was NOT verified. That passes
+    // only where an unsigned installer would pass anyway (--unsigned-ok);
+    // otherwise it is a failure — a gate that goes green when it cannot look
+    // is not a gate.
+    const msg = `Could not run Get-AuthenticodeSignature: ${e.message.split('\n')[0]}`;
+    if (args.unsignedOk) result.warnings.push(`${msg} (accepted because --unsigned-ok)`);
+    else result.failures.push(msg);
   }
+}
+
+/**
+ * Authenticode status of `p` as PowerShell reports it ("Valid", "NotSigned", ...).
+ *
+ * The path travels in an environment variable, never inside a command line.
+ * The previous form spliced it into `powershell.exe -Command "...'<path>'..."`
+ * run through cmd.exe, escaping only quotes: cmd.exe still expanded `%VAR%`
+ * inside the path and -FilePath treated `[` `]` as wildcards, so for such a
+ * path PowerShell looked at a different (nonexistent) file and printed an
+ * empty status — a signed installer could not be verified. With execFileSync
+ * there is no cmd.exe layer, and -LiteralPath takes the value verbatim.
+ */
+function authenticodeStatus(p) {
+  return execFileSync(
+    'powershell.exe',
+    [
+      '-NoProfile',
+      '-NonInteractive',
+      '-Command',
+      // Stop: an unreadable path is an error (non-zero exit), not an empty status.
+      "$ErrorActionPreference='Stop'; (Get-AuthenticodeSignature -LiteralPath $env:FOURDA_VERIFY_INSTALLER_PATH).Status",
+    ],
+    {
+      encoding: 'utf8',
+      timeout: 30000,
+      windowsHide: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: { ...process.env, FOURDA_VERIFY_INSTALLER_PATH: p },
+    },
+  ).trim();
 }
 
 function humanBytes(n) {
