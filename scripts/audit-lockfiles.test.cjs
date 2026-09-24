@@ -21,6 +21,14 @@ const {
  */
 const OLD_HARDCODED_DIRS = ['.', 'site', 'paddle-webhook', 'mcp-4da-server'];
 
+/**
+ * Directories deleted from the repo since then. Coverage cannot regress for a
+ * lockfile that no longer exists; anything else on the old list must stay audited.
+ * paddle-webhook: retired 2026-09-24 (not deployed anywhere; Signal checkout runs
+ * on Stripe through site/functions).
+ */
+const RETIRED_DIRS = new Set(['paddle-webhook']);
+
 test('discovery finds every tracked lockfile, not just the pnpm ones', () => {
   const found = discoverLockfiles();
   // Whatever else moves, these must be in the set: they are the two the old
@@ -40,6 +48,10 @@ test('discovery finds every tracked lockfile, not just the pnpm ones', () => {
 test('THE case: discovery covers strictly more than the list it replaced', () => {
   const dirs = new Set(discoverLockfiles().map((f) => commandFor(f).dir));
   for (const d of OLD_HARDCODED_DIRS) {
+    if (RETIRED_DIRS.has(d)) {
+      assert.ok(!dirs.has(d), `${d} is listed as retired but a lockfile for it is still tracked`);
+      continue;
+    }
     assert.ok(dirs.has(d), `regression: ${d} was covered by the old loop and must stay covered`);
   }
   assert.ok(

@@ -36,7 +36,7 @@
 // can be spammed. See the rate-limit follow-up note in activate.js.
 //
 // Config (Cloudflare Pages -> Settings -> Environment variables):
-//   RESEND_API_KEY    — Resend API key (same provider paddle-webhook/ already uses)
+//   RESEND_API_KEY    — Resend API key (the same provider the licence emails use)
 //   RESEND_FROM_EMAIL — e.g. "4DA <licenses@4da.ai>"; domain must be verified in Resend
 
 // `meta` resolves the signal_*/streets_* namespace. entitlement.js imports

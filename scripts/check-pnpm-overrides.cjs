@@ -34,7 +34,6 @@ const ROOT = path.resolve(__dirname, '..');
 const MANIFESTS = [
   'package.json',
   'site/package.json',
-  'paddle-webhook/package.json',
   'mcp-4da-server/package.json',
   'mcp-memory-server/package.json',
 ];
