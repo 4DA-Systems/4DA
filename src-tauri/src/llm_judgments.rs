@@ -416,14 +416,16 @@ async fn evaluate_with_provider(
     }
 
     let model_name = provider.model.clone();
+    let send_body = crate::llm_egress::body_allowed(&provider);
     let client = LLMClient::with_purpose(provider, "ingest_judge");
     let user_context = crate::adversarial::build_user_context_summary();
 
     for chunk in unjudged.chunks(items_per_call.max(1)) {
-        let items = load_items_for_judgment(db, chunk)?;
+        let mut items = load_items_for_judgment(db, chunk)?;
         if items.is_empty() {
             continue;
         }
+        crate::llm_egress::withhold_judgment_bodies(send_body, &mut items);
 
         match evaluate_batch(&client, &items, &user_context).await {
             Ok(results) => {

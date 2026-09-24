@@ -15,7 +15,7 @@ build edges, all target platforms). npm packages are the production
 dependency closure reported by `pnpm licenses list --prod`. Dev-only
 dependencies are omitted because they are not distributed.
 
-Totals: 842 Rust crates, 42 npm packages.
+Totals: 842 Rust crates, 40 npm packages.
 
 Rust Crates (842)
 -----------------
@@ -863,28 +863,27 @@ zvariant 5.11.0 - MIT - https://github.com/z-galaxy/zbus/
 zvariant_derive 5.11.0 - MIT - https://github.com/z-galaxy/zbus/
 zvariant_utils 3.3.1 - MIT - https://github.com/z-galaxy/zbus/
 
-npm Packages (42)
+npm Packages (40)
 -----------------
 
-@babel/runtime 7.28.6 - MIT - https://babel.dev/docs/en/next/babel-runtime
 @babel/runtime 7.29.7 - MIT - https://babel.dev/docs/en/next/babel-runtime
-@fontsource-variable/inter 5.2.8 - OFL-1.1 - https://fontsource.org/fonts/inter
-@fontsource-variable/jetbrains-mono 5.2.8 - OFL-1.1 - https://fontsource.org/fonts/jetbrains-mono
-@tanstack/react-virtual 3.14.9 - MIT - https://tanstack.com/virtual
-@tanstack/virtual-core 3.17.7 - MIT - https://tanstack.com/virtual
+@fontsource-variable/inter 5.3.0 - OFL-1.1 - https://fontsource.org/fonts/inter
+@fontsource-variable/jetbrains-mono 5.3.0 - OFL-1.1 - https://fontsource.org/fonts/jetbrains-mono
+@tanstack/react-virtual 3.14.13 - MIT - https://tanstack.com/virtual
+@tanstack/virtual-core 3.17.11 - MIT - https://tanstack.com/virtual
 @tauri-apps/api 2.11.1 - Apache-2.0 OR MIT - https://github.com/tauri-apps/tauri#readme
-@tauri-apps/plugin-opener 2.5.4 - MIT OR Apache-2.0 - https://github.com/tauri-apps/plugins-workspace#readme
-@tauri-apps/plugin-updater 2.10.1 - MIT OR Apache-2.0 - https://github.com/tauri-apps/plugins-workspace#readme
+@tauri-apps/plugin-opener 2.5.5 - MIT OR Apache-2.0 - https://github.com/tauri-apps/plugins-workspace#readme
+@tauri-apps/plugin-updater 2.12.0 - MIT OR Apache-2.0 - https://github.com/tauri-apps/plugins-workspace#readme
 @types/d3-color 3.1.3 - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/d3-color
 @types/d3-drag 3.0.7 - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/d3-drag
 @types/d3-interpolate 3.0.4 - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/d3-interpolate
-@types/d3-selection 3.0.11 - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/d3-selection
+@types/d3-selection 3.0.12 - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/d3-selection
 @types/d3-transition 3.0.9 - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/d3-transition
 @types/d3-zoom 3.0.8 - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/d3-zoom
-@types/react 19.2.17 - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/react
-@types/react-dom 19.2.3 - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/react-dom
-@xyflow/react 12.11.2 - MIT - https://reactflow.dev
-@xyflow/system 0.0.79 - MIT - https://github.com/xyflow/xyflow#readme
+@types/react 19.3.0 - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/react
+@types/react-dom 19.3.0 - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/react-dom
+@xyflow/react 12.11.6 - MIT - https://reactflow.dev
+@xyflow/system 0.0.82 - MIT - https://github.com/xyflow/xyflow#readme
 classcat 5.0.5 - MIT - https://github.com/jorgebucaran/classcat#readme
 csstype 3.2.3 - MIT - https://github.com/frenic/csstype#readme
 d3-color 3.1.0 - ISC - https://d3js.org/d3-color/
@@ -896,18 +895,17 @@ d3-selection 3.0.0 - ISC - https://d3js.org/d3-selection/
 d3-timer 3.0.1 - ISC - https://d3js.org/d3-timer/
 d3-transition 3.0.1 - ISC - https://d3js.org/d3-transition/
 d3-zoom 3.0.0 - ISC - https://d3js.org/d3-zoom/
-html-parse-stringify 3.0.1 - MIT - https://github.com/henrikjoreteg/html-parse-stringify
-i18next 26.3.3 - MIT - https://www.i18next.com
-i18next-resources-to-backend 1.2.1 - MIT - https://github.com/i18next/i18next-resources-to-backend
-react 19.2.7 - MIT - https://react.dev/
-react-dom 19.2.7 - MIT - https://react.dev/
-react-i18next 17.0.8 - MIT - https://github.com/i18next/react-i18next
-scheduler 0.27.0 - MIT - https://react.dev/
+html-parse-stringify 4.0.1 - MIT - https://github.com/i18next/html-parse-stringify
+i18next 26.4.2 - MIT - https://www.i18next.com
+i18next-resources-to-backend 1.2.3 - MIT - https://github.com/i18next/i18next-resources-to-backend
+react 19.3.0 - MIT - https://react.dev/
+react-dom 19.3.0 - MIT - https://react.dev/
+react-i18next 17.0.14 - MIT - https://github.com/i18next/react-i18next
+scheduler 0.28.0 - MIT - https://react.dev/
 typescript 5.9.3 - Apache-2.0 - https://www.typescriptlang.org/
-use-sync-external-store 1.6.0 - MIT - https://github.com/facebook/react#readme
-void-elements 3.1.0 - MIT - https://github.com/jadejs/void-elements
+use-sync-external-store 1.7.0 - MIT - https://github.com/react/react#readme
 zustand 4.5.7 - MIT - https://github.com/pmndrs/zustand
-zustand 5.0.14 - MIT - https://github.com/pmndrs/zustand
+zustand 5.0.15 - MIT - https://github.com/pmndrs/zustand
 
 Reciprocal-Licence Components (9)
 ---------------------------------
@@ -930,7 +928,7 @@ option-ext 0.2.0 - MPL-2.0 - https://github.com/soc/option-ext.git
 selectors 0.36.1 - MPL-2.0 - https://github.com/servo/stylo
 selectors 0.38.0 - MPL-2.0 - https://github.com/servo/stylo
 
-Full Licence Text - @fontsource-variable/inter 5.2.8 (SIL Open Font License 1.1)
+Full Licence Text - @fontsource-variable/inter 5.3.0 (SIL Open Font License 1.1)
 --------------------------------------------------------------------------------
 
 Copyright 2016 The Inter Project Authors (https://github.com/rsms/inter) Inter-Italic[opsz,wght].ttf: Copyright 2016 The Inter Project Authors (https://github.com/rsms/inter)
@@ -1027,7 +1025,7 @@ DAMAGES, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING
 FROM, OUT OF THE USE OR INABILITY TO USE THE FONT SOFTWARE OR FROM
 OTHER DEALINGS IN THE FONT SOFTWARE.
 
-Full Licence Text - @fontsource-variable/jetbrains-mono 5.2.8 (SIL Open Font License 1.1)
+Full Licence Text - @fontsource-variable/jetbrains-mono 5.3.0 (SIL Open Font License 1.1)
 -----------------------------------------------------------------------------------------
 
 Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono) JetBrainsMono-Italic[wght].ttf: Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono)
