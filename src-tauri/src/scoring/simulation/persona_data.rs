@@ -43,9 +43,8 @@ pub(super) struct PersonaEnrichment {
     // ACEContext enrichment
     pub topic_confidence: HashMap<String, f32>,
 
-    // ScoringContext enrichment (11 missing fields)
+    // ScoringContext enrichment
     pub topic_embeddings: HashMap<String, Vec<f32>>,
-    pub source_quality: HashMap<String, f32>,
     pub work_topics: Vec<String>,
     pub calibration_deltas: HashMap<String, f32>,
     pub taste_embedding: Option<Vec<f32>>,
@@ -74,10 +73,6 @@ fn string_set(items: &[&str]) -> HashSet<String> {
 }
 
 fn half_life_map(pairs: &[(&str, f32)]) -> HashMap<String, f32> {
-    pairs.iter().map(|(k, v)| (k.to_string(), *v)).collect()
-}
-
-fn source_quality_map(pairs: &[(&str, f32)]) -> HashMap<String, f32> {
     pairs.iter().map(|(k, v)| (k.to_string(), *v)).collect()
 }
 
@@ -127,12 +122,6 @@ fn rust_enrichment() -> PersonaEnrichment {
             "sqlite",
             "wasm",
             "systems programming",
-        ]),
-        source_quality: source_quality_map(&[
-            ("hackernews", 0.8),
-            ("reddit", 0.6),
-            ("github_trending", 0.9),
-            ("rss", 0.7),
         ]),
         work_topics: string_vec(&["rust", "tauri"]),
         calibration_deltas: confidence_map(&[("rust", 0.05), ("tauri", 0.03)]),
@@ -195,12 +184,6 @@ fn python_enrichment() -> PersonaEnrichment {
             "machine learning",
             "llm",
             "data science",
-        ]),
-        source_quality: source_quality_map(&[
-            ("hackernews", 0.7),
-            ("reddit", 0.7),
-            ("github_trending", 0.8),
-            ("rss", 0.8),
         ]),
         work_topics: string_vec(&["pytorch", "transformers"]),
         calibration_deltas: confidence_map(&[("python", 0.04), ("pytorch", 0.06)]),
@@ -268,12 +251,6 @@ fn fullstack_ts_enrichment() -> PersonaEnrichment {
             "nodejs",
             "graphql",
         ]),
-        source_quality: source_quality_map(&[
-            ("hackernews", 0.7),
-            ("reddit", 0.7),
-            ("github_trending", 0.8),
-            ("rss", 0.8),
-        ]),
         work_topics: string_vec(&["react", "nextjs"]),
         calibration_deltas: confidence_map(&[("typescript", 0.03), ("react", 0.04)]),
         taste_embedding: Some(taste_from_topics(&["typescript", "react", "nextjs"])),
@@ -337,12 +314,6 @@ fn devops_enrichment() -> PersonaEnrichment {
             "prometheus",
             "observability",
         ]),
-        source_quality: source_quality_map(&[
-            ("hackernews", 0.7),
-            ("reddit", 0.6),
-            ("github_trending", 0.8),
-            ("rss", 0.8),
-        ]),
         work_topics: string_vec(&["kubernetes", "terraform"]),
         calibration_deltas: confidence_map(&[("kubernetes", 0.05), ("terraform", 0.03)]),
         taste_embedding: Some(taste_from_topics(&[
@@ -401,12 +372,6 @@ fn mobile_enrichment() -> PersonaEnrichment {
             "mobile",
             "ios",
             "android",
-        ]),
-        source_quality: source_quality_map(&[
-            ("hackernews", 0.6),
-            ("reddit", 0.7),
-            ("github_trending", 0.8),
-            ("rss", 0.7),
         ]),
         work_topics: string_vec(&["react native", "expo"]),
         calibration_deltas: confidence_map(&[("react native", 0.04), ("expo", 0.03)]),

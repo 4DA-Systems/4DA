@@ -219,104 +219,8 @@ pub(crate) fn validate_path_input(field: &str, path: &str) -> Result<String> {
     Ok(clean)
 }
 
-/// Validate a file path by resolving symlinks and ensuring the canonical path
-/// is safe. Use this instead of `validate_path_input` when the path will be
-/// used for actual filesystem access (reads, writes, directory listing).
-///
-/// Performs all checks from `validate_path_input` plus:
-/// - Resolves symlinks via `std::fs::canonicalize()`
-/// - Blocks Windows UNC paths (`\\server\share`)
-/// - Optionally validates the resolved path is under an allowed root
-///
-/// Returns the canonicalized path as a string.
-///
-/// NO PRODUCTION CALLER TODAY — exercised only by `ipc_guard_tests`. Kept as the
-/// hardened path-validation primitive any future filesystem-touching IPC command
-/// must use; deleting it would invite an unguarded re-implementation. The expired
-/// removal marker dated 2026-08-01 was cleared 2026-08-12 rather than rolled
-/// forward; wiring or removal is an owner decision.
-#[allow(dead_code)] // REMOVE BY 2026-11-12
-pub(crate) fn validate_path_canonical(
-    field: &str,
-    path: &str,
-    allowed_root: Option<&std::path::Path>,
-) -> Result<String> {
-    // First run the basic string-level checks
-    let clean = validate_path_input(field, path)?;
-
-    // Block Windows UNC paths (\\server\share or //server/share)
-    if clean.starts_with("\\\\") || clean.starts_with("//") {
-        tracing::warn!(
-            target: "4da::security",
-            field,
-            "UNC path blocked"
-        );
-        return Err(FourDaError::Validation(format!(
-            "{field} contains a UNC network path which is not allowed"
-        )));
-    }
-
-    // Resolve symlinks and normalize the path
-    let canonical = std::fs::canonicalize(&clean).map_err(|e| {
-        tracing::warn!(
-            target: "4da::security",
-            field,
-            path = %clean,
-            error = %e,
-            "Failed to canonicalize path"
-        );
-        FourDaError::Validation(format!("{field} could not be resolved to a real path: {e}"))
-    })?;
-
-    let canonical_str = canonical.to_string_lossy().to_string();
-
-    // On Windows, canonicalize returns \\?\ extended-length paths — strip the prefix
-    // for usability but keep the resolved path.
-    let normalized = if cfg!(windows) {
-        canonical_str
-            .strip_prefix("\\\\?\\")
-            .unwrap_or(&canonical_str)
-            .to_string()
-    } else {
-        canonical_str.clone()
-    };
-
-    // If an allowed root is specified, verify the resolved path is underneath it
-    if let Some(root) = allowed_root {
-        let root_canonical = std::fs::canonicalize(root).map_err(|e| {
-            FourDaError::Validation(format!("Allowed root path could not be resolved: {e}"))
-        })?;
-        let root_str = root_canonical.to_string_lossy().to_string();
-        let root_normalized = if cfg!(windows) {
-            root_str
-                .strip_prefix("\\\\?\\")
-                .unwrap_or(&root_str)
-                .to_string()
-        } else {
-            root_str.clone()
-        };
-
-        if !normalized.starts_with(&root_normalized) {
-            tracing::warn!(
-                target: "4da::security",
-                field,
-                resolved = %normalized,
-                allowed_root = %root_normalized,
-                "Canonical path escapes allowed root"
-            );
-            return Err(FourDaError::Validation(format!(
-                "{field} resolves to a path outside the allowed directory"
-            )));
-        }
-    }
-
-    Ok(normalized)
-}
-
 /// Ollama's default local endpoint — explicitly allowed through SSRF checks.
-#[allow(dead_code)] // REMOVE BY 2026-11-12
 const OLLAMA_HOST: &str = "127.0.0.1";
-#[allow(dead_code)] // REMOVE BY 2026-11-12
 const OLLAMA_PORT: u16 = 11434;
 
 /// Validate a URL is safe for outbound HTTP requests (SSRF prevention).
@@ -333,10 +237,11 @@ const OLLAMA_PORT: u16 = 11434;
 /// WIRED, BUT ONLY BEHIND A NON-DEFAULT FEATURE (corrected 2026-08-15): the one
 /// production caller is `webhooks::commands::register_webhook_cmd`, gated on
 /// `feature = "enterprise"`. The default build compiles the `webhooks_stub`
-/// instead, so under default features this genuinely has no caller — which is
-/// why the dead-code allowance below must stay until `enterprise` ships on by
-/// default. The previous "NO PRODUCTION CALLER TODAY" note predated that caller
-/// and was stale.
+/// instead, so under default features this genuinely has no caller. The
+/// dead-code allowance is therefore scoped with `cfg_attr` to builds WITHOUT
+/// `enterprise` (2026-09-24): an enterprise build (CI runs clippy
+/// `--features enterprise -D warnings`) still fails if that caller goes away,
+/// so the compiler, not a calendar date, polices this.
 ///
 /// WHY IT IS NOT WIRED MORE WIDELY (recorded 2026-08-13 after an audit flagged
 /// it as orphaned hardening):
@@ -357,7 +262,7 @@ const OLLAMA_PORT: u16 = 11434;
 /// distinguishes user-authored URLs (a feed the user typed — trusted) from
 /// content-derived URLs (a link discovered inside fetched content — untrusted,
 /// and the real SSRF vector). Apply it to the latter only.
-#[allow(dead_code)] // REMOVE BY 2026-11-12
+#[cfg_attr(not(feature = "enterprise"), allow(dead_code))]
 pub(crate) fn validate_url_safe_for_request(field: &str, url: &str) -> Result<String> {
     // Basic input validation first
     let clean = validate_url_input(field, url)?;

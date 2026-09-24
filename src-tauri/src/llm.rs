@@ -241,19 +241,6 @@ impl LLMClient {
         self.purpose.unwrap_or(call_shape)
     }
 
-    /// Check if the client is configured.
-    /// Only the provider-validation tests call this today; the production paths
-    /// check capability via `llm_capability` instead.
-    /// (Expired removal marker dated 2026-08-01 cleared 2026-08-12.)
-    #[allow(dead_code)] // REMOVE BY 2026-11-12
-    pub fn is_configured(&self) -> bool {
-        match self.provider.provider.as_str() {
-            "anthropic" | "openai" | "openai-compatible" => !self.provider.api_key.is_empty(),
-            "ollama" => true, // Ollama doesn't need an API key
-            _ => false,
-        }
-    }
-
     /// Send a completion request.
     /// Enforces daily token and cost limits — returns an error if the budget is exhausted.
     pub async fn complete(&self, system: &str, messages: Vec<Message>) -> Result<LLMResponse> {
@@ -1332,100 +1319,6 @@ mod tests {
     }
 
     // ========================================================================
-    // is_configured — empty API key handling
-    // ========================================================================
-
-    #[test]
-    fn test_is_configured_empty_api_key_anthropic() {
-        let provider = LLMProvider {
-            provider: "anthropic".to_string(),
-            api_key: String::new(),
-            model: "claude-haiku-4-5-20251001".to_string(),
-            base_url: None,
-            openai_api_key: String::new(),
-            embedding_model: String::new(),
-            allow_cloud_embeddings: false,
-        };
-        let client = LLMClient::new(provider);
-        assert!(
-            !client.is_configured(),
-            "Anthropic with empty API key should not be configured"
-        );
-    }
-
-    #[test]
-    fn test_is_configured_empty_api_key_openai() {
-        let provider = LLMProvider {
-            provider: "openai".to_string(),
-            api_key: String::new(),
-            model: "gpt-4o-mini".to_string(),
-            base_url: None,
-            openai_api_key: String::new(),
-            embedding_model: String::new(),
-            allow_cloud_embeddings: false,
-        };
-        let client = LLMClient::new(provider);
-        assert!(
-            !client.is_configured(),
-            "OpenAI with empty API key should not be configured"
-        );
-    }
-
-    #[test]
-    fn test_is_configured_ollama_no_key_needed() {
-        let provider = LLMProvider {
-            provider: "ollama".to_string(),
-            api_key: String::new(),
-            model: "llama3".to_string(),
-            base_url: None,
-            openai_api_key: String::new(),
-            embedding_model: String::new(),
-            allow_cloud_embeddings: false,
-        };
-        let client = LLMClient::new(provider);
-        assert!(
-            client.is_configured(),
-            "Ollama should be configured without an API key"
-        );
-    }
-
-    #[test]
-    fn test_is_configured_with_valid_api_key() {
-        let provider = LLMProvider {
-            provider: "anthropic".to_string(),
-            api_key: "sk-ant-test-key-12345".to_string(),
-            model: "claude-haiku-4-5-20251001".to_string(),
-            base_url: None,
-            openai_api_key: String::new(),
-            embedding_model: String::new(),
-            allow_cloud_embeddings: false,
-        };
-        let client = LLMClient::new(provider);
-        assert!(
-            client.is_configured(),
-            "Anthropic with API key should be configured"
-        );
-    }
-
-    #[test]
-    fn test_is_configured_unknown_provider() {
-        let provider = LLMProvider {
-            provider: "unknown_provider".to_string(),
-            api_key: "some-key".to_string(),
-            model: "some-model".to_string(),
-            base_url: None,
-            openai_api_key: String::new(),
-            embedding_model: String::new(),
-            allow_cloud_embeddings: false,
-        };
-        let client = LLMClient::new(provider);
-        assert!(
-            !client.is_configured(),
-            "Unknown provider should not be configured"
-        );
-    }
-
-    // ========================================================================
     // Cost estimation edge cases
     // ========================================================================
 
@@ -1533,46 +1426,6 @@ mod tests {
     fn test_sanitize_api_error_preserves_short_text() {
         let text = "rate limit exceeded";
         assert_eq!(sanitize_api_error(text), text);
-    }
-
-    // ========================================================================
-    // is_configured — openai-compatible provider
-    // ========================================================================
-
-    #[test]
-    fn test_is_configured_openai_compatible_needs_key() {
-        let provider = LLMProvider {
-            provider: "openai-compatible".to_string(),
-            api_key: String::new(),
-            model: "mistral-large".to_string(),
-            base_url: Some("https://api.mistral.ai/v1".to_string()),
-            openai_api_key: String::new(),
-            embedding_model: String::new(),
-            allow_cloud_embeddings: false,
-        };
-        let client = LLMClient::new(provider);
-        assert!(
-            !client.is_configured(),
-            "openai-compatible with empty key should not be configured"
-        );
-    }
-
-    #[test]
-    fn test_is_configured_openai_compatible_with_key() {
-        let provider = LLMProvider {
-            provider: "openai-compatible".to_string(),
-            api_key: "test-key-12345".to_string(),
-            model: "mistral-large".to_string(),
-            base_url: Some("https://api.mistral.ai/v1".to_string()),
-            openai_api_key: String::new(),
-            embedding_model: String::new(),
-            allow_cloud_embeddings: false,
-        };
-        let client = LLMClient::new(provider);
-        assert!(
-            client.is_configured(),
-            "openai-compatible with API key should be configured"
-        );
     }
 
     // ========================================================================

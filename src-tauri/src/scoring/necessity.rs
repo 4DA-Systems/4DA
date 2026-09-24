@@ -19,8 +19,6 @@ use tracing::debug;
 
 /// Inputs gathered from existing scoring signals.
 /// All fields are populated from values already computed in the pipeline.
-// REMOVE BY 2026-11-15 — extended 2026-09-24 in #681: the expired date failed the CI date gate on every PR; the dedicated dead-code pass decides delete-vs-wire (was: scoring dir staged wholesale): necessity inputs are populated and displayed; owner to wire the unread fields or trim
-#[allow(dead_code)] // Pipeline struct field — populated but not read in current scoring
 pub(crate) struct NecessityInputs {
     /// Does this item match a user dependency? (from dep_match_score)
     pub dep_match_score: f32,

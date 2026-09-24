@@ -44,36 +44,20 @@ use chrono::{DateTime, Utc};
 use rusqlite::{params, Connection};
 use tracing::{debug, warn};
 
-/// One row of the `calibration_samples` table. Constructed from an
-/// AdvisorSignal + the source_item_id that was judged.
+/// The columns of one `calibration_samples` row that the fitter reads.
 ///
-/// Most call sites don't need to build a `CalibrationSample` directly;
-/// `stamp_signals` accepts AdvisorSignal slices and does the conversion.
-/// The struct is exposed so the fitter's SELECT can decode rows into it.
-// (Expired removal marker dated 2026-08-01 cleared 2026-08-12 — the multi-task fitter
-// below has not landed, so retention is an owner call, not a rolled-forward date.)
-// REMOVE BY 2026-11-12
-#[allow(dead_code)]
-// Several fields are decoded but not read by the fitter yet;
-// the fitter uses raw_score + source_item_id + created_at +
-// id. The remaining fields are reserved for the upcoming
-// multi-task fitter that will re-group by (hash, task) +
-// drift-detection by prompt_version.
+/// Rows are written by `stamp_signals` from AdvisorSignal slices. The fitter
+/// decodes only what it pairs against outcomes: row id, judged item, raw
+/// score and creation time. Model, task and prompt version are selection
+/// keys in `collect_unprocessed`'s WHERE clause, so they are not decoded.
 #[derive(Debug, Clone)]
 pub struct CalibrationSample {
     pub id: Option<i64>,
     pub source_item_id: i64,
-    pub model_identity_hash: String,
-    pub task: String,
-    pub prompt_version: String,
     /// Raw confidence reported by the advisor (the value we want to
     /// calibrate against observed outcomes).
     pub raw_score: f32,
-    /// Separately-reported confidence in the signal itself. Kept for
-    /// completeness; the fitter uses `raw_score` as the predicted value.
-    pub confidence: f32,
     pub created_at: Option<DateTime<Utc>>,
-    pub processed_at: Option<DateTime<Utc>>,
 }
 
 /// Persist a batch of advisor signals against a single source_item.
@@ -139,30 +123,6 @@ pub fn stamp_signals(
     Ok(inserted)
 }
 
-/// Count unprocessed samples for a given (model, task). The "pending samples"
-/// UI indicator this was written for never shipped, so today it is exercised
-/// only by this module's and `calibration_fitter`'s tests; the fitter itself
-/// uses `collect_unprocessed` because it needs the rows, not just a count.
-/// (Expired removal marker dated 2026-08-01 cleared 2026-08-12.)
-#[allow(dead_code)] // REMOVE BY 2026-11-12
-pub fn count_unprocessed(
-    conn: &Connection,
-    identity_hash: &str,
-    task: &str,
-    min_age_hours: i64,
-) -> Result<u32> {
-    let count: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM calibration_samples
-         WHERE model_identity_hash = ?1
-           AND task = ?2
-           AND processed_at IS NULL
-           AND created_at <= datetime('now', ?3)",
-        params![identity_hash, task, format!("-{} hours", min_age_hours),],
-        |r| r.get(0),
-    )?;
-    Ok(count.max(0) as u32)
-}
-
 /// Fetch unprocessed samples older than `min_age_hours` for a given
 /// (model, task). The age floor matters because InteractionPattern
 /// classification needs dwell/scroll telemetry that only arrives on
@@ -176,8 +136,7 @@ pub fn collect_unprocessed(
     limit: usize,
 ) -> Result<Vec<CalibrationSample>> {
     let mut stmt = conn.prepare(
-        "SELECT id, source_item_id, model_identity_hash, task,
-                prompt_version, raw_score, confidence, created_at, processed_at
+        "SELECT id, source_item_id, raw_score, created_at
          FROM calibration_samples
          WHERE model_identity_hash = ?1
            AND task = ?2
@@ -237,13 +196,8 @@ fn row_to_sample(row: &rusqlite::Row<'_>) -> rusqlite::Result<CalibrationSample>
     Ok(CalibrationSample {
         id: Some(row.get(0)?),
         source_item_id: row.get(1)?,
-        model_identity_hash: row.get(2)?,
-        task: row.get(3)?,
-        prompt_version: row.get(4)?,
-        raw_score: row.get::<_, f64>(5)? as f32,
-        confidence: row.get::<_, f64>(6)? as f32,
-        created_at: parse_sqlite_datetime(row.get::<_, Option<String>>(7)?.as_deref()),
-        processed_at: parse_sqlite_datetime(row.get::<_, Option<String>>(8)?.as_deref()),
+        raw_score: row.get::<_, f64>(2)? as f32,
+        created_at: parse_sqlite_datetime(row.get::<_, Option<String>>(3)?.as_deref()),
     })
 }
 
@@ -337,18 +291,25 @@ mod tests {
     }
 
     #[test]
-    fn count_unprocessed_respects_min_age_hours() {
+    fn collect_respects_min_age_hours() {
         let conn = test_conn();
         // Insert a fresh sample (created_at = now).
         stamp_signals(&conn, 1, "hash", &[signal("judge", 0.5, 0.9)]).unwrap();
 
         // min_age=0 sees it; min_age=24 does not.
-        assert_eq!(count_unprocessed(&conn, "hash", "judge", 0).unwrap(), 1);
-        assert_eq!(count_unprocessed(&conn, "hash", "judge", 24).unwrap(), 0);
+        assert_eq!(
+            collect_unprocessed(&conn, "hash", "judge", 0, 10)
+                .unwrap()
+                .len(),
+            1
+        );
+        assert!(collect_unprocessed(&conn, "hash", "judge", 24, 10)
+            .unwrap()
+            .is_empty());
     }
 
     #[test]
-    fn count_unprocessed_ignores_processed_rows() {
+    fn collect_ignores_processed_rows() {
         let conn = test_conn();
         stamp_signals(&conn, 1, "hash", &[signal("judge", 0.5, 0.9)]).unwrap();
         conn.execute(
@@ -356,7 +317,9 @@ mod tests {
             [],
         )
         .unwrap();
-        assert_eq!(count_unprocessed(&conn, "hash", "judge", 0).unwrap(), 0);
+        assert!(collect_unprocessed(&conn, "hash", "judge", 0, 10)
+            .unwrap()
+            .is_empty());
     }
 
     #[test]
@@ -413,7 +376,7 @@ mod tests {
     }
 
     #[test]
-    fn mark_processed_sets_timestamp_and_excludes_from_count() {
+    fn mark_processed_sets_timestamp_and_excludes_from_collect() {
         let conn = test_conn();
         stamp_signals(
             &conn,
@@ -428,7 +391,9 @@ mod tests {
 
         let marked = mark_processed(&conn, &ids).unwrap();
         assert_eq!(marked, 2);
-        assert_eq!(count_unprocessed(&conn, "h", "judge", 0).unwrap(), 0);
+        assert!(collect_unprocessed(&conn, "h", "judge", 0, 10)
+            .unwrap()
+            .is_empty());
     }
 
     #[test]

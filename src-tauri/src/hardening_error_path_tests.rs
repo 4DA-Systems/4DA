@@ -111,65 +111,6 @@ mod tests {
         use crate::llm::LLMClient;
         use crate::settings::LLMProvider;
 
-        /// LLMClient with unknown provider returns error from complete().
-        /// The match arm for unknown providers returns Err("Unknown provider: ...").
-        #[test]
-        fn test_unknown_provider_not_configured() {
-            let provider = LLMProvider {
-                provider: "bogus_provider_xyz".to_string(),
-                api_key: "key".to_string(),
-                model: "model".to_string(),
-                base_url: None,
-                openai_api_key: String::new(),
-                embedding_model: String::new(),
-                allow_cloud_embeddings: false,
-            };
-            let client = LLMClient::new(provider);
-            // is_configured returns false for unknown providers
-            assert!(
-                !client.is_configured(),
-                "Unknown provider should not be configured"
-            );
-        }
-
-        /// LLMClient with empty API key for anthropic is not configured.
-        #[test]
-        fn test_anthropic_empty_api_key_not_configured() {
-            let provider = LLMProvider {
-                provider: "anthropic".to_string(),
-                api_key: String::new(),
-                model: "claude-haiku-4-5-20251001".to_string(),
-                base_url: None,
-                openai_api_key: String::new(),
-                embedding_model: String::new(),
-                allow_cloud_embeddings: false,
-            };
-            let client = LLMClient::new(provider);
-            assert!(
-                !client.is_configured(),
-                "Anthropic with empty key should not be configured"
-            );
-        }
-
-        /// LLMClient with empty API key for openai is not configured.
-        #[test]
-        fn test_openai_empty_api_key_not_configured() {
-            let provider = LLMProvider {
-                provider: "openai".to_string(),
-                api_key: String::new(),
-                model: "gpt-4o-mini".to_string(),
-                base_url: None,
-                openai_api_key: String::new(),
-                embedding_model: String::new(),
-                allow_cloud_embeddings: false,
-            };
-            let client = LLMClient::new(provider);
-            assert!(
-                !client.is_configured(),
-                "OpenAI with empty key should not be configured"
-            );
-        }
-
         /// Malformed JSON from LLM: parsing a non-JSON string as Value should fail
         /// gracefully through serde_json, not panic.
         #[test]

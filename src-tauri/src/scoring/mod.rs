@@ -694,15 +694,12 @@ pub(crate) struct ScoringContext {
     // feedback_boosts (feedback-derived topic boosts) DELETED in v20a: the
     // loader had pinned it to an empty map since v19 (AD-029) and the last
     // pipeline reader was removed with the dead feedback_boost computation.
-    /// Retired source-quality scaffold: source_type -> score (-1.0 to 1.0)
-    ///
-    /// Loaded permanently empty and read by nothing since AD-029 demoted the
-    /// behavioural scoring signals (V2 pins `source_quality_boost` to 0.0). The
-    /// field is retained deliberately as AD-029 scaffolding — it still carries
-    /// the simulation's enrichment knob — and must NOT be deleted until that
-    /// decision is revisited against AD-029's re-enable criteria.
-    #[allow(dead_code)] // REMOVE BY 2026-11-12
-    pub source_quality: HashMap<String, f32>,
+    // source_quality (learned per-source score map) DELETED 2026-09-24: loaded
+    // permanently empty and read by nothing since AD-029 (v19) demoted the
+    // behavioural signals; V2 pins `source_quality_boost` to 0.0. AD-031
+    // rejected keeping dormant capture for a re-enable (criterion 1 requires a
+    // rebuilt capture layer), so the empty map and its simulation no-op knob
+    // went with it.
     /// User's explicitly declared tech stack (3-5 items from onboarding).
     /// Used for signal action text and priority escalation — much smaller than detected_tech.
     pub declared_tech: Vec<String>,

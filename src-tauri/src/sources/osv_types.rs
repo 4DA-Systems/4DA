@@ -63,9 +63,8 @@ pub(super) struct OsvSeverity {
 pub(super) struct OsvAffected {
     pub package: Option<OsvPackage>,
     pub ranges: Option<Vec<OsvRange>>,
-    // REMOVE BY 2026-11-10: serde-deserialized field, wire into vulnerability detail view or drop
-    #[allow(dead_code)]
-    pub versions: Option<Vec<String>>,
+    // The advisory's enumerated `versions` list is not deserialized: matching
+    // runs on `ranges` only, and serde skips unknown fields.
 }
 
 #[derive(Debug, Deserialize, Serialize)]

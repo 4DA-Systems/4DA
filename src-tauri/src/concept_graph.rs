@@ -23,14 +23,12 @@ use crate::extract_topics;
 // ============================================================================
 
 /// A weighted edge between two co-occurring topics in the concept graph.
+/// `weight` = co-occurrence count x mean feedback quality of the items that
+/// carry both topics (see `build_concept_graph`).
 #[derive(Debug, Clone)]
-// REMOVE BY 2026-11-10: struct fields set but not yet read — wire into concept map UI or drop
-#[allow(dead_code)]
 pub struct ConceptEdge {
     pub topic_a: String,
     pub topic_b: String,
-    pub co_occurrence_count: u32,
-    pub avg_quality: f32,
     pub weight: f32,
 }
 
@@ -150,8 +148,6 @@ pub fn build_concept_graph(conn: &Connection) -> Result<Vec<ConceptEdge>> {
             ConceptEdge {
                 topic_a,
                 topic_b,
-                co_occurrence_count: count,
-                avg_quality,
                 weight: count as f32 * avg_quality,
             }
         })

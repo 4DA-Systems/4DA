@@ -677,23 +677,10 @@ mod tests {
             title: "New Rust RFC".to_string(),
             source_type: "hackernews".to_string(),
             score: 0.85,
-            signal_priority: Some("alert".to_string()),
         };
         assert_eq!(notification.title, "New Rust RFC");
         assert_eq!(notification.source_type, "hackernews");
         assert!(notification.score > 0.8);
-        assert_eq!(notification.signal_priority, Some("alert".to_string()));
-    }
-
-    #[test]
-    fn test_batched_notification_no_priority() {
-        let notification = BatchedNotification {
-            title: "Minor update".to_string(),
-            source_type: "rss".to_string(),
-            score: 0.3,
-            signal_priority: None,
-        };
-        assert!(notification.signal_priority.is_none());
     }
 
     // ---- MonitoringState batched_items ----
@@ -708,7 +695,6 @@ mod tests {
                 title: "Test".to_string(),
                 source_type: "test".to_string(),
                 score: 0.5,
-                signal_priority: None,
             });
         }
         let items = state.batched_items.lock();

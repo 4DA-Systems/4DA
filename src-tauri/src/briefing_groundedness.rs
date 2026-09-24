@@ -45,13 +45,6 @@ use nlp::*;
 pub struct GroundednessReport {
     pub confidence: f32,
     pub total_terms: usize,
-    /// Count of salient terms matched against the source corpus — the numerator
-    /// of the grounding fraction. Diagnostic only: it reaches humans through the
-    /// report's `Debug` output, NOT the receipts UI (that wiring never landed, and
-    /// the expired removal marker dated 2026-08-01 was cleared 2026-08-12
-    /// rather than rolled forward).
-    #[allow(dead_code)] // REMOVE BY 2026-11-12
-    pub grounded_terms: usize,
     pub ungrounded_terms: Vec<String>,
     /// Multi-word capitalized proper-noun phrases (e.g. "Stripe Connect",
     /// "React Server Components") — the interpretive "claim" layer, kept
@@ -195,7 +188,6 @@ pub fn validate_groundedness_with_packages(
     GroundednessReport {
         confidence,
         total_terms: total,
-        grounded_terms: grounded,
         ungrounded_terms: ungrounded,
         claim_terms,
         claim_grounded,

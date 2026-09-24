@@ -251,8 +251,8 @@ async fn build_scoring_context_cold(db: &Database) -> Result<ScoringContext> {
     // The capture pipeline keeps writing (preferences UI, engagement
     // dashboard); the scoring context simply stops consuming it. Re-enable
     // criteria live in AD-029. (v20a: the pinned-empty feedback_boosts field
-    // was deleted outright with its dead pipeline reader.)
-    let source_quality: HashMap<String, f32> = HashMap::new();
+    // was deleted outright with its dead pipeline reader; 2026-09-24: the
+    // pinned-empty source_quality field likewise.)
 
     // Open a single shared connection for all DB queries in context building
     let shared_conn = crate::open_db_connection()?;
@@ -348,11 +348,6 @@ async fn build_scoring_context_cold(db: &Database) -> Result<ScoringContext> {
     // 3 implicit signals = 1 effective explicit signal
     let effective_feedback_count = feedback_interaction_count + implicit_interaction_count / 3;
 
-    // The stack-profile warm-start of `source_quality` was deleted 2026-08-12:
-    // its only production reader was the V1 pipeline's source-quality boost, and
-    // V2 pins `source_quality_boost = 0.0` (pipeline_v2.rs). The field itself
-    // stays on ScoringContext — the simulation enrichment harness populates it.
-
     // Taste embedding + persona-posterior boosts DEMOTED in v19 (AD-029):
     // both were behavioral aggregates injected into scoring (taste ±0.08 +
     // triage keep-verdict; persona boosts merged into feedback_boosts).
@@ -364,7 +359,6 @@ async fn build_scoring_context_cold(db: &Database) -> Result<ScoringContext> {
         topics = ace_ctx.active_topics.len(),
         tech = ace_ctx.detected_tech.len(),
         embeddings = topic_embeddings.len(),
-        source_prefs = source_quality.len(),
         domain_primary = domain_profile.primary_stack.len(),
         domain_all = domain_profile.all_tech.len(),
         stack_active = composed_stack.active,
@@ -398,7 +392,6 @@ async fn build_scoring_context_cold(db: &Database) -> Result<ScoringContext> {
         exclusions: static_identity.exclusions,
         ace_ctx,
         topic_embeddings,
-        source_quality,
         declared_tech,
         domain_profile,
         work_topics,

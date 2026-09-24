@@ -581,21 +581,15 @@ impl Database {
 
     /// Load embeddings for a set of item IDs. Used by topic clustering to
     /// compute cosine similarity without loading full item content.
-    /// Returns (id, title, source_type, embedding, content_type) tuples.
-    pub fn get_embeddings_for_ids(
-        &self,
-        ids: &[i64],
-    ) -> SqliteResult<Vec<(i64, String, String, Vec<f32>, Option<String>)>> {
+    /// Returns (id, embedding) pairs.
+    pub fn get_embeddings_for_ids(&self, ids: &[i64]) -> SqliteResult<Vec<(i64, Vec<f32>)>> {
         if ids.is_empty() {
             return Ok(Vec::new());
         }
 
         let conn = self.conn.lock();
         let placeholders: String = ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
-        let sql = format!(
-            "SELECT id, title, source_type, embedding, content_type \
-             FROM source_items WHERE id IN ({placeholders})"
-        );
+        let sql = format!("SELECT id, embedding FROM source_items WHERE id IN ({placeholders})");
         let mut stmt = conn.prepare(&sql)?;
 
         let params: Vec<Box<dyn rusqlite::types::ToSql>> = ids
@@ -606,14 +600,8 @@ impl Database {
             params.iter().map(|p| p.as_ref()).collect();
 
         let rows = stmt.query_map(param_refs.as_slice(), |row| {
-            let embedding_blob: Vec<u8> = row.get(3)?;
-            Ok((
-                row.get::<_, i64>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-                blob_to_embedding(&embedding_blob),
-                row.get::<_, Option<String>>(4).unwrap_or(None),
-            ))
+            let embedding_blob: Vec<u8> = row.get(1)?;
+            Ok((row.get::<_, i64>(0)?, blob_to_embedding(&embedding_blob)))
         })?;
 
         rows.collect()

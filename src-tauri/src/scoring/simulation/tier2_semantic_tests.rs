@@ -88,33 +88,6 @@ fn semantic_rust_ctx() -> ScoringContext {
         .build()
 }
 
-#[allow(dead_code)] // REMOVE BY 2026-11-26 — test helper for Python persona context
-fn semantic_python_ctx() -> ScoringContext {
-    let interests = vec![
-        sem_interest(1, "Machine Learning", 1.0, PI_PYTHON),
-        sem_interest(2, "Python", 1.0, PI_PYTHON),
-    ];
-    let ace = sem_ace(
-        &["python", "pytorch", "machine learning"],
-        &["python", "pytorch"],
-    );
-    let domain = personas::make_domain(
-        &["python", "pytorch", "tensorflow"],
-        &["numpy", "pandas", "scikit-learn", "huggingface"],
-        &["torch", "transformers", "numpy", "pandas"],
-        &["machine learning", "python", "llm", "pytorch"],
-    );
-    ScoringContext::builder()
-        .interest_count(2)
-        .interests(interests)
-        .ace_ctx(ace)
-        .domain_profile(domain)
-        .declared_tech(vec!["python".into(), "pytorch".into(), "tensorflow".into()])
-        .composed_stack(crate::stacks::compose_profiles(&["python_ml".to_string()]))
-        .feedback_interaction_count(40)
-        .build()
-}
-
 fn semantic_ts_ctx() -> ScoringContext {
     let interests = vec![sem_interest(1, "TypeScript", 1.0, PI_TS)];
     let ace = sem_ace(

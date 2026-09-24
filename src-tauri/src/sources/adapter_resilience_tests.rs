@@ -200,7 +200,6 @@ mod hn_resilience {
 // 3. Reddit — RedditListing serde deserialization
 // ============================================================================
 
-#[allow(dead_code)] // REMOVE BY 2026-11-26 — deserialization test fixtures — fields read by serde not code
 mod reddit_resilience {
     use serde::Deserialize;
 
@@ -260,7 +259,14 @@ mod reddit_resilience {
         assert_eq!(listing.data.children.len(), 1);
         let post = &listing.data.children[0].data;
         assert_eq!(post.id, "abc");
+        assert_eq!(post.title, "Test");
+        assert!(post.selftext.is_none());
+        assert!(post.url.is_none());
+        assert_eq!(post.permalink, "/r/test/comments/abc");
         assert_eq!(post.score, 0);
+        assert_eq!(post.author, "user");
+        assert_eq!(post.subreddit, "test");
+        assert_eq!(post.num_comments, 0);
         assert!(post.is_self);
     }
 

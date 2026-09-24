@@ -188,9 +188,6 @@ mod channel_render;
 pub mod channels;
 /// Intelligence Reconciliation Phase 11 — Commitment Contracts.
 mod commitment_contracts;
-// REMOVE BY 2026-11-15 — extended 2026-09-24 in #681: the expired date failed the CI date gate on every PR; the dedicated dead-code pass decides delete-vs-wire (was: file touched for an unrelated re-export removal); community intelligence commands gated; module kept for CommunityIntelligenceConfig type
-#[allow(dead_code)]
-mod community_intelligence;
 mod competing_tech;
 pub(crate) mod compression_rules;
 mod concept_graph;
@@ -214,8 +211,6 @@ mod decisions;
 #[cfg(feature = "experimental")]
 mod delegation;
 #[cfg(not(feature = "experimental"))]
-// REMOVE BY 2026-11-15 — extended 2026-09-24 in #681: the expired date failed the CI date gate on every PR; the dedicated dead-code pass decides delete-vs-wire (was: file touched for an unrelated re-export removal): feature-gate structure, its owner decides wiring vs drop
-#[allow(dead_code)] // Feature-gated: stub active only when "experimental" is disabled
 #[path = "delegation_stub.rs"]
 mod delegation;
 pub(crate) mod dep_linker;
@@ -237,8 +232,6 @@ mod triage_audit_commands;
 #[cfg(feature = "experimental")]
 mod achievement_commands;
 #[cfg(not(feature = "experimental"))]
-// REMOVE BY 2026-11-15 — extended 2026-09-24 in #681: the expired date failed the CI date gate on every PR; the dedicated dead-code pass decides delete-vs-wire (was: file touched for an unrelated re-export removal): feature-gate structure, its owner decides wiring vs drop
-#[allow(dead_code)] // Feature-gated: stub active only when "experimental" is disabled
 #[path = "achievement_commands_stub.rs"]
 mod achievement_commands;
 #[cfg(feature = "experimental")]
@@ -370,8 +363,6 @@ mod topic_clustering;
 mod url_validation;
 mod void_commands;
 mod void_engine;
-// REMOVE BY 2026-11-15 — extended 2026-09-24 in #681: the expired date failed the CI date gate on every PR; the dedicated dead-code pass decides delete-vs-wire (was: file touched for an unrelated re-export removal); WaitlistEntry only constructed in tests, owner to wire or drop
-#[allow(dead_code)] // WaitlistEntry struct only constructed in tests
 mod waitlist;
 mod weekly_digest;
 
@@ -393,37 +384,50 @@ mod toolkit_export;
 #[cfg(feature = "experimental")]
 mod toolkit_http;
 #[cfg(not(feature = "experimental"))]
-// REMOVE BY 2026-11-15 — extended 2026-09-24 in #681: the expired date failed the CI date gate on every PR; the dedicated dead-code pass decides delete-vs-wire (was: file touched for an unrelated re-export removal): feature-gate structure, its owner decides wiring vs drop
-#[allow(dead_code)] // Feature-gated: stub active only when "experimental" is disabled
 #[path = "toolkit_http_stub.rs"]
 mod toolkit_http;
 // Team sync — encrypted metadata relay (AD-023)
 // Gated: 17 commands with zero frontend callers. Enable with --features team-sync.
 //
-// `#[allow(dead_code)]` on the dormant members below is deliberate and matches
-// the convention used for the stub modules above. These carry the plumbing the
-// command surface will call once AD-023 is activated; until then a portion is
+// The dead-code allowance on the dormant members below is deliberate. These
+// carry the plumbing the command surface will call once AD-023 is activated
+// (the stub modules above need none); until then a portion is
 // legitimately unreferenced. The allow keeps `-D warnings` meaningful for the
 // rest of the crate instead of forcing this staged code to be deleted. It does
 // NOT suppress compile errors — which is the failure this feature actually had.
+//
+// Each allow carries a REMOVE BY date (added 2026-09-24, staggered so no two
+// fall on one day): the date is the AD-023 re-review, not a deletion order.
+// On it, either AD-023 has activated (wire the listed items, drop the allow),
+// or the owner re-dates it with a fresh count, or the dormant items are deleted.
+// What each allow covers (`cargo clippy --features team-sync,enterprise` with
+// the allow removed, measured 2026-09-24):
+//   team_monitoring     record_team_signal
+//   team_notifications  create_notification
+//   team_sync           cleanup_acked_entries
+//   team_sync_crypto    StorableKeypair, 5 TeamCrypto key methods, encrypt_entry,
+//                       forget_team_keys (the team-leave flow is not built)
+//   team_sync_scheduler PushResponse
+//   organization        8 org-admin functions/types
+//   webhooks            14 delivery / retry / circuit-breaker items
 #[cfg(feature = "team-sync")]
 mod team_intelligence;
 #[cfg(feature = "team-sync")]
-#[allow(dead_code)]
+#[allow(dead_code)] // REMOVE BY 2027-01-12 — AD-023 dormant, see list above
 mod team_monitoring;
 #[cfg(feature = "team-sync")]
-#[allow(dead_code)]
+#[allow(dead_code)] // REMOVE BY 2027-01-14 — AD-023 dormant, see list above
 mod team_notifications;
 #[cfg(feature = "team-sync")]
-#[allow(dead_code)]
+#[allow(dead_code)] // REMOVE BY 2027-01-19 — AD-023 dormant, see list above
 mod team_sync;
 #[cfg(feature = "team-sync")]
 mod team_sync_commands;
 #[cfg(feature = "team-sync")]
-#[allow(dead_code)]
+#[allow(dead_code)] // REMOVE BY 2027-01-21 — AD-023 dormant, see list above
 mod team_sync_crypto;
 #[cfg(feature = "team-sync")]
-#[allow(dead_code)]
+#[allow(dead_code)] // REMOVE BY 2027-01-26 — AD-023 dormant, see list above
 mod team_sync_scheduler;
 #[cfg(feature = "team-sync")]
 mod team_sync_types;
@@ -451,9 +455,10 @@ mod team_sync_commands;
 mod audit;
 #[cfg(feature = "enterprise")]
 mod enterprise_analytics;
-// Same dormant-surface rationale as the team-sync block above.
+// Same dormant-surface rationale (and REMOVE BY re-review) as the team-sync
+// block above.
 #[cfg(feature = "enterprise")]
-#[allow(dead_code)]
+#[allow(dead_code)] // REMOVE BY 2027-01-28 — AD-023/AD-024 dormant, see team-sync list
 mod organization;
 #[cfg(feature = "enterprise")]
 mod sso;
@@ -462,7 +467,7 @@ mod sso_crypto;
 #[cfg(feature = "enterprise")]
 mod sso_xml;
 #[cfg(feature = "enterprise")]
-#[allow(dead_code)]
+#[allow(dead_code)] // REMOVE BY 2027-02-02 — AD-023/AD-024 dormant, see team-sync list
 mod webhooks;
 
 // Stubs when enterprise is disabled
@@ -1155,8 +1160,6 @@ pub fn run() {
             // Intelligence History
             intelligence_history::get_intelligence_growth,
             intelligence_history::get_session_diff,
-            // Community Intelligence — REMOVED from handler (zero frontend callers)
-            // Module retained for CommunityIntelligenceConfig type in settings
             // Local Telemetry (privacy-first, never leaves machine)
             telemetry::track_event,
             telemetry::get_usage_analytics,

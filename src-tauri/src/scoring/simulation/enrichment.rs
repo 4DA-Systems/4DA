@@ -19,7 +19,6 @@ use super::persona_data::PersonaEnrichment;
 pub(super) struct EnrichmentConfig {
     pub enable_topic_confidence: bool,
     pub enable_topic_embeddings: bool,
-    pub enable_source_quality: bool,
     pub enable_work_topics: bool,
     pub enable_calibration_deltas: bool,
     pub enable_taste_embedding: bool,
@@ -36,7 +35,6 @@ impl EnrichmentConfig {
         Self {
             enable_topic_confidence: true,
             enable_topic_embeddings: true,
-            enable_source_quality: true,
             enable_work_topics: true,
             enable_calibration_deltas: true,
             enable_taste_embedding: true,
@@ -53,7 +51,6 @@ impl EnrichmentConfig {
         Self {
             enable_topic_confidence: false,
             enable_topic_embeddings: false,
-            enable_source_quality: false,
             enable_work_topics: false,
             enable_calibration_deltas: false,
             enable_taste_embedding: false,
@@ -71,7 +68,6 @@ impl EnrichmentConfig {
         match field {
             EnrichmentField::TopicConfidence => cfg.enable_topic_confidence = true,
             EnrichmentField::TopicEmbeddings => cfg.enable_topic_embeddings = true,
-            EnrichmentField::SourceQuality => cfg.enable_source_quality = true,
             EnrichmentField::WorkTopics => cfg.enable_work_topics = true,
             EnrichmentField::CalibrationDeltas => cfg.enable_calibration_deltas = true,
             EnrichmentField::TasteEmbedding => cfg.enable_taste_embedding = true,
@@ -90,7 +86,6 @@ impl EnrichmentConfig {
 pub(super) enum EnrichmentField {
     TopicConfidence,
     TopicEmbeddings,
-    SourceQuality,
     WorkTopics,
     CalibrationDeltas,
     TasteEmbedding,
@@ -107,7 +102,6 @@ impl EnrichmentField {
         &[
             EnrichmentField::TopicConfidence,
             EnrichmentField::TopicEmbeddings,
-            EnrichmentField::SourceQuality,
             EnrichmentField::WorkTopics,
             EnrichmentField::CalibrationDeltas,
             EnrichmentField::TasteEmbedding,
@@ -123,7 +117,6 @@ impl EnrichmentField {
         match self {
             Self::TopicConfidence => "topic_confidence",
             Self::TopicEmbeddings => "topic_embeddings",
-            Self::SourceQuality => "source_quality",
             Self::WorkTopics => "work_topics",
             Self::CalibrationDeltas => "calibration_deltas",
             Self::TasteEmbedding => "taste_embedding",
@@ -201,12 +194,6 @@ pub(super) fn enrich_persona(
         base.topic_embeddings
     };
 
-    let source_quality = if config.enable_source_quality {
-        data.source_quality.clone()
-    } else {
-        base.source_quality
-    };
-
     let work_topics = if config.enable_work_topics {
         data.work_topics.clone()
     } else {
@@ -273,7 +260,6 @@ pub(super) fn enrich_persona(
         .exclusions(exclusions)
         .ace_ctx(ace)
         .topic_embeddings(topic_embeddings)
-        .source_quality(source_quality)
         .declared_tech(base.declared_tech)
         .domain_profile(base.domain_profile)
         .work_topics(work_topics)
@@ -379,10 +365,6 @@ mod tests {
             "EnrichmentConfig::none() should not add topic_embeddings"
         );
         assert!(
-            enriched.source_quality.is_empty(),
-            "EnrichmentConfig::none() should not add source_quality"
-        );
-        assert!(
             enriched.work_topics.is_empty(),
             "EnrichmentConfig::none() should not add work_topics"
         );
@@ -396,28 +378,28 @@ mod tests {
     fn enrichment_only_enables_single_field() {
         let bases = all_personas();
         let enrichments = all_enrichments();
-        let config = EnrichmentConfig::only(EnrichmentField::SourceQuality);
+        let config = EnrichmentConfig::only(EnrichmentField::WorkTopics);
 
         // Base-relative for the same reason as enrichment_none_preserves_base:
         // calibrated-sim bases legitimately carry topic embeddings already.
         let base = bases.into_iter().next().expect("at least one persona");
         let base_topic_embeddings = base.topic_embeddings.len();
         let enriched = enrich_persona(base, &enrichments[0], &config);
-        // Source quality should be set
+        // Work topics should be set
         assert!(
-            !enriched.source_quality.is_empty(),
-            "only(SourceQuality) should set source_quality"
+            !enriched.work_topics.is_empty(),
+            "only(WorkTopics) should set work_topics"
         );
         // But topic_embeddings should be untouched
         assert_eq!(
             enriched.topic_embeddings.len(),
             base_topic_embeddings,
-            "only(SourceQuality) should not set topic_embeddings"
+            "only(WorkTopics) should not set topic_embeddings"
         );
         // And exclusions should still be empty
         assert!(
             enriched.exclusions.is_empty(),
-            "only(SourceQuality) should not set exclusions"
+            "only(WorkTopics) should not set exclusions"
         );
     }
 }

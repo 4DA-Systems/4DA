@@ -441,8 +441,6 @@ pub(crate) fn read_team_symmetric_key(
 }
 
 /// Scrub both keychain entries for a team. Tolerant of keychain unavailability.
-// REMOVE BY 2026-11-10: wired up when team-leave lands — kept for parity with team key lifecycle
-#[allow(dead_code)]
 pub(crate) fn forget_team_keys(team_id: &str) {
     let _ = crate::settings::keystore::delete_secret(&team_privkey_keystore_key(team_id));
     let _ = crate::settings::keystore::delete_secret(&team_symkey_keystore_key(team_id));

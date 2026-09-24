@@ -14,15 +14,11 @@ mod tests {
         let existing = HashMap::new();
         let events = vec![
             FeedbackEvent {
-                item_id: 1,
                 topic: "core_tech".to_string(),
-                relevant: true,
                 delta: 0.15,
             },
             FeedbackEvent {
-                item_id: 2,
                 topic: "core_tech".to_string(),
-                relevant: true,
                 delta: 0.15,
             },
         ];
@@ -49,10 +45,8 @@ mod tests {
     fn test_apply_feedback_clamps() {
         let existing = HashMap::new();
         let events: Vec<FeedbackEvent> = (0..20)
-            .map(|i| FeedbackEvent {
-                item_id: i,
+            .map(|_| FeedbackEvent {
                 topic: "core_tech".to_string(),
-                relevant: true,
                 delta: 0.15,
             })
             .collect();
@@ -70,21 +64,15 @@ mod tests {
         let existing = HashMap::new();
         let events = vec![
             FeedbackEvent {
-                item_id: 1,
                 topic: "core_tech".to_string(),
-                relevant: true,
                 delta: 0.15,
             },
             FeedbackEvent {
-                item_id: 2,
                 topic: "core_tech".to_string(),
-                relevant: true,
                 delta: 0.15,
             },
             FeedbackEvent {
-                item_id: 3,
                 topic: "core_tech".to_string(),
-                relevant: false,
                 delta: -0.10,
             },
         ];
@@ -182,10 +170,8 @@ mod tests {
 
         // Apply negative feedback to simulate dismissals
         let negative_events: Vec<FeedbackEvent> = (0..5)
-            .map(|i| FeedbackEvent {
-                item_id: 100 + i,
+            .map(|_| FeedbackEvent {
                 topic: "cross_domain".to_string(),
-                relevant: false,
                 delta: -0.10,
             })
             .collect();
@@ -215,9 +201,7 @@ mod tests {
         // Apply the same positive feedback 10 sessions
         for _ in 0..10 {
             let events = vec![FeedbackEvent {
-                item_id: 1,
                 topic: "core_tech".to_string(),
-                relevant: true,
                 delta: 0.15,
             }];
             boosts = apply_feedback(&boosts, &events);
