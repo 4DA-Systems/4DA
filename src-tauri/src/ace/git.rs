@@ -18,8 +18,13 @@ use crate::utils::sanitize_path;
 /// Max time to wait for a git subprocess (30 seconds).
 const GIT_TIMEOUT_SECS: u64 = 30;
 
-/// Run a git command with a timeout to prevent indefinite hangs.
-fn run_git_with_timeout(args: &[&str], repo_path: &Path) -> Result<std::process::Output> {
+/// Run a git command with a timeout to prevent indefinite hangs. Shared with
+/// `ace::dormancy`, so every git spawn in ACE goes through one windowless,
+/// time-bounded path.
+pub(super) fn run_git_with_timeout(
+    args: &[&str],
+    repo_path: &Path,
+) -> Result<std::process::Output> {
     use std::process::Stdio;
 
     let mut cmd = Command::new("git");
