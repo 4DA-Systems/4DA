@@ -120,7 +120,7 @@
   "devDependencies": {
     "@eslint/js": "^9.39.4",
     "@playwright/test": "^1.63.0",
-    "@size-limit/esbuild": "^12.1.0",
+    "@size-limit/esbuild": "^14.0.0",
     "@tailwindcss/vite": "^4.3.3",
     "@tauri-apps/cli": "^2.11.5",
     "@testing-library/jest-dom": "^7.0.1",
@@ -144,7 +144,7 @@
     "jest-axe": "^10.0.0",
     "jsdom": "^29.1.1",
     "knip": "^6.37.0",
-    "size-limit": "^12.1.0",
+    "size-limit": "^14.0.0",
     "tailwindcss": "^4.3.3",
     "typescript": "~5.9.3",
     "vite": "^8.3.0",
