@@ -26,21 +26,21 @@ fn test_router(pool: SqlitePool) -> Router {
         .route("/health", get(health))
         .route("/auth/invite", post(clients::join_via_invite))
         .route("/teams", post(clients::create_team))
-        .route("/teams/:team_id", get(clients::get_team_info))
-        .route("/teams/:team_id/entries", post(entries::push_entry))
-        .route("/teams/:team_id/entries", get(entries::pull_entries))
-        .route("/teams/:team_id/clients", get(clients::list_clients))
-        .route("/teams/:team_id/clients", post(clients::register_client))
+        .route("/teams/{team_id}", get(clients::get_team_info))
+        .route("/teams/{team_id}/entries", post(entries::push_entry))
+        .route("/teams/{team_id}/entries", get(entries::pull_entries))
+        .route("/teams/{team_id}/clients", get(clients::list_clients))
+        .route("/teams/{team_id}/clients", post(clients::register_client))
         .route(
-            "/teams/:team_id/clients/:client_id",
+            "/teams/{team_id}/clients/{client_id}",
             delete(clients::remove_member),
         )
         .route(
-            "/teams/:team_id/clients/:client_id",
+            "/teams/{team_id}/clients/{client_id}",
             patch(clients::update_role),
         )
-        .route("/teams/:team_id/leave", post(clients::leave_team))
-        .route("/teams/:team_id/invites", post(clients::create_invite))
+        .route("/teams/{team_id}/leave", post(clients::leave_team))
+        .route("/teams/{team_id}/invites", post(clients::create_invite))
         .with_state(pool)
 }
 
