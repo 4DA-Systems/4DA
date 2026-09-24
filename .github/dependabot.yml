@@ -14,7 +14,6 @@
 #   - npm            (/mcp-4da-server)  — MCP server (pnpm-lock.yaml)
 #   - npm            (/mcp-memory-server) — MCP memory server (package-lock.json)
 #   - npm            (/editors/vscode/4da) — VS Code extension (package-lock.json)
-#   - npm            (/paddle-webhook)  — Paddle webhook handler (pnpm-lock.yaml)
 #
 # Dependabot's "npm" ecosystem handles both npm and pnpm lockfiles despite
 # the name — the detection is lockfile-based.
@@ -222,44 +221,3 @@ updates:
     commit-message:
       prefix: "chore(vscode)"
       include: "scope"
-
-  # ── Paddle webhook handler ────────────────────────────────────────
-  - package-ecosystem: "npm"
-    directory: "/paddle-webhook"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "06:00"
-      timezone: "Etc/UTC"
-    open-pull-requests-limit: 5
-    groups:
-      minor-and-patch:
-        update-types: ["minor", "patch"]
-    labels:
-      - "dependencies"
-      - "paddle"
-    assignees:
-      - "runyourempire"
-    reviewers:
-      - "runyourempire"
-    commit-message:
-      prefix: "chore(paddle)"
-      include: "scope"
-    ignore:
-      # undici is a transitive dep of the `vercel` deploy CLI (a devDependency),
-      # NOT of the shipped serverless runtime — api/ imports only Node's built-in
-      # `crypto`, so runtime exposure is nil. It appears across three majors
-      # (5.x / 6.x / 7.x) deep in vercel's tree with no atomic Dependabot update
-      # path, so Dependabot's security update for it errors out ("encountered one
-      # or more errors") on every advisory — the recurring red on this dir.
-      #
-      # SECURITY IS HANDLED, NOT HIDDEN: the patchable 7.x line (which carried
-      # the only HIGH advisories) is pinned to a fixed release via the pnpm
-      # `overrides` entry "undici@7": ">=7.28.0 <8" in package.json — same major,
-      # semver-safe for vercel's HTTP-client usage. The residual 5.28.4 / 6.25.0
-      # lines are low/medium-only and have no override path without a risky,
-      # untestable cross-major bump of the deploy CLI; those ride vercel's own
-      # version bumps. This `ignore` exists ONLY to stop Dependabot's failed
-      # transitive-update attempts — not to suppress the high advisories, which
-      # the override already resolves.
-      - dependency-name: "undici"

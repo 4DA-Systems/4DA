@@ -467,9 +467,10 @@ fn real_repo_lockfiles_parse_with_the_v9_graph() {
         (scope, packages, dev, unknown)
     };
 
-    // paddle-webhook declares no runtime dependencies: everything it holds
-    // ships only with dev tooling — sandbox included.
-    let paddle = read("paddle-webhook/pnpm-lock.yaml");
+    // The retired paddle-webhook's real lockfile (kept as a fixture): a project
+    // that declares no runtime dependencies, so everything it holds ships only
+    // with dev tooling, sandbox included.
+    let paddle = read("src-tauri/src/ace/fixtures/pnpm-v9-dev-only-graph.yaml");
     let edges = ProjectScanner::parse_pnpm_lock_edges(&paddle).len();
     let (_, packages, dev, unknown) = tally(&paddle);
     println!(
