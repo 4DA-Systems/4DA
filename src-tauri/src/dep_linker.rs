@@ -626,8 +626,9 @@ fn is_advisory_source(source_type: &str, content_type: Option<&str>) -> bool {
 ///
 /// Handles adapter-specific formats:
 /// - npm_registry: `react@19.2.5` → `react`, `@tanstack/react-query@5.0.0` → `@tanstack/react-query`
-/// - crates_io: `crate-serde` → `serde`
+/// - crates_io: `crate-serde@1.0.200` → `serde` (pre-schema-123 rows: `crate-serde`)
 /// - pypi: `requests-2.31.0` → `requests` (adapter emits `{name}-{version}`)
+/// - go_modules: `github.com/gin-gonic/gin@v1.10.0` → `github.com/gin-gonic/gin`
 /// - Others: source_id is the bare package name.
 ///
 /// `pub(crate)`: shared with the live scoring pipeline (registry subject grounding).
@@ -655,13 +656,10 @@ pub(crate) fn extract_registry_package(source_type: &str, source_id: &str) -> Op
             name.map(|n| n.to_string())
         }
         "crates_io" | "crates" => {
-            // crates_io source_id format: `crate-{name}`
-            Some(
-                source_id
-                    .strip_prefix("crate-")
-                    .unwrap_or(source_id)
-                    .to_string(),
-            )
+            // crates_io source_id format: `crate-{name}@{version}`. Crate
+            // names never contain '@', so the first one ends the name.
+            let name = source_id.strip_prefix("crate-").unwrap_or(source_id);
+            Some(name.split_once('@').map_or(name, |(n, _)| n).to_string())
         }
         "pypi" => {
             // pypi adapter emits `{name}-{version}` (sources/pypi.rs). Strip the
@@ -685,9 +683,17 @@ pub(crate) fn extract_registry_package(source_type: &str, source_id: &str) -> Op
                 _ => Some(source_id.to_string()),
             }
         }
-        "go_modules" | "go" | "maven" | "nuget" | "packagist" | "rubygems" | "cocoapods" => {
-            Some(source_id.to_string())
+        "go_modules" | "go" => {
+            // go_modules adapter emits `{module}@{version}`; module paths never
+            // contain '@'. Returning the whole key never matched a dependency.
+            Some(
+                source_id
+                    .split_once('@')
+                    .map_or(source_id, |(m, _)| m)
+                    .to_string(),
+            )
         }
+        "maven" | "nuget" | "packagist" | "rubygems" | "cocoapods" => Some(source_id.to_string()),
         _ => None,
     }
 }

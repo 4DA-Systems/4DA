@@ -1,8 +1,12 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! crates.io source implementation
 //!
-//! Monitors Rust crates for new versions, yanked crates, and recently updated
-//! packages. Combines monitored-crate checks with discovery of trending crates.
+//! Monitors the user's Rust crates for new versions and yanked releases.
+//!
+//! Each release is its own item, keyed `crate-{name}@{version}` like the npm,
+//! PyPI and Go adapters. The key used to be `crate-{name}`, so after the first
+//! sighting every later release of a crate was only "seen again" and never
+//! recorded (fastembed's row still read v6.0.0 after two major releases).
 
 use async_trait::async_trait;
 use serde::Deserialize;
@@ -40,14 +44,16 @@ struct CrateVersion {
     yanked: bool,
 }
 
-#[derive(Debug, Deserialize)]
-struct CratesSearchResponse {
-    crates: Vec<CrateInfo>,
-}
-
 // ============================================================================
 // crates.io Source
 // ============================================================================
+
+/// The item key for one release. Schema 123 rewrote pre-existing
+/// `crate-{name}` rows into this form so their current release is not
+/// re-ingested as new.
+pub(crate) fn release_source_id(name: &str, version: &str) -> String {
+    format!("crate-{name}@{version}")
+}
 
 const USER_AGENT: &str = "4DA-Developer-OS/1.0 (https://4da.ai)";
 const API_BASE: &str = "https://crates.io/api/v1";
@@ -153,7 +159,7 @@ impl CratesIoSource {
             .to_string();
 
         let title = format!("crates.io: {} v{}", krate.name, version);
-        let crate_url = format!("https://crates.io/crates/{}", krate.name);
+        let crate_url = format!("https://crates.io/crates/{}/{}", krate.name, version);
 
         // Check for yanked versions (security signal)
         let has_yanked = data
@@ -212,70 +218,14 @@ impl CratesIoSource {
             metadata["yanked_versions"] = serde_json::json!(yanked_versions);
         }
 
-        Ok(
-            SourceItem::new("crates_io", &format!("crate-{}", krate.name), &title)
-                .with_url(Some(crate_url))
-                .with_content(content)
-                .with_metadata(metadata),
+        Ok(SourceItem::new(
+            "crates_io",
+            &release_source_id(&krate.name, &version),
+            &title,
         )
-    }
-
-    /// Fetch recently updated crates for discovery
-    async fn fetch_recent(&self, max: usize) -> SourceResult<Vec<SourceItem>> {
-        let url = format!("{API_BASE}/crates?sort=recent-updates&per_page={max}");
-
-        let response = self
-            .client
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| SourceError::Network(e.to_string()))?;
-
-        super::classify_http_response(&response, "crates.io API")?;
-
-        let data: CratesSearchResponse = response
-            .json()
-            .await
-            .map_err(|e| SourceError::Parse(e.to_string()))?;
-
-        let items = data
-            .crates
-            .into_iter()
-            .take(max)
-            .map(|krate| {
-                let version = krate
-                    .max_version
-                    .as_deref()
-                    .unwrap_or("unknown")
-                    .to_string();
-                let title = format!("crates.io: {} v{}", krate.name, version);
-                let crate_url = format!("https://crates.io/crates/{}", krate.name);
-                let description = krate
-                    .description
-                    .as_deref()
-                    .unwrap_or("No description")
-                    .to_string();
-                let downloads = krate.downloads.unwrap_or(0);
-
-                let mut metadata = serde_json::json!({
-                    "version": version,
-                    "downloads": downloads,
-                    "ecosystem": "crates.io",
-                    "discovery": true,
-                    "source_name": "crates_io",
-                });
-                if let Some(updated) = &krate.updated_at {
-                    metadata["updated_at"] = serde_json::json!(updated);
-                }
-
-                SourceItem::new("crates_io", &format!("crate-{}", krate.name), &title)
-                    .with_url(Some(crate_url))
-                    .with_content(format!("{description}\nDownloads: {downloads}"))
-                    .with_metadata(metadata)
-            })
-            .collect();
-
-        Ok(items)
+        .with_url(Some(crate_url))
+        .with_content(content)
+        .with_metadata(metadata))
     }
 }
 
@@ -329,7 +279,7 @@ impl Source for CratesIoSource {
         let mut items = Vec::new();
         let mut seen_ids = std::collections::HashSet::new();
 
-        // 1. Check monitored crates (primary value). In strict manifest mode the crate list is the
+        // Check monitored crates. In strict manifest mode the crate list is the
         // FULL pinned manifest (can be hundreds); at ~1 req/sec that overruns the adapter's fetch
         // timeout and surfaces NOTHING. Cap per cycle to max_items so the fetch finishes in-budget —
         // every fetched crate is still manifest-grounded. Non-strict is unchanged (loops the list).
@@ -362,28 +312,6 @@ impl Source for CratesIoSource {
             }
             // Respect crates.io rate limit: ~1 req/sec
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-        }
-
-        // 2. Fetch recently updated for discovery (cap at 10).
-        // Skipped in strict manifest mode: the recent-updates feed is global discovery
-        // (random crates not in the stack's manifest) — exactly the ungrounded noise the
-        // ledger must never publish. Strict mode fetches only the targeted crates above.
-        let remaining = self.config.max_items.saturating_sub(items.len());
-        let discovery_count = remaining.min(10);
-        if discovery_count > 0 && !crate::source_fetching::strict_manifest_mode() {
-            match self.fetch_recent(discovery_count).await {
-                Ok(recent) => {
-                    info!(count = recent.len(), "Fetched recently updated crates");
-                    for item in recent {
-                        if seen_ids.insert(item.source_id.clone()) {
-                            items.push(item);
-                        }
-                    }
-                }
-                Err(e) => {
-                    warn!(error = ?e, "Failed to fetch recently updated crates");
-                }
-            }
         }
 
         info!(total = items.len(), "Total crates.io items");
@@ -467,30 +395,13 @@ mod tests {
     }
 
     #[test]
-    fn test_search_response_parsing() {
-        let json = r#"{
-            "crates": [
-                {
-                    "name": "tokio",
-                    "description": "An event-driven, non-blocking I/O platform",
-                    "max_version": "1.42.0",
-                    "downloads": 200000000,
-                    "updated_at": "2026-03-20T08:00:00Z"
-                },
-                {
-                    "name": "axum",
-                    "description": "Web framework built on top of tokio and hyper",
-                    "max_version": "0.8.1",
-                    "downloads": 15000000,
-                    "updated_at": "2026-03-18T12:00:00Z"
-                }
-            ]
-        }"#;
-
-        let data: CratesSearchResponse = serde_json::from_str(json).unwrap();
-        assert_eq!(data.crates.len(), 2);
-        assert_eq!(data.crates[0].name, "tokio");
-        assert_eq!(data.crates[1].name, "axum");
-        assert_eq!(data.crates[1].max_version.as_deref(), Some("0.8.1"));
+    fn release_key_carries_the_version() {
+        // A new release must be a new key, or the fetch path only touches the
+        // row it already has and the release is never recorded.
+        assert_eq!(release_source_id("tokio", "1.54.0"), "crate-tokio@1.54.0");
+        assert_ne!(
+            release_source_id("fastembed", "6.0.0"),
+            release_source_id("fastembed", "7.1.0")
+        );
     }
 }
