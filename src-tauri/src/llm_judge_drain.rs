@@ -285,19 +285,27 @@ async fn run_drain_with(
             // `llm_judgments::judge_items_per_call`); cloud keeps the slice.
             let per_call = crate::llm_judgments::judge_items_per_call(&provider)
                 .map_or(DRAIN_SLICE, |n| n.min(DRAIN_SLICE));
+            // titles_only (see `llm_egress`): an off-machine model re-judges
+            // from the title alone.
+            let send_body = crate::llm_egress::body_allowed(&provider);
             let client = LLMClient::with_purpose(provider, "verdict_drain");
             // One call per DRAIN_SLICE items — the size every call had before
             // the surge slice existed. A truncated or malformed reply then
             // costs at most one chunk's evidence, never the whole pass.
             for chunk in needs_llm.chunks(per_call.max(1)) {
                 let ids: Vec<i64> = chunk.iter().map(|r| r.id).collect();
-                let items = match load_items(db, &ids) {
+                let mut items = match load_items(db, &ids) {
                     Ok(items) => items,
                     Err(e) => {
                         warn!(target: "4da::verdict_drain", error = %e, "Failed to load drain items");
                         continue;
                     }
                 };
+                if !send_body {
+                    for item in &mut items {
+                        item.content = None;
+                    }
+                }
                 match judge_items(&client, &items).await {
                     Ok(judgments) => {
                         for row in chunk {

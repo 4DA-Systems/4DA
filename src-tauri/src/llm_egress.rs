@@ -76,6 +76,21 @@ pub(crate) fn body_allowed(provider: &LLMProvider) -> bool {
     body_allowed_for(titles_only(), provider_is_on_machine(provider))
 }
 
+/// For the ingest judge: when item bodies may not leave the machine, drop them
+/// before the prompt is built. The prompt then carries no `Content:` line, and
+/// `llm_judgments` stores no content analysis for these items (it needs the
+/// content): depth and novelty read off a title alone would be invented.
+pub(crate) fn withhold_judgment_bodies(
+    send_body: bool,
+    items: &mut [crate::llm_judgments::ItemForJudgment],
+) {
+    if !send_body {
+        for item in items {
+            item.content = None;
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -145,5 +160,30 @@ mod tests {
         assert!(!is_titles_only_level("full"));
         assert!(!is_titles_only_level("TITLES_ONLY"));
         assert!(!is_titles_only_level(""));
+    }
+
+    #[test]
+    fn the_ingest_judge_prompt_carries_no_body_when_withheld() {
+        use crate::llm_judgments::{format_items_block, ItemForJudgment};
+        let items = || {
+            vec![ItemForJudgment {
+                id: 7,
+                title: "Tokio 2.0 released".into(),
+                content: Some("PRIVATE BODY TEXT".into()),
+                source_type: "hackernews".into(),
+                relevance_score: 0.5,
+            }]
+        };
+
+        let mut sent = items();
+        withhold_judgment_bodies(true, &mut sent);
+        assert!(format_items_block(&sent).contains("PRIVATE BODY TEXT"));
+
+        let mut withheld = items();
+        withhold_judgment_bodies(false, &mut withheld);
+        let block = format_items_block(&withheld);
+        assert!(block.contains("Tokio 2.0 released"), "the title still goes");
+        assert!(!block.contains("PRIVATE BODY TEXT"), "{block}");
+        assert!(!block.contains("Content:"), "{block}");
     }
 }
