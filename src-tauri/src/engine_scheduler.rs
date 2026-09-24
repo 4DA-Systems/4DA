@@ -69,6 +69,13 @@ pub fn install(
     let interval = interval_minutes.max(1);
     #[cfg(target_os = "windows")]
     {
+        let existing = status();
+        check_install(
+            exe,
+            existing.installed.then_some(existing.detail.as_str()),
+            std::env::var("FOURDA_DATA_DIR").ok().as_deref(),
+            cfg!(debug_assertions),
+        )?;
         windows::install(interval, exe, headless_arg)?;
         Ok(status())
     }
@@ -77,6 +84,44 @@ pub fn install(
         let _ = (interval, exe, headless_arg);
         Err(status().detail)
     }
+}
+
+/// Refuse an install whose scheduled refresh would feed a different database than the one the
+/// installing instance is showing. There is one task per user, so an install also re-points every
+/// refresh on the machine.
+///
+/// - A `FOURDA_DATA_DIR` override cannot travel with the task (schtasks runs the bare binary), so the
+///   task would refresh the binary's default data dir while the user watches the override's.
+/// - A debug build never re-points an existing task at itself: dev builds live in throwaway worktrees
+///   with their own `data/`. On 2026-09-24 a worktree dev app did exactly this, and the live corpus
+///   went unrefreshed for hours while a fresh 26 MB worktree database took every run.
+///
+/// `existing_task_run` is the installed task's "Task To Run" (None when no task is installed).
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+fn check_install(
+    exe: &Path,
+    existing_task_run: Option<&str>,
+    data_dir_override: Option<&str>,
+    is_debug: bool,
+) -> Result<(), String> {
+    if let Some(dir) = data_dir_override.map(str::trim).filter(|d| !d.is_empty()) {
+        return Err(format!(
+            "Background refresh was not changed: this instance uses FOURDA_DATA_DIR={dir}, which a \
+             scheduled task cannot carry, so it would refresh a different database than this one."
+        ));
+    }
+    if let Some(task_run) = existing_task_run {
+        let exe_str = exe.display().to_string().to_lowercase();
+        let same_exe = task_run.to_lowercase().contains(&exe_str);
+        if is_debug && !same_exe {
+            return Err(format!(
+                "Background refresh was not changed: the installed task runs {task_run}. A \
+                 development build does not re-point it at {}.",
+                exe.display()
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// Remove the background-refresh task. Succeeds (idempotently) if it does not exist.
@@ -275,5 +320,48 @@ mod windows {
             }
         }
         (minutes > 0).then_some(minutes)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::check_install;
+    use std::path::Path;
+
+    const MAIN: &str = r"D:\4DA\src-tauri\target\debug\fourda.exe";
+    const WORKTREE: &str = r"D:\4DA\.claude\worktrees\wt\src-tauri\target\debug\fourda.exe";
+    const MAIN_TASK: &str = r#""D:\4DA\src-tauri\target\debug\fourda.exe" --engine-once"#;
+
+    #[test]
+    fn a_data_dir_override_blocks_the_install() {
+        let err = check_install(Path::new(MAIN), None, Some(r"D:\4DA\data"), false).unwrap_err();
+        assert!(err.contains("FOURDA_DATA_DIR"), "{err}");
+    }
+
+    #[test]
+    fn a_blank_override_is_no_override() {
+        assert!(check_install(Path::new(MAIN), None, Some("  "), true).is_ok());
+    }
+
+    #[test]
+    fn a_debug_build_does_not_repoint_another_binarys_task() {
+        let err = check_install(Path::new(WORKTREE), Some(MAIN_TASK), None, true).unwrap_err();
+        assert!(err.contains("does not re-point"), "{err}");
+    }
+
+    #[test]
+    fn a_debug_build_may_reinstall_its_own_task_case_insensitively() {
+        let task = MAIN_TASK.to_uppercase();
+        assert!(check_install(Path::new(MAIN), Some(&task), None, true).is_ok());
+    }
+
+    #[test]
+    fn a_debug_build_may_install_when_no_task_exists() {
+        assert!(check_install(Path::new(WORKTREE), None, None, true).is_ok());
+    }
+
+    #[test]
+    fn a_release_build_may_move_the_task_to_a_new_install_location() {
+        assert!(check_install(Path::new(WORKTREE), Some(MAIN_TASK), None, false).is_ok());
     }
 }
