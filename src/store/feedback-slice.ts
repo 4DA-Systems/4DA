@@ -14,6 +14,12 @@ const FEEDBACK_ADJUSTMENTS: Record<FeedbackAction, number> = {
   snooze: -0.05,
 };
 
+/** Actions that state relevance, and the label each one records. */
+const RELEVANCE_LABEL: Partial<Record<FeedbackAction, boolean>> = {
+  save: true,
+  mark_irrelevant: false,
+};
+
 /**
  * Translate the "feedback did not fully save" toast.
  *
@@ -139,15 +145,25 @@ export const createFeedbackSlice: StateCreator<AppStore, [], [], FeedbackSlice> 
             feedbackType: feedbackTypeMap[actionType],
           }),
         },
-        {
-          // Feed the main DB feedback table — powers autophagy calibration analysis
+      ];
+      // The `feedback` table is ground truth for relevance: the calibration
+      // fitter (`calibration_fitter.rs`) reads it ahead of every other signal,
+      // and autophagy and the rerank context read it too. Only an explicit
+      // relevance statement belongs there. A click (opening a link to check
+      // something), a dismiss (done with it) and a snooze (later) say nothing
+      // about relevance; they stay in `interactions` via the calls above.
+      // Before 2026-09-24 every click was written as `relevant = 1` and every
+      // dismiss and snooze as `relevant = 0`.
+      const explicitRelevance = RELEVANCE_LABEL[actionType];
+      if (explicitRelevance !== undefined) {
+        calls.push({
           name: 'record_item_feedback',
           promise: cmd('record_item_feedback', {
             itemId: itemId,
-            relevant: actionType === 'save' || actionType === 'click',
+            relevant: explicitRelevance,
           }),
-        },
-      ];
+        });
+      }
       const results = await Promise.allSettled(calls.map(c => c.promise));
 
       // Log any individual failures (named) without reverting the UI

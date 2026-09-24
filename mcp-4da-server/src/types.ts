@@ -200,6 +200,8 @@ export interface FeedbackResult {
   success: boolean;
   message: string;
   interaction_id?: number;
+  /** The relevance label written to `feedback`: true (save), false (mark_irrelevant), null (no label: click/dismiss). */
+  relevance_label?: boolean | null;
 }
 
 // =============================================================================
@@ -225,7 +227,8 @@ export interface ExplainRelevanceParams {
 
 export interface RecordFeedbackParams {
   item_id: number;
-  source_type: string;
+  /** Optional; when given it must match the item's source type. */
+  source_type?: string;
   action: FeedbackAction;
 }
 
