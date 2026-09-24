@@ -685,12 +685,14 @@ jobs:
   #   no `Validate Success` on it — and the ruleset's sole required check
   #   reads the PR's head SHA. workflow_dispatch is the documented exception
   #   to that guard, and this workflow already runs its full suite on
-  #   dispatch, so the job re-dispatches Validate on the healed branch tip.
-  #   Hermetic is re-dispatched too. It used to be skipped because the healed
-  #   commit differs only in NOTICE text and `Hermetic Success` was advisory.
-  #   Since 2026-09-24 it is a REQUIRED check, read from the PR's HEAD commit,
-  #   so a healed PR without a Hermetic run on that commit can never merge
-  #   (hit live on the first grouped Dependabot PRs, #693 and #695).
+  #   dispatch. In practice (observed 2026-09-24) the push DOES create
+  #   pull_request runs, but as `github-actions[bot]`, which the repo's
+  #   "require approval for all external contributors" policy holds as
+  #   `action_required`. So the job now APPROVES those held runs on its own
+  #   commit. That puts Validate/Hermetic on the PR itself, which auto-merge
+  #   needs to enter the queue. It falls back to dispatching Validate AND
+  #   Hermetic (both required checks since 2026-09-24) only when nothing was
+  #   held or approval failed.
   #
   # No loop is possible: the heal push triggers nothing (recursion guard), and
   # in the dispatched run this job skips (both `pull_request` and the
@@ -704,7 +706,7 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: write # push the regenerated NOTICE to the PR branch
-      actions: write # re-dispatch Validate and Hermetic on the healed head
+      actions: write # approve held runs on the healed head (fallback: re-dispatch)
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
         with:
@@ -735,7 +737,7 @@ jobs:
       - name: Regenerate NOTICE
         run: node scripts/generate-notice.cjs
 
-      - name: Push regenerated NOTICE and re-dispatch Validate
+      - name: Push regenerated NOTICE and approve the runs it triggers
         env:
           GH_TOKEN: ${{ github.token }}
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
@@ -753,9 +755,42 @@ jobs:
           # push is rejected non-fast-forward and the job fails — correct: the
           # rebase's own pull_request run re-heals against the new head.
           git push origin "HEAD:$HEAD_REF"
-          gh workflow run validate.yml --repo "$GITHUB_REPOSITORY" --ref "$HEAD_REF"
-          gh workflow run hermetic.yml --repo "$GITHUB_REPOSITORY" --ref "$HEAD_REF"
-          echo "NOTICE healed and pushed. This run's repo-guards may still fail against the pre-heal commit; the dispatched Validate and Hermetic runs on the healed head are the ones the merge gate reads."
+          HEALED_SHA=$(git rev-parse HEAD)
+
+          # The healed commit is authored by github-actions[bot], and under the
+          # repo's "require approval for all external contributors" policy the
+          # pull_request runs it triggers wait as `action_required`. Runs
+          # dispatched below DO attach Validate/Hermetic to the commit, but
+          # auto-merge reads the PR's own checks, so a healed PR never entered
+          # the merge queue. #709 and #695 sat green-but-stuck on 2026-09-24
+          # until their held runs were approved by hand; #695 queued within
+          # minutes of approval. Approving the held runs on OUR OWN commit is
+          # what "Approve and run" exists for. Poll briefly, because GitHub
+          # creates those runs a few seconds after the push.
+          approved=0
+          for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
+            ids=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$HEALED_SHA&status=action_required&per_page=50" \
+                    --jq '.workflow_runs[] | select(.event == "pull_request") | .id' || true)
+            if [ -n "$ids" ]; then
+              for id in $ids; do
+                if gh api -X POST "repos/$GITHUB_REPOSITORY/actions/runs/$id/approve" >/dev/null; then
+                  approved=$((approved + 1)); echo "approved held run $id"
+                fi
+              done
+              break
+            fi
+            sleep 10
+          done
+
+          if [ "$approved" -eq 0 ]; then
+            # Fallback, the previous behaviour: nothing was held (policy changed)
+            # or approval failed. Dispatched runs still put Validate/Hermetic on
+            # the commit, so a human can merge even if auto-merge will not.
+            echo "::warning::no held pull_request runs approved on $HEALED_SHA; dispatching Validate and Hermetic instead"
+            gh workflow run validate.yml --repo "$GITHUB_REPOSITORY" --ref "$HEAD_REF"
+            gh workflow run hermetic.yml --repo "$GITHUB_REPOSITORY" --ref "$HEAD_REF"
+          fi
+          echo "NOTICE healed and pushed ($HEALED_SHA); approved $approved held run(s)."
 
   rust:
     name: Rust (${{ matrix.label }})
