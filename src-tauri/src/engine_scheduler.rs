@@ -124,6 +124,40 @@ fn check_install(
     Ok(())
 }
 
+/// Hidden-launch host written next to a debug exe: `wscript.exe` is GUI-subsystem (owns no
+/// console) and `Run(cmd, 0, True)` starts the child with SW_HIDE, waiting so the task sees its
+/// exit code.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+const RUN_HIDDEN_VBS: &str =
+    "' Written by 4DA engine_scheduler: run a console exe with no visible window.\r\n\
+Dim args, cmd, i\r\n\
+Set args = WScript.Arguments\r\n\
+If args.Count < 1 Then WScript.Quit 2\r\n\
+For i = 0 To args.Count - 1\r\n\
+  cmd = cmd & \"\"\"\" & Replace(args(i), \"\"\"\", \"\"\"\"\"\") & \"\"\" \"\r\n\
+Next\r\n\
+WScript.Quit CreateObject(\"WScript.Shell\").Run(Trim(cmd), 0, True)\r\n";
+
+/// The scheduled task's "Task To Run".
+///
+/// Release `fourda.exe` is GUI-subsystem, so it runs directly. A debug build is console-subsystem:
+/// launched straight from Task Scheduler, conhost paints its console before `main` can hide it. The
+/// large debug binary loading from a busy disk kept that black window up for 25+ seconds, every 30
+/// minutes, over whatever the user was doing (Screenshot_3822, 2026-09-25). So a debug build goes
+/// through the `hidden_host` script and no window is ever created.
+#[cfg_attr(not(target_os = "windows"), allow(dead_code))]
+fn task_run_command(exe: &Path, headless_arg: &str, hidden_host: Option<&Path>) -> String {
+    match hidden_host {
+        Some(vbs) => format!(
+            "wscript.exe //B //Nologo \"{}\" \"{}\" {}",
+            vbs.display(),
+            exe.display(),
+            headless_arg
+        ),
+        None => format!("\"{}\" {}", exe.display(), headless_arg),
+    }
+}
+
 /// Remove the background-refresh task. Succeeds (idempotently) if it does not exist.
 pub fn uninstall() -> Result<SchedulerStatus, String> {
     #[cfg(target_os = "windows")]
@@ -190,7 +224,7 @@ pub fn background_refresh_status() -> SchedulerStatus {
 
 #[cfg(target_os = "windows")]
 mod windows {
-    use super::{SchedulerStatus, TASK_NAME};
+    use super::{task_run_command, SchedulerStatus, RUN_HIDDEN_VBS, TASK_NAME};
     use std::os::windows::process::CommandExt;
     use std::path::Path;
     use std::process::Command;
@@ -208,9 +242,18 @@ mod windows {
         exe: &Path,
         headless_arg: &str,
     ) -> Result<(), String> {
-        // `"<exe>" <arg>` as a single /TR value; std's Windows quoting escapes the inner quotes so
-        // schtasks re-parses the exe path correctly even under "C:\Program Files\...".
-        let task_run = format!("\"{}\" {}", exe.display(), headless_arg);
+        // A debug (console-subsystem) exe runs through a hidden wscript host written beside it.
+        let hidden_host = if cfg!(debug_assertions) {
+            let vbs = exe.with_file_name("run-hidden.vbs");
+            std::fs::write(&vbs, RUN_HIDDEN_VBS)
+                .map_err(|e| format!("Could not write {}: {e}", vbs.display()))?;
+            Some(vbs)
+        } else {
+            None
+        };
+        // One /TR value; std's Windows quoting escapes the inner quotes so schtasks re-parses the
+        // exe path correctly even under "C:\Program Files\...".
+        let task_run = task_run_command(exe, headless_arg, hidden_host.as_deref());
         let output = Command::new("schtasks")
             .args([
                 "/Create",
@@ -325,7 +368,7 @@ mod windows {
 
 #[cfg(test)]
 mod tests {
-    use super::check_install;
+    use super::{check_install, task_run_command};
     use std::path::Path;
 
     const MAIN: &str = r"D:\4DA\src-tauri\target\debug\fourda.exe";
@@ -363,5 +406,33 @@ mod tests {
     #[test]
     fn a_release_build_may_move_the_task_to_a_new_install_location() {
         assert!(check_install(Path::new(WORKTREE), Some(MAIN_TASK), None, false).is_ok());
+    }
+
+    #[test]
+    fn a_release_exe_runs_directly() {
+        assert_eq!(
+            task_run_command(Path::new(MAIN), "--engine-once", None),
+            MAIN_TASK
+        );
+    }
+
+    #[test]
+    fn a_debug_exe_runs_through_the_hidden_host() {
+        let vbs = Path::new(r"D:\4DA\src-tauri\target\debug\run-hidden.vbs");
+        let task = task_run_command(Path::new(MAIN), "--engine-once", Some(vbs));
+        assert_eq!(
+            task,
+            r#"wscript.exe //B //Nologo "D:\4DA\src-tauri\target\debug\run-hidden.vbs" "D:\4DA\src-tauri\target\debug\fourda.exe" --engine-once"#
+        );
+        // schtasks /TR caps the value at 261 characters.
+        assert!(task.len() <= 261, "{}", task.len());
+    }
+
+    #[test]
+    fn a_wrapped_task_still_counts_as_the_same_exe() {
+        let vbs = Path::new(r"D:\4DA\src-tauri\target\debug\run-hidden.vbs");
+        let task = task_run_command(Path::new(MAIN), "--engine-once", Some(vbs));
+        assert!(check_install(Path::new(MAIN), Some(&task), None, true).is_ok());
+        assert!(check_install(Path::new(WORKTREE), Some(&task), None, true).is_err());
     }
 }

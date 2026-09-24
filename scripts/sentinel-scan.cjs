@@ -45,6 +45,14 @@ function addSignal(check, severity, domain, expert, message, detail = "") {
   signals.push({ check, severity, domain, expert, message, detail });
 }
 
+// The UserPromptSubmit hook launches this scan DETACHED (.claude/scripts/sentinel-hook.cjs), and
+// on Windows a detached process owns no console. Every child it spawns without windowsHide is
+// therefore handed a brand-new VISIBLE console: "npm exec tsc --noEmit --incremental", cargo,
+// cmd.exe and gh windows flashed over the operator's games on each stale-results prompt
+// (Screenshot_3821/3823, 2026-09-25). windowsHide gives each child a hidden console instead,
+// which its own children (npx -> node tsc, cargo -> rustc) inherit.
+const NO_WINDOW = { windowsHide: true };
+
 function safeExec(cmd, opts = {}) {
   try {
     return {
@@ -54,6 +62,7 @@ function safeExec(cmd, opts = {}) {
         encoding: "utf-8",
         timeout: opts.timeout || 60000,
         stdio: ["pipe", "pipe", "pipe"],
+        ...NO_WINDOW,
         ...opts,
       }),
     };
@@ -190,7 +199,7 @@ function isCargoRunning() {
   try {
     const result = execSync(
       'tasklist //FI "IMAGENAME eq cargo.exe" 2>NUL',
-      { encoding: "utf-8", timeout: 5000, stdio: ["pipe", "pipe", "pipe"] }
+      { encoding: "utf-8", timeout: 5000, stdio: ["pipe", "pipe", "pipe"], ...NO_WINDOW }
     );
     return /cargo\.exe/i.test(result);
   } catch {
