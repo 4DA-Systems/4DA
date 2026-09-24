@@ -391,11 +391,10 @@ where
         }));
     }
 
-    let body = serde_json::json!({
-        "model": provider.model,
-        "messages": all_messages,
-        "stream": true
-    });
+    // Same body as every non-streaming Ollama call (thinking off, pinned
+    // context — see `llm::ollama_chat_body`), streamed.
+    let mut body = crate::llm::ollama_chat_body(&provider.model, all_messages, false);
+    body["stream"] = serde_json::Value::Bool(true);
 
     let response = client
         .post(&url)

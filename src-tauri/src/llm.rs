@@ -674,11 +674,7 @@ impl LLMClient {
             }));
         }
 
-        let body = serde_json::json!({
-            "model": self.provider.model,
-            "messages": all_messages,
-            "stream": false
-        });
+        let body = ollama_chat_body(&self.provider.model, all_messages, false);
 
         let response = self
             .client
@@ -890,12 +886,7 @@ impl LLMClient {
             }));
         }
 
-        let body = serde_json::json!({
-            "model": self.provider.model,
-            "messages": all_messages,
-            "stream": false,
-            "format": "json"
-        });
+        let body = ollama_chat_body(&self.provider.model, all_messages, true);
 
         let response = self
             .client
@@ -1170,9 +1161,79 @@ pub(crate) fn apply_openai_retention(body: &mut serde_json::Value, provider: &st
 // Tests
 // ============================================================================
 
+/// Context window every 4DA request to Ollama asks for. Ollama's own default
+/// is 4,096 tokens (measured on 0.34.4), and a longer prompt silently loses its
+/// head — the Brief prompt alone averages ~5,300 input tokens. 8,192 holds every
+/// prompt 4DA sends plus its reply, identically on every Ollama version.
+const OLLAMA_NUM_CTX: u32 = 8192;
+// Brief/digest prompts average ~5,300 input + ~1,000 output tokens (ai_usage,
+// 14 days to 2026-09-24): lowering this below 8,192 truncates them again.
+const _: () = assert!(OLLAMA_NUM_CTX >= 8192);
+
+/// The `/api/chat` body for every 4DA call to Ollama.
+///
+/// `think: false` is sent unconditionally: 4DA never wants hidden reasoning,
+/// and a thinking-capable model (gemma4, qwen3.x) otherwise reasons by
+/// default. Measured 2026-09-24 in this exact request shape: gemma4:26b spent
+/// ~2,000 tokens thinking per judged item — 29 s/item against 2.4 s with
+/// thinking off — and dropped verdicts. Models that cannot think accept
+/// `false` (verified on 0.34.4: llama3.2, qwen2.5:14b; only `true` errors).
+/// The qwen3 `/no_think` system prefix stays for Ollama builds that predate
+/// the field.
+pub(crate) fn ollama_chat_body(
+    model: &str,
+    messages: Vec<serde_json::Value>,
+    json_format: bool,
+) -> serde_json::Value {
+    let mut body = serde_json::json!({
+        "model": model,
+        "messages": messages,
+        "stream": false,
+        "think": false,
+        "options": { "num_ctx": OLLAMA_NUM_CTX }
+    });
+    if json_format {
+        body["format"] = serde_json::Value::String("json".to_string());
+    }
+    body
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ollama_body_disables_thinking_and_pins_context() {
+        let msgs = vec![serde_json::json!({ "role": "user", "content": "hi" })];
+        let body = ollama_chat_body("gemma4:26b", msgs, false);
+        assert_eq!(
+            body["think"],
+            serde_json::Value::Bool(false),
+            "gemma4/qwen3.x think by default without this"
+        );
+        assert_eq!(
+            body["options"]["num_ctx"],
+            serde_json::json!(OLLAMA_NUM_CTX)
+        );
+        assert_eq!(body["stream"], serde_json::Value::Bool(false));
+        assert_eq!(body["model"], "gemma4:26b");
+        assert_eq!(body["messages"][0]["content"], "hi");
+        assert!(
+            body.get("format").is_none(),
+            "plain completions must not force JSON mode"
+        );
+    }
+
+    #[test]
+    fn ollama_structured_body_keeps_json_format_and_thinking_off() {
+        let body = ollama_chat_body("qwen3:14b", vec![], true);
+        assert_eq!(body["format"], "json");
+        assert_eq!(body["think"], serde_json::Value::Bool(false));
+        assert_eq!(
+            body["options"]["num_ctx"],
+            serde_json::json!(OLLAMA_NUM_CTX)
+        );
+    }
 
     #[test]
     fn retention_sets_store_false_for_first_party_openai() {

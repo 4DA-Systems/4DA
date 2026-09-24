@@ -352,6 +352,11 @@ async fn run_drain_with(
     }
 
     // ── B3: apply, from whichever lane produced the reading ─────────────
+    let slice_ids: Vec<i64> = slice.iter().map(|r| r.id).collect();
+    let dependency_releases = db.dependency_release_ids(&slice_ids).unwrap_or_else(|e| {
+        warn!(target: "4da::verdict_drain", error = %e, "Dependency-release guard lookup failed");
+        std::collections::HashSet::default()
+    });
     let mut demote: Vec<(i64, bool, VerdictSource, Option<VerdictReason>)> = Vec::new();
     let mut promote: Vec<(i64, bool, VerdictSource, Option<VerdictReason>)> = Vec::new();
     let mut clear: Vec<i64> = Vec::new();
@@ -361,7 +366,12 @@ async fn run_drain_with(
             continue;
         };
         let direction = row.marker.map(|m| m.direction);
-        match resolve_action(direction, relevance) {
+        let action = guard_dependency_release(
+            resolve_action(direction, relevance),
+            direction,
+            dependency_releases.contains(&row.id),
+        );
+        match action {
             DrainAction::Demote => demote.push((
                 row.id,
                 false,
@@ -489,6 +499,28 @@ fn resolve_action(pending_direction: Option<bool>, relevance: f64) -> DrainActio
         }
     }
     DrainAction::Escalate
+}
+
+/// An LLM reading never overrides a deterministic dependency match: on a
+/// registry release of a matched dependency (`db::llm_judgments::
+/// dependency_release_sql`) a reject stands only where the PIPELINE itself
+/// proposed the demotion (pending direction `false`). Against a pending
+/// promotion the pipeline's call stands (twin-checked like any promotion);
+/// a corrupt marker escalates. Escalating a pending promotion instead would
+/// only delay the loss — exhausted markers resolve to a rejection.
+fn guard_dependency_release(
+    action: DrainAction,
+    pending_direction: Option<bool>,
+    dependency_release: bool,
+) -> DrainAction {
+    match action {
+        DrainAction::Demote if dependency_release => match pending_direction {
+            Some(false) => DrainAction::Demote,
+            Some(true) => DrainAction::Promote,
+            None => DrainAction::Escalate,
+        },
+        other => other,
+    }
 }
 
 fn log_summary(db: &Database, summary: &DrainSummary) {

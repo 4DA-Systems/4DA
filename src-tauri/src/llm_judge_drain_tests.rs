@@ -511,3 +511,42 @@ async fn a_judgment_older_than_the_marker_is_never_reused() {
     assert_eq!(summary.demoted, 0);
     assert!(pending_of(&db, id).is_some(), "the marker must survive");
 }
+
+#[test]
+fn llm_reject_never_overrides_a_dependency_release() {
+    // Not a dependency release: the drain's verdicts are unchanged.
+    for direction in [Some(false), Some(true), None] {
+        assert_eq!(
+            guard_dependency_release(DrainAction::Demote, direction, false),
+            DrainAction::Demote
+        );
+    }
+    // A registry release of the user's dependency: the reject stands only
+    // where the pipeline itself proposed the demotion.
+    assert_eq!(
+        guard_dependency_release(DrainAction::Demote, Some(false), true),
+        DrainAction::Demote
+    );
+    // Against a pending promotion the pipeline's call stands (escalating
+    // would only delay the loss: exhausted markers resolve to a rejection).
+    assert_eq!(
+        guard_dependency_release(DrainAction::Demote, Some(true), true),
+        DrainAction::Promote
+    );
+    assert_eq!(
+        guard_dependency_release(DrainAction::Demote, None, true),
+        DrainAction::Escalate
+    );
+    // Non-demote readings pass through untouched.
+    for action in [
+        DrainAction::ClearPending,
+        DrainAction::Promote,
+        DrainAction::Escalate,
+    ] {
+        let expected = format!("{action:?}");
+        assert_eq!(
+            format!("{:?}", guard_dependency_release(action, Some(true), true)),
+            expected
+        );
+    }
+}

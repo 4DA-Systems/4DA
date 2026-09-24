@@ -620,16 +620,34 @@ fn judge_items_per_call_gates_and_sizes_by_model() {
         judge_items_per_call(&provider_of("ollama", "some-unknown-model")),
         None
     );
-    // Measured local judge: allowed, one item per call.
+    // qwen2.5:14b fell below the bench:judge MCC floor through the production
+    // path (0.497 / 0.556 / 0.529, 2026-09-25): it must not demote feed items.
     assert_eq!(
         judge_items_per_call(&provider_of("ollama", "qwen2.5:14b")),
-        Some(1)
+        None
     );
     // Good-tier local model: allowed, still one item per call.
     assert_eq!(
         judge_items_per_call(&provider_of("ollama", "qwen2.5:72b")),
         Some(1)
     );
+    // R6 bake-off (2026-09-24): measured at or above Haiku, one item per call,
+    // including quantisation-suffixed tags of the same model.
+    for model in ["gemma4:26b", "gemma4:12b", "gemma4:12b-it-qat", "qwen3:14b"] {
+        assert_eq!(
+            judge_items_per_call(&provider_of("ollama", model)),
+            Some(1),
+            "{model} passed the bake-off"
+        );
+    }
+    // Measured and rejected: never demote feed items.
+    for model in ["qwen3.5:9b", "qwen3.8:27b", "gemma4:e4b"] {
+        assert_eq!(
+            judge_items_per_call(&provider_of("ollama", model)),
+            None,
+            "{model} was not measured as a judge"
+        );
+    }
 }
 
 #[tokio::test]

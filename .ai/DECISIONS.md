@@ -682,6 +682,25 @@
 - **Date:** 2026-09-10
 - **Status:** Final
 
+### AD-048: A Local Model Judges Only After It Passes Both Bars; No LLM Verdict Removes a Release of the User's Own Dependency
+
+*(Numbered 048: AD-047 is reserved by the pending project-liveness proposal.)*
+
+- **Decision:** 2026-09-25 (no schema change, no `PIPELINE_VERSION` bump — `score_item` is untouched; verdict lanes and the Ollama request change). Three rules:
+  1. **Every 4DA request to Ollama disables hidden reasoning and pins its context.** `llm::ollama_chat_body` sends `think: false` and `options.num_ctx = 8192` on every `/api/chat` call (completion, structured, streaming); the model warm-up and the Settings connection test send `think: false`. Models that cannot think accept `false`; only `true` errors.
+  2. **A local model is a feed judge only after it passes both bars:** at or above fresh Haiku 4.5 on real blind items, one item per call, production item format; AND the `bench:judge` MCC floor (0.55) run through the production code path (`judge_items_per_call` now sizes the benchmark's requests exactly as the lane does). The allowlist is `llm_judgments::MEASURED_LOCAL_JUDGES` = gemma4:26b, gemma4:12b, qwen3:14b.
+  3. **No LLM verdict removes a registry release of a matched dependency** (`db::llm_judgments::dependency_release_sql`: `content_type = 'release_notes'`, a source in `dep_linker::REGISTRY_SOURCE_TYPES`, a non-empty `matched_deps`). The ingest gate excludes such rows in its candidate query; the verdict drain lets a reject stand only where the pipeline itself proposed the demotion (a pending promotion stands, a corrupt marker escalates); and the verdict cycle withdraws any `llm_reject` already written on one (cleared, never flipped — the risen sweep re-verdicts it by score). Editorial rows that merely name a dependency, and model cards name-matched to one, stay demotable.
+- **Rationale:** Measured 2026-09-24/25 (Ollama 0.34.4, RTX 4080 16 GB; evidence `.claude/plans/laya-own-model-2026-09-24/`). (1) Through 4DA's own request shape gemma4 reasoned silently on every item — ~2,000 tokens, 29 s/item (26b) and 11–22 s/item (12b) against 2.4 / 1.8 s with thinking off — and dropped verdicts; the Settings test (`num_predict: 10`) got empty content and would tell the user the model was corrupted. Ollama's default context is 4,096 tokens while the Brief prompt averages ~5,300. (2) On 400 blind real items gemma4:26b scored AUC 0.930 against fresh Haiku 0.883 (+0.046 [+0.016, +0.081]); gemma4:12b 0.906; qwen3:14b 0.893. Through the production path: MCC 0.750 / 0.652 / 0.597. qwen2.5:14b — allowlisted by #708 on a 0.964 measured with `(id=0)` item headers; 0.913 with real ids — scored MCC 0.497 / 0.556 / 0.529 with 10–11 false demotions of 49 relevant, and was removed. After the fix, engine cycles on a live-corpus snapshot averaged 120–126 output tokens per ingest call. (3) Live, 22 registry releases of real dependencies (rusqlite, sha2, better-sqlite3, ed25519-dalek, sqlite-vec, …) sat demoted `llm_reject` by Haiku — 9 by the ingest gate, 5 by the drain, 8 by both — because the ingest profile lists ten tech names and no dependencies while the prompt says to reject what cannot be confirmed in the stack; gemma4:26b demoted `jsonwebtoken v11.1.0` (a direct dependency) on its first cycle. With the guard, the same cycle withdrew all 22 (none carried `llm_reject` afterwards), and all 8 dependency releases re-judged by gemma4:26b that cycle stayed curated.
+- **Considered:**
+  - *Giving the ingest judge the dependency list instead:* Not chosen as the fix — the rich (rerank-lane) context moved AUC +0.009 for gemma4:12b and −0.029 for gemma4:26b on the blind set, and a context change re-measures every provider. A deterministic dependency fact should not depend on a model reading a list correctly.
+  - *Filtering exempt rows after the candidate query:* Rejected — immune rows would hold the LIMIT slots on every pass and starve legitimate demotions.
+  - *Escalating the drain's reject on a pending promotion:* Rejected — an exhausted marker resolves to a rejection, so it would only delay the loss by seven days.
+  - *Temperature 0 on every Ollama call:* Rejected — the same body carries long Brief generations, where greedy decoding invites repetition loops in small models; the judge's temperature sensitivity was not measured on Ollama.
+  - *Raising `MIN_OLLAMA_VERSION`:* Not needed — older servers ignore the unknown `think` field and qwen3's `/no_think` prefix stays. gemma4 was verified on 0.34.3/0.34.4; the 0.9.0 it replaced predates Gemma 4 (inferred unable to load it, not tested).
+- **Open (recorded, not decided):** onboarding still auto-pulls `llama3.2` (which cannot judge) for new Ollama users; it now prefers an installed measured judge (`pickOllamaModel`), but choosing a default download by detected VRAM is a product decision (7.6–18 GB vs 2 GB). The rerank lane's tier table (`llm_capability::KNOWN_TIERS`) was not changed — gemma4/qwen3 still rerank as Basic (skipped), unmeasured for that lane.
+- **Date:** 2026-09-25
+- **Status:** Final
+
 ---
 
 ## Decision Template

@@ -566,22 +566,26 @@ fn classify_item_dep_match(item: &UnlinkedItem, dep_name: &str) -> Option<(&'sta
 /// `pub(crate)`: the live scoring pipeline shares this predicate so registry
 /// items are grounded by their SUBJECT package everywhere, not just here.
 pub(crate) fn is_registry_source(source_type: &str) -> bool {
-    matches!(
-        source_type,
-        "npm_registry"
-            | "npm"
-            | "crates_io"
-            | "crates"
-            | "pypi"
-            | "go_modules"
-            | "go"
-            | "maven"
-            | "nuget"
-            | "packagist"
-            | "rubygems"
-            | "cocoapods"
-    )
+    REGISTRY_SOURCE_TYPES.contains(&source_type)
 }
+
+/// Every `source_type` that is a package registry — the single list behind
+/// [`is_registry_source`] and the SQL predicates that must agree with it
+/// (`db::llm_judgments::DEPENDENCY_RELEASE_SQL`).
+pub(crate) const REGISTRY_SOURCE_TYPES: &[&str] = &[
+    "npm_registry",
+    "npm",
+    "crates_io",
+    "crates",
+    "pypi",
+    "go_modules",
+    "go",
+    "maven",
+    "nuget",
+    "packagist",
+    "rubygems",
+    "cocoapods",
+];
 
 /// The subject of a registry row's TITLE — `("tauri", Some("2.11.5"))` from
 /// `crates.io: tauri v2.11.5`, `npm: react-dom v19.2.8`, `PyPI: x v1.2`,

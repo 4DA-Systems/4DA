@@ -25,6 +25,27 @@ export function buildInitialPullProgress(status: OllamaStatus): {
   return { models, initial };
 }
 
+/**
+ * Local models measured as feed judges, best first — keep in step with
+ * `MEASURED_LOCAL_JUDGES` in src-tauri/src/llm_judgments.rs. Any other model
+ * still works for 4DA's other lanes, but the backend will not let it judge.
+ */
+const MEASURED_JUDGE_MODELS = ['gemma4:26b', 'gemma4:12b', 'qwen3:14b'];
+
+/**
+ * The installed Ollama model 4DA should use: a measured judge when one is
+ * installed (same prefix match as the backend, so `gemma4:12b-it-qat` counts),
+ * otherwise the first chat model, otherwise the `llama3.2` default.
+ */
+export function pickOllamaModel(models: readonly string[] | undefined): string {
+  const chat = (models ?? []).filter(m => !m.startsWith('nomic-embed-text'));
+  for (const judge of MEASURED_JUDGE_MODELS) {
+    const hit = chat.find(m => m.toLowerCase().startsWith(judge));
+    if (hit) return hit;
+  }
+  return chat[0] || 'llama3.2';
+}
+
 /** Re-check Ollama status after a model pull, retrying up to 5 times. */
 export async function refreshOllamaAfterPull(): Promise<OllamaStatus | null> {
   for (let attempt = 0; attempt < 5; attempt++) {
@@ -99,7 +120,7 @@ export async function saveLlmProvider(
 
   if (provider === 'ollama') {
     if (ollamaStatus?.running) {
-      const ollamaModel = ollamaStatus.models?.find(m => !m.startsWith('nomic-embed-text')) || 'llama3.2';
+      const ollamaModel = pickOllamaModel(ollamaStatus.models);
       await cmd('set_llm_provider', {
         provider: 'ollama', apiKey: '', model: ollamaModel,
         baseUrl: ollamaStatus.base_url || 'http://localhost:11434', openaiApiKey: null,

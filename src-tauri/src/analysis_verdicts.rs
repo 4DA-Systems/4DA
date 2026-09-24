@@ -169,6 +169,20 @@ pub(crate) async fn reconcile_stale_verdicts_cycle(budget: usize) -> Result<Verd
             "Orphaned duplicate verdicts withdrawn — their curated twin is no longer in the feed"
         );
     }
+    // An `llm_reject` on a registry release of a matched dependency is a
+    // verdict the judge was never entitled to write (see
+    // `db::llm_judgments::dependency_release_sql`: 22 live on 2026-09-25).
+    // Withdraw it so the risen sweep below re-judges the row by its score.
+    let dep_rejects = db
+        .withdraw_llm_rejects_on_dependency_releases()
+        .map_err(|e| format!("Failed to withdraw dependency-release rejections: {e}"))?;
+    if dep_rejects > 0 {
+        info!(
+            target: "4da::verdicts",
+            withdrawn = dep_rejects,
+            "LLM rejections withdrawn from registry releases of the user's dependencies"
+        );
+    }
     // v33: one slot per release line — the newest final stands, its betas,
     // RCs and older patches of the same line yield (and return if it leaves).
     let (train_demoted, train_withdrawn) = db

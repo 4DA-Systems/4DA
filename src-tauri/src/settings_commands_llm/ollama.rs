@@ -125,6 +125,10 @@ pub(crate) async fn test_ollama_connection_impl(llm: &LLMProvider) -> Result<ser
         "model": model,
         "messages": [{"role": "user", "content": "Say OK"}],
         "stream": false,
+        // Without this a thinking model (gemma4, qwen3.x) spends all 10
+        // tokens reasoning and returns empty content — which the check below
+        // reports as a corrupted model (measured on gemma4:26b, 2026-09-25).
+        "think": false,
         "options": {
             "num_predict": 10,
             "temperature": 0.0
