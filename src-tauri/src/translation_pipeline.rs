@@ -257,6 +257,7 @@ fn get_llm_client() -> Result<llm::LLMClient> {
     if provider.api_key.is_empty() && provider.provider != "ollama" {
         return Err("LLM not configured -- set up your API key in Settings".into());
     }
+    // llm-egress: no-item-body translates the app's own UI strings
     Ok(llm::LLMClient::new(provider))
 }
 

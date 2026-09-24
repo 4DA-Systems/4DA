@@ -110,6 +110,7 @@ pub(crate) async fn deliberate(
     let system_prompt = build_system_prompt();
     let user_message = build_user_message(item, user_context);
 
+    // llm-egress: no-item-body sends the title, 4DA's own explanation and dependency names, never the article text
     let client = LLMClient::with_purpose(provider, "adversarial");
     let messages = vec![Message {
         role: "user".to_string(),

@@ -4041,6 +4041,7 @@ pub async fn assess_blind_spots_with_ai() -> std::result::Result<BlindSpotAssess
     );
 
     // 5. Single LLM call — the only await; no guards held across it.
+    // llm-egress: no-item-body sends dependency names and signal counts from the user's own manifests
     let client = crate::llm::LLMClient::with_purpose(provider, "blind_spots");
     let response = client
         .complete(

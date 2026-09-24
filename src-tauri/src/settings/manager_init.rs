@@ -372,6 +372,8 @@ impl SettingsManager {
             }
         }
 
+        crate::llm_egress::publish_content_level(&settings.privacy.llm_content_level);
+
         Self {
             settings,
             usage,

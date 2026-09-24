@@ -451,6 +451,7 @@ pub(crate) async fn generate_briefing_internal(
         batched = batched_section,
     );
 
+    // llm-egress: no-item-body the prompt slate is title, URL, source, score and 4DA's match explanation (briefing_prompt::build_prompt_slate)
     let llm_client = crate::llm::LLMClient::with_purpose(llm_settings.clone(), "digest");
     let messages = vec![crate::llm::Message {
         role: "user".to_string(),

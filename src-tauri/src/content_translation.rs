@@ -514,6 +514,7 @@ fn get_llm_client() -> Result<llm::LLMClient> {
         let lang = crate::i18n::get_user_language();
         return Err(crate::i18n::t("errors:translation.noLlm", &lang, &[]).into());
     }
+    // llm-egress: no-item-body translates titles and 4DA's own labels (ContentTranslationProvider callers), not article text
     Ok(llm::LLMClient::new(provider))
 }
 
