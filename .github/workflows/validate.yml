@@ -621,6 +621,13 @@ jobs:
       - name: Raw local content stays local (NETWORK.md)
         run: node scripts/check-privacy-egress.cjs
 
+      # Before the self-tests, not after them: signal-terminal-xss.test.cjs
+      # renders the Signal Terminal in jsdom (a devDependency) to prove the XSS
+      # sink is closed. With the install placed later in this job, that test
+      # found no node_modules and failed the required gate.
+      - name: Install dependencies (guard self-tests + `pnpm licenses list`)
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
       - name: Guard self-tests (scripts/*.test.cjs)
         # The guards above have their OWN unit tests, and until now those ran in
         # no hook and no workflow — nothing verified the guards still detect
@@ -639,9 +646,6 @@ jobs:
         uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
         with:
           toolchain: stable
-
-      - name: Install dependencies (for `pnpm licenses list`)
-        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Third-party attribution is current (NOTICE)
         # --require turns a missing toolchain into a failure. Without it the
