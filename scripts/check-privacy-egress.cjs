@@ -97,18 +97,105 @@ function scanText(file, text) {
   return findings;
 }
 
+/*
+ * RULE 2 (2026-09-24): the `titles_only` privacy setting.
+ *
+ * NETWORK.md promises that with `llm_content_level = "titles_only"` an
+ * off-machine model gets item titles and no body text. Until 2026-09-24 one of
+ * the dozen modules that call a model honoured it. Every module that builds an
+ * `LLMClient` must now either route item text through `llm_egress::` or say, with
+ * a reason, why it does not have to:
+ *
+ *   // llm-egress: no-item-body <what it sends instead>
+ *   // llm-egress: exempt <why this caller may send bodies regardless>
+ *
+ * A new call site fails until someone makes that decision on purpose.
+ */
+const LLM_CLIENT_CTOR = /LLMClient::(new|with_purpose)\(/;
+const EGRESS_ROUTED = /llm_egress::/;
+// The reason must be on the same line: `\s` would let the newline and the next
+// code line stand in for a reason.
+const EGRESS_DECLARED = /llm-egress:[ \t]*(no-item-body|exempt)[ \t]+\S/;
+
+/**
+ * Temporarily not routed, with the reason. Every entry must be removed by the
+ * change that routes the module; this list is meant to be empty.
+ */
+const EGRESS_PENDING = {
+  'src-tauri/src/llm_judgments.rs':
+    'claimed by the judge-capability-routing change; routed in its follow-up',
+  'src-tauri/src/llm_judge_drain.rs':
+    'claimed by the judge-capability-routing change; routed in its follow-up',
+};
+
+/**
+ * A Rust file with every `#[cfg(test)] mod … { … }` body removed. Test modules
+ * can sit mid-file with production code after them, so this removes only the
+ * braced body (by brace depth), not everything below the first one. Braces in
+ * strings or comments can skew the count; a skew only ever keeps MORE code, so the
+ * gate errs toward flagging.
+ */
+function productionPart(text) {
+  const lines = text.split('\n');
+  const out = [];
+  for (let i = 0; i < lines.length; i++) {
+    const isTestAttr = /^\s*#\[cfg\(test\)\]\s*$/.test(lines[i]);
+    // The attribute may be followed by other attributes (e.g. #[path = "…"]).
+    let j = i + 1;
+    while (isTestAttr && j < lines.length && /^\s*#\[/.test(lines[j])) j++;
+    if (!isTestAttr || j >= lines.length || !/^\s*(pub(\([^)]*\))?\s+)?mod\s/.test(lines[j])) {
+      out.push(lines[i]);
+      continue;
+    }
+    if (!lines[j].includes('{')) {
+      i = j; // `mod tests;` — body lives in another file
+      continue;
+    }
+    let depth = 0;
+    let k = j;
+    for (; k < lines.length; k++) {
+      for (const ch of lines[k]) {
+        if (ch === '{') depth++;
+        else if (ch === '}') depth--;
+      }
+      if (depth <= 0 && k > j - 1 && lines[k].includes('}')) break;
+    }
+    i = k;
+  }
+  return out.join('\n');
+}
+
+/** Rule 2 for one file. Exported so the test can drive it without git. */
+function scanLlmCallSites(file, text) {
+  if (/_tests?\.rs$/.test(file) || file.includes('/tests/')) return [];
+  if (EGRESS_PENDING[file]) return [];
+  const code = productionPart(text)
+    .split('\n')
+    .filter((l) => !/^\s*(\/\/|\*|\/\*)/.test(l))
+    .join('\n');
+  if (!LLM_CLIENT_CTOR.test(code)) return [];
+  if (EGRESS_ROUTED.test(code) || EGRESS_DECLARED.test(text)) return [];
+  return [{ file, line: 0, token: 'titles_only', text: 'builds an LLMClient without llm_egress' }];
+}
+
 function main() {
   const findings = [];
   for (const file of trackedRustFiles()) {
     const full = path.join(ROOT, file);
     if (!fs.existsSync(full)) continue;
-    findings.push(...scanText(file, fs.readFileSync(full, 'utf8')));
+    const text = fs.readFileSync(full, 'utf8');
+    findings.push(...scanText(file, text));
+    findings.push(...scanLlmCallSites(file, text));
   }
 
   if (findings.length === 0) {
+    const pending = Object.keys(EGRESS_PENDING);
     console.log(
-      '[check-privacy-egress] OK — raw local content is confined to the modules that mine and store it.'
+      '[check-privacy-egress] OK — raw local content is confined to the modules that mine and store it, and every LLM caller outside the pending list honours titles_only.'
     );
+    if (pending.length) {
+      console.log(`[check-privacy-egress] titles_only still pending in: ${pending.join(', ')}`);
+    }
     return 0;
   }
 
@@ -120,9 +207,20 @@ function main() {
     '\nIf this module cannot reach a network call, add `privacy-egress-ok: <reason>`.'
   );
   console.error('If it can, the content must not go in. NETWORK.md is the contract.');
+  console.error(
+    '[titles_only] findings: gate item body text with `crate::llm_egress::body_allowed(&provider)`, or add' +
+      ' `// llm-egress: no-item-body <what it sends>` / `// llm-egress: exempt <why>`.'
+  );
   return 1;
 }
 
 if (require.main === module) process.exit(main());
 
-module.exports = { scanText, RAW_CONTENT_TOKENS, ALLOWLIST };
+module.exports = {
+  scanText,
+  scanLlmCallSites,
+  productionPart,
+  RAW_CONTENT_TOKENS,
+  ALLOWLIST,
+  EGRESS_PENDING,
+};

@@ -2715,6 +2715,10 @@ async fn synthesize_morning_briefing_once(
         }
     };
 
+    // The prompt is built once for the whole fallback chain, so item descriptions
+    // (advisory text or derived action text) go in only if every provider in the
+    // chain may receive item bodies (titles_only, see `llm_egress`).
+    let send_body = providers.iter().all(crate::llm_egress::body_allowed);
     let items_text = briefing
         .items
         .iter()
@@ -2725,7 +2729,11 @@ async fn synthesize_morning_briefing_once(
                 .as_deref()
                 .map(|p| format!("[{}] ", p.to_uppercase()))
                 .unwrap_or_default();
-            let desc = item.description.as_deref().unwrap_or("");
+            let desc = if send_body {
+                item.description.as_deref().unwrap_or("")
+            } else {
+                ""
+            };
             let deps = if item.matched_deps.is_empty() {
                 String::new()
             } else {

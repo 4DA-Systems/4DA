@@ -130,6 +130,7 @@ fn build_channel_prompt(
     active_topics: &str,
     sovereign_profile: &str,
     previous_render: Option<&ChannelRender>,
+    include_body: bool,
 ) -> (String, String) {
     let system_prompt = format!(
         "You are a senior technical analyst maintaining a live intelligence channel on: {title}\n\
@@ -163,14 +164,20 @@ fn build_channel_prompt(
 
     let mut items_text = String::new();
     for (i, (item, score)) in items.iter().enumerate().take(20) {
+        // titles_only: no `Content:` line at all, so the model is not invited to
+        // cite an empty body.
+        let body = if include_body {
+            format!("\n  Content: {}", crate::truncate_utf8(&item.content, 300))
+        } else {
+            String::new()
+        };
         items_text.push_str(&format!(
-            "S{}: [{}] {} (match: {:.0}%)\n  URL: {}\n  Content: {}\n\n",
+            "S{}: [{}] {} (match: {:.0}%)\n  URL: {}{body}\n\n",
             i + 1,
             item.source_type,
             item.title,
             score * 100.0,
             item.url.as_deref().unwrap_or("N/A"),
-            crate::truncate_utf8(&item.content, 300),
         ));
     }
 
@@ -354,6 +361,7 @@ pub(crate) async fn render_channel(channel_id: i64) -> Result<ChannelRender> {
         &topics_summary,
         &sovereign_summary,
         previous_render.as_ref(),
+        crate::llm_egress::body_allowed(&llm_settings),
     );
 
     // Call LLM (async -- no locks held at this point)
@@ -631,5 +639,50 @@ mod tests {
         assert!(content.contains("GPU Intel"));
         assert!(content.contains("NVIDIA RTX 5090"));
         assert!(content.contains("90%"));
+    }
+
+    /// titles_only (llm_egress): the channel prompt carries titles, never bodies.
+    #[test]
+    fn channel_prompt_omits_item_bodies_when_body_not_allowed() {
+        use chrono::Utc;
+        let channel = Channel {
+            id: 1,
+            slug: "gpu".to_string(),
+            title: "GPU Intel".to_string(),
+            description: "GPU stuff".to_string(),
+            topic_query: vec![],
+            status: ChannelStatus::Active,
+            source_count: 1,
+            render_count: 0,
+            last_rendered_at: None,
+            created_at: String::new(),
+            updated_at: String::new(),
+        };
+        let item = StoredSourceItem {
+            id: 1,
+            source_type: "hn".to_string(),
+            source_id: "1".to_string(),
+            url: Some("https://example.com".to_string()),
+            title: "NVIDIA RTX 5090".to_string(),
+            content: "SECRET-BODY-TEXT benchmark numbers".to_string(),
+            content_hash: "h".to_string(),
+            embedding: vec![],
+            created_at: Utc::now(),
+            last_seen: Utc::now(),
+            detected_lang: "en".to_string(),
+            feed_origin: None,
+            tags: None,
+            published_at: None,
+        };
+        let items = vec![(item, 0.9)];
+
+        let (_, full) = build_channel_prompt(&channel, &items, "rust", "gpu", "", None, true);
+        assert!(full.contains("SECRET-BODY-TEXT"));
+        assert!(full.contains("Content:"));
+
+        let (_, titles) = build_channel_prompt(&channel, &items, "rust", "gpu", "", None, false);
+        assert!(titles.contains("NVIDIA RTX 5090"), "the title still goes");
+        assert!(!titles.contains("SECRET-BODY-TEXT"), "the body must not");
+        assert!(!titles.contains("Content:"), "no empty Content line either");
     }
 }

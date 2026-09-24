@@ -281,6 +281,7 @@ mod knowledge_decay;
 pub(crate) mod language_detect;
 mod llm;
 pub(crate) mod llm_capability;
+mod llm_egress;
 mod llm_gate;
 mod llm_judge;
 mod llm_judgments;

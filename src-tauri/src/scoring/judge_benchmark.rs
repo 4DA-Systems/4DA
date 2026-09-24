@@ -394,6 +394,7 @@ async fn judge_accuracy_benchmark() {
         return;
     }
     let model = provider.model.clone();
+    // llm-egress: exempt developer benchmark over the synthetic labelled scenarios, not user data
     let client = LLMClient::with_purpose(provider, "judge_benchmark");
 
     let scenarios = load_cases();

@@ -25,6 +25,7 @@ import { setActivityTrackingEnabled } from '../../hooks/use-telemetry';
 export function PrivacySection() {
   const { t } = useTranslation();
   const [activityOptedIn, setActivityOptedIn] = useState<boolean | null>(null);
+  const [titlesOnly, setTitlesOnly] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
 
@@ -42,6 +43,7 @@ export function PrivacySection() {
         const privacy = await cmd('get_privacy_config');
         if (!cancelled) {
           setActivityOptedIn(Boolean(privacy.activity_tracking_opt_in));
+          setTitlesOnly(privacy.llm_content_level === 'titles_only');
         }
       } catch {
         if (!cancelled) {
@@ -61,6 +63,18 @@ export function PrivacySection() {
       setActivityOptedIn(next);
       // Flip runtime telemetry gate immediately — don't wait for reload.
       setActivityTrackingEnabled(next);
+    } catch {
+      // Toggle stays where it was.
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleTitlesOnlyToggle = async (next: boolean) => {
+    setSaving(true);
+    try {
+      await cmd('set_privacy_config', { llmContentLevel: next ? 'titles_only' : 'full' });
+      setTitlesOnly(next);
     } catch {
       // Toggle stays where it was.
     } finally {
@@ -230,6 +244,32 @@ export function PrivacySection() {
               {t(
                 'settings.privacy.activityTracking.subtitle',
                 'Record tab opens, view durations, and search queries on your device to power relevance learning. Nothing is transmitted — data stays in your local SQLite. Off by default.',
+              )}
+            </p>
+          </div>
+        </label>
+      </div>
+
+      <div className="border-t border-border/40 pt-3">
+        <label htmlFor="privacy-titles-only" aria-label={t('settings.privacy.titlesOnly.title', 'Send only titles to cloud AI')} className="flex items-start gap-3 cursor-pointer">
+          <input
+            id="privacy-titles-only"
+            type="checkbox"
+            checked={titlesOnly}
+            disabled={saving}
+            onChange={(e) => {
+              void handleTitlesOnlyToggle(e.target.checked);
+            }}
+            className="mt-0.5 w-4 h-4 rounded border-border bg-bg-secondary text-accent-gold focus:ring-accent-gold/50"
+          />
+          <div className="flex-1">
+            <div className="text-sm font-medium text-text-primary">
+              {t('settings.privacy.titlesOnly.title', 'Send only titles to cloud AI')}
+            </div>
+            <p className="text-xs text-text-muted mt-0.5">
+              {t(
+                'settings.privacy.titlesOnly.subtitle',
+                'When a cloud AI provider is configured, 4DA sends it item titles but no article text. Judging is less accurate and article summaries are unavailable. A local model (Ollama or another endpoint on this machine) always gets the full text, because nothing leaves your device. Off by default.',
               )}
             </p>
           </div>
