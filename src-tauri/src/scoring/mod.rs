@@ -624,7 +624,12 @@ pub(crate) use types::{ScoringInput, ScoringOptions};
 // to NVD ("[GHSA-h395-gr6q-cpjc] jsonwebtoken: …") reached the mirror with no
 // id and the ungraded fallback said Critical for a medium-labelled bug. The
 // title's id is always a candidate now; every advisory row re-judges.
-pub(crate) const PIPELINE_VERSION: i32 = 35;
+// v36 (2026-09-24, harvest recall audit): `extract_registry_package` returned
+// a go_modules key whole (`github.com/gin-gonic/gin@v1.10.0`), so no Go
+// release was ever grounded through its registry subject. Scoped in
+// `epochs::SCOPED_EPOCHS` to go_modules rows: crates.io keys gained a
+// version in the same change, but extraction still yields the same name.
+pub(crate) const PIPELINE_VERSION: i32 = 36;
 
 /// Parse the topic tags carried in the `source_items.tags` column.
 ///

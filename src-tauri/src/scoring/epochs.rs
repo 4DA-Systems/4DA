@@ -160,6 +160,10 @@ const SCOPED_EPOCHS: &[(i32, &str)] = &[
         24,
         "published_at IS NOT NULL AND published_at < datetime('now','-24 months')",
     ),
+    // v36 — the Go registry key is parsed to its module path. Only a
+    // go_modules row's registry subject changes; `source_type` is assigned at
+    // ingest and never re-derived (same reasoning as v18).
+    (36, "source_type IN ('go_modules','go')"),
 ];
 
 /// Promote stale items that the registered epoch predicates prove unaffected,

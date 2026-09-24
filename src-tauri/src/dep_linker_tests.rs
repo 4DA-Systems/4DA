@@ -715,10 +715,20 @@ fn test_extract_registry_package_formats() {
         extract_registry_package("npm_registry", "@tanstack/react-query@5.0.0"),
         Some("@tanstack/react-query".to_string())
     );
-    // crates_io with prefix
+    // crates_io with prefix (pre-schema-123 key)
     assert_eq!(
         extract_registry_package("crates_io", "crate-serde"),
         Some("serde".to_string())
+    );
+    // crates_io release key
+    assert_eq!(
+        extract_registry_package("crates_io", "crate-serde@1.0.200"),
+        Some("serde".to_string())
+    );
+    // go_modules release key
+    assert_eq!(
+        extract_registry_package("go_modules", "github.com/gin-gonic/gin@v1.10.0"),
+        Some("github.com/gin-gonic/gin".to_string())
     );
     // crates_io without prefix (legacy)
     assert_eq!(

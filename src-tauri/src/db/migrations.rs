@@ -1470,7 +1470,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 122;
+        const TARGET_VERSION: i64 = 123;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -5744,6 +5744,34 @@ impl Database {
                     },
                 )?;
             }
+            // Phase 123: crates.io items are keyed per release. The adapter
+            // used `crate-{name}`, and the fetch path only touches a key it
+            // already holds, so after the first sighting no later release of
+            // any crate was ever recorded (2026-09-24: fastembed's row still
+            // read v6.0.0 after two majors; 0 of 307 crates.io rows ingested
+            // in ten days were the user's dependencies). The adapter now emits
+            // `crate-{name}@{version}`. This rewrites each existing row to the
+            // key of the release its title names, so that release is not
+            // ingested a second time as new. OR IGNORE: a row whose versioned
+            // twin already exists keeps its legacy key, which the dependency
+            // linker still parses.
+            if current_version < 123 {
+                Self::run_versioned_migration(
+                    &conn,
+                    122,
+                    123,
+                    "Phase 123: crates.io items keyed per release",
+                    |c| {
+                        let rekeyed = Self::rekey_crates_io_releases(c)?;
+                        info!(
+                            target: "4da::db",
+                            rekeyed,
+                            "Phase 123: crates.io rows now keyed per release — a new version is a new item"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
 
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
@@ -5751,6 +5779,24 @@ impl Database {
 
         info!(target: "4da::db", "Database schema initialized with sqlite-vec");
         Ok(())
+    }
+
+    /// Rewrite legacy `crate-{name}` keys to `crate-{name}@{version}`, taking
+    /// the version from the adapter's title (`crates.io: {name} v{version}`).
+    /// Idempotent: a key that already carries '@' is left alone.
+    pub(crate) fn rekey_crates_io_releases(c: &Connection) -> SqliteResult<usize> {
+        c.execute(
+            "UPDATE OR IGNORE source_items
+                SET source_id = source_id || '@'
+                    || substr(title, length('crates.io: ' || substr(source_id, 7) || ' v') + 1)
+              WHERE source_type = 'crates_io'
+                AND source_id LIKE 'crate-%'
+                AND instr(source_id, '@') = 0
+                AND substr(title, 1, length('crates.io: ' || substr(source_id, 7) || ' v'))
+                    = 'crates.io: ' || substr(source_id, 7) || ' v'
+                AND length(title) > length('crates.io: ' || substr(source_id, 7) || ' v')",
+            [],
+        )
     }
 
     /// Phase 1 migration: Multi-format file support
@@ -7431,6 +7477,58 @@ mod tests {
             stored("p119c").as_deref(),
             Some("discussion"),
             "the scorer's classification supersedes the ingest default"
+        );
+    }
+
+    /// Phase 123 rewrites legacy `crate-{name}` keys to the release their
+    /// title names, so the adapter's per-release key finds the row it already
+    /// holds instead of ingesting the same release again as new.
+    #[test]
+    fn test_phase_123_rekeys_crates_io_rows_per_release() {
+        let db = test_db();
+        let conn = db.conn.lock();
+        let insert = |id: &str, title: &str| {
+            conn.execute(
+                "INSERT INTO source_items (source_type, source_id, title, content, content_hash, embedding)
+                 VALUES (?1, ?2, ?3, '', ?2, zeroblob(4))",
+                rusqlite::params![if id.starts_with("hn") { "hackernews" } else { "crates_io" }, id, title],
+            )
+            .unwrap();
+        };
+        insert("crate-fastembed", "crates.io: fastembed v6.0.0");
+        insert("crate-tokio", "crates.io: tokio v1.53.1");
+        // Its versioned twin already exists: the legacy row must stay put.
+        insert("crate-serde", "crates.io: serde v1.0.200");
+        insert("crate-serde@1.0.200", "crates.io: serde v1.0.200");
+        // Title does not name the crate: never guess a version.
+        insert("crate-odd", "something else entirely");
+        insert("hn-1", "crates.io: tokio v9.9.9");
+
+        let rekeyed = crate::db::Database::rekey_crates_io_releases(&conn).unwrap();
+        assert_eq!(rekeyed, 2);
+        // Idempotent.
+        assert_eq!(
+            crate::db::Database::rekey_crates_io_releases(&conn).unwrap(),
+            0
+        );
+
+        let ids: Vec<String> = conn
+            .prepare("SELECT source_id FROM source_items ORDER BY source_id")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect();
+        assert_eq!(
+            ids,
+            [
+                "crate-fastembed@6.0.0",
+                "crate-odd",
+                "crate-serde",
+                "crate-serde@1.0.200",
+                "crate-tokio@1.53.1",
+                "hn-1",
+            ]
         );
     }
 
