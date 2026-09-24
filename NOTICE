@@ -15,9 +15,9 @@ build edges, all target platforms). npm packages are the production
 dependency closure reported by `pnpm licenses list --prod`. Dev-only
 dependencies are omitted because they are not distributed.
 
-Totals: 845 Rust crates, 40 npm packages.
+Totals: 842 Rust crates, 40 npm packages.
 
-Rust Crates (845)
+Rust Crates (842)
 -----------------
 
 adler2 2.0.1 - 0BSD OR MIT OR Apache-2.0 - https://github.com/oyvindln/adler2
@@ -506,12 +506,9 @@ quote 1.0.45 - MIT OR Apache-2.0 - https://github.com/dtolnay/quote
 quoted_printable 0.5.2 - 0BSD - https://github.com/staktrace/quoted-printable
 r-efi 5.3.0 - MIT OR Apache-2.0 OR LGPL-2.1-or-later - https://github.com/r-efi/r-efi
 r-efi 6.0.0 - MIT OR Apache-2.0 OR LGPL-2.1-or-later - https://github.com/r-efi/r-efi
-rand 0.8.6 - MIT OR Apache-2.0 - https://github.com/rust-random/rand
 rand 0.9.4 - MIT OR Apache-2.0 - https://github.com/rust-random/rand
 rand 0.10.1 - MIT OR Apache-2.0 - https://github.com/rust-random/rand
-rand_chacha 0.3.1 - MIT OR Apache-2.0 - https://github.com/rust-random/rand
 rand_chacha 0.9.0 - MIT OR Apache-2.0 - https://github.com/rust-random/rand
-rand_core 0.6.4 - MIT OR Apache-2.0 - https://github.com/rust-random/rand
 rand_core 0.9.5 - MIT OR Apache-2.0 - https://github.com/rust-random/rand
 rand_core 0.10.1 - MIT OR Apache-2.0 - https://github.com/rust-random/rand_core
 rangemap 1.7.1 - MIT/Apache-2.0 - https://github.com/jeffparsons/rangemap
