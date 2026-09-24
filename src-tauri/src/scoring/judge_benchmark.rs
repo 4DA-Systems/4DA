@@ -93,7 +93,7 @@ use serde::Deserialize;
 use super::benchmark_scenarios::{load_scenarios, profile_ctx};
 use crate::llm::{LLMClient, Message};
 use crate::llm_judgments::{
-    format_items_block, judge_system_prompt, parse_batch_response, ItemForJudgment, BATCH_SIZE,
+    format_items_block, judge_system_prompt, parse_batch_response, ItemForJudgment,
     DEMOTION_CONFIDENCE_MIN, DEMOTION_RELEVANCE_BELOW, PROMPT_VERSION,
 };
 
@@ -303,19 +303,22 @@ fn profile_user_context(profile: &str) -> String {
     }
 }
 
-/// Judge one profile's scenarios, in the shipped batch size.
+/// Judge one profile's scenarios, `per_call` items per request — the size the
+/// ingest lane itself uses for this provider (`judge_items_per_call`: cloud
+/// batches, local models judge one item per call).
 /// Returns the outcomes plus `(input_tokens, output_tokens)`.
 async fn judge_profile(
     client: &LLMClient,
     profile: &str,
     scenarios: &[(usize, &Case)],
+    per_call: usize,
 ) -> (Vec<Outcome>, u64, u64) {
     let user_context = profile_user_context(profile);
     let system_prompt = judge_system_prompt(&user_context);
     let mut outcomes = Vec::new();
     let (mut tin, mut tout) = (0u64, 0u64);
 
-    for chunk in scenarios.chunks(BATCH_SIZE) {
+    for chunk in scenarios.chunks(per_call.max(1)) {
         let items: Vec<ItemForJudgment> = chunk
             .iter()
             .map(|(idx, s)| ItemForJudgment {
@@ -393,6 +396,15 @@ async fn judge_accuracy_benchmark() {
         eprintln!("no API key configured — nothing measured");
         return;
     }
+    // Size requests exactly as production does; a model production would not
+    // let judge is not measured as if it were one.
+    let Some(per_call) = crate::llm_judgments::judge_items_per_call(&provider) else {
+        eprintln!(
+            "{} is not an allowed feed judge (judge_items_per_call = None) — nothing measured",
+            provider.model
+        );
+        return;
+    };
     let model = provider.model.clone();
     // llm-egress: exempt developer benchmark over the synthetic labelled scenarios, not user data
     let client = LLMClient::with_purpose(provider, "judge_benchmark");
@@ -409,6 +421,7 @@ async fn judge_accuracy_benchmark() {
     println!("\n=== JUDGE ACCURACY BENCHMARK ===");
     println!("model          : {model}");
     println!("prompt_version : {PROMPT_VERSION}");
+    println!("items per call : {per_call}");
     println!("scenarios      : {}", scenarios.len());
     println!(
         "gate           : relevance < {DEMOTION_RELEVANCE_BELOW} AND confidence >= {DEMOTION_CONFIDENCE_MIN}\n"
@@ -418,7 +431,7 @@ async fn judge_accuracy_benchmark() {
     let (mut tin, mut tout) = (0u64, 0u64);
     for (profile, list) in &by_profile {
         println!("judging {profile} ({} scenarios)...", list.len());
-        let (o, i, ot) = judge_profile(&client, profile, list).await;
+        let (o, i, ot) = judge_profile(&client, profile, list, per_call).await;
         all.extend(o);
         tin += i;
         tout += ot;

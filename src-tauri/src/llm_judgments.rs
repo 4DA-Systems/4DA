@@ -103,12 +103,12 @@ pub(crate) const BATCH_SIZE: usize = 10;
 /// on reranking (batched), adversarial deliberation and LLM explanations for
 /// the model, none of which were measured.
 ///
-/// qwen2.5:14b (blind gold, v6 prompt, 2026-09-24): one item per call AUC
-/// 0.964, level with Haiku (+0.009 [-0.028, +0.054]). Batched at 10 it fell
-/// to 0.82-0.90 in all five item orders tried (every CI excluding 0), dropped
-/// up to 7 of 160 items, and in rank order wrongly rejected 4 of 19 relevant
-/// items against 0 of 19 — hence one item per call for local judges below.
-const MEASURED_LOCAL_JUDGES: &[&str] = &["qwen2.5:14b"];
+/// Each passed BOTH bars, one item per call, thinking off: >= fresh Haiku 4.5
+/// (0.883) on 400 blind real items — gemma4:26b 0.930, gemma4:12b 0.906,
+/// qwen3:14b 0.893 — and the `bench:judge` MCC floor through this code path
+/// (0.75 / 0.65 / 0.60). qwen2.5:14b was removed: MCC 0.497-0.556 (mean 0.527,
+/// 10-11 false demotions of 49). Not listed: qwen3.5:9b, qwen3.8:27b.
+const MEASURED_LOCAL_JUDGES: &[&str] = &["gemma4:26b", "gemma4:12b", "qwen3:14b"];
 
 /// How the ingest judge (and the pending-verdict drain, which shares its
 /// provider gate) may run for this provider: `Some(items_per_call)`, or
