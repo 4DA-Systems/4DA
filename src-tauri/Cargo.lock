@@ -2444,7 +2444,7 @@ dependencies = [
  "parking_lot",
  "pdf-extract",
  "pkcs8 0.11.0",
- "rand 0.8.6",
+ "rand 0.10.1",
  "reqwest 0.12.28",
  "rsa 0.10.0-rc.18",
  "rten",

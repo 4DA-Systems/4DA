@@ -18,9 +18,10 @@ use anyhow::{bail, Context, Result};
 // enable). `x25519-dalek` 3.x left the old `rand_core` 0.6 generation behind
 // too: keypair generation now uses `StaticSecret::random()` (the crate's
 // `getrandom` feature), which draws from the same system CSPRNG directly.
-// `generate_team_key` still fills from `rand` 0.8's `OsRng` — also the system
-// CSPRNG. All paths are OS-entropy; these are API migrations, not a change in
-// randomness source or strength.
+// `generate_team_key` fills from `getrandom::fill` (rand 0.10 dropped
+// `rand::rngs::OsRng`, which was a thin wrapper over the same call). All paths
+// are OS-entropy; these are API migrations, not a change in randomness source
+// or strength.
 use chacha20poly1305::{
     aead::{Aead, Generate, KeyInit},
     XChaCha20Poly1305, XNonce,
@@ -146,11 +147,14 @@ impl TeamCrypto {
 
     /// Generate a new random team-wide symmetric key.
     /// Called by the admin when creating a team.
-    pub fn generate_team_key() -> [u8; 32] {
+    ///
+    /// Fails closed: if the OS entropy source is unavailable there is no key,
+    /// never a zero-filled one (every member would then share a guessable key).
+    pub fn generate_team_key() -> Result<[u8; 32]> {
         let mut key = [0u8; 32];
-        use rand::RngCore;
-        rand::rngs::OsRng.fill_bytes(&mut key);
-        key
+        getrandom::fill(&mut key)
+            .map_err(|e| anyhow::anyhow!("OS entropy unavailable for the team key: {e}"))?;
+        Ok(key)
     }
 
     /// Encrypt the team key for a specific member using their public key.
@@ -491,7 +495,7 @@ mod tests {
 
     #[test]
     fn encrypt_decrypt_roundtrip() {
-        let key = TeamCrypto::generate_team_key();
+        let key = TeamCrypto::generate_team_key().unwrap();
         let plaintext = b"Hello, team!";
 
         let encrypted = encrypt_metadata(&key, plaintext).unwrap();
@@ -511,8 +515,8 @@ mod tests {
 
     #[test]
     fn decrypt_with_wrong_key_fails() {
-        let key1 = TeamCrypto::generate_team_key();
-        let key2 = TeamCrypto::generate_team_key();
+        let key1 = TeamCrypto::generate_team_key().unwrap();
+        let key2 = TeamCrypto::generate_team_key().unwrap();
 
         let encrypted = encrypt_metadata(&key1, b"secret").unwrap();
         let result = decrypt_metadata(&key2, &encrypted);
@@ -522,7 +526,7 @@ mod tests {
 
     #[test]
     fn decrypt_tampered_data_fails() {
-        let key = TeamCrypto::generate_team_key();
+        let key = TeamCrypto::generate_team_key().unwrap();
         let mut encrypted = encrypt_metadata(&key, b"secret").unwrap();
 
         // Flip the last byte of the ciphertext (inside the Poly1305 tag region)
@@ -539,7 +543,7 @@ mod tests {
 
     #[test]
     fn decrypt_too_short_blob_fails() {
-        let key = TeamCrypto::generate_team_key();
+        let key = TeamCrypto::generate_team_key().unwrap();
         let result = decrypt_metadata(&key, &[0u8; 10]);
         assert!(
             result.is_err(),
@@ -553,7 +557,7 @@ mod tests {
         let mut member = TeamCrypto::generate();
 
         // Admin generates and stores the team key
-        let team_key = TeamCrypto::generate_team_key();
+        let team_key = TeamCrypto::generate_team_key().unwrap();
         admin.set_team_key(team_key);
 
         // Admin encrypts the team key for the member
@@ -575,7 +579,7 @@ mod tests {
 
     #[test]
     fn entry_encrypt_decrypt_roundtrip() {
-        let key = TeamCrypto::generate_team_key();
+        let key = TeamCrypto::generate_team_key().unwrap();
 
         let entry = crate::team_sync_types::TeamMetadataEntry {
             entry_id: "test-123".to_string(),
@@ -599,7 +603,7 @@ mod tests {
 
     #[test]
     fn different_nonces_for_same_plaintext() {
-        let key = TeamCrypto::generate_team_key();
+        let key = TeamCrypto::generate_team_key().unwrap();
         let plaintext = b"same data";
 
         let enc1 = encrypt_metadata(&key, plaintext).unwrap();
