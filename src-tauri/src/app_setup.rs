@@ -722,6 +722,13 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                 tauri::async_runtime::spawn(async {
                     crate::reembed::reembed_all_items().await;
                 });
+            } else {
+                // INV-022 backstop: measure (not assume) that the stored vectors
+                // are in the space the current route produces. One app_meta read
+                // once verified; a sample re-embed otherwise.
+                tauri::async_runtime::spawn(async {
+                    crate::reembed_space::ensure_embedding_space().await;
+                });
             }
         }
     }

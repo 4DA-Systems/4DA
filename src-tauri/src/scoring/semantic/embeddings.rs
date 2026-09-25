@@ -27,6 +27,15 @@ pub(crate) async fn get_topic_embeddings(ace_ctx: &ACEContext) -> HashMap<String
         let mut cache_guard = cache.lock();
         let mut db_loaded_guard = db_loaded.lock();
 
+        // A re-embed moved every stored vector to a new space: drop the cached
+        // (old-space) topic vectors and reload/re-embed them.
+        static CACHE_EPOCH: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let epoch = crate::reembed_space::embedding_epoch();
+        if CACHE_EPOCH.swap(epoch, std::sync::atomic::Ordering::AcqRel) != epoch {
+            cache_guard.clear();
+            *db_loaded_guard = false;
+        }
+
         // First time: load persisted embeddings from database
         if !*db_loaded_guard {
             if let Ok(ace) = get_ace_engine() {

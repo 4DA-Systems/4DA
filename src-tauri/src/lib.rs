@@ -106,6 +106,7 @@ pub(crate) mod embedding_calibration;
 mod embeddings;
 mod events;
 pub(crate) mod reembed;
+pub(crate) mod reembed_space;
 pub mod state;
 mod utils;
 mod victauri_commands;
