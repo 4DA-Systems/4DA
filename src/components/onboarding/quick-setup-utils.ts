@@ -134,7 +134,8 @@ export async function saveLlmProvider(
       baseUrl: null, openaiApiKey: null,
     });
   } else if (apiKey.trim()) {
-    const model = provider === 'anthropic' ? 'claude-haiku-4-5-20251001' : 'gpt-4o-mini';
+    // Anthropic: the brief-capable default (judges run on the Haiku sibling).
+    const model = provider === 'anthropic' ? 'claude-sonnet-5' : 'gpt-4o-mini';
     await cmd('set_llm_provider', {
       provider, apiKey, model, baseUrl: null,
       openaiApiKey: provider === 'openai' ? apiKey : null,

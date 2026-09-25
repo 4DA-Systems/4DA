@@ -66,8 +66,31 @@ pub(crate) struct ModelRecommendation {
 // Core Functions
 // ============================================================================
 
-/// Estimate cost per API call based on known model pricing (per 1M tokens).
+/// Estimate cost per API call in USD.
+///
+/// Priced from the model registry first — the same source the daily cost cap
+/// uses (`LLMClient::estimate_cost_millicents`). Until 2026-09-25 this ledger
+/// priced by substring alone, so `ai_usage` disagreed with the cap: Opus 4.6/5
+/// at Opus 4's $15/$75, Sonnet 5 at $3/$15, Fable at the $1/$3 fallback. And
+/// because the cap is re-seeded from `ai_usage` at every restart, the wrong
+/// ledger leaked into enforcement. The substring table below is only the
+/// fallback for models the registry does not know.
 pub(crate) fn estimate_cost(provider: &str, model: &str, tokens_in: u32, tokens_out: u32) -> f64 {
+    if let Some(millicents) = crate::model_registry::estimate_cost_millicents(
+        provider,
+        model,
+        u64::from(tokens_in),
+        u64::from(tokens_out),
+    ) {
+        // 1 USD = 100,000 millicents.
+        return (millicents as f64 / 100_000.0 * 10_000.0).round() / 10_000.0;
+    }
+    substring_price_cost(provider, model, tokens_in, tokens_out)
+}
+
+/// Fallback pricing (per 1M tokens) by name pattern, for models the registry
+/// does not know. More specific patterns come first.
+fn substring_price_cost(provider: &str, model: &str, tokens_in: u32, tokens_out: u32) -> f64 {
     let (cost_in_per_m, cost_out_per_m) = match (provider, model) {
         // OpenAI embeddings
         ("openai", m) if m.contains("text-embedding-3-small") => (0.02, 0.0),
@@ -80,8 +103,14 @@ pub(crate) fn estimate_cost(provider: &str, model: &str, tokens_in: u32, tokens_
         ("openai", m) if m.contains("gpt-4.1") => (2.00, 8.00),
         // Anthropic
         ("anthropic", m) if m.contains("haiku") => (1.00, 5.00),
+        ("anthropic", m) if m.contains("sonnet-5") => (2.00, 10.00),
         ("anthropic", m) if m.contains("sonnet") => (3.00, 15.00),
-        ("anthropic", m) if m.contains("opus") => (15.00, 75.00),
+        ("anthropic", m) if m.contains("fable") => (10.00, 50.00),
+        ("anthropic", m) if m.contains("opus-5-5") => (4.00, 20.00),
+        // Opus 4.5 and later: $5/$25. Opus 4 / 4.1: $15/$75.
+        ("anthropic", m) if m.contains("opus-4-5") || m.contains("opus-4-6") => (5.00, 25.00),
+        ("anthropic", m) if m.contains("opus-4") => (15.00, 75.00),
+        ("anthropic", m) if m.contains("opus") => (5.00, 25.00),
         // Local models (free)
         ("ollama", _) => (0.0, 0.0),
         // Conservative fallback
@@ -307,6 +336,36 @@ mod tests {
         assert!(cost > 0.0);
         // 1000 * 3.00/1M + 500 * 15.00/1M = 0.003 + 0.0075 = 0.0105
         assert!(cost < 0.02);
+    }
+
+    #[test]
+    fn test_claude_five_prices_match_the_cap_ledger() {
+        // Per 1M input / 1M output tokens.
+        let cases = [
+            ("claude-sonnet-5", 2.0, 10.0),
+            ("claude-opus-5", 5.0, 25.0),
+            ("claude-opus-5-5", 4.0, 20.0),
+            ("claude-fable-5-1", 10.0, 50.0),
+            ("claude-opus-4-6", 5.0, 25.0),
+        ];
+        for (model, input, output) in cases {
+            let cost_in = estimate_cost("anthropic", model, 1_000_000, 0);
+            let cost_out = estimate_cost("anthropic", model, 0, 1_000_000);
+            assert!((cost_in - input).abs() < 1e-6, "{model} input {cost_in}");
+            assert!(
+                (cost_out - output).abs() < 1e-6,
+                "{model} output {cost_out}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_substring_fallback_prices_unknown_claude_ids() {
+        // Dated ids the registry does not carry still get their family's price.
+        let fable = substring_price_cost("anthropic", "claude-fable-5-2-20270101", 1_000_000, 0);
+        assert!((fable - 10.0).abs() < 1e-6);
+        let opus4 = substring_price_cost("anthropic", "claude-opus-4-1-20250805", 1_000_000, 0);
+        assert!((opus4 - 15.0).abs() < 1e-6);
     }
 
     #[test]

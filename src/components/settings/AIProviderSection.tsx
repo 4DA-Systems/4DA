@@ -174,7 +174,7 @@ export function AIProviderSection({
                   setSettingsForm((f) => ({
                     ...f,
                     provider: 'anthropic',
-                    model: registryModels[0] ?? 'claude-haiku-4-5-20251001',
+                    model: registryModels[0] ?? 'claude-sonnet-5',
                     apiKey: '',
                     baseUrl: '',
                   }));

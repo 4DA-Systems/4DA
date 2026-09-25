@@ -123,7 +123,10 @@ pub fn import_env_key(provider: &str) -> Result<String> {
             settings.llm.provider = "anthropic".to_string();
             settings.llm.api_key = full_key;
             if settings.llm.model.is_empty() {
-                settings.llm.model = "claude-haiku-4-5-20251001".to_string();
+                // Brief-capable default (Haiku is below the brief bar, so a
+                // Haiku main model drops the user to the deterministic floor).
+                // Judges still run on the cheap Haiku sibling (llm_judge).
+                settings.llm.model = "claude-sonnet-5".to_string();
             }
         }
         "openai" => {

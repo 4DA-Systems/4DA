@@ -216,7 +216,16 @@ impl LLMClient {
     }
 
     fn build(provider: LLMProvider, purpose: Option<&'static str>) -> Self {
-        let timeout_secs: u64 = 120;
+        // The timeout covers the whole request, streamed bodies included, so a
+        // thinking-by-default model (Claude 5) gets headroom: even at low
+        // effort a long digest can think before it writes.
+        let timeout_secs: u64 = if provider.provider == "anthropic"
+            && crate::anthropic_wire::thinks_by_default(&provider.model)
+        {
+            240
+        } else {
+            120
+        };
         Self {
             provider,
             client: reqwest::Client::builder()
@@ -490,17 +499,8 @@ impl LLMClient {
     ) -> Result<LLMResponse> {
         let url = "https://api.anthropic.com/v1/messages";
 
-        let body = serde_json::json!({
-            "model": self.provider.model,
-            "max_tokens": 4096,  // Increased for batch judgments (15 items need ~2000+ tokens)
-            "system": system,
-            "messages": messages.iter().map(|m| {
-                serde_json::json!({
-                    "role": m.role,
-                    "content": m.content
-                })
-            }).collect::<Vec<_>>()
-        });
+        let body =
+            crate::anthropic_wire::request_body(&self.provider.model, system, &messages, false);
 
         let response = self
             .client
@@ -536,18 +536,20 @@ impl LLMClient {
             .await
             .context("Failed to parse Anthropic response")?;
 
-        let content = data["content"][0]["text"]
-            .as_str()
-            .unwrap_or("")
-            .to_string();
-
-        let input_tokens = data["usage"]["input_tokens"].as_u64().unwrap_or(0);
-        let output_tokens = data["usage"]["output_tokens"].as_u64().unwrap_or(0);
+        let reply = crate::anthropic_wire::parse_reply(&data)?;
+        if reply.truncated() {
+            warn!(
+                target: "4da::llm",
+                model = %self.provider.model,
+                output_tokens = reply.output_tokens,
+                "Anthropic reply hit max_tokens — answer is truncated"
+            );
+        }
 
         Ok(LLMResponse {
-            content,
-            input_tokens,
-            output_tokens,
+            content: reply.text,
+            input_tokens: reply.input_tokens,
+            output_tokens: reply.output_tokens,
         })
     }
 

@@ -161,6 +161,7 @@ mod analysis_narration;
 mod analysis_rerank;
 mod analysis_verdicts;
 mod anomaly;
+mod anthropic_wire;
 mod app_setup;
 mod attention;
 mod autophagy;

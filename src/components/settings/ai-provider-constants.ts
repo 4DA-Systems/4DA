@@ -11,14 +11,14 @@ import type { ModelRegistryData } from '../../store/types';
 // model that can't narrate it (Haiku/-mini/-nano → is_brief_capable=false) silently drops
 // every new user to the deterministic floor. Anthropic defaults to Sonnet for that reason.
 const curatedModels: Record<string, string[]> = {
-  anthropic: ['claude-sonnet-4-6', 'claude-haiku-4-5-20251001', 'claude-opus-4-6'],
+  anthropic: ['claude-sonnet-5', 'claude-opus-5', 'claude-haiku-4-5', 'claude-sonnet-4-6'],
   openai: ['gpt-4.1', 'gpt-4o', 'gpt-4.1-mini', 'gpt-4o-mini', 'gpt-4.1-nano'],
-  ollama: ['qwen3:14b', 'gemma3:12b', 'qwen3:8b', 'gemma3:4b', 'deepseek-r1', 'llama3.2', 'phi4'],
+  ollama: ['qwen3:14b', 'gemma3:12b', 'qwen3:8b', 'gemma4:26b', 'gemma4:12b', 'gemma3:4b', 'deepseek-r1', 'llama3.2', 'phi4'],
 };
 
 // Ollama models split by synthesis capability for grouped dropdown.
 export const ollamaSynthesisModels = ['qwen3:14b', 'gemma3:12b', 'qwen3:8b'];
-export const ollamaOtherModels = ['gemma3:4b', 'deepseek-r1', 'llama3.2', 'phi4'];
+export const ollamaOtherModels = ['gemma4:26b', 'gemma4:12b', 'gemma3:4b', 'deepseek-r1', 'llama3.2', 'phi4'];
 
 // Popular OpenAI-compatible endpoints
 export const popularEndpoints: { name: string; url: string }[] = [

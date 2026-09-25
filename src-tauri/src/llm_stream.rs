@@ -102,6 +102,19 @@ pub(crate) fn parse_anthropic_output_tokens(data: &str) -> Option<u64> {
     None
 }
 
+/// Extract the stop reason from an Anthropic message_delta event
+/// (`end_turn`, `max_tokens`, `refusal`, …).
+pub(crate) fn parse_anthropic_stop_reason(data: &str) -> Option<String> {
+    let v: serde_json::Value = serde_json::from_str(data).ok()?;
+    if v.get("type")?.as_str()? == "message_delta" {
+        return v
+            .pointer("/delta/stop_reason")
+            .and_then(serde_json::Value::as_str)
+            .map(String::from);
+    }
+    None
+}
+
 /// Extract token text from an OpenAI SSE data line.
 pub(crate) fn parse_openai_sse_token(data: &str) -> Option<String> {
     let v: serde_json::Value = serde_json::from_str(data).ok()?;
@@ -160,18 +173,7 @@ where
 {
     let url = "https://api.anthropic.com/v1/messages";
 
-    let body = serde_json::json!({
-        "model": provider.model,
-        "max_tokens": 4096,
-        "stream": true,
-        "system": system,
-        "messages": messages.iter().map(|m| {
-            serde_json::json!({
-                "role": m.role,
-                "content": m.content
-            })
-        }).collect::<Vec<_>>()
-    });
+    let body = crate::anthropic_wire::request_body(&provider.model, system, &messages, true);
 
     let response = client
         .post(url)
@@ -199,6 +201,7 @@ where
     let mut full_text = String::new();
     let mut input_tokens: u64 = 0;
     let mut output_tokens: u64 = 0;
+    let mut stop_reason: Option<String> = None;
 
     while let Some(chunk) = stream.next().await {
         let bytes = chunk.context("Stream read error")?;
@@ -232,6 +235,10 @@ where
                 if let Some(t) = parse_anthropic_output_tokens(data) {
                     output_tokens = t;
                 }
+
+                if let Some(reason) = parse_anthropic_stop_reason(data) {
+                    stop_reason = Some(reason);
+                }
             }
         }
     }
@@ -241,8 +248,10 @@ where
         input_tokens = input_tokens,
         output_tokens = output_tokens,
         len = full_text.len(),
+        stop_reason = stop_reason.as_deref().unwrap_or("none"),
         "Anthropic streaming complete"
     );
+    crate::anthropic_wire::check_stop(stop_reason.as_deref(), &full_text)?;
 
     Ok(LLMResponse {
         content: full_text,

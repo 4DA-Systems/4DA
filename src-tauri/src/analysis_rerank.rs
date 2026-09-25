@@ -373,13 +373,16 @@ pub(crate) async fn apply_llm_reranking(
         crate::llm_judge::judge_provider(&settings.get().llm)
     };
 
-    // Gate: skip reranking for Basic-tier models (small local models that
-    // can't reliably produce structured JSON judgments). They still get
-    // pipeline scoring and heuristic explanations from scoring/explanation.rs.
+    // Gate: the same rule as the ingest judge (`judge_items_per_call`) — a
+    // Good/Full tier model, or a local model on the MEASURED judge allowlist
+    // (gemma4:26b, gemma4:12b, qwen3:14b sit in the Basic tier, so this lane
+    // used to skip them silently while the ingest judge ran them). Small
+    // unmeasured local models still get pipeline scoring and heuristic
+    // explanations from scoring/explanation.rs.
     let tier = crate::llm_capability::get_model_tier(&llm_settings);
-    if !tier.supports_reranking() {
+    let Some(items_per_call) = crate::llm_judgments::judge_items_per_call(&llm_settings) else {
         return RerankOutcome::Skipped(RerankSkip::UnsupportedTier(tier.to_string()));
-    }
+    };
 
     // Construct the advisory core. It carries its own ModelIdentity and
     // prompt_version so every AdvisorSignal and provenance row this rerank
@@ -489,10 +492,12 @@ pub(crate) async fn apply_llm_reranking(
         })
         .collect();
 
-    // Split into batches of 8 for better LLM accuracy
+    // Cloud models judge 8 per call; local models one per call (their
+    // batching penalty was large and significant — `judge_items_per_call`).
     const LLM_BATCH_SIZE: usize = 8;
+    let batch_size = items_per_call.min(LLM_BATCH_SIZE);
     let batches: Vec<Vec<(String, String, String)>> = to_judge
-        .chunks(LLM_BATCH_SIZE)
+        .chunks(batch_size)
         .map(
             <[(
                 std::string::String,

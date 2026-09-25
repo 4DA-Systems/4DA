@@ -72,12 +72,12 @@ describe('saveLlmProvider', () => {
     expect(persistedProvider()).toEqual(NONE);
   });
 
-  it('anthropic + key → persists anthropic with the haiku model, no openaiApiKey', async () => {
+  it('anthropic + key → persists anthropic with the brief-capable Sonnet 5 model, no openaiApiKey', async () => {
     await saveLlmProvider('anthropic', 'sk-ant-realkey-1234567890', null);
     expect(persistedProvider()).toMatchObject({
       provider: 'anthropic',
       apiKey: 'sk-ant-realkey-1234567890',
-      model: 'claude-haiku-4-5-20251001',
+      model: 'claude-sonnet-5',
       openaiApiKey: null,
     });
   });
