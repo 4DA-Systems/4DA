@@ -633,6 +633,10 @@ pub(crate) async fn apply_llm_reranking(
             // multiple times in future (multi-advisor) and each advisor
             // must adjust off the same baseline.
             let pipeline_score = result.top_score;
+            // AD-048: the judge never removes a registry release of a matched
+            // dependency. Its rejection here would reach the persist boundary
+            // as a PIPELINE demotion, which the verdict drain lets stand.
+            let dependency_release = crate::db::llm_judgments::is_dependency_release(result);
 
             let advisor_signal = crate::types::AdvisorSignal {
                 provider: advisor_identity.provider.clone(),
@@ -706,7 +710,7 @@ pub(crate) async fn apply_llm_reranking(
                 // mechanical dep matching shouldn't override human-calibrated judgment.
                 // This is NOT a general override — only fires when LLM confidence < 0.30
                 // (score < 1.5/5) AND the item relies primarily on dependency matching.
-                if !judgment.relevant && judgment.confidence < 0.30 {
+                if !judgment.relevant && judgment.confidence < 0.30 && !dependency_release {
                     let has_strong_user_signal = result
                         .score_breakdown
                         .as_ref()
@@ -765,7 +769,7 @@ pub(crate) async fn apply_llm_reranking(
                         result.explanation = Some(judgment.reasoning.clone());
                     }
                     confirmed += 1;
-                } else {
+                } else if !dependency_release {
                     result.relevant = false;
                     result.top_score *= 0.15;
                     if judgment.reasoning != "No judgment provided by LLM" {

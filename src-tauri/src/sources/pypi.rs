@@ -145,8 +145,10 @@ impl PypiSource {
         }
         let content = content_parts.join("\n");
 
-        // Build the project URL: prefer Homepage from project_urls, then home_page
-        let project_url = info
+        // The item links the release's own PyPI page; the homepage (often the
+        // GitHub repo every release shares) is kept as metadata only.
+        let release_url = release_page_url(&info.name, &info.version);
+        let homepage = info
             .project_urls
             .as_ref()
             .and_then(|urls| {
@@ -157,8 +159,7 @@ impl PypiSource {
                     .or_else(|| urls.get("Repository"))
                     .cloned()
             })
-            .or_else(|| info.home_page.clone())
-            .unwrap_or_else(|| format!("https://pypi.org/project/{}/", info.name));
+            .or_else(|| info.home_page.clone());
 
         // Build metadata
         let mut metadata = serde_json::json!({
@@ -169,12 +170,15 @@ impl PypiSource {
         if let Some(ref author) = info.author {
             metadata["author"] = serde_json::json!(author);
         }
+        if let Some(ref homepage) = homepage {
+            metadata["homepage"] = serde_json::json!(homepage);
+        }
         if let Some(ref req) = info.requires_python {
             metadata["requires_python"] = serde_json::json!(req);
         }
 
         Ok(SourceItem::new("pypi", &source_id, &title)
-            .with_url(Some(project_url))
+            .with_url(Some(release_url))
             .with_content(content)
             .with_metadata(metadata))
     }
@@ -301,6 +305,12 @@ impl Source for PypiSource {
     }
 }
 
+/// The PyPI page of one release — distinct per version, so two releases of a
+/// package never share a URL.
+fn release_page_url(name: &str, version: &str) -> String {
+    format!("https://pypi.org/project/{name}/{version}/")
+}
+
 // ============================================================================
 // Tests
 // ============================================================================
@@ -308,6 +318,18 @@ impl Source for PypiSource {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn release_page_url_is_distinct_per_version() {
+        assert_eq!(
+            release_page_url("boto3", "1.43.102"),
+            "https://pypi.org/project/boto3/1.43.102/"
+        );
+        assert_ne!(
+            release_page_url("boto3", "1.43.101"),
+            release_page_url("boto3", "1.43.102")
+        );
+    }
 
     #[test]
     fn test_pypi_source_creation() {

@@ -1084,6 +1084,87 @@ fn curated_twin_found_by_canonical_url_or_title() {
     );
 }
 
+/// 2026-09-26 live: every npm row pointed at the package page, so
+/// `npm: vitest v5.0.2` (and 4.1.11, 5.0.0, 5.0.1) yielded to the curated
+/// `v4.1.10` and the major never reached the feed. A shared registry URL is
+/// a twin only when the titles name the SAME release.
+#[test]
+fn registry_releases_are_twins_only_of_the_same_release() {
+    use crate::test_utils::insert_test_item_with_url;
+    let db = test_db();
+    let url = "https://www.npmjs.com/package/vitest";
+    let curated = insert_test_item_with_url(
+        &db,
+        "npm_registry",
+        "vitest@4.1.10",
+        url,
+        "npm: vitest v4.1.10",
+        "body",
+    );
+    db.persist_feed_verdicts(&[(curated, true, VerdictSource::Score)], 37)
+        .unwrap();
+
+    let major = insert_test_item_with_url(
+        &db,
+        "npm_registry",
+        "vitest@5.0.2",
+        url,
+        "npm: vitest v5.0.2",
+        "body",
+    );
+    assert_eq!(
+        db.find_curated_twin(major, Some(url), "npm: vitest v5.0.2")
+            .unwrap(),
+        None,
+        "a newer release of the package is its own story, not a copy"
+    );
+
+    let refetch = insert_test_item_with_url(
+        &db,
+        "npm_registry",
+        "vitest@4.1.10b",
+        url,
+        "npm: vitest v4.1.10",
+        "body",
+    );
+    assert_eq!(
+        db.find_curated_twin(refetch, Some(url), "npm: vitest v4.1.10")
+            .unwrap(),
+        Some(curated),
+        "the same release fetched twice is still one story"
+    );
+
+    let story = insert_test_item_with_url(
+        &db,
+        "hackernews",
+        "h1",
+        url,
+        "Why we moved our tests to Vitest",
+        "body",
+    );
+    assert_eq!(
+        db.find_curated_twin(story, Some(url), "Why we moved our tests to Vitest")
+            .unwrap(),
+        None,
+        "an editorial link to the package page is not a copy of a release row"
+    );
+}
+
+#[test]
+fn registry_release_identity_reads_only_registry_titles() {
+    use crate::dep_linker::registry_release_identity;
+    assert_eq!(
+        registry_release_identity("npm: vitest v5.0.2"),
+        Some(("vitest".into(), Some("5.0.2".into())))
+    );
+    assert_eq!(
+        registry_release_identity("crates.io: serial_test v4.0.1"),
+        registry_release_identity("crates.io: serial-test v4.0.1"),
+        "crates.io treats - and _ as one name"
+    );
+    assert_eq!(registry_release_identity("Bun v1.3 is here"), None);
+}
+
 #[test]
 fn rejected_items_are_not_twins() {
     use crate::test_utils::insert_test_item_with_url;
