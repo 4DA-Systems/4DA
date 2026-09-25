@@ -487,6 +487,12 @@ jobs:
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           workspaces: relay
+          # Main-only, like the Rust matrix. Unset, every merge-queue entry
+          # saved its own 412 MB copy under a throwaway gh-readonly-queue ref
+          # that nothing can read back (three were live on 2026-09-26). That
+          # pushed the repo over its 10 GB cache limit, so GitHub evicted a
+          # main-scoped Rust entry every PR depends on.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Format
         run: cargo fmt --check
@@ -691,7 +697,7 @@ jobs:
   #   `action_required`. So the job now APPROVES those held runs on its own
   #   commit. That puts Validate/Hermetic on the PR itself, which auto-merge
   #   needs to enter the queue. It falls back to dispatching Validate AND
-  #   Hermetic (both required checks since 2026-09-24) only when nothing was
+  #   Hermetic (only Validate is required since 2026-09-26) only when nothing was
   #   held or approval failed.
   #
   # No loop is possible: the heal push triggers nothing (recursion guard), and
@@ -804,9 +810,10 @@ jobs:
     # forcing the 75m bump). Hosted runners are dedicated + ephemeral; with
     # Swatinem/rust-cache a warm build is ~3-5 min and is immune to fleet load.
     #
-    # Platform coverage: default-feature `cargo test --lib` is already proven on
-    # ubuntu AND windows by hermetic.yml's fresh-clone matrix, so default
-    # behaviour keeps two-platform coverage. The trade-off is that the
+    # Platform coverage: default-feature Rust tests also run on ubuntu AND
+    # windows in hermetic.yml's fresh-clone matrix. Since 2026-09-26 that is
+    # advisory on PRs and runs after the merge on main, where a failure opens a
+    # `hermetic-main` issue. It no longer gates the queue. The trade-off is that the
     # EXPERIMENTAL-feature leg now runs on ubuntu only (it previously ran on the
     # self-hosted Windows box) — acceptable: the experimental surface is not
     # Windows-specific. Cost: cheap 1x ubuntu minutes (the macOS 10x tier is the
@@ -815,10 +822,8 @@ jobs:
     # a ~3-min source compile each.
     runs-on: ubuntu-latest
     # 60, not 30: this job now compiles the integration test targets too (see
-    # the compile-gate step), and the default leg additionally builds the lib
-    # once more under `--features calibrated-sim` for the real-embedding gate
-    # (feature unification forces a fourda-crate recompile; the dep graph stays
-    # cached). Swatinem's cache is only saved from main, so PR runs right after
+    # the compile-gate step). (The calibrated-sim rebuild that used to follow
+    # it now runs in `rust-calibration`.) Swatinem's cache is only saved from main, so PR runs right after
     # a scope change pay the full cold link. A timeout here is a red required
     # gate, so the cap holds headroom for the cold-cache window.
     timeout-minutes: 60
@@ -843,14 +848,17 @@ jobs:
           - label: team-sync
             cargo-features: '--features team-sync'
             test-floor: 0
+            cache-key: features
           - label: enterprise
             cargo-features: '--features enterprise'
             test-floor: 0
+            cache-key: features
           # Both together exercises the third path: the real `audit` module
           # replacing `audit_stub`, which neither single-feature leg covers.
           - label: team-sync+enterprise
             cargo-features: '--features team-sync,enterprise'
             test-floor: 0
+            cache-key: features
     defaults:
       run:
         shell: bash
@@ -891,16 +899,24 @@ jobs:
       - uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2.7.8
         with:
           workspaces: src-tauri
-          # One entry per matrix leg: each leg compiles a different feature set,
-          # so a shared key would let whichever leg saved first serve the wrong
-          # artifacts to the other four.
-          key: ${{ matrix.label }}
+          # default and experimental keep their own entries. The three dormant-
+          # surface legs SHARE one (`cache-key: features`). The budget forced
+          # that, not taste: one leg's entry is ~2.3 GB, the repo limit is
+          # 10 GB, and five per-leg entries plus the model/relay/CodeQL caches
+          # came to 10.8 GB (measured 2026-09-26). GitHub evicts to fit, so one
+          # leg was always cold. That day it was enterprise (`No cache found`),
+          # at 16.8 min the slowest job in the queue entry. Their dependency
+          # graphs are near-identical and cargo fingerprints every artifact, so
+          # a shared entry can only cost a few recompiles, never a wrong build.
+          # Only the superset leg (team-sync+enterprise) SAVES the shared
+          # entry, so it always holds every feature's dependencies.
+          key: ${{ matrix.cache-key || matrix.label }}
           # Save the cache only from main — PR builds reuse it but don't churn it.
           # Until the daily `schedule` trigger existed this condition was NEVER
           # true (no event ran on refs/heads/main), so the cache was never
           # written: measured 2026-09-24, zero rust-cache entries existed and
           # every leg of every PR and queue entry compiled cold.
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          save-if: ${{ github.ref == 'refs/heads/main' && (matrix.cache-key != 'features' || matrix.label == 'team-sync+enterprise') }}
 
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v4
@@ -932,7 +948,22 @@ jobs:
         if: matrix.label == 'default'
         run: cargo deny check
 
+      # ── Compile-gate + tests run in the MERGE QUEUE, not on the PR ─────────
+      # Every PR was paying this suite twice, back to back: once on the PR (a
+      # required check has to be green before auto-merge queues it) and again on
+      # the merge_group entry, which runs every leg by design. Measured
+      # 2026-09-25 on #726-#733: PR run ~21 min, queue run ~19-26 min, so a
+      # clean PR took 41-47 min to merge and one flake took 73-102.
+      #
+      # The queue entry is the authoritative gate. It is what lands, and it
+      # still runs all of this on every leg. The PR run keeps the fast signal:
+      # fmt, clippy on every feature set, cargo-audit and cargo-deny. A test
+      # failure now shows up in the queue instead of on the PR, and ejects the
+      # entry. That rebuilds whatever is queued behind it, a cost that stays
+      # small while the queue rarely holds more than one or two entries.
+      # workflow_dispatch and schedule still run everything.
       - name: Compile-gate (cargo test --no-run)
+        if: github.event_name != 'pull_request'
         # Fast-fail if the test binary stops compiling, before the slow test run.
         #
         # `--tests` (not `--lib`): cargo's `--tests` selects every target with
@@ -942,6 +973,7 @@ jobs:
         run: cargo test --tests ${{ matrix.cargo-features }} --no-run
 
       - name: Run tests (unit + integration) and verify count floor
+        if: github.event_name != 'pull_request'
         # Was `--lib`, which silently excluded every one of the 154 real
         # integration tests in src-tauri/tests/ — including all 12 migration
         # tests and the repo's only old-schema forward-migration coverage —
@@ -987,14 +1019,74 @@ jobs:
           fi
           rm -f test-output.txt
 
-      # ── Real-embedding mode (2026-08-23 adversarial audit, items 21/22) ──
-      # Everything above runs the SYNTHETIC embedding suite. That suite was
-      # 699/699 green while real-embedding mode failed 4 persona recall guards
-      # — CI was structurally blind to real-mode regressions because nothing
-      # here ever exercised them. These two steps close that hole on the
-      # default leg only (one leg is enough: the calibrated fixtures are
+  # ─────────────────────────────────────────────────────────────────────
+  # Real-embedding mode (2026-08-23 adversarial audit, items 21/22).
+  #
+  # Its own job, in parallel with the Rust matrix. These steps used to run at
+  # the END of `Rust (default)`, after its full test run, and made that leg the
+  # queue's long pole: 4.3 of its 19 minutes (2026-09-25, pr-733 entry). They
+  # share nothing with the steps before them except the build cache. Separately,
+  # they cost ~1.5 min of setup plus the calibrated-sim compile they always
+  # paid (feature unification recompiles the fourda crate either way).
+  #
+  # Merge queue, dispatch and schedule only, like the test steps above: the PR
+  # run is the fast pre-check, and the queue entry is the gate.
+  # ─────────────────────────────────────────────────────────────────────
+  rust-calibration:
+    name: Rust (real-embedding calibration)
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+        working-directory: src-tauri
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+
+      - name: Install Linux system dependencies (tauri / webkit)
+        working-directory: .
+        run: |
+          # Same image-source pruning as the Rust matrix above (see its note).
+          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list \
+                     /etc/apt/sources.list.d/microsoft-prod.sources \
+                     /etc/apt/sources.list.d/azure-cli.list \
+                     /etc/apt/sources.list.d/azure-cli.sources
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # v1
+        with:
+          toolchain: stable
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2.7.8
+        with:
+          workspaces: src-tauri
+          # READ the default leg's entry, never write one. Without `shared-key`
+          # the action appends this job's id (`rust-calibration`) and would look
+          # for an entry nobody saves. `default-rust` is exactly the key+job
+          # prefix the `Rust (default)` leg writes (v0-rust-default-rust-...),
+          # and a fifth ~2.3 GB entry would break the budget noted above.
+          shared-key: default-rust
+          save-if: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v4
+        with:
+          node-version: '22'
+
+      - name: Fetch OCR bundle resources (build dependency)
+        working-directory: .
+        run: node scripts/fetch-ocr-models.cjs
+
+      # The synthetic embedding suite once passed 699/699 while real-embedding
+      # mode failed 4 persona recall guards. CI could not see real-mode
+      # regressions because nothing here exercised them. The steps below close
+      # that hole in one job, which is enough: the calibrated fixtures are
       # platform-independent committed .bin files, and the fastembed model is
-      # deterministic ONNX inference).
+      # deterministic ONNX inference.
       # The cache key must contain the exact identity of BOTH artifacts, or a
       # warm cache silently pins the gate to yesterday's model:
       #   * hashFiles() over the two fetcher scripts covers ORT_VERSION, the
@@ -1007,10 +1099,6 @@ jobs:
       # miss, and the fetch step below re-downloads for real.
       - name: Resolve embedding-model revision (cache key input)
         id: model-rev
-        # Must match the cache step's condition below: its key reads this
-        # step's output, and an empty SHA would silently collapse every
-        # revision onto one key.
-        if: matrix.label == 'default'
         working-directory: .
         run: |
           api=https://huggingface.co/api/models/nomic-ai/nomic-embed-text-v1.5/revision/main
@@ -1035,7 +1123,6 @@ jobs:
       # (model revision moved since the last scheduled run) costs the same ~15s
       # it always did.
       - name: Cache embedding model + ORT runtime
-        if: matrix.label == 'default'
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           # Exactly the two destination dirs the fetchers write. NOT all of
@@ -1058,7 +1145,6 @@ jobs:
         # Unchanged on a cache MISS: both scripts still download and verify.
         # On a HIT they see the files already on disk and no-op, which is the
         # documented `--force`-less behaviour of each.
-        if: matrix.label == 'default'
         working-directory: .
         run: |
           node scripts/download-ort.cjs
@@ -1078,7 +1164,6 @@ jobs:
         # "SKIP" and green-passing having measured nothing, and the benchmark
         # quality-gate ratchet hard-fails instead of soft-warning. This step
         # can therefore never pass vacuously.
-        if: matrix.label == 'default'
         env:
           FOURDA_REQUIRE_REAL_EMBEDDINGS: '1'
           FOURDA_DATA_DIR: ${{ runner.temp }}/4da-validate-data
@@ -1096,7 +1181,9 @@ jobs:
   # This job depends on all of them and fails if any FAILED or was CANCELLED; a
   # SKIPPED job (a conditional leg that legitimately did not apply) passes.
   # Runs on a hosted runner so the gate itself never ties up the self-hosted box.
-  # Require ONLY "Validate Success" (plus "Hermetic Success") in branch protection.
+  # Require ONLY "Validate Success" in branch protection. "Hermetic Success" was
+  # also required from 2026-09-24 to 2026-09-26. It was the queue's slowest job
+  # and its only flake, so it now runs after the merge instead (see hermetic.yml).
   # Pattern mirrors victauri's ci.yml `ci-success` job.
   # ─────────────────────────────────────────────────────────────────────
   validate-success:
@@ -1114,7 +1201,7 @@ jobs:
     # protection change is needed to enforce it. It runs on pull_request AND
     # merge_group (where it scans the final squash commits) and SKIPS on
     # workflow_dispatch/schedule (skipped == pass below).
-    needs: [changes, pr-metadata, repo-guards, dependabot-notice, frontend, mcp-server, relay, rust]
+    needs: [changes, pr-metadata, repo-guards, dependabot-notice, frontend, mcp-server, relay, rust, rust-calibration]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
