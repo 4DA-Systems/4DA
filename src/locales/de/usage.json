@@ -16,6 +16,10 @@
     "channel_render": "Kanal-Rendering",
     "content_analysis": "Inhaltsanalyse",
     "translation": "Übersetzung",
+    "verdict_drain": "Relevanzbewertung — ausstehende Urteile",
+    "monitoring_brief": "Morgen-Briefing",
+    "capability_probe": "Modell-Fähigkeitsprüfung",
+    "connection_test": "Verbindungstest (Einstellungen)",
     "completion": "Ohne Tag (Briefings u. a.)",
     "structured_completion": "Ohne Tag (strukturiert)",
     "streaming": "Ohne Tag (Streaming)"

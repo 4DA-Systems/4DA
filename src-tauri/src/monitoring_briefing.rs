@@ -3198,7 +3198,8 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
     let mut last_error: Option<String> = None;
 
     for (idx, llm_settings) in providers.iter().enumerate() {
-        let llm_client = crate::llm::LLMClient::new(llm_settings.clone());
+        let llm_client =
+            crate::llm::LLMClient::with_purpose(llm_settings.clone(), "monitoring_brief");
         let tier = crate::ollama::synthesis_tier(llm_settings).await;
         let provider_label = format!(
             "{}/{}",

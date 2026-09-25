@@ -258,7 +258,7 @@ fn get_llm_client() -> Result<llm::LLMClient> {
         return Err("LLM not configured -- set up your API key in Settings".into());
     }
     // llm-egress: no-item-body translates the app's own UI strings
-    Ok(llm::LLMClient::new(provider))
+    Ok(llm::LLMClient::with_purpose(provider, "translation"))
 }
 
 /// Map language code to human-readable name for LLM prompts.

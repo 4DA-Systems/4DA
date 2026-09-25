@@ -16,6 +16,10 @@
     "channel_render": "Rendu de canal",
     "content_analysis": "Analyse de contenu",
     "translation": "Traduction",
+    "verdict_drain": "Évaluation de pertinence — verdicts en attente",
+    "monitoring_brief": "Briefing du matin",
+    "capability_probe": "Vérification des capacités du modèle",
+    "connection_test": "Test de connexion (paramètres)",
     "completion": "Sans étiquette (briefings et divers)",
     "structured_completion": "Sans étiquette (structuré)",
     "streaming": "Sans étiquette (streaming)"

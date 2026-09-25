@@ -16,6 +16,10 @@
     "channel_render": "चैनल रेंडरिंग",
     "content_analysis": "सामग्री विश्लेषण",
     "translation": "अनुवाद",
+    "verdict_drain": "प्रासंगिकता मूल्यांकन — लंबित निर्णय",
+    "monitoring_brief": "सुबह की ब्रीफ़िंग",
+    "capability_probe": "मॉडल क्षमता जाँच",
+    "connection_test": "कनेक्शन परीक्षण (सेटिंग्स)",
     "completion": "बिना टैग (ब्रीफ़िंग आदि)",
     "structured_completion": "बिना टैग (संरचित)",
     "streaming": "बिना टैग (स्ट्रीमिंग)"

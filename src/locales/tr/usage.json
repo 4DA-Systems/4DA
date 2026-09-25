@@ -16,6 +16,10 @@
     "channel_render": "Kanal işleme",
     "content_analysis": "İçerik analizi",
     "translation": "Çeviri",
+    "verdict_drain": "Alaka değerlendirmesi — bekleyen kararlar",
+    "monitoring_brief": "Sabah brifingi",
+    "capability_probe": "Model yetenek kontrolü",
+    "connection_test": "Bağlantı testi (ayarlar)",
     "completion": "Etiketsiz (brifingler vb.)",
     "structured_completion": "Etiketsiz (yapılandırılmış)",
     "streaming": "Etiketsiz (akış)"

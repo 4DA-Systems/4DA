@@ -309,7 +309,7 @@ pub(crate) async fn probe_model_capability(settings: &LLMProvider) -> Result<Mod
     );
 
     // llm-egress: no-item-body a fixed capability probe with no user or item data
-    let client = LLMClient::new(settings.clone());
+    let client = LLMClient::with_purpose(settings.clone(), "capability_probe");
     let system =
         "You are a JSON-only assistant. Respond with ONLY valid JSON, no markdown, no explanation.";
 
