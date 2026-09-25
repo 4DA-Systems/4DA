@@ -188,8 +188,8 @@ fn prompt_pins_confidence_semantics_and_mandatory_field() {
     );
 
     assert_eq!(
-        PROMPT_VERSION, "v6",
-        "the topic-not-vocabulary fix must ride its own cohort"
+        PROMPT_VERSION, "v7",
+        "the project-card context must ride its own cohort"
     );
 }
 

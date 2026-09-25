@@ -312,7 +312,21 @@ pub(crate) async fn apply_llm_reranking(
         return RerankOutcome::Skipped(RerankSkip::Disabled);
     }
 
-    if !within_limits {
+    // Judge work runs on a measured local judge when one fits this machine,
+    // else on the cheap sibling of the configured model (same provider, same
+    // key) — see `llm_judge::judge_provider`. Resolved BEFORE the budget
+    // gates (a local judge spends nothing, so the rerank budget does not
+    // apply to it) and before core construction, so the advisor identity,
+    // provenance rows, and calibration samples all record the model that
+    // actually judged.
+    crate::local_judge::refresh_if_stale().await;
+    let llm_settings = {
+        let settings = get_settings_manager().lock();
+        crate::llm_judge::judge_provider(&settings.get().llm)
+    };
+    let metered = llm_settings.provider != "ollama";
+
+    if metered && !within_limits {
         return RerankOutcome::Skipped(RerankSkip::BudgetExhausted {
             tokens_today: usage.tokens_today,
             token_limit: rerank_config.daily_token_limit,
@@ -323,7 +337,7 @@ pub(crate) async fn apply_llm_reranking(
 
     let allowed_by_now =
         budget_allowance_by_now(rerank_config.daily_token_limit, secs_into_utc_day());
-    if usage.tokens_today >= allowed_by_now {
+    if metered && usage.tokens_today >= allowed_by_now {
         return RerankOutcome::Skipped(RerankSkip::BudgetPaced {
             tokens_today: usage.tokens_today,
             allowed_by_now,
@@ -362,16 +376,6 @@ pub(crate) async fn apply_llm_reranking(
     if candidates.is_empty() {
         return RerankOutcome::Skipped(RerankSkip::NoCandidates);
     }
-
-    // Judge work runs on the cheap sibling of the configured model (same
-    // provider, same key) — see `llm_judge::judge_provider`. The override is
-    // applied BEFORE the tier gate and core construction so the advisor
-    // identity, provenance rows, and calibration samples all record the model
-    // that actually judged.
-    let llm_settings = {
-        let settings = get_settings_manager().lock();
-        crate::llm_judge::judge_provider(&settings.get().llm)
-    };
 
     // Gate: the same rule as the ingest judge (`judge_items_per_call`) — a
     // Good/Full tier model, or a local model on the MEASURED judge allowlist
@@ -857,8 +861,8 @@ pub(crate) async fn apply_llm_reranking(
     // Re-sort after LLM adjustments
     scoring::sort_results(results);
 
-    // Track token usage for daily limits
-    {
+    // Track token usage for daily limits (spend only: a local judge is free)
+    if metered {
         let mut settings = get_settings_manager().lock();
         let cost = core.estimate_cost_cents(total_input, total_output);
         settings.record_usage(total_input + total_output, cost);

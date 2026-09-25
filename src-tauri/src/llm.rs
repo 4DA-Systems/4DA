@@ -174,7 +174,7 @@ pub(crate) fn todays_persisted_usage() -> Option<(u64, u64)> {
     let (tokens, cost_usd) = conn
         .query_row(
             "SELECT COALESCE(SUM(tokens_in + tokens_out), 0), COALESCE(SUM(estimated_cost_usd), 0.0)
-             FROM ai_usage WHERE created_at >= ?1",
+             FROM ai_usage WHERE created_at >= ?1 AND provider <> 'ollama'",
             rusqlite::params![since_utc],
             |row| {
                 let tokens: i64 = row.get(0)?;
@@ -254,6 +254,15 @@ impl LLMClient {
         self.purpose.unwrap_or(call_shape)
     }
 
+    /// Whether this call spends money and so answers to the daily token and
+    /// cost caps. A local Ollama call costs nothing: counting its tokens let
+    /// free local judging (about 1,200 tokens per item, one item per call)
+    /// exhaust the 2M-token cap and block the briefs and digests the cap
+    /// protects. Its usage is still written to `ai_usage`.
+    fn metered(&self) -> bool {
+        self.provider.provider != "ollama"
+    }
+
     /// Send a completion request.
     /// Enforces daily token and cost limits — returns an error if the budget is exhausted.
     pub async fn complete(&self, system: &str, messages: Vec<Message>) -> Result<LLMResponse> {
@@ -261,7 +270,7 @@ impl LLMClient {
         let (system, messages) = crate::privacy_egress::scrub_prompt(system, messages);
         let system = system.as_str();
         // Hard cutoff: refuse to call the LLM if daily limit is already reached
-        if is_llm_limit_reached() {
+        if self.metered() && is_llm_limit_reached() {
             let (tokens_used, tokens_limit) = crate::state::get_llm_token_usage();
             let (cost_used, cost_limit) = crate::state::get_llm_cost_usage();
             warn!(
@@ -286,12 +295,28 @@ impl LLMClient {
         // consent flag here at call time — recording consent at the moment data is
         // sent would defeat its purpose.
 
+        let local_judge_call = self.provider.provider == "ollama"
+            && crate::local_judge::is_judge_purpose(self.purpose);
+        if local_judge_call && crate::local_judge::cooling_off() {
+            return Err(
+                "Local judge is cooling off after a slow or failed call; the next pass uses the cloud judge"
+                    .into(),
+            );
+        }
+        let started = std::time::Instant::now();
         let result = match self.provider.provider.as_str() {
             "anthropic" => self.complete_anthropic(system, messages.clone()).await,
             "openai" | "openai-compatible" => self.complete_openai(system, messages.clone()).await,
             "ollama" => self.complete_ollama(system, messages.clone()).await,
             _ => return Err(self.provider_error_message().into()),
         };
+        if local_judge_call {
+            crate::local_judge::record_call(
+                &self.provider.model,
+                started.elapsed(),
+                result.is_ok(),
+            );
+        }
 
         let response = match result {
             Ok(resp) => resp,
@@ -308,7 +333,7 @@ impl LLMClient {
         // Record token + cost usage (atomic, lock-free for the counters)
         let total_tokens = response.input_tokens + response.output_tokens;
         if total_tokens > 0 {
-            let tokens_ok = record_llm_tokens(total_tokens);
+            let tokens_ok = !self.metered() || record_llm_tokens(total_tokens);
             let cost_millicents =
                 self.estimate_cost_millicents(response.input_tokens, response.output_tokens);
             let cost_ok = record_llm_cost_millicents(cost_millicents);
@@ -350,7 +375,7 @@ impl LLMClient {
         // Egress boundary: the user's local paths never reach a provider.
         let (system, messages) = crate::privacy_egress::scrub_prompt(system, messages);
         let system = system.as_str();
-        if is_llm_limit_reached() {
+        if self.metered() && is_llm_limit_reached() {
             let (tokens_used, tokens_limit) = crate::state::get_llm_token_usage();
             let (cost_used, cost_limit) = crate::state::get_llm_cost_usage();
             warn!(
@@ -397,7 +422,7 @@ impl LLMClient {
 
         let total_tokens = response.input_tokens + response.output_tokens;
         if total_tokens > 0 {
-            let tokens_ok = record_llm_tokens(total_tokens);
+            let tokens_ok = !self.metered() || record_llm_tokens(total_tokens);
             let cost_millicents =
                 self.estimate_cost_millicents(response.input_tokens, response.output_tokens);
             let cost_ok = record_llm_cost_millicents(cost_millicents);
@@ -462,7 +487,9 @@ impl LLMClient {
         // Record usage for visibility (no limit enforcement)
         let total_tokens = response.input_tokens + response.output_tokens;
         if total_tokens > 0 {
-            let _ = record_llm_tokens(total_tokens);
+            if self.metered() {
+                let _ = record_llm_tokens(total_tokens);
+            }
             let cost_millicents =
                 self.estimate_cost_millicents(response.input_tokens, response.output_tokens);
             let _ = record_llm_cost_millicents(cost_millicents);
@@ -954,7 +981,7 @@ impl LLMClient {
         let (system, messages) = crate::privacy_egress::scrub_prompt(system, messages);
         let system = system.as_str();
         // Hard cutoff: refuse to call the LLM if daily limit is already reached
-        if is_llm_limit_reached() {
+        if self.metered() && is_llm_limit_reached() {
             let (tokens_used, tokens_limit) = crate::state::get_llm_token_usage();
             let (cost_used, cost_limit) = crate::state::get_llm_cost_usage();
             warn!(
@@ -1013,7 +1040,7 @@ impl LLMClient {
         // Record token + cost usage
         let total_tokens = response.input_tokens + response.output_tokens;
         if total_tokens > 0 {
-            let tokens_ok = record_llm_tokens(total_tokens);
+            let tokens_ok = !self.metered() || record_llm_tokens(total_tokens);
             let cost_millicents =
                 self.estimate_cost_millicents(response.input_tokens, response.output_tokens);
             let cost_ok = record_llm_cost_millicents(cost_millicents);

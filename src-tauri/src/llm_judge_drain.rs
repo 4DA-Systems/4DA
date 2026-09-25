@@ -101,7 +101,8 @@ const EXHAUST_SCAN_LIMIT: usize = 512;
 /// Judgments this drain writes are stamped with their own prompt version so
 /// the main lane's demotion gate (which filters on ITS prompt version) can
 /// never double-count them, and post-hoc analysis can see the cohort.
-const DRAIN_PROMPT_VERSION: &str = "drain_v1";
+/// `drain_v2` (2026-09-26): project cards as the user context, as ingest v7.
+const DRAIN_PROMPT_VERSION: &str = "drain_v2";
 
 /// A drain judgment DISPUTES a pending demote only at or above this judged
 /// relevance (plus the shared confidence bar). Between the reject line and
@@ -144,7 +145,10 @@ pub(crate) struct DrainSummary {
 
 /// Scheduled/headless entry point, run right after the post-cycle judge pass.
 pub(crate) async fn run_pending_verdict_drain(db: &Database) -> DrainSummary {
-    run_drain_with(db, crate::state::is_llm_limit_reached(), drain_provider()).await
+    crate::local_judge::refresh_if_stale().await;
+    let provider = drain_provider();
+    let blocked = crate::local_judge::budget_blocks(provider.as_ref());
+    run_drain_with(db, blocked, provider).await
 }
 
 /// Same BYOK gate as the main judge lane (`llm_judgments::get_llm_settings`,
@@ -302,6 +306,10 @@ async fn run_drain_with(
             // titles_only (see `llm_egress`): an off-machine model re-judges
             // from the title alone.
             let send_body = crate::llm_egress::body_allowed(&provider);
+            let user_context = crate::project_cards::judge_context(
+                db,
+                crate::llm_egress::provider_is_on_machine(&provider),
+            );
             let client = LLMClient::with_purpose(provider, "verdict_drain");
             // One call per DRAIN_SLICE items — the size every call had before
             // the surge slice existed. A truncated or malformed reply then
@@ -320,7 +328,7 @@ async fn run_drain_with(
                         item.content = None;
                     }
                 }
-                match judge_items(&client, &items).await {
+                match judge_items(&client, &items, &user_context).await {
                     Ok(judgments) => {
                         for row in chunk {
                             let Some(judged) = judgments.iter().find(|j| j.id == Some(row.id))
@@ -663,8 +671,8 @@ struct DrainJudgment {
 async fn judge_items(
     client: &LLMClient,
     items: &[DrainItem],
+    user_context: &str,
 ) -> crate::error::Result<Vec<DrainJudgment>> {
-    let user_context = crate::adversarial::build_user_context_summary();
     let items_block: String = items
         .iter()
         .enumerate()
