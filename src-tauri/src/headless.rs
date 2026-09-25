@@ -363,6 +363,11 @@ async fn run_one_cycle(handle: &AppHandle, trigger: &'static str, force_osv: boo
     // deployment is picked up (the dependency axis + OSV version-matching read these tables
     // every cycle), not frozen until a re-bootstrap.
     ensure_dependencies_scanned().await;
+    // Step 0c — pins changed? Re-judge the dependency releases they grade. Was GUI-only,
+    // so an engine-only deployment never re-examined anything (scoring::reexamination).
+    if let Ok(db) = crate::get_database() {
+        let _ = crate::scoring::reexamination::reexamine_if_pins_changed(db).await;
+    }
 
     // Step 1 — fetch (fills the cache; writes/touches source_items, stamps sources.last_fetch).
     info!(target: "4da::headless", "Cycle step 1/3: fetching sources...");

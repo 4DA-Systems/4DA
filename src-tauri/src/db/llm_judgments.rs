@@ -273,6 +273,21 @@ impl Database {
         rows.collect()
     }
 
+    /// Every dependency release (see [`dependency_release_sql`]), newest
+    /// first. Their relevance is a function of the user's pinned versions, so
+    /// re-examination re-judges all of them when the pins change.
+    pub fn dependency_release_item_ids(&self, limit: usize) -> SqliteResult<Vec<i64>> {
+        let sql = format!(
+            "SELECT si.id FROM source_items si WHERE {}
+             ORDER BY si.created_at DESC LIMIT ?1",
+            dependency_release_sql("si")
+        );
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare(&sql)?;
+        let rows = stmt.query_map(rusqlite::params![limit as i64], |r| r.get(0))?;
+        rows.collect()
+    }
+
     /// Withdraw `llm_reject` verdicts that sit on a dependency release — the
     /// rows the judge was never entitled to remove (see
     /// [`dependency_release_sql`]). Cleared outright, never flipped, exactly

@@ -263,10 +263,40 @@ impl Database {
         rows.collect()
     }
 
-    /// Reset `scored_pipeline_version` to 0 for the given items so the backfill worker
-    /// re-scores them (prioritized) against the current profile. Used by Phase-3
-    /// re-examination. Batched in one transaction; returns the number reset.
-    pub fn requeue_items_by_ids(&self, ids: &[i64]) -> SqliteResult<usize> {
+    /// Every recorded dependency pin: (project_path, package_name, version,
+    /// is_direct, is_dev). The re-examination epoch hashes these, because a
+    /// registry release is graded against each project's pin (v37).
+    pub fn all_dependency_pins(
+        &self,
+    ) -> SqliteResult<Vec<(String, String, Option<String>, bool, bool)>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare_cached(
+            "SELECT project_path, package_name, version, is_direct, is_dev FROM user_dependencies",
+        )?;
+        let rows = stmt.query_map([], |r| {
+            Ok((
+                r.get(0)?,
+                r.get(1)?,
+                r.get(2)?,
+                r.get::<_, i64>(3)? != 0,
+                r.get::<_, i64>(4)? != 0,
+            ))
+        })?;
+        rows.collect()
+    }
+
+    /// Reset `scored_pipeline_version` to 0 for the given items so the drain
+    /// re-scores them against the current profile (Phase-3 re-examination), and
+    /// withdraw each row's SCORE-derived feed verdict (none, or one whose reason is a
+    /// version/score repair: `stale_version`, `score_sunk_in_version`) so the
+    /// re-score can take effect. Without this a verdict stamped at the current
+    /// pipeline version is permanent: the risen sweep only re-admits
+    /// superseded-version verdicts, and the drain writes scores, never verdicts.
+    /// Judgments in their own right — `llm_reject`, `duplicate_curated`,
+    /// `superseded_release`, `pending_retries_exhausted`, serendipity picks —
+    /// are left alone. A withdrawn row gets its first verdict again from the
+    /// risen sweep (score at or above the line) or stays out of the feed.
+    pub fn requeue_and_clear_score_verdicts(&self, ids: &[i64]) -> SqliteResult<usize> {
         if ids.is_empty() {
             return Ok(0);
         }
@@ -274,11 +304,23 @@ impl Database {
         let tx = conn.unchecked_transaction()?;
         let mut count = 0;
         {
-            let mut stmt = tx.prepare_cached(
+            let mut requeue = tx.prepare_cached(
                 "UPDATE source_items SET scored_pipeline_version = 0 WHERE id = ?1",
             )?;
+            let mut withdraw = tx.prepare_cached(
+                "UPDATE source_items
+                 SET feed_relevant = NULL, feed_verdict_at = NULL, feed_verdict_version = NULL,
+                     feed_verdict_source = NULL, feed_verdict_reason = NULL,
+                     feed_verdict_pending = NULL
+                 WHERE id = ?1
+                   AND feed_relevant IS NOT NULL
+                   AND COALESCE(feed_verdict_source, 'score') = 'score'
+                   AND COALESCE(feed_verdict_reason, '')
+                       IN ('', 'stale_version', 'score_sunk_in_version')",
+            )?;
             for id in ids {
-                count += stmt.execute(params![id])?;
+                count += requeue.execute(params![id])?;
+                withdraw.execute(params![id])?;
             }
         }
         tx.commit()?;
