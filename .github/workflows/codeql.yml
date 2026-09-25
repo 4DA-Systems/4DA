@@ -12,21 +12,29 @@
 # toolchain is needed.
 #
 # Timing (measured on the default-setup run 35894846966): rust ~18 min,
-# javascript-typescript ~2 min, actions <1 min. That is under Hermetic's
-# ~23 min, so the queue's wall-clock does not grow.
+# javascript-typescript ~2 min, actions <1 min.
 #
-# Activation order matters (see the PR body): merge this, switch the repo's
-# default setup OFF (the two cannot both own these languages), then add the
-# ruleset `code_scanning` rule.
+# Status 2026-09-26: default setup is OFF and this workflow owns scanning. The
+# `code_scanning` rule was never added (see the note on `on:` below), so the
+# merge_group trigger this header describes has been removed until it is.
 
 name: CodeQL
 
+# NO merge_group trigger, as of 2026-09-26. It only matters once the ruleset
+# carries a `code_scanning` rule, and that rule was deliberately NOT added
+# (2026-09-24): NOTICE-healed Dependabot PRs have no CodeQL result, so the rule
+# would freeze dependency updates. Until then the queue runs gated nothing. They
+# did cost 3 jobs per entry (rust ~17 min) against the free plan's 20-job
+# concurrency cap, and on 2026-09-25 #735's entry waited 8.2 min for a runner
+# while three entries overlapped. PR and push-to-main runs still scan every
+# change, and the ruleset's review-thread rule still blocks merges on open
+# CodeQL PR comments. If the code_scanning rule is ever added, restore
+# `merge_group: {}` FIRST, or every queued PR waits forever.
 on:
   pull_request:
     branches: [main]
   push:
     branches: [main]
-  merge_group: {}
   schedule:
     # Weekly, so newly published queries find old code even when nothing merges.
     - cron: '30 4 * * 1'

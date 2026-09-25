@@ -41,19 +41,25 @@
 name: Hermetic Fresh-Clone
 
 on:
+  # ADVISORY on PRs, and deliberately NOT a merge-queue check (no merge_group
+  # trigger). History, so this is not re-litigated blind:
+  #   - 2026-09-24 (#682): made REQUIRED, with a merge_group trigger, after #635
+  #     (vitest 5 in mcp-4da-server) merged with `Fresh clone (windows-latest)`
+  #     red and Validate green.
+  #   - 2026-09-26: required-ness removed. The cold, cacheless windows leg
+  #     (13.5 min compile + 7 min tests on 4 vCPU) became the queue's slowest
+  #     job at 22-26 min, ~5-7 min past Validate. Its only failure in 60 runs
+  #     was a timing flake (the watcher panic test, fixed in #737). That flake
+  #     ejected #735 and cost 30 min. Each entry also started 3 more jobs
+  #     against the free plan's 20-concurrent-job cap, and #735's entry waited
+  #     8.2 min for a runner.
+  # What replaces the gate: every push to main still runs the full canary
+  # (below), and `main-alert` turns a red push or nightly run into an open
+  # issue within ~25 min of the merge. Windows breakage is caught just after
+  # the merge instead of just before. PRs touching code still get an early,
+  # non-blocking run.
   pull_request:
     branches: [main]
-  # Merge-queue entries. Without this trigger `Hermetic Success` can never be a
-  # REQUIRED check (the queue would wait forever for a context that never
-  # reports), and while it was advisory a PR could merge with the fresh-clone
-  # canary red: #635 (vitest 5 in mcp-4da-server) sat with Validate green,
-  # `Fresh clone (windows-latest)` failing, and a mergeable state of UNSTABLE.
-  # On merge_group the `changes` detector skips (it is PR-only), so the
-  # `github.event_name != 'pull_request'` clause below runs the full canary —
-  # right for the last gate before main. Cost: the queue waits for
-  # max(Validate, Hermetic) instead of Validate alone — measured ~16-20 min vs
-  # ~23 min on 2026-09-11/23, so roughly +3-5 min per entry.
-  merge_group: {}
   push:
     branches: [main]
   schedule:
@@ -335,3 +341,62 @@ jobs:
             exit 1
           fi
           echo "all Hermetic Fresh-Clone legs succeeded (or were skipped as not-applicable)"
+
+  # ─────────────────────────────────────────────────────────────────────
+  # main-alert: Hermetic no longer gates the merge queue, so a red canary on
+  # main must be impossible to miss. It maintains ONE issue, labelled
+  # `hermetic-main`: opened (or commented on) when a push-to-main or nightly
+  # run fails, closed automatically by the next green one. So an open issue
+  # always means "a fresh clone of main is broken right now", never history.
+  # Same shape as validate.yml's `main-health`.
+  # ─────────────────────────────────────────────────────────────────────
+  main-alert:
+    name: main fresh-clone alert
+    needs: [hermetic-success]
+    if: ${{ always() && !cancelled() && (github.event_name == 'push' || github.event_name == 'schedule') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Open, update or close the hermetic-main issue
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v7
+        env:
+          RESULT: ${{ needs.hermetic-success.result }}
+          HEAD_SHA: ${{ github.sha }}
+        with:
+          script: |
+            const LABEL = 'hermetic-main';
+            const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+            const sha = process.env.HEAD_SHA.slice(0, 8);
+            const red = process.env.RESULT !== 'success';
+            const { data: open } = await github.rest.issues.listForRepo({
+              ...context.repo, state: 'open', labels: LABEL, per_page: 10,
+            });
+            const issue = open[0];
+            if (!red) {
+              if (issue) {
+                await github.rest.issues.createComment({ ...context.repo, issue_number: issue.number,
+                  body: `Resolved: fresh clone of main is green again at ${sha} (${context.eventName}). ${runUrl}` });
+                await github.rest.issues.update({ ...context.repo, issue_number: issue.number, state: 'closed', state_reason: 'completed' });
+                core.info(`Closed #${issue.number}`);
+              }
+              return;
+            }
+            const body = [
+              `## Fresh clone of main FAILS at \`${sha}\` (${context.eventName}, ${process.env.RESULT})`,
+              '',
+              'Hermetic is not a merge-queue check, so this landed. A contributor cloning main today cannot build or test it on at least one platform. Failing legs:',
+              runUrl,
+              '',
+              'Usually a Windows-only break (Validate runs Rust on ubuntu only). This issue closes itself on the next green push or nightly run.',
+            ].join('\n');
+            if (issue) {
+              await github.rest.issues.createComment({ ...context.repo, issue_number: issue.number, body });
+              core.info(`Updated #${issue.number}`);
+            } else {
+              const { data } = await github.rest.issues.create({ ...context.repo,
+                title: `main is RED on a fresh clone (${sha})`, body, labels: [LABEL] });
+              core.info(`Opened #${data.number}`);
+            }
