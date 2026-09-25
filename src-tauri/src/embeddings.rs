@@ -190,7 +190,7 @@ fn zero_vector_fallback(count: usize) -> Vec<Vec<f32>> {
 }
 
 /// Generate embeddings for a list of texts
-/// Supports OpenAI (text-embedding-3-small), Ollama (nomic-embed-text), and fastembed (snowflake-arctic-embed-m)
+/// Supports OpenAI (text-embedding-3-small), Ollama (nomic-embed-text), and fastembed (nomic-embed-text v1.5, fp16 ONNX)
 /// Provider is determined by settings - uses same provider as LLM when possible
 pub(crate) async fn embed_texts(texts: &[String]) -> Result<Vec<Vec<f32>>> {
     if texts.is_empty() {
@@ -346,7 +346,8 @@ pub(crate) async fn embed_texts(texts: &[String]) -> Result<Vec<Vec<f32>>> {
     result
 }
 
-/// Current model: Snowflake Arctic Embed M (quantized) — 768d, 110M params
+/// Current models: nomic-embed-text v1.5 via Ollama, or its fp16 ONNX build
+/// in-process (fastembed) — 768d, 137M params, one vector space.
 /// Single source of truth for embedding dimensions across the entire codebase.
 pub const EMBEDDING_DIMS: usize = 768;
 
@@ -597,7 +598,7 @@ mod tests {
     fn test_embedding_dims_matches_model() {
         assert_eq!(
             EMBEDDING_DIMS, 768,
-            "Embedding dims must match DB vec0 schema (768 for Arctic-M)"
+            "Embedding dims must match DB vec0 schema (768 for nomic-embed-text)"
         );
     }
 

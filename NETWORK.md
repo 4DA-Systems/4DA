@@ -266,7 +266,7 @@ use (`src-tauri/src/embeddings_providers/fastembed.rs`):
 | What | Host | Endpoint |
 |---|---|---|
 | ONNX Runtime library | `github.com` | `/microsoft/onnxruntime/releases/download/v1.24.2/onnxruntime-{platform}.{zip,tgz}` |
-| Embedding model weights (`snowflake-arctic-embed-m`, ~220 MB) | HuggingFace Hub CDN (`huggingface.co` + its LFS/Xet CDN) | downloaded by the fastembed/hf-hub client on first init if not bundled |
+| Embedding model weights (`nomic-embed-text-v1.5`, ~550 MB; normally bundled as a 274 MB fp16 build, so never fetched) | HuggingFace Hub CDN (`huggingface.co` + its LFS/Xet CDN) | downloaded by the fastembed/hf-hub client on first init if not bundled |
 
 - **Trigger:** first embedding init only, and only if not already bundled in the install or cached.
 - **After setup:** embeddings are 100% local — zero network. If no provider is available at all,

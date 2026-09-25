@@ -1013,7 +1013,7 @@ jobs:
         if: matrix.label == 'default'
         working-directory: .
         run: |
-          api=https://huggingface.co/api/models/Snowflake/snowflake-arctic-embed-m/revision/main
+          api=https://huggingface.co/api/models/nomic-ai/nomic-embed-text-v1.5/revision/main
           sha=$(curl -fsSL --retry 3 --retry-delay 2 --max-time 30 "$api" | jq -er .sha) || sha=''
           if [ -z "$sha" ]; then
             # Degrade to a guaranteed cache MISS rather than a red gate: the

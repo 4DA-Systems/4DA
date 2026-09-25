@@ -1,9 +1,13 @@
 /**
- * Download the fastembed embedding model for bundling with the Tauri installer.
+ * Download the in-process embedding model for bundling with the Tauri installer.
  *
- * Fetches snowflake-arctic-embed-m (quantized ONNX, 768-dim) from HuggingFace
- * and creates the hf-hub cache directory structure so fastembed recognizes the
- * pre-cached model and skips the first-run download entirely.
+ * Fetches nomic-embed-text v1.5 (fp16 ONNX weights, f32 inputs/outputs, 768-dim)
+ * from HuggingFace at a PINNED revision and verifies the ONNX file's SHA-256. It is
+ * the model Ollama serves by default, so the in-process route writes the same
+ * vector space as the Ollama route (measured median cosine 1.00000 vs Ollama's
+ * nomic). The app loads these files directly from the bundle (fastembed
+ * user-defined model, src-tauri/src/embeddings_providers/fastembed.rs); nothing is
+ * copied into the user's cache.
  *
  * Usage:
  *   node scripts/download-embedding-model.cjs          # download model
@@ -15,14 +19,23 @@
 'use strict';
 
 const https = require('https');
+const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 
-const MODEL_REPO = 'Snowflake/snowflake-arctic-embed-m';
-const CACHE_DIR_NAME = 'models--Snowflake--snowflake-arctic-embed-m';
+const MODEL_REPO = 'nomic-ai/nomic-embed-text-v1.5';
+// Pinned: a bump is a reviewed change (it changes every user's vector space).
+const REVISION = 'e9b6763023c676ca8431644204f50c2b100d9aab';
+const MODEL_DIR_NAME = 'nomic-embed-text-v1.5-fp16';
+// Retired bundles removed from the resources dir so they are never shipped again.
+const LEGACY_DIR_NAMES = ['models--Snowflake--snowflake-arctic-embed-m'];
 
 const FILES = [
-  { remote: 'onnx/model_quantized.onnx', local: 'onnx/model_quantized.onnx' },
+  {
+    remote: 'onnx/model_fp16.onnx',
+    local: 'model_fp16.onnx',
+    sha256: 'cf5b5a86edb00f895561803cfc04729090a958340b8ca2ad76c143f565f6bb04',
+  },
   { remote: 'tokenizer.json', local: 'tokenizer.json' },
   { remote: 'config.json', local: 'config.json' },
   { remote: 'special_tokens_map.json', local: 'special_tokens_map.json' },
@@ -88,74 +101,45 @@ function downloadBuffer(url) {
   });
 }
 
-function downloadText(url) {
-  return new Promise((resolve, reject) => {
-    const follow = (u, redirects = 0) => {
-      if (redirects > 5) return reject(new Error('Too many redirects'));
-      https.get(u, { headers: { 'User-Agent': '4DA-build' } }, (res) => {
-        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
-          return follow(res.headers.location, redirects + 1);
-        }
-        if (res.statusCode !== 200) {
-          return reject(new Error(`HTTP ${res.statusCode} for ${u}`));
-        }
-        let data = '';
-        res.on('data', (c) => (data += c));
-        res.on('end', () => resolve(data));
-        res.on('error', reject);
-      }).on('error', reject);
-    };
-    follow(url);
-  });
-}
-
-async function resolveCommitHash() {
-  const url = `https://huggingface.co/api/models/${MODEL_REPO}/revision/main`;
-  const json = await downloadText(url);
-  const { sha } = JSON.parse(json);
-  if (!sha || sha.length < 40) {
-    throw new Error(`Could not resolve commit hash from API: ${json.slice(0, 200)}`);
-  }
-  return sha;
+function sha256Of(buffer) {
+  return crypto.createHash('sha256').update(buffer).digest('hex');
 }
 
 async function main() {
   const force = process.argv.includes('--force');
 
-  console.log('Embedding Model Bundler — snowflake-arctic-embed-m (quantized ONNX, 768-dim)');
-  console.log(`Repo: ${MODEL_REPO}`);
+  console.log('Embedding Model Bundler - nomic-embed-text v1.5 (fp16 ONNX, 768-dim)');
+  console.log(`Repo: ${MODEL_REPO} @ ${REVISION}`);
   console.log(`Destination: ${DEST_ROOT}\n`);
 
-  console.log('Resolving latest commit hash...');
-  const commitHash = await resolveCommitHash();
-  console.log(`Commit: ${commitHash}\n`);
+  for (const legacy of LEGACY_DIR_NAMES) {
+    const dir = path.join(DEST_ROOT, legacy);
+    if (fs.existsSync(dir)) {
+      fs.rmSync(dir, { recursive: true, force: true });
+      console.log(`  removed retired bundle: ${legacy}`);
+    }
+  }
 
-  const snapshotDir = path.join(DEST_ROOT, CACHE_DIR_NAME, 'snapshots', commitHash);
-  const refsDir = path.join(DEST_ROOT, CACHE_DIR_NAME, 'refs');
-
-  fs.mkdirSync(snapshotDir, { recursive: true });
-  fs.mkdirSync(refsDir, { recursive: true });
-
-  fs.writeFileSync(path.join(refsDir, 'main'), commitHash);
+  const modelDir = path.join(DEST_ROOT, MODEL_DIR_NAME);
+  fs.mkdirSync(modelDir, { recursive: true });
 
   let totalSize = 0;
 
-  for (const { remote, local } of FILES) {
-    const dest = path.join(snapshotDir, local);
-    const destDir = path.dirname(dest);
-    fs.mkdirSync(destDir, { recursive: true });
+  for (const { remote, local, sha256 } of FILES) {
+    const dest = path.join(modelDir, local);
 
-    if (!force && fs.existsSync(dest)) {
-      const size = fs.statSync(dest).size;
-      if (size > 0) {
-        const mb = (size / 1048576).toFixed(1);
-        console.log(`  ${local}: already cached (${mb}MB) — skipping`);
-        totalSize += size;
+    if (!force && fs.existsSync(dest) && fs.statSync(dest).size > 0) {
+      const existing = fs.readFileSync(dest);
+      if (!sha256 || sha256Of(existing) === sha256) {
+        const mb = (existing.length / 1048576).toFixed(1);
+        console.log(`  ${local}: already cached (${mb}MB) - skipping`);
+        totalSize += existing.length;
         continue;
       }
+      console.log(`  ${local}: cached copy fails its checksum - re-downloading`);
     }
 
-    const url = `https://huggingface.co/${MODEL_REPO}/resolve/main/${remote}`;
+    const url = `https://huggingface.co/${MODEL_REPO}/resolve/${REVISION}/${remote}`;
     console.log(`  ${local}: downloading...`);
 
     // Retry transient network failures (e.g. ECONNRESET mid-download) so a
@@ -171,10 +155,16 @@ async function main() {
         await new Promise((r) => setTimeout(r, 2000 * attempt));
       }
     }
+    if (sha256) {
+      const got = sha256Of(buffer);
+      if (got !== sha256) {
+        throw new Error(`${local}: SHA-256 mismatch (expected ${sha256}, got ${got})`);
+      }
+    }
     fs.writeFileSync(dest, buffer);
 
     const mb = (buffer.length / 1048576).toFixed(2);
-    console.log(`  ${local}: saved (${mb}MB)`);
+    console.log(`  ${local}: saved (${mb}MB)${sha256 ? ', checksum verified' : ''}`);
     totalSize += buffer.length;
   }
 
