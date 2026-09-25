@@ -550,3 +550,109 @@ fn llm_reject_never_overrides_a_dependency_release() {
         );
     }
 }
+
+/// Make `id` a scored registry release of a matched dependency (the
+/// `dependency_release_sql` shape) with a standing rejection.
+fn make_dependency_release(db: &Database, id: i64, score: f64) {
+    let conn = db.conn.lock();
+    conn.execute(
+        "UPDATE source_items SET content_type = 'release_notes', relevance_score = ?1,
+                feed_relevant = 0, feed_verdict_source = 'score', feed_verdict_version = 36
+         WHERE id = ?2",
+        rusqlite::params![score, id],
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT INTO scoring_explanations (source_item_id, pipeline_version, breakdown, scored_at)
+         VALUES (?1, 37, '{\"breakdown\":{\"matched_deps\":[\"fastembed\"]}}', datetime('now'))",
+        rusqlite::params![id],
+    )
+    .unwrap();
+}
+
+/// v37 activation on a copy of the founder corpus: graded breaking upgrades
+/// (`fastembed v7.1.0`, pinned 5.13.4) sat pending behind a 272-row,
+/// oldest-first backlog drained 24 per cycle. Against a pending promotion of
+/// a dependency release the pipeline's call stands (AD-048), so the drain
+/// applies it with no judge — even with no provider and no budget.
+#[tokio::test]
+async fn a_pending_dependency_release_promotion_needs_no_judge() {
+    let db = test_db();
+    let dep = insert_test_item(
+        &db,
+        "crates_io",
+        "crate-fastembed@7.1.0",
+        "crates.io: fastembed v7.1.0",
+        "Library for generating vector embeddings.",
+    );
+    make_dependency_release(&db, dep, 0.76);
+    set_marker(&db, dep, true, 0, 1);
+
+    // Controls: an editorial story with the same pending promotion, a
+    // dependency release whose score has since sunk under the line, and a
+    // dependency release with a pending DEMOTION.
+    let story = insert_test_item(&db, "hackernews", "hn-1", "fastembed 7 is out", "body");
+    set_marker(&db, story, true, 0, 1);
+    let sunk = insert_test_item(
+        &db,
+        "crates_io",
+        "crate-fastembed@6.0.0",
+        "crates.io: fastembed v6.0.0",
+        "",
+    );
+    make_dependency_release(&db, sunk, 0.20);
+    set_marker(&db, sunk, true, 0, 1);
+    let demoting = insert_test_item(
+        &db,
+        "crates_io",
+        "crate-fastembed@6.1.0",
+        "crates.io: fastembed v6.1.0",
+        "",
+    );
+    make_dependency_release(&db, demoting, 0.76);
+    set_marker(&db, demoting, false, 0, 1);
+
+    let summary = run_drain_with(&db, true, None).await;
+
+    assert_eq!(summary.promoted, 1);
+    assert_eq!(
+        verdict_of(&db, dep).0,
+        Some(1),
+        "the release entered the feed"
+    );
+    assert!(pending_of(&db, dep).is_none());
+    assert!(
+        pending_of(&db, story).is_some(),
+        "editorial rows keep the judge"
+    );
+    assert!(
+        pending_of(&db, sunk).is_some(),
+        "a promotion the current score no longer supports is not applied"
+    );
+    assert!(
+        pending_of(&db, demoting).is_some(),
+        "a pending demotion is never auto-applied"
+    );
+}
+
+/// The loss path the guard never saw: a dependency-release promotion that
+/// kept escalating would reach `MAX_DRAIN_ATTEMPTS` and resolve to a
+/// rejection. Phase 0 runs before terminal exhaustion.
+#[tokio::test]
+async fn an_exhausted_dependency_release_promotion_is_promoted_not_rejected() {
+    let db = test_db();
+    let dep = insert_test_item(
+        &db,
+        "crates_io",
+        "crate-fastembed@7.1.0",
+        "crates.io: fastembed v7.1.0",
+        "",
+    );
+    make_dependency_release(&db, dep, 0.76);
+    set_marker(&db, dep, true, MIN_EXHAUST_AGE_DAYS + 1, MAX_DRAIN_ATTEMPTS);
+
+    let summary = run_drain_with(&db, true, None).await;
+
+    assert_eq!(summary.exhausted, 0);
+    assert_eq!(verdict_of(&db, dep).0, Some(1));
+}

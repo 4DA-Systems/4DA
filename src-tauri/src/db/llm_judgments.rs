@@ -245,6 +245,34 @@ impl Database {
         rows.collect()
     }
 
+    /// Dependency releases (see [`dependency_release_sql`]) holding a pending
+    /// PROMOTION whose current score still clears `min_score`, oldest first.
+    /// The pending-verdict drain resolves these without a judge: against a
+    /// pending promotion of a dependency release the pipeline's call stands
+    /// (AD-048), so the queue could only delay it — or, through escalation
+    /// and exhaustion, lose it.
+    pub fn pending_dependency_release_promotions(
+        &self,
+        min_score: f32,
+        limit: usize,
+    ) -> SqliteResult<Vec<i64>> {
+        let sql = format!(
+            "SELECT si.id FROM source_items si
+             WHERE si.feed_verdict_pending LIKE '1@%'
+               AND si.relevance_score >= ?1
+               AND {}
+             ORDER BY si.created_at ASC, si.id ASC
+             LIMIT ?2",
+            dependency_release_sql("si")
+        );
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare(&sql)?;
+        let rows = stmt.query_map(rusqlite::params![f64::from(min_score), limit as i64], |r| {
+            r.get(0)
+        })?;
+        rows.collect()
+    }
+
     /// Withdraw `llm_reject` verdicts that sit on a dependency release — the
     /// rows the judge was never entitled to remove (see
     /// [`dependency_release_sql`]). Cleared outright, never flipped, exactly
