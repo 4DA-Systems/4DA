@@ -121,8 +121,33 @@ fn detect_nvidia() -> Option<GpuInfo> {
     })
 }
 
+/// The display-adapter device class. Each adapter is a numbered subkey that
+/// carries its `DriverDesc` and, from WDDM drivers, a 64-bit
+/// `HardwareInformation.qwMemorySize`.
+#[cfg(target_os = "windows")]
+const DISPLAY_CLASS_KEY: &str =
+    r"HKLM\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}";
+
+/// Non-NVIDIA Windows GPUs. The registry is read first: `Win32_VideoController
+/// .AdapterRAM` is a 32-bit field that saturates at 4 GiB, so WMI reported a
+/// 16 GB card as 4,095 MB (and `wmic` is removed from current Windows 11).
+/// Local judges are offered by VRAM tier, so a wrong 4 GB hid them from every
+/// large AMD or Intel card.
 #[cfg(target_os = "windows")]
 fn detect_gpu_platform() -> Option<GpuInfo> {
+    detect_gpu_registry().or_else(detect_gpu_wmic)
+}
+
+#[cfg(target_os = "windows")]
+fn detect_gpu_registry() -> Option<GpuInfo> {
+    let query = |value: &str| run_quiet("reg", &["query", DISPLAY_CLASS_KEY, "/s", "/v", value]);
+    let sizes = query("HardwareInformation.qwMemorySize")?;
+    let names = query("DriverDesc").unwrap_or_default();
+    largest_registry_adapter(&sizes, &names)
+}
+
+#[cfg(target_os = "windows")]
+fn detect_gpu_wmic() -> Option<GpuInfo> {
     let output = run_quiet(
         "wmic",
         &[
@@ -133,28 +158,108 @@ fn detect_gpu_platform() -> Option<GpuInfo> {
             "/format:csv",
         ],
     )?;
-    // CSV output: Node,AdapterRAM,Name
-    // First line is header, skip blanks.
-    for line in output.lines().filter(|l| !l.trim().is_empty()) {
-        let parts: Vec<&str> = line.split(',').collect();
-        if parts.len() >= 3 && parts[1].trim().parse::<u64>().is_ok() {
-            let adapter_ram_bytes = parts[1].trim().parse::<u64>().unwrap_or(0);
-            let name = parts[2].trim().to_string();
-            if name.eq_ignore_ascii_case("Name") {
-                continue; // skip header
+    largest_wmic_adapter(&output)
+}
+
+#[cfg(any(target_os = "windows", test))]
+/// `reg query <key> /s /v <name>` output as (subkey path, raw value) pairs.
+/// A value line follows its key line: `    <name>    <REG_TYPE>    <data>`.
+fn parse_reg_values(output: &str) -> Vec<(String, String, String)> {
+    let mut current_key = String::new();
+    let mut values = Vec::new();
+    for line in output.lines() {
+        if line.starts_with("HKEY_") {
+            current_key = line.trim().to_string();
+            continue;
+        }
+        let mut parts = line.split_whitespace();
+        let (Some(_name), Some(kind), Some(first)) = (parts.next(), parts.next(), parts.next())
+        else {
+            continue;
+        };
+        if !kind.starts_with("REG_") || current_key.is_empty() {
+            continue;
+        }
+        let data = std::iter::once(first)
+            .chain(parts)
+            .collect::<Vec<_>>()
+            .join(" ");
+        values.push((current_key.clone(), kind.to_string(), data));
+    }
+    values
+}
+
+#[cfg(any(target_os = "windows", test))]
+/// Bytes from a registry memory-size value: `REG_QWORD`/`REG_DWORD` as hex
+/// (`0x3ff800000`), or `REG_BINARY` as little-endian hex bytes.
+fn reg_bytes(kind: &str, data: &str) -> Option<u64> {
+    match kind {
+        "REG_QWORD" | "REG_DWORD" => {
+            u64::from_str_radix(data.trim().trim_start_matches("0x"), 16).ok()
+        }
+        "REG_BINARY" => {
+            let hex = data.trim();
+            if hex.is_empty() || hex.len() > 16 || hex.len() % 2 != 0 {
+                return None;
             }
-            return Some(GpuInfo {
+            (0..hex.len()).step_by(2).rev().try_fold(0u64, |acc, i| {
+                u8::from_str_radix(hex.get(i..i + 2)?, 16)
+                    .ok()
+                    .map(|b| (acc << 8) | u64::from(b))
+            })
+        }
+        _ => None,
+    }
+}
+
+#[cfg(any(target_os = "windows", test))]
+/// The adapter with the most dedicated memory. Virtual displays (VR, remote
+/// desktop) report no memory size, so they never win.
+fn largest_registry_adapter(sizes: &str, names: &str) -> Option<GpuInfo> {
+    let names = parse_reg_values(names);
+    parse_reg_values(sizes)
+        .into_iter()
+        .filter_map(|(key, kind, data)| Some((key, reg_bytes(&kind, &data)?)))
+        .filter(|(_, bytes)| *bytes > 0)
+        .max_by_key(|(_, bytes)| *bytes)
+        .map(|(key, bytes)| {
+            let name = names
+                .iter()
+                .find(|(k, _, _)| k.eq_ignore_ascii_case(&key))
+                .map(|(_, _, desc)| desc.clone())
+                .unwrap_or_else(|| "Unknown GPU".to_string());
+            GpuInfo {
                 vendor: infer_vendor(&name),
                 name,
-                vram_mb: if adapter_ram_bytes > 0 {
-                    Some(adapter_ram_bytes / (1024 * 1024))
-                } else {
-                    None
-                },
-            });
-        }
-    }
-    None
+                vram_mb: Some(bytes / (1024 * 1024)),
+            }
+        })
+}
+
+#[cfg(any(target_os = "windows", test))]
+/// `AdapterRAM` at or above this is the 32-bit field saturating, not a size.
+const WMI_ADAPTER_RAM_SATURATED: u64 = 0xFFF0_0000;
+
+#[cfg(any(target_os = "windows", test))]
+/// WMIC CSV (`Node,AdapterRAM,Name`): the adapter with the most memory. A
+/// saturated `AdapterRAM` means "4 GiB or more", so its size is unknown.
+fn largest_wmic_adapter(output: &str) -> Option<GpuInfo> {
+    output
+        .lines()
+        .filter_map(|line| {
+            let parts: Vec<&str> = line.split(',').collect();
+            let bytes = parts.get(1)?.trim().parse::<u64>().ok()?;
+            let name = parts.get(2)?.trim();
+            (!name.is_empty() && !name.eq_ignore_ascii_case("Name"))
+                .then(|| (name.to_string(), bytes))
+        })
+        .max_by_key(|(_, bytes)| *bytes)
+        .map(|(name, bytes)| GpuInfo {
+            vendor: infer_vendor(&name),
+            name,
+            vram_mb: (bytes > 0 && bytes < WMI_ADAPTER_RAM_SATURATED)
+                .then_some(bytes / (1024 * 1024)),
+        })
 }
 
 #[cfg(target_os = "macos")]
@@ -349,6 +454,86 @@ mod tests {
         // Case insensitive
         assert_eq!(infer_vendor("geforce gtx 1080"), "NVIDIA");
         assert_eq!(infer_vendor("Quadro P4000"), "NVIDIA");
+    }
+
+    // `reg query` output captured on a machine with three virtual displays
+    // ahead of the real card (2026-09-25). WMI reported this card as 4,095 MB.
+    const REG_SIZES: &str = r"
+HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}\0002
+    HardwareInformation.qwMemorySize    REG_QWORD    0x3ff800000
+
+End of search: 1 match(es) found.
+";
+    const REG_NAMES: &str = r"
+HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}\0000
+    DriverDesc    REG_SZ    Virtual Desktop Monitor
+
+HKEY_LOCAL_MACHINE\SYSTEM\CurrentControlSet\Control\Class\{4d36e968-e325-11ce-bfc1-08002be10318}\0002
+    DriverDesc    REG_SZ    NVIDIA GeForce RTX 4080 SUPER
+
+End of search: 2 match(es) found.
+";
+
+    #[test]
+    fn registry_reports_the_real_card_past_the_32bit_limit() {
+        let gpu = largest_registry_adapter(REG_SIZES, REG_NAMES).expect("adapter");
+        assert_eq!(gpu.name, "NVIDIA GeForce RTX 4080 SUPER");
+        assert_eq!(gpu.vendor, "NVIDIA");
+        assert_eq!(gpu.vram_mb, Some(16376), "same figure nvidia-smi reports");
+    }
+
+    #[test]
+    fn registry_picks_the_largest_adapter_not_the_first() {
+        let sizes = r"HKEY_LOCAL_MACHINE\X\0000
+    HardwareInformation.qwMemorySize    REG_QWORD    0x20000000
+HKEY_LOCAL_MACHINE\X\0001
+    HardwareInformation.qwMemorySize    REG_QWORD    0x400000000
+";
+        let names = r"HKEY_LOCAL_MACHINE\X\0000
+    DriverDesc    REG_SZ    Intel(R) UHD Graphics 770
+HKEY_LOCAL_MACHINE\X\0001
+    DriverDesc    REG_SZ    AMD Radeon RX 7800 XT
+";
+        let gpu = largest_registry_adapter(sizes, names).expect("adapter");
+        assert_eq!(gpu.name, "AMD Radeon RX 7800 XT");
+        assert_eq!(gpu.vendor, "AMD");
+        assert_eq!(gpu.vram_mb, Some(16384));
+    }
+
+    #[test]
+    fn registry_binary_and_dword_sizes_decode() {
+        // 16 GiB as REG_BINARY little-endian, and 2 GiB as REG_DWORD.
+        assert_eq!(
+            reg_bytes("REG_BINARY", "0000000004000000"),
+            Some(16 * 1024 * 1024 * 1024)
+        );
+        assert_eq!(
+            reg_bytes("REG_DWORD", "0x80000000"),
+            Some(2 * 1024 * 1024 * 1024)
+        );
+        assert_eq!(reg_bytes("REG_SZ", "whatever"), None);
+        assert_eq!(reg_bytes("REG_BINARY", "abc"), None);
+        assert!(largest_registry_adapter("", "").is_none());
+    }
+
+    #[test]
+    fn wmic_saturated_adapter_ram_is_unknown_not_4gb() {
+        let csv = "
+Node,AdapterRAM,Name
+PC,,Virtual Desktop Monitor
+PC,4293918720,NVIDIA GeForce RTX 4080 SUPER
+PC,1073741824,Intel(R) UHD Graphics
+";
+        let gpu = largest_wmic_adapter(csv).expect("adapter");
+        assert_eq!(gpu.name, "NVIDIA GeForce RTX 4080 SUPER");
+        assert_eq!(gpu.vram_mb, None, "a saturated 32-bit field is not a size");
+        let small = "Node,AdapterRAM,Name
+PC,2147483648,AMD Radeon Vega 8
+";
+        assert_eq!(
+            largest_wmic_adapter(small).expect("adapter").vram_mb,
+            Some(2048)
+        );
     }
 
     #[test]
