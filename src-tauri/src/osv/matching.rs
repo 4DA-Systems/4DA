@@ -158,6 +158,13 @@ pub fn get_matched_advisories(db: &Database) -> Result<Vec<MatchedAdvisory>> {
             }
 
             for (version, is_direct, is_dev) in candidates {
+                if is_npm_security_holding(
+                    &advisory.advisory_id,
+                    &advisory.ecosystem,
+                    version.as_deref(),
+                ) {
+                    continue;
+                }
                 let (is_affected, confirmed) =
                     check_version_affected(version.as_deref(), &advisory.affected_ranges);
                 if is_affected {
@@ -382,6 +389,18 @@ pub(crate) fn check_version_affected(
     (false, true)
 }
 
+/// npm's "Security holding package": after a malicious package is taken
+/// down, npm republishes the name as an empty `0.0.1-security` placeholder.
+/// A malicious-package advisory (`MAL-`) covers every version ("introduced
+/// 0"), so the placeholder read as installed malware (4da-ledger's
+/// transitive `fs@0.0.1-security`, 2026-09-26). The placeholder contains no
+/// code, so no MAL advisory applies to it.
+fn is_npm_security_holding(advisory_id: &str, ecosystem: &str, version: Option<&str>) -> bool {
+    advisory_id.starts_with("MAL-")
+        && normalize_ecosystem(ecosystem) == "npm"
+        && version.is_some_and(|v| v.trim().ends_with("-security"))
+}
+
 /// The fix for the release line a version is on: the `fixed` bound of the
 /// affected window that contains `user_version`. `None` when the version is
 /// in no window, its window has no fix (`last_affected` / open-ended), or it
@@ -492,6 +511,31 @@ mod tests {
 
     /// GHSA-p293-qw3h-jr36 as OSV publishes it: one fix per release line.
     const NEXT_RCE_RANGES: &str = r#"[{"type":"SEMVER","events":[{"introduced":"13.4.0"},{"fixed":"15.5.24"}]},{"type":"SEMVER","events":[{"introduced":"16.0.0"},{"fixed":"16.3.3"}]}]"#;
+
+    #[test]
+    fn npm_security_holding_placeholder_is_not_malware() {
+        assert!(is_npm_security_holding(
+            "MAL-2025-21003",
+            "npm",
+            Some("0.0.1-security")
+        ));
+        assert!(!is_npm_security_holding(
+            "MAL-2025-21003",
+            "npm",
+            Some("0.0.2")
+        ));
+        assert!(!is_npm_security_holding(
+            "GHSA-xxxx",
+            "npm",
+            Some("0.0.1-security")
+        ));
+        assert!(!is_npm_security_holding(
+            "MAL-2025-21003",
+            "crates.io",
+            Some("0.0.1-security")
+        ));
+        assert!(!is_npm_security_holding("MAL-2025-21003", "npm", None));
+    }
 
     #[test]
     fn fix_is_the_one_for_the_installed_release_line() {
