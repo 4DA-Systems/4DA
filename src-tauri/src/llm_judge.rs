@@ -103,7 +103,9 @@ pub fn judge_provider(base: &LLMProvider) -> LLMProvider {
 fn cheap_judge_sibling(provider: &str, model: &str) -> Option<&'static str> {
     let model = model.to_lowercase();
     match provider {
-        "anthropic" if model.contains("sonnet") || model.contains("opus") => {
+        "anthropic"
+            if model.contains("sonnet") || model.contains("opus") || model.contains("fable") =>
+        {
             Some("claude-haiku-4-5")
         }
         "openai" if model.contains("gpt-4o") && !model.contains("mini") => Some("gpt-4o-mini"),
@@ -127,9 +129,16 @@ pub struct RelevanceJudge {
 
 impl RelevanceJudge {
     pub fn new(provider: LLMProvider) -> Self {
+        Self::with_purpose(provider, "rerank_judge")
+    }
+
+    /// A judge whose calls are recorded in `ai_usage` under `purpose` instead
+    /// of `rerank_judge` — the Settings connection test used `new()` and
+    /// logged every test call as rerank spend on the MAIN model.
+    pub fn with_purpose(provider: LLMProvider, purpose: &'static str) -> Self {
         let on_machine = crate::llm_egress::provider_is_on_machine(&provider);
         Self {
-            client: LLMClient::with_purpose(provider, "rerank_judge"),
+            client: LLMClient::with_purpose(provider, purpose),
             on_machine,
         }
     }
@@ -540,6 +549,24 @@ That's it."#;
             cheap_judge_sibling("anthropic", "claude-opus-4-6"),
             Some("claude-haiku-4-5")
         );
+    }
+
+    #[test]
+    fn test_judge_sibling_covers_every_claude_five_model() {
+        // Fable had no sibling, so a Fable user's judges — 98.5% of all calls —
+        // would have run on a $10/$50 model.
+        for m in [
+            "claude-sonnet-5",
+            "claude-opus-5",
+            "claude-opus-5-5",
+            "claude-fable-5-1",
+        ] {
+            assert_eq!(
+                cheap_judge_sibling("anthropic", m),
+                Some("claude-haiku-4-5"),
+                "{m}"
+            );
+        }
     }
 
     #[test]

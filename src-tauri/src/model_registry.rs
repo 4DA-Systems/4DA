@@ -113,10 +113,45 @@ pub fn bundled_registry() -> ModelRegistry {
         (
             "claude-opus-4-6",
             "Claude Opus 4.6",
-            15.00,
-            75.00,
-            200_000,
-            32_000,
+            5.00,
+            25.00,
+            1_000_000,
+            128_000,
+        ),
+        // Claude 5 generation. Without these a fresh or offline install could
+        // not price them at all, and an unpriced model never counts against
+        // the daily cost cap.
+        (
+            "claude-sonnet-5",
+            "Claude Sonnet 5",
+            2.00,
+            10.00,
+            1_000_000,
+            128_000,
+        ),
+        (
+            "claude-opus-5",
+            "Claude Opus 5",
+            5.00,
+            25.00,
+            1_000_000,
+            128_000,
+        ),
+        (
+            "claude-opus-5-5",
+            "Claude Opus 5.5",
+            4.00,
+            20.00,
+            1_000_000,
+            128_000,
+        ),
+        (
+            "claude-fable-5-1",
+            "Claude Fable 5.1",
+            10.00,
+            50.00,
+            1_000_000,
+            128_000,
         ),
     ];
     for (id, name, input_price, output_price, max_in, max_out) in anthropic_models {

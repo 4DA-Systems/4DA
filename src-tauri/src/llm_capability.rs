@@ -81,6 +81,7 @@ const KNOWN_TIERS: &[(&str, ModelTier)] = &[
     ("claude-opus", ModelTier::Full),
     ("claude-sonnet", ModelTier::Full),
     ("claude-haiku", ModelTier::Full),
+    ("claude-fable", ModelTier::Full),
     // OpenAI — all Full
     ("gpt-4o", ModelTier::Full),
     ("gpt-4.1", ModelTier::Full),
@@ -207,6 +208,7 @@ pub(crate) fn is_brief_capable(settings: &LLMProvider) -> bool {
         const BRIEF_GRADE: &[&str] = &[
             "sonnet",
             "opus",
+            "fable",
             "gpt-4o",
             "gpt-4.1",
             "gpt-4-turbo",
@@ -606,6 +608,19 @@ mod tests {
         assert_eq!(cap.reason, BriefNarrationReason::Capable);
         assert_eq!(cap.provider, "anthropic");
         assert_eq!(cap.model, "claude-sonnet-4-6");
+    }
+
+    #[test]
+    fn brief_capability_claude_five_models_are_capable() {
+        for m in [
+            "claude-sonnet-5",
+            "claude-opus-5",
+            "claude-opus-5-5",
+            "claude-fable-5-1",
+        ] {
+            let cap = compute_brief_capability(&provider("anthropic", "sk-ant-real", m));
+            assert!(cap.brief_capable, "{m}");
+        }
     }
 
     #[test]
