@@ -976,6 +976,23 @@ jobs:
       # `--tests` (not `--lib`): cargo's `--tests` selects every target with
       # `test = true` — lib unittests, bin unittests AND the integration tests
       # under src-tauri/tests/.
+      # cargo-nextest, not `cargo test`. Measured A/B in one job on
+      # ci/trial-nextest (2026-09-26): the same 5,660 tests, 0 failures, 86.7s
+      # under nextest vs 123.6s for libtest's lib binary alone. Nextest runs each
+      # test in its own process, spread across binaries. That process isolation
+      # passed the whole suite first try: the in-process test locks (env vars,
+      # statics) guard per-process state, so they stay correct. The profile
+      # (src-tauri/.config/nextest.toml) adds one retry that is REPORTED as
+      # flaky, a 5-minute hang kill, and per-test timings in junit.xml. The
+      # calibration job and hermetic.yml keep plain `cargo test`: calibration
+      # loads the real ONNX model, and one process per test would reload it
+      # hundreds of times. Hermetic mirrors a contributor's `cargo test`.
+      - name: Install cargo-nextest (prebuilt)
+        if: github.event_name != 'pull_request'
+        uses: taiki-e/install-action@94c31af3204a9f15ab40b35ad084410b905bbc73 # v2
+        with:
+          tool: cargo-nextest
+
       - name: Run tests (unit + integration) and verify count floor
         if: github.event_name != 'pull_request'
         # Was `--lib`, which silently excluded every one of the 154 real
@@ -993,30 +1010,51 @@ jobs:
           FOURDA_DB_PATH: ${{ runner.temp }}/4da-validate-data/4da.db
         run: |
           set -o pipefail
-          cargo test --tests ${{ matrix.cargo-features }} 2>&1 | tee test-output.txt
+          cargo nextest run --tests ${{ matrix.cargo-features }} --profile ci 2>&1 | tee test-output.txt
           status=${PIPESTATUS[0]}
-          tail -n 10 test-output.txt
+          tail -n 15 test-output.txt
           if [ "$status" -ne 0 ]; then
             echo "::error::Tests exited with code $status"
             exit 1
           fi
-          # SUM every binary's count, don't take the last. `--tests` runs many
-          # binaries (lib + bins + each integration target), so the previous
-          # `tail -1` would have read only the LAST binary's total (~162) and
-          # tripped the floor on every run.
-          count=$(grep -oE 'test result: ok\. [0-9]+ passed' test-output.txt \
-            | grep -oE '[0-9]+' | awk '{s+=$1} END {print s+0}')
-          binaries=$(grep -cE '^test result:' test-output.txt || true)
-          echo "Rust tests passed: $count across $binaries test binaries"
+          # Counts come from nextest's junit report: one <testsuite> per test
+          # binary, one <testcase> per test that RAN (skipped tests are not
+          # listed). A testcase carrying <flakyFailure> failed, then passed on
+          # retry.
+          read -r count binaries flaky < <(python3 - target/nextest/ci/junit.xml <<'EOF'
+          import sys, xml.etree.ElementTree as ET
+          root = ET.parse(sys.argv[1]).getroot()
+          suites = list(root.iter('testsuite'))
+          cases = list(root.iter('testcase'))
+          bad = {'failure', 'error', 'skipped'}
+          passed = [c for c in cases if not any(ch.tag in bad for ch in c)]
+          flaky = [c for c in cases if any(ch.tag in ('flakyFailure', 'flakyError') for ch in c)]
+          for c in flaky:
+              print(f"::warning::FLAKY (failed, then passed on retry): {c.get('classname')} {c.get('name')}", file=sys.stderr)
+          print(len(passed), len(suites), len(flaky))
+          EOF
+          )
+          flaky=${flaky%$'\r'}
+          # Fail CLOSED. If the parse produced nothing (no junit file, python
+          # missing), every comparison below would error, `[` would return
+          # false, and the step would pass having measured nothing.
+          for v in "$count" "$binaries" "$flaky"; do
+            case "$v" in
+              ''|*[!0-9]*)
+                echo "::error::could not read test counts from target/nextest/ci/junit.xml (count='$count' binaries='$binaries' flaky='$flaky')"
+                exit 1 ;;
+            esac
+          done
+          echo "Rust tests passed: $count across $binaries test binaries ($flaky flaky)"
           floor=${{ matrix.test-floor }}
           if [ "$floor" -gt 0 ] && [ "$count" -lt "$floor" ]; then
             echo "::error::Rust test count dropped below $floor (got $count)"
             exit 1
           fi
-          # Guards the regression this step exists to fix: if someone re-scopes
-          # this to --lib, only ONE binary reports and the integration suite is
-          # silently gone again. Observed on 2026-08-14: 9 binaries (lib, 3
-          # bins, 5 integration targets).
+          # Guards the regression the --tests scope exists to fix: if someone
+          # re-scopes this to --lib, only ONE binary reports and the integration
+          # suite is silently gone again (9 binaries on 2026-08-14 under
+          # libtest; nextest lists only binaries that contain tests, 7+).
           if [ "$floor" -gt 0 ] && [ "$binaries" -lt 5 ]; then
             echo "::error::only $binaries test binaries ran — the integration tests in src-tauri/tests/ did not execute (is this scoped to --lib again?)"
             exit 1
