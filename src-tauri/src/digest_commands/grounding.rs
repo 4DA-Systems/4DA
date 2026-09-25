@@ -75,32 +75,63 @@ pub(super) fn first_seen_for_ids(
     Some((date, days))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::test_utils::{insert_test_item, test_db};
+/// The version clause of one CONFIRMED SECURITY line. The model repeats it
+/// verbatim, so it says only what 4DA knows:
+/// - A fix is stated whenever one is known, even when the affected projects
+///   pin different versions (no single installed version). The 2026-09-25
+///   brief read quick-xml as "no fix published" because this case printed
+///   nothing, while 0.41.0 sat in the advisory mirror.
+/// - "No fix published" only for an OSV-verified alert, where a missing fix
+///   means the advisory lists none. An LLM-classified alert never carries fix
+///   data, so for it a missing fix is unknown, not absent.
+fn version_note(installed: Option<&str>, fixed: Option<&str>, osv_verified: bool) -> String {
+    match (installed, fixed) {
+        (Some(i), Some(f)) => format!(" ({i} -> update to >= {f})"),
+        (None, Some(f)) => format!(" (update to >= {f})"),
+        (Some(i), None) if osv_verified => format!(" (installed {i}; no fix published)"),
+        (None, None) if osv_verified => " (no fix published)".to_string(),
+        (Some(i), None) => format!(" (installed {i}; fix version not verified)"),
+        (None, None) => " (fix version not verified)".to_string(),
+    }
+}
 
-    /// The only honest age is when 4DA first held the advisory; a brief that
-    /// cannot find one carries no age and the prompt rule forbids inventing it.
-    #[test]
-    fn first_seen_is_the_earliest_advisory_row_naming_the_id() {
-        let db = test_db();
-        insert_test_item(
-            &db,
-            "osv",
-            "a1",
-            "[GHSA-h395-gr6q-cpjc] jsonwebtoken: type confusion",
-            "body",
-        );
-        let conn = db.conn.lock();
-        let (date, days) = first_seen_for_ids(&conn, &["GHSA-h395-gr6q-cpjc".to_string()])
-            .expect("an osv row names the id");
-        assert_eq!(date, chrono::Utc::now().date_naive().to_string());
-        assert_eq!(days, 0);
-        assert!(
-            first_seen_for_ids(&conn, &["GHSA-nope-nope-nope".to_string()]).is_none(),
-            "no row, no age"
-        );
+/// The scope clause of one CONFIRMED SECURITY line. A transitive package is
+/// fixed by updating its parent or refreshing the lockfile; the 2026-09-25
+/// briefs told the user to bump nanoid and quick-xml directly, and neither is
+/// in a manifest. Unknown scope adds nothing.
+fn scope_note(is_direct: Option<bool>, is_dev: Option<bool>) -> String {
+    let dev = if is_dev == Some(true) {
+        "dev-only, "
+    } else {
+        ""
+    };
+    match is_direct {
+        Some(false) => format!(
+            " [{dev}transitive: fixed by updating the parent package or refreshing the lockfile, not by a manifest bump]"
+        ),
+        Some(true) => format!(" [{dev}direct dependency]"),
+        None if is_dev == Some(true) => " [dev-only]".to_string(),
+        None => String::new(),
+    }
+}
+
+/// Give each dependency-grounded item that has no match explanation one that
+/// names its dependency. Persisted links cover direct, non-dev dependencies
+/// only, so "direct dependency" is exact. An existing explanation wins.
+pub(super) fn explain_grounded_items(
+    explanations: &mut std::collections::HashMap<i64, String>,
+    grounded: &std::collections::HashMap<i64, Vec<String>>,
+) {
+    for (id, packages) in grounded {
+        if packages.is_empty() {
+            continue;
+        }
+        explanations.entry(*id).or_insert_with(|| {
+            format!(
+                "Concerns a direct dependency of your projects: {}",
+                packages.join(", ")
+            )
+        });
     }
 }
 
@@ -145,12 +176,11 @@ pub(super) fn build_grounded_security_section() -> String {
             crate::preemption::AlertUrgency::Medium => "MEDIUM",
             crate::preemption::AlertUrgency::Watch => "WATCH",
         };
-        let version = match (&a.installed_version, &a.fixed_version) {
-            (Some(i), Some(f)) => format!(" ({i} -> update to >= {f})"),
-            (Some(i), None) => format!(" (installed {i}; no fix published)"),
-            (None, None) => " (no fix published)".to_string(),
-            _ => String::new(),
-        };
+        let version = version_note(
+            a.installed_version.as_deref(),
+            a.fixed_version.as_deref(),
+            a.osv_verified,
+        ) + &scope_note(a.is_direct, a.is_dev);
         // The only honest age: when 4DA first held the advisory. The model
         // otherwise invented one and incremented it every brief (2026-09-07).
         let first_seen = advisory_first_seen(a)
@@ -207,4 +237,95 @@ pub(super) fn build_grounded_security_section() -> String {
          project or ecosystem):\n{}",
         lines.join("\n")
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::test_utils::{insert_test_item, test_db};
+
+    /// quick-xml, 2026-09-25: one project on 0.38.4 and another on
+    /// 0.39.4, so no single installed version; the fix 0.41.0 must still
+    /// reach the prompt.
+    #[test]
+    fn fix_is_stated_when_projects_pin_different_versions() {
+        assert_eq!(
+            version_note(None, Some("0.41.0"), true),
+            " (update to >= 0.41.0)"
+        );
+        assert_eq!(
+            version_note(Some("0.38.4"), Some("0.41.0"), true),
+            " (0.38.4 -> update to >= 0.41.0)"
+        );
+    }
+
+    #[test]
+    fn transitive_scope_says_how_the_fix_arrives() {
+        let transitive = scope_note(Some(false), Some(false));
+        assert!(transitive.contains("transitive"));
+        assert!(transitive.contains("not by a manifest bump"));
+        assert_eq!(
+            scope_note(Some(true), Some(true)),
+            " [dev-only, direct dependency]"
+        );
+        assert_eq!(scope_note(None, Some(true)), " [dev-only]");
+        assert_eq!(scope_note(None, None), "");
+    }
+
+    #[test]
+    fn grounded_items_name_their_dependency_and_keep_existing_explanations() {
+        let mut explanations =
+            std::collections::HashMap::from([(2_i64, "Matched your tokio work".to_string())]);
+        let grounded = std::collections::HashMap::from([
+            (1_i64, vec!["@xyflow/react".to_string()]),
+            (2, vec!["tokio".to_string()]),
+            (3, vec![]),
+        ]);
+        explain_grounded_items(&mut explanations, &grounded);
+        assert_eq!(
+            explanations[&1],
+            "Concerns a direct dependency of your projects: @xyflow/react"
+        );
+        assert_eq!(explanations[&2], "Matched your tokio work");
+        assert!(!explanations.contains_key(&3));
+    }
+
+    #[test]
+    fn only_an_osv_verified_alert_can_say_no_fix_published() {
+        assert_eq!(version_note(None, None, true), " (no fix published)");
+        assert_eq!(
+            version_note(Some("0.9.6"), None, true),
+            " (installed 0.9.6; no fix published)"
+        );
+        for note in [
+            version_note(None, None, false),
+            version_note(Some("1.2.3"), None, false),
+        ] {
+            assert!(!note.contains("no fix"), "unverified alert claimed: {note}");
+            assert!(note.contains("not verified"));
+        }
+    }
+
+    /// The only honest age is when 4DA first held the advisory; a brief that
+    /// cannot find one carries no age and the prompt rule forbids inventing it.
+    #[test]
+    fn first_seen_is_the_earliest_advisory_row_naming_the_id() {
+        let db = test_db();
+        insert_test_item(
+            &db,
+            "osv",
+            "a1",
+            "[GHSA-h395-gr6q-cpjc] jsonwebtoken: type confusion",
+            "body",
+        );
+        let conn = db.conn.lock();
+        let (date, days) = first_seen_for_ids(&conn, &["GHSA-h395-gr6q-cpjc".to_string()])
+            .expect("an osv row names the id");
+        assert_eq!(date, chrono::Utc::now().date_naive().to_string());
+        assert_eq!(days, 0);
+        assert!(
+            first_seen_for_ids(&conn, &["GHSA-nope-nope-nope".to_string()]).is_none(),
+            "no row, no age"
+        );
+    }
 }

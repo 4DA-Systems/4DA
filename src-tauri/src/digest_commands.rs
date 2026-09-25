@@ -47,7 +47,7 @@ pub async fn get_latest_briefing() -> Result<serde_json::Value> {
 // SECURITY contract (PENDING-DECISION 2026-06-06, lever 2) and the dormancy
 // labelling added by the 2026-08-31 live audit.
 mod grounding;
-use grounding::build_grounded_security_section;
+use grounding::{build_grounded_security_section, explain_grounded_items};
 
 /// Auto-trigger reuse window (2026-08-31 live audit) — the mechanism and its
 /// tests live in their own file for size hygiene; see the module doc there.
@@ -205,17 +205,23 @@ pub(crate) async fn generate_briefing_internal(
         }
     };
 
+    let mut explanations = explanations;
     let (items, grounded_ids) = if mem_items.is_empty() {
         let db = get_database()?;
         let period_start = Utc::now() - Duration::hours(72);
         let user_lang = crate::i18n::get_user_language();
         let fetched = fetch_db_fallback_items(&db, period_start, &user_lang)?;
         let ids: Vec<i64> = fetched.iter().map(|i| i.id).collect();
-        let grounded = db.filter_strongly_grounded_items(&ids).unwrap_or_else(|e| {
+        let grounded = db.strongly_grounded_packages(&ids).unwrap_or_else(|e| {
             error!(target: "4da::briefing", error = %e, "Grounding lookup failed; slate falls back to score order");
-            std::collections::HashSet::new()
+            std::collections::HashMap::new()
         });
-        (fetched, grounded)
+        // This path has no in-memory explanations, so every item reached the
+        // model as "No context match" and it filtered releases of the user's
+        // own direct dependencies as "not a confirmed dependency" (2026-09-25:
+        // @xyflow/react, react-i18next, all exact registry links).
+        explain_grounded_items(&mut explanations, &grounded);
+        (fetched, grounded.into_keys().collect())
     } else {
         (mem_items, mem_grounded)
     };

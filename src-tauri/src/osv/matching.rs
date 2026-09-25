@@ -220,11 +220,17 @@ pub fn get_matched_advisories(db: &Database) -> Result<Vec<MatchedAdvisory>> {
             continue;
         }
 
-        let fixed_version = advisory
-            .fixed_versions
-            .as_ref()
-            .and_then(|fv| serde_json::from_str::<Vec<String>>(fv).ok())
-            .and_then(|versions| versions.into_iter().next());
+        // The fix for the line each confirmed copy is on (highest across
+        // copies), else the fix that clears every listed range.
+        let fixed_version = dependency_instances
+            .iter()
+            .filter(|instance| instance.is_version_confirmed)
+            .filter_map(|instance| instance.installed_version.as_deref())
+            .filter_map(|v| fix_for_version(v, &advisory.affected_ranges))
+            .filter_map(|fix| parse_version(&fix).map(|parsed| (parsed, fix)))
+            .max_by(|a, b| a.0.cmp(&b.0))
+            .map(|(_, fix)| fix)
+            .or_else(|| highest_listed_fix(&advisory.fixed_versions));
 
         matches.push(MatchedAdvisory {
             advisory_id: advisory.advisory_id.clone(),
@@ -376,6 +382,64 @@ pub(crate) fn check_version_affected(
     (false, true)
 }
 
+/// The fix for the release line a version is on: the `fixed` bound of the
+/// affected window that contains `user_version`. `None` when the version is
+/// in no window, its window has no fix (`last_affected` / open-ended), or it
+/// cannot be parsed.
+///
+/// An advisory fixed in several lines lists one fix per line. GHSA-p293-qw3h-jr36
+/// (next) lists `["15.5.24", "16.3.3"]`, and taking the first told a 16.2.10
+/// install that 15.5.24 fixed it; the group maximum then printed "update to
+/// >= 16.2.11", which leaves both critical RCEs open (2026-09-26).
+pub(crate) fn fix_for_version(
+    user_version: &str,
+    affected_ranges_json: &Option<String>,
+) -> Option<String> {
+    let ranges: Vec<Range> = serde_json::from_str(affected_ranges_json.as_deref()?).ok()?;
+    let user = parse_version(user_version)?;
+    for range in &ranges {
+        if range.range_type != "SEMVER" && range.range_type != "ECOSYSTEM" {
+            continue;
+        }
+        let mut introduced: Option<Version> = None;
+        for obj in range.events.iter().flatten().filter_map(|e| e.as_object()) {
+            if let Some(intro) = obj.get("introduced").and_then(|v| v.as_str()) {
+                introduced = if intro == "0" {
+                    Some(Version::new(0, 0, 0))
+                } else {
+                    parse_version(intro)
+                };
+            }
+            let bound = obj
+                .get("fixed")
+                .or_else(|| obj.get("last_affected"))
+                .and_then(|v| v.as_str());
+            if let Some(bound) = bound {
+                let is_fix = obj.contains_key("fixed");
+                if let (Some(intro), Some(end)) = (introduced.as_ref(), parse_version(bound)) {
+                    let inside = if is_fix { user < end } else { user <= end };
+                    if !is_unknown_bound(bound) && user >= *intro && inside {
+                        return is_fix.then(|| bound.trim().to_string());
+                    }
+                }
+                introduced = None;
+            }
+        }
+    }
+    None
+}
+
+/// Highest semver among an advisory's listed fixes: the version that clears
+/// every range. Used when no installed copy could be placed in a window.
+fn highest_listed_fix(fixed_versions_json: &Option<String>) -> Option<String> {
+    let versions: Vec<String> = serde_json::from_str(fixed_versions_json.as_deref()?).ok()?;
+    versions
+        .into_iter()
+        .filter_map(|v| parse_version(&v).map(|parsed| (parsed, v)))
+        .max_by(|a, b| a.0.cmp(&b.0))
+        .map(|(_, v)| v)
+}
+
 /// Whether an OSV version boundary is an unknown ("not available") sentinel rather than a
 /// concrete version. OSV's PYSEC import appends "-NA" when the exact affected boundary is
 /// unknown; `semver` parses "2.5.0-NA" as a 2.5.0 prerelease, so a naive comparison would
@@ -425,6 +489,46 @@ fn normalize_ecosystem(eco: &str) -> &str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// GHSA-p293-qw3h-jr36 as OSV publishes it: one fix per release line.
+    const NEXT_RCE_RANGES: &str = r#"[{"type":"SEMVER","events":[{"introduced":"13.4.0"},{"fixed":"15.5.24"}]},{"type":"SEMVER","events":[{"introduced":"16.0.0"},{"fixed":"16.3.3"}]}]"#;
+
+    #[test]
+    fn fix_is_the_one_for_the_installed_release_line() {
+        let ranges = Some(NEXT_RCE_RANGES.to_string());
+        assert_eq!(
+            fix_for_version("16.2.10", &ranges).as_deref(),
+            Some("16.3.3")
+        );
+        assert_eq!(
+            fix_for_version("15.1.0", &ranges).as_deref(),
+            Some("15.5.24")
+        );
+        assert_eq!(fix_for_version("16.3.3", &ranges), None, "not affected");
+        assert_eq!(fix_for_version("12.0.0", &ranges), None, "not affected");
+    }
+
+    #[test]
+    fn last_affected_window_has_no_fix() {
+        let ranges = Some(
+            r#"[{"type":"SEMVER","events":[{"introduced":"0"},{"last_affected":"0.9.6"}]}]"#
+                .to_string(),
+        );
+        assert_eq!(fix_for_version("0.9.6", &ranges), None);
+    }
+
+    #[test]
+    fn unplaced_copies_fall_back_to_the_fix_that_clears_every_range() {
+        assert_eq!(
+            highest_listed_fix(&Some(r#"["15.5.24","16.3.3"]"#.to_string())).as_deref(),
+            Some("16.3.3")
+        );
+        assert_eq!(
+            highest_listed_fix(&Some(r#"["0.41.0"]"#.to_string())).as_deref(),
+            Some("0.41.0")
+        );
+        assert_eq!(highest_listed_fix(&None), None);
+    }
 
     #[test]
     fn test_version_in_simple_range() {
