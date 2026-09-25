@@ -1470,8 +1470,14 @@ impl ValidationError {
             },
         );
 
-        // Wait for the flush + panic to be observed.
-        let deadline = Instant::now() + Duration::from_secs(10);
+        // Wait for the flush + panic to be observed. The deadline is generous on
+        // purpose: the panic hook runs BEFORE unwinding reaches `catch_unwind`,
+        // and CI sets RUST_BACKTRACE=1, so the hook symbolizes a full backtrace
+        // first. On a 4-vCPU Windows runner (dbghelp, one global lock, a
+        // 5,000-test binary panicking in parallel) that took over 10s and
+        // ejected #735 from the merge queue. The loop exits the moment the flag
+        // clears, so a passing run is exactly as fast as before.
+        let deadline = Instant::now() + Duration::from_secs(120);
         while Instant::now() < deadline && watcher.is_running() {
             std::thread::sleep(Duration::from_millis(20));
         }
