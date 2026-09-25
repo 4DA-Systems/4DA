@@ -433,7 +433,15 @@ impl Source for StackOverflowSource {
 
         let mut all_items = Vec::new();
         let mut seen_ids = std::collections::HashSet::new();
-        let tags_to_fetch: Vec<&String> = self.tags.iter().take(MAX_TAGS_PER_FETCH).collect();
+        // A rotating window over the stack's tags: the fixed first
+        // `MAX_TAGS_PER_FETCH` left every tag past the fourth permanently
+        // unwatched (the stack can map to up to six).
+        let tag_window = crate::source_fetching::rotating_window(
+            "sources.stackoverflow.tag_cursor",
+            &self.tags,
+            MAX_TAGS_PER_FETCH,
+        );
+        let tags_to_fetch: Vec<&String> = tag_window.iter().collect();
 
         for (i, tag) in tags_to_fetch.iter().enumerate() {
             // 2-second delay between tag requests (skip first)
