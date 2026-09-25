@@ -77,6 +77,8 @@ pub struct NpmRegistrySource {
     config: SourceConfig,
     client: reqwest::Client,
     packages: Vec<String>,
+    /// `packages` came from the user's manifests (not the popular defaults).
+    user_declared: bool,
 }
 
 impl NpmRegistrySource {
@@ -84,6 +86,7 @@ impl NpmRegistrySource {
     pub fn new() -> Self {
         // Use real user deps from ACE if available, fall back to popular defaults
         let ace_packages = crate::source_fetching::load_ace_packages_for_ecosystem("npm");
+        let user_declared = !ace_packages.is_empty();
         let packages = if ace_packages.is_empty() {
             // Strict manifest mode: fetch NOTHING rather than the global default list.
             if crate::source_fetching::strict_manifest_mode() {
@@ -103,6 +106,7 @@ impl NpmRegistrySource {
             },
             client: super::shared_client(),
             packages,
+            user_declared,
         }
     }
 
@@ -255,6 +259,32 @@ impl Source for NpmRegistrySource {
             return Ok(items);
         }
 
+        // The user's own packages: a rotating window, so every declared
+        // package is checked in turn. The deep path used to walk the list
+        // from the top every cycle and stop after `2 x max_items` successes,
+        // so a dependency list longer than that had a permanently unwatched
+        // tail (live 2026-09-25: 125 declared packages, the same first 60
+        // alphabetically every cycle, 23 of 125 ever harvested — react,
+        // typescript and vite never among them). Generic popular packages
+        // are never mixed in: a release of a package the user does not use
+        // is ungrounded by construction and can never reach the feed.
+        if self.user_declared {
+            let window = crate::source_fetching::rotating_window(
+                "sources.npm_registry.rotation_cursor",
+                &self.packages,
+                self.config.max_items * 2,
+            );
+            let items = self
+                .fetch_package_list(&window, self.config.max_items * 2)
+                .await?;
+            info!(
+                items = items.len(),
+                declared = self.packages.len(),
+                "Fetched npm registry items (rotating window over declared packages)"
+            );
+            return Ok(items);
+        }
+
         info!("Deep fetching npm registry (default + extended packages)");
 
         // Combine default + extended, dedup
@@ -373,6 +403,10 @@ mod tests {
         assert_eq!(source.config().max_items, 30);
         assert_eq!(source.config().fetch_interval_secs, 3600);
         assert_eq!(source.packages.len(), DEFAULT_PACKAGES.len());
+        assert!(
+            !source.user_declared,
+            "the popular defaults are never mistaken for the user's own packages"
+        );
     }
 
     #[test]

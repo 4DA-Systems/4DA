@@ -228,9 +228,15 @@ impl Source for PypiSource {
         );
 
         let mut items = Vec::new();
-        let max = self.config.max_items.min(self.packages.len());
+        // A rotating window: the fixed first `max_items` names left every
+        // package past them permanently unwatched.
+        let window = crate::source_fetching::rotating_window(
+            "sources.pypi.rotation_cursor",
+            &self.packages,
+            self.config.max_items,
+        );
 
-        for package in self.packages.iter().take(max) {
+        for package in &window {
             match self.fetch_package(package).await {
                 Ok(item) => items.push(item),
                 Err(e) => {
@@ -259,11 +265,19 @@ impl Source for PypiSource {
 
         // In strict manifest mode the package list is the full pinned manifest; cap per cycle so a
         // large stack's deep fetch finishes within the adapter timeout instead of surfacing nothing.
-        // Non-strict deep scan is unchanged (queries every monitored package).
+        // Desktop mode takes a rotating window over the same list: querying EVERY package one at a
+        // time, 500 ms apart, inside the 90 s adapter timeout meant a stack of more than ~150
+        // Python packages timed out and surfaced nothing at all, every cycle.
+        let window: Vec<String>;
         let packages: Vec<&String> = if crate::source_fetching::strict_manifest_mode() {
             self.packages.iter().take(self.config.max_items).collect()
         } else {
-            self.packages.iter().collect()
+            window = crate::source_fetching::rotating_window(
+                "sources.pypi.rotation_cursor",
+                &self.packages,
+                self.config.max_items,
+            );
+            window.iter().collect()
         };
         let mut items = Vec::new();
         for package in packages {
