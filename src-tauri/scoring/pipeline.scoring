@@ -403,6 +403,24 @@ stale_content {
     superseded_ceiling: 0.35    # [0.20, 0.37]
 }
 
+# Release grading (v37). A registry release of the user's own dependency is
+# graded against EACH project's pinned version (scoring/release_grade.rs).
+# A breaking upgrade (new major, or a new minor below 1.0) and a yanked pin
+# keep their score; the other grades take a ceiling so they rank below it.
+# Live 2026-09-25: prereleases were kept 9 of 12 times and breaking stable
+# upgrades 13 of 24; seven tauri 3.0.0-alpha rows sat at 0.90 while
+# fastembed 7.1.0 (pinned 5.13.4) left the feed.
+release_grade {
+    # A new minor is worth knowing, and ranks below a breaking upgrade.
+    minor_ceiling: 0.78         # [0.60, 0.90]
+    # A prerelease is awareness: below every stable minor of the same line.
+    prerelease_ceiling: 0.55    # [0.42, 0.70]
+    # A patch (or a release only transitive copies are behind on) is not
+    # news on its own; security fixes arrive through the advisory lanes.
+    # The verdict is gated too, for the superseded_ceiling arithmetic reason.
+    patch_ceiling: 0.35         # [0.20, 0.37]
+}
+
 # Community quality signal thresholds - extracted from source metadata
 # (SO score, HN points, Reddit upvotes). Applied as multiplier in Phase 5.
 community_signal {

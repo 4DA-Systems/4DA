@@ -41,6 +41,7 @@ pub(crate) mod query_weighting;
 pub(crate) mod reexamination;
 #[cfg(test)]
 mod registry_grounding_tests;
+pub(crate) mod release_grade;
 pub(crate) mod release_version;
 mod role_inference;
 mod semantic;
@@ -629,7 +630,16 @@ pub(crate) use types::{ScoringInput, ScoringOptions};
 // release was ever grounded through its registry subject. Scoped in
 // `epochs::SCOPED_EPOCHS` to go_modules rows: crates.io keys gained a
 // version in the same change, but extraction still yields the same name.
-pub(crate) const PIPELINE_VERSION: i32 = 36;
+// v37 (2026-09-25, harvest audit v2): (1) a registry release whose subject
+// grounds to the user's dependency takes full domain relevance — the
+// dep-match override needed 0.50 but a single subject match scores 0.19–0.42,
+// so `fastembed v7.1.0` (pinned 5.13.4) fell to the off-domain gate at 0.155;
+// (2) registry releases are graded per project against the pinned version
+// (`release_grade`): breaking and yanked keep their score as
+// `breaking_change` necessity naming the projects, a minor and a prerelease
+// take ceilings below it, a patch leaves the feed. Scoped in
+// `epochs::SCOPED_EPOCHS` to registry rows.
+pub(crate) const PIPELINE_VERSION: i32 = 37;
 
 /// Parse the topic tags carried in the `source_items.tags` column.
 ///

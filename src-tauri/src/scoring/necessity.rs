@@ -64,6 +64,11 @@ pub(crate) struct NecessityInputs {
     /// evidence that the dependency is affected, and the reason must not say
     /// it is (v32).
     pub registry_advisory: bool,
+    /// v37: a registry release graded against each project's pinned version
+    /// (`release_grade`) — its class and the one-line reason naming the
+    /// package, the release and the projects it concerns. `None` for every
+    /// other item.
+    pub release_grade: Option<(super::release_grade::ReleaseClass, String)>,
 }
 
 /// Result of necessity computation
@@ -179,6 +184,8 @@ pub(crate) fn compute_necessity(inputs: &NecessityInputs) -> NecessityResult {
     // Evaluate paths in priority order
     let (mut score, reason, category, urgency) =
         if let Some(result) = try_security_path(inputs, has_dep_match, &dep_names) {
+            result
+        } else if let Some(result) = try_release_grade_path(inputs) {
             result
         } else if let Some(result) = try_breaking_change_path(inputs, has_dep_match, &dep_names) {
             result
@@ -346,6 +353,47 @@ fn try_security_path(
             Urgency::Awareness,
         ))
     }
+}
+
+/// Graded registry release path (v37). The grade already knows which projects
+/// the release concerns and how far behind they are, so it outranks the
+/// keyword-driven breaking-change path and the generic stack-update path:
+///
+/// - yanked pin / breaking upgrade → `BreakingChange`, this week (the same
+///   tier the breaking-change path uses; nothing here pages as `immediate`);
+/// - new minor → `EcosystemShift`, awareness, at the stack-update score;
+/// - patch or transitive-only → a low awareness score (security fixes reach
+///   the user through the advisory lanes, not the release row);
+/// - prerelease → the same low awareness score.
+fn try_release_grade_path(
+    inputs: &NecessityInputs,
+) -> Option<(f32, String, NecessityCategory, Urgency)> {
+    use super::release_grade::ReleaseClass;
+    let (class, reason) = inputs.release_grade.as_ref()?;
+    if !inputs.strongly_grounded {
+        return None;
+    }
+    let reason = reason.clone();
+    Some(match class {
+        ReleaseClass::Yanked | ReleaseClass::Breaking => (
+            0.80,
+            reason,
+            NecessityCategory::BreakingChange,
+            Urgency::ThisWeek,
+        ),
+        ReleaseClass::Minor => (
+            (0.45 + inputs.dep_match_score * 0.20).min(0.65),
+            reason,
+            NecessityCategory::EcosystemShift,
+            Urgency::Awareness,
+        ),
+        ReleaseClass::Patch | ReleaseClass::Prerelease => (
+            0.20,
+            reason,
+            NecessityCategory::EcosystemShift,
+            Urgency::Awareness,
+        ),
+    })
 }
 
 /// Breaking change path.

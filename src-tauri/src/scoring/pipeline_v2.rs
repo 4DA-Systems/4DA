@@ -831,6 +831,29 @@ fn extract_signals(
         domain_relevance = domain_relevance.max(1.0);
     }
 
+    // v37: a registry release whose SUBJECT is the user's own dependency is
+    // in-domain by definition — it is not a text mention that could be
+    // incidental, it IS the package. The override above cannot reach it: a
+    // single corroborated subject match is halved to 0.19–0.42, under the
+    // 0.50 bar, so the item fell back to its topic words. Live 2026-09-25:
+    // `crates.io: fastembed v7.1.0` ("vector embeddings", 4DA pins 5.13.4)
+    // took domain 0.15 → the off-domain gate → 0.155, and 28 of 127
+    // direct-dependency releases in 45 days were scored off-domain, none
+    // kept. The registry-subject route is the same predicate that grounds
+    // the row (`compute_grounding_verdict`), so the two can never disagree.
+    if !ctx.domain_profile.is_empty()
+        && crate::dep_linker::is_registry_source(input.source_type)
+        && dependencies::compute_grounding_verdict(
+            input.source_type,
+            input.source_id,
+            &matched_deps,
+            &ctx.ace_ctx,
+        )
+        .via_registry_subject
+    {
+        domain_relevance = domain_relevance.max(1.0);
+    }
+
     // Stack intelligence
     let stack_boost = crate::stacks::scoring::compute_stack_boost(
         input.title,
@@ -3140,11 +3163,34 @@ pub(crate) fn score_item(
     // 5.9.3) and "crates.io: sha2 v0.11.0" (installed 0.11.0) sit at 0.88–0.90
     // as new releases (2026-09-07, twenty of fifty-one release rows). An
     // unknown installed version never gates.
-    let already_installed_release =
-        matches!(content_type, crate::content_dna::ContentType::ReleaseNotes)
+    // v37: a registry release of the user's own dependency is graded against
+    // EACH project's pinned version (`release_grade`): which projects it
+    // concerns, and whether it is a breaking upgrade, a new minor, a patch, a
+    // prerelease, or a withdrawal of a version a project runs (yanked).
+    let release_grade = (grounding.via_registry_subject
+        && matches!(content_type, crate::content_dna::ContentType::ReleaseNotes))
+    .then(|| {
+        super::release_grade::grade_registry_release(
+            db,
+            input.source_type,
+            input.title,
+            input.content,
+        )
+    })
+    .flatten();
+    let release_class = release_grade.as_ref().and_then(|g| g.class());
+    let already_installed_release = matches!(content_type, crate::content_dna::ContentType::ReleaseNotes)
             && !matches!(input.source_type, "cve" | "osv")
             && grounding.strong
+            // A yanked pin is news even when it is the newest version.
+            && release_class != Some(super::release_grade::ReleaseClass::Yanked)
             && release_already_installed(db, input, &raw.matched_deps);
+    // v37: a patch (or a release only transitive copies are behind on) is not
+    // news on its own — security fixes reach the user through the advisory
+    // lanes, not the release row. Gated like a superseded release, for the
+    // same v18 arithmetic reason (a score ceiling alone is re-opened by the
+    // post-ceiling offset).
+    let release_patch_only = release_class == Some(super::release_grade::ReleaseClass::Patch);
     // v30: the source class decides whether an ungrounded advisory is a
     // registry row (gated) or an editorial story (decided by score).
     let registry_advisory = is_registry_advisory_source(input.source_type);
@@ -3219,7 +3265,14 @@ pub(crate) fn score_item(
             "direct".to_string()
         }
     });
-    let installed_version = display_deps.first().and_then(|d| d.version.clone());
+    // v37: a graded release shows the version of the projects it concerns
+    // (the copy furthest behind), not whichever copy the dependency edge
+    // happened to carry — "sha2 v0.11.0, installed v0.11.0" hid that two
+    // sibling projects were on 0.10.9.
+    let installed_version = release_grade
+        .as_ref()
+        .and_then(super::release_grade::ReleaseGrade::headline_installed)
+        .or_else(|| display_deps.first().and_then(|d| d.version.clone()));
     // v29: the OSV mirror's STRUCTURED ranges decide first (introduced/fixed/
     // last_affected, via the same matcher Preemption trusts); the text route
     // is the fallback for advisories the mirror does not hold. Before this
@@ -3376,7 +3429,22 @@ pub(crate) fn score_item(
             scoring_config::COMMODITY_CEILING_SECURITY_ADVISORY_REGISTRY_UNGROUNDED
                 + scoring_config::SCORE_OFFSET_NEGATIVE_FLOOR,
         );
-        [commodity, superseded, not_affected, ugc]
+        // v37 release grade: a breaking upgrade (or a yanked pin) keeps its
+        // score; a new minor ranks below it, a prerelease below that, and a
+        // patch leaves the feed (verdict gated below).
+        let graded = {
+            use super::release_grade::ReleaseClass;
+            match release_class {
+                Some(ReleaseClass::Minor) => Some(scoring_config::RELEASE_GRADE_MINOR_CEILING),
+                Some(ReleaseClass::Prerelease) => {
+                    Some(scoring_config::RELEASE_GRADE_PRERELEASE_CEILING)
+                }
+                Some(ReleaseClass::Patch) => Some(scoring_config::RELEASE_GRADE_PATCH_CEILING),
+                Some(ReleaseClass::Breaking | ReleaseClass::Yanked) | None => None,
+            }
+            .map(|c| c + scoring_config::SCORE_OFFSET_NEGATIVE_FLOOR)
+        };
+        [commodity, superseded, not_affected, ugc, graded]
             .into_iter()
             .flatten()
             .reduce(f32::min)
@@ -3433,6 +3501,7 @@ pub(crate) fn score_item(
     let relevant = !ungrounded_registry_release
         && !superseded_release
         && !already_installed_release
+        && !release_patch_only
         && !ugc_capped
         && !security_ungrounded
         && !version_not_affected
@@ -3555,6 +3624,9 @@ pub(crate) fn score_item(
         strongly_grounded: grounding.strong,
         version_affected: is_version_affected,
         registry_advisory,
+        release_grade: release_grade
+            .as_ref()
+            .and_then(|g| Some((g.class()?, g.necessity_reason()?))),
     };
     let mut necessity_result = necessity::compute_necessity(&necessity_inputs);
     // v33: a release you already run needs nothing from you — the "New
@@ -3632,6 +3704,9 @@ pub(crate) fn score_item(
             installed_version: installed_version.as_deref(),
             via_registry_subject: grounding.via_registry_subject,
             registry_advisory,
+            release_chain: release_grade
+                .as_ref()
+                .and_then(super::release_grade::ReleaseGrade::chain_text),
         });
     let explanation = if relevant || combined_score >= 0.3 {
         explanation_chain::render_subtitle(&explanation_factors)
@@ -5746,7 +5821,7 @@ mod tests {
     #[test]
     fn already_installed_release_is_ceilinged_not_relevant_and_needs_nothing() {
         let db = crate::test_utils::test_db();
-        db.store_dependency("/proj/app", "sha2", Some("0.11.0"), "cargo", false, None)
+        db.store_dependency("/proj/app", "sha2", Some("0.11.0"), "rust", false, None)
             .unwrap();
         let ctx = fastpath_ctx(&[("sha2", "rust")]);
         let opts = ScoringOptions {
@@ -5808,11 +5883,13 @@ mod tests {
             source_id: Some("crate-sha2"),
         };
         let r2 = score_item(&newer, &ctx, &db, &opts, None);
+        // v37: still news — and graded. 0.11 → 0.12 is a new minor below
+        // 1.0, i.e. a breaking upgrade for the one project that pins 0.11.0.
         assert_eq!(
             r2.score_breakdown
                 .as_ref()
                 .and_then(|b| b.necessity_reason.as_deref()),
-            Some("New release in your stack: sha2"),
+            Some("Breaking upgrade: sha2 0.12.0 for proj/app on 0.11.0"),
             "a newer release than the installed one is still news"
         );
         assert_eq!(
@@ -6826,3 +6903,7 @@ mod tests {
         assert!(!result.relevant);
     }
 }
+
+#[cfg(test)]
+#[path = "pipeline_v2_release_grade_tests.rs"]
+mod release_grade_tests;

@@ -164,6 +164,15 @@ const SCOPED_EPOCHS: &[(i32, &str)] = &[
     // go_modules row's registry subject changes; `source_type` is assigned at
     // ingest and never re-derived (same reasoning as v18).
     (36, "source_type IN ('go_modules','go')"),
+    // v37 — release grading + the registry-subject domain override. Both
+    // fire only on a registry row whose subject grounds to the user's
+    // dependency, so every affected item is a registry source (same list and
+    // reasoning as v18).
+    (
+        37,
+        "source_type IN ('npm_registry','npm','crates_io','crates','pypi',\
+     'go_modules','go','maven','nuget','packagist','rubygems','cocoapods')",
+    ),
 ];
 
 /// Promote stale items that the registered epoch predicates prove unaffected,
