@@ -29,6 +29,7 @@ struct Fixture {
     installed_version: Option<String>,
     via_registry_subject: bool,
     registry_advisory: bool,
+    release_chain: Option<(String, String)>,
 }
 
 impl Default for Fixture {
@@ -59,6 +60,7 @@ impl Default for Fixture {
             installed_version: None,
             via_registry_subject: false,
             registry_advisory: false,
+            release_chain: None,
         }
     }
 }
@@ -91,6 +93,7 @@ impl Fixture {
             installed_version: self.installed_version.as_deref(),
             via_registry_subject: self.via_registry_subject,
             registry_advisory: self.registry_advisory,
+            release_chain: self.release_chain.clone(),
         }
     }
 

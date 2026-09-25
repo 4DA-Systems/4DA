@@ -84,6 +84,11 @@ pub(crate) struct ChainInputs<'a> {
     /// rendered for an npm-worm story whose only link to react was the words
     /// "React Query Codegen" in its title.
     pub registry_advisory: bool,
+    /// v37: the graded release's (headline, evidence) — which projects the
+    /// release concerns, on which versions (`release_grade::chain_text`).
+    /// Replaces the ungraded "Release of your dependency X (direct, installed
+    /// vN)" line, which named one installed copy and no project.
+    pub release_chain: Option<(String, String)>,
 }
 
 /// Word-boundary-aware topic match (same rule the score path applies): the
@@ -281,23 +286,30 @@ pub(crate) fn build_explanation_chain(inp: &ChainInputs<'_>) -> Vec<ExplanationF
         for n in &names {
             used_topics.push(n.to_lowercase());
         }
-        // Registry-subject releases get the honest, stronger claim: the item
-        // IS a release of the user's dependency, not merely text naming it.
-        let (display, evidence_tail) = if inp.via_registry_subject {
-            (
+        // A graded registry release (v37) names the projects it concerns and
+        // their pinned versions; the grade already carries its evidence.
+        let graded = inp
+            .release_chain
+            .as_ref()
+            .filter(|_| inp.via_registry_subject);
+        let (display, evidence) = match graded {
+            Some((display, evidence)) => (display.clone(), evidence.clone()),
+            // Registry-subject releases get the honest, stronger claim: the
+            // item IS a release of the user's dependency, not merely text
+            // naming it.
+            None if inp.via_registry_subject => (
                 format!("Release of your {noun} {}", names.join(", ")),
-                "the subject of this release",
-            )
-        } else {
-            (
+                format!("{evidence} \u{2014} the subject of this release"),
+            ),
+            None => (
                 format!("Names your {noun} {}", names.join(", ")),
-                "named in the item text",
-            )
+                format!("{evidence} \u{2014} named in the item text"),
+            ),
         };
         factors.push(WeightedFactor {
             kind: FactorKind::DependencyMatch,
             display,
-            evidence: format!("{evidence} \u{2014} {evidence_tail}"),
+            evidence,
             weight: inp.dep_match_score,
         });
     }

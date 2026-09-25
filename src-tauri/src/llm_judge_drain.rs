@@ -178,6 +178,19 @@ async fn run_drain_with(
 ) -> DrainSummary {
     let mut summary = DrainSummary::default();
 
+    // Phase 0 — a pending PROMOTION of a dependency release is resolved
+    // without a judge, ahead of terminal exhaustion. Against such a flip the
+    // pipeline's call stands (AD-048, `guard_dependency_release`), so the
+    // queue could only delay it: measured on a copy of the founder corpus
+    // (2026-09-25, v37 activation), graded breaking upgrades such as
+    // `fastembed v7.1.0` sat pending behind a 272-row, oldest-first backlog
+    // drained 24 per cycle — and an UNCERTAIN reading escalates, which
+    // after `MAX_DRAIN_ATTEMPTS` resolves to a rejection the guard never
+    // sees. Twin-checked like every promotion; the current score must
+    // still clear the feed line.
+    let promoted_now = promote_pending_dependency_releases(db);
+    summary.promoted += promoted_now.len();
+
     let backlog = match db.get_pending_verdict_backlog(EXHAUST_SCAN_LIMIT) {
         Ok(rows) => rows,
         Err(e) => {
@@ -186,6 +199,7 @@ async fn run_drain_with(
         }
     };
     if backlog.is_empty() {
+        log_summary(db, &summary);
         return summary;
     }
 
@@ -419,6 +433,49 @@ async fn run_drain_with(
 
     log_summary(db, &summary);
     summary
+}
+
+/// Phase 0 of the drain: apply every pending promotion of a dependency
+/// release that still clears the feed line (see the call site). Returns the
+/// ids promoted into the feed; a twin of an already-curated story is written
+/// `duplicate_curated` instead, and a failed twin check leaves the marker for
+/// the judge lanes.
+fn promote_pending_dependency_releases(db: &Database) -> Vec<i64> {
+    let ids = match db
+        .pending_dependency_release_promotions(crate::get_relevance_threshold(), EXHAUST_SCAN_LIMIT)
+    {
+        Ok(ids) => ids,
+        Err(e) => {
+            warn!(target: "4da::verdict_drain", error = %e, "Dependency-release promotion lookup failed");
+            return Vec::new();
+        }
+    };
+    let mut verdicts: Vec<(i64, bool, VerdictSource, Option<VerdictReason>)> = Vec::new();
+    let mut promoted = Vec::new();
+    for id in ids {
+        match db.curated_twin_of_item(id) {
+            Ok(Some(_)) => verdicts.push((
+                id,
+                false,
+                VerdictSource::Score,
+                Some(VerdictReason::DuplicateCurated),
+            )),
+            Ok(None) => {
+                verdicts.push((id, true, VerdictSource::Score, None));
+                promoted.push(id);
+            }
+            Err(e) => {
+                warn!(target: "4da::verdict_drain", error = %e, item_id = id, "Twin check failed — dependency release left pending");
+            }
+        }
+    }
+    if let Err(e) =
+        db.persist_feed_verdicts_with_reasons(&verdicts, crate::scoring::PIPELINE_VERSION)
+    {
+        warn!(target: "4da::verdict_drain", error = %e, "Dependency-release promotions failed");
+        return Vec::new();
+    }
+    promoted
 }
 
 /// The relevance an ALREADY-STORED ingest-lane judgment supplies for this

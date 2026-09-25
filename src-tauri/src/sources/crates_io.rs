@@ -30,6 +30,11 @@ struct CrateInfo {
     name: String,
     description: Option<String>,
     max_version: Option<String>,
+    /// The newest non-prerelease version. `max_version` includes prereleases,
+    /// so a crate on a 3.0 alpha train (tauri, 2026-09-24) reported the alpha
+    /// and never the stable 2.11.6 the user's projects actually run.
+    #[serde(default)]
+    max_stable_version: Option<String>,
     downloads: Option<u64>,
     updated_at: Option<String>,
     #[serde(default)]
@@ -53,6 +58,17 @@ struct CrateVersion {
 /// re-ingested as new.
 pub(crate) fn release_source_id(name: &str, version: &str) -> String {
     format!("crate-{name}@{version}")
+}
+
+/// The release a crate item reports: the newest STABLE version, else (a crate
+/// that has only ever published prereleases) the newest version of any kind.
+fn release_version_of(krate: &CrateInfo) -> &str {
+    krate
+        .max_stable_version
+        .as_deref()
+        .filter(|v| !v.is_empty())
+        .or(krate.max_version.as_deref())
+        .unwrap_or("unknown")
 }
 
 const USER_AGENT: &str = "4DA-Developer-OS/1.0 (https://4da.ai)";
@@ -152,11 +168,7 @@ impl CratesIoSource {
             .krate
             .ok_or_else(|| SourceError::Parse(format!("Missing crate data for {name}")))?;
 
-        let version = krate
-            .max_version
-            .as_deref()
-            .unwrap_or("unknown")
-            .to_string();
+        let version = release_version_of(&krate).to_string();
 
         let title = format!("crates.io: {} v{}", krate.name, version);
         let crate_url = format!("https://crates.io/crates/{}/{}", krate.name, version);
@@ -392,6 +404,30 @@ mod tests {
         assert!(!versions[0].yanked);
         assert!(versions[2].yanked);
         assert_eq!(versions[2].num, "1.0.100");
+    }
+
+    /// Live 2026-09-24: `max_version` reported tauri 3.0.0-alpha.2 (and six
+    /// plugin alphas) while every project ran the stable 2.11.x line, so the
+    /// stable releases the user needed were never harvested.
+    #[test]
+    fn the_reported_release_is_the_newest_stable_one() {
+        let alpha_train = r#"{"crate": {"name": "tauri",
+            "max_version": "3.0.0-alpha.2", "max_stable_version": "2.11.6"}}"#;
+        let data: CratesIoResponse = serde_json::from_str(alpha_train).unwrap();
+        assert_eq!(release_version_of(&data.krate.unwrap()), "2.11.6");
+
+        let prerelease_only = r#"{"crate": {"name": "fresh",
+            "max_version": "0.1.0-rc.1", "max_stable_version": null}}"#;
+        let data: CratesIoResponse = serde_json::from_str(prerelease_only).unwrap();
+        assert_eq!(
+            release_version_of(&data.krate.unwrap()),
+            "0.1.0-rc.1",
+            "a crate with no stable release still reports its newest"
+        );
+
+        let legacy = r#"{"crate": {"name": "serde", "max_version": "1.0.215"}}"#;
+        let data: CratesIoResponse = serde_json::from_str(legacy).unwrap();
+        assert_eq!(release_version_of(&data.krate.unwrap()), "1.0.215");
     }
 
     #[test]
