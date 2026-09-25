@@ -196,6 +196,17 @@ impl ReleaseGrade {
         }
     }
 
+    /// A breaking upgrade (or a yanked pin) for a project that declares the
+    /// package as a RUNTIME dependency: the case that should change what a
+    /// project does, so it always reaches the feed. A dev-only pin (a test
+    /// runner, a linter) is tooling news, left to its score.
+    pub(crate) fn actionable_runtime(&self) -> bool {
+        matches!(
+            self.class(),
+            Some(ReleaseClass::Breaking | ReleaseClass::Yanked)
+        ) && self.concerned_pins().iter().any(|p| !p.is_dev)
+    }
+
     /// The projects the class is about: the yanked ones for `Yanked`, else
     /// the direct projects carrying the largest gap. Sorted, de-duplicated.
     pub(crate) fn concerned_pins(&self) -> Vec<&ProjectPin> {

@@ -333,3 +333,70 @@ fn every_class_is_reachable_from_the_pipeline_inputs() {
     );
     assert_eq!(g.class(), Some(release_grade::ReleaseClass::Breaking));
 }
+
+/// Live E2E 2026-09-25: `npm: stripe v22.6.2` for the site (pinned 20.3.1,
+/// two majors behind) scored 0.396 — under the line. A breaking upgrade of a
+/// RUNTIME dependency always reaches the feed; a dev-only pin does not get
+/// the floor.
+#[test]
+fn a_breaking_upgrade_of_a_runtime_dependency_always_reaches_the_feed() {
+    let zero = vec![0.0_f32; crate::EMBEDDING_DIMS];
+    let published = chrono::Utc::now() - chrono::Duration::days(2);
+    let input = |source_id: &'static str| ScoringInput {
+        id: 1,
+        title: "crates.io: paycrate v22.6.2",
+        url: Some("https://crates.io/crates/paycrate"),
+        content: "Client library.",
+        source_type: "crates_io",
+        embedding: &zero,
+        created_at: Some(&published),
+        detected_lang: "en",
+        source_tags: &[],
+        tags_json: None,
+        feed_origin: None,
+        source_id: Some(source_id),
+    };
+    let ctx = ctx_with(&["paycrate"], &["rust"]);
+    let floor = get_relevance_threshold() + scoring_config::RELEASE_GRADE_BREAKING_FLOOR_MARGIN;
+
+    let db = crate::test_utils::test_db();
+    db.store_dependency(
+        "/proj/site",
+        "paycrate",
+        Some("20.3.1"),
+        "rust",
+        false,
+        None,
+    )
+    .unwrap();
+    let r = score_item(&input("crate-paycrate@22.6.2"), &ctx, &db, &opts(), None);
+    assert!(r.relevant, "a runtime breaking upgrade is feed-relevant");
+    assert!(
+        r.top_score >= floor - 1e-4,
+        "floored above the line (got {})",
+        r.top_score
+    );
+
+    let dev_db = crate::test_utils::test_db();
+    dev_db
+        .store_dependency("/proj/site", "paycrate", Some("20.3.1"), "rust", true, None)
+        .unwrap();
+    let dev = score_item(
+        &input("crate-paycrate@22.6.2"),
+        &ctx,
+        &dev_db,
+        &opts(),
+        None,
+    );
+    assert_eq!(
+        breakdown(&dev).necessity_category.as_deref(),
+        Some("breaking_change"),
+        "still graded breaking"
+    );
+    assert!(
+        dev.top_score < floor - 1e-4,
+        "a dev-only pin is left to its own score, never lifted by the floor (got {})",
+        dev.top_score
+    );
+    assert!(!dev.relevant);
+}

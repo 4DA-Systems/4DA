@@ -422,6 +422,11 @@ release_grade {
     # news on its own; security fixes arrive through the advisory lanes.
     # The verdict is gated too, for the superseded_ceiling arithmetic reason.
     patch_ceiling: 0.35         # [0.20, 0.37]
+    # A breaking upgrade (or a yanked pin) of a RUNTIME dependency always
+    # reaches the feed, floored this far above the live relevance line so it
+    # ranks consistently. Live E2E 2026-09-25: stripe 22.6 for the site
+    # (pinned 20.3.1, two majors behind) scored 0.396, under the line.
+    breaking_floor_margin: 0.05 # [0.03, 0.15]
 }
 
 # Community quality signal thresholds - extracted from source metadata

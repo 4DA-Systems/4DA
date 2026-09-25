@@ -3460,6 +3460,23 @@ pub(crate) fn score_item(
         Some(ceiling) => combined_score.min(ceiling),
         None => combined_score,
     };
+    // v37: a breaking upgrade (or a yanked pin) of a RUNTIME dependency is
+    // the release that should change what a project does — deterministic
+    // evidence (registry subject + pinned version), so it is feed-relevant
+    // and floored just above the live line. A row carrying any ceiling
+    // (superseded, already installed, a language mismatch cap) is never
+    // floored; its gates below still apply.
+    let release_act = score_ceiling.is_none()
+        && !lang_mismatch
+        && release_grade
+            .as_ref()
+            .is_some_and(super::release_grade::ReleaseGrade::actionable_runtime);
+    let combined_score = if release_act {
+        combined_score
+            .max(get_relevance_threshold() + scoring_config::RELEASE_GRADE_BREAKING_FLOOR_MARGIN)
+    } else {
+        combined_score
+    };
 
     // ── Relevance determination ───────────────────────────────────────
     // The bootstrap relaxation (1 signal while feedback_interaction_count
@@ -3513,6 +3530,7 @@ pub(crate) fn score_item(
         && !security_ungrounded
         && !version_not_affected
         && ((critical_fast_path && !lang_mismatch)  // Critical items always relevant
+            || release_act // a breaking upgrade of a runtime dependency (v37)
             || (combined_score >= get_relevance_threshold()
                 && (signal_count >= min_signals
                     || combined_score >= scoring_config::QUALITY_FLOOR_MIN_SCORE)));
