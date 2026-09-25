@@ -364,7 +364,7 @@ fn try_security_path(
 /// - new minor → `EcosystemShift`, awareness, at the stack-update score;
 /// - patch or transitive-only → a low awareness score (security fixes reach
 ///   the user through the advisory lanes, not the release row);
-/// - prerelease → the same low awareness score.
+/// - prerelease → the same low awareness score (the row leaves the feed).
 fn try_release_grade_path(
     inputs: &NecessityInputs,
 ) -> Option<(f32, String, NecessityCategory, Urgency)> {

@@ -220,7 +220,7 @@ fn a_new_minor_ranks_below_a_breaking_upgrade() {
 /// Live 2026-09-24: seven `tauri 3.0.0-alpha` rows at 0.90 above every
 /// stable release of the user's dependencies.
 #[test]
-fn a_prerelease_is_capped_below_stable_minors() {
+fn a_prerelease_leaves_the_feed() {
     let db = crate::test_utils::test_db();
     db.store_dependency("/proj/app", "tauri", Some("2.11.6"), "rust", false, None)
         .unwrap();
@@ -232,6 +232,7 @@ fn a_prerelease_is_capped_below_stable_minors() {
     );
     let r = score_item(&row.input(), &ctx, &db, &opts(), None);
     let b = breakdown(&r);
+    assert!(!r.relevant, "one registry row per plugin alpha is not news");
     assert!(b
         .score_ceiling
         .is_some_and(
@@ -318,6 +319,7 @@ fn every_class_is_reachable_from_the_pipeline_inputs() {
     // (a patch must never reach the 0.40 line with the post-ceiling offset).
     const {
         assert!(scoring_config::RELEASE_GRADE_PATCH_CEILING <= 0.37);
+        assert!(scoring_config::RELEASE_GRADE_PRERELEASE_CEILING <= 0.37);
         assert!(
             scoring_config::RELEASE_GRADE_MINOR_CEILING
                 > scoring_config::RELEASE_GRADE_PRERELEASE_CEILING

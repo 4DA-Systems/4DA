@@ -3185,12 +3185,19 @@ pub(crate) fn score_item(
             // A yanked pin is news even when it is the newest version.
             && release_class != Some(super::release_grade::ReleaseClass::Yanked)
             && release_already_installed(db, input, &raw.matched_deps);
-    // v37: a patch (or a release only transitive copies are behind on) is not
-    // news on its own — security fixes reach the user through the advisory
-    // lanes, not the release row. Gated like a superseded release, for the
-    // same v18 arithmetic reason (a score ceiling alone is re-opened by the
-    // post-ceiling offset).
-    let release_patch_only = release_class == Some(super::release_grade::ReleaseClass::Patch);
+    // v37: a patch (or a release only transitive copies are behind on) and a
+    // prerelease are not news on their own — security fixes reach the user
+    // through the advisory lanes, and a prerelease announcement through
+    // editorial coverage, not one registry row per package. Gated like a
+    // superseded release, for the same v18 arithmetic reason (a score
+    // ceiling alone is re-opened by the post-ceiling offset).
+    let release_below_line = matches!(
+        release_class,
+        Some(
+            super::release_grade::ReleaseClass::Patch
+                | super::release_grade::ReleaseClass::Prerelease
+        )
+    );
     // v30: the source class decides whether an ungrounded advisory is a
     // registry row (gated) or an editorial story (decided by score).
     let registry_advisory = is_registry_advisory_source(input.source_type);
@@ -3430,8 +3437,8 @@ pub(crate) fn score_item(
                 + scoring_config::SCORE_OFFSET_NEGATIVE_FLOOR,
         );
         // v37 release grade: a breaking upgrade (or a yanked pin) keeps its
-        // score; a new minor ranks below it, a prerelease below that, and a
-        // patch leaves the feed (verdict gated below).
+        // score; a new minor ranks below it; a patch and a prerelease leave
+        // the feed (verdict gated below).
         let graded = {
             use super::release_grade::ReleaseClass;
             match release_class {
@@ -3501,7 +3508,7 @@ pub(crate) fn score_item(
     let relevant = !ungrounded_registry_release
         && !superseded_release
         && !already_installed_release
-        && !release_patch_only
+        && !release_below_line
         && !ugc_capped
         && !security_ungrounded
         && !version_not_affected

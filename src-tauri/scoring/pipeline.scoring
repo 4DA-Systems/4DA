@@ -413,8 +413,11 @@ stale_content {
 release_grade {
     # A new minor is worth knowing, and ranks below a breaking upgrade.
     minor_ceiling: 0.78         # [0.60, 0.90]
-    # A prerelease is awareness: below every stable minor of the same line.
-    prerelease_ceiling: 0.55    # [0.42, 0.70]
+    # A prerelease leaves the feed like a patch: crates.io now reports the
+    # newest STABLE release, so a registry prerelease row is legacy or a
+    # prerelease-only crate, and one plugin family's alpha train was seven
+    # rows (live 2026-09-25). Editorial coverage carries the announcement.
+    prerelease_ceiling: 0.35    # [0.20, 0.37]
     # A patch (or a release only transitive copies are behind on) is not
     # news on its own; security fixes arrive through the advisory lanes.
     # The verdict is gated too, for the superseded_ceiling arithmetic reason.
