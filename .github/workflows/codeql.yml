@@ -75,3 +75,81 @@ jobs:
         uses: github/codeql-action/analyze@1c5b675653bb5c22dbe9b12b556ec555138e09fd # v4.38.1
         with:
           category: /language:${{ matrix.language }}
+
+  # ─────────────────────────────────────────────────────────────────────
+  # main-alert: CodeQL findings used to block a merge only through the ruleset's
+  # review-thread rule, which works when CodeQL comments on the PR BEFORE the
+  # merge. Rust analysis takes ~16 min on a PR. Since 2026-09-26 a PR can merge
+  # in ~15-20 min, so the comment can land after the merge, and nothing watched
+  # main for alerts (0 open at the time of writing, none monitored).
+  #
+  # After every push-to-main (and the weekly scan) this keeps ONE issue,
+  # labelled `codeql-main`, open while any code-scanning alert is open, and
+  # closes it when the count returns to zero. The baseline is zero, so an open
+  # issue always means a finding that reached main. It lists each alert with
+  # its rule and location.
+  # ─────────────────────────────────────────────────────────────────────
+  main-alert:
+    name: main code-scanning alert
+    needs: [analyze]
+    if: ${{ always() && !cancelled() && (github.event_name == 'push' || github.event_name == 'schedule') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+      security-events: read
+    steps:
+      - name: Open, update or close the codeql-main issue
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v7
+        env:
+          ANALYZE_RESULT: ${{ needs.analyze.result }}
+        with:
+          script: |
+            const LABEL = 'codeql-main';
+            const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+            const sha = context.sha.slice(0, 8);
+            // An analysis that failed has uploaded nothing new, so the alert
+            // list would describe an older commit. Say so instead of reporting
+            // that main is clean.
+            if (process.env.ANALYZE_RESULT !== 'success') {
+              core.warning(`CodeQL analysis did not succeed (${process.env.ANALYZE_RESULT}); alert state not updated`);
+              return;
+            }
+            const alerts = await github.paginate(github.rest.codeScanning.listAlertsForRepo, {
+              ...context.repo, state: 'open', ref: 'refs/heads/main', per_page: 100,
+            });
+            const { data: open } = await github.rest.issues.listForRepo({
+              ...context.repo, state: 'open', labels: LABEL, per_page: 10,
+            });
+            const issue = open[0];
+            if (alerts.length === 0) {
+              if (issue) {
+                await github.rest.issues.createComment({ ...context.repo, issue_number: issue.number,
+                  body: `Resolved: no open code-scanning alerts on main at ${sha}. ${runUrl}` });
+                await github.rest.issues.update({ ...context.repo, issue_number: issue.number, state: 'closed', state_reason: 'completed' });
+                core.info(`Closed #${issue.number}`);
+              }
+              return;
+            }
+            const lines = [
+              `## ${alerts.length} open code-scanning alert(s) on main at \`${sha}\``,
+              '',
+              'A finding reached main. Fix it, or dismiss it with a written reason in the Security tab. This issue closes itself when none are open.',
+              '',
+            ];
+            for (const a of alerts.slice(0, 50)) {
+              const loc = a.most_recent_instance?.location;
+              const sev = a.rule?.security_severity_level || a.rule?.severity || 'n/a';
+              lines.push(`- [#${a.number}](${a.html_url}) **${sev}** \`${a.rule?.id}\` at \`${loc?.path}:${loc?.start_line}\``);
+            }
+            lines.push('', runUrl);
+            const body = lines.join('\n');
+            if (issue) {
+              await github.rest.issues.createComment({ ...context.repo, issue_number: issue.number, body });
+              core.info(`Updated #${issue.number}`);
+            } else {
+              const { data } = await github.rest.issues.create({ ...context.repo,
+                title: `Code scanning: ${alerts.length} open alert(s) on main`, body, labels: [LABEL] });
+              core.info(`Opened #${data.number}`);
+            }
