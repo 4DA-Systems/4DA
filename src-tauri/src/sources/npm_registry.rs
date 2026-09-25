@@ -377,7 +377,14 @@ fn package_to_source_item(package_name: &str, info: &NpmPackageInfo) -> SourceIt
         metadata["version_count"] = serde_json::json!(version_count);
     }
 
-    let npm_url = format!("https://www.npmjs.com/package/{name}");
+    // The release's own page: every release of a package shared the
+    // package-page URL, so the duplicate rule read each new release as a
+    // copy of the first one curated.
+    let npm_url = if latest_version == "unknown" {
+        format!("https://www.npmjs.com/package/{name}")
+    } else {
+        format!("https://www.npmjs.com/package/{name}/v/{latest_version}")
+    };
     let source_id = format!("{name}@{latest_version}");
 
     SourceItem::new("npm_registry", &source_id, &title)
@@ -439,7 +446,7 @@ mod tests {
         assert_eq!(item.title, "npm: vite v6.2.0");
         assert_eq!(
             item.url,
-            Some("https://www.npmjs.com/package/vite".to_string())
+            Some("https://www.npmjs.com/package/vite/v/6.2.0".to_string())
         );
         assert!(item.content.contains("Next generation frontend tooling"));
         assert!(item

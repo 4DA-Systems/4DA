@@ -608,6 +608,21 @@ pub(crate) fn registry_title_subject(title: &str) -> Option<(String, Option<Stri
     Some((name, version))
 }
 
+/// The release a registry-row title names — `("vitest", Some("5.0.2"))`
+/// from `npm: vitest v5.0.2` — or `None` for any title without a registry
+/// prefix. Two rows are the same release only when these agree: a registry
+/// URL is not a release identity (npm rows point at the versionless package
+/// page, PyPI rows at the project homepage), so on URL alone every release
+/// of a package looked like a copy of the first one curated.
+pub(crate) fn registry_release_identity(title: &str) -> Option<(String, Option<String>)> {
+    const PREFIXES: &[&str] = &["npm: ", "crates.io: ", "PyPI: ", "Go: "];
+    if !PREFIXES.iter().any(|p| title.starts_with(p)) {
+        return None;
+    }
+    registry_title_subject(title)
+        .map(|(name, version)| (name.to_lowercase().replace('_', "-"), version))
+}
+
 /// crates.io treats `-` and `_` as one namespace; npm names are exact but
 /// the comparison is case-insensitive.
 pub(crate) fn registry_names_equal(a: &str, b: &str) -> bool {

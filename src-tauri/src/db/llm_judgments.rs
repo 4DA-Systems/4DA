@@ -58,6 +58,15 @@ pub(crate) fn dependency_release_sql(alias: &str) -> String {
     )
 }
 
+/// [`dependency_release_sql`] for an in-memory scoring result, before its
+/// explanation is persisted — the rerank pass's form of the same guard.
+pub(crate) fn is_dependency_release(result: &crate::SourceRelevance) -> bool {
+    crate::dep_linker::is_registry_source(&result.source_type)
+        && result.score_breakdown.as_ref().is_some_and(|b| {
+            b.content_type.as_deref() == Some("release_notes") && !b.matched_deps.is_empty()
+        })
+}
+
 /// A curated feed item whose fresh judgment argues for demotion
 /// (see `llm_judgments::apply_judgment_demotions`).
 #[derive(Debug, Clone)]
@@ -336,6 +345,49 @@ fn map_judgment_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<StoredJudgment>
 mod tests {
     use super::*;
     use crate::test_utils::test_db;
+
+    fn scored(source_type: &str, content_type: &str, deps: &[&str]) -> crate::SourceRelevance {
+        let mut r: crate::SourceRelevance = serde_json::from_value(serde_json::json!({
+            "id": 1, "title": "t", "url": null, "top_score": 0.8,
+            "matches": [], "relevant": true, "source_type": source_type,
+        }))
+        .expect("SourceRelevance from JSON");
+        r.score_breakdown = Some(
+            serde_json::from_value(serde_json::json!({
+                "context_score": 0.0, "interest_score": 0.0, "ace_boost": 0.0,
+                "affinity_mult": 1.0, "anti_penalty": 0.0, "confidence_by_signal": {},
+                "content_type": content_type, "matched_deps": deps,
+            }))
+            .expect("ScoreBreakdown from JSON"),
+        );
+        r
+    }
+
+    /// The rerank pass's in-memory guard agrees with `dependency_release_sql`:
+    /// a registry release of a matched dependency, and nothing editorial.
+    #[test]
+    fn in_memory_dependency_release_matches_the_sql_guard() {
+        assert!(is_dependency_release(&scored(
+            "crates_io",
+            "release_notes",
+            &["sha2"]
+        )));
+        assert!(!is_dependency_release(&scored(
+            "crates_io",
+            "release_notes",
+            &[]
+        )));
+        assert!(!is_dependency_release(&scored(
+            "hackernews",
+            "release_notes",
+            &["sha2"]
+        )));
+        assert!(!is_dependency_release(&scored(
+            "npm_registry",
+            "discussion",
+            &["vite"]
+        )));
+    }
 
     #[test]
     fn upsert_and_retrieve_judgment() {

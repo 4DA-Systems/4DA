@@ -485,6 +485,13 @@ impl Database {
     /// erasing the story from the feed. Anchoring on ingest order makes the
     /// outcome stable across drains: the first copy keeps the slot, every
     /// later copy yields to it.
+    ///
+    /// A shared URL makes two registry rows twins only when their titles
+    /// name the same release (`dep_linker::registry_release_identity`), and
+    /// never makes a registry row the twin of an editorial one. npm rows all
+    /// point at the package page, so `npm: vitest v5.0.2` yielded to the
+    /// curated `v4.1.10` and a major upgrade never reached the feed (live
+    /// 2026-09-26: vitest 4.1.11, 5.0.0, 5.0.1, 5.0.2).
     pub fn find_curated_twin(
         &self,
         id: i64,
@@ -498,6 +505,7 @@ impl Database {
         if url_key.is_empty() && title_key.is_empty() {
             return Ok(None);
         }
+        let release = crate::dep_linker::registry_release_identity(title);
         let url_prefix = url
             .map(|u| u.split(['?', '#']).next().unwrap_or(u).to_string())
             .unwrap_or_default();
@@ -519,6 +527,7 @@ impl Database {
         for row in rows {
             let (other_id, other_url, other_title) = row?;
             let same_url = !url_key.is_empty()
+                && crate::dep_linker::registry_release_identity(&other_title) == release
                 && other_url
                     .as_deref()
                     .is_some_and(|u| crate::scoring::normalize_result_url(u) == url_key);
