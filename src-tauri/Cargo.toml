@@ -206,6 +206,9 @@ required-features = ["ocr"]
 
 [dev-dependencies]
 tempfile = "3"
+# `trace` lets tests assert which SQL a code path runs (ace/init_tests.rs).
+# Test builds only; the shipped binary keeps the plain `bundled` feature set.
+rusqlite = { version = "0.32", features = ["bundled", "trace"] }
 criterion = { version = "0.5", features = ["html_reports"] }
 victauri-test = "0.8"
 # `test-util` gives tests tokio's virtual clock (`#[tokio::test(start_paused)]`),
