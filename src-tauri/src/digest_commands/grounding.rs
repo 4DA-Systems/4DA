@@ -98,17 +98,20 @@ fn version_note(installed: Option<&str>, fixed: Option<&str>, osv_verified: bool
 /// The scope clause of one CONFIRMED SECURITY line. A transitive package is
 /// fixed by updating its parent or refreshing the lockfile; the 2026-09-25
 /// briefs told the user to bump nanoid and quick-xml directly, and neither is
-/// in a manifest. Unknown scope adds nothing.
-fn scope_note(is_direct: Option<bool>, is_dev: Option<bool>) -> String {
+/// in a manifest. Unknown scope adds nothing. Without a fix the clause says
+/// only "transitive": "fixed by updating the parent" beside "no fix
+/// published" contradicts itself (the `fs` line, 2026-09-26).
+fn scope_note(is_direct: Option<bool>, is_dev: Option<bool>, has_fix: bool) -> String {
     let dev = if is_dev == Some(true) {
         "dev-only, "
     } else {
         ""
     };
     match is_direct {
-        Some(false) => format!(
+        Some(false) if has_fix => format!(
             " [{dev}transitive: fixed by updating the parent package or refreshing the lockfile, not by a manifest bump]"
         ),
+        Some(false) => format!(" [{dev}transitive]"),
         Some(true) => format!(" [{dev}direct dependency]"),
         None if is_dev == Some(true) => " [dev-only]".to_string(),
         None => String::new(),
@@ -180,7 +183,7 @@ pub(super) fn build_grounded_security_section() -> String {
             a.installed_version.as_deref(),
             a.fixed_version.as_deref(),
             a.osv_verified,
-        ) + &scope_note(a.is_direct, a.is_dev);
+        ) + &scope_note(a.is_direct, a.is_dev, a.fixed_version.is_some());
         // The only honest age: when 4DA first held the advisory. The model
         // otherwise invented one and incremented it every brief (2026-09-07).
         let first_seen = advisory_first_seen(a)
@@ -261,15 +264,16 @@ mod tests {
 
     #[test]
     fn transitive_scope_says_how_the_fix_arrives() {
-        let transitive = scope_note(Some(false), Some(false));
+        assert_eq!(scope_note(Some(false), None, false), " [transitive]");
+        let transitive = scope_note(Some(false), Some(false), true);
         assert!(transitive.contains("transitive"));
         assert!(transitive.contains("not by a manifest bump"));
         assert_eq!(
-            scope_note(Some(true), Some(true)),
+            scope_note(Some(true), Some(true), true),
             " [dev-only, direct dependency]"
         );
-        assert_eq!(scope_note(None, Some(true)), " [dev-only]");
-        assert_eq!(scope_note(None, None), "");
+        assert_eq!(scope_note(None, Some(true), true), " [dev-only]");
+        assert_eq!(scope_note(None, None, false), "");
     }
 
     #[test]
