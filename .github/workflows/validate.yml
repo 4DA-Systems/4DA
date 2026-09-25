@@ -962,16 +962,20 @@ jobs:
       # entry. That rebuilds whatever is queued behind it, a cost that stays
       # small while the queue rarely holds more than one or two entries.
       # workflow_dispatch and schedule still run everything.
-      - name: Compile-gate (cargo test --no-run)
-        if: github.event_name != 'pull_request'
-        # Fast-fail if the test binary stops compiling, before the slow test run.
-        #
-        # `--tests` (not `--lib`): cargo's `--tests` selects every target with
-        # `test = true` — lib unittests, bin unittests AND the integration tests
-        # under src-tauri/tests/. Under the old `--lib` scope the integration
-        # suite was never compiled by this job, so it could rot undetected.
-        run: cargo test --tests ${{ matrix.cargo-features }} --no-run
-
+      # ONE cargo invocation compiles and runs the tests. A separate
+      # `cargo test --no-run` step used to run first, and it made the test step
+      # rebuild the whole fourda crate a second time: 2m04s + 2m14s on the
+      # default leg, 4-6 min on the feature legs (2026-09-25, pr-739 entry).
+      # Cargo's fingerprint log (trial run on ci/trial-fingerprint) gave the
+      # reason. Tauri's `generate_context!` rewrites an embedded-asset file under
+      # the build script's OUT_DIR mid-compile, so it is always newer than the
+      # compile that just produced it, and the NEXT cargo command sees the crate
+      # as stale. The env vars below were never the cause. A compile failure
+      # still fails this step before any test runs.
+      #
+      # `--tests` (not `--lib`): cargo's `--tests` selects every target with
+      # `test = true` — lib unittests, bin unittests AND the integration tests
+      # under src-tauri/tests/.
       - name: Run tests (unit + integration) and verify count floor
         if: github.event_name != 'pull_request'
         # Was `--lib`, which silently excluded every one of the 154 real

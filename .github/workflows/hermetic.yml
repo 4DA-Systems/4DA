@@ -56,10 +56,15 @@ on:
   # What replaces the gate: every push to main still runs the full canary
   # (below), and `main-alert` turns a red push or nightly run into an open
   # issue within ~25 min of the merge. Windows breakage is caught just after
-  # the merge instead of just before. PRs touching code still get an early,
-  # non-blocking run.
-  pull_request:
-    branches: [main]
+  # the merge instead of just before.
+  #   - 2026-09-26 (later): the pull_request trigger went too. Once the gate
+  #     was gone, a PR run could not stop anything: auto-merge queues a PR ~5 min
+  #     after it opens and the queue merges it ~10-12 min later, while this cold
+  #     build takes 20-25 min. Every code PR still paid 3 jobs against the
+  #     20-job cap for a result that arrived after the merge, and that is the
+  #     cap that delays queue entries. The push-to-main run checks the same
+  #     code minutes later. To check a branch before merging, dispatch this
+  #     workflow on it (`gh workflow run hermetic.yml --ref <branch>`).
   push:
     branches: [main]
   schedule:
@@ -69,17 +74,15 @@ on:
   workflow_dispatch: {}
 
 # Least privilege, stated explicitly (CodeQL actions/missing-workflow-permissions).
-# `pull-requests: read` is what dorny/paths-filter needs to list a PR's files.
 permissions:
   contents: read
-  pull-requests: read
 
 concurrency:
   group: hermetic-${{ github.ref }}
-  # Cancel superseded PR runs only. On main, a cancelled push run means that
-  # commit is never fresh-clone-verified at all: 8a6d5995 (#666) was cancelled
-  # by #667's push eight minutes later and has no post-merge canary result.
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  # Never cancel. On main, a cancelled push run means that commit is never
+  # fresh-clone-verified at all: 8a6d5995 (#666) was cancelled by #667's push
+  # eight minutes later and has no post-merge canary result.
+  cancel-in-progress: false
 
 env:
   CARGO_TERM_COLOR: always
@@ -87,69 +90,11 @@ env:
   NODE_OPTIONS: '--max-old-space-size=8192'
 
 jobs:
-  # On PRs, decide whether the cold fresh-clone build is worth GitHub-HOSTED
-  # minutes. A docs-only PR (markdown, plans) cannot break a fresh clone, so it
-  # skips the build entirely — this protects the shared account's metered hosted
-  # minutes (the macOS-heavy victauri builds can exhaust them). Push-to-main,
-  # the nightly schedule, and manual dispatch ALWAYS run the full canary — the
-  # whole point of Hermetic is to catch drift there, so it is never filtered.
-  changes:
-    name: Detect changes
-    # PR-only (see note in validate.yml): push/schedule/dispatch skip this and
-    # always build via fresh-clone's `github.event_name != 'pull_request'` clause.
-    # That clause only works because `fresh-clone`'s `if:` is wrapped in a status
-    # function — see the comment there. Do not remove it.
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    outputs:
-      code: ${{ steps.filter.outputs.code }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
-      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
-        id: filter
-        with:
-          filters: |
-            code:
-              - 'src/**'
-              - 'src-tauri/**'
-              - 'mcp-4da-server/**'
-              - 'package.json'
-              - 'pnpm-lock.yaml'
-              - 'index.html'
-              # vite*.config.* so 'vitest.config.ts' is covered too — it decides how
-              # every frontend test in this gate executes. Unlike validate.yml this
-              # filter has NO 'uncovered' fail-safe, so a miss here does not degrade to
-              # 'run the generic gate', it SKIPS the fresh clone outright (#603: 19s).
-              - 'vite*.config.*'
-              - 'tsconfig*.json'
-              - 'scripts/**'
-              - '.github/workflows/**'
-
   fresh-clone:
     name: Fresh clone (${{ matrix.os }})
-    needs: changes
-    # Always run on push/schedule/dispatch (the canary); on PRs, only when code
-    # that could affect a fresh clone changed. A skipped run still reports via
-    # the `Hermetic Success` aggregate below (skipped == pass).
-    #
-    # The `!cancelled()` wrapper is LOAD-BEARING, not decoration. `changes` is
-    # itself PR-only, so on push/schedule/dispatch it is SKIPPED — and GitHub
-    # skips any job whose `needs` was skipped unless that job's `if:` contains a
-    # status function (`always()` / `cancelled()` / `success()` / `failure()`).
-    # Without the wrapper the implicit `success()` on `needs` won this argument
-    # and the canary silently skipped on exactly the three triggers the comment
-    # above promises it runs on: push-to-main, the nightly cron and manual
-    # dispatch all reported "success" in 6-26 SECONDS without cloning anything
-    # (observed 2026-08-13/14: 7s, 7s, 9s vs ~19min for a real PR run). The
-    # nightly cron had never built a single fresh clone.
-    #
-    # `!cancelled()` rather than `always()`: a cancelled run should stay
-    # cancelled, not spawn a 45-minute cold build. If `changes` FAILS on a PR,
-    # `needs.changes.outputs.code` is empty, this evaluates false and the leg
-    # skips — but `hermetic-success` below takes `changes` in its own `needs`
-    # and fails on that `failure` result, so a broken detector cannot pass.
-    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.outputs.code == 'true') }}
+    # Runs on every trigger (push to main, nightly, dispatch). There is no PR
+    # trigger any more, so the PR-only path detector and the `!cancelled()`
+    # wrapper it forced on this job went with it.
     runs-on: ${{ matrix.os }}
     # Cold, cacheless build + full test suite on two platforms. Runs have
     # historically landed ~16-18 min; 45 caps a hung network fetch or a runner
@@ -265,18 +210,18 @@ jobs:
           pnpm --dir mcp-4da-server run build
           pnpm --dir mcp-4da-server run test
 
-      - name: Rust — cold compile gate (no cache, no-run)
-        # Fast-fails the build/resource class before the slow test run.
-        #
-        # `--tests` (not `--lib`): cargo's `--tests` selects every target with
-        # `test = true`, which is the lib unittests, the bin unittests AND the
-        # integration tests under src-tauri/tests/. The old `--lib` scope meant
-        # the integration suite was never even COMPILED here, so a fresh clone
-        # could not prove it builds.
-        working-directory: src-tauri
-        run: cargo test --tests --no-run
-
-      - name: Rust — hermetic tests (unit + integration, isolated data dir)
+      # Cold compile + tests in ONE cargo invocation. A separate `--no-run`
+      # compile step used to come first, and it forced a second full compile of
+      # the fourda crate here. Tauri's `generate_context!` rewrites an OUT_DIR
+      # asset mid-compile, so the next cargo command always sees the crate as
+      # stale (see validate.yml's Rust test step). A compile failure still fails
+      # this step before any test runs, so the build/resource failure class is
+      # still reported as a build failure.
+      #
+      # `--tests` (not `--lib`): cargo's `--tests` selects every target with
+      # `test = true` — lib unittests, bin unittests AND the integration tests
+      # under src-tauri/tests/, so a fresh clone proves all of them build.
+      - name: Rust — cold compile + hermetic tests (unit + integration, isolated data dir)
         working-directory: src-tauri
         env:
           # Force any data-dir resolution onto a path that holds no real DB, so
@@ -301,16 +246,15 @@ jobs:
   # ─────────────────────────────────────────────────────────────────────
   # Aggregate gate: a SINGLE status check to require in branch protection,
   # collapsing the ubuntu + windows matrix legs into one stable name. Renaming
-  # or adding an OS leg cannot silently drop it from the gate. Fails if any leg
-  # FAILED or was CANCELLED; a SKIPPED leg passes. Mirrors validate.yml's
+  # or adding an OS leg cannot silently drop it from the gate. Only `success`
+  # passes. `skipped` used to pass too, for path-filtered PR legs, and there is
+  # no PR trigger any more. Mirrors validate.yml's
   # `validate-success` and victauri's `ci-success`.
   # ─────────────────────────────────────────────────────────────────────
   hermetic-success:
     name: Hermetic Success
     if: always()
-    # `changes` included so a detector failure is caught; a path-filtered
-    # skip of `fresh-clone` reports "skipped", treated as pass below.
-    needs: [changes, fresh-clone]
+    needs: [fresh-clone]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -320,8 +264,9 @@ jobs:
           # ALLOWLIST, not a denylist — the same fix #485 made to Validate
           # Success after a Relay job reported `abandoned` and the denylist
           # (`failure|cancelled` only) passed it GREEN. GitHub emits more
-          # results than the documented four; only `success` and `skipped`
-          # (a path-filtered PR leg) may pass.
+          # results than the documented four; only `success` may pass. (A
+          # `skipped` leg once meant a path-filtered PR run. With no PR trigger, a
+          # skip here would mean the canary silently did not run.)
           results='${{ join(needs.*.result, ',') }}'
           echo "dependency results: $results"
           if [ -z "$results" ]; then
@@ -332,7 +277,7 @@ jobs:
           IFS=',' read -ra parsed <<< "$results"
           for r in "${parsed[@]}"; do
             case "$r" in
-              success|skipped) ;;
+              success) ;;
               *) bad="$bad $r" ;;
             esac
           done
@@ -340,7 +285,7 @@ jobs:
             echo "::error::a Hermetic Fresh-Clone leg did not succeed ($results) — offending results:$bad"
             exit 1
           fi
-          echo "all Hermetic Fresh-Clone legs succeeded (or were skipped as not-applicable)"
+          echo "all Hermetic Fresh-Clone legs succeeded"
 
   # ─────────────────────────────────────────────────────────────────────
   # main-alert: Hermetic no longer gates the merge queue, so a red canary on
