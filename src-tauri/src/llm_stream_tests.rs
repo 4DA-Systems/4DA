@@ -125,6 +125,19 @@ fn parse_anthropic_message_delta_output_tokens() {
 }
 
 #[test]
+fn parse_anthropic_message_delta_stop_reason() {
+    let data = r#"{"type":"message_delta","delta":{"stop_reason":"refusal","stop_sequence":null},"usage":{"output_tokens":3}}"#;
+    assert_eq!(
+        parse_anthropic_stop_reason(data).as_deref(),
+        Some("refusal")
+    );
+    // Thinking deltas on Claude 5 carry no answer text.
+    let thinking = r#"{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"hmm"}}"#;
+    assert_eq!(parse_anthropic_sse_token(thinking), None);
+    assert_eq!(parse_anthropic_stop_reason(thinking), None);
+}
+
+#[test]
 fn parse_anthropic_ignores_non_delta_events() {
     let data = r#"{"type":"message_stop"}"#;
     assert_eq!(parse_anthropic_sse_token(data), None);

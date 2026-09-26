@@ -134,7 +134,11 @@ pub fn persist_upgrade_plan(
 /// raw SQL (it deliberately does not link `fourda_lib`), so it does NOT call this
 /// `Database`-based reader. This fn's production caller is the in-app Phase-2a
 /// reader (operator-gated), still pending.
-#[allow(dead_code)] // REMOVE BY 2026-10-01 — wired by the in-app Phase-2a reader
+// Moved 2026-09-24 from 2026-10-01: the in-app Phase-2a reader that wires this
+// is still operator-gated, and deleting a tested, fail-closed reader ahead of
+// that decision would pre-empt it. Same review date as the seven markers #681
+// moved. If Phase-2a is not scheduled by then, delete this fn and its tests.
+#[allow(dead_code)] // REMOVE BY 2026-11-15 — wired by the in-app Phase-2a reader
 pub fn read_upgrade_plan_snapshot(db: &Database) -> Option<super::types::UpgradePlanSnapshot> {
     let json = db.get_kv(PLAN_KV_KEY).ok().flatten()?;
     let snapshot: super::types::UpgradePlanSnapshot = serde_json::from_str(&json).ok()?;

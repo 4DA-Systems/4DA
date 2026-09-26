@@ -28,13 +28,10 @@ pub use crate::monitoring_notifications::{
 
 /// A notification that was below the quality threshold and batched for the next briefing
 #[derive(Debug, Clone)]
-// REMOVE BY 2026-11-15 — extended 2026-09-24 in #681: the expired date failed the CI date gate on every PR; the dedicated dead-code pass decides delete-vs-wire (was: file touched for the tuner freeze): struct is production-live, only signal_priority is test-only; owner to trim the field
-#[allow(dead_code)] // Reason: signal_priority field only read in tests; other fields used in production
 pub struct BatchedNotification {
     pub title: String,
     pub source_type: String,
     pub score: f32,
-    pub signal_priority: Option<String>,
 }
 
 /// Global monitoring state
@@ -887,8 +884,9 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
             }
 
             // Re-examination — "yesterday's noise becomes tomorrow's signal". When the
-            // developer's dependency graph changes, re-queue buried releases/advisories of
-            // now-tracked deps so the backfill re-scores them against the new profile.
+            // developer's pins change, re-queue dependency releases and buried
+            // releases/advisories of now-tracked deps and re-judge them against the new
+            // profile.
             // Checks hourly but only does work when the dep-set epoch HASH actually changes,
             // so it's a no-op almost every time. The run timestamp is in-memory only (a
             // no-op extra run after restart is harmless); the hash persists in kv_store
@@ -901,30 +899,10 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
             {
                 state.last_reexamination.store(now, Ordering::Relaxed);
                 if let Ok(db) = crate::get_database() {
-                    match crate::scoring::build_scoring_context(db).await {
-                        Ok(ctx) => {
-                            let epoch = crate::scoring::reexamination::dep_epoch_hash(&ctx);
-                            let prev = crate::scheduler_state::get_dep_epoch_hash();
-                            if epoch != prev {
-                                let threshold = crate::get_relevance_threshold();
-                                let requeued =
-                                    crate::scoring::reexamination::requeue_reexaminable_items(
-                                        db, &ctx, threshold,
-                                    );
-                                crate::scheduler_state::persist_dep_epoch_hash(epoch);
-                                if requeued > 0 {
-                                    info!(
-                                        target: "4da::reexamination",
-                                        requeued,
-                                        "Dependency graph changed — re-queued buried items for re-scoring"
-                                    );
-                                }
-                            }
-                        }
-                        Err(e) => {
-                            tracing::debug!(target: "4da::reexamination", error = %e, "Re-examination skipped (context build failed)");
-                        }
-                    }
+                    // Shared with the engine cycle (headless.rs): the pin epoch,
+                    // the re-queue with verdict withdrawal, and the in-step
+                    // convergence all live in `scoring::reexamination`.
+                    let _ = crate::scoring::reexamination::reexamine_if_pins_changed(db).await;
                 }
             }
 

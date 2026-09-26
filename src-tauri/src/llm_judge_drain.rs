@@ -101,7 +101,8 @@ const EXHAUST_SCAN_LIMIT: usize = 512;
 /// Judgments this drain writes are stamped with their own prompt version so
 /// the main lane's demotion gate (which filters on ITS prompt version) can
 /// never double-count them, and post-hoc analysis can see the cohort.
-const DRAIN_PROMPT_VERSION: &str = "drain_v1";
+/// `drain_v2` (2026-09-26): project cards as the user context, as ingest v7.
+pub(crate) const DRAIN_PROMPT_VERSION: &str = "drain_v2";
 
 /// A drain judgment DISPUTES a pending demote only at or above this judged
 /// relevance (plus the shared confidence bar). Between the reject line and
@@ -144,7 +145,10 @@ pub(crate) struct DrainSummary {
 
 /// Scheduled/headless entry point, run right after the post-cycle judge pass.
 pub(crate) async fn run_pending_verdict_drain(db: &Database) -> DrainSummary {
-    run_drain_with(db, crate::state::is_llm_limit_reached(), drain_provider()).await
+    crate::local_judge::refresh_if_stale().await;
+    let provider = drain_provider();
+    let blocked = crate::local_judge::budget_blocks(provider.as_ref());
+    run_drain_with(db, blocked, provider).await
 }
 
 /// Same BYOK gate as the main judge lane (`llm_judgments::get_llm_settings`,
@@ -156,6 +160,13 @@ fn drain_provider() -> Option<LLMProvider> {
     guard.ensure_keys_hydrated();
     let provider = crate::llm_judge::judge_provider(&guard.get().llm);
     if provider.provider != "ollama" && provider.api_key.is_empty() {
+        return None;
+    }
+    // The drain DEMOTES on the model's say-so, so it holds the ingest judge's
+    // bar (`llm_judgments::judge_items_per_call`): a model below it is treated
+    // as no provider — phase A and free reuse still run, the paid lane does not.
+    if crate::llm_judgments::judge_items_per_call(&provider).is_none() {
+        debug!(target: "4da::verdict_drain", model = %provider.model, "Judge model is below the feed-judging bar — drain re-judging disabled");
         return None;
     }
     Some(provider)
@@ -171,6 +182,19 @@ async fn run_drain_with(
 ) -> DrainSummary {
     let mut summary = DrainSummary::default();
 
+    // Phase 0 — a pending PROMOTION of a dependency release is resolved
+    // without a judge, ahead of terminal exhaustion. Against such a flip the
+    // pipeline's call stands (AD-048, `guard_dependency_release`), so the
+    // queue could only delay it: measured on a copy of the founder corpus
+    // (2026-09-25, v37 activation), graded breaking upgrades such as
+    // `fastembed v7.1.0` sat pending behind a 272-row, oldest-first backlog
+    // drained 24 per cycle — and an UNCERTAIN reading escalates, which
+    // after `MAX_DRAIN_ATTEMPTS` resolves to a rejection the guard never
+    // sees. Twin-checked like every promotion; the current score must
+    // still clear the feed line.
+    let promoted_now = promote_pending_dependency_releases(db);
+    summary.promoted += promoted_now.len();
+
     let backlog = match db.get_pending_verdict_backlog(EXHAUST_SCAN_LIMIT) {
         Ok(rows) => rows,
         Err(e) => {
@@ -179,6 +203,7 @@ async fn run_drain_with(
         }
     };
     if backlog.is_empty() {
+        log_summary(db, &summary);
         return summary;
     }
 
@@ -274,20 +299,36 @@ async fn run_drain_with(
             summary.skipped = Some("llm_budget_reached");
         } else if let Some(provider) = provider {
             let model_name = provider.model.clone();
+            // Local models judge one item per call (see
+            // `llm_judgments::judge_items_per_call`); cloud keeps the slice.
+            let per_call = crate::llm_judgments::judge_items_per_call(&provider)
+                .map_or(DRAIN_SLICE, |n| n.min(DRAIN_SLICE));
+            // titles_only (see `llm_egress`): an off-machine model re-judges
+            // from the title alone.
+            let send_body = crate::llm_egress::body_allowed(&provider);
+            let user_context = crate::project_cards::judge_context(
+                db,
+                crate::llm_egress::provider_is_on_machine(&provider),
+            );
             let client = LLMClient::with_purpose(provider, "verdict_drain");
             // One call per DRAIN_SLICE items — the size every call had before
             // the surge slice existed. A truncated or malformed reply then
             // costs at most one chunk's evidence, never the whole pass.
-            for chunk in needs_llm.chunks(DRAIN_SLICE) {
+            for chunk in needs_llm.chunks(per_call.max(1)) {
                 let ids: Vec<i64> = chunk.iter().map(|r| r.id).collect();
-                let items = match load_items(db, &ids) {
+                let mut items = match load_items(db, &ids) {
                     Ok(items) => items,
                     Err(e) => {
                         warn!(target: "4da::verdict_drain", error = %e, "Failed to load drain items");
                         continue;
                     }
                 };
-                match judge_items(&client, &items).await {
+                if !send_body {
+                    for item in &mut items {
+                        item.content = None;
+                    }
+                }
+                match judge_items(&client, &items, &user_context).await {
                     Ok(judgments) => {
                         for row in chunk {
                             let Some(judged) = judgments.iter().find(|j| j.id == Some(row.id))
@@ -333,6 +374,11 @@ async fn run_drain_with(
     }
 
     // ── B3: apply, from whichever lane produced the reading ─────────────
+    let slice_ids: Vec<i64> = slice.iter().map(|r| r.id).collect();
+    let dependency_releases = db.dependency_release_ids(&slice_ids).unwrap_or_else(|e| {
+        warn!(target: "4da::verdict_drain", error = %e, "Dependency-release guard lookup failed");
+        std::collections::HashSet::default()
+    });
     let mut demote: Vec<(i64, bool, VerdictSource, Option<VerdictReason>)> = Vec::new();
     let mut promote: Vec<(i64, bool, VerdictSource, Option<VerdictReason>)> = Vec::new();
     let mut clear: Vec<i64> = Vec::new();
@@ -342,7 +388,12 @@ async fn run_drain_with(
             continue;
         };
         let direction = row.marker.map(|m| m.direction);
-        match resolve_action(direction, relevance) {
+        let action = guard_dependency_release(
+            resolve_action(direction, relevance),
+            direction,
+            dependency_releases.contains(&row.id),
+        );
+        match action {
             DrainAction::Demote => demote.push((
                 row.id,
                 false,
@@ -390,6 +441,49 @@ async fn run_drain_with(
 
     log_summary(db, &summary);
     summary
+}
+
+/// Phase 0 of the drain: apply every pending promotion of a dependency
+/// release that still clears the feed line (see the call site). Returns the
+/// ids promoted into the feed; a twin of an already-curated story is written
+/// `duplicate_curated` instead, and a failed twin check leaves the marker for
+/// the judge lanes.
+fn promote_pending_dependency_releases(db: &Database) -> Vec<i64> {
+    let ids = match db
+        .pending_dependency_release_promotions(crate::get_relevance_threshold(), EXHAUST_SCAN_LIMIT)
+    {
+        Ok(ids) => ids,
+        Err(e) => {
+            warn!(target: "4da::verdict_drain", error = %e, "Dependency-release promotion lookup failed");
+            return Vec::new();
+        }
+    };
+    let mut verdicts: Vec<(i64, bool, VerdictSource, Option<VerdictReason>)> = Vec::new();
+    let mut promoted = Vec::new();
+    for id in ids {
+        match db.curated_twin_of_item(id) {
+            Ok(Some(_)) => verdicts.push((
+                id,
+                false,
+                VerdictSource::Score,
+                Some(VerdictReason::DuplicateCurated),
+            )),
+            Ok(None) => {
+                verdicts.push((id, true, VerdictSource::Score, None));
+                promoted.push(id);
+            }
+            Err(e) => {
+                warn!(target: "4da::verdict_drain", error = %e, item_id = id, "Twin check failed — dependency release left pending");
+            }
+        }
+    }
+    if let Err(e) =
+        db.persist_feed_verdicts_with_reasons(&verdicts, crate::scoring::PIPELINE_VERSION)
+    {
+        warn!(target: "4da::verdict_drain", error = %e, "Dependency-release promotions failed");
+        return Vec::new();
+    }
+    promoted
 }
 
 /// The relevance an ALREADY-STORED ingest-lane judgment supplies for this
@@ -470,6 +564,28 @@ fn resolve_action(pending_direction: Option<bool>, relevance: f64) -> DrainActio
         }
     }
     DrainAction::Escalate
+}
+
+/// An LLM reading never overrides a deterministic dependency match: on a
+/// registry release of a matched dependency (`db::llm_judgments::
+/// dependency_release_sql`) a reject stands only where the PIPELINE itself
+/// proposed the demotion (pending direction `false`). Against a pending
+/// promotion the pipeline's call stands (twin-checked like any promotion);
+/// a corrupt marker escalates. Escalating a pending promotion instead would
+/// only delay the loss — exhausted markers resolve to a rejection.
+fn guard_dependency_release(
+    action: DrainAction,
+    pending_direction: Option<bool>,
+    dependency_release: bool,
+) -> DrainAction {
+    match action {
+        DrainAction::Demote if dependency_release => match pending_direction {
+            Some(false) => DrainAction::Demote,
+            Some(true) => DrainAction::Promote,
+            None => DrainAction::Escalate,
+        },
+        other => other,
+    }
 }
 
 fn log_summary(db: &Database, summary: &DrainSummary) {
@@ -555,8 +671,8 @@ struct DrainJudgment {
 async fn judge_items(
     client: &LLMClient,
     items: &[DrainItem],
+    user_context: &str,
 ) -> crate::error::Result<Vec<DrainJudgment>> {
-    let user_context = crate::adversarial::build_user_context_summary();
     let items_block: String = items
         .iter()
         .enumerate()

@@ -32,6 +32,16 @@ on:
 # immediately instead of queueing redundant work behind it. merge_group refs
 # are unique per queue entry, so queue runs never cancel each other here
 # (GitHub retires superseded queue entries itself).
+# Least privilege, stated explicitly (CodeQL actions/missing-workflow-permissions).
+# The repo default is already read-only; declaring it here means a change to
+# that default can never silently widen every job. `pull-requests: read` is
+# what dorny/paths-filter needs to list a PR's files through the API. Jobs that
+# need more (dependabot-notice, main-health) declare their own block, which
+# replaces this one for that job.
+permissions:
+  contents: read
+  pull-requests: read
+
 concurrency:
   group: validate-${{ github.ref }}
   cancel-in-progress: true
@@ -93,7 +103,7 @@ jobs:
       #
       # Deliberately placed BEFORE the main filter step to keep this diff clear
       # of the end-of-job boundary that PR #418 inserts a new job into.
-      - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4.0.2
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: uncovered
         with:
           predicate-quantifier: 'every'
@@ -123,7 +133,7 @@ jobs:
               - '!tsconfig*.json'
               - '!tailwind.config.*'
 
-      - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4.0.2
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
         id: filter
         with:
           filters: |
@@ -197,7 +207,7 @@ jobs:
           fetch-depth: 0
 
       - name: Setup Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v4
         with:
           node-version: '22'
 
@@ -278,14 +288,14 @@ jobs:
       # node_modules (the `clean: false` this job used to rely on), so the store
       # cache is what keeps the install off the critical path.
       - name: Setup pnpm
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
           # MUST equal package.json's packageManager — action-setup hard-errors
           # on a mismatch (the reason nightly-audit.yml installs pnpm 11 by hand).
           version: 9.15.0
 
       - name: Setup Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v4
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -428,12 +438,12 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6.0.10
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
           version: 9.15.0 # must match package.json packageManager
 
       - name: Setup Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v4
         with:
           node-version: '22'
           cache: 'pnpm'
@@ -468,7 +478,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # v1
         with:
           toolchain: stable
           components: rustfmt, clippy
@@ -477,6 +487,12 @@ jobs:
         uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           workspaces: relay
+          # Main-only, like the Rust matrix. Unset, every merge-queue entry
+          # saved its own 412 MB copy under a throwaway gh-readonly-queue ref
+          # that nothing can read back (three were live on 2026-09-26). That
+          # pushed the repo over its 10 GB cache limit, so GitHub evicted a
+          # main-scoped Rust entry every PR depends on.
+          save-if: ${{ github.ref == 'refs/heads/main' }}
 
       - name: Format
         run: cargo fmt --check
@@ -519,7 +535,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v4
         with:
           node-version: '22'
 
@@ -621,6 +637,13 @@ jobs:
       - name: Raw local content stays local (NETWORK.md)
         run: node scripts/check-privacy-egress.cjs
 
+      # Before the self-tests, not after them: signal-terminal-xss.test.cjs
+      # renders the Signal Terminal in jsdom (a devDependency) to prove the XSS
+      # sink is closed. With the install placed later in this job, that test
+      # found no node_modules and failed the required gate.
+      - name: Install dependencies (guard self-tests + `pnpm licenses list`)
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
       - name: Guard self-tests (scripts/*.test.cjs)
         # The guards above have their OWN unit tests, and until now those ran in
         # no hook and no workflow — nothing verified the guards still detect
@@ -636,12 +659,9 @@ jobs:
       # and a dependency install it would not otherwise need; the alternative was
       # a gate that silently skips on exactly the PRs that move dependencies.
       - name: Install Rust toolchain (for `cargo metadata`)
-        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # v1
         with:
           toolchain: stable
-
-      - name: Install dependencies (for `pnpm licenses list`)
-        run: pnpm install --frozen-lockfile --ignore-scripts
 
       - name: Third-party attribution is current (NOTICE)
         # --require turns a missing toolchain into a failure. Without it the
@@ -671,12 +691,14 @@ jobs:
   #   no `Validate Success` on it — and the ruleset's sole required check
   #   reads the PR's head SHA. workflow_dispatch is the documented exception
   #   to that guard, and this workflow already runs its full suite on
-  #   dispatch, so the job re-dispatches Validate on the healed branch tip.
-  #   Hermetic is deliberately NOT re-dispatched: the healed commit differs
-  #   from the already-hermetic-tested head by NOTICE text only, which cannot
-  #   affect a fresh-clone build, and `Hermetic Success` is not a required
-  #   check — re-running a ~20-min two-OS matrix would spend metered hosted
-  #   minutes to learn nothing.
+  #   dispatch. In practice (observed 2026-09-24) the push DOES create
+  #   pull_request runs, but as `github-actions[bot]`, which the repo's
+  #   "require approval for all external contributors" policy holds as
+  #   `action_required`. So the job now APPROVES those held runs on its own
+  #   commit. That puts Validate/Hermetic on the PR itself, which auto-merge
+  #   needs to enter the queue. It falls back to dispatching Validate AND
+  #   Hermetic (only Validate is required since 2026-09-26) only when nothing was
+  #   held or approval failed.
   #
   # No loop is possible: the heal push triggers nothing (recursion guard), and
   # in the dispatched run this job skips (both `pull_request` and the
@@ -690,7 +712,7 @@ jobs:
     timeout-minutes: 15
     permissions:
       contents: write # push the regenerated NOTICE to the PR branch
-      actions: write # re-dispatch Validate on the healed head
+      actions: write # approve held runs on the healed head (fallback: re-dispatch)
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
         with:
@@ -699,7 +721,7 @@ jobs:
           ref: ${{ github.event.pull_request.head.ref }}
 
       - name: Setup Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v4
         with:
           node-version: '22'
 
@@ -711,7 +733,7 @@ jobs:
       # Same recipe as the NOTICE gate in `repo-guards`, so what this job
       # generates is byte-for-byte what that gate will verify.
       - name: Install Rust toolchain (for `cargo metadata`)
-        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # v1
         with:
           toolchain: stable
 
@@ -721,7 +743,7 @@ jobs:
       - name: Regenerate NOTICE
         run: node scripts/generate-notice.cjs
 
-      - name: Push regenerated NOTICE and re-dispatch Validate
+      - name: Push regenerated NOTICE and approve the runs it triggers
         env:
           GH_TOKEN: ${{ github.token }}
           HEAD_REF: ${{ github.event.pull_request.head.ref }}
@@ -739,8 +761,42 @@ jobs:
           # push is rejected non-fast-forward and the job fails — correct: the
           # rebase's own pull_request run re-heals against the new head.
           git push origin "HEAD:$HEAD_REF"
-          gh workflow run validate.yml --repo "$GITHUB_REPOSITORY" --ref "$HEAD_REF"
-          echo "NOTICE healed and pushed. This run's repo-guards may still fail against the pre-heal commit; the dispatched Validate on the healed head is the run the merge gate reads."
+          HEALED_SHA=$(git rev-parse HEAD)
+
+          # The healed commit is authored by github-actions[bot], and under the
+          # repo's "require approval for all external contributors" policy the
+          # pull_request runs it triggers wait as `action_required`. Runs
+          # dispatched below DO attach Validate/Hermetic to the commit, but
+          # auto-merge reads the PR's own checks, so a healed PR never entered
+          # the merge queue. #709 and #695 sat green-but-stuck on 2026-09-24
+          # until their held runs were approved by hand; #695 queued within
+          # minutes of approval. Approving the held runs on OUR OWN commit is
+          # what "Approve and run" exists for. Poll briefly, because GitHub
+          # creates those runs a few seconds after the push.
+          approved=0
+          for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
+            ids=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?head_sha=$HEALED_SHA&status=action_required&per_page=50" \
+                    --jq '.workflow_runs[] | select(.event == "pull_request") | .id' || true)
+            if [ -n "$ids" ]; then
+              for id in $ids; do
+                if gh api -X POST "repos/$GITHUB_REPOSITORY/actions/runs/$id/approve" >/dev/null; then
+                  approved=$((approved + 1)); echo "approved held run $id"
+                fi
+              done
+              break
+            fi
+            sleep 10
+          done
+
+          if [ "$approved" -eq 0 ]; then
+            # Fallback, the previous behaviour: nothing was held (policy changed)
+            # or approval failed. Dispatched runs still put Validate/Hermetic on
+            # the commit, so a human can merge even if auto-merge will not.
+            echo "::warning::no held pull_request runs approved on $HEALED_SHA; dispatching Validate and Hermetic instead"
+            gh workflow run validate.yml --repo "$GITHUB_REPOSITORY" --ref "$HEAD_REF"
+            gh workflow run hermetic.yml --repo "$GITHUB_REPOSITORY" --ref "$HEAD_REF"
+          fi
+          echo "NOTICE healed and pushed ($HEALED_SHA); approved $approved held run(s)."
 
   rust:
     name: Rust (${{ matrix.label }})
@@ -754,9 +810,10 @@ jobs:
     # forcing the 75m bump). Hosted runners are dedicated + ephemeral; with
     # Swatinem/rust-cache a warm build is ~3-5 min and is immune to fleet load.
     #
-    # Platform coverage: default-feature `cargo test --lib` is already proven on
-    # ubuntu AND windows by hermetic.yml's fresh-clone matrix, so default
-    # behaviour keeps two-platform coverage. The trade-off is that the
+    # Platform coverage: default-feature Rust tests also run on ubuntu AND
+    # windows in hermetic.yml's fresh-clone matrix. Since 2026-09-26 that is
+    # advisory on PRs and runs after the merge on main, where a failure opens a
+    # `hermetic-main` issue. It no longer gates the queue. The trade-off is that the
     # EXPERIMENTAL-feature leg now runs on ubuntu only (it previously ran on the
     # self-hosted Windows box) — acceptable: the experimental surface is not
     # Windows-specific. Cost: cheap 1x ubuntu minutes (the macOS 10x tier is the
@@ -765,10 +822,8 @@ jobs:
     # a ~3-min source compile each.
     runs-on: ubuntu-latest
     # 60, not 30: this job now compiles the integration test targets too (see
-    # the compile-gate step), and the default leg additionally builds the lib
-    # once more under `--features calibrated-sim` for the real-embedding gate
-    # (feature unification forces a fourda-crate recompile; the dep graph stays
-    # cached). Swatinem's cache is only saved from main, so PR runs right after
+    # the compile-gate step). (The calibrated-sim rebuild that used to follow
+    # it now runs in `rust-calibration`.) Swatinem's cache is only saved from main, so PR runs right after
     # a scope change pay the full cold link. A timeout here is a red required
     # gate, so the cap holds headroom for the cold-cache window.
     timeout-minutes: 60
@@ -793,14 +848,17 @@ jobs:
           - label: team-sync
             cargo-features: '--features team-sync'
             test-floor: 0
+            cache-key: features
           - label: enterprise
             cargo-features: '--features enterprise'
             test-floor: 0
+            cache-key: features
           # Both together exercises the third path: the real `audit` module
           # replacing `audit_stub`, which neither single-feature leg covers.
           - label: team-sync+enterprise
             cargo-features: '--features team-sync,enterprise'
             test-floor: 0
+            cache-key: features
     defaults:
       run:
         shell: bash
@@ -833,7 +891,7 @@ jobs:
         # repo's rust-toolchain.toml (1.93.1) still governs the actual build via
         # rustup where it is honored; this job's value is fast, parallel,
         # contention-free clippy/audit/test on a dedicated runner.
-        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # v1
         with:
           toolchain: stable
           components: clippy, rustfmt
@@ -841,19 +899,27 @@ jobs:
       - uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2.7.8
         with:
           workspaces: src-tauri
-          # One entry per matrix leg: each leg compiles a different feature set,
-          # so a shared key would let whichever leg saved first serve the wrong
-          # artifacts to the other four.
-          key: ${{ matrix.label }}
+          # default and experimental keep their own entries. The three dormant-
+          # surface legs SHARE one (`cache-key: features`). The budget forced
+          # that, not taste: one leg's entry is ~2.3 GB, the repo limit is
+          # 10 GB, and five per-leg entries plus the model/relay/CodeQL caches
+          # came to 10.8 GB (measured 2026-09-26). GitHub evicts to fit, so one
+          # leg was always cold. That day it was enterprise (`No cache found`),
+          # at 16.8 min the slowest job in the queue entry. Their dependency
+          # graphs are near-identical and cargo fingerprints every artifact, so
+          # a shared entry can only cost a few recompiles, never a wrong build.
+          # Only the superset leg (team-sync+enterprise) SAVES the shared
+          # entry, so it always holds every feature's dependencies.
+          key: ${{ matrix.cache-key || matrix.label }}
           # Save the cache only from main — PR builds reuse it but don't churn it.
           # Until the daily `schedule` trigger existed this condition was NEVER
           # true (no event ran on refs/heads/main), so the cache was never
           # written: measured 2026-09-24, zero rust-cache entries existed and
           # every leg of every PR and queue entry compiled cold.
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          save-if: ${{ github.ref == 'refs/heads/main' && (matrix.cache-key != 'features' || matrix.label == 'team-sync+enterprise') }}
 
       - name: Setup Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v4
         with:
           node-version: '22'
 
@@ -870,7 +936,7 @@ jobs:
 
       - name: Install cargo-audit + cargo-deny (prebuilt)
         if: matrix.label == 'default'
-        uses: taiki-e/install-action@b20dedce73af6905cdc30d6611090c9b67557c8d # v2
+        uses: taiki-e/install-action@94c31af3204a9f15ab40b35ad084410b905bbc73 # v2
         with:
           tool: cargo-audit,cargo-deny
 
@@ -882,16 +948,53 @@ jobs:
         if: matrix.label == 'default'
         run: cargo deny check
 
-      - name: Compile-gate (cargo test --no-run)
-        # Fast-fail if the test binary stops compiling, before the slow test run.
-        #
-        # `--tests` (not `--lib`): cargo's `--tests` selects every target with
-        # `test = true` — lib unittests, bin unittests AND the integration tests
-        # under src-tauri/tests/. Under the old `--lib` scope the integration
-        # suite was never compiled by this job, so it could rot undetected.
-        run: cargo test --tests ${{ matrix.cargo-features }} --no-run
+      # ── Compile-gate + tests run in the MERGE QUEUE, not on the PR ─────────
+      # Every PR was paying this suite twice, back to back: once on the PR (a
+      # required check has to be green before auto-merge queues it) and again on
+      # the merge_group entry, which runs every leg by design. Measured
+      # 2026-09-25 on #726-#733: PR run ~21 min, queue run ~19-26 min, so a
+      # clean PR took 41-47 min to merge and one flake took 73-102.
+      #
+      # The queue entry is the authoritative gate. It is what lands, and it
+      # still runs all of this on every leg. The PR run keeps the fast signal:
+      # fmt, clippy on every feature set, cargo-audit and cargo-deny. A test
+      # failure now shows up in the queue instead of on the PR, and ejects the
+      # entry. That rebuilds whatever is queued behind it, a cost that stays
+      # small while the queue rarely holds more than one or two entries.
+      # workflow_dispatch and schedule still run everything.
+      # ONE cargo invocation compiles and runs the tests. A separate
+      # `cargo test --no-run` step used to run first, and it made the test step
+      # rebuild the whole fourda crate a second time: 2m04s + 2m14s on the
+      # default leg, 4-6 min on the feature legs (2026-09-25, pr-739 entry).
+      # Cargo's fingerprint log (trial run on ci/trial-fingerprint) gave the
+      # reason. Tauri's `generate_context!` rewrites an embedded-asset file under
+      # the build script's OUT_DIR mid-compile, so it is always newer than the
+      # compile that just produced it, and the NEXT cargo command sees the crate
+      # as stale. The env vars below were never the cause. A compile failure
+      # still fails this step before any test runs.
+      #
+      # `--tests` (not `--lib`): cargo's `--tests` selects every target with
+      # `test = true` — lib unittests, bin unittests AND the integration tests
+      # under src-tauri/tests/.
+      # cargo-nextest, not `cargo test`. Measured A/B in one job on
+      # ci/trial-nextest (2026-09-26): the same 5,660 tests, 0 failures, 86.7s
+      # under nextest vs 123.6s for libtest's lib binary alone. Nextest runs each
+      # test in its own process, spread across binaries. That process isolation
+      # passed the whole suite first try: the in-process test locks (env vars,
+      # statics) guard per-process state, so they stay correct. The profile
+      # (src-tauri/.config/nextest.toml) adds one retry that is REPORTED as
+      # flaky, a 5-minute hang kill, and per-test timings in junit.xml. The
+      # calibration job and hermetic.yml keep plain `cargo test`: calibration
+      # loads the real ONNX model, and one process per test would reload it
+      # hundreds of times. Hermetic mirrors a contributor's `cargo test`.
+      - name: Install cargo-nextest (prebuilt)
+        if: github.event_name != 'pull_request'
+        uses: taiki-e/install-action@94c31af3204a9f15ab40b35ad084410b905bbc73 # v2
+        with:
+          tool: cargo-nextest
 
       - name: Run tests (unit + integration) and verify count floor
+        if: github.event_name != 'pull_request'
         # Was `--lib`, which silently excluded every one of the 154 real
         # integration tests in src-tauri/tests/ — including all 12 migration
         # tests and the repo's only old-schema forward-migration coverage —
@@ -907,44 +1010,125 @@ jobs:
           FOURDA_DB_PATH: ${{ runner.temp }}/4da-validate-data/4da.db
         run: |
           set -o pipefail
-          cargo test --tests ${{ matrix.cargo-features }} 2>&1 | tee test-output.txt
+          cargo nextest run --tests ${{ matrix.cargo-features }} --profile ci 2>&1 | tee test-output.txt
           status=${PIPESTATUS[0]}
-          tail -n 10 test-output.txt
+          tail -n 15 test-output.txt
           if [ "$status" -ne 0 ]; then
             echo "::error::Tests exited with code $status"
             exit 1
           fi
-          # SUM every binary's count, don't take the last. `--tests` runs many
-          # binaries (lib + bins + each integration target), so the previous
-          # `tail -1` would have read only the LAST binary's total (~162) and
-          # tripped the floor on every run.
-          count=$(grep -oE 'test result: ok\. [0-9]+ passed' test-output.txt \
-            | grep -oE '[0-9]+' | awk '{s+=$1} END {print s+0}')
-          binaries=$(grep -cE '^test result:' test-output.txt || true)
-          echo "Rust tests passed: $count across $binaries test binaries"
+          # Counts come from nextest's junit report: one <testsuite> per test
+          # binary, one <testcase> per test that RAN (skipped tests are not
+          # listed). A testcase carrying <flakyFailure> failed, then passed on
+          # retry.
+          read -r count binaries flaky < <(python3 - target/nextest/ci/junit.xml <<'EOF'
+          import sys, xml.etree.ElementTree as ET
+          root = ET.parse(sys.argv[1]).getroot()
+          suites = list(root.iter('testsuite'))
+          cases = list(root.iter('testcase'))
+          bad = {'failure', 'error', 'skipped'}
+          passed = [c for c in cases if not any(ch.tag in bad for ch in c)]
+          flaky = [c for c in cases if any(ch.tag in ('flakyFailure', 'flakyError') for ch in c)]
+          for c in flaky:
+              print(f"::warning::FLAKY (failed, then passed on retry): {c.get('classname')} {c.get('name')}", file=sys.stderr)
+          print(len(passed), len(suites), len(flaky))
+          EOF
+          )
+          flaky=${flaky%$'\r'}
+          # Fail CLOSED. If the parse produced nothing (no junit file, python
+          # missing), every comparison below would error, `[` would return
+          # false, and the step would pass having measured nothing.
+          for v in "$count" "$binaries" "$flaky"; do
+            case "$v" in
+              ''|*[!0-9]*)
+                echo "::error::could not read test counts from target/nextest/ci/junit.xml (count='$count' binaries='$binaries' flaky='$flaky')"
+                exit 1 ;;
+            esac
+          done
+          echo "Rust tests passed: $count across $binaries test binaries ($flaky flaky)"
           floor=${{ matrix.test-floor }}
           if [ "$floor" -gt 0 ] && [ "$count" -lt "$floor" ]; then
             echo "::error::Rust test count dropped below $floor (got $count)"
             exit 1
           fi
-          # Guards the regression this step exists to fix: if someone re-scopes
-          # this to --lib, only ONE binary reports and the integration suite is
-          # silently gone again. Observed on 2026-08-14: 9 binaries (lib, 3
-          # bins, 5 integration targets).
+          # Guards the regression the --tests scope exists to fix: if someone
+          # re-scopes this to --lib, only ONE binary reports and the integration
+          # suite is silently gone again (9 binaries on 2026-08-14 under
+          # libtest; nextest lists only binaries that contain tests, 7+).
           if [ "$floor" -gt 0 ] && [ "$binaries" -lt 5 ]; then
             echo "::error::only $binaries test binaries ran — the integration tests in src-tauri/tests/ did not execute (is this scoped to --lib again?)"
             exit 1
           fi
           rm -f test-output.txt
 
-      # ── Real-embedding mode (2026-08-23 adversarial audit, items 21/22) ──
-      # Everything above runs the SYNTHETIC embedding suite. That suite was
-      # 699/699 green while real-embedding mode failed 4 persona recall guards
-      # — CI was structurally blind to real-mode regressions because nothing
-      # here ever exercised them. These two steps close that hole on the
-      # default leg only (one leg is enough: the calibrated fixtures are
+  # ─────────────────────────────────────────────────────────────────────
+  # Real-embedding mode (2026-08-23 adversarial audit, items 21/22).
+  #
+  # Its own job, in parallel with the Rust matrix. These steps used to run at
+  # the END of `Rust (default)`, after its full test run, and made that leg the
+  # queue's long pole: 4.3 of its 19 minutes (2026-09-25, pr-733 entry). They
+  # share nothing with the steps before them except the build cache. Separately,
+  # they cost ~1.5 min of setup plus the calibrated-sim compile they always
+  # paid (feature unification recompiles the fourda crate either way).
+  #
+  # Merge queue, dispatch and schedule only, like the test steps above: the PR
+  # run is the fast pre-check, and the queue entry is the gate.
+  # ─────────────────────────────────────────────────────────────────────
+  rust-calibration:
+    name: Rust (real-embedding calibration)
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        shell: bash
+        working-directory: src-tauri
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+
+      - name: Install Linux system dependencies (tauri / webkit)
+        working-directory: .
+        run: |
+          # Same image-source pruning as the Rust matrix above (see its note).
+          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list \
+                     /etc/apt/sources.list.d/microsoft-prod.sources \
+                     /etc/apt/sources.list.d/azure-cli.list \
+                     /etc/apt/sources.list.d/azure-cli.sources
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # v1
+        with:
+          toolchain: stable
+          components: clippy, rustfmt
+
+      - uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2.7.8
+        with:
+          workspaces: src-tauri
+          # READ the default leg's entry, never write one. Without `shared-key`
+          # the action appends this job's id (`rust-calibration`) and would look
+          # for an entry nobody saves. `default-rust` is exactly the key+job
+          # prefix the `Rust (default)` leg writes (v0-rust-default-rust-...),
+          # and a fifth ~2.3 GB entry would break the budget noted above.
+          shared-key: default-rust
+          save-if: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v4
+        with:
+          node-version: '22'
+
+      - name: Fetch OCR bundle resources (build dependency)
+        working-directory: .
+        run: node scripts/fetch-ocr-models.cjs
+
+      # The synthetic embedding suite once passed 699/699 while real-embedding
+      # mode failed 4 persona recall guards. CI could not see real-mode
+      # regressions because nothing here exercised them. The steps below close
+      # that hole in one job, which is enough: the calibrated fixtures are
       # platform-independent committed .bin files, and the fastembed model is
-      # deterministic ONNX inference).
+      # deterministic ONNX inference.
       # The cache key must contain the exact identity of BOTH artifacts, or a
       # warm cache silently pins the gate to yesterday's model:
       #   * hashFiles() over the two fetcher scripts covers ORT_VERSION, the
@@ -957,13 +1141,9 @@ jobs:
       # miss, and the fetch step below re-downloads for real.
       - name: Resolve embedding-model revision (cache key input)
         id: model-rev
-        # Must match the cache step's condition below: its key reads this
-        # step's output, and an empty SHA would silently collapse every
-        # revision onto one key.
-        if: matrix.label == 'default'
         working-directory: .
         run: |
-          api=https://huggingface.co/api/models/Snowflake/snowflake-arctic-embed-m/revision/main
+          api=https://huggingface.co/api/models/nomic-ai/nomic-embed-text-v1.5/revision/main
           sha=$(curl -fsSL --retry 3 --retry-delay 2 --max-time 30 "$api" | jq -er .sha) || sha=''
           if [ -z "$sha" ]; then
             # Degrade to a guaranteed cache MISS rather than a red gate: the
@@ -985,8 +1165,7 @@ jobs:
       # (model revision moved since the last scheduled run) costs the same ~15s
       # it always did.
       - name: Cache embedding model + ORT runtime
-        if: matrix.label == 'default'
-        uses: actions/cache@caa296126883cff596d87d8935842f9db880ef25 # v5.1.0
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           # Exactly the two destination dirs the fetchers write. NOT all of
           # src-tauri/models/ — fetch-ocr-models.cjs owns a sibling dir there
@@ -1008,7 +1187,6 @@ jobs:
         # Unchanged on a cache MISS: both scripts still download and verify.
         # On a HIT they see the files already on disk and no-op, which is the
         # documented `--force`-less behaviour of each.
-        if: matrix.label == 'default'
         working-directory: .
         run: |
           node scripts/download-ort.cjs
@@ -1028,7 +1206,6 @@ jobs:
         # "SKIP" and green-passing having measured nothing, and the benchmark
         # quality-gate ratchet hard-fails instead of soft-warning. This step
         # can therefore never pass vacuously.
-        if: matrix.label == 'default'
         env:
           FOURDA_REQUIRE_REAL_EMBEDDINGS: '1'
           FOURDA_DATA_DIR: ${{ runner.temp }}/4da-validate-data
@@ -1046,7 +1223,9 @@ jobs:
   # This job depends on all of them and fails if any FAILED or was CANCELLED; a
   # SKIPPED job (a conditional leg that legitimately did not apply) passes.
   # Runs on a hosted runner so the gate itself never ties up the self-hosted box.
-  # Require ONLY "Validate Success" (plus "Hermetic Success") in branch protection.
+  # Require ONLY "Validate Success" in branch protection. "Hermetic Success" was
+  # also required from 2026-09-24 to 2026-09-26. It was the queue's slowest job
+  # and its only flake, so it now runs after the merge instead (see hermetic.yml).
   # Pattern mirrors victauri's ci.yml `ci-success` job.
   # ─────────────────────────────────────────────────────────────────────
   validate-success:
@@ -1064,7 +1243,7 @@ jobs:
     # protection change is needed to enforce it. It runs on pull_request AND
     # merge_group (where it scans the final squash commits) and SKIPS on
     # workflow_dispatch/schedule (skipped == pass below).
-    needs: [changes, pr-metadata, repo-guards, dependabot-notice, frontend, mcp-server, relay, rust]
+    needs: [changes, pr-metadata, repo-guards, dependabot-notice, frontend, mcp-server, relay, rust, rust-calibration]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -1131,7 +1310,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
 
       - name: Setup Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v4
         with:
           node-version: '22'
 

@@ -194,6 +194,47 @@ pub fn pending_monthly_rollup(conn: &Connection) -> Vec<Vec<String>> {
 // Briefing Context Injection
 // ============================================================================
 
+/// The part of a sealed briefing that may be fed back as continuity: its
+/// "Worth Knowing" themes, without any line that makes a security claim.
+///
+/// A seal is the briefing's own text. Fed back whole, its Action Required
+/// and Filtered Out claims came back as fact. On 2026-09-25 the sealed
+/// "quick-xml ... no fix published — don't wait on upstream" reappeared
+/// verbatim in the next brief, whose CONFIRMED SECURITY input said
+/// "update to >= 0.41.0". The new brief was sealed in turn, so the claim
+/// could outlive any correction. "No SQLite dependency on record" survived
+/// the same way. Security truth comes only from the current CONFIRMED
+/// SECURITY block; a seal without the heading keeps the whole text.
+pub(crate) fn continuity_view(text: &str) -> String {
+    const SECURITY_MARKERS: [&str; 9] = [
+        "cve-",
+        "ghsa-",
+        "rustsec-",
+        "vulnerab",
+        "advisor",
+        "no fix",
+        "unpatched",
+        "exploit",
+        "malicious",
+    ];
+    let section = match text.find("## Worth Knowing") {
+        Some(start) => {
+            let body = &text[start..];
+            let end = body[3..].find("\n## ").map_or(body.len(), |i| i + 3);
+            &body[..end]
+        }
+        None => text,
+    };
+    section
+        .lines()
+        .filter(|line| {
+            let lower = line.to_lowercase();
+            !SECURITY_MARKERS.iter().any(|m| lower.contains(m))
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 /// Strip self-made age counters from continuity text before it is fed back
 /// to the model. Five consecutive briefs (2026-09-06 19:39 → 09-07 02:38,
 /// two to three hours apart) said the same advisory was "past day 20", 21,
@@ -259,7 +300,7 @@ pub fn build_seal_context(conn: &Connection) -> String {
     // Yesterday's daily seal
     if let Some(seal) = get_most_recent_seal(conn, SealLevel::Daily) {
         let truncated = strip_age_counters(&truncate_to_tokens(
-            &seal.summary_text,
+            &continuity_view(&seal.summary_text),
             MAX_DAILY_SEAL_TOKENS,
         ));
         parts.push(format!(
@@ -271,7 +312,7 @@ pub fn build_seal_context(conn: &Connection) -> String {
     // Most recent weekly seal
     if let Some(seal) = get_most_recent_seal(conn, SealLevel::Weekly) {
         let truncated = strip_age_counters(&truncate_to_tokens(
-            &seal.summary_text,
+            &continuity_view(&seal.summary_text),
             MAX_WEEKLY_SEAL_TOKENS,
         ));
         parts.push(format!(
@@ -283,7 +324,7 @@ pub fn build_seal_context(conn: &Connection) -> String {
     // Most recent monthly seal
     if let Some(seal) = get_most_recent_seal(conn, SealLevel::Monthly) {
         let truncated = strip_age_counters(&truncate_to_tokens(
-            &seal.summary_text,
+            &continuity_view(&seal.summary_text),
             MAX_MONTHLY_SEAL_TOKENS,
         ));
         parts.push(format!(
@@ -671,6 +712,32 @@ mod tests {
         let ctx = build_seal_context(&conn);
         assert!(ctx.contains("Yesterday's briefing summary"));
         assert!(ctx.contains("Rust dominated yesterday"));
+    }
+
+    /// The 2026-09-25 seal, shortened: its security and filter claims must
+    /// not come back as continuity; its themes must.
+    #[test]
+    fn seal_context_carries_themes_not_claims() {
+        let conn = setup_db();
+        let brief = "## Action Required\n\n**quick-xml** — 2 known vulns, no fix published — don't wait on upstream.\n\n\
+                     ## Worth Knowing\n\n- Tokio's Topcoat writeup is relevant to your concurrency work.\n\
+                     - The rsa Marvin Attack timing side-channel still has no fix published.\n\n\
+                     ## Filtered Out\n\nThe SQLite encryption piece (no SQLite dependency on record).";
+        create_daily_seal(&conn, "2026-09-25", brief, 30, &[]);
+        let ctx = build_seal_context(&conn);
+        assert!(ctx.contains("Topcoat"), "{ctx}");
+        for claim in ["quick-xml", "no fix", "Marvin", "SQLite"] {
+            assert!(!ctx.contains(claim), "{claim} carried forward: {ctx}");
+        }
+    }
+
+    #[test]
+    fn continuity_view_keeps_a_seal_without_sections() {
+        assert_eq!(
+            continuity_view("Rust dominated yesterday"),
+            "Rust dominated yesterday"
+        );
+        assert_eq!(continuity_view("CVE-2026-1 hit axios"), "");
     }
 
     #[test]

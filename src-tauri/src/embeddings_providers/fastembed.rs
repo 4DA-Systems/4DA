@@ -221,60 +221,100 @@ fn extract_ort_library(
 }
 
 // ============================================================================
-// Bundled embedding model — copy from installer to writable cache on first run
+// The in-process model: read straight from the installer's bundled resources
 // ============================================================================
 
+/// nomic-embed-text v1.5, fp16 weights (274 MB; inputs and outputs stay f32).
+/// It is the model Ollama serves by default and writes the SAME vector space:
+/// measured median cosine 1.00000 (p5 0.99999) against Ollama's nomic on 400
+/// real items. The model it replaced, Arctic-embed-M, shared no space with
+/// nomic at all (median cosine 0.007) and scored significantly worse on the
+/// blind gold (combined AUC 0.689 vs 0.764). The smaller int8 build was
+/// rejected: ~0.90 agreement is too noisy for the top-1 match over thousands
+/// of code chunks (context AUC 0.499). See `reembed_space`.
 #[cfg(feature = "fastembed-local")]
-const EMBEDDING_CACHE_DIR_NAME: &str = "models--Snowflake--snowflake-arctic-embed-m";
+const BUNDLED_MODEL_DIR: &str = "nomic-embed-text-v1.5-fp16";
 
 #[cfg(feature = "fastembed-local")]
-fn ensure_embedding_model(cache_dir: &std::path::Path) -> bool {
-    let model_dir = cache_dir.join(EMBEDDING_CACHE_DIR_NAME);
-    let refs_file = model_dir.join("refs").join("main");
+const BUNDLED_ONNX: &str = "model_fp16.onnx";
 
-    if refs_file.exists() {
-        tracing::debug!(target: "4da::embeddings", "Embedding model already cached");
-        return true;
+/// Caches of retired in-process models (hf-hub layout). Nothing reads them any
+/// more; each is reclaimed on first init.
+#[cfg(feature = "fastembed-local")]
+const LEGACY_CACHE_DIRS: [&str; 1] = ["models--Snowflake--snowflake-arctic-embed-m"];
+
+#[cfg(feature = "fastembed-local")]
+fn remove_legacy_caches(cache_dir: &std::path::Path) {
+    for name in LEGACY_CACHE_DIRS {
+        let dir = cache_dir.join(name);
+        if dir.is_dir() {
+            match std::fs::remove_dir_all(&dir) {
+                Ok(()) => {
+                    tracing::info!(target: "4da::embeddings", path = %dir.display(), "Removed a retired embedding model cache")
+                }
+                Err(e) => {
+                    tracing::debug!(target: "4da::embeddings", error = %e, "Could not remove a retired embedding model cache")
+                }
+            }
+        }
     }
-
-    let bundled_dir = crate::runtime_paths::RuntimePaths::get()
-        .bundled_models_dir()
-        .join("embeddings")
-        .join(EMBEDDING_CACHE_DIR_NAME);
-
-    if !bundled_dir.exists() {
-        tracing::debug!(target: "4da::embeddings", "No bundled embedding model — will download on first use");
-        return false;
-    }
-
-    tracing::info!(
-        target: "4da::embeddings",
-        bundled = %bundled_dir.display(),
-        cache = %model_dir.display(),
-        "Copying bundled embedding model to cache"
-    );
-
-    if let Err(e) = copy_dir_recursive(&bundled_dir, &model_dir) {
-        tracing::warn!(target: "4da::embeddings", error = %e, "Bundled model copy failed — will download");
-        return false;
-    }
-    true
 }
 
 #[cfg(feature = "fastembed-local")]
-fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> std::io::Result<()> {
-    std::fs::create_dir_all(dst)?;
-    for entry in std::fs::read_dir(src)? {
-        let entry = entry?;
-        let ty = entry.file_type()?;
-        let dest_path = dst.join(entry.file_name());
-        if ty.is_dir() {
-            copy_dir_recursive(&entry.path(), &dest_path)?;
-        } else {
-            std::fs::copy(entry.path(), &dest_path)?;
+fn bundled_model_dir() -> std::path::PathBuf {
+    crate::runtime_paths::RuntimePaths::get()
+        .bundled_models_dir()
+        .join("embeddings")
+        .join(BUNDLED_MODEL_DIR)
+}
+
+/// Load the bundled fp16 build (a read-only resource, never copied).
+#[cfg(feature = "fastembed-local")]
+fn load_bundled_nomic(
+    dir: &std::path::Path,
+) -> std::result::Result<fastembed::TextEmbedding, String> {
+    let read = |name: &str| std::fs::read(dir.join(name)).map_err(|e| format!("{name}: {e}"));
+    let tokenizer_files = fastembed::TokenizerFiles {
+        tokenizer_file: read("tokenizer.json")?,
+        config_file: read("config.json")?,
+        special_tokens_map_file: read("special_tokens_map.json")?,
+        tokenizer_config_file: read("tokenizer_config.json")?,
+    };
+    let model = fastembed::UserDefinedEmbeddingModel::new(read(BUNDLED_ONNX)?, tokenizer_files)
+        .with_pooling(fastembed::Pooling::Mean);
+    fastembed::TextEmbedding::try_new_from_user_defined(
+        model,
+        fastembed::InitOptionsUserDefined::new(),
+    )
+    .map_err(|e| e.to_string())
+}
+
+/// The in-process embedding model: the bundled fp16 nomic when present, else
+/// fastembed's own nomic v1.5 build (f32, downloaded once into the cache).
+/// Same weights either way, so the same vector space.
+#[cfg(feature = "fastembed-local")]
+fn load_embedding_model(
+    cache_dir: std::path::PathBuf,
+) -> std::result::Result<fastembed::TextEmbedding, FourDaError> {
+    remove_legacy_caches(&cache_dir);
+    let bundled = bundled_model_dir();
+    if bundled.join(BUNDLED_ONNX).is_file() {
+        tracing::info!(target: "4da::embeddings", dir = %bundled.display(), "Loading bundled embedding model (nomic-embed-text v1.5, fp16)");
+        match load_bundled_nomic(&bundled) {
+            Ok(model) => return Ok(model),
+            Err(e) => {
+                tracing::warn!(target: "4da::embeddings", error = %e, "Bundled embedding model failed to load; downloading the same model instead");
+            }
         }
     }
-    Ok(())
+    tracing::info!(target: "4da::embeddings", cache = %cache_dir.display(), "Downloading embedding model (nomic-embed-text v1.5, ~550MB first run)");
+    let options = fastembed::InitOptions::new(fastembed::EmbeddingModel::NomicEmbedTextV15)
+        .with_cache_dir(cache_dir)
+        .with_show_download_progress(true);
+    fastembed::TextEmbedding::try_new(options).map_err(|e| {
+        tracing::warn!(target: "4da::embeddings", error = %e, "fastembed init failed");
+        FourDaError::from(format!("fastembed init: {e}"))
+    })
 }
 
 #[cfg(feature = "fastembed-local")]
@@ -283,23 +323,7 @@ fn get_or_init_fastembed(
     FASTEMBED_MODEL.get_or_try_init(|| {
         let cache_dir = crate::runtime_paths::RuntimePaths::get().model_cache_dir();
         ensure_ort_runtime(&cache_dir, None)?;
-        let cached = ensure_embedding_model(&cache_dir);
-        let msg = if cached {
-            "Loading bundled embedding model (snowflake-arctic-embed-m)"
-        } else {
-            "Downloading embedding model (snowflake-arctic-embed-m, ~220MB first run)"
-        };
-        tracing::info!(target: "4da::embeddings", cache = %cache_dir.display(), "{msg}");
-        let options =
-            fastembed::InitOptions::new(fastembed::EmbeddingModel::SnowflakeArcticEmbedMQ)
-                .with_cache_dir(cache_dir)
-                .with_show_download_progress(!cached);
-        fastembed::TextEmbedding::try_new(options)
-            .map(parking_lot::Mutex::new)
-            .map_err(|e| {
-                tracing::warn!(target: "4da::embeddings", error = %e, "fastembed init failed");
-                FourDaError::from(format!("fastembed init: {e}"))
-            })
+        load_embedding_model(cache_dir).map(parking_lot::Mutex::new)
     })
 }
 
@@ -307,10 +331,9 @@ fn get_or_init_fastembed(
 /// (findings #3 antibody): embedding ALL texts in a single ONNX batch spikes
 /// activation memory on large inputs (e.g. re-embedding ~1000 items). We bound
 /// peak memory by chunking the input HERE, then pass `None` to fastembed's own
-/// batching — which is incompatible with the dynamically-quantized model
-/// (SnowflakeArcticEmbedMQ): `model.embed(.., Some(n))` errors with "Dynamic
-/// quantization cannot be used with batching." Chunking at this layer keeps the
-/// memory guard without tripping that constraint, regardless of the caller.
+/// batching (a dynamically-quantized model rejects `Some(n)` with "Dynamic
+/// quantization cannot be used with batching"; chunking here keeps the memory
+/// guard for any model, regardless of the caller).
 #[cfg(feature = "fastembed-local")]
 const EMBED_BATCH_SIZE: usize = 32;
 
@@ -322,7 +345,7 @@ pub(in crate::embeddings) fn embed_texts_fastembed_sync(texts: &[String]) -> Res
     for chunk in texts.chunks(EMBED_BATCH_SIZE) {
         let str_refs: Vec<&str> = chunk.iter().map(String::as_str).collect();
         // `None`: bound memory via the chunk above, not fastembed's internal
-        // batching (which the quantized model rejects).
+        // batching.
         let embedded = model
             .embed(str_refs, None)
             .map_err(|e| FourDaError::from(format!("fastembed embed: {e}")))?;
@@ -338,13 +361,13 @@ pub(in crate::embeddings) fn init_fastembed_with_progress(
     let _ = FASTEMBED_MODEL.get_or_try_init(|| {
         let cache_dir = crate::runtime_paths::RuntimePaths::get().model_cache_dir();
         ensure_ort_runtime(&cache_dir, progress.as_ref())?;
-        let cached = ensure_embedding_model(&cache_dir);
+        let bundled = bundled_model_dir().join(BUNDLED_ONNX).is_file();
 
         if let Some(tx) = progress.as_ref() {
-            let msg = if cached {
+            let msg = if bundled {
                 "Loading bundled embedding model...".to_string()
             } else {
-                "Downloading embedding model (~220MB first run)...".to_string()
+                "Downloading embedding model (~550MB first run)...".to_string()
             };
             let _ = tx.send(DownloadProgress {
                 stage: "model-init".into(),
@@ -356,16 +379,7 @@ pub(in crate::embeddings) fn init_fastembed_with_progress(
             });
         }
 
-        let options =
-            fastembed::InitOptions::new(fastembed::EmbeddingModel::SnowflakeArcticEmbedMQ)
-                .with_cache_dir(cache_dir)
-                .with_show_download_progress(!cached);
-        let result = fastembed::TextEmbedding::try_new(options)
-            .map(parking_lot::Mutex::new)
-            .map_err(|e| {
-                tracing::warn!(target: "4da::embeddings", error = %e, "fastembed init failed");
-                FourDaError::from(format!("fastembed init: {e}"))
-            });
+        let result = load_embedding_model(cache_dir).map(parking_lot::Mutex::new);
 
         if let Some(tx) = progress.as_ref() {
             let _ = tx.send(DownloadProgress {

@@ -1274,23 +1274,20 @@ fn apply_topic_clustering(items: &mut Vec<BriefingItem>) -> bool {
     }
 
     // Build cluster candidates by joining briefing items with their embeddings
-    let embedding_map: std::collections::HashMap<i64, (Vec<f32>, Option<String>)> = embedding_data
-        .into_iter()
-        .map(|(id, _title, _source, emb, ct)| (id, (emb, ct)))
-        .collect();
+    let embedding_map: std::collections::HashMap<i64, Vec<f32>> =
+        embedding_data.into_iter().collect();
 
     let candidates: Vec<crate::topic_clustering::ClusterCandidate> = items
         .iter()
         .filter_map(|item| {
             let id = item.item_id?;
-            let (embedding, content_type) = embedding_map.get(&id)?.clone();
+            let embedding = embedding_map.get(&id)?.clone();
             Some(crate::topic_clustering::ClusterCandidate {
                 id,
                 score: item.score,
                 source_type: item.source_type.clone(),
                 embedding,
                 title: item.title.clone(),
-                content_type,
             })
         })
         .collect();
@@ -2718,6 +2715,10 @@ async fn synthesize_morning_briefing_once(
         }
     };
 
+    // The prompt is built once for the whole fallback chain, so item descriptions
+    // (advisory text or derived action text) go in only if every provider in the
+    // chain may receive item bodies (titles_only, see `llm_egress`).
+    let send_body = providers.iter().all(crate::llm_egress::body_allowed);
     let items_text = briefing
         .items
         .iter()
@@ -2728,7 +2729,11 @@ async fn synthesize_morning_briefing_once(
                 .as_deref()
                 .map(|p| format!("[{}] ", p.to_uppercase()))
                 .unwrap_or_default();
-            let desc = item.description.as_deref().unwrap_or("");
+            let desc = if send_body {
+                item.description.as_deref().unwrap_or("")
+            } else {
+                ""
+            };
             let deps = if item.matched_deps.is_empty() {
                 String::new()
             } else {
@@ -3193,7 +3198,8 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
     let mut last_error: Option<String> = None;
 
     for (idx, llm_settings) in providers.iter().enumerate() {
-        let llm_client = crate::llm::LLMClient::new(llm_settings.clone());
+        let llm_client =
+            crate::llm::LLMClient::with_purpose(llm_settings.clone(), "monitoring_brief");
         let tier = crate::ollama::synthesis_tier(llm_settings).await;
         let provider_label = format!(
             "{}/{}",

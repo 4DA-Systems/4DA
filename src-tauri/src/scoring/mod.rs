@@ -41,6 +41,7 @@ pub(crate) mod query_weighting;
 pub(crate) mod reexamination;
 #[cfg(test)]
 mod registry_grounding_tests;
+pub(crate) mod release_grade;
 pub(crate) mod release_version;
 mod role_inference;
 mod semantic;
@@ -624,7 +625,21 @@ pub(crate) use types::{ScoringInput, ScoringOptions};
 // to NVD ("[GHSA-h395-gr6q-cpjc] jsonwebtoken: …") reached the mirror with no
 // id and the ungraded fallback said Critical for a medium-labelled bug. The
 // title's id is always a candidate now; every advisory row re-judges.
-pub(crate) const PIPELINE_VERSION: i32 = 35;
+// v36 (2026-09-24, harvest recall audit): `extract_registry_package` returned
+// a go_modules key whole (`github.com/gin-gonic/gin@v1.10.0`), so no Go
+// release was ever grounded through its registry subject. Scoped in
+// `epochs::SCOPED_EPOCHS` to go_modules rows: crates.io keys gained a
+// version in the same change, but extraction still yields the same name.
+// v37 (2026-09-25, harvest audit v2): (1) a registry release whose subject
+// grounds to the user's dependency takes full domain relevance — the
+// dep-match override needed 0.50 but a single subject match scores 0.19–0.42,
+// so `fastembed v7.1.0` (pinned 5.13.4) fell to the off-domain gate at 0.155;
+// (2) registry releases are graded per project against the pinned version
+// (`release_grade`): breaking and yanked keep their score as
+// `breaking_change` necessity naming the projects, a minor and a prerelease
+// take ceilings below it, a patch leaves the feed. Scoped in
+// `epochs::SCOPED_EPOCHS` to registry rows.
+pub(crate) const PIPELINE_VERSION: i32 = 37;
 
 /// Parse the topic tags carried in the `source_items.tags` column.
 ///
@@ -694,15 +709,12 @@ pub(crate) struct ScoringContext {
     // feedback_boosts (feedback-derived topic boosts) DELETED in v20a: the
     // loader had pinned it to an empty map since v19 (AD-029) and the last
     // pipeline reader was removed with the dead feedback_boost computation.
-    /// Retired source-quality scaffold: source_type -> score (-1.0 to 1.0)
-    ///
-    /// Loaded permanently empty and read by nothing since AD-029 demoted the
-    /// behavioural scoring signals (V2 pins `source_quality_boost` to 0.0). The
-    /// field is retained deliberately as AD-029 scaffolding — it still carries
-    /// the simulation's enrichment knob — and must NOT be deleted until that
-    /// decision is revisited against AD-029's re-enable criteria.
-    #[allow(dead_code)] // REMOVE BY 2026-11-12
-    pub source_quality: HashMap<String, f32>,
+    // source_quality (learned per-source score map) DELETED 2026-09-24: loaded
+    // permanently empty and read by nothing since AD-029 (v19) demoted the
+    // behavioural signals; V2 pins `source_quality_boost` to 0.0. AD-031
+    // rejected keeping dormant capture for a re-enable (criterion 1 requires a
+    // rebuilt capture layer), so the empty map and its simulation no-op knob
+    // went with it.
     /// User's explicitly declared tech stack (3-5 items from onboarding).
     /// Used for signal action text and priority escalation — much smaller than detected_tech.
     pub declared_tech: Vec<String>,

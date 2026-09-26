@@ -86,15 +86,51 @@ use tracing::{debug, info, warn};
 /// gate reads only current-version judgments, so it pauses until v6 judgments
 /// accumulate rather than mixing two rubrics.
 ///
+/// v7 (2026-09-26): same rubric; `{user_context}` is now project cards
+/// (`project_cards`, which records the measurements).
+///
 /// `pub(crate)`: the judge accuracy benchmark (`scoring::judge_benchmark`)
 /// stamps every result row with the prompt cohort it measured, so a stored
 /// score can never be misread as belonging to a prompt it never ran under.
-pub(crate) const PROMPT_VERSION: &str = "v6";
+pub(crate) const PROMPT_VERSION: &str = "v7";
 const INGESTION_THRESHOLD: f64 = 0.25;
 /// 10 items per call: the system prompt + user-context block (~800 tokens) is
 /// resent on every call, so batch size directly divides that fixed overhead.
 /// Was 5 — measured 2026-08-31, the fixed overhead was ~40% of input spend.
 pub(crate) const BATCH_SIZE: usize = 10;
+
+/// How the ingest judge (and the pending-verdict drain, which shares its
+/// provider gate) may run for this provider: `Some(items_per_call)`, or
+/// `None` when the model must not judge at all.
+///
+/// Both lanes REMOVE items from the feed (`llm_reject`), so the bar is the
+/// rerank lane's (`ModelTier::supports_reranking`) — which the demotion lanes
+/// never checked. The onboarding default for Ollama is `llama3.2` (3B, Basic),
+/// so every Ollama user without a larger model ran a 3B feed judge, while the
+/// far gentler rerank lane (±0.15, never removes) refused the same model.
+/// Measured 2026-09-24 on the blind gold: llama3.2 + v6 adds nothing over the
+/// pipeline (+0.001 [-0.009, +0.012] one per call, +0.008 batched) — a lane
+/// that burns GPU every cycle and can still remove items, for no signal.
+///
+/// Items per call: cloud keeps [`BATCH_SIZE`]. Haiku 1 vs 10 per call: +0.009
+/// AUC [-0.049, +0.071]; in rank order +0.051 [-0.016, +0.133] — unproven, and
+/// one per call measured 2.6x the spend (the ~940-token prefix is under Haiku
+/// 4.5's 4,096-token cache minimum). Local models judge one per call: their
+/// batching penalty is large and significant, and local calls cost only GPU.
+pub(crate) fn judge_items_per_call(provider: &LLMProvider) -> Option<usize> {
+    let tier = crate::llm_capability::get_model_tier(provider);
+    let local = provider.provider == "ollama";
+    let measured_local = local && {
+        let model = provider.model.to_lowercase();
+        crate::local_judge::MEASURED_LOCAL_JUDGES
+            .iter()
+            .any(|m| model.starts_with(m))
+    };
+    if !tier.supports_reranking() && !measured_local {
+        return None;
+    }
+    Some(if local { 1 } else { BATCH_SIZE })
+}
 
 /// Demote-only verdict feedback: judged relevance strictly below this…
 ///
@@ -227,17 +263,21 @@ pub(crate) fn drain_reserve(pending_backlog: i64) -> usize {
 /// Called after ingestion when new items arrive (deep-scan path), and by
 /// [`run_post_cycle_llm_passes`] on the scheduled/headless cadence.
 pub(crate) async fn evaluate_pending_items(db: &Database) -> Result<usize> {
-    if crate::state::is_llm_limit_reached() {
-        debug!(target: "4da::llm_judgments", "LLM daily limit reached, skipping judgment batch");
-        return Ok(0);
-    }
-
+    crate::local_judge::refresh_if_stale().await;
     let Some(provider) = get_llm_settings() else {
         debug!(target: "4da::llm_judgments", "No LLM provider configured, skipping judgments");
         return Ok(0);
     };
+    if crate::local_judge::budget_blocks(Some(&provider)) {
+        debug!(target: "4da::llm_judgments", "LLM daily limit reached, skipping judgment batch");
+        return Ok(0);
+    }
+    let Some(per_call) = judge_items_per_call(&provider) else {
+        debug!(target: "4da::llm_judgments", model = %provider.model, "Judge model is below the feed-judging bar, skipping judgments");
+        return Ok(0);
+    };
 
-    Ok(evaluate_with_provider(db, provider).await?.judged)
+    Ok(evaluate_with_provider(db, provider, per_call).await?.judged)
 }
 
 // ============================================================================
@@ -252,7 +292,8 @@ pub(crate) struct PostCycleLlmSummary {
     pub judged: usize,
     pub analyses_stored: usize,
     pub demoted: usize,
-    /// Why the pass was a no-op (`"llm_budget_reached"` / `"no_llm_provider"`),
+    /// Why the pass was a no-op (`"llm_budget_reached"` / `"no_llm_provider"` /
+    /// `"judge_model_below_bar"`),
     /// if it was.
     pub skipped: Option<&'static str>,
 }
@@ -271,7 +312,10 @@ pub(crate) struct PostCycleLlmSummary {
 // REMOVE the allow when the app_setup/headless seams land (fix-queue item 25
 // wiring; the seam lines are in this function's doc above).
 pub(crate) async fn run_post_cycle_llm_passes(db: &Database) -> PostCycleLlmSummary {
-    run_post_cycle_with(db, crate::state::is_llm_limit_reached(), get_llm_settings()).await
+    crate::local_judge::refresh_if_stale().await;
+    let provider = get_llm_settings();
+    let blocked = crate::local_judge::budget_blocks(provider.as_ref());
+    run_post_cycle_with(db, blocked, provider).await
 }
 
 /// Gate-injectable inner pass. Hermetic tests drive the budget/BYOK gates
@@ -294,8 +338,15 @@ async fn run_post_cycle_with(
         summary.skipped = Some("no_llm_provider");
         return summary;
     };
+    // Below the bar: skip the demotion pass too — the judgments it would act
+    // on came from the same model.
+    let Some(per_call) = judge_items_per_call(&provider) else {
+        debug!(target: "4da::llm_judgments", model = %provider.model, "Judge model is below the feed-judging bar — skipping post-cycle LLM passes");
+        summary.skipped = Some("judge_model_below_bar");
+        return summary;
+    };
 
-    match evaluate_with_provider(db, provider).await {
+    match evaluate_with_provider(db, provider, per_call).await {
         Ok(outcome) => {
             summary.judged = outcome.judged;
             summary.analyses_stored = outcome.analyses_stored;
@@ -333,7 +384,11 @@ struct JudgeOutcome {
     analyses_stored: usize,
 }
 
-async fn evaluate_with_provider(db: &Database, provider: LLMProvider) -> Result<JudgeOutcome> {
+async fn evaluate_with_provider(
+    db: &Database,
+    provider: LLMProvider,
+    items_per_call: usize,
+) -> Result<JudgeOutcome> {
     let mut outcome = JudgeOutcome {
         judged: 0,
         analyses_stored: 0,
@@ -346,7 +401,11 @@ async fn evaluate_with_provider(db: &Database, provider: LLMProvider) -> Result<
     // of it. No backlog → the fresh lane keeps its full selection.
     let reserve = drain_reserve(db.count_pending_verdicts().unwrap_or(0));
     let unjudged = db
-        .get_unjudged_item_ids(INGESTION_THRESHOLD, BATCH_SIZE * 4 - reserve)
+        .get_unjudged_item_ids(
+            INGESTION_THRESHOLD,
+            f64::from(crate::state::get_relevance_threshold()) - 0.03,
+            BATCH_SIZE * 4 - reserve,
+        )
         .map_err(|e| {
             crate::error::FourDaError::Internal(format!("Failed to get unjudged items: {e}"))
         })?;
@@ -355,14 +414,17 @@ async fn evaluate_with_provider(db: &Database, provider: LLMProvider) -> Result<
     }
 
     let model_name = provider.model.clone();
+    let send_body = crate::llm_egress::body_allowed(&provider);
+    let on_machine = crate::llm_egress::provider_is_on_machine(&provider);
+    let user_context = crate::project_cards::judge_context(db, on_machine);
     let client = LLMClient::with_purpose(provider, "ingest_judge");
-    let user_context = crate::adversarial::build_user_context_summary();
 
-    for chunk in unjudged.chunks(BATCH_SIZE) {
-        let items = load_items_for_judgment(db, chunk)?;
+    for chunk in unjudged.chunks(items_per_call.max(1)) {
+        let mut items = load_items_for_judgment(db, chunk)?;
         if items.is_empty() {
             continue;
         }
+        crate::llm_egress::withhold_judgment_bodies(send_body, &mut items);
 
         match evaluate_batch(&client, &items, &user_context).await {
             Ok(results) => {

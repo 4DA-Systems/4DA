@@ -63,7 +63,7 @@ pub async fn create_team(relay_url: String, display_name: String) -> Result<serd
     )?;
     // Generate cryptographic material
     let crypto = TeamCrypto::generate();
-    let team_key = TeamCrypto::generate_team_key();
+    let team_key = TeamCrypto::generate_team_key().map_err(|e| e.to_string())?;
     let client_id = uuid::Uuid::new_v4().to_string();
     let team_id = uuid::Uuid::new_v4().to_string();
 

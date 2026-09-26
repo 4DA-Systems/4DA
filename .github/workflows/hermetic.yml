@@ -41,19 +41,30 @@
 name: Hermetic Fresh-Clone
 
 on:
-  pull_request:
-    branches: [main]
-  # Merge-queue entries. Without this trigger `Hermetic Success` can never be a
-  # REQUIRED check (the queue would wait forever for a context that never
-  # reports), and while it was advisory a PR could merge with the fresh-clone
-  # canary red: #635 (vitest 5 in mcp-4da-server) sat with Validate green,
-  # `Fresh clone (windows-latest)` failing, and a mergeable state of UNSTABLE.
-  # On merge_group the `changes` detector skips (it is PR-only), so the
-  # `github.event_name != 'pull_request'` clause below runs the full canary —
-  # right for the last gate before main. Cost: the queue waits for
-  # max(Validate, Hermetic) instead of Validate alone — measured ~16-20 min vs
-  # ~23 min on 2026-09-11/23, so roughly +3-5 min per entry.
-  merge_group: {}
+  # ADVISORY on PRs, and deliberately NOT a merge-queue check (no merge_group
+  # trigger). History, so this is not re-litigated blind:
+  #   - 2026-09-24 (#682): made REQUIRED, with a merge_group trigger, after #635
+  #     (vitest 5 in mcp-4da-server) merged with `Fresh clone (windows-latest)`
+  #     red and Validate green.
+  #   - 2026-09-26: required-ness removed. The cold, cacheless windows leg
+  #     (13.5 min compile + 7 min tests on 4 vCPU) became the queue's slowest
+  #     job at 22-26 min, ~5-7 min past Validate. Its only failure in 60 runs
+  #     was a timing flake (the watcher panic test, fixed in #737). That flake
+  #     ejected #735 and cost 30 min. Each entry also started 3 more jobs
+  #     against the free plan's 20-concurrent-job cap, and #735's entry waited
+  #     8.2 min for a runner.
+  # What replaces the gate: every push to main still runs the full canary
+  # (below), and `main-alert` turns a red push or nightly run into an open
+  # issue within ~25 min of the merge. Windows breakage is caught just after
+  # the merge instead of just before.
+  #   - 2026-09-26 (later): the pull_request trigger went too. Once the gate
+  #     was gone, a PR run could not stop anything: auto-merge queues a PR ~5 min
+  #     after it opens and the queue merges it ~10-12 min later, while this cold
+  #     build takes 20-25 min. Every code PR still paid 3 jobs against the
+  #     20-job cap for a result that arrived after the merge, and that is the
+  #     cap that delays queue entries. The push-to-main run checks the same
+  #     code minutes later. To check a branch before merging, dispatch this
+  #     workflow on it (`gh workflow run hermetic.yml --ref <branch>`).
   push:
     branches: [main]
   schedule:
@@ -62,12 +73,16 @@ on:
     - cron: "0 7 * * *"
   workflow_dispatch: {}
 
+# Least privilege, stated explicitly (CodeQL actions/missing-workflow-permissions).
+permissions:
+  contents: read
+
 concurrency:
   group: hermetic-${{ github.ref }}
-  # Cancel superseded PR runs only. On main, a cancelled push run means that
-  # commit is never fresh-clone-verified at all: 8a6d5995 (#666) was cancelled
-  # by #667's push eight minutes later and has no post-merge canary result.
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  # Never cancel. On main, a cancelled push run means that commit is never
+  # fresh-clone-verified at all: 8a6d5995 (#666) was cancelled by #667's push
+  # eight minutes later and has no post-merge canary result.
+  cancel-in-progress: false
 
 env:
   CARGO_TERM_COLOR: always
@@ -75,69 +90,11 @@ env:
   NODE_OPTIONS: '--max-old-space-size=8192'
 
 jobs:
-  # On PRs, decide whether the cold fresh-clone build is worth GitHub-HOSTED
-  # minutes. A docs-only PR (markdown, plans) cannot break a fresh clone, so it
-  # skips the build entirely — this protects the shared account's metered hosted
-  # minutes (the macOS-heavy victauri builds can exhaust them). Push-to-main,
-  # the nightly schedule, and manual dispatch ALWAYS run the full canary — the
-  # whole point of Hermetic is to catch drift there, so it is never filtered.
-  changes:
-    name: Detect changes
-    # PR-only (see note in validate.yml): push/schedule/dispatch skip this and
-    # always build via fresh-clone's `github.event_name != 'pull_request'` clause.
-    # That clause only works because `fresh-clone`'s `if:` is wrapped in a status
-    # function — see the comment there. Do not remove it.
-    if: github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
-    timeout-minutes: 5
-    outputs:
-      code: ${{ steps.filter.outputs.code }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
-      - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4.0.2
-        id: filter
-        with:
-          filters: |
-            code:
-              - 'src/**'
-              - 'src-tauri/**'
-              - 'mcp-4da-server/**'
-              - 'package.json'
-              - 'pnpm-lock.yaml'
-              - 'index.html'
-              # vite*.config.* so 'vitest.config.ts' is covered too — it decides how
-              # every frontend test in this gate executes. Unlike validate.yml this
-              # filter has NO 'uncovered' fail-safe, so a miss here does not degrade to
-              # 'run the generic gate', it SKIPS the fresh clone outright (#603: 19s).
-              - 'vite*.config.*'
-              - 'tsconfig*.json'
-              - 'scripts/**'
-              - '.github/workflows/**'
-
   fresh-clone:
     name: Fresh clone (${{ matrix.os }})
-    needs: changes
-    # Always run on push/schedule/dispatch (the canary); on PRs, only when code
-    # that could affect a fresh clone changed. A skipped run still reports via
-    # the `Hermetic Success` aggregate below (skipped == pass).
-    #
-    # The `!cancelled()` wrapper is LOAD-BEARING, not decoration. `changes` is
-    # itself PR-only, so on push/schedule/dispatch it is SKIPPED — and GitHub
-    # skips any job whose `needs` was skipped unless that job's `if:` contains a
-    # status function (`always()` / `cancelled()` / `success()` / `failure()`).
-    # Without the wrapper the implicit `success()` on `needs` won this argument
-    # and the canary silently skipped on exactly the three triggers the comment
-    # above promises it runs on: push-to-main, the nightly cron and manual
-    # dispatch all reported "success" in 6-26 SECONDS without cloning anything
-    # (observed 2026-08-13/14: 7s, 7s, 9s vs ~19min for a real PR run). The
-    # nightly cron had never built a single fresh clone.
-    #
-    # `!cancelled()` rather than `always()`: a cancelled run should stay
-    # cancelled, not spawn a 45-minute cold build. If `changes` FAILS on a PR,
-    # `needs.changes.outputs.code` is empty, this evaluates false and the leg
-    # skips — but `hermetic-success` below takes `changes` in its own `needs`
-    # and fails on that `failure` result, so a broken detector cannot pass.
-    if: ${{ !cancelled() && (github.event_name != 'pull_request' || needs.changes.outputs.code == 'true') }}
+    # Runs on every trigger (push to main, nightly, dispatch). There is no PR
+    # trigger any more, so the PR-only path detector and the `!cancelled()`
+    # wrapper it forced on this job went with it.
     runs-on: ${{ matrix.os }}
     # Cold, cacheless build + full test suite on two platforms. Runs have
     # historically landed ~16-18 min; 45 caps a hung network fetch or a runner
@@ -157,7 +114,7 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@e97e2d8cc328f1b50210efc529dca0028893a2d9 # v1
+        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # v1
         with:
           toolchain: stable
 
@@ -180,7 +137,7 @@ jobs:
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev
 
       - name: Setup Node.js
-        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v4
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v4
         with:
           node-version: '22'
 
@@ -253,18 +210,18 @@ jobs:
           pnpm --dir mcp-4da-server run build
           pnpm --dir mcp-4da-server run test
 
-      - name: Rust — cold compile gate (no cache, no-run)
-        # Fast-fails the build/resource class before the slow test run.
-        #
-        # `--tests` (not `--lib`): cargo's `--tests` selects every target with
-        # `test = true`, which is the lib unittests, the bin unittests AND the
-        # integration tests under src-tauri/tests/. The old `--lib` scope meant
-        # the integration suite was never even COMPILED here, so a fresh clone
-        # could not prove it builds.
-        working-directory: src-tauri
-        run: cargo test --tests --no-run
-
-      - name: Rust — hermetic tests (unit + integration, isolated data dir)
+      # Cold compile + tests in ONE cargo invocation. A separate `--no-run`
+      # compile step used to come first, and it forced a second full compile of
+      # the fourda crate here. Tauri's `generate_context!` rewrites an OUT_DIR
+      # asset mid-compile, so the next cargo command always sees the crate as
+      # stale (see validate.yml's Rust test step). A compile failure still fails
+      # this step before any test runs, so the build/resource failure class is
+      # still reported as a build failure.
+      #
+      # `--tests` (not `--lib`): cargo's `--tests` selects every target with
+      # `test = true` — lib unittests, bin unittests AND the integration tests
+      # under src-tauri/tests/, so a fresh clone proves all of them build.
+      - name: Rust — cold compile + hermetic tests (unit + integration, isolated data dir)
         working-directory: src-tauri
         env:
           # Force any data-dir resolution onto a path that holds no real DB, so
@@ -289,16 +246,15 @@ jobs:
   # ─────────────────────────────────────────────────────────────────────
   # Aggregate gate: a SINGLE status check to require in branch protection,
   # collapsing the ubuntu + windows matrix legs into one stable name. Renaming
-  # or adding an OS leg cannot silently drop it from the gate. Fails if any leg
-  # FAILED or was CANCELLED; a SKIPPED leg passes. Mirrors validate.yml's
+  # or adding an OS leg cannot silently drop it from the gate. Only `success`
+  # passes. `skipped` used to pass too, for path-filtered PR legs, and there is
+  # no PR trigger any more. Mirrors validate.yml's
   # `validate-success` and victauri's `ci-success`.
   # ─────────────────────────────────────────────────────────────────────
   hermetic-success:
     name: Hermetic Success
     if: always()
-    # `changes` included so a detector failure is caught; a path-filtered
-    # skip of `fresh-clone` reports "skipped", treated as pass below.
-    needs: [changes, fresh-clone]
+    needs: [fresh-clone]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -308,8 +264,9 @@ jobs:
           # ALLOWLIST, not a denylist — the same fix #485 made to Validate
           # Success after a Relay job reported `abandoned` and the denylist
           # (`failure|cancelled` only) passed it GREEN. GitHub emits more
-          # results than the documented four; only `success` and `skipped`
-          # (a path-filtered PR leg) may pass.
+          # results than the documented four; only `success` may pass. (A
+          # `skipped` leg once meant a path-filtered PR run. With no PR trigger, a
+          # skip here would mean the canary silently did not run.)
           results='${{ join(needs.*.result, ',') }}'
           echo "dependency results: $results"
           if [ -z "$results" ]; then
@@ -320,7 +277,7 @@ jobs:
           IFS=',' read -ra parsed <<< "$results"
           for r in "${parsed[@]}"; do
             case "$r" in
-              success|skipped) ;;
+              success) ;;
               *) bad="$bad $r" ;;
             esac
           done
@@ -328,4 +285,63 @@ jobs:
             echo "::error::a Hermetic Fresh-Clone leg did not succeed ($results) — offending results:$bad"
             exit 1
           fi
-          echo "all Hermetic Fresh-Clone legs succeeded (or were skipped as not-applicable)"
+          echo "all Hermetic Fresh-Clone legs succeeded"
+
+  # ─────────────────────────────────────────────────────────────────────
+  # main-alert: Hermetic no longer gates the merge queue, so a red canary on
+  # main must be impossible to miss. It maintains ONE issue, labelled
+  # `hermetic-main`: opened (or commented on) when a push-to-main or nightly
+  # run fails, closed automatically by the next green one. So an open issue
+  # always means "a fresh clone of main is broken right now", never history.
+  # Same shape as validate.yml's `main-health`.
+  # ─────────────────────────────────────────────────────────────────────
+  main-alert:
+    name: main fresh-clone alert
+    needs: [hermetic-success]
+    if: ${{ always() && !cancelled() && (github.event_name == 'push' || github.event_name == 'schedule') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      issues: write
+    steps:
+      - name: Open, update or close the hermetic-main issue
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v7
+        env:
+          RESULT: ${{ needs.hermetic-success.result }}
+          HEAD_SHA: ${{ github.sha }}
+        with:
+          script: |
+            const LABEL = 'hermetic-main';
+            const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+            const sha = process.env.HEAD_SHA.slice(0, 8);
+            const red = process.env.RESULT !== 'success';
+            const { data: open } = await github.rest.issues.listForRepo({
+              ...context.repo, state: 'open', labels: LABEL, per_page: 10,
+            });
+            const issue = open[0];
+            if (!red) {
+              if (issue) {
+                await github.rest.issues.createComment({ ...context.repo, issue_number: issue.number,
+                  body: `Resolved: fresh clone of main is green again at ${sha} (${context.eventName}). ${runUrl}` });
+                await github.rest.issues.update({ ...context.repo, issue_number: issue.number, state: 'closed', state_reason: 'completed' });
+                core.info(`Closed #${issue.number}`);
+              }
+              return;
+            }
+            const body = [
+              `## Fresh clone of main FAILS at \`${sha}\` (${context.eventName}, ${process.env.RESULT})`,
+              '',
+              'Hermetic is not a merge-queue check, so this landed. A contributor cloning main today cannot build or test it on at least one platform. Failing legs:',
+              runUrl,
+              '',
+              'Usually a Windows-only break (Validate runs Rust on ubuntu only). This issue closes itself on the next green push or nightly run.',
+            ].join('\n');
+            if (issue) {
+              await github.rest.issues.createComment({ ...context.repo, issue_number: issue.number, body });
+              core.info(`Updated #${issue.number}`);
+            } else {
+              const { data } = await github.rest.issues.create({ ...context.repo,
+                title: `main is RED on a fresh clone (${sha})`, body, labels: [LABEL] });
+              core.info(`Opened #${data.number}`);
+            }

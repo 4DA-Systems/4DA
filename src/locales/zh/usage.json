@@ -15,6 +15,10 @@
     "channel_render": "频道渲染",
     "content_analysis": "内容分析",
     "translation": "翻译",
+    "verdict_drain": "相关性评判 — 待定结论",
+    "monitoring_brief": "晨间简报",
+    "capability_probe": "模型能力检测",
+    "connection_test": "连接测试（设置）",
     "completion": "未标记（简报等）",
     "structured_completion": "未标记（结构化）",
     "streaming": "未标记（流式）"

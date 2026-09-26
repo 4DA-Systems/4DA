@@ -17,11 +17,11 @@ export const recordFeedbackTool = {
 
 Feedback actions:
 - "click": User clicked/opened the item
-- "save": User saved/bookmarked the item
+- "save": User saved/bookmarked the item, or said it is relevant (also records a relevance label)
 - "dismiss": User dismissed the item
-- "mark_irrelevant": User marked item as not relevant
+- "mark_irrelevant": User said the item is not relevant (also records a relevance label)
 
-This records what happened; it does not train content preferences (interaction counts only graduate scoring's bootstrap gate).`,
+Only "save" and "mark_irrelevant" are relevance labels; they are what 4DA's accuracy measurement reads. Use them only when the user actually says whether the item matters to them. This does not train content preferences.`,
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -31,8 +31,7 @@ This records what happened; it does not train content preferences (interaction c
       },
       source_type: {
         type: "string",
-        description: 'The source type: "hackernews", "arxiv", or "reddit"',
-        enum: ["hackernews", "arxiv", "reddit"],
+        description: "Optional. The item's source type (e.g. \"hackernews\", \"crates_io\", \"lobsters\"); if given it must match the item.",
       },
       action: {
         type: "string",
@@ -40,7 +39,7 @@ This records what happened; it does not train content preferences (interaction c
         enum: ["click", "save", "dismiss", "mark_irrelevant"],
       },
     },
-    required: ["item_id", "source_type", "action"],
+    required: ["item_id", "action"],
   },
 };
 
@@ -53,10 +52,10 @@ export function executeRecordFeedback(
   db: FourDADatabase,
   params: RecordFeedbackParams
 ): FeedbackResult {
-  if (!params.item_id || !params.source_type || !params.action) {
+  if (!params.item_id || !params.action) {
     return {
       success: false,
-      message: "item_id, source_type, and action are required",
+      message: "item_id and action are required",
     };
   }
 

@@ -72,11 +72,6 @@ pub(crate) struct ClusterCandidate {
     pub source_type: String,
     pub embedding: Vec<f32>,
     pub title: String,
-    /// Content type, loaded with each item for mixed-signal detection refinements
-    /// that were never built. Populated, never read.
-    /// (Expired removal marker dated 2026-08-01 cleared 2026-08-12.)
-    #[allow(dead_code)] // REMOVE BY 2026-11-12
-    pub content_type: Option<String>,
 }
 
 /// An alternative source for a clustered item — shown as "also reported by" in the UI.
@@ -304,7 +299,6 @@ mod tests {
             source_type: source.to_string(),
             embedding,
             title: format!("Item {id}"),
-            content_type: None,
         }
     }
 
@@ -321,7 +315,6 @@ mod tests {
             source_type: source.to_string(),
             embedding,
             title: title.to_string(),
-            content_type: None,
         }
     }
 

@@ -16,7 +16,6 @@ pub(super) fn bootstrap_enrichment() -> PersonaEnrichment {
     PersonaEnrichment {
         topic_confidence: confidence_map(&[("typescript", 0.60)]),
         topic_embeddings: topic_embedding_map(&["typescript"]),
-        source_quality: HashMap::new(),
         work_topics: vec![],
         calibration_deltas: HashMap::new(),
         taste_embedding: None,
@@ -52,12 +51,6 @@ pub(super) fn power_user_enrichment() -> PersonaEnrichment {
             "ai",
             "wasm",
             "databases",
-        ]),
-        source_quality: source_quality_map(&[
-            ("hackernews", 0.85),
-            ("reddit", 0.7),
-            ("github_trending", 0.9),
-            ("rss", 0.8),
         ]),
         work_topics: string_vec(&["rust", "python", "distributed systems"]),
         calibration_deltas: confidence_map(&[
@@ -133,12 +126,6 @@ pub(super) fn context_switcher_enrichment() -> PersonaEnrichment {
             ("grpc", 0.70),
         ]),
         topic_embeddings: topic_embedding_map(&["rust", "go", "backend", "microservices", "grpc"]),
-        source_quality: source_quality_map(&[
-            ("hackernews", 0.8),
-            ("reddit", 0.6),
-            ("github_trending", 0.85),
-            ("rss", 0.7),
-        ]),
         work_topics: string_vec(&["rust", "go"]),
         calibration_deltas: confidence_map(&[("rust", 0.02), ("go", -0.01)]),
         taste_embedding: Some(taste_from_topics(&["rust", "go", "microservices"])),
@@ -192,12 +179,6 @@ pub(super) fn niche_specialist_enrichment() -> PersonaEnrichment {
             "functional programming",
             "type theory",
             "nix",
-        ]),
-        source_quality: source_quality_map(&[
-            ("hackernews", 0.7),
-            ("reddit", 0.6),
-            ("github_trending", 0.7),
-            ("rss", 0.9),
         ]),
         work_topics: string_vec(&["haskell", "nix"]),
         calibration_deltas: confidence_map(&[("haskell", 0.06), ("functional programming", 0.04)]),

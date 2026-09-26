@@ -1028,8 +1028,9 @@ mod tests {
 
             // Before fit: unprocessed count matches what we stamped.
             let pending =
-                calibration_samples::count_unprocessed(&conn, identity_hash, "judge", 0).unwrap();
-            assert_eq!(pending, 60);
+                calibration_samples::collect_unprocessed(&conn, identity_hash, "judge", 0, 1000)
+                    .unwrap();
+            assert_eq!(pending.len(), 60);
 
             // 2. Run the fitter. This writes the curve to disk and marks
             //    every sample processed.
@@ -1040,10 +1041,15 @@ mod tests {
             assert!(fit_curve.buckets.len() >= 2);
 
             // After fit: zero unprocessed.
-            assert_eq!(
-                calibration_samples::count_unprocessed(&conn, identity_hash, "judge", 0).unwrap(),
-                0
-            );
+            assert!(calibration_samples::collect_unprocessed(
+                &conn,
+                identity_hash,
+                "judge",
+                0,
+                1000
+            )
+            .unwrap()
+            .is_empty());
 
             // 3. Reload from disk. load_current_curve applies the drift
             //    check: a matching prompt_version returns Some, a drifted
@@ -1095,10 +1101,6 @@ mod tests {
                             input_tokens: 1,
                             output_tokens: 1,
                         },
-                        identity: self.identity(),
-                        prompt_version: "judge-v1-e2e".to_string(),
-                        calibration_id: Some("pre-mesh-unknown".to_string()),
-                        raw_response_hash: None,
                     })
                 }
                 fn estimate_cost_cents(&self, _: u64, _: u64) -> u64 {
@@ -1117,10 +1119,11 @@ mod tests {
                 }))
                 .unwrap();
 
-            // calibration_id on the Validated response must reflect the
-            // fitted curve (not the stub's sentinel) — proves the wiring.
+            // The wrapped core's calibration_id (what the rerank loop stamps
+            // on provenance rows) must reflect the fitted curve, not the
+            // stub's sentinel — proves the wiring.
             assert_eq!(
-                judged.calibration_id.as_deref(),
+                wrapped.calibration_id().as_deref(),
                 Some(loaded.curve_id.as_str())
             );
 

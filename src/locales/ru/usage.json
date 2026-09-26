@@ -18,6 +18,10 @@
     "channel_render": "Рендеринг канала",
     "content_analysis": "Анализ контента",
     "translation": "Перевод",
+    "verdict_drain": "Оценка релевантности — ожидающие вердикты",
+    "monitoring_brief": "Утренний брифинг",
+    "capability_probe": "Проверка возможностей модели",
+    "connection_test": "Проверка подключения (настройки)",
     "completion": "Без тега (брифинги и прочее)",
     "structured_completion": "Без тега (структурированное)",
     "streaming": "Без тега (стриминг)"

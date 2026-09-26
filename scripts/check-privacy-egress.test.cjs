@@ -69,3 +69,60 @@ test('the escape hatch works and requires a reason on or above the line', () => 
 test('test files are exempt', () => {
   assert.deepStrictEqual(scanText('src-tauri/src/foo_tests.rs', REGRESSION), []);
 });
+
+// ---------------------------------------------------------------------------
+// Rule 2: the titles_only privacy setting (2026-09-24)
+// ---------------------------------------------------------------------------
+const { scanLlmCallSites, productionPart } = require('./check-privacy-egress.cjs');
+
+const UNROUTED = `
+pub async fn summarize(provider: LLMProvider, body: &str) -> String {
+    let client = LLMClient::with_purpose(provider, "summary");
+    client.complete(SYSTEM, vec![msg(body)]).await
+}
+`;
+
+test('a new LLM caller that ignores titles_only is caught', () => {
+  const hits = scanLlmCallSites('src-tauri/src/some_new_feature.rs', UNROUTED);
+  assert.strictEqual(hits.length, 1);
+  assert.strictEqual(hits[0].token, 'titles_only');
+});
+
+test('routing through llm_egress satisfies the rule', () => {
+  const routed = UNROUTED.replace(
+    'let client',
+    'let send_body = crate::llm_egress::body_allowed(&provider);\n    let client'
+  );
+  assert.deepStrictEqual(scanLlmCallSites('src-tauri/src/some_new_feature.rs', routed), []);
+});
+
+test('a declaration needs a reason, and a comment alone is not routing', () => {
+  const declared = `// llm-egress: no-item-body sends only dependency names\n${UNROUTED}`;
+  assert.deepStrictEqual(scanLlmCallSites('src-tauri/src/x.rs', declared), []);
+  const bare = `// llm-egress: no-item-body\n${UNROUTED}`;
+  assert.strictEqual(scanLlmCallSites('src-tauri/src/x.rs', bare).length, 1, 'no reason, no pass');
+  const commented = `// crate::llm_egress::body_allowed(&p) would go here\n${UNROUTED}`;
+  assert.strictEqual(
+    scanLlmCallSites('src-tauri/src/x.rs', commented).length,
+    1,
+    'a comment mentioning llm_egress is not a call'
+  );
+});
+
+test('a client built only inside a test module is not production egress', () => {
+  const testOnly = `pub fn real() {}\n\n#[cfg(test)]\nmod tests {\n    fn t() { let c = LLMClient::new(p()); }\n}\n`;
+  assert.deepStrictEqual(scanLlmCallSites('src-tauri/src/llm.rs', testOnly), []);
+});
+
+test('production code AFTER a mid-file test module is still scanned', () => {
+  // blind_spots.rs has a test module mid-file; cutting at the first one hid its
+  // LLM call from the gate until 2026-09-24.
+  const midFile = `#[cfg(test)]\nmod early_tests {\n    #[test]\n    fn a() { assert!(true); }\n}\n${UNROUTED}`;
+  assert.ok(productionPart(midFile).includes('LLMClient::with_purpose'));
+  assert.strictEqual(scanLlmCallSites('src-tauri/src/blind_spots_like.rs', midFile).length, 1);
+});
+
+test('an out-of-line test module declaration does not swallow the file', () => {
+  const outOfLine = `#[cfg(test)]\n#[path = "x_tests.rs"]\nmod tests;\n${UNROUTED}`;
+  assert.strictEqual(scanLlmCallSites('src-tauri/src/x.rs', outOfLine).length, 1);
+});

@@ -16,6 +16,10 @@
     "channel_render": "Channel rendering",
     "content_analysis": "Content analysis",
     "translation": "Translation",
+    "verdict_drain": "Relevance judging — pending verdicts",
+    "monitoring_brief": "Morning brief",
+    "capability_probe": "Model capability check",
+    "connection_test": "Settings connection test",
     "completion": "Untagged (briefings & misc)",
     "structured_completion": "Untagged (structured)",
     "streaming": "Untagged (streaming)"

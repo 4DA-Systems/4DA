@@ -85,7 +85,6 @@
     "translate_descriptions": false,
     "cloud_translation_consent": false
   },
-  "community_intelligence": null,
   "team_relay": null,
   "network": {
     "proxy_url": null

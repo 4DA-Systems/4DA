@@ -21,19 +21,13 @@ fn validate_ollama_endpoint(url: &str) -> Result<()> {
 
     // For HTTP, only allow localhost addresses
     if url.starts_with("http://") {
-        let after_scheme = &url[7..]; // len("http://") == 7
-        let host = after_scheme
-            .split(|c: char| c == ':' || c == '/')
-            .next()
-            .unwrap_or("");
-
-        if matches!(host, "localhost" | "127.0.0.1" | "[::1]") {
+        if is_local_endpoint(url) {
             return Ok(());
         }
 
         tracing::info!(
             target: "4da::security",
-            host = %host,
+            url = %url,
             "Blocked Ollama request to non-localhost HTTP endpoint"
         );
         return Err(FourDaError::Validation(
@@ -46,6 +40,30 @@ fn validate_ollama_endpoint(url: &str) -> Result<()> {
     Err(FourDaError::Validation(format!(
         "Unsupported Ollama endpoint scheme: {url}"
     )))
+}
+
+/// Whether `url` is Ollama on this machine (the hosts HTTP is allowed to).
+/// Parsed as a URL: splitting on ':' cut `[::1]` down to `[`.
+fn is_local_endpoint(url: &str) -> bool {
+    reqwest::Url::parse(url)
+        .ok()
+        .and_then(|u| u.host_str().map(str::to_owned))
+        .is_some_and(|host| matches!(host.as_str(), "localhost" | "127.0.0.1" | "[::1]"))
+}
+
+/// An embed request body. On a local Ollama the embedding model runs on the
+/// CPU (`num_gpu: 0`), leaving the GPU to the local judge. Measured 2026-09-26
+/// on a 16 GB card with nomic-embed-text: the CPU vectors match the GPU ones
+/// (cosine >= 0.99999 on 32 texts), so no re-embed is needed, and a 32-text
+/// batch takes 1.56 s against 1.20 s on the GPU. With the embedder on the GPU,
+/// Ollama evicted and reloaded gemma4:26b around every embed call, and the
+/// judge's median went from 4.3 s to 101.5 s per item. A remote Ollama has its
+/// own GPU, so its requests are left unchanged.
+fn embed_body(base: &str, mut body: serde_json::Value) -> serde_json::Value {
+    if is_local_endpoint(base) {
+        body["options"] = serde_json::json!({ "num_gpu": 0 });
+    }
+    body
 }
 
 /// Generate embeddings using Ollama API
@@ -68,10 +86,13 @@ pub(in crate::embeddings) async fn embed_texts_ollama(
 
     let embedding_model = crate::reembed::get_embedding_model();
 
-    let batch_body = serde_json::json!({
-        "model": embedding_model,
-        "input": texts,
-    });
+    let batch_body = embed_body(
+        base,
+        serde_json::json!({
+            "model": embedding_model,
+            "input": texts,
+        }),
+    );
 
     // Try batch API first (/api/embed) - supported since Ollama v0.1.26
     let batch_result = EMBEDDING_CLIENT
@@ -151,10 +172,13 @@ async fn embed_texts_ollama_single(texts: &[String], base: &str) -> Result<Vec<V
     let embedding_model = crate::reembed::get_embedding_model();
 
     for text in texts {
-        let single_body = serde_json::json!({
-            "model": &embedding_model,
-            "prompt": text,
-        });
+        let single_body = embed_body(
+            base,
+            serde_json::json!({
+                "model": &embedding_model,
+                "prompt": text,
+            }),
+        );
 
         let response = EMBEDDING_CLIENT
             .post(format!("{base}/api/embeddings"))
@@ -215,4 +239,40 @@ async fn embed_texts_ollama_single(texts: &[String], base: &str) -> Result<Vec<V
     }
 
     Ok(all_embeddings)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_local_ollama_embeds_on_the_cpu() {
+        for base in [
+            "http://localhost:11434",
+            "http://127.0.0.1:11434/",
+            "http://[::1]:11434",
+        ] {
+            let body = embed_body(base, serde_json::json!({ "model": "m", "input": ["a"] }));
+            assert_eq!(body["options"]["num_gpu"], 0, "{base}");
+            assert_eq!(body["input"][0], "a");
+        }
+    }
+
+    #[test]
+    fn http_is_allowed_only_to_this_machine() {
+        assert!(validate_ollama_endpoint("http://[::1]:11434").is_ok());
+        assert!(validate_ollama_endpoint("http://localhost:11434").is_ok());
+        assert!(validate_ollama_endpoint("http://localhost.evil.com:11434").is_err());
+        assert!(validate_ollama_endpoint("http://10.0.0.5:11434").is_err());
+        assert!(validate_ollama_endpoint("https://gpu.example.com").is_ok());
+    }
+
+    #[test]
+    fn a_remote_ollama_keeps_its_own_gpu() {
+        let body = embed_body(
+            "https://gpu.example.com",
+            serde_json::json!({ "model": "m", "prompt": "a" }),
+        );
+        assert!(body.get("options").is_none());
+    }
 }

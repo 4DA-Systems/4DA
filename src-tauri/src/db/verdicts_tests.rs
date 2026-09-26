@@ -1084,6 +1084,87 @@ fn curated_twin_found_by_canonical_url_or_title() {
     );
 }
 
+/// 2026-09-26 live: every npm row pointed at the package page, so
+/// `npm: vitest v5.0.2` (and 4.1.11, 5.0.0, 5.0.1) yielded to the curated
+/// `v4.1.10` and the major never reached the feed. A shared registry URL is
+/// a twin only when the titles name the SAME release.
+#[test]
+fn registry_releases_are_twins_only_of_the_same_release() {
+    use crate::test_utils::insert_test_item_with_url;
+    let db = test_db();
+    let url = "https://www.npmjs.com/package/vitest";
+    let curated = insert_test_item_with_url(
+        &db,
+        "npm_registry",
+        "vitest@4.1.10",
+        url,
+        "npm: vitest v4.1.10",
+        "body",
+    );
+    db.persist_feed_verdicts(&[(curated, true, VerdictSource::Score)], 37)
+        .unwrap();
+
+    let major = insert_test_item_with_url(
+        &db,
+        "npm_registry",
+        "vitest@5.0.2",
+        url,
+        "npm: vitest v5.0.2",
+        "body",
+    );
+    assert_eq!(
+        db.find_curated_twin(major, Some(url), "npm: vitest v5.0.2")
+            .unwrap(),
+        None,
+        "a newer release of the package is its own story, not a copy"
+    );
+
+    let refetch = insert_test_item_with_url(
+        &db,
+        "npm_registry",
+        "vitest@4.1.10b",
+        url,
+        "npm: vitest v4.1.10",
+        "body",
+    );
+    assert_eq!(
+        db.find_curated_twin(refetch, Some(url), "npm: vitest v4.1.10")
+            .unwrap(),
+        Some(curated),
+        "the same release fetched twice is still one story"
+    );
+
+    let story = insert_test_item_with_url(
+        &db,
+        "hackernews",
+        "h1",
+        url,
+        "Why we moved our tests to Vitest",
+        "body",
+    );
+    assert_eq!(
+        db.find_curated_twin(story, Some(url), "Why we moved our tests to Vitest")
+            .unwrap(),
+        None,
+        "an editorial link to the package page is not a copy of a release row"
+    );
+}
+
+#[test]
+fn registry_release_identity_reads_only_registry_titles() {
+    use crate::dep_linker::registry_release_identity;
+    assert_eq!(
+        registry_release_identity("npm: vitest v5.0.2"),
+        Some(("vitest".into(), Some("5.0.2".into())))
+    );
+    assert_eq!(
+        registry_release_identity("crates.io: serial_test v4.0.1"),
+        registry_release_identity("crates.io: serial-test v4.0.1"),
+        "crates.io treats - and _ as one name"
+    );
+    assert_eq!(registry_release_identity("Bun v1.3 is here"), None);
+}
+
 #[test]
 fn rejected_items_are_not_twins() {
     use crate::test_utils::insert_test_item_with_url;
@@ -1195,6 +1276,57 @@ fn orphaned_duplicate_verdict_is_withdrawn_and_the_row_re_enters_on_its_own_scor
     assert_eq!(verdict_of(&db, canonical).0, Some(1));
     // Idempotent: nothing left to withdraw.
     assert_eq!(db.withdraw_orphaned_duplicate_verdicts().unwrap(), 0);
+}
+
+/// A scoped npm package's train collapses too: `matched_deps` carries the
+/// normalized key (`ai-sdk-openai`), the title the scoped name (live
+/// 2026-09-26: 4.0.75, 4.0.77 and 4.0.78 all curated at once).
+#[test]
+fn a_scoped_npm_release_train_collapses_to_its_newest() {
+    use crate::test_utils::insert_test_item_with_url;
+    let db = test_db();
+    let version = crate::scoring::PIPELINE_VERSION;
+    let release = |v: &str| -> i64 {
+        let id = insert_test_item_with_url(
+            &db,
+            "npm_registry",
+            &format!("@ai-sdk/openai@{v}"),
+            &format!("https://www.npmjs.com/package/@ai-sdk/openai/v/{v}"),
+            &format!("npm: @ai-sdk/openai v{v}"),
+            "body",
+        );
+        let conn = db.conn.lock();
+        conn.execute(
+            "UPDATE source_items SET content_type = 'release_notes' WHERE id = ?1",
+            rusqlite::params![id],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO scoring_explanations (source_item_id, pipeline_version, breakdown)
+             VALUES (?1, ?2, '{\"breakdown\":{\"matched_deps\":[\"ai-sdk-openai\"]}}')",
+            rusqlite::params![id, version],
+        )
+        .unwrap();
+        id
+    };
+    let (a, b, c) = (release("4.0.75"), release("4.0.77"), release("4.0.78"));
+    db.persist_feed_verdicts(
+        &[
+            (a, true, VerdictSource::Score),
+            (b, true, VerdictSource::Score),
+            (c, true, VerdictSource::Score),
+        ],
+        version,
+    )
+    .unwrap();
+    assert_eq!(db.reconcile_release_train(version).unwrap(), (2, 0));
+    assert_eq!(verdict_of(&db, a).0, Some(0));
+    assert_eq!(verdict_of(&db, b).0, Some(0));
+    assert_eq!(
+        verdict_of(&db, c).0,
+        Some(1),
+        "the newest release keeps the slot"
+    );
 }
 
 /// v33: one slot per release line. The TypeScript train (5.9 Beta, 5.9 RC,
@@ -1631,4 +1763,57 @@ fn curated_twins_in_the_standing_feed_are_retired() {
     assert_eq!(reason_of(&db, c), Some("duplicate_curated".into()));
     assert_eq!(verdict_of(&db, other).0, Some(1));
     assert_eq!(db.demote_curated_twins(32).unwrap(), 0, "converges");
+}
+
+/// Phase 124: `first_curated_at` is written on the first transition to
+/// curated and never moved after it: a demotion keeps it, a later
+/// re-admission keeps the ORIGINAL time. It is what makes "was this in the
+/// feed before the user upgraded?" answerable.
+#[test]
+fn first_curated_at_is_stamped_once_on_first_entry() {
+    let db = test_db();
+    let id = crate::test_utils::insert_test_item(&db, "hackernews", "fc1", "A story", "body");
+    let stamp = |db: &Database| -> Option<String> {
+        db.conn
+            .lock()
+            .query_row(
+                "SELECT first_curated_at FROM source_items WHERE id = ?1",
+                rusqlite::params![id],
+                |r| r.get(0),
+            )
+            .unwrap()
+    };
+    db.persist_feed_verdicts(&[(id, false, VerdictSource::Score)], 37)
+        .unwrap();
+    assert_eq!(stamp(&db), None, "a rejection is not an entry");
+    db.persist_feed_verdicts_with_reasons(&[(id, true, VerdictSource::Score, None)], 37)
+        .unwrap();
+    // The first flip is deferred by the boundary; the second confirms it.
+    db.persist_feed_verdicts_with_reasons(&[(id, true, VerdictSource::Score, None)], 37)
+        .unwrap();
+    assert!(stamp(&db).is_some(), "the confirmed entry is stamped");
+    db.conn
+        .lock()
+        .execute(
+            "UPDATE source_items SET first_curated_at = '2026-01-01 00:00:00' WHERE id = ?1",
+            rusqlite::params![id],
+        )
+        .unwrap();
+    db.persist_feed_verdicts_with_reasons(
+        &[(
+            id,
+            false,
+            VerdictSource::Score,
+            Some(VerdictReason::LlmReject),
+        )],
+        37,
+    )
+    .unwrap();
+    db.persist_feed_verdicts_with_reasons(&[(id, true, VerdictSource::Serendipity, None)], 37)
+        .unwrap();
+    assert_eq!(
+        stamp(&db).as_deref(),
+        Some("2026-01-01 00:00:00"),
+        "a demotion and a re-admission keep the first entry time"
+    );
 }

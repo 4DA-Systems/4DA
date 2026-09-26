@@ -21,7 +21,13 @@ static REEMBED_IN_PROGRESS: AtomicBool = AtomicBool::new(false);
 pub const DEFAULT_EMBEDDING_MODEL: &str = "nomic-embed-text";
 
 /// Model name used by the built-in fastembed (ONNX) provider for calibration lookup.
-pub const FASTEMBED_MODEL_NAME: &str = "snowflake-arctic-embed-m";
+///
+/// The in-process model is nomic-embed-text v1.5 (fp16 ONNX) — the SAME
+/// model Ollama serves by default, so the Ollama route and its offline fallback
+/// write one vector space. Until 2026-09-25 the fallback was Arctic-embed-M,
+/// which shares no space with nomic (median cosine 0.007 on the same text) and
+/// measured significantly worse on the blind gold (-0.077 AUC).
+pub const FASTEMBED_MODEL_NAME: &str = "nomic-embed-text";
 
 /// Get the currently configured embedding model name from settings.
 /// Falls back to the default if the field is empty or unset.
@@ -223,25 +229,29 @@ pub(crate) async fn reembed_all_items() {
         }
     };
 
-    let items: Vec<(i64, String, String)> = {
+    let items: Vec<(i64, String, String, String)> = {
         let conn = db.conn.lock();
-        conn.prepare("SELECT id, title, content FROM source_items ORDER BY id")
-            .and_then(|mut stmt| {
-                stmt.query_map([], |row| {
-                    Ok((
-                        row.get::<_, i64>(0)?,
-                        row.get::<_, String>(1)?,
-                        row.get::<_, String>(2)?,
-                    ))
-                })
-                .and_then(|rows| rows.collect::<std::result::Result<Vec<_>, _>>())
+        conn.prepare(
+            "SELECT id, title, COALESCE(content, ''), source_type FROM source_items ORDER BY id",
+        )
+        .and_then(|mut stmt| {
+            stmt.query_map([], |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, String>(3)?,
+                ))
             })
-            .unwrap_or_default()
+            .and_then(|rows| rows.collect::<std::result::Result<Vec<_>, _>>())
+        })
+        .unwrap_or_default()
     };
 
     let total = items.len();
     if total == 0 {
         tracing::info!(target: "4da::embeddings", "No items to re-embed");
+        crate::reembed_space::mark_space_verified(&db.conn.lock());
         return;
     }
 
@@ -256,22 +266,35 @@ pub(crate) async fn reembed_all_items() {
     let mut fail_count = 0usize;
 
     for (batch_idx, chunk) in items.chunks(32).enumerate() {
+        // The ingest text (same builder + per-source compression), so a
+        // re-embedded item lands exactly where a freshly fetched one would.
         let texts: Vec<String> = chunk
             .iter()
-            .map(|(_, title, content)| crate::build_embedding_text(title, content))
+            .map(|(_, title, content, source_type)| {
+                crate::reembed_space::item_embedding_text(source_type, title, content)
+            })
             .collect();
 
         match crate::embed_texts(&texts).await {
             Ok(embeddings) => {
                 let conn = db.conn.lock();
-                for (i, (id, _, _)) in chunk.iter().enumerate() {
+                for (i, (id, _, _, _)) in chunk.iter().enumerate() {
                     if let Some(embedding) = embeddings.get(i) {
-                        let blob: Vec<u8> =
-                            embedding.iter().flat_map(|f| f.to_le_bytes()).collect();
-                        let result = conn.execute(
-                            "UPDATE source_vec SET embedding = ?1 WHERE rowid = ?2",
-                            rusqlite::params![blob, id],
-                        );
+                        let blob = crate::reembed_space::vec_to_blob(embedding);
+                        // BOTH copies: scoring reads source_items.embedding
+                        // (context KNN, calibration); search reads source_vec.
+                        // Writing only source_vec left scoring on the old model.
+                        let result = conn
+                            .execute(
+                                "UPDATE source_items SET embedding = ?1 WHERE id = ?2",
+                                rusqlite::params![blob, id],
+                            )
+                            .and_then(|_| {
+                                conn.execute(
+                                    "UPDATE source_vec SET embedding = ?1 WHERE rowid = ?2",
+                                    rusqlite::params![blob, id],
+                                )
+                            });
                         match result {
                             Ok(_) => success_count += 1,
                             Err(e) => {
@@ -310,8 +333,22 @@ pub(crate) async fn reembed_all_items() {
         total,
         success = success_count,
         failed = fail_count,
-        "Re-embed complete"
+        "Re-embedded items"
     );
+
+    // Everything else scoring reads, and every cache built from old vectors.
+    let derived_ok = crate::reembed_space::reembed_derived_stores(db).await;
+    if fail_count == 0 && derived_ok {
+        crate::reembed_space::mark_space_verified(&db.conn.lock());
+        tracing::info!(target: "4da::embeddings", "Re-embed complete — corpus verified in one embedding space");
+    } else {
+        tracing::warn!(
+            target: "4da::embeddings",
+            failed_items = fail_count,
+            derived_ok,
+            "Re-embed incomplete — the embedding-space probe will retry on next start"
+        );
+    }
 
     // Re-calibrate sigmoid parameters for the new embedding model's distribution.
     if success_count > 0 {

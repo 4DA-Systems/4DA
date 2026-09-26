@@ -198,22 +198,6 @@ impl Database {
         self.persist_feed_verdicts_with_reasons(&demote, version)
     }
 
-    /// Withdraw `duplicate_curated` verdicts whose curated twin is gone.
-    ///
-    /// A twin verdict is a claim about ANOTHER row — "the story is already
-    /// in the feed under an earlier id" — and it stays true only while that
-    /// earlier copy is curated. Nothing re-checked it: "This Week in Rust
-    /// 666" lost both its RSS row (twin of a lemmy mirror) and the lemmy row
-    /// (twin of a Mastodon boost) when the boost fell to the UGC gate, and
-    /// the issue vanished from a feed that lists 660–665 and 667 (2026-09-07;
-    /// 11 such stories live, 4 scored ≥ 0.7).
-    ///
-    /// The verdict is cleared outright (no verdict, no reason, no pending
-    /// marker), never flipped: the row was never judged on its own merits,
-    /// so the next risen sweep grants it a FIRST verdict through the persist
-    /// boundary — immediate, and twin-checked again against whatever is
-    /// curated by then. Convergent: a row whose twin is back is re-written
-    /// `duplicate_curated` by that same sweep.
     /// Collapse a dependency's release train (v33): among the CURATED
     /// `release_notes` rows about one dependency, from one source class
     /// (registry rows / editorial rows), a row is superseded when a newer
@@ -320,6 +304,22 @@ impl Database {
         Ok((demoted, withdrawn))
     }
 
+    /// Withdraw `duplicate_curated` verdicts whose curated twin is gone.
+    ///
+    /// A twin verdict is a claim about ANOTHER row — "the story is already
+    /// in the feed under an earlier id" — and it stays true only while that
+    /// earlier copy is curated. Nothing re-checked it: "This Week in Rust
+    /// 666" lost both its RSS row (twin of a lemmy mirror) and the lemmy row
+    /// (twin of a Mastodon boost) when the boost fell to the UGC gate, and
+    /// the issue vanished from a feed that lists 660–665 and 667 (2026-09-07;
+    /// 11 such stories live, 4 scored ≥ 0.7).
+    ///
+    /// The verdict is cleared outright (no verdict, no reason, no pending
+    /// marker), never flipped: the row was never judged on its own merits,
+    /// so the next risen sweep grants it a FIRST verdict through the persist
+    /// boundary — immediate, and twin-checked again against whatever is
+    /// curated by then. Convergent: a row whose twin is back is re-written
+    /// `duplicate_curated` by that same sweep.
     pub fn withdraw_orphaned_duplicate_verdicts(&self) -> SqliteResult<usize> {
         let duplicates: Vec<(i64, Option<String>, String)> = {
             let conn = self.read_conn();

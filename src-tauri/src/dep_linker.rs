@@ -566,22 +566,26 @@ fn classify_item_dep_match(item: &UnlinkedItem, dep_name: &str) -> Option<(&'sta
 /// `pub(crate)`: the live scoring pipeline shares this predicate so registry
 /// items are grounded by their SUBJECT package everywhere, not just here.
 pub(crate) fn is_registry_source(source_type: &str) -> bool {
-    matches!(
-        source_type,
-        "npm_registry"
-            | "npm"
-            | "crates_io"
-            | "crates"
-            | "pypi"
-            | "go_modules"
-            | "go"
-            | "maven"
-            | "nuget"
-            | "packagist"
-            | "rubygems"
-            | "cocoapods"
-    )
+    REGISTRY_SOURCE_TYPES.contains(&source_type)
 }
+
+/// Every `source_type` that is a package registry — the single list behind
+/// [`is_registry_source`] and the SQL predicates that must agree with it
+/// (`db::llm_judgments::DEPENDENCY_RELEASE_SQL`).
+pub(crate) const REGISTRY_SOURCE_TYPES: &[&str] = &[
+    "npm_registry",
+    "npm",
+    "crates_io",
+    "crates",
+    "pypi",
+    "go_modules",
+    "go",
+    "maven",
+    "nuget",
+    "packagist",
+    "rubygems",
+    "cocoapods",
+];
 
 /// The subject of a registry row's TITLE — `("tauri", Some("2.11.5"))` from
 /// `crates.io: tauri v2.11.5`, `npm: react-dom v19.2.8`, `PyPI: x v1.2`,
@@ -604,10 +608,34 @@ pub(crate) fn registry_title_subject(title: &str) -> Option<(String, Option<Stri
     Some((name, version))
 }
 
+/// The release a registry-row title names — `("vitest", Some("5.0.2"))`
+/// from `npm: vitest v5.0.2` — or `None` for any title without a registry
+/// prefix. Two rows are the same release only when these agree: a registry
+/// URL is not a release identity (npm rows point at the versionless package
+/// page, PyPI rows at the project homepage), so on URL alone every release
+/// of a package looked like a copy of the first one curated.
+pub(crate) fn registry_release_identity(title: &str) -> Option<(String, Option<String>)> {
+    const PREFIXES: &[&str] = &["npm: ", "crates.io: ", "PyPI: ", "Go: "];
+    if !PREFIXES.iter().any(|p| title.starts_with(p)) {
+        return None;
+    }
+    registry_title_subject(title)
+        .map(|(name, version)| (name.to_lowercase().replace('_', "-"), version))
+}
+
 /// crates.io treats `-` and `_` as one namespace; npm names are exact but
-/// the comparison is case-insensitive.
+/// the comparison is case-insensitive. A scoped npm name also equals its
+/// normalized dependency key (`scoring::dependencies::normalize_package_name`):
+/// `matched_deps` stores `@ai-sdk/openai` as `ai-sdk-openai`, so the release
+/// train never matched a scoped package's title to its dependency and every
+/// release of it stayed curated at once (live 2026-09-26: `@ai-sdk/openai`
+/// 4.0.75, 4.0.77 and 4.0.78 side by side; 19 scoped release rows).
 pub(crate) fn registry_names_equal(a: &str, b: &str) -> bool {
-    let norm = |s: &str| s.to_lowercase().replace('_', "-");
+    let norm = |s: &str| {
+        s.to_lowercase()
+            .trim_start_matches('@')
+            .replace(['/', '_'], "-")
+    };
     norm(a) == norm(b)
 }
 
@@ -626,8 +654,9 @@ fn is_advisory_source(source_type: &str, content_type: Option<&str>) -> bool {
 ///
 /// Handles adapter-specific formats:
 /// - npm_registry: `react@19.2.5` → `react`, `@tanstack/react-query@5.0.0` → `@tanstack/react-query`
-/// - crates_io: `crate-serde` → `serde`
+/// - crates_io: `crate-serde@1.0.200` → `serde` (pre-schema-123 rows: `crate-serde`)
 /// - pypi: `requests-2.31.0` → `requests` (adapter emits `{name}-{version}`)
+/// - go_modules: `github.com/gin-gonic/gin@v1.10.0` → `github.com/gin-gonic/gin`
 /// - Others: source_id is the bare package name.
 ///
 /// `pub(crate)`: shared with the live scoring pipeline (registry subject grounding).
@@ -655,13 +684,10 @@ pub(crate) fn extract_registry_package(source_type: &str, source_id: &str) -> Op
             name.map(|n| n.to_string())
         }
         "crates_io" | "crates" => {
-            // crates_io source_id format: `crate-{name}`
-            Some(
-                source_id
-                    .strip_prefix("crate-")
-                    .unwrap_or(source_id)
-                    .to_string(),
-            )
+            // crates_io source_id format: `crate-{name}@{version}`. Crate
+            // names never contain '@', so the first one ends the name.
+            let name = source_id.strip_prefix("crate-").unwrap_or(source_id);
+            Some(name.split_once('@').map_or(name, |(n, _)| n).to_string())
         }
         "pypi" => {
             // pypi adapter emits `{name}-{version}` (sources/pypi.rs). Strip the
@@ -685,9 +711,17 @@ pub(crate) fn extract_registry_package(source_type: &str, source_id: &str) -> Op
                 _ => Some(source_id.to_string()),
             }
         }
-        "go_modules" | "go" | "maven" | "nuget" | "packagist" | "rubygems" | "cocoapods" => {
-            Some(source_id.to_string())
+        "go_modules" | "go" => {
+            // go_modules adapter emits `{module}@{version}`; module paths never
+            // contain '@'. Returning the whole key never matched a dependency.
+            Some(
+                source_id
+                    .split_once('@')
+                    .map_or(source_id, |(m, _)| m)
+                    .to_string(),
+            )
         }
+        "maven" | "nuget" | "packagist" | "rubygems" | "cocoapods" => Some(source_id.to_string()),
         _ => None,
     }
 }

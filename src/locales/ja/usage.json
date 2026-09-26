@@ -15,6 +15,10 @@
     "channel_render": "チャンネル描画",
     "content_analysis": "コンテンツ分析",
     "translation": "翻訳",
+    "verdict_drain": "関連性判定 — 保留中の判定",
+    "monitoring_brief": "朝のブリーフィング",
+    "capability_probe": "モデル能力チェック",
+    "connection_test": "接続テスト（設定）",
     "completion": "タグなし（ブリーフィング等）",
     "structured_completion": "タグなし（構造化）",
     "streaming": "タグなし（ストリーミング）"

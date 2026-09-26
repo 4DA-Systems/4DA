@@ -602,6 +602,11 @@ fn registry_title_subject_reads_adapter_and_bare_shapes() {
     );
     assert!(registry_names_equal("serial-test", "serial_test"));
     assert!(!registry_names_equal("axum-stack", "axum"));
+    assert!(
+        registry_names_equal("@ai-sdk/openai", "ai-sdk-openai"),
+        "a scoped title subject equals its normalized dependency key"
+    );
+    assert!(!registry_names_equal("@ai-sdk/openai", "openai"));
 }
 
 #[test]
@@ -715,10 +720,20 @@ fn test_extract_registry_package_formats() {
         extract_registry_package("npm_registry", "@tanstack/react-query@5.0.0"),
         Some("@tanstack/react-query".to_string())
     );
-    // crates_io with prefix
+    // crates_io with prefix (pre-schema-123 key)
     assert_eq!(
         extract_registry_package("crates_io", "crate-serde"),
         Some("serde".to_string())
+    );
+    // crates_io release key
+    assert_eq!(
+        extract_registry_package("crates_io", "crate-serde@1.0.200"),
+        Some("serde".to_string())
+    );
+    // go_modules release key
+    assert_eq!(
+        extract_registry_package("go_modules", "github.com/gin-gonic/gin@v1.10.0"),
+        Some("github.com/gin-gonic/gin".to_string())
     );
     // crates_io without prefix (legacy)
     assert_eq!(

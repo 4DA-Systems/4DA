@@ -50,6 +50,8 @@ struct SoQuestion {
     tags: Option<Vec<String>>,
     creation_date: Option<u64>,
     is_answered: Option<bool>,
+    /// Question body (HTML), present because the query asks for `filter=withbody`.
+    body: Option<String>,
 }
 
 // ============================================================================
@@ -272,7 +274,7 @@ impl StackOverflowSource {
         }
 
         let url = format!(
-            "https://api.stackexchange.com/2.3/questions?order=desc&sort=activity&site=stackoverflow&tagged={}&pagesize=10",
+            "https://api.stackexchange.com/2.3/questions?order=desc&sort=activity&site=stackoverflow&tagged={}&pagesize=10&filter=withbody",
             urlencoding::encode(tag)
         );
 
@@ -323,8 +325,13 @@ impl StackOverflowSource {
                 let question_tags = q.tags.clone().unwrap_or_default();
                 let answer_count = q.answer_count.unwrap_or(0);
                 // Tags flow through metadata → extract_structured_tags() → extract_topics().
-                // Content is empty because SO API doesn't return question body in list endpoints.
-                let content = String::new();
+                // The body comes with the list call (`filter=withbody`, no extra
+                // request). Without it every question was stored as a bare title.
+                let content = q
+                    .body
+                    .as_deref()
+                    .map(|html| crate::utils::html_to_text(html, crate::utils::MAX_CONTENT_LENGTH))
+                    .unwrap_or_default();
 
                 let mut metadata = serde_json::json!({
                     "score": q.score,
@@ -426,7 +433,15 @@ impl Source for StackOverflowSource {
 
         let mut all_items = Vec::new();
         let mut seen_ids = std::collections::HashSet::new();
-        let tags_to_fetch: Vec<&String> = self.tags.iter().take(MAX_TAGS_PER_FETCH).collect();
+        // A rotating window over the stack's tags: the fixed first
+        // `MAX_TAGS_PER_FETCH` left every tag past the fourth permanently
+        // unwatched (the stack can map to up to six).
+        let tag_window = crate::source_fetching::rotating_window(
+            "sources.stackoverflow.tag_cursor",
+            &self.tags,
+            MAX_TAGS_PER_FETCH,
+        );
+        let tags_to_fetch: Vec<&String> = tag_window.iter().collect();
 
         for (i, tag) in tags_to_fetch.iter().enumerate() {
             // 2-second delay between tag requests (skip first)

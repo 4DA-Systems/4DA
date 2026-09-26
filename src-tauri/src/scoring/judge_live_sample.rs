@@ -119,6 +119,7 @@ async fn judge_live_sample() {
         "no LLM provider configured — nothing measured"
     );
     let model = provider.model.clone();
+    // llm-egress: exempt developer measurement run by hand on a corpus snapshot; it must render the shipped prompt exactly, bodies included
     let client = LLMClient::with_purpose(provider, "judge_sample");
 
     let db_path = crate::state::get_db_path();

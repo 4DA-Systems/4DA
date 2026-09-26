@@ -312,7 +312,21 @@ pub(crate) async fn apply_llm_reranking(
         return RerankOutcome::Skipped(RerankSkip::Disabled);
     }
 
-    if !within_limits {
+    // Judge work runs on a measured local judge when one fits this machine,
+    // else on the cheap sibling of the configured model (same provider, same
+    // key) — see `llm_judge::judge_provider`. Resolved BEFORE the budget
+    // gates (a local judge spends nothing, so the rerank budget does not
+    // apply to it) and before core construction, so the advisor identity,
+    // provenance rows, and calibration samples all record the model that
+    // actually judged.
+    crate::local_judge::refresh_if_stale().await;
+    let llm_settings = {
+        let settings = get_settings_manager().lock();
+        crate::llm_judge::judge_provider(&settings.get().llm)
+    };
+    let metered = llm_settings.provider != "ollama";
+
+    if metered && !within_limits {
         return RerankOutcome::Skipped(RerankSkip::BudgetExhausted {
             tokens_today: usage.tokens_today,
             token_limit: rerank_config.daily_token_limit,
@@ -323,7 +337,7 @@ pub(crate) async fn apply_llm_reranking(
 
     let allowed_by_now =
         budget_allowance_by_now(rerank_config.daily_token_limit, secs_into_utc_day());
-    if usage.tokens_today >= allowed_by_now {
+    if metered && usage.tokens_today >= allowed_by_now {
         return RerankOutcome::Skipped(RerankSkip::BudgetPaced {
             tokens_today: usage.tokens_today,
             allowed_by_now,
@@ -363,23 +377,16 @@ pub(crate) async fn apply_llm_reranking(
         return RerankOutcome::Skipped(RerankSkip::NoCandidates);
     }
 
-    // Judge work runs on the cheap sibling of the configured model (same
-    // provider, same key) — see `llm_judge::judge_provider`. The override is
-    // applied BEFORE the tier gate and core construction so the advisor
-    // identity, provenance rows, and calibration samples all record the model
-    // that actually judged.
-    let llm_settings = {
-        let settings = get_settings_manager().lock();
-        crate::llm_judge::judge_provider(&settings.get().llm)
-    };
-
-    // Gate: skip reranking for Basic-tier models (small local models that
-    // can't reliably produce structured JSON judgments). They still get
-    // pipeline scoring and heuristic explanations from scoring/explanation.rs.
+    // Gate: the same rule as the ingest judge (`judge_items_per_call`) — a
+    // Good/Full tier model, or a local model on the MEASURED judge allowlist
+    // (gemma4:26b, gemma4:12b, qwen3:14b sit in the Basic tier, so this lane
+    // used to skip them silently while the ingest judge ran them). Small
+    // unmeasured local models still get pipeline scoring and heuristic
+    // explanations from scoring/explanation.rs.
     let tier = crate::llm_capability::get_model_tier(&llm_settings);
-    if !tier.supports_reranking() {
+    let Some(items_per_call) = crate::llm_judgments::judge_items_per_call(&llm_settings) else {
         return RerankOutcome::Skipped(RerankSkip::UnsupportedTier(tier.to_string()));
-    }
+    };
 
     // Construct the advisory core. It carries its own ModelIdentity and
     // prompt_version so every AdvisorSignal and provenance row this rerank
@@ -396,7 +403,7 @@ pub(crate) async fn apply_llm_reranking(
     //   3. Wrap with CalibratedCore. When no curve exists, CalibratedCore
     //      is a transparent pass-through — matches pre-mesh behavior
     //      exactly, so zero risk. When a curve exists, it applies and
-    //      overrides calibration_id on each Validated response.
+    //      overrides the core's calibration_id().
     //
     // The fitter that PRODUCES curves (Phase 5b.2) is not yet built, so in
     // practice every rerank today is pass-through. This commit lands the
@@ -489,10 +496,12 @@ pub(crate) async fn apply_llm_reranking(
         })
         .collect();
 
-    // Split into batches of 8 for better LLM accuracy
+    // Cloud models judge 8 per call; local models one per call (their
+    // batching penalty was large and significant — `judge_items_per_call`).
     const LLM_BATCH_SIZE: usize = 8;
+    let batch_size = items_per_call.min(LLM_BATCH_SIZE);
     let batches: Vec<Vec<(String, String, String)>> = to_judge
-        .chunks(LLM_BATCH_SIZE)
+        .chunks(batch_size)
         .map(
             <[(
                 std::string::String,
@@ -628,6 +637,10 @@ pub(crate) async fn apply_llm_reranking(
             // multiple times in future (multi-advisor) and each advisor
             // must adjust off the same baseline.
             let pipeline_score = result.top_score;
+            // AD-048: the judge never removes a registry release of a matched
+            // dependency. Its rejection here would reach the persist boundary
+            // as a PIPELINE demotion, which the verdict drain lets stand.
+            let dependency_release = crate::db::llm_judgments::is_dependency_release(result);
 
             let advisor_signal = crate::types::AdvisorSignal {
                 provider: advisor_identity.provider.clone(),
@@ -701,7 +714,7 @@ pub(crate) async fn apply_llm_reranking(
                 // mechanical dep matching shouldn't override human-calibrated judgment.
                 // This is NOT a general override — only fires when LLM confidence < 0.30
                 // (score < 1.5/5) AND the item relies primarily on dependency matching.
-                if !judgment.relevant && judgment.confidence < 0.30 {
+                if !judgment.relevant && judgment.confidence < 0.30 && !dependency_release {
                     let has_strong_user_signal = result
                         .score_breakdown
                         .as_ref()
@@ -760,7 +773,7 @@ pub(crate) async fn apply_llm_reranking(
                         result.explanation = Some(judgment.reasoning.clone());
                     }
                     confirmed += 1;
-                } else {
+                } else if !dependency_release {
                     result.relevant = false;
                     result.top_score *= 0.15;
                     if judgment.reasoning != "No judgment provided by LLM" {
@@ -848,8 +861,8 @@ pub(crate) async fn apply_llm_reranking(
     // Re-sort after LLM adjustments
     scoring::sort_results(results);
 
-    // Track token usage for daily limits
-    {
+    // Track token usage for daily limits (spend only: a local judge is free)
+    if metered {
         let mut settings = get_settings_manager().lock();
         let cost = core.estimate_cost_cents(total_input, total_output);
         settings.record_usage(total_input + total_output, cost);

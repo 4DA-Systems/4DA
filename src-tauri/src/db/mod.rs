@@ -15,11 +15,13 @@ mod context_rebuild_tests;
 pub(crate) mod dep_snapshots;
 mod dependencies;
 pub(crate) mod encryption;
+mod enrichment;
 #[cfg(test)]
 mod fts_sync_tests;
 mod helpers;
 mod history;
 pub(crate) mod hybrid_search;
+mod judge_gate;
 pub(crate) mod llm_judgments;
 pub(crate) mod migrations;
 mod osv_advisories;
@@ -35,10 +37,12 @@ mod verdicts_promotion;
 pub use cache::*;
 pub use dep_snapshots::*;
 pub use dependencies::*;
+pub(crate) use enrichment::{EnrichmentCandidate, EnrichmentOutcome};
 // Flat re-export so every existing `crate::db::parse_datetime` /
 // `super::blob_to_embedding` path keeps working after the helpers extraction.
 pub(crate) use helpers::*;
 pub use history::*;
+pub use judge_gate::*;
 pub use scoring_explanations::*;
 pub use scoring_queries::*;
 pub use sources::*;

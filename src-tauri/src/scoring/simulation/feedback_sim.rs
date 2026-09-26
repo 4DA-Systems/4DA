@@ -18,11 +18,7 @@ use super::{ContentCategory, ExpectedOutcome, LabeledItem};
 // ============================================================================
 
 pub(super) struct FeedbackEvent {
-    #[allow(dead_code)] // REMOVE BY 2026-11-26 — serde-deserialized test fixture fields
-    pub item_id: u64,
     pub topic: String,
-    #[allow(dead_code)] // REMOVE BY 2026-11-26 — serde-deserialized test fixture fields
-    pub relevant: bool,
     pub delta: f64,
 }
 
@@ -220,16 +216,12 @@ pub(super) fn simulate_session_with_embeddings(
             ExpectedOutcome::StrongRelevant => {
                 if result.relevant {
                     events.push(FeedbackEvent {
-                        item_id: item.id,
                         topic: derive_topic(&item.category),
-                        relevant: true,
                         delta: 0.15,
                     });
                 } else {
                     events.push(FeedbackEvent {
-                        item_id: item.id,
                         topic: derive_topic(&item.category),
-                        relevant: true,
                         delta: 0.10,
                     });
                 }
@@ -237,9 +229,7 @@ pub(super) fn simulate_session_with_embeddings(
             ExpectedOutcome::NotRelevant => {
                 if result.relevant {
                     events.push(FeedbackEvent {
-                        item_id: item.id,
                         topic: derive_topic(&item.category),
-                        relevant: false,
                         delta: -0.10,
                     });
                 }
@@ -271,18 +261,14 @@ pub(super) fn simulate_session(
                 if result.relevant {
                     // Confirmation: user clicks on correctly surfaced item
                     events.push(FeedbackEvent {
-                        item_id: item.id,
                         topic: derive_topic(&item.category),
-                        relevant: true,
                         delta: 0.15,
                     });
                 } else {
                     // Corrective: user discovers missed relevant item
                     // (via manual search, recommendations, or browsing)
                     events.push(FeedbackEvent {
-                        item_id: item.id,
                         topic: derive_topic(&item.category),
-                        relevant: true,
                         delta: 0.10,
                     });
                 }
@@ -291,9 +277,7 @@ pub(super) fn simulate_session(
                 // User dismisses noise
                 if result.relevant {
                     events.push(FeedbackEvent {
-                        item_id: item.id,
                         topic: derive_topic(&item.category),
-                        relevant: false,
                         delta: -0.10,
                     });
                 }

@@ -133,23 +133,8 @@ pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<()> {
                 // afterward on a separate task so the next scheduled/manual pass has
                 // fresh data without making this foreground completion wait on slow
                 // or broken adapters.
+                // The fill also runs intake enrichment (content_enrichment).
                 spawn_post_foreground_cache_fill(app.clone());
-
-                // Background content enrichment for ambiguous-zone items.
-                // Fetches page body for title-only items scoring 0.20–0.55,
-                // so the next analysis cycle can re-score with richer signal.
-                tokio::spawn(async move {
-                    if let Ok(db) = crate::get_database() {
-                        let count = crate::content_enrichment::enrich_ambiguous_items(db).await;
-                        if count > 0 {
-                            tracing::info!(
-                                target: "4da::enrichment",
-                                enriched = count,
-                                "Post-analysis enrichment complete"
-                            );
-                        }
-                    }
-                });
 
                 // Record intelligence snapshot for growth tracking
                 if let Ok(conn) = open_db_connection() {
@@ -731,7 +716,7 @@ async fn analyze_cached_content_inner_impl(
         let mut rank_prov = RankProvenance::begin(&new_results);
         if run.llm_rerank {
             // LLM Reranking on new items only (if enabled)
-            // 120s timeout: LLM API calls can hang on provider outages
+            // Bounded by rerank_budget: a cloud call can hang on a provider outage
             emit_narration(
                 app,
                 NarrationEvent {
@@ -741,9 +726,14 @@ async fn analyze_cached_content_inner_impl(
                     relevance: None,
                 },
             );
+            // Load a local judge before the 2-minute guard starts: a cold load
+            // (up to 94 s measured for gemma4:26b during a cycle) inside it left
+            // too little time to judge, and a timed-out pass stores nothing.
+            crate::local_judge::refresh_if_stale().await;
+            let rerank_budget = crate::local_judge::rerank_budget();
             let rerank_started = Instant::now();
             match tokio::time::timeout(
-                std::time::Duration::from_mins(2),
+                rerank_budget,
                 analysis_rerank::apply_llm_reranking(app, &mut new_results, &scoring_ctx),
             )
             .await
@@ -752,7 +742,7 @@ async fn analyze_cached_content_inner_impl(
                     outcome.log(elapsed_ms(rerank_started), "differential");
                 }
                 Err(_) => {
-                    warn!(target: "4da::analysis", "LLM reranking timed out after 120s, using pipeline scores only");
+                    warn!(target: "4da::analysis", budget_s = rerank_budget.as_secs(), "LLM reranking timed out, using pipeline scores only");
                 }
             }
         } else {

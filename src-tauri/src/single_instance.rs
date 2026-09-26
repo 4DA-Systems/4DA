@@ -132,35 +132,10 @@ pub enum InstanceError {
 #[derive(Debug)]
 pub struct InstanceLock {
     path: PathBuf,
-    /// Whether the Drop impl should remove the file. We set this to false
-    /// if the process is being replaced (hot reload) or if the caller
-    /// explicitly wants to keep the lock.
-    active: bool,
-}
-
-impl InstanceLock {
-    /// Path of the lock file this guard manages.
-    /// Test-only reader today (expired removal marker dated 2026-08-01 cleared 2026-08-12).
-    #[allow(dead_code)] // REMOVE BY 2026-11-12
-    pub fn path(&self) -> &Path {
-        &self.path
-    }
-
-    /// Disarm the guard — on drop the lock file will NOT be removed.
-    /// Use this only if something else takes ownership of the lock.
-    /// No production caller yet; exercised by the process-replacement test.
-    /// (Expired removal marker dated 2026-08-01 cleared 2026-08-12.)
-    #[allow(dead_code)] // REMOVE BY 2026-11-12
-    pub fn forget(mut self) {
-        self.active = false;
-    }
 }
 
 impl Drop for InstanceLock {
     fn drop(&mut self) {
-        if !self.active {
-            return;
-        }
         match std::fs::remove_file(&self.path) {
             Ok(()) => {
                 debug!(target: "4da::single_instance", path = ?self.path, "Instance lock released")
@@ -244,7 +219,6 @@ fn try_create_lock(lock_path: &Path) -> Result<InstanceLock, InstanceError> {
     info!(target: "4da::single_instance", pid, path = ?lock_path, "Instance lock acquired");
     Ok(InstanceLock {
         path: lock_path.to_path_buf(),
-        active: true,
     })
 }
 
@@ -354,9 +328,9 @@ mod tests {
         // Happy path: empty directory -> lock acquired, file exists, PID is us.
         let dir = TempDir::new().expect("tempdir");
         let lock = acquire_instance_lock(dir.path()).expect("first acquire");
-        assert!(lock.path().exists(), "lock file should exist");
+        assert!(lock.path.exists(), "lock file should exist");
 
-        let pid = read_lock_pid(lock.path()).expect("parseable pid");
+        let pid = read_lock_pid(&lock.path).expect("parseable pid");
         assert_eq!(pid, std::process::id(), "lock should record our PID");
 
         drop(lock);
@@ -407,7 +381,7 @@ mod tests {
         );
 
         let lock = acquire_instance_lock(dir.path()).expect("should take over stale lock");
-        let pid = read_lock_pid(lock.path()).expect("new pid");
+        let pid = read_lock_pid(&lock.path).expect("new pid");
         assert_eq!(
             pid,
             std::process::id(),
@@ -423,7 +397,7 @@ mod tests {
         std::fs::write(&lock_path, b"").expect("seed empty lock");
 
         let lock = acquire_instance_lock(dir.path()).expect("should recover from empty lock");
-        assert!(lock.path().exists());
+        assert!(lock.path.exists());
     }
 
     #[test]
@@ -467,18 +441,5 @@ mod tests {
             None,
             "missing file is None"
         );
-    }
-
-    #[test]
-    fn forget_prevents_drop_cleanup() {
-        // forget() is the escape hatch for process-replacement scenarios.
-        // Verify the lock file survives the guard's destructor.
-        let dir = TempDir::new().expect("tempdir");
-        let lock = acquire_instance_lock(dir.path()).expect("acquire");
-        let path = lock.path().to_path_buf();
-        lock.forget();
-        assert!(path.exists(), "forget() must leave the file intact");
-        // Clean up so the test doesn't leak.
-        let _ = std::fs::remove_file(path);
     }
 }

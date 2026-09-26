@@ -10,6 +10,9 @@ use tracing::{debug, info, warn};
 
 use super::{Source, SourceConfig, SourceError, SourceItem, SourceResult};
 
+#[path = "rss_selection.rs"]
+mod selection;
+
 /// Maximum items to parse from a single feed (prevents OOM from malicious feeds)
 const MAX_ITEMS_PER_FEED: usize = 200;
 
@@ -419,7 +422,7 @@ impl Source for RssSource {
             .collect()
             .await;
 
-        let mut all_items = Vec::new();
+        let mut per_feed = Vec::new();
         let mut all_errors = Vec::new();
 
         for (feed_xmls, errors) in results {
@@ -428,6 +431,7 @@ impl Source for RssSource {
                 let entries = self.parse_feed(&xml, &url);
                 debug!(url = %url, count = entries.len(), "Parsed entries");
 
+                let mut feed_items = Vec::with_capacity(entries.len());
                 for entry in entries {
                     let mut item = SourceItem::new("rss", &entry.id, &entry.title)
                         .with_url(Some(entry.link.clone()))
@@ -439,14 +443,22 @@ impl Source for RssSource {
                         "pub_date": entry.pub_date,
                     }));
 
-                    all_items.push(item);
+                    feed_items.push(item);
                 }
+                per_feed.push(feed_items);
             }
         }
 
         *self.feed_errors.lock().unwrap_or_else(|e| e.into_inner()) = all_errors;
 
-        all_items.truncate(self.config.max_items);
+        // `max_items` caps NEW entries only; see `rss_selection` for why.
+        let db = crate::try_get_database();
+        let all_items = selection::select_items(
+            per_feed,
+            self.config.max_items,
+            |id| db.is_some_and(|db| db.source_item_exists("rss", id).unwrap_or(false)),
+            chrono::Utc::now(),
+        );
 
         info!(count = all_items.len(), "Fetched RSS items");
         Ok(all_items)

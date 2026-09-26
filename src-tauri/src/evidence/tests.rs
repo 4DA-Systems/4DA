@@ -89,27 +89,13 @@ fn urgency_ordering_is_most_urgent_first() {
 #[test]
 fn confidence_constructors_set_provenance() {
     assert_eq!(
-        Confidence::checklist(0.5).provenance,
-        ConfidenceProvenance::Checklist
-    );
-    assert_eq!(
         Confidence::heuristic(0.5).provenance,
         ConfidenceProvenance::Heuristic
-    );
-    assert_eq!(
-        Confidence::calibrated(0.5, 42).provenance,
-        ConfidenceProvenance::Calibrated
     );
     assert_eq!(
         Confidence::llm_assessed(0.5).provenance,
         ConfidenceProvenance::LlmAssessed
     );
-}
-
-#[test]
-fn confidence_calibrated_captures_sample_size() {
-    let c = Confidence::calibrated(0.8, 47);
-    assert_eq!(c.sample_size, Some(47));
 }
 
 // --- validate_item: happy paths ----------------------------------------------
@@ -188,7 +174,11 @@ fn calibrated_missing_sample_size_rejected() {
 #[test]
 fn calibrated_small_sample_size_rejected() {
     let mut it = good_alert();
-    it.confidence = Confidence::calibrated(0.7, 5);
+    it.confidence = Confidence {
+        value: 0.7,
+        provenance: ConfidenceProvenance::Calibrated,
+        sample_size: Some(5),
+    };
     assert!(matches!(
         validate_item(&it),
         Err(ValidationError::CalibratedNTooSmall { .. })
@@ -198,7 +188,11 @@ fn calibrated_small_sample_size_rejected() {
 #[test]
 fn calibrated_n_at_floor_accepted() {
     let mut it = good_alert();
-    it.confidence = Confidence::calibrated(0.7, 10);
+    it.confidence = Confidence {
+        value: 0.7,
+        provenance: ConfidenceProvenance::Calibrated,
+        sample_size: Some(10),
+    };
     assert!(validate_item(&it).is_ok());
 }
 

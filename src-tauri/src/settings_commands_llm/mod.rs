@@ -49,7 +49,9 @@ pub async fn test_llm_connection() -> Result<serde_json::Value> {
     }
 
     // Cloud providers: use a lightweight direct LLM call
-    let judge = RelevanceJudge::new(settings.llm.clone());
+    // Exercises the judge's JSON path on the MAIN model, recorded as its own
+    // task so a connection test is never counted as rerank spend.
+    let judge = RelevanceJudge::with_purpose(settings.llm.clone(), "connection_test");
     let test_items = vec![(
         "test".to_string(),
         "Test Item".to_string(),
@@ -144,7 +146,7 @@ pub async fn list_provider_models(
             if models.is_empty() {
                 // Fallback if registry isn't initialized
                 Ok(serde_json::json!({
-                    "models": ["claude-haiku-4-5-20251001", "claude-sonnet-4-6", "claude-opus-4-6"]
+                    "models": ["claude-sonnet-5", "claude-opus-5", "claude-haiku-4-5", "claude-sonnet-4-6"]
                 }))
             } else {
                 Ok(serde_json::json!({ "models": models }))

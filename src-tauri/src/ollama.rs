@@ -99,6 +99,9 @@ pub(crate) async fn warm_model(model: &str, base_url: &str, app: &AppHandle) {
         "model": model,
         "messages": [{"role": "user", "content": "Say OK"}],
         "stream": false,
+        // A thinking model (gemma4, qwen3.x) otherwise spends the whole
+        // num_predict budget reasoning — see `llm::ollama_chat_body`.
+        "think": false,
         "options": {
             "num_predict": 5,
             "temperature": 0.0

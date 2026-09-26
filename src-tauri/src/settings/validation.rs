@@ -183,9 +183,9 @@ async fn test_anthropic_key(
                     true,
                     None,
                     vec![
-                        "claude-haiku-4-5-20251001".to_string(),
-                        "claude-sonnet-4-20250514".to_string(),
-                        "claude-opus-4-20250514".to_string(),
+                        "claude-sonnet-5".to_string(),
+                        "claude-opus-5".to_string(),
+                        "claude-haiku-4-5".to_string(),
                     ],
                 )
             } else if status.as_u16() == 401 {

@@ -67,18 +67,24 @@ mod tests {
                     let _ = std::fs::remove_file(&self.path);
                 }
             }
-            // Walk back up removing directories the suite created, so a test
-            // run does not leave `src-tauri/data/translations/` behind in
-            // `git status`. `remove_dir` is non-recursive and fails on a
-            // non-empty directory, so this can never delete real content.
-            let mut dir = self.path.parent().map(std::path::Path::to_path_buf);
-            for _ in 0..3 {
-                match dir {
-                    Some(ref d) if std::fs::remove_dir(d).is_ok() => {
-                        dir = d.parent().map(std::path::Path::to_path_buf);
-                    }
-                    _ => break,
-                }
+            // Remove ONLY this test's own `overrides/{lang}` directory, never
+            // the shared `overrides/` or `translations/` above it.
+            //
+            // This used to walk up three levels, removing any parent that was
+            // momentarily empty. Tests run in parallel, and this was the only
+            // code in the crate that deletes ancestors of
+            // `translations/overrides/{lang}`. A concurrent `create_dir_all`
+            // can only fail with NotFound (Linux) or PermissionDenied (Windows,
+            // a directory pending deletion) if an ancestor disappears mid-call:
+            // exactly the two CI failures of "create overrides dir" that
+            // ejected merge-queue entries on 2026-09-23/24. Deleting
+            // `translations/` also flipped what `i18n::translations_dir()`
+            // resolved to for every concurrent test, because it checks
+            // `exists()`. Nothing is lost by stopping here: the override FILE
+            // is removed above, and git never shows the empty directories that
+            // remain.
+            if let Some(lang_dir) = self.path.parent() {
+                let _ = std::fs::remove_dir(lang_dir);
             }
         }
     }

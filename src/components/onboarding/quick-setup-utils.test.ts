@@ -15,6 +15,7 @@ vi.mock('../../lib/commands', () => ({
 }));
 
 import {
+  pickOllamaModel,
   saveLlmProvider,
   validateApiKey,
   buildInitialPullProgress,
@@ -71,12 +72,12 @@ describe('saveLlmProvider', () => {
     expect(persistedProvider()).toEqual(NONE);
   });
 
-  it('anthropic + key → persists anthropic with the haiku model, no openaiApiKey', async () => {
+  it('anthropic + key → persists anthropic with the brief-capable Sonnet 5 model, no openaiApiKey', async () => {
     await saveLlmProvider('anthropic', 'sk-ant-realkey-1234567890', null);
     expect(persistedProvider()).toMatchObject({
       provider: 'anthropic',
       apiKey: 'sk-ant-realkey-1234567890',
-      model: 'claude-haiku-4-5-20251001',
+      model: 'claude-sonnet-5',
       openaiApiKey: null,
     });
   });
@@ -199,5 +200,25 @@ describe('probeKeyBeforeSave', () => {
     cmdMock.mockResolvedValueOnce({ valid: false, format_ok: true, connection_ok: true, error: null, model_access: [] });
     const r = await probeKeyBeforeSave('anthropic', 'sk-ant-rate-limited');
     expect(r.ok).toBe(true);
+  });
+});
+
+describe('pickOllamaModel', () => {
+  it('prefers a measured feed judge over whatever Ollama lists first', () => {
+    expect(pickOllamaModel(['llama3.2:latest', 'nomic-embed-text:latest', 'gemma4:12b'])).toBe('gemma4:12b');
+  });
+
+  it('takes the best measured judge when several are installed', () => {
+    expect(pickOllamaModel(['qwen3:14b', 'gemma4:12b', 'gemma4:26b'])).toBe('gemma4:26b');
+  });
+
+  it('matches quantisation-suffixed tags of a measured judge, as the backend does', () => {
+    expect(pickOllamaModel(['llama3.2', 'gemma4:12b-it-qat'])).toBe('gemma4:12b-it-qat');
+  });
+
+  it('falls back to the first chat model, then the llama3.2 default', () => {
+    expect(pickOllamaModel(['nomic-embed-text', 'mistral:7b'])).toBe('mistral:7b');
+    expect(pickOllamaModel(['nomic-embed-text'])).toBe('llama3.2');
+    expect(pickOllamaModel(undefined)).toBe('llama3.2');
   });
 });

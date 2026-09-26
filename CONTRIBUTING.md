@@ -117,15 +117,24 @@ maintainers.
   [Conventional Commit](https://www.conventionalcommits.org/) title
   (`fix(scoring): …`, `feat(mcp): …`, `chore(deps): …`) and write the body for
   someone reading `git log` later.
-- **Required checks.** `Validate Success` gates every PR. It aggregates lint,
-  types, tests, Rust clippy/tests/audit across feature sets, the MCP server, the
-  relay, repo-wide guards, and a scan of PR metadata. Path filters skip legs a
-  PR does not touch.
-- **The queue re-tests everything.** When a PR enters the queue, CI runs the
-  *full* suite, with no path filters, against the latest `main` plus everything
-  ahead of it in the queue. A PR can be green on its own and still be ejected
-  from the queue if `main` has moved or rotted. If that happens, read the queue
-  run before re-queueing.
+- **Required checks.** `Validate Success` is the only required check. On the PR
+  it runs the fast checks: frontend lint, types and tests, the MCP server, the
+  relay, repo-wide guards, a scan of PR metadata, and for Rust, `fmt`, clippy on
+  every feature set, `cargo audit` and `cargo deny`. Path filters skip legs a PR
+  does not touch.
+- **Rust tests run in the merge queue.** The full Rust suite (compile, unit and
+  integration tests on every feature set, plus the real-embedding calibration)
+  runs once, when the PR enters the queue. It runs with no path filters, against
+  the latest `main` plus everything ahead of it in the queue. A failing Rust test
+  therefore shows up as a queue ejection, not a red PR, so run `cargo test` in
+  `src-tauri/` before you push. A PR can also be ejected if `main` has moved or
+  rotted. Either way, read the queue run before re-queueing. A test that fails
+  once and passes on retry is reported as `FLAKY` in that run.
+- **After the merge.** Every push to `main` also runs a cold, cacheless
+  fresh-clone build and test on Linux and Windows (`Hermetic Fresh-Clone`) and a
+  CodeQL scan. They do not block merges. When one goes red on `main` it opens an
+  issue (`hermetic-main` or `codeql-main`), which closes itself when `main` is
+  green again.
 - **External contributors:** workflows on fork PRs start only after a
   maintainer approves them.
 

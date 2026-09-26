@@ -21,6 +21,20 @@ const {
   summarizeDriftLines,
 } = require('./generate-notice.cjs');
 
+/** Match `s` literally inside a RegExp — every metacharacter, backslash first-class. */
+function escapeRegExp(s) {
+  return s.replace(/[\\^$.*+?()[\]{}|/-]/g, '\\$&');
+}
+
+test('escapeRegExp matches its input literally and nothing else', () => {
+  for (const s of ['@fontsource-variable/inter', 'a.b', 'c\\d', 'x[1]+(y)?', '^$|{2}*']) {
+    const re = new RegExp(`^${escapeRegExp(s)}$`);
+    assert.ok(re.test(s), s);
+  }
+  assert.equal(new RegExp(escapeRegExp('a.b')).test('axb'), false, '. is literal');
+  assert.equal(new RegExp(escapeRegExp('c\\d')).test('c7'), false, 'a backslash is literal, not an escape');
+});
+
 // ---------------------------------------------------------------------------
 // Licence classification
 // ---------------------------------------------------------------------------
@@ -154,7 +168,7 @@ test('committed NOTICE attributes every shipping MPL-2.0 crate', () => {
   const notice = fs.readFileSync(NOTICE_PATH, 'utf8');
   // MPL-2.0 s3.2 requires notice. None of these were attributed before.
   for (const crate of ['cssparser', 'selectors', 'cssparser-macros', 'dtoa-short', 'option-ext']) {
-    assert.match(notice, new RegExp(`^${crate} \\S+ - MPL-2\\.0`, 'm'), `${crate} missing MPL-2.0 attribution`);
+    assert.match(notice, new RegExp(`^${escapeRegExp(crate)} \\S+ - MPL-2\\.0`, 'm'), `${crate} missing MPL-2.0 attribution`);
   }
   assert.match(notice, /Reciprocal-Licence Components/);
 });
@@ -163,7 +177,7 @@ test('committed NOTICE ships the OFL text for both bundled fonts', () => {
   const notice = fs.readFileSync(NOTICE_PATH, 'utf8');
   // OFL-1.1 requires the licence to travel with the font software.
   for (const font of ['@fontsource-variable/inter', '@fontsource-variable/jetbrains-mono']) {
-    assert.match(notice, new RegExp(`Full Licence Text - ${font.replace(/[/@-]/g, '\\$&')}`), `${font} OFL text missing`);
+    assert.match(notice, new RegExp(`Full Licence Text - ${escapeRegExp(font)}`), `${font} OFL text missing`);
   }
 });
 

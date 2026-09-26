@@ -202,7 +202,6 @@ fn batch_generic_items(
         title: format!("{count} new relevant items"),
         source_type: "mixed".to_string(),
         score: 0.0,
-        signal_priority: None,
     });
     info!(
         target: "4da::monitor",

@@ -514,7 +514,8 @@ fn get_llm_client() -> Result<llm::LLMClient> {
         let lang = crate::i18n::get_user_language();
         return Err(crate::i18n::t("errors:translation.noLlm", &lang, &[]).into());
     }
-    Ok(llm::LLMClient::new(provider))
+    // llm-egress: no-item-body translates titles and 4DA's own labels (ContentTranslationProvider callers), not article text
+    Ok(llm::LLMClient::with_purpose(provider, "translation"))
 }
 
 /// Map language code to display name for LLM prompts.

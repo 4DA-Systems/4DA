@@ -135,7 +135,7 @@ export const TOOL_REGISTRY: Record<string, ToolRegistryEntry> = {
     annotations: { readOnlyHint: true, openWorldHint: false },
   },
   record_feedback: {
-    summary: "Record click/save/dismiss on a content item as explicit interaction history. Call AFTER the user reacts to a surfaced item (opens, saves, or dismisses it).",
+    summary: "Record click/save/dismiss/mark_irrelevant on a content item; save and mark_irrelevant are also relevance labels. Call AFTER the user reacts to a surfaced item (opens, saves, dismisses, or rates it).",
     schemaFile: "record-feedback.json",
     category: "intelligence",
     tags: ["feedback", "history", "save", "dismiss"],

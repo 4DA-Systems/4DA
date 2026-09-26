@@ -79,7 +79,7 @@ All retrieve **public** developer content. Trigger cadence is the default fetch 
 | PyPI | `pypi.org` | `/pypi/{package}/json` | auto | None |
 | HuggingFace | `huggingface.co` | `/api/models` | auto | None |
 | PapersWithCode | `huggingface.co` | `/api/daily_papers` (PwC API now redirects here) | auto | None |
-| Stack Overflow | `api.stackexchange.com` | `/2.3/questions?...&site=stackoverflow&tagged={tag}` | auto | None |
+| Stack Overflow | `api.stackexchange.com` | `/2.3/questions?...&site=stackoverflow&tagged={tag}&filter=withbody` | auto | None |
 | Go modules | `index.golang.org` | `/index?limit={n}` | auto | None |
 
 **RSS default hosts** (`sources/rss.rs`, user-customizable): `feeds.arstechnica.com`,
@@ -91,12 +91,23 @@ All retrieve **public** developer content. Trigger cadence is the default fetch 
 
 ### 1c. Article scraping
 
-After fetching items, 4DA scrapes the linked article URL to extract **text only** (no images or
-media) for HN, Reddit link posts, Lobsters, and RSS items.
+Many items arrive as a bare title or a short teaser. After each background fetch
+(`content_enrichment.rs`, run at the end of every cache fill), 4DA fetches readable **text only**
+(no images or media) for recent items that are still thin, so they are scored on what they say:
 
-- **Hosts:** any domain linked by the sources above.
-- **Data sent:** a plain `GET` with the default User-Agent. No cookies, no login.
-- **Rate limit:** ~100 ms between requests; 2–10 s per-article timeout.
+- **What is fetched:** the story link for HN, Lobsters, RSS and Lemmy items; the `[link]` target of
+  a Reddit link post; the first outbound link in a Mastodon or Bluesky post (not mentions or
+  hashtags); a dev.to post's full text from `dev.to/api/articles/{user}/{slug}`. Stack Overflow
+  question bodies come with the list call above (`filter=withbody`), with no extra request.
+- **Never fetched:** items that already carry their text (arXiv, CVE/OSV, registries, GitHub), and
+  X/Twitter, Facebook, Instagram, LinkedIn, YouTube, Reddit and HN discussion pages.
+- **Hosts:** any domain linked by the sources above, plus `dev.to`.
+- **Data sent:** a plain `GET` with the default User-Agent. No cookies, no login. Internal and
+  private network addresses are refused (SSRF guard).
+- **Budget:** at most 60 fetches per cycle, 4 at a time, only for items from the last 48 hours; the
+  same host is spaced 0.5 s apart (dev.to 1.1 s); 10 s timeout per page; a failed page is retried
+  once, 6 hours later.
+- **Scope:** only items from enabled sources are ever fetched, so disabling a source stops this too.
 
 ### 1d. Model-pricing refresh
 
@@ -134,7 +145,11 @@ embeddings) — with no key configured, zero LLM network calls leave the machine
   Content per item is **capped at 2000 characters** (`llm_judge.rs`). **No raw project code, file
   contents, or git history is ever sent.**
 - **Privacy control:** Settings → Privacy → `llm_content_level`. Set to `titles_only` to send
-  titles with **no** snippet body; default `full` sends the 2000-char-capped snippet.
+  titles with **no** snippet body; default `full` sends the 2000-char-capped snippet. The setting
+  covers every prompt that carries item text: the ingest and rerank judges, the verdict re-judge
+  drain, search synthesis, briefings and channels (`src-tauri/src/llm_egress.rs`; a pre-commit gate
+  fails any new model call that bypasses it). A model on this machine (Ollama, or a `base_url` on
+  localhost) is exempt, because nothing leaves the machine.
 - **Auth:** your key, sent as `x-api-key` (Anthropic) or `Authorization: Bearer` (OpenAI-compatible).
   Keys are stored only on your machine (keychain) and never sent anywhere but the provider you chose.
 - **Retention (zero-retention defaults):** first-party **OpenAI** requests send `store: false`,
@@ -251,7 +266,7 @@ use (`src-tauri/src/embeddings_providers/fastembed.rs`):
 | What | Host | Endpoint |
 |---|---|---|
 | ONNX Runtime library | `github.com` | `/microsoft/onnxruntime/releases/download/v1.24.2/onnxruntime-{platform}.{zip,tgz}` |
-| Embedding model weights (`snowflake-arctic-embed-m`, ~220 MB) | HuggingFace Hub CDN (`huggingface.co` + its LFS/Xet CDN) | downloaded by the fastembed/hf-hub client on first init if not bundled |
+| Embedding model weights (`nomic-embed-text-v1.5`, ~550 MB; normally bundled as a 274 MB fp16 build, so never fetched) | HuggingFace Hub CDN (`huggingface.co` + its LFS/Xet CDN) | downloaded by the fastembed/hf-hub client on first init if not bundled |
 
 - **Trigger:** first embedding init only, and only if not already bundled in the install or cached.
 - **After setup:** embeddings are 100% local — zero network. If no provider is available at all,

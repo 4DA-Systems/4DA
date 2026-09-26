@@ -9,100 +9,84 @@ pub(crate) enum ModelTier {
     Blocked,
 }
 
+/// One allowlisted model family. Each entry's licence and the reason for its
+/// tier are recorded as a comment directly above it (curatorial notes for
+/// reviewers — nothing reads them at runtime).
 pub(crate) struct ModelEntry {
     pub family: &'static str,
     pub tier: ModelTier,
     pub min_ram_gb: f64,
-    /// Curatorial metadata kept beside the entry it describes so a reviewer can
-    /// audit licence compatibility without leaving the allowlist. Not rendered
-    /// anywhere — deliberately retained as machine-readable documentation.
-    #[allow(dead_code)] // REMOVE BY 2026-11-12
-    pub license: &'static str,
-    /// Why this model sits in this tier. Same rationale as `license`.
-    #[allow(dead_code)] // REMOVE BY 2026-11-12
-    pub notes: &'static str,
 }
 
 static ALLOWLIST: &[ModelEntry] = &[
     // ── Verified ───────────────────────────────────────────────────────
+    // Apache-2.0 — Primary — 5.4% hallucination, best structured output
     ModelEntry {
         family: "qwen3:14b",
         tier: ModelTier::Verified,
         min_ram_gb: 11.0,
-        license: "Apache-2.0",
-        notes: "Primary — 5.4% hallucination, best structured output",
     },
+    // Apache-2.0 — Google QAT preserves quality at Q4
     ModelEntry {
         family: "gemma3:12b",
         tier: ModelTier::Verified,
         min_ram_gb: 9.0,
-        license: "Apache-2.0",
-        notes: "Google QAT preserves quality at Q4",
     },
+    // Apache-2.0 — Minimum verified for synthesis
     ModelEntry {
         family: "qwen3:8b",
         tier: ModelTier::Verified,
         min_ram_gb: 7.0,
-        license: "Apache-2.0",
-        notes: "Minimum verified for synthesis",
     },
     // ── Experimental ───────────────────────────────────────────────────
+    // Apache-2.0 — Anomalous IFEval 90.2, needs grammar constraints
     ModelEntry {
         family: "gemma3:4b",
         tier: ModelTier::Experimental,
         min_ram_gb: 4.0,
-        license: "Apache-2.0",
-        notes: "Anomalous IFEval 90.2, needs grammar constraints",
     },
+    // MIT — Reasoning model, may overthink structured tasks
     ModelEntry {
         family: "deepseek-r1",
         tier: ModelTier::Experimental,
         min_ram_gb: 5.0,
-        license: "MIT",
-        notes: "Reasoning model, may overthink structured tasks",
     },
+    // MIT — Microsoft, decent instruction following
     ModelEntry {
         family: "phi4",
         tier: ModelTier::Experimental,
         min_ram_gb: 5.0,
-        license: "MIT",
-        notes: "Microsoft, decent instruction following",
     },
+    // Llama 3.1 — Meta, was previous recommendation
     ModelEntry {
         family: "llama3.1:8b",
         tier: ModelTier::Experimental,
         min_ram_gb: 6.0,
-        license: "Llama 3.1",
-        notes: "Meta, was previous recommendation",
     },
+    // Apache-2.0 — Older 7B, superseded by qwen3/gemma3
     ModelEntry {
         family: "mistral",
         tier: ModelTier::Experimental,
         min_ram_gb: 6.0,
-        license: "Apache-2.0",
-        notes: "Older 7B, superseded by qwen3/gemma3",
     },
     // ── Blocked ────────────────────────────────────────────────────────
+    // Llama 3.2 — 3B default, produces hallucinated narratives
     ModelEntry {
         family: "llama3.2",
         tier: ModelTier::Blocked,
         min_ram_gb: 2.5,
-        license: "Llama 3.2",
-        notes: "3B default, produces hallucinated narratives",
     },
+    // MIT — Too small for 20+ quality rules
     ModelEntry {
         family: "phi3:mini",
         tier: ModelTier::Blocked,
         min_ram_gb: 2.5,
-        license: "MIT",
-        notes: "Too small for 20+ quality rules",
     },
+    // Apache-2.0 — 1.1B, immediately fails
     ModelEntry {
         family: "tinyllama",
         tier: ModelTier::Blocked,
         min_ram_gb: 1.0,
-        license: "Apache-2.0",
-        notes: "1.1B, immediately fails",
     },
 ];
 

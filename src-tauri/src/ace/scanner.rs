@@ -631,12 +631,29 @@ impl ProjectScanner {
 
             if (in_deps || in_dev_deps) && !trimmed.is_empty() && !trimmed.starts_with('#') {
                 if let Some((dep_name, dep_value)) = trimmed.split_once('=') {
-                    let dep = dep_name.trim().to_string();
+                    // TOML dotted keys (`anyhow.workspace = true`,
+                    // `tokio.features = [..]`) name the crate by their first
+                    // segment; a crate name never contains '.'. Read whole, the
+                    // key became a phantom dependency `anyhow.workspace` with no
+                    // version (24 live rows across one workspace's member crates, 2026-09-25).
+                    let key = dep_name.trim();
+                    let (name, dotted_field) = key.split_once('.').unwrap_or((key, ""));
+                    let dep = name.trim().trim_matches('"').to_string();
                     // Skip local path/git deps (e.g. `foo = { path = "..." }`).
                     // These are the user's own crates or vendored code with no
                     // crates.io presence — tracking them as external dependencies
                     // only produces false-positive "unmonitored" blind spots.
-                    if is_local_cargo_dep(dep_value) {
+                    if is_local_cargo_dep(dep_value)
+                        || matches!(dotted_field.trim(), "path" | "git")
+                    {
+                        continue;
+                    }
+                    // A crate spelled over several dotted lines is one dependency.
+                    if !dotted_field.is_empty()
+                        && (signal.dependencies.contains(&dep)
+                            || signal.dev_dependencies.contains(&dep)
+                            || signal.target_dependencies.iter().any(|(d, _)| d == &dep))
+                    {
                         continue;
                     }
                     if !dep.is_empty() {
@@ -3039,6 +3056,43 @@ packages:
             packages.contains(&("react-dom".to_string(), "18.2.0".to_string())),
             "{packages:?}"
         );
+    }
+
+    #[test]
+    fn parse_cargo_toml_reads_dotted_keys_as_the_crate_name() {
+        // A live workspace's member crates, 2026-09-25: `anyhow.workspace = true` had been
+        // recorded as a dependency literally named "anyhow.workspace".
+        let content = r#"
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+serde.features = ["derive"]
+"quoted".version = "1"
+mylib.path = "../mylib"
+
+[dev-dependencies]
+tempfile.workspace = true
+"#;
+        let scanner = ProjectScanner::new();
+        let mut signal = ProjectSignal {
+            manifest_type: ManifestType::CargoToml,
+            manifest_path: PathBuf::from("Cargo.toml"),
+            project_name: None,
+            languages: vec!["rust".to_string()],
+            frameworks: Vec::new(),
+            dependencies: Vec::new(),
+            dev_dependencies: Vec::new(),
+            indirect_dependencies: Vec::new(),
+            import_scraped_dependencies: Vec::new(),
+            target_dependencies: Vec::new(),
+            detected_at: String::new(),
+            project_license: None,
+            project_relevance: 1.0,
+        };
+        scanner.parse_cargo_toml(content, &mut signal);
+
+        assert_eq!(signal.dependencies, vec!["anyhow", "serde", "quoted"]);
+        assert_eq!(signal.dev_dependencies, vec!["tempfile"]);
     }
 
     #[test]

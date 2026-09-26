@@ -10,7 +10,7 @@ import { setActivityTrackingEnabled } from '../hooks/use-telemetry';
 const defaultSettingsForm: SettingsForm = {
   provider: 'anthropic',
   apiKey: '',
-  model: 'claude-haiku-4-5-20251001',
+  model: 'claude-sonnet-5',
   baseUrl: '',
   rerankEnabled: false,
   maxItems: 15,
@@ -73,7 +73,7 @@ export const createSettingsSlice: StateCreator<AppStore, [], [], SettingsSlice> 
         settingsForm: {
           ...state.settingsForm,
           provider: s.llm.provider !== 'none' ? s.llm.provider : 'anthropic',
-          model: s.llm.model || 'claude-haiku-4-5-20251001',
+          model: s.llm.model || 'claude-sonnet-5',
           baseUrl: s.llm.base_url || '',
           rerankEnabled: s.rerank.enabled,
           maxItems: s.rerank.max_items_per_batch,

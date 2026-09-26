@@ -152,21 +152,15 @@ impl ACE {
     pub fn new(conn: Arc<Mutex<Connection>>) -> Result<Self> {
         db::migrate(&conn)?;
 
-        // Verify ACE database integrity (same defense as main DB)
-        {
-            let conn_guard = conn.lock();
-            match conn_guard.query_row("PRAGMA quick_check", [], |row| row.get::<_, String>(0)) {
-                Ok(result) if result == "ok" => {
-                    info!(target: "4da::ace", "ACE database integrity verified");
-                }
-                Ok(result) => {
-                    warn!(target: "4da::ace", result = %result, "ACE database integrity check returned warnings");
-                }
-                Err(e) => {
-                    warn!(target: "4da::ace", error = %e, "ACE database integrity check failed — continuing with caution");
-                }
-            }
-        }
+        // No integrity check here. ACE shares the main database file, which
+        // `get_database()` already quick_checks twice per process (pre-flight
+        // recovery + `Database::new`). A third `PRAGMA quick_check` reads every
+        // page of the whole corpus (1.4 GB on 2026-09-25) and, because ACE is
+        // initialised lazily from inside the scoring-context build, it ran
+        // under the 45s `BUILD_TIMEOUT_SECS` budget in every cold headless
+        // run. On a busy disk it took 45-245s by itself: 31 of 33 logged
+        // "Scoring context build timed out" failures between 09-18 and 09-24
+        // were this scan, and the rebuild right after each one took 4-35s.
 
         let scanner = ProjectScanner::new();
         let git_analyzer = GitAnalyzer::default();
@@ -1132,6 +1126,9 @@ pub(crate) fn create_test_ace() -> ACE {
         peak_hours: Vec::new(),
     }
 }
+
+#[cfg(test)]
+mod init_tests;
 
 #[cfg(test)]
 mod tests {

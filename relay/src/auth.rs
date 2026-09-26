@@ -1,6 +1,5 @@
 //! JWT authentication for relay API.
 
-use async_trait::async_trait;
 use axum::extract::FromRequestParts;
 use axum::http::request::Parts;
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
@@ -26,7 +25,6 @@ pub struct TeamClaims {
 /// Extract authenticated team claims from the Authorization header.
 pub struct AuthTeam(pub TeamClaims);
 
-#[async_trait]
 impl<S> FromRequestParts<S> for AuthTeam
 where
     S: Send + Sync,

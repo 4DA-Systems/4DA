@@ -161,7 +161,7 @@ chacha20poly1305 = "0.11"
 x25519-dalek = { version = "3", features = ["static_secrets", "getrandom"] }
 hkdf = "0.13"
 uuid = { version = "1", features = ["v4", "serde"] }
-rand = "0.8"
+rand = "0.10"
 zeroize = "1"
 
 # Keyring — cross-platform credential storage (Windows Credential Manager, macOS Keychain, Linux Secret Service)
@@ -206,6 +206,9 @@ required-features = ["ocr"]
 
 [dev-dependencies]
 tempfile = "3"
+# `trace` lets tests assert which SQL a code path runs (ace/init_tests.rs).
+# Test builds only; the shipped binary keeps the plain `bundled` feature set.
+rusqlite = { version = "0.32", features = ["bundled", "trace"] }
 criterion = { version = "0.5", features = ["html_reports"] }
 victauri-test = "0.8"
 # `test-util` gives tests tokio's virtual clock (`#[tokio::test(start_paused)]`),

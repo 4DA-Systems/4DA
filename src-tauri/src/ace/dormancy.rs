@@ -70,6 +70,23 @@ pub fn is_dormant_days(days: i64) -> bool {
     days > DORMANT_AFTER_DAYS
 }
 
+/// Lockfiles that make a directory an independent project rather than a
+/// workspace member. A workspace member shares its workspace root's lockfile
+/// and is built as part of it, so it rightly inherits the repository's
+/// activity. A directory with its OWN lockfile is installed and shipped on its
+/// own, and can die while the repository around it stays busy.
+const OWN_LOCKFILES: &[&str] = &[
+    "Cargo.lock",
+    "package-lock.json",
+    "pnpm-lock.yaml",
+    "yarn.lock",
+    "poetry.lock",
+    "uv.lock",
+    "Gemfile.lock",
+    "composer.lock",
+    "go.sum",
+];
+
 /// Most recent on-disk activity marker for a project, as an RFC3339 UTC
 /// timestamp: the newest mtime among the git activity files and the
 /// project's manifest/lockfiles. `None` when nothing is readable — the
@@ -80,7 +97,27 @@ pub fn is_dormant_days(days: i64) -> bool {
 /// measurement that established this). The `.git` entry is searched from the
 /// project dir upward so workspace members without their own `.git` inherit
 /// the repository's activity.
+///
+/// Exception: an independent project NESTED inside a larger repository (its
+/// own lockfile, below the repository root) is judged by its own history — see
+/// [`nested_project_activity`]. Otherwise a dead folder inside an active
+/// monorepo inherits the monorepo's heartbeat and can never go dormant
+/// (2026-09-24: `D:\4DA\paddle-webhook`, unused since Signal moved to Stripe,
+/// read as "active today" because the 4DA repository was).
 pub fn last_activity_from_fs(project_dir: &Path) -> Option<String> {
+    if let Some(root) = find_repo_root_upward(project_dir) {
+        if !same_dir(&root, project_dir)
+            && has_own_lockfile(project_dir)
+            && !consumed_by_enclosing_project(&root, project_dir)
+        {
+            if let Some(ts) = nested_project_activity(&root, project_dir) {
+                return Some(ts);
+            }
+            // git could not answer (not installed, timed out): fall through to
+            // the repository-level evidence. Unknown must never read as dormant.
+        }
+    }
+
     let mut newest: Option<SystemTime> = None;
     let mut consider = |t: SystemTime| {
         newest = Some(match newest {
@@ -110,6 +147,169 @@ pub fn last_activity_from_fs(project_dir: &Path) -> Option<String> {
     newest.map(|t| chrono::DateTime::<chrono::Utc>::from(t).to_rfc3339())
 }
 
+/// The directory holding the nearest `.git` entry, from `start` upward.
+fn find_repo_root_upward(start: &Path) -> Option<std::path::PathBuf> {
+    let mut dir = Some(start);
+    while let Some(d) = dir {
+        if d.join(".git").exists() {
+            return Some(d.to_path_buf());
+        }
+        dir = d.parent();
+    }
+    None
+}
+
+fn same_dir(a: &Path, b: &Path) -> bool {
+    match (a.canonicalize(), b.canonicalize()) {
+        (Ok(x), Ok(y)) => x == y,
+        _ => a == b,
+    }
+}
+
+fn has_own_lockfile(dir: &Path) -> bool {
+    OWN_LOCKFILES.iter().any(|f| dir.join(f).is_file())
+}
+
+/// Manifests that can pull in a sibling directory by path.
+const CONSUMER_MANIFESTS: &[&str] = &["Cargo.toml", "package.json", "pyproject.toml", "go.mod"];
+
+/// True when a manifest in any directory between `project_dir` and the
+/// repository root names the project by its path from there: a Cargo `path =`
+/// dependency or workspace member, an npm `file:`/`link:` dependency, a
+/// pyproject path source, a go `replace`. Such a directory is a component of
+/// the enclosing project (a stray lockfile of its own does not change that:
+/// `src-tauri/fourda-macros`) and lives as long as that project does.
+fn consumed_by_enclosing_project(repo_root: &Path, project_dir: &Path) -> bool {
+    let (Ok(root), Ok(project)) = (repo_root.canonicalize(), project_dir.canonicalize()) else {
+        return false;
+    };
+    let mut ancestor = project.parent();
+    while let Some(dir) = ancestor {
+        let Ok(rel) = project.strip_prefix(dir) else {
+            break;
+        };
+        let rel = rel.to_string_lossy().replace('\\', "/");
+        let needles = [
+            format!("\"{rel}\""),
+            format!("\"./{rel}\""),
+            format!("file:{rel}"),
+            format!("file:./{rel}"),
+            format!("link:{rel}"),
+            format!("link:./{rel}"),
+            format!("=> ./{rel}"),
+            format!("=> {rel}"),
+        ];
+        for manifest in CONSUMER_MANIFESTS {
+            if let Ok(text) = std::fs::read_to_string(dir.join(manifest)) {
+                if needles.iter().any(|n| text.contains(n.as_str())) {
+                    return true;
+                }
+            }
+        }
+        if dir == root {
+            break;
+        }
+        ancestor = dir.parent();
+    }
+    false
+}
+
+/// Activity of an independent project nested in a larger repository, judged
+/// by its own history: the newer of
+/// - the last commit that changed anything under it OTHER than its manifests
+///   and lockfiles (dependency bumps, most of them automated, are upkeep, not
+///   work on the project), and
+/// - the newest mtime among its uncommitted changes, same exclusion, so work in
+///   progress never reads as dormant.
+///
+/// `None` when git cannot answer or neither signal exists; the caller then
+/// falls back to the repository-level evidence.
+fn nested_project_activity(repo_root: &Path, project_dir: &Path) -> Option<String> {
+    let root = repo_root.canonicalize().ok()?;
+    let project = project_dir.canonicalize().ok()?;
+    let rel = project
+        .strip_prefix(&root)
+        .ok()?
+        .to_string_lossy()
+        .replace('\\', "/");
+    if rel.is_empty() {
+        return None;
+    }
+
+    let excludes: Vec<String> = ACTIVITY_MANIFESTS
+        .iter()
+        .map(|m| format!(":(exclude){rel}/{m}"))
+        .collect();
+    let mut log_args = vec!["log", "-1", "--format=%cI", "--", rel.as_str()];
+    log_args.extend(excludes.iter().map(String::as_str));
+    let committed = super::git::run_git_with_timeout(&log_args, &root)
+        .ok()
+        .filter(|o| o.status.success())
+        .and_then(|o| parse_commit_time(&String::from_utf8_lossy(&o.stdout)));
+
+    let status_args = [
+        "--no-optional-locks",
+        "status",
+        "--porcelain=v1",
+        "-z",
+        "-uall",
+        "--",
+        rel.as_str(),
+    ];
+    let uncommitted = super::git::run_git_with_timeout(&status_args, &root)
+        .ok()
+        .filter(|o| o.status.success())
+        .and_then(|o| newest_uncommitted_change(&root, &o.stdout));
+
+    match (committed, uncommitted) {
+        (Some(c), Some(u)) => Some(c.max(u)),
+        (c, u) => c.or(u),
+    }
+    .map(|t| t.to_rfc3339())
+}
+
+fn parse_commit_time(stdout: &str) -> Option<chrono::DateTime<chrono::Utc>> {
+    chrono::DateTime::parse_from_rfc3339(stdout.trim())
+        .ok()
+        .map(|t| t.with_timezone(&chrono::Utc))
+}
+
+/// Newest mtime among the files `git status --porcelain=v1 -z` lists, skipping
+/// manifests and lockfiles. Entries are `XY path\0`; a rename or copy carries
+/// its original path as a second NUL-separated field, skipped here. Bounded so
+/// a huge untracked tree cannot stall a scan.
+fn newest_uncommitted_change(
+    repo_root: &Path,
+    porcelain: &[u8],
+) -> Option<chrono::DateTime<chrono::Utc>> {
+    const MAX_ENTRIES: usize = 500;
+    let text = String::from_utf8_lossy(porcelain);
+    let mut fields = text.split('\0').filter(|f| !f.is_empty());
+    let mut newest: Option<SystemTime> = None;
+    let mut seen = 0;
+    while let Some(entry) = fields.next() {
+        if entry.len() < 4 || seen >= MAX_ENTRIES {
+            break;
+        }
+        seen += 1;
+        let (status, path) = entry.split_at(3);
+        if status.contains('R') || status.contains('C') {
+            fields.next();
+        }
+        let is_manifest = Path::new(path)
+            .file_name()
+            .and_then(|n| n.to_str())
+            .is_some_and(|n| ACTIVITY_MANIFESTS.contains(&n));
+        if is_manifest {
+            continue;
+        }
+        if let Ok(modified) = std::fs::metadata(repo_root.join(path)).and_then(|m| m.modified()) {
+            newest = Some(newest.map_or(modified, |n| n.max(modified)));
+        }
+    }
+    newest.map(chrono::DateTime::<chrono::Utc>::from)
+}
+
 /// Walk from `start` upward to the nearest `.git` entry and resolve it to a
 /// real git directory (handles linked worktrees, where `.git` is a file).
 fn find_git_dir_upward(start: &Path) -> Option<std::path::PathBuf> {
@@ -123,6 +323,10 @@ fn find_git_dir_upward(start: &Path) -> Option<std::path::PathBuf> {
     }
     None
 }
+
+#[cfg(test)]
+#[path = "dormancy_nested_tests.rs"]
+mod nested_tests;
 
 #[cfg(test)]
 mod tests {

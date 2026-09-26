@@ -16,6 +16,10 @@
     "channel_render": "Renderizado de canal",
     "content_analysis": "Análisis de contenido",
     "translation": "Traducción",
+    "verdict_drain": "Evaluación de relevancia — veredictos pendientes",
+    "monitoring_brief": "Informe matutino",
+    "capability_probe": "Comprobación de capacidad del modelo",
+    "connection_test": "Prueba de conexión (ajustes)",
     "completion": "Sin etiqueta (informes y otros)",
     "structured_completion": "Sin etiqueta (estructurado)",
     "streaming": "Sin etiqueta (streaming)"

@@ -21,6 +21,7 @@ fn default_inputs() -> NecessityInputs {
         strongly_grounded: false,
         version_affected: None,
         registry_advisory: false,
+        release_grade: None,
     }
 }
 
@@ -754,4 +755,64 @@ fn test_persist_from_results_upserts_on_rescore() {
     assert_eq!(count, 1, "upsert must not duplicate rows");
     assert!((score - 0.40).abs() < 0.001, "re-score refreshes the row");
     assert_eq!(reason.as_deref(), Some("decayed"));
+}
+
+/// v37: a graded registry release says which projects it concerns and how
+/// far behind they are; a breaking upgrade is the `breaking_change` tier.
+#[test]
+fn test_release_grade_breaking_is_breaking_change_this_week() {
+    use crate::scoring::release_grade::ReleaseClass;
+    let inputs = NecessityInputs {
+        dep_match_score: 0.3,
+        matched_deps: vec!["fastembed".to_string()],
+        content_type: Some("release_notes".to_string()),
+        strongly_grounded: true,
+        release_grade: Some((
+            ReleaseClass::Breaking,
+            "Breaking upgrade: fastembed 7.1.0 for 4da/src-tauri on 5.13.4".to_string(),
+        )),
+        ..default_inputs()
+    };
+    let r = compute_necessity(&inputs);
+    assert_eq!(r.category, NecessityCategory::BreakingChange);
+    assert_eq!(r.urgency, Urgency::ThisWeek);
+    assert!((r.score - 0.80).abs() < 1e-6);
+    assert_eq!(
+        r.reason,
+        "Breaking upgrade: fastembed 7.1.0 for 4da/src-tauri on 5.13.4"
+    );
+}
+
+#[test]
+fn test_release_grade_patch_is_low_awareness() {
+    use crate::scoring::release_grade::ReleaseClass;
+    let inputs = NecessityInputs {
+        dep_match_score: 0.3,
+        content_type: Some("release_notes".to_string()),
+        strongly_grounded: true,
+        release_grade: Some((ReleaseClass::Patch, "Patch release x 1.0.1".to_string())),
+        ..default_inputs()
+    };
+    let r = compute_necessity(&inputs);
+    assert_eq!(r.category, NecessityCategory::EcosystemShift);
+    assert_eq!(r.urgency, Urgency::Awareness);
+    assert!(r.score <= 0.20 + 1e-6);
+}
+
+/// The grade never speaks for an item the canonical verdict did not ground.
+#[test]
+fn test_release_grade_requires_grounding() {
+    use crate::scoring::release_grade::ReleaseClass;
+    let inputs = NecessityInputs {
+        dep_match_score: 0.3,
+        content_type: Some("release_notes".to_string()),
+        strongly_grounded: false,
+        release_grade: Some((
+            ReleaseClass::Breaking,
+            "Breaking upgrade: x 2.0.0".to_string(),
+        )),
+        ..default_inputs()
+    };
+    let r = compute_necessity(&inputs);
+    assert_ne!(r.category, NecessityCategory::BreakingChange);
 }

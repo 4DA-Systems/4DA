@@ -1017,6 +1017,63 @@ describe("4DA MCP Tool Handlers", () => {
       // poisoned every consumer aggregating signal_strength).
       expect(row!.signal_strength).toBe(1.0);
     });
+
+    // The feedback table is created on first label write; no table means no labels.
+    const labelsFor = (itemId: number) => {
+      const raw = db.getRawDb();
+      const exists = raw.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'feedback'").get();
+      if (!exists) return [];
+      return raw
+        .prepare("SELECT relevant FROM feedback WHERE source_item_id = ? ORDER BY id")
+        .all(itemId) as { relevant: number }[];
+    };
+
+    it("writes a relevance label for save and mark_irrelevant only", () => {
+      const saved = insertSourceItem(db, { source_type: "hackernews", title: "Label: save" });
+      const rejected = insertSourceItem(db, { source_type: "hackernews", title: "Label: reject" });
+      const clicked = insertSourceItem(db, { source_type: "hackernews", title: "Label: click" });
+      const dismissed = insertSourceItem(db, { source_type: "hackernews", title: "Label: dismiss" });
+
+      const s = executeRecordFeedback(db, { item_id: saved, action: "save" });
+      const r = executeRecordFeedback(db, { item_id: rejected, action: "mark_irrelevant" });
+      const c = executeRecordFeedback(db, { item_id: clicked, action: "click" });
+      const d = executeRecordFeedback(db, { item_id: dismissed, action: "dismiss" });
+
+      expect(labelsFor(saved)).toEqual([{ relevant: 1 }]);
+      expect(labelsFor(rejected)).toEqual([{ relevant: 0 }]);
+      expect(labelsFor(clicked)).toEqual([]);
+      expect(labelsFor(dismissed)).toEqual([]);
+      expect([s.relevance_label, r.relevance_label, c.relevance_label, d.relevance_label]).toEqual([true, false, null, null]);
+    });
+
+    it("rates items from any source, with source_type optional", () => {
+      // crates_io is one of the ~17 sources the old three-value enum excluded.
+      const itemId = insertSourceItem(db, { source_type: "crates_io", title: "crates.io: tower-http v0.7.1" });
+
+      const result = executeRecordFeedback(db, { item_id: itemId, action: "mark_irrelevant" });
+      expect(result.success).toBe(true);
+      expect(labelsFor(itemId)).toEqual([{ relevant: 0 }]);
+
+      const interaction = db
+        .getRawDb()
+        .prepare("SELECT item_source FROM interactions WHERE item_id = ?")
+        .get(itemId) as { item_source: string };
+      expect(interaction.item_source).toBe("crates_io");
+    });
+
+    it("rejects a source_type that does not match the item, writing nothing", () => {
+      const itemId = insertSourceItem(db, { source_type: "lobsters", title: "Mismatch" });
+
+      const result = executeRecordFeedback(db, { item_id: itemId, source_type: "hackernews", action: "save" });
+      expect(result.success).toBe(false);
+      expect(result.message).toContain("not found");
+      expect(labelsFor(itemId)).toEqual([]);
+      const interactions = db
+        .getRawDb()
+        .prepare("SELECT COUNT(*) AS n FROM interactions WHERE item_id = ?")
+        .get(itemId) as { n: number };
+      expect(interactions.n).toBe(0);
+    });
   });
 
   // ---------------------------------------------------------------------------

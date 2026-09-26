@@ -15,6 +15,10 @@
     "channel_render": "채널 렌더링",
     "content_analysis": "콘텐츠 분석",
     "translation": "번역",
+    "verdict_drain": "관련성 판정 — 보류 중인 판정",
+    "monitoring_brief": "아침 브리핑",
+    "capability_probe": "모델 성능 확인",
+    "connection_test": "연결 테스트 (설정)",
     "completion": "태그 없음 (브리핑 등)",
     "structured_completion": "태그 없음 (구조화)",
     "streaming": "태그 없음 (스트리밍)"

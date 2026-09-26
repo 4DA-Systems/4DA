@@ -219,7 +219,21 @@ impl Database {
         &self,
         item_ids: &[i64],
     ) -> SqliteResult<std::collections::HashSet<i64>> {
-        let mut grounded = std::collections::HashSet::new();
+        Ok(self
+            .strongly_grounded_packages(item_ids)?
+            .into_keys()
+            .collect())
+    }
+
+    /// The same verdict as [`Self::filter_strongly_grounded_items`], keyed to
+    /// the grounding package names (sorted, deduplicated), so the Brief can tell
+    /// the model WHICH dependency an item concerns.
+    pub fn strongly_grounded_packages(
+        &self,
+        item_ids: &[i64],
+    ) -> SqliteResult<std::collections::HashMap<i64, Vec<String>>> {
+        let mut grounded: std::collections::HashMap<i64, Vec<String>> =
+            std::collections::HashMap::new();
         if item_ids.is_empty() {
             return Ok(grounded);
         }
@@ -243,8 +257,12 @@ impl Database {
         for (item_id, package_name, match_type) in rows.flatten() {
             let proof_based = matches!(match_type.as_str(), "exact_registry" | "advisory");
             if proof_based || !crate::package_ambiguity::is_ambiguous_package_name(&package_name) {
-                grounded.insert(item_id);
+                grounded.entry(item_id).or_default().push(package_name);
             }
+        }
+        for packages in grounded.values_mut() {
+            packages.sort();
+            packages.dedup();
         }
         Ok(grounded)
     }
@@ -622,6 +640,14 @@ mod tests {
             !grounded.contains(&unlinked),
             "unlinked item is not grounded"
         );
+
+        // Same verdict, keyed to the grounding package names.
+        let packages = db
+            .strongly_grounded_packages(&[strong, weak, ambiguous_heuristic, ambiguous_registry])
+            .expect("packages");
+        assert_eq!(packages[&strong], vec!["tokio".to_string()]);
+        assert_eq!(packages[&ambiguous_registry], vec!["log".to_string()]);
+        assert_eq!(packages.len(), 2);
     }
 
     #[test]

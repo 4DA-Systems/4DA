@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Go Module Proxy source implementation
 //!
-//! Monitors new Go module versions via the Go Module Index API.
-//! Uses newline-delimited JSON from index.golang.org.
+//! Monitors new versions of the Go modules the user's `go.mod` files declare,
+//! through the module proxy's per-module `/@latest` endpoint. The global
+//! `index.golang.org` feed is never read: without a `since` it returns the
+//! same April-2019 entries on every call (probed 2026-09-25), and with one it
+//! is a firehose of modules no project imports.
 
 use async_trait::async_trait;
 use serde::Deserialize;
@@ -13,16 +16,6 @@ use super::{Source, SourceConfig, SourceError, SourceItem, SourceResult};
 // ============================================================================
 // Go Module Index API Types
 // ============================================================================
-
-#[derive(Debug, Deserialize)]
-struct GoModuleEntry {
-    #[serde(rename = "Path")]
-    path: String,
-    #[serde(rename = "Version")]
-    version: String,
-    #[serde(rename = "Timestamp")]
-    timestamp: Option<String>,
-}
 
 /// Response of the module proxy `/<module>/@latest` endpoint.
 #[derive(Debug, Deserialize)]
@@ -73,23 +66,28 @@ impl GoModulesSource {
         }
     }
 
-    /// Strict manifest mode: fetch the latest version of ONLY the modules the stack's
-    /// go.mod/go.sum pins, via the module proxy's per-module `/@latest` endpoint — never
-    /// the whole-registry `index.golang.org` feed (which surfaces random modules the stack
-    /// never imports). Returns an empty vec when the manifest has no Go modules tracked.
+    /// Fetch the latest version of the modules the user's manifests declare, a
+    /// rotating window of `max_items` per cycle so a long module list is covered
+    /// in turn. Returns an empty vec when no Go module is declared.
     async fn fetch_targeted(&self) -> SourceResult<Vec<SourceItem>> {
         let modules = crate::source_fetching::load_ace_packages_for_ecosystem("go");
         if modules.is_empty() {
-            info!("Strict manifest mode: no Go modules in manifest — skipping Go fetch");
+            info!("No Go modules declared in any manifest — skipping Go fetch");
             return Ok(Vec::new());
         }
+        let window = crate::source_fetching::rotating_window(
+            "sources.go_modules.rotation_cursor",
+            &modules,
+            self.config.max_items,
+        );
         info!(
             modules = modules.len(),
-            "Strict manifest mode: fetching latest versions for manifest Go modules"
+            window = window.len(),
+            "Fetching latest versions for declared Go modules"
         );
 
         let mut items = Vec::new();
-        for module in modules.iter().take(self.config.max_items) {
+        for module in &window {
             match self.fetch_module_latest(module).await {
                 Ok(Some(item)) => items.push(item),
                 Ok(None) => {}
@@ -210,85 +208,7 @@ impl Source for GoModulesSource {
         if !self.config.enabled {
             return Err(SourceError::Disabled);
         }
-
-        // Strict manifest mode targets only the stack's pinned modules via the proxy;
-        // the global index below is never queried.
-        if crate::source_fetching::strict_manifest_mode() {
-            return self.fetch_targeted().await;
-        }
-
-        info!("Fetching Go Module Index latest entries");
-
-        let url = format!(
-            "https://index.golang.org/index?limit={}",
-            self.config.max_items
-        );
-
-        let response = self
-            .client
-            .get(&url)
-            .send()
-            .await
-            .map_err(|e| SourceError::Network(e.to_string()))?;
-
-        super::classify_http_response(&response, "Go modules proxy")?;
-
-        let body = response
-            .text()
-            .await
-            .map_err(|e| SourceError::Parse(e.to_string()))?;
-
-        // Parse newline-delimited JSON
-        let items: Vec<SourceItem> = body
-            .lines()
-            .filter(|line| !line.trim().is_empty())
-            .filter_map(|line| {
-                match serde_json::from_str::<GoModuleEntry>(line) {
-                    Ok(entry) => {
-                        let source_id = format!("{}@{}", entry.path, entry.version);
-                        let title = format!("Go: {} {}", entry.path, entry.version);
-                        let pkg_url =
-                            format!("https://pkg.go.dev/{}@{}", entry.path, entry.version);
-
-                        // Build content from module info
-                        let mut content_parts = vec![
-                            format!("Module: {}", entry.path),
-                            format!("Version: {}", entry.version),
-                        ];
-                        if let Some(ref ts) = entry.timestamp {
-                            content_parts.push(format!("Published: {}", ts));
-                        }
-                        let content = content_parts.join("\n");
-
-                        // Build metadata
-                        let mut metadata = serde_json::json!({
-                            "module_path": entry.path,
-                            "version": entry.version,
-                            "ecosystem": "go",
-                            "source_name": "go_modules",
-                        });
-                        if let Some(ref ts) = entry.timestamp {
-                            metadata["timestamp"] = serde_json::json!(ts);
-                        }
-
-                        Some(
-                            SourceItem::new("go_modules", &source_id, &title)
-                                .with_url(Some(pkg_url))
-                                .with_content(content)
-                                .with_metadata(metadata),
-                        )
-                    }
-                    Err(e) => {
-                        warn!(line = %line, error = %e, "Failed to parse Go module entry");
-                        None
-                    }
-                }
-            })
-            .take(self.config.max_items)
-            .collect();
-
-        info!(items = items.len(), "Fetched Go Module Index items");
-        Ok(items)
+        self.fetch_targeted().await
     }
 }
 
@@ -343,34 +263,5 @@ mod tests {
         let info: GoLatestInfo = serde_json::from_str(r#"{"Version":"v0.1.0"}"#).unwrap();
         assert_eq!(info.version, "v0.1.0");
         assert!(info.time.is_none());
-    }
-
-    #[test]
-    fn test_go_module_ndjson_parsing() {
-        let ndjson = r#"{"Path":"github.com/example/module","Version":"v1.2.3","Timestamp":"2026-03-15T10:00:00Z"}
-{"Path":"golang.org/x/text","Version":"v0.14.0","Timestamp":"2026-03-15T09:00:00Z"}
-{"Path":"github.com/no-timestamp/pkg","Version":"v0.1.0"}"#;
-
-        let entries: Vec<GoModuleEntry> = ndjson
-            .lines()
-            .filter(|l| !l.trim().is_empty())
-            .filter_map(|l| serde_json::from_str(l).ok())
-            .collect();
-
-        assert_eq!(entries.len(), 3);
-
-        assert_eq!(entries[0].path, "github.com/example/module");
-        assert_eq!(entries[0].version, "v1.2.3");
-        assert_eq!(
-            entries[0].timestamp.as_deref(),
-            Some("2026-03-15T10:00:00Z")
-        );
-
-        assert_eq!(entries[1].path, "golang.org/x/text");
-        assert_eq!(entries[1].version, "v0.14.0");
-
-        // Entry without timestamp
-        assert_eq!(entries[2].path, "github.com/no-timestamp/pkg");
-        assert!(entries[2].timestamp.is_none());
     }
 }

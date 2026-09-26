@@ -188,8 +188,8 @@ fn prompt_pins_confidence_semantics_and_mandatory_field() {
     );
 
     assert_eq!(
-        PROMPT_VERSION, "v6",
-        "the topic-not-vocabulary fix must ride its own cohort"
+        PROMPT_VERSION, "v7",
+        "the project-card context must ride its own cohort"
     );
 }
 
@@ -579,6 +579,92 @@ async fn post_cycle_no_op_without_provider() {
         feed_relevant_of(&db, id),
         1,
         "a BYOK no-op must not touch verdicts"
+    );
+}
+
+fn provider_of(kind: &str, model: &str) -> crate::settings::LLMProvider {
+    let mut p = crate::settings::LLMProvider::default();
+    p.provider = kind.into();
+    p.api_key = if kind == "ollama" {
+        String::new()
+    } else {
+        "test-key".into()
+    };
+    p.model = model.into();
+    p
+}
+
+/// The demotion lanes hold the rerank lane's capability bar, with a measured
+/// local allowlist, and local models judge one item per call.
+#[test]
+fn judge_items_per_call_gates_and_sizes_by_model() {
+    // Cloud: batched (Haiku measured flat across 1/3/10 items per call).
+    assert_eq!(
+        judge_items_per_call(&provider_of("anthropic", "claude-haiku-4-5")),
+        Some(BATCH_SIZE)
+    );
+    assert_eq!(
+        judge_items_per_call(&provider_of("openai", "gpt-4o-mini")),
+        Some(BATCH_SIZE)
+    );
+    // The Ollama onboarding default (3B, Basic) must never demote feed items.
+    assert_eq!(
+        judge_items_per_call(&provider_of("ollama", "llama3.2")),
+        None
+    );
+    assert_eq!(
+        judge_items_per_call(&provider_of("ollama", "llama3.2:latest")),
+        None
+    );
+    assert_eq!(
+        judge_items_per_call(&provider_of("ollama", "some-unknown-model")),
+        None
+    );
+    // qwen2.5:14b fell below the bench:judge MCC floor through the production
+    // path (0.497 / 0.556 / 0.529, 2026-09-25): it must not demote feed items.
+    assert_eq!(
+        judge_items_per_call(&provider_of("ollama", "qwen2.5:14b")),
+        None
+    );
+    // Good-tier local model: allowed, still one item per call.
+    assert_eq!(
+        judge_items_per_call(&provider_of("ollama", "qwen2.5:72b")),
+        Some(1)
+    );
+    // R6 bake-off (2026-09-24): measured at or above Haiku, one item per call,
+    // including quantisation-suffixed tags of the same model.
+    for model in ["gemma4:26b", "gemma4:12b", "gemma4:12b-it-qat", "qwen3:14b"] {
+        assert_eq!(
+            judge_items_per_call(&provider_of("ollama", model)),
+            Some(1),
+            "{model} passed the bake-off"
+        );
+    }
+    // Measured and rejected: never demote feed items.
+    for model in ["qwen3.5:9b", "qwen3.8:27b", "gemma4:e4b"] {
+        assert_eq!(
+            judge_items_per_call(&provider_of("ollama", model)),
+            None,
+            "{model} was not measured as a judge"
+        );
+    }
+}
+
+#[tokio::test]
+async fn post_cycle_no_op_when_judge_model_below_bar() {
+    let db = test_db();
+    let id = seed_feed_item(&db, "g4", "Would-be demotion from a 3B judge");
+    db.upsert_llm_judgment(id, 0.05, "junk", None, 0.95, "llama3.2", PROMPT_VERSION)
+        .unwrap();
+
+    let summary = run_post_cycle_with(&db, false, Some(provider_of("ollama", "llama3.2"))).await;
+    assert_eq!(summary.skipped, Some("judge_model_below_bar"));
+    assert_eq!(summary.judged, 0);
+    assert_eq!(summary.demoted, 0);
+    assert_eq!(
+        feed_relevant_of(&db, id),
+        1,
+        "a below-bar judge must not remove items from the feed"
     );
 }
 

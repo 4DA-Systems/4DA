@@ -303,9 +303,6 @@ impl IntelligenceCore for CalibratedCore {
                 judgment.raw_confidence = Some(judgment.confidence);
                 judgment.confidence = curve.apply(judgment.confidence);
             }
-            // Re-stamp the wrapper's calibration_id on the returned Validated
-            // so receipts show the curve, not the inner core's sentinel.
-            validated.calibration_id = Some(curve.curve_id.clone());
         }
 
         Ok(validated)
@@ -515,10 +512,6 @@ mod tests {
                     input_tokens: 10,
                     output_tokens: 5,
                 },
-                identity: self.identity.clone(),
-                prompt_version: self.prompt_version.to_string(),
-                calibration_id: self.calibration_id.clone(),
-                raw_response_hash: None,
             })
         }
         fn estimate_cost_cents(&self, _i: u64, _o: u64) -> u64 {
@@ -556,7 +549,10 @@ mod tests {
         let v = wrapped.judge(req()).await.unwrap();
         assert!((v.value.judgments[0].confidence - 0.73).abs() < 1e-5);
         // calibration_id falls through to inner's value.
-        assert_eq!(v.calibration_id.as_deref(), Some("pre-mesh-unknown"));
+        assert_eq!(
+            wrapped.calibration_id().as_deref(),
+            Some("pre-mesh-unknown")
+        );
     }
 
     #[tokio::test]
@@ -596,17 +592,6 @@ mod tests {
         let plain = CalibratedCore::new(inner_b, None);
         let vb = plain.judge(req()).await.unwrap();
         assert_eq!(vb.value.judgments[0].raw_confidence, None);
-    }
-
-    #[tokio::test]
-    async fn calibrated_core_overrides_calibration_id() {
-        let inner = Box::new(stub_with_confidence(0.5));
-        let wrapped = CalibratedCore::new(inner, Some(sample_curve()));
-        let v = wrapped.judge(req()).await.unwrap();
-        assert_eq!(
-            v.calibration_id.as_deref(),
-            Some("judge-test-cal-v1-2026-04-15")
-        );
     }
 
     #[test]

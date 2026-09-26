@@ -174,7 +174,7 @@ pub(crate) fn todays_persisted_usage() -> Option<(u64, u64)> {
     let (tokens, cost_usd) = conn
         .query_row(
             "SELECT COALESCE(SUM(tokens_in + tokens_out), 0), COALESCE(SUM(estimated_cost_usd), 0.0)
-             FROM ai_usage WHERE created_at >= ?1",
+             FROM ai_usage WHERE created_at >= ?1 AND provider <> 'ollama'",
             rusqlite::params![since_utc],
             |row| {
                 let tokens: i64 = row.get(0)?;
@@ -205,6 +205,10 @@ pub struct LLMClient {
 }
 
 impl LLMClient {
+    /// Test-only: production clients must say which feature they serve, so
+    /// their spend is attributable (`with_purpose`). The last untagged
+    /// production callers were tagged on 2026-09-26.
+    #[cfg(test)]
     pub fn new(provider: LLMProvider) -> Self {
         Self::build(provider, None)
     }
@@ -216,7 +220,16 @@ impl LLMClient {
     }
 
     fn build(provider: LLMProvider, purpose: Option<&'static str>) -> Self {
-        let timeout_secs: u64 = 120;
+        // The timeout covers the whole request, streamed bodies included, so a
+        // thinking-by-default model (Claude 5) gets headroom: even at low
+        // effort a long digest can think before it writes.
+        let timeout_secs: u64 = if provider.provider == "anthropic"
+            && crate::anthropic_wire::thinks_by_default(&provider.model)
+        {
+            240
+        } else {
+            120
+        };
         Self {
             provider,
             client: reqwest::Client::builder()
@@ -241,17 +254,13 @@ impl LLMClient {
         self.purpose.unwrap_or(call_shape)
     }
 
-    /// Check if the client is configured.
-    /// Only the provider-validation tests call this today; the production paths
-    /// check capability via `llm_capability` instead.
-    /// (Expired removal marker dated 2026-08-01 cleared 2026-08-12.)
-    #[allow(dead_code)] // REMOVE BY 2026-11-12
-    pub fn is_configured(&self) -> bool {
-        match self.provider.provider.as_str() {
-            "anthropic" | "openai" | "openai-compatible" => !self.provider.api_key.is_empty(),
-            "ollama" => true, // Ollama doesn't need an API key
-            _ => false,
-        }
+    /// Whether this call spends money and so answers to the daily token and
+    /// cost caps. A local Ollama call costs nothing: counting its tokens let
+    /// free local judging (about 1,200 tokens per item, one item per call)
+    /// exhaust the 2M-token cap and block the briefs and digests the cap
+    /// protects. Its usage is still written to `ai_usage`.
+    fn metered(&self) -> bool {
+        self.provider.provider != "ollama"
     }
 
     /// Send a completion request.
@@ -261,7 +270,7 @@ impl LLMClient {
         let (system, messages) = crate::privacy_egress::scrub_prompt(system, messages);
         let system = system.as_str();
         // Hard cutoff: refuse to call the LLM if daily limit is already reached
-        if is_llm_limit_reached() {
+        if self.metered() && is_llm_limit_reached() {
             let (tokens_used, tokens_limit) = crate::state::get_llm_token_usage();
             let (cost_used, cost_limit) = crate::state::get_llm_cost_usage();
             warn!(
@@ -286,12 +295,28 @@ impl LLMClient {
         // consent flag here at call time — recording consent at the moment data is
         // sent would defeat its purpose.
 
+        let local_judge_call = self.provider.provider == "ollama"
+            && crate::local_judge::is_judge_purpose(self.purpose);
+        if local_judge_call && crate::local_judge::cooling_off() {
+            return Err(
+                "Local judge is cooling off after a slow or failed call; the next pass uses the cloud judge"
+                    .into(),
+            );
+        }
+        let started = std::time::Instant::now();
         let result = match self.provider.provider.as_str() {
             "anthropic" => self.complete_anthropic(system, messages.clone()).await,
             "openai" | "openai-compatible" => self.complete_openai(system, messages.clone()).await,
             "ollama" => self.complete_ollama(system, messages.clone()).await,
             _ => return Err(self.provider_error_message().into()),
         };
+        if local_judge_call {
+            crate::local_judge::record_call(
+                &self.provider.model,
+                started.elapsed(),
+                result.is_ok(),
+            );
+        }
 
         let response = match result {
             Ok(resp) => resp,
@@ -308,7 +333,7 @@ impl LLMClient {
         // Record token + cost usage (atomic, lock-free for the counters)
         let total_tokens = response.input_tokens + response.output_tokens;
         if total_tokens > 0 {
-            let tokens_ok = record_llm_tokens(total_tokens);
+            let tokens_ok = !self.metered() || record_llm_tokens(total_tokens);
             let cost_millicents =
                 self.estimate_cost_millicents(response.input_tokens, response.output_tokens);
             let cost_ok = record_llm_cost_millicents(cost_millicents);
@@ -350,7 +375,7 @@ impl LLMClient {
         // Egress boundary: the user's local paths never reach a provider.
         let (system, messages) = crate::privacy_egress::scrub_prompt(system, messages);
         let system = system.as_str();
-        if is_llm_limit_reached() {
+        if self.metered() && is_llm_limit_reached() {
             let (tokens_used, tokens_limit) = crate::state::get_llm_token_usage();
             let (cost_used, cost_limit) = crate::state::get_llm_cost_usage();
             warn!(
@@ -397,7 +422,7 @@ impl LLMClient {
 
         let total_tokens = response.input_tokens + response.output_tokens;
         if total_tokens > 0 {
-            let tokens_ok = record_llm_tokens(total_tokens);
+            let tokens_ok = !self.metered() || record_llm_tokens(total_tokens);
             let cost_millicents =
                 self.estimate_cost_millicents(response.input_tokens, response.output_tokens);
             let cost_ok = record_llm_cost_millicents(cost_millicents);
@@ -462,7 +487,9 @@ impl LLMClient {
         // Record usage for visibility (no limit enforcement)
         let total_tokens = response.input_tokens + response.output_tokens;
         if total_tokens > 0 {
-            let _ = record_llm_tokens(total_tokens);
+            if self.metered() {
+                let _ = record_llm_tokens(total_tokens);
+            }
             let cost_millicents =
                 self.estimate_cost_millicents(response.input_tokens, response.output_tokens);
             let _ = record_llm_cost_millicents(cost_millicents);
@@ -503,17 +530,8 @@ impl LLMClient {
     ) -> Result<LLMResponse> {
         let url = "https://api.anthropic.com/v1/messages";
 
-        let body = serde_json::json!({
-            "model": self.provider.model,
-            "max_tokens": 4096,  // Increased for batch judgments (15 items need ~2000+ tokens)
-            "system": system,
-            "messages": messages.iter().map(|m| {
-                serde_json::json!({
-                    "role": m.role,
-                    "content": m.content
-                })
-            }).collect::<Vec<_>>()
-        });
+        let body =
+            crate::anthropic_wire::request_body(&self.provider.model, system, &messages, false);
 
         let response = self
             .client
@@ -549,18 +567,20 @@ impl LLMClient {
             .await
             .context("Failed to parse Anthropic response")?;
 
-        let content = data["content"][0]["text"]
-            .as_str()
-            .unwrap_or("")
-            .to_string();
-
-        let input_tokens = data["usage"]["input_tokens"].as_u64().unwrap_or(0);
-        let output_tokens = data["usage"]["output_tokens"].as_u64().unwrap_or(0);
+        let reply = crate::anthropic_wire::parse_reply(&data)?;
+        if reply.truncated() {
+            warn!(
+                target: "4da::llm",
+                model = %self.provider.model,
+                output_tokens = reply.output_tokens,
+                "Anthropic reply hit max_tokens — answer is truncated"
+            );
+        }
 
         Ok(LLMResponse {
-            content,
-            input_tokens,
-            output_tokens,
+            content: reply.text,
+            input_tokens: reply.input_tokens,
+            output_tokens: reply.output_tokens,
         })
     }
 
@@ -687,11 +707,7 @@ impl LLMClient {
             }));
         }
 
-        let body = serde_json::json!({
-            "model": self.provider.model,
-            "messages": all_messages,
-            "stream": false
-        });
+        let body = ollama_chat_body(&self.provider.model, all_messages, false);
 
         let response = self
             .client
@@ -903,12 +919,7 @@ impl LLMClient {
             }));
         }
 
-        let body = serde_json::json!({
-            "model": self.provider.model,
-            "messages": all_messages,
-            "stream": false,
-            "format": "json"
-        });
+        let body = ollama_chat_body(&self.provider.model, all_messages, true);
 
         let response = self
             .client
@@ -970,7 +981,7 @@ impl LLMClient {
         let (system, messages) = crate::privacy_egress::scrub_prompt(system, messages);
         let system = system.as_str();
         // Hard cutoff: refuse to call the LLM if daily limit is already reached
-        if is_llm_limit_reached() {
+        if self.metered() && is_llm_limit_reached() {
             let (tokens_used, tokens_limit) = crate::state::get_llm_token_usage();
             let (cost_used, cost_limit) = crate::state::get_llm_cost_usage();
             warn!(
@@ -1029,7 +1040,7 @@ impl LLMClient {
         // Record token + cost usage
         let total_tokens = response.input_tokens + response.output_tokens;
         if total_tokens > 0 {
-            let tokens_ok = record_llm_tokens(total_tokens);
+            let tokens_ok = !self.metered() || record_llm_tokens(total_tokens);
             let cost_millicents =
                 self.estimate_cost_millicents(response.input_tokens, response.output_tokens);
             let cost_ok = record_llm_cost_millicents(cost_millicents);
@@ -1183,9 +1194,79 @@ pub(crate) fn apply_openai_retention(body: &mut serde_json::Value, provider: &st
 // Tests
 // ============================================================================
 
+/// Context window every 4DA request to Ollama asks for. Ollama's own default
+/// is 4,096 tokens (measured on 0.34.4), and a longer prompt silently loses its
+/// head — the Brief prompt alone averages ~5,300 input tokens. 8,192 holds every
+/// prompt 4DA sends plus its reply, identically on every Ollama version.
+pub(crate) const OLLAMA_NUM_CTX: u32 = 8192;
+// Brief/digest prompts average ~5,300 input + ~1,000 output tokens (ai_usage,
+// 14 days to 2026-09-24): lowering this below 8,192 truncates them again.
+const _: () = assert!(OLLAMA_NUM_CTX >= 8192);
+
+/// The `/api/chat` body for every 4DA call to Ollama.
+///
+/// `think: false` is sent unconditionally: 4DA never wants hidden reasoning,
+/// and a thinking-capable model (gemma4, qwen3.x) otherwise reasons by
+/// default. Measured 2026-09-24 in this exact request shape: gemma4:26b spent
+/// ~2,000 tokens thinking per judged item — 29 s/item against 2.4 s with
+/// thinking off — and dropped verdicts. Models that cannot think accept
+/// `false` (verified on 0.34.4: llama3.2, qwen2.5:14b; only `true` errors).
+/// The qwen3 `/no_think` system prefix stays for Ollama builds that predate
+/// the field.
+pub(crate) fn ollama_chat_body(
+    model: &str,
+    messages: Vec<serde_json::Value>,
+    json_format: bool,
+) -> serde_json::Value {
+    let mut body = serde_json::json!({
+        "model": model,
+        "messages": messages,
+        "stream": false,
+        "think": false,
+        "options": { "num_ctx": OLLAMA_NUM_CTX }
+    });
+    if json_format {
+        body["format"] = serde_json::Value::String("json".to_string());
+    }
+    body
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn ollama_body_disables_thinking_and_pins_context() {
+        let msgs = vec![serde_json::json!({ "role": "user", "content": "hi" })];
+        let body = ollama_chat_body("gemma4:26b", msgs, false);
+        assert_eq!(
+            body["think"],
+            serde_json::Value::Bool(false),
+            "gemma4/qwen3.x think by default without this"
+        );
+        assert_eq!(
+            body["options"]["num_ctx"],
+            serde_json::json!(OLLAMA_NUM_CTX)
+        );
+        assert_eq!(body["stream"], serde_json::Value::Bool(false));
+        assert_eq!(body["model"], "gemma4:26b");
+        assert_eq!(body["messages"][0]["content"], "hi");
+        assert!(
+            body.get("format").is_none(),
+            "plain completions must not force JSON mode"
+        );
+    }
+
+    #[test]
+    fn ollama_structured_body_keeps_json_format_and_thinking_off() {
+        let body = ollama_chat_body("qwen3:14b", vec![], true);
+        assert_eq!(body["format"], "json");
+        assert_eq!(body["think"], serde_json::Value::Bool(false));
+        assert_eq!(
+            body["options"]["num_ctx"],
+            serde_json::json!(OLLAMA_NUM_CTX)
+        );
+    }
 
     #[test]
     fn retention_sets_store_false_for_first_party_openai() {
@@ -1332,100 +1413,6 @@ mod tests {
     }
 
     // ========================================================================
-    // is_configured — empty API key handling
-    // ========================================================================
-
-    #[test]
-    fn test_is_configured_empty_api_key_anthropic() {
-        let provider = LLMProvider {
-            provider: "anthropic".to_string(),
-            api_key: String::new(),
-            model: "claude-haiku-4-5-20251001".to_string(),
-            base_url: None,
-            openai_api_key: String::new(),
-            embedding_model: String::new(),
-            allow_cloud_embeddings: false,
-        };
-        let client = LLMClient::new(provider);
-        assert!(
-            !client.is_configured(),
-            "Anthropic with empty API key should not be configured"
-        );
-    }
-
-    #[test]
-    fn test_is_configured_empty_api_key_openai() {
-        let provider = LLMProvider {
-            provider: "openai".to_string(),
-            api_key: String::new(),
-            model: "gpt-4o-mini".to_string(),
-            base_url: None,
-            openai_api_key: String::new(),
-            embedding_model: String::new(),
-            allow_cloud_embeddings: false,
-        };
-        let client = LLMClient::new(provider);
-        assert!(
-            !client.is_configured(),
-            "OpenAI with empty API key should not be configured"
-        );
-    }
-
-    #[test]
-    fn test_is_configured_ollama_no_key_needed() {
-        let provider = LLMProvider {
-            provider: "ollama".to_string(),
-            api_key: String::new(),
-            model: "llama3".to_string(),
-            base_url: None,
-            openai_api_key: String::new(),
-            embedding_model: String::new(),
-            allow_cloud_embeddings: false,
-        };
-        let client = LLMClient::new(provider);
-        assert!(
-            client.is_configured(),
-            "Ollama should be configured without an API key"
-        );
-    }
-
-    #[test]
-    fn test_is_configured_with_valid_api_key() {
-        let provider = LLMProvider {
-            provider: "anthropic".to_string(),
-            api_key: "sk-ant-test-key-12345".to_string(),
-            model: "claude-haiku-4-5-20251001".to_string(),
-            base_url: None,
-            openai_api_key: String::new(),
-            embedding_model: String::new(),
-            allow_cloud_embeddings: false,
-        };
-        let client = LLMClient::new(provider);
-        assert!(
-            client.is_configured(),
-            "Anthropic with API key should be configured"
-        );
-    }
-
-    #[test]
-    fn test_is_configured_unknown_provider() {
-        let provider = LLMProvider {
-            provider: "unknown_provider".to_string(),
-            api_key: "some-key".to_string(),
-            model: "some-model".to_string(),
-            base_url: None,
-            openai_api_key: String::new(),
-            embedding_model: String::new(),
-            allow_cloud_embeddings: false,
-        };
-        let client = LLMClient::new(provider);
-        assert!(
-            !client.is_configured(),
-            "Unknown provider should not be configured"
-        );
-    }
-
-    // ========================================================================
     // Cost estimation edge cases
     // ========================================================================
 
@@ -1533,46 +1520,6 @@ mod tests {
     fn test_sanitize_api_error_preserves_short_text() {
         let text = "rate limit exceeded";
         assert_eq!(sanitize_api_error(text), text);
-    }
-
-    // ========================================================================
-    // is_configured — openai-compatible provider
-    // ========================================================================
-
-    #[test]
-    fn test_is_configured_openai_compatible_needs_key() {
-        let provider = LLMProvider {
-            provider: "openai-compatible".to_string(),
-            api_key: String::new(),
-            model: "mistral-large".to_string(),
-            base_url: Some("https://api.mistral.ai/v1".to_string()),
-            openai_api_key: String::new(),
-            embedding_model: String::new(),
-            allow_cloud_embeddings: false,
-        };
-        let client = LLMClient::new(provider);
-        assert!(
-            !client.is_configured(),
-            "openai-compatible with empty key should not be configured"
-        );
-    }
-
-    #[test]
-    fn test_is_configured_openai_compatible_with_key() {
-        let provider = LLMProvider {
-            provider: "openai-compatible".to_string(),
-            api_key: "test-key-12345".to_string(),
-            model: "mistral-large".to_string(),
-            base_url: Some("https://api.mistral.ai/v1".to_string()),
-            openai_api_key: String::new(),
-            embedding_model: String::new(),
-            allow_cloud_embeddings: false,
-        };
-        let client = LLMClient::new(provider);
-        assert!(
-            client.is_configured(),
-            "openai-compatible with API key should be configured"
-        );
     }
 
     // ========================================================================

@@ -10,8 +10,6 @@ fn make_edge(a: &str, b: &str, count: u32, avg_quality: f32) -> ConceptEdge {
     ConceptEdge {
         topic_a: a.to_string(),
         topic_b: b.to_string(),
-        co_occurrence_count: count,
-        avg_quality,
         weight: count as f32 * avg_quality,
     }
 }
@@ -113,13 +111,14 @@ fn test_build_graph_co_occurrences() {
         "Should find rust-database co-occurrence edge"
     );
 
+    // Four all-positive items (quality 1.0 each) share the pair, so the
+    // weight (co-occurrences x mean quality) must reflect 3+ co-occurrences.
     let edge = rust_db.unwrap();
     assert!(
-        edge.co_occurrence_count >= 3,
-        "Should have 3+ co-occurrences, got {}",
-        edge.co_occurrence_count
+        edge.weight >= 3.0,
+        "Should weigh 3+ co-occurrences, got {}",
+        edge.weight
     );
-    assert!(edge.weight > 0.0, "Edge weight should be positive");
 }
 
 #[test]

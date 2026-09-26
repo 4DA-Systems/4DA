@@ -114,6 +114,14 @@ pub async fn generate_item_summary(item_id: i64) -> Result<ItemSummary> {
         ));
     }
 
+    // A summary written from the title alone would be invented, so under
+    // titles_only an off-machine model is not asked for one.
+    if !crate::llm_egress::body_allowed(&llm_config) {
+        return Err(FourDaError::Llm(
+            "Summaries need the article text, and your privacy setting sends only titles to cloud AI providers. Change it in Settings → Privacy, or use a local Ollama model.".to_string(),
+        ));
+    }
+
     debug!(target: "4da::content", item_id = item_id, "Generating AI summary");
 
     let client = LLMClient::with_purpose(llm_config, "content_analysis");

@@ -8,14 +8,13 @@
 
 use crate::domain_profile::DomainProfile;
 
-/// Result of sophistication analysis
+/// Result of sophistication analysis. The senior-audience inference feeds
+/// `multiplier` and is not surfaced separately; the two sub-scores are read by
+/// the pipeline's commodity-ceiling bypass (`pipeline_v2`).
 #[derive(Debug, Clone)]
-// REMOVE BY 2026-11-10: struct fields set but only multiplier read — wire into sophistication breakdown UI or drop
-#[allow(dead_code)]
 pub struct SophisticationScore {
     pub title_complexity: f32,
     pub content_depth: f32,
-    pub audience_is_senior: bool,
     pub multiplier: f32,
 }
 
@@ -45,7 +44,6 @@ pub fn compute_sophistication(
     SophisticationScore {
         title_complexity,
         content_depth,
-        audience_is_senior,
         multiplier,
     }
 }

@@ -73,6 +73,9 @@ impl SettingsManager {
     /// API keys are written to disk AND mirrored to the platform keychain.
     /// The on-disk file is the authoritative source; the keychain is secondary.
     pub fn save(&mut self) -> Result<()> {
+        // Every change to the privacy level is followed by a save, so this keeps
+        // the lock-free mirror current (see `llm_egress`).
+        crate::llm_egress::publish_content_level(&self.settings.privacy.llm_content_level);
         if let Some(parent) = self.settings_path.parent() {
             fs::create_dir_all(parent)?;
         }

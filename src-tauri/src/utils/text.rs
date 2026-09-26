@@ -94,14 +94,61 @@ pub(crate) fn truncate_display(s: &str, max_chars: usize) -> String {
 /// Decode common HTML entities that sources may include in titles/content.
 /// Applied to all text before embedding and display to prevent `&amp;` literals.
 pub(crate) fn decode_html_entities(text: &str) -> String {
-    text.replace("&amp;", "&")
+    let named = text
+        .replace("&amp;", "&")
         .replace("&lt;", "<")
         .replace("&gt;", ">")
         .replace("&quot;", "\"")
         .replace("&apos;", "'")
         .replace("&#39;", "'")
         .replace("&#x27;", "'")
-        .replace("&nbsp;", " ")
+        .replace("&nbsp;", " ");
+    decode_numeric_entities(named)
+}
+
+/// Decode `&#32;` / `&#x2014;` references (Reddit writes every separator as
+/// `&#32;`). An invalid or unterminated reference is kept as written.
+fn decode_numeric_entities(text: String) -> String {
+    if !text.contains("&#") {
+        return text;
+    }
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch != '&' || chars.next_if_eq(&'#').is_none() {
+            out.push(ch);
+            continue;
+        }
+        let marker = chars.next_if(|c| matches!(c, 'x' | 'X'));
+        let radix = if marker.is_some() { 16 } else { 10 };
+        let mut digits = String::new();
+        while let Some(d) = chars.next_if(|c| digits.len() < 8 && c.is_digit(radix)) {
+            digits.push(d);
+        }
+        let decoded = (!digits.is_empty() && chars.peek() == Some(&';'))
+            .then(|| u32::from_str_radix(&digits, radix).ok())
+            .flatten()
+            .and_then(char::from_u32);
+        match decoded {
+            Some(c) => {
+                chars.next(); // ';'
+                out.push(c);
+            }
+            None => {
+                out.push_str("&#");
+                out.extend(marker);
+                out.push_str(&digits);
+            }
+        }
+    }
+    out
+}
+
+/// HTML to plain text for storage, capped at `max_chars`. Unlike
+/// [`preprocess_content`] it keeps URLs: judges and people read stored content.
+pub(crate) fn html_to_text(html: &str, max_chars: usize) -> String {
+    let text = decode_html_entities(&strip_html_tags(html));
+    truncate_utf8(collapse_whitespace(&text).trim(), max_chars)
 }
 
 pub(crate) fn build_embedding_text(title: &str, content: &str) -> String {

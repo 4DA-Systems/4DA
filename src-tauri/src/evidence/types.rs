@@ -152,29 +152,12 @@ pub struct Confidence {
 }
 
 impl Confidence {
-    // Doctrine-bound scaffolding. The three public constructors below
-    // (`checklist`, `calibrated`, `llm_assessed`) are the canonical builders
-    // that every EvidenceItem producer is supposed to use once the
-    // Intelligence Reconciliation Phase 9 wiring is complete. Today only
-    // `heuristic()` is being called in production, so the other three
-    // trip the dead-code lint — but deleting them would break the Phase 9
-    // contract and force a later re-introduction. See
-    // .claude/rules/intelligence-doctrine.md rule 1 (one canonical type
-    // per concept, extended via ADR — not by removing builders that
-    // haven't landed their lens yet).
-    // Retention is tracked by docs/strategy/INTELLIGENCE-RECONCILIATION.md
-    // (Phase 9), not by a calendar deadline — the 2026-08-01 marker that used to
-    // sit here expired without the phase landing and was removed 2026-08-12
-    // rather than silently rolled forward.
-    #[allow(dead_code)] // REMOVE BY 2026-11-12 — Doctrine-bound scaffolding (Phase 9); test-exercised
-    /// Constructor for keyword/pattern-matched confidence.
-    pub fn checklist(value: f32) -> Self {
-        Self {
-            value,
-            provenance: ConfidenceProvenance::Checklist,
-            sample_size: None,
-        }
-    }
+    // Constructors exist only for provenances a producer actually emits.
+    // `Checklist` and `Calibrated` stay in `ConfidenceProvenance` (they are
+    // part of the exported schema and `validate_item` enforces the Calibrated
+    // sample-size rule), but no producer builds them, so their builders were
+    // deleted 2026-09-24 (Phase 9 closed without a caller). Add a builder back
+    // in the same change as its first producer.
 
     /// Constructor for weighted-formula confidence.
     pub fn heuristic(value: f32) -> Self {
@@ -185,20 +168,7 @@ impl Confidence {
         }
     }
 
-    /// Constructor for Bayesian-calibrated confidence.
-    /// `n` must be ≥ 10 per schema rules (enforced by `validate_item`).
-    /// Doctrine-bound scaffolding — see the impl-block note above.
-    #[allow(dead_code)] // REMOVE BY 2026-11-12 — Doctrine-bound scaffolding (Phase 9); test-exercised
-    pub fn calibrated(value: f32, n: u32) -> Self {
-        Self {
-            value,
-            provenance: ConfidenceProvenance::Calibrated,
-            sample_size: Some(n),
-        }
-    }
-
     /// Constructor for LLM-assessed confidence.
-    /// Doctrine-bound scaffolding — see the impl-block note above.
     pub fn llm_assessed(value: f32) -> Self {
         Self {
             value,
@@ -422,17 +392,6 @@ impl LensHints {
         Self {
             preemption: true,
             upgrade_plan: true,
-            ..Default::default()
-        }
-    }
-
-    /// Convenience: hint only the evidence lens (decisions, retrospectives).
-    /// Doctrine-bound scaffolding (see `Confidence` note above) — will be
-    /// used once retrospective lens materializers land in Phase 9.
-    #[allow(dead_code)] // REMOVE BY 2026-11-12 — Doctrine-bound scaffolding (Phase 9)
-    pub fn evidence_only() -> Self {
-        Self {
-            evidence: true,
             ..Default::default()
         }
     }

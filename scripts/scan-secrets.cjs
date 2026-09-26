@@ -45,7 +45,7 @@
  *   2 — could not enumerate files (git failure)
  */
 
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
@@ -385,21 +385,27 @@ const SECRET_PATTERNS = [
 
 // --- Main Logic ---
 
+/**
+ * List the files to scan, exactly as named on disk / in the index.
+ *
+ * `-z` is load-bearing. Without it git applies core.quotePath: any path with a
+ * byte >= 0x80, a double quote, a backslash or a control character comes back
+ * C-quoted (`"cr\303\251ds.env"`). That string names no file, so the old
+ * newline-split listing handed the scanner paths it could not open and the
+ * file was silently skipped — a secret in a non-ASCII-named file passed the
+ * commit gate. NUL-separated output is never quoted.
+ */
+function listFiles(staged, cwd) {
+  const args = staged
+    ? ['diff', '--cached', '--name-only', '--diff-filter=ACM', '-z']
+    : ['ls-files', '-z'];
+  const output = execFileSync('git', args, { encoding: 'utf-8', cwd, maxBuffer: 64 * 1024 * 1024 });
+  return output.split('\0').filter(Boolean);
+}
+
 function getFiles() {
   try {
-    if (STAGED_ONLY) {
-      const output = execSync('git diff --cached --name-only --diff-filter=ACM', {
-        encoding: 'utf-8',
-        cwd: path.resolve(__dirname, '..'),
-      });
-      return output.trim().split('\n').filter(Boolean);
-    } else {
-      const output = execSync('git ls-files', {
-        encoding: 'utf-8',
-        cwd: path.resolve(__dirname, '..'),
-      });
-      return output.trim().split('\n').filter(Boolean);
-    }
+    return listFiles(STAGED_ONLY, path.resolve(__dirname, '..'));
   } catch (e) {
     console.error('Failed to get file list from git:', e.message);
     process.exit(2);
@@ -423,7 +429,13 @@ function shouldSkipFile(filePath) {
 function readStagedContent(filePath, repoRoot) {
   try {
     // Returns a Buffer (no `encoding`) so the NUL-byte binary check is accurate.
-    return execSync(`git show ":${filePath.replace(/"/g, '\\"')}"`, {
+    // execFileSync, not a shell string: the path is one argv entry, so `$(...)`,
+    // backticks, quotes, backslashes and `%VAR%` in a filename are just bytes.
+    // (The previous `git show ":${path with " -> \"}"` escaped quotes only, so a
+    // staged file named `$(cmd).txt` ran `cmd` under /bin/sh, and on Windows
+    // cmd.exe expanded `%VAR%` in the name, the read failed, and the file was
+    // skipped unscanned.)
+    return execFileSync('git', ['show', `:${filePath}`], {
       cwd: repoRoot,
       maxBuffer: 64 * 1024 * 1024,
       stdio: ['ignore', 'pipe', 'ignore'],
@@ -649,6 +661,8 @@ module.exports = {
   ALLOWLISTED_FILES,
   matchesAny,
   scanContent,
+  listFiles,
+  readStagedContent,
 };
 
 if (require.main === module) {

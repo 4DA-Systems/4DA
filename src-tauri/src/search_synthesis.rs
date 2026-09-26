@@ -350,7 +350,7 @@ pub async fn synthesize_search(
 
     // Gather deep context from DB
     let keywords = extract_keywords(&query_text);
-    let (items, stack_summary, decisions, gaps) = {
+    let (mut items, stack_summary, decisions, gaps) = {
         let conn = crate::open_db_connection()?;
         let items = gather_result_context(&conn, &keywords, 7);
         let stack = gather_stack_summary(&conn);
@@ -358,6 +358,11 @@ pub async fn synthesize_search(
         let gaps = gather_gap_context(&conn, &keywords);
         (items, stack, decisions, gaps)
     };
+    if !crate::llm_egress::body_allowed(&provider) {
+        for item in &mut items {
+            item.preview.clear();
+        }
+    }
 
     debug!(
         target: "4da::synthesis",

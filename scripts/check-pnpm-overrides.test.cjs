@@ -8,10 +8,10 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { evaluate, pnpmMajorFrom, PNPM_FIELD_DROPPED_IN_MAJOR } = require('./check-pnpm-overrides.cjs');
 
+// The live counts on 2026-09-24, after paddle-webhook was retired.
 const REAL_USAGES = [
-  { file: 'package.json', count: 15 },
-  { file: 'site/package.json', count: 16 },
-  { file: 'paddle-webhook/package.json', count: 22 },
+  { file: 'package.json', count: 17 },
+  { file: 'site/package.json', count: 17 },
   { file: 'mcp-4da-server/package.json', count: 16 },
 ];
 
@@ -25,11 +25,11 @@ test('pnpm major is parsed from the packageManager pin', () => {
 
 test('THE case: bumping the pin to 11 with overrides still in package.json FAILS', () => {
   const r = evaluate(PNPM_FIELD_DROPPED_IN_MAJOR, REAL_USAGES);
-  assert.strictEqual(r.ok, false, 'a pnpm 11 pin must not pass while 69 overrides sit in the dead field');
+  assert.strictEqual(r.ok, false, 'a pnpm 11 pin must not pass while 50 overrides sit in the dead field');
   assert.match(r.message, /DOES NOT READ/);
-  assert.match(r.message, /69 security override/);
+  assert.match(r.message, /50 security override/);
   // The message has to name the files, or whoever hits this cannot act on it.
-  assert.match(r.message, /paddle-webhook\/package\.json \(22 override\(s\)\)/);
+  assert.match(r.message, /site\/package\.json \(17 override\(s\)\)/);
   assert.match(r.message, /pnpm-workspace\.yaml/);
 });
 
@@ -37,7 +37,7 @@ test('the current pin passes, and reports what is live', () => {
   const r = evaluate(9, REAL_USAGES);
   assert.strictEqual(r.ok, true);
   assert.match(r.message, /still reads/);
-  assert.match(r.message, /69 override\(s\) across 4 manifest\(s\)/);
+  assert.match(r.message, /50 override\(s\) across 3 manifest\(s\)/);
 });
 
 test('pnpm 11 is fine once the overrides have actually been moved', () => {

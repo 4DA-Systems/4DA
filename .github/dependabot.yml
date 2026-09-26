@@ -14,7 +14,6 @@
 #   - npm            (/mcp-4da-server)  — MCP server (pnpm-lock.yaml)
 #   - npm            (/mcp-memory-server) — MCP memory server (package-lock.json)
 #   - npm            (/editors/vscode/4da) — VS Code extension (package-lock.json)
-#   - npm            (/paddle-webhook)  — Paddle webhook handler (pnpm-lock.yaml)
 #
 # Dependabot's "npm" ecosystem handles both npm and pnpm lockfiles despite
 # the name — the detection is lockfile-based.
@@ -157,6 +156,17 @@ updates:
     commit-message:
       prefix: "chore(mcp-4da)"
       include: "scope"
+    ignore:
+      # DEFERRED 2026-09-24 (#446). better-sqlite3 13 declares engines
+      # node >=22, dropping Node 20. `@4da/mcp-server` is PUBLISHED to npm with
+      # engines node >=20.0.0, so adopting it breaks every Node 20 user of a
+      # released package: a semver-major decision for the product, not a
+      # routine bump. It also has no Windows prebuild for the Node 22 ABI CI
+      # uses, so install falls back to node-gyp and fails without Visual Studio
+      # (MCP Server + Fresh clone windows red on #446). Lift this when the
+      # package's own engines floor moves to 22.
+      - dependency-name: "better-sqlite3"
+        versions: [">=13"]
 
   # ── MCP memory server ─────────────────────────────────────────────
   - package-ecosystem: "npm"
@@ -180,6 +190,14 @@ updates:
     commit-message:
       prefix: "chore(mcp-memory)"
       include: "scope"
+    ignore:
+      # DEFERRED 2026-09-24 (#442), same reason as mcp-4da-server above. This
+      # package is not built by any CI job (only audited), so #442's green
+      # checks never installed it. On the operator's Windows / Node 22 machine
+      # a v13 install needs node-gyp + Visual Studio, which would break the dev
+      # memory server. Lift together with the mcp-4da-server entry.
+      - dependency-name: "better-sqlite3"
+        versions: [">=13"]
 
   # ── VS Code extension ─────────────────────────────────────────────
   - package-ecosystem: "npm"
@@ -203,44 +221,3 @@ updates:
     commit-message:
       prefix: "chore(vscode)"
       include: "scope"
-
-  # ── Paddle webhook handler ────────────────────────────────────────
-  - package-ecosystem: "npm"
-    directory: "/paddle-webhook"
-    schedule:
-      interval: "weekly"
-      day: "monday"
-      time: "06:00"
-      timezone: "Etc/UTC"
-    open-pull-requests-limit: 5
-    groups:
-      minor-and-patch:
-        update-types: ["minor", "patch"]
-    labels:
-      - "dependencies"
-      - "paddle"
-    assignees:
-      - "runyourempire"
-    reviewers:
-      - "runyourempire"
-    commit-message:
-      prefix: "chore(paddle)"
-      include: "scope"
-    ignore:
-      # undici is a transitive dep of the `vercel` deploy CLI (a devDependency),
-      # NOT of the shipped serverless runtime — api/ imports only Node's built-in
-      # `crypto`, so runtime exposure is nil. It appears across three majors
-      # (5.x / 6.x / 7.x) deep in vercel's tree with no atomic Dependabot update
-      # path, so Dependabot's security update for it errors out ("encountered one
-      # or more errors") on every advisory — the recurring red on this dir.
-      #
-      # SECURITY IS HANDLED, NOT HIDDEN: the patchable 7.x line (which carried
-      # the only HIGH advisories) is pinned to a fixed release via the pnpm
-      # `overrides` entry "undici@7": ">=7.28.0 <8" in package.json — same major,
-      # semver-safe for vercel's HTTP-client usage. The residual 5.28.4 / 6.25.0
-      # lines are low/medium-only and have no override path without a risky,
-      # untestable cross-major bump of the deploy CLI; those ride vercel's own
-      # version bumps. This `ignore` exists ONLY to stop Dependabot's failed
-      # transitive-update attempts — not to suppress the high advisories, which
-      # the override already resolves.
-      - dependency-name: "undici"

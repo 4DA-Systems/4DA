@@ -2,7 +2,7 @@
 //! Enriched Lifecycle Tests — full-fidelity multi-session convergence.
 //!
 //! Re-runs lifecycle convergence tests with fully enriched personas to validate
-//! that full-fidelity context (source_quality, topic_confidence, exclusions,
+//! that full-fidelity context (topic_confidence, exclusions, work_topics,
 //! etc.) doesn't destabilize the feedback loop.
 
 use std::collections::HashMap;

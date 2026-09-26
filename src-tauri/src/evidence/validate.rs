@@ -41,16 +41,6 @@ pub enum ValidationError {
     PrecedentSimilarityOutOfRange(f32),
     #[error("id is empty")]
     IdEmpty,
-    #[error("explanation required (Phase 9+)")]
-    // Gated on a future phase flag; checker wires in Phase 9. Retention tracked by
-    // docs/strategy/EVIDENCE-ITEM-SCHEMA.md, not by a calendar deadline — the
-    // expired 2026-08-01 markers were removed 2026-08-12 rather than rolled forward.
-    #[allow(dead_code)] // REMOVE BY 2026-11-12
-    ExplanationRequired,
-    #[error("explanation lacks grounded reasoning (no causal connectors found)")]
-    // Gated — will warn in dev, not block, until Phase 10. See note above.
-    #[allow(dead_code)] // REMOVE BY 2026-11-12
-    ReasoningNotGrounded,
 }
 
 /// Kinds that are user-surfaced and require at least one citation.

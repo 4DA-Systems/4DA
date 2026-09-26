@@ -54,7 +54,7 @@ fn senior_audience_penalizes_beginner_content() {
         "Expected <=0.60, got {}",
         result.multiplier
     );
-    assert!(result.audience_is_senior);
+    assert!(infer_senior_audience(SENIOR_TECH_COUNT, &dp));
 }
 
 #[test]

@@ -5,15 +5,10 @@
 //! content depth, and source authority. Used as a scoring multiplier
 //! to boost high-quality content and penalize low-quality content.
 
-/// Content quality assessment result
+/// Content quality assessment result. The title-quality and content-depth
+/// sub-scores feed `multiplier` and are not surfaced separately.
 #[derive(Debug, Clone)]
-// REMOVE BY 2026-11-10: title_quality and content_depth set but only multiplier read — wire into score breakdown or drop fields
-#[allow(dead_code)]
 pub struct ContentQuality {
-    /// Title quality score (0.0-1.0)
-    pub title_quality: f32,
-    /// Content depth score (0.0-1.0)
-    pub content_depth: f32,
     /// Overall quality multiplier applied to scoring
     pub multiplier: f32,
 }
@@ -54,11 +49,7 @@ pub fn compute_content_quality(title: &str, content: &str, url: Option<&str>) ->
         + fragment_penalty)
         .clamp(0.5, 1.2);
 
-    ContentQuality {
-        title_quality,
-        content_depth,
-        multiplier,
-    }
+    ContentQuality { multiplier }
 }
 
 /// Detect egregious clickbait that must be hard-capped regardless of topic or
