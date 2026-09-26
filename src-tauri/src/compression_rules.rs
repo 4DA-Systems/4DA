@@ -39,16 +39,19 @@ struct CompressionRule {
     keep_section: Option<&'static str>,
 }
 
+/// Keys are the live `source_items.source_type` values. From 2026-05-19 to
+/// 2026-09-26 three keys matched no source ("hn", "crates", "npm"; the
+/// adapters say "hackernews", "crates_io", "npm_registry"), so those sources
+/// silently took the default rule. Every scoring calibration since was made
+/// that way.
+/// - The registries now get the registry rule, like pypi and go_modules.
+///   Measured over 30 days, it changes 1 of 4,322 crates_io/npm_registry items
+///   (average content 94 and 14 chars).
+/// - Hacker News deliberately stays on the default. Its dead rule would
+///   have cut 884 of 11,761 items (7.5%) from 2,000 to 1,500 embedded chars,
+///   with no measured benefit and against the calibrated baseline.
 fn rule_for(source_type: &str) -> CompressionRule {
     match source_type {
-        "hn" => CompressionRule {
-            max_chars: 1500,
-            extract_lead: false,
-            lead_paragraphs: 0,
-            strip_quoted: true,
-            strip_markdown_formatting: false,
-            keep_section: None,
-        },
         "reddit" => CompressionRule {
             max_chars: 1500,
             extract_lead: false,
@@ -89,7 +92,7 @@ fn rule_for(source_type: &str) -> CompressionRule {
             strip_markdown_formatting: false,
             keep_section: None,
         },
-        "npm" | "crates" | "pypi" | "go_modules" => CompressionRule {
+        "npm_registry" | "crates_io" | "pypi" | "go_modules" => CompressionRule {
             max_chars: 600,
             extract_lead: true,
             lead_paragraphs: 2,
@@ -293,9 +296,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_compress_hn_strips_quotes() {
+    fn test_compress_reddit_strips_quotes() {
         let content = "This is the main point.\n> Quoted reply text\n> More quoted text\nAnother real comment.";
-        let result = compress("hn", content);
+        let result = compress("reddit", content);
         assert!(result.contains("main point"));
         assert!(
             !result.contains("Quoted reply"),
@@ -322,8 +325,28 @@ mod tests {
     #[test]
     fn test_compress_npm_short_cap() {
         let content = "x".repeat(1000);
-        let result = compress("npm", &content);
+        let result = compress("npm_registry", &content);
         assert!(result.len() <= 600);
+    }
+
+    /// The keys are the adapters' own source_type strings, so a rule that
+    /// names a source can no longer silently miss it. The old tests passed
+    /// "hn"/"npm" directly and stayed green for four months while production
+    /// never sent those names.
+    #[test]
+    fn rules_bind_to_the_live_source_type_names() {
+        let registry_readme = "x".repeat(1000);
+        for source in ["crates_io", "npm_registry", "pypi", "go_modules"] {
+            assert!(
+                compress(source, &registry_readme).len() <= 600,
+                "{source} must take the registry rule"
+            );
+        }
+        // Hacker News stays on the calibrated default: 2,000 chars, quotes kept.
+        let hn = format!("{}\n> quoted", "y".repeat(1800));
+        let out = compress("hackernews", &hn);
+        assert!(out.len() > 1500, "hackernews must keep the default cap");
+        assert!(out.contains("> quoted"));
     }
 
     #[test]
@@ -371,13 +394,13 @@ mod tests {
     fn test_chars_saved_metric() {
         reset_chars_saved();
         let long_content = "x".repeat(3000);
-        compress("npm", &long_content);
+        compress("npm_registry", &long_content);
         assert!(chars_saved() > 0);
     }
 
     #[test]
     fn test_empty_content() {
-        let result = compress("hn", "");
+        let result = compress("hackernews", "");
         assert!(result.is_empty());
     }
 }

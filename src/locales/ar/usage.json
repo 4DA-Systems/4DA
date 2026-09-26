@@ -20,6 +20,10 @@
     "channel_render": "عرض القناة",
     "content_analysis": "تحليل المحتوى",
     "translation": "الترجمة",
+    "verdict_drain": "تقييم الصلة — أحكام معلّقة",
+    "monitoring_brief": "إحاطة الصباح",
+    "capability_probe": "فحص قدرات النموذج",
+    "connection_test": "اختبار الاتصال (الإعدادات)",
     "completion": "بدون وسم (الإحاطات وغيرها)",
     "structured_completion": "بدون وسم (منظّم)",
     "streaming": "بدون وسم (بث)"
