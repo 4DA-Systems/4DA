@@ -45,6 +45,14 @@ const SLOW_CALL: Duration = Duration::from_secs(90);
 /// and 47 of 48 rerank batches of the pass failed fast.
 const LOAD_TIMEOUT: Duration = Duration::from_mins(5);
 const COOL_OFF: Duration = Duration::from_mins(30);
+/// Wall-clock budget for one rerank pass. The cloud keeps the 2-minute guard
+/// against a hung provider. A local judge gets longer: each of its calls is
+/// already bounded (the client's 120 s timeout, then the breaker fails the
+/// rest fast), and a timed-out pass stores nothing. Measured 2026-09-27 on
+/// the live app with gemma4:26b: 48 items took 78-84 s, but one pass ran at
+/// ~5 s per call (12 calls a minute instead of 25-35) and timed out at 22 of 48.
+const CLOUD_RERANK_BUDGET: Duration = Duration::from_mins(2);
+const LOCAL_RERANK_BUDGET: Duration = Duration::from_mins(5);
 /// VRAM kept free beside the judge: the desktop's own use (about 1.4 GB idle
 /// on the measured machine), 4DA's embedding model, and the judge's 8k
 /// context cache.
@@ -273,6 +281,19 @@ pub(crate) fn budget_blocks(provider: Option<&LLMProvider>) -> bool {
 
 pub(crate) fn is_judge_purpose(purpose: Option<&str>) -> bool {
     purpose.is_some_and(|p| JUDGE_PURPOSES.contains(&p))
+}
+
+/// The rerank pass's wall-clock budget: longer when a local judge will run it.
+pub(crate) fn rerank_budget() -> Duration {
+    budget_for(route(&STATE.lock(), Instant::now()).is_some())
+}
+
+fn budget_for(local: bool) -> Duration {
+    if local {
+        LOCAL_RERANK_BUDGET
+    } else {
+        CLOUD_RERANK_BUDGET
+    }
 }
 
 /// Whether the breaker is open: local judge calls should fail fast.
