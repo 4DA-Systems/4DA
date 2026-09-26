@@ -78,6 +78,15 @@ pub const PROMPT_VERSION: &str = "judge-v1-2026-04-15";
 /// actually judged is stamped on every `llm_judgments` row and advisor
 /// signal.
 pub fn judge_provider(base: &LLMProvider) -> LLMProvider {
+    route_judge(base, crate::local_judge::local_provider)
+}
+
+/// [`judge_provider`] with the local-judge lookup injected, so the routing
+/// rules are testable without the process-global detection cache.
+fn route_judge(
+    base: &LLMProvider,
+    local_judge: impl Fn(&LLMProvider) -> Option<LLMProvider>,
+) -> LLMProvider {
     let mut p = base.clone();
 
     match std::env::var("FOURDA_JUDGE_MODEL") {
@@ -92,9 +101,13 @@ pub fn judge_provider(base: &LLMProvider) -> LLMProvider {
     // A measured local judge that fits this GPU beats the cloud sibling on
     // accuracy and keeps the judged text on the machine
     // (`local_judge`). A user whose MAIN model is local keeps it: that
-    // choice was theirs.
-    if p.provider != "ollama" {
-        if let Some(local) = crate::local_judge::local_provider(&p) {
+    // choice was theirs. A user with NO AI configured (provider "none", or
+    // a cloud provider without a key) gets no judge at all: detecting a
+    // model in Ollama is not consent to run one. Found 2026-09-27, when the
+    // receipts ledger's fixture engines, configured `none` on purpose,
+    // began judging on the local GPU.
+    if p.provider != "ollama" && crate::llm_gate::compute_has_llm(&p.provider, &p.api_key) {
+        if let Some(local) = local_judge(&p) {
             return local;
         }
     }
@@ -621,6 +634,31 @@ That's it."#;
         assert_eq!(pinned.model, "claude-sonnet-4-6");
         assert_eq!(pinned.provider, "anthropic");
         assert_eq!(pinned.api_key, "k", "key must ride along unchanged");
+    }
+
+    #[test]
+    fn a_local_judge_never_runs_for_a_user_who_configured_no_ai() {
+        let provider = |name: &str, model: &str, key: &str| {
+            let mut p = LLMProvider::default();
+            p.provider = name.to_string();
+            p.model = model.to_string();
+            p.api_key = key.to_string();
+            p
+        };
+        let local = |_: &LLMProvider| Some(provider("ollama", "gemma4:26b", ""));
+        assert_eq!(
+            route_judge(&provider("none", "", ""), local).provider,
+            "none"
+        );
+        assert_eq!(
+            route_judge(&provider("anthropic", "claude-sonnet-5", ""), local).provider,
+            "anthropic",
+            "a cloud provider without a key is not a configured AI"
+        );
+        assert_eq!(
+            route_judge(&provider("anthropic", "claude-sonnet-5", "k"), local).model,
+            "gemma4:26b"
+        );
     }
 
     // judge_batch — empty items returns immediately
