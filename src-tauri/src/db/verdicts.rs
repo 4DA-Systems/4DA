@@ -379,6 +379,9 @@ impl Database {
             let mut apply_stmt = tx.prepare_cached(
                 "UPDATE source_items
                  SET feed_relevant = ?1,
+                     first_curated_at = CASE WHEN ?1 = 1
+                         THEN COALESCE(first_curated_at, datetime('now'))
+                         ELSE first_curated_at END,
                      feed_verdict_at = datetime('now'),
                      feed_verdict_version = ?2,
                      feed_verdict_source = ?3,

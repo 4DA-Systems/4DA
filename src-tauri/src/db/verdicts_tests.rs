@@ -1764,3 +1764,56 @@ fn curated_twins_in_the_standing_feed_are_retired() {
     assert_eq!(verdict_of(&db, other).0, Some(1));
     assert_eq!(db.demote_curated_twins(32).unwrap(), 0, "converges");
 }
+
+/// Phase 124: `first_curated_at` is written on the first transition to
+/// curated and never moved after it: a demotion keeps it, a later
+/// re-admission keeps the ORIGINAL time. It is what makes "was this in the
+/// feed before the user upgraded?" answerable.
+#[test]
+fn first_curated_at_is_stamped_once_on_first_entry() {
+    let db = test_db();
+    let id = crate::test_utils::insert_test_item(&db, "hackernews", "fc1", "A story", "body");
+    let stamp = |db: &Database| -> Option<String> {
+        db.conn
+            .lock()
+            .query_row(
+                "SELECT first_curated_at FROM source_items WHERE id = ?1",
+                rusqlite::params![id],
+                |r| r.get(0),
+            )
+            .unwrap()
+    };
+    db.persist_feed_verdicts(&[(id, false, VerdictSource::Score)], 37)
+        .unwrap();
+    assert_eq!(stamp(&db), None, "a rejection is not an entry");
+    db.persist_feed_verdicts_with_reasons(&[(id, true, VerdictSource::Score, None)], 37)
+        .unwrap();
+    // The first flip is deferred by the boundary; the second confirms it.
+    db.persist_feed_verdicts_with_reasons(&[(id, true, VerdictSource::Score, None)], 37)
+        .unwrap();
+    assert!(stamp(&db).is_some(), "the confirmed entry is stamped");
+    db.conn
+        .lock()
+        .execute(
+            "UPDATE source_items SET first_curated_at = '2026-01-01 00:00:00' WHERE id = ?1",
+            rusqlite::params![id],
+        )
+        .unwrap();
+    db.persist_feed_verdicts_with_reasons(
+        &[(
+            id,
+            false,
+            VerdictSource::Score,
+            Some(VerdictReason::LlmReject),
+        )],
+        37,
+    )
+    .unwrap();
+    db.persist_feed_verdicts_with_reasons(&[(id, true, VerdictSource::Serendipity, None)], 37)
+        .unwrap();
+    assert_eq!(
+        stamp(&db).as_deref(),
+        Some("2026-01-01 00:00:00"),
+        "a demotion and a re-admission keep the first entry time"
+    );
+}
