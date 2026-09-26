@@ -1470,7 +1470,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 123;
+        const TARGET_VERSION: i64 = 124;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -5767,6 +5767,38 @@ impl Database {
                             target: "4da::db",
                             rekeyed,
                             "Phase 123: crates.io rows now keyed per release — a new version is a new item"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
+            // Phase 124: `source_items.first_curated_at` records when an item
+            // FIRST entered the feed. The verdict columns hold only the
+            // current verdict, so "did 4DA surface this release before the
+            // user upgraded?" could not be answered. Measured 2026-09-27:
+            // 21 breaking upgrades in 60 days, but whether each release was
+            // in the feed BEFORE the commit was unknowable. The persist
+            // boundary stamps it on the first transition to curated. Backfill
+            // uses the current verdict time for rows curated now: an upper
+            // bound, since their first entry may be earlier.
+            if current_version < 124 {
+                Self::run_versioned_migration(
+                    &conn,
+                    123,
+                    124,
+                    "Phase 124: source_items.first_curated_at",
+                    |c| {
+                        Self::add_column_if_missing(c, "source_items", "first_curated_at", "TEXT")?;
+                        let backfilled = c.execute(
+                            "UPDATE source_items SET first_curated_at = feed_verdict_at
+                             WHERE feed_relevant = 1 AND first_curated_at IS NULL",
+                            [],
+                        )?;
+                        info!(
+                            target: "4da::db",
+                            backfilled,
+                            "Phase 124: first_curated_at added — lead time before the user acts is measurable"
                         );
                         Ok(())
                     },
