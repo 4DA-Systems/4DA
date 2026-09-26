@@ -205,6 +205,10 @@ pub struct LLMClient {
 }
 
 impl LLMClient {
+    /// Test-only: production clients must say which feature they serve, so
+    /// their spend is attributable (`with_purpose`). The last untagged
+    /// production callers were tagged on 2026-09-26.
+    #[cfg(test)]
     pub fn new(provider: LLMProvider) -> Self {
         Self::build(provider, None)
     }
