@@ -34,12 +34,12 @@ use tracing::{info, warn};
 use crate::settings::LLMProvider;
 
 pub(crate) const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
-const REFRESH_EVERY: Duration = Duration::from_secs(10 * 60);
+const REFRESH_EVERY: Duration = Duration::from_mins(10);
 /// Longer than a cold load. Measured 2026-09-26: gemma4:26b loaded in 65 s
 /// from an NVMe drive, and gemma4:12b is well under half that. A warm call
 /// takes about 2 s.
 const SLOW_CALL: Duration = Duration::from_secs(90);
-const COOL_OFF: Duration = Duration::from_secs(30 * 60);
+const COOL_OFF: Duration = Duration::from_mins(30);
 /// VRAM kept free beside the judge: the desktop's own use (about 1.4 GB idle
 /// on the measured machine), 4DA's embedding model, and the judge's 8k
 /// context cache.
