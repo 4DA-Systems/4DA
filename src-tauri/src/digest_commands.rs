@@ -223,6 +223,15 @@ pub(crate) async fn generate_briefing_internal(
         explain_grounded_items(&mut explanations, &grounded);
         (fetched, grounded.into_keys().collect())
     } else {
+        // The in-memory path has explanations, but a scoring explanation need
+        // not name the dependency, so the same note is added from the
+        // persisted links.
+        if let Ok(db) = get_database() {
+            let ids: Vec<i64> = mem_items.iter().map(|i| i.id).collect();
+            if let Ok(grounded) = db.strongly_grounded_packages(&ids) {
+                explain_grounded_items(&mut explanations, &grounded);
+            }
+        }
         (mem_items, mem_grounded)
     };
 

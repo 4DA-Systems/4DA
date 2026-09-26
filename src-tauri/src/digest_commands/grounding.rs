@@ -118,9 +118,13 @@ fn scope_note(is_direct: Option<bool>, is_dev: Option<bool>, has_fix: bool) -> S
     }
 }
 
-/// Give each dependency-grounded item that has no match explanation one that
-/// names its dependency. Persisted links cover direct, non-dev dependencies
-/// only, so "direct dependency" is exact. An existing explanation wins.
+/// Make every dependency-grounded item's match explanation name its
+/// dependency. Persisted links cover direct, non-dev dependencies only, so
+/// "direct dependency" is exact. An explanation that already names the
+/// package is kept as it is. Any other explanation gets the note appended:
+/// the in-memory scoring explanation of `npm: @xyflow/react v12.12.0` said
+/// nothing of the dependency, and the 2026-09-26 brief filtered the release
+/// as "no confirmed match to your projects".
 pub(super) fn explain_grounded_items(
     explanations: &mut std::collections::HashMap<i64, String>,
     grounded: &std::collections::HashMap<i64, Vec<String>>,
@@ -129,12 +133,20 @@ pub(super) fn explain_grounded_items(
         if packages.is_empty() {
             continue;
         }
-        explanations.entry(*id).or_insert_with(|| {
-            format!(
-                "Concerns a direct dependency of your projects: {}",
-                packages.join(", ")
-            )
-        });
+        let note = format!(
+            "Concerns a direct dependency of your projects: {}",
+            packages.join(", ")
+        );
+        match explanations.get_mut(id) {
+            Some(existing) if packages.iter().any(|p| existing.contains(p.as_str())) => {}
+            Some(existing) if !existing.trim().is_empty() => {
+                existing.push_str(". ");
+                existing.push_str(&note);
+            }
+            _ => {
+                explanations.insert(*id, note);
+            }
+        }
     }
 }
 
@@ -292,6 +304,17 @@ mod tests {
         );
         assert_eq!(explanations[&2], "Matched your tokio work");
         assert!(!explanations.contains_key(&3));
+
+        // An in-memory explanation that does not name the dependency gets the note.
+        let mut in_memory =
+            std::collections::HashMap::from([(4_i64, "Semantic match: react, flow".to_string())]);
+        let grounded =
+            std::collections::HashMap::from([(4_i64, vec!["@xyflow/react".to_string()])]);
+        explain_grounded_items(&mut in_memory, &grounded);
+        assert_eq!(
+            in_memory[&4],
+            "Semantic match: react, flow. Concerns a direct dependency of your projects: @xyflow/react"
+        );
     }
 
     #[test]
