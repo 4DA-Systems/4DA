@@ -21,6 +21,7 @@ mod fts_sync_tests;
 mod helpers;
 mod history;
 pub(crate) mod hybrid_search;
+mod judge_gate;
 pub(crate) mod llm_judgments;
 pub(crate) mod migrations;
 mod osv_advisories;
@@ -41,6 +42,7 @@ pub(crate) use enrichment::{EnrichmentCandidate, EnrichmentOutcome};
 // `super::blob_to_embedding` path keeps working after the helpers extraction.
 pub(crate) use helpers::*;
 pub use history::*;
+pub use judge_gate::*;
 pub use scoring_explanations::*;
 pub use scoring_queries::*;
 pub use sources::*;

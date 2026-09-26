@@ -146,23 +146,46 @@ impl Database {
     /// Get source item IDs that have no judgment yet and scored above a threshold.
     /// Only considers items from the last 7 days.
     ///
+    /// Plus the judge gate's working set (`crate::judge_gate`). These are
+    /// items from a gated source with no CARD-AWARE judgment, scored at or
+    /// above `gated_min`, and in the feed, waiting (`awaiting_judge`) or never
+    /// judged, from the last 14 days (the feed's window). An older thin-context
+    /// judgment does not count: the gate reads only card-aware ones.
+    ///
     /// Ranked read (audit items 12+26): the top-band SELECTION threshold stays
     /// on relevance_score (evidence decides membership); which of the band's
     /// members get judged first follows the shared rank-then-evidence order.
-    pub fn get_unjudged_item_ids(&self, min_score: f64, limit: usize) -> SqliteResult<Vec<i64>> {
+    pub fn get_unjudged_item_ids(
+        &self,
+        min_score: f64,
+        gated_min: f64,
+        limit: usize,
+    ) -> SqliteResult<Vec<i64>> {
         let conn = self.conn.lock();
+        let [ingest, drain] = crate::judge_gate::CARD_PROMPT_VERSIONS;
         let sql = format!(
             "SELECT si.id FROM source_items si
-             LEFT JOIN llm_judgments lj ON si.id = lj.source_item_id
-             WHERE lj.id IS NULL
-               AND si.relevance_score >= ?1
-               AND si.created_at >= datetime('now', '-7 days')
+             WHERE (si.relevance_score >= ?1
+                    AND si.created_at >= datetime('now', '-7 days')
+                    AND NOT EXISTS (SELECT 1 FROM llm_judgments lj WHERE lj.source_item_id = si.id))
+                OR (si.source_type IN ({gated})
+                    AND si.relevance_score >= ?3
+                    AND si.created_at >= datetime('now', '-14 days')
+                    AND (si.feed_relevant IS NULL OR si.feed_relevant = 1
+                         OR si.feed_verdict_reason = 'awaiting_judge')
+                    AND NOT EXISTS (SELECT 1 FROM llm_judgments lj
+                                    WHERE lj.source_item_id = si.id
+                                      AND lj.prompt_version IN (?4, ?5)))
              ORDER BY {ranked}
              LIMIT ?2",
+            gated = crate::judge_gate::gated_sources_sql(),
             ranked = super::ranked_order_expr("si")
         );
         let mut stmt = conn.prepare(&sql)?;
-        let rows = stmt.query_map(params![min_score, limit as i64], |row| row.get(0))?;
+        let rows = stmt.query_map(
+            params![min_score, limit as i64, gated_min, ingest, drain],
+            |row| row.get(0),
+        )?;
         rows.collect()
     }
 
@@ -487,13 +510,13 @@ mod tests {
             .unwrap();
         }
 
-        let unjudged = db.get_unjudged_item_ids(0.3, 10).unwrap();
+        let unjudged = db.get_unjudged_item_ids(0.3, 0.37, 10).unwrap();
         assert_eq!(unjudged.len(), 1);
 
         db.upsert_llm_judgment(1, 0.85, "Judged", None, 0.90, "m", "v1")
             .unwrap();
 
-        let unjudged = db.get_unjudged_item_ids(0.3, 10).unwrap();
+        let unjudged = db.get_unjudged_item_ids(0.3, 0.37, 10).unwrap();
         assert!(unjudged.is_empty());
     }
 
