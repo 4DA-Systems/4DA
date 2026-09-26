@@ -1198,7 +1198,7 @@ pub(crate) fn apply_openai_retention(body: &mut serde_json::Value, provider: &st
 /// is 4,096 tokens (measured on 0.34.4), and a longer prompt silently loses its
 /// head — the Brief prompt alone averages ~5,300 input tokens. 8,192 holds every
 /// prompt 4DA sends plus its reply, identically on every Ollama version.
-const OLLAMA_NUM_CTX: u32 = 8192;
+pub(crate) const OLLAMA_NUM_CTX: u32 = 8192;
 // Brief/digest prompts average ~5,300 input + ~1,000 output tokens (ai_usage,
 // 14 days to 2026-09-24): lowering this below 8,192 truncates them again.
 const _: () = assert!(OLLAMA_NUM_CTX >= 8192);

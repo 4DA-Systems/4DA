@@ -15,10 +15,11 @@
 //!
 //! Three guards:
 //! - **Fit.** A model is eligible only when its size plus
-//!   [`VRAM_HEADROOM_MB`] fits in VRAM. Measured 2026-09-26 on a 16 GB card:
-//!   gemma4:26b (17 GB) ran at about 1.8 s per item alone, but when 4DA's
-//!   embedding model loaded next to it one call took 7m15s (0.17 tok/s), and
-//!   speed returned when the embedding model's keep-alive expired.
+//!   [`VRAM_HEADROOM_MB`] fits in VRAM, or when it was measured to run well
+//!   with partial offload on a card this size ([`MEASURED_OFFLOAD_FITS`]).
+//!   Measured 2026-09-26 on a 16 GB card: gemma4:26b stalled (one call took
+//!   7m15s) whenever 4DA's embedding model loaded on the GPU beside it.
+//!   Embeddings now run on the CPU, and the stall is gone.
 //! - **Detection is cached** ([`REFRESH_EVERY`]). If Ollama is down or no
 //!   measured judge fits, judging stays on the cloud sibling as before.
 //! - **Circuit breaker.** A local judge call that fails or runs longer than
@@ -35,10 +36,14 @@ use crate::settings::LLMProvider;
 
 pub(crate) const DEFAULT_OLLAMA_URL: &str = "http://localhost:11434";
 const REFRESH_EVERY: Duration = Duration::from_mins(10);
-/// Longer than a cold load. Measured 2026-09-26: gemma4:26b loaded in 65 s
-/// from an NVMe drive, and gemma4:12b is well under half that. A warm call
-/// takes about 2 s.
+/// A warm judge call takes 2-7 s. The model load is not part of it: [`warm`]
+/// loads the judge before a lane's first timed call.
 const SLOW_CALL: Duration = Duration::from_secs(90);
+/// How long a judge model may take to load. Measured 2026-09-27: gemma4:26b
+/// loaded in 46 s on an idle machine but 94 s during an engine cycle (from
+/// NVMe). Timed inside the first judge call, that load tripped the breaker
+/// and 47 of 48 rerank batches of the pass failed fast.
+const LOAD_TIMEOUT: Duration = Duration::from_mins(5);
 const COOL_OFF: Duration = Duration::from_mins(30);
 /// VRAM kept free beside the judge: the desktop's own use (about 1.4 GB idle
 /// on the measured machine), 4DA's embedding model, and the judge's 8k
@@ -58,6 +63,17 @@ pub(crate) const VRAM_HEADROOM_MB: u64 = 4096;
 /// (0.75 / 0.65 / 0.60). qwen2.5:14b was removed: MCC 0.497-0.556 (mean 0.527,
 /// 10-11 false demotions of 49). Not listed: qwen3.5:9b, qwen3.8:27b.
 pub(crate) const MEASURED_LOCAL_JUDGES: &[&str] = &["gemma4:26b", "gemma4:12b", "qwen3:14b"];
+
+/// Judges measured to run well on a card SMALLER than size plus headroom, and
+/// the smallest VRAM they were measured on. gemma4:26b is a mixture-of-experts
+/// model: Ollama offloads part of it to the CPU and it still judges quickly.
+/// Measured 2026-09-26 on a 16,376 MiB card (production request shape, one
+/// item per call): 3.97 s median per item alone, 4.26 s with 4DA's embedding
+/// model running beside it on the CPU. With the embedding model on the GPU the
+/// median was 101.5 s, because Ollama evicted and reloaded the judge around
+/// every embed call, so this entry relies on the CPU-pinned embeddings in
+/// `embeddings_providers::ollama`.
+const MEASURED_OFFLOAD_FITS: &[(&str, u64)] = &[("gemma4:26b", 16_000)];
 
 /// The purposes (`LLMClient::with_purpose`) of the three judge lanes.
 const JUDGE_PURPOSES: &[&str] = &["ingest_judge", "verdict_drain", "rerank_judge"];
@@ -90,9 +106,16 @@ pub(crate) fn pick_judge(installed: &[Installed], budget_mb: Option<u64>) -> Opt
         .find_map(|measured| {
             installed
                 .iter()
-                .find(|i| i.name.starts_with(measured) && i.size_mb + VRAM_HEADROOM_MB <= budget)
+                .find(|i| i.name.starts_with(measured) && fits(measured, i.size_mb, budget))
         })
         .map(|i| i.name.clone())
+}
+
+fn fits(measured: &str, size_mb: u64, budget_mb: u64) -> bool {
+    size_mb + VRAM_HEADROOM_MB <= budget_mb
+        || MEASURED_OFFLOAD_FITS
+            .iter()
+            .any(|(name, min_mb)| *name == measured && budget_mb >= *min_mb)
 }
 
 /// This machine's judge memory budget: dedicated VRAM when the GPU reports
@@ -137,9 +160,58 @@ async fn fetch_installed(base_url: &str) -> Option<Vec<Installed>> {
     )
 }
 
-/// Re-detect the local judge when the cached answer is older than
-/// [`REFRESH_EVERY`]. Called at the top of each judge lane; cheap when fresh.
+/// Called at the top of each judge lane: re-detect the local judge when the
+/// cached answer is older than [`REFRESH_EVERY`], then make sure it is loaded.
+/// Cheap when fresh and warm.
 pub(crate) async fn refresh_if_stale() {
+    redetect_if_stale().await;
+    warm().await;
+}
+
+/// Load the routed judge before the lane's first timed call, so a cold load
+/// never counts as a slow judge call. Ollama answers an empty-prompt
+/// `/api/generate` once the model is in memory, at once if it already is.
+/// It must ask for the judge calls' context size: measured on Ollama 0.34.4,
+/// a load at the default 4,096 made the next 8,192 judge call reload for 36 s.
+/// A load that fails or outlasts [`LOAD_TIMEOUT`] opens the breaker.
+async fn warm() {
+    let Some((model, base_url)) = route(&STATE.lock(), Instant::now()) else {
+        return;
+    };
+    let started = Instant::now();
+    let loaded = load_model(&base_url, &model).await;
+    let elapsed = started.elapsed();
+    if !loaded {
+        STATE.lock().tripped_until = Some(Instant::now() + COOL_OFF);
+        warn!(
+            target: "4da::local_judge",
+            model,
+            elapsed_s = elapsed.as_secs(),
+            cool_off_min = COOL_OFF.as_secs() / 60,
+            "Local judge failed to load; judging returns to the cloud judge for the cool-off"
+        );
+    } else if elapsed > Duration::from_secs(5) {
+        info!(target: "4da::local_judge", model, elapsed_s = elapsed.as_secs(), "Local judge loaded");
+    }
+}
+
+async fn load_model(base_url: &str, model: &str) -> bool {
+    let Ok(client) = reqwest::Client::builder().timeout(LOAD_TIMEOUT).build() else {
+        return false;
+    };
+    client
+        .post(format!("{base_url}/api/generate"))
+        .json(&serde_json::json!({
+            "model": model,
+            "options": { "num_ctx": crate::llm::OLLAMA_NUM_CTX },
+        }))
+        .send()
+        .await
+        .and_then(reqwest::Response::error_for_status)
+        .is_ok()
+}
+
+async fn redetect_if_stale() {
     let base_url = {
         let mut s = STATE.lock();
         if s.checked_at.is_some_and(|t| t.elapsed() < REFRESH_EVERY) {

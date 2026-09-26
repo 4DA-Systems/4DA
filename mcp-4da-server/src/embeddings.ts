@@ -189,7 +189,13 @@ export async function embedText(
       const res = await fetch(`${base}/api/embeddings`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ model: config.model, prompt: input }),
+        // The embedder runs on the CPU, as the 4DA app's does: on the GPU,
+        // Ollama evicts and reloads the local judge model around each call.
+        body: JSON.stringify({
+          model: config.model,
+          prompt: input,
+          options: { num_gpu: 0 },
+        }),
         signal,
       });
       if (!res.ok) return null;

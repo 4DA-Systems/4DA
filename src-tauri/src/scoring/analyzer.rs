@@ -355,6 +355,10 @@ pub(crate) async fn score_items_full(
                 relevance: None,
             },
         );
+        // Load a local judge before the 2-minute guard starts: a cold load
+        // (up to 94 s measured for gemma4:26b during a cycle) inside it left
+        // too little time to judge, and a timed-out pass stores nothing.
+        crate::local_judge::refresh_if_stale().await;
         let llm_started = Instant::now();
         match tokio::time::timeout(
             std::time::Duration::from_mins(2),

@@ -965,8 +965,12 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
         info!(target: "4da::monitor", "Scheduled analysis starting (cache-first)");
         let handle = app_handle_scheduled.clone();
         tauri::async_runtime::spawn(async move {
-            run_scheduled_cycle_contained(get_monitoring_state(), run_scheduled_analysis(handle))
-                .await;
+            // Boxed: the analysis future is ~24 KB, too large to move by value.
+            Box::pin(run_scheduled_cycle_contained(
+                get_monitoring_state(),
+                run_scheduled_analysis(handle),
+            ))
+            .await;
         });
     });
 
