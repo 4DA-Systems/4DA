@@ -359,9 +359,10 @@ pub(crate) async fn score_items_full(
         // (up to 94 s measured for gemma4:26b during a cycle) inside it left
         // too little time to judge, and a timed-out pass stores nothing.
         crate::local_judge::refresh_if_stale().await;
+        let rerank_budget = crate::local_judge::rerank_budget();
         let llm_started = Instant::now();
         match tokio::time::timeout(
-            std::time::Duration::from_mins(2),
+            rerank_budget,
             crate::analysis_rerank::apply_llm_reranking(app, &mut results, &scoring_ctx),
         )
         .await
@@ -376,7 +377,7 @@ pub(crate) async fn score_items_full(
                 outcome.log(llm_started.elapsed().as_millis(), "cached_full");
             }
             Err(_) => {
-                warn!(target: "4da::analysis", "LLM reranking timed out after 120s, using pipeline scores only");
+                warn!(target: "4da::analysis", budget_s = rerank_budget.as_secs(), "LLM reranking timed out, using pipeline scores only");
             }
         }
     } else {

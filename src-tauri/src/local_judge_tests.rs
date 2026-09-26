@@ -113,3 +113,16 @@ async fn an_unreachable_ollama_fails_the_load_rather_than_hanging() {
     assert!(!load_model("http://127.0.0.1:9", "gemma4:26b").await);
     assert!(started.elapsed() < Duration::from_secs(30));
 }
+
+#[test]
+fn a_local_rerank_pass_gets_the_longer_budget() {
+    assert_eq!(
+        budget_for(false),
+        Duration::from_mins(2),
+        "cloud keeps the hang guard"
+    );
+    assert!(
+        budget_for(true) >= Duration::from_secs(48 * 5),
+        "48 local items at the slowest measured 5 s per call must fit"
+    );
+}
