@@ -624,9 +624,18 @@ pub(crate) fn registry_release_identity(title: &str) -> Option<(String, Option<S
 }
 
 /// crates.io treats `-` and `_` as one namespace; npm names are exact but
-/// the comparison is case-insensitive.
+/// the comparison is case-insensitive. A scoped npm name also equals its
+/// normalized dependency key (`scoring::dependencies::normalize_package_name`):
+/// `matched_deps` stores `@ai-sdk/openai` as `ai-sdk-openai`, so the release
+/// train never matched a scoped package's title to its dependency and every
+/// release of it stayed curated at once (live 2026-09-26: `@ai-sdk/openai`
+/// 4.0.75, 4.0.77 and 4.0.78 side by side; 19 scoped release rows).
 pub(crate) fn registry_names_equal(a: &str, b: &str) -> bool {
-    let norm = |s: &str| s.to_lowercase().replace('_', "-");
+    let norm = |s: &str| {
+        s.to_lowercase()
+            .trim_start_matches('@')
+            .replace(['/', '_'], "-")
+    };
     norm(a) == norm(b)
 }
 

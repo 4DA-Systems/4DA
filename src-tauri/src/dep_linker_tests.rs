@@ -602,6 +602,11 @@ fn registry_title_subject_reads_adapter_and_bare_shapes() {
     );
     assert!(registry_names_equal("serial-test", "serial_test"));
     assert!(!registry_names_equal("axum-stack", "axum"));
+    assert!(
+        registry_names_equal("@ai-sdk/openai", "ai-sdk-openai"),
+        "a scoped title subject equals its normalized dependency key"
+    );
+    assert!(!registry_names_equal("@ai-sdk/openai", "openai"));
 }
 
 #[test]
