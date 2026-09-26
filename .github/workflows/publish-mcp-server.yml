@@ -9,6 +9,13 @@ jobs:
   publish:
     name: Build, Test & Publish to npm + MCP Registry
     runs-on: ubuntu-latest
+    # npm publishes are irreversible. The `release` environment requires an
+    # explicit maintainer approval (Settings -> Environments -> release) and only
+    # admits `v*` / `mcp-v*` tags, so a tag pushed by mistake — or by an
+    # automated agent with push rights — waits for a human instead of shipping.
+    # npm Trusted Publishing checks the environment name only when one is set
+    # on the npmjs publisher config; if you set one there, set it to `release`.
+    environment: release
     permissions:
       contents: read
       id-token: write

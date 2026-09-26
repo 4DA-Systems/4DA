@@ -95,6 +95,16 @@ jobs:
     # Apple notarization queue while still catching a genuine hang, instead of
     # inheriting the 6-hour default and burning a runner all afternoon.
     timeout-minutes: 90
+    # The approval gate for every release. This is the first job that touches
+    # signing material (SSL.com eSigner, Apple, Tauri updater key), so it waits
+    # on the `release` environment: a required maintainer approval, and a
+    # deployment policy that admits only `v*` / `mcp-v*` tags. All four matrix
+    # legs (and `publish-mcp`, which starts at the same moment) request the
+    # environment together and are approved in ONE review. `create-release`
+    # stays ungated on purpose: it only makes a DRAFT release, visible to
+    # maintainers only. Once the signing secrets move from repo-level to
+    # environment secrets, only jobs naming this environment can read them.
+    environment: release
     permissions:
       contents: write
       # Required for Sigstore/cosign KEYLESS signing of the SBOMs below.
@@ -1005,6 +1015,9 @@ jobs:
     if: needs.create-release.outputs.production == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
+    # Same approval gate as build-tauri (see the note there). Both jobs start
+    # right after create-release, so one review approves them together.
+    environment: release
     permissions:
       contents: read
       id-token: write
