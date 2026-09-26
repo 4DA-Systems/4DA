@@ -279,6 +279,7 @@ mod intelligence_history;
 mod intelligence_metrics;
 mod ipc_guard;
 mod ipc_rate_limit;
+mod judge_gate;
 mod knowledge_decay;
 pub(crate) mod language_detect;
 mod llm;

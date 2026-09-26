@@ -235,6 +235,11 @@ pub enum VerdictReason {
     /// 7.0 Beta, 7.0 RC, 7.0 — held nine feed slots (2026-09-07). Withdrawn
     /// when the newer sibling leaves the feed.
     SupersededRelease,
+    /// A promotion from a judge-gated source (`judge_gate`) that no
+    /// card-aware judgment has cleared yet. `Database::reconcile_judge_gate`
+    /// releases it (verdict withdrawn, so the risen sweep admits it by score)
+    /// once the judge clears it, or turns it into `llm_reject`.
+    AwaitingJudge,
 }
 
 impl VerdictReason {
@@ -248,8 +253,21 @@ impl VerdictReason {
             Self::PendingRetriesExhausted => "pending_retries_exhausted",
             Self::DuplicateCurated => "duplicate_curated",
             Self::SupersededRelease => "superseded_release",
+            Self::AwaitingJudge => "awaiting_judge",
         }
     }
+}
+
+/// The latest card-aware judge relevance for `id` (`judge_gate`), if any.
+pub(crate) fn card_judgment(conn: &rusqlite::Connection, id: i64) -> SqliteResult<Option<f64>> {
+    let [ingest, drain] = crate::judge_gate::CARD_PROMPT_VERSIONS;
+    conn.prepare_cached(
+        "SELECT relevance_score FROM llm_judgments
+         WHERE source_item_id = ?1 AND prompt_version IN (?2, ?3)
+         ORDER BY judged_at DESC, id DESC LIMIT 1",
+    )?
+    .query_row(params![id, ingest, drain], |r| r.get(0))
+    .optional()
 }
 
 /// SQL fragment selecting curated items whose verdict is stale AND
@@ -367,14 +385,17 @@ impl Database {
         if verdicts.is_empty() {
             return Ok(0);
         }
+        // Read before the connection lock: it takes the settings lock.
+        let gate = crate::judge_gate::active();
         let conn = self.conn.lock();
         let tx = conn.unchecked_transaction()?;
         let mut count = 0;
         let mut deferred = 0usize;
         let mut confirmed_flips = 0usize;
+        let mut gated = 0usize;
         {
             let mut read_stmt = tx.prepare_cached(
-                "SELECT feed_relevant, feed_verdict_pending FROM source_items WHERE id = ?1",
+                "SELECT feed_relevant, feed_verdict_pending, source_type FROM source_items WHERE id = ?1",
             )?;
             let mut apply_stmt = tx.prepare_cached(
                 "UPDATE source_items
@@ -394,10 +415,37 @@ impl Database {
             )?;
             for (id, relevant, source, reason) in verdicts {
                 // Standing state first, same transaction — exact, not racy.
-                let (old_relevant, pending): (Option<i64>, Option<String>) = read_stmt
-                    .query_row(params![id], |r| Ok((r.get(0)?, r.get(1)?)))
+                let (old_relevant, pending, source_type): (
+                    Option<i64>,
+                    Option<String>,
+                    Option<String>,
+                ) = read_stmt
+                    .query_row(params![id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
                     .optional()?
-                    .unwrap_or((None, None));
+                    .unwrap_or((None, None, None));
+                // Judge-gated admission (`judge_gate`): a promotion from a
+                // gated source needs a card-aware judgment at the bar.
+                let (relevant, reason) =
+                    match (gate && *relevant && *source != VerdictSource::Serendipity)
+                        .then(|| {
+                            source_type
+                                .as_deref()
+                                .filter(|s| crate::judge_gate::is_gated_source(s))
+                        })
+                        .flatten()
+                    {
+                        Some(_) => match crate::judge_gate::decide(
+                            card_judgment(&tx, *id)?,
+                            old_relevant == Some(1),
+                        ) {
+                            Some(gate_reason) => {
+                                gated += 1;
+                                (&false, &Some(gate_reason))
+                            }
+                            None => (relevant, reason),
+                        },
+                        None => (relevant, reason),
+                    };
                 let is_flip = matches!(old_relevant, Some(old) if (old != 0) != *relevant);
                 let immediate =
                     reason.is_some() || *source == VerdictSource::Serendipity || !is_flip;
@@ -429,11 +477,12 @@ impl Database {
             }
         }
         tx.commit()?;
-        if deferred > 0 || confirmed_flips > 0 {
+        if deferred > 0 || confirmed_flips > 0 || gated > 0 {
             tracing::debug!(
                 target: "4da::verdicts",
                 deferred,
                 confirmed_flips,
+                gated,
                 "Unreasoned verdict flips damped at the persist boundary"
             );
         }

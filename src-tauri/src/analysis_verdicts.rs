@@ -183,6 +183,20 @@ pub(crate) async fn reconcile_stale_verdicts_cycle(budget: usize) -> Result<Verd
             "LLM rejections withdrawn from registry releases of the user's dependencies"
         );
     }
+    // Judge-gated admission (`judge_gate`): curated items the card-aware judge
+    // put below the bar leave; waiting items it cleared are released for the
+    // risen sweep below to admit by score.
+    let gate = db
+        .reconcile_judge_gate(crate::judge_gate::active(), scoring::PIPELINE_VERSION)
+        .map_err(|e| format!("Failed to reconcile the judge gate: {e}"))?;
+    if gate.rejected > 0 || gate.released > 0 {
+        info!(
+            target: "4da::verdicts",
+            rejected = gate.rejected,
+            released = gate.released,
+            "Judge gate reconciled — low-yield sources enter the feed on the project-aware judge's call"
+        );
+    }
     // v33: one slot per release line — the newest final stands, its betas,
     // RCs and older patches of the same line yield (and return if it leaves).
     let (train_demoted, train_withdrawn) = db

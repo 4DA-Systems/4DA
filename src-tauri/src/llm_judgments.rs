@@ -401,7 +401,11 @@ async fn evaluate_with_provider(
     // of it. No backlog → the fresh lane keeps its full selection.
     let reserve = drain_reserve(db.count_pending_verdicts().unwrap_or(0));
     let unjudged = db
-        .get_unjudged_item_ids(INGESTION_THRESHOLD, BATCH_SIZE * 4 - reserve)
+        .get_unjudged_item_ids(
+            INGESTION_THRESHOLD,
+            f64::from(crate::state::get_relevance_threshold()) - 0.03,
+            BATCH_SIZE * 4 - reserve,
+        )
         .map_err(|e| {
             crate::error::FourDaError::Internal(format!("Failed to get unjudged items: {e}"))
         })?;
