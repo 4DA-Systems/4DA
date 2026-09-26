@@ -68,6 +68,10 @@ pub const PROMPT_VERSION: &str = "judge-v1-2026-04-15";
 /// price for identical judgments. Briefings, synthesis, and every other
 /// surface keep the user's configured model.
 ///
+/// Before the sibling: a measured local judge that fits this machine's GPU
+/// (`local_judge`, 2026-09-26) takes the work whenever Ollama has one, so
+/// the sibling is the fallback when no local judge is available.
+///
 /// Escape hatch: `FOURDA_JUDGE_MODEL` env var — `same` pins judging to the
 /// configured model; any other non-empty value names the judge model
 /// explicitly. Judgment provenance is unaffected either way: the model that
@@ -83,6 +87,16 @@ pub fn judge_provider(base: &LLMProvider) -> LLMProvider {
             return p;
         }
         _ => {}
+    }
+
+    // A measured local judge that fits this GPU beats the cloud sibling on
+    // accuracy and keeps the judged text on the machine
+    // (`local_judge`). A user whose MAIN model is local keeps it: that
+    // choice was theirs.
+    if p.provider != "ollama" {
+        if let Some(local) = crate::local_judge::local_provider(&p) {
+            return local;
+        }
     }
 
     if let Some(cheap) = cheap_judge_sibling(&p.provider, &p.model) {

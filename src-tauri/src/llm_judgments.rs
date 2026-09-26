@@ -86,29 +86,18 @@ use tracing::{debug, info, warn};
 /// gate reads only current-version judgments, so it pauses until v6 judgments
 /// accumulate rather than mixing two rubrics.
 ///
+/// v7 (2026-09-26): same rubric; `{user_context}` is now project cards
+/// (`project_cards`, which records the measurements).
+///
 /// `pub(crate)`: the judge accuracy benchmark (`scoring::judge_benchmark`)
 /// stamps every result row with the prompt cohort it measured, so a stored
 /// score can never be misread as belonging to a prompt it never ran under.
-pub(crate) const PROMPT_VERSION: &str = "v6";
+pub(crate) const PROMPT_VERSION: &str = "v7";
 const INGESTION_THRESHOLD: f64 = 0.25;
 /// 10 items per call: the system prompt + user-context block (~800 tokens) is
 /// resent on every call, so batch size directly divides that fixed overhead.
 /// Was 5 — measured 2026-08-31, the fixed overhead was ~40% of input spend.
 pub(crate) const BATCH_SIZE: usize = 10;
-
-/// Local models that have PASSED a real-item measurement as a feed judge,
-/// despite sitting in the Basic capability tier (every unlisted Ollama model
-/// defaults to Basic, `llm_capability::get_model_tier`). Deliberately a
-/// judge-lane allowlist, not a tier promotion: a tier change would also turn
-/// on reranking (batched), adversarial deliberation and LLM explanations for
-/// the model, none of which were measured.
-///
-/// Each passed BOTH bars, one item per call, thinking off: >= fresh Haiku 4.5
-/// (0.883) on 400 blind real items — gemma4:26b 0.930, gemma4:12b 0.906,
-/// qwen3:14b 0.893 — and the `bench:judge` MCC floor through this code path
-/// (0.75 / 0.65 / 0.60). qwen2.5:14b was removed: MCC 0.497-0.556 (mean 0.527,
-/// 10-11 false demotions of 49). Not listed: qwen3.5:9b, qwen3.8:27b.
-const MEASURED_LOCAL_JUDGES: &[&str] = &["gemma4:26b", "gemma4:12b", "qwen3:14b"];
 
 /// How the ingest judge (and the pending-verdict drain, which shares its
 /// provider gate) may run for this provider: `Some(items_per_call)`, or
@@ -133,7 +122,9 @@ pub(crate) fn judge_items_per_call(provider: &LLMProvider) -> Option<usize> {
     let local = provider.provider == "ollama";
     let measured_local = local && {
         let model = provider.model.to_lowercase();
-        MEASURED_LOCAL_JUDGES.iter().any(|m| model.starts_with(m))
+        crate::local_judge::MEASURED_LOCAL_JUDGES
+            .iter()
+            .any(|m| model.starts_with(m))
     };
     if !tier.supports_reranking() && !measured_local {
         return None;
@@ -272,15 +263,15 @@ pub(crate) fn drain_reserve(pending_backlog: i64) -> usize {
 /// Called after ingestion when new items arrive (deep-scan path), and by
 /// [`run_post_cycle_llm_passes`] on the scheduled/headless cadence.
 pub(crate) async fn evaluate_pending_items(db: &Database) -> Result<usize> {
-    if crate::state::is_llm_limit_reached() {
-        debug!(target: "4da::llm_judgments", "LLM daily limit reached, skipping judgment batch");
-        return Ok(0);
-    }
-
+    crate::local_judge::refresh_if_stale().await;
     let Some(provider) = get_llm_settings() else {
         debug!(target: "4da::llm_judgments", "No LLM provider configured, skipping judgments");
         return Ok(0);
     };
+    if crate::local_judge::budget_blocks(Some(&provider)) {
+        debug!(target: "4da::llm_judgments", "LLM daily limit reached, skipping judgment batch");
+        return Ok(0);
+    }
     let Some(per_call) = judge_items_per_call(&provider) else {
         debug!(target: "4da::llm_judgments", model = %provider.model, "Judge model is below the feed-judging bar, skipping judgments");
         return Ok(0);
@@ -321,7 +312,10 @@ pub(crate) struct PostCycleLlmSummary {
 // REMOVE the allow when the app_setup/headless seams land (fix-queue item 25
 // wiring; the seam lines are in this function's doc above).
 pub(crate) async fn run_post_cycle_llm_passes(db: &Database) -> PostCycleLlmSummary {
-    run_post_cycle_with(db, crate::state::is_llm_limit_reached(), get_llm_settings()).await
+    crate::local_judge::refresh_if_stale().await;
+    let provider = get_llm_settings();
+    let blocked = crate::local_judge::budget_blocks(provider.as_ref());
+    run_post_cycle_with(db, blocked, provider).await
 }
 
 /// Gate-injectable inner pass. Hermetic tests drive the budget/BYOK gates
@@ -417,8 +411,9 @@ async fn evaluate_with_provider(
 
     let model_name = provider.model.clone();
     let send_body = crate::llm_egress::body_allowed(&provider);
+    let on_machine = crate::llm_egress::provider_is_on_machine(&provider);
+    let user_context = crate::project_cards::judge_context(db, on_machine);
     let client = LLMClient::with_purpose(provider, "ingest_judge");
-    let user_context = crate::adversarial::build_user_context_summary();
 
     for chunk in unjudged.chunks(items_per_call.max(1)) {
         let mut items = load_items_for_judgment(db, chunk)?;
