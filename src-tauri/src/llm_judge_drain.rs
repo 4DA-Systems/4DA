@@ -102,7 +102,7 @@ const EXHAUST_SCAN_LIMIT: usize = 512;
 /// the main lane's demotion gate (which filters on ITS prompt version) can
 /// never double-count them, and post-hoc analysis can see the cohort.
 /// `drain_v2` (2026-09-26): project cards as the user context, as ingest v7.
-const DRAIN_PROMPT_VERSION: &str = "drain_v2";
+pub(crate) const DRAIN_PROMPT_VERSION: &str = "drain_v2";
 
 /// A drain judgment DISPUTES a pending demote only at or above this judged
 /// relevance (plus the shared confidence bar). Between the reject line and
