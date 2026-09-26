@@ -1278,6 +1278,57 @@ fn orphaned_duplicate_verdict_is_withdrawn_and_the_row_re_enters_on_its_own_scor
     assert_eq!(db.withdraw_orphaned_duplicate_verdicts().unwrap(), 0);
 }
 
+/// A scoped npm package's train collapses too: `matched_deps` carries the
+/// normalized key (`ai-sdk-openai`), the title the scoped name (live
+/// 2026-09-26: 4.0.75, 4.0.77 and 4.0.78 all curated at once).
+#[test]
+fn a_scoped_npm_release_train_collapses_to_its_newest() {
+    use crate::test_utils::insert_test_item_with_url;
+    let db = test_db();
+    let version = crate::scoring::PIPELINE_VERSION;
+    let release = |v: &str| -> i64 {
+        let id = insert_test_item_with_url(
+            &db,
+            "npm_registry",
+            &format!("@ai-sdk/openai@{v}"),
+            &format!("https://www.npmjs.com/package/@ai-sdk/openai/v/{v}"),
+            &format!("npm: @ai-sdk/openai v{v}"),
+            "body",
+        );
+        let conn = db.conn.lock();
+        conn.execute(
+            "UPDATE source_items SET content_type = 'release_notes' WHERE id = ?1",
+            rusqlite::params![id],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO scoring_explanations (source_item_id, pipeline_version, breakdown)
+             VALUES (?1, ?2, '{\"breakdown\":{\"matched_deps\":[\"ai-sdk-openai\"]}}')",
+            rusqlite::params![id, version],
+        )
+        .unwrap();
+        id
+    };
+    let (a, b, c) = (release("4.0.75"), release("4.0.77"), release("4.0.78"));
+    db.persist_feed_verdicts(
+        &[
+            (a, true, VerdictSource::Score),
+            (b, true, VerdictSource::Score),
+            (c, true, VerdictSource::Score),
+        ],
+        version,
+    )
+    .unwrap();
+    assert_eq!(db.reconcile_release_train(version).unwrap(), (2, 0));
+    assert_eq!(verdict_of(&db, a).0, Some(0));
+    assert_eq!(verdict_of(&db, b).0, Some(0));
+    assert_eq!(
+        verdict_of(&db, c).0,
+        Some(1),
+        "the newest release keeps the slot"
+    );
+}
+
 /// v33: one slot per release line. The TypeScript train (5.9 Beta, 5.9 RC,
 /// 5.9, 6.0 Beta, 6.0 RC, 6.0, 7.0 Beta, 7.0 RC, 7.0) held nine feed slots
 /// (2026-09-07). Pre-releases yield to their final; majors stand on their
