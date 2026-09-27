@@ -189,11 +189,12 @@ pub(crate) async fn reconcile_stale_verdicts_cycle(budget: usize) -> Result<Verd
     let gate = db
         .reconcile_judge_gate(crate::judge_gate::active(), scoring::PIPELINE_VERSION)
         .map_err(|e| format!("Failed to reconcile the judge gate: {e}"))?;
-    if gate.rejected > 0 || gate.released > 0 {
+    if gate.rejected > 0 || gate.released > 0 || gate.rescued > 0 {
         info!(
             target: "4da::verdicts",
             rejected = gate.rejected,
             released = gate.released,
+            rescued = gate.rescued,
             "Judge gate reconciled — low-yield sources enter the feed on the project-aware judge's call"
         );
     }

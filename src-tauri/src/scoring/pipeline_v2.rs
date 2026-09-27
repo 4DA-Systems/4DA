@@ -3398,6 +3398,18 @@ pub(crate) fn score_item(
     let ugc_capped = !critical_fast_path
         && community_signal < scoring_config::COMMUNITY_SIGNAL_LOW_THRESHOLD
         && is_low_community_ugc_source(input.source_type);
+    // Engagement was the proxy for quality that the project-card judge
+    // (`judge_gate`) now measures directly. Measured 2026-09-27: 8% of capped
+    // mastodon/reddit posts were useful (Tokio performance, Verus, CDP
+    // pitfalls), and the judge picked them at AUC 0.89 (admitted at >= 0.5:
+    // 24% precision, the feed's own level). So a capped post from a gated
+    // source is not verdict-gated once that judge cleared it. It keeps its
+    // capped score for ranking, and without a judgment nothing changes.
+    let judge_cleared = ugc_capped
+        && crate::judge_gate::is_gated_source(input.source_type)
+        && db
+            .card_judgment_of(input.id as i64)
+            .is_some_and(|r| r >= crate::judge_gate::GATE_RELEVANCE);
     // v29 capped an ungrounded security advisory (a CVE/GHSA for a package NOT
     // in the user's dependency graph) below the line and gated the verdict, but
     // only OFF the user's stack (domain relevance < 0.50); one ON the stack
@@ -3526,7 +3538,7 @@ pub(crate) fn score_item(
         && !superseded_release
         && !already_installed_release
         && !release_below_line
-        && !ugc_capped
+        && !(ugc_capped && !judge_cleared)
         && !security_ungrounded
         && !version_not_affected
         && ((critical_fast_path && !lang_mismatch)  // Critical items always relevant

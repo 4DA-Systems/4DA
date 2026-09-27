@@ -130,7 +130,8 @@ fn the_sweep_rejects_below_the_bar_and_releases_what_the_judge_cleared() {
         sweep,
         JudgeGateSweep {
             rejected: 2,
-            released: 1
+            released: 1,
+            rescued: 0
         }
     );
     assert_eq!(
@@ -213,4 +214,105 @@ fn the_judge_queue_includes_gated_items_without_a_card_aware_judgment() {
     let mut got = db.get_unjudged_item_ids(0.25, 0.37, 40).unwrap();
     got.sort_unstable();
     assert_eq!(got, vec![gated_curated, gated_old_thin]);
+}
+
+/// Rescue: an item out of the feed (a thin-context `llm_reject`, or a score
+/// verdict) that a NEWER card-aware judgment cleared is withdrawn and queued
+/// for one re-score; the next sweep does not touch it again, and a rejection
+/// the card judge agrees with stays.
+#[test]
+fn the_card_judge_rescues_what_older_rules_rejected_once() {
+    let db = test_db();
+    let [card, _] = crate::judge_gate::CARD_PROMPT_VERSIONS;
+    let (thin_rejected, capped, agreed) = (
+        item(&db, "lobsters", "r1"),
+        item(&db, "mastodon", "r2"),
+        item(&db, "devto", "r3"),
+    );
+    {
+        let conn = db.conn.lock();
+        conn.execute(
+            "UPDATE source_items SET scored_pipeline_version = 37, scored_at = '2026-01-01 00:00:00'",
+            [],
+        )
+        .unwrap();
+    }
+    db.persist_feed_verdicts_with_reasons(
+        &[
+            (
+                thin_rejected,
+                false,
+                VerdictSource::Score,
+                Some(VerdictReason::LlmReject),
+            ),
+            (capped, false, VerdictSource::Score, None),
+            (
+                agreed,
+                false,
+                VerdictSource::Score,
+                Some(VerdictReason::LlmReject),
+            ),
+        ],
+        V,
+    )
+    .unwrap();
+    judge(&db, thin_rejected, 0.8, card);
+    judge(&db, capped, 0.6, card);
+    judge(&db, agreed, 0.2, card);
+
+    let sweep = db.reconcile_judge_gate(true, V).unwrap();
+    assert_eq!(sweep.rescued, 2);
+    assert_eq!(verdict(&db, thin_rejected), (None, None));
+    assert_eq!(verdict(&db, capped), (None, None));
+    assert_eq!(verdict(&db, agreed), (Some(0), Some("llm_reject".into())));
+    let queued: i64 = db
+        .conn
+        .lock()
+        .query_row(
+            "SELECT COUNT(*) FROM source_items WHERE scored_pipeline_version = 0",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(queued, 2, "both rescues wait for one re-score");
+    assert_eq!(
+        db.reconcile_judge_gate(true, V).unwrap().rescued,
+        0,
+        "one-shot: queued rows are not rescued twice"
+    );
+    assert_eq!(
+        db.reconcile_judge_gate(false, V).unwrap().rescued,
+        0,
+        "no judge, no rescue"
+    );
+}
+
+/// What the scorer reads (`score_item`'s `judge_cleared`): the LATEST
+/// card-aware judgment, never a thin-context one.
+#[test]
+fn the_scorer_reads_the_latest_card_aware_judgment_only() {
+    let db = test_db();
+    let [card, drain] = crate::judge_gate::CARD_PROMPT_VERSIONS;
+    let id = item(&db, "mastodon", "s1");
+    judge(&db, id, 0.9, "v6");
+    assert_eq!(
+        db.card_judgment_of(id),
+        None,
+        "thin context is not the gate's evidence"
+    );
+    judge(&db, id, 0.6, card);
+    assert_eq!(db.card_judgment_of(id), Some(0.6));
+    db.conn
+        .lock()
+        .execute(
+            "UPDATE llm_judgments SET judged_at = '2026-01-01 00:00:00' WHERE prompt_version = ?1",
+            params![card],
+        )
+        .unwrap();
+    judge(&db, id, 0.2, drain);
+    assert_eq!(
+        db.card_judgment_of(id),
+        Some(0.2),
+        "the newest card-aware reading wins"
+    );
 }

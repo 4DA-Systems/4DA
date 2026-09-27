@@ -16,9 +16,62 @@ pub struct JudgeGateSweep {
     /// Waiting items the judge cleared (or, with no judge, all of them):
     /// verdict withdrawn so the risen sweep admits them by score.
     pub released: usize,
+    /// Items out of the feed (score verdict, zero-engagement cap, or a
+    /// thin-context `llm_reject`) that a newer card-aware judgment cleared:
+    /// verdict withdrawn and queued for one re-score.
+    pub rescued: usize,
 }
 
 impl Database {
+    /// The latest card-aware judge relevance for `id` (`crate::judge_gate`).
+    /// Read by the scorer for judge-gated sources only.
+    pub fn card_judgment_of(&self, id: i64) -> Option<f64> {
+        super::verdicts::card_judgment(&self.read_conn(), id)
+            .ok()
+            .flatten()
+    }
+
+    /// Rescue: gated items out of the feed that a card-aware judgment at the
+    /// bar cleared AFTER their last score. Measured 2026-09-27 on 241 blind
+    /// items: the judge picks the useful ones among zero-engagement posts at
+    /// AUC 0.89 and among thin-context rejections at 0.95, at the feed's own
+    /// precision. The verdict is withdrawn (`llm_reject` too: a newer,
+    /// better-informed judge disagrees) and the row is queued for one
+    /// re-score, whose verdict goes back through the persist boundary. The
+    /// guard `judged_at > scored_at` makes it one-shot: the re-score stamps
+    /// `scored_at` past the judgment.
+    fn rescue_judge_cleared(&self) -> SqliteResult<usize> {
+        let [ingest, drain] = crate::judge_gate::CARD_PROMPT_VERSIONS;
+        let conn = self.conn.lock();
+        conn.execute(
+            &format!(
+                "UPDATE source_items
+                 SET feed_relevant = NULL, feed_verdict_at = NULL, feed_verdict_version = NULL,
+                     feed_verdict_source = NULL, feed_verdict_reason = NULL,
+                     feed_verdict_pending = NULL, scored_pipeline_version = 0
+                 WHERE source_type IN ({gated})
+                   AND created_at >= datetime('now', '-14 days')
+                   AND COALESCE(feed_relevant, 0) = 0
+                   AND COALESCE(feed_verdict_source, 'score') = 'score'
+                   AND COALESCE(feed_verdict_reason, '')
+                       IN ('', 'stale_version', 'score_sunk_in_version', 'llm_reject')
+                   AND COALESCE(scored_pipeline_version, 0) <> 0
+                   AND EXISTS (
+                       SELECT 1 FROM llm_judgments lj
+                       WHERE lj.source_item_id = source_items.id
+                         AND lj.prompt_version IN (?1, ?2)
+                         AND lj.relevance_score >= ?3
+                         AND lj.judged_at > COALESCE(source_items.scored_at, '')
+                         AND lj.id = (SELECT lj2.id FROM llm_judgments lj2
+                                      WHERE lj2.source_item_id = source_items.id
+                                        AND lj2.prompt_version IN (?1, ?2)
+                                        ORDER BY lj2.judged_at DESC, lj2.id DESC LIMIT 1))",
+                gated = crate::judge_gate::gated_sources_sql()
+            ),
+            params![ingest, drain, crate::judge_gate::GATE_RELEVANCE],
+        )
+    }
+
     /// Bring standing verdicts in line with the gate.
     /// - A curated item from a gated source whose latest card-aware judgment
     ///   is below the bar is demoted (`llm_reject`).
@@ -91,7 +144,16 @@ impl Database {
             }
             tx.commit()?;
         }
-        Ok(JudgeGateSweep { rejected, released })
+        let rescued = if gate_active {
+            self.rescue_judge_cleared()?
+        } else {
+            0
+        };
+        Ok(JudgeGateSweep {
+            rejected,
+            released,
+            rescued,
+        })
     }
 }
 

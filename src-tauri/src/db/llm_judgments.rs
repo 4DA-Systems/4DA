@@ -148,9 +148,11 @@ impl Database {
     ///
     /// Plus the judge gate's working set (`crate::judge_gate`). These are
     /// items from a gated source with no CARD-AWARE judgment, scored at or
-    /// above `gated_min`, and in the feed, waiting (`awaiting_judge`) or never
-    /// judged, from the last 14 days (the feed's window). An older thin-context
-    /// judgment does not count: the gate reads only card-aware ones.
+    /// above `gated_min`, from the last 14 days (the feed's window), and not a
+    /// twin or a superseded release. That covers items in the feed, waiting
+    /// (`awaiting_judge`), never judged, and those rejected by score or by a
+    /// thin-context judge, which the judge may rescue (`reconcile_judge_gate`).
+    /// An older thin-context judgment does not count.
     ///
     /// Ranked read (audit items 12+26): the top-band SELECTION threshold stays
     /// on relevance_score (evidence decides membership); which of the band's
@@ -171,8 +173,8 @@ impl Database {
                 OR (si.source_type IN ({gated})
                     AND si.relevance_score >= ?3
                     AND si.created_at >= datetime('now', '-14 days')
-                    AND (si.feed_relevant IS NULL OR si.feed_relevant = 1
-                         OR si.feed_verdict_reason = 'awaiting_judge')
+                    AND COALESCE(si.feed_verdict_reason, '')
+                        NOT IN ('duplicate_curated', 'superseded_release')
                     AND NOT EXISTS (SELECT 1 FROM llm_judgments lj
                                     WHERE lj.source_item_id = si.id
                                       AND lj.prompt_version IN (?4, ?5)))
