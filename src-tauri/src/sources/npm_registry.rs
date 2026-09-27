@@ -24,6 +24,10 @@ struct NpmPackageInfo {
     dist_tags: Option<NpmDistTags>,
     time: Option<HashMap<String, String>>,
     deprecated: Option<serde_json::Value>,
+    /// Set on a version manifest (`/<name>/latest`), which has no `dist-tags`.
+    version: Option<String>,
+    /// A string or `{ "type": "git", "url": ... }`.
+    repository: Option<serde_json::Value>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -110,14 +114,19 @@ impl NpmRegistrySource {
         }
     }
 
-    /// Fetch metadata for a single package from the npm registry.
+    /// Fetch the latest version's manifest from the npm registry.
+    ///
+    /// `/<name>/latest` is a few KB and carries the description, repository and
+    /// deprecation. The abbreviated package document used before has none of
+    /// them (every npm item read "No description") and runs to megabytes for
+    /// packages with many versions (vite 2.3 MB, typescript 8.7 MB).
     async fn fetch_package(&self, package: &str) -> SourceResult<Option<SourceItem>> {
-        let url = format!("https://registry.npmjs.org/{}", package);
+        let url = format!("https://registry.npmjs.org/{package}/latest");
 
         let response = self
             .client
             .get(&url)
-            .header("Accept", "application/vnd.npm.install-v1+json")
+            .header("Accept", "application/json")
             .header("User-Agent", "4DA-Developer-OS/1.0")
             .send()
             .await
@@ -318,7 +327,9 @@ fn package_to_source_item(package_name: &str, info: &NpmPackageInfo) -> SourceIt
         .dist_tags
         .as_ref()
         .and_then(|dt| dt.latest.as_deref())
+        .or(info.version.as_deref())
         .unwrap_or("unknown");
+    let repository = info.repository.as_ref().and_then(repository_url);
 
     // Check if the package-level deprecated field is set
     let is_deprecated = info.deprecated.as_ref().is_some_and(|v| !v.is_null());
@@ -362,6 +373,9 @@ fn package_to_source_item(package_name: &str, info: &NpmPackageInfo) -> SourceIt
     if let Some(msg) = &deprecation_msg {
         content.push_str(&format!("\nDeprecation notice: {msg}"));
     }
+    if let Some(repo) = &repository {
+        content.push_str(&format!("\nRepository: {repo}"));
+    }
 
     // Build metadata
     let mut metadata = serde_json::json!({
@@ -375,6 +389,9 @@ fn package_to_source_item(package_name: &str, info: &NpmPackageInfo) -> SourceIt
     }
     if version_count > 0 {
         metadata["version_count"] = serde_json::json!(version_count);
+    }
+    if let Some(repo) = &repository {
+        metadata["repository"] = serde_json::json!(repo);
     }
 
     // The release's own page: every release of a package shared the
@@ -391,6 +408,36 @@ fn package_to_source_item(package_name: &str, info: &NpmPackageInfo) -> SourceIt
         .with_url(Some(npm_url))
         .with_content(content)
         .with_metadata(metadata)
+}
+
+/// Browsable URL of a manifest's `repository` field: `git+https://…/x.git`,
+/// `git://…`, `git+ssh://git@github.com/…` and the `github:owner/repo` /
+/// `owner/repo` shorthands all become `https://github.com/owner/repo`.
+fn repository_url(field: &serde_json::Value) -> Option<String> {
+    let raw = match field {
+        serde_json::Value::String(s) => s.as_str(),
+        serde_json::Value::Object(o) => o.get("url")?.as_str()?,
+        _ => return None,
+    }
+    .trim();
+    let raw = raw.strip_prefix("git+").unwrap_or(raw);
+    let url = if let Some(rest) = raw.strip_prefix("github:") {
+        format!("https://github.com/{rest}")
+    } else if let Some(rest) = raw.strip_prefix("ssh://git@") {
+        format!("https://{rest}")
+    } else if let Some(rest) = raw.strip_prefix("git@") {
+        format!("https://{}", rest.replacen(':', "/", 1))
+    } else if let Some(rest) = raw.strip_prefix("git://") {
+        format!("https://{rest}")
+    } else if raw.starts_with("https://") || raw.starts_with("http://") {
+        raw.to_string()
+    } else if raw.split('/').count() == 2 && !raw.contains(':') {
+        format!("https://github.com/{raw}")
+    } else {
+        return None;
+    };
+    let url = url.trim_end_matches('/');
+    Some(url.strip_suffix(".git").unwrap_or(url).to_string())
 }
 
 // ============================================================================
@@ -437,6 +484,8 @@ mod tests {
                 ("6.1.0".to_string(), "2026-02-10T08:00:00Z".to_string()),
             ])),
             deprecated: None,
+            version: None,
+            repository: None,
         };
 
         let item = package_to_source_item("vite", &info);
@@ -472,6 +521,8 @@ mod tests {
             }),
             time: None,
             deprecated: Some(serde_json::json!("Use 'got' or 'node-fetch' instead")),
+            version: None,
+            repository: None,
         };
 
         let item = package_to_source_item("request", &info);
@@ -493,6 +544,8 @@ mod tests {
             dist_tags: None,
             time: None,
             deprecated: None,
+            version: None,
+            repository: None,
         };
 
         let item = package_to_source_item("mystery-pkg", &info);
@@ -534,5 +587,83 @@ mod tests {
         );
         assert!(info.time.as_ref().unwrap().contains_key("3.23.0"));
         assert!(info.deprecated.is_none());
+    }
+
+    #[test]
+    fn a_latest_manifest_yields_description_version_and_repository() {
+        // Trimmed from https://registry.npmjs.org/@tauri-apps/api/latest (2026-09-27).
+        let json = r#"{
+            "name": "@tauri-apps/api",
+            "version": "2.12.0",
+            "description": "Tauri API definitions",
+            "repository": { "type": "git", "url": "git+https://github.com/tauri-apps/tauri.git" },
+            "license": "Apache-2.0 OR MIT"
+        }"#;
+        let info: NpmPackageInfo = serde_json::from_str(json).unwrap();
+        let item = package_to_source_item("@tauri-apps/api", &info);
+
+        assert_eq!(item.source_id, "@tauri-apps/api@2.12.0");
+        assert_eq!(item.title, "npm: @tauri-apps/api v2.12.0");
+        assert!(item.content.starts_with("Tauri API definitions"));
+        assert!(!item.content.contains("No description"));
+        assert!(item
+            .content
+            .contains("Repository: https://github.com/tauri-apps/tauri"));
+        let metadata = item.metadata.unwrap();
+        assert_eq!(
+            metadata["repository"],
+            "https://github.com/tauri-apps/tauri"
+        );
+    }
+
+    #[test]
+    fn a_deprecated_latest_manifest_is_flagged() {
+        let json = r#"{
+            "name": "request",
+            "version": "2.88.2",
+            "description": "Simplified HTTP request client.",
+            "deprecated": "request has been deprecated, see https://github.com/request/request/issues/3142"
+        }"#;
+        let info: NpmPackageInfo = serde_json::from_str(json).unwrap();
+        let item = package_to_source_item("request", &info);
+        assert_eq!(item.title, "[DEPRECATED] request");
+        assert_eq!(item.source_id, "request@2.88.2");
+    }
+
+    #[test]
+    fn repository_forms_normalise_to_a_browsable_url() {
+        let cases = [
+            (
+                serde_json::json!({"type": "git", "url": "git+https://github.com/vitejs/vite.git"}),
+                Some("https://github.com/vitejs/vite"),
+            ),
+            (
+                serde_json::json!("git://github.com/a/b.git"),
+                Some("https://github.com/a/b"),
+            ),
+            (
+                serde_json::json!("git+ssh://git@github.com/a/b.git"),
+                Some("https://github.com/a/b"),
+            ),
+            (
+                serde_json::json!("git@github.com:a/b.git"),
+                Some("https://github.com/a/b"),
+            ),
+            (
+                serde_json::json!("github:a/b"),
+                Some("https://github.com/a/b"),
+            ),
+            (serde_json::json!("a/b"), Some("https://github.com/a/b")),
+            (
+                serde_json::json!("https://gitlab.com/a/b/"),
+                Some("https://gitlab.com/a/b"),
+            ),
+            (serde_json::json!({"type": "git"}), None),
+            (serde_json::json!("not a url"), None),
+            (serde_json::json!(42), None),
+        ];
+        for (field, want) in cases {
+            assert_eq!(repository_url(&field).as_deref(), want, "{field}");
+        }
     }
 }
