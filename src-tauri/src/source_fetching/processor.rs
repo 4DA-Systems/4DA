@@ -422,6 +422,20 @@ async fn ingest_source_batch(
     counts
 }
 
+/// Sources the foreign-language filter never drops.
+///
+/// - Security advisories (OSV/CVE) are version-matched to a pinned dependency, and
+///   their "[id] pkg:" title prefix skews short-title detection.
+/// - Package registries are fetched for the user's declared dependencies, and their
+///   titles are package identifiers, not prose. At 40+ ASCII characters the
+///   detector's short-English guard no longer applies and a name such as
+///   "crates.io: tauri-plugin-single-instance v2.5.0" gets a guessed language.
+///   Live logs showed every fetch dropping ~4 npm, ~6 PyPI and ~8 Go releases
+///   this way (2026-09-27), so the long names never reached the feed at all.
+pub(crate) fn exempt_from_language_filter(source_type: &str) -> bool {
+    matches!(source_type, "osv" | "cve") || crate::dep_linker::is_registry_source(source_type)
+}
+
 /// Decode HTML entities, detect language, and apply the foreign-language filter
 /// to one source's raw items; pairs each retained item with its embed text.
 fn prepare_source_batch(
@@ -459,12 +473,9 @@ fn prepare_source_batch(
         // ASCII tokens). Non-English users have foreign titles translated, so
         // those are retained for them.
         .filter(|(st, _, _, title, _, detected, _, _, _)| {
-            // Security advisories (OSV/CVE) are version-matched to a pinned dependency — they
-            // are relevant regardless of the advisory text's DETECTED language (the title
-            // carries an "[id] pkg:" prefix that skews short-title detection, so an English
-            // advisory like "Next.js Cache Poisoning" can be misclassified and wrongly dropped,
-            // silently losing a real exposure). Never language-filter a security source.
-            if st == "osv" || st == "cve" {
+            // Advisories and registry releases are about the user's own dependencies:
+            // a misdetected language must never silently lose one.
+            if exempt_from_language_filter(st) {
                 return true;
             }
             let foreign_by_detect = detected != user_lang;
