@@ -16,6 +16,16 @@
 //! The same test with the thin 10-tech context (2026-09-25) found no usable
 //! bar, so only card-aware judgments ([`CARD_PROMPT_VERSIONS`]) count.
 //!
+//! The bar, re-measured 2026-09-27 per routed judge with
+//! `scoring::judge_arms_bench` (the shipped v7 path, 335 gated gold items of
+//! which 20 are useful; with no gate these are 6.0% useful):
+//! - gemma4:26b, full cards: 0.5 keeps 14 of 20 useful in 79 slots (17.7%).
+//! - The cloud sibling on nouns-only cards, the judge of every user without a
+//!   local one: 0.5 keeps 15 of 20 in 141 slots (10.6%).
+//! - Lowering the bar buys recall at a precision the feed cannot afford: the
+//!   band between 0.30 and 0.5 is 3 useful in 32 slots for gemma4:26b, and the
+//!   band between 0.35 and 0.5 is 5 in 64 for the cloud judge. The bar stays.
+//!
 //! Sources not listed keep deciding by score. Registry releases, security
 //! advisories, HN and RSS are either deterministic (release grading, OSV) or
 //! already far more precise.
