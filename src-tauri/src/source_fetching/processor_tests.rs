@@ -473,3 +473,46 @@ fn test_prepare_source_batch_filters_foreign_language_keeps_security() {
         "osv/cve items bypass the language filter"
     );
 }
+
+#[test]
+fn registry_releases_and_advisories_skip_the_language_filter() {
+    for st in [
+        "crates_io",
+        "npm_registry",
+        "pypi",
+        "go_modules",
+        "osv",
+        "cve",
+    ] {
+        assert!(exempt_from_language_filter(st), "{st}");
+    }
+    for st in ["hackernews", "reddit", "rss", "mastodon", "github", "arxiv"] {
+        assert!(!exempt_from_language_filter(st), "{st}");
+    }
+}
+
+#[test]
+fn long_package_titles_are_not_reliably_english_to_the_detector() {
+    // Shapes of real registry titles. They are package identifiers, so any
+    // "language" the detector reports for them is a guess; at least one of
+    // these lands on a foreign code, which is what dropped releases live.
+    let titles = [
+        "crates.io: tauri-plugin-single-instance v2.5.0",
+        "npm: @tauri-apps/plugin-single-instance v2.5.0",
+        "npm: i18next-resources-to-backend v1.2.3",
+        "PyPI: sentence-transformers-onnx-runtime v3.1.0",
+        "Go: github.com/google/go-containerregistry v0.20.2",
+        "Go: golang.org/x/sys v0.0.0-20190306220234-b354f8bf4d9e",
+    ];
+    let foreign: Vec<_> = titles
+        .iter()
+        .map(|t| {
+            (
+                t,
+                crate::language_detect::detect_language_with_content(t, ""),
+            )
+        })
+        .filter(|(_, lang)| lang != "en")
+        .collect();
+    assert!(!foreign.is_empty(), "every title detected as en");
+}
