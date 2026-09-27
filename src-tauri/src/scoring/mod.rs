@@ -30,6 +30,8 @@ mod gate;
 #[cfg(test)]
 mod judge_agreement_live;
 #[cfg(test)]
+mod judge_arms_bench;
+#[cfg(test)]
 mod judge_benchmark;
 #[cfg(test)]
 mod judge_live_sample;
