@@ -26,9 +26,9 @@
 //!   band between 0.30 and 0.5 is 3 useful in 32 slots for gemma4:26b, and the
 //!   band between 0.35 and 0.5 is 5 in 64 for the cloud judge. The bar stays.
 //!
-//! Sources not listed keep deciding by score. Registry releases, security
-//! advisories, HN and RSS are either deterministic (release grading, OSV) or
-//! already far more precise.
+//! Sources not listed keep deciding by score. Registry releases and security
+//! advisories are deterministic (release grading, OSV); on HN the judge is
+//! not better than the score (see [`GATED_SOURCES`]).
 //!
 //! The rule is applied at the verdict persist boundary
 //! (`Database::persist_feed_verdicts_with_reasons`), which every admission
@@ -42,7 +42,13 @@
 use crate::db::VerdictReason;
 
 /// Sources whose items need a card-aware judgment to enter the feed.
-pub(crate) const GATED_SOURCES: &[&str] = &["devto", "lobsters", "mastodon", "reddit"];
+///
+/// `rss` joined 2026-09-27: on the 25 RSS items then in the feed (5 useful,
+/// AI gold) the card judge scored AUC 0.960 against the pipeline's 0.400.
+/// At the bar it kept all 5 useful items and 7 of 25 slots, 20% -> 71%. HN
+/// stays out: the judge managed only 0.683 there and the bar would have
+/// dropped 3 of its 12 useful items.
+pub(crate) const GATED_SOURCES: &[&str] = &["devto", "lobsters", "mastodon", "reddit", "rss"];
 
 /// Minimum card-aware judge relevance for admission (see module doc).
 pub(crate) const GATE_RELEVANCE: f64 = 0.5;
@@ -132,17 +138,10 @@ mod tests {
 
     #[test]
     fn only_the_measured_low_yield_sources_are_gated() {
-        for s in ["devto", "lobsters", "mastodon", "reddit"] {
+        for s in ["devto", "lobsters", "mastodon", "reddit", "rss"] {
             assert!(is_gated_source(s));
         }
-        for s in [
-            "hackernews",
-            "rss",
-            "crates_io",
-            "npm_registry",
-            "osv",
-            "github",
-        ] {
+        for s in ["hackernews", "crates_io", "npm_registry", "osv", "github"] {
             assert!(!is_gated_source(s));
         }
     }
