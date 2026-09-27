@@ -75,7 +75,7 @@ All retrieve **public** developer content. Trigger cadence is the default fetch 
 | Product Hunt | `www.producthunt.com` | `/feed` | auto | None |
 | Bluesky | `public.api.bsky.app` | `/xrpc/app.bsky.feed.getFeed?feed=...whats-hot` | auto | None (public "What's Hot", no auth) |
 | crates.io | `crates.io` | `/api/v1/...` | auto | None (UA `4DA-Developer-OS/1.0`) |
-| npm | `registry.npmjs.org` | `/{package}` | auto | None |
+| npm | `registry.npmjs.org` | `/{package}/latest` | auto | None |
 | PyPI | `pypi.org` | `/pypi/{package}/json` | auto | None |
 | HuggingFace | `huggingface.co` | `/api/models` | auto | None |
 | PapersWithCode | `huggingface.co` | `/api/daily_papers` (PwC API now redirects here) | auto | None |
