@@ -122,7 +122,37 @@ fn a_local_rerank_pass_gets_the_longer_budget() {
         "cloud keeps the hang guard"
     );
     assert!(
-        budget_for(true) >= Duration::from_secs(48 * 5),
+        budget_for(true) >= Duration::from_mins(4), // 48 items x 5 s
         "48 local items at the slowest measured 5 s per call must fit"
+    );
+}
+
+#[test]
+fn a_missed_probe_keeps_the_local_judge() {
+    let installed = [inst("gemma4:26b", 17_750), inst("gemma4:12b", 7_250)];
+    assert_eq!(
+        next_route(Some("gemma4:26b".into()), None, Some(16_376)).as_deref(),
+        Some("gemma4:26b"),
+        "a busy Ollama missing the probe does not send judging to the cloud"
+    );
+    assert_eq!(
+        next_route(None, None, Some(16_376)),
+        None,
+        "with no judge known yet, an unanswered probe routes nowhere"
+    );
+    assert_eq!(
+        next_route(
+            Some("gemma4:26b".into()),
+            Some(&installed[1..]),
+            Some(16_376)
+        )
+        .as_deref(),
+        Some("gemma4:12b"),
+        "an answered probe decides afresh"
+    );
+    assert_eq!(
+        next_route(Some("gemma4:26b".into()), Some(&[]), Some(16_376)),
+        None,
+        "an answered probe with no judge installed stops local judging"
     );
 }

@@ -238,10 +238,16 @@ async fn redetect_if_stale() {
         }
     };
     let installed = fetch_installed(&base_url).await;
-    let model = installed
-        .as_deref()
-        .and_then(|list| pick_judge(list, memory_budget_mb()));
     let mut s = STATE.lock();
+    let previous = (s.base_url == base_url).then(|| s.model.clone()).flatten();
+    let model = next_route(previous, installed.as_deref(), memory_budget_mb());
+    if installed.is_none() && model.is_some() {
+        info!(
+            target: "4da::local_judge",
+            judge = model.as_deref().unwrap_or_default(),
+            "Ollama did not answer the model probe; keeping the local judge"
+        );
+    }
     if s.model != model {
         info!(
             target: "4da::local_judge",
@@ -252,6 +258,23 @@ async fn redetect_if_stale() {
     }
     s.model = model;
     s.base_url = base_url;
+}
+
+/// The judge to route to after a probe. A probe that got no answer keeps the
+/// previous judge: a busy Ollama can miss the probe's 3 s timeout, and
+/// switching then sent every judge lane to the cloud until the next probe,
+/// 10 minutes later (2026-09-27 03:48 local: `ollama_reachable=false` under
+/// benchmark load, 13 cloud judge calls). An Ollama that is really gone
+/// fails the judge's load or first call, which opens the breaker.
+pub(crate) fn next_route(
+    previous: Option<String>,
+    installed: Option<&[Installed]>,
+    budget_mb: Option<u64>,
+) -> Option<String> {
+    match installed {
+        Some(list) => pick_judge(list, budget_mb),
+        None => previous,
+    }
 }
 
 fn route(state: &State, now: Instant) -> Option<(String, String)> {
