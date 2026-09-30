@@ -139,8 +139,10 @@ pub(crate) fn judge_items_per_call(provider: &LLMProvider) -> Option<usize> {
 /// immediately BELOW the largest low cluster and caught none of it. Measured
 /// histogram of judged feed items scoring under 0.5 (2026-08-27):
 ///
-///     0.25 -> 33 items        0.35 -> 40 items
-///     0.30 -> 22 items        0.45 -> 44 items
+/// ```text
+/// 0.25 -> 33 items        0.35 -> 40 items
+/// 0.30 -> 22 items        0.45 -> 44 items
+/// ```
 ///
 /// 0.30 admits the 0.25 cluster and nothing above it. The CONFIDENCE bar below
 /// is deliberately unchanged: lowering both at once would have swept in
