@@ -882,8 +882,8 @@ npm Packages (40)
 @types/d3-zoom 3.0.8 - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/d3-zoom
 @types/react 19.3.0 - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/react
 @types/react-dom 19.3.0 - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/react-dom
-@xyflow/react 12.11.6 - MIT - https://reactflow.dev
-@xyflow/system 0.0.82 - MIT - https://github.com/xyflow/xyflow#readme
+@xyflow/react 12.12.0 - MIT - https://reactflow.dev
+@xyflow/system 0.0.83 - MIT - https://github.com/xyflow/xyflow#readme
 classcat 5.0.5 - MIT - https://github.com/jorgebucaran/classcat#readme
 csstype 3.2.3 - MIT - https://github.com/frenic/csstype#readme
 d3-color 3.1.0 - ISC - https://d3js.org/d3-color/
@@ -900,7 +900,7 @@ i18next 26.4.2 - MIT - https://www.i18next.com
 i18next-resources-to-backend 1.2.3 - MIT - https://github.com/i18next/i18next-resources-to-backend
 react 19.3.0 - MIT - https://react.dev/
 react-dom 19.3.0 - MIT - https://react.dev/
-react-i18next 17.0.14 - MIT - https://github.com/i18next/react-i18next
+react-i18next 17.0.15 - MIT - https://github.com/i18next/react-i18next
 scheduler 0.28.0 - MIT - https://react.dev/
 typescript 5.9.3 - Apache-2.0 - https://www.typescriptlang.org/
 use-sync-external-store 1.7.0 - MIT - https://github.com/react/react#readme
