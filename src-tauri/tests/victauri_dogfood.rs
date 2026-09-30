@@ -9,6 +9,12 @@
 use victauri_test::visual::{MaskRegion, ThresholdPreset, VisualOptions};
 use victauri_test::VictauriClient;
 
+/// Server-side budget for 4DA's slow commands. Victauri cuts an `invoke_command`
+/// off at 30 s by default, and on the real corpus `get_blind_spots` (28.7 s cold)
+/// and `get_stack_health` (17-26 s) sit right under that, so a loaded machine
+/// tips them over. Measured 2026-10-01 via `introspect command_timings`.
+const SLOW_COMMAND_TIMEOUT_MS: u64 = 120_000;
+
 fn configured_victauri_port() -> u16 {
     std::env::var("VICTAURI_PORT")
         .ok()
@@ -386,7 +392,6 @@ async fn ipc_integrity_check() {
 }
 
 #[tokio::test]
-#[ignore = "Victauri IPC checkpoint drain timing is unreliable — upstream fix needed in victauri-plugin event loop"]
 async fn ipc_log_captures_commands() {
     if skip_unless_e2e() {
         return;
@@ -727,7 +732,6 @@ async fn settings_modal_open_close() {
 }
 
 #[tokio::test]
-#[ignore = "press_key('?') does not reliably trigger keyboard shortcut modal in automated context"]
 async fn keyboard_shortcuts_modal() {
     if skip_unless_e2e() {
         return;
@@ -1529,7 +1533,7 @@ async fn blind_spots_data_dump() {
 
     let mut client = connect_victauri().await.unwrap();
     let result = client
-        .invoke_command("get_blind_spots", None)
+        .invoke_command_with_timeout("get_blind_spots", None, SLOW_COMMAND_TIMEOUT_MS)
         .await
         .unwrap();
 
@@ -1577,7 +1581,7 @@ async fn blind_spots_ipc_returns_evidence_feed() {
 
     let mut client = connect_victauri().await.unwrap();
     let result = client
-        .invoke_command("get_blind_spots", None)
+        .invoke_command_with_timeout("get_blind_spots", None, SLOW_COMMAND_TIMEOUT_MS)
         .await
         .unwrap();
 
@@ -1626,7 +1630,7 @@ async fn blind_spots_score_is_valid() {
 
     let mut client = connect_victauri().await.unwrap();
     let result = client
-        .invoke_command("get_blind_spots", None)
+        .invoke_command_with_timeout("get_blind_spots", None, SLOW_COMMAND_TIMEOUT_MS)
         .await
         .unwrap();
 
@@ -1653,7 +1657,7 @@ async fn blind_spots_no_template_explanations() {
 
     let mut client = connect_victauri().await.unwrap();
     let result = client
-        .invoke_command("get_blind_spots", None)
+        .invoke_command_with_timeout("get_blind_spots", None, SLOW_COMMAND_TIMEOUT_MS)
         .await
         .unwrap();
 
@@ -1688,7 +1692,7 @@ async fn blind_spots_items_have_valid_evidence() {
 
     let mut client = connect_victauri().await.unwrap();
     let result = client
-        .invoke_command("get_blind_spots", None)
+        .invoke_command_with_timeout("get_blind_spots", None, SLOW_COMMAND_TIMEOUT_MS)
         .await
         .unwrap();
 
@@ -1944,7 +1948,7 @@ async fn blind_spots_clean_state_shows_positive_ux() {
     let mut client = connect_victauri().await.unwrap();
 
     let result = client
-        .invoke_command("get_blind_spots", None)
+        .invoke_command_with_timeout("get_blind_spots", None, SLOW_COMMAND_TIMEOUT_MS)
         .await
         .unwrap();
     let score = result.get("score").and_then(|s| s.as_f64()).unwrap_or(99.0);
@@ -2048,7 +2052,7 @@ async fn blind_spots_score_shows_coverage_not_problems() {
     let mut client = connect_victauri().await.unwrap();
 
     let result = client
-        .invoke_command("get_blind_spots", None)
+        .invoke_command_with_timeout("get_blind_spots", None, SLOW_COMMAND_TIMEOUT_MS)
         .await
         .unwrap();
     let raw_score = result.get("score").and_then(|s| s.as_f64()).unwrap_or(-1.0);
@@ -2106,7 +2110,7 @@ async fn blind_spots_covered_section_has_compact_view() {
     let mut client = connect_victauri().await.unwrap();
 
     let result = client
-        .invoke_command("get_blind_spots", None)
+        .invoke_command_with_timeout("get_blind_spots", None, SLOW_COMMAND_TIMEOUT_MS)
         .await
         .unwrap();
     let total = result
@@ -3453,7 +3457,9 @@ async fn ipc_commands_never_panic() {
     ];
 
     for cmd in &commands {
-        let result = client.invoke_command(cmd, None).await;
+        let result = client
+            .invoke_command_with_timeout(cmd, None, SLOW_COMMAND_TIMEOUT_MS)
+            .await;
         assert!(
             result.is_ok(),
             "IPC command '{cmd}' panicked or errored: {:?}",
@@ -4156,7 +4162,7 @@ async fn stack_health_returns_report() {
 
     let mut client = connect_victauri().await.unwrap();
     let health = client
-        .invoke_command("get_stack_health", None)
+        .invoke_command_with_timeout("get_stack_health", None, SLOW_COMMAND_TIMEOUT_MS)
         .await
         .unwrap();
 
@@ -5244,7 +5250,9 @@ async fn expanded_panic_guard_30_plus_commands() {
     ];
 
     for (i, (cmd, args)) in commands.iter().enumerate() {
-        let result = client.invoke_command(cmd, args.clone()).await;
+        let result = client
+            .invoke_command_with_timeout(cmd, args.clone(), SLOW_COMMAND_TIMEOUT_MS)
+            .await;
         assert!(
             result.is_ok(),
             "IPC command #{} '{cmd}' panicked or errored: {:?}",

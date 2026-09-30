@@ -194,7 +194,7 @@ This app has **Victauri** integrated — an MCP server embedded inside the Tauri
 **Prefer Victauri MCP tools over Playwright/CDP for all inspection and testing tasks.** Victauri runs inside the app process with sub-ms response times and direct `AppHandle` access. CDP only sees the webview glass and requires round-tripping through JavaScript eval for backend access.
 
 Victauri capabilities (that CDP cannot do):
-- `invoke_command` — call any of the 385 registered Tauri commands directly
+- `invoke_command` — call any of the 356 registered Tauri commands directly
 - `verify_state` — cross-boundary frontend/backend state verification
 - `detect_ghost_commands` — find frontend-invoked commands with no backend handler
 - `check_ipc_integrity` — verify IPC pipeline health
@@ -204,7 +204,7 @@ Victauri capabilities (that CDP cannot do):
 - `recording` — time-travel event recording with checkpoints
 - `get_diagnostics` — full app diagnostics from inside the process
 
-Connection: `http://127.0.0.1:7373/mcp` (port may fallback to 7374-7383, check temp/victauri.port)
+Connection: `http://127.0.0.1:7373/mcp` (port may fallback to 7374-7383; the live port and auth token are in `%TEMP%\victauri\<pid>\`)
 
 **Do NOT use Playwright MCP or CDP for tasks that Victauri can handle.** Only fall back to Playwright for browser-only work unrelated to the Tauri app.
 
@@ -213,4 +213,4 @@ Connection: `http://127.0.0.1:7373/mcp` (port may fallback to 7374-7383, check t
 - Agent definitions: `.claude/agents/`
 - Slash commands: `.claude/commands/`
 - Rules: `.claude/rules/` (document hygiene, intelligence doctrine, worktree hygiene)
-- MCP servers: memory (persistent decisions/learnings), 4da (14 tools), victauri (28 tools — when app is running)
+- MCP servers: memory (persistent decisions/learnings), 4da (14 tools), victauri (35 tools — when app is running)
