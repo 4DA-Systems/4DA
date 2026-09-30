@@ -295,8 +295,8 @@ fn test_link_items_inserts_into_real_schema() {
 
     // This is the call that would fail with "table source_item_dependencies
     // has no column named dependency_name" if the INSERT used the wrong column.
-    let linked = link_items_to_deps(&conn, &items, &dep_names)
-        .expect("link_items_to_deps should succeed against real schema");
+    let linked = upsert_links(&conn, &classify_links(&items, &dep_names))
+        .expect("linking should succeed against real schema");
     assert_eq!(linked, 1, "Expected exactly 1 link row");
 
     // Verify the row exists with the correct columns
@@ -355,7 +355,8 @@ fn test_link_items_upgrades_existing_weak_row_with_exact_evidence() {
     }];
     let dep_names = vec!["axios".to_string()];
 
-    let changed = link_items_to_deps(&conn, &items, &dep_names).expect("upsert exact link");
+    let changed =
+        upsert_links(&conn, &classify_links(&items, &dep_names)).expect("upsert exact link");
     assert_eq!(changed, 1);
 
     let (mt, conf, evidence, source_url): (String, f64, Option<String>, Option<String>) = conn
@@ -994,4 +995,48 @@ fn test_matches_dep_in_title_multibyte_dep_does_not_panic() {
     );
     // A non-ASCII letter glued to an ASCII dep is NOT a boundary (bug E).
     assert_eq!(matches_dep_in_title("иreact rules", "react"), None);
+}
+
+/// Regression: the startup backfill held `db.conn` from the first row to the
+/// last, so a non-async command needing the writer parked the UI thread for
+/// the whole scan. The writer must be free between a batch's read and its
+/// write — that gap is where the expensive classification runs.
+#[test]
+fn test_backfill_releases_the_writer_between_batches() {
+    use crate::test_utils::test_db;
+
+    let db = test_db();
+    {
+        let conn = db.conn.lock();
+        conn.execute(
+            "INSERT INTO source_items
+                (id, source_type, source_id, url, title, content, content_hash, embedding)
+             VALUES
+                (1, 'npm_registry', 'axios', 'https://www.npmjs.com/package/axios',
+                 'axios 2.0 released', '', 'hash1', zeroblob(1536))",
+            [],
+        )
+        .expect("insert source item");
+        conn.execute(
+            "INSERT INTO project_dependencies
+                (package_name, project_path, manifest_type, language, is_dev, is_direct, project_relevance)
+             VALUES
+                ('axios', '/home/user/project', 'package.json', 'typescript', 0, 1, 1.0)",
+            [],
+        )
+        .expect("insert project dependency");
+    }
+
+    let mut batches = 0usize;
+    let linked = backfill_with(&db, || {
+        batches += 1;
+        assert!(
+            db.conn.try_lock().is_some(),
+            "backfill must not hold the database writer while a batch is classified"
+        );
+    })
+    .expect("backfill");
+
+    assert_eq!(batches, 1, "one batch of one item");
+    assert_eq!(linked, 1, "the batch's link is still written");
 }
