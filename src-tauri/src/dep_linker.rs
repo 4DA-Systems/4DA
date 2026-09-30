@@ -40,20 +40,26 @@ use crate::package_ambiguity::is_ambiguous_package_name;
 ///
 /// Returns the number of links created or materially upgraded.
 pub fn link_recent_items(db: &Database) -> Result<usize> {
-    let conn = db.conn.lock();
-
-    let dep_names = load_dependency_names(&conn)?;
-    if dep_names.is_empty() {
-        return Ok(0);
-    }
-
-    let recent = load_recent_items(&conn, 500)?;
+    let (dep_names, recent) = {
+        let conn = db.conn.lock();
+        let dep_names = load_dependency_names(&conn)?;
+        if dep_names.is_empty() {
+            return Ok(0);
+        }
+        (dep_names, load_recent_items(&conn, 500)?)
+    };
 
     if recent.is_empty() {
         return Ok(0);
     }
 
-    let total = link_items_to_deps(&conn, &recent, &dep_names)?;
+    // Classify with the writer released — see `backfill_with`.
+    let pending = classify_links(&recent, &dep_names);
+    let total = if pending.is_empty() {
+        0
+    } else {
+        upsert_links(&db.conn.lock(), &pending)?
+    };
     if total > 0 {
         info!(
             target: "4da::dep_linker",
@@ -76,9 +82,22 @@ pub fn link_recent_items(db: &Database) -> Result<usize> {
 ///
 /// Returns the total number of rows inserted or materially upgraded.
 pub fn backfill_if_empty(db: &Database) -> Result<usize> {
-    let conn = db.conn.lock();
+    backfill_with(db, || {})
+}
 
-    let dep_names = load_dependency_names(&conn)?;
+/// `backfill_if_empty`, calling `while_unlocked` once per batch at the point
+/// where the database writer is released.
+///
+/// The writer is taken per batch — once to read 500 rows, once to write that
+/// batch's hits — and NOT across the scan. Classification is every item
+/// against every dependency name, and it used to run under one `db.conn`
+/// guard held from the first row to the last. Any non-async
+/// `#[tauri::command]` that takes `db.conn` runs on the UI thread, so the
+/// window stopped answering messages for the whole scan on every launch
+/// (measured 2026-10-01, debug build, 134,928 items: not responding from
+/// T+9 s to T+101 s).
+fn backfill_with(db: &Database, mut while_unlocked: impl FnMut()) -> Result<usize> {
+    let dep_names = load_dependency_names(&db.conn.lock())?;
     if dep_names.is_empty() {
         return Ok(0);
     }
@@ -88,14 +107,18 @@ pub fn backfill_if_empty(db: &Database) -> Result<usize> {
     let batch_size = 500;
 
     loop {
-        let batch = load_items_after(&conn, batch_size, last_id)?;
+        let batch = load_items_after(&db.conn.lock(), batch_size, last_id)?;
         if batch.is_empty() {
             break;
         }
         if let Some(last) = batch.last() {
             last_id = last.id;
         }
-        total_linked += link_items_to_deps(&conn, &batch, &dep_names)?;
+        let pending = classify_links(&batch, &dep_names);
+        while_unlocked();
+        if !pending.is_empty() {
+            total_linked += upsert_links(&db.conn.lock(), &pending)?;
+        }
     }
 
     if total_linked > 0 {
@@ -411,15 +434,47 @@ fn load_items_after(
     Ok(items)
 }
 
-/// Core linking logic: for each item, check every dep for a match and
-/// upsert a `source_item_dependencies` row for each hit.
+// Core linking logic, in two halves so the expensive one runs unlocked: for
+// each item, check every dep for a match (`classify_links`), then upsert a
+// `source_item_dependencies` row for each hit (`upsert_links`).
+
+/// A link the classifier produced, not yet written.
+struct PendingLink<'a> {
+    item_id: i64,
+    dep_name: &'a str,
+    ecosystem: Option<String>,
+    match_type: &'static str,
+    confidence: f64,
+    evidence: String,
+    source_url: Option<&'a str>,
+}
+
+/// The matching half of linking: every item against every dependency name.
+/// Takes no connection, so callers run it with the database writer released.
+fn classify_links<'a>(items: &'a [UnlinkedItem], dep_names: &'a [String]) -> Vec<PendingLink<'a>> {
+    let mut pending = Vec::new();
+    for item in items {
+        for dep_name in dep_names {
+            if let Some((match_type, confidence)) = classify_item_dep_match(item, dep_name) {
+                pending.push(PendingLink {
+                    item_id: item.id,
+                    dep_name,
+                    ecosystem: infer_ecosystem(item, dep_name),
+                    match_type,
+                    confidence,
+                    evidence: build_evidence_text(match_type, item, dep_name),
+                    source_url: item.url.as_deref(),
+                });
+            }
+        }
+    }
+    pending
+}
+
+/// The writing half of linking: upsert each classified link.
 ///
 /// Returns the number of link rows inserted or materially upgraded.
-fn link_items_to_deps(
-    conn: &rusqlite::Connection,
-    items: &[UnlinkedItem],
-    dep_names: &[String],
-) -> Result<usize> {
+fn upsert_links(conn: &rusqlite::Connection, pending: &[PendingLink<'_>]) -> Result<usize> {
     let insert_sql = "INSERT INTO source_item_dependencies
                       (source_item_id, package_name, ecosystem, match_type, confidence, evidence_text, source_url)
                       VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
@@ -446,26 +501,25 @@ fn link_items_to_deps(
     let mut stmt = conn.prepare(insert_sql)?;
     let mut count = 0usize;
 
-    for item in items {
-        for dep_name in dep_names {
-            if let Some((match_type, confidence)) = classify_item_dep_match(item, dep_name) {
-                let ecosystem = infer_ecosystem(item, dep_name);
-                let evidence = build_evidence_text(match_type, item, dep_name);
-                let source_url = item.url.as_deref();
-                match stmt.execute(params![
-                    item.id, dep_name, ecosystem, match_type, confidence, evidence, source_url
-                ]) {
-                    Ok(changed) => count += changed,
-                    Err(e) => {
-                        debug!(
-                            target: "4da::dep_linker",
-                            item_id = item.id,
-                            dep = dep_name,
-                            error = %e,
-                            "Failed to upsert dep link"
-                        );
-                    }
-                }
+    for link in pending {
+        match stmt.execute(params![
+            link.item_id,
+            link.dep_name,
+            link.ecosystem,
+            link.match_type,
+            link.confidence,
+            link.evidence,
+            link.source_url
+        ]) {
+            Ok(changed) => count += changed,
+            Err(e) => {
+                debug!(
+                    target: "4da::dep_linker",
+                    item_id = link.item_id,
+                    dep = link.dep_name,
+                    error = %e,
+                    "Failed to upsert dep link"
+                );
             }
         }
     }

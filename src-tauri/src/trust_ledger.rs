@@ -675,7 +675,7 @@ pub async fn get_false_positive_analysis(
 /// Persist a feedback event to the SQLite outbox for durable retry.
 /// Called by the frontend when the immediate send fails.
 #[tauri::command]
-pub fn queue_feedback_event(
+pub async fn queue_feedback_event(
     event_type: String,
     signal_id: Option<String>,
     alert_id: Option<String>,
@@ -756,8 +756,11 @@ fn queue_feedback_event_on_conn(
 
 /// Load pending feedback events from the SQLite outbox.
 /// Called by the frontend on startup to resume retry.
+// `async` so Tauri runs these off the UI thread: the frontend calls
+// `get_pending_feedback` at module load, and a sync command that waits on
+// `db.conn` freezes the window for as long as a background job holds it.
 #[tauri::command]
-pub fn get_pending_feedback() -> std::result::Result<Vec<serde_json::Value>, String> {
+pub async fn get_pending_feedback() -> std::result::Result<Vec<serde_json::Value>, String> {
     let db = crate::get_database().map_err(|e| e.to_string())?;
     let conn = db.conn.lock();
     let mut stmt = conn
@@ -791,7 +794,7 @@ pub fn get_pending_feedback() -> std::result::Result<Vec<serde_json::Value>, Str
 
 /// Mark a feedback outbox event as sent (successfully delivered to backend).
 #[tauri::command]
-pub fn mark_feedback_sent(outbox_id: i64) -> std::result::Result<(), String> {
+pub async fn mark_feedback_sent(outbox_id: i64) -> std::result::Result<(), String> {
     let db = crate::get_database().map_err(|e| e.to_string())?;
     let conn = db.conn.lock();
     mark_feedback_sent_on_conn(&conn, outbox_id)
@@ -820,7 +823,7 @@ fn mark_feedback_sent_on_conn(
 
 /// Increment attempt count for a failed feedback outbox event.
 #[tauri::command]
-pub fn mark_feedback_attempt(outbox_id: i64) -> std::result::Result<(), String> {
+pub async fn mark_feedback_attempt(outbox_id: i64) -> std::result::Result<(), String> {
     let db = crate::get_database().map_err(|e| e.to_string())?;
     let conn = db.conn.lock();
     mark_feedback_attempt_on_conn(&conn, outbox_id)

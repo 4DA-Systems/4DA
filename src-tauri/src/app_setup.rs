@@ -1397,7 +1397,10 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
     if crate::startup_frontend::victauri_e2e_active() {
         info!(target: "4da::startup", "Victauri E2E active - skipping startup dep-linker repair");
     } else {
-        tauri::async_runtime::spawn(async {
+        // Blocking pool, not an async task: the backfill is a CPU-bound scan of
+        // the whole corpus with no await point, so as a plain `spawn` it pinned
+        // a runtime worker for its full duration.
+        tauri::async_runtime::spawn_blocking(|| {
             if let Ok(db) = crate::get_database() {
                 match crate::dep_linker::backfill_if_empty(&db) {
                     Ok(n) if n > 0 => {
