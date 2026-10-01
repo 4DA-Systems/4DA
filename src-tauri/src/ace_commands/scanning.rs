@@ -212,9 +212,11 @@ pub async fn ace_full_scan(paths: Vec<String>) -> Result<serde_json::Value> {
     }
 
     // Phase 1a-reconcile: prune dependency rows of projects DELETED or MOVED
-    // on disk. prune_removed_dependencies only fires for manifests that are
-    // re-scanned, so a deleted project's manifest never scans again and its
-    // deps persisted forever, grounding alerts for projects that don't exist.
+    // on disk, or whose directory no longer holds any manifest (a leftover
+    // `node_modules` shell). prune_removed_dependencies only fires for
+    // manifests that are re-scanned, so a deleted project's manifest never
+    // scans again and its deps persisted forever, grounding alerts for
+    // projects that don't exist.
     // Disk probes run fs::metadata against every stored project path — a
     // disconnected MAPPED network drive (Z:\) can block for the full SMB
     // timeout — so the whole reconcile runs on a blocking thread, never on
@@ -224,7 +226,7 @@ pub async fn ace_full_scan(paths: Vec<String>) -> Result<serde_json::Value> {
             let conn = crate::open_db_connection().map_err(|e| e.to_string())?;
             crate::db::prune_orphaned_project_dependencies(
                 &conn,
-                &crate::db::project_path_missing_on_disk,
+                &crate::db::project_gone_from_disk,
             )
             .map_err(|e| e.to_string())
         },
@@ -238,7 +240,9 @@ pub async fn ace_full_scan(paths: Vec<String>) -> Result<serde_json::Value> {
                 user_deps = c.user_dependencies,
                 project_deps = c.project_dependencies,
                 snapshots = c.dependency_snapshots,
-                "Pruned dependencies of deleted/moved projects"
+                instances = c.dependency_instances,
+                edges = c.dependency_edges,
+                "Pruned dependencies of deleted/moved/manifest-less projects"
             );
         }
         Ok(Ok(_)) => {}

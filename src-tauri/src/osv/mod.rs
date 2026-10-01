@@ -6,6 +6,7 @@
 
 pub(crate) mod cache;
 pub(crate) mod exposure;
+pub(crate) mod fix_target;
 pub(crate) mod identity;
 pub(crate) mod matching;
 pub(crate) mod sync;

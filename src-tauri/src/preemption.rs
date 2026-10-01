@@ -612,6 +612,53 @@ fn rank_osv_urgency(
     ))
 }
 
+/// The fix target of the copies an alert names, per release line
+/// (dependency-handoff 1.1), and the sentence the explanation carries.
+///
+/// The advisory-level `fixed_version` is machine-wide: navcal's
+/// brace-expansion 1.1.12 read "Update to >= 5.0.12" because another project
+/// held 5.0.9. One target when every named copy converges on it; otherwise
+/// none, and the sentence says where each line goes. With no version-confirmed
+/// copy at all (a conservative, name-only match) there is no line to scope
+/// to, so the fix that clears every listed range is kept.
+fn alert_fix_target(
+    group: &[&crate::osv::types::MatchedAdvisory],
+    projects: &[String],
+) -> (Option<String>, String) {
+    use crate::osv::fix_target::{describe_lines, distinct_targets, line_targets};
+    let lines = line_targets(group, projects);
+    let targets = distinct_targets(&lines);
+    let best_fix: Option<String> = match targets.as_slice() {
+        [only] => Some(only.clone()),
+        [] if lines.is_empty() => group
+            .iter()
+            .filter_map(|m| m.fixed_version.as_deref())
+            .max_by(|a, b| {
+                semver::Version::parse(a.trim_start_matches('v'))
+                    .ok()
+                    .zip(semver::Version::parse(b.trim_start_matches('v')).ok())
+                    .map(|(va, vb)| va.cmp(&vb))
+                    .unwrap_or(std::cmp::Ordering::Equal)
+            })
+            .map(str::to_string),
+        _ => None,
+    };
+    let major = if lines.iter().any(|l| l.is_major()) {
+        " This crosses a major version — check the changelog for breaking changes."
+    } else {
+        ""
+    };
+    let sentence = match (best_fix.as_deref(), targets.len()) {
+        (Some(f), _) => format!(" Update to >= {f}.{major}"),
+        (None, 0) => String::new(),
+        (None, _) => format!(
+            " Update each copy on its own line: {}.{major}",
+            describe_lines(&lines)
+        ),
+    };
+    (best_fix, sentence)
+}
+
 fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
     let db = match crate::get_database() {
         Ok(db) => db,
@@ -660,13 +707,14 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
             // a version that is not affected never carries another version's
             // severity. One group is the previous behavior and the previous id.
             let exposures = crate::osv::identity::split_by_exposure(&group);
-            let split = exposures.len() > 1;
+            let keys = crate::osv::identity::exposure_keys(&exposures);
             exposures
                 .into_iter()
-                .map(move |(all_projects, group)| (all_projects, group, split))
+                .zip(keys)
+                .map(|((all_projects, group), key)| (all_projects, group, key))
                 .collect::<Vec<_>>()
         })
-        .map(|(all_projects, group, split)| {
+        .map(|(all_projects, group, exposure_key)| {
             let first = group[0];
             // Phase 120: one cluster per VULNERABILITY. The mirror holds a
             // row per id, and OSV publishes the same bug as GHSA + RUSTSEC
@@ -721,18 +769,7 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
                 (base + cvss_bonus).min(0.99)
             };
 
-            // Best fix version (highest semver among fixed_versions)
-            let best_fix: Option<String> = group
-                .iter()
-                .filter_map(|m| m.fixed_version.as_ref())
-                .max_by(|a, b| {
-                    semver::Version::parse(a.trim_start_matches('v'))
-                        .ok()
-                        .zip(semver::Version::parse(b.trim_start_matches('v')).ok())
-                        .map(|(va, vb)| va.cmp(&vb))
-                        .unwrap_or(std::cmp::Ordering::Equal)
-                })
-                .cloned();
+            let (best_fix, fix_str) = alert_fix_target(&group, &all_projects);
 
             let project_display = if all_projects.is_empty() {
                 "your projects".to_string()
@@ -761,10 +798,6 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
                 None
             };
             let subject = alert_subject(&first.package_name, &installed_versions);
-            let fix_str = best_fix
-                .as_deref()
-                .map(|f| format!(" Update to >= {f}."))
-                .unwrap_or_default();
 
             let vuln_word = if advisory_count == 1 {
                 "vulnerability"
@@ -874,7 +907,7 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
             // An unsplit package keeps the id it has always had; only a package
             // that split needs a discriminator, so triage on one exposure can
             // never silence the other.
-            let id = match crate::osv::identity::exposure_key(split, &group) {
+            let id = match exposure_key {
                 Some(key) => format!(
                     "osv-pkg-{}-{}-{}",
                     first.package_name, first.ecosystem, key
@@ -3064,6 +3097,8 @@ mod tests {
                     is_direct: false,
                     is_dev: false,
                     is_version_confirmed: true,
+                    fixed_version: None,
+                    clean_version: None,
                 },
                 crate::osv::types::MatchedDependency {
                     project_path: "/direct".into(),
@@ -3071,6 +3106,8 @@ mod tests {
                     is_direct: true,
                     is_dev: false,
                     is_version_confirmed: true,
+                    fixed_version: None,
+                    clean_version: None,
                 },
             ],
         };
@@ -3096,6 +3133,64 @@ mod tests {
                 label: "transitive dependency (dev/runtime reachability unknown)",
             }
         );
+    }
+
+    /// Dependency-handoff 1.1, the alert path: the target is the named
+    /// copies' own line, not the advisory's machine-wide fix. Two lines in
+    /// one project get no single target — the sentence names both.
+    #[test]
+    fn alert_fix_target_is_the_named_copies_own_line() {
+        let copy = |project: &str, version: &str, fix: &str| crate::osv::types::MatchedDependency {
+            project_path: project.into(),
+            installed_version: Some(version.into()),
+            is_direct: false,
+            is_dev: true,
+            is_version_confirmed: true,
+            fixed_version: Some(fix.into()),
+            clean_version: Some(fix.into()),
+        };
+        let advisory = crate::osv::types::MatchedAdvisory {
+            advisory_id: "GHSA-q2hr-2g5m-vwhr".into(),
+            summary: "ReDoS".into(),
+            details: None,
+            package_name: "brace-expansion".into(),
+            ecosystem: "npm".into(),
+            installed_version: Some("5.0.9".into()),
+            // Machine-wide: what every project used to be told.
+            fixed_version: Some("5.0.12".into()),
+            severity_type: None,
+            cvss_score: Some(6.5),
+            source_url: None,
+            is_version_confirmed: true,
+            project_paths: vec!["/navcal".into(), "/webhook".into()],
+            published_at: None,
+            aliases: vec![],
+            severity_label: None,
+            dependency_instances: vec![
+                copy("/navcal", "1.1.12", "1.1.21"),
+                copy("/webhook", "1.1.18", "1.1.21"),
+                copy("/webhook", "5.0.9", "5.0.12"),
+            ],
+        };
+
+        let (fix, sentence) = alert_fix_target(&[&advisory], &["/navcal".to_string()]);
+        assert_eq!(fix.as_deref(), Some("1.1.21"));
+        assert_eq!(sentence, " Update to >= 1.1.21.");
+
+        let (fix, sentence) = alert_fix_target(&[&advisory], &["/webhook".to_string()]);
+        assert_eq!(fix, None, "two lines have no single target");
+        assert_eq!(
+            sentence,
+            " Update each copy on its own line: 1.1.18 -> 1.1.21, 5.0.9 -> 5.0.12."
+        );
+
+        // No confirmed copy: keep the fix that clears every listed range.
+        let mut unconfirmed = advisory.clone();
+        for d in &mut unconfirmed.dependency_instances {
+            d.is_version_confirmed = false;
+        }
+        let (fix, _) = alert_fix_target(&[&unconfirmed], &["/navcal".to_string()]);
+        assert_eq!(fix.as_deref(), Some("5.0.12"));
     }
 
     /// The sandbox shape (AD-046): transitive, and reached only through dev
@@ -3126,6 +3221,8 @@ mod tests {
                 is_direct: false,
                 is_dev: true,
                 is_version_confirmed: true,
+                fixed_version: None,
+                clean_version: None,
             }],
         };
         let projects = vec!["/paddle-webhook".to_string()];

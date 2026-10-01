@@ -22,7 +22,7 @@ mod tests;
 pub mod types;
 
 pub use hygiene::{
-    project_path_missing_on_disk, prune_orphaned_project_dependencies,
+    project_gone_from_disk, project_path_missing_on_disk, prune_orphaned_project_dependencies,
     purge_agent_infra_dependencies, purge_builtin_import_dependencies, purge_excluded_project_rows,
     purge_non_project_intelligence, AgentInfraPurge, BuiltinImportPurge, ExcludedPurge,
     NonProjectPurge, OrphanedProjectPurge,

@@ -593,6 +593,90 @@ fn orphan_prune_removes_deleted_project_rows_keeps_existing() {
     assert_eq!(again.total(), 0);
 }
 
+/// The matcher unions `dependency_instances` versions into every project it
+/// still knows, so pruning the collapsed tables alone left a deleted
+/// project's instances matching advisories (live: paddle-webhook, 361 rows).
+#[test]
+fn orphan_prune_also_clears_the_instance_inventory_and_its_graph() {
+    let db = test_db();
+    let conn = db.conn.lock();
+    create_side_tables(&conn);
+    conn.execute_batch(
+        "INSERT INTO user_dependencies (project_path, package_name, version, ecosystem, is_direct) VALUES
+            ('d:/4da/paddle-webhook', 'undici', '7.29.0', 'javascript', 0),
+            ('d:/dev/alive-app', 'undici', '7.30.0', 'javascript', 0);
+         INSERT INTO dependency_instances (project_path, ecosystem, package_name, version) VALUES
+            ('d:/4da/paddle-webhook', 'npm', 'undici', '7.29.0'),
+            ('d:/4da/paddle-webhook', 'npm', 'undici', '6.28.0'),
+            ('d:/dev/alive-app', 'npm', 'undici', '7.30.0');
+         INSERT INTO dependency_edges (project_path, ecosystem, parent_package, child_package) VALUES
+            ('d:/4da/paddle-webhook', 'npm', 'wrangler', 'undici'),
+            ('d:/dev/alive-app', 'npm', 'next', 'undici');",
+    )
+    .unwrap();
+
+    let gone = |p: &str| p.ends_with("paddle-webhook");
+    let counts = crate::db::prune_orphaned_project_dependencies(&conn, &gone).unwrap();
+    assert_eq!(counts.orphaned_paths, 1);
+    assert_eq!(counts.dependency_instances, 2);
+    assert_eq!(counts.dependency_edges, 1);
+    assert_eq!(counts.user_dependencies, 1);
+
+    for table in [
+        "dependency_instances",
+        "dependency_edges",
+        "user_dependencies",
+    ] {
+        let paths: Vec<String> = conn
+            .prepare(&format!("SELECT DISTINCT project_path FROM {table}"))
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .filter_map(|r| r.ok())
+            .collect();
+        assert_eq!(paths, vec!["d:/dev/alive-app".to_string()], "{table}");
+    }
+}
+
+/// A directory that still exists but holds no manifest — only a leftover
+/// `node_modules` — is a removed project. A directory with any manifest or
+/// lockfile, and anything the probe cannot read, is kept.
+#[test]
+fn manifest_less_shell_counts_as_gone() {
+    use crate::db::project_gone_from_disk;
+
+    let shell = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(shell.path().join("node_modules").join("undici")).unwrap();
+    std::fs::write(shell.path().join("README.md"), "gone").unwrap();
+    assert!(project_gone_from_disk(&shell.path().to_string_lossy()));
+
+    for marker in [
+        "package.json",
+        "Cargo.toml",
+        "pnpm-lock.yaml",
+        "requirements-dev.txt",
+        "App.csproj",
+    ] {
+        let live = tempfile::tempdir().unwrap();
+        std::fs::write(live.path().join(marker), "x").unwrap();
+        assert!(
+            !project_gone_from_disk(&live.path().to_string_lossy()),
+            "{marker} keeps the project"
+        );
+    }
+
+    // Not a directory, relative, UNC: never gone by the manifest rule.
+    let file = shell.path().join("README.md");
+    assert!(!project_gone_from_disk(&file.to_string_lossy()));
+    assert!(!project_gone_from_disk("relative/proj"));
+    assert!(!project_gone_from_disk(r"\\server\share\proj"));
+
+    // A deleted directory is still gone.
+    assert!(project_gone_from_disk(
+        &shell.path().join("deleted").to_string_lossy()
+    ));
+}
+
 #[test]
 fn orphan_prune_never_touches_existing_paths() {
     let db = test_db();

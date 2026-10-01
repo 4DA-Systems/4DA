@@ -118,9 +118,13 @@ export async function executeDependencyHealth(
   const vulnResult = liveIntel.getVulnerabilities();
   const allVulns = vulnResult?.vulnerabilities ?? [];
   const activeVulns = allVulns.filter(isActionableVulnerability);
+  // Keyed by (ecosystem, name): a bare name let an npm advisory mark a
+  // same-named crate as vulnerable, and counted the two as one package.
+  const vulnKey = (ecosystem: string, name: string) => `${ecosystem}\u0000${name}`;
   const vulnMap = new Map<string, number>();
   for (const v of activeVulns) {
-    vulnMap.set(v.package, (vulnMap.get(v.package) || 0) + 1);
+    const key = vulnKey(v.ecosystem, v.package);
+    vulnMap.set(key, (vulnMap.get(key) || 0) + 1);
   }
   const advisoryCount = allVulns.length;
 
@@ -152,7 +156,7 @@ export async function executeDependencyHealth(
     // risk: vulnerable > deprecated > major outdated > minor > patch > current
     const riskScore = (dep: RegistryPackageInfo) => {
       let score = 0;
-      if (vulnMap.has(dep.name)) score += 1000;
+      if (vulnMap.has(vulnKey(dep.ecosystem, dep.name))) score += 1000;
       if (dep.deprecated) score += 500;
       if (dep.versionsBehind) {
         score += dep.versionsBehind.major * 100 + dep.versionsBehind.minor * 10 + dep.versionsBehind.patch;

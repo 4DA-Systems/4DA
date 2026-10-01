@@ -219,17 +219,49 @@ pub fn split_by_exposure<'a>(
         .collect()
 }
 
-/// The id discriminator for a package that split into several groups: the
-/// alphabetically-first advisory id of THIS group. `None` keeps the id a
-/// package's row has always had, so triage state on every unsplit row survives.
-pub fn exposure_key(split: bool, advisories: &[&MatchedAdvisory]) -> Option<String> {
-    split.then(|| {
-        advisories
-            .iter()
-            .map(|a| a.advisory_id.to_lowercase())
-            .min()
-            .unwrap_or_default()
-    })
+/// The id discriminator of each group [`split_by_exposure`] returned, in the
+/// same order. One group -> `None`: the id a package's row has always had, so
+/// triage state on every unsplit row survives.
+///
+/// Several groups -> the alphabetically-first advisory id of each group, kept
+/// as-is wherever it is unique (so existing triage keys survive), and suffixed
+/// with a digest of the group's whole advisory set where two groups share it.
+/// Groups differ by advisory SET, not by first id: live 2026-10-01, navcal
+/// (brace-expansion 1.1.12, 7 advisories) and the vscode extension (1.1.15,
+/// 6 advisories) both led with GHSA-3jxr-9vmj-r5cp, so two plan rows and two
+/// alerts carried one id and triage on one silenced the other.
+pub fn exposure_keys(groups: &[(Vec<String>, Vec<&MatchedAdvisory>)]) -> Vec<Option<String>> {
+    if groups.len() <= 1 {
+        return vec![None; groups.len()];
+    }
+    let firsts: Vec<String> = groups
+        .iter()
+        .map(|(_, advisories)| {
+            advisories
+                .iter()
+                .map(|a| a.advisory_id.to_lowercase())
+                .min()
+                .unwrap_or_default()
+        })
+        .collect();
+    groups
+        .iter()
+        .zip(&firsts)
+        .map(|((_, advisories), first)| {
+            if firsts.iter().filter(|f| *f == first).count() == 1 {
+                return Some(first.clone());
+            }
+            use sha2::{Digest, Sha256};
+            let mut ids: Vec<String> = advisories
+                .iter()
+                .map(|a| a.advisory_id.to_lowercase())
+                .collect();
+            ids.sort();
+            ids.dedup();
+            let digest = hex::encode(Sha256::digest(ids.join("\n").as_bytes()));
+            Some(format!("{first}~{}", &digest[..8]))
+        })
+        .collect()
 }
 
 // ============================================================================
@@ -422,11 +454,56 @@ mod tests {
         assert_eq!(current_advs[0].advisory_id, "GHSA-med");
 
         // Split -> a discriminator; unsplit -> the id the row always had.
-        assert_eq!(
-            exposure_key(true, current_advs),
-            Some("ghsa-med".to_string())
+        let keys = exposure_keys(&groups);
+        let current_idx = groups
+            .iter()
+            .position(|(p, _)| p == &vec!["/current".to_string()])
+            .expect("current group");
+        assert_eq!(keys[current_idx], Some("ghsa-med".to_string()));
+        assert_eq!(exposure_keys(&groups[..1]), vec![None]);
+    }
+
+    /// Live 2026-10-01: two exposures of brace-expansion led with the same
+    /// advisory id, so their rows shared one id. Keys must be unique across a
+    /// package's groups — and a unique first id keeps its old key unchanged.
+    #[test]
+    fn exposure_keys_are_unique_when_groups_share_a_first_advisory() {
+        let mk = |id: &str, projects: &[&str]| {
+            let mut a = adv(
+                id,
+                "brace-expansion",
+                Some("1.1.21"),
+                id,
+                &[],
+                Some(6.5),
+                None,
+            );
+            a.project_paths = projects.iter().map(|p| p.to_string()).collect();
+            a
+        };
+        let shared = mk("GHSA-3jxr", &["/navcal", "/vscode"]);
+        let navcal_only = mk("GHSA-v6h2", &["/navcal"]);
+        let other = mk("GHSA-6j4f", &["/webhook"]);
+
+        let groups = split_by_exposure(&[&shared, &navcal_only, &other]);
+        assert_eq!(groups.len(), 3);
+        let keys = exposure_keys(&groups);
+        let mut unique = keys.clone();
+        unique.sort();
+        unique.dedup();
+        assert_eq!(unique.len(), 3, "every group gets its own key: {keys:?}");
+        assert!(
+            keys.contains(&Some("ghsa-6j4f".to_string())),
+            "unique first id unchanged"
         );
-        assert_eq!(exposure_key(false, current_advs), None);
+        assert!(
+            keys.iter()
+                .flatten()
+                .filter(|k| k.starts_with("ghsa-3jxr~"))
+                .count()
+                == 2,
+            "the colliding pair is disambiguated: {keys:?}"
+        );
     }
 
     /// The common case: every project carries the same advisories, so nothing
@@ -652,6 +729,8 @@ mod tests {
             is_direct: direct,
             is_dev: dev,
             is_version_confirmed: confirmed,
+            fixed_version: None,
+            clean_version: None,
         };
         let mut sandbox = adv("GHSA-s", "sandbox", None, "s", &[], Some(9.8), None);
         sandbox.dependency_instances = vec![

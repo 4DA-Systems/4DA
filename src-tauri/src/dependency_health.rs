@@ -137,8 +137,22 @@ fn load_security_alert_packages(conn: &Connection) -> HashSet<(String, String)> 
         Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
     })
     .ok()
-    .map(|rows| rows.filter_map(|r| r.ok()).collect())
+    .map(|rows| {
+        rows.filter_map(|r| r.ok())
+            .map(|(pkg, eco)| (pkg, ecosystem_key(&eco)))
+            .collect()
+    })
     .unwrap_or_default()
+}
+
+/// One spelling per ecosystem for joining the two tables. `user_dependencies`
+/// stores the ACE language name (`rust`, `javascript`) and `dependency_alerts`
+/// the registry name (`crates.io`, `npm`), so a raw lowercase key never joined:
+/// on the live DB (2026-10-01) no dependency could ever classify as
+/// `SecurityAlert`, and no security_patch window was ever opened from here.
+fn ecosystem_key(eco: &str) -> String {
+    crate::ecosystem::Ecosystem::parse(eco)
+        .map_or_else(|| eco.to_lowercase(), |e| e.osv_name().to_lowercase())
 }
 
 /// Classify a single dependency's health status.
@@ -148,7 +162,7 @@ fn classify_health(
     ecosystem: &str,
     alert_packages: &HashSet<(String, String)>,
 ) -> HealthStatus {
-    let key = (package_name.to_lowercase(), ecosystem.to_lowercase());
+    let key = (package_name.to_lowercase(), ecosystem_key(ecosystem));
 
     // Priority 1: Security alerts
     if alert_packages.contains(&key) {
