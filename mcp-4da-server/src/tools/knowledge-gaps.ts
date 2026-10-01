@@ -24,7 +24,15 @@ import {
   type RowVerdict,
 } from "./knowledge-gap-exposure.js";
 import { InstallResolver, type DeclaringRow, type Install } from "./knowledge-gap-installs.js";
-import { gradeGap, isAdvisoryRow, parsePublishedAt, type Exposure, type GapSeverity } from "./knowledge-gap-grading.js";
+import {
+  gradeGap,
+  isAdvisoryRow,
+  parsePublishedAt,
+  registryVersionFromTitle,
+  type Exposure,
+  type GapSeverity,
+} from "./knowledge-gap-grading.js";
+import { compareVersions } from "../live/version-compare.js";
 import { dependencyIsActive, loadActiveScope, loadLinkerIndex, scopeRows, type LinkerIndex } from "./knowledge-gap-scope.js";
 
 // The grading and range rules live in their own modules; re-exported for existing importers.
@@ -127,6 +135,17 @@ function advisoryVerdict(item: GapCandidate, name: string, installs: Install[], 
   return entries === null ? "unresolvable" : rowVerdict(entries, installs);
 }
 
+const REGISTRY_SOURCES = new Set(["crates_io", "npm_registry", "pypi", "go_modules"]);
+
+/** A registry row's version is above every readable installed version (unknown versions keep it). */
+function newerThanEveryInstall(item: GapCandidate, installs: Install[]): boolean {
+  const released = registryVersionFromTitle(item.title || "");
+  if (!released) return true;
+  const known = installs.filter((i) => i.version && i.ecosystem);
+  if (known.length === 0) return true;
+  return known.every((i) => compareVersions(released, i.version!, i.ecosystem!) > 0);
+}
+
 function brief(item: GapCandidate): SourceItemBriefRow {
   return {
     id: item.id,
@@ -155,6 +174,9 @@ function buildGap(name: string, rows: DeclaringRow[], ctx: GapContext): Knowledg
   const evidence: Evidence[] = [];
   const seenTitles = new Set<string>();
   for (const item of cited) {
+    // A registry release you already run (or are past) was not missed: live
+    // 2026-10-01, "npm: react v19.3.0" was a gap for an installed react 19.3.0.
+    if (REGISTRY_SOURCES.has(item.source_type ?? "") && !newerThanEveryInstall(item, installs)) continue;
     const verdict = isAdvisoryRow(item) ? advisoryVerdict(item, name, installs, ctx.advisories) : null;
     if (verdict === "clear") continue;
     const e: Evidence = { item, verdict };

@@ -36,7 +36,7 @@ export interface TaskPackage {
  * only with a qualifier beside it — "the next crate", "`next`", "upgrade
  * next to 15" — so "the next step" does not drag the `next` package in.
  */
-const COMMON_WORDS = new Set([
+export const COMMON_WORDS = new Set([
   "next", "open", "debug", "ms", "ai", "test", "core", "util", "utils", "path", "fs", "os", "url", "http",
   "log", "time", "rand", "bytes", "once", "glob", "which", "yes", "color", "colors", "async", "events",
   "image", "regex", "net", "io", "fetch", "form", "data", "config", "cache", "queue", "stream",

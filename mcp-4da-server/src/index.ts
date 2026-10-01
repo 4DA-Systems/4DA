@@ -45,7 +45,6 @@ import { runSetup } from "./setup.js";
 import { runDoctor } from "./doctor.js";
 import { scanProjectTree, treeResolutionGroups } from "./project-tree.js";
 import { LiveIntelligence } from "./live/index.js";
-import { deriveTechStackForHeadlines } from "./tools/ecosystem-pulse.js";
 import { setLiveIntelligence } from "./live-singleton.js";
 import { SERVER_INSTRUCTIONS } from "./server-instructions.js";
 import { validateToolArgs } from "./tool-args.js";
@@ -148,16 +147,12 @@ function getDatabase(): FourDADatabase {
         liveIntel.initFromProjectTree(cwd, groups);
 
         if (liveIntel.isEnabled()) {
-          console.error(`[4DA]   Live intelligence: enabled (OSV.dev + HN)`);
-          // Background prefetch — non-blocking, warms cache for first tool call.
+          console.error(`[4DA]   Live intelligence: enabled (OSV.dev)`);
           // The vulnerability scan goes through the warmup so a briefing that
           // arrives before it finishes can await it instead of reading nothing.
-          const techStack = [...scan.languages, ...scan.frameworks];
+          // Headlines are fetched only when ecosystem_pulse is called.
           liveIntel.startVulnerabilityWarmup(cwd);
           console.error(`[4DA]   Vulnerability scan warming in background (OSV.dev).`);
-          liveIntel.fetchHeadlines(techStack).catch((err) => {
-            console.error(`[4DA]   Headline prefetch failed: ${err instanceof Error ? err.message : String(err)}.`);
-          });
         }
       } else {
         console.error(
@@ -204,9 +199,8 @@ function getDatabase(): FourDADatabase {
           liveIntel.initFromDependencyGroups([...groups.values()]);
         }
 
-        // Warm the headline cache for ecosystem_pulse — previously only the
-        // standalone branch prefetched, so full-DB servers served an empty
-        // cache forever. Non-blocking; the tool also fetches on demand now.
+        // Headlines are fetched only when ecosystem_pulse is called: the
+        // search terms come from the user's projects.
         if (liveIntel.isEnabled()) {
           // Warm the vulnerability scan too. This branch never scanned: the
           // dependency set was initialised, headlines were prefetched, and
@@ -220,14 +214,6 @@ function getDatabase(): FourDADatabase {
             console.error(
               `[4DA]   Vulnerability scan warming in background (OSV.dev) for ${liveIntel.getAuditDeps().length} resolved dependencies.`,
             );
-          }
-          const techStack = deriveTechStackForHeadlines(db);
-          if (techStack.length > 0) {
-            liveIntel.fetchHeadlines(techStack).catch((err) => {
-              console.error(
-                `[4DA]   Headline prefetch failed: ${err instanceof Error ? err.message : String(err)}.`,
-              );
-            });
           }
         }
       } catch (err) {

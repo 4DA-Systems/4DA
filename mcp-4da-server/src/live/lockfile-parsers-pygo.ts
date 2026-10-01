@@ -220,12 +220,20 @@ export function parseGoMod(content: string): {
   return { requires: result, goVersionAtLeast117 };
 }
 
-/** Per module, the highest version whose module zip (not just its go.mod) is hashed in go.sum. */
+/**
+ * Per module, the highest version go.sum records — minimal version selection
+ * picks the highest required version, and go.sum records every version the
+ * module graph required. A module listed only by its `/go.mod` hash is still
+ * in Go's build list (`go list -m all`): measured 2026-10-02 on gh cli v1.0
+ * (go 1.13), skipping those lines missed 14 advisories (grpc 1.21.0,
+ * jwt-go, gorilla/websocket, ...) the build list carries.
+ */
 export function selectedFromGoSum(content: string): Map<string, string> {
   const selected = new Map<string, string>();
   for (const line of content.split(/\r?\n/)) {
-    const [module, version] = line.trim().split(/\s+/);
-    if (!module || !version || version.endsWith("/go.mod") || !GO_VERSION.test(version)) continue;
+    const [module, rawVersion] = line.trim().split(/\s+/);
+    const version = rawVersion?.replace(/\/go\.mod$/, "");
+    if (!module || !version || !GO_VERSION.test(version)) continue;
     const current = selected.get(module);
     if (!current || compareGoVersions(version, current) > 0) selected.set(module, version);
   }

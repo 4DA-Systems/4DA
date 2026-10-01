@@ -15,7 +15,7 @@ import type { LiveHeadline } from "./types.js";
 const HN_ALGOLIA_URL = "https://hn.algolia.com/api/v1/search";
 const HN_TIMEOUT_MS = 8_000;
 const HN_CACHE_TTL = 1800; // 30 minutes
-const MAX_QUERIES = 5;
+const MAX_QUERIES = 8;
 const RESULTS_PER_QUERY = 10;
 const MIN_POINTS = 10;
 
@@ -153,7 +153,7 @@ function scoreAndMap(hits: HNHit[], techStack: string[]): LiveHeadline[] {
         comments: hit.num_comments,
         published: hit.created_at,
         relevanceScore: Math.round(score * 100) / 100,
-        relevanceReason: `Matches your stack: ${matchedTech.join(", ")}`,
+        relevanceReason: `Names ${matchedTech.join(", ")} (used in your projects)`,
       };
     })
     .sort((a, b) => b.relevanceScore - a.relevanceScore)

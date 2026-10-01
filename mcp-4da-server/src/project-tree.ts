@@ -19,6 +19,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { IgnoreRules } from "./gitignore.js";
 import { scanCurrentProject, type ProjectScanResult } from "./project-scanner.js";
 
 const LOCK_MARKERS = [
@@ -48,11 +49,17 @@ export interface ProjectTreeEntry {
   scan: ProjectScanResult;
 }
 
-/** The root (always) and every locked project below it, each with its own scan. */
+/**
+ * The root (always) and every locked project below it, each with its own
+ * scan. Directories and lockfiles the repository's .gitignore excludes are not
+ * part of the project and are skipped (gitignore.ts).
+ */
 export function scanProjectTree(root: string): ProjectTreeEntry[] {
   const entries: ProjectTreeEntry[] = [{ dir: root, scan: scanCurrentProject(root) }];
-  const walk = (dir: string, depth: number) => {
+  const ignore = new IgnoreRules(root);
+  const walk = (dir: string, rel: string, depth: number) => {
     if (depth > MAX_DEPTH || entries.length >= MAX_PROJECTS) return;
+    ignore.load(rel);
     let children: fs.Dirent[];
     try {
       children = fs.readdirSync(dir, { withFileTypes: true });
@@ -62,14 +69,18 @@ export function scanProjectTree(root: string): ProjectTreeEntry[] {
     for (const child of children) {
       if (entries.length >= MAX_PROJECTS) return;
       if (!child.isDirectory() || SKIP_DIRS.has(child.name) || child.name.startsWith(".")) continue;
+      const childRel = rel ? `${rel}/${child.name}` : child.name;
+      if (ignore.ignores(childRel, true)) continue;
       const sub = path.join(dir, child.name);
-      if (LOCK_MARKERS.some((marker) => fs.existsSync(path.join(sub, marker)))) {
-        entries.push({ dir: sub, scan: scanCurrentProject(sub) });
-      }
-      walk(sub, depth + 1);
+      ignore.load(childRel);
+      const locked = LOCK_MARKERS.some(
+        (marker) => fs.existsSync(path.join(sub, marker)) && !ignore.ignores(`${childRel}/${marker}`, false),
+      );
+      if (locked) entries.push({ dir: sub, scan: scanCurrentProject(sub) });
+      walk(sub, childRel, depth + 1);
     }
   };
-  walk(root, 1);
+  walk(root, "", 1);
   return entries;
 }
 

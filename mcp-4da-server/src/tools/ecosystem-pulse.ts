@@ -9,6 +9,7 @@
 
 import type { FourDADatabase } from "../db.js";
 import type { LiveIntelligence } from "../live/index.js";
+import { COMMON_WORDS } from "./briefing-task-scope.js";
 
 export interface EcosystemPulseParams {
   min_points?: number;
@@ -50,29 +51,59 @@ export const ecosystemPulseTool = {
   },
 };
 
+/** Languages: matching a headline on one is matching the whole language's news. */
+const LANGUAGES = new Set(["rust", "javascript", "typescript", "python", "go", "golang", "java", "kotlin", "ruby", "php", "c", "c++", "c#", "swift", "dart", "npm"]);
+const MAX_TERMS = 8;
+
 /**
- * Derive the tech stack used to filter HN headlines from the database:
- * explicit tech_stack entries plus the languages of tracked dependencies.
+ * The terms HN headlines are searched and matched on: the frameworks the
+ * project uses and its most-used direct dependencies — names specific enough
+ * that a headline naming one is about something this project runs. Language
+ * names are the fallback only: matched on "rust", the pulse was "What Zig felt
+ * like, coming from Rust" and an Emacs fork (live 2026-10-01). Package names
+ * that are everyday words are left out (they match unrelated titles).
  * Works on both the desktop DB and the standalone minimal schema.
  */
 export function deriveTechStackForHeadlines(db: FourDADatabase): string[] {
-  const stack = new Set<string>();
+  const terms: string[] = [];
+  const add = (term: string | null | undefined) => {
+    const t = (term ?? "").toLowerCase().trim();
+    if (t.length >= 3 && !LANGUAGES.has(t) && !COMMON_WORDS.has(t) && !terms.includes(t) && !t.includes("/")) terms.push(t);
+  };
   const rawDb = db.getRawDb();
   try {
-    for (const row of rawDb.prepare("SELECT technology FROM tech_stack").all() as Array<{ technology: string }>) {
-      if (row.technology) stack.add(row.technology.toLowerCase());
+    for (const row of rawDb
+      .prepare("SELECT name FROM detected_tech WHERE category IN ('framework', 'library') ORDER BY confidence DESC LIMIT 20")
+      .all() as Array<{ name: string }>) {
+      add(row.name);
     }
   } catch {
-    // tech_stack may not exist on exotic DBs — languages below still apply.
+    // detected_tech may not exist on exotic DBs.
   }
   try {
-    for (const row of rawDb.prepare("SELECT DISTINCT language FROM project_dependencies").all() as Array<{ language: string }>) {
-      if (row.language) stack.add(row.language.toLowerCase());
+    const direct = db.hasColumn("project_dependencies", "is_direct") ? "WHERE is_direct = 1" : "";
+    for (const row of rawDb
+      .prepare(
+        `SELECT package_name FROM project_dependencies ${direct}
+         GROUP BY LOWER(package_name) ORDER BY COUNT(DISTINCT project_path) DESC, package_name LIMIT 40`,
+      )
+      .all() as Array<{ package_name: string }>) {
+      if (terms.length >= MAX_TERMS) break;
+      add(row.package_name);
     }
   } catch {
-    // project_dependencies may not exist — an empty stack yields an honest empty result.
+    // project_dependencies may not exist.
   }
-  return [...stack];
+  if (terms.length > 0) return terms.slice(0, MAX_TERMS);
+  // Nothing more specific: languages, as before.
+  try {
+    for (const row of rawDb.prepare("SELECT DISTINCT language FROM project_dependencies").all() as Array<{ language: string }>) {
+      if (row.language) terms.push(row.language.toLowerCase());
+    }
+  } catch {
+    // An empty stack yields an honest empty result.
+  }
+  return terms;
 }
 
 export async function executeEcosystemPulse(
@@ -89,9 +120,9 @@ export async function executeEcosystemPulse(
     };
   }
 
-  // The startup prefetch only ever ran in standalone mode, so full-DB servers
-  // returned an empty cache forever. Fetch on demand when the cache is empty —
-  // the cache still serves warm repeat calls.
+  // Fetched when asked for, never at startup: the search terms are names from
+  // the user's projects, and HN should see them only when the user asks for
+  // the pulse. The cache serves warm repeat calls.
   let headlines = liveIntel.getHeadlines();
   if (headlines.length === 0 && liveIntel.isEnabled()) {
     const techStack = deriveTechStackForHeadlines(db);

@@ -47,7 +47,11 @@ Use this to understand what the user is working on and interested in.`,
 export function executeGetContext(
   db: FourDADatabase,
   params: GetContextParams
-): UserContext & { resolved_dependencies?: Array<{ name: string; version: string | null; ecosystem: string; isDev: boolean }> } {
+): UserContext & {
+  resolved_dependencies?: Array<{ name: string; version: string | null; ecosystem: string; isDev: boolean }>;
+  resolved_dependencies_total?: number;
+  resolved_dependencies_note?: string;
+} {
   const includeAce = params.include_ace ?? true;
   const includeLearned = params.include_learned ?? true;
 
@@ -57,17 +61,26 @@ export function executeGetContext(
   if (liveIntel) {
     const deps = liveIntel.getResolvedDeps();
     if (deps.length > 0) {
+      // Bounded: the full direct-dependency list ran this answer to ~30 KB
+      // on a 150-dependency project. vulnerability_scan / dependency_health
+      // are the tools for the whole list.
       return {
         ...context,
-        resolved_dependencies: deps.map((d) => ({
+        resolved_dependencies: deps.slice(0, MAX_LISTED_DEPENDENCIES).map((d) => ({
           name: d.name,
           version: d.version,
           ecosystem: d.ecosystem,
           isDev: d.isDev,
         })),
+        resolved_dependencies_total: deps.length,
+        ...(deps.length > MAX_LISTED_DEPENDENCIES
+          ? { resolved_dependencies_note: `showing ${MAX_LISTED_DEPENDENCIES} of ${deps.length}; dependency_health lists them all` }
+          : {}),
       };
     }
   }
 
   return context;
 }
+
+const MAX_LISTED_DEPENDENCIES = 40;

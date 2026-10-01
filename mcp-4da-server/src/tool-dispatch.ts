@@ -124,7 +124,10 @@ export async function dispatchTool(
       throw error;
     }
   }
-  const payload = cleanStrings(FRESHNESS_TOOLS.has(name) ? attachFreshness(db, result) : result);
+  // Feed freshness describes the desktop app's feed; a standalone install has
+  // none, and telling it to "run fourda-engine" is noise.
+  const withFreshness = FRESHNESS_TOOLS.has(name) && !db.isStandalone;
+  const payload = cleanStrings(withFreshness ? attachFreshness(db, result) : result);
   // An executor that returns `{ error: "<message>" }` failed: say so in the
   // protocol, not only in the body, so the host and model treat it as an error.
   const failed =

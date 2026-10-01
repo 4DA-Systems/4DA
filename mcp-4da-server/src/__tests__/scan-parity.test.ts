@@ -332,17 +332,19 @@ describe("Go", () => {
     expect(read.instances.find((i) => i.name === "example.com/extra")?.version).toBe("v1.1.0");
   });
 
-  it("go.sum: highest version whose module zip is hashed; /go.mod-only lines do not count", () => {
+  it("go.sum: the highest version recorded, /go.mod-only lines included (Go's build list)", () => {
     const selected = selectedFromGoSum(
       [
         "github.com/a/b v1.0.0 h1:x=",
         "github.com/a/b v1.0.0/go.mod h1:x=",
         "github.com/a/b v1.2.0/go.mod h1:y=",
+        "google.golang.org/grpc v1.21.0/go.mod h1:q=",
         "golang.org/x/sys v0.0.0-20200101000000-aaaaaaaaaaaa h1:z=",
         "golang.org/x/sys v0.0.0-20210101000000-bbbbbbbbbbbb h1:w=",
       ].join("\n"),
     );
-    expect(selected.get("github.com/a/b")).toBe("v1.0.0");
+    expect(selected.get("github.com/a/b")).toBe("v1.2.0");
+    expect(selected.get("google.golang.org/grpc")).toBe("v1.21.0");
     expect(selected.get("golang.org/x/sys")).toBe("v0.0.0-20210101000000-bbbbbbbbbbbb");
     expect(compareGoVersions("v0.0.0-20210101000000-bbbbbbbbbbbb", "v0.1.0")).toBe(-1);
   });
@@ -406,6 +408,20 @@ describe("project discovery", () => {
     const deps = cargoWorkspaceDeps(dir, '[workspace]\nmembers = ["crates/*"]\n\n[workspace.dependencies]\ntokio = "1"\n');
     expect(deps.deps.sort()).toEqual(["serde", "tokio"]);
     expect(deps.devDeps).toEqual(["tempfile"]);
+  });
+
+  it("skips directories and lockfiles the repository ignores, nested .gitignore and info/exclude included", () => {
+    write(".gitignore", "# scratch\ncli/\n/victauri-gauntlet\n*.tmp\n!keep.tmp\n");
+    write(".git/info/exclude", "scratch-clone/\n");
+    write("cli/pnpm-lock.yaml", "lockfileVersion: '9.0'\n");
+    write("victauri-gauntlet/Cargo.lock", "");
+    write("scratch-clone/package-lock.json", "{}");
+    write("proto/.gitignore", "Cargo.lock\n");
+    write("proto/Cargo.lock", "");
+    write("proto/Cargo.toml", '[package]\nname = "proto"\n');
+    write("relay/Cargo.lock", '[[package]]\nname = "rsa"\nversion = "0.9.10"\nsource = "registry+x"\n');
+    const rel = scanProjectTree(dir).map((t) => path.relative(dir, t.dir).replace(/\\/g, "/") || ".").sort();
+    expect(rel).toEqual([".", "relay"]);
   });
 
   it("finds independently-locked projects below the root and skips installed code and fixtures", () => {

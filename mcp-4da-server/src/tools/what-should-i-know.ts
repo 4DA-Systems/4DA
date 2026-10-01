@@ -25,6 +25,7 @@ import type { LiveIntelligence } from "../live/index.js";
 import type { ResolvedDependency, VulnerabilityScanResult } from "../live/types.js";
 import { isActionableVulnerability } from "../live/maintenance.js";
 import { presentedSeverity } from "../live/severity-scope.js";
+import { maxVersion } from "../live/version-compare.js";
 import { installDriftAdvisories } from "./install-drift-notes.js";
 import { getLiveIntelligence } from "../live-singleton.js";
 import { createRelevanceScorer } from "./recall.js";
@@ -249,19 +250,31 @@ export async function executeWhatShouldIKnow(
   const taskDependencies = packages.map((pkg) => describePackage(db, pkg, vulns));
 
   // ── 2. Advisories: confirmed for the task, stored feed rows, project-wide
+  // One row per task package (the per-advisory detail is in task_dependencies;
+  // listing every advisory twice doubled the briefing).
   const advisories: Advisory[] = [];
   for (const dep of taskDependencies) {
-    for (const v of dep.vulnerabilities) {
-      advisories.push({
-        title: `${dep.package}@${v.installed}: ${v.id} ${v.summary}`,
-        signal_type: "security_alert",
-        priority: v.severity,
-        action: v.fixed_version ? `Upgrade ${dep.package} to ${v.fixed_version}` : `Review ${dep.package}: no fixed release published`,
-        url: null,
-        scope: "task",
-        version_confirmed: true,
-      });
-    }
+    if (dep.vulnerabilities.length === 0) continue;
+    const rank: Record<string, number> = { critical: 4, high: 3, medium: 2, low: 1, unknown: 0 };
+    const top = dep.vulnerabilities.reduce((a, b) => (rank[b.severity] > rank[a.severity] ? b : a));
+    const fixes = dep.vulnerabilities.map((v) => v.fixed_version).filter((f): f is string => Boolean(f));
+    const unfixed = dep.vulnerabilities.length - fixes.length;
+    const smallest = fixes.length > 0 ? maxVersion(fixes, dep.ecosystem) : null;
+    const n = dep.vulnerabilities.length;
+    advisories.push({
+      title: `${dep.package} ${dep.installed.join("/")}: ${n} confirmed vulnerabilit${n !== 1 ? "ies" : "y"}, highest ${top.severity}`,
+      signal_type: "security_alert",
+      priority: top.severity,
+      action:
+        smallest && unfixed === 0
+          ? `Upgrade ${dep.package} to ${smallest} (the smallest version that fixes all ${n})`
+          : smallest
+            ? `Upgrade ${dep.package} to ${smallest} fixes ${fixes.length}; Review ${dep.package}: ${unfixed} have no fixed release`
+            : `Review ${dep.package}: no fixed release published`,
+      url: null,
+      scope: "task",
+      version_confirmed: true,
+    });
   }
   // Advisory-database rows (cve/osv sources) that name a task package. With a
   // ready scan they are kept only for packages the scan confirms vulnerable;
@@ -444,28 +457,28 @@ function assessDelegation(input: {
   relevantWisdom: WisdomEntry[];
 }): { level: DelegationLevel; reason: string } {
   const { scanStatus, advisories, taskDependencies, decisionWindows, decisionConflicts, relevantWisdom } = input;
-  const severe = (a: Advisory) => a.priority === "critical" || a.priority === "high";
-  const confirmedTask = advisories.filter((a) => a.scope === "task" && a.version_confirmed);
+  const severe = (priority: string) => priority === "critical" || priority === "high";
+  const confirmed = taskDependencies.flatMap((d) => d.vulnerabilities);
   const unconfirmedTask = advisories.filter((a) => a.scope === "task" && !a.version_confirmed);
   const runningDrift = advisories.filter((a) => a.scope === "project" && a.title.includes("the installed"));
 
   if (decisionConflicts.length > 0) {
     return { level: "human_only", reason: `The task touches ${decisionConflicts.map((c) => c.technology).join(", ")}, which a recorded decision rejected. A human decides whether to revisit it.` };
   }
-  if (confirmedTask.some((a) => severe(a) && a.action.startsWith("Review "))) {
+  if (confirmed.some((v) => severe(v.severity) && !v.fixed_version)) {
     return { level: "human_only", reason: "A dependency this task touches has a high or critical vulnerability with no fixed release: replacing it or accepting the risk is a human call." };
   }
   if (decisionWindows.some((w) => w.urgency >= 4)) {
     return { level: "human_only", reason: "A high-urgency decision window relevant to this task is open." };
   }
   if (scanStatus !== "ready") {
-    if (unconfirmedTask.some(severe)) {
+    if (unconfirmedTask.some((a) => severe(a.priority))) {
       return { level: "human_only", reason: "An advisory names a package this task touches and the vulnerability scan is not available to confirm or rule it out." };
     }
     return { level: "unknown", reason: `${SCAN_UNAVAILABLE_REASON}${scanStatus === "disabled" ? " (live intelligence is disabled)" : ""}.` };
   }
   const reasons: string[] = [];
-  if (confirmedTask.length > 0) reasons.push(`${confirmedTask.length} confirmed vulnerabilit${confirmedTask.length !== 1 ? "ies" : "y"} in the packages this task touches`);
+  if (confirmed.length > 0) reasons.push(`${confirmed.length} confirmed vulnerabilit${confirmed.length !== 1 ? "ies" : "y"} in the packages this task touches`);
   const crossing = taskDependencies.filter((d) => (d.majors_crossed ?? 0) > 0);
   if (crossing.length > 0) reasons.push(`the upgrade crosses ${crossing.map((d) => `${d.majors_crossed} major version${d.majors_crossed !== 1 ? "s" : ""} of ${d.package}`).join(", ")} (check upgrade_impact for breaking changes)`);
   if (runningDrift.length > 0) reasons.push("node_modules runs a vulnerable copy the lockfile does not pin");
@@ -490,7 +503,7 @@ function summarize(
       ? `Task touches ${deps.map((d) => `${d.package}${d.installed.length ? ` ${d.installed.join("/")}` : ""}`).join(", ")}`
       : "No dependency of this project is named in the task",
   );
-  const task = advisories.filter((a) => a.scope === "task" && a.version_confirmed).length;
+  const task = deps.reduce((n, d) => n + d.vulnerabilities.length, 0);
   if (task > 0) parts.push(`${task} confirmed vulnerabilit${task !== 1 ? "ies" : "y"} in them`);
   const project = advisories.filter((a) => a.scope === "project").length;
   if (project > 0) parts.push(`${project} project-wide finding${project !== 1 ? "s" : ""} (not about this task)`);
