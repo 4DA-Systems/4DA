@@ -670,49 +670,25 @@ pub async fn run_cve_scan<R: Runtime>(app: &AppHandle<R>) {
         }
     }
 
-    // 5. Run local audit tools (npm audit, cargo audit) if available
-    let outcome = crate::local_audit::run_local_audits().await;
-
-    // The fresh scan is the authoritative set for every ecosystem it covered.
-    // Reconcile BEFORE storing so a returning finding reopens its original row
-    // rather than being retired and re-added in the same pass.
-    let current: std::collections::HashSet<(String, String, String)> =
-        outcome.findings.iter().map(|f| f.alert_key()).collect();
-
-    match db.reconcile_audit_alerts(&outcome.audited_ecosystems, &current) {
+    // 5. Retire anything the removed local audit step left open.
+    //
+    // This job used to run `npm audit` / `cargo audit` inside every scanned
+    // project. It no longer runs any tool in a user's project: the OSV mirror
+    // (declared in NETWORK.md, version-confirmed, the source Preemption reads)
+    // already covers both ecosystems, while those tools contacted parties
+    // NETWORK.md does not list and took configuration from the project they
+    // ran in. Nothing writes `audit` alerts any more, so an empty current set
+    // retires the old rows; once retired this is a no-op.
+    let audited: std::collections::HashSet<String> = ["npm", "crates.io"]
+        .iter()
+        .map(|s| (*s).to_string())
+        .collect();
+    match db.reconcile_audit_alerts(&audited, &std::collections::HashSet::new()) {
         Ok(0) => {}
         Ok(n) => {
-            info!(target: "4da::jobs", retired = n, "Audit alerts retired — no longer reported")
+            info!(target: "4da::jobs", retired = n, "Local audit alerts retired — the local audit step was removed")
         }
-        Err(e) => warn!(target: "4da::jobs", error = %e, "Audit alert reconcile failed"),
-    }
-
-    for finding in outcome.findings {
-        // Surface the published fix alongside the advisory text. The audit tool
-        // reports it and the user's next action depends on it ("upgrade to
-        // what?"), but `dependency_alerts` has no column for it — so it rides
-        // in the description rather than being parsed and discarded.
-        let description = match (&finding.fix_version, &finding.description) {
-            (Some(fix), Some(d)) => Some(format!("{d}\n\nFixed in {fix}")),
-            (Some(fix), None) => Some(format!("Fixed in {fix}")),
-            (None, d) => d.clone(),
-        };
-        let alert = crate::db::DependencyAlert {
-            id: 0,
-            package_name: finding.package_name,
-            ecosystem: finding.ecosystem,
-            alert_type: "audit".to_string(),
-            severity: finding.severity,
-            title: finding.title,
-            description,
-            affected_versions: finding.affected_versions,
-            source_url: finding.source_url,
-            source_item_id: None,
-            detected_at: chrono::Utc::now().to_rfc3339(),
-            resolved_at: None,
-            project_path: finding.project_path,
-        };
-        let _ = db.store_dependency_alert(&alert);
+        Err(e) => warn!(target: "4da::jobs", error = %e, "Audit alert retirement failed"),
     }
 }
 

@@ -42,6 +42,7 @@
  */
 import { execFileSync } from "node:child_process";
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import { fileSignature } from "./file-signature.js";
 
@@ -104,32 +105,17 @@ function computeActiveCrates(dir: string): Set<string> | null {
 
   let raw: string;
   try {
-    raw = execFileSync(
-      "cargo",
-      [
-        "tree",
-        // Never touch the network or mutate the lockfile from a read-only
-        // scan. `--locked` also means a lockfile out of step with the manifest
-        // fails loudly here rather than being silently re-resolved.
-        "--offline",
-        "--locked",
-        // One package per line, no tree glyphs: `name vX.Y.Z [(...)]`.
-        "--prefix",
-        "none",
-        // dev-dependencies are compiled by `cargo test`, so an advisory
-        // against one is reachable. proc-macro deps ride along with normal.
-        "--edges",
-        "normal,build,dev",
-      ],
-      {
-        cwd: dir,
-        encoding: "utf8",
-        maxBuffer: 64 * 1024 * 1024,
-        stdio: ["ignore", "pipe", "ignore"],
-        timeout: 30_000,
-        windowsHide: true,
-      },
-    );
+    const { args, cwd, targetDir } = cargoTreeInvocation(dir);
+    fs.mkdirSync(cwd, { recursive: true });
+    raw = execFileSync("cargo", args, {
+      cwd,
+      env: { ...process.env, CARGO_TARGET_DIR: targetDir },
+      encoding: "utf8",
+      maxBuffer: 64 * 1024 * 1024,
+      stdio: ["ignore", "pipe", "ignore"],
+      timeout: 30_000,
+      windowsHide: true,
+    });
   } catch {
     // cargo absent, not a workspace, offline resolution impossible, a stale
     // lockfile, a held package-cache lock, or a timeout.
@@ -140,6 +126,48 @@ function computeActiveCrates(dir: string): Set<string> | null {
   // An empty result is not a credible answer for a real workspace; treat it
   // as unknown so nothing gets marked inactive on a parse quirk.
   return names.size > 0 ? names : null;
+}
+
+/**
+ * How `cargo tree` is invoked for the workspace at `dir`.
+ *
+ * cargo runs from a server-owned scratch directory and reaches the project
+ * only through `--manifest-path`. cargo and rustup take their configuration
+ * (`.cargo/config.toml`, `rust-toolchain.toml`) from the working directory and
+ * its parents, so running inside the scanned project would let files in that
+ * project configure the toolchain this server invokes. A scanned project is
+ * untrusted input. `CARGO_TARGET_DIR` points at the same scratch directory so
+ * cargo's metadata writes never land in the user's tree either.
+ *
+ * Exported for tests.
+ */
+export function cargoTreeInvocation(dir: string): {
+  args: string[];
+  cwd: string;
+  targetDir: string;
+} {
+  const scratch = path.join(os.tmpdir(), "4da-mcp-cargo-resolve");
+  return {
+    args: [
+      "tree",
+      "--manifest-path",
+      path.join(path.resolve(dir), "Cargo.toml"),
+      // Never touch the network or mutate the lockfile from a read-only
+      // scan. `--locked` also means a lockfile out of step with the manifest
+      // fails loudly here rather than being silently re-resolved.
+      "--offline",
+      "--locked",
+      // One package per line, no tree glyphs: `name vX.Y.Z [(...)]`.
+      "--prefix",
+      "none",
+      // dev-dependencies are compiled by `cargo test`, so an advisory
+      // against one is reachable. proc-macro deps ride along with normal.
+      "--edges",
+      "normal,build,dev",
+    ],
+    cwd: scratch,
+    targetDir: scratch,
+  };
 }
 
 /**

@@ -126,8 +126,8 @@ impl Database {
     /// - CVE scan (`monitoring_jobs::run_cve_scan`) cross-references advisories
     ///   against `get_relevant_user_dependencies()` (direct, non-dev, real deps)
     ///   with semver range matching before storing.
-    /// - Local audit (`local_audit::run_local_audits`) stores findings reported
-    ///   by `npm audit` / `cargo audit` against the user's actual lockfiles.
+    /// - `audit` rows came from a local `npm audit` / `cargo audit` step that
+    ///   has been removed; the CVE job now only retires them.
     /// Do NOT add an `is_ambiguous_package_name` filter here: a real dependency
     /// legitimately named like a common word (e.g. the `log` crate) has a REAL
     /// alert that must surface. Do NOT add a JOIN against the current dependency

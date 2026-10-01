@@ -18,25 +18,86 @@ use crate::utils::sanitize_path;
 /// Max time to wait for a git subprocess (30 seconds).
 const GIT_TIMEOUT_SECS: u64 = 30;
 
+/// Global options every git command run inside a scanned repository carries.
+///
+/// A scanned repository is untrusted input, and git reads configuration from
+/// the repository it runs in. Command-line `-c` values take precedence over
+/// repository config, so these switch off the repository-configurable program
+/// hooks reachable from the read-only commands 4DA runs (`log`, `status`,
+/// `grep`, `branch`, `check-ignore`): the filesystem monitor and signature
+/// display. `--no-pager` keeps git from ever invoking a pager. Content
+/// filters, the remaining case, are handled where `status` runs (see
+/// `repo_defines_content_filters`).
+pub(crate) const SCANNED_REPO_GIT_ARGS: &[&str] = &[
+    "-c",
+    "core.fsmonitor=false",
+    "-c",
+    "log.showSignature=false",
+    "--no-pager",
+];
+
+/// A `git` command for reading a scanned repository: hardened global options,
+/// no credential prompts, no console window. Every git spawn against a user's
+/// project must start here.
+pub(crate) fn scanned_repo_git(repo_path: &Path) -> Command {
+    let mut cmd = Command::new("git");
+    cmd.args(SCANNED_REPO_GIT_ARGS)
+        .current_dir(repo_path)
+        .env("GIT_TERMINAL_PROMPT", "0");
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    }
+    cmd
+}
+
+/// True when the repository's own config (local or worktree scope, including
+/// files it includes) defines a content filter. `git status` may run a
+/// filter's command while comparing the working tree, so callers skip
+/// `status` for such repositories. Fails closed: if git cannot answer, the
+/// repository is treated as defining one.
+pub(crate) fn repo_defines_content_filters(repo_path: &Path) -> bool {
+    let output = scanned_repo_git(repo_path)
+        .args([
+            "config",
+            "--show-scope",
+            "--get-regexp",
+            r"^filter\..*\.(clean|smudge|process)$",
+        ])
+        .stdin(std::process::Stdio::null())
+        .output();
+    match output {
+        // Exit 1 = no matching key in any scope.
+        Ok(out) if out.status.code() == Some(1) => false,
+        Ok(out) if out.status.success() => {
+            filter_lines_include_repo_scope(&String::from_utf8_lossy(&out.stdout))
+        }
+        _ => true,
+    }
+}
+
+/// `git config --show-scope` prefixes each line with its scope. System and
+/// global filters (for example Git LFS) are the user's own configuration;
+/// only filters defined by the repository itself are untrusted.
+fn filter_lines_include_repo_scope(stdout: &str) -> bool {
+    stdout.lines().any(|line| {
+        let scope = line.split_whitespace().next().unwrap_or("");
+        scope == "local" || scope == "worktree"
+    })
+}
+
 /// Run a git command with a timeout to prevent indefinite hangs. Shared with
 /// `ace::dormancy`, so every git spawn in ACE goes through one windowless,
-/// time-bounded path.
+/// time-bounded, hardened path (see [`scanned_repo_git`]).
 pub(super) fn run_git_with_timeout(
     args: &[&str],
     repo_path: &Path,
 ) -> Result<std::process::Output> {
     use std::process::Stdio;
 
-    let mut cmd = Command::new("git");
-    cmd.args(args)
-        .current_dir(repo_path)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped());
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
-    }
+    let mut cmd = scanned_repo_git(repo_path);
+    cmd.args(args).stdout(Stdio::piped()).stderr(Stdio::piped());
     let mut child = cmd.spawn().context("Failed to spawn git process")?;
 
     // Poll for completion with timeout
@@ -294,6 +355,9 @@ impl GitAnalyzer {
             &since_date,
             "--pretty=format:%H%x1f%h%x1f%s%x1f%an%x1f%ai",
             "--shortstat",
+            // Line counts from raw blobs: no repository-defined diff drivers.
+            "--no-ext-diff",
+            "--no-textconv",
         ];
 
         if !self.config.include_merges {
@@ -523,6 +587,10 @@ fn parse_stat_line(line: &str, commit: &mut CommitInfo) {
 // ============================================================================
 // Tests
 // ============================================================================
+
+#[cfg(test)]
+#[path = "git_hardening_tests.rs"]
+mod hardening_tests;
 
 #[cfg(test)]
 mod tests {
