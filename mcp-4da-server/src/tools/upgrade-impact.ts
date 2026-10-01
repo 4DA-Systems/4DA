@@ -169,6 +169,18 @@ export async function analyzeUpgradeImpact(
   }
   const to = target.version;
   if ((compareVersionPrecedence(from, to) ?? 0) >= 0) {
+    // Already on the newest stable release is an answer, not a failed call.
+    if (!params.to_version) {
+      return {
+        package: index.name,
+        ecosystem: eco,
+        from_version: from,
+        to_version: from,
+        up_to_date: true,
+        newest_stable: to,
+        summary: `${index.name} ${from} is already at or past the newest stable release (${to}); nothing to upgrade.`,
+      };
+    }
     return { error: `from_version ${from} is not older than to_version ${to}: nothing to upgrade. Pass a newer to_version.` };
   }
 
@@ -179,14 +191,15 @@ export async function analyzeUpgradeImpact(
     return lower > 0 && upper <= 0 && (allowPre || parseSemverPrecedence(v.version)?.prerelease.length === 0);
   });
 
-  const [changelog, advFrom, advTo] = await Promise.all([
+  // The local code scan runs alongside the network reads, not after them.
+  const [changelog, advFrom, advTo, yourCode] = await Promise.all([
     getChangelog(ctx.net, index, target),
     getOsvAdvisories(ctx.net, eco, index.name, from),
     getOsvAdvisories(ctx.net, eco, index.name, to),
+    ctx.projectRoot
+      ? scanCallSites(ctx.projectRoot, index.name, eco)
+      : Promise.resolve<CallSiteReport>({ total_files: 0, files: [], symbols_used: [] }),
   ]);
-  const yourCode: CallSiteReport = ctx.projectRoot
-    ? scanCallSites(ctx.projectRoot, index.name, eco)
-    : { total_files: 0, files: [], symbols_used: [] };
 
   const range = changelog.found && changelog.sections
     ? selectRange(changelog.sections, from, to, between[0]?.version ?? to)

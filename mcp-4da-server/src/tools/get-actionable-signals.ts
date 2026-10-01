@@ -292,10 +292,13 @@ export function executeGetActionableSignals(
         // a transitive of unknown scope read "CRITICAL: Sandbox Breakout" here
         // while the app graded it High (sandbox@3.1.2, 2026-09-10).
         const presented = presentedSeverity(vuln);
+        // Low stays low (a "LOW: ..." finding was listed at medium); an
+        // advisory with no severity at all is medium, not hidden.
         let priority: SignalPriority =
           presented === "critical" ? "critical" :
-          presented === "high" ? "high" : "medium";
-        let relevance = presented === "critical" ? 1.0 : presented === "high" ? 0.9 : 0.7;
+          presented === "high" ? "high" :
+          presented === "low" ? "low" : "medium";
+        let relevance = presented === "critical" ? 1.0 : presented === "high" ? 0.9 : presented === "low" ? 0.5 : 0.7;
         // An installed copy the lockfile does not pin is fixed by a reinstall,
         // not an upgrade: the lockfile is already where it should be.
         let action = vuln.installDriftOf

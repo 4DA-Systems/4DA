@@ -94,17 +94,27 @@ export function deriveTechStackForHeadlines(db: FourDADatabase): string[] {
   } catch {
     // project_dependencies may not exist.
   }
-  if (terms.length > 0) return terms.slice(0, MAX_TERMS);
-  // Nothing more specific: languages, as before.
+  // Then the project's languages, as language-level news (labelled so by the
+  // fetcher): HN titles rarely name a library in a two-week window, and an
+  // asked-for ecosystem pulse should still say what moved in the language.
+  const specific = terms.slice(0, MAX_TERMS - 2);
+  const languages: string[] = [];
   try {
     for (const row of rawDb.prepare("SELECT DISTINCT language FROM project_dependencies").all() as Array<{ language: string }>) {
-      if (row.language) terms.push(row.language.toLowerCase());
+      const term = (row.language ?? "").toLowerCase();
+      if (term && PULSE_LANGUAGES.has(term) && !languages.includes(term)) languages.push(term);
     }
   } catch {
     // An empty stack yields an honest empty result.
   }
-  return terms;
+  return [...specific, ...languages.slice(0, MAX_TERMS - specific.length)];
 }
+
+/**
+ * Languages with distinctive enough names to search HN for: not
+ * "javascript"/"typescript" (they flood), not "go" (an everyday word in titles).
+ */
+const PULSE_LANGUAGES = new Set(["rust", "python", "zig", "kotlin", "swift", "ruby", "elixir"]);
 
 export async function executeEcosystemPulse(
   db: FourDADatabase,

@@ -153,16 +153,16 @@ describe("call-site scanning", () => {
     expect([...symbols].sort()).toEqual(["EmbeddingModel", "InitOptions", "Pooling", "TextEmbedding", "try_new"]);
   });
 
-  it("walks the project, skipping node_modules, with relative POSIX paths", () => {
-    const report = scanCallSites(root, "demo-lib", "npm");
+  it("walks the project, skipping node_modules, with relative POSIX paths", async () => {
+    const report = await scanCallSites(root, "demo-lib", "npm");
     expect(report.total_files).toBe(2);
     expect(report.files.map((f) => f.path)).toEqual(["src/app.ts", "src/nested/legacy.cjs"]);
     expect(report.symbols_used).toContain("legacyMode");
     expect(report.symbols_used).not.toContain("ignored");
   });
 
-  it("scans only .rs files for crates", () => {
-    const report = scanCallSites(root, "fast_embed", "crates.io");
+  it("scans only .rs files for crates", async () => {
+    const report = await scanCallSites(root, "fast_embed", "crates.io");
     expect(report.files).toEqual([{ path: "crates/core/src/lib.rs", matches: 4 }]);
   });
 });

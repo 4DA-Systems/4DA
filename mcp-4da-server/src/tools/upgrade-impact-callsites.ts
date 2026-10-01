@@ -18,6 +18,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { IgnoreRules } from "../gitignore.js";
 import type { UpgradeEcosystem } from "../live/upgrade-sources.js";
 
 const SKIP_DIRS = new Set([
@@ -123,10 +124,14 @@ export function scanRustSource(source: string, crateName: string, symbols: Set<s
   return matches;
 }
 
-function* walk(root: string, exts: Set<string>, budget: { left: number }): Generator<string> {
-  const stack = [root];
+/** Source files under `root`, skipping installed code, build output, hidden and .gitignored directories. */
+function listSources(root: string, exts: Set<string>, budget: { left: number }): string[] {
+  const files: string[] = [];
+  const ignore = new IgnoreRules(root);
+  const stack: Array<[string, string]> = [[root, ""]];
   while (stack.length > 0 && budget.left > 0) {
-    const dir = stack.pop() as string;
+    const [dir, rel] = stack.pop() as [string, string];
+    ignore.load(rel);
     let entries: fs.Dirent[];
     try {
       entries = fs.readdirSync(dir, { withFileTypes: true });
@@ -135,36 +140,64 @@ function* walk(root: string, exts: Set<string>, budget: { left: number }): Gener
     }
     for (const entry of entries) {
       if (entry.isSymbolicLink()) continue;
-      const full = path.join(dir, entry.name);
+      const childRel = rel ? `${rel}/${entry.name}` : entry.name;
       if (entry.isDirectory()) {
-        if (!SKIP_DIRS.has(entry.name)) stack.push(full);
+        if (SKIP_DIRS.has(entry.name) || entry.name.startsWith(".") || ignore.ignores(childRel, true)) continue;
+        stack.push([path.join(dir, entry.name), childRel]);
       } else if (entry.isFile() && exts.has(path.extname(entry.name).toLowerCase())) {
-        if (budget.left-- <= 0) return;
-        yield full;
+        if (budget.left-- <= 0) break;
+        files.push(path.join(dir, entry.name));
       }
     }
   }
+  return files;
 }
 
-/** Bounded scan of `root` for usages of `pkg`. */
-export function scanCallSites(root: string, pkg: string, ecosystem: UpgradeEcosystem): CallSiteReport {
+/**
+ * Bounded scan of `root` for usages of `pkg`: concurrent reads under a time
+ * budget. Measured 2026-10-02 on 4DA's tree (856 TS/JS, 721 Rust files on a
+ * nearly full disk): one-at-a-time synchronous reads took 20-26 s cold, so the
+ * reads now overlap, a file is regex-scanned only when it contains the name at
+ * all, and a scan that runs out of time says its counts are lower bounds.
+ */
+export async function scanCallSites(
+  root: string,
+  pkg: string,
+  ecosystem: UpgradeEcosystem,
+  opts: { timeBudgetMs?: number; concurrency?: number } = {},
+): Promise<CallSiteReport> {
   const exts = ecosystem === "npm" ? NPM_EXTS : RUST_EXTS;
   const budget = { left: MAX_FILES };
   const symbols = new Set<string>();
   const hits: Array<{ path: string; matches: number }> = [];
+  const needle = ecosystem === "npm" ? pkg : pkg.replace(/-/g, "_");
+  const deadline = Date.now() + (opts.timeBudgetMs ?? CALLSITE_TIME_BUDGET_MS);
+  const files = listSources(root, exts, budget);
 
-  for (const file of walk(root, exts, budget)) {
-    let source: string;
-    try {
-      if (fs.statSync(file).size > MAX_FILE_BYTES) continue;
-      source = fs.readFileSync(file, "utf8");
-    } catch {
-      continue;
+  let next = 0;
+  let timedOut = false;
+  const worker = async () => {
+    while (next < files.length) {
+      if (Date.now() > deadline) {
+        timedOut = true;
+        return;
+      }
+      const file = files[next++];
+      let source: string;
+      try {
+        const stat = await fs.promises.stat(file);
+        if (stat.size > MAX_FILE_BYTES) continue;
+        source = await fs.promises.readFile(file, "utf8");
+      } catch {
+        continue;
+      }
+      if (!source.includes(needle)) continue;
+      const matches =
+        ecosystem === "npm" ? scanNpmSource(source, pkg, symbols) : scanRustSource(source, pkg, symbols);
+      if (matches > 0) hits.push({ path: path.relative(root, file).split(path.sep).join("/"), matches });
     }
-    const matches =
-      ecosystem === "npm" ? scanNpmSource(source, pkg, symbols) : scanRustSource(source, pkg, symbols);
-    if (matches > 0) hits.push({ path: path.relative(root, file).split(path.sep).join("/"), matches });
-  }
+  };
+  await Promise.all(Array.from({ length: Math.min(opts.concurrency ?? 32, files.length) }, worker));
 
   hits.sort((a, b) => b.matches - a.matches || a.path.localeCompare(b.path));
   const report: CallSiteReport = {
@@ -173,8 +206,11 @@ export function scanCallSites(root: string, pkg: string, ecosystem: UpgradeEcosy
     symbols_used: [...symbols].sort().slice(0, MAX_SYMBOLS),
   };
   if (budget.left <= 0) report.truncated = `stopped after ${MAX_FILES} source files; counts are lower bounds`;
+  else if (timedOut) report.truncated = `stopped after ${Math.round((opts.timeBudgetMs ?? CALLSITE_TIME_BUDGET_MS) / 1000)} s with ${files.length - next} of ${files.length} files unread; counts are lower bounds`;
   return report;
 }
+
+const CALLSITE_TIME_BUDGET_MS = 10_000;
 
 /**
  * Symbols (≥ 3 chars) that `text` names at a word boundary, case-sensitively.
