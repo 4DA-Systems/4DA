@@ -2,9 +2,12 @@
 /**
  * upgrade_planner tool
  *
- * Ranked standalone upgrade recommendations for project dependencies.
- * Combines version freshness, vulnerability data, and deprecation status
- * to produce a prioritized upgrade plan.
+ * One brain (AD-049): when the 4DA app's database holds its persisted Upgrade
+ * Plan (current schema), the tool returns that plan's machine-readable work
+ * order (`provenance.mode: "app_plan"`, flagged `stale` past its horizon) —
+ * see ./app-plan.ts. Only without one does it run the standalone heuristic
+ * below: version freshness, vulnerability data and deprecation status from
+ * the local lockfiles (`provenance.mode: "standalone_heuristic"`).
  *
  * Honesty contract (Phase 0 hardening):
  * - Transitive CVEs are surfaced as `waiting_on_upstream` steps instead of
@@ -23,6 +26,7 @@
 
 import type { FourDADatabase } from "../db.js";
 import type { LiveIntelligence } from "../live/index.js";
+import { formatAppPlan, readAppPlan, type AppPlanResult } from "./app-plan.js";
 import { compareSemver, maxSemver } from "../live/semver-utils.js";
 import { dirsLabel, driftFor } from "./install-drift-notes.js";
 import { relativeDir } from "./vulnerability-scan-format.js";
@@ -74,16 +78,18 @@ interface UpgradePlanResult {
     mode: "standalone_heuristic";
     note: string;
   };
+  /** Why the 4DA app's own plan was not used (no database, no snapshot, other schema). */
+  appPlanUnavailable?: string;
 }
 
 const PROVENANCE_NOTE =
   "Point-in-time heuristic from local lockfiles plus live registry/OSV lookups. " +
-  "Not the 4DA desktop app's cross-project, version-confirmed plan.";
+  "Not the 4DA desktop app's cross-project, version-confirmed plan (none was available).";
 
 export const upgradePlannerTool = {
   name: "upgrade_planner",
   description:
-    "Ranked standalone upgrade recommendations for dependencies — call before upgrading, adding, or auditing any dependency to pick the safest order. Prioritizes by vulnerability severity (direct AND transitive), deprecation, and version distance. Splits quick wins (patch/minor) from breaking changes (major) and from transitive CVEs waiting on upstream. Run vulnerability_scan first for a CVE-aware plan. Privacy: live mode may query public registries and OSV with package names and versions; it never sends source code.",
+    "Ranked dependency upgrade plan — call before upgrading, adding, or auditing any dependency to pick the safest order. When the 4DA desktop app has computed its plan, returns that plan's work order (provenance app_plan): per package the ecosystem, each installed version with its minimum clean target, upgrade type (patch/minor/major), the projects that hold it (direct/dev) and the mechanism (manifest_bump, lockfile_or_parent_update, mixed, no_fix); flagged stale past its freshness horizon. Otherwise falls back to a standalone heuristic from local lockfiles (provenance standalone_heuristic): vulnerability severity, deprecation and version distance — run vulnerability_scan first for a CVE-aware fallback. Privacy: the fallback may query public registries and OSV with package names and versions; it never sends source code.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -120,7 +126,19 @@ function higherRisk(
 }
 
 export async function executeUpgradePlanner(
-  _db: FourDADatabase,
+  db: FourDADatabase,
+  params: UpgradePlannerParams,
+  liveIntel: LiveIntelligence | null,
+): Promise<UpgradePlanResult | AppPlanResult> {
+  // One brain: the app's plan wins whenever there is one, stale or not (a
+  // stale plan is returned flagged, never silently replaced by a heuristic).
+  const appPlan = readAppPlan(db);
+  if (appPlan.kind === "plan") return formatAppPlan(appPlan, params);
+  const standalone = await executeStandalonePlanner(params, liveIntel);
+  return { ...standalone, appPlanUnavailable: appPlan.reason };
+}
+
+async function executeStandalonePlanner(
   params: UpgradePlannerParams,
   liveIntel: LiveIntelligence | null,
 ): Promise<UpgradePlanResult> {

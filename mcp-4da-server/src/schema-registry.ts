@@ -77,7 +77,7 @@ export const TOOL_REGISTRY: Record<string, ToolRegistryEntry> = {
     annotations: { readOnlyHint: true, openWorldHint: true },
   },
   upgrade_planner: {
-    summary: "Prioritized upgrade plan (CVE severity, deprecation, version distance), quick wins vs breaking changes. Call when the user asks what to upgrade, or after dependency_health surfaces problems.",
+    summary: "Prioritized upgrade plan: the 4DA app's work order when computed (per-line targets, manifest vs lockfile fix), else a standalone heuristic. Call when the user asks what to upgrade.",
     schemaFile: "upgrade-planner.json",
     category: "security",
     tags: ["upgrade", "dependencies", "recommendations", "versions"],

@@ -546,4 +546,8 @@ pub struct UpgradePlanSnapshot {
     pub item_count: usize,
     /// The ranked plan steps, exactly as the lens renders them.
     pub items: Vec<EvidenceItem>,
+    /// The machine-readable work order (AD-049, schema v4): one step per
+    /// package, keyed by the id of its item in `items`, built from the same
+    /// per-line targets as the item's title. For coding agents, not the UI.
+    pub steps: Vec<super::upgrade_steps::UpgradeStep>,
 }

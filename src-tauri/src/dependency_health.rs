@@ -411,12 +411,12 @@ pub fn resolve_patched_dependency_alerts(db: &Database) -> Result<usize> {
 
     let mut resolved = 0usize;
     for alert in &alerts {
-        // Audit-sourced alerts are owned by the tool that produced them and are
-        // retired by `Database::reconcile_audit_alerts` when that tool stops
-        // reporting them. Re-deriving a verdict here asks a different question
-        // from a stored range and answers it with less information than
-        // `cargo audit` had — which is precisely how a live memory-corruption
-        // advisory got closed (see `local_audit::derive_affected_range`).
+        // Audit-sourced alerts came from the local `npm audit` / `cargo audit`
+        // step, removed in #784; the CVE job retires any still open through
+        // `Database::reconcile_audit_alerts`. Never re-derive a verdict for one
+        // here: a range reconstructed from a tool's report answers a different
+        // question with less information than the tool had — which is how a
+        // live memory-corruption advisory once got closed.
         if alert.alert_type == "audit" {
             continue;
         }
