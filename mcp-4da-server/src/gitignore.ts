@@ -92,6 +92,22 @@ export class IgnoreRules {
     }
   }
 
+  /**
+   * Whether an absolute directory below the root lies in, or is, an ignored
+   * directory. Every ancestor is checked, loading nested .gitignore files on
+   * the way down. A directory outside the root is never "ignored" here.
+   */
+  ignoresDirectory(absDir: string): boolean {
+    const rel = path.relative(this.root, absDir).replace(/\\/g, "/");
+    if (!rel || rel.startsWith("..") || path.isAbsolute(rel)) return false;
+    const segments = rel.split("/");
+    for (let i = 1; i <= segments.length; i++) {
+      this.load(segments.slice(0, i - 1).join("/"));
+      if (this.ignores(segments.slice(0, i).join("/"), true)) return true;
+    }
+    return false;
+  }
+
   /** Whether a path (relative to the root, `/`-separated) is ignored. */
   ignores(relPath: string, isDir: boolean): boolean {
     let ignored = false;

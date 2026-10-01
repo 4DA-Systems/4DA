@@ -196,6 +196,20 @@ describe("cross-referencing", () => {
     expect(detailed.sections[0].omitted_changes).toBeUndefined();
   });
 
+  it("lists a change repeated across a release and its prereleases once, in the newest section", () => {
+    const shaped = shapeChangelog(
+      [
+        { version: "0.8.0", date: null, entries: [{ kind: "breaking", text: "**breaking:** Remove `Foo` ([#3088])" }] },
+        { version: "0.8.0-rc.1", date: null, entries: [{ kind: "breaking", text: "**breaking:** Remove `Foo` (#3088)" }, { kind: "change", text: "only here" }] },
+      ],
+      [],
+      "detailed",
+    );
+    expect(shaped.breaking).toBe(1);
+    expect(shaped.duplicates).toBe(1);
+    expect(shaped.sections[1].entries.map((e) => e.text)).toEqual(["only here"]);
+  });
+
   it("caps detailed output at 400 entries and says so", () => {
     const big = [{ version: "2.0.0", date: null, entries: Array.from({ length: 450 }, (_, i) => ({ kind: "change" as const, text: `e${i}` })) }];
     const shaped = shapeChangelog(big, [], "detailed");
@@ -308,6 +322,37 @@ describe("analyzeUpgradeImpact", () => {
     expect(r.changelog).toEqual({ found: false, reason: "the 2.0.0 archive ships no changelog file" });
     expect(r.release_notes_url).toBe("https://github.com/acme/demo-lib/releases");
     expect(r.summary).toMatch(/no changelog in the package archive/);
+    // Unknown, not zero: an eval agent read "0 breaking changes" as "nothing breaks".
+    expect(r.breaking_changes_count).toBeNull();
+    expect(r.deprecations_count).toBeNull();
+    expect(r.security_fixes_count).toBeNull();
+  });
+
+  it("reads a line request ('2', '1.x', '1.4') as the newest stable release on it", async () => {
+    expect((await run({ package: "demo-lib", to_version: "2" }, fakeNpm())).to_version).toBe("2.0.0");
+    expect((await run({ package: "demo-lib", to_version: "1.x" }, fakeNpm())).to_version).toBe("1.5.0");
+    // 1.0.0 is published, and "1" compares equal to it: the line still wins (axum "0.8" read as 0.8.0, not 0.8.4).
+    expect((await run({ package: "demo-lib", to_version: "1" }, fakeNpm())).to_version).toBe("1.5.0");
+    expect((await run({ package: "demo-lib", to_version: "1.4" }, fakeNpm())).to_version).toBe("1.4.0");
+    const missing = await run({ package: "demo-lib", to_version: "9" }, fakeNpm());
+    expect(missing.error).toMatch(/not published/);
+    // The suggestions are not empty for a line request.
+    expect(missing.error).toMatch(/Nearest published versions: .*2\.0\.0/);
+  });
+
+  it("names every installed copy when the project has more than one version", async () => {
+    const r = await run({ package: "demo-lib" }, fakeNpm(), {
+      installed: [
+        { name: "demo-lib", version: "1.0.0", ecosystem: "npm", isDirect: true, sourceDirs: [root] },
+        { name: "demo-lib", version: "1.4.0", ecosystem: "npm", isDirect: false, sourceDirs: [path.join(root, "tools")] },
+      ],
+    });
+    expect(r.from_version).toBe("1.0.0");
+    expect(r.installed_copies).toEqual([
+      { version: "1.0.0", direct: true, pinned_in: ["."] },
+      { version: "1.4.0", direct: false, pinned_in: ["tools"] },
+    ]);
+    expect(r.installed_copies_note).toMatch(/from_version is the direct one/);
   });
 
   it("tolerates OSV failure with null advisory fields and a note", async () => {

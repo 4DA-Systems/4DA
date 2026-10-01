@@ -55,6 +55,26 @@ export interface InstalledDep {
   version: string | null;
   ecosystem: string;
   isDirect: boolean;
+  /** Manifest directories pinning this copy, when known. */
+  sourceDirs?: string[];
+}
+
+/**
+ * Every installed copy of the package, when there is more than one version:
+ * vite was pinned at 8.3.1 at the root and 7.3.5 in mcp-4da-server, and an
+ * agent eval could not tell which copy the answer described (2026-10-02).
+ */
+function installedCopies(installed: InstalledDep[], name: string, eco: UpgradeEcosystem, root: string | null) {
+  const byVersion = new Map<string, { version: string; direct: boolean; dirs: Set<string> }>();
+  for (const d of installed) {
+    if (d.ecosystem !== eco || !d.version || !sameName(d.name, name, eco)) continue;
+    const entry = byVersion.get(d.version) ?? { version: d.version, direct: false, dirs: new Set<string>() };
+    entry.direct ||= d.isDirect;
+    for (const dir of d.sourceDirs ?? []) entry.dirs.add(root ? path.relative(root, dir).replace(/\\/g, "/") || "." : dir);
+    byVersion.set(d.version, entry);
+  }
+  if (byVersion.size < 2) return null;
+  return [...byVersion.values()].map((c) => ({ version: c.version, direct: c.direct, pinned_in: [...c.dirs].sort() }));
 }
 
 /** Everything the analysis needs from outside; tests build one with a fake fetch. */
@@ -159,7 +179,17 @@ export async function analyzeUpgradeImpact(
   let target: PublishedVersion | undefined;
   if (params.to_version) {
     const wanted = strip(params.to_version);
-    target = index.versions.find((v) => compareVersionPrecedence(v.version, wanted) === 0);
+    // "7", "7.x", "7.1" name a line, not a release: the newest stable release
+    // on it. An agent eval asked for to_version "7" and got an error. Checked
+    // before the exact match, which pads "0.8" to 0.8.0 and so would answer
+    // with the line's first release instead of its newest.
+    const line = /^\d+(?:\.\d+)?(?:\.[x*])?$/i.test(wanted) ? wanted.replace(/\.[x*]$/i, "") : null;
+    if (line) {
+      target = [...index.versions]
+        .reverse()
+        .find((v) => !v.yanked && v.version.startsWith(`${line}.`) && parseSemverPrecedence(v.version)?.prerelease.length === 0);
+    }
+    target ??= index.versions.find((v) => compareVersionPrecedence(v.version, wanted) === 0);
     if (!target) {
       return { error: `${pkg}@${wanted} is not published on ${eco}. Nearest published versions: ${nearestVersions(published, wanted).join(", ")}.` };
     }
@@ -207,11 +237,18 @@ export async function analyzeUpgradeImpact(
   const shaped = shapeChangelog(range.sections, yourCode.symbols_used, params.response_format === "detailed" ? "detailed" : "concise");
   const advisoriesFixed = advFrom && advTo ? advFrom.filter((id) => !advTo.includes(id)) : null;
 
+  const copies = params.from_version ? null : installedCopies(ctx.installed, pkg, eco, ctx.projectRoot);
   return {
     package: index.name,
     ecosystem: eco,
     from_version: from,
     to_version: to,
+    ...(copies
+      ? {
+          installed_copies: copies,
+          installed_copies_note: `This project has ${copies.length} versions of ${index.name}; from_version is the direct one. Pass from_version for another copy.`,
+        }
+      : {}),
     versions_between: between.slice(-MAX_LISTED_VERSIONS).map((v) => ({
       version: v.version,
       published: v.published,
@@ -228,11 +265,14 @@ export async function analyzeUpgradeImpact(
           covers_range: range.coversRange,
           sections: shaped.sections,
           ...(shaped.truncated ? { truncated: shaped.truncated } : {}),
+          ...(shaped.duplicates ? { duplicates_omitted: shaped.duplicates } : {}),
         }
       : { found: false, ...(changelog.file ? { file: changelog.file } : {}), reason: changelog.reason },
-    breaking_changes_count: shaped.breaking,
-    deprecations_count: shaped.deprecations,
-    security_fixes_count: shaped.security,
+    // Without a changelog these are unknown, not zero: an agent eval read
+    // "0 breaking changes" on vite 7 -> 8 as "nothing breaks" (2026-10-02).
+    breaking_changes_count: changelog.found ? shaped.breaking : null,
+    deprecations_count: changelog.found ? shaped.deprecations : null,
+    security_fixes_count: changelog.found ? shaped.security : null,
     your_code: yourCode,
     advisories_fixed: advisoriesFixed,
     advisories_remaining: advTo,

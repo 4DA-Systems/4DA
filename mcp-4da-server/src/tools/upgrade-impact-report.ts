@@ -42,6 +42,8 @@ export interface ShapedChangelog {
   touching: number;
   touchingSymbols: string[];
   truncated?: string;
+  /** Entries left out because an earlier (newer) section already listed the same change. */
+  duplicates?: number;
 }
 
 const CONCISE_OTHER_PER_VERSION = 3;
@@ -60,9 +62,25 @@ export function shapeChangelog(
   const touched = new Set<string>();
   let emitted = 0;
   let dropped = 0;
+  // A release's notes often repeat its prereleases' (axum 0.8.0 repeats the
+  // 0.8.0-alpha/rc entries): read once, in the newest section, and counted
+  // once. Measured 2026-10-02 in an agent eval: axum 0.7.9 -> 0.8.4 reported
+  // "20 breaking changes" for about ten distinct ones.
+  const seen = new Set<string>();
+  const key = (text: string) =>
+    text.toLowerCase().replace(/\(\[?#\d+\]?\)|\[#\d+\]|#\d+/g, "").replace(/[^a-z0-9]+/g, " ").trim();
 
   for (const section of sections) {
-    const entries: ReportEntry[] = section.entries.map((e) => {
+    const unique = section.entries.filter((e) => {
+      const k = key(e.text);
+      if (!k || seen.has(k)) {
+        if (k) out.duplicates = (out.duplicates ?? 0) + 1;
+        return !k;
+      }
+      seen.add(k);
+      return true;
+    });
+    const entries: ReportEntry[] = unique.map((e) => {
       const entry: ReportEntry = { kind: e.kind, text: e.text };
       if (e.kind === "breaking" || e.kind === "deprecation") {
         const matched = matchSymbols(e.text, symbols);
@@ -142,7 +160,11 @@ export function majorsCrossed(from: string, to: string): number {
 }
 
 /** Up to `count` published versions nearest to `wanted` by precedence, for "version not found" errors. */
-export function nearestVersions(published: string[], wanted: string, count = 5): string[] {
+export function nearestVersions(published: string[], requested: string, count = 5): string[] {
+  // "7" / "7.x" / "7.1" are not semver: read them as the start of that line,
+  // or every comparison is unreadable and the suggestion list comes back empty.
+  const parts = requested.replace(/\.[x*]$/i, "").split(".");
+  const wanted = /^\d+(\.\d+){0,2}$/.test(parts.join(".")) ? [...parts, "0", "0"].slice(0, 3).join(".") : requested;
   const below = published.filter((v) => (compareVersionPrecedence(v, wanted) ?? 1) < 0);
   const above = published.filter((v) => (compareVersionPrecedence(v, wanted) ?? -1) > 0);
   // Prefer an even split; let either side fill in when the other runs short.

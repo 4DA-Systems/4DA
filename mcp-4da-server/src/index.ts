@@ -44,6 +44,7 @@ import { startHttpServer } from "./http-transport.js";
 import { runSetup } from "./setup.js";
 import { runDoctor } from "./doctor.js";
 import { scanProjectTree, treeResolutionGroups } from "./project-tree.js";
+import { IgnoreRules } from "./gitignore.js";
 import { LiveIntelligence } from "./live/index.js";
 import { setLiveIntelligence } from "./live-singleton.js";
 import { SERVER_INSTRUCTIONS } from "./server-instructions.js";
@@ -176,6 +177,10 @@ function getDatabase(): FourDADatabase {
         // into this project's vulnerability scan.
         const norm = (p: string) => p.replace(/\\/g, "/").toLowerCase().replace(/\/+$/, "");
         const rootNorm = norm(resolveProjectDir());
+        // The app indexes every project it can see, including directories the
+        // repository ignores (4DA's victauri-gauntlet/ and cli/); their
+        // advisories are not this project's. Same rule as standalone mode.
+        const ignore = new IgnoreRules(resolveProjectDir());
 
         const groups = new Map<string, { dir: string; language: string; deps: string[]; devDeps: string[] }>();
         for (const row of rows) {
@@ -183,6 +188,7 @@ function getDatabase(): FourDADatabase {
           const pp = norm(projectPath);
           if (rootNorm && pp !== rootNorm && !pp.startsWith(`${rootNorm}/`)) continue;
           if (pp.includes("/.claude/worktrees/") || pp.includes("/.codex/worktrees/")) continue;
+          if (rootNorm && ignore.ignoresDirectory(projectPath)) continue;
           const language = row.language || "npm";
           const key = `${projectPath}::${language}`;
           let group = groups.get(key);

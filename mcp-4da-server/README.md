@@ -12,7 +12,7 @@ You:     "Upgrade axum to 0.8"
 Agent →  upgrade_impact { package: "axum", to_version: "0.8.4" }
 
          axum 0.7.9 -> 0.8.4: 5 releases (0.8.2 yanked), changelog from the 0.8.4 crate.
-         20 breaking entries, 13 touch symbols you import (Path, Query, Router, extract, serve):
+         12 breaking entries, 8 touch symbols you import (Path, Query, Router, extract, serve):
            breaking  Remove OptionalFromRequestParts impl for `Query`        (you use Query)
            breaking  Require `Sync` for all handlers added to `Router`       (you use Router)
            ...
@@ -259,7 +259,7 @@ git clone https://github.com/4DA-Systems/4DA.git
 cd 4DA/mcp-4da-server
 pnpm install
 pnpm build
-pnpm test    # 560 tests, offline
+pnpm test    # 577 tests, offline
 ```
 
 ## License

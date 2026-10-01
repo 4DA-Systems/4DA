@@ -24,6 +24,7 @@ import { compareVersions, isComparable, parsePep440 } from "../live/version-comp
 import { extractFixedVersion } from "../live/osv-scanner.js";
 import { cargoWorkspaceDeps, parsePyprojectDependencies } from "../project-manifests.js";
 import { scanProjectTree, treeResolutionGroups } from "../project-tree.js";
+import { IgnoreRules } from "../gitignore.js";
 import type { OsvVulnerability } from "../live/types.js";
 
 let dir: string;
@@ -422,6 +423,18 @@ describe("project discovery", () => {
     write("relay/Cargo.lock", '[[package]]\nname = "rsa"\nversion = "0.9.10"\nsource = "registry+x"\n');
     const rel = scanProjectTree(dir).map((t) => path.relative(dir, t.dir).replace(/\\/g, "/") || ".").sort();
     expect(rel).toEqual([".", "relay"]);
+  });
+
+  it("desktop mode: an app-indexed project inside an ignored directory is not this project's", () => {
+    write(".gitignore", "victauri-gauntlet/\n");
+    write("tools/.gitignore", "scratch/\n");
+    const rules = new IgnoreRules(dir);
+    expect(rules.ignoresDirectory(path.join(dir, "victauri-gauntlet"))).toBe(true);
+    expect(rules.ignoresDirectory(path.join(dir, "victauri-gauntlet", "crates", "x"))).toBe(true);
+    expect(rules.ignoresDirectory(path.join(dir, "tools", "scratch", "deep"))).toBe(true);
+    expect(rules.ignoresDirectory(path.join(dir, "src-tauri"))).toBe(false);
+    expect(rules.ignoresDirectory(dir)).toBe(false);
+    expect(rules.ignoresDirectory(path.join(os.tmpdir(), "elsewhere"))).toBe(false);
   });
 
   it("finds independently-locked projects below the root and skips installed code and fixtures", () => {

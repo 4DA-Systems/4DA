@@ -34,9 +34,13 @@ export function dedupeDependencies(deps: ResolvedDependency[]): ResolvedDependen
       existing.isDirect ||= dep.isDirect;
       existing.devScopeKnown &&= dep.devScopeKnown;
       existing.isDev = existing.devScopeKnown && existing.isDev && dep.isDev;
-      // A crate reachable via ANY active path is active; keep a target label if present.
+      // A crate reachable via ANY active path is active, and its target label
+      // is then the active copy's: rsa 0.9.10, built for relay and not for
+      // src-tauri on Windows, read "not built for x86_64-pc-windows-msvc"
+      // beside platform_active: true (2026-10-02 agent eval).
+      if (dep.platformActive && !existing.platformActive) existing.target = dep.target;
+      else if (existing.platformActive === dep.platformActive) existing.target = existing.target ?? dep.target;
       existing.platformActive ||= dep.platformActive;
-      existing.target = existing.target ?? dep.target;
       // Union the provenance rather than discarding it — the same version can
       // legitimately be pinned by several workspaces, and the reader needs all
       // of them to know where to apply the fix.
