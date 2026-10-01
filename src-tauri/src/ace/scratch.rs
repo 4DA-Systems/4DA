@@ -78,22 +78,16 @@ fn git_ignores(dir: &Path) -> bool {
     let Some(parent) = dir.parent() else {
         return false;
     };
-    let mut cmd = std::process::Command::new("git");
     // Run from the PARENT and name the child: `check-ignore` on the repo's
     // own root would ask whether the repository ignores itself.
+    let mut cmd = super::git::scanned_repo_git(parent);
     cmd.arg("check-ignore")
         .arg("-q")
         .arg("--")
         .arg(name)
-        .current_dir(parent)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null());
-    #[cfg(windows)]
-    {
-        use std::os::windows::process::CommandExt;
-        cmd.creation_flags(0x0800_0000); // CREATE_NO_WINDOW
-    }
     let Ok(mut child) = cmd.spawn() else {
         return false; // git absent -> nothing is scratch
     };

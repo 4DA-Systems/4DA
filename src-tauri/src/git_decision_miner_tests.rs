@@ -278,3 +278,66 @@ fn smoke_mine_fourda() {
         decisions.len()
     );
 }
+
+// --- Commit text is data, never git options ------------------------------
+
+/// A committed repository whose HEAD contains `content`, or None when git is
+/// unavailable on this machine.
+fn repo_with_file(tag: &str, content: &str) -> Option<std::path::PathBuf> {
+    let root = std::env::temp_dir().join(format!(
+        "4da-miner-{tag}-{}",
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .ok()?
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&root).ok()?;
+    std::fs::write(root.join("notes.txt"), content).ok()?;
+    let git = |args: &[&str]| {
+        std::process::Command::new("git")
+            .args([
+                "-c",
+                "user.name=t",
+                "-c",
+                "user.email=t@t",
+                "-c",
+                "commit.gpgsign=false",
+            ])
+            .args(args)
+            .current_dir(&root)
+            .status()
+            .map(|s| s.success())
+            .unwrap_or(false)
+    };
+    (git(&["init", "-q"]) && git(&["add", "notes.txt"]) && git(&["commit", "-qm", "init"]))
+        .then_some(root)
+}
+
+#[test]
+fn a_subject_that_looks_like_an_option_is_searched_as_text() {
+    // Decision subjects come from commit messages. One that begins with
+    // dashes must be matched literally, not parsed as a `git grep` option.
+    let Some(repo) = repo_with_file("dash", "uses --weird-subject here\n") else {
+        eprintln!("skipped: git not available");
+        return;
+    };
+    let found = subject_in_head(&repo, "--weird-subject");
+    let absent = subject_in_head(&repo, "--not-in-the-file");
+    let _ = std::fs::remove_dir_all(&repo);
+    assert!(
+        found,
+        "a dash-leading subject present in HEAD must be found"
+    );
+    assert!(!absent, "and one that is absent must not be");
+}
+
+#[test]
+fn a_plain_subject_is_still_found() {
+    let Some(repo) = repo_with_file("plain", "we adopted tokio\n") else {
+        eprintln!("skipped: git not available");
+        return;
+    };
+    let found = subject_in_head(&repo, "tokio");
+    let _ = std::fs::remove_dir_all(&repo);
+    assert!(found);
+}

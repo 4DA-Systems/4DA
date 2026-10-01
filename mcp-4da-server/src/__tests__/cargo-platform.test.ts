@@ -16,12 +16,14 @@
  */
 import { describe, it, expect, beforeEach } from "vitest";
 import * as fs from "node:fs";
+import * as os from "node:os";
 import * as path from "node:path";
 import { execFileSync } from "node:child_process";
 import {
   hostTriple,
   activeCratesForHost,
   parseTreeNames,
+  cargoTreeInvocation,
   _resetCargoPlatformCache,
 } from "../live/cargo-platform.js";
 import { platformFilterNote } from "../tools/vulnerability-scan.js";
@@ -84,6 +86,38 @@ describe("parseTreeNames", () => {
     // the whole lockfile unreachable and bury every real advisory.
     expect(parseTreeNames("").size).toBe(0);
     expect(parseTreeNames("warning: nothing to print.\n").has("warning:")).toBe(false);
+  });
+});
+
+describe("cargoTreeInvocation", () => {
+  // cargo and rustup read their configuration from the working directory
+  // upward, so the scanned project must never be cargo's working directory.
+  const project = path.resolve("some-scanned-project");
+  const inv = cargoTreeInvocation(project);
+  /** True when `p` is `dir` or inside it (drive-aware on Windows). */
+  const isInside = (dir: string, p: string): boolean => {
+    const rel = path.relative(dir, p);
+    return rel === "" || (!rel.startsWith("..") && !path.isAbsolute(rel));
+  };
+
+  it("runs cargo from a server-owned directory outside the scanned project", () => {
+    expect(isInside(project, inv.cwd)).toBe(false);
+    expect(isInside(os.tmpdir(), inv.cwd)).toBe(true);
+  });
+
+  it("names the project only through --manifest-path", () => {
+    const at = inv.args.indexOf("--manifest-path");
+    expect(at).toBeGreaterThan(-1);
+    expect(inv.args[at + 1]).toBe(path.join(project, "Cargo.toml"));
+  });
+
+  it("keeps cargo's metadata writes out of the scanned project", () => {
+    expect(isInside(project, inv.targetDir)).toBe(false);
+  });
+
+  it("stays read-only and offline", () => {
+    expect(inv.args).toContain("--offline");
+    expect(inv.args).toContain("--locked");
   });
 });
 

@@ -44,6 +44,7 @@ use tracing::{debug, error, info, warn};
 use crate::error::Result;
 
 pub use embedding::{EmbeddingConfig, EmbeddingService};
+pub(crate) use git::scanned_repo_git;
 pub use git::{GitAnalyzer, GitSignal};
 pub use scanner::ProjectScanner;
 pub use watcher::{

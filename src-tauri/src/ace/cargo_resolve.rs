@@ -247,25 +247,34 @@ fn cargo_resolve_target_dir() -> std::path::PathBuf {
 
 /// Build the resolution command. Split from [`run_cargo_tree`] so the
 /// environment it carries is assertable without spawning cargo.
+///
+/// cargo runs FROM the app-owned `target_dir` and reaches the project only
+/// through `--manifest-path`. cargo and rustup take their configuration
+/// (`.cargo/config.toml`, `rust-toolchain.toml`) from the working directory
+/// and its parents, so running inside the scanned project would let files in
+/// that project configure the toolchain 4DA invokes. A scanned project is
+/// untrusted input: reading it must not let it configure the tools reading it.
 fn cargo_tree_command(dir: &Path, target_dir: &Path) -> std::process::Command {
     let mut cmd = std::process::Command::new("cargo");
-    cmd.args([
-        "tree",
-        "--offline",
-        "--locked",
-        "--prefix",
-        "none",
-        // Dev-dependencies are compiled by `cargo test`, so an advisory
-        // against one is reachable; proc-macro deps ride along with normal.
-        "--edges",
-        "normal,build,dev",
-    ])
-    .current_dir(dir)
-    // The whole point: cargo's scratch writes land here, never in `dir`.
-    .env("CARGO_TARGET_DIR", target_dir)
-    .stdin(Stdio::null())
-    .stdout(Stdio::piped())
-    .stderr(Stdio::null());
+    cmd.arg("tree")
+        .arg("--manifest-path")
+        .arg(dir.join("Cargo.toml"))
+        .args([
+            "--offline",
+            "--locked",
+            "--prefix",
+            "none",
+            // Dev-dependencies are compiled by `cargo test`, so an advisory
+            // against one is reachable; proc-macro deps ride along with normal.
+            "--edges",
+            "normal,build,dev",
+        ])
+        .current_dir(target_dir)
+        // Cargo's scratch writes land here, never in `dir`.
+        .env("CARGO_TARGET_DIR", target_dir)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null());
     #[cfg(windows)]
     {
         use std::os::windows::process::CommandExt;
@@ -430,12 +439,39 @@ mod tests {
             Some(std::ffi::OsStr::new("C:/appdata/cargo-resolve-target")),
             "the command must carry CARGO_TARGET_DIR"
         );
-        assert_eq!(cmd.get_current_dir(), Some(project));
         // The negative half: the target dir must not sit inside the tree
         // being scanned, or the redirect buys nothing.
         assert!(
             !target.starts_with(project),
             "cargo's scratch must live outside the scanned project"
+        );
+    }
+
+    #[test]
+    fn cargo_runs_outside_the_scanned_project_and_names_it_by_manifest() {
+        // cargo and rustup read their configuration from the working
+        // directory upward. The scanned project must therefore never be the
+        // working directory; it is reached only through --manifest-path.
+        let project = Path::new("C:/projects/app");
+        let target = Path::new("C:/appdata/cargo-resolve-target");
+        let cmd = cargo_tree_command(project, target);
+
+        let cwd = cmd.get_current_dir().expect("cwd must be set explicitly");
+        assert_eq!(cwd, target, "cargo must run from the app-owned dir");
+        assert!(
+            !cwd.starts_with(project),
+            "the scanned project must not be cargo's working directory"
+        );
+
+        let args: Vec<&std::ffi::OsStr> = cmd.get_args().collect();
+        let at = args
+            .iter()
+            .position(|a| *a == std::ffi::OsStr::new("--manifest-path"))
+            .expect("--manifest-path must be passed");
+        assert_eq!(
+            Path::new(args[at + 1]),
+            project.join("Cargo.toml"),
+            "the manifest path names the scanned project's Cargo.toml"
         );
     }
 

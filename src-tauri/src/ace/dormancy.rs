@@ -253,13 +253,22 @@ fn nested_project_activity(repo_root: &Path, project_dir: &Path) -> Option<Strin
         "--porcelain=v1",
         "-z",
         "-uall",
+        // Submodules are separate repositories with their own config.
+        "--ignore-submodules=all",
         "--",
         rel.as_str(),
     ];
-    let uncommitted = super::git::run_git_with_timeout(&status_args, &root)
-        .ok()
-        .filter(|o| o.status.success())
-        .and_then(|o| newest_uncommitted_change(&root, &o.stdout));
+    // `status` can run a repository-defined content filter while comparing
+    // the working tree, so it is skipped for repositories that define one;
+    // the committed timestamp still answers.
+    let uncommitted = if super::git::repo_defines_content_filters(&root) {
+        None
+    } else {
+        super::git::run_git_with_timeout(&status_args, &root)
+            .ok()
+            .filter(|o| o.status.success())
+            .and_then(|o| newest_uncommitted_change(&root, &o.stdout))
+    };
 
     match (committed, uncommitted) {
         (Some(c), Some(u)) => Some(c.max(u)),

@@ -289,7 +289,6 @@ mod llm_gate;
 mod llm_judge;
 mod llm_judgments;
 mod llm_stream;
-mod local_audit;
 mod local_judge;
 mod log_retention;
 mod model_allowlist;

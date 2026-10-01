@@ -1360,3 +1360,26 @@ installs, the alert path did not.
 (`osv::identity::scope_adjusted_urgency` over `ExposureScope`), and a parity
 test drives BOTH call paths over every combination. A comment saying two
 implementations match is a bug report waiting for its first reader.
+
+---
+
+### The scanned folder configured the scanner (2026-10-02)
+
+**Symptom.** Three ways a project 4DA scans could choose a program for 4DA
+to run: `cargo tree` ran with the project as its working directory, so the
+project's `.cargo/config.toml` and `rust-toolchain.toml` configured the
+toolchain (app and MCP server alike); `git status` / `git log` honoured
+repository-configured hooks; and the local `npm audit` / `cargo audit` step
+ran inside every project. The audit step also contacted parties NETWORK.md
+does not list, and on Windows its npm spawn had never worked
+(`Command::new("npm")` cannot start `npm.cmd`).
+
+**Root cause.** Each spawn treated the scanned folder as a trusted working
+directory. The tools read configuration from where they run.
+
+**The rule.** A scanned folder is untrusted input. Toolchains run from an
+app-owned directory and reach the project by path (`--manifest-path`);
+every git call goes through `ace::git::scanned_repo_git`; `status` is
+skipped when the repository defines its own content filters. Prefer parsing
+files to running tools in a user's project, and never add a spawn there
+without a test that pins its working directory and options.
