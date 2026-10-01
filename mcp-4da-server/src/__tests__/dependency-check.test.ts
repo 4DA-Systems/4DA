@@ -237,12 +237,16 @@ describe("dependency_check verdicts (fixtures)", () => {
       { ecosystem: "npm", package: "axios", from: "1.14.0", to: "1.14.1" },
       { ecosystem: "crates.io", package: "fixture-crate", from: "2.0.0", to: "2.0.1" },
     ]);
-    const registry = router.requests.filter((u) => !u.startsWith("https://api.osv.dev"));
+    const host = (u: string): string => new URL(u).hostname;
+    const registry = router.requests.filter((u) => host(u) !== "api.osv.dev");
     expect(registry.length).toBeGreaterThan(0);
     for (const url of registry) {
       expect(url, url).not.toMatch(/1\.14\.[01]|2\.0\.[01]/);
     }
-    for (const url of registry.filter((u) => u.includes("crates.io"))) expect(url).toBeTruthy();
+    // Registry traffic goes only to the documented registry hosts.
+    for (const url of registry) {
+      expect(["registry.npmjs.org", "crates.io", "index.crates.io"], url).toContain(host(url));
+    }
   });
 
   it("rejects ranges and malformed input instead of guessing", async () => {
