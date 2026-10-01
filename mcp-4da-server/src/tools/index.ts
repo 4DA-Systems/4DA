@@ -30,6 +30,11 @@ export {
   executeDependencyCheck,
 } from "./dependency-check.js";
 
+export {
+  upgradeImpactTool,
+  executeUpgradeImpact,
+} from "./upgrade-impact.js";
+
 // Intelligence
 export {
   whatShouldIKnowTool,

@@ -229,7 +229,7 @@ describe("vulnerability_scan — install drift and resolution provenance in the 
     li.initFromDependencyGroups([{ dir, language: "javascript", deps: ["hono"], devDeps: [] }]);
     vi.spyOn(process, "cwd").mockReturnValue(dir);
 
-    const out = (await executeVulnerabilityScan(noDb, {}, li)) as Record<string, any>;
+    const out = (await executeVulnerabilityScan(noDb, { response_format: "detailed" }, li)) as Record<string, any>;
 
     // OSV was asked about the installed version, not only the lockfile's.
     expect(scanned[0].map((d) => `${d.name}@${d.version}`).sort()).toEqual(["hono@4.13.1", "hono@4.13.5"]);
@@ -252,7 +252,7 @@ describe("vulnerability_scan — install drift and resolution provenance in the 
     li.initFromDependencyGroups([{ dir, language: "javascript", deps: ["hono"], devDeps: [] }]);
     vi.spyOn(process, "cwd").mockReturnValue(dir);
 
-    const out = (await executeVulnerabilityScan(noDb, {}, li)) as Record<string, any>;
+    const out = (await executeVulnerabilityScan(noDb, { response_format: "detailed" }, li)) as Record<string, any>;
 
     expect(out.vulnerabilities).toHaveLength(3);
     for (const v of out.vulnerabilities) {
@@ -276,7 +276,7 @@ describe("vulnerability_scan — install drift and resolution provenance in the 
     li.initFromDependencyGroups([{ dir, language: "javascript", deps: ["hono"], devDeps: [] }]);
     vi.spyOn(process, "cwd").mockReturnValue(dir);
 
-    const out = (await executeVulnerabilityScan(noDb, {}, li)) as Record<string, any>;
+    const out = (await executeVulnerabilityScan(noDb, { response_format: "detailed" }, li)) as Record<string, any>;
     const meta = out._meta;
     expect(meta.osv_cached).toBe(meta.cached);
     expect(meta.resolution.re_resolved_this_call).toBe(false);
@@ -373,9 +373,9 @@ describe("re-resolution when a lockfile changes", () => {
 
     fs.writeFileSync(path.join(dir, "pnpm-lock.yaml"), pnpmLock("4.13.5"));
     touchFuture(path.join(dir, "pnpm-lock.yaml"));
-    const first = (await executeVulnerabilityScan(noDb, {}, li)) as Record<string, any>;
+    const first = (await executeVulnerabilityScan(noDb, { response_format: "detailed" }, li)) as Record<string, any>;
     expect(first._meta.resolution.re_resolved_this_call).toBe(true);
-    const second = (await executeVulnerabilityScan(noDb, {}, li)) as Record<string, any>;
+    const second = (await executeVulnerabilityScan(noDb, { response_format: "detailed" }, li)) as Record<string, any>;
     expect(second._meta.resolution.re_resolved_this_call).toBe(false);
   });
 });

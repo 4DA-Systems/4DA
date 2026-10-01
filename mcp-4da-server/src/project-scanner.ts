@@ -14,6 +14,12 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import {
+  cargoWorkspaceDeps,
+  parseGoModDirectDeps,
+  parsePyprojectDependencies,
+  parseRequirementNames,
+} from "./project-manifests.js";
 
 // =============================================================================
 // Types
@@ -229,6 +235,16 @@ export function scanCurrentProject(cwd: string): ProjectScanResult {
       // Platform-gated deps: [target.'cfg(...)'.dependencies] / [target.<triple>.dependencies].
       // Previously skipped entirely (e.g. windows-sys, winreg, libc were invisible).
       parseTargetDependencies(content, rustDeps, rustDevDeps, result.depTargets, fwSet, RUST_FRAMEWORK_MAP);
+      // A workspace root declares dependencies for its members; a virtual one
+      // (no [package]) declares nothing else, and was scanned as empty.
+      const workspace = cargoWorkspaceDeps(cwd, content);
+      for (const dep of workspace.deps) {
+        if (!rustDeps.includes(dep)) rustDeps.push(dep);
+        if (dep in RUST_FRAMEWORK_MAP) fwSet.add(RUST_FRAMEWORK_MAP[dep]);
+      }
+      for (const dep of workspace.devDeps) {
+        if (!rustDeps.includes(dep) && !rustDevDeps.includes(dep)) rustDevDeps.push(dep);
+      }
 
       // Add to flat arrays for backward compat
       result.dependencies.push(...rustDeps);
@@ -250,54 +266,39 @@ export function scanCurrentProject(cwd: string): ProjectScanResult {
   const requirementsPath = path.join(cwd, "requirements.txt");
   const setupPyPath = path.join(cwd, "setup.py");
 
+  // pyproject.toml (PEP 621, Poetry, uv) and requirements.txt are read
+  // together: a project often has both, and the old else-if dropped the second.
+  const pyDeps = new Set<string>();
+  const pyDevDeps = new Set<string>();
   if (fs.existsSync(pyprojectPath)) {
     langSet.add("python");
-    const pyDeps: string[] = [];
     try {
-      const content = fs.readFileSync(pyprojectPath, "utf-8");
-      // Extract dependencies from pyproject.toml
-      const depsMatch = content.match(/dependencies\s*=\s*\[([\s\S]*?)\]/);
-      if (depsMatch) {
-        const deps = depsMatch[1].match(/"([^">=<!\s]+)/g);
-        if (deps) {
-          for (const dep of deps) {
-            const name = dep.replace(/^"/, "");
-            result.dependencies.push(name);
-            pyDeps.push(name);
-            detectPythonFramework(name, fwSet);
-          }
-        }
-      }
+      const parsed = parsePyprojectDependencies(fs.readFileSync(pyprojectPath, "utf-8"));
+      parsed.deps.forEach((d) => pyDeps.add(d));
+      parsed.devDeps.forEach((d) => pyDevDeps.add(d));
     } catch {
       // Skip
     }
-    if (pyDeps.length > 0) {
-      result.depsByEcosystem["python"] = { deps: pyDeps, devDeps: [] };
-    }
-  } else if (fs.existsSync(requirementsPath)) {
+  }
+  if (fs.existsSync(requirementsPath)) {
     langSet.add("python");
-    const pyDeps: string[] = [];
     try {
-      const content = fs.readFileSync(requirementsPath, "utf-8");
-      for (const line of content.split("\n")) {
-        const trimmed = line.trim();
-        if (trimmed && !trimmed.startsWith("#") && !trimmed.startsWith("-")) {
-          const name = trimmed.split(/[>=<!\[]/)[0].trim();
-          if (name) {
-            result.dependencies.push(name);
-            pyDeps.push(name);
-            detectPythonFramework(name, fwSet);
-          }
-        }
-      }
+      parseRequirementNames(fs.readFileSync(requirementsPath, "utf-8")).forEach((d) => pyDeps.add(d));
     } catch {
       // Skip
     }
-    if (pyDeps.length > 0) {
-      result.depsByEcosystem["python"] = { deps: pyDeps, devDeps: [] };
-    }
-  } else if (fs.existsSync(setupPyPath)) {
+  }
+  if (fs.existsSync(setupPyPath)) {
     langSet.add("python");
+  }
+  for (const name of pyDeps) {
+    pyDevDeps.delete(name);
+    result.dependencies.push(name);
+    detectPythonFramework(name, fwSet);
+  }
+  result.devDependencies.push(...pyDevDeps);
+  if (pyDeps.size > 0 || pyDevDeps.size > 0) {
+    result.depsByEcosystem["python"] = { deps: [...pyDeps], devDeps: [...pyDevDeps] };
   }
 
   // -------------------------------------------------------------------------
@@ -315,18 +316,11 @@ export function scanCurrentProject(cwd: string): ProjectScanResult {
         const parts = moduleMatch[1].split("/");
         result.projectName = parts[parts.length - 1];
       }
-      // Extract require block dependencies
-      const requireMatch = content.match(/require\s*\(([\s\S]*?)\)/);
-      if (requireMatch) {
-        for (const line of requireMatch[1].split("\n")) {
-          const depMatch = line.trim().match(/^(\S+)\s+/);
-          if (depMatch && !depMatch[1].startsWith("//")) {
-            const dep = depMatch[1];
-            result.dependencies.push(dep);
-            goDeps.push(dep);
-            detectGoFramework(dep, fwSet);
-          }
-        }
+      // Direct requirements only: `// indirect` lines are transitive.
+      for (const dep of parseGoModDirectDeps(content)) {
+        result.dependencies.push(dep);
+        goDeps.push(dep);
+        detectGoFramework(dep, fwSet);
       }
     } catch {
       // Skip

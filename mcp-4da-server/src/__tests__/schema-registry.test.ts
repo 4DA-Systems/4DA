@@ -1,108 +1,96 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Regression tests for the tool registry descriptions.
+ * The tool registry as hosts see it in tools/list.
  *
- * Locks in the prescriptive "call-when" trigger guarantee: every tool the
- * server advertises must tell the calling model WHEN to use it, not just what
- * it does. Recent models reach for tools more conservatively and select them
- * more reliably when the description carries an explicit trigger condition.
- *
- * Without this test a future edit could silently strip the triggers (or let the
- * slim list bloat back past its token budget) while the contract tests stay
- * green. Guards both description surfaces: the slim ListTools summary and the
- * lazy-loaded full schema.
+ * Locks in: the call-when trigger in every description (models select tools
+ * more reliably with an explicit trigger), the description budget, the FULL
+ * inputSchema for every tool (AD-032's slim `{type:"object"}` hid 30+ optional
+ * parameters from every host that never reads MCP Resources), honest
+ * annotations with a title, and the server instructions' length limit.
  */
 
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
-import { TOOL_REGISTRY, getSlimToolList } from "../schema-registry.js";
+import { TOOL_REGISTRY, getSlimToolList, getToolSchemaDocument } from "../schema-registry.js";
+import { SERVER_INSTRUCTIONS } from "../server-instructions.js";
 
 // An explicit trigger: "Call [this] when/before/after/first/to ..." (case-insensitive).
-// The optional "this" allows the natural "Call this before starting..." phrasing.
-const TRIGGER = /\bCall (this )?(when|after|before|first|to)\b/i;
-const schemaDir = join(dirname(fileURLToPath(import.meta.url)), "..", "schemas");
+const TRIGGER = /\bCall (this )?(when|after|before|first|to|BEFORE)\b/i;
+const WRITE_TOOLS = new Set(["record_feedback", "decision_memory", "agent_memory"]);
 
-describe("tool registry descriptions", () => {
-  it("registers exactly 15 tools (10 standalone, 5 full-mode)", () => {
-    expect(Object.keys(TOOL_REGISTRY)).toHaveLength(15);
-    expect(getSlimToolList().length).toBe(15);
-    expect(getSlimToolList(true).length).toBe(10);
+describe("tool registry", () => {
+  it("registers 16 tools (11 standalone, 5 that need the desktop app's database)", () => {
+    expect(Object.keys(TOOL_REGISTRY)).toHaveLength(16);
+    expect(getSlimToolList().length).toBe(16);
+    expect(getSlimToolList(true).length).toBe(11);
     expect(getSlimToolList(false).length).toBe(5);
   });
 
-  it("every slim summary carries an explicit call-when trigger", () => {
+  it("registry key, definition name and dispatch name agree", () => {
     for (const [name, entry] of Object.entries(TOOL_REGISTRY)) {
-      expect(entry.summary, `${name}: slim summary missing a 'Call ...' trigger`).toMatch(
-        TRIGGER,
-      );
+      expect(entry.definition.name, `${name}: definition.name`).toBe(name);
     }
   });
 
-  it("slim summaries stay within the token budget (guard against bloat)", () => {
+  it("every description carries an explicit call-when trigger", () => {
     for (const [name, entry] of Object.entries(TOOL_REGISTRY)) {
-      expect(
-        entry.summary.length,
-        `${name}: slim summary too long (${entry.summary.length} chars)`,
-      ).toBeLessThanOrEqual(240);
+      expect(entry.summary, `${name}: description missing a 'Call ...' trigger`).toMatch(TRIGGER);
     }
-    // Combined slim-list budget. The pre-trigger baseline was ~2000 chars; with
-    // triggers it sits near ~2450. Hard-cap well below the ~3200 over-budget
-    // version so a future regression is caught.
+  });
+
+  it("descriptions stay within budget (Claude Code truncates at 2,048; tool search reads them)", () => {
+    for (const [name, entry] of Object.entries(TOOL_REGISTRY)) {
+      expect(entry.summary.length, `${name}: ${entry.summary.length} chars`).toBeLessThanOrEqual(300);
+    }
     const total = Object.values(TOOL_REGISTRY).reduce((n, e) => n + e.summary.length, 0);
-    expect(total, `combined slim list is ${total} chars`).toBeLessThanOrEqual(2800);
+    expect(total, `combined descriptions are ${total} chars`).toBeLessThanOrEqual(3400);
   });
 
-  it("every full schema description also carries a trigger", () => {
-    for (const [name, entry] of Object.entries(TOOL_REGISTRY)) {
-      const raw = readFileSync(join(schemaDir, entry.schemaFile), "utf8");
-      const desc = JSON.parse(raw).description as string;
-      expect(desc, `${entry.schemaFile}: full description missing a trigger`).toMatch(TRIGGER);
+  it("tools/list serves every tool's FULL inputSchema, optional parameters included", () => {
+    for (const tool of getSlimToolList()) {
+      const definition = TOOL_REGISTRY[tool.name].definition;
+      expect(tool.inputSchema, tool.name).toBe(definition.inputSchema);
+      expect(tool.inputSchema.type, tool.name).toBe("object");
     }
+    // The parameters AD-032 hid are now visible.
+    const vuln = getSlimToolList().find((t) => t.name === "vulnerability_scan")!;
+    expect(Object.keys(vuln.inputSchema.properties as object)).toEqual(
+      expect.arrayContaining(["project_path", "severity_filter", "include_dev", "force_refresh", "response_format"]),
+    );
+  });
+
+  it("the whole tools/list stays within a ~5k-token budget", () => {
+    const chars = JSON.stringify(getSlimToolList()).length;
+    expect(chars, `tools/list is ${chars} chars`).toBeLessThanOrEqual(20_000);
+  });
+
+  it("every tool has a title and honest read/write annotations", () => {
+    for (const [name, entry] of Object.entries(TOOL_REGISTRY)) {
+      expect(entry.annotations.title.length, `${name}: title`).toBeGreaterThan(0);
+      expect(entry.annotations.readOnlyHint, `${name}: readOnlyHint`).toBe(!WRITE_TOOLS.has(name));
+      if (WRITE_TOOLS.has(name)) expect(entry.annotations.destructiveHint, name).toBe(false);
+    }
+  });
+
+  it("serves a schema document per tool as a resource", () => {
+    for (const name of Object.keys(TOOL_REGISTRY)) {
+      const doc = getToolSchemaDocument(name) as { name: string; inputSchema: unknown };
+      expect(doc.name).toBe(name);
+      expect(doc.inputSchema).toBe(TOOL_REGISTRY[name].definition.inputSchema);
+    }
+    expect(getToolSchemaDocument("no_such_tool")).toBeNull();
   });
 });
 
-describe("tools/list inputSchema discoverability (AD-032)", () => {
-  // Ground truth from the schema files themselves — the test never hardcodes
-  // which tools have required params, so adding one later stays consistent.
-  const requiredByFile = new Map(
-    Object.entries(TOOL_REGISTRY).map(([name, entry]) => {
-      const raw = JSON.parse(readFileSync(join(schemaDir, entry.schemaFile), "utf8")) as {
-        inputSchema?: { required?: string[] };
-      };
-      return [name, raw.inputSchema?.required ?? []] as const;
-    }),
-  );
-
-  it("required-param tools serve their REAL inputSchema in tools/list", () => {
-    for (const tool of getSlimToolList()) {
-      const required = requiredByFile.get(tool.name) ?? [];
-      if (required.length === 0) continue;
-      expect(
-        tool.inputSchema.required,
-        `${tool.name}: required params must be discoverable in tools/list`,
-      ).toEqual(required);
-      expect(
-        Object.keys((tool.inputSchema.properties ?? {}) as object).length,
-        `${tool.name}: real schema must carry its properties`,
-      ).toBeGreaterThan(0);
-    }
-    // The line is only meaningful if it actually fires for someone.
-    const servedFull = getSlimToolList().filter(
-      (t) => (requiredByFile.get(t.name) ?? []).length > 0,
-    );
-    expect(servedFull.length).toBeGreaterThanOrEqual(5);
+describe("server instructions", () => {
+  it("fit Claude Code's 2,048-character limit and lead with what the server is for", () => {
+    expect(SERVER_INSTRUCTIONS.length).toBeLessThanOrEqual(2048);
+    expect(SERVER_INSTRUCTIONS.slice(0, 512)).toMatch(/dependenc/i);
   });
 
-  it("all-optional tools stay slim ({} is a valid call; full schema via resource)", () => {
-    for (const tool of getSlimToolList()) {
-      const required = requiredByFile.get(tool.name) ?? [];
-      if (required.length > 0) continue;
-      expect(
-        tool.inputSchema,
-        `${tool.name}: all-optional tools keep the slim schema`,
-      ).toEqual({ type: "object" });
-    }
+  it("name only tools that exist", () => {
+    const resultFields = new Set(["advisory_severity"]);
+    const named = (SERVER_INSTRUCTIONS.match(/\b[a-z]+(?:_[a-z]+)+\b/g) ?? []).filter((n) => !resultFields.has(n));
+    expect(named.length).toBeGreaterThan(5);
+    for (const name of named) expect(Object.keys(TOOL_REGISTRY), name).toContain(name);
   });
 });

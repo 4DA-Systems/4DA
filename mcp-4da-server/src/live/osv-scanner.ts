@@ -12,7 +12,7 @@ import type { LiveCache } from "./cache.js";
 import type { RateLimiter } from "./rate-limiter.js";
 import { fetchWithTimeout, fetchJson } from "./http-utils.js";
 import { cvssBaseScore } from "./cvss.js";
-import { compareSemver, maxSemver, parseSemver } from "./semver-utils.js";
+import { compareVersions, isComparable, maxVersion, samePackageName } from "./version-compare.js";
 import type {
   ResolvedDependency,
   OsvVulnerability,
@@ -382,33 +382,32 @@ export function extractFixedVersion(
     .map((i) => i.fixed)
     .filter((f): f is string => f !== null);
   if (fixes.length === 0) return null;
+  // Ordered the ecosystem's way (PEP 440 for PyPI, `v`-less semver for Go).
+  const cmp = (a: string, b: string) => compareVersions(a, b, ecosystem);
 
-  if (installedVersion === null || parseSemver(installedVersion) === null) {
+  if (installedVersion === null || !isComparable(installedVersion, ecosystem)) {
     // Can't place the installed version on a release line — recommend the
     // highest published fix so the upgrade resolves the advisory either way.
-    return maxSemver(fixes);
+    return maxVersion(fixes, ecosystem);
   }
 
-  // The interval whose release line the installed version sits on. `compareSemver`
-  // returns 0 for unparseable bounds (e.g. introduced "0" = since inception),
-  // which keeps those intervals eligible on the introduced side only.
+  // The interval whose release line the installed version sits on. An
+  // unreadable bound compares as 0, which keeps those intervals eligible on
+  // the introduced side only; "0" (since inception) orders below everything.
   const containing = intervals.find(
     (i) =>
-      compareSemver(installedVersion, i.introduced) >= 0 &&
-      (i.fixed === null || compareSemver(installedVersion, i.fixed) < 0),
+      cmp(installedVersion, i.introduced) >= 0 &&
+      (i.fixed === null || cmp(installedVersion, i.fixed) < 0),
   );
-  if (
-    containing?.fixed &&
-    compareSemver(containing.fixed, installedVersion) > 0
-  ) {
+  if (containing?.fixed && cmp(containing.fixed, installedVersion) > 0) {
     return containing.fixed;
   }
 
   // No fix on the installed line (open interval, or installed already past
   // every containing range): smallest fix strictly above installed, or nothing.
-  const above = fixes.filter((f) => compareSemver(f, installedVersion) > 0);
+  const above = fixes.filter((f) => cmp(f, installedVersion) > 0);
   if (above.length === 0) return null;
-  return above.reduce((min, v) => (compareSemver(v, min) < 0 ? v : min), above[0]);
+  return above.reduce((min, v) => (cmp(v, min) < 0 ? v : min), above[0]);
 }
 
 /**
@@ -424,7 +423,10 @@ function collectVulnerableIntervals(
 ): VulnerableInterval[] {
   const intervals: VulnerableInterval[] = [];
   for (const a of affected) {
-    if (a.package.name !== packageName || a.package.ecosystem !== ecosystem) continue;
+    // Names compare the registry's way: PEP 503 for PyPI (`Jinja2` is
+    // `jinja2`), `-`/`_` folding for crates. An exact compare found no range
+    // for Jinja2 or PyYAML and reported "no fix version published" for both.
+    if (a.package.ecosystem !== ecosystem || !samePackageName(a.package.name, packageName, ecosystem)) continue;
     for (const range of a.ranges || []) {
       if (range.type === "GIT") continue;
       let open: VulnerableInterval | null = null;

@@ -11,6 +11,7 @@ import type { CallToolResult } from "@modelcontextprotocol/server";
 import type { FourDADatabase } from "./db.js";
 import { assertToolPermission } from "./auth-context.js";
 import { checkBuildStaleness } from "./build-staleness.js";
+import { cleanStrings } from "./tool-args.js";
 
 import {
   executeGetRelevantContent,
@@ -28,6 +29,7 @@ import {
   executeDependencyHealth,
   executeUpgradePlanner,
   executeDependencyCheck,
+  executeUpgradeImpact,
 } from "./tools/index.js";
 
 import { getLiveIntelligence } from "./live-singleton.js";
@@ -48,6 +50,7 @@ const DISPATCH_MAP: Record<string, ToolExecutor> = {
   dependency_health: (db, params) => executeDependencyHealth(db, params, getLiveIntelligence()),
   upgrade_planner: (db, params) => executeUpgradePlanner(db, params, getLiveIntelligence()),
   dependency_check: (db, params) => executeDependencyCheck(db, params, getLiveIntelligence()),
+  upgrade_impact: (db, params) => executeUpgradeImpact(db, params, getLiveIntelligence()),
 
   // Intelligence
   what_should_i_know: executeWhatShouldIKnow,
@@ -121,9 +124,23 @@ export async function dispatchTool(
       throw error;
     }
   }
-  const payload = FRESHNESS_TOOLS.has(name) ? attachFreshness(db, result) : result;
+  const payload = cleanStrings(FRESHNESS_TOOLS.has(name) ? attachFreshness(db, result) : result);
+  // An executor that returns `{ error: "<message>" }` failed: say so in the
+  // protocol, not only in the body, so the host and model treat it as an error.
+  const failed =
+    payload !== null && typeof payload === "object" && typeof (payload as { error?: unknown }).error === "string";
+  // The same payload as text AND as structuredContent: hosts disagree on which
+  // one reaches the model (Claude Code and VS Code read the structured form;
+  // Cursor, Zed and Gemini CLI read only the text), so neither may be partial.
+  // Compact JSON: indentation was ~20% of every response's tokens.
+  const structured =
+    payload !== null && typeof payload === "object" && !Array.isArray(payload)
+      ? { structuredContent: payload as Record<string, unknown> }
+      : {};
   return {
-    content: [{ type: "text", text: JSON.stringify(payload, null, 2) }],
+    content: [{ type: "text", text: JSON.stringify(payload) }],
+    ...structured,
+    ...(failed ? { isError: true } : {}),
   };
 }
 

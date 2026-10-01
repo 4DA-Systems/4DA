@@ -43,13 +43,22 @@ import { homedir } from "node:os";
 import { startHttpServer } from "./http-transport.js";
 import { runSetup } from "./setup.js";
 import { runDoctor } from "./doctor.js";
-import { scanCurrentProject } from "./project-scanner.js";
+import { scanProjectTree, treeResolutionGroups } from "./project-tree.js";
 import { LiveIntelligence } from "./live/index.js";
 import { deriveTechStackForHeadlines } from "./tools/ecosystem-pulse.js";
 import { setLiveIntelligence } from "./live-singleton.js";
+import { SERVER_INSTRUCTIONS } from "./server-instructions.js";
+import { validateToolArgs } from "./tool-args.js";
 
-// Schema registry for slim tool listing + category metadata
-import { getSlimToolList, getSchemaResources, hasToolSchema, getSchemaFilename, getCategoryManifest } from "./schema-registry.js";
+// Tool registry: listing, schema resources, category metadata
+import {
+  getCategoryManifest,
+  getSchemaResources,
+  getSlimToolList,
+  getToolSchemaDocument,
+  hasToolSchema,
+  TOOL_REGISTRY,
+} from "./schema-registry.js";
 
 // Map-based tool dispatch (replaces per-tool imports + switch statement)
 import { dispatchTool } from "./tool-dispatch.js";
@@ -113,8 +122,12 @@ function getDatabase(): FourDADatabase {
     // the user's code) — the .mcpb bundle wires its directory picker to this.
     if (db.isStandalone) {
       const cwd = resolveProjectDir();
-      const scan = scanCurrentProject(cwd);
+      // The root and every independently-locked project below it
+      // (project-tree.ts): a repo root's own lockfile is often not the only one.
+      const tree = scanProjectTree(cwd);
+      const scan = tree[0].scan;
       db.populateFromScan(scan);
+      const groups = treeResolutionGroups(tree);
 
       const detected = [
         ...scan.languages,
@@ -122,17 +135,17 @@ function getDatabase(): FourDADatabase {
       ].filter(Boolean);
 
       console.error(
-        `[4DA] Standalone mode: scanned ${scan.projectPath}`
+        `[4DA] Standalone mode: scanned ${scan.projectPath} (${tree.length} project${tree.length === 1 ? "" : "s"})`
       );
-      if (detected.length > 0) {
+      if (groups.length > 0) {
         console.error(
-          `[4DA]   Detected: ${detected.join(", ")} | ${scan.dependencies.length} deps, ${scan.devDependencies.length} dev deps`
+          `[4DA]   Detected: ${detected.join(", ") || "lockfiles"} | ${scan.dependencies.length} deps, ${scan.devDependencies.length} dev deps at the root`
         );
 
         // Initialize live intelligence with per-ecosystem resolved versions
-        // (depTargets carries platform-gated dep info so advisories can be
-        // flagged platform-relevant for the host).
-        liveIntel.initFromMultiEcosystem(cwd, scan.depsByEcosystem, scan.depTargets);
+        // (targets carry platform-gated dep info so advisories can be flagged
+        // platform-relevant for the host).
+        liveIntel.initFromProjectTree(cwd, groups);
 
         if (liveIntel.isEnabled()) {
           console.error(`[4DA]   Live intelligence: enabled (OSV.dev + HN)`);
@@ -229,6 +242,38 @@ function getDatabase(): FourDADatabase {
   return db;
 }
 
+/** Standalone vs desktop-app database, decided once by the cheap probe (no scan, no resolution). */
+let standaloneMode: boolean | null = null;
+
+function isStandaloneMode(): boolean {
+  if (db) return db.isStandalone;
+  if (standaloneMode === null) {
+    const probe = FourDADatabase.validateDatabase(process.env.FOURDA_DB_PATH || undefined);
+    standaloneMode = probe.standalone === true;
+  }
+  return standaloneMode;
+}
+
+let backgroundInitScheduled = false;
+
+/**
+ * Start the full init (database, project scan, lockfile resolution, scan
+ * warmup) after the current response has been written. It is synchronous
+ * work, so it runs on a later tick; a tool call that arrives first simply
+ * performs it itself, exactly as before.
+ */
+function scheduleBackgroundInit(): void {
+  if (backgroundInitScheduled || db) return;
+  backgroundInitScheduled = true;
+  setTimeout(() => {
+    try {
+      getDatabase();
+    } catch (err) {
+      console.error(`[4DA] Background init failed (tools will retry on first call): ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }, 50).unref?.();
+}
+
 // =============================================================================
 // Server Factory
 // =============================================================================
@@ -248,20 +293,25 @@ export function buildServer(): Server {
       version: SERVER_VERSION,
     },
     {
+      // `listChanged` was advertised and never sent: the tool set is fixed for
+      // the life of the process, so the honest capability is none.
       capabilities: {
-        tools: { listChanged: true },
+        tools: {},
         resources: {},
         prompts: {},
       },
+      instructions: SERVER_INSTRUCTIONS,
     }
   );
 
-  // List available tools (SLIM): one-liner descriptions only (~500 tokens vs
-  // ~4500). Full schemas available via MCP Resources: 4da://schema/{tool_name}
+  // tools/list answers from a cheap mode probe, never from the full init. It
+  // used to open the database AND resolve every lockfile synchronously first
+  // (measured 6.6 s on a 2,063-dependency tree), stalling the host's handshake.
+  // The full init is started right after the first listing is sent.
   server.setRequestHandler("tools/list", async () => {
-    const database = getDatabase();
+    scheduleBackgroundInit();
     return {
-      tools: getSlimToolList(database.isStandalone ? true : undefined),
+      tools: getSlimToolList(isStandaloneMode() ? true : undefined),
     };
   });
 
@@ -331,25 +381,17 @@ export function buildServer(): Server {
     }
 
     const toolName = match[1];
-    if (!hasToolSchema(toolName)) {
+    const document = hasToolSchema(toolName) ? getToolSchemaDocument(toolName) : null;
+    if (!document) {
       throw new Error(`Unknown tool: ${toolName}`);
     }
-
-    const schemaFile = getSchemaFilename(toolName);
-    if (!schemaFile) {
-      throw new Error(`No schema file for tool: ${toolName}`);
-    }
-
-    // Read schema from file
-    const schemaPath = join(__dirname, "schemas", schemaFile);
-    const schemaContent = readFileSync(schemaPath, "utf-8");
 
     return {
       contents: [
         {
           uri,
           mimeType: "application/json",
-          text: schemaContent,
+          text: JSON.stringify(document, null, 2),
         },
       ],
     };
@@ -369,6 +411,20 @@ export function buildServer(): Server {
   // Execute a tool
   server.setRequestHandler("tools/call", async (request) => {
     const { name, arguments: args } = request.params;
+
+    // Arguments are checked against the published schema before anything
+    // runs, so a wrong type or a misspelled parameter comes back as a
+    // correctable error rather than a Node exception or a silent no-op.
+    const entry = TOOL_REGISTRY[name];
+    if (entry) {
+      const problem = validateToolArgs(name, entry.definition.inputSchema, (args ?? {}) as Record<string, unknown>);
+      if (problem) {
+        return {
+          content: [{ type: "text", text: JSON.stringify({ error: problem }) }],
+          isError: true,
+        };
+      }
+    }
 
     try {
       const database = getDatabase();

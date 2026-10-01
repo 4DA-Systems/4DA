@@ -138,6 +138,15 @@ export class LiveIntelligence {
   }
 
   /**
+   * Initialize from every independently-locked project under `root` (see
+   * project-tree.ts): each group resolves from its own directory and keeps
+   * its manifest's platform targets; `root` is the reported project root.
+   */
+  initFromProjectTree(root: string, groups: ResolutionGroup[]): void {
+    this.applyGroups(groups, root);
+  }
+
+  /**
    * Initialize from dependency groups that each carry their own resolution
    * directory. Used in 4DA database mode, where dependencies span multiple
    * manifests in different locations (Rust crates under src-tauri/, relay/,

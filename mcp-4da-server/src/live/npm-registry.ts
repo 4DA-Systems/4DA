@@ -44,66 +44,33 @@ export class NpmRegistry {
     currentVersion: string | null,
     isDev: boolean,
   ): Promise<RegistryPackageInfo> {
-    const cacheKey = `npm-reg:${name}`;
-    const cached = this.cache.get<RegistryPackageInfo>(cacheKey);
-    if (cached !== null) return cached;
-
-    if (!this.rateLimiter.canProceed("npm")) {
-      const stale = this.cache.getStale<RegistryPackageInfo>(cacheKey);
-      if (stale) return stale.data;
-      return errorResult(name, currentVersion, isDev, "Rate limited");
-    }
-
-    try {
-      this.rateLimiter.consume("npm");
-
-      const meta = await fetchJson<NpmAbbreviatedMeta>(
-        `${NPM_REGISTRY_URL}/${encodeURIComponent(name)}`,
-        { headers: { Accept: "application/vnd.npm.install-v1+json" } },
-        NPM_TIMEOUT_MS,
-      );
-
-      const latestTag = meta["dist-tags"]?.latest ?? null;
-      const versions = Object.keys(meta.versions || {});
-
-      // Latest stable = last version that is not a prerelease
-      const latestStable = findLatestStable(versions);
-
-      // Check deprecation on the latest version entry
-      const latestVersionEntry = latestTag ? meta.versions[latestTag] : null;
-      const deprecated = !!latestVersionEntry?.deprecated;
-      const deprecationMessage = latestVersionEntry?.deprecated ?? null;
-
-      // Semver distance between current and latest stable (or latest tag)
-      let versionsBehind: SemverDistance | null = null;
-      if (currentVersion && (latestStable || latestTag)) {
-        versionsBehind = computeSemverDistance(currentVersion, latestStable || latestTag!);
+    // The cache holds facts about the PACKAGE; the answer is computed for the
+    // installed version on every call. It used to cache the finished answer by
+    // name, so the second project to ask about a package got the first one's
+    // `currentVersion` and distance.
+    const cacheKey = `npm-facts:${name}`;
+    let facts = this.cache.get<NpmPackageFacts>(cacheKey);
+    if (facts === null) {
+      if (!this.rateLimiter.canProceed("npm")) {
+        facts = this.cache.getStale<NpmPackageFacts>(cacheKey)?.data ?? null;
+        if (!facts) return errorResult(name, currentVersion, isDev, "Rate limited");
+      } else {
+        try {
+          this.rateLimiter.consume("npm");
+          const meta = await fetchJson<NpmAbbreviatedMeta>(
+            `${NPM_REGISTRY_URL}/${encodeURIComponent(name)}`,
+            { headers: { Accept: "application/vnd.npm.install-v1+json" } },
+            NPM_TIMEOUT_MS,
+          );
+          facts = packageFacts(meta);
+          this.cache.set(cacheKey, facts, "npm", NPM_CACHE_TTL);
+        } catch (err) {
+          facts = this.cache.getStale<NpmPackageFacts>(cacheKey)?.data ?? null;
+          if (!facts) return errorResult(name, currentVersion, isDev, err instanceof Error ? err.message : String(err));
+        }
       }
-
-      const result: RegistryPackageInfo = {
-        name,
-        ecosystem: "npm",
-        currentVersion,
-        latestVersion: latestTag,
-        latestStableVersion: latestStable,
-        versionsBehind,
-        deprecated,
-        deprecationMessage,
-        lastPublished: meta.modified ?? null,
-        license: null, // abbreviated metadata does not include license
-        weeklyDownloads: null, // fetched separately via getBulkDownloads
-        isDev,
-        fetchError: null,
-      };
-
-      this.cache.set(cacheKey, result, "npm", NPM_CACHE_TTL);
-      return result;
-    } catch (err) {
-      const stale = this.cache.getStale<RegistryPackageInfo>(cacheKey);
-      if (stale) return stale.data;
-      const message = err instanceof Error ? err.message : String(err);
-      return errorResult(name, currentVersion, isDev, message);
     }
+    return infoFor(name, currentVersion, isDev, facts);
   }
 
   async getBulkDownloads(names: string[]): Promise<Map<string, number>> {
@@ -156,10 +123,58 @@ export class NpmRegistry {
   }
 }
 
-// Semver-max, not last-published: maintenance releases of older lines are
-// published after newer lines (see maxStableSemver).
-function findLatestStable(versions: string[]): string | null {
-  return maxStableSemver(versions);
+/** What the registry says about a package, independent of which version is installed. */
+interface NpmPackageFacts {
+  latestTag: string | null;
+  latestStable: string | null;
+  modified: string | null;
+  /** Deprecation message per deprecated version (only those). */
+  deprecations: Record<string, string>;
+}
+
+function packageFacts(meta: NpmAbbreviatedMeta): NpmPackageFacts {
+  const deprecations: Record<string, string> = {};
+  for (const [version, entry] of Object.entries(meta.versions || {})) {
+    if (entry?.deprecated) deprecations[version] = entry.deprecated;
+  }
+  return {
+    latestTag: meta["dist-tags"]?.latest ?? null,
+    // Semver-max, not last-published: maintenance releases of older lines are
+    // published after newer lines (see maxStableSemver).
+    latestStable: maxStableSemver(Object.keys(meta.versions || {})),
+    modified: meta.modified ?? null,
+    deprecations,
+  };
+}
+
+/**
+ * The answer for one installed version. Deprecation is the INSTALLED
+ * version's first (that is what the project runs): `mkdirp@0.5.1` is
+ * deprecated on npm while its latest is not, and checking only the latest
+ * entry reported it healthy. A deprecated latest still marks the whole
+ * package deprecated.
+ */
+function infoFor(name: string, currentVersion: string | null, isDev: boolean, facts: NpmPackageFacts): RegistryPackageInfo {
+  const installedDeprecation = currentVersion ? facts.deprecations[currentVersion] : undefined;
+  const latestDeprecation = facts.latestTag ? facts.deprecations[facts.latestTag] : undefined;
+  const target = facts.latestStable || facts.latestTag;
+  const versionsBehind: SemverDistance | null =
+    currentVersion && target ? computeSemverDistance(currentVersion, target) : null;
+  return {
+    name,
+    ecosystem: "npm",
+    currentVersion,
+    latestVersion: facts.latestTag,
+    latestStableVersion: facts.latestStable,
+    versionsBehind,
+    deprecated: Boolean(installedDeprecation || latestDeprecation),
+    deprecationMessage: installedDeprecation ?? latestDeprecation ?? null,
+    lastPublished: facts.modified,
+    license: null, // abbreviated metadata does not include license
+    weeklyDownloads: null, // fetched separately via getBulkDownloads
+    isDev,
+    fetchError: null,
+  };
 }
 
 function errorResult(

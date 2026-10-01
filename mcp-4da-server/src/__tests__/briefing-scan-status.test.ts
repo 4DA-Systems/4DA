@@ -164,6 +164,20 @@ function scanOf(entries: VulnerabilityEntry[], over: Partial<VulnerabilityScanRe
   };
 }
 
+function dep(name: string, version: string, ecosystem: ResolvedDependency["ecosystem"], isDirect = true): ResolvedDependency {
+  return { name, version, ecosystem, isDev: false, isDirect, devScopeKnown: true, target: null, platformActive: true, sourceDirs: ["d:/proj"] };
+}
+
+/** The project's dependency set: the briefing finds a task's packages in it. */
+const DEPS: ResolvedDependency[] = [
+  dep("jsonwebtoken", "9.3.1", "crates.io"),
+  dep("hono", "4.13.5", "npm"),
+  dep("nix", "0.29.0", "crates.io"),
+  dep("paste", "1.0.15", "crates.io", false),
+  dep("sandbox", "3.1.2", "npm", false),
+  dep("fastembed", "5.17.4", "crates.io"),
+];
+
 /** A live layer whose scan state is under the test's control. */
 function stubIntel(
   scan: VulnerabilityScanResult | null,
@@ -172,9 +186,9 @@ function stubIntel(
   return {
     isEnabled: () => true,
     getProjectRoot: () => "d:/proj",
-    getHeadlines: () => [],
     getVulnerabilities: () => scan,
     ensureVulnerabilities: async () => scan,
+    getResolvedDeps: () => DEPS,
     ...over,
   };
 }
@@ -277,9 +291,7 @@ describe("what_should_i_know — the briefing never answers safe without a scan"
     expect(result.delegation_assessment.level).toBe("safe_to_delegate");
   });
 
-  it("a security alert older than 72 hours but inside 30 days reaches the briefing", async () => {
-    // A recent unrelated item keeps the 72-hour pass from falling back to the
-    // deep window on its own; the 30-day security pass is what must find it.
+  it("an advisory-feed row naming a task package reaches the briefing at any age inside 90 days, marked unconfirmed", async () => {
     insertItem(db, { title: "Rust 1.99 released", hoursAgo: 3, source_type: "hackernews", relevance: 0.5 });
     insertItem(db, {
       title: "hono 4.12.34 patches middleware bypass",
@@ -288,13 +300,50 @@ describe("what_should_i_know — the briefing never answers safe without a scan"
       signal_priority: "medium",
     });
 
+    // No scan: the feed row is the only evidence, and it says so.
+    const unscanned = await executeWhatShouldIKnow(db, { task: "Upgrade hono in the API gateway" }, stubIntel(null));
+    const row = unscanned.advisories.find((a) => a.title.includes("hono 4.12.34"));
+    expect(row?.version_confirmed).toBe(false);
+    expect(row?.scope).toBe("task");
+
+    // A ready scan that finds the installed hono clean is authoritative: the
+    // unconfirmed row is not repeated as if it were a finding.
+    const scanned = await executeWhatShouldIKnow(db, { task: "Upgrade hono in the API gateway" }, stubIntel(scanOf([])));
+    expect(scanned.advisories.some((a) => a.title.includes("hono 4.12.34"))).toBe(false);
+    expect(scanned.delegation_assessment.level).toBe("safe_to_delegate");
+  });
+
+  it("a security headline that is not from an advisory source never reaches the briefing", async () => {
+    // The 2026-10-01 defect: company news matched to a package name.
+    insertItem(db, {
+      title: "OpenAI agents tried to bruteforce a UN website's API fields",
+      hoursAgo: 2,
+      source_type: "mastodon",
+      signal_type: "security_alert",
+      signal_priority: "alert",
+    });
+    insertItem(db, {
+      title: "A Function-level Dataset of Vulnerable and Fixed Source Code in JavaScript and TypeScript",
+      hoursAgo: 2,
+      source_type: "arxiv",
+      signal_type: "security_alert",
+      signal_priority: "alert",
+    });
     const result = await executeWhatShouldIKnow(
       db,
-      { task: "Upgrade hono in the API gateway" },
-      stubIntel(scanOf([])),
+      { task: "Upgrade the fastembed crate from 5.x to 7.x" },
+      stubIntel(scanOf([]), { getResolvedDeps: () => [...DEPS, dep("openai", "6.7.0", "npm")] }),
     );
-
-    expect(result.advisories.some((a) => a.title.includes("hono 4.12.34"))).toBe(true);
+    expect(result.advisories).toEqual([]);
+    expect(result.task_dependencies.map((d) => d.package)).toEqual(["fastembed"]);
+    const fastembed = result.task_dependencies[0];
+    expect(fastembed.installed).toEqual(["5.17.4"]);
+    expect(fastembed.requested).toEqual({ from: "5.x", to: "7.x" });
+    expect(fastembed.majors_crossed).toBe(2);
+    expect(fastembed.next_step).toContain("upgrade_impact");
+    // A two-major jump is a review, not human_only and not safe.
+    expect(result.delegation_assessment.level).toBe("review_needed");
+    expect(result.delegation_assessment.reason).toContain("2 major versions of fastembed");
   });
 
   it("advisories that appear in both passes are reported once", async () => {

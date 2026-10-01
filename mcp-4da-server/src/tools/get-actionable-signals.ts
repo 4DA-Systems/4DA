@@ -14,16 +14,14 @@ import { isMaintenanceNotice } from "../live/maintenance.js";
 import { presentedSeverity, scopeAdjustmentReason } from "../live/severity-scope.js";
 import { getLiveIntelligence } from "../live-singleton.js";
 import { driftAction } from "./install-drift-notes.js";
-import {
-  classify,
-  normalizeStoredPriority,
-  type SignalPriority,
-  type SignalType,
-} from "./signal-classifier.js";
+import { normalizeStoredPriority, type SignalPriority, type SignalType } from "./signal-classifier.js";
 
-// The keyword classifier and the priority vocabulary live in
-// signal-classifier.ts; re-exported for existing importers.
-export { classify, normalizeStoredPriority, type SignalPriority, type SignalType } from "./signal-classifier.js";
+// The priority vocabulary lives in signal-classifier.ts; re-exported for existing importers.
+export { normalizeStoredPriority, type SignalPriority, type SignalType } from "./signal-classifier.js";
+
+/** Feed sources whose rows are structured facts (an advisory record, a registry release), not prose. */
+const STRUCTURED_SOURCES = new Set(["cve", "osv", "crates_io", "npm_registry", "pypi", "go_modules", "github"]);
+const ADVISORY_SOURCES = new Set(["cve", "osv"]);
 
 interface ClassifiedSignal {
   id: number;
@@ -165,6 +163,39 @@ export function clusterVulnerabilities(vulns: VulnerabilityEntry[]): Vulnerabili
   });
 }
 
+/** Latest relevance-judge verdict per item (`llm_judgments`), when the desktop app has judged it. */
+function judgeVerdicts(db: FourDADatabase, ids: number[]): Map<number, number> {
+  const out = new Map<number, number>();
+  if (ids.length === 0) return out;
+  try {
+    const raw = db.getRawDb();
+    for (let i = 0; i < ids.length; i += 500) {
+      const chunk = ids.slice(i, i + 500);
+      const rows = raw
+        .prepare(
+          `SELECT source_item_id AS id, relevance_score AS v FROM llm_judgments
+           WHERE id IN (SELECT MAX(id) FROM llm_judgments WHERE source_item_id IN (${chunk.map(() => "?").join(",")}) GROUP BY source_item_id)`,
+        )
+        .all(...chunk) as Array<{ id: number; v: number }>;
+      for (const row of rows) out.set(row.id, row.v);
+    }
+  } catch {
+    // No llm_judgments table (standalone or an older app): no verdicts.
+  }
+  return out;
+}
+
+/** What an agent can do with a signal of this type and source. */
+function actionFor(type: SignalType, source: string): string {
+  if (ADVISORY_SOURCES.has(source)) return "Advisory record: run vulnerability_scan to see whether your installed versions are affected.";
+  if (source === "crates_io" || source === "npm_registry" || source === "pypi" || source === "go_modules") {
+    return "New release of a dependency: call upgrade_impact for what changed before bumping.";
+  }
+  if (type === "security_alert") return "Security news (not an advisory against your versions): read for context.";
+  if (type === "breaking_change") return "Possible breaking change: check whether it touches a dependency you use.";
+  return "Read for context.";
+}
+
 // ============================================================================
 // Execution
 // ============================================================================
@@ -207,53 +238,32 @@ export function executeGetActionableSignals(
     items = fetchItems(0.0, 720, true);
   }
 
-  // Get user's detected tech for cross-referencing
-  const context = db.getUserContext(true, false);
-  const detectedTech = (context.ace?.detected_tech || []).map((t: { name: string }) => t.name);
-
   const signals: ClassifiedSignal[] = [];
+  const verdicts = judgeVerdicts(db, items.map((item) => item.id));
 
   for (const item of items) {
-    // Prefer pipeline-computed signals from DB over keyword re-classification.
-    // The pipeline's priority vocabulary (critical/alert/advisory/watch) is
-    // mapped onto this tool's tiers rather than cast through unchanged.
-    if (item.signal_type && item.signal_priority) {
-      const storedType = item.signal_type as SignalType;
-      const storedPriority = normalizeStoredPriority(item.signal_priority);
+    // Only the pipeline's own classifications, and only when they can be
+    // stood behind: a prose item (news, social, papers) appears when the
+    // relevance judge accepted it (latest verdict >= 0.5); a structured row
+    // (advisory record, registry release) may appear unjudged. Measured
+    // 2026-10-01: of 154 items stamped security_alert in 14 days the judge
+    // accepted 10, rejected 62 and never saw 82; 3 came from an advisory source.
+    if (!item.signal_type || !item.signal_priority) continue;
+    const verdict = verdicts.get(item.id);
+    const structured = STRUCTURED_SOURCES.has(item.source_type);
+    if (verdict !== undefined ? verdict < 0.5 : !structured) continue;
 
-      // Apply filters
-      if (params.priority_filter && storedPriority !== params.priority_filter) continue;
-      if (params.signal_type && storedType !== params.signal_type) continue;
-
-      signals.push({
-        id: item.id,
-        title: item.title,
-        url: item.url,
-        source_type: item.source_type,
-        relevance_score: item.relevance_score,
-        signal_type: storedType,
-        signal_priority: storedPriority,
-        action: `${storedType}: ${item.title.substring(0, 60)}`,
-        triggers: [],
-        confidence: 0.90,
-        discovered_ago: item.discovered_ago,
-      });
-      continue;
+    const storedType = item.signal_type as SignalType;
+    let priority = normalizeStoredPriority(item.signal_priority);
+    // A headline about security is not an advisory against your versions:
+    // never above medium unless it comes from an advisory database.
+    if (storedType === "security_alert" && !ADVISORY_SOURCES.has(item.source_type) && (priority === "critical" || priority === "high")) {
+      priority = "medium";
     }
 
-    // Fallback: keyword classification for items without pipeline signals
-    const result = classify(
-      item.title,
-      item.content || "",
-      item.relevance_score,
-      detectedTech
-    );
-
-    if (!result) continue;
-
     // Apply filters
-    if (params.priority_filter && result.priority !== params.priority_filter) continue;
-    if (params.signal_type && result.signalType !== params.signal_type) continue;
+    if (params.priority_filter && priority !== params.priority_filter) continue;
+    if (params.signal_type && storedType !== params.signal_type) continue;
 
     signals.push({
       id: item.id,
@@ -261,11 +271,12 @@ export function executeGetActionableSignals(
       url: item.url,
       source_type: item.source_type,
       relevance_score: item.relevance_score,
-      signal_type: result.signalType,
-      signal_priority: result.priority,
-      action: result.action,
-      triggers: result.triggers,
-      confidence: result.confidence,
+      signal_type: storedType,
+      signal_priority: priority,
+      action: actionFor(storedType, item.source_type),
+      triggers: [],
+      // The judge's verdict when there is one; a structured row carries none.
+      confidence: verdict ?? (structured ? 0.5 : 0),
       discovered_ago: item.discovered_ago,
     });
   }

@@ -167,7 +167,7 @@ async function scanPaddle(db: Database.Database): Promise<Record<string, any>> {
   (li as unknown as { osvScanner: { scan: typeof scanOf } }).osvScanner = { scan: async (d, p) => scanOf(d, p) } as never;
   li.initFromDependencyGroups([{ dir: paddleDir, language: "javascript", deps: ["@paddle/paddle-node-sdk"], devDeps: [] }]);
   vi.spyOn(process, "cwd").mockReturnValue(paddleDir);
-  return (await executeVulnerabilityScan(noDb, {}, li)) as Record<string, any>;
+  return (await executeVulnerabilityScan(noDb, { response_format: "detailed" }, li)) as Record<string, any>;
 }
 
 beforeAll(() => {
@@ -243,9 +243,9 @@ describe("vulnerability_scan — sandbox@3.1.2 graded as the app grades it", () 
     li.initFromDependencyGroups([{ dir: paddleDir, language: "javascript", deps: ["@paddle/paddle-node-sdk"], devDeps: [] }]);
     vi.spyOn(process, "cwd").mockReturnValue(paddleDir);
 
-    const critical = (await executeVulnerabilityScan(noDb, { severity_filter: "critical" }, li)) as Record<string, any>;
+    const critical = (await executeVulnerabilityScan(noDb, { severity_filter: "critical", response_format: "detailed" }, li)) as Record<string, any>;
     expect(critical.vulnerabilities).toHaveLength(0);
-    const high = (await executeVulnerabilityScan(noDb, { severity_filter: "high" }, li)) as Record<string, any>;
+    const high = (await executeVulnerabilityScan(noDb, { severity_filter: "high", response_format: "detailed" }, li)) as Record<string, any>;
     expect(high.vulnerabilities).toHaveLength(1);
   });
 });
