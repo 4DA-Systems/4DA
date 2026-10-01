@@ -902,7 +902,7 @@ react 19.3.0 - MIT - https://react.dev/
 react-dom 19.3.0 - MIT - https://react.dev/
 react-i18next 17.0.15 - MIT - https://github.com/i18next/react-i18next
 scheduler 0.28.0 - MIT - https://react.dev/
-typescript 5.9.3 - Apache-2.0 - https://www.typescriptlang.org/
+typescript 6.0.3 - Apache-2.0 - https://www.typescriptlang.org/
 use-sync-external-store 1.7.0 - MIT - https://github.com/react/react#readme
 zustand 4.5.7 - MIT - https://github.com/pmndrs/zustand
 zustand 5.0.15 - MIT - https://github.com/pmndrs/zustand
