@@ -319,6 +319,17 @@ describe("deps prompt", () => {
     expect(text).toContain("security only");
     expect(getPrompt("nope", undefined)).toBeNull();
   });
+
+  it("routes each app-plan step by its mechanism and treats targets as minimums", async () => {
+    const { getPrompt } = await import("../prompts.js");
+    const text = getPrompt("deps", undefined)!.messages[0].content.text;
+    for (const mechanism of ["manifest_bump", "lockfile_or_parent_update", "mixed", "no_fix"]) {
+      expect(text, mechanism).toContain(`\`${mechanism}\``);
+    }
+    expect(text).toMatch(/target` is a minimum/);
+    expect(text).toMatch(/Never add the transitive package as a new direct dependency/);
+    expect(text).toMatch(/do not change the policy/);
+  });
 });
 
 describe("upgrade_type", () => {
