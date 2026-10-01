@@ -88,6 +88,25 @@ describe('SignalsPanel', () => {
     expect(screen.getByText('Patch this vulnerability')).toBeInTheDocument();
   });
 
+  it('keeps pipeline-rejected items out of Key Signals, except critical alerts', () => {
+    // Demotion clears `relevant` but keeps the signal fields (live audit
+    // 2026-10-02: 48 of 104 Key Signals were rejected items).
+    render(
+      <SignalsPanel
+        results={[
+          makeSignalItem({ id: 1, signal_action: 'Kept: surfaced item' }),
+          makeSignalItem({ id: 2, relevant: false, excluded: true, signal_action: 'Gone: judge-rejected' }),
+          makeSignalItem({ id: 3, excluded: true, signal_action: 'Gone: excluded' }),
+          makeSignalItem({ id: 4, relevant: false, is_critical_alert: true, signal_action: 'Kept: critical alert' }),
+        ]}
+      />,
+    );
+    expect(screen.getByText('Kept: surfaced item')).toBeInTheDocument();
+    expect(screen.getByText('Kept: critical alert')).toBeInTheDocument();
+    expect(screen.queryByText('Gone: judge-rejected')).not.toBeInTheDocument();
+    expect(screen.queryByText('Gone: excluded')).not.toBeInTheDocument();
+  });
+
   it('shows the signals title header', () => {
     render(
       <SignalsPanel results={[makeSignalItem({ id: 1 })]} />,

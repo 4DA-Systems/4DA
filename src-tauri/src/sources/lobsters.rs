@@ -54,6 +54,26 @@ impl LobstersSubmitter {
     }
 }
 
+/// Oldest story `hottest.json` / `newest.json` can legitimately list. Both
+/// feeds only ever show the last few days; anything older is an archive page.
+///
+/// Since 2026-09-23 Lobste.rs has intermittently served cached archive pages at
+/// the plain feed URLs (its page cache keys on the path and ignores `?page=`,
+/// so a `newest.json?page=N` request that lands on an expired cache poisons
+/// the shared entry). 3,460 stories from 2012-2025 were ingested that way and
+/// 24 reached the Signal feed — "Tauri 2.0 Stable Release", "Announcing Rust
+/// 1.88.0" — as if they were today's news.
+const MAX_STORY_AGE_DAYS: i64 = 14;
+
+/// True when the story's `created_at` is older than [`MAX_STORY_AGE_DAYS`]
+/// relative to `now`. A missing or unparseable timestamp is NOT stale — the
+/// gate drops only what it can prove is old.
+fn is_stale_story(created_at: Option<&str>, now: chrono::DateTime<chrono::Utc>) -> bool {
+    created_at
+        .and_then(|s| chrono::DateTime::parse_from_rfc3339(s).ok())
+        .is_some_and(|t| now.signed_duration_since(t) > chrono::Duration::days(MAX_STORY_AGE_DAYS))
+}
+
 // ============================================================================
 // Lobste.rs Source
 // ============================================================================
@@ -132,6 +152,20 @@ impl LobstersSource {
                     .first()
                     .map_or("<none>", std::string::String::as_str)
             )));
+        }
+
+        let decoded = stories.len();
+        let now = chrono::Utc::now();
+        stories.retain(|story| !is_stale_story(story.created_at.as_deref(), now));
+        let stale = decoded - stories.len();
+        if stale > 0 {
+            warn!(
+                url = %url,
+                stale,
+                decoded,
+                max_age_days = MAX_STORY_AGE_DAYS,
+                "Lobste.rs: dropped archive stories from a live feed (upstream page-cache poisoning?)"
+            );
         }
 
         let items: Vec<SourceItem> = stories
@@ -458,5 +492,36 @@ mod tests {
         assert_eq!(decoded.len(), 2, "the two well-formed stories must survive");
         assert_eq!(decoded[0].short_id, "ok1");
         assert_eq!(decoded[1].short_id, "ok2");
+    }
+
+    fn at(rfc3339: &str) -> chrono::DateTime<chrono::Utc> {
+        chrono::DateTime::parse_from_rfc3339(rfc3339)
+            .unwrap()
+            .with_timezone(&chrono::Utc)
+    }
+
+    /// Real poisoned-feed records (ingested 2026-10-01 from /newest.json):
+    /// a 2017 and a 2025 story must be dropped, a same-day story kept.
+    #[test]
+    fn test_archive_stories_are_stale() {
+        let now = at("2026-10-01T14:21:05Z");
+        assert!(is_stale_story(Some("2017-10-24T12:49:10.000-05:00"), now));
+        assert!(is_stale_story(Some("2025-06-26T13:58:39.000-05:00"), now));
+        assert!(!is_stale_story(Some("2026-10-01T09:12:00.000-05:00"), now));
+    }
+
+    #[test]
+    fn test_stale_boundary_is_fourteen_days() {
+        let now = at("2026-10-01T00:00:00Z");
+        assert!(!is_stale_story(Some("2026-09-17T00:00:00Z"), now));
+        assert!(is_stale_story(Some("2026-09-16T23:59:59Z"), now));
+    }
+
+    /// The gate only drops what it can prove is old.
+    #[test]
+    fn test_missing_or_garbled_timestamp_is_kept() {
+        let now = at("2026-10-01T00:00:00Z");
+        assert!(!is_stale_story(None, now));
+        assert!(!is_stale_story(Some("yesterday"), now));
     }
 }

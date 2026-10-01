@@ -25,9 +25,10 @@ pub(super) fn category_for(source_type: &str, signal_type: Option<&str>) -> &'st
     }
     match source_type {
         "osv" | "cve" => CATEGORY_SECURITY,
-        "crates_io" | "npm" | "pypi" | "go_modules" | "github" | "huggingface" | "producthunt" => {
-            CATEGORY_RELEASE
-        }
+        // The npm source registers as "npm_registry" (sources/npm_registry.rs);
+        // matching only "npm" painted every npm release as discussion.
+        "crates_io" | "npm" | "npm_registry" | "pypi" | "go_modules" | "github" | "huggingface"
+        | "producthunt" => CATEGORY_RELEASE,
         "arxiv" | "papers_with_code" => CATEGORY_RESEARCH,
         _ => CATEGORY_DISCUSSION,
     }
@@ -53,7 +54,7 @@ mod tests {
 
     #[test]
     fn package_registries_are_release() {
-        for s in ["crates_io", "npm", "pypi", "go_modules"] {
+        for s in ["crates_io", "npm", "npm_registry", "pypi", "go_modules"] {
             assert_eq!(category_for(s, None), CATEGORY_RELEASE);
         }
     }
