@@ -1,0 +1,18 @@
+# pnpm settings for the 4da.ai site (11ty build + Cloudflare Pages Functions).
+#
+# A standalone project: `packages` is empty on purpose, and this file also
+# keeps pnpm from treating site/ as part of the root project.
+packages: []
+
+# --- Supply-chain policy (same values as the root pnpm-workspace.yaml) ------
+minimumReleaseAge: 4320
+minimumReleaseAgeExclude: []
+trustPolicy: no-downgrade
+# Exceptions: "package@version" with the reason in a comment.
+trustPolicyExclude: []
+strictDepBuilds: true
+# wrangler's toolchain: esbuild and workerd install their platform binaries
+# from install scripts.
+onlyBuiltDependencies:
+  - esbuild
+  - workerd

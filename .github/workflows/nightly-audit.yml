@@ -54,12 +54,12 @@ jobs:
 
       - name: Setup pnpm
         # npm registry retired the legacy audit endpoints on 2026-07-14
-        # (HTTP 410) — pnpm <=10 (incl. the repo's pinned 9.15.0) can no
+        # (HTTP 410) — pnpm <=10 (incl. the repo's pinned 10.34.6) can no
         # longer audit AT ALL; only pnpm 11+ speaks the replacement bulk
         # advisory endpoint. Installed via npm -g (the validate.yml /
         # hermetic.yml pattern) because pnpm/action-setup hard-errors when
         # its `version` input differs from package.json's packageManager
-        # (pnpm@9.15.0, which the rest of the repo keeps for installs).
+        # (pnpm@10.34.6, which the rest of the repo keeps for installs).
         # This job only audits — it never writes a lockfile — so the
         # version split is safe.
         run: npm install -g --force pnpm@11.13.0
@@ -136,7 +136,7 @@ jobs:
         id: pnpm_audit
         # No `pnpm install` needed: `pnpm audit` reads pnpm-lock.yaml only.
         # pnpm_config_pm_on_fail=ignore stops pnpm 11 from silently
-        # re-executing the root packageManager pin (pnpm@9.15.0), whose
+        # re-executing the root packageManager pin (pnpm@10.34.6), whose
         # audit is dead against the retired registry endpoint.
         env:
           pnpm_config_pm_on_fail: ignore

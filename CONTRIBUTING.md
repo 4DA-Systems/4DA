@@ -8,7 +8,7 @@
 # Prerequisites:
 #   - Rust 1.93+ (rustup will auto-pin from src-tauri/rust-toolchain.toml)
 #   - Node.js 20 LTS (.nvmrc provided)
-#   - pnpm 9.15.0 (pinned in package.json packageManager)
+#   - pnpm 10.34.6 (pinned in package.json packageManager)
 # Platform build tools:
 #   - Windows: Visual Studio Build Tools 2022 + "Desktop development with C++"
 #   - macOS:   xcode-select --install

@@ -144,7 +144,7 @@ jobs:
       - name: Install pnpm
         run: |
           corepack disable
-          npm install -g --force pnpm@9.15.0
+          npm install -g --force pnpm@10.34.6
           pnpm --version
 
       - name: pnpm install (frozen) — exercises the postinstall OCR-model fetch

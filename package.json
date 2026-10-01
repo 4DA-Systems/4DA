@@ -27,10 +27,10 @@
     "sqlite-vec"
   ],
   "type": "module",
-  "packageManager": "pnpm@9.15.0",
+  "packageManager": "pnpm@10.34.6",
   "engines": {
     "node": ">=20.0.0",
-    "pnpm": ">=9.15.0"
+    "pnpm": ">=10.27.0"
   },
   "scripts": {
     "dev": "node scripts/kill-fourda.cjs && node scripts/kill-port.cjs vite-config && vite",

@@ -21,7 +21,7 @@
  *                        npm retired the legacy audit endpoint 2026-07-14
  *                        (HTTP 410), so pnpm <=10 cannot audit at all; only
  *                        pnpm 11+ speaks the bulk advisory endpoint. A one-shot
- *                        via npx, leaving the repo's 9.15.0 pin untouched.
+ *                        via npx, leaving the repo's 10.34.6 pin untouched.
  *   package-lock.json -> `npm audit` in that directory. Reads the lockfile
  *                        alone; no `node_modules` and no install required
  *                        (verified 2026-09-09 on a bare copy).
@@ -206,7 +206,7 @@ function main() {
   }
   if (failed > 0) {
     console.log(
-      '::error::Advisories at or above the level. For a pnpm lockfile raise that project\'s pnpm override floor and regenerate with the PINNED pnpm (9.15.0) — pnpm 11 is audit-only and its install drops the overrides block. For an npm lockfile run `npm audit fix --package-lock-only` in that directory.',
+      '::error::Advisories at or above the level. For a pnpm lockfile raise that project\'s pnpm override floor and regenerate with the PINNED pnpm (10.34.6) — pnpm 11 is audit-only and its install drops the overrides block. For an npm lockfile run `npm audit fix --package-lock-only` in that directory.',
     );
     process.exit(1);
   }
