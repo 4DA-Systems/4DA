@@ -352,7 +352,18 @@ describe("analyzeUpgradeImpact", () => {
       { version: "1.0.0", direct: true, pinned_in: ["."] },
       { version: "1.4.0", direct: false, pinned_in: ["tools"] },
     ]);
-    expect(r.installed_copies_note).toMatch(/from_version is the direct one/);
+    expect(r.installed_copies_note).toMatch(/from_version is the oldest direct dependency/);
+  });
+
+  it("starts from the oldest copy when no copy is a direct dependency, and says so", async () => {
+    const r = await run({ package: "demo-lib" }, fakeNpm(), {
+      installed: [
+        { name: "demo-lib", version: "1.4.0", ecosystem: "npm", isDirect: false, sourceDirs: [root] },
+        { name: "demo-lib", version: "1.0.0", ecosystem: "npm", isDirect: false, sourceDirs: [path.join(root, "tools")] },
+      ],
+    });
+    expect(r.from_version).toBe("1.0.0");
+    expect(r.installed_copies_note).toMatch(/oldest copy \(none is a direct dependency\)/);
   });
 
   it("tolerates OSV failure with null advisory fields and a note", async () => {

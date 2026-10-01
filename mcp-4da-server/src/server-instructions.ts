@@ -17,6 +17,8 @@ export const SERVER_INSTRUCTIONS = [
   "When to call what:",
   "- Before upgrading or bumping a package: upgrade_impact (what changes between the installed and target version: " +
     "breaking changes, deprecations, security fixes, and which of this project's files import it).",
+  "- Before adding a package or applying a bump (npm, crates.io): dependency_check (proceed/wait/review/avoid " +
+    "verdict from advisories, release age, publisher trust, new install scripts).",
   "- Before starting a non-trivial task: what_should_i_know (briefing scoped to the dependencies the task touches, " +
     "with a delegation verdict).",
   "- Security questions, or before recommending a dependency: vulnerability_scan.",

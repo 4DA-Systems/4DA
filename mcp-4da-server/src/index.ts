@@ -15,13 +15,13 @@
  * secret (MCP_AUTH_SECRET) and then verifies an HMAC-SHA256-signed Bearer
  * token on every request, enforcing the token's role at tool dispatch.
  *
- * 15 tools across 5 categories, plus the `deps` prompt. Live vulnerability
- * scanning (OSV.dev), pre-install dependency checks, ecosystem news,
- * persistent memory, and tech stack awareness for any MCP host.
+ * 16 tools across 5 categories, plus the `deps` prompt. Upgrade impact,
+ * live vulnerability scanning (OSV.dev), pre-install dependency checks,
+ * ecosystem news, persistent memory, and tech stack awareness for any MCP host.
  *
  * Categories (canonical — matches schema-registry.ts `ToolCategory`):
- *   Security (4)      — vulnerability scanning, dependency health, upgrade planning,
- *                       dependency check
+ *   Security (5)      — vulnerability scanning, dependency health, upgrade planning,
+ *                       upgrade impact, dependency check
  *   Intelligence (7)  — briefing, ecosystem pulse, context, content feed,
  *                       actionable signals, knowledge gaps, feedback
  *   Decisions (2)     — decision memory, alignment checking

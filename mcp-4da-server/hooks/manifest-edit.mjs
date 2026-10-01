@@ -61,10 +61,21 @@ function adviceFor(file, changes) {
     return `- ${c.name}: ${c.from ?? "(added)"} -> ${c.to}${call}`;
   });
   const more = changes.length > 8 ? `\n- ...and ${changes.length - 8} more` : "";
+  // dependency_check takes exact versions only; a range ("^1.2") gets no item.
+  const items = ecosystem
+    ? changes.slice(0, 25).flatMap((c) => {
+        const to = exact(c.to);
+        const from = c.from ? exact(c.from) : null;
+        return to ? [{ ecosystem, package: c.name, to, ...(from ? { from } : {}) }] : [];
+      })
+    : [];
+  const check = items.length > 0
+    ? `Before installing, call the 4da MCP tool dependency_check ${JSON.stringify({ items })} for a proceed/review/avoid verdict (advisories, release age, publisher trust, new install scripts).\n`
+    : "";
   const tail = ecosystem
     ? "Before building, call the 4da MCP tool upgrade_impact for each upgraded package: it lists the breaking changes between the versions and the files in this project that use the package."
     : "Before building, call the 4da MCP tool what_should_i_know with the upgrade as the task, and vulnerability_scan after installing.";
-  return `4DA: this edit changes dependency versions in ${file}:\n${lines.join("\n")}${more}\n${tail}`;
+  return `4DA: this edit changes dependency versions in ${file}:\n${lines.join("\n")}${more}\n${check}${tail}`;
 }
 
 async function main() {

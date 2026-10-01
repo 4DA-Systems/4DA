@@ -124,8 +124,15 @@ const sameName = (a: string, b: string, eco: string): boolean =>
 
 function installedVersion(installed: InstalledDep[], name: string, eco: UpgradeEcosystem): string | null {
   const rows = installed.filter((d) => d.ecosystem === eco && d.version && sameName(d.name, name, eco));
-  const direct = rows.find((d) => d.isDirect);
-  return (direct ?? rows[0])?.version ?? null;
+  // A direct dependency is the one an upgrade edits; among several (or none),
+  // the oldest copy, whose upgrade crosses the most releases. Was "the first
+  // row", which read zod 4.3.6 for one tree and could read 4.6.5 for another.
+  const pool = rows.some((d) => d.isDirect) ? rows.filter((d) => d.isDirect) : rows;
+  const oldest = pool.reduce<InstalledDep | null>(
+    (min, d) => (min === null || (compareVersionPrecedence(d.version!, min.version!) ?? 0) < 0 ? d : min),
+    null,
+  );
+  return oldest?.version ?? null;
 }
 
 function chooseEcosystem(params: UpgradeImpactParams, installed: InstalledDep[]): UpgradeEcosystem | { error: string } {
@@ -246,7 +253,7 @@ export async function analyzeUpgradeImpact(
     ...(copies
       ? {
           installed_copies: copies,
-          installed_copies_note: `This project has ${copies.length} versions of ${index.name}; from_version is the direct one. Pass from_version for another copy.`,
+          installed_copies_note: `This project has ${copies.length} versions of ${index.name}; from_version is the ${copies.some((c) => c.direct) ? "oldest direct dependency" : "oldest copy (none is a direct dependency)"}. Pass from_version for another copy.`,
         }
       : {}),
     versions_between: between.slice(-MAX_LISTED_VERSIONS).map((v) => ({

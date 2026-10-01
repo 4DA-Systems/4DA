@@ -55,12 +55,17 @@ describe("manifest-edit hook", () => {
     const text = context(npm.stdout);
     expect(text).toContain("vite: ^6.0.0 -> ^7.0.0");
     expect(text).toContain('upgrade_impact {"package":"@tauri-apps/api","to_version":"2.12.0","ecosystem":"npm"}');
+    // dependency_check gets the exact pin only; the vite range has no exact target.
+    expect(text).toContain(
+      'dependency_check {"items":[{"ecosystem":"npm","package":"@tauri-apps/api","to":"2.12.0","from":"2.11.1"}]}',
+    );
 
     const cargo = run({
       tool_name: "Edit",
       tool_input: { file_path: "Cargo.toml", old_string: 'tokio = { version = "1.40", features = ["full"] }', new_string: 'tokio = { version = "1.47", features = ["full"] }' },
     });
     expect(context(cargo.stdout)).toContain("tokio: 1.40 -> 1.47");
+    expect(context(cargo.stdout)).not.toContain("dependency_check");
   });
 
   it("points Python and Go edits at the briefing (upgrade_impact covers npm and crates.io)", () => {
