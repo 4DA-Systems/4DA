@@ -4,7 +4,7 @@
  * check-pnpm-overrides.cjs — stop a pnpm upgrade silently disarming every
  * security override in the repo.
  *
- * This repo pins `packageManager: pnpm@9.x` and carries its dependency-security
+ * This repo pins `packageManager: pnpm@10.x` and carries its dependency-security
  * floors as `pnpm.overrides` blocks in package.json — 69 of them across four
  * manifests at the time of writing, including the ones holding `undici`,
  * `form-data` and `tmp` above known-vulnerable ranges.

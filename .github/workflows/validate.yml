@@ -292,7 +292,7 @@ jobs:
         with:
           # MUST equal package.json's packageManager — action-setup hard-errors
           # on a mismatch (the reason nightly-audit.yml installs pnpm 11 by hand).
-          version: 9.15.0
+          version: 10.34.6
 
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v4
@@ -305,12 +305,12 @@ jobs:
 
       - name: Security audit (npm)
         # npm retired the legacy audit endpoint on 2026-07-14 (HTTP 410) —
-        # pnpm <=10, including the repo's pinned 9.15.0, can no longer audit
+        # pnpm <=10, including the repo's pinned 10.34.6, can no longer audit
         # at all; only pnpm 11+ speaks the replacement bulk advisory endpoint.
         # This step therefore runs the audit through a ONE-SHOT pnpm 11 via
-        # npx, leaving the global pnpm 9.15.0 (which installs and runs
+        # npx, leaving the global pnpm 10.34.6 (which installs and runs
         # everything else in this job) untouched. pm_on_fail=ignore stops
-        # pnpm 11 from re-executing the root packageManager pin (pnpm@9.15.0),
+        # pnpm 11 from re-executing the root packageManager pin (pnpm@10.34.6),
         # whose audit is dead. Same pattern as nightly-audit.yml, proven
         # green there on 2026-07-15. Without this fix the required Validate
         # gate 410-failed on EVERY frontend-touching PR.
@@ -440,7 +440,7 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
         with:
-          version: 9.15.0 # must match package.json packageManager
+          version: 10.34.6 # must match package.json packageManager
 
       - name: Setup Node.js
         uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v4
@@ -544,7 +544,7 @@ jobs:
         # package.json rather than duplicating it here. No dependency install.
         run: |
           corepack disable
-          npm install -g --force pnpm@9.15.0
+          npm install -g --force pnpm@10.34.6
 
       # ── Supply chain: EVERY lockfile, not just the root one ──────────────
       # `Security audit (npm)` existed in exactly one place — the Frontend job —
@@ -582,7 +582,7 @@ jobs:
         # workspace is covered from the commit that adds it. Same policy and
         # same `--audit-level=high` bar as nightly-audit.yml — deliberately, so
         # the nightly can never report something the merge gate would allow.
-        # pm_on_fail=ignore stops pnpm 11 re-executing the repo's 9.15.0 pin.
+        # pm_on_fail=ignore stops pnpm 11 re-executing the repo's 10.34.6 pin.
         env:
           pnpm_config_pm_on_fail: ignore
         shell: bash
@@ -702,9 +702,10 @@ jobs:
   #
   # No loop is possible: the heal push triggers nothing (recursion guard), and
   # in the dispatched run this job skips (both `pull_request` and the
-  # Dependabot actor test fail). If Dependabot force-pushes a rebase the
-  # NOTICE commit is dropped — but that push is a Dependabot-actored
-  # pull_request event, so the heal simply runs again on the new head.
+  # Dependabot actor test fail). The heal commit carries `[dependabot skip]`
+  # so Dependabot keeps rebasing the PR; a rebase drops the NOTICE commit,
+  # and that Dependabot-actored pull_request event runs the heal again on the
+  # new head.
   dependabot-notice:
     name: Dependabot NOTICE auto-heal
     if: github.event_name == 'pull_request' && github.actor == 'dependabot[bot]'
@@ -728,7 +729,7 @@ jobs:
       - name: Install pnpm
         run: |
           corepack disable
-          npm install -g --force pnpm@9.15.0
+          npm install -g --force pnpm@10.34.6
 
       # Same recipe as the NOTICE gate in `repo-guards`, so what this job
       # generates is byte-for-byte what that gate will verify.
@@ -756,7 +757,10 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add NOTICE
-          git commit -m "chore: regenerate NOTICE for this dependency bump"
+          # [dependabot skip]: Dependabot stops rebasing a PR once another
+          # author has pushed to it, unless that extra commit carries this tag.
+          # Without it a healed PR could never be rebased again.
+          git commit -m "chore: regenerate NOTICE for this dependency bump [dependabot skip]"
           # If Dependabot force-pushed a rebase between checkout and here, this
           # push is rejected non-fast-forward and the job fails — correct: the
           # rebase's own pull_request run re-heals against the new head.

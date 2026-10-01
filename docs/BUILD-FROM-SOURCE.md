@@ -24,7 +24,7 @@ If you just want to verify a downloaded binary, see [VERIFY-DOWNLOADS.md](VERIFY
 |------|---------|---------|
 | [Rust](https://rustup.rs/) | 1.93+ (pinned in `rust-toolchain.toml`) | Backend compilation |
 | [Node.js](https://nodejs.org/) | 20 LTS or later | Frontend tooling |
-| [pnpm](https://pnpm.io/) | 9.15.0 (pinned in `package.json`) | Package manager |
+| [pnpm](https://pnpm.io/) | 10.34.6 (pinned in `package.json`) | Package manager |
 | [Git](https://git-scm.com/) | Any recent version | Source code checkout |
 
 After installing Rust via rustup, the correct toolchain version is selected automatically from `src-tauri/rust-toolchain.toml`.
@@ -41,7 +41,7 @@ Install pnpm after Node.js:
 
 ```bash
 corepack enable
-corepack prepare pnpm@9.15.0 --activate
+corepack prepare pnpm@10.34.6 --activate
 ```
 
 ### Windows
@@ -318,7 +318,7 @@ Your Rust toolchain is too old. Run `rustup update` to get the version specified
 
 ### `pnpm: command not found`
 
-Enable corepack: `corepack enable && corepack prepare pnpm@9.15.0 --activate`
+Enable corepack: `corepack enable && corepack prepare pnpm@10.34.6 --activate`
 
 ### Port 4444 already in use (dev mode)
 

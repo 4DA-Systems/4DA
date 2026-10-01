@@ -1,0 +1,40 @@
+# pnpm settings for the root project (the desktop app's frontend).
+#
+# Not a multi-package workspace: `packages` is empty on purpose. site/ and
+# mcp-4da-server/ are separate projects with their own pnpm-workspace.yaml and
+# lockfile. Security overrides and the d3-color patch stay in package.json
+# (`pnpm.overrides`, `pnpm.patchedDependencies`), which pnpm 10 reads; pnpm 11
+# does not (see scripts/check-pnpm-overrides.cjs).
+packages: []
+
+# --- Supply-chain policy (pnpm >= 10.27; same values in every pnpm project) ---
+
+# Never resolve a version published less than 3 days ago. Malicious releases
+# have historically been pulled within hours; a short hold avoids them. It
+# applies whenever versions are resolved (add, update, Dependabot), not to a
+# frozen-lockfile install of versions already reviewed. A security fix that
+# cannot wait is added to minimumReleaseAgeExclude in the same PR, with the
+# advisory id in a comment, and removed once it is 3 days old.
+minimumReleaseAge: 4320
+minimumReleaseAgeExclude: []
+
+# Fail when a package's publish trust drops between releases (trusted
+# publisher -> provenance only -> none), a common sign of a hijacked account.
+trustPolicy: no-downgrade
+# A legitimate exception (for example a maintainer hand-publishing a backport
+# line) is listed here with the reason in a comment, never by switching the
+# policy off:
+#   - "package@1.2.3"   # why it is trusted
+trustPolicyExclude: []
+
+# A dependency may run install scripts only when listed here. With
+# strictDepBuilds a new, unreviewed install script fails the install instead
+# of being skipped silently, so adding one is always a reviewed change.
+strictDepBuilds: true
+# These ran their install scripts under pnpm 9, which ran every script; listing
+# them keeps the build identical. better-sqlite3 is a native addon; @swc/core
+# and esbuild install platform binaries.
+onlyBuiltDependencies:
+  - "@swc/core"
+  - better-sqlite3
+  - esbuild

@@ -14,6 +14,7 @@
 #   - npm            (/mcp-4da-server)  — MCP server (pnpm-lock.yaml)
 #   - npm            (/mcp-memory-server) — MCP memory server (package-lock.json)
 #   - npm            (/editors/vscode/4da) — VS Code extension (package-lock.json)
+#   - npm            (/site)            — 4da.ai site + Pages Functions (pnpm-lock.yaml)
 #
 # Dependabot's "npm" ecosystem handles both npm and pnpm lockfiles despite
 # the name — the detection is lockfile-based.
@@ -28,6 +29,12 @@
 # package per week outran a single maintainer, and each PR also pays a full
 # merge-queue run. Security updates are not grouped (groups default to
 # version updates), so an advisory fix still lands as its own small PR.
+#
+# Cooldown: every block holds a new version for 3 days (7 for a major)
+# before proposing it. Malicious releases have historically been pulled within
+# hours. Security updates are never held (Dependabot applies cooldown to
+# version updates only). The pnpm projects enforce the same 3-day minimum
+# themselves (minimumReleaseAge in each pnpm-workspace.yaml).
 #
 # Adding a new workspace: drop it in with its own `- package-ecosystem:`
 # block. Do NOT omit a maintainer-owned package.json just to keep the
@@ -47,6 +54,9 @@ updates:
     groups:
       minor-and-patch:
         update-types: ["minor", "patch"]
+    cooldown:
+      default-days: 3
+      semver-major-days: 7
     labels:
       - "dependencies"
       - "github-actions"
@@ -70,6 +80,11 @@ updates:
     groups:
       minor-and-patch:
         update-types: ["minor", "patch"]
+    cooldown:
+      default-days: 3
+      semver-major-days: 7
+      # Our own crates release in lockstep with 4DA; no hold for them.
+      exclude: ["victauri-*"]
     labels:
       - "dependencies"
       - "rust"
@@ -99,6 +114,9 @@ updates:
     groups:
       minor-and-patch:
         update-types: ["minor", "patch"]
+    cooldown:
+      default-days: 3
+      semver-major-days: 7
     labels:
       - "dependencies"
       - "rust"
@@ -123,6 +141,9 @@ updates:
     groups:
       minor-and-patch:
         update-types: ["minor", "patch"]
+    cooldown:
+      default-days: 3
+      semver-major-days: 7
     labels:
       - "dependencies"
       - "frontend"
@@ -146,6 +167,9 @@ updates:
     groups:
       minor-and-patch:
         update-types: ["minor", "patch"]
+    cooldown:
+      default-days: 3
+      semver-major-days: 7
     labels:
       - "dependencies"
       - "mcp"
@@ -180,6 +204,9 @@ updates:
     groups:
       minor-and-patch:
         update-types: ["minor", "patch"]
+    cooldown:
+      default-days: 3
+      semver-major-days: 7
     labels:
       - "dependencies"
       - "mcp"
@@ -211,6 +238,9 @@ updates:
     groups:
       minor-and-patch:
         update-types: ["minor", "patch"]
+    cooldown:
+      default-days: 3
+      semver-major-days: 7
     labels:
       - "dependencies"
       - "vscode"
@@ -220,4 +250,32 @@ updates:
       - "runyourempire"
     commit-message:
       prefix: "chore(vscode)"
+      include: "scope"
+
+  # ── 4da.ai site (11ty + Cloudflare Pages Functions) ───────────────
+  # Its own pnpm project and lockfile. The Functions (licence activation and
+  # refresh, Stripe checkout) are production code, so the site gets version
+  # updates like every other project, not only security alerts.
+  - package-ecosystem: "npm"
+    directory: "/site"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+    cooldown:
+      default-days: 3
+      semver-major-days: 7
+    labels:
+      - "dependencies"
+    assignees:
+      - "runyourempire"
+    reviewers:
+      - "runyourempire"
+    commit-message:
+      prefix: "chore(site)"
       include: "scope"

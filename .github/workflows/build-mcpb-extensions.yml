@@ -38,7 +38,7 @@ jobs:
 
       - uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v4
         with:
-          version: 9.15.0 # match packageManager; unpinned drifts to pnpm 10 and mismatches the pnpm-9 lockfile
+          version: 10.34.6 # must match package.json packageManager
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
         with:
