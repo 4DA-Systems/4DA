@@ -255,6 +255,22 @@ the allowlist is rejected.
   `/2/tweets/search/recent` (deep fetch).
 - **Auth:** your Bearer Token, sent only to `api.x.com`. No key = zero calls.
 
+### 2j. MCP server `dependency_check` (only when an agent calls the tool)
+
+The `@4da/mcp-server` tool `dependency_check` (`mcp-4da-server/src/live/npm-packument.ts`,
+`crates-versions.ts`) judges a version an agent is about to install. It runs only when an agent
+calls it, and sends nothing while `FOURDA_OFFLINE=true`.
+
+| Host | Endpoint | Data sent |
+|---|---|---|
+| `registry.npmjs.org` | `GET /{package}` (full packument, `Accept: application/json`) | **Package name only.** Cached on disk with its ETag; repeat reads send `If-None-Match` (the registry's own ETag) |
+| `crates.io` | `GET /api/v1/crates/{crate}/versions?per_page=100&sort=semver` (paged), `GET /api/v1/crates/{crate}` | **Crate name only.** User-Agent `4DA-MCP-Server/1.0 (https://4da.ai)`; at most one request per second |
+| `index.crates.io` | `GET /{prefix}/{crate}` (sparse index) | **Crate name only** |
+| `api.osv.dev` | `POST /v1/querybatch`, `GET /v1/vulns/{id}` | Package names **and versions** (the installed and the proposed one), as `vulnerability_scan` already sends |
+
+The installed version and the proposed version are never sent to a registry: both are picked out
+of the full release list on your machine. Only OSV receives versions.
+
 ---
 
 ## 3. Setup-time (one-time downloads)
@@ -309,6 +325,8 @@ use (`src-tauri/src/embeddings_providers/fastembed.rs`):
   | `registry.npmjs.org` | your npm package names | release / version intelligence |
   | `pypi.org` | your Python package names | as above |
   | `crates.io` | your crate names | as above |
+  | `registry.npmjs.org` full packument (MCP `dependency_check`, §2j) | the npm package name being checked — name only | release vetting |
+  | `crates.io/api/v1/crates/{crate}/versions` (MCP `dependency_check`, §2j) | the crate name being checked — name only | release vetting |
   | `proxy.golang.org` | your **full Go module paths** | as above |
   | `api.github.com/advisories` | your ecosystem names | advisory matching |
   | `api.github.com/search` | your languages | repo discovery |

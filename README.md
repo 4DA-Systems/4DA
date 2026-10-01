@@ -203,7 +203,7 @@ Your Codebase                    External Sources
 ## Pricing
 
 **Free** — $0 forever. No credit card. No account. No expiration.
-- All 20+ sources, full 5-axis scoring engine, AI daily briefings (BYOK), natural language search (BYOK), Developer DNA profiling, Score Autopsy (5-axis breakdown), signal chain analysis, channels, the OSV security floor, Learned Preferences, MCP server (14 tools), CLI
+- All 20+ sources, full 5-axis scoring engine, AI daily briefings (BYOK), natural language search (BYOK), Developer DNA profiling, Score Autopsy (5-axis breakdown), signal chain analysis, channels, the OSV security floor, Learned Preferences, MCP server (15 tools), CLI
 
 **Signal** — $12 AUD/month, $99 AUD/year, or $299 AUD once for a Lifetime license (14-day free trial).
 - Everything in Free, plus: blind spot detection with AI assessment, and knowledge gap detection — the analysis layer computed from your dependency graph and reading history
@@ -268,7 +268,7 @@ The [STREETS Playbook](https://4da.ai/streets) — 7 modules on turning develope
 </details>
 
 <details>
-<summary><strong>MCP Integration</strong> — 14 tools for dependency security, intelligence, decisions, and agent memory</summary>
+<summary><strong>MCP Integration</strong> — 15 tools for dependency security, intelligence, decisions, and agent memory</summary>
 
 Plug your intelligence system directly into Claude Code, Cursor, Windsurf, VS Code (Copilot), or any MCP-compatible tool.
 
@@ -276,7 +276,7 @@ Plug your intelligence system directly into Claude Code, Cursor, Windsurf, VS Co
 npx @4da/mcp-server
 ```
 
-9 tools work standalone with zero setup (vulnerability scanning, dependency health, upgrade planning, ecosystem news, pre-task briefings, decision memory, agent memory). 5 more activate with the desktop app (scored content feed, actionable signals, knowledge gaps, feedback learning, developer DNA). Every tool reliably returns useful data. [Full tool reference.](mcp-4da-server/)
+10 tools work standalone with zero setup (vulnerability scanning, dependency health, upgrade planning, pre-install dependency checks, ecosystem news, pre-task briefings, decision memory, agent memory). 5 more activate with the desktop app (scored content feed, actionable signals, knowledge gaps, feedback learning, developer DNA). Every tool reliably returns useful data. [Full tool reference.](mcp-4da-server/)
 
 </details>
 

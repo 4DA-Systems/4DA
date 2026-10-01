@@ -18,6 +18,9 @@ import { NpmRegistry } from "./npm-registry.js";
 import { CratesRegistry } from "./crates-registry.js";
 import { PyPIRegistry } from "./pypi-registry.js";
 import { GoRegistry } from "./go-registry.js";
+import { NpmPackumentReader } from "./npm-packument.js";
+import { CratesVersionsReader } from "./crates-versions.js";
+import type { ReleaseMetadataSource } from "./release-metadata.js";
 import { fetchRegistryHealthFor } from "./registry-health.js";
 import { commonPathRoot, dedupeDependencies, emptyVulnResult } from "./dependency-set.js";
 import { groupIsStale, resolveGroup, type GroupResolution, type ResolutionGroup } from "./resolution.js";
@@ -57,6 +60,8 @@ export class LiveIntelligence {
   private cratesRegistry: CratesRegistry;
   private pypiRegistry: PyPIRegistry;
   private goRegistry: GoRegistry;
+  private npmPackuments: NpmPackumentReader;
+  private cratesVersions: CratesVersionsReader;
   private enabled: boolean;
 
   private lastVulnScan: VulnerabilityScanResult | null = null;
@@ -95,6 +100,8 @@ export class LiveIntelligence {
     this.cratesRegistry = new CratesRegistry(this.cache, this.rateLimiter);
     this.pypiRegistry = new PyPIRegistry(this.cache, this.rateLimiter);
     this.goRegistry = new GoRegistry(this.cache, this.rateLimiter);
+    this.npmPackuments = new NpmPackumentReader(this.cache, this.rateLimiter);
+    this.cratesVersions = new CratesVersionsReader(this.cache, this.rateLimiter);
   }
 
   /**
@@ -389,6 +396,26 @@ export class LiveIntelligence {
       { npm: this.npmRegistry, crates: this.cratesRegistry, pypi: this.pypiRegistry, go: this.goRegistry },
       this.enabled,
     );
+  }
+
+  /** Per-release registry readers for dependency_check (name-only requests). */
+  getReleaseSources(): { npm: ReleaseMetadataSource; "crates.io": ReleaseMetadataSource } {
+    return { npm: this.npmPackuments, "crates.io": this.cratesVersions };
+  }
+
+  /**
+   * OSV advisories for explicit (ecosystem, name, version) triples that need
+   * not be in the project, e.g. a version an agent is about to install. Same
+   * scanner, cache and rate limit as vulnerability_scan; never touches the
+   * stored project scan. Disabled or failed yields an `offline` result.
+   */
+  async queryAdvisories(deps: ResolvedDependency[]): Promise<VulnerabilityScanResult> {
+    if (!this.enabled) return emptyVulnResult("dependency_check", true);
+    try {
+      return await this.osvScanner.scan(deps, "dependency_check");
+    } catch {
+      return emptyVulnResult("dependency_check", true);
+    }
   }
 
   getStatus(): LiveIntelligenceStatus {

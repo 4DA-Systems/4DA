@@ -25,10 +25,10 @@ const TRIGGER = /\bCall (this )?(when|after|before|first|to)\b/i;
 const schemaDir = join(dirname(fileURLToPath(import.meta.url)), "..", "schemas");
 
 describe("tool registry descriptions", () => {
-  it("registers exactly 14 tools (9 standalone, 5 full-mode)", () => {
-    expect(Object.keys(TOOL_REGISTRY)).toHaveLength(14);
-    expect(getSlimToolList().length).toBe(14);
-    expect(getSlimToolList(true).length).toBe(9);
+  it("registers exactly 15 tools (10 standalone, 5 full-mode)", () => {
+    expect(Object.keys(TOOL_REGISTRY)).toHaveLength(15);
+    expect(getSlimToolList().length).toBe(15);
+    expect(getSlimToolList(true).length).toBe(10);
     expect(getSlimToolList(false).length).toBe(5);
   });
 

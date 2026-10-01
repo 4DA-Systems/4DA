@@ -1,0 +1,31 @@
+{
+  "_comment": "Minimal full-packument shape of axios around the 2026-03-31 compromise: 1.14.0 published by GitHub Actions as a trusted publisher; 1.14.1 hand-published with a token, no attestation, and a new dependency (plain-crypto-js) first published the day before. Field names match registry.npmjs.org/axios; values trimmed to what dependency_check reads.",
+  "name": "axios",
+  "time": {
+    "created": "2014-08-29T23:08:36.810Z",
+    "modified": "2026-03-31T00:21:58.168Z",
+    "1.13.6": "2026-02-20T10:00:00.000Z",
+    "1.14.0": "2026-03-27T19:01:40.915Z",
+    "1.14.1": "2026-03-31T00:21:58.168Z"
+  },
+  "versions": {
+    "1.13.6": {
+      "_npmUser": { "name": "GitHub Actions", "email": "npm-oidc-no-reply@github.com", "trustedPublisher": { "id": "github", "oidcConfigId": "oidc:fixture" } },
+      "dist": { "attestations": { "url": "https://registry.npmjs.org/-/npm/v1/attestations/axios@1.13.6", "provenance": { "predicateType": "https://slsa.dev/provenance/v1" } } },
+      "scripts": { "test": "vitest run", "prepare": "husky" },
+      "dependencies": { "form-data": "^4.0.5", "proxy-from-env": "^2.1.0", "follow-redirects": "^1.15.11" }
+    },
+    "1.14.0": {
+      "_npmUser": { "name": "GitHub Actions", "email": "npm-oidc-no-reply@github.com", "trustedPublisher": { "id": "github", "oidcConfigId": "oidc:fixture" } },
+      "dist": { "attestations": { "url": "https://registry.npmjs.org/-/npm/v1/attestations/axios@1.14.0", "provenance": { "predicateType": "https://slsa.dev/provenance/v1" } } },
+      "scripts": { "test": "vitest run", "prepare": "husky" },
+      "dependencies": { "form-data": "^4.0.5", "proxy-from-env": "^2.1.0", "follow-redirects": "^1.15.11" }
+    },
+    "1.14.1": {
+      "_npmUser": { "name": "jasonsaayman", "email": "fixture@example.invalid" },
+      "dist": {},
+      "scripts": { "test": "vitest run", "prepare": "husky" },
+      "dependencies": { "form-data": "^4.0.5", "proxy-from-env": "^2.1.0", "follow-redirects": "^1.15.11", "plain-crypto-js": "^4.2.1" }
+    }
+  }
+}

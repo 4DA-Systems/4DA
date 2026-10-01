@@ -1,0 +1,35 @@
+{
+  "_comment": "A well-behaved package. Times are relative to the test clock 2026-04-10T00:00:00Z: 1.0.0 40 days old, 1.0.1 10 days, 1.0.2 1 day, 1.0.3 20 days and deprecated. Every release by the same trusted publisher, no install scripts, same dependencies.",
+  "name": "steady-lib",
+  "time": {
+    "created": "2025-01-01T00:00:00.000Z",
+    "modified": "2026-04-09T00:00:00.000Z",
+    "1.0.0": "2026-03-01T00:00:00.000Z",
+    "1.0.1": "2026-03-31T00:00:00.000Z",
+    "1.0.2": "2026-04-09T00:00:00.000Z",
+    "1.0.3": "2026-03-21T00:00:00.000Z"
+  },
+  "versions": {
+    "1.0.0": {
+      "_npmUser": { "name": "GitHub Actions", "trustedPublisher": { "id": "github" } },
+      "dist": { "attestations": { "url": "x" } },
+      "dependencies": { "tiny-dep": "^2.0.0" }
+    },
+    "1.0.1": {
+      "_npmUser": { "name": "GitHub Actions", "trustedPublisher": { "id": "github" } },
+      "dist": { "attestations": { "url": "x" } },
+      "dependencies": { "tiny-dep": "^2.0.0" }
+    },
+    "1.0.2": {
+      "_npmUser": { "name": "GitHub Actions", "trustedPublisher": { "id": "github" } },
+      "dist": { "attestations": { "url": "x" } },
+      "dependencies": { "tiny-dep": "^2.0.0" }
+    },
+    "1.0.3": {
+      "_npmUser": { "name": "GitHub Actions", "trustedPublisher": { "id": "github" } },
+      "dist": { "attestations": { "url": "x" } },
+      "dependencies": { "tiny-dep": "^2.0.0" },
+      "deprecated": "Critical bug in 1.0.3, use 1.0.1"
+    }
+  }
+}

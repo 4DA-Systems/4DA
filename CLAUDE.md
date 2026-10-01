@@ -213,4 +213,4 @@ Connection: `http://127.0.0.1:7373/mcp` (port may fallback to 7374-7383; the liv
 - Agent definitions: `.claude/agents/`
 - Slash commands: `.claude/commands/`
 - Rules: `.claude/rules/` (document hygiene, intelligence doctrine, worktree hygiene)
-- MCP servers: memory (persistent decisions/learnings), 4da (14 tools), victauri (35 tools — when app is running)
+- MCP servers: memory (persistent decisions/learnings), 4da (15 tools), victauri (35 tools — when app is running)

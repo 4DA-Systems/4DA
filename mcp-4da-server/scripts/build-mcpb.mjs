@@ -54,6 +54,7 @@ const standaloneTools = [
   { name: "vulnerability_scan", description: "Scan the project's dependencies for known CVEs via OSV.dev — severity, fix versions, upgrade commands." },
   { name: "dependency_health", description: "Version freshness, deprecations, and known issues across npm, Rust, Python, Go." },
   { name: "upgrade_planner", description: "Ranked upgrade plan: quick wins vs breaking majors." },
+  { name: "dependency_check", description: "Verdict with evidence before adding a dependency or applying a version bump (npm, crates.io)." },
   { name: "what_should_i_know", description: "Pre-task briefing: advisories and decisions relevant to the task at hand." },
   { name: "ecosystem_pulse", description: "What moved in the project's ecosystem lately." },
   { name: "get_context", description: "The detected stack, so the agent stops guessing versions." },
@@ -69,7 +70,7 @@ const manifest = {
   version: pkg.version,
   description: "Stack-aware developer intelligence: CVE scans, dependency health, upgrade plans, decision memory. Privacy-first — only public package names leave your machine.",
   long_description:
-    "Point 4DA at a project folder and your agent gets nine tools: vulnerability scanning (full lockfile tree against OSV.dev), dependency health, ranked upgrade plans, pre-task briefings, ecosystem pulse, detected stack context, decision memory and alignment checks, and cross-session agent memory. The only data that ever leaves your machine is public package names and versions sent to OSV.dev and public registries — your code, paths, and prompts never do.",
+    "Point 4DA at a project folder and your agent gets ten tools: vulnerability scanning (full lockfile tree against OSV.dev), dependency health, ranked upgrade plans, pre-install dependency checks, pre-task briefings, ecosystem pulse, detected stack context, decision memory and alignment checks, and cross-session agent memory. The only data that ever leaves your machine is public package names and versions sent to OSV.dev and public registries — your code, paths, and prompts never do.",
   author: { name: "4DA Systems", url: "https://4da.ai" },
   homepage: "https://4da.ai/mcp/",
   documentation: "https://4da.ai/mcp/",

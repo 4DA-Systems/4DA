@@ -92,6 +92,7 @@ On startup, the server reads your manifest and lock files (`package.json`, `Carg
 - **OSV.dev** for known CVEs across all ecosystems
 - **npm registry** for version freshness, deprecation status, and weekly downloads
 - **crates.io sparse index** for Rust package versions (avoids the 1 req/s API limit)
+- **npm full packument** and the **crates.io versions API** for `dependency_check` (publish times, publishers, install scripts, per-version dependencies). These requests carry the package name only; the version you have installed is never sent to a registry. Packuments are cached on disk and revalidated with `If-None-Match`; crates.io API reads are spaced one per second.
 - **PyPI JSON API** for Python package metadata with license normalization
 - **Go module proxy** for Go module versions
 - **Hacker News Algolia API** for ecosystem news filtered by your tech stack
@@ -110,6 +111,7 @@ Results are cached (24h for registry data, 1h for vulnerabilities, 30min for new
 "Check my dependency health"                  -> dependency_health
 "Scan for vulnerabilities"                    -> vulnerability_scan
 "Which deps should I upgrade first?"          -> upgrade_planner
+"Is it safe to bump axios to 1.14.1?"         -> dependency_check
 "What should I know before I start coding?"   -> what_should_i_know
 "What's happening in the ecosystem?"          -> ecosystem_pulse
 "What's my tech stack?"                       -> get_context
@@ -118,7 +120,7 @@ Results are cached (24h for registry data, 1h for vulnerabilities, 30min for new
 "Remember: never use ORM for batch inserts"   -> agent_memory
 ```
 
-## All 14 Tools
+## All 15 Tools
 
 ### Dependency Security
 
@@ -127,6 +129,7 @@ Results are cached (24h for registry data, 1h for vulnerabilities, 30min for new
 | `vulnerability_scan` | Live CVE scanning via OSV.dev. Severity, fix versions, CVSS scores. |
 | `dependency_health` | Health score (0-100) + version freshness, deprecation, CVE counts per dependency. |
 | `upgrade_planner` | Ranked upgrade recommendations. Quick wins vs. breaking changes. Risk-sorted. |
+| `dependency_check` | Call before adding a dependency or applying a bump. Verdict per item (`proceed` / `wait` / `review` / `avoid` / `unknown`) with evidence: advisories on the target, release age (holds releases under 3 days unless they fix an advisory you have), publish-trust drop, new install scripts, brand-new transitive dependencies, yanked or deprecated. npm and crates.io. |
 
 ### Intelligence
 
@@ -156,6 +159,10 @@ Results are cached (24h for registry data, 1h for vulnerabilities, 30min for new
 
 *\* Requires the [4DA desktop app](https://4da.ai) for full data.*
 
+### Prompt: `deps`
+
+A user-invoked workflow (shown as a slash command by hosts that surface MCP prompts). It tells the agent to run `upgrade_planner`, check every proposed bump with `dependency_check`, apply only `proceed` items in small batches with the project's own tests after each batch, stop and report every `review` / `avoid` / `wait` / `unknown` item with its evidence, and re-run `vulnerability_scan` at the end. Optional argument `scope` (e.g. `security only`).
+
 ## Standalone vs. Full Mode
 
 The MCP server works without the desktop app. On first run it creates a local database and scans your project:
@@ -165,6 +172,7 @@ The MCP server works without the desktop app. On first run it creates a local da
 | Vulnerability scanning (OSV.dev) | Yes | Yes |
 | Dependency health (4 registries) | Yes | Yes |
 | Upgrade planner | Yes | Yes |
+| Pre-install dependency check | Yes | Yes |
 | Ecosystem news (Hacker News) | Yes | Yes |
 | Pre-task intelligence briefing | Yes | Yes |
 | Tech stack detection + resolved versions | Yes | Yes |
@@ -229,7 +237,7 @@ npx @4da/mcp-server --version    # Print version
 No. The server sends package names and versions to public APIs ([OSV.dev](https://osv.dev), npm registry, crates.io, PyPI, Go proxy) and generic tech keywords to [HN Algolia](https://hn.algolia.com/api). The same public data visible in your `package.json`. No source code, no file paths, no personal data. Set `FOURDA_OFFLINE=true` to disable all network calls. (The sole exception is opt-in OpenAI embeddings — see the network note above.)
 
 **Do I need the 4DA desktop app?**
-No. 9 tools work standalone: vulnerability scanning, dependency health, upgrade planning, ecosystem news, pre-task briefings, project context, decision memory, alignment checking, and agent memory. The desktop app adds a scored content feed from 20+ sources, graded against your actual stack.
+No. 10 tools work standalone: vulnerability scanning, dependency health, upgrade planning, pre-install dependency checks, ecosystem news, pre-task briefings, project context, decision memory, alignment checking, and agent memory. The desktop app adds a scored content feed from 20+ sources, graded against your actual stack.
 
 **Which AI tools does this work with?**
 Any tool that supports [MCP](https://modelcontextprotocol.io): Claude Code, Claude Desktop, Cursor, Windsurf, VS Code (Copilot), and any custom MCP client.
