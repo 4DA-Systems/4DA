@@ -15,11 +15,13 @@
  * secret (MCP_AUTH_SECRET) and then verifies an HMAC-SHA256-signed Bearer
  * token on every request, enforcing the token's role at tool dispatch.
  *
- * 14 tools across 5 categories. Live vulnerability scanning (OSV.dev),
- * ecosystem news, persistent memory, and tech stack awareness for any MCP host.
+ * 15 tools across 5 categories, plus the `deps` prompt. Live vulnerability
+ * scanning (OSV.dev), pre-install dependency checks, ecosystem news,
+ * persistent memory, and tech stack awareness for any MCP host.
  *
  * Categories (canonical — matches schema-registry.ts `ToolCategory`):
- *   Security (3)      — vulnerability scanning, dependency health, upgrade planning
+ *   Security (4)      — vulnerability scanning, dependency health, upgrade planning,
+ *                       dependency check
  *   Intelligence (7)  — briefing, ecosystem pulse, context, content feed,
  *                       actionable signals, knowledge gaps, feedback
  *   Decisions (2)     — decision memory, alignment checking
@@ -51,6 +53,7 @@ import { getSlimToolList, getSchemaResources, hasToolSchema, getSchemaFilename, 
 
 // Map-based tool dispatch (replaces per-tool imports + switch statement)
 import { dispatchTool } from "./tool-dispatch.js";
+import { getPrompt, listPrompts } from "./prompts.js";
 import { checkBuildStaleness } from "./build-staleness.js";
 
 const __filename = fileURLToPath(import.meta.url);
@@ -248,6 +251,7 @@ export function buildServer(): Server {
       capabilities: {
         tools: { listChanged: true },
         resources: {},
+        prompts: {},
       },
     }
   );
@@ -349,6 +353,17 @@ export function buildServer(): Server {
         },
       ],
     };
+  });
+
+  // Prompts: user-invoked workflows (surfaced as slash commands by some hosts).
+  server.setRequestHandler("prompts/list", async () => ({ prompts: listPrompts() }));
+
+  server.setRequestHandler("prompts/get", async (request) => {
+    const prompt = getPrompt(request.params.name, request.params.arguments);
+    if (!prompt) {
+      throw new Error(`Unknown prompt: ${request.params.name}`);
+    }
+    return prompt;
   });
 
   // Execute a tool

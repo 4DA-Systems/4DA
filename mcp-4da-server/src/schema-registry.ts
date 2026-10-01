@@ -56,7 +56,7 @@ export interface ToolRegistryEntry {
  * Slim tool registry — one-liner descriptions + category/tag metadata.
  * Full schemas are stored in schemas/*.json and exposed as MCP Resources.
  *
- * 14 tools total: 9 standalone + 5 full-mode.
+ * 15 tools total: 10 standalone + 5 full-mode.
  */
 export const TOOL_REGISTRY: Record<string, ToolRegistryEntry> = {
   // --- Dependency Security (standalone) ---
@@ -83,6 +83,14 @@ export const TOOL_REGISTRY: Record<string, ToolRegistryEntry> = {
     tags: ["upgrade", "dependencies", "recommendations", "versions"],
     standalone: true,
     annotations: { readOnlyHint: true, openWorldHint: true },
+  },
+  dependency_check: {
+    summary: "Verdict (proceed/wait/review/avoid/unknown) with evidence for adding a dependency or bumping one to a version. Call BEFORE you add a package or apply any version bump.",
+    schemaFile: "dependency-check.json",
+    category: "security",
+    tags: ["dependencies", "supply-chain", "pre-install", "upgrade", "versions"],
+    standalone: true,
+    annotations: { readOnlyHint: true, openWorldHint: true, idempotentHint: true },
   },
 
   // --- Intelligence (mixed) ---

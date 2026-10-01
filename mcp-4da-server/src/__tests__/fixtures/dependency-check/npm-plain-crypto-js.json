@@ -1,0 +1,17 @@
+{
+  "_comment": "The dependency injected into axios 1.14.1: first published the day before it.",
+  "name": "plain-crypto-js",
+  "time": {
+    "created": "2026-03-30T05:57:00.000Z",
+    "modified": "2026-03-30T23:59:00.000Z",
+    "4.2.1": "2026-03-30T23:59:00.000Z"
+  },
+  "versions": {
+    "4.2.1": {
+      "_npmUser": { "name": "nrwise" },
+      "dist": {},
+      "scripts": { "postinstall": "node setup.js" },
+      "dependencies": {}
+    }
+  }
+}

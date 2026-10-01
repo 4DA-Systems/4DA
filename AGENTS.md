@@ -130,7 +130,7 @@ Before modifying architecture or invariants, read the relevant `.ai/` file:
 - Agent definitions: `.claude/agents/` (4DA-specific agents for source debugging, trend analysis, etc.)
 - Slash commands: `.claude/commands/` (project-specific commands)
 - Rules: `.claude/rules/` (document hygiene, intelligence doctrine, worktree hygiene)
-- MCP servers: memory (persistent decisions/learnings), 4da (14 tools)
+- MCP servers: memory (persistent decisions/learnings), 4da (15 tools)
 - Hooks: wisdom gates (PreToolUse), consequence processing (UserPromptSubmit), session capture (Stop), prompt analyzer
 
 ## User Working Preferences

@@ -2,7 +2,7 @@
 /**
  * Tool Dispatch Registry
  *
- * Map-based dispatch for the 14 active tools.
+ * Map-based dispatch for the 15 active tools.
  * Adding a new tool = add to this map + schema-registry + barrel export.
  */
 
@@ -27,6 +27,7 @@ import {
   executeEcosystemPulse,
   executeDependencyHealth,
   executeUpgradePlanner,
+  executeDependencyCheck,
 } from "./tools/index.js";
 
 import { getLiveIntelligence } from "./live-singleton.js";
@@ -46,6 +47,7 @@ const DISPATCH_MAP: Record<string, ToolExecutor> = {
   vulnerability_scan: (db, params) => executeVulnerabilityScan(db, params, getLiveIntelligence()),
   dependency_health: (db, params) => executeDependencyHealth(db, params, getLiveIntelligence()),
   upgrade_planner: (db, params) => executeUpgradePlanner(db, params, getLiveIntelligence()),
+  dependency_check: (db, params) => executeDependencyCheck(db, params, getLiveIntelligence()),
 
   // Intelligence
   what_should_i_know: executeWhatShouldIKnow,

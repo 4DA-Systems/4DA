@@ -1,0 +1,27 @@
+{
+  "_comment": "Shape of crates.io/api/v1/crates/fixture-crate/versions?per_page=100&sort=semver (newest semver first). 2.0.0 was published from CI via trusted publishing; 2.0.1 was not. Test clock 2026-04-10T00:00:00Z: 2.0.1 is 10 days old.",
+  "versions": [
+    {
+      "num": "2.0.1",
+      "created_at": "2026-03-31T00:00:00.000000Z",
+      "yanked": false,
+      "published_by": { "login": "someone" },
+      "trustpub_data": null
+    },
+    {
+      "num": "2.0.0",
+      "created_at": "2026-02-01T00:00:00.000000Z",
+      "yanked": false,
+      "published_by": null,
+      "trustpub_data": { "provider": "github", "repository": "fixture-org/fixture-crate", "run_id": "1", "sha": "abc" }
+    },
+    {
+      "num": "1.9.0",
+      "created_at": "2025-12-01T00:00:00.000000Z",
+      "yanked": false,
+      "published_by": null,
+      "trustpub_data": { "provider": "github", "repository": "fixture-org/fixture-crate", "run_id": "0", "sha": "def" }
+    }
+  ],
+  "meta": { "total": 3, "next_page": null }
+}

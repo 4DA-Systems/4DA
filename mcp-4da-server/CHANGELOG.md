@@ -1,5 +1,38 @@
 # Changelog
 
+## Unreleased
+
+### Added: `dependency_check` — a verdict before you add or bump a dependency
+
+An agent calls it with up to 25 `{ ecosystem, package, to, from? }` items (npm
+and crates.io) before it edits a manifest. Each item gets `proceed`, `wait`,
+`review`, `avoid` or `unknown`, a one-line reason, and the signals behind it,
+each with evidence: known OSV advisories on the target (and the ones the change
+fixes), release age (under 3 days is `wait`, unless the release fixes an
+advisory affecting the installed version), a drop in publish trust (trusted
+publisher > provenance attestation > neither), npm install scripts the target
+adds, runtime dependencies the target adds that were themselves first published
+under 30 days earlier, yanked / deprecated / unpublished targets, and the
+upgrade type. Against the axios 1.14.0 -> 1.14.1 compromise shape (token
+publish replacing a trusted publisher, plus a dependency created the day
+before) it answers `review` on both counts. A registry or OSV that cannot be
+reached gives `unknown`, never `proceed`; a name missing from the public
+registry says it may be private, misspelled or hallucinated.
+
+Registry requests carry the package name only. The installed and target
+versions are picked out of the full release list locally: npm's full packument
+(cached on disk with its ETag and revalidated with `If-None-Match`) and the
+crates.io versions API (spaced one request per second, with a descriptive
+User-Agent) plus the sparse index for per-version dependencies.
+
+### Added: the `deps` prompt
+
+The server now declares the MCP `prompts` capability. `deps` is a user-invoked
+workflow: plan with `upgrade_planner`, vet each bump with `dependency_check`,
+apply only `proceed` items in small batches with the project's tests after
+each, report everything else with its evidence, and re-run
+`vulnerability_scan` at the end.
+
 ## 5.1.0 — 2026-09-11
 
 ### Fixed: scoped packages in pnpm and yarn lockfiles were never scanned
