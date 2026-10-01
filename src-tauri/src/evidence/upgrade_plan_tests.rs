@@ -491,6 +491,8 @@ fn matched(cvss: f64, installs: &[(bool, bool, bool)]) -> crate::osv::types::Mat
                     is_direct,
                     is_dev,
                     is_version_confirmed: confirmed,
+                    fixed_version: None,
+                    clean_version: None,
                 },
             )
             .collect(),
@@ -503,7 +505,7 @@ fn matched(cvss: f64, installs: &[(bool, bool, bool)]) -> crate::osv::types::Mat
 fn both_grades(advisory: &crate::osv::types::MatchedAdvisory) -> (Urgency, Urgency) {
     let advisories = vec![advisory];
     let projects = vec!["/p".to_string()];
-    let plan = super::package_group("npm", (projects.clone(), advisories.clone()), false).urgency;
+    let plan = super::package_group("npm", (projects.clone(), advisories.clone()), None).urgency;
     let alert = crate::preemption::alert_urgency_to_canonical(
         &crate::preemption::osv_alert_urgency(&advisories, &projects),
     );

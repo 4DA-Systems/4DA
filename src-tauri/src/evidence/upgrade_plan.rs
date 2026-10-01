@@ -30,6 +30,7 @@
 //! is the ranking brain behind all of them.
 
 use crate::db::Database;
+use crate::osv::fix_target::{self, LineTarget};
 use crate::osv::types::MatchedAdvisory;
 
 use super::types::{
@@ -241,12 +242,16 @@ struct PackageGroup<'a> {
     all_dev: bool,
     urgency: Urgency,
     max_cvss: f64,
-    /// Highest fixed version across the group's advisories (upgrading to it
-    /// clears the most); `None` when no advisory has a fix yet.
-    target_version: Option<String>,
-    /// At least one advisory names a fixed version — the only case in which
-    /// the step may say "Upgrade" (2026-09-06: 14 of 30 live plan items said
-    /// "Upgrade gtk — clears 1 advisory" with nothing to upgrade to).
+    /// The target of each installed version in THIS row's projects (Phase
+    /// 1.1). Never the machine-wide maximum: a copy in another project can
+    /// neither set nor raise it.
+    lines: Vec<LineTarget>,
+    /// The distinct targets of `lines`, ascending. Usually one; a project
+    /// holding two copies on two lines has two.
+    targets: Vec<String>,
+    /// Some line has a target — the only case in which the step may say
+    /// "Upgrade" (2026-09-06: 14 of 30 live plan items said "Upgrade gtk —
+    /// clears 1 advisory" with nothing to upgrade to).
     has_fix: bool,
     /// Every advisory is a maintenance notice (unmaintained / deprecated: no
     /// fix, no CVSS). Folded into ONE Watch item, never an upgrade step.
@@ -276,10 +281,11 @@ fn aggregate_by_package(matches: &[MatchedAdvisory]) -> Vec<PackageGroup<'_>> {
         .into_iter()
         .flat_map(|((ecosystem_norm, _pkg_lower), advisories)| {
             let cohorts = crate::osv::identity::split_by_exposure(&advisories);
-            let split = cohorts.len() > 1;
+            let keys = crate::osv::identity::exposure_keys(&cohorts);
             cohorts
                 .into_iter()
-                .map(|cohort| package_group(&ecosystem_norm, cohort, split))
+                .zip(keys)
+                .map(|(cohort, key)| package_group(&ecosystem_norm, cohort, key))
                 .collect::<Vec<_>>()
         })
         .collect()
@@ -291,7 +297,7 @@ fn aggregate_by_package(matches: &[MatchedAdvisory]) -> Vec<PackageGroup<'_>> {
 fn package_group<'a>(
     ecosystem_norm: &str,
     (projects, advisories): (Vec<String>, Vec<&'a MatchedAdvisory>),
-    split: bool,
+    cohort_key: Option<String>,
 ) -> PackageGroup<'a> {
     // Display name from the first advisory (preserves original casing).
     let package = advisories[0].package_name.clone();
@@ -304,8 +310,9 @@ fn package_group<'a>(
     };
 
     let any_confirmed = advisories.iter().any(|a| a.is_version_confirmed);
-    let target_version = highest_fixed_version(&advisories);
-    let has_fix = target_version.is_some();
+    let lines = fix_target::line_targets(&advisories, &projects);
+    let targets = fix_target::distinct_targets(&lines);
+    let has_fix = !targets.is_empty();
     // "Fixable now" needs something to bump TO: rsa's Marvin attack
     // (no fix exists) read "Fixable now via a direct dependency bump"
     // on the live plan (2026-09-06).
@@ -338,8 +345,6 @@ fn package_group<'a>(
         scope.all_dev(),
     );
 
-    let cohort_key = crate::osv::identity::exposure_key(split, &advisories);
-
     PackageGroup {
         package,
         ecosystem_norm: ecosystem_norm.to_string(),
@@ -350,7 +355,8 @@ fn package_group<'a>(
         all_dev,
         urgency,
         max_cvss,
-        target_version,
+        lines,
+        targets,
         has_fix,
         informational,
         cohort_key,
@@ -404,11 +410,18 @@ impl PackageGroup<'_> {
     fn into_evidence_item(self, now_millis: i64) -> EvidenceItem {
         let n = self.advisory_count();
         let m = self.projects.len();
-        let target_note = self
-            .target_version
-            .as_deref()
-            .map(|v| format!(" to >= {v}"))
-            .unwrap_or_default();
+        let major = self.lines.iter().any(LineTarget::is_major);
+        // One target per line the row's copies are on; two lines in one
+        // project read "to >= 1.1.21 / 5.0.12", never the higher of the two.
+        let target_note = if self.targets.is_empty() {
+            String::new()
+        } else {
+            format!(
+                " to >= {}{}",
+                self.targets.join(" / "),
+                if major { " (major)" } else { "" }
+            )
+        };
 
         // No fixed version anywhere in the group: the step must not say
         // "Upgrade" — there is nothing to upgrade to. It stays an Alert at its
@@ -446,6 +459,7 @@ impl PackageGroup<'_> {
         } else {
             ""
         };
+        let target_detail = target_detail(&self.package, &self.lines, major);
         let representatives = self.representatives();
         let ids: Vec<&str> = representatives
             .iter()
@@ -460,7 +474,7 @@ impl PackageGroup<'_> {
         };
         let explanation = format!(
             "{pkg} has {n} version-confirmed {adv} matching installed versions across {m} {proj}. \
-             {scope}.{dev} Advisories: {ids}{more}.",
+             {scope}.{dev}{targets} Advisories: {ids}{more}.",
             pkg = self.package,
             n = n,
             adv = plural(n, "advisory", "advisories"),
@@ -468,11 +482,14 @@ impl PackageGroup<'_> {
             proj = plural(m, "project", "projects"),
             scope = scope_note,
             dev = dev_note,
+            targets = target_detail,
             ids = ids.join(", "),
             more = more_note,
         );
 
-        // Citations: one per vulnerability (capped), plus the affected-projects context.
+        // Citations: one per vulnerability (capped), plus the affected-projects
+        // context. The installed version cited is the one in THIS row's
+        // projects, not the advisory's machine-wide representative.
         let mut evidence: Vec<EvidenceCitation> = representatives
             .iter()
             .take(MAX_CITATIONS)
@@ -488,7 +505,7 @@ impl PackageGroup<'_> {
                             .cvss_score
                             .map(|c| format!("CVSS {c:.1}; "))
                             .unwrap_or_default(),
-                        ver = a.installed_version.as_deref().unwrap_or("version"),
+                        ver = installed_in(a, &self.projects),
                     ),
                     200,
                 ),
@@ -504,6 +521,7 @@ impl PackageGroup<'_> {
                 200,
             ),
         });
+        evidence.extend(line_citations(&self.lines));
 
         // Confidence: heuristic ranking; a shade higher when the fix is a direct
         // bump the user controls, a shade lower when there is no fix to point
@@ -559,6 +577,103 @@ impl PackageGroup<'_> {
             created_at: now_millis,
             expires_at: None,
         }
+    }
+}
+
+/// One `fix-target` citation per installed version (Phase 1.2), carried in
+/// the canonical item rather than a new type: title `"1.1.12 -> 1.1.21"`, and
+/// a note with the upgrade type, whether it clears every known advisory, and
+/// each install site as `project (direct|transitive[, dev])`.
+fn line_citations(lines: &[LineTarget]) -> Vec<EvidenceCitation> {
+    lines
+        .iter()
+        .map(|l| {
+            let target = l.target_version.as_deref().unwrap_or("no fix published");
+            let kind = match l.upgrade_type {
+                Some(fix_target::UpgradeType::Patch) => "patch",
+                Some(fix_target::UpgradeType::Minor) => "minor",
+                Some(fix_target::UpgradeType::Major) => "major",
+                None => "unknown",
+            };
+            let clears = if l.target_version.is_none() {
+                ""
+            } else if l.clears_all_known {
+                "; clears every known advisory"
+            } else {
+                "; clears only the advisories with a fix"
+            };
+            let sites: Vec<String> = l
+                .sites
+                .iter()
+                .map(|s| {
+                    format!(
+                        "{} ({}{})",
+                        s.project_path,
+                        if s.is_direct { "direct" } else { "transitive" },
+                        if s.is_dev { ", dev" } else { "" }
+                    )
+                })
+                .collect();
+            EvidenceCitation {
+                source: "fix-target".to_string(),
+                title: truncate(&format!("{} -> {target}", l.installed_version), 160),
+                url: None,
+                freshness_days: 0.0,
+                relevance_note: truncate(
+                    &format!("{kind} upgrade{clears}. Installed in: {}", sites.join(", ")),
+                    200,
+                ),
+            }
+        })
+        .collect()
+}
+
+/// The per-line sentence of a step's explanation: where each copy goes when
+/// there is more than one line, that the move is a major one, and that the
+/// target leaves an unfixed advisory open. Empty in the common case (one line,
+/// in-major, clears everything) — the title already says it.
+fn target_detail(package: &str, lines: &[LineTarget], major: bool) -> String {
+    let mut out = String::new();
+    if lines.iter().filter(|l| l.target_version.is_some()).count() > 1 {
+        out.push_str(&format!(
+            " Each installed version has its own target: {}.",
+            fix_target::describe_lines(lines)
+        ));
+    }
+    if major {
+        out.push_str(
+            " The target crosses a major version — breaking changes are possible; \
+             check the changelog before upgrading.",
+        );
+    }
+    if lines
+        .iter()
+        .any(|l| l.target_version.is_some() && !l.clears_all_known)
+    {
+        out.push_str(&format!(
+            " No published version of {package} clears every known advisory; \
+             the target clears the ones that have a fix."
+        ));
+    }
+    out
+}
+
+/// The installed versions of `advisory`'s confirmed copies in `projects`
+/// ("1.1.18, 5.0.9"); "version" when none is known.
+fn installed_in(advisory: &MatchedAdvisory, projects: &[String]) -> String {
+    let mut versions: Vec<&str> = advisory
+        .dependency_instances
+        .iter()
+        .filter(|d| d.is_version_confirmed)
+        .filter(|d| projects.iter().any(|p| p == &d.project_path))
+        .filter_map(|d| d.installed_version.as_deref())
+        .collect();
+    versions.sort_unstable();
+    versions.dedup();
+    if versions.is_empty() {
+        "version".to_string()
+    } else {
+        versions.join(", ")
     }
 }
 
@@ -622,7 +737,7 @@ fn informational_item(groups: Vec<PackageGroup<'_>>, now_millis: i64) -> Evidenc
                 &format!(
                     "{}: no fixed version; installed {}",
                     g.package,
-                    a.installed_version.as_deref().unwrap_or("version")
+                    installed_in(a, &g.projects)
                 ),
                 200,
             ),
@@ -739,36 +854,6 @@ fn cluster_urgency(cluster: &[&MatchedAdvisory]) -> Urgency {
     }
 }
 
-/// Highest fixed version across the advisories (semver-aware; falls back to a
-/// lexicographic max for non-semver strings, then to the first fix seen).
-fn highest_fixed_version(advisories: &[&MatchedAdvisory]) -> Option<String> {
-    let fixes: Vec<String> = advisories
-        .iter()
-        .filter_map(|a| a.fixed_version.clone())
-        .filter(|v| !v.is_empty())
-        .collect();
-    if fixes.is_empty() {
-        return None;
-    }
-    let mut best = fixes[0].clone();
-    for v in fixes.iter().skip(1) {
-        if version_gt(v, &best) {
-            best = v.clone();
-        }
-    }
-    Some(best)
-}
-
-fn version_gt(a: &str, b: &str) -> bool {
-    match (
-        semver::Version::parse(a.trim_start_matches('v')),
-        semver::Version::parse(b.trim_start_matches('v')),
-    ) {
-        (Ok(va), Ok(vb)) => va > vb,
-        _ => a > b, // both non-semver → lexicographic
-    }
-}
-
 fn plural(n: usize, one: &'static str, many: &'static str) -> &'static str {
     if n == 1 {
         one
@@ -811,3 +896,7 @@ pub(super) fn truncate(s: &str, max: usize) -> String {
 #[cfg(test)]
 #[path = "upgrade_plan_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "upgrade_targets_tests.rs"]
+mod target_tests;

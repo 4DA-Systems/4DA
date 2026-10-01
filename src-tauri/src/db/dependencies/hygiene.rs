@@ -15,7 +15,8 @@
 //! - [`purge_builtin_import_dependencies`] — import-scraped Node/Python
 //!   builtin modules + the stale decision windows they minted (Wave 8a);
 //! - [`prune_orphaned_project_dependencies`] — rows of projects that no
-//!   longer exist on disk (Wave 8a).
+//!   longer exist on disk, or whose directory no longer holds a manifest
+//!   (Wave 8a; manifest-less shells and the instance tables, 2026-10-01).
 
 use rusqlite::{params, Result as SqliteResult};
 
@@ -580,11 +581,19 @@ pub struct OrphanedProjectPurge {
     pub project_dependencies: usize,
     /// Rows deleted from `dependency_snapshots`.
     pub dependency_snapshots: usize,
+    /// Rows deleted from `dependency_instances` (multi-version inventory).
+    pub dependency_instances: usize,
+    /// Rows deleted from `dependency_edges` (the inventory's graph).
+    pub dependency_edges: usize,
 }
 
 impl OrphanedProjectPurge {
     pub fn total(&self) -> usize {
-        self.user_dependencies + self.project_dependencies + self.dependency_snapshots
+        self.user_dependencies
+            + self.project_dependencies
+            + self.dependency_snapshots
+            + self.dependency_instances
+            + self.dependency_edges
     }
 }
 
@@ -625,14 +634,122 @@ pub fn project_path_missing_on_disk(path: &str) -> bool {
     }
 }
 
+/// Files whose presence makes a directory a dependency project: every manifest
+/// and lockfile the scanners read (`ace::scanner`, the lockfile walk, the
+/// headless watch list) plus the common ones they may read later. Deliberately
+/// broad — a name here can only KEEP a project.
+const PROJECT_MARKERS: &[&str] = &[
+    "package.json",
+    "package-lock.json",
+    "npm-shrinkwrap.json",
+    "pnpm-lock.yaml",
+    "pnpm-workspace.yaml",
+    "yarn.lock",
+    "bun.lock",
+    "bun.lockb",
+    "deno.json",
+    "deno.jsonc",
+    "deno.lock",
+    "Cargo.toml",
+    "Cargo.lock",
+    "pyproject.toml",
+    "poetry.lock",
+    "uv.lock",
+    "Pipfile",
+    "Pipfile.lock",
+    "setup.py",
+    "setup.cfg",
+    "go.mod",
+    "go.sum",
+    "go.work",
+    "Gemfile",
+    "Gemfile.lock",
+    "composer.json",
+    "composer.lock",
+    "pom.xml",
+    "build.gradle",
+    "build.gradle.kts",
+    "settings.gradle",
+    "settings.gradle.kts",
+    "gradle.lockfile",
+    "pubspec.yaml",
+    "pubspec.lock",
+    "mix.exs",
+    "mix.lock",
+    "Package.swift",
+    "Package.resolved",
+    "Podfile",
+    "Podfile.lock",
+    "packages.config",
+    "Directory.Packages.props",
+];
+
+/// Project-file extensions (.NET), compared case-insensitively.
+const PROJECT_MARKER_EXTENSIONS: &[&str] = &["csproj", "fsproj", "vbproj", "sln"];
+
+fn is_project_marker(name: &str) -> bool {
+    let path = std::path::Path::new(name);
+    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+    let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+    PROJECT_MARKERS.iter().any(|m| m.eq_ignore_ascii_case(name))
+        || PROJECT_MARKER_EXTENSIONS
+            .iter()
+            .any(|e| e.eq_ignore_ascii_case(ext))
+        || (ext.eq_ignore_ascii_case("txt")
+            && stem.to_ascii_lowercase().starts_with("requirements"))
+}
+
+/// The production probe for the orphan reconcile: the project is deleted or
+/// moved ([`project_path_missing_on_disk`]), OR its directory still exists
+/// but holds no manifest or lockfile at all — a leftover shell. Live
+/// 2026-10-01: `D:\4DA\paddle-webhook` had been removed from the repo but its
+/// untracked `node_modules` kept the directory alive, so 361 instance rows
+/// and five Upgrade Plan items survived for a project that no longer exists.
+///
+/// Same conservatism as the missing-path probe: anything it cannot read
+/// (permission error, unreadable entry, not a directory, a share) is kept.
+pub fn project_gone_from_disk(path: &str) -> bool {
+    project_path_missing_on_disk(path) || project_manifest_absent(path)
+}
+
+/// True only when `path` is a readable local directory with no project
+/// marker among its direct entries.
+fn project_manifest_absent(path: &str) -> bool {
+    let trimmed = path.trim();
+    if trimmed.is_empty() || trimmed.starts_with("\\\\") || trimmed.starts_with("//") {
+        return false;
+    }
+    let dir = std::path::Path::new(trimmed);
+    if !dir.is_absolute() || !std::fs::metadata(dir).is_ok_and(|m| m.is_dir()) {
+        return false;
+    }
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return false;
+    };
+    for entry in entries {
+        let Ok(entry) = entry else {
+            return false;
+        };
+        if is_project_marker(&entry.file_name().to_string_lossy()) {
+            return false;
+        }
+    }
+    true
+}
+
 /// Reconcile dependency tables against the filesystem: `prune_removed_dependencies`
 /// only runs for manifests that are RE-scanned, so the rows of a project that
 /// was deleted or moved persist forever (its manifest never scans again) —
 /// stale deps kept grounding alerts for projects that no longer exist. Called
 /// after each full ACE scan.
 ///
-/// `path_missing` is injected (production: [`project_path_missing_on_disk`])
-/// so tests can simulate deletion. Tier-waived ledger fixture paths (canonical
+/// Covers every table the OSV matcher and the Upgrade Plan read per project,
+/// including the multi-version inventory (`dependency_instances`) and its
+/// graph (`dependency_edges`) — the matcher unions instance versions in, so a
+/// pruned `user_dependencies` row with surviving instances still matched.
+///
+/// `path_missing` is injected (production: [`project_gone_from_disk`]) so
+/// tests can simulate deletion. Tier-waived ledger fixture paths (canonical
 /// policy: `project_inclusion` tier-2 + active waiver) are skipped — the
 /// receipts ledger scans fixture stacks on purpose.
 ///
@@ -658,6 +775,8 @@ pub fn prune_orphaned_project_dependencies(
         "user_dependencies",
         "project_dependencies",
         "dependency_snapshots",
+        "dependency_instances",
+        "dependency_edges",
     ];
 
     // Phase 1 — collect candidate paths, then release the read snapshot.
@@ -711,7 +830,9 @@ pub fn prune_orphaned_project_dependencies(
             match *table {
                 "user_dependencies" => counts.user_dependencies += deleted,
                 "project_dependencies" => counts.project_dependencies += deleted,
-                _ => counts.dependency_snapshots += deleted,
+                "dependency_snapshots" => counts.dependency_snapshots += deleted,
+                "dependency_instances" => counts.dependency_instances += deleted,
+                _ => counts.dependency_edges += deleted,
             }
         }
     }

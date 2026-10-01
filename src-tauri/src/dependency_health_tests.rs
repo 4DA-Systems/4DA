@@ -141,6 +141,41 @@ fn test_security_alert_overrides_stale() {
     assert_eq!(health[0].health_status, HealthStatus::SecurityAlert);
 }
 
+/// The production shape (live DB, 2026-10-01): `user_dependencies` holds the
+/// ACE language name, `dependency_alerts` the registry name. The test above
+/// used `javascript` on both sides, which is why the join never matching in
+/// production went unseen.
+#[test]
+fn security_alert_matches_across_ecosystem_spellings() {
+    let conn = test_conn();
+    conn.execute_batch(
+        "INSERT INTO user_dependencies (project_path, package_name, version, ecosystem, is_direct, is_dev)
+             VALUES ('/app', 'lodash', '4.17.0', 'javascript', 1, 0),
+                    ('/svc', 'tokio', '1.0.0', 'rust', 1, 0),
+                    ('/svc', 'serde', '1.0.0', 'rust', 1, 0);
+         INSERT INTO dependency_alerts (package_name, ecosystem, alert_type, severity, title)
+             VALUES ('lodash', 'npm', 'vulnerability', 'HIGH', 'Prototype pollution'),
+                    ('tokio', 'crates.io', 'vulnerability', 'critical', 'Data race'),
+                    ('serde', 'npm', 'vulnerability', 'critical', 'Same name, other registry');",
+    )
+    .unwrap();
+
+    let health = check_dependency_health(&conn).unwrap();
+    let status = |name: &str| {
+        health
+            .iter()
+            .find(|h| h.package_name == name)
+            .map(|h| h.health_status.clone())
+    };
+    assert_eq!(status("lodash"), Some(HealthStatus::SecurityAlert));
+    assert_eq!(status("tokio"), Some(HealthStatus::SecurityAlert));
+    assert_ne!(
+        status("serde"),
+        Some(HealthStatus::SecurityAlert),
+        "an npm alert must not mark the serde crate"
+    );
+}
+
 #[test]
 fn test_unknown_when_no_mentions() {
     let conn = test_conn();

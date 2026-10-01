@@ -10,6 +10,7 @@ use crate::db::Database;
 use crate::error::{FourDaError, Result};
 use semver::Version;
 
+use super::fix_target;
 use super::types::{MatchedAdvisory, MatchedDependency, Range};
 
 /// Get all advisories that match the user's installed dependencies.
@@ -108,6 +109,20 @@ pub fn get_matched_advisories(db: &Database) -> Result<Vec<MatchedAdvisory>> {
         ),
     }
 
+    // Every known advisory's ranges per package: a copy's clean version must
+    // clear ALL of them, not only the ones it matched today.
+    let mut package_ranges: HashMap<(String, String), Vec<&Option<String>>> = HashMap::new();
+    for advisory in &advisories {
+        package_ranges
+            .entry((
+                advisory.package_name.to_lowercase(),
+                normalize_ecosystem(&advisory.ecosystem).to_string(),
+            ))
+            .or_default()
+            .push(&advisory.affected_ranges);
+    }
+    let mut clean_cache: HashMap<(String, String, String), Option<String>> = HashMap::new();
+
     let mut matches: Vec<MatchedAdvisory> = Vec::new();
     let mut seen = std::collections::HashSet::new();
 
@@ -168,12 +183,33 @@ pub fn get_matched_advisories(db: &Database) -> Result<Vec<MatchedAdvisory>> {
                 let (is_affected, confirmed) =
                     check_version_affected(version.as_deref(), &advisory.affected_ranges);
                 if is_affected {
+                    // Targets are facts about THIS copy (Phase 1.1): its own
+                    // line's fix, and the version clearing every advisory.
+                    let (fixed_version, clean_version) = match version.as_deref() {
+                        Some(v) if confirmed => {
+                            let clean = clean_cache
+                                .entry((key.0.clone(), key.1.clone(), v.to_string()))
+                                .or_insert_with(|| {
+                                    package_ranges
+                                        .get(&key)
+                                        .and_then(|ranges| fix_target::clean_version(v, ranges))
+                                })
+                                .clone();
+                            (
+                                fix_target::fix_for_version(v, &advisory.affected_ranges),
+                                clean,
+                            )
+                        }
+                        _ => (None, None),
+                    };
                     dependency_instances.push(MatchedDependency {
                         project_path: normalize_project_path(&dep.project_path),
                         installed_version: version,
                         is_direct,
                         is_dev,
                         is_version_confirmed: confirmed,
+                        fixed_version,
+                        clean_version,
                     });
                 }
             }
@@ -227,13 +263,13 @@ pub fn get_matched_advisories(db: &Database) -> Result<Vec<MatchedAdvisory>> {
             continue;
         }
 
-        // The fix for the line each confirmed copy is on (highest across
-        // copies), else the fix that clears every listed range.
+        // Machine-wide (see `MatchedAdvisory::fixed_version`): the fix for the
+        // line each confirmed copy is on (highest across copies), else the
+        // fix that clears every listed range.
         let fixed_version = dependency_instances
             .iter()
             .filter(|instance| instance.is_version_confirmed)
-            .filter_map(|instance| instance.installed_version.as_deref())
-            .filter_map(|v| fix_for_version(v, &advisory.affected_ranges))
+            .filter_map(|instance| instance.fixed_version.clone())
             .filter_map(|fix| parse_version(&fix).map(|parsed| (parsed, fix)))
             .max_by(|a, b| a.0.cmp(&b.0))
             .map(|(_, fix)| fix)
@@ -323,6 +359,16 @@ pub(crate) fn check_version_affected(
         None => return (true, false), // Can't parse user version → conservative
     };
 
+    // A bound the matcher cannot parse leaves its window undecided. Reading
+    // that as "not in any window" answered "confirmed NOT affected" about a
+    // window it never evaluated (dependency-handoff Phase 1.4).
+    let mut undecided = false;
+    let mut parse_bound = |s: &str| {
+        let parsed = parse_version(s);
+        undecided |= parsed.is_none();
+        parsed
+    };
+
     for range in &ranges {
         if range.range_type != "SEMVER" && range.range_type != "ECOSYSTEM" {
             continue;
@@ -346,14 +392,14 @@ pub(crate) fn check_version_affected(
                 introduced = if intro_str == "0" {
                     Some(Version::new(0, 0, 0))
                 } else {
-                    parse_version(intro_str)
+                    parse_bound(intro_str)
                 };
             }
 
             if let Some(fixed_str) = obj.get("fixed").and_then(|v| v.as_str()) {
                 if !is_unknown_bound(fixed_str) {
-                    if let Some(ref intro_ver) = introduced {
-                        if let Some(fix_ver) = parse_version(fixed_str) {
+                    if let Some(fix_ver) = parse_bound(fixed_str) {
+                        if let Some(ref intro_ver) = introduced {
                             if parsed_user >= *intro_ver && parsed_user < fix_ver {
                                 return (true, true);
                             }
@@ -365,8 +411,8 @@ pub(crate) fn check_version_affected(
 
             if let Some(la_str) = obj.get("last_affected").and_then(|v| v.as_str()) {
                 if !is_unknown_bound(la_str) {
-                    if let Some(ref intro_ver) = introduced {
-                        if let Some(la_ver) = parse_version(la_str) {
+                    if let Some(la_ver) = parse_bound(la_str) {
+                        if let Some(ref intro_ver) = introduced {
                             if parsed_user >= *intro_ver && parsed_user <= la_ver {
                                 return (true, true);
                             }
@@ -385,6 +431,10 @@ pub(crate) fn check_version_affected(
         }
     }
 
+    if undecided {
+        // Conservative, unconfirmed: the same answer as unparseable ranges JSON.
+        return (true, false);
+    }
     // Went through all ranges, version not in any affected window
     (false, true)
 }
@@ -399,53 +449,6 @@ fn is_npm_security_holding(advisory_id: &str, ecosystem: &str, version: Option<&
     advisory_id.starts_with("MAL-")
         && normalize_ecosystem(ecosystem) == "npm"
         && version.is_some_and(|v| v.trim().ends_with("-security"))
-}
-
-/// The fix for the release line a version is on: the `fixed` bound of the
-/// affected window that contains `user_version`. `None` when the version is
-/// in no window, its window has no fix (`last_affected` / open-ended), or it
-/// cannot be parsed.
-///
-/// An advisory fixed in several lines lists one fix per line. GHSA-p293-qw3h-jr36
-/// (next) lists `["15.5.24", "16.3.3"]`, and taking the first told a 16.2.10
-/// install that 15.5.24 fixed it; the group maximum then printed "update to
-/// >= 16.2.11", which leaves both critical RCEs open (2026-09-26).
-pub(crate) fn fix_for_version(
-    user_version: &str,
-    affected_ranges_json: &Option<String>,
-) -> Option<String> {
-    let ranges: Vec<Range> = serde_json::from_str(affected_ranges_json.as_deref()?).ok()?;
-    let user = parse_version(user_version)?;
-    for range in &ranges {
-        if range.range_type != "SEMVER" && range.range_type != "ECOSYSTEM" {
-            continue;
-        }
-        let mut introduced: Option<Version> = None;
-        for obj in range.events.iter().flatten().filter_map(|e| e.as_object()) {
-            if let Some(intro) = obj.get("introduced").and_then(|v| v.as_str()) {
-                introduced = if intro == "0" {
-                    Some(Version::new(0, 0, 0))
-                } else {
-                    parse_version(intro)
-                };
-            }
-            let bound = obj
-                .get("fixed")
-                .or_else(|| obj.get("last_affected"))
-                .and_then(|v| v.as_str());
-            if let Some(bound) = bound {
-                let is_fix = obj.contains_key("fixed");
-                if let (Some(intro), Some(end)) = (introduced.as_ref(), parse_version(bound)) {
-                    let inside = if is_fix { user < end } else { user <= end };
-                    if !is_unknown_bound(bound) && user >= *intro && inside {
-                        return is_fix.then(|| bound.trim().to_string());
-                    }
-                }
-                introduced = None;
-            }
-        }
-    }
-    None
 }
 
 /// Highest semver among an advisory's listed fixes: the version that clears
@@ -466,13 +469,13 @@ fn highest_listed_fix(fixed_versions_json: &Option<String>) -> Option<String> {
 /// matcher does NOT place a version inside such a range. Treat it as no usable bound so the
 /// engine stays conservative and consistent with OSV (verified 2026-06-18 via the ledger's
 /// external accuracy audit).
-fn is_unknown_bound(v: &str) -> bool {
+pub(super) fn is_unknown_bound(v: &str) -> bool {
     let t = v.trim();
     t.ends_with("-NA") || t.ends_with("-na")
 }
 
 /// Parse a version string, handling common non-semver formats.
-fn parse_version(ver: &str) -> Option<Version> {
+pub(super) fn parse_version(ver: &str) -> Option<Version> {
     let v = ver.trim().trim_start_matches('v');
     if v.is_empty() {
         return None;
@@ -509,9 +512,6 @@ fn normalize_ecosystem(eco: &str) -> &str {
 mod tests {
     use super::*;
 
-    /// GHSA-p293-qw3h-jr36 as OSV publishes it: one fix per release line.
-    const NEXT_RCE_RANGES: &str = r#"[{"type":"SEMVER","events":[{"introduced":"13.4.0"},{"fixed":"15.5.24"}]},{"type":"SEMVER","events":[{"introduced":"16.0.0"},{"fixed":"16.3.3"}]}]"#;
-
     #[test]
     fn npm_security_holding_placeholder_is_not_malware() {
         assert!(is_npm_security_holding(
@@ -535,30 +535,6 @@ mod tests {
             Some("0.0.1-security")
         ));
         assert!(!is_npm_security_holding("MAL-2025-21003", "npm", None));
-    }
-
-    #[test]
-    fn fix_is_the_one_for_the_installed_release_line() {
-        let ranges = Some(NEXT_RCE_RANGES.to_string());
-        assert_eq!(
-            fix_for_version("16.2.10", &ranges).as_deref(),
-            Some("16.3.3")
-        );
-        assert_eq!(
-            fix_for_version("15.1.0", &ranges).as_deref(),
-            Some("15.5.24")
-        );
-        assert_eq!(fix_for_version("16.3.3", &ranges), None, "not affected");
-        assert_eq!(fix_for_version("12.0.0", &ranges), None, "not affected");
-    }
-
-    #[test]
-    fn last_affected_window_has_no_fix() {
-        let ranges = Some(
-            r#"[{"type":"SEMVER","events":[{"introduced":"0"},{"last_affected":"0.9.6"}]}]"#
-                .to_string(),
-        );
-        assert_eq!(fix_for_version("0.9.6", &ranges), None);
     }
 
     #[test]

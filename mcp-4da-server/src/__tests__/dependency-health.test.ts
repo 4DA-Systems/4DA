@@ -112,6 +112,18 @@ describe("dependency_health — vulnerable means the actionable set", () => {
     expect(result.vulnerabilitySummary).toEqual({ critical: 0, high: 1, medium: 0, low: 0 });
   });
 
+  it("keys a vulnerable package by ecosystem and name, not name alone", async () => {
+    // Same name, two registries: two vulnerable packages, never one.
+    const twoRegistries = makeScan([
+      makeEntry({}),
+      makeEntry({ ecosystem: "crates.io", vulnId: "RUSTSEC-react", currentVersion: "0.1.0" }),
+    ]);
+    const result = await executeDependencyHealth(noDb, {}, makeIntel(twoRegistries));
+
+    expect(result.vulnerableCount).toBe(2);
+    expect(result.summary).toContain("2 vulnerable");
+  });
+
   it("reports all healthy when every advisory is inactive or a maintenance notice", async () => {
     const quiet = makeScan([
       makeEntry({ package: "nix", vulnId: "GHSA-inactive", severity: "critical", platformActive: false, target: "cfg(unix)" }),

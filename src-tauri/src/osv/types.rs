@@ -141,6 +141,12 @@ pub struct MatchedAdvisory {
     pub package_name: String,
     pub ecosystem: String,
     pub installed_version: Option<String>,
+    /// Machine-wide: the highest line fix across EVERY confirmed copy, in any
+    /// project. Right for "is there a fix at all"; wrong as a per-project
+    /// upgrade target (navcal's brace-expansion 1.1.12 was told ">= 5.0.12"
+    /// because another project held 5.0.9). Per-project consumers read
+    /// [`MatchedDependency::fixed_version`] / [`MatchedDependency::clean_version`]
+    /// through `osv::fix_target::line_targets`.
     pub fixed_version: Option<String>,
     pub severity_type: Option<String>,
     pub cvss_score: Option<f64>,
@@ -192,6 +198,17 @@ pub struct MatchedDependency {
     pub is_direct: bool,
     pub is_dev: bool,
     pub is_version_confirmed: bool,
+    /// This advisory's fix on the release line THIS copy is on (`None` when
+    /// the window has no fix, or the copy could not be placed in a window).
+    #[serde(default)]
+    pub fixed_version: Option<String>,
+    /// The lowest version reachable from this copy by successive fixes that
+    /// no known advisory of the package affects — the version that clears
+    /// everything, on this copy's own line where one exists. `None` when the
+    /// path runs into a window with no fix, or an advisory the matcher cannot
+    /// evaluate (no clean version can then be claimed).
+    #[serde(default)]
+    pub clean_version: Option<String>,
 }
 
 /// Result of a sync operation.
