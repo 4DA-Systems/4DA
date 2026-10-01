@@ -1,7 +1,7 @@
 {
   "name": "4da",
-  "version": "5.0.4",
-  "description": "Stack-aware developer intelligence for your agent: CVE scans, dependency health, upgrade plans, decision memory. Privacy-first — only public package names leave the machine.",
+  "version": "6.0.0",
+  "description": "Upgrade intelligence for your agent: what an upgrade changes and where it touches your code, CVE scans against your real lockfiles, upgrade plans, decision memory. Only public package names and versions leave the machine.",
   "mcpServers": {
     "4da": {
       "command": "npx",
