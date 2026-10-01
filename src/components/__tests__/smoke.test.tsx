@@ -144,6 +144,7 @@ vi.mock('../../utils/score', () => ({
   getScoreColor: () => 'text-white',
   getRelevancePresentation: () => ({ labelKey: 'relevance.strong', colorClass: 'text-success', ariaLabelKey: 'relevance.strongAria' }),
   getStageLabel: (s: string) => s || 'Ready',
+  isSurfacedSignal: (r: { relevant: boolean; excluded?: boolean }) => r.relevant && r.excluded !== true,
 }));
 
 // Mock source config

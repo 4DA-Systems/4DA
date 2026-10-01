@@ -10,6 +10,7 @@ import type { SignalItem } from './signals/SignalRow';
 import { computeEvidencePool, groundingDeps, type EvidencePool } from './signals/evidence-pool';
 import { isBriefSuppressed, useActiveBriefFilteredIds } from '../hooks/use-brief-verdicts';
 import { normalizeUrlForDedup } from '../utils/normalize-url';
+import { isSurfacedSignal } from '../utils/score';
 
 // ============================================================================
 // Types
@@ -36,8 +37,18 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
   const briefFilteredIds = useActiveBriefFilteredIds();
 
   const { signals, filtered, typeCounts, priorityCounts, poolCounts, pools, briefSuppressedCount } = useMemo(() => {
+    // Signal fields are computed before convergence, and a demotion (judge
+    // reject, awaiting_judge, stale version) clears `relevant` but keeps them.
+    // Gating on the signal fields alone put pipeline-rejected items in this
+    // lane: live audit 2026-10-02, 48 of 104 Key Signals were rejected items,
+    // 6 of the 15 ALERTs. Every list reads the one surfaced-signal predicate
+    // (AD-039); critical alerts keep their exemption.
     const signalEligible = results.filter(
-      (r) => r.signal_type && r.signal_priority && r.signal_action,
+      (r) =>
+        r.signal_type &&
+        r.signal_priority &&
+        r.signal_action &&
+        (isSurfacedSignal(r) || r.is_critical_alert),
     );
     const briefSuppressed = signalEligible.filter((r) => isBriefSuppressed(r, briefFilteredIds));
     if (briefSuppressed.length > 0) {
