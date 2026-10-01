@@ -3197,7 +3197,13 @@ pub(crate) fn score_item(
             && grounding.strong
             // A yanked pin is news even when it is the newest version.
             && release_class != Some(super::release_grade::ReleaseClass::Yanked)
-            && release_already_installed(db, input, &raw.matched_deps);
+            // A graded release decides from its own pins: the grade excludes
+            // the projects that BUILD the package (`release_ownership`), which
+            // the name-wide route below cannot tell from installs.
+            && match release_grade.as_ref() {
+                Some(grade) => grade.not_news(),
+                None => release_already_installed(db, input, &raw.matched_deps),
+            };
     // v37: a patch (or a release only transitive copies are behind on) and a
     // prerelease are not news on their own — security fixes reach the user
     // through the advisory lanes, and a prerelease announcement through

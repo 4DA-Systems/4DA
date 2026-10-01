@@ -44,6 +44,7 @@ pub(crate) mod reexamination;
 #[cfg(test)]
 mod registry_grounding_tests;
 pub(crate) mod release_grade;
+pub(crate) mod release_ownership;
 pub(crate) mod release_version;
 mod role_inference;
 pub(crate) mod security_verdict;

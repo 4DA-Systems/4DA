@@ -27,6 +27,12 @@
 //! Only projects that declare the package DIRECTLY can act on it. A project
 //! that reaches the package only transitively is upgraded by its parent, so it
 //! never makes a release actionable.
+//!
+//! A project that BUILDS the package (its own crate, a member of the
+//! workspace that publishes it, a path dependency) is not a pin at all
+//! (`release_ownership`): the operator's own `victauri-core v0.9.0` was a
+//! "breaking upgrade" for the victauri workspace itself (live 2026-10-02).
+//! When only such projects carry the package, the release is not news.
 
 use semver::Version;
 
@@ -80,6 +86,11 @@ pub(crate) struct ReleaseGrade {
     pub package: String,
     pub announced: Version,
     pub pins: Vec<ProjectPin>,
+    /// Projects that BUILD the package themselves — its own manifest, a
+    /// member of the workspace that publishes it, a path dependency
+    /// (`release_ownership`). They are its source, not installs of the
+    /// release, so they are never pins; they are kept to say so.
+    pub own_projects: Vec<String>,
 }
 
 /// The gap between an installed version and an announced one, or `None` when
@@ -160,6 +171,7 @@ impl ReleaseGrade {
             package: package.to_string(),
             announced,
             pins,
+            own_projects: Vec::new(),
         }
     }
 
@@ -167,6 +179,19 @@ impl ReleaseGrade {
     /// already-installed rule). An empty pin set is "cannot tell" → false.
     pub(crate) fn all_installed(&self) -> bool {
         !self.pins.is_empty() && self.pins.iter().all(|p| p.gap.is_none())
+    }
+
+    /// The release carries no news for any project: every project that
+    /// installs it already runs it or newer (and none runs a yanked
+    /// version), or the only projects carrying the package are the ones
+    /// that build it — the user's own publication announced back to them.
+    /// The scorer holds such a row at the already-installed ceiling.
+    pub(crate) fn not_news(&self) -> bool {
+        let any_yanked = self.pins.iter().any(|p| p.is_direct && p.yanked);
+        if self.pins.is_empty() {
+            return !self.own_projects.is_empty();
+        }
+        self.all_installed() && !any_yanked
     }
 
     /// Projects that declare the package directly and are behind (or yanked).
@@ -251,16 +276,38 @@ impl ReleaseGrade {
     /// "4da/src-tauri on 5.13.4", "work/tools (+4 more) on 0.10.9",
     /// or with mixed versions "… on 0.10.9–0.10.12".
     pub(crate) fn concerned_label(&self) -> Option<String> {
+        Some(format!(
+            "{} on {}",
+            self.concerned_location()?,
+            self.concerned_versions()?
+        ))
+    }
+
+    /// The concerned projects alone: "4da/src-tauri", "work/tools (+4 more)".
+    fn concerned_location(&self) -> Option<String> {
+        let paths: Vec<String> = self
+            .concerned_pins()
+            .iter()
+            .map(|p| p.project_path.clone())
+            .collect();
+        dependencies::project_label(&paths)
+    }
+
+    /// The concerned projects' installed versions: "0.8.4", "1.52.1–1.52.3".
+    fn concerned_versions(&self) -> Option<String> {
         let pins = self.concerned_pins();
-        let paths: Vec<String> = pins.iter().map(|p| p.project_path.clone()).collect();
-        let location = dependencies::project_label(&paths)?;
         let lo = pins.iter().map(|p| &p.installed).min()?;
         let hi = pins.iter().map(|p| &p.installed).max()?;
         Some(if lo == hi {
-            format!("{location} on {lo}")
+            lo.to_string()
         } else {
-            format!("{location} on {lo}\u{2013}{hi}")
+            format!("{lo}\u{2013}{hi}")
         })
+    }
+
+    /// The projects that build the package themselves, as a label.
+    fn own_label(&self) -> Option<String> {
+        dependencies::project_label(&self.own_projects)
     }
 
     /// Projects that already run the announced version or newer, as a label
@@ -302,16 +349,48 @@ impl ReleaseGrade {
 
     /// The dependency factor's headline and evidence for the explanation
     /// chain: (display, evidence).
+    ///
+    /// The headline names the project the release concerns and the move it
+    /// asks of it ("Breaking upgrade: victauri-core 0.8.4 → 0.9.0
+    /// (bridge/src-tauri)"). The class word alone ("Breaking upgrade of your
+    /// dependency victauri-core") let the feed claim a release for whichever
+    /// project the reader thought of first — live 2026-10-02 it read as news
+    /// for 4DA, which already ran 0.9.0, about the operator's own crate.
     pub(crate) fn chain_text(&self) -> Option<(String, String)> {
-        let class = self.class()?;
         let pkg = &self.package;
         let new = &self.announced;
-        let display = match class {
-            ReleaseClass::Yanked => format!("Your pinned {pkg} was yanked"),
-            ReleaseClass::Breaking => format!("Breaking upgrade of your dependency {pkg}"),
-            ReleaseClass::Minor => format!("New release of your dependency {pkg}"),
-            ReleaseClass::Patch => format!("Patch release of your dependency {pkg}"),
-            ReleaseClass::Prerelease => format!("Pre-release of your dependency {pkg}"),
+        let Some(class) = self.class() else {
+            // The user's own publication: say so instead of falling back to
+            // "Release of your dependency".
+            let own = self.own_label().filter(|_| self.pins.is_empty())?;
+            return Some((
+                format!("Your own package {pkg}"),
+                format!(
+                    "{pkg} {new} \u{b7} built in {own} \u{2014} your own release, not an upgrade"
+                ),
+            ));
+        };
+        let display = match (self.concerned_location(), self.concerned_versions()) {
+            (Some(loc), Some(from)) => match class {
+                ReleaseClass::Yanked => format!("Your pinned {pkg} {from} was yanked ({loc})"),
+                ReleaseClass::Breaking => {
+                    format!("Breaking upgrade: {pkg} {from} \u{2192} {new} ({loc})")
+                }
+                ReleaseClass::Minor => format!("New minor: {pkg} {from} \u{2192} {new} ({loc})"),
+                ReleaseClass::Patch => {
+                    format!("Patch release: {pkg} {from} \u{2192} {new} ({loc})")
+                }
+                ReleaseClass::Prerelease => {
+                    format!("Pre-release {pkg} {new} ({loc} stays on {from})")
+                }
+            },
+            _ => match class {
+                ReleaseClass::Yanked => format!("Your pinned {pkg} was yanked"),
+                ReleaseClass::Breaking => format!("Breaking upgrade of your dependency {pkg}"),
+                ReleaseClass::Minor => format!("New release of your dependency {pkg}"),
+                ReleaseClass::Patch => format!("Patch release of your dependency {pkg}"),
+                ReleaseClass::Prerelease => format!("Pre-release of your dependency {pkg}"),
+            },
         };
         let mut evidence = format!("{pkg} {new}");
         if let Some(who) = self.concerned_label() {
@@ -319,6 +398,9 @@ impl ReleaseGrade {
         }
         if let Some(current) = self.current_label() {
             evidence.push_str(&format!(" \u{b7} already current: {current}"));
+        }
+        if let Some(own) = self.own_label() {
+            evidence.push_str(&format!(" \u{b7} built in your own {own}"));
         }
         evidence.push_str(" \u{2014} the subject of this release");
         Some((display, evidence))
@@ -342,18 +424,47 @@ pub(crate) fn grade_registry_release(
     let (subject, version) = crate::dep_linker::registry_title_subject(title)?;
     let announced = lenient_semver(&version?, None)?;
     let lang = dependencies::registry_manifest_language(source_type)?;
-    let raw_pins = load_pins(db, &subject, lang);
-    if raw_pins.is_empty() {
-        return None;
-    }
     let yanked = if matches!(source_type, "crates_io" | "crates") {
         yanked_versions(content)
     } else {
         Vec::new()
     };
-    Some(ReleaseGrade::from_pins(
-        &subject, announced, raw_pins, &yanked,
-    ))
+    grade_pins(
+        &subject,
+        announced,
+        load_pins(db, &subject, lang),
+        &yanked,
+        |path| super::release_ownership::is_own_package(path, &subject, lang),
+    )
+}
+
+/// Grade raw pins, setting aside the projects `is_own` says build the
+/// package themselves. `None` when no project carries the package at all.
+pub(crate) fn grade_pins(
+    subject: &str,
+    announced: Version,
+    raw_pins: Vec<(String, String, bool, bool)>,
+    yanked: &[String],
+    is_own: impl Fn(&str) -> bool,
+) -> Option<ReleaseGrade> {
+    let (own, pins): (Vec<_>, Vec<_>) = raw_pins.into_iter().partition(|(path, ..)| is_own(path));
+    if pins.is_empty() && own.is_empty() {
+        return None;
+    }
+    let mut grade = ReleaseGrade::from_pins(subject, announced, pins, yanked);
+    grade.own_projects = own_project_paths(own);
+    Some(grade)
+}
+
+/// The distinct project paths among `own` pins, sorted.
+fn own_project_paths(own: Vec<(String, String, bool, bool)>) -> Vec<String> {
+    let mut paths: Vec<String> = own.into_iter().map(|(path, ..)| path).collect();
+    paths.sort();
+    paths.dedup_by(|a, b| {
+        a.replace('\\', "/")
+            .eq_ignore_ascii_case(&b.replace('\\', "/"))
+    });
+    paths
 }
 
 /// (project_path, version, is_direct, is_dev) for every included project that
