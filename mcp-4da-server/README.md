@@ -29,6 +29,8 @@ One command to install. No API keys. No accounts. Your code never leaves your ma
 claude mcp add 4da -- npx @4da/mcp-server
 ```
 
+Installed as a **Claude Code plugin** (this directory carries `.claude-plugin/plugin.json`), it also adds a hook: when your agent edits a dependency's version in `package.json`, `Cargo.toml`, `pyproject.toml`, `requirements.txt` or `go.mod`, the agent is told which packages moved and given the exact `upgrade_impact` call to make before it builds. The hook is plain Node, contacts nothing, and stays silent for every other edit.
+
 <details>
 <summary><b>Cursor / Windsurf</b></summary>
 

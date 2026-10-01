@@ -46,6 +46,15 @@ apply only `proceed` items in small batches with the project's tests after
 each, report everything else with its evidence, and re-run
 `vulnerability_scan` at the end.
 
+### New: a Claude Code plugin hook on dependency edits
+
+The plugin (`.claude-plugin/plugin.json`) now ships `hooks/hooks.json`: after
+an Edit or MultiEdit that changes a dependency's version in `package.json`,
+`Cargo.toml`, `pyproject.toml`, `requirements.txt` or `go.mod`, the agent is
+told which packages moved and given the exact `upgrade_impact` call. A tool is
+called when the agent thinks to; a hook fires on the edit itself. Plain Node,
+no network, silent for every other edit, and it can never fail the edit.
+
 ### Fixed: the vulnerability scan read lockfiles losslessly
 
 Measured against osv-scanner on 12 projects, the matching was exact but the
