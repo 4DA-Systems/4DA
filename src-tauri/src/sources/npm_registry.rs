@@ -222,6 +222,7 @@ impl Source for NpmRegistrySource {
             min_title_words: 3,
             require_user_language: false,
             require_dev_relevance: false,
+            max_item_age_days: None,
         }
     }
 

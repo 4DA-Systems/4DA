@@ -22,6 +22,9 @@ struct HNStory {
     text: Option<String>, // For Ask HN / Show HN posts
     score: Option<i32>,
     by: Option<String>,
+    /// Submission time, Unix seconds. Carried as `published_at` so the
+    /// stored publication date and the news freshness gate see it.
+    time: Option<i64>,
 }
 
 // ============================================================================
@@ -97,6 +100,9 @@ impl HackerNewsSource {
                                 if let Some(by) = story.by {
                                     metadata["author"] = serde_json::json!(by);
                                 }
+                                if let Some(time) = story.time {
+                                    metadata["published_at"] = serde_json::json!(time);
+                                }
 
                                 let item = SourceItem::new("hackernews", &id.to_string(), &title)
                                     .with_url(story.url.clone())
@@ -156,6 +162,7 @@ impl Source for HackerNewsSource {
             min_title_words: 3,
             require_user_language: false,
             require_dev_relevance: false,
+            max_item_age_days: super::freshness::news_max_item_age_days("hackernews"),
         }
     }
 
@@ -374,5 +381,22 @@ mod tests {
         assert_eq!(source.name(), "Hacker News");
         assert!(source.config().enabled);
         assert_eq!(source.config().max_items, 100);
+    }
+
+    #[test]
+    fn hn_story_keeps_its_submission_time() {
+        // published_at was NULL for every hackernews row (28,459 live,
+        // 2026-10-02): the API's `time` was never deserialized.
+        let story: HNStory = serde_json::from_str(
+            r#"{"by":"pg","id":1,"score":57,"time":1160418111,"title":"Y Combinator","type":"story"}"#,
+        )
+        .unwrap();
+        assert_eq!(story.time, Some(1_160_418_111));
+        let item = SourceItem::new("hackernews", "1", "Y Combinator")
+            .with_metadata(serde_json::json!({ "published_at": story.time }));
+        assert_eq!(
+            crate::source_fetching::extract_published_at(&item).as_deref(),
+            Some("2006-10-09 18:21:51")
+        );
     }
 }

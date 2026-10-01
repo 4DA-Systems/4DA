@@ -240,6 +240,13 @@ pub enum VerdictReason {
     /// releases it (verdict withdrawn, so the risen sweep admits it by score)
     /// once the judge clears it, or turns it into `llm_reject`.
     AwaitingJudge,
+    /// A news / discussion item that was already older than its source's
+    /// max age (`sources::freshness::news_max_item_age_days`) when it was
+    /// first ingested — an archive page or a feed's back catalogue, not news
+    /// (2026-10-02 audit: "Tauri 2.0 Stable Release", "Why async Rust?" 2023,
+    /// "Announcing axum 0.8.0" in the feed). A fact about the row, so it binds
+    /// every promotion at this boundary; see `verdicts_stale_news.rs`.
+    StaleNews,
 }
 
 impl VerdictReason {
@@ -254,6 +261,7 @@ impl VerdictReason {
             Self::DuplicateCurated => "duplicate_curated",
             Self::SupersededRelease => "superseded_release",
             Self::AwaitingJudge => "awaiting_judge",
+            Self::StaleNews => "stale_news",
         }
     }
 }
@@ -393,10 +401,12 @@ impl Database {
         let mut deferred = 0usize;
         let mut confirmed_flips = 0usize;
         let mut gated = 0usize;
+        let mut stale = 0usize;
         {
-            let mut read_stmt = tx.prepare_cached(
-                "SELECT feed_relevant, feed_verdict_pending, source_type FROM source_items WHERE id = ?1",
-            )?;
+            let mut read_stmt = tx.prepare_cached(&format!(
+                "SELECT feed_relevant, feed_verdict_pending, source_type, {} FROM source_items WHERE id = ?1",
+                stale_news::INGEST_AGE_DAYS_SQL
+            ))?;
             let mut apply_stmt = tx.prepare_cached(
                 "UPDATE source_items
                  SET feed_relevant = ?1,
@@ -415,14 +425,28 @@ impl Database {
             )?;
             for (id, relevant, source, reason) in verdicts {
                 // Standing state first, same transaction — exact, not racy.
-                let (old_relevant, pending, source_type): (
+                let (old_relevant, pending, source_type, ingest_age_days): (
                     Option<i64>,
                     Option<String>,
                     Option<String>,
+                    Option<f64>,
                 ) = read_stmt
-                    .query_row(params![id], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+                    .query_row(params![id], |r| {
+                        Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?))
+                    })
                     .optional()?
-                    .unwrap_or((None, None, None));
+                    .unwrap_or((None, None, None, None));
+                // Stale news first: a fact about the row outranks every
+                // judgment, serendipity picks included — an archive page is
+                // not news whichever lane promotes it.
+                let (relevant, reason) = if *relevant
+                    && stale_news::stale_at_ingest(source_type.as_deref(), ingest_age_days)
+                {
+                    stale += 1;
+                    (&false, &Some(VerdictReason::StaleNews))
+                } else {
+                    (relevant, reason)
+                };
                 // Judge-gated admission (`judge_gate`): a promotion from a
                 // gated source needs a card-aware judgment at the bar.
                 let (relevant, reason) =
@@ -477,12 +501,13 @@ impl Database {
             }
         }
         tx.commit()?;
-        if deferred > 0 || confirmed_flips > 0 || gated > 0 {
+        if deferred > 0 || confirmed_flips > 0 || gated > 0 || stale > 0 {
             tracing::debug!(
                 target: "4da::verdicts",
                 deferred,
                 confirmed_flips,
                 gated,
+                stale,
                 "Unreasoned verdict flips damped at the persist boundary"
             );
         }
@@ -884,6 +909,10 @@ impl Database {
 
 // The promotion lane (the `feed_relevant` path in the OTHER direction, v32)
 // lives in `verdicts_promotion.rs` — this file sat at its size ceiling.
+
+// The `stale_news` rule (predicate + held-row sweep) lives beside it.
+#[path = "verdicts_stale_news.rs"]
+mod stale_news;
 
 #[cfg(test)]
 #[path = "verdicts_tests.rs"]

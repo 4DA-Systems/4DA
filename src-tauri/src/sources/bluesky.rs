@@ -218,6 +218,7 @@ impl Source for BlueskySource {
             min_title_words: 4,
             require_user_language: true,
             require_dev_relevance: true, // "What's Hot" is general audience — must filter
+            max_item_age_days: super::freshness::news_max_item_age_days("bluesky"),
         }
     }
 

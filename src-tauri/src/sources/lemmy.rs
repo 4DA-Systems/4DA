@@ -51,6 +51,9 @@ struct LemmyPost {
     body: Option<String>,
     /// Canonical federated ActivityPub id (stable dedup key across instances).
     ap_id: String,
+    /// Publication time (RFC 3339).
+    #[serde(default)]
+    published: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -106,6 +109,7 @@ fn post_view_to_item(view: LemmyPostView) -> SourceItem {
         "community": view.community.as_ref().map(|c| c.name.as_str()),
         "author": view.creator.as_ref().map(|c| c.name.as_str()),
         "is_self": post.url.is_none(),
+        "published_at": post.published,
         "via": "api",
     });
     // Engagement contract (scoring::pipeline_v2::extract_community_signal): the
@@ -159,11 +163,16 @@ fn parse_lemmy_rss(xml: &str, limit: usize) -> Vec<SourceItem> {
                 super::extract_tag(item, "link").or_else(|| super::extract_tag(item, "guid"))?;
             let content = super::extract_tag(item, "description").unwrap_or_default();
             let id = super::extract_tag(item, "guid").unwrap_or_else(|| link.clone());
+            let published = super::extract_tag(item, "pubDate");
             Some(
                 SourceItem::new("lemmy", &id, &title)
                     .with_url(Some(link))
                     .with_content(content)
-                    .with_metadata(serde_json::json!({ "via": "rss", "is_self": false })),
+                    .with_metadata(serde_json::json!({
+                        "via": "rss",
+                        "is_self": false,
+                        "published_at": published,
+                    })),
             )
         })
         .collect()
@@ -276,6 +285,7 @@ impl Source for LemmySource {
             min_title_words: 3,
             require_user_language: false,
             require_dev_relevance: false,
+            max_item_age_days: super::freshness::news_max_item_age_days("lemmy"),
         }
     }
 
@@ -389,6 +399,27 @@ mod tests {
         // RSS carries no vote counts — engagement stays UNKNOWN (no keys).
         let md = items[0].metadata.as_ref().unwrap();
         assert!(md.get("score").is_none(), "RSS item must not fake a score");
+    }
+
+    #[test]
+    fn both_access_paths_carry_the_publication_date() {
+        // published_at was NULL for every lemmy row (34,609 live, 2026-10-02).
+        let json = r#"{"posts": [{"post": {"name": "A post", "ap_id": "https://programming.dev/post/1",
+                        "published": "2026-10-01T15:00:06.946059Z"}}]}"#;
+        let list: LemmyPostList = serde_json::from_str(json).unwrap();
+        let items: Vec<_> = list.posts.into_iter().map(post_view_to_item).collect();
+        assert_eq!(
+            crate::source_fetching::extract_published_at(&items[0]).as_deref(),
+            Some("2026-10-01 15:00:06")
+        );
+        let xml = r#"<rss><channel><item><title>RSS post</title>
+            <link>https://programming.dev/post/2</link>
+            <pubDate>Thu, 1 Oct 2026 15:03:37 +0000</pubDate></item></channel></rss>"#;
+        let items = parse_lemmy_rss(xml, 40);
+        assert_eq!(
+            crate::source_fetching::extract_published_at(&items[0]).as_deref(),
+            Some("2026-10-01 15:03:37")
+        );
     }
 
     #[test]

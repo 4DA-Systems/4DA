@@ -61,6 +61,9 @@ struct MastodonStatus {
     /// Present (non-null) when this status is a pure boost of another — skipped to avoid duplicates.
     #[serde(default)]
     reblog: Option<serde_json::Value>,
+    /// Post time (RFC 3339).
+    #[serde(default)]
+    created_at: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -376,6 +379,7 @@ fn status_to_item(status: MastodonStatus) -> Option<SourceItem> {
                 "reblogs": status.reblogs_count,
                 "comments": status.replies_count,
                 "is_self": true,
+                "published_at": status.created_at,
                 "via": "api",
             })),
     )
@@ -477,6 +481,7 @@ fn parse_mastodon_rss(xml: &str, tag: &str, limit: usize) -> Vec<SourceItem> {
                     .with_metadata(serde_json::json!({
                         "tags": [tag],
                         "is_self": true,
+                        "published_at": super::extract_tag(item, "pubDate"),
                         "via": "rss",
                     })),
             )
@@ -673,6 +678,7 @@ impl Source for MastodonSource {
             min_title_words: 3,
             require_user_language: false,
             require_dev_relevance: false,
+            max_item_age_days: super::freshness::news_max_item_age_days("mastodon"),
         }
     }
 
