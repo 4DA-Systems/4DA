@@ -580,6 +580,10 @@ pub(super) fn extract_title_keywords(title: &str) -> Vec<String> {
         // "true · agent" (live 2026-10-02): a literal, not a topic.
         "true",
         "false",
+        // "apps · tauri · plugin" (live 2026-10-02): the sub-word of
+        // "@tauri-apps/…" crowned a label; "app(s)" names nothing.
+        "app",
+        "apps",
     ];
 
     let keep = |w: &str| w.len() >= 3 && !STOPWORDS.contains(&w) && !is_numeric_noise(w);
