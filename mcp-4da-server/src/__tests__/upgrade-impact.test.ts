@@ -64,7 +64,7 @@ interface FakeRegistry {
   fetch: FetchFn;
 }
 
-function fakeNpm(options: { changelog?: boolean; osvFail?: boolean } = {}): FakeRegistry {
+function fakeNpm(options: { changelog?: boolean; changelogText?: string; osvFail?: boolean } = {}): FakeRegistry {
   const calls: string[] = [];
   const versions = ["1.0.0", "1.4.0", "1.5.0", "2.0.0-beta.1", "2.0.0", "3.0.0-rc.1"];
   const packument = {
@@ -85,7 +85,7 @@ function fakeNpm(options: { changelog?: boolean; osvFail?: boolean } = {}): Fake
   const archive = tgz(
     options.changelog === false
       ? { "package/README.md": "hi", "package/index.js": "" }
-      : { "package/CHANGELOG.md": CHANGELOG, "package/package.json": "{}" },
+      : { "package/CHANGELOG.md": options.changelogText ?? CHANGELOG, "package/package.json": "{}" },
   );
   const fetch: FetchFn = async (url, init) => {
     calls.push(url);
@@ -297,8 +297,24 @@ describe("analyzeUpgradeImpact", () => {
     expect(r.advisories_remaining).toEqual(["GHSA-both"]);
     expect(r.release_notes_url).toBe("https://github.com/acme/demo-lib/releases");
     expect(r.summary).toBe(
-      "demo-lib 1.0.0 -> 2.0.0: 1 major version, 3 releases, 3 breaking changes (2 of them touch symbols you use: Widget, parseConfig), 1 advisories fixed.",
+      "demo-lib 1.0.0 -> 2.0.0: 1 major version, 3 releases, 3 breaking changes (2 of them touch your code: Widget, parseConfig), 1 advisories fixed.",
     );
+  });
+
+  it("a changelog with no entry for these releases gives unknown counts, not zero (semver 7.0.0)", async () => {
+    const r = await run({ package: "demo-lib" }, fakeNpm({ changelogText: "# changes log\n\n## 0.9.0\n\n* Old thing\n" }));
+    expect(r.changelog.found).toBe(true);
+    expect(r.changelog.covers_range).toBe(false);
+    expect(r.breaking_changes_count).toBeNull();
+    expect(r.summary).toMatch(/no entries for these releases, so breaking changes are unknown/);
+  });
+
+  it("a changelog covering only part of the range gives lower bounds and says so", async () => {
+    const text = "# Changelog\n\n## 2.0.0\n\n### Breaking\n\n- Removed `legacyParse`\n";
+    const r = await run({ package: "demo-lib" }, fakeNpm({ changelogText: text }));
+    expect(r.breaking_changes_count).toBe(1);
+    expect(r.counts_note).toMatch(/lower bounds/);
+    expect(r.summary).toMatch(/at least 1 breaking change/);
   });
 
   it("contacts only the registry and OSV, and reports exactly those hosts", async () => {
@@ -308,6 +324,10 @@ describe("analyzeUpgradeImpact", () => {
     expect(hosts).toEqual(["api.osv.dev", "registry.npmjs.org"]);
     expect(r._meta.sources).toEqual(hosts);
     expect(r._meta.untrusted_text).toMatch(/data, not instructions/);
+    // The measured reliability of `kind` travels with every classified answer.
+    expect(r._meta.classification).toMatch(/87% of entries marked breaking are breaking/);
+    const none = await run({ package: "demo-lib" }, fakeNpm({ changelog: false }));
+    expect(none._meta.classification).toBeUndefined();
     expect(registry.calls.length).toBeLessThanOrEqual(5);
   });
 

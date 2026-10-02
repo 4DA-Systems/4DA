@@ -18,7 +18,7 @@ import { classifyEntry, classifyHeading, classifyText, sanitizeEntry } from "../
 
 describe("changelog file discovery", () => {
   it("recognises the conventional names case-insensitively", () => {
-    for (const name of ["CHANGELOG.md", "changelog", "History.md", "CHANGES.rst", "RELEASES.markdown", "NEWS.txt"]) {
+    for (const name of ["CHANGELOG.md", "changelog", "History.md", "CHANGES.rst", "RELEASES.markdown", "NEWS.txt", "RELEASE-NOTES.md", "release_notes.md"]) {
       expect(isChangelogName(name)).toBe(true);
     }
     for (const name of ["README.md", "CHANGELOG.json", "changelog-old.md"]) {
@@ -59,6 +59,27 @@ describe("parseVersionHeading", () => {
 });
 
 describe("parseChangelog", () => {
+  it("keeps a category heading at the release's own level inside the release (date-fns 3.0.0)", () => {
+    const sections = parseChangelog(
+      [
+        "# Change Log",
+        "## v3.0.0 - 2023-12-03",
+        "## Changed",
+        "- **BREAKING**: date-fns is now a dual-package with the support of both ESM and CommonJS.",
+        "### Added",
+        "- New `constants` export",
+        "## v2.30.0",
+        "### Changes",
+        "- Fix a thing",
+        "## Migration guide",
+        "- Not part of any release",
+      ].join("\n"),
+    );
+    expect(sections.map((s) => s.version)).toEqual(["3.0.0", "2.30.0"]);
+    expect(sections[0].entries.map((e) => e.kind)).toEqual(["breaking", "change"]);
+    expect(sections[1].entries.map((e) => e.text)).toEqual(["Fix a thing"]);
+  });
+
   it("skips HTML comments, including ones spanning lines", () => {
     const sections = parseChangelog(
       [
@@ -148,11 +169,86 @@ describe("parseChangelog", () => {
     const sections = parseChangelog(
       ["## 3.0.0", "- Breaking:", "  - config loader rewritten", "```js", "- not an entry", "```", "- docs tweak"].join("\n"),
     );
+    // The label bullet is a heading for its children, not an entry (it inflated the count).
     expect(sections[0].entries).toEqual([
-      { kind: "breaking", text: "Breaking:" },
       { kind: "breaking", text: "config loader rewritten" },
       { kind: "change", text: "docs tweak" },
     ]);
+  });
+
+  it("reads releases written as bullets with nested changes (indexmap RELEASES.md)", () => {
+    const sections = parseChangelog(
+      [
+        "- 2.0.0",
+        "",
+        "  - **MSRV**: Rust 1.64.0 or later is now required.",
+        "",
+        "  - The `\"serde-1\"` feature has been removed.",
+        "",
+        "- 1.9.3",
+        "",
+        "  - Bump the `rustc-rayon` dependency.",
+      ].join("\n"),
+    );
+    expect(sections.map((s) => [s.version, s.entries.length])).toEqual([["2.0.0", 2], ["1.9.3", 1]]);
+    expect(sections[0].entries.map((e) => e.kind)).toEqual(["breaking", "breaking"]);
+  });
+
+  it("reads a day-first date with a comma (knex: '# 3.0.0 - 6 October, 2023')", () => {
+    expect(parseVersionHeading("3.0.0 - 6 October, 2023")).toEqual({ version: "3.0.0", date: "2023-10-06" });
+    const sections = parseChangelog("# Master (Unreleased)\n\n# 3.0.0 - 6 October, 2023\n\n- Drop compatibility for Node < 16\n\n# 2.5.1 - 12 July, 2023\n\n- y\n");
+    expect(sections.map((s) => s.version)).toEqual(["3.0.0", "2.5.1"]);
+  });
+
+  it("reads indented label lists as headings (express History.md)", () => {
+    const sections = parseChangelog(
+      [
+        "5.0.0-alpha.3 / 2017-01-28",
+        "==========================",
+        "",
+        "  * remove:",
+        "    - `res.json(status, obj)` signature - use `res.status(status).json(obj)`",
+        "    - `res.vary()` (no arguments) -- provide a field name as an argument",
+        "  * deps: debug@2.6.0",
+      ].join("\n"),
+    );
+    expect(sections[0].entries.map((e) => [e.kind, e.text.slice(0, 12)])).toEqual([
+      ["breaking", "`res.json(st"],
+      ["breaking", "`res.vary()`"],
+      ["change", "deps: debug@"],
+    ]);
+  });
+
+  it("lends a breaking bullet's kind to its sub-points (date-fns 3.0 interval functions)", () => {
+    const sections = parseChangelog(
+      [
+        "## v3.0.0",
+        "- **BREAKING**: Functions that accept `Interval` arguments now do not throw an error if the start is before the end.",
+        "  - `areIntervalsOverlapping` normalize intervals before comparison",
+        "  - `intervalToDuration` now returns negative durations for negative intervals.",
+        "- New `constants` export",
+      ].join("\n"),
+    );
+    expect(sections[0].entries.map((e) => e.kind)).toEqual(["breaking", "breaking", "breaking", "change"]);
+  });
+
+  it("separates API changes from additions, fixes, internal removals and other projects' breakage", () => {
+    const parse = (body: string[]) => parseChangelog(["## 1.0.0", ...body].join("\n"))[0].entries.map((e) => e.kind);
+    // changesets
+    expect(parse(["### Major Changes", "- Remove `future.v7_startTransition` flag"])).toEqual(["breaking"]);
+    // a removal word inside an addition / a fix is not a removal
+    expect(parse(["### Added", "- Added a clear() function so all interceptors have been removed"])).toEqual(["change"]);
+    expect(parse(["### Fixed", "- No longer panics when the queue overflows"])).toEqual(["change"]);
+    // keep-a-changelog Removed: internal clean-up and filed deprecations are not removals
+    expect(parse(["### Removed", "- Removed unused imports", "- Removed Webpack", "- The `LinkatFlags` type has been deprecated", "- Removed `Foo::bar`"])).toEqual([
+      "change",
+      "change",
+      "deprecation",
+      "breaking",
+    ]);
+    // rand 0.9: "reproducibility-breaking" is not API-breaking; "API changes" is
+    expect(parse(["### Reproducibility-breaking optimisations", "- Optimize fn `sample_single_inclusive` for floats"])).toEqual(["change"]);
+    expect(parse(["### API changes: RNGs", "- Remove first parameter (`rng`) of `ReseedingRng::new`"])).toEqual(["breaking"]);
   });
 
   it("ends the last release at a same-level non-release heading", () => {
@@ -211,9 +307,35 @@ describe("classification", () => {
 
   it("lets a signalling heading override the line's wording", () => {
     expect(classifyHeading("⚠ BREAKING CHANGES")).toBe("breaking");
-    expect(classifyHeading("Bug Fixes")).toBeNull();
+    expect(classifyHeading("Major Changes")).toBe("breaking");
+    expect(classifyHeading("Bug Fixes")).toBe("additive");
+    expect(classifyHeading("Changed")).toBeNull();
     expect(classifyEntry("tweak the loader", "breaking")).toBe("breaking");
     expect(classifyEntry("Removed a thing", null)).toBe("breaking");
+  });
+
+  it("reads API-changing wording and ignores look-alikes (2026-10-02 rater panel)", () => {
+    const breaking = [
+      "Rename fn `rand::thread_rng()` to `rand::rng()` and remove from the prelude (#1506)",
+      "Rename feature `serde1` to `serde` (#1477)",
+      "Remove first parameter (`rng`) of `ReseedingRng::new` (#1533)",
+      "`RecvMsg::cmsgs()` now returns a `Result`, and checks that cmsgs were not truncated.",
+      "Change the signature of `ptrace::write` and `ptrace::write_user` to make them safe",
+      "Distribution `Uniform` implements `TryFrom` instead of `From` for ranges (#1229)",
+      "To keep the old behavior, see the `bitflags-serde-legacy` library.",
+      "Bump MSRV to 1.63",
+      "`Foo` is no longer exported from the crate root",
+    ];
+    const notBreaking = [
+      "Add `Cargo.lock.msrv` file (#1275)",
+      "No longer panics when the `fanotify` queue overflows.",
+      "Fix proxy to internally no longer cache system proxy settings.",
+      "This release also includes a `regex-syntax 0.8.0` breaking change release, which was necessary.",
+      "Yanked from crates.io due to unforeseen breaking change, see [#3190] for details.",
+      "Removed unused imports",
+    ];
+    for (const text of breaking) expect(classifyText(text), text).toBe("breaking");
+    for (const text of notBreaking) expect(classifyText(text), text).not.toBe("breaking");
   });
 });
 

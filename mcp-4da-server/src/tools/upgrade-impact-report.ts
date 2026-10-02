@@ -23,6 +23,8 @@ export interface ReportEntry {
   text: string;
   touches_your_code?: boolean;
   matched_symbols?: string[];
+  /** String literals in your code that use the syntax this entry retires (route patterns and the like). */
+  matched_literals?: Array<{ file: string; line: number; literal: string }>;
 }
 
 export interface ReportSection {
@@ -181,7 +183,8 @@ export interface SummaryInput {
   breaking: number;
   touching: number;
   touchingSymbols: string[];
-  changelogFound: boolean;
+  /** missing = no changelog file; no_entries = a file with no section for these releases; partial = some of them. */
+  changelog: "missing" | "no_entries" | "partial" | "complete";
   advisoriesFixed: number | null;
 }
 
@@ -193,12 +196,15 @@ export function summarize(input: SummaryInput): string {
     `${input.releases} release${input.releases === 1 ? "" : "s"}`,
   ].filter(Boolean);
   let breaking: string;
-  if (!input.changelogFound) breaking = "no changelog in the package archive (see release_notes_url)";
-  else if (input.touching > 0) {
+  const atLeast = input.changelog === "partial" ? "at least " : "";
+  if (input.changelog === "missing") breaking = "no changelog in the package archive (see release_notes_url)";
+  else if (input.changelog === "no_entries") {
+    breaking = "the package's changelog has no entries for these releases, so breaking changes are unknown (see release_notes_url)";
+  } else if (input.touching > 0) {
     const names = input.touchingSymbols.slice(0, 5).join(", ");
     const verb = input.breaking === 1 ? "it touches" : `${input.touching} of them touch`;
-    breaking = `${input.breaking} breaking change${input.breaking === 1 ? "" : "s"} (${verb} symbols you use: ${names})`;
-  } else breaking = `${input.breaking} breaking change${input.breaking === 1 ? "" : "s"}`;
+    breaking = `${atLeast}${input.breaking} breaking change${input.breaking === 1 ? "" : "s"} (${verb} your code: ${names})`;
+  } else breaking = `${atLeast}${input.breaking} breaking change${input.breaking === 1 ? "" : "s"}`;
   const advisories =
     input.advisoriesFixed === null ? "advisories unknown (OSV unreachable)" : `${input.advisoriesFixed} advisories fixed`;
   return `${input.pkg} ${input.from} -> ${input.to}: ${parts.join(", ")}, ${breaking}, ${advisories}.`;
