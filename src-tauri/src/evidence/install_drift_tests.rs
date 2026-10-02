@@ -162,6 +162,45 @@ fn a_matching_install_is_not_drift() {
     assert!(drift(&db).is_empty());
 }
 
+/// Live 2026-10-01: `@upstash/ratelimit` publishes `"version": "v2.0.7"`, the
+/// lockfile says `2.0.7`, and navcal was reported out of sync. The same
+/// version with npm's tolerated `v` / `=` prefix is the same install.
+#[test]
+fn a_v_prefixed_installed_version_matches_its_bare_pin() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = project(tmp.path(), "navcal", "package-lock.json");
+    install(&dir, "@upstash/ratelimit", "v2.0.7");
+    install(&dir, "hono", "=4.13.5");
+    let db = test_db();
+    pin(&db, &dir, "@upstash/ratelimit", "2.0.7", false);
+    pin(&db, &dir, "hono", "4.13.5", false);
+    assert!(drift(&db).is_empty(), "{:?}", drift(&db));
+
+    // A genuinely different version behind the prefix is still drift.
+    let other = project(tmp.path(), "other", "package-lock.json");
+    install(&other, "@upstash/ratelimit", "v2.0.6");
+    pin(&db, &other, "@upstash/ratelimit", "2.0.7", false);
+    let rows = drift(&db);
+    assert_eq!(rows.len(), 1, "{rows:?}");
+    assert_eq!(
+        rows[0].packages[0]
+            .installed
+            .as_ref()
+            .map(|c| c.version.as_str()),
+        Some("2.0.6"),
+        "the installed version is recorded in the lockfile's spelling"
+    );
+}
+
+#[test]
+fn normalize_installed_version_strips_only_the_tolerated_prefix() {
+    assert_eq!(normalize_installed_version(" v2.0.7 "), "2.0.7");
+    assert_eq!(normalize_installed_version("V1.0.0"), "1.0.0");
+    assert_eq!(normalize_installed_version("=4.13.5"), "4.13.5");
+    assert_eq!(normalize_installed_version("2.0.7"), "2.0.7");
+    assert_eq!(normalize_installed_version("1.0.0-v2"), "1.0.0-v2");
+}
+
 #[test]
 fn a_project_that_was_never_installed_is_not_drift() {
     let tmp = tempfile::tempdir().unwrap();

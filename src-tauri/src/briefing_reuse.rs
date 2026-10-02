@@ -1,69 +1,93 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-//! Auto-trigger briefing reuse window (2026-08-31 live audit).
+//! Auto-trigger briefing reuse: one brief a day, plus one whenever the facts
+//! it was written from change.
 //!
 //! Split from `digest_commands.rs` for size hygiene (declared there via
-//! `#[path]`). Measured live 2026-08-31 on the founder's instance: opening
-//! the main window fired `generate_ai_briefing` — 32 seconds and 6,290
-//! tokens — with a perfectly fresh briefing sitting in the `briefings`
-//! table. The AUTO-triggered path now reuses that briefing when it is young
-//! and nothing critical arrived since; explicit user triggers always
-//! regenerate.
+//! `#[path]`).
+//!
+//! History. 2026-08-31: opening the window regenerated a perfectly fresh
+//! briefing (32 s, 6,290 tokens), so AUTO triggers got a 4-hour reuse
+//! window. 2026-10-01: 168 briefs in 6 days (~28/day), 73% of topics
+//! repeating the previous one — because no frontend caller ever passed
+//! `auto: true`, and because any "immediate" item (including a false hono
+//! "Critical") busted the window. Decision 2 replaces the window with the
+//! rule a reader expects: the brief is today's brief until something it
+//! reports changes. "Changes" is the `brief_facts` fingerprint — confirmed
+//! security (urgency, installed versions, fix) and breaking upgrades —
+//! not "another article arrived".
 
 use tracing::info;
 
-/// How fresh a persisted briefing must be for an AUTO-triggered generation
-/// to reuse it instead of regenerating.
+/// How fresh the LATEST briefing's filter verdicts must be to bind the
+/// display surfaces (AD-035, `brief_verdict_display`). Independent of reuse.
 pub(super) const BRIEFING_REUSE_WINDOW_HOURS: f64 = 4.0;
 
-/// Auto-trigger reuse gate: the latest persisted briefing, in the same
-/// response shape as a fresh generation (plus `"cached": true`), when it is
-/// younger than [`BRIEFING_REUSE_WINDOW_HOURS`] AND no critical-urgency item
-/// has arrived since it was written. `None` means "regenerate" — including on
-/// any read error, negative age (clock skew), or a critical arrival: reuse
+/// `kv_store` key: the fingerprint the latest briefing was written from.
+const FINGERPRINT_KV_KEY: &str = "brief_fingerprint_v1";
+
+/// Record the facts fingerprint a persisted briefing was written from.
+pub(super) fn remember_fingerprint(db: &crate::db::Database, briefing_id: i64, fingerprint: &str) {
+    let value = serde_json::json!({ "id": briefing_id, "fp": fingerprint }).to_string();
+    if let Err(e) = db.set_kv(FINGERPRINT_KV_KEY, &value) {
+        tracing::warn!(target: "4da::briefing", error = %e, "briefing fingerprint not persisted");
+    }
+}
+
+/// The latest briefing, in the same response shape as a fresh generation
+/// (plus `"cached": true`), when it was written TODAY (local time) from the
+/// facts the caller holds now. `None` means "regenerate", including on any
+/// read error, a briefing with no recorded fingerprint, or clock skew: reuse
 /// must fail toward regeneration, never toward stale intelligence.
-///
-/// "Critical-urgency" is data-true, not vibes: `item_necessity` rows the
-/// scoring pipeline stamped `necessity_urgency = 'immediate'` (the CVE /
-/// security-critical class) on items created after the briefing.
-pub(super) fn try_reuse_recent_briefing(db: &crate::db::Database) -> Option<serde_json::Value> {
-    let (content, model, item_count, created_at, age_hours): (
+pub(super) fn try_reuse_recent_briefing(
+    db: &crate::db::Database,
+    fingerprint: &str,
+) -> Option<serde_json::Value> {
+    let (id, content, model, item_count, created_at, age_hours, today): (
+        i64,
         String,
         Option<String>,
         i64,
         String,
         f64,
+        bool,
     ) = {
         let conn = db.conn.lock();
         conn.query_row(
-            "SELECT content, model, item_count, created_at,
-                    (julianday('now') - julianday(created_at)) * 24.0
-             FROM briefings ORDER BY created_at DESC LIMIT 1",
+            "SELECT id, content, model, item_count, created_at,
+                    (julianday('now') - julianday(created_at)) * 24.0,
+                    date(created_at, 'localtime') = date('now', 'localtime')
+             FROM briefings ORDER BY created_at DESC, id DESC LIMIT 1",
             [],
-            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+            |r| {
+                Ok((
+                    r.get(0)?,
+                    r.get(1)?,
+                    r.get(2)?,
+                    r.get(3)?,
+                    r.get(4)?,
+                    r.get(5)?,
+                    r.get::<_, i64>(6)? != 0,
+                ))
+            },
         )
         .ok()?
     };
-    if !(0.0..BRIEFING_REUSE_WINDOW_HOURS).contains(&age_hours) {
+    if age_hours < 0.0 || !today {
         return None;
     }
-    let new_critical: i64 = {
-        let conn = db.conn.lock();
-        conn.query_row(
-            "SELECT COUNT(*) FROM item_necessity n
-             JOIN source_items si ON si.id = n.source_item_id
-             WHERE n.necessity_urgency = 'immediate'
-               AND si.created_at > ?1",
-            rusqlite::params![created_at],
-            |r| r.get(0),
-        )
-        .ok()?
-    };
-    if new_critical > 0 {
+    let stored: serde_json::Value = db
+        .get_kv(FINGERPRINT_KV_KEY)
+        .ok()
+        .flatten()
+        .and_then(|s| serde_json::from_str(&s).ok())?;
+    let same_brief = stored.get("id").and_then(serde_json::Value::as_i64) == Some(id);
+    let same_facts = stored.get("fp").and_then(serde_json::Value::as_str) == Some(fingerprint);
+    if !(same_brief && same_facts) {
         info!(
             target: "4da::briefing",
-            new_critical,
-            age_hours = format!("{age_hours:.1}"),
-            "Auto-trigger regenerating despite fresh briefing — critical items arrived since"
+            same_brief,
+            same_facts,
+            "Auto-trigger regenerating — the facts changed since today's briefing"
         );
         return None;
     }
@@ -71,7 +95,7 @@ pub(super) fn try_reuse_recent_briefing(db: &crate::db::Database) -> Option<serd
         target: "4da::briefing",
         age_hours = format!("{age_hours:.1}"),
         item_count,
-        "Auto-trigger reusing persisted briefing — no regeneration"
+        "Auto-trigger reusing today's briefing — facts unchanged"
     );
     // Keep the in-memory cache (TTS / handoff readers) aligned with what the
     // UI is about to show.
@@ -93,8 +117,7 @@ mod tests {
     use super::*;
 
     // try_reuse_recent_briefing writes the process-global LATEST_BRIEFING on
-    // success; tests that can reach that write serialize on this lock so the
-    // shape test's global assertion cannot race a parallel test's write.
+    // success; tests that can reach that write serialize on this lock.
     static REUSE_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
     fn backdate_latest_briefing(db: &crate::db::Database, hours: f64) {
@@ -107,46 +130,27 @@ mod tests {
         .unwrap();
     }
 
-    fn insert_item_with_urgency(db: &crate::db::Database, key: &str, urgency: Option<&str>) {
-        let conn = db.conn.lock();
-        conn.execute(
-            "INSERT INTO source_items (source_type, source_id, url, title, content, content_hash, embedding, created_at)
-             VALUES ('cve', ?1, NULL, ?1, '', ?1, X'', datetime('now'))",
-            rusqlite::params![key],
-        )
-        .unwrap();
-        let id = conn.last_insert_rowid();
-        if let Some(u) = urgency {
-            conn.execute(
-                "INSERT INTO item_necessity (source_item_id, necessity_score, necessity_reason, necessity_category, necessity_urgency, scored_at)
-                 VALUES (?1, 0.95, 'test', 'security', ?2, datetime('now'))",
-                rusqlite::params![id, u],
-            )
+    fn save(db: &crate::db::Database, text: &str, fp: &str) -> i64 {
+        let id = db
+            .save_briefing(text, Some("claude-sonnet-5"), 7, Some(6290), Some(32000))
             .unwrap();
-        }
+        remember_fingerprint(db, id, fp);
+        id
     }
 
-    /// The audit's exact waste: a fresh persisted briefing + an auto trigger.
-    /// Reuse returns the persisted briefing in the generation response shape,
-    /// marked cached, with zero LLM involvement.
+    /// Today's briefing, same facts: reused in the generation response
+    /// shape, marked cached, with zero LLM involvement.
     #[test]
-    fn auto_reuse_returns_fresh_briefing_in_response_shape() {
+    fn auto_reuse_returns_todays_briefing_while_the_facts_hold() {
         let _guard = REUSE_TEST_LOCK.lock().unwrap();
         let db = crate::test_utils::test_db();
-        db.save_briefing(
-            "## Fresh brief",
-            Some("claude-sonnet-4-6"),
-            7,
-            Some(6290),
-            Some(32000),
-        )
-        .unwrap();
+        save(&db, "## Fresh brief", "fp-a");
 
-        let cached = try_reuse_recent_briefing(&db).expect("fresh briefing must be reused");
+        let cached = try_reuse_recent_briefing(&db, "fp-a").expect("same day, same facts");
         assert_eq!(cached["success"], true);
         assert_eq!(cached["briefing"], "## Fresh brief");
         assert_eq!(cached["item_count"], 7);
-        assert_eq!(cached["model"], "claude-sonnet-4-6");
+        assert_eq!(cached["model"], "claude-sonnet-5");
         assert_eq!(cached["cached"], true);
         assert_eq!(cached["auto_triggered"], true);
         assert_eq!(
@@ -156,38 +160,43 @@ mod tests {
         );
     }
 
-    /// Outside the window the auto path regenerates — reuse never serves a
-    /// briefing older than BRIEFING_REUSE_WINDOW_HOURS.
+    /// A new confirmed advisory, a fixed install, a new breaking release:
+    /// the fingerprint moves and the brief is rewritten.
     #[test]
-    fn auto_reuse_declines_a_stale_briefing() {
+    fn auto_reuse_regenerates_when_the_facts_change() {
         let db = crate::test_utils::test_db();
-        db.save_briefing("## Old brief", Some("m"), 3, Some(0), Some(0))
-            .unwrap();
-        backdate_latest_briefing(&db, BRIEFING_REUSE_WINDOW_HOURS + 0.5);
-        assert!(try_reuse_recent_briefing(&db).is_none());
+        save(&db, "## Brief", "fp-a");
+        assert!(try_reuse_recent_briefing(&db, "fp-b").is_none());
     }
 
-    /// A critical-urgency arrival ('immediate' necessity) since the briefing
-    /// forces regeneration; lower urgencies and unscored items do not.
+    /// Yesterday's briefing is never today's, however fresh its facts.
     #[test]
-    fn auto_reuse_declines_when_critical_items_arrived() {
-        let _guard = REUSE_TEST_LOCK.lock().unwrap();
+    fn auto_reuse_declines_an_earlier_day() {
         let db = crate::test_utils::test_db();
-        db.save_briefing("## Brief", Some("m"), 3, Some(0), Some(0))
-            .unwrap();
-        backdate_latest_briefing(&db, 1.0);
+        save(&db, "## Old brief", "fp-a");
+        backdate_latest_briefing(&db, 30.0);
+        assert!(try_reuse_recent_briefing(&db, "fp-a").is_none());
+    }
 
-        insert_item_with_urgency(&db, "aware-1", Some("awareness"));
-        insert_item_with_urgency(&db, "unscored-1", None);
+    /// A briefing persisted without a fingerprint (an older build, or a
+    /// different latest row) is not trusted to describe today's facts.
+    #[test]
+    fn auto_reuse_declines_without_a_matching_fingerprint_record() {
+        let db = crate::test_utils::test_db();
+        db.save_briefing("## No fingerprint", Some("m"), 3, Some(0), Some(0))
+            .unwrap();
         assert!(
-            try_reuse_recent_briefing(&db).is_some(),
-            "non-critical arrivals must not bust the reuse window"
+            try_reuse_recent_briefing(&db, "fp-a").is_none(),
+            "nothing recorded"
         );
 
-        insert_item_with_urgency(&db, "critical-1", Some("immediate"));
+        let first = save(&db, "## First", "fp-a");
+        db.save_briefing("## Newer, unrecorded", Some("m"), 3, Some(0), Some(0))
+            .unwrap();
+        assert!(first > 0);
         assert!(
-            try_reuse_recent_briefing(&db).is_none(),
-            "an 'immediate' arrival after the briefing forces regeneration"
+            try_reuse_recent_briefing(&db, "fp-a").is_none(),
+            "the recorded fingerprint belongs to an older briefing"
         );
     }
 
@@ -196,13 +205,14 @@ mod tests {
     #[test]
     fn auto_reuse_declines_without_a_sane_briefing() {
         let db = crate::test_utils::test_db();
-        assert!(try_reuse_recent_briefing(&db).is_none(), "empty table");
-
-        db.save_briefing("## From the future", Some("m"), 3, Some(0), Some(0))
-            .unwrap();
-        backdate_latest_briefing(&db, -2.0); // 2 hours in the future
         assert!(
-            try_reuse_recent_briefing(&db).is_none(),
+            try_reuse_recent_briefing(&db, "fp").is_none(),
+            "empty table"
+        );
+        save(&db, "## From the future", "fp");
+        backdate_latest_briefing(&db, -2.0);
+        assert!(
+            try_reuse_recent_briefing(&db, "fp").is_none(),
             "negative age (clock skew) must regenerate, not reuse"
         );
     }

@@ -12,8 +12,6 @@ import { PersonalizeNudge } from './briefing/PersonalizeNudge';
 import { BriefingLoadingState, BriefingReadyState } from './BriefingEmptyStates';
 import { BriefingWarmupState } from './BriefingWarmupState';
 import { useLicense } from '../hooks/use-license';
-import { useActiveBriefFilteredIds } from '../hooks/use-brief-verdicts';
-import { useBriefingDerived } from '../hooks/use-briefing-derived';
 import { isVictauriDogfoodMode } from '../lib/startup-runtime';
 import { safeListen } from '../lib/tauri-events';
 import type { SourceRelevance } from '../types';
@@ -23,7 +21,6 @@ export const BriefingView = memo(function BriefingView() {
 
   const {
     briefing, results, isLoading, analysisComplete, feedbackGiven,
-    lastBackgroundResultsAt, sourceHealth,
     freeBriefing, freeBriefingLoading, morningBriefSynthesis, morningBriefClusters, morningBriefData, instantSnapshot,
   } = useAppStore(
     useShallow((s) => ({
@@ -32,8 +29,6 @@ export const BriefingView = memo(function BriefingView() {
       isLoading: s.appState.loading,
       analysisComplete: s.appState.analysisComplete,
       feedbackGiven: s.feedbackGiven,
-      lastBackgroundResultsAt: s.lastBackgroundResultsAt,
-      sourceHealth: s.sourceHealth,
       freeBriefing: s.freeBriefing,
       freeBriefingLoading: s.freeBriefingLoading,
       morningBriefSynthesis: s.morningBriefSynthesis,
@@ -141,14 +136,9 @@ export const BriefingView = memo(function BriefingView() {
     };
   }, [instantSnapshot, results.length, analysisComplete, isLoading, isFirstRun]);
 
-  // AD-035: the latest briefing's filter verdicts demote items from the
-  // attention cards while the briefing is fresh — one item, one verdict.
-  const briefFilteredIds = useActiveBriefFilteredIds();
-  const { signalItems, topItems } =
-    useBriefingDerived(results, sourceHealth, briefing, lastBackgroundResultsAt, briefFilteredIds);
-
-  // Loading skeleton
-  if (briefing.loading) {
+  // Loading skeleton — only while there is no brief to show yet. A
+  // regeneration keeps the current brief on screen (its button says so).
+  if (briefing.loading && !briefing.content) {
     return <BriefingSkeleton />;
   }
 
@@ -229,12 +219,10 @@ export const BriefingView = memo(function BriefingView() {
         briefing={briefing}
         results={results}
         feedbackGiven={feedbackGiven}
-        sourceHealth={sourceHealth}
-        signalItems={signalItems}
-        topItems={topItems}
         onSave={handleSave}
         onDismiss={handleDismiss}
         onRecordClick={handleRecordClick}
+        onRegenerate={() => { void generateBriefing(); }}
         setActiveView={setActiveView}
       />
 

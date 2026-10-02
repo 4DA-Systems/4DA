@@ -332,7 +332,7 @@ use (`src-tauri/src/embeddings_providers/fastembed.rs`):
   | `api.github.com/search` | your languages | repo discovery |
   | Reddit / Lemmy / Mastodon | the subreddits / communities you follow | feed fetch |
   | Stack Overflow | your tags | question fetch |
-  | your configured LLM provider | dependency **names**, git-derived work **topics**, declared interests, and the titles of items you saved — nouns, never your prose | rerank + briefing (BYOK, off unless you supply a key) |
+  | your configured LLM provider | dependency **names** (and, for the AI brief, the **installed and fix versions** of vulnerable or outdated ones), short project labels, git-derived work **topics**, declared interests, and the titles of items you saved — nouns and version numbers, never your prose | rerank + briefing (BYOK, off unless you supply a key) |
 
   Go module paths are the sharpest edge here: a private module path such as
   `github.com/yourcompany/internal-service` discloses the organisation and repository name to

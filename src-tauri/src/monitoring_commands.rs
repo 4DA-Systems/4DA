@@ -38,7 +38,7 @@ pub async fn get_monitoring_status() -> Result<serde_json::Value> {
 
     let gate_policy = crate::scheduler_gate::current_policy();
 
-    let (learned_facets_count, hot_topics_count, seal_counts, compression_chars_saved) =
+    let (learned_facets_count, hot_topics_count, compression_chars_saved) =
         crate::open_db_connection()
             .map(|conn| {
                 let facets: i64 = conn
@@ -55,31 +55,12 @@ pub async fn get_monitoring_status() -> Result<serde_json::Value> {
                         |row| row.get(0),
                     )
                     .unwrap_or(0);
-                let daily: i64 = conn
-                    .query_row(
-                        "SELECT COUNT(*) FROM briefing_seals WHERE seal_level = 0",
-                        [],
-                        |row| row.get(0),
-                    )
-                    .unwrap_or(0);
-                let weekly: i64 = conn
-                    .query_row(
-                        "SELECT COUNT(*) FROM briefing_seals WHERE seal_level = 1",
-                        [],
-                        |row| row.get(0),
-                    )
-                    .unwrap_or(0);
-                let monthly: i64 = conn
-                    .query_row(
-                        "SELECT COUNT(*) FROM briefing_seals WHERE seal_level = 2",
-                        [],
-                        |row| row.get(0),
-                    )
-                    .unwrap_or(0);
+                // Briefing seals retired with the seal replay (AD-050): the
+                // table is no longer written, so its counts would only freeze.
                 let chars = crate::compression_rules::chars_saved();
-                (facets, hot, serde_json::json!({"daily": daily, "weekly": weekly, "monthly": monthly}), chars)
+                (facets, hot, chars)
             })
-            .unwrap_or((0, 0, serde_json::json!({"daily": 0, "weekly": 0, "monthly": 0}), 0));
+            .unwrap_or((0, 0, 0));
 
     Ok(serde_json::json!({
         "enabled": state.is_enabled(),
@@ -97,7 +78,6 @@ pub async fn get_monitoring_status() -> Result<serde_json::Value> {
         "compound_lattice": {
             "learned_facets": learned_facets_count,
             "hot_topics": hot_topics_count,
-            "briefing_seals": seal_counts,
             "compression_chars_saved": compression_chars_saved,
         }
     }))

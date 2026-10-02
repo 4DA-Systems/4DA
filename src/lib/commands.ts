@@ -415,7 +415,7 @@ interface CommandMap {
 
   // -- Briefing --
   get_latest_briefing: { params: Record<string, never>; result: { content: string; model: string | null; item_count: number; created_at: string } | null };
-  generate_ai_briefing: { params: Record<string, never>; result: { success: boolean; briefing: string | null; error?: string; model?: string; item_count?: number; latency_ms?: number } };
+  generate_ai_briefing: { params: { auto?: boolean }; result: { success: boolean; briefing: string | null; error?: string; model?: string; item_count?: number; latency_ms?: number; cached?: boolean; briefing_created_at?: string } };
   get_brief_display_verdicts: { params: Record<string, never>; result: { filtered: Array<{ id: number; reason: string }>; expires_in_seconds: number } };
   generate_free_briefing: { params: Record<string, never>; result: { content: string; item_count: number; created_at: string } };
   get_source_health_status: { params: Record<string, never>; result: SourceHealthStatus[] };
@@ -685,7 +685,6 @@ interface CommandMap {
 
   // -- Intelligence History --
   get_intelligence_growth: { params: Record<string, never>; result: IntelligenceGrowthData };
-  get_session_diff: { params: Record<string, never>; result: { new_items: number; new_relevant: number; hours_since_last: number; has_previous: boolean } };
 
   // -- Stack Health --
   get_stack_health: { params: Record<string, never>; result: StackHealthData };

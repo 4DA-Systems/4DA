@@ -721,6 +721,38 @@
 
 ---
 
+### AD-050: The Brief Is Written From Computed Facts; It Is Shown, Once a Day, and Says Only What Changed
+
+*(Numbered 050: AD-049 is referenced by the dependency-handoff work order, #781.)*
+
+- **Decision:** 2026-10-02, PENDING-DECISION Decision 2 (approved by the operator). No schema change, no `PIPELINE_VERSION` bump.
+  1. **Facts first.** `brief_facts` computes everything the brief may claim, and the model only explains it:
+     - **security:** the Preemption feed's version-confirmed alerts. The fix path is worked out from `dependency_edges`: bump a direct dependency; refresh the lockfile when the parent's requirement (npm) or semver compatibility (Cargo) admits the fix; otherwise upgrade the named direct parent. The worst advisory tier is stated, and dev-only, scratch and dormant projects are labelled;
+     - **upgrades:** breaking or yanked releases of DIRECT dependencies published in the last 30 days (`release_grade`), the latest version per package, never the user's own packages (detected project names), never a version already installed;
+     - **worth knowing:** feed items published in the last 7 days that the judge approved (≥ 0.5), never featured on an earlier day, with a 600-character body excerpt under the `titles_only` gate.
+
+     The same facts render as the deterministic floor. `briefing_groundedness::check_factual_claims` checks every narrated upgrade target against them: one retry, then the floor.
+  2. **Shown.** The written brief is the Brief tab's hero (`NarratedBrief`). The tab no longer promotes items by keyword `signal_priority`.
+  3. **Once a day, plus when the facts change.** App-initiated triggers pass `auto: true`. The backend reuses today's (local) brief while the facts fingerprint is unchanged. An explicit Regenerate always writes a new brief.
+  4. **Only what changed.** A per-fact novelty record in `kv_store` dates each fact's first report. Unchanged facts fold into one "Still open" line. Seal replay (yesterday's brief fed back as context) is retired: it was the brief's only continuity input, its weekly/monthly rollups were never called, and it re-asserted stale claims (AD-044 era).
+- **Rationale:** live audit 2026-10-01, measured against the DB, lockfiles and OSV:
+  - 168 briefs in 6 days (~28/day), because no frontend caller passed `auto`; 73% of topics repeated the previous brief.
+  - The narrated text was rendered nowhere on the tab.
+  - The model wrote from titles only, under a prompt that asked for "concrete details from the articles".
+  - "rmcp: a lockfile refresh should resolve it" appeared in 10 of 10 briefs, but victauri-plugin 0.8.4 pins rmcp 1.x.
+  - fastembed 5.17.4 → 7.1.0 was never mentioned, while axum 0.8.9 (April, installed) and TypeScript 6.0 (March) were reported as news.
+  - The operator's own victauri 0.9.0 was presented as news, and openai/stripe were dismissed as "not in your project" although navcal declares both.
+  - The tab's "Critical: hono" card was false: 4.13.8 is installed, the fix is 4.13.7, the advisory is MEDIUM, and hono is never imported.
+  - The morning notification brief's lexical gate rejected 82 of 115 syntheses because the model named the user's own stack ("Rust/Tauri/Axum") or the prompt's own label ("Standing"). Its dependency context was the first 50 of 144 deps alphabetically, and its #1 item was a 2024 blog post.
+- **Considered:**
+  - *Keep title-only prompts and harden the system prompt:* Rejected. Prompt rules have repeatedly failed against facts asserted in the input (brief-grounding, 2026-06-06); compute the fact instead.
+  - *A new backend command serving the facts as bespoke JSON to the tab:* Rejected. Doctrine rule 4 forbids it, and the narrated brief and the floor already carry the facts. Per-item cards stay on Preemption, which owns the EvidenceItems.
+  - *Fixing `pipeline_v2`'s ungraded-advisory "Critical" default in this change:* Deferred to the Signal/scoring lane. It needs a `PIPELINE_VERSION` bump and a re-score, and the Brief no longer reads `signal_priority`.
+- **Date:** 2026-10-02
+- **Status:** Final
+
+---
+
 ## Decision Template
 
 When adding a new decision:

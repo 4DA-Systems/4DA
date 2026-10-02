@@ -28,6 +28,7 @@ export function useBriefing(
   const lastBriefingTriggerRef = useRef(0);
   const generatingBriefingRef = useRef(false);
   const prevAnalysisCompleteRef = useRef(false);
+  const lastBackgroundAskRef = useRef(0);
 
   // Autonomous AI Briefing - triggers when analysisComplete transitions false→true
   useEffect(() => {
@@ -48,7 +49,7 @@ export function useBriefing(
       generatingBriefingRef.current = true;
 
       const briefingTimer = setTimeout(() => {
-        void generateBriefing().finally(() => {
+        void generateBriefing({ auto: true }).finally(() => {
           generatingBriefingRef.current = false;
         });
       }, 500);
@@ -61,8 +62,9 @@ export function useBriefing(
   // eslint-disable-next-line react-hooks/exhaustive-deps -- trigger on analysis complete transition
   }, [analysisComplete, autoBriefingEnabled, aiBriefing.loading]);
 
-  // Background auto-refresh: silently regenerate when briefing is >2h old
-  // and new background items have arrived
+  // Background auto-refresh: when the brief is >2h old and new background
+  // items have arrived, ask again as AUTO — the backend reuses today's brief
+  // unless the facts it reports changed (or the day did).
   const lastBackgroundResultsAt = useAppStore(s => s.lastBackgroundResultsAt);
   useEffect(() => {
     if (
@@ -73,13 +75,18 @@ export function useBriefing(
       generatingBriefingRef.current
     ) return;
 
-    const briefingAgeMs = Date.now() - aiBriefing.lastGenerated.getTime();
+    const now = Date.now();
+    const briefingAgeMs = now - aiBriefing.lastGenerated.getTime();
     const twoHoursMs = 2 * 60 * 60 * 1000;
     const hasNewItems = lastBackgroundResultsAt.getTime() > aiBriefing.lastGenerated.getTime();
+    // A reused brief keeps its real (old) timestamp, so without this every
+    // background cycle (~10 min) would re-ask; ask at most every two hours.
+    const askedRecently = now - lastBackgroundAskRef.current < twoHoursMs;
 
-    if (briefingAgeMs > twoHoursMs && hasNewItems) {
+    if (briefingAgeMs > twoHoursMs && hasNewItems && !askedRecently) {
+      lastBackgroundAskRef.current = now;
       generatingBriefingRef.current = true;
-      void generateBriefing().finally(() => {
+      void generateBriefing({ auto: true }).finally(() => {
         generatingBriefingRef.current = false;
       });
     }

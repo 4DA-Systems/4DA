@@ -829,6 +829,12 @@ pub(crate) fn build_enriched_briefing(
         })
         .collect();
 
+    // Freshness gate — the brief reports what is new. Live 2026-10-01 its #1
+    // item was a February 2024 blog post (an RSS full-archive ingest: created
+    // 2026-08-12, published 2024-02-18) and a July crates.io release sat at
+    // #7. An item whose publish date is older than the window is not news.
+    let quality_filtered = drop_stale_items(quality_filtered);
+
     // Intra-batch fuzzy dedupe — collapses semantic duplicates.
     let deduped = crate::briefing_dedupe::dedupe_briefing_items(quality_filtered);
 
@@ -1185,6 +1191,44 @@ pub(crate) fn build_enriched_briefing(
 ///
 /// Content types that represent actionable intelligence — things a developer
 /// might need to DO something about. These get priority in the brief's hero section.
+/// Items older than this are not morning-brief news.
+const BRIEF_ITEM_MAX_AGE_DAYS: i64 = 30;
+
+/// Drop items whose source row was PUBLISHED more than
+/// [`BRIEF_ITEM_MAX_AGE_DAYS`] ago. Items without an id or a publish date
+/// stay (an unknown age is not stale), and a failed lookup keeps everything.
+fn drop_stale_items(items: Vec<BriefingItem>) -> Vec<BriefingItem> {
+    let ids: Vec<i64> = items.iter().filter_map(|i| i.item_id).collect();
+    if ids.is_empty() {
+        return items;
+    }
+    let Ok(conn) = crate::open_db_connection() else {
+        return items;
+    };
+    let placeholders = vec!["?"; ids.len()].join(",");
+    let sql = format!(
+        "SELECT id FROM source_items WHERE id IN ({placeholders})
+           AND published_at IS NOT NULL
+           AND published_at < datetime('now', '-{BRIEF_ITEM_MAX_AGE_DAYS} days')"
+    );
+    let stale: std::collections::HashSet<i64> = conn
+        .prepare(&sql)
+        .and_then(|mut stmt| {
+            stmt.query_map(rusqlite::params_from_iter(ids.iter()), |r| {
+                r.get::<_, i64>(0)
+            })
+            .map(|rows| rows.flatten().collect())
+        })
+        .unwrap_or_default();
+    if !stale.is_empty() {
+        tracing::info!(target: "4da::briefing", dropped = stale.len(), "Dropped stale items from the brief");
+    }
+    items
+        .into_iter()
+        .filter(|i| i.item_id.is_none_or(|id| !stale.contains(&id)))
+        .collect()
+}
+
 fn is_actionable_content_type(content_type: Option<&str>) -> bool {
     matches!(
         content_type,
@@ -2681,14 +2725,23 @@ async fn synthesize_morning_briefing_once(
             let has_relevance = conn
                 .prepare("SELECT project_relevance FROM project_dependencies LIMIT 1")
                 .is_ok();
+            // The deps the user's code actually leans on: direct, runtime,
+            // used by the most projects. This was `ORDER BY package_name
+            // LIMIT 50` — live 2026-10-01 the cut ended at "i18next-…", so the
+            // model never learned the user runs react, tauri, tokio, serde,
+            // sqlx or typescript (50 of 144 relevant deps, alphabetically).
             let query = if has_relevance {
-                "SELECT DISTINCT package_name, language FROM project_dependencies \
-                 WHERE is_dev = 0 AND project_relevance >= 0.3 \
-                 ORDER BY package_name LIMIT 50"
+                "SELECT package_name, language FROM project_dependencies \
+                 WHERE is_dev = 0 AND is_direct = 1 AND project_relevance >= 0.3 \
+                 GROUP BY package_name, language \
+                 ORDER BY COUNT(DISTINCT project_path) DESC, MAX(project_relevance) DESC, package_name \
+                 LIMIT 60"
             } else {
-                "SELECT DISTINCT package_name, language FROM project_dependencies \
+                "SELECT package_name, language FROM project_dependencies \
                  WHERE is_dev = 0 \
-                 ORDER BY package_name LIMIT 50"
+                 GROUP BY package_name, language \
+                 ORDER BY COUNT(DISTINCT project_path) DESC, package_name \
+                 LIMIT 60"
             };
             let deps: Vec<String> = conn
                 .prepare(query)
@@ -2996,25 +3049,28 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
 
     let messages = vec![crate::llm::Message {
         role: "user".to_string(),
-        content: user_prompt,
+        content: user_prompt.clone(),
     }];
 
-    let mut corpus: Vec<String> = briefing
-        .items
-        .iter()
-        .map(|i| {
-            let mut c = i.title.clone();
-            if let Some(d) = &i.description {
-                c.push(' ');
-                c.push_str(d);
-            }
-            for dep in &i.matched_deps {
-                c.push(' ');
-                c.push_str(dep);
-            }
-            c
-        })
-        .collect();
+    // Everything the model was GIVEN is grounded by definition: the stack,
+    // the installed dependencies, the alerts and their labels. The gate used
+    // to see only the item list, so the model naming the user's own stack
+    // ("Rust/Tauri/Axum") or echoing the prompt's own label ("Standing
+    // conditions") was "ungrounded" — 82 of 115 syntheses rejected
+    // 2026-09-27..10-01, and the morning brief went out with no synthesis.
+    let mut corpus: Vec<String> = vec![user_prompt];
+    corpus.extend(briefing.items.iter().map(|i| {
+        let mut c = i.title.clone();
+        if let Some(d) = &i.description {
+            c.push(' ');
+            c.push_str(d);
+        }
+        for dep in &i.matched_deps {
+            c.push(' ');
+            c.push_str(dep);
+        }
+        c
+    }));
     // The security alerts now lead the prompt, so the synthesis will reference
     // them — ground those sentences by adding the alert text to the corpus.
     for a in &briefing.preemption_alerts {

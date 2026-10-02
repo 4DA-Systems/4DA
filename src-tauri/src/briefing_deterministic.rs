@@ -1,139 +1,189 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-//! Deterministic morning brief — the always-available floor (no LLM required).
+//! Deterministic brief — the always-available floor (no LLM required).
 //!
-//! A morning brief is *facts + packaging*. The facts — which of the user's installed
-//! dependencies have a verified vulnerability, which items scored most relevant and why —
-//! are COMPUTED, not written: the security section is an OSV ∩ installed-versions lookup,
-//! the signals are the ranked scoring output. None of it is synthesized, so none of it
-//! can hallucinate.
+//! A brief is *facts + packaging*. The facts — which installed dependencies
+//! carry a confirmed vulnerability and how the fix actually arrives, which
+//! direct dependencies shipped a breaking release, which fresh articles the
+//! judges kept — are COMPUTED by `brief_facts`. This module renders them in
+//! the same sections the narrated brief uses, so the floor and the narration
+//! can never disagree on a fact, and the tab renders both the same way.
 //!
-//! This module renders those facts directly into a clean, grounded brief that:
-//!   * works offline and entirely locally (preserves the privacy / local-first moat),
-//!   * is available to EVERY user — free, local, or without a capable model,
-//!   * cannot fabricate (the Brief-grounding incident: a weak/ungrounded LLM welded a
-//!     global CVE onto the wrong stack and invented an outage — impossible here).
-//!
-//! When the user has a Sonnet-class+ model (`llm_capability::is_brief_capable`), the LLM
-//! path in `digest_commands` narrates these same facts on top. Otherwise this floor is
-//! served as-is — a genuine brief, never a faked one.
+//! Served when the user has no Sonnet-class model
+//! (`llm_capability::is_brief_capable`), and as the fallback when a narration
+//! states a version the facts do not hold. Works offline, stays private,
+//! cannot fabricate.
 
-use std::collections::HashMap;
+use crate::brief_facts::{fix_clause, BriefFacts, FactStatus, SecurityFact, UpgradeFact};
+use crate::preemption::AlertUrgency;
 
-use crate::db::DigestSourceItem;
+/// Articles the floor lists (its caller records them as featured).
+pub(crate) const FLOOR_ARTICLES: usize = 5;
 
-/// Build the deterministic, grounded brief as Markdown. Pure: reads the preemption feed
-/// and the already-ranked items; performs no synthesis and no mutation.
-pub(crate) fn build_deterministic_brief(
-    items: &[DigestSourceItem],
-    explanations: &HashMap<i64, String>,
-) -> String {
-    let mut out = String::new();
-
-    out.push_str("## Security\n");
-    out.push_str(&render_security_section());
-
-    out.push_str("\n\n## Top signals today\n");
-    out.push_str(&render_signals_section(items, explanations));
-
-    out.push_str(
-        "\n---\n_Grounded brief — computed from your OSV-verified security feed and ranked \
-         signals, with no AI synthesis (so it can't hallucinate). Add a Sonnet-class cloud \
-         model in Settings → AI Provider for a narrated brief._\n",
-    );
-    out
+/// Why the floor was served — the footer says so honestly.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum FloorReason {
+    /// No Sonnet-class model is configured.
+    NoCapableModel,
+    /// A narration stated a version the facts do not hold, twice.
+    NarrationRejected,
 }
 
-/// Render the ranked "top signals" list (pure — no feed/DB access).
-///
-/// `items` arrives pre-ordered by the caller's grounded-first slate
-/// (`digest_commands::order_briefing_slate`): dependency-grounded items first,
-/// then ungrounded, score DESC within each partition — so this top-10 cut
-/// keeps grounded items ahead of higher-scoring ungrounded ones by design.
-fn render_signals_section(
-    items: &[DigestSourceItem],
-    explanations: &HashMap<i64, String>,
-) -> String {
-    if items.is_empty() {
-        return "_No relevant items today. Run an analysis to fetch and score fresh content._\n"
-            .to_string();
-    }
+/// The facts brief as Markdown. Pure: performs no synthesis and no I/O.
+pub(crate) fn build_deterministic_brief(facts: &BriefFacts, reason: FloorReason) -> String {
     let mut out = String::new();
-    for (i, item) in items.iter().take(10).enumerate() {
-        let pct = (item.relevance_score.unwrap_or(0.0) * 100.0).round() as u32;
-        let why = explanations
-            .get(&item.id)
-            .map(String::as_str)
-            .filter(|s| !s.is_empty() && *s != "No context match")
-            .unwrap_or("");
-        let title = item.title.trim();
-        if why.is_empty() {
-            out.push_str(&format!("{}. **{title}** ({pct}%)\n", i + 1));
-        } else {
-            out.push_str(&format!("{}. **{title}** ({pct}%) — {why}\n", i + 1));
-        }
-    }
-    out
-}
-
-/// The deterministic security verdict from the preemption feed: confirmed, dep-scoped,
-/// OSV-verified advisories, or an explicit "all clear" when there are none. Always present
-/// (Preemption appears in every brief), positive or negative.
-fn render_security_section() -> String {
-    let feed = match crate::preemption::get_preemption_feed() {
-        Ok(f) => f,
-        Err(_) => {
-            return "_Security feed unavailable right now._".to_string();
-        }
-    };
-
-    let mut alerts: Vec<&crate::preemption::PreemptionAlert> = feed
-        .alerts
+    let new_security: Vec<&SecurityFact> = facts
+        .security
         .iter()
-        .filter(|a| a.osv_verified || a.source_classified)
+        .filter(|f| f.status.is_new())
         .collect();
-    if alerts.is_empty() {
-        return "✓ No confirmed vulnerabilities affecting your installed dependencies.".to_string();
-    }
-    // Most urgent first.
-    alerts.sort_by_key(|a| urgency_rank(&a.urgency));
+    let new_upgrades: Vec<&UpgradeFact> = facts
+        .upgrades
+        .iter()
+        .filter(|u| u.status.is_new())
+        .collect();
 
-    let mut lines = Vec::new();
-    for a in alerts.iter().take(8) {
-        let (icon, label) = match a.urgency {
-            crate::preemption::AlertUrgency::Critical => ("🔴", "CRITICAL"),
-            crate::preemption::AlertUrgency::High => ("🟠", "HIGH"),
-            crate::preemption::AlertUrgency::Medium => ("🟡", "MEDIUM"),
-            crate::preemption::AlertUrgency::Watch => ("⚪", "WATCH"),
-        };
-        let dep = a
-            .affected_dependencies
-            .first()
-            .map(String::as_str)
-            .unwrap_or("");
-        let version = match (&a.installed_version, &a.fixed_version) {
-            (Some(i), Some(f)) => format!(" {i} → update to ≥ {f}"),
-            (Some(i), None) => format!(" (installed {i})"),
-            _ => String::new(),
-        };
-        let scope = if a.affected_projects.is_empty() {
-            String::new()
-        } else {
-            format!(" — affects: {}", a.affected_projects.join(", "))
-        };
-        lines.push(format!(
-            "{icon} **[{label}]** {dep}{version}: {}{scope}",
-            a.title.trim()
+    if !new_security.is_empty() {
+        out.push_str("## Act now\n");
+        for f in &new_security {
+            out.push_str(&security_line(f));
+        }
+        out.push('\n');
+    }
+    if !new_upgrades.is_empty() {
+        out.push_str("## Upgrades to plan\n");
+        for u in &new_upgrades {
+            out.push_str(&upgrade_line(u));
+        }
+        out.push('\n');
+    }
+    if !facts.worth_knowing.is_empty() {
+        out.push_str("## Worth knowing\n");
+        for c in facts.worth_knowing.iter().take(FLOOR_ARTICLES) {
+            match &c.url {
+                Some(url) => out.push_str(&format!("- [{}]({url}) ({})\n", c.title, c.source_type)),
+                None => out.push_str(&format!("- {} ({})\n", c.title, c.source_type)),
+            }
+        }
+        out.push('\n');
+    }
+    if new_security.is_empty() && new_upgrades.is_empty() && facts.worth_knowing.is_empty() {
+        out.push_str("Nothing new touches your code today.\n\n");
+    }
+
+    let still: Vec<String> = facts
+        .security
+        .iter()
+        .filter_map(|f| unchanged_label(&f.package, &site_labels_sec(f), &f.status))
+        .chain(
+            facts
+                .upgrades
+                .iter()
+                .filter_map(|u| unchanged_label(&u.package, &site_labels_up(u), &u.status)),
+        )
+        .collect();
+    if !still.is_empty() || !facts.also_open.is_empty() {
+        out.push_str("## Still open\n");
+        if !still.is_empty() {
+            out.push_str(&format!("{}\n", still.join("; ")));
+        }
+        if !facts.also_open.is_empty() {
+            out.push_str(&format!(
+                "Lower severity: {}\n",
+                crate::brief_facts::also_open_line(&facts.also_open)
+            ));
+        }
+        out.push('\n');
+    }
+
+    out.push_str(match reason {
+        FloorReason::NoCapableModel => {
+            "---\n_Computed from your lockfiles, OSV advisories and package registries, with no AI \
+             narration. Add a Sonnet-class model in Settings → AI Provider for a written brief._\n"
+        }
+        FloorReason::NarrationRejected => {
+            "---\n_Computed from your lockfiles, OSV advisories and package registries. The written \
+             brief stated a version these facts do not hold, so the facts are shown instead._\n"
+        }
+    });
+    out
+}
+
+fn urgency_word(u: &AlertUrgency) -> &'static str {
+    match u {
+        AlertUrgency::Critical => "Critical",
+        AlertUrgency::High => "High",
+        AlertUrgency::Medium => "Medium",
+        AlertUrgency::Watch => "Low",
+    }
+}
+
+fn security_line(f: &SecurityFact) -> String {
+    let mut line = format!(
+        "- **{}** ({}, {} — {} advisor{})",
+        f.package,
+        f.ecosystem,
+        urgency_word(&f.urgency),
+        f.advisory_count,
+        if f.advisory_count == 1 { "y" } else { "ies" }
+    );
+    if let Some(tier) = &f.worst_tier {
+        if !tier.eq_ignore_ascii_case(urgency_word(&f.urgency)) {
+            line.push_str(&format!("; worst advisory {tier}"));
+        }
+    }
+    line.push_str(&format!(": {}\n", f.title));
+    for s in &f.sites {
+        let installed = s.installed.as_deref().unwrap_or("version unknown");
+        let dev = if s.dev_only { ", dev-only" } else { "" };
+        line.push_str(&format!(
+            "  - {} on {installed}{dev}: {}\n",
+            s.label,
+            fix_clause(&s.fix_path)
         ));
     }
-    lines.join("\n")
+    line
 }
 
-fn urgency_rank(u: &crate::preemption::AlertUrgency) -> u8 {
-    match u {
-        crate::preemption::AlertUrgency::Critical => 0,
-        crate::preemption::AlertUrgency::High => 1,
-        crate::preemption::AlertUrgency::Medium => 2,
-        crate::preemption::AlertUrgency::Watch => 3,
+fn upgrade_line(u: &UpgradeFact) -> String {
+    let sites = crate::brief_facts::upgrade_sites_line(u);
+    let when = u
+        .published
+        .as_deref()
+        .map(|d| format!(", released {d}"))
+        .unwrap_or_default();
+    let what = if u.yanked {
+        "a pinned version was yanked by the publisher"
+    } else {
+        "read the changelog before bumping"
+    };
+    let tooling = if u.dev_only { " (dev tooling)" } else { "" };
+    let title = match &u.url {
+        Some(url) => format!("[{} {}]({url})", u.package, u.announced),
+        None => format!("{} {}", u.package, u.announced),
+    };
+    format!("- **{title}**{tooling}{when}: {sites} — {what}\n")
+}
+
+fn site_labels_sec(f: &SecurityFact) -> String {
+    f.sites
+        .iter()
+        .map(|s| s.label.as_str())
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn site_labels_up(u: &UpgradeFact) -> String {
+    u.sites
+        .iter()
+        .map(|s| format!("{} on {}", s.label, s.installed))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn unchanged_label(package: &str, sites: &str, status: &FactStatus) -> Option<String> {
+    match status {
+        FactStatus::Unchanged { since } => Some(format!("{package} ({sites}, since {since})")),
+        FactStatus::New => None,
     }
 }
 

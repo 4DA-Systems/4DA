@@ -130,21 +130,27 @@ export const createBriefingSlice: StateCreator<AppStore, [], [], BriefingSlice> 
     }
   },
 
-  generateBriefing: async () => {
+  generateBriefing: async (options) => {
     set(state => ({
       aiBriefing: { ...state.aiBriefing, loading: true, error: null },
     }));
     try {
-      const result = await cmd('generate_ai_briefing');
+      // Until 2026-10-02 no caller passed `auto`, so every app-initiated
+      // trigger regenerated (~28 briefs a day, 73% repeating the previous).
+      const result = await cmd('generate_ai_briefing', { auto: options?.auto ?? false });
 
       if (result.success && result.briefing) {
+        // A reused brief keeps its real age ("written 3h ago"), not "just now".
+        const createdAt = result.briefing_created_at
+          ? new Date(`${result.briefing_created_at.replace(' ', 'T')}Z`)
+          : null;
         set({
           aiBriefing: {
             content: result.briefing,
             loading: false,
             error: null,
             model: result.model || null,
-            lastGenerated: new Date(),
+            lastGenerated: createdAt && !Number.isNaN(createdAt.getTime()) ? createdAt : new Date(),
           },
         });
         // AD-035: the generation just recorded (or superseded) the display-

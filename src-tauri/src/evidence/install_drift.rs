@@ -729,7 +729,11 @@ fn resolve_installed(project_dir: &Path, package: &str) -> Resolved {
             .join("package.json");
         if manifest.is_file() {
             let version = read_json(&manifest)
-                .and_then(|json| json.get("version")?.as_str().map(|v| v.trim().to_string()))
+                .and_then(|json| {
+                    json.get("version")?
+                        .as_str()
+                        .map(normalize_installed_version)
+                })
                 .filter(|v| !v.is_empty());
             return match version {
                 Some(version) => Resolved::Installed(InstalledCopy { version, manifest }),
@@ -749,6 +753,21 @@ fn resolve_installed(project_dir: &Path, package: &str) -> Resolved {
         current = dir.parent();
     }
     Resolved::Missing
+}
+
+/// The version an installed `package.json` declares, in the lockfile's
+/// spelling. A publisher may write a leading `v`: `@upstash/ratelimit` ships
+/// `"version": "v2.0.7"` while every lockfile records `2.0.7`, so an exact
+/// compare reported navcal's node_modules as out of sync with its lock
+/// (live audit 2026-10-01). npm's own semver parser drops the `v` (and a
+/// leading `=`), so the comparison here does too.
+fn normalize_installed_version(raw: &str) -> String {
+    let trimmed = raw.trim();
+    trimmed
+        .strip_prefix(['v', 'V', '='])
+        .unwrap_or(trimmed)
+        .trim()
+        .to_string()
 }
 
 /// `name` or `@scope/name` as path components. A name that could climb out
