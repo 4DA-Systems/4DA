@@ -445,7 +445,11 @@ pub(crate) fn check_version_affected(
 /// 0"), so the placeholder read as installed malware (4da-ledger's
 /// transitive `fs@0.0.1-security`, 2026-09-26). The placeholder contains no
 /// code, so no MAL advisory applies to it.
-pub(crate) fn is_npm_security_holding(advisory_id: &str, ecosystem: &str, version: Option<&str>) -> bool {
+pub(crate) fn is_npm_security_holding(
+    advisory_id: &str,
+    ecosystem: &str,
+    version: Option<&str>,
+) -> bool {
     advisory_id.starts_with("MAL-")
         && normalize_ecosystem(ecosystem) == "npm"
         && version.is_some_and(|v| v.trim().ends_with("-security"))
