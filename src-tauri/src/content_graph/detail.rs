@@ -28,7 +28,10 @@ pub struct GraphNodeDetail {
     pub source_type: String,
     pub relevance_score: f32,
     pub created_at: String,
-    /// Highest-confidence dependency link — why this touches the user's stack.
+    /// Highest-confidence dependency link — why this touches the user's
+    /// stack. Only present when the item carries the canonical grounding
+    /// verdict (`loading::GROUNDED_SQL`): a raw link row at any confidence
+    /// put "🎯 openai" on rogue-AI news the pipeline had judged ungrounded.
     pub matched_package: Option<String>,
     /// Cached AI summary, if one was already generated for this item.
     pub summary: Option<String>,
@@ -47,12 +50,15 @@ pub(super) fn fetch_node_details(
     let sql = format!(
         "SELECT si.id, si.title, si.url, si.source_type, si.relevance_score,
                 si.created_at, si.summary,
-                (SELECT sid.package_name FROM source_item_dependencies sid
-                 WHERE sid.source_item_id = si.id
-                 ORDER BY sid.confidence DESC, sid.id LIMIT 1) AS matched_package
+                CASE WHEN {grounded} THEN
+                    (SELECT sid.package_name FROM source_item_dependencies sid
+                     WHERE sid.source_item_id = si.id
+                     ORDER BY sid.confidence DESC, sid.id LIMIT 1)
+                END AS matched_package
          FROM source_items si
          WHERE si.id IN ({placeholders})
-         ORDER BY si.relevance_score DESC"
+         ORDER BY si.relevance_score DESC",
+        grounded = super::loading::GROUNDED_SQL
     );
 
     let mut stmt = conn.prepare(&sql)?;
@@ -101,10 +107,25 @@ mod tests {
                  source_item_id INTEGER NOT NULL,
                  package_name TEXT NOT NULL,
                  confidence REAL NOT NULL
+             );
+             CREATE TABLE scoring_explanations (
+                 source_item_id INTEGER PRIMARY KEY,
+                 breakdown TEXT NOT NULL
              );",
         )
         .unwrap();
         conn
+    }
+
+    fn set_grounded(conn: &rusqlite::Connection, id: i64, grounded: bool) {
+        conn.execute(
+            "INSERT INTO scoring_explanations (source_item_id, breakdown) VALUES (?1, ?2)",
+            rusqlite::params![
+                id,
+                format!(r#"{{"breakdown":{{"strongly_grounded":{grounded}}}}}"#)
+            ],
+        )
+        .unwrap();
     }
 
     fn insert_item(conn: &rusqlite::Connection, id: i64, title: &str, score: f64) {
@@ -144,9 +165,26 @@ mod tests {
              VALUES (1, 'lodash', 0.4), (1, 'tokio', 0.9);",
         )
         .unwrap();
+        set_grounded(&conn, 1, true);
 
         let details = fetch_node_details(&conn, &[1]).unwrap();
         assert_eq!(details[0].matched_package.as_deref(), Some("tokio"));
+    }
+
+    #[test]
+    fn ungrounded_link_is_not_shown_as_stack_evidence() {
+        let conn = test_conn();
+        insert_item(&conn, 1, "OpenAI agents went rogue", 0.8);
+        insert_item(&conn, 2, "no verdict persisted", 0.7);
+        conn.execute_batch(
+            "INSERT INTO source_item_dependencies (source_item_id, package_name, confidence)
+             VALUES (1, 'openai', 0.5), (2, 'react', 0.5);",
+        )
+        .unwrap();
+        set_grounded(&conn, 1, false);
+
+        let details = fetch_node_details(&conn, &[1, 2]).unwrap();
+        assert!(details.iter().all(|d| d.matched_package.is_none()));
     }
 
     #[test]

@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 // here — the node module is always in the graph bundle — so it also applies to
 // the Controls/MiniMap rendered by ContentGraphView without editing that file.
 import './content-graph.css';
+import { zoomInvariant } from './graph-zoom';
 
 interface ContentNodeData {
   title: string;
@@ -112,34 +113,31 @@ const ContentGraphNode = memo(function ContentGraphNode({ data, selected }: Node
   const label = cleanTitle(data.title);
   const extraCount = memberCount - 1;
 
-  // "Touches your stack" is a FILL-level signal (founder decision 2026-07-20):
-  // an outline ring was invisible at fit zoom while category fills read at any
-  // distance. Stack nodes take a dedicated beacon core (--color-graph-stack-
-  // core: white on matte black where it glows, deep navy on paper where it
-  // reads as intentional colour not a hole) plus a gold ring and halo whose
-  // widths divide by the live zoom (--graph-zoom, written by ZoomCssVar in
-  // ContentGraphView) so they hold a CONSTANT on-screen size from fit view to
-  // close-up. All theme tokens, no hardcoded colours: the light theme's
-  // print-twin gold (--color-accent-gold #8F7118) engages by itself. Category
-  // identity survives through the SHAPE channel on stack nodes.
+  // "Touches your stack" is a RING + HALO, never a fill override. The
+  // 2026-07-20 white beacon core replaced the category fill, so every stack
+  // node rendered as the same plain white circle and lost its category colour
+  // — the map's primary channel (audit 2026-10-02). The original objection to
+  // a ring (invisible at fit zoom) is answered by sizing: ring and halo widths
+  // divide by the live zoom (--graph-zoom, written by ZoomCssVar) so they hold
+  // a CONSTANT on-screen size from fit view to close-up. Theme tokens only:
+  // the light theme's print-twin gold (--color-accent-gold) engages by itself.
   const isStack = data.affects_you;
-  const fill = isStack ? 'var(--color-graph-stack-core)' : color;
-  const borderColor = isStack ? 'var(--color-graph-stack-core)' : brighten(color);
+  const fill = color;
+  const borderColor = brighten(color);
   const stackRing = isStack
     ? `0 0 0 calc(2px / var(--graph-zoom, 1)) var(--color-bg-primary), ` +
-      `0 0 0 calc(4px / var(--graph-zoom, 1)) var(--color-accent-gold)`
+      `0 0 0 calc(5px / var(--graph-zoom, 1)) var(--color-accent-gold)`
     : '';
   const stackHalo = isStack
     ? `0 0 calc(20px / var(--graph-zoom, 1)) calc(8px / var(--graph-zoom, 1)) ` +
       `color-mix(in srgb, var(--color-accent-gold) 50%, transparent)`
     : '';
-  // Selection ring (detail panel open) sits outside the gold stack ring; on a
-  // stack node its core color equals the ring color, so the bg-primary gap is
-  // what keeps it readable.
+  // Selection ring (detail panel open) sits outside the gold stack ring,
+  // separated from it by a bg-primary gap.
   const selectedRing = selected
     ? isStack
-      ? `0 0 0 calc(6px / var(--graph-zoom, 1)) var(--color-bg-primary), ` +
-        `0 0 0 calc(8px / var(--graph-zoom, 1)) var(--color-text-primary)`
+      ? `0 0 0 calc(7px / var(--graph-zoom, 1)) var(--color-bg-primary), ` +
+        `0 0 0 calc(9px / var(--graph-zoom, 1)) var(--color-text-primary)`
       : `0 0 0 2px var(--color-bg-primary), 0 0 0 4px var(--color-text-primary)`
     : '';
   const boxShadow = [stackRing, selectedRing, stackHalo, glow === 'none' ? '' : glow]
@@ -227,15 +225,22 @@ const ContentGraphNode = memo(function ContentGraphNode({ data, selected }: Node
         </span>
       )}
 
+      {/* Label size divides by the live zoom (zoomInvariant) so it reads at
+          >=11px on screen at fit view; content-graph.css hides non-stack
+          labels at far zoom (data-graph-lod) unless hovered — level of
+          detail instead of an unreadable smear of 150 titles. */}
       <span
+        className="cg-node-label"
+        data-stack={isStack ? 'true' : 'false'}
+        data-hovered={hovered ? 'true' : 'false'}
         style={{
           position: 'absolute',
           top: size + 3,
           left: '50%',
           transform: 'translateX(-50%)',
-          width: 128,
-          color: hovered ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
-          fontSize: 10,
+          width: zoomInvariant(150),
+          color: hovered || isStack ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
+          fontSize: zoomInvariant(11),
           fontFamily: 'Inter, sans-serif',
           fontWeight: 500,
           lineHeight: 1.15,
@@ -248,16 +253,19 @@ const ContentGraphNode = memo(function ContentGraphNode({ data, selected }: Node
           textShadow: '0 1px 4px var(--color-bg-primary), 0 0 2px var(--color-bg-primary)',
         }}
       >
-        {truncate(label, 22)}
+        {truncate(label, 24)}
       </span>
 
       {hovered && (
         <div
           style={{
             position: 'absolute',
-            top: size + 22,
+            top: size + 6,
             left: '50%',
-            transform: 'translateX(-50%)',
+            // Scale with 1/zoom like the label, so the tooltip is readable at
+            // fit view; it opens below the (hidden-while-hovered) label slot.
+            transform: 'translateX(-50%) scale(calc(1 / min(var(--graph-zoom, 1), 1)))',
+            transformOrigin: 'top center',
             backgroundColor: 'var(--color-bg-tertiary)',
             border: '1px solid var(--color-border)',
             borderRadius: 6,

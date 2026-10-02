@@ -15,9 +15,16 @@ use super::types::RawItem;
 /// Shared selection predicate: corpus parity (curated at any window age, or
 /// young not-yet-judged) minus items under an active snooze. Kept as one
 /// fragment so the item query and the candidate count can never disagree.
+///
+/// `+si.embedding_status` (unary plus) deliberately disqualifies the
+/// embedding_status index: ~all of the 139k live rows are 'complete', so the
+/// planner's pick of that index scanned the whole table for every query
+/// (measured on the live DB 2026-10-02: count 738 ms, main load 661 ms,
+/// security top-up 761 ms). Without it SQLite ranges the created_at index
+/// over the window instead — 211 / 185 / 80 ms on the same data.
 const SELECTION_WHERE: &str = "si.relevance_score IS NOT NULL
            AND si.created_at >= datetime('now', ?1)
-           AND si.embedding_status = 'complete'
+           AND +si.embedding_status = 'complete'
            AND (si.feed_relevant IS 1
                 OR (si.feed_relevant IS NULL
                     AND si.created_at >= datetime('now', '-2 days')))
@@ -35,6 +42,30 @@ const SELECTION_WHERE: &str = "si.relevance_score IS NOT NULL
 const RESERVE_SECURITY: usize = 12;
 /// Reserved slots for research items (arxiv / papers_with_code), same logic.
 const RESERVE_RESEARCH: usize = 8;
+
+/// "Touches your stack" — the SAME verdict Signal's "Affects You" pool reads
+/// (`evidence-pool.ts::isGrounded` → `ScoreBreakdown.strongly_grounded`), taken
+/// from the breakdown the scoring pipeline persisted for this item. Before
+/// 2026-10-02 the graph used "any `source_item_dependencies` row at any
+/// confidence", which is looser than Signal: live, 47 of 150 nodes glowed —
+/// including title-heuristic hits at confidence 0.5 that the pipeline itself
+/// had judged ungrounded — so the map contradicted Key Signals.
+///
+/// Mirrors the frontend predicate:
+/// - `strongly_grounded = true` (strong, non-ambiguous, corroborated dep edge),
+///   or a backend-confirmed affected version (`is_version_affected = true`);
+/// - EXCEPT a confirmed not-affected advisory (`is_version_affected = false`
+///   → `applicability = "not_affected"`), which never occupies the stack pool.
+///
+/// Items with no persisted breakdown evaluate to NULL → not grounded (the
+/// honest default: no verdict, no claim). Any grounding false positive (e.g.
+/// ambiguous company names like "openai") is a scoring-side fix that reaches
+/// both surfaces at once — the graph deliberately has no opinion of its own.
+pub(super) const GROUNDED_SQL: &str = "(SELECT
+           (COALESCE(json_extract(e.breakdown, '$.breakdown.strongly_grounded'), 0) = 1
+            OR json_extract(e.breakdown, '$.breakdown.is_version_affected') = 1)
+           AND COALESCE(json_extract(e.breakdown, '$.breakdown.is_version_affected'), 1) != 0
+         FROM scoring_explanations e WHERE e.source_item_id = si.id)";
 
 const SECURITY_PRED: &str =
     "(si.source_type IN ('osv','cve') OR si.signal_type = 'security_alert')";
@@ -100,13 +131,16 @@ pub(super) fn load_scored_items(
         )
         .map(|n| n > 0)?;
 
-    let select_columns = "SELECT si.id, si.title, si.url, si.source_type, si.relevance_score,
+    let select_columns = format!(
+        "SELECT si.id, si.title, si.url, si.source_type, si.relevance_score,
                 si.created_at, si.embedding, si.signal_type, si.signal_priority,
                 (SELECT sid.package_name FROM source_item_dependencies sid
                  WHERE sid.source_item_id = si.id
                  ORDER BY sid.confidence DESC, sid.id LIMIT 1) AS matched_package,
-                (si.feed_relevant IS 1) AS curated
-         FROM source_items si";
+                (si.feed_relevant IS 1) AS curated,
+                {GROUNDED_SQL} AS grounded
+         FROM source_items si"
+    );
 
     let mut items = Vec::new();
     let mut seen: std::collections::HashSet<i64> = std::collections::HashSet::new();
@@ -127,6 +161,7 @@ pub(super) fn load_scored_items(
                 row.get::<_, Option<String>>(8)?,
                 row.get::<_, Option<String>>(9)?,
                 row.get::<_, bool>(10)?,
+                row.get::<_, Option<bool>>(11)?.unwrap_or(false),
             ))
         })?;
         for row in rows {
@@ -142,6 +177,7 @@ pub(super) fn load_scored_items(
                 signal_priority,
                 matched_package,
                 curated,
+                grounded,
             ) = row?;
             if !seen.insert(id) {
                 continue;
@@ -162,6 +198,7 @@ pub(super) fn load_scored_items(
                 created_at,
                 curated,
                 reserved: false,
+                grounded,
                 embedding,
             });
         }

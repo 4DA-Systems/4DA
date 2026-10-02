@@ -21,6 +21,7 @@ fn raw(id: i64, title: &str, source_type: &str, score: f32, embedding: Vec<f32>)
         created_at: "2026-05-24".to_string(),
         curated: false,
         reserved: false,
+        grounded: false,
         embedding,
     }
 }
@@ -241,7 +242,7 @@ fn test_cluster_labels_prefer_distinctive_terms() {
     let edge_list = vec![edge(1, 2, 0.9), edge(3, 4, 0.9)];
 
     let mut clusters = clustering::compute_clusters(&items, &edge_list);
-    clustering::assign_cluster_labels(&items, &mut clusters);
+    labels::assign_cluster_labels(&items, &mut clusters);
 
     for cluster in &clusters {
         let first = cluster.label.split(" · ").next().unwrap_or("");
@@ -389,7 +390,7 @@ fn test_multilevel_merges_bridged_themes() {
 }
 
 /// A term found in ONE member title is not a shared topic: a 2-member
-/// cluster with disjoint titles must take the honest digest label, not a
+/// cluster with disjoint titles must take the fallback label, not a
 /// single-title word crowned by c-TF-IDF ("bun · claude · now", live).
 #[test]
 fn test_label_requires_two_title_hits() {
@@ -413,10 +414,12 @@ fn test_label_requires_two_title_hits() {
 
     let mut clusters = clustering::compute_clusters(&items, &edge_list);
     assert_eq!(clusters.len(), 1);
-    clustering::assign_cluster_labels(&items, &mut clusters);
+    labels::assign_cluster_labels(&items, &mut clusters);
+    // No term appears in 2+ titles → no term label; the fallback names the
+    // typical member (equal embeddings: the earliest), never "assorted".
     assert_eq!(
-        clusters[0].label, "hacker news · assorted",
-        "no term appears in 2+ titles → digest label"
+        clusters[0].label, "Rust async runtime deep dive",
+        "no term appears in 2+ titles → representative-title label"
     );
 }
 
@@ -486,11 +489,11 @@ fn test_label_falls_back_to_source_digest_when_no_shared_topic() {
 
     let mut clusters = clustering::compute_clusters(&items, &edge_list);
     assert_eq!(clusters.len(), 1);
-    clustering::assign_cluster_labels(&items, &mut clusters);
+    labels::assign_cluster_labels(&items, &mut clusters);
 
     assert_eq!(
-        clusters[0].label, "crates.io · assorted",
-        "template-only cohesion must get an honest digest label"
+        clusters[0].label, "crates.io releases",
+        "template-only cohesion is stated as what it is — a registry group-by"
     );
 }
 
@@ -529,7 +532,7 @@ fn test_label_uses_real_topic_despite_source_boilerplate() {
 
     let mut clusters = clustering::compute_clusters(&items, &edge_list);
     assert_eq!(clusters.len(), 1);
-    clustering::assign_cluster_labels(&items, &mut clusters);
+    labels::assign_cluster_labels(&items, &mut clusters);
 
     assert!(
         clusters[0].label.split(" · ").any(|w| w == "tauri"),
@@ -545,7 +548,7 @@ fn test_label_uses_real_topic_despite_source_boilerplate() {
 
 #[test]
 fn test_extract_title_keywords() {
-    let keywords = clustering::extract_title_keywords("Show HN: A New Rust Web Framework");
+    let keywords = labels::extract_title_keywords("Show HN: A New Rust Web Framework");
     assert!(keywords.contains(&"rust".to_string()));
     assert!(keywords.contains(&"web".to_string()));
     assert!(keywords.contains(&"framework".to_string()));
@@ -560,7 +563,7 @@ fn test_extract_title_keywords_drops_numeric_noise() {
     // tokens crowning labels ("152", "8th", "191k", "160-post",
     // 2026-07-19). Digit-dominated tokens never label; real names with
     // incidental digits survive.
-    let keywords = clustering::extract_title_keywords(
+    let keywords = labels::extract_title_keywords(
         "RE: fosstodon 116885294589687234Here TypeScript 7.0 released v5-9 8th 191k sqlite3",
     );
     assert!(!keywords.iter().any(|k| k.contains("116885294589687234")));
@@ -1163,6 +1166,10 @@ fn test_build_graph_deterministic_across_processes() {
                  source_item_id INTEGER PRIMARY KEY, snooze_until TEXT NOT NULL,
                  created_at TEXT NOT NULL DEFAULT (datetime('now'))
              );
+             CREATE TABLE scoring_explanations (
+                 source_item_id INTEGER PRIMARY KEY, pipeline_version INTEGER NOT NULL,
+                 breakdown TEXT NOT NULL, scored_at TEXT NOT NULL DEFAULT (datetime('now'))
+             );
              CREATE TABLE graph_layout_anchors (
                  window_days INTEGER NOT NULL, cluster_key TEXT NOT NULL,
                  x REAL NOT NULL, y REAL NOT NULL, member_ids TEXT NOT NULL,
@@ -1318,7 +1325,7 @@ fn test_cluster_label_terms_all_need_two_hits() {
         centroid_x: 0.0,
         centroid_y: 0.0,
     }];
-    clustering::assign_cluster_labels(&items, &mut clusters);
+    labels::assign_cluster_labels(&items, &mut clusters);
     let label = &clusters[0].label;
     assert!(label.contains("rust"), "shared term labels: {label}");
     assert!(label.contains("embedded"), "3-hit term labels: {label}");
@@ -1414,4 +1421,425 @@ fn test_source_cap_limits_unjudged_flood_but_exempts_curated() {
         "capped stories count into hidden_items (got {})",
         graph.meta.hidden_items
     );
+}
+
+// ── Graph truth (adversarial audit 2026-10-02, section 3) ──────────────────
+
+/// Labels one cluster made of `titles` (all members of one cluster, among
+/// `others` that form no cluster but share the item universe — c-TF-IDF and
+/// boilerplate are corpus-relative).
+fn label_for(titles: &[(&str, &str)], others: &[(&str, &str)]) -> String {
+    let mut items: Vec<RawItem> = Vec::new();
+    let dims = titles.len() + others.len() + 1;
+    for (i, (title, src)) in titles.iter().chain(others.iter()).enumerate() {
+        let mut v = vec![0.0f32; dims];
+        v[0] = 1.0;
+        v[i + 1] = 0.3;
+        items.push(raw(i as i64 + 1, title, src, 0.5, v));
+    }
+    let mut clusters = vec![GraphCluster {
+        id: "cluster_1".to_string(),
+        label: String::new(),
+        node_ids: (1..=titles.len() as i64).collect(),
+        source_count: 1,
+        coherence: 0.0,
+        centroid_x: 0.0,
+        centroid_y: 0.0,
+    }];
+    labels::assign_cluster_labels(&items, &mut clusters);
+    clusters.remove(0).label
+}
+
+fn assert_never_assorted(label: &str) {
+    assert!(!label.is_empty(), "label must not be empty");
+    assert!(
+        !label.contains("assorted"),
+        "'assorted' names nothing: {label}"
+    );
+}
+
+#[test]
+fn test_live_rust_concurrency_trio_is_labelled_by_its_shared_term() {
+    // Live 2026-10-02: "related items · assorted". "rust" is in two of three
+    // titles, but the old code checked coverage only on the raw c-TF-IDF
+    // winner (a one-title word) and fell through to the digest.
+    let label = label_for(
+        &[
+            (
+                "Compio: A thread-per-core async Rust runtime with IOCP/io_uring/polling",
+                "hackernews",
+            ),
+            (
+                "Idiomatic Concurrency in Rust: Stop Writing Accidental Microservices",
+                "devto",
+            ),
+            ("Mixing rayon and tokio for fun and (hair) loss", "lobsters"),
+        ],
+        &[],
+    );
+    assert_never_assorted(&label);
+    assert_eq!(label, "rust");
+}
+
+#[test]
+fn test_live_sql_injection_pair_is_labelled_sql() {
+    let label = label_for(
+        &[
+            (
+                "Everyone Greps for SQL Injection. Nobody Greps for the Other Eight.",
+                "devto",
+            ),
+            (
+                "Compile Time Prevention of SQL-Injections in Rust",
+                "lobsters",
+            ),
+        ],
+        &[],
+    );
+    assert_never_assorted(&label);
+    assert!(
+        label.split(" · ").any(|t| t == "sql"),
+        "the shared topic is sql: {label}"
+    );
+}
+
+#[test]
+fn test_live_registry_pair_is_named_as_releases() {
+    // Live: "npm · assorted" for @react-pdf/renderer + @upstash/ratelimit.
+    let label = label_for(
+        &[
+            ("npm: @react-pdf/renderer v4.9.0", "npm_registry"),
+            ("npm: @upstash/ratelimit v2.2.0", "npm_registry"),
+        ],
+        &[],
+    );
+    assert_eq!(label, "npm releases");
+}
+
+#[test]
+fn test_no_shared_term_falls_back_to_representative_title() {
+    // Live: "devto · assorted" and "hacker news · assorted" — pairs whose
+    // titles share no content word. The label is the typical member's title,
+    // shortened: concrete words the user can check against the dots.
+    let titles = [
+        (
+            "You Are Lying to Your Compiler. Use \"satisfies\" Instead of \"as\".",
+            "devto",
+        ),
+        (
+            "TypeScript `using` in Real Codebases: Database Connections, File Handles, and Async Cleanup",
+            "devto",
+        ),
+    ];
+    let label = label_for(&titles, &[]);
+    assert_never_assorted(&label);
+    assert!(
+        label.chars().count() <= 37,
+        "title labels stay header-sized: {label}"
+    );
+    let head = label.trim_end_matches('…');
+    assert!(
+        titles.iter().any(|(t, _)| t.starts_with(head)),
+        "fallback label must be a member's own words: {label}"
+    );
+
+    let label = label_for(
+        &[
+            (
+                "Replace Your OpenAI, Anthropic or Google API Call with Middleware",
+                "hackernews",
+            ),
+            ("Programmatic Tool Calling", "hackernews"),
+        ],
+        &[],
+    );
+    assert_never_assorted(&label);
+}
+
+#[test]
+fn test_shared_dependency_names_a_cluster_without_a_shared_term() {
+    let mut items = vec![
+        raw(
+            1,
+            "Webhook retries that silently drop events",
+            "devto",
+            0.5,
+            vec![1.0, 0.1],
+        ),
+        raw(
+            2,
+            "Cancelled customers who keep access",
+            "devto",
+            0.5,
+            vec![1.0, 0.2],
+        ),
+    ];
+    items[0].matched_package = Some("stripe".into());
+    items[1].matched_package = Some("Stripe".into());
+    let mut clusters = vec![GraphCluster {
+        id: "cluster_1".to_string(),
+        label: String::new(),
+        node_ids: vec![1, 2],
+        source_count: 1,
+        coherence: 0.0,
+        centroid_x: 0.0,
+        centroid_y: 0.0,
+    }];
+    labels::assign_cluster_labels(&items, &mut clusters);
+    assert_eq!(clusters[0].label, "stripe");
+}
+
+#[test]
+fn test_generic_words_never_label_but_nextjs_does() {
+    // Live: "tests · never · next" and "concurrent · building".
+    let kw = labels::extract_title_keywords(
+        "Our most valuable tests never break: building the next thing",
+    );
+    for generic in ["never", "next", "building"] {
+        assert!(
+            !kw.contains(&generic.to_string()),
+            "{generic} leaked: {kw:?}"
+        );
+    }
+    assert!(kw.contains(&"tests".to_string()));
+
+    let kw = labels::extract_title_keywords("Next.js's after() Function Is Easy to Misuse");
+    assert!(kw.contains(&"nextjs".to_string()), "{kw:?}");
+    let kw = labels::extract_title_keywords("React.js ~New feature in React 19.3~");
+    assert!(kw.contains(&"reactjs".to_string()) && kw.contains(&"react".to_string()));
+
+    let label = label_for(
+        &[
+            (
+                "Calling revalidateTag on an Already-Uncached Fetch Does Nothing, and Next.js Won't Tell You",
+                "devto",
+            ),
+            (
+                "That JSON error quotes what the server actually sent - and V8 cuts it at exactly",
+                "devto",
+            ),
+            ("Next.js's after() Function Is Easy to Misuse in Both Directions", "devto"),
+        ],
+        &[],
+    );
+    assert_eq!(label, "next.js", "shown in its usual spelling");
+
+    let label = label_for(
+        &[
+            (
+                "Concurrent Writes in Practice: Building High-Throughput Apps with Turso's MVCC",
+                "rss",
+            ),
+            (
+                "maillon: a concurrent intrusive list for building faster synchronization primitives",
+                "reddit",
+            ),
+        ],
+        &[],
+    );
+    assert_eq!(label, "concurrent");
+}
+
+#[test]
+fn test_label_does_not_repeat_a_compound_and_its_part() {
+    let label = label_for(
+        &[
+            ("npm: @tauri-apps/api v2.12.0", "hackernews"),
+            ("@tauri-apps/plugin-opener v2.7.0", "hackernews"),
+            ("tauri apps everywhere", "hackernews"),
+        ],
+        &[],
+    );
+    let terms: Vec<&str> = label.split(" · ").collect();
+    let has_compound = terms.contains(&"tauri-apps");
+    let has_part = terms.contains(&"tauri") || terms.contains(&"apps");
+    assert!(!(has_compound && has_part), "duplicate naming: {label}");
+}
+
+#[test]
+fn test_live_mixed_api_cluster_leads_with_its_covering_term() {
+    // Live 2026-10-02 (11 members): the most distinctive 3-title term
+    // outranked the 5-title "api", failed the coverage floor, and the
+    // cluster fell back to a registry title ("ai v7.0.126").
+    let label = label_for(
+        &[
+            (
+                "AI Gateway now supports TypeSafe clients and an HTTP API for Jev",
+                "rss",
+            ),
+            ("npm: @tauri-apps/api v2.12.0", "npm_registry"),
+            ("Trying GPT-6 Sol with AI SDK Evaluation API", "hackernews"),
+            (
+                "Jeb: Turn any OpenAI API into a decision model",
+                "hackernews",
+            ),
+            ("npm: openai v7.25.0", "npm_registry"),
+            ("npm: @tauri-apps/plugin-opener v2.7.0", "npm_registry"),
+            ("npm: @tauri-apps/plugin-updater v2.13.1", "npm_registry"),
+            ("What Is OpenAI's Decisions API?", "hackernews"),
+            ("npm: @ai-sdk/openai v4.0.83", "npm_registry"),
+            ("AI Gateway adds Browserbase Search and Fetch tools", "rss"),
+            ("npm: ai v7.0.126", "npm_registry"),
+        ],
+        &[],
+    );
+    assert_never_assorted(&label);
+    assert!(
+        label.split(" · ").next() == Some("api") || label.split(" · ").next() == Some("openai"),
+        "a term covering >= 30% of members leads: {label}"
+    );
+    assert!(!label.contains("v7.0.126"), "{label}");
+}
+
+#[test]
+fn test_label_does_not_repeat_a_word_and_its_plural() {
+    let label = label_for(
+        &[
+            ("Agent memory for long tasks", "devto"),
+            ("Agents that verify their own work", "devto"),
+            ("Agent sandboxes in practice", "hackernews"),
+            ("Why agents fail in production", "devto"),
+        ],
+        &[],
+    );
+    let terms: Vec<&str> = label.split(" · ").collect();
+    assert!(
+        !(terms.contains(&"agent") && terms.contains(&"agents")),
+        "plural duplicate: {label}"
+    );
+}
+
+#[test]
+fn test_short_title_strips_prefixes_and_cuts_on_words() {
+    assert_eq!(
+        labels::short_title("crates.io: tauri-plugin-opener v2.7.0"),
+        "tauri-plugin-opener v2.7.0"
+    );
+    assert_eq!(
+        labels::short_title("[GHSA-xxxx-yyyy] Axios: header injection"),
+        "Axios: header injection"
+    );
+    let cut = labels::short_title(
+        "Self Healing Execution Graphs - How to Catch Cascading Agent Failures Before They Spread",
+    );
+    assert!(cut.ends_with('…') && cut.chars().count() <= 37, "{cut}");
+}
+
+/// "Touches your stack" = the scoring pipeline's persisted grounding verdict
+/// (Signal's predicate), not "any dependency link at any confidence".
+#[test]
+fn test_affects_you_follows_the_persisted_grounding_verdict() {
+    use crate::test_utils::test_db;
+
+    let db = test_db();
+    let conn = db.conn.lock();
+    for (id, dim) in [(1i64, 0usize), (2, 1), (3, 2), (4, 3), (5, 4)] {
+        insert_singleton(
+            &conn,
+            id,
+            8,
+            dim,
+            0.9 - id as f64 * 0.01,
+            "-1 hours",
+            Some(1),
+        );
+    }
+    // Every item carries a dep link — the OLD rule lit all five.
+    for (id, pkg, conf) in [
+        (1i64, "openai", 0.5),
+        (2, "tokio", 0.95),
+        (3, "hono", 0.9),
+        (4, "react", 0.5),
+        (5, "axum", 0.95),
+    ] {
+        conn.execute(
+            "INSERT INTO source_item_dependencies (source_item_id, package_name, ecosystem,
+                 match_type, confidence) VALUES (?1, ?2, 'npm', 'title_heuristic', ?3)",
+            rusqlite::params![id, pkg, conf],
+        )
+        .expect("dep link");
+    }
+    let breakdown = |id: i64, json: &str| {
+        conn.execute(
+            "INSERT INTO scoring_explanations (source_item_id, pipeline_version, breakdown)
+             VALUES (?1, 1, ?2)",
+            rusqlite::params![id, json],
+        )
+        .expect("breakdown");
+    };
+    breakdown(1, r#"{"breakdown":{"strongly_grounded":false}}"#);
+    breakdown(2, r#"{"breakdown":{"strongly_grounded":true}}"#);
+    // Grounded by name but the installed version is confirmed past the fix.
+    breakdown(
+        3,
+        r#"{"breakdown":{"strongly_grounded":true,"is_version_affected":false}}"#,
+    );
+    // Version-confirmed affected advisory.
+    breakdown(
+        4,
+        r#"{"breakdown":{"strongly_grounded":false,"is_version_affected":true}}"#,
+    );
+    // 5: no breakdown persisted → no verdict, no claim.
+
+    let graph = build_graph(&conn, 7, 150).expect("build");
+    let affects = |id: i64| {
+        graph
+            .nodes
+            .iter()
+            .find(|n| n.id == id)
+            .map(|n| n.affects_you)
+            .expect("node on map")
+    };
+    assert!(
+        !affects(1),
+        "a link the pipeline judged ungrounded must not glow"
+    );
+    assert!(affects(2), "strongly grounded → touches your stack");
+    assert!(
+        !affects(3),
+        "confirmed not-affected never occupies the stack pool"
+    );
+    assert!(
+        affects(4),
+        "version-confirmed affected advisory grounds the item"
+    );
+    assert!(!affects(5), "no persisted verdict → no claim");
+}
+
+/// Phase profile of a real build — `#[ignore]`d; run on demand against a
+/// corpus (opened READ-ONLY, so it is safe on the live DB while the app runs):
+///
+/// ```text
+/// FOURDA_GRAPH_PROFILE_DB=D:/4DA/data/4da.db \
+///   cargo test --lib -- --ignored content_graph::tests::profile_build_graph_phases --nocapture
+/// ```
+#[test]
+#[ignore = "needs FOURDA_GRAPH_PROFILE_DB pointing at a real corpus"]
+fn profile_build_graph_phases() {
+    let Ok(path) = std::env::var("FOURDA_GRAPH_PROFILE_DB") else {
+        return;
+    };
+    let conn = rusqlite::Connection::open_with_flags(
+        &path,
+        rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_URI,
+    )
+    .expect("open corpus read-only");
+    for run in 0..2 {
+        let started = std::time::Instant::now();
+        let (graph, phases) = build_graph_timed(&conn, 7, 150).expect("build");
+        println!(
+            "run {run}: total {} ms, nodes {}, edges {}, clusters {}, phases {phases:?}",
+            started.elapsed().as_millis(),
+            graph.nodes.len(),
+            graph.edges.len(),
+            graph.clusters.len()
+        );
+        for c in &graph.clusters {
+            println!("  cluster {}: {}", c.node_ids.len(), c.label);
+        }
+        println!(
+            "  touches-your-stack nodes: {}",
+            graph.nodes.iter().filter(|n| n.affects_you).count()
+        );
+    }
 }

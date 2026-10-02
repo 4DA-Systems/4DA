@@ -5,13 +5,14 @@
 import { useTranslation } from 'react-i18next';
 
 import { CATEGORY_COLORS, CATEGORY_SHAPES } from './ContentGraphNode';
+import { zoomInvariant } from './graph-zoom';
 
 export function ClusterLabelNode({ data }: { data: { label: string; count: number } }) {
   return (
     <div
       style={{
         color: 'var(--color-text-secondary)',
-        fontSize: 11,
+        fontSize: zoomInvariant(12),
         fontWeight: 600,
         fontFamily: 'Inter, sans-serif',
         letterSpacing: '0.03em',
@@ -24,9 +25,34 @@ export function ClusterLabelNode({ data }: { data: { label: string; count: numbe
       }}
     >
       {data.label}
-      <span style={{ color: 'var(--color-text-muted)', fontWeight: 400, marginLeft: 4, fontSize: 10 }}>
+      <span style={{ color: 'var(--color-text-muted)', fontWeight: 400, marginLeft: 4, fontSize: zoomInvariant(11) }}>
         ({data.count})
       </span>
+    </div>
+  );
+}
+
+/** Header over the unconnected lane (layout.rs): items in this window that
+ *  relate to no theme — said plainly instead of implied by placement. */
+export function LaneLabelNode({ data }: { data: { count: number } }) {
+  const { t } = useTranslation();
+  return (
+    <div
+      style={{
+        color: 'var(--color-text-muted)',
+        fontSize: zoomInvariant(12),
+        fontWeight: 600,
+        fontFamily: 'Inter, sans-serif',
+        letterSpacing: '0.03em',
+        textTransform: 'uppercase',
+        pointerEvents: 'none',
+        whiteSpace: 'nowrap',
+        borderBottom: '1px dashed var(--color-border)',
+        paddingBottom: 4,
+        textShadow: '0 1px 4px var(--color-bg-primary)',
+      }}
+    >
+      {t('signals.graphLaneLabel', { count: data.count })}
     </div>
   );
 }
@@ -194,14 +220,15 @@ export function GraphLegend({ categories, anyAffects, edgeTypes }: GraphLegendPr
             whiteSpace: 'nowrap',
           }}
         >
-          {/* Mirrors the node treatment: beacon core + gold ring. */}
+          {/* Mirrors the node treatment: the category mark keeps its own
+              fill; "your stack" is the gold ring around it. */}
           <span
             style={{
               width: 9,
               height: 9,
               borderRadius: '50%',
-              backgroundColor: 'var(--color-graph-stack-core)',
-              border: '2px solid var(--color-accent-gold)',
+              backgroundColor: 'transparent',
+              boxShadow: '0 0 0 2px var(--color-accent-gold)',
               display: 'inline-block',
             }}
           />

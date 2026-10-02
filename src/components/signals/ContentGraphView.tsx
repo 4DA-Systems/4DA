@@ -15,21 +15,21 @@ import {
 import '@xyflow/react/dist/style.css';
 import { useTranslation } from 'react-i18next';
 
-import { cmd } from '../../lib/commands';
 import { useTheme } from '../../lib/theme';
-import { useAppStore } from '../../store';
-import type { ContentGraph } from '../../types/graph';
 import ContentGraphNodeComponent, { type ContentNode } from './ContentGraphNode';
 import ContentGraphEdgeComponent from './ContentGraphEdge';
 import GraphDetailPanel from './GraphDetailPanel';
 import {
   ClusterLabelNode,
   ClusterHullNode,
+  LaneLabelNode,
   LoadingState,
   EmptyState,
   ErrorState,
   GraphLegend,
 } from './ContentGraphChrome';
+import { useContentGraph } from './use-content-graph';
+import ContentGraphFooter from './ContentGraphFooter';
 import {
   NON_STACK_OPACITY,
   ZoomCssVar,
@@ -43,71 +43,39 @@ const nodeTypes = {
   contentNode: ContentGraphNodeComponent,
   clusterLabel: ClusterLabelNode,
   clusterHull: ClusterHullNode,
+  laneLabel: LaneLabelNode,
 };
 const edgeTypes = { contentEdge: ContentGraphEdgeComponent };
-
-
 
 // Fixed legend order: most-urgent first. Category identity is color + shape
 // (never hue alone), so the legend swatches repeat the node silhouettes.
 const LEGEND_CATEGORIES = ['security', 'release', 'discussion', 'research'] as const;
 
-const TIME_WINDOWS = [7, 14, 30] as const;
 
 export default function ContentGraphView() {
   const { t } = useTranslation();
   const { isLight } = useTheme();
   const [days, setDays] = useState(7);
-  const [loading, setLoading] = useState(true);
-  // A failed build is an ERROR, not an empty corpus — rendering EmptyState on
-  // failure told users "no data" when the backend was down (audit 2026-07-19).
-  const [loadError, setLoadError] = useState(false);
+  const { graph, loading, loadError, stale, reload, applyFresh } = useContentGraph(days);
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  const [meta, setMeta] = useState<ContentGraph['meta'] | null>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [baseEdges, setBaseEdges] = useState<Edge[]>([]);
-  // Corpus snapshot the current graph was built against — when a new analysis
-  // lands, the map is stale and says so instead of silently contradicting the
-  // header (live: corpus went 32→430 mid-session with no refresh path).
-  const relevanceResults = useAppStore((s) => s.appState.relevanceResults);
-  const builtAgainstRef = useRef<unknown>(null);
-  const [reloadToken, setReloadToken] = useState(0);
-  const reload = useCallback(() => setReloadToken((n) => n + 1), []);
+  const meta = graph?.meta ?? null;
+  const flowRef = useRef<{ fitView: (opts?: { padding?: number }) => void } | null>(null);
+  const needsFitRef = useRef(false);
 
   useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    setLoadError(false);
-
-    cmd('build_content_graph', { days, maxNodes: 150 })
-      .then((graph: ContentGraph) => {
-        if (cancelled) return;
-        needsFitRef.current = true;
-        setSelectedNodeId(null);
-        setNodes(toFlowNodes(graph.nodes, graph.clusters));
-        const flowEdges = toFlowEdges(graph.edges);
-        setEdges(flowEdges);
-        setBaseEdges(flowEdges);
-        setMeta(graph.meta);
-        builtAgainstRef.current = useAppStore.getState().appState.relevanceResults;
-        markGraphViewed();
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        console.error('[ContentGraph] Failed to load:', err);
-        setLoadError(true);
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => { cancelled = true; };
-  }, [days, reloadToken, setNodes, setEdges]);
-
-  const corpusChanged =
-    !loading && builtAgainstRef.current !== null && relevanceResults !== builtAgainstRef.current;
+    if (!graph) return;
+    needsFitRef.current = true;
+    setSelectedNodeId(null);
+    setNodes(toFlowNodes(graph.nodes, graph.clusters));
+    const flowEdges = toFlowEdges(graph.edges);
+    setEdges(flowEdges);
+    setBaseEdges(flowEdges);
+    markGraphViewed();
+  }, [graph, setNodes, setEdges]);
 
   const connectedNodeIds = useMemo(() => {
     if (!hoveredNodeId) return new Set<string>();
@@ -156,7 +124,7 @@ export default function ContentGraphView() {
   // a launcher. Engagement ('click') is recorded when the user actually opens
   // a link from the panel, so panel-browsing never pollutes the learning loop.
   const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
-    if (node.type === 'clusterLabel') return;
+    if (node.type !== 'contentNode') return;
     setSelectedNodeId(node.id);
   }, []);
 
@@ -171,15 +139,12 @@ export default function ContentGraphView() {
   }, []);
 
   const onNodeMouseEnter = useCallback((_: React.MouseEvent, node: Node) => {
-    if (node.type !== 'clusterLabel') setHoveredNodeId(node.id);
+    if (node.type === 'contentNode') setHoveredNodeId(node.id);
   }, []);
 
   const onNodeMouseLeave = useCallback(() => {
     setHoveredNodeId(null);
   }, []);
-
-  const flowRef = useRef<{ fitView: (opts?: { padding?: number }) => void } | null>(null);
-  const needsFitRef = useRef(false);
 
   const onInit = useCallback((instance: { fitView: (opts?: { padding?: number }) => void }) => {
     flowRef.current = instance;
@@ -225,7 +190,7 @@ export default function ContentGraphView() {
     };
   }, [nodes, baseEdges]);
 
-  const isEmpty = !loading && !loadError && nodes.length === 0;
+  const isEmpty = !loading && !loadError && (graph?.nodes.length ?? 0) === 0;
 
   const selectedNode = selectedNodeId
     ? nodes.find((n) => n.id === selectedNodeId && n.type === 'contentNode')
@@ -279,21 +244,22 @@ export default function ContentGraphView() {
           </Panel>
         )}
 
-        {/* Stale-corpus pill: a new analysis landed after this map was built.
-            Refresh is explicit — silent rebuilds would yank the viewport. */}
-        {corpusChanged && (
+        {/* Stale-map pill: a quiet probe rebuild found a DIFFERENT node set
+            (use-content-graph). Swapping is explicit — a silent swap would
+            yank the viewport mid-read. */}
+        {stale && (
           <Panel position="top-right">
             <button
-              onClick={reload}
+              onClick={applyFresh}
               className="px-2.5 py-1 text-[11px] rounded border transition-colors hover:bg-bg-tertiary"
               style={{
-                color: 'var(--color-accent-gold, #D4AF37)',
+                color: 'var(--color-accent-gold)',
                 borderColor: 'var(--color-border)',
                 backgroundColor: 'var(--color-bg-secondary)',
                 fontFamily: 'Inter, sans-serif',
               }}
             >
-              {t('signals.graphCorpusChanged', 'Corpus updated — refresh')}
+              {t('signals.graphCorpusChanged')}
             </button>
           </Panel>
         )}
@@ -327,63 +293,7 @@ export default function ContentGraphView() {
         />
       )}
       </div>
-      <div
-        className="flex items-center justify-between px-4 py-2 border-t"
-        style={{ backgroundColor: 'var(--color-bg-secondary)', borderColor: 'var(--color-border)' }}
-      >
-        <div className="flex gap-4 text-[11px]" style={{ color: 'var(--color-text-muted)', fontFamily: 'JetBrains Mono, monospace' }}>
-          {meta && (
-            <>
-              <span>{meta.total_items} {t('signals.graphNodes', 'nodes')}</span>
-              <span>{meta.total_edges} {t('signals.graphEdges', 'edges')}</span>
-              <span>{meta.cluster_count} {t('signals.graphClusters', 'clusters')}</span>
-              {meta.collapsed_items > 0 && (
-                <span>{t('signals.graphCollapsedNote', { items: meta.collapsed_items, stories: meta.story_count })}</span>
-              )}
-              {/* Honest coverage: the map is the top slice of the window, not
-                  the window. The old "+2 in List only" line counted just the
-                  cap overflow while thousands sat below the load cutoff. */}
-              {meta.window_candidates > meta.total_items + meta.collapsed_items && (
-                <span>{t('signals.graphCoverageNote', 'top {{shown}} of {{total}} this window', {
-                  shown: meta.total_items + meta.collapsed_items,
-                  total: meta.window_candidates,
-                })}</span>
-              )}
-              {/* Corpus parity ramp (Phase 95): curated vs unjudged in ITEM
-                  units (P2.14 — story collapse can't inflate the ramp). */}
-              {meta.curated_items > 0 && meta.curated_items < meta.total_items + meta.collapsed_items && (
-                <span>{t('signals.graphCuratedNote', '{{curated}} curated · {{recent}} recent unjudged', {
-                  curated: meta.curated_items,
-                  recent: meta.total_items + meta.collapsed_items - meta.curated_items,
-                })}</span>
-              )}
-            </>
-          )}
-        </div>
-        {/* The 7/14/30d toggle renders only when the windows would actually
-            differ (curated verdicts older than 7d exist) — a control that
-            does nothing is a cold-start-doctrine violation. Kept visible if
-            the user already switched off the default so they can get back. */}
-        {(meta?.windows_differ || days !== 7) && (
-        <div className="flex items-center gap-1">
-          {TIME_WINDOWS.map((w) => (
-            <button
-              key={w}
-              onClick={() => setDays(w)}
-              className={`px-2 py-0.5 text-[10px] rounded transition-colors ${
-                days === w
-                  ? 'bg-bg-tertiary text-text-primary'
-                  : 'text-text-muted hover:text-text-secondary'
-              }`}
-              style={{ fontFamily: 'JetBrains Mono, monospace' }}
-            >
-              {/* eslint-disable-next-line i18next/no-literal-string */}
-              {w}d
-            </button>
-          ))}
-        </div>
-        )}
-      </div>
+      <ContentGraphFooter meta={meta} days={days} onDaysChange={setDays} />
     </div>
   );
 }

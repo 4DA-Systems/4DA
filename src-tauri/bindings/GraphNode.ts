@@ -17,7 +17,8 @@ member_ids: Array<bigint>,
  */
 category: string, 
 /**
- * Any member is linked to one of the user's declared dependencies
- * (dep_linker) — rendered as the gold "touches your stack" ring.
+ * Any member carries the scoring pipeline's strong-grounding verdict
+ * (the same predicate as Signal's "Affects You" pool) — rendered as the
+ * gold "touches your stack" ring.
  */
 affects_you: boolean, x: number, y: number, };
