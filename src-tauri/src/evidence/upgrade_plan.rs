@@ -113,7 +113,17 @@ pub fn build_upgrade_plan(db: &Database) -> BuiltPlan {
         groups.into_iter().partition(|g| g.informational);
     let mut candidates: Vec<(EvidenceItem, Vec<UpgradeStep>)> = steps
         .into_iter()
-        .map(|g| g.into_evidence_item(now))
+        .map(|mut g| {
+            // Which installed parent brings each transitive copy in (read
+            // from the user's lockfiles only; empty for a direct-only row).
+            g.parents = crate::osv::parent_hint::load_parent_links(
+                db,
+                &g.ecosystem_norm,
+                &g.package,
+                &g.lines,
+            );
+            g.into_evidence_item(now)
+        })
         .collect();
     if !informational.is_empty() {
         candidates.push(informational_item(informational, now));
@@ -179,6 +189,9 @@ struct PackageGroup<'a> {
     /// ids distinct: the alphabetically-first advisory id of this row's set.
     /// `None` — the overwhelmingly common case — leaves the id untouched.
     cohort_key: Option<String>,
+    /// The installed parent of each transitive copy (`osv::parent_hint`).
+    /// Filled after ranking; it never changes the rank.
+    parents: Vec<crate::osv::parent_hint::ParentLink>,
 }
 
 fn aggregate_by_package(matches: &[MatchedAdvisory]) -> Vec<PackageGroup<'_>> {
@@ -279,6 +292,7 @@ fn package_group<'a>(
         has_fix,
         informational,
         cohort_key,
+        parents: Vec::new(),
     }
 }
 
@@ -292,12 +306,18 @@ impl PackageGroup<'_> {
         Urgency,
         bool,
         bool,
+        bool,
         std::cmp::Reverse<usize>,
         std::cmp::Reverse<i64>,
         String,
     ) {
         (
             self.urgency,
+            // At equal (scope-adjusted) urgency a runtime exposure outranks a
+            // dev-only one. Live 2026-10-02 both HIGH rows tied here and the
+            // dev-only vitest (a Critical discounted for being dev-only) led
+            // the runtime rmcp session leak on fixable-now alone.
+            self.all_dev,
             !self.any_confirmed, // confirmed (true) sorts before unconfirmed
             !self.fixable_now,   // fixable-now sorts before waiting-on-upstream
             std::cmp::Reverse(self.projects.len()), // widest blast radius first
@@ -346,9 +366,17 @@ impl PackageGroup<'_> {
         // No fixed version anywhere in the group: the step must not say
         // "Upgrade" — there is nothing to upgrade to. It stays an Alert at its
         // CVSS urgency; the reader's move is to pin, patch or replace.
+        // A transitive-only step names the one parent that is the move.
+        let via = if self.fixable_now {
+            String::new()
+        } else {
+            super::upgrade_parent::single_parent(&self.parents)
+                .map(|p| format!(" via {p}"))
+                .unwrap_or_default()
+        };
         let title = clamp_title(if self.has_fix {
             format!(
-                "Upgrade {pkg}{target} — clears {n} {adv} across {m} {proj}",
+                "Upgrade {pkg}{target}{via} — clears {n} {adv} across {m} {proj}",
                 pkg = self.package,
                 target = target_note,
                 n = n,
@@ -369,10 +397,11 @@ impl PackageGroup<'_> {
 
         let scope_note = if !self.has_fix {
             "No fix has been published — pin, patch, or replace; there is nothing to upgrade to yet"
+                .to_string()
         } else if self.fixable_now {
-            "Fixable now via a direct dependency bump"
+            "Fixable now via a direct dependency bump".to_string()
         } else {
-            "Fixed only upstream — awaits a parent-package update or lockfile refresh"
+            super::upgrade_parent::upstream_note(&self.package, &self.parents, m > 1)
         };
         let dev_note = if self.all_dev {
             " All affected instances are dev-only."
@@ -442,6 +471,10 @@ impl PackageGroup<'_> {
             ),
         });
         evidence.extend(line_citations(&self.lines));
+        evidence.extend(super::upgrade_parent::path_citations(
+            &self.package,
+            &self.parents,
+        ));
 
         // Confidence: heuristic ranking; a shade higher when the fix is a direct
         // bump the user controls, a shade lower when there is no fix to point

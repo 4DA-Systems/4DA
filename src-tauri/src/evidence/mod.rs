@@ -29,6 +29,7 @@ mod liveness;
 mod materializer;
 mod plan_snapshot;
 mod types;
+mod upgrade_parent;
 mod upgrade_plan;
 mod upgrade_steps;
 mod validate;
