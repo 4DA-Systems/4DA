@@ -119,7 +119,7 @@ function repositoryUrl(repo: unknown): string | null {
 }
 
 async function loadNpmIndex(net: UpgradeNet, name: string): Promise<RegistryIndex | null> {
-  const url = `https://registry.npmjs.org/${name.replace("/", "%2F")}`;
+  const url = `https://registry.npmjs.org/${name.replaceAll("/", "%2F")}`;
   const res = await net.fetch(url, { headers: { Accept: "application/json" } }, INDEX_TIMEOUT_MS);
   if (res.status === 404) return null;
   if (!res.ok) throw new Error(`npm registry HTTP ${res.status} for ${name}`);

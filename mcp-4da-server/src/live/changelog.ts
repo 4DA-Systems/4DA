@@ -180,6 +180,7 @@ export function parseChangelog(text: string): ChangelogSection[] {
   const lines = text.replace(/\r\n?/g, "\n").split("\n");
   const state: ParseState = { sections: [], current: null, sectionLevel: 0, headingKind: null, parentKind: null, pending: null };
   let inFence = false;
+  let inComment = false;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -188,7 +189,19 @@ export function parseChangelog(text: string): ChangelogSection[] {
       inFence = !inFence;
       continue;
     }
-    if (inFence || LINK_DEF.test(line) || /^\s*<!--.*-->\s*$/.test(line)) continue;
+    if (inFence) continue;
+    // HTML comments are skipped whole, including ones that span lines
+    // (release tooling leaves `<!--\n  template notes\n-->` blocks in changelogs).
+    const trimmed = line.trim();
+    if (inComment) {
+      if (trimmed.includes("-->")) inComment = false;
+      continue;
+    }
+    if (trimmed.startsWith("<!--")) {
+      if (!trimmed.slice(4).includes("-->")) inComment = true;
+      continue;
+    }
+    if (LINK_DEF.test(line)) continue;
 
     const atx = ATX.exec(line);
     if (atx) {

@@ -442,6 +442,9 @@ describe("analyzeUpgradeImpact", () => {
     ]);
     expect(r.changelog.covers_range).toBe(true);
     expect(r.changelog.sections[0].entries[0]).toMatchObject({ touches_your_code: true, matched_symbols: ["TextEmbedding", "try_new"] });
-    expect(seen.filter((s) => s.url.includes("crates.io")).every((s) => s.ua?.includes("4da-mcp-server"))).toBe(true);
+    const cratesHost = (url: string) => /(^|\.)crates\.io$/.test(new URL(url).hostname);
+    const cratesCalls = seen.filter((s) => cratesHost(s.url));
+    expect(cratesCalls.length).toBeGreaterThan(0);
+    expect(cratesCalls.every((s) => s.ua?.includes("4da-mcp-server"))).toBe(true);
   });
 });

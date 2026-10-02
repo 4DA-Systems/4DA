@@ -59,6 +59,21 @@ describe("parseVersionHeading", () => {
 });
 
 describe("parseChangelog", () => {
+  it("skips HTML comments, including ones spanning lines", () => {
+    const sections = parseChangelog(
+      [
+        "## 2.0.0",
+        "<!--",
+        "- **breaking:** template placeholder, not a real entry",
+        "-->",
+        "<!-- one-line note -->",
+        "- Real change",
+      ].join("\n"),
+    );
+    expect(sections).toHaveLength(1);
+    expect(sections[0].entries.map((e) => e.text)).toEqual(["Real change"]);
+  });
+
   it("parses keep-a-changelog with typed sub-sections", () => {
     const sections = parseChangelog(
       [
