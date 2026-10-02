@@ -273,6 +273,34 @@ describe("parseChangelog", () => {
     ]);
   });
 
+  it("treats a plain 'Label:' line as a sub-heading, not an entry (highlight.js 11, ts-loader 9)", () => {
+    const sections = parseChangelog(
+      ["## 9.0.0", "", "Breaking changes:", "", "- minimum webpack version is now 5", "", "Security:", "", "- harden the parser"].join("\n"),
+    );
+    expect(sections[0].entries.map((e) => [e.kind, e.text, e.under])).toEqual([
+      ["breaking", "minimum webpack version is now 5", "Breaking changes"],
+      ["security", "harden the parser", "Security"],
+    ]);
+  });
+
+  it("reads corpus-4 API wording and keeps prose about breaking changes out", () => {
+    const breaking = [
+      "Breaking - Merge customization has been moved behind `mergeWithCustomize`.",
+      "`observableSet.toJS()` has been dropped. Use `new Set(observableSet)` instead.",
+      "`isArrayLike` is no longer exposed as utility.",
+      "`RawTable::remove` now also returns an `InsertSlot`. (#429)",
+      "`AddressError` is now marked as `#[non_exhaustive]` ([#839])",
+      "Vuex 4 removes its global typings for `this.$store` within Vue Component",
+    ];
+    const notBreaking = [
+      "There are a few breaking changes described in a later section, so please check them out.",
+      "That is why we only bump the minor version despite mentioning breaking changes",
+      "We determined this change is not a breaking change",
+    ];
+    for (const text of breaking) expect(classifyText(text), text).toBe("breaking");
+    for (const text of notBreaking) expect(classifyText(text), text).not.toBe("breaking");
+  });
+
   it("treats a bold line as a sub-heading", () => {
     const sections = parseChangelog("## 2.0.0\n**Breaking Changes**\n- config moved\n");
     expect(sections[0].entries).toEqual([{ kind: "breaking", text: "config moved", under: "Breaking Changes" }]);

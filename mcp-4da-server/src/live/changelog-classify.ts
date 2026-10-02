@@ -38,15 +38,18 @@ export function sanitizeEntry(text: string, cap: number = MAX_ENTRY_CHARS): stri
  * "We determined this change is not a breaking change" was counted as
  * breaking on the first live run.
  */
-// `BREAKING` but not the file name `BREAKING-CHANGES.md` (ratatui links it from routine entries).
-const EXPLICIT_BREAKING_MARKER = /\bBREAKING\b(?![-_.]\w)|⚠|^\s*\*{0,2}\w+(?:\([^)]*\))?!:|^\s*\*{0,2}[Bb]reaking\*{0,2}:/;
+// `BREAKING` but not the file name `BREAKING-CHANGES.md` (ratatui links it from routine entries);
+// a leading "Breaking -" / "[Breaking]" label too (webpack-merge 5, handlebars-rust).
+// Case-sensitive on purpose: lowercase "breaking" is prose, handled (with negation) below.
+const EXPLICIT_BREAKING_MARKER =
+  /\bBREAKING\b(?![-_.]\w)|⚠|^\s*\*{0,2}\w+(?:\([^)]*\))?!:|^\s*\*{0,2}[Bb]reaking\*{0,2}\s*(?::|[-–—]\s)|^\s*\[(?:[Bb]reaking|[Rr]emoved)\]/;
 /**
  * Text ABOUT breaking changes rather than one: a pointer to the list ("⚠️ List
  * of breaking changes can be found here"), a CI label check, a docs fix
  * (ratatui 0.24-0.26: 8 of 16 marker-based flags on 2026-10-03 were these).
  */
 const META_BREAKING =
-  /\b(?:list|lists|see|found|documented|described|summary|guide|doc|docs|documentation|label|labels|check)\b[^.]{0,40}\bbreaking[- ]changes?\b|\bbreaking[- ]changes?\b[^.]{0,30}\b(?:can be found|are (?:listed|documented|described)|label|labels|doc|docs|documentation)\b|BREAKING[-_]CHANGES/i;
+  /\b(?:list|lists|see|found|documented|described|summary|guide|doc|docs|documentation|label|labels|check|technically|despite|mentioning)\b[^.]{0,40}\bbreaking[- ]changes?\b|\bbreaking[- ]changes?\b[^.]{0,30}\b(?:can be found|are (?:listed|documented|described)|described|label|labels|doc|docs|documentation)\b|BREAKING[-_]CHANGES/i;
 /**
  * Intent, not a change: "We reserve the right to drop support for ...",
  * "will be removed in a future release".
@@ -87,6 +90,8 @@ const SECURITY = /\bsecurity\b|\bCVE-\d{4}-\d+|\bGHSA-[\w-]+|\bRUSTSEC-\d{4}-\d+
 const REMOVAL_HEURISTIC = new RegExp(
   [
     "\\bremoved\\b",
+    "\\bremoves\\b",
+    "\\b(?:has|have|was|were) been dropped\\b",
     "\\brenamed?\\b",
     // The removed thing is the object of "remove": a code name within a few words
     // ("Remove first parameter (`rng`) of ..."), not a backtick somewhere later
@@ -102,8 +107,11 @@ const BREAKING_HEURISTIC = new RegExp(
   [
     // Not "no longer require(s)": that is a relaxation ("`Data::get_ref()` no longer
     // requires `T: Sized`", four actix-web 4 entries the panel called non-breaking).
-    "\\bno longer (?:accepts?|returns?|supports?|exports?|exported|re-?exports?|available|provides?|allow(?:s|ed)?|implements?|public|includes?|ships?|compiles?|works? with)\\b",
+    "\\bno longer (?:accepts?|returns?|supports?|exports?|exported|exposed|re-?exports?|available|provides?|allow(?:s|ed)?|implements?|public|includes?|ships?|compiles?|works? with)\\b",
     "\\bcan no longer\\b",
+    "\\bnow (?:also )?returns?\\b",
+    // Rust: marking a public type non-exhaustive breaks exhaustive matches and struct literals.
+    "\\b(?:now )?marked (?:as )?`?#\\[non_exhaustive\\]",
     "\\bdrop(?:ped|s)? (?:support|compatibility)\\b",
     "\\bdropped\\b.*\\b(?:support|compatibility)\\b",
     // A raise names a version: "Bump MSRV to 1.63"; "Update MSRV in cron job" (config 0.14, CI) does not.

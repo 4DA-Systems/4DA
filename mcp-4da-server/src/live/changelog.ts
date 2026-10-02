@@ -122,6 +122,8 @@ const FENCE = /^\s*(```|~~~)/;
 const RULE = /^\s*(?:[-=*_]\s*){3,}$/;
 /** A whole-line bold label ("**Breaking Changes:**") acts as a sub-heading. */
 const BOLD_LABEL = /^\s*\*\*([^*]+)\*\*:?\s*$/;
+/** A short unbulleted line ending in a colon: a label for what follows ("Security:", "Breaking changes:"). */
+const PLAIN_LABEL = /^\s{0,3}([A-Za-z⚠][\w /&,'()⚠️-]{1,58}?)\s*:\s*$/;
 /** A line that opens or closes layout markup rather than describing a change. */
 const HTML_LAYOUT = /^<\/?(?:details|summary|div|p|br|hr|img|picture|source|table|tr|td|th|thead|tbody|center|sup|sub)\b/i;
 /** A bullet that is only a label: "remove:", "**Breaking**:", "deps:". */
@@ -316,7 +318,11 @@ export function parseChangelog(text: string): ChangelogSection[] {
         continue;
       }
     }
-    const bold = BOLD_LABEL.exec(line);
+    // A whole-line label, bold or plain ("**Breaking Changes**", "BREAKING CHANGES:",
+    // "Deprecations / Removals / API Changes:") is a sub-heading, not an entry.
+    // Plain ones were entries until 2026-10-03: 6 of 17 false "breaking" flags
+    // on the fresh corpus-4 panel (highlight.js 11, handlebars 4.6, ts-loader 9).
+    const bold = BOLD_LABEL.exec(line) ?? PLAIN_LABEL.exec(line);
     if (bold && state.current) {
       flush(state);
       state.headingKind = classifyHeading(bold[1]);

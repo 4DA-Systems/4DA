@@ -81,41 +81,47 @@ function getDefaultDbPath(): string {
     return projectRootPath;
   }
 
-  // 4. Platform-specific Tauri app data dirs (production)
-  const platform = process.platform;
-  let appDataPath: string;
-  if (platform === "win32") {
-    appDataPath = path.join(
-      process.env.APPDATA || path.join(os.homedir(), "AppData", "Roaming"),
-      "com.4da.app",
-      "data",
-      "4da.db"
-    );
-  } else if (platform === "darwin") {
-    appDataPath = path.join(
-      os.homedir(),
-      "Library",
-      "Application Support",
-      "com.4da.app",
-      "data",
-      "4da.db"
-    );
-  } else {
-    appDataPath = path.join(
-      os.homedir(),
-      ".local",
-      "share",
-      "com.4da.app",
-      "data",
-      "4da.db"
-    );
-  }
-  if (fs.existsSync(appDataPath)) {
-    return appDataPath;
+  // 4. The desktop app's own database, where the deployed app keeps it.
+  for (const appDataPath of desktopAppDbPaths()) {
+    if (fs.existsSync(appDataPath)) return appDataPath;
   }
 
   // 5. No desktop database: the standalone database, in the user's data dir.
   return standaloneDbPath();
+}
+
+/**
+ * Where the deployed desktop app keeps its database, mirroring
+ * `src-tauri/src/state.rs::get_db_path` / `get_platform_data_dir`:
+ * FOURDA_DATA_DIR overrides; Windows `%APPDATA%\com.4da.app\data`, macOS
+ * `~/Library/Application Support/com.4da.app/data`, Linux
+ * `$XDG_DATA_HOME/4da/data` (default `~/.local/share/4da/data`).
+ *
+ * Measured 2026-10-03 (pre-publish verification): this looked in
+ * `~/.local/share/com.4da.app/data` on Linux, a directory the app never
+ * writes, so a Linux desktop user's server never found the app's database and
+ * never offered the desktop tools. The old path is still checked last, in case
+ * a database was ever placed there by hand.
+ */
+export function desktopAppDbPaths(
+  platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv = process.env,
+  home: string = os.homedir(),
+): string[] {
+  const join = platform === "win32" ? path.win32.join : path.posix.join;
+  const paths: string[] = [];
+  const dataDir = env.FOURDA_DATA_DIR?.trim();
+  if (dataDir) paths.push(join(dataDir, "4da.db"));
+  if (platform === "win32") {
+    paths.push(join(env.APPDATA || join(home, "AppData", "Roaming"), "com.4da.app", "data", "4da.db"));
+  } else if (platform === "darwin") {
+    paths.push(join(home, "Library", "Application Support", "com.4da.app", "data", "4da.db"));
+  } else {
+    const xdg = env.XDG_DATA_HOME?.trim() || join(home, ".local", "share");
+    paths.push(join(xdg, "4da", "data", "4da.db"));
+    paths.push(join(home, ".local", "share", "com.4da.app", "data", "4da.db"));
+  }
+  return paths;
 }
 
 /**
