@@ -384,6 +384,7 @@ impl Source for TwitterSource {
             min_title_words: 2,
             require_user_language: true,
             require_dev_relevance: false,
+            max_item_age_days: super::freshness::news_max_item_age_days("twitter"),
         }
     }
 

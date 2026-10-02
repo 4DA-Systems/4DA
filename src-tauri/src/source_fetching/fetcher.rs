@@ -320,6 +320,12 @@ pub(crate) async fn fetch_all_sources(
                     }
                 }
 
+                // News freshness gate AFTER the health probe (which must see the
+                // feed as served), BEFORE anything is stored: this deep-scan path
+                // never ran the processor's quality gate, so it was the one route
+                // by which an archive item could still be ingested.
+                let items = crate::sources::drop_items_past_max_age(items, &source.manifest());
+
                 for (idx, item) in items.into_iter().take(effective_cap).enumerate() {
                     // Generate a numeric ID from source_id hash
                     let id = {

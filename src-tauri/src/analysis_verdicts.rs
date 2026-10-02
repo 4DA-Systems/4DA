@@ -44,6 +44,10 @@ pub(crate) struct VerdictReconciliation {
     /// v32: later copies of a story the feed already held, demoted
     /// `duplicate_curated` (both from the standing feed and among the risen).
     pub twin_demoted: usize,
+    /// Curated news rows that were already older than their source's max age
+    /// when ingested (archive pages, feed back catalogues) — reason
+    /// `stale_news` (2026-10-02 audit).
+    pub stale_news_demoted: usize,
 }
 
 impl VerdictReconciliation {
@@ -145,6 +149,21 @@ pub(crate) async fn reconcile_stale_verdicts_cycle(budget: usize) -> Result<Verd
         );
     }
 
+    // News that was already stale when it arrived (Lobste.rs archive pages,
+    // RSS back catalogues) leaves the feed — a fact about the row, not a
+    // score, so it runs before every promotion lane below and the persist
+    // boundary re-applies it to anything they promote.
+    let stale_news = db
+        .demote_stale_news_verdicts()
+        .map_err(|e| format!("Failed to demote stale-news verdicts: {e}"))?;
+    if stale_news > 0 {
+        info!(
+            target: "4da::verdicts",
+            demoted = stale_news,
+            "Stale-news sweep: curated items older than their source's max age at ingest un-curated"
+        );
+    }
+
     // v32: the lane in the OTHER direction. Every pass in this file could only
     // remove; the drain persists scores only; the cycle re-verdicts only what
     // it selects. So a row the current brain scores above the line with no
@@ -231,6 +250,7 @@ pub(crate) async fn reconcile_stale_verdicts_cycle(budget: usize) -> Result<Verd
     }
     let base = VerdictReconciliation {
         sunk_demoted: sunk,
+        stale_news_demoted: stale_news,
         promoted: risen.promoted,
         deferred_promotions: risen.deferred,
         twin_demoted: twins + risen.twins,

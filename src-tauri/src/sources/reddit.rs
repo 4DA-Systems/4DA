@@ -46,6 +46,9 @@ struct RedditPost {
     subreddit: String,
     num_comments: i32,
     is_self: bool,
+    /// Creation time, Unix seconds (float in Reddit's JSON).
+    #[serde(default)]
+    created_utc: Option<f64>,
 }
 
 const REDDIT_USER_AGENT: &str = "4DA:com.4da.app:1.0 (by /u/4da-desktop)";
@@ -98,6 +101,7 @@ async fn fetch_subreddit_json(
                     "subreddit": post.subreddit,
                     "comments": post.num_comments,
                     "is_self": post.is_self,
+                    "published_at": post.created_utc,
                     "via": "json",
                 }))
         })
@@ -149,6 +153,8 @@ fn parse_reddit_atom(xml: &str, subreddit: &str, limit: usize) -> Vec<SourceItem
             let link = extract_link_href(entry)
                 .unwrap_or_else(|| format!("https://www.reddit.com/r/{subreddit}/"));
             let content = super::extract_tag(entry, "content").unwrap_or_default();
+            let published = super::extract_tag(entry, "published")
+                .or_else(|| super::extract_tag(entry, "updated"));
             Some(
                 SourceItem::new("reddit", &id, &title)
                     .with_url(Some(link))
@@ -158,6 +164,7 @@ fn parse_reddit_atom(xml: &str, subreddit: &str, limit: usize) -> Vec<SourceItem
                         // RSS gives no score; mark self so scrape_content keeps the feed content
                         // rather than trying to scrape the reddit comments page.
                         "is_self": true,
+                        "published_at": published,
                         "via": "rss",
                     })),
             )
@@ -422,6 +429,7 @@ impl Source for RedditSource {
             min_title_words: 3,
             require_user_language: false,
             require_dev_relevance: false,
+            max_item_age_days: super::freshness::news_max_item_age_days("reddit"),
         }
     }
 
@@ -608,6 +616,27 @@ mod tests {
             Some("https://www.reddit.com/r/rust/comments/abc123/title/")
         );
         assert!(items[1].content.is_empty(), "missing content tolerated");
+    }
+
+    #[test]
+    fn both_access_paths_carry_the_publication_date() {
+        // published_at was NULL for every reddit row (849 live, 2026-10-02).
+        let xml = r#"<feed><entry><id>t3_abc</id><title>A Rust post</title>
+            <link href="https://www.reddit.com/r/rust/comments/abc/x/" />
+            <updated>2026-10-01T15:10:00+00:00</updated>
+            <published>2026-10-01T15:00:06+00:00</published></entry></feed>"#;
+        let items = parse_reddit_atom(xml, "rust", 30);
+        assert_eq!(
+            crate::source_fetching::extract_published_at(&items[0]).as_deref(),
+            Some("2026-10-01 15:00:06")
+        );
+        let post: RedditPost = serde_json::from_str(
+            r#"{"id": "abc", "title": "t", "permalink": "/r/rust/abc", "score": 1,
+                "author": "a", "subreddit": "rust", "num_comments": 0, "is_self": true,
+                "created_utc": 1790000000.0}"#,
+        )
+        .unwrap();
+        assert_eq!(post.created_utc, Some(1_790_000_000.0));
     }
 
     #[test]

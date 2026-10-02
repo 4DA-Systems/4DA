@@ -329,6 +329,67 @@ pub(crate) fn parse_timestamp(val: &serde_json::Value) -> Option<DateTime<Utc>> 
 }
 
 // ============================================================================
+// News freshness bound (max item age)
+// ============================================================================
+
+/// Lobste.rs: matches the 14-day fetch-time story gate in `lobsters.rs`
+/// (#782), so the held-row verdict and the fetch gate agree on what "stale"
+/// means for that source.
+const LOBSTERS_MAX_AGE_DAYS: u32 = 14;
+
+/// Every other news / discussion / social source. Thirty days is the window
+/// in which an item can still be NEWS to someone who reads the feed daily
+/// and is the bound the RSS adapter's back-catalogue skip already uses
+/// (`rss_selection::NEW_ENTRY_MAX_AGE_DAYS`). It is deliberately generous:
+/// these sources surface items within hours of publication (HN/Reddit/Lemmy
+/// "hot", Mastodon/Bluesky timelines, YouTube channel feeds list the newest
+/// ~15 uploads, X recent search is 7 days), so anything past a month is an
+/// archive leak, not a slow news day. A blog that posts monthly still has
+/// every new post ingested within the hour it appears.
+const NEWS_MAX_AGE_DAYS: u32 = 30;
+
+/// The max publication age, in days, for items of `source_type`, or `None`
+/// when the source has no age bound. THE table: every news manifest's
+/// `max_item_age_days` reads it, and the verdict persist boundary
+/// (`db::verdicts`) reads it by source type, where no `Source` is in hand.
+///
+/// Exempt by design:
+/// - registries (`crates_io`, `npm_registry`, `pypi`, `go_modules`) and
+///   advisories (`osv`, `cve`): an old release or a long-published advisory
+///   can still be the first the user hears of it, and both have their own
+///   version/staleness machinery (superseded releases, version verdicts);
+/// - research (`arxiv`, `papers_with_code`, `huggingface`): papers and
+///   models have a long shelf life and HF "trending" is by recent activity;
+/// - `github` (trending repos carry the repo's creation date, not the
+///   moment it trended) and `stackoverflow` (sorted by ACTIVITY: an old
+///   question with a fresh answer is current).
+pub(crate) fn news_max_item_age_days(source_type: &str) -> Option<u32> {
+    match source_type {
+        "lobsters" => Some(LOBSTERS_MAX_AGE_DAYS),
+        "hackernews" | "reddit" | "lemmy" | "mastodon" | "bluesky" | "devto" | "rss"
+        | "youtube" | "twitter" | "producthunt" => Some(NEWS_MAX_AGE_DAYS),
+        _ => None,
+    }
+}
+
+/// The item's publication date from adapter metadata (same key vocabulary
+/// and parser as `source_fetching::extract_published_at`).
+pub(crate) fn item_published_at(item: &SourceItem) -> Option<DateTime<Utc>> {
+    let meta = item.metadata.as_ref()?;
+    PUBLICATION_DATE_KEYS
+        .iter()
+        .find_map(|key| meta.get(*key).and_then(parse_timestamp))
+}
+
+/// Whether `item` was published more than `max_days` before `now`.
+/// Undated items are never "too old" — the gate drops only provably old
+/// items. A future date (clock skew) is not old either.
+pub(crate) fn exceeds_max_age(item: &SourceItem, max_days: u32, now: DateTime<Utc>) -> bool {
+    item_published_at(item)
+        .is_some_and(|published| now - published > chrono::Duration::days(i64::from(max_days)))
+}
+
+// ============================================================================
 // Tests
 // ============================================================================
 
@@ -650,5 +711,80 @@ mod tests {
             SourceHealthState::Zombie("frozen".into()),
         );
         assert!(matches!(result, SourceHealthState::Zombie(_)));
+    }
+
+    // ── News max-age gate ───────────────────────────────────────────────
+
+    #[test]
+    fn exceeds_max_age_boundary_is_strict() {
+        // Whole seconds: RFC 2822 carries no sub-second part, so a fractional
+        // `now` would push the exact-boundary item past the bound.
+        let now = DateTime::from_timestamp(Utc::now().timestamp(), 0).expect("valid now");
+        let at = |age: chrono::Duration| {
+            SourceItem::new("rss", "x", "t")
+                .with_metadata(serde_json::json!({ "pub_date": (now - age).to_rfc2822() }))
+        };
+        let day = chrono::Duration::days(1);
+        // Exactly the bound is still news; one minute past it is not.
+        assert!(!exceeds_max_age(&at(day * 30), 30, now));
+        assert!(exceeds_max_age(
+            &at(day * 30 + chrono::Duration::minutes(1)),
+            30,
+            now
+        ));
+        assert!(!exceeds_max_age(&at(chrono::Duration::hours(2)), 30, now));
+        // A future date (clock skew) is not old.
+        assert!(!exceeds_max_age(&at(-day), 30, now));
+    }
+
+    #[test]
+    fn undated_or_unparseable_items_are_never_too_old() {
+        let now = Utc::now();
+        assert!(!exceeds_max_age(
+            &make_item("rss", "a", "no metadata"),
+            1,
+            now
+        ));
+        let garbage = SourceItem::new("rss", "b", "t")
+            .with_metadata(serde_json::json!({ "pub_date": "sometime last spring" }));
+        assert!(!exceeds_max_age(&garbage, 1, now));
+        let null = SourceItem::new("hackernews", "c", "t")
+            .with_metadata(serde_json::json!({ "published_at": null, "score": 3 }));
+        assert!(!exceeds_max_age(&null, 1, now));
+    }
+
+    #[test]
+    fn age_bound_covers_news_and_exempts_registries_advisories_research() {
+        for news in [
+            "hackernews",
+            "reddit",
+            "lemmy",
+            "mastodon",
+            "bluesky",
+            "devto",
+            "rss",
+            "youtube",
+            "twitter",
+            "producthunt",
+        ] {
+            assert_eq!(news_max_item_age_days(news), Some(30), "{news}");
+        }
+        assert_eq!(news_max_item_age_days("lobsters"), Some(14));
+        for exempt in [
+            "crates_io",
+            "npm_registry",
+            "pypi",
+            "go_modules",
+            "osv",
+            "cve",
+            "arxiv",
+            "papers_with_code",
+            "huggingface",
+            "github",
+            "stackoverflow",
+            "unknown_source",
+        ] {
+            assert_eq!(news_max_item_age_days(exempt), None, "{exempt}");
+        }
     }
 }

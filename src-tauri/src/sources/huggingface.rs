@@ -186,6 +186,7 @@ impl Source for HuggingFaceSource {
             min_title_words: 2, // Model IDs like "meta-llama/Llama-3" are OK (2 parts after split)
             require_user_language: false,
             require_dev_relevance: false, // All HF models are dev-relevant by nature
+            max_item_age_days: None,
         }
     }
 

@@ -324,6 +324,27 @@ fn parses_mastodon_rss() {
 }
 
 #[test]
+fn both_access_paths_carry_the_publication_date() {
+    // published_at was NULL for every mastodon row (28,724 live, 2026-10-02):
+    // the API's `created_at` and the feed's `<pubDate>` were both dropped.
+    let json = r#"[{"uri": "https://h.io/users/x/statuses/1", "content": "<p>A neat Rust crate</p>",
+                    "created_at": "2026-10-01T15:00:06.000Z"}]"#;
+    let statuses: Vec<MastodonStatus> = serde_json::from_str(json).unwrap();
+    let items: Vec<_> = statuses.into_iter().filter_map(status_to_item).collect();
+    assert_eq!(
+        crate::source_fetching::extract_published_at(&items[0]).as_deref(),
+        Some("2026-10-01 15:00:06")
+    );
+    let xml = r#"<rss><channel><item><title>A tagged post</title><link>https://h.io/@x/1</link>
+        <pubDate>Thu, 1 Oct 2026 15:03:37 +0000</pubDate></item></channel></rss>"#;
+    let items = parse_mastodon_rss(xml, "rust", 40);
+    assert_eq!(
+        crate::source_fetching::extract_published_at(&items[0]).as_deref(),
+        Some("2026-10-01 15:03:37")
+    );
+}
+
+#[test]
 fn mastodon_source_defaults() {
     let s = MastodonSource::new();
     assert_eq!(s.source_type(), "mastodon");

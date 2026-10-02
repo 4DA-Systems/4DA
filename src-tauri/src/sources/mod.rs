@@ -523,6 +523,16 @@ pub struct SourceManifest {
     pub require_user_language: bool,
     /// Whether items need developer-relevance keywords to pass
     pub require_dev_relevance: bool,
+    /// News-feed freshness bound: an item whose PUBLICATION date is more than
+    /// this many days old is dropped at ingest, and a held row that was
+    /// already this old when first ingested loses its feed verdict
+    /// (`stale_news`). `None` = no age bound (registries, advisories,
+    /// research — an old release or paper can still be news to the user).
+    /// Items without a parseable publication date always pass: the gate
+    /// drops only what is PROVABLY old. Values live in one table,
+    /// [`freshness::news_max_item_age_days`], so the ingest gate and the
+    /// verdict boundary (which has no `Source` in hand) cannot drift.
+    pub max_item_age_days: Option<u32>,
 }
 
 impl Default for SourceManifest {
@@ -536,8 +546,57 @@ impl Default for SourceManifest {
             min_title_words: 3,
             require_user_language: false,
             require_dev_relevance: false,
+            max_item_age_days: None,
         }
     }
+}
+
+/// Drop items whose publication date is older than the manifest's
+/// `max_item_age_days` (news freshness gate, 2026-10-02 adversarial audit).
+///
+/// Measured live that day: 40 of the 193 dated items in the Signal feed were
+/// more than 90 days old and 29 more than a year — Lobste.rs archive pages
+/// poisoning the plain feed URL, and RSS feeds delivering their back
+/// catalogue on first ingest ("Why async Rust?", 2023; "Announcing axum
+/// 0.8.0", 2025-01). Nothing at ingest ever looked at an item's age:
+/// `freshness::validate_freshness` only reports the NEWEST item, on the
+/// legacy path, and never drops.
+///
+/// This is an ingest rule, not a score change: scoring's staleness discount
+/// deliberately discounts rather than kills, and still applies to whatever
+/// passes here. Undated items pass. Logs a per-source drop count.
+pub fn drop_items_past_max_age(
+    items: Vec<SourceItem>,
+    manifest: &SourceManifest,
+) -> Vec<SourceItem> {
+    let Some(max_days) = manifest.max_item_age_days else {
+        return items;
+    };
+    let now = chrono::Utc::now();
+    let before = items.len();
+    let mut source_type = None;
+    let kept: Vec<SourceItem> = items
+        .into_iter()
+        .filter(|item| {
+            let stale = freshness::exceeds_max_age(item, max_days, now);
+            if stale && source_type.is_none() {
+                source_type = Some(item.source_type.clone());
+            }
+            !stale
+        })
+        .collect();
+    let dropped = before - kept.len();
+    if dropped > 0 {
+        info!(
+            target: "4da::freshness",
+            source = source_type.as_deref().unwrap_or(manifest.label),
+            dropped,
+            kept = kept.len(),
+            max_age_days = max_days,
+            "News freshness gate: dropped items published before the source's max age"
+        );
+    }
+    kept
 }
 
 // ============================================================================
@@ -553,7 +612,8 @@ pub fn apply_source_quality_gate(
 ) -> Vec<SourceItem> {
     let user_lang = crate::i18n::get_user_language();
 
-    items
+    // Gate 0: news freshness (see `drop_items_past_max_age`).
+    drop_items_past_max_age(items, manifest)
         .into_iter()
         .filter(|item| {
             // Gate 1: Minimum title word count (filters raw IDs, hashes, codes)
@@ -837,6 +897,61 @@ mod tests {
             item_with_content.embedding_text(),
             "Test Title\n\nSome content here"
         );
+    }
+
+    fn dated(source: &str, id: &str, days_ago: i64) -> SourceItem {
+        let at = chrono::Utc::now() - chrono::Duration::days(days_ago);
+        SourceItem::new(source, id, "A perfectly ordinary dev title")
+            .with_metadata(serde_json::json!({ "published_at": at.to_rfc3339() }))
+    }
+
+    fn ids(items: &[SourceItem]) -> Vec<&str> {
+        items.iter().map(|i| i.source_id.as_str()).collect()
+    }
+
+    #[test]
+    fn quality_gate_drops_news_older_than_the_manifest_bound() {
+        let manifest = SourceManifest {
+            max_item_age_days: Some(30),
+            ..SourceManifest::default()
+        };
+        let items = vec![
+            dated("rss", "fresh", 1),
+            dated("rss", "edge", 29),
+            dated("rss", "archive", 31),
+            dated("rss", "ancient", 900),
+            SourceItem::new("rss", "undated", "A perfectly ordinary dev title"),
+        ];
+        let kept = apply_source_quality_gate(items, &manifest);
+        assert_eq!(ids(&kept), vec!["fresh", "edge", "undated"]);
+    }
+
+    #[test]
+    fn unbounded_manifest_keeps_old_items() {
+        // Registries / advisories declare no bound: a 2-year-old release passes.
+        let items = vec![dated("crates_io", "old-release", 700)];
+        let kept = drop_items_past_max_age(items, &SourceManifest::default());
+        assert_eq!(ids(&kept), vec!["old-release"]);
+    }
+
+    #[test]
+    fn every_manifest_reads_the_one_age_table() {
+        // The persist boundary reads `news_max_item_age_days` by source type;
+        // the ingest gate reads the manifest. They must never disagree.
+        for source in build_all_sources() {
+            let st = source.source_type();
+            assert_eq!(
+                source.manifest().max_item_age_days,
+                freshness::news_max_item_age_days(st),
+                "manifest of `{st}` drifted from the age table"
+            );
+            if matches!(
+                source.manifest().category,
+                SourceCategory::PackageRegistry | SourceCategory::Security
+            ) {
+                assert_eq!(source.manifest().max_item_age_days, None, "{st}");
+            }
+        }
     }
 
     #[test]
