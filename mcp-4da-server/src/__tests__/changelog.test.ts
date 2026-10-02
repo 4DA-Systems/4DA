@@ -121,7 +121,7 @@ describe("parseChangelog", () => {
     expect(sections.map((s) => s.version)).toEqual(["2.0.0", "1.1.0"]);
     expect(sections[0].date).toBe("2024-03-01");
     expect(sections[0].entries.map((e) => e.kind)).toEqual(["change", "breaking", "deprecation", "security"]);
-    expect(sections[1].entries).toEqual([{ kind: "change", text: "Crash on empty input that spanned two lines" }]);
+    expect(sections[1].entries).toEqual([{ kind: "change", text: "Crash on empty input that spanned two lines", under: "Fixed" }]);
   });
 
   it("parses conventional-changelog output with a BREAKING CHANGES block", () => {
@@ -171,7 +171,7 @@ describe("parseChangelog", () => {
     );
     // The label bullet is a heading for its children, not an entry (it inflated the count).
     expect(sections[0].entries).toEqual([
-      { kind: "breaking", text: "config loader rewritten" },
+      { kind: "breaking", text: "config loader rewritten", under: "Breaking" },
       { kind: "change", text: "docs tweak" },
     ]);
   });
@@ -256,9 +256,26 @@ describe("parseChangelog", () => {
     expect(sections[0].entries).toEqual([{ kind: "change", text: "shipped" }]);
   });
 
+  it("records the heading or parent each entry sits under (actix-web 4 'Removed', date-fns sub-points)", () => {
+    const sections = parseChangelog(
+      [
+        "## 4.0.0",
+        "### Removed",
+        "- `rt::{Arbiter, ArbiterHandle}` re-exports. [#2619]",
+        "- **BREAKING**: Functions that accept `Interval` arguments now do not throw.",
+        "  - `areIntervalsOverlapping` normalize intervals before comparison",
+      ].join("\n"),
+    );
+    expect(sections[0].entries.map((e) => e.under)).toEqual([
+      "Removed",
+      "Removed",
+      "BREAKING: Functions that accept Interval arguments now do not throw.",
+    ]);
+  });
+
   it("treats a bold line as a sub-heading", () => {
     const sections = parseChangelog("## 2.0.0\n**Breaking Changes**\n- config moved\n");
-    expect(sections[0].entries).toEqual([{ kind: "breaking", text: "config moved" }]);
+    expect(sections[0].entries).toEqual([{ kind: "breaking", text: "config moved", under: "Breaking Changes" }]);
   });
 });
 
@@ -336,6 +353,27 @@ describe("classification", () => {
     ];
     for (const text of breaking) expect(classifyText(text), text).toBe("breaking");
     for (const text of notBreaking) expect(classifyText(text), text).not.toBe("breaking");
+  });
+
+  it("separates deprecations, internal choices and security fixes from API changes (2026-10-03 held-out panel)", () => {
+    const breaking = [
+      "Drop compatibility for Node < 16",
+      "remove Socket#rooms object ([1507b41](https://github.com/socketio/socket.io/commit/1507b41))",
+      "MSRV is now 1.70 because of a dependency update",
+      "**MSRV**: Rust 1.64.0 or later is now required.",
+      "Remove `future.v7_startTransition` flag",
+    ];
+    const notBreaking = [
+      "Deprecated `Itertools::group_by` (renamed `chunk_by`) (#866, #879)",
+      "Move MSRV metadata to `Cargo.toml` (#672)",
+      "Use `Cell` instead of `RefCell` in `Format` and `FormatWith` (#608)",
+      "Remove a window when an extracted directory might be unexpectedly listable and/or `cd`able by non-owners",
+      "Removed unneeded `cfg-if` dependency ([#2553])",
+      "Removed Babel from the project’s release process.",
+    ];
+    for (const text of breaking) expect(classifyText(text), text).toBe("breaking");
+    for (const text of notBreaking) expect(classifyText(text), text).not.toBe("breaking");
+    expect(classifyText("Deprecated `Itertools::group_by` (renamed `chunk_by`) (#866, #879)")).toBe("deprecation");
   });
 });
 

@@ -21,6 +21,8 @@ export type ResponseFormat = "concise" | "detailed";
 export interface ReportEntry {
   kind: EntryKind;
   text: string;
+  /** The changelog heading or parent bullet the entry sits under ("Removed", "Breaking Changes"). */
+  under?: string;
   touches_your_code?: boolean;
   matched_symbols?: string[];
   /** String literals in your code that use the syntax this entry retires (route patterns and the like). */
@@ -83,7 +85,7 @@ export function shapeChangelog(
       return true;
     });
     const entries: ReportEntry[] = unique.map((e) => {
-      const entry: ReportEntry = { kind: e.kind, text: e.text };
+      const entry: ReportEntry = { kind: e.kind, text: e.text, ...(e.under ? { under: e.under } : {}) };
       if (e.kind === "breaking" || e.kind === "deprecation") {
         const matched = matchSymbols(e.text, symbols);
         if (matched.length > 0) {

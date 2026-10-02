@@ -24,6 +24,12 @@ import { classifyEntry, classifyHeading, sanitizeEntry, type EntryContext, type 
 export interface ChangelogEntry {
   kind: EntryKind;
   text: string;
+  /**
+   * The heading, label or parent bullet the entry sits under ("Removed", "remove",
+   * "BREAKING: Functions that accept ..."). Without it "`rt::{Arbiter}` re-exports."
+   * under actix-web's "Removed" reads as harmless, to an agent and to a rater alike.
+   */
+  under?: string;
 }
 
 export interface ChangelogSection {
@@ -128,13 +134,17 @@ interface ParseState {
   /** Context a parent bullet lends to the bullets nested under it, and that parent's indent. */
   parentKind: EntryContext | null;
   parentIndent: number | null;
-  pending: { text: string; context: EntryContext | null; indent: number } | null;
+  /** Text of the current sub-heading and of the parent bullet, for ChangelogEntry.under. */
+  headingText: string | null;
+  parentText: string | null;
+  pending: { text: string; context: EntryContext | null; indent: number; under: string | null } | null;
 }
 
 function flush(state: ParseState): void {
   if (state.pending && state.current) {
     const text = sanitizeEntry(state.pending.text);
-    if (text) state.current.entries.push({ kind: classifyEntry(text, state.pending.context), text });
+    const under = state.pending.under;
+    if (text) state.current.entries.push({ kind: classifyEntry(text, state.pending.context), text, ...(under ? { under } : {}) });
   }
   state.pending = null;
 }
@@ -158,6 +168,13 @@ function openSection(state: ParseState, heading: { version: string; date: string
   state.headingKind = null;
   state.parentKind = null;
   state.parentIndent = null;
+  state.headingText = null;
+  state.parentText = null;
+}
+
+/** A heading or parent bullet as context text: emphasis and code marks dropped, one line, at most 80 characters. */
+function contextText(raw: string): string | null {
+  return sanitizeEntry(raw.replace(/\*\*|__|`/g, "").replace(/:\s*$/, ""), 80) || null;
 }
 
 function addLine(state: ParseState, line: string): void {
@@ -175,6 +192,7 @@ function addLine(state: ParseState, line: string): void {
       const label = LABEL_BULLET.exec(text);
       if (label) {
         state.parentKind = classifyHeading(label[1]) ?? state.headingKind;
+        state.parentText = contextText(label[1]);
         return;
       }
       // A breaking bullet lends "breaking" to its sub-points (date-fns 3.0: "**BREAKING**: Functions
@@ -182,9 +200,11 @@ function addLine(state: ParseState, line: string): void {
       // ending in ":" lends any signalling kind.
       const own = classifyEntry(text, state.headingKind);
       state.parentKind = own === "breaking" || (/:\s*$/.test(text) && own !== "change") ? own : null;
+      state.parentText = contextText(text);
     }
     const context = !outer && state.parentKind ? state.parentKind : state.headingKind;
-    state.pending = { text, context, indent };
+    const under = !outer && state.parentText ? state.parentText : state.headingText;
+    state.pending = { text, context, indent, under };
     return;
   }
   if (line.trim() === "") {
@@ -200,13 +220,23 @@ function addLine(state: ParseState, line: string): void {
     return;
   }
   flush(state);
-  state.pending = { text: line, context: state.headingKind, indent: -1 };
+  state.pending = { text: line, context: state.headingKind, indent: -1, under: state.headingText };
 }
 
 /** Parse a changelog into version sections, in document order (usually newest first). */
 export function parseChangelog(text: string): ChangelogSection[] {
   const lines = text.replace(/\r\n?/g, "\n").split("\n");
-  const state: ParseState = { sections: [], current: null, sectionLevel: 0, headingKind: null, parentKind: null, parentIndent: null, pending: null };
+  const state: ParseState = {
+    sections: [],
+    current: null,
+    sectionLevel: 0,
+    headingKind: null,
+    parentKind: null,
+    parentIndent: null,
+    headingText: null,
+    parentText: null,
+    pending: null,
+  };
   let inFence = false;
   let inComment = false;
 
@@ -244,8 +274,10 @@ export function parseChangelog(text: string): ChangelogSection[] {
         // "## v3.0.0" then "## Changed", and its ten BREAKING entries were dropped.
         if (state.current && level <= state.sectionLevel && !isCategoryHeading(atx[2])) state.current = null;
         state.headingKind = classifyHeading(atx[2]);
+        state.headingText = contextText(atx[2]);
         state.parentKind = null;
         state.parentIndent = null;
+        state.parentText = null;
       }
       continue;
     }
@@ -282,8 +314,10 @@ export function parseChangelog(text: string): ChangelogSection[] {
     if (bold && state.current) {
       flush(state);
       state.headingKind = classifyHeading(bold[1]);
+      state.headingText = contextText(bold[1]);
       state.parentKind = null;
       state.parentIndent = null;
+      state.parentText = null;
       continue;
     }
     if (state.current) addLine(state, line);

@@ -26,6 +26,7 @@
 
 import * as fs from "node:fs";
 import * as path from "node:path";
+import { readBunLock } from "./bun-lockfile.js";
 import { readPnpmLock, readYarnLock } from "./js-lockfile-readers.js";
 import { resolveGo, resolvePython } from "./lockfile-parsers-pygo.js";
 import { emptySource, found, InstanceSet, type PackageInstance, type VersionSource } from "./lockfile-types.js";
@@ -34,7 +35,7 @@ import type { OsvEcosystem } from "./types.js";
 export type { PackageInstance, VersionSource } from "./lockfile-types.js";
 
 const LOCKFILES: Partial<Record<OsvEcosystem, string[]>> = {
-  npm: ["package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml", "yarn.lock"],
+  npm: ["package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock"],
   "crates.io": ["Cargo.lock"],
   PyPI: ["poetry.lock", "uv.lock", "Pipfile.lock"],
   Go: ["go.mod", "go.sum"],
@@ -78,7 +79,7 @@ function manifestInstances(versions: Map<string, string>): PackageInstance[] {
 }
 
 // =============================================================================
-// npm: package-lock.json > npm-shrinkwrap.json > pnpm-lock.yaml > yarn.lock > package.json ranges
+// npm: package-lock.json > npm-shrinkwrap.json > pnpm-lock.yaml > yarn.lock > bun.lock > package.json ranges
 // =============================================================================
 
 function resolveNpm(cwd: string): VersionSource {
@@ -116,6 +117,17 @@ function resolveNpm(cwd: string): VersionSource {
         if (version) versions.set(name, version);
       }
       if (versions.size > 0) return found(versions, instances, yarnLockPath, "lockfile");
+    } catch { /* fall through */ }
+  }
+
+  // bun.lock (Bun 1.2+ text lockfile; the binary bun.lockb is not readable)
+  const bunLockPath = path.join(cwd, "bun.lock");
+  if (fs.existsSync(bunLockPath)) {
+    try {
+      const versions = new Map<string, string>();
+      const instances = new InstanceSet();
+      readBunLock(fs.readFileSync(bunLockPath, "utf-8"), versions, instances);
+      if (versions.size > 0) return found(versions, instances, bunLockPath, "lockfile");
     } catch { /* fall through */ }
   }
 
