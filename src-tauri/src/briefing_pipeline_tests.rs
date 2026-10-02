@@ -283,3 +283,68 @@ fn screenshot_1976_regression_guard() {
         report.ungrounded_terms
     );
 }
+
+/// LIVE: the morning notification brief built from a REAL corpus snapshot,
+/// synthesized `FOURDA_BRIEF_RUNS` times (default 3) with the configured
+/// model. 2026-09-27..10-01 the groundedness gate rejected 82 of 115
+/// syntheses (the user's own stack and the prompt's own labels counted as
+/// "ungrounded"), so the morning window went out with no synthesis. Asserts
+/// most runs now produce a real (non-abstention) synthesis. Run with
+/// `FOURDA_BRIEF_LIVE=1 FOURDA_DB_PATH=<snapshot> cargo test --lib
+///  live_snapshot_morning_synthesis -- --ignored --nocapture`.
+#[tokio::test]
+#[ignore = "calls the configured LLM against a real database snapshot"]
+async fn live_snapshot_morning_synthesis() {
+    if std::env::var("FOURDA_BRIEF_LIVE").is_err() || std::env::var("FOURDA_DB_PATH").is_err() {
+        return;
+    }
+    let runs: usize = std::env::var("FOURDA_BRIEF_RUNS")
+        .ok()
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(3);
+    let db = crate::get_database().expect("open snapshot");
+    let since = chrono::Utc::now() - chrono::Duration::hours(36);
+    let raw: Vec<BriefingItem> = db
+        .get_relevant_items_since(since, 0.35, 25, "en")
+        .expect("items")
+        .into_iter()
+        .map(|i| BriefingItem {
+            title: i.title,
+            source_type: i.source_type,
+            score: i.relevance_score.unwrap_or(0.0) as f32,
+            signal_type: None,
+            url: i.url,
+            item_id: Some(i.id),
+            signal_priority: None,
+            description: None,
+            matched_deps: vec![],
+            content_type: i.content_type,
+            corroboration_count: 0,
+            alt_sources: vec![],
+            section: None,
+            triage_reason: None,
+        })
+        .collect();
+    let briefing = crate::monitoring_briefing::build_enriched_briefing(raw, "en", true);
+    println!(
+        "items={} alerts={}",
+        briefing.items.len(),
+        briefing.preemption_alerts.len()
+    );
+    let mut synthesized = 0;
+    for run in 1..=runs {
+        let result = crate::monitoring_briefing::synthesize_morning_briefing(&briefing)
+            .await
+            .expect("synthesis runs");
+        let abstained = crate::monitoring_briefing::is_abstention_synthesis(&result.prose);
+        println!("--- run {run} abstained={abstained}\n{}", result.prose);
+        if !abstained {
+            synthesized += 1;
+        }
+    }
+    println!("synthesized {synthesized}/{runs}");
+    assert!(
+        synthesized * 3 >= runs * 2,
+        "only {synthesized}/{runs} morning syntheses survived the gate"
+    );
+}
