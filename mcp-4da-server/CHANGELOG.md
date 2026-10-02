@@ -122,7 +122,15 @@ zero findings.
   and a headline is never above medium unless it comes from an advisory database.
 - `get_relevant_content` and `knowledge_gaps` leave out judge-rejected items.
 - `upgrade_planner` targets the smallest version that fixes the advisories, not
-  the newest major; unmaintained-package notices are not counted as CVEs.
+  the newest major; unmaintained-package notices are not counted as CVEs. It
+  and `dependency_health` run the OSV scan themselves when none has run (they
+  answered "run vulnerability_scan first", leaving the first answer of a
+  session CVE-blind),
+  and `package` finds a vulnerable transitive instead of calling it "not a
+  dependency".
+- `vulnerability_scan` takes `package`: one dependency's findings across every
+  installed copy, with a `package_note` saying what the lockfiles hold for it.
+  An agent asked about one transitive otherwise read the whole report.
 - A scan that finishes late no longer replaces a newer one: the startup scan
   (devDependencies left out) could overwrite an agent's `include_dev` scan, and
   the planner then sent the devDependency node-fetch 2.6.0 to the ESM-only 3.3.2

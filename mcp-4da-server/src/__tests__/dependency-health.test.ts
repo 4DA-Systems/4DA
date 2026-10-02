@@ -137,3 +137,33 @@ describe("dependency_health — vulnerable means the actionable set", () => {
     expect(result.healthScore).toBe(100);
   });
 });
+
+// 2026-10-03 agent eval: the first health check of a session answered "run
+// vulnerability_scan first" instead of loading the scan it needed.
+describe("dependency_health loads its own vulnerability data", () => {
+  it("runs the scan when none has run, at the requested scope", async () => {
+    delete process.env.FOURDA_OFFLINE;
+    const li = new LiveIntelligence(new Database(":memory:"));
+    process.env.FOURDA_OFFLINE = "true";
+    li.initFromDependencyGroups([{ dir: webDir, language: "javascript", deps: ["react"], devDeps: [] }]);
+    const calls: Array<{ includeDev?: boolean }> = [];
+    (li as unknown as { osvScanner: unknown }).osvScanner = {
+      scan: async () => ({ ...makeScan([makeEntry({})]), offline: false, cached: false }),
+    };
+    li.fetchRegistryHealth = async () => [];
+    const scan = li.scanVulnerabilities.bind(li);
+    li.scanVulnerabilities = (p, o) => (calls.push(o ?? {}), scan(p, o));
+
+    const result = await executeDependencyHealth(noDb, { include_dev: true }, li);
+    expect(calls).toEqual([{ includeDev: true }]);
+    expect(result.vulnerableCount).toBe(1);
+    expect(result.summary).not.toContain("CVE data not loaded");
+  });
+
+  it("says why there is no CVE data offline", async () => {
+    const li = new LiveIntelligence(new Database(":memory:"));
+    li.initFromDependencyGroups([{ dir: webDir, language: "javascript", deps: ["react"], devDeps: [] }]);
+    const result = await executeDependencyHealth(noDb, {}, li);
+    expect(result.summary).toContain("CVE data not loaded: offline mode (FOURDA_OFFLINE)");
+  });
+});

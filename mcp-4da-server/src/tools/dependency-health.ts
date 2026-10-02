@@ -20,6 +20,9 @@ export interface DependencyHealthParams {
   limit?: number;
 }
 
+/** How long a health check waits for its own OSV scan before answering without CVE data (the scan keeps running). */
+const HEALTH_SCAN_TIMEOUT_MS = 60_000;
+
 export const dependencyHealthTool = {
   name: "dependency_health",
   description:
@@ -115,7 +118,10 @@ export async function executeDependencyHealth(
   // vulnerable packages where the scan listed 5 and filed the rest under
   // platform-inactive and maintenance notices). `advisoryCount` keeps the raw
   // row count visible so the filter hides nothing.
-  const vulnResult = liveIntel.getVulnerabilities();
+  // Loaded here (bounded) when no scan has run: telling the agent to "run
+  // vulnerability_scan first" left a session's first health check CVE-blind.
+  const root = liveIntel.getProjectRoot() ?? process.cwd();
+  const vulnResult = (await liveIntel.ensureVulnerabilities(root, HEALTH_SCAN_TIMEOUT_MS, { includeDev })) ?? liveIntel.getVulnerabilities();
   const allVulns = vulnResult?.vulnerabilities ?? [];
   const activeVulns = allVulns.filter(isActionableVulnerability);
   // Keyed by (ecosystem, name): a bare name let an npm advisory mark a
@@ -229,7 +235,9 @@ export async function executeDependencyHealth(
     parts.push(`${hidden} advisor${hidden !== 1 ? "ies" : "y"} not counted (platform-inactive or maintenance notices)`);
   }
   if (!vulnResult) {
-    parts.push("CVE data not loaded (no scan yet, or dependencies changed since the last one) — run vulnerability_scan first");
+    parts.push(liveIntel.isEnabled()
+      ? `CVE data not loaded: the OSV scan did not finish within ${HEALTH_SCAN_TIMEOUT_MS / 1000}s or OSV was unreachable. Call again to use it once it completes`
+      : "CVE data not loaded: offline mode (FOURDA_OFFLINE)");
   }
 
   return {
