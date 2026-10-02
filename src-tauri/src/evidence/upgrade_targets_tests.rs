@@ -250,6 +250,16 @@ fn live_snapshot_upgrade_targets() {
         for (title, note) in line_cites(item) {
             println!("    line {title} | {note}");
         }
+        for c in item
+            .evidence
+            .iter()
+            .filter(|c| c.source == "dependency-path")
+        {
+            println!("    path {} | {}", c.title, c.relevance_note);
+        }
+        if item.explanation.contains("Fixed only upstream") {
+            println!("    why  {}", item.explanation);
+        }
     }
     let mut ids: Vec<&str> = items.iter().map(|i| i.id.as_str()).collect();
     ids.sort_unstable();

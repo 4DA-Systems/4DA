@@ -9,6 +9,7 @@ pub(crate) mod exposure;
 pub(crate) mod fix_target;
 pub(crate) mod identity;
 pub(crate) mod matching;
+pub(crate) mod parent_hint;
 pub(crate) mod sync;
 pub(crate) mod types;
 
