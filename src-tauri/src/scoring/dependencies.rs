@@ -861,7 +861,11 @@ const SECURITY_CONTEXT_MARKERS: &[(&str, MarkerFit)] = &[
     ("backdoor", MarkerFit::Stem),
     ("0-day", MarkerFit::Stem),
     ("zero-day", MarkerFit::Stem),
-    ("patch", MarkerFit::Stem),
+    // Not bare "patch": "an API receives a PATCH request" is HTTP, and it
+    // corroborated a TypeScript utility-types tutorial (live 2026-10-02).
+    ("patched", MarkerFit::Token),
+    ("patches", MarkerFit::Token),
+    ("patch release", MarkerFit::Stem),
 ];
 
 /// Check if security-advisory markers appear near a position in text.
@@ -1188,10 +1192,15 @@ const NAME_CONTEXT_WINDOW: usize = 120;
 /// - Multi-token names are self-evident: a literal "windows-sys" or
 ///   "better-sqlite3" occurrence cannot be prose coincidence.
 /// - Single-token names (axios, react, tokio) double as ordinary words
-///   ("companies react to market changes"), so they corroborate only with
-///   software context near an occurrence (language/registry words, a
-///   security-advisory marker) or a version literal adjacent to the name
-///   ("axios 1.12.2", "crates.io: axum v0.8.9").
+///   ("companies react to market changes") AND name technologies whole
+///   tutorials are written about, so they corroborate only with
+///   DEPENDENCY-EVENT evidence at an occurrence (`has_dependency_event_evidence`:
+///   a security marker, release/change vocabulary, or a version literal
+///   adjacent to the name — "axios 1.12.2", "crates.io: axum v0.8.9",
+///   "Announcing TypeScript 7.0"). Since 2026-10-02 language vocabulary
+///   ("import", "npm install") no longer suffices: it is in every tutorial.
+/// - Org-name packages (`openai`, `stripe`) additionally need package-usage
+///   evidence (`has_package_usage_evidence`) — their text is about the company.
 fn is_name_corroborated(
     title_lower: &str,
     text_lower: &str,
@@ -1211,26 +1220,87 @@ fn is_name_corroborated(
     // Org-name packages (`openai`, `stripe`): the text is about the company
     // unless it shows the PACKAGE — security or language vocabulary near
     // "OpenAI" describes the company's news, not the client library.
-    if crate::package_ambiguity::is_org_name_package(normalized_name) {
-        return has_package_usage_evidence(
-            text_lower,
-            title_lower.len(),
-            normalized_name,
-            &positions,
-        );
+    if crate::package_ambiguity::is_org_name_package(normalized_name)
+        && !has_package_usage_evidence(text_lower, title_lower.len(), normalized_name, &positions)
+    {
+        return false;
     }
-    let title_len = title_lower.len();
-    positions.iter().any(|&(pos, _)| {
-        // A title hit may draw context from the whole title.
-        let window = if pos < title_len {
+    has_dependency_event_evidence(title_lower.len(), text_lower, &positions)
+}
+
+/// Is the item about the package AS A DEPENDENCY — a release, an API change,
+/// a migration, a vulnerability — rather than any article that uses the
+/// technology? Evidence near a full-name occurrence: a security marker,
+/// release/change vocabulary ([`DEPENDENCY_EVENT_MARKERS`]), or a version
+/// literal adjacent to the name.
+///
+/// Language vocabulary ("import", "npm install", "library") USED to suffice,
+/// and it is in every tutorial: live 2026-10-02, "React useState Basics",
+/// "TypeScript `Partial`, `Required`, and `DeepPartial`", "Angular vs React",
+/// "Why not React?" and "A TypeScript runtime for deploying Discord bots" were
+/// all "Names your dependency". A tutorial about a dependency is TOPICAL
+/// relevance — the interest and context axes carry it; the dependency claim
+/// is reserved for things the user may have to act on in their manifest.
+fn has_dependency_event_evidence(
+    title_len: usize,
+    text_lower: &str,
+    positions: &[(usize, usize)],
+) -> bool {
+    positions.iter().any(|&(pos, len)| {
+        let in_title = pos < title_len;
+        // A title hit may draw SECURITY context from the whole title and the
+        // opening of the body (an advisory's first sentence names the flaw).
+        // A body hit only from a short span: a 5,000-char tutorial carries
+        // security-sounding words somewhere near most of its mentions.
+        let window = if in_title {
             title_len.max(NAME_CONTEXT_WINDOW)
         } else {
-            NAME_CONTEXT_WINDOW
+            EVENT_BODY_WINDOW
         };
-        has_language_context_nearby(text_lower, pos, window)
-            || has_security_context_nearby(text_lower, pos, window)
-    }) || has_adjacent_version_literal(text_lower, &positions)
+        if has_security_context_nearby(text_lower, pos, window) {
+            return true;
+        }
+        // Release/change words are everywhere in news prose ("announced",
+        // "released"), so they must be about THIS mention: the title itself
+        // for a title hit, a short span for a body hit. Measured: with the
+        // security window, "Japan ... throwing futures into doubt" borrowed
+        // "announced" from its body and grounded the `futures` crate.
+        let (start, end) = if in_title {
+            (0, title_len)
+        } else {
+            (
+                pos.saturating_sub(EVENT_BODY_WINDOW),
+                pos + len + EVENT_BODY_WINDOW,
+            )
+        };
+        markers_in_window(text_lower, start, end, DEPENDENCY_EVENT_MARKERS)
+    }) || has_adjacent_version_literal(text_lower, positions)
 }
+
+/// Bytes either side of a BODY name occurrence searched for release/change
+/// vocabulary (title occurrences use the title).
+const EVENT_BODY_WINDOW: usize = 60;
+
+/// Release / change vocabulary: what makes a mention of a package a
+/// dependency EVENT ("Announcing TypeScript 7.0", "React 20: migrating away
+/// from forwardRef", "tokio drops support for ...", "vite 8 breaking changes").
+const DEPENDENCY_EVENT_MARKERS: &[(&str, MarkerFit)] = &[
+    ("releas", MarkerFit::Stem),
+    ("announc", MarkerFit::Stem),
+    ("changelog", MarkerFit::Stem),
+    ("deprecat", MarkerFit::Stem),
+    ("breaking", MarkerFit::Stem),
+    ("migrat", MarkerFit::Stem),
+    ("upgrad", MarkerFit::Stem),
+    ("regression", MarkerFit::Stem),
+    ("sunset", MarkerFit::Stem),
+    ("end-of-life", MarkerFit::Stem),
+    ("eol", MarkerFit::Token),
+    ("lts", MarkerFit::Token),
+    ("rc", MarkerFit::Token),
+    ("beta", MarkerFit::Token),
+    ("drops support", MarkerFit::Stem),
+];
 
 /// Version-adjacency corroboration for a single-token name — anchored to the
 /// boundary-checked `positions`, never a raw substring re-scan, so "react"

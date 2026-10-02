@@ -268,9 +268,10 @@ fn window_edge_cannot_cut_a_word_into_a_context_token() {
 #[test]
 fn security_markers_need_a_word_start() {
     for text in [
-        "the event dispatch loop",  // patch
-        "a 10-day trip report",     // 0-day
-        "insecurity in the market", // security
+        "the event dispatch loop",                       // patch
+        "a 10-day trip report",                          // 0-day
+        "insecurity in the market",                      // security
+        "an api receives a patch request with a subset", // HTTP verb
     ] {
         assert!(
             !has_security_context_nearby(text, 0, text.len()),
@@ -309,6 +310,75 @@ fn gemini_title_does_not_corroborate_a_word_like_dep() {
             .all(|m| m.confidence < STRONG_GROUNDING_CONFIDENCE),
         "{matches:?}"
     );
+}
+
+// ── 4. "Names your dependency" means a dependency EVENT ─────────────────────
+
+#[test]
+fn tutorials_about_a_dependency_do_not_name_it_as_a_dependency() {
+    let ctx = ctx_with(&[
+        dep("react", "javascript", false),
+        dep("typescript", "javascript", true),
+    ]);
+    let tutorial_body = "First npm install react and typescript, then import { useState } \
+                         from 'react'. This library makes components easy.";
+    for (title, pkg) in [
+        ("React useState Basics: Build Dynamic UI with Vite", "react"),
+        (
+            "TypeScript `Partial`, `Required`, and `DeepPartial` in 2026: Which Utility Type Actually Fits Your Use Case",
+            "typescript",
+        ),
+        ("Angular vs React: How I Decide Which to Use for a New Project", "react"),
+        ("A TypeScript runtime for deploying Discord bots", "typescript"),
+        ("Why not React?", "react"),
+    ] {
+        assert!(
+            !names(title, tutorial_body, &ctx, pkg),
+            "a tutorial must not NAME {pkg} as a dependency: {title}"
+        );
+    }
+}
+
+#[test]
+fn event_words_must_belong_to_the_mention() {
+    // Live: the title mention borrowed "announced" from the body.
+    let ctx = ctx_with(&[dep("futures", "rust", false)]);
+    assert!(!names(
+        "Japan moves to tighten rules for foreigners, throwing futures into doubt",
+        "The government announced the changes on Friday and released guidance.",
+        &ctx,
+        "futures"
+    ));
+}
+
+#[test]
+fn dependency_events_still_name_the_package() {
+    let ctx = ctx_with(&[
+        dep("react", "javascript", false),
+        dep("typescript", "javascript", true),
+        dep("tokio", "rust", false),
+    ]);
+    for (title, content, pkg) in [
+        ("React 19.3 is here", "", "react"),
+        ("Announcing TypeScript 7.0", "", "typescript"),
+        (
+            "React 20 `ref` as a Prop: Migrating Away From `forwardRef`",
+            "",
+            "react",
+        ),
+        (
+            "React Server Components flaw lets attackers run code",
+            "A critical vulnerability was disclosed.",
+            "react",
+        ),
+        ("tokio drops support for Rust 1.70", "", "tokio"),
+        ("Tokio 1.40 breaking change in the scheduler", "", "tokio"),
+    ] {
+        assert!(
+            names(title, content, &ctx, pkg),
+            "a dependency event must name {pkg}: {title}"
+        );
+    }
 }
 
 // ── 3. Corroboration's dependency flag is non-dev ───────────────────────────
