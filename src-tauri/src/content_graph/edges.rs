@@ -9,7 +9,6 @@ use std::collections::{HashMap, HashSet};
 use tracing::debug;
 
 use crate::signal_chains::detect_chains_for_items;
-use crate::utils::cosine_similarity;
 
 use super::types::{EdgeType, GraphEdge, RawItem};
 use super::{KNN_FLOOR, KNN_K};
@@ -34,16 +33,12 @@ pub(super) fn compute_semantic_edges(items: &[RawItem], edges: &mut Vec<GraphEdg
     }
 
     // Top-K neighbor lists, deterministic (sim desc, then neighbor id asc).
+    let unit = unit_vectors(items);
     let mut top: Vec<Vec<(f32, usize)>> = Vec::with_capacity(n);
     for i in 0..n {
         let mut sims: Vec<(f32, usize)> = (0..n)
             .filter(|&j| j != i)
-            .map(|j| {
-                (
-                    cosine_similarity(&items[i].embedding, &items[j].embedding),
-                    j,
-                )
-            })
+            .map(|j| (dot(&unit[i], &unit[j]), j))
             .collect();
         sims.sort_by(|a, b| {
             b.0.partial_cmp(&a.0)
@@ -243,6 +238,36 @@ pub(super) fn sparsify_edges(edges: &mut Vec<GraphEdge>, k: usize) {
         idx += 1;
         kept
     });
+}
+
+/// Unit-normalized copies of every item embedding, so the O(n²) similarity
+/// passes (story collapse over ~450 raw items, kNN over the node budget) cost
+/// one dot product per pair instead of a dot product plus two norms. Measured
+/// on the live corpus 2026-10-02 (debug build, the one the dev app runs):
+/// story collapse was 2.4-2.5 s of a 4.0-4.3 s build. A zero vector stays
+/// zero, so its similarity to anything is 0 — the same as
+/// `cosine_similarity`'s zero-norm guard.
+pub(super) fn unit_vectors(items: &[RawItem]) -> Vec<Vec<f32>> {
+    items
+        .iter()
+        .map(|item| {
+            let norm = item.embedding.iter().map(|v| v * v).sum::<f32>().sqrt();
+            if norm > 0.0 {
+                item.embedding.iter().map(|v| v / norm).collect()
+            } else {
+                vec![0.0; item.embedding.len()]
+            }
+        })
+        .collect()
+}
+
+/// Dot product of two unit vectors = their cosine. Mismatched lengths are
+/// unrelated (0.0), as in `cosine_similarity`.
+pub(super) fn dot(a: &[f32], b: &[f32]) -> f32 {
+    if a.len() != b.len() {
+        return 0.0;
+    }
+    a.iter().zip(b).map(|(x, y)| x * y).sum()
 }
 
 pub(super) fn count_edges_per_node(edges: &[GraphEdge]) -> HashMap<i64, usize> {

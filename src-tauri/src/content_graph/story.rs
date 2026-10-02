@@ -24,9 +24,8 @@
 
 use std::collections::HashMap;
 
-use super::edges::title_word_overlap;
+use super::edges::{dot, title_word_overlap, unit_vectors};
 use super::types::{RawItem, StoryItem};
-use crate::utils::cosine_similarity;
 
 /// Cosine at/above which two items are the same story on embeddings alone.
 const STORY_COSINE: f32 = 0.92;
@@ -172,9 +171,11 @@ pub(super) fn collapse_stories(items: Vec<RawItem>) -> Vec<StoryItem> {
     }
 
     // Signal 2: near-duplicate embeddings (optionally corroborated by titles).
+    // Pre-normalized once: the dominant cost of a whole graph build.
+    let unit = unit_vectors(&items);
     for i in 0..n {
         for j in (i + 1)..n {
-            let sim = cosine_similarity(&items[i].embedding, &items[j].embedding);
+            let sim = dot(&unit[i], &unit[j]);
             let near_dup = sim >= STORY_COSINE
                 || (sim >= STORY_COSINE_WITH_OVERLAP
                     && title_word_overlap(&items[i].title, &items[j].title) >= STORY_OVERLAP_MIN);
@@ -221,7 +222,7 @@ fn build_story(items: &[RawItem], member_idxs: &[usize], dim: usize) -> StoryIte
         return StoryItem {
             member_ids: vec![rep.id],
             member_count: 1,
-            affects_you: rep.matched_package.is_some(),
+            affects_you: rep.grounded,
             curated_count: usize::from(rep.curated),
             item: clone_raw(rep),
         };
@@ -290,9 +291,7 @@ fn build_story(items: &[RawItem], member_idxs: &[usize], dim: usize) -> StoryIte
 
     let member_ids: Vec<i64> = member_idxs.iter().map(|&idx| items[idx].id).collect();
 
-    let affects_you = member_idxs
-        .iter()
-        .any(|&idx| items[idx].matched_package.is_some());
+    let affects_you = member_idxs.iter().any(|&idx| items[idx].grounded);
 
     let curated_count = member_idxs
         .iter()
@@ -313,6 +312,7 @@ fn build_story(items: &[RawItem], member_idxs: &[usize], dim: usize) -> StoryIte
             created_at: rep.created_at.clone(),
             curated: curated_count > 0,
             reserved,
+            grounded: member_idxs.iter().any(|&idx| items[idx].grounded),
             embedding: centroid,
         },
         member_ids,
@@ -335,6 +335,7 @@ pub(super) fn clone_raw(item: &RawItem) -> RawItem {
         created_at: item.created_at.clone(),
         curated: item.curated,
         reserved: item.reserved,
+        grounded: item.grounded,
         embedding: item.embedding.clone(),
     }
 }
@@ -356,6 +357,7 @@ mod tests {
             created_at: String::new(),
             curated: false,
             reserved: false,
+            grounded: false,
             embedding,
         }
     }

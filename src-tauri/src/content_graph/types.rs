@@ -38,8 +38,9 @@ pub struct GraphNode {
     /// Content category: "security" | "release" | "discussion" | "research".
     /// The primary color channel — source identity moved to the tooltip.
     pub category: String,
-    /// Any member is linked to one of the user's declared dependencies
-    /// (dep_linker) — rendered as the gold "touches your stack" ring.
+    /// Any member carries the scoring pipeline's strong-grounding verdict
+    /// (the same predicate as Signal's "Affects You" pool) — rendered as the
+    /// gold "touches your stack" ring.
     pub affects_you: bool,
     pub x: f32,
     pub y: f32,
@@ -136,6 +137,11 @@ pub(super) struct RawItem {
     /// / research items of the window) — exempt from relevance-first caps so
     /// starved categories stay represented on the map.
     pub reserved: bool,
+    /// The scoring pipeline's persisted grounding verdict — the same one
+    /// Signal's "Affects You" pool reads (see `loading::GROUNDED_SQL`).
+    /// Drives the "touches your stack" ring; `matched_package` alone does
+    /// NOT (any-confidence link rows are looser than the canonical verdict).
+    pub grounded: bool,
     pub embedding: Vec<f32>,
 }
 
@@ -147,7 +153,7 @@ pub(super) struct StoryItem {
     pub item: RawItem,
     pub member_ids: Vec<i64>,
     pub member_count: usize,
-    /// Any member carries a dep_linker match to the user's declared stack.
+    /// Any member is strongly grounded in the user's stack (`RawItem::grounded`).
     pub affects_you: bool,
     /// Members with a persisted curation verdict — the item-level count the
     /// ramp metric sums (P2.14: story-level "any member curated" inflated it).

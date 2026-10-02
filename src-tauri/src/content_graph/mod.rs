@@ -18,6 +18,7 @@ mod category;
 mod clustering;
 mod detail;
 mod edges;
+mod labels;
 mod layout;
 mod loading;
 mod story;
@@ -51,8 +52,8 @@ const RAW_LOAD_FACTOR: usize = 3;
 const KNN_K: usize = 3;
 /// Absolute floor under which even a mutual nearest neighbor is noise.
 const KNN_FLOOR: f32 = 0.55;
-/// Isolated singletons shown on the map (as semantic satellites or on the
-/// shelf), by relevance; the rest stay in the List view (counted honestly in
+/// Isolated singletons shown in the map's "not connected to any theme" lane,
+/// by relevance; the rest stay in the List view (counted honestly in
 /// `meta.hidden_items`).
 const SINGLETON_CAP: usize = 40;
 /// Per-node top-K edges kept for display (plus the spanning backbone).
@@ -71,36 +72,59 @@ const SOURCE_CAP_FRACTION: f32 = 0.25;
 // Graph Construction
 // ============================================================================
 
+/// Wall-clock per build phase (ms), in pipeline order. Logged with every
+/// build so a slow map is attributable from the log alone (the live 6.5-10.8 s
+/// builds of 2026-10-02 had no breakdown anywhere).
+pub(crate) type PhaseTimes = Vec<(&'static str, u128)>;
+
 pub fn build_graph(
     conn: &rusqlite::Connection,
     days: u32,
     max_nodes: usize,
 ) -> Result<ContentGraph> {
+    build_graph_timed(conn, days, max_nodes).map(|(graph, _)| graph)
+}
+
+pub(crate) fn build_graph_timed(
+    conn: &rusqlite::Connection,
+    days: u32,
+    max_nodes: usize,
+) -> Result<(ContentGraph, PhaseTimes)> {
+    let mut phases: PhaseTimes = Vec::new();
+    let mut clock = std::time::Instant::now();
+    let mut mark = |name: &'static str, phases: &mut PhaseTimes| {
+        phases.push((name, clock.elapsed().as_millis()));
+        clock = std::time::Instant::now();
+    };
     let loading::LoadedWindow {
         items,
         window_candidates,
         windows_differ,
     } = loading::load_scored_items(conn, days, max_nodes * RAW_LOAD_FACTOR)?;
+    mark("load", &mut phases);
     if items.is_empty() {
-        return Ok(ContentGraph {
-            nodes: Vec::new(),
-            edges: Vec::new(),
-            clusters: Vec::new(),
-            meta: GraphMeta {
-                total_items: 0,
-                total_edges: 0,
-                cluster_count: 0,
-                story_count: 0,
-                collapsed_items: 0,
-                hidden_items: 0,
-                window_candidates,
-                time_window_days: days,
-                edge_threshold: format!("mutual top-{KNN_K} nearest neighbors"),
-                mean_cluster_coherence: None,
-                curated_items: 0,
-                windows_differ,
+        return Ok((
+            ContentGraph {
+                nodes: Vec::new(),
+                edges: Vec::new(),
+                clusters: Vec::new(),
+                meta: GraphMeta {
+                    total_items: 0,
+                    total_edges: 0,
+                    cluster_count: 0,
+                    story_count: 0,
+                    collapsed_items: 0,
+                    hidden_items: 0,
+                    window_candidates,
+                    time_window_days: days,
+                    edge_threshold: format!("mutual top-{KNN_K} nearest neighbors"),
+                    mean_cluster_coherence: None,
+                    curated_items: 0,
+                    windows_differ,
+                },
             },
-        });
+            phases,
+        ));
     }
 
     // Collapse near-duplicates into stories FIRST: redundancy becomes one
@@ -109,6 +133,7 @@ pub fn build_graph(
     // curated and quota-reserved stories are exempt from truncation, the
     // rest rank by relevance (matching the load order).
     let mut stories = story::collapse_stories(items);
+    mark("collapse", &mut phases);
     stories.sort_by(|a, b| {
         (b.item.curated || b.item.reserved)
             .cmp(&(a.item.curated || a.item.reserved))
@@ -185,12 +210,14 @@ pub fn build_graph(
     let mut edge_list = Vec::new();
     edges::compute_semantic_edges(&story_items, &mut edge_list);
     let clusters = clustering::compute_clusters(&story_items, &edge_list);
+    mark("edges+louvain", &mut phases);
 
     edges::compute_chain_edges(conn, &rep_of, &mut edge_list);
     edges::merge_duplicate_edges(&mut edge_list);
+    mark("chains", &mut phases);
 
     // Visibility: anything connected or aggregated appears; isolated plain
-    // items appear as semantic satellites (or shelf) up to SINGLETON_CAP by
+    // items appear in the unconnected lane up to SINGLETON_CAP by
     // relevance. Curated singletons are EXEMPT from the cap (they carry a
     // persisted feed-curation verdict — the corpus the map claims to show),
     // as are quota-reserved category items (P2.12) — both would otherwise
@@ -276,7 +303,20 @@ pub fn build_graph(
         })
         .filter(|c| c.node_ids.len() >= 2)
         .collect();
-    clustering::assign_cluster_labels(&story_items, &mut clusters);
+    // A node whose community fell below 2 visible members belongs to no
+    // rendered cluster — it sits in the unconnected lane, and its cluster_id
+    // must say so (the frontend counts the lane from `cluster_id == null`).
+    let kept_cluster_ids: HashSet<&str> = clusters.iter().map(|c| c.id.as_str()).collect();
+    for node in &mut nodes {
+        if node
+            .cluster_id
+            .as_deref()
+            .is_some_and(|id| !kept_cluster_ids.contains(id))
+        {
+            node.cluster_id = None;
+        }
+    }
+    labels::assign_cluster_labels(&story_items, &mut clusters);
 
     // Coherence: mean pairwise member cosine per cluster, and the pair-count
     // weighted mean across clusters — the graph measures its own theme
@@ -312,48 +352,6 @@ pub fn build_graph(
         None
     };
 
-    // Semantic satellite assignment: each visible singleton attaches to its
-    // nearest clustered story (max member cosine). Below the floor it goes
-    // to the shelf — genuinely unrelated. Live evidence for this design:
-    // 90 of 93 window singletons sat at cosine 0.45-0.77 from a cluster.
-    let clustered_visible: Vec<&types::RawItem> = story_items
-        .iter()
-        .filter(|item| {
-            visible_ids.contains(&item.id) && clusters.iter().any(|c| c.node_ids.contains(&item.id))
-        })
-        .collect();
-    let mut satellite_of: HashMap<i64, layout::SatelliteAssign> = HashMap::new();
-    for node in &nodes {
-        if node.cluster_id.is_some() {
-            continue;
-        }
-        let Some(item) = story_items.iter().find(|i| i.id == node.id) else {
-            continue;
-        };
-        let best = clustered_visible
-            .iter()
-            .map(|c| {
-                (
-                    c.id,
-                    crate::utils::cosine_similarity(&item.embedding, &c.embedding),
-                )
-            })
-            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
-        if let Some((nearest_id, sim)) = best {
-            if sim >= layout::SATELLITE_MIN_SIM {
-                if let Some(cluster) = clusters.iter().find(|c| c.node_ids.contains(&nearest_id)) {
-                    satellite_of.insert(
-                        node.id,
-                        layout::SatelliteAssign {
-                            cluster_id: cluster.id.clone(),
-                            sim,
-                        },
-                    );
-                }
-            }
-        }
-    }
-
     // Temporal layout anchors (P2.11): clusters overlapping a persisted
     // anchor's member set seed at the remembered position, so day-over-day
     // maps stay spatially recognizable. Read-only here — persisting is the
@@ -376,14 +374,10 @@ pub fn build_graph(
 
     // Layout sees the full retained edge set (affinity fidelity); display
     // gets the sparsified backbone + top-K.
-    layout::compute_layout(
-        &mut nodes,
-        &edge_list,
-        &mut clusters,
-        &satellite_of,
-        &anchor_seeds,
-    );
+    mark("labels+coherence+anchors", &mut phases);
+    layout::compute_layout(&mut nodes, &edge_list, &mut clusters, &anchor_seeds);
     edges::sparsify_edges(&mut edge_list, TOP_K_EDGES);
+    mark("layout", &mut phases);
 
     let story_count = nodes.iter().filter(|n| n.member_count > 1).count();
     let collapsed_items: usize = nodes.iter().map(|n| n.member_count.saturating_sub(1)).sum();
@@ -419,15 +413,19 @@ pub fn build_graph(
         collapsed = collapsed_items,
         hidden = hidden_items,
         coherence = mean_cluster_coherence.unwrap_or(0.0),
+        phases_ms = ?phases,
         "Content graph built"
     );
 
-    Ok(ContentGraph {
-        nodes,
-        edges: edge_list,
-        clusters,
-        meta,
-    })
+    Ok((
+        ContentGraph {
+            nodes,
+            edges: edge_list,
+            clusters,
+            meta,
+        },
+        phases,
+    ))
 }
 
 // ============================================================================

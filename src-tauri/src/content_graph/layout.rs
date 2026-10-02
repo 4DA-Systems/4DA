@@ -2,25 +2,22 @@
 // Copyright (c) 2025-2026 4DA Systems Pty Ltd (ACN 696 078 841). All rights reserved.
 // Licensed under the Functional Source License 1.1 (FSL-1.1-Apache-2.0). See LICENSE file.
 
-//! Cluster-first layout with semantic satellites (deterministic, no RNG).
+//! Cluster-first layout with an unconnected lane (deterministic, no RNG).
 //!
 //! Phase 1 treats each cluster as a disc sized by member count: discs seed on
 //! a circle (largest central), then a short force pass pulls discs with
-//! inter-cluster edges together and separates overlapping discs. Disc spacing
-//! reserves each cluster's satellite halo.
+//! inter-cluster edges together and separates overlapping discs.
 //! Phase 2 places members inside their disc on a golden-angle (sunflower)
 //! spiral — collision-free by construction — with high-degree members central.
 //!
-//! Unclustered singletons are NOT parked on an arbitrary ring (the Wave 1
-//! orbit ring made two-thirds of the canvas encode nothing — live measure
-//! 2026-07-16: 41 of 63 nodes; a pure MDS projection was prototyped on the
-//! real embeddings and rejected: 2D captured 22.6% of variance, a blob).
-//! Instead each singleton becomes a SATELLITE of its semantically nearest
-//! cluster, at a distance proportional to (1 - similarity) — so proximity on
-//! screen means topical relatedness for every node. Live evidence: 90 of 93
-//! singletons sit at cosine 0.45–0.77 from a cluster. The remainder (< the
-//! [`SATELLITE_MIN_SIM`] floor) go to a small shelf grid below the map —
-//! honest "unrelated to any theme" placement, no fake geometry.
+//! Unclustered nodes go to ONE labelled lane under the map ("not connected
+//! to any theme" — the frontend draws the lane header above the grid). They
+//! used to orbit their nearest cluster as SATELLITES at a distance set by
+//! cosine (floor 0.45), but a satellite sat inside a theme's halo with no
+//! edge to it: live 2026-10-02, 26% of nodes rendered as apparent theme
+//! members that the graph's own edge rule (mutual top-3, floor 0.55) had
+//! judged unrelated. Proximity that the edge model disowns is decoration,
+//! not relation — the lane says plainly what these items are.
 //!
 //! A final global collision pass resolves any residual overlap.
 
@@ -31,7 +28,7 @@ use super::types::{GraphCluster, GraphEdge, GraphNode};
 /// Target spacing between neighboring member dots inside a cluster disc.
 /// Sized for the readable label under each dot (~128px wide at zoom 1).
 const MEMBER_SPACING: f32 = 95.0;
-/// Minimum free gap between two cluster halos.
+/// Minimum free gap between two cluster discs.
 const CLUSTER_GAP: f32 = 120.0;
 /// Golden angle in radians — successive spiral points never align.
 const GOLDEN_ANGLE: f32 = 2.399_963;
@@ -39,29 +36,20 @@ const GOLDEN_ANGLE: f32 = 2.399_963;
 const PHASE1_ITERATIONS: usize = 120;
 /// Logical canvas center; the frontend fits the view, so overflow is fine.
 const CENTER: (f32, f32) = (600.0, 500.0);
-/// Satellites closer than this to their disc edge would read as members.
-const SATELLITE_BASE: f32 = 70.0;
-/// How far (1 - similarity) pushes a satellite outward.
-const SATELLITE_SPREAD: f32 = 260.0;
-/// Below this best-similarity a singleton is genuinely unrelated → shelf.
-pub(super) const SATELLITE_MIN_SIM: f32 = 0.45;
-/// Shelf grid columns for unrelated singletons.
-const SHELF_COLS: usize = 8;
+/// Lane grid columns for unconnected nodes — wide enough that a 40-node
+/// lane stays a few rows, not a tall column under a wide map.
+const SHELF_COLS: usize = 12;
+/// Gap between the lowest map node and the lane's first row (leaves room
+/// for the lane header the frontend draws).
+const LANE_GAP: f32 = 260.0;
 /// Global collision pass: minimum center distance and sweep count.
 const COLLIDE_DIST: f32 = 82.0;
 const COLLIDE_ITERATIONS: usize = 60;
-
-/// A singleton's semantic attachment: nearest cluster + best similarity.
-pub(super) struct SatelliteAssign {
-    pub cluster_id: String,
-    pub sim: f32,
-}
 
 pub(super) fn compute_layout(
     nodes: &mut [GraphNode],
     edges: &[GraphEdge],
     clusters: &mut [GraphCluster],
-    satellites: &HashMap<i64, SatelliteAssign>,
     anchor_seeds: &HashMap<String, (f32, f32)>,
 ) {
     if nodes.is_empty() {
@@ -79,47 +67,11 @@ pub(super) fn compute_layout(
         }
     }
 
-    // Satellites per cluster, most-similar first (deterministic tiebreak).
-    let cluster_pos_by_id: HashMap<&str, usize> = clusters
-        .iter()
-        .enumerate()
-        .map(|(ci, c)| (c.id.as_str(), ci))
-        .collect();
-    let mut sats_of: Vec<Vec<(usize, f32)>> = vec![Vec::new(); clusters.len()];
-    for (idx, node) in nodes.iter().enumerate() {
-        if cluster_of.contains_key(&idx) {
-            continue;
-        }
-        if let Some(assign) = satellites.get(&node.id) {
-            if let Some(&ci) = cluster_pos_by_id.get(assign.cluster_id.as_str()) {
-                sats_of[ci].push((idx, assign.sim));
-            }
-        }
-    }
-    for sats in &mut sats_of {
-        sats.sort_by(|a, b| {
-            b.1.partial_cmp(&a.1)
-                .unwrap_or(std::cmp::Ordering::Equal)
-                .then_with(|| nodes[a.0].id.cmp(&nodes[b.0].id))
-        });
-    }
-
-    // Halo radius = disc + this cluster's farthest satellite orbit.
+    // Disc radius = sunflower extent of the member count. (The halo that
+    // reserved satellite orbits is gone with the satellites.)
     let disc_radii: Vec<f32> = clusters
         .iter()
         .map(|c| disc_radius(c.node_ids.len()))
-        .collect();
-    let halo_radii: Vec<f32> = disc_radii
-        .iter()
-        .enumerate()
-        .map(|(ci, &r)| {
-            let worst_sim = sats_of[ci].last().map(|&(_, s)| s).unwrap_or(1.0);
-            if sats_of[ci].is_empty() {
-                r
-            } else {
-                r + SATELLITE_BASE + (1.0 - worst_sim).max(0.0) * SATELLITE_SPREAD + 40.0
-            }
-        })
         .collect();
 
     let seeds_by_idx: HashMap<usize, (f32, f32)> = clusters
@@ -129,7 +81,7 @@ pub(super) fn compute_layout(
         .collect();
     let centers = place_cluster_discs(
         clusters,
-        &halo_radii,
+        &disc_radii,
         edges,
         &id_to_idx,
         &cluster_of,
@@ -159,26 +111,11 @@ pub(super) fn compute_layout(
         cluster.centroid_y = cy;
     }
 
-    // Satellites: golden-angle around their cluster, radius grows as
-    // similarity falls — closer on screen IS more related.
-    for (ci, sats) in sats_of.iter().enumerate() {
-        let (cx, cy) = centers[ci];
-        for (slot, &(idx, sim)) in sats.iter().enumerate() {
-            let radius = disc_radii[ci] + SATELLITE_BASE + (1.0 - sim).max(0.0) * SATELLITE_SPREAD;
-            let theta = slot as f32 * GOLDEN_ANGLE + ci as f32 * 0.7 + 1.2;
-            nodes[idx].x = cx + radius * theta.cos();
-            nodes[idx].y = cy + radius * theta.sin();
-        }
-    }
-
-    // Shelf: singletons related to nothing (below the similarity floor, or
-    // no clusters exist at all). A plain grid under the map — honest, no
-    // implied geometry.
+    // Lane: every node in no cluster. A plain grid under the map, by
+    // relevance — honest, no implied geometry.
     let shelf_idxs: Vec<usize> = {
         let mut v: Vec<usize> = (0..nodes.len())
-            .filter(|idx| {
-                !cluster_of.contains_key(idx) && !satellites.contains_key(&nodes[*idx].id)
-            })
+            .filter(|idx| !cluster_of.contains_key(idx))
             .collect();
         v.sort_by(|&a, &b| {
             nodes[b]
@@ -196,7 +133,7 @@ pub(super) fn compute_layout(
             .filter(|(i, _)| !shelf_idxs.contains(i))
             .map(|(_, n)| n.y)
             .fold(CENTER.1, f32::max);
-        let shelf_top = max_y + 200.0;
+        let shelf_top = max_y + LANE_GAP;
         let width = (SHELF_COLS.min(shelf_idxs.len()).max(1) - 1) as f32 * MEMBER_SPACING;
         for (slot, &idx) in shelf_idxs.iter().enumerate() {
             let row = slot / SHELF_COLS;
@@ -454,26 +391,13 @@ mod tests {
         }
     }
 
-    fn sat(cluster_id: &str, sim: f32) -> SatelliteAssign {
-        SatelliteAssign {
-            cluster_id: cluster_id.to_string(),
-            sim,
-        }
-    }
-
     #[test]
     fn members_stay_inside_their_disc() {
         let mut nodes: Vec<GraphNode> = (1..=12).map(node).collect();
         let mut clusters = vec![cluster("a", (1..=12).collect())];
         let edges: Vec<GraphEdge> = (2..=12).map(|i| edge(1, i, 0.8)).collect();
 
-        compute_layout(
-            &mut nodes,
-            &edges,
-            &mut clusters,
-            &HashMap::new(),
-            &HashMap::new(),
-        );
+        compute_layout(&mut nodes, &edges, &mut clusters, &HashMap::new());
 
         let r = disc_radius(12);
         let (cx, cy) = (clusters[0].centroid_x, clusters[0].centroid_y);
@@ -498,13 +422,7 @@ mod tests {
         ];
         let edges = vec![edge(1, 11, 0.9), edge(11, 21, 0.9), edge(1, 21, 0.9)];
 
-        compute_layout(
-            &mut nodes,
-            &edges,
-            &mut clusters,
-            &HashMap::new(),
-            &HashMap::new(),
-        );
+        compute_layout(&mut nodes, &edges, &mut clusters, &HashMap::new());
 
         for a in 0..clusters.len() {
             for b in (a + 1)..clusters.len() {
@@ -518,50 +436,20 @@ mod tests {
     }
 
     #[test]
-    fn satellites_orbit_their_cluster_ordered_by_similarity() {
-        let mut nodes: Vec<GraphNode> = (1..=7).map(node).collect();
-        let mut clusters = vec![cluster("a", vec![1, 2, 3, 4])];
-        let edges = vec![edge(1, 2, 0.8), edge(3, 4, 0.8)];
-        let mut sats = HashMap::new();
-        sats.insert(5i64, sat("a", 0.75)); // very related → closest
-        sats.insert(6i64, sat("a", 0.60));
-        sats.insert(7i64, sat("a", 0.46)); // barely related → farthest
-
-        compute_layout(&mut nodes, &edges, &mut clusters, &sats, &HashMap::new());
-
-        let (cx, cy) = (clusters[0].centroid_x, clusters[0].centroid_y);
-        let dist = |id: i64| {
-            let n = nodes.iter().find(|n| n.id == id).unwrap();
-            ((n.x - cx).powi(2) + (n.y - cy).powi(2)).sqrt()
-        };
-        let r = disc_radius(4);
-        assert!(dist(5) > r, "satellite must sit outside the disc");
-        assert!(
-            dist(5) < dist(6) && dist(6) < dist(7),
-            "orbit distance must fall with similarity: {} {} {}",
-            dist(5),
-            dist(6),
-            dist(7)
-        );
-    }
-
-    #[test]
     fn unrelated_singletons_form_a_shelf_below_the_map() {
         let mut nodes: Vec<GraphNode> = (1..=8).map(node).collect();
         let mut clusters = vec![cluster("a", vec![1, 2, 3, 4])];
         let edges = vec![edge(1, 2, 0.8), edge(3, 4, 0.8)];
-        // 5 is a satellite; 6,7,8 have no assignment → shelf.
-        let mut sats = HashMap::new();
-        sats.insert(5i64, sat("a", 0.6));
-
-        compute_layout(&mut nodes, &edges, &mut clusters, &sats, &HashMap::new());
+        // 5-8 belong to no cluster → all go to the lane (no satellites:
+        // proximity the edge model disowns is not shown as relation).
+        compute_layout(&mut nodes, &edges, &mut clusters, &HashMap::new());
 
         let map_max_y = nodes
             .iter()
-            .filter(|n| n.id <= 5)
+            .filter(|n| n.id <= 4)
             .map(|n| n.y)
             .fold(f32::MIN, f32::max);
-        for id in [6i64, 7, 8] {
+        for id in [5i64, 6, 7, 8] {
             let n = nodes.iter().find(|n| n.id == id).unwrap();
             assert!(
                 n.y > map_max_y + 100.0,
@@ -569,27 +457,22 @@ mod tests {
                 n.y
             );
         }
-        // Shelf rows are horizontal: all three share one row here.
-        let ys: Vec<f32> = [6i64, 7, 8]
+        // Lane rows are horizontal: all four share one row here.
+        let ys: Vec<f32> = [5i64, 6, 7, 8]
             .iter()
             .map(|id| nodes.iter().find(|n| n.id == *id).unwrap().y)
             .collect();
-        assert!((ys[0] - ys[1]).abs() < 1.0 && (ys[1] - ys[2]).abs() < 1.0);
+        assert!(ys.windows(2).all(|w| (w[0] - w[1]).abs() < 1.0));
     }
 
     #[test]
     fn no_two_nodes_closer_than_collision_distance() {
-        // Crowd one cluster with many satellites at the same similarity —
-        // the collision pass must keep everything readable.
+        // A small cluster plus a crowded lane — the collision pass must keep
+        // everything readable.
         let mut nodes: Vec<GraphNode> = (1..=40).map(node).collect();
         let mut clusters = vec![cluster("a", (1..=6).collect())];
         let edges: Vec<GraphEdge> = (2..=6).map(|i| edge(1, i, 0.8)).collect();
-        let mut sats = HashMap::new();
-        for id in 7i64..=40 {
-            sats.insert(id, sat("a", 0.6));
-        }
-
-        compute_layout(&mut nodes, &edges, &mut clusters, &sats, &HashMap::new());
+        compute_layout(&mut nodes, &edges, &mut clusters, &HashMap::new());
 
         for a in 0..nodes.len() {
             for b in (a + 1)..nodes.len() {
@@ -614,10 +497,7 @@ mod tests {
                 cluster("b", (7..=12).collect()),
             ];
             let edges = vec![edge(1, 7, 0.9), edge(2, 8, 0.8)];
-            let mut sats = HashMap::new();
-            sats.insert(13i64, sat("a", 0.7));
-            sats.insert(14i64, sat("b", 0.5));
-            compute_layout(&mut nodes, &edges, &mut clusters, &sats, &HashMap::new());
+            compute_layout(&mut nodes, &edges, &mut clusters, &HashMap::new());
             nodes.iter().map(|n| (n.x, n.y)).collect::<Vec<_>>()
         };
         assert_eq!(build(), build());
@@ -638,13 +518,7 @@ mod tests {
         }
         edges.push(edge(27, 28, 0.8));
 
-        compute_layout(
-            &mut nodes,
-            &edges,
-            &mut clusters,
-            &HashMap::new(),
-            &HashMap::new(),
-        );
+        compute_layout(&mut nodes, &edges, &mut clusters, &HashMap::new());
         for n in &nodes {
             assert!(
                 n.x.is_finite() && n.y.is_finite(),
@@ -658,12 +532,6 @@ mod tests {
     fn empty_graph_is_a_no_op() {
         let mut nodes: Vec<GraphNode> = Vec::new();
         let mut clusters: Vec<GraphCluster> = Vec::new();
-        compute_layout(
-            &mut nodes,
-            &[],
-            &mut clusters,
-            &HashMap::new(),
-            &HashMap::new(),
-        );
+        compute_layout(&mut nodes, &[], &mut clusters, &HashMap::new());
     }
 }
