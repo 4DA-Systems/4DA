@@ -174,6 +174,98 @@ fn live_dep_axis_sweep() {
     }
 }
 
+/// Grounding dump: for every currently-relevant item (`feed_relevant = 1`) and
+/// every item created in the last `FOURDA_GROUNDING_DAYS` days (default 14),
+/// write the canonical grounding verdict and the packages that carry it, one
+/// TSV row per item, to `FOURDA_GROUNDING_DUMP`. Run once on the base commit
+/// and once on a candidate, then diff: the rows whose grounded set shrank are
+/// exactly the items a grounding-precision change un-grounds, and every one of
+/// them must be read and judged a false grounding before the change ships
+/// (2026-10-02 audit: `openai` company news grounded as "your dependency").
+///
+/// ```text
+/// FOURDA_DB_PATH=/path/to/snapshot.db FOURDA_GROUNDING_DUMP=/tmp/before.tsv \
+///     cargo test --lib live_grounding_dump -- --ignored --nocapture
+/// ```
+#[test]
+#[ignore = "requires FOURDA_DB_PATH pointing at a real database snapshot"]
+fn live_grounding_dump() {
+    use std::io::Write as _;
+    let (Ok(path), Ok(out)) = (
+        std::env::var("FOURDA_DB_PATH"),
+        std::env::var("FOURDA_GROUNDING_DUMP"),
+    ) else {
+        eprintln!("FOURDA_DB_PATH / FOURDA_GROUNDING_DUMP not set — nothing to dump");
+        return;
+    };
+    let days: i64 = std::env::var("FOURDA_GROUNDING_DAYS")
+        .ok()
+        .and_then(|d| d.parse().ok())
+        .unwrap_or(14);
+    let ctx = build_ctx();
+    let conn = rusqlite::Connection::open(&path).expect("open snapshot");
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, source_type, COALESCE(source_id,''), title, COALESCE(content,''), \
+                    COALESCE(tags,''), COALESCE(feed_relevant,0) \
+             FROM source_items \
+             WHERE feed_relevant = 1 OR created_at >= datetime('now', ?1) \
+             ORDER BY id",
+        )
+        .expect("prepare");
+    let window = format!("-{days} days");
+    let rows: Vec<(i64, String, String, String, String, String, i64)> = stmt
+        .query_map([&window], |r| {
+            Ok((
+                r.get(0)?,
+                r.get(1)?,
+                r.get(2)?,
+                r.get(3)?,
+                r.get(4)?,
+                r.get(5)?,
+                r.get(6)?,
+            ))
+        })
+        .expect("query")
+        .filter_map(|r| r.ok())
+        .collect();
+    let mut file = std::fs::File::create(&out).expect("create dump");
+    let mut grounded = 0usize;
+    for (id, st, sid, title, content, tags, feed) in &rows {
+        let tags: Vec<String> = serde_json::from_str(tags).unwrap_or_default();
+        let topics = crate::extract_topics(title, content, &tags);
+        let (mut deps, _) = match_dependencies(title, content, &topics, &ctx);
+        let source_id = (!sid.is_empty()).then_some(sid.as_str());
+        super::dependencies::align_registry_corroboration(st, source_id, &mut deps);
+        let verdict = super::dependencies::compute_grounding_verdict(st, source_id, &deps, &ctx);
+        let strong: Vec<String> = deps
+            .iter()
+            .filter(|d| super::dependencies::is_strong_grounding_match(d))
+            .map(|d| {
+                format!(
+                    "{}{}@{:.2}",
+                    d.package_name,
+                    if d.is_dev { "(dev)" } else { "" },
+                    d.confidence
+                )
+            })
+            .collect();
+        if verdict.strong {
+            grounded += 1;
+        }
+        let title_clean: String = title.replace(['\t', '\n', '\r'], " ");
+        writeln!(
+            file,
+            "{id}\t{st}\t{feed}\t{}\t{}\t{}\t{title_clean}",
+            u8::from(verdict.strong),
+            u8::from(verdict.strong_direct),
+            strong.join(",")
+        )
+        .expect("write");
+    }
+    println!("items: {}  grounded: {grounded}  dump: {out}", rows.len());
+}
+
 /// A6: the scanner discards every parsed version at the manifest write, so the
 /// SameMajor / NewerMajor / OlderMajor multipliers have never fired in
 /// production. Reports the live coverage so the backfill can be verified.
