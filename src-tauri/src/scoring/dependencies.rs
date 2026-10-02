@@ -192,6 +192,19 @@ pub(crate) fn is_strongly_grounded(deps: &[DepMatch]) -> bool {
     deps.iter().any(is_strong_grounding_match)
 }
 
+/// As [`is_strongly_grounded`], but the edge must be a NON-DEV dependency.
+/// The trust predicate behind the signal classifier's
+/// `CorroborationContext::dependency_match`, which gates every Alert and
+/// Critical tier: a devDependency may ground the FEED (item 16), but a
+/// vitest/typescript/vercel-CLI story is never a klaxon. Before 2026-10-02 the
+/// corroboration builder documented "non-dev" while calling
+/// [`is_strongly_grounded`], so a dev-dep title hit at exactly the 0.40 floor
+/// (0.5 x 0.8) opened the Alert tier.
+pub(crate) fn is_strongly_grounded_non_dev(deps: &[DepMatch]) -> bool {
+    deps.iter()
+        .any(|d| is_strong_grounding_match(d) && !d.is_dev)
+}
+
 /// As [`is_strongly_grounded`], but additionally requires the edge to be a
 /// DIRECT, NON-DEV dependency — the trust floor for a Critical alert. A CVE in
 /// a package the user chose directly is urgent; one reached only transitively
@@ -540,30 +553,79 @@ const COMMON_ENGLISH_WORDS: &[&str] = &[
     "unix",
 ];
 
-/// Language-context words that disambiguate package names from English
-const LANGUAGE_CONTEXT_WORDS: &[&str] = &[
-    "package",
-    "crate",
-    "library",
-    "lib",
-    "module",
-    "npm",
-    "cargo",
-    "pip",
-    "dependency",
-    "dep",
-    "install",
-    "import",
-    "require",
-    "gem",
-    "composer",
-    "pypi",
-    "crates.io",
-    "npmjs",
-    "yarn",
-    "pnpm",
-    "bun",
+/// How a context marker must sit in the text to count.
+///
+/// Context markers were matched as RAW SUBSTRINGS until 2026-10-02, so "gem"
+/// fired on "Gemini", "pip" on "pipeline", "import" on "important", "lib" on
+/// "liberal", "dep" on "deploy", "require" on "requirement", "patch" on
+/// "dispatch" and "0-day" on "10-day" — every one of them a free corroboration
+/// for whatever package name sat nearby.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MarkerFit {
+    /// A whole token: a word boundary on BOTH sides.
+    Token,
+    /// A word-start stem: a boundary on the LEFT only, so the stem covers its
+    /// word family ("install" → installed/installs, "patch" → patched/patches,
+    /// "vulnerabilit" → vulnerability/vulnerabilities) without firing mid-word
+    /// ("dispatch", "insecurity").
+    Stem,
+}
+
+/// Language/registry context that disambiguates a package name from English.
+/// Stems where a word family is wanted, tokens where the short form collides
+/// with ordinary words.
+const LANGUAGE_CONTEXT_MARKERS: &[(&str, MarkerFit)] = &[
+    ("package", MarkerFit::Stem), // package, packages, packaged
+    ("crate", MarkerFit::Stem),   // crate, crates, crates.io
+    ("librar", MarkerFit::Stem),  // library, libraries
+    ("lib", MarkerFit::Token),
+    ("libs", MarkerFit::Token),
+    ("module", MarkerFit::Stem), // module, modules
+    ("npm", MarkerFit::Token),
+    ("npmjs", MarkerFit::Token),
+    ("cargo", MarkerFit::Token),
+    ("pip", MarkerFit::Token),
+    ("pip3", MarkerFit::Token),
+    ("dependenc", MarkerFit::Stem), // dependency, dependencies
+    ("dep", MarkerFit::Token),
+    ("deps", MarkerFit::Token),
+    ("install", MarkerFit::Stem), // install, installs, installed, installation
+    ("import", MarkerFit::Token),
+    ("imports", MarkerFit::Token),
+    ("imported", MarkerFit::Token),
+    ("importing", MarkerFit::Token),
+    ("require", MarkerFit::Token),
+    ("gem", MarkerFit::Token),
+    ("gems", MarkerFit::Token),
+    ("composer", MarkerFit::Token),
+    ("pypi", MarkerFit::Token),
+    ("yarn", MarkerFit::Token),
+    ("pnpm", MarkerFit::Token),
+    ("bun", MarkerFit::Token),
 ];
+
+/// Does any marker occur in `text[start..end]`, honouring its [`MarkerFit`]?
+///
+/// The boundary tests read the FULL text, not the window slice: a window edge
+/// that cuts "important" after "import" must not manufacture a token end.
+/// `start`/`end` are snapped to char boundaries here.
+fn markers_in_window(text: &str, start: usize, end: usize, markers: &[(&str, MarkerFit)]) -> bool {
+    let start = snap_to_char_boundary(text, start.min(text.len()), false);
+    let end = snap_to_char_boundary(text, end.min(text.len()), true);
+    let Some(window) = text.get(start..end) else {
+        return false;
+    };
+    markers.iter().any(|&(marker, fit)| {
+        crate::utils::match_offsets(window, marker).any(|rel| {
+            let pos = start + rel;
+            let left_ok = crate::utils::char_before(text, pos).is_none_or(|c| !c.is_alphanumeric());
+            let right_ok = fit == MarkerFit::Stem
+                || crate::utils::char_at(text, pos + marker.len())
+                    .is_none_or(|c| !c.is_alphanumeric());
+            left_ok && right_ok
+        })
+    })
+}
 
 /// Normalize a package name for consistent matching.
 /// `@tanstack/react-query` -> `tanstack-react-query`
@@ -767,50 +829,250 @@ pub(crate) fn extract_search_terms(name: &str) -> Vec<String> {
 
 /// Check if language-context words appear near a position in text
 fn has_language_context_nearby(text: &str, position: usize, window: usize) -> bool {
-    let start = position.saturating_sub(window);
-    let end = (position + window).min(text.len());
-    // Snap to char boundaries to avoid panicking on multi-byte UTF-8
-    let start = snap_to_char_boundary(text, start, false);
-    let end = snap_to_char_boundary(text, end, true);
-    // SAFE: both ends explicitly snapped on the line above.
-    #[allow(clippy::string_slice)]
-    let context = &text[start..end];
-    LANGUAGE_CONTEXT_WORDS.iter().any(|w| context.contains(w))
+    markers_in_window(
+        text,
+        position.saturating_sub(window),
+        position.saturating_add(window),
+        LANGUAGE_CONTEXT_MARKERS,
+    )
 }
 
 /// Security/advisory markers that corroborate a package-name mention as being
 /// about the SOFTWARE — advisory-id prefixes, vulnerability vocabulary,
 /// supply-chain vocabulary. Only consulted NEAR a full-name occurrence, so a
-/// CVE roundup can't corroborate a dep whose name never appears
-/// (stems like "vulnerabilit"/"compromis" cover the word families).
-const SECURITY_CONTEXT_MARKERS: &[&str] = &[
-    "cve-",
-    "rustsec-",
-    "ghsa-",
-    "osv-",
-    "vulnerabilit",
-    "advisor",
-    "security",
-    "exploit",
-    "malware",
-    "malicious",
-    "supply chain",
-    "supply-chain",
-    "compromis",
-    "backdoor",
-    "0-day",
-    "zero-day",
-    "patch",
+/// CVE roundup can't corroborate a dep whose name never appears. All are
+/// word-start stems (`MarkerFit::Stem`): "vulnerabilit"/"compromis" cover the
+/// word families, "patch" covers patched/patches but not "dispatch", "0-day"
+/// no longer fires inside "10-day".
+const SECURITY_CONTEXT_MARKERS: &[(&str, MarkerFit)] = &[
+    ("cve-", MarkerFit::Stem),
+    ("rustsec-", MarkerFit::Stem),
+    ("ghsa-", MarkerFit::Stem),
+    ("osv-", MarkerFit::Stem),
+    ("vulnerabilit", MarkerFit::Stem),
+    ("advisor", MarkerFit::Stem),
+    ("security", MarkerFit::Stem),
+    ("exploit", MarkerFit::Stem),
+    ("malware", MarkerFit::Stem),
+    ("malicious", MarkerFit::Stem),
+    ("supply chain", MarkerFit::Stem),
+    ("supply-chain", MarkerFit::Stem),
+    ("compromis", MarkerFit::Stem),
+    ("backdoor", MarkerFit::Stem),
+    ("0-day", MarkerFit::Stem),
+    ("zero-day", MarkerFit::Stem),
+    ("patch", MarkerFit::Stem),
 ];
 
 /// Check if security-advisory markers appear near a position in text.
 fn has_security_context_nearby(text: &str, position: usize, window: usize) -> bool {
-    let start = snap_to_char_boundary(text, position.saturating_sub(window), false);
-    let end = snap_to_char_boundary(text, (position + window).min(text.len()), true);
-    // SAFE: both ends explicitly snapped on the lines above.
-    #[allow(clippy::string_slice)]
-    let context = &text[start..end];
-    SECURITY_CONTEXT_MARKERS.iter().any(|m| context.contains(m))
+    markers_in_window(
+        text,
+        position.saturating_sub(window),
+        position.saturating_add(window),
+        SECURITY_CONTEXT_MARKERS,
+    )
+}
+
+/// Package nouns that, written AS THE NEXT WORD after an org-name package's
+/// name (optionally past one language qualifier), or as the word right before
+/// it, say the text is about the CLIENT LIBRARY — "OpenAI Node SDK", "openai
+/// npm package", "Stripe Python library", "npm package openai" — rather than
+/// the company. Adjacency, not a byte window: "OpenAI model client",
+/// "OpenAI's Agents SDK" and "Vercel AI SDK" (a different package, `ai`) sit
+/// within a few bytes of a noun and are company/product prose. Plural
+/// "clients" is deliberately absent — that is the business sense.
+const PACKAGE_NOUNS: &[&str] = &[
+    "sdk",
+    "sdks",
+    "npm",
+    "pypi",
+    "crate",
+    "gem",
+    "package",
+    "packages",
+    "library",
+    "libraries",
+    "lib",
+    "client",
+    "module",
+    "bindings",
+    "wrapper",
+];
+
+/// Language qualifiers allowed between the name and its package noun
+/// ("OpenAI Node SDK", "Stripe Python library", "openai official client").
+const PACKAGE_NOUN_QUALIFIERS: &[&str] = &[
+    "node",
+    "nodejs",
+    "node.js",
+    "python",
+    "js",
+    "javascript",
+    "typescript",
+    "ts",
+    "go",
+    "golang",
+    "ruby",
+    "java",
+    "rust",
+    "php",
+    "dotnet",
+    ".net",
+    "official",
+];
+
+/// API-change vocabulary that, in the TITLE alongside an "api" token, makes an
+/// org-name headline a change the client library's users must act on ("OpenAI
+/// deprecates the Assistants API"). Title-only: long company articles mention
+/// APIs and migrations in passing.
+const API_TOKEN_MARKERS: &[(&str, MarkerFit)] =
+    &[("api", MarkerFit::Token), ("apis", MarkerFit::Token)];
+const API_CHANGE_MARKERS: &[(&str, MarkerFit)] = &[
+    ("deprecat", MarkerFit::Stem),
+    ("breaking", MarkerFit::Stem),
+    ("sunset", MarkerFit::Stem),
+    ("retir", MarkerFit::Stem),
+    ("migrat", MarkerFit::Stem),
+    ("changelog", MarkerFit::Stem),
+    ("remov", MarkerFit::Stem),
+];
+
+/// Lowercase word tokens of `s`, split on whitespace with surrounding
+/// punctuation trimmed (`.` kept inside, for "node.js" / ".net").
+fn word_tokens(s: &str) -> impl Iterator<Item = &str> {
+    s.split_whitespace()
+        .map(|w| w.trim_matches(|c: char| !c.is_alphanumeric() && c != '.'))
+        .map(|w| w.trim_end_matches('.'))
+        .filter(|w| !w.is_empty())
+}
+
+/// Is a package noun the next word after the name ending at `end` (past an
+/// optional possessive and one qualifier), or the word right before `pos`?
+fn has_adjacent_package_noun(text: &str, pos: usize, end: usize) -> bool {
+    let after = text.get(end..).unwrap_or("");
+    let after = after
+        .strip_prefix("'s")
+        .or_else(|| after.strip_prefix("\u{2019}s"))
+        .unwrap_or(after);
+    // The name must END its word: "openai/codex" or "openai-node" continue it.
+    if !after.is_empty() && !after.starts_with(char::is_whitespace) {
+        return false;
+    }
+    let mut next = word_tokens(after).take(2);
+    let following = match next.next() {
+        Some(w) if PACKAGE_NOUN_QUALIFIERS.contains(&w) => next.next(),
+        other => other,
+    };
+    if following.is_some_and(|w| PACKAGE_NOUNS.contains(&w)) {
+        return true;
+    }
+    let before = text.get(..pos).unwrap_or("");
+    before.ends_with(char::is_whitespace)
+        && word_tokens(before)
+            .last()
+            .is_some_and(|w| PACKAGE_NOUNS.contains(&w))
+}
+
+/// Evidence that an ORG-NAME package mention (`package_ambiguity::
+/// is_org_name_package`) is about the package and not the company: code
+/// syntax anywhere in the text, or — at a name occurrence — an immediate
+/// version literal or an adjacent package noun, or — in the title —
+/// API-change vocabulary. Security vocabulary alone never qualifies:
+/// "OpenAI's rogue model hacked Hugging Face" is a security story about the
+/// company.
+fn has_package_usage_evidence(
+    text: &str,
+    title_len: usize,
+    name: &str,
+    positions: &[(usize, usize)],
+) -> bool {
+    if has_package_code_form(text, name) {
+        return true;
+    }
+    if positions
+        .iter()
+        .any(|&(pos, len)| has_immediate_version_literal(text, pos + len))
+        || positions
+            .iter()
+            .any(|&(pos, len)| has_adjacent_package_noun(text, pos, pos + len))
+    {
+        return true;
+    }
+    positions.iter().any(|&(pos, _)| pos < title_len)
+        && markers_in_window(text, 0, title_len, API_TOKEN_MARKERS)
+        && markers_in_window(text, 0, title_len, API_CHANGE_MARKERS)
+}
+
+/// The package written as CODE: a pinned spec (`openai@4.2.0`, `openai@^4`),
+/// an import (`import openai`, `from openai import`, `require("openai")`), a
+/// quoted or backticked name, or a package-manager command (`pip install
+/// openai`, `npm i openai`, `pnpm add openai`). `text` and `name` lowercase.
+fn has_package_code_form(text: &str, name: &str) -> bool {
+    let spec = format!("{name}@");
+    let pinned = crate::utils::match_offsets(text, &spec).any(|pos| {
+        crate::utils::char_before(text, pos).is_none_or(|c| !c.is_alphanumeric())
+            && crate::utils::char_at(text, pos + spec.len())
+                .is_some_and(|c| c.is_ascii_digit() || c == '^' || c == '~')
+    });
+    if pinned {
+        return true;
+    }
+    let literal = [
+        format!("`{name}`"),
+        format!("'{name}'"),
+        format!("\"{name}\""),
+        format!("from {name} import"),
+    ];
+    if literal.iter().any(|l| text.contains(l.as_str())) {
+        return true;
+    }
+    let mut phrases = vec![format!("import {name}")];
+    for manager in [
+        "npm", "pnpm", "yarn", "bun", "pip", "pip3", "uv", "poetry", "cargo",
+    ] {
+        for verb in ["install", "i", "add"] {
+            phrases.push(format!("{manager} {verb} {name}"));
+        }
+    }
+    phrases
+        .iter()
+        .any(|p| crate::utils::has_word_boundary_match(text, p))
+}
+
+/// A version literal IMMEDIATELY after a name ending at byte `after`: only
+/// spaces, `@`, `:` or `=` may separate them ("openai 4.2.0", "openai@4.2.0",
+/// "openai v7.25.0", "openai v5"). Dotted, or v-prefixed. Stricter than
+/// [`version_literal_at_start`]'s 20-byte scan, which reads "OpenAI GPT-5.4"
+/// as openai's version — for an org-name package the model names that follow
+/// the company name carry exactly that shape.
+fn has_immediate_version_literal(text: &str, after: usize) -> bool {
+    let Some(rest) = text.get(after..) else {
+        return false;
+    };
+    let rest = rest.trim_start_matches([' ', '@', ':', '=']);
+    let (v_prefixed, digits) = match rest.strip_prefix(['v', 'V']) {
+        Some(r) => (true, r),
+        None => (false, rest),
+    };
+    let token: String = digits
+        .chars()
+        .take_while(|c| c.is_ascii_digit() || *c == '.')
+        .collect();
+    let token = token.trim_end_matches('.');
+    if !token.starts_with(|c: char| c.is_ascii_digit()) {
+        return false;
+    }
+    // "4o" (a model name) is not a version: the literal must end at a boundary.
+    if digits
+        .get(token.len()..)
+        .and_then(|s| s.chars().next())
+        .is_some_and(char::is_alphanumeric)
+    {
+        return false;
+    }
+    let dotted = token.split('.').filter(|p| !p.is_empty()).count() >= 2;
+    (dotted || v_prefixed) && version_triplet(token).is_some_and(|t| t.0 < 100 && t != (0, 0, 0))
 }
 
 /// A package-name boundary: characters that may legitimately appear INSIDE a
@@ -877,6 +1139,13 @@ fn package_name_positions(
                         // Sentence period: "…update axios. The fix…"
                         || rest[1..].chars().next().is_none_or(|c2| !c2.is_alphanumeric())
                 }
+                // A pinned spec ("openai@4.2.0", "axios@^1") ends the name:
+                // `@` is name-internal only in the SCOPED position, never
+                // before a version.
+                Some('@') => rest
+                    .chars()
+                    .nth(1)
+                    .is_some_and(|c| c.is_ascii_digit() || c == '^' || c == '~'),
                 Some(_) => false,
             };
             if before_ok && after_ok {
@@ -938,6 +1207,17 @@ fn is_name_corroborated(
     }
     if normalized_name.contains(['-', '_']) {
         return true;
+    }
+    // Org-name packages (`openai`, `stripe`): the text is about the company
+    // unless it shows the PACKAGE — security or language vocabulary near
+    // "OpenAI" describes the company's news, not the client library.
+    if crate::package_ambiguity::is_org_name_package(normalized_name) {
+        return has_package_usage_evidence(
+            text_lower,
+            title_lower.len(),
+            normalized_name,
+            &positions,
+        );
     }
     let title_len = title_lower.len();
     positions.iter().any(|&(pos, _)| {
@@ -1799,6 +2079,10 @@ pub(crate) fn match_dependencies(
 
     (matched, score)
 }
+
+#[cfg(test)]
+#[path = "dependencies_grounding_tests.rs"]
+mod grounding_tests;
 
 #[cfg(test)]
 mod tests {

@@ -164,6 +164,28 @@ impl Database {
         rows.next().transpose()
     }
 
+    /// EVERY active mirror row for an advisory id (aliases count) — one per
+    /// affected package/ecosystem. The scorer's security verdict runs the
+    /// Preemption matcher over each, so a multi-package advisory
+    /// (`@swc/html` npm + `swc_html_minifier` crates.io) is judged against
+    /// every package it names, not only the first row.
+    pub fn get_osv_advisories_by_id(&self, advisory_id: &str) -> SqliteResult<Vec<StoredAdvisory>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare_cached(
+            "SELECT id, advisory_id, summary, details, package_name, ecosystem,
+                    affected_ranges, fixed_versions, severity_type, cvss_score,
+                    source_url, published_at, modified_at, withdrawn_at, synced_at,
+                    aliases, severity_label
+             FROM osv_advisories
+             WHERE withdrawn_at IS NULL
+               AND (advisory_id = ?1 COLLATE NOCASE
+                    OR aliases LIKE '%\"' || ?1 || '\"%')
+             ORDER BY (advisory_id LIKE 'GHSA-%') DESC, cvss_score DESC NULLS LAST",
+        )?;
+        let rows = stmt.query_map(params![advisory_id], map_advisory_row)?;
+        rows.collect()
+    }
+
     /// Get all active (non-withdrawn) stored advisories.
     pub fn get_all_osv_advisories(&self) -> SqliteResult<Vec<StoredAdvisory>> {
         let conn = self.conn.lock();

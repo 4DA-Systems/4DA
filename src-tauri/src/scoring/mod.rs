@@ -44,8 +44,10 @@ pub(crate) mod reexamination;
 #[cfg(test)]
 mod registry_grounding_tests;
 pub(crate) mod release_grade;
+pub(crate) mod release_ownership;
 pub(crate) mod release_version;
 mod role_inference;
+pub(crate) mod security_verdict;
 mod semantic;
 #[cfg(test)]
 mod simulation;
@@ -641,7 +643,19 @@ pub(crate) use types::{ScoringInput, ScoringOptions};
 // `breaking_change` necessity naming the projects, a minor and a prerelease
 // take ceilings below it, a patch leaves the feed. Scoped in
 // `epochs::SCOPED_EPOCHS` to registry rows.
-pub(crate) const PIPELINE_VERSION: i32 = 37;
+// v38 (2026-10-02, Signal adversarial audit): (1) one security truth — an
+// advisory's applicability comes from the same version-confirmed matcher
+// Preemption reads (transitive copies included), severity from the advisory
+// itself, never a default Critical; editorial security stories and every
+// non-security signal type cap at Advisory; (2) dependency grounding matches
+// context words as whole tokens (not substrings: "gem" in "Gemini"), and
+// org-name packages (`openai`, `stripe`) need package evidence — company
+// news no longer grounds;
+// (3) registry releases are graded only against projects that INSTALL the
+// package (a project that builds it is not a pin). (2) reaches any item that
+// mentions a dependency, so the bump is NOT registered: the whole corpus
+// re-judges (AD-034: the version declares a corpus-wide blast radius).
+pub(crate) const PIPELINE_VERSION: i32 = 38;
 
 /// Parse the topic tags carried in the `source_items.tags` column.
 ///

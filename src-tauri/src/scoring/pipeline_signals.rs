@@ -52,13 +52,13 @@ pub(super) fn build_corroboration(
         }
     };
 
-    // 2. Dependency match — the single canonical grounding predicate. A bare
-    //    non-dev hit is NOT enough; the classifier's Critical hard-gate trusts
-    //    this flag, so it must mean the same "strongly grounded" as the
-    //    evidence pool and the persisted link set (non-dev, confidence >= the
-    //    strong floor, non-ambiguous name, and name-corroborated: the item
-    //    actually names the package).
-    let dependency_match = dependencies::is_strongly_grounded(matched_deps);
+    // 2. Dependency match — the canonical grounding predicate restricted to
+    //    NON-DEV edges. The classifier's Critical hard-gate and its Alert
+    //    gates (security and v33 every-type) trust this flag, so it must be
+    //    the strong grounding (confidence >= the strong floor, non-ambiguous
+    //    name, name-corroborated) AND a production dependency. Dev deps still
+    //    ground the feed (item 16) — they just never open a klaxon tier.
+    let dependency_match = dependencies::is_strongly_grounded_non_dev(matched_deps);
 
     // 3. Signal chain phase — detect if topics appear across multiple days
     //    (lightweight chain detection without the full detect_chains() machinery)
@@ -249,13 +249,14 @@ mod tests {
     }
 
     #[test]
-    fn corroboration_dependency_match_for_dev_and_weak_dep() {
+    fn corroboration_dependency_match_refuses_dev_and_weak_dep() {
         let db = test_db();
-        // Dev dependency IS a grounding edge at strong confidence (item 16,
-        // 2026-08-23: manifest devDeps ground the feed; only the Critical
-        // paging lane stays non-dev via `is_strongly_grounded_direct`).
+        // A dev dependency grounds the FEED (item 16) but never confirms the
+        // classifier's dependency flag, which opens the Alert and Critical
+        // tiers (2026-10-02: the builder documented "non-dev" and called the
+        // dev-inclusive predicate).
         let c1 = build_corroboration(&db, &["x".to_string()], &[dep("tokio", 0.95, true)]);
-        assert!(c1.dependency_match);
+        assert!(!c1.dependency_match);
         // Confidence below the 0.40 strong floor does not ground.
         let c2 = build_corroboration(&db, &["x".to_string()], &[dep("tokio", 0.30, false)]);
         assert!(!c2.dependency_match);

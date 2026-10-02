@@ -1329,6 +1329,104 @@ fn a_scoped_npm_release_train_collapses_to_its_newest() {
     );
 }
 
+/// Live 2026-10-02: three packages each held two feed slots with releases on
+/// different lines — `fastembed` 6.0.0 + 7.1.0, `lopdf` 0.44.0 + 0.45.0 and
+/// npm `stripe` 22.6.2 + 23.0.0. A registry row is superseded by ANY newer
+/// curated final of its package; a newer pre-release supersedes nothing; a
+/// same-named package on another registry is another package.
+#[test]
+fn a_registry_release_yields_to_the_newest_final_of_its_package_across_lines() {
+    use crate::test_utils::insert_test_item_with_url;
+    let db = test_db();
+    let version = crate::scoring::PIPELINE_VERSION;
+    let release = |source: &str, title: &str, dep: &str| -> i64 {
+        let id = insert_test_item_with_url(
+            &db,
+            source,
+            title,
+            &format!("https://registry.test/{}", title.replace([' ', ':'], "-")),
+            title,
+            "body",
+        );
+        let conn = db.conn.lock();
+        conn.execute(
+            "UPDATE source_items SET content_type = 'release_notes' WHERE id = ?1",
+            rusqlite::params![id],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO scoring_explanations (source_item_id, pipeline_version, breakdown)
+             VALUES (?1, ?2, json_object('breakdown', json_object('matched_deps', json_array(?3))))",
+            rusqlite::params![id, version, dep],
+        )
+        .unwrap();
+        id
+    };
+    let fe6 = release("crates_io", "crates.io: fastembed v6.0.0", "fastembed");
+    let fe7 = release("crates_io", "crates.io: fastembed v7.1.0", "fastembed");
+    let lo44 = release("crates_io", "crates.io: lopdf v0.44.0", "lopdf");
+    let lo45 = release("crates_io", "crates.io: lopdf v0.45.0", "lopdf");
+    let st22 = release("npm_registry", "npm: stripe v22.6.2", "stripe");
+    let st23 = release("npm_registry", "npm: stripe v23.0.0", "stripe");
+    let crate_stripe = release("crates_io", "crates.io: stripe v0.9.0", "stripe");
+    let tauri_final = release("crates_io", "crates.io: tauri v2.12.1", "tauri");
+    let tauri_alpha = release("crates_io", "crates.io: tauri v3.0.0-alpha.2", "tauri");
+    let all = [
+        fe6,
+        fe7,
+        lo44,
+        lo45,
+        st22,
+        st23,
+        crate_stripe,
+        tauri_final,
+        tauri_alpha,
+    ];
+    let verdicts: Vec<_> = all
+        .iter()
+        .map(|id| (*id, true, VerdictSource::Score))
+        .collect();
+    db.persist_feed_verdicts(&verdicts, version).unwrap();
+
+    assert_eq!(db.reconcile_release_train(version).unwrap(), (3, 0));
+    for old in [fe6, lo44, st22] {
+        assert_eq!(verdict_of(&db, old).0, Some(0), "item {old} is superseded");
+    }
+    for kept in [fe7, lo45, st23] {
+        assert_eq!(
+            verdict_of(&db, kept).0,
+            Some(1),
+            "the newest keeps the slot"
+        );
+    }
+    assert_eq!(
+        verdict_of(&db, crate_stripe).0,
+        Some(1),
+        "the stripe crate is not the stripe npm package"
+    );
+    assert_eq!(
+        verdict_of(&db, tauri_final).0,
+        Some(1),
+        "a newer pre-release does not supersede a final"
+    );
+    // Convergent.
+    assert_eq!(db.reconcile_release_train(version).unwrap(), (0, 0));
+
+    // The newest leaves the feed → the older release's verdict is withdrawn.
+    db.persist_feed_verdicts_with_reasons(
+        &[(
+            fe7,
+            false,
+            VerdictSource::Score,
+            Some(VerdictReason::LlmReject),
+        )],
+        version,
+    )
+    .unwrap();
+    assert_eq!(db.reconcile_release_train(version).unwrap(), (0, 1));
+    assert_eq!(verdict_of(&db, fe6), (None, None, None));
+}
+
 /// v33: one slot per release line. The TypeScript train (5.9 Beta, 5.9 RC,
 /// 5.9, 6.0 Beta, 6.0 RC, 6.0, 7.0 Beta, 7.0 RC, 7.0) held nine feed slots
 /// (2026-09-07). Pre-releases yield to their final; majors stand on their

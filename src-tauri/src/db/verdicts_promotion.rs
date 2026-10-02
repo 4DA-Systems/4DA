@@ -208,12 +208,31 @@ impl Database {
     /// sibling is no longer curated is withdrawn (cleared, never flipped) so
     /// the risen sweep grants the row a first verdict again. Returns
     /// `(demoted, withdrawn)`.
+    ///
+    /// A REGISTRY row is keyed by the package its title names, in its
+    /// registry, and any newer curated STABLE release of that package
+    /// supersedes it, across lines: an upgrade goes to the newest release, so
+    /// an older major on the registry says nothing the newer one does not
+    /// (live 2026-10-02: `fastembed 6.0.0` beside `7.1.0`, `lopdf 0.44.0`
+    /// beside `0.45.0`, npm `stripe 22.6.2` beside `23.0.0`, each pair
+    /// holding two slots). A newer pre-release never supersedes a final.
+    /// Editorial announcements keep one row per line — "TypeScript 6.0" and
+    /// "7.0" are each their own story.
     pub fn reconcile_release_train(&self, version: i32) -> SqliteResult<(usize, usize)> {
         use crate::scoring::release_version::{announced_release_version, same_release_line};
         struct Row {
             id: i64,
             curated: bool,
             version: semver::Version,
+        }
+        /// Does `newer` supersede `older` within one group?
+        fn supersedes(registry: bool, newer: &semver::Version, older: &semver::Version) -> bool {
+            newer > older
+                && if registry {
+                    newer.pre.is_empty()
+                } else {
+                    same_release_line(newer, older)
+                }
         }
         let rows: Vec<(i64, String, String, String, i64)> = {
             let conn = self.read_conn();
@@ -240,32 +259,51 @@ impl Database {
             })?;
             mapped.collect::<SqliteResult<Vec<_>>>()?
         };
-        let mut groups: std::collections::HashMap<(String, bool), Vec<Row>> =
+        // Key: (registry, identity). A registry row's identity is its
+        // registry plus the package its title names; an editorial row's is
+        // the dependency it matched.
+        let mut groups: std::collections::HashMap<(bool, String), Vec<Row>> =
             std::collections::HashMap::new();
         for (id, title, source_type, dep, relevant) in rows {
-            let Some(version) = announced_release_version(&title, &source_type, &dep) else {
-                continue;
+            let registry = crate::dep_linker::is_registry_source(&source_type);
+            let (key, version) = if registry {
+                // One registry, two spellings of its source type.
+                let ecosystem = match source_type.as_str() {
+                    "crates_io" | "crates" => "crates",
+                    "npm_registry" | "npm" => "npm",
+                    "go_modules" | "go" => "go",
+                    other => other,
+                };
+                let Some((package, Some(raw))) =
+                    crate::dep_linker::registry_release_identity(&title)
+                else {
+                    continue;
+                };
+                let Some(version) = crate::scoring::release_version::lenient_semver(&raw, None)
+                else {
+                    continue;
+                };
+                (format!("{ecosystem}:{package}"), version)
+            } else {
+                let Some(version) = announced_release_version(&title, &source_type, &dep) else {
+                    continue;
+                };
+                (dep.to_lowercase(), version)
             };
-            let class = crate::dep_linker::is_registry_source(&source_type);
-            groups
-                .entry((dep.to_lowercase(), class))
-                .or_default()
-                .push(Row {
-                    id,
-                    curated: relevant == 1,
-                    version,
-                });
+            groups.entry((registry, key)).or_default().push(Row {
+                id,
+                curated: relevant == 1,
+                version,
+            });
         }
         let mut demote: Vec<(i64, bool, VerdictSource, Option<VerdictReason>)> = Vec::new();
         let mut withdraw: Vec<i64> = Vec::new();
-        for group in groups.values() {
+        for ((registry, _), group) in &groups {
             let curated: Vec<&Row> = group.iter().filter(|r| r.curated).collect();
             for row in group {
-                let newer_curated = curated.iter().any(|c| {
-                    c.id != row.id
-                        && same_release_line(&c.version, &row.version)
-                        && c.version > row.version
-                });
+                let newer_curated = curated
+                    .iter()
+                    .any(|c| c.id != row.id && supersedes(*registry, &c.version, &row.version));
                 match (row.curated, newer_curated) {
                     (true, true) => demote.push((
                         row.id,

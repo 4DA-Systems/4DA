@@ -98,6 +98,69 @@ pub(crate) fn is_ambiguous_package_name(name: &str) -> bool {
     )
 }
 
+/// Single-token packages named after the ORGANISATION or PRODUCT that
+/// publishes them: the vendor SDKs (`openai`, `stripe`, `twilio`, ...).
+///
+/// The text of almost every item that names one of these is about the company
+/// — its models, funding, lawsuits, outages, incidents — not about the client
+/// library in the user's manifest. Live 2026-10-02: the npm `openai` package
+/// (a direct dependency of one side project) grounded a whole cluster of
+/// rogue-AI news as "Security story names openai in runyourempire/navcal" and
+/// made "OpenAI still doesn't seem to have a handle on all of its rogue AI
+/// activity" the Signal hero. The existing word-like guards cannot see the
+/// class: "openai" is neither an English word nor short, and a company story
+/// carries exactly the security vocabulary (`hacked`, `security`, `exploit`)
+/// that corroborates a genuine package advisory.
+///
+/// A name on this list corroborates ONLY with evidence that the text is about
+/// the PACKAGE (`scoring::dependencies::has_package_usage_evidence`): code
+/// syntax (`openai@4`, `import openai`, `require("openai")`, `pip install
+/// openai`), a version literal immediately after the name ("openai 4.2.0",
+/// "openai v7.25.0"), a package noun beside it ("OpenAI Node SDK", "openai npm
+/// package"), or API-change vocabulary ("OpenAI deprecates the Assistants
+/// API"). Registry release rows and structured advisories keep their own
+/// proofs (subject package / `Affected:` metadata) and are unaffected.
+///
+/// Why a curated list and not a casing signal: a brand written with internal
+/// capitals ("OpenAI", "PostHog") looks data-derivable, but the same signal
+/// fires on technologies that ARE their package — "TypeScript", "NumPy",
+/// "LangChain", "GraphQL" — where an editorial vulnerability story naming the
+/// package is a genuine dependency story. Whether a name is primarily a
+/// company is world knowledge, not a property of the string. Entries must be
+/// a real single-token package on npm/PyPI/crates.io whose publisher shares
+/// the name; multi-token SDKs (`@anthropic-ai/sdk`, `groq-sdk`) need nothing
+/// here because their bare subterm never corroborates.
+const ORG_NAME_PACKAGES: &[&str] = &[
+    "openai",
+    "anthropic",
+    "stripe",
+    "vercel",
+    "supabase",
+    "twilio",
+    "sendgrid",
+    "replicate",
+    "cohere",
+    "mistralai",
+    "groq",
+    "firebase",
+    "posthog",
+    "resend",
+    "clerk",
+    "auth0",
+    "cloudflare",
+    "netlify",
+    "datadog",
+    "mixpanel",
+    "plaid",
+];
+
+/// True when `name` (any case) is a single-token package named after the
+/// organisation or product that publishes it — see [`ORG_NAME_PACKAGES`].
+pub(crate) fn is_org_name_package(name: &str) -> bool {
+    let lower = name.to_lowercase();
+    ORG_NAME_PACKAGES.contains(&lower.as_str())
+}
+
 /// Dep names that are so generic they cause false matches in SQL LIKE queries.
 /// Only truly generic English words that appear in nearly every article title.
 /// Words like "futures", "bytes", "ring", "cookie", "config", "router" are real

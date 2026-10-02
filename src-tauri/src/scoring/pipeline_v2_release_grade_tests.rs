@@ -132,7 +132,7 @@ fn a_release_of_your_dependency_is_in_domain_whatever_its_words() {
         .expect("the dependency factor is present");
     assert_eq!(
         dep_factor.display,
-        "Breaking upgrade of your dependency fastembed"
+        "Breaking upgrade: fastembed 5.13.4 \u{2192} 7.1.0 (proj/app)"
     );
     assert!(
         dep_factor.evidence.contains("proj/app on 5.13.4"),

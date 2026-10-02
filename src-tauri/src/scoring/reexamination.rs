@@ -49,11 +49,24 @@ const MAX_REQUEUE: usize = 5000;
 const CONVERGE_CHUNK: usize = 500;
 const CONVERGE_MAX_CHUNKS: usize = 12;
 
+/// The revision of the rules that turn pins into a release grade
+/// (`release_grade`, `release_ownership`). It is hashed into the pin epoch, so
+/// a build that changes what the SAME pins mean re-examines every held
+/// dependency release once — the scoped alternative to a `PIPELINE_VERSION`
+/// bump, which would re-judge the whole corpus for a registry-only rule.
+/// Bump it with any change to how a release is graded against pins.
+///
+/// 1 (2026-10-02): a project that builds the package is not a pin
+/// (`release_ownership`), and a grade that says "not news" holds the row at
+/// the already-installed ceiling.
+pub(crate) const RELEASE_GRADE_RULES: u32 = 1;
+
 /// Stable hash of the developer's pins: every included project's (path, package,
-/// version, direct, dev), sorted. `DefaultHasher` is seeded deterministically, so the
-/// value is stable across runs; a Rust-version change to the algorithm would at worst
-/// trigger one extra (harmless) re-examination. Masked to 63 bits (kept from the
-/// scheduler_state era; see `scheduler_state::persist_dep_epoch_hash`).
+/// version, direct, dev), sorted, plus [`RELEASE_GRADE_RULES`]. `DefaultHasher` is
+/// seeded deterministically, so the value is stable across runs; a Rust-version
+/// change to the algorithm would at worst trigger one extra (harmless)
+/// re-examination. Masked to 63 bits (kept from the scheduler_state era; see
+/// `scheduler_state::persist_dep_epoch_hash`).
 pub(crate) fn dependency_pin_epoch(db: &Database) -> u64 {
     let user_excluded = crate::project_inclusion::user_excluded_paths();
     let mut pins: Vec<(String, String, String, bool, bool)> = db
@@ -76,6 +89,7 @@ pub(crate) fn dependency_pin_epoch(db: &Database) -> u64 {
     pins.sort_unstable();
     pins.dedup();
     let mut hasher = DefaultHasher::new();
+    RELEASE_GRADE_RULES.hash(&mut hasher);
     pins.len().hash(&mut hasher);
     for pin in &pins {
         pin.hash(&mut hasher);

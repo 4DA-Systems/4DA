@@ -828,7 +828,14 @@ fn is_specific_title_match_candidate(dep_name: &str) -> bool {
         .replace(['/', '_'], "-")
         .to_lowercase();
 
-    !is_ambiguous_package_name(&normalized) && !crate::scoring::is_ambiguous_dep_name(&normalized)
+    // Org-name packages (`openai`, `stripe`) name a company far more often
+    // than the client library: a bare title word linked every OpenAI news
+    // story to the `openai` npm dependency (live 2026-10-02, a whole "rogue
+    // AI" cluster). Package releases still link through the registry tier,
+    // and scoring's grounding judges package evidence in the text itself.
+    !is_ambiguous_package_name(&normalized)
+        && !crate::scoring::is_ambiguous_dep_name(&normalized)
+        && !crate::package_ambiguity::is_org_name_package(&normalized)
 }
 
 enum AffectedStatus {

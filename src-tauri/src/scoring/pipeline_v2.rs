@@ -26,6 +26,7 @@ use crate::{
 use crate::sources::cve_matching::normalize_ecosystem;
 
 use super::dependencies::DepMatch;
+use super::security_verdict::{exposed_security_action, priority_from_label, SecurityLane};
 use super::types::{ScoringInput, ScoringOptions};
 use super::*;
 
@@ -2593,6 +2594,7 @@ fn classify_signals(
     matched_deps: &[dependencies::DepMatch],
     grounding: dependencies::GroundingVerdict,
     db: &Database,
+    security: &SecurityLane<'_>,
 ) -> (
     Option<String>,
     Option<String>,
@@ -2715,14 +2717,21 @@ fn classify_signals(
             // triggering misleading Critical alerts.
             if !matched_deps.is_empty() {
                 let has_strong_dep = grounding.strong;
-                if c.signal_type == signals::SignalType::SecurityAlert && has_strong_dep {
-                    // The advisory's OWN tier decides the priority (Phase 120):
-                    // the mirror's CVSS band or the source's curated label —
-                    // the same tier Preemption, the knowledge gap and the MCP
-                    // read. A GitHub-MODERATE type-confusion bug was "Critical"
-                    // here and "medium" on the next tab (2026-09-07). Ungraded
-                    // stays Critical: an advisory in your direct dependency
-                    // with no severity is not a reason to relax.
+                if c.signal_type == signals::SignalType::SecurityAlert
+                    && (has_strong_dep || security.exposed.is_some())
+                {
+                    // 2026-10-02 (one security truth): the tier comes from the
+                    // version-confirmed matcher's verdict and the advisory's
+                    // OWN severity (mirror CVSS band / curated label, else the
+                    // item's CVSS / Severity line) — never a default. Only a
+                    // confirmed-affected REGISTRY advisory may reach Alert or
+                    // Critical (`signals::confirmed_advisory_priority`);
+                    // unknown applicability and editorial security coverage
+                    // are Advisory, confirmed-not-affected is Watch. Before
+                    // this an ungraded advisory defaulted to Critical — the
+                    // hono/jsx XSS (MEDIUM 4.7, already fixed in the installed
+                    // 4.13.9) paged as "Critical" because the mirror did not
+                    // hold it yet when the item was scored.
                     let best = matched_deps
                         .iter()
                         .filter(|d| dependencies::is_strong_grounding_match(d))
@@ -2731,20 +2740,22 @@ fn classify_signals(
                                 .partial_cmp(&b.confidence)
                                 .unwrap_or(std::cmp::Ordering::Equal)
                         });
-                    let exposed =
-                        best.and_then(|dep| mirror_affected_projects(db, input, dep, None));
-                    let tier = best.and_then(|dep| mirror_severity_tier(db, input, dep, None));
-                    c.priority = match tier {
-                        Some("medium") => signals::SignalPriority::Alert,
-                        Some("low") => signals::SignalPriority::Advisory,
-                        _ => signals::SignalPriority::Critical,
-                    };
+                    c.priority = security.priority(best);
                     let prefix = if c.priority == signals::SignalPriority::Critical {
                         "Critical"
                     } else {
                         "Security"
                     };
-                    c.action = critical_security_action(matched_deps, exposed.as_deref(), prefix);
+                    c.action = match (security.exposed.is_some(), security.package) {
+                        (true, Some(pkg)) => {
+                            exposed_security_action(pkg, &security.exposed_projects, prefix)
+                        }
+                        _ => {
+                            let exposed =
+                                best.and_then(|dep| mirror_affected_projects(db, input, dep, None));
+                            critical_security_action(matched_deps, exposed.as_deref(), prefix)
+                        }
+                    };
                 } else if c.signal_type == signals::SignalType::BreakingChange
                     && matched_deps
                         .iter()
@@ -2777,8 +2788,10 @@ fn classify_signals(
 
             // TRUST GATE: Critical requires verified dependency evidence.
             // If signal classifier set Critical but there's no strong direct dep match, downgrade.
+            // A matcher-confirmed DIRECT runtime copy is that evidence.
             if c.priority == signals::SignalPriority::Critical {
-                let has_strong_direct_dep = grounding.strong_direct;
+                let has_strong_direct_dep = grounding.strong_direct
+                    || security.exposed.is_some_and(|e| e.is_direct && !e.is_dev);
                 if !has_strong_direct_dep {
                     c.priority = signals::SignalPriority::Alert;
                     if matched_deps.is_empty() {
@@ -3184,7 +3197,13 @@ pub(crate) fn score_item(
             && grounding.strong
             // A yanked pin is news even when it is the newest version.
             && release_class != Some(super::release_grade::ReleaseClass::Yanked)
-            && release_already_installed(db, input, &raw.matched_deps);
+            // A graded release decides from its own pins: the grade excludes
+            // the projects that BUILD the package (`release_ownership`), which
+            // the name-wide route below cannot tell from installs.
+            && match release_grade.as_ref() {
+                Some(grade) => grade.not_news(),
+                None => release_already_installed(db, input, &raw.matched_deps),
+            };
     // v37: a patch (or a release only transitive copies are behind on) and a
     // prerelease are not news on their own — security fixes reach the user
     // through the advisory lanes, and a prerelease announcement through
@@ -3251,34 +3270,95 @@ pub(crate) fn score_item(
     } else {
         None
     };
-    let fixed_version = if is_security_source {
-        extract_fixed_version(input.content)
+    // 2026-10-02 (one security truth): the advisory is judged by the SAME
+    // version-confirmed matcher Preemption uses — every installed copy of its
+    // package, direct, transitive and dev, in every auditable project. `None`
+    // when the mirror does not hold the advisory (yet) or the package is not
+    // in the inventory; the routes below then decide.
+    let sec_verdict = if is_security_source {
+        super::security_verdict::matcher_verdict(
+            db,
+            &item_advisory_ids(input, advisory_id.as_deref()),
+        )
     } else {
         None
     };
-    let affected_versions = if is_security_source {
+    let sec_exposed_copy = sec_verdict
+        .as_ref()
+        .and_then(super::security_verdict::SecurityVerdict::worst_copy);
+    let fixed_version = if is_security_source {
+        extract_fixed_version(input.content).or_else(|| {
+            sec_exposed_copy
+                .and(sec_verdict.as_ref())
+                .and_then(|v| v.fixed_version.clone())
+        })
+    } else {
+        None
+    };
+    // The RANGE for the matched package: the cve source writes
+    // `Affected range: hono (npm): < 4.13.7` (v29) — the old reader took the
+    // `Affected: hono (npm)` NAME line as the range, so the text verdict was
+    // never computable for a cve row (live 2026-10-02: a hono advisory fixed
+    // in 4.13.7 stayed `unknown` against 4.13.8 and paged as Critical).
+    let package_ranges: Vec<String> = if is_security_source {
+        display_deps
+            .first()
+            .map(|dep| {
+                let raw = super::security_verdict::affected_ranges_for_package(
+                    input.content,
+                    dep.raw_name.as_deref().unwrap_or(&dep.package_name),
+                );
+                if raw.is_empty() {
+                    super::security_verdict::affected_ranges_for_package(
+                        input.content,
+                        &dep.package_name,
+                    )
+                } else {
+                    raw
+                }
+            })
+            .unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+    let affected_versions = if !package_ranges.is_empty() {
+        Some(package_ranges.join("; "))
+    } else if is_security_source {
         extract_affected_range(input.content)
     } else {
         None
     };
     // Version/path evidence comes from the strongest DISPLAY dep — showing the
     // installed version of an uncorroborated alias hit was quietly dishonest.
-    let dep_path = display_deps.first().map(|dep| {
-        if dep.is_dev {
-            "dev-only".to_string()
-        } else if !dep.is_direct {
-            "transitive".to_string()
-        } else {
-            "direct".to_string()
-        }
-    });
+    // A copy the matcher confirmed exposed outranks the edge: the edge is the
+    // DECLARING project's copy (rmcp 3.1.2 in victauri, fixed), the exposure
+    // may be a transitive copy elsewhere (rmcp 1.7.0 in a sibling bridge app).
+    let dep_path = sec_verdict
+        .as_ref()
+        .and_then(super::security_verdict::SecurityVerdict::path_label)
+        .map(str::to_string)
+        .or_else(|| {
+            display_deps.first().map(|dep| {
+                if dep.is_dev {
+                    "dev-only".to_string()
+                } else if !dep.is_direct {
+                    "transitive".to_string()
+                } else {
+                    "direct".to_string()
+                }
+            })
+        });
     // v37: a graded release shows the version of the projects it concerns
     // (the copy furthest behind), not whichever copy the dependency edge
     // happened to carry — "sha2 v0.11.0, installed v0.11.0" hid that two
     // sibling projects were on 0.10.9.
-    let installed_version = release_grade
-        .as_ref()
-        .and_then(super::release_grade::ReleaseGrade::headline_installed)
+    let installed_version = sec_exposed_copy
+        .map(|c| c.installed_version.clone())
+        .or_else(|| {
+            release_grade
+                .as_ref()
+                .and_then(super::release_grade::ReleaseGrade::headline_installed)
+        })
         .or_else(|| display_deps.first().and_then(|d| d.version.clone()));
     // v29: the OSV mirror's STRUCTURED ranges decide first (introduced/fixed/
     // last_affected, via the same matcher Preemption trusts); the text route
@@ -3286,19 +3366,41 @@ pub(crate) fn score_item(
     // `is_version_affected` was NULL on 746 of 746 live security breakdowns
     // (the cve source wrote no range and no fix), so a hono advisory fixed in
     // 4.12.34 paged as Critical against an installed 4.13.3.
-    let is_version_affected = display_deps
-        .first()
-        .zip(installed_version.as_deref())
-        .and_then(|(dep, installed)| {
-            mirror_version_verdict(db, input, dep, installed, advisory_id.as_deref())
-        })
-        .or_else(|| {
-            check_version_affected(
-                installed_version.as_deref(),
-                affected_versions.as_deref(),
-                fixed_version.as_deref(),
-            )
-        });
+    // 2026-10-02: the matcher verdict over the WHOLE inventory is final when
+    // it evaluated any copy; the edge-scoped routes only run without one.
+    let is_version_affected = match &sec_verdict {
+        Some(verdict) => verdict.affected,
+        None => display_deps
+            .first()
+            .zip(installed_version.as_deref())
+            .and_then(|(dep, installed)| {
+                mirror_version_verdict(db, input, dep, installed, advisory_id.as_deref())
+            })
+            .or_else(|| {
+                // The package's OWN range entries decide when the item
+                // carries them; the item-wide `Fixed in:` list is the
+                // fallback (it may belong to another package of a
+                // multi-package advisory).
+                if package_ranges.is_empty() {
+                    check_version_affected(
+                        installed_version.as_deref(),
+                        affected_versions.as_deref(),
+                        fixed_version.as_deref(),
+                    )
+                } else {
+                    super::security_verdict::ranges_verdict(
+                        installed_version.as_deref(),
+                        &package_ranges,
+                    )
+                }
+            }),
+    };
+    // A registry advisory the matcher CONFIRMED against an installed copy is
+    // grounded by that fact, whatever the text-match confidence of its
+    // dependency edge (rmcp: 0.375 — below the 0.40 strong floor, so the
+    // advisory was "ungrounded", capped and verdict-gated although
+    // Preemption listed it as a HIGH).
+    let security_confirmed = registry_advisory && sec_exposed_copy.is_some();
     // v31: a REGISTRY advisory row the graph grounds but whose installed
     // version is CONFIRMED outside the affected range (at or past the fix)
     // leaves Signal — the same tier as an ungrounded registry row (cap 0.35 +
@@ -3332,7 +3434,7 @@ pub(crate) fn score_item(
     let is_breaking = content_type == crate::content_dna::ContentType::BreakingChange;
     let has_strong_dep_match = raw.dep_match_score
         >= scoring_config::CRITICAL_FASTPATH_DEP_MATCH_THRESHOLD
-        && grounding.strong;
+        && (grounding.strong || security_confirmed);
     // v31: a confirmed not-affected advisory never takes the floor.
     let critical_fast_path =
         (is_security || is_breaking) && has_strong_dep_match && !version_not_affected;
@@ -3344,7 +3446,8 @@ pub(crate) fn score_item(
     // sitting at the bare 0.50 floor. The higher tier requires the direct dep
     // itself to be the strongly grounded edge (canonical predicate), not just
     // any direct dep riding alongside a grounded transitive match.
-    let has_direct_dep = grounding.strong_direct;
+    let has_direct_dep = grounding.strong_direct
+        || (security_confirmed && sec_exposed_copy.is_some_and(|c| c.is_direct && !c.is_dev));
     let fast_path_floor = if has_direct_dep {
         scoring_config::CRITICAL_FASTPATH_DIRECT_DEP_FLOOR
     } else {
@@ -3428,6 +3531,7 @@ pub(crate) fn score_item(
     // decision 2026-09-04 ("off-stack advisories leave Signal"), sharpened.
     let security_ungrounded = content_type == crate::content_dna::ContentType::SecurityAdvisory
         && !grounding.strong
+        && !security_confirmed
         && registry_advisory;
     let score_ceiling: Option<f32> = {
         let commodity = ungrounded_registry_release.then_some(
@@ -3575,7 +3679,38 @@ pub(crate) fn score_item(
     }
 
     // ── Signal classification ─────────────────────────────────────────
-    let (sig_type, mut sig_priority, sig_action, sig_triggers, sig_horizon) = classify_signals(
+    // The advisory's own severity: the matcher's deciding mirror row, else
+    // the mirror row for the matched dependency, else the item's own
+    // `CVSS:` / `Severity:` line. Never a default.
+    let security_tier = if is_security_source {
+        sec_verdict
+            .as_ref()
+            .and_then(|v| v.tier)
+            .or_else(|| {
+                display_deps
+                    .first()
+                    .and_then(|dep| mirror_severity_tier(db, input, dep, advisory_id.as_deref()))
+            })
+            .or_else(|| super::security_verdict::content_severity_tier(input.content))
+    } else {
+        None
+    };
+    let security_lane = SecurityLane {
+        registry_advisory,
+        affected: is_version_affected,
+        exposed: if security_confirmed {
+            sec_exposed_copy
+        } else {
+            None
+        },
+        exposed_projects: sec_verdict
+            .as_ref()
+            .map(super::security_verdict::SecurityVerdict::exposed_projects)
+            .unwrap_or_default(),
+        tier: security_tier,
+        package: display_deps.first().map(|d| d.package_name.as_str()),
+    };
+    let (sig_type, mut sig_priority, mut sig_action, sig_triggers, sig_horizon) = classify_signals(
         relevant,
         combined_score,
         raw.domain_relevance,
@@ -3587,6 +3722,7 @@ pub(crate) fn score_item(
         &raw.matched_deps,
         grounding,
         db,
+        &security_lane,
     );
 
     // (The security version evidence — advisory_id / fixed_version /
@@ -3600,23 +3736,28 @@ pub(crate) fn score_item(
     // package; without this they all page as if they endanger today's build.
     let version_negative =
         sig_type.as_deref() == Some("security_alert") && is_version_affected == Some(false);
-    if version_negative
-        && matches!(
-            sig_priority.as_deref(),
-            Some("critical") | Some("alert") | Some("advisory")
-        )
-    {
-        sig_priority = Some("watch".to_string());
-    }
-    // v29: CRITICAL requires a POSITIVE version verdict. A grounded advisory
-    // whose applicability to the installed version cannot be confirmed is an
-    // Alert ("likely affected — verify"), never a Critical page: the version
-    // evidence is exactly what separates "your build is exposed" from "a
-    // package you use has had an advisory".
-    let critical_unverified =
-        sig_priority.as_deref() == Some("critical") && is_version_affected != Some(true);
-    if critical_unverified {
-        sig_priority = Some("alert".to_string());
+    // 2026-10-02: the security tier's upper bound, for EVERY security_alert
+    // (grounded or not, any route that classified it): Alert/Critical only
+    // for a version-confirmed affected registry advisory; confirmed
+    // not-affected is Watch; unknown applicability and editorial security
+    // stories (an arXiv dataset paper, OpenAI news) are Advisory at most.
+    // Supersedes the v29 "Critical needs a positive verdict → Alert" step,
+    // which still let an unverified advisory page as an Alert.
+    if sig_type.as_deref() == Some("security_alert") {
+        let cap = security_lane.cap();
+        let current = sig_priority.as_deref().and_then(priority_from_label);
+        if let Some(current) = current.filter(|p| *p > cap) {
+            sig_priority = Some(cap.label().to_string());
+            // The action line's "Critical:" prefix must follow the tier.
+            if current == signals::SignalPriority::Critical {
+                if let Some(rest) = sig_action
+                    .as_deref()
+                    .and_then(|a| a.strip_prefix("Critical:"))
+                {
+                    sig_action = Some(format!("Security:{rest}"));
+                }
+            }
+        }
     }
 
     // ── Necessity scoring ─────────────────────────────────────────────
@@ -3651,14 +3792,18 @@ pub(crate) fn score_item(
         signal_priority: sig_priority.clone(),
         cve_severity: None, // folded into signal_priority by the classifier
         cvss_score,         // numeric severity fallback when no priority is present
-        affected_project_count: count_affected_projects(db, &matched_dep_names),
+        affected_project_count: if security_confirmed {
+            security_lane.exposed_projects.len()
+        } else {
+            count_affected_projects(db, &matched_dep_names)
+        },
         skill_gap_boost,
         matched_skill_gaps: matched_skill_gaps.clone(),
         window_boost,
         matched_window_label: matched_window_label.clone(),
         age_hours,
         content_type: Some(content_type.slug().to_string()),
-        strongly_grounded: grounding.strong,
+        strongly_grounded: grounding.strong || security_confirmed,
         version_affected: is_version_affected,
         registry_advisory,
         release_grade: release_grade
@@ -3687,8 +3832,14 @@ pub(crate) fn score_item(
     // not-affected advisory (installed version outside the affected range /
     // at-or-past the fix) is `not_affected` and never a critical alert — the
     // evidence pool keeps it out of "Affects You".
+    // 2026-10-02: a critical alert is a CRITICAL-tier signal — the "Affects
+    // You" pool and notifications must never disagree with the tier shown.
+    let tier_is_critical = sig_priority.as_deref() == Some("critical");
     let (applicability, is_critical_alert) = if version_negative {
         (Some("not_affected".to_string()), false)
+    } else if sig_type.as_deref() == Some("security_alert") && security_confirmed {
+        // The matcher placed an installed copy inside the range: affected.
+        (Some("affected".to_string()), tier_is_critical)
     } else if sig_type.as_deref() == Some("security_alert") {
         let (applicability, critical) =
             security_applicability(&raw.matched_deps, &advisory_ecosystems);
@@ -3698,7 +3849,7 @@ pub(crate) fn score_item(
         if critical && is_version_affected != Some(true) {
             (Some("likely_affected".to_string()), false)
         } else {
-            (applicability, critical)
+            (applicability, critical && tier_is_critical)
         }
     } else {
         (None, false)
@@ -3707,13 +3858,33 @@ pub(crate) fn score_item(
     // (advisory_id / fixed_version / affected_versions / dep_path /
     // installed_version / is_version_affected extracted above, before
     // necessity, so the version verdict informs it.)
-    let sec_affected_project_count = count_affected_projects(db, &matched_dep_names) as u32;
+    let sec_affected_project_count = if security_confirmed {
+        security_lane.exposed_projects.len() as u32
+    } else {
+        count_affected_projects(db, &matched_dep_names) as u32
+    };
 
     // ── Explanation evidence chain ────────────────────────────────────
     // Built from the SAME values the pipeline scored with; the subtitle is
     // rendered from the chain so every surface reads one explanation source.
     let is_security_necessity =
         necessity_result.category == necessity::NecessityCategory::SecurityVulnerability;
+    // A matcher-confirmed advisory names the EXPOSED copy — its project,
+    // version and reach — not the declaring edge ("rmcp in victauri, direct,
+    // v3.1.2" was the copy that already carries the fix).
+    let exposed_chain_deps: Option<Vec<DepMatch>> = sec_exposed_copy
+        .filter(|_| security_confirmed && !display_deps.is_empty())
+        .map(|copy| {
+            let mut deps = display_deps.clone();
+            if let Some(first) = deps.first_mut() {
+                first.project_paths = security_lane.exposed_projects.clone();
+                first.version = Some(copy.installed_version.clone());
+                first.is_direct = copy.is_direct;
+                first.is_dev = copy.is_dev;
+            }
+            deps
+        });
+    let chain_deps: &[DepMatch] = exposed_chain_deps.as_deref().unwrap_or(&display_deps);
     let explanation_factors =
         explanation_chain::build_explanation_chain(&explanation_chain::ChainInputs {
             title: input.title,
@@ -3722,7 +3893,7 @@ pub(crate) fn score_item(
             interests: &ctx.interests,
             declared_tech: &ctx.declared_tech,
             matches: &matches,
-            display_deps: &display_deps,
+            display_deps: chain_deps,
             dep_match_score: raw.dep_match_score,
             context_score: cal.context_score,
             interest_score: cal.interest_score,
@@ -3768,7 +3939,7 @@ pub(crate) fn score_item(
         confirmation_mult,
         dep_match_score: raw.dep_match_score,
         matched_deps: matched_dep_names,
-        strongly_grounded: grounding.strong,
+        strongly_grounded: grounding.strong || security_confirmed,
         degraded_inputs,
         // Categorical ceiling for post-pipeline writers: a capped item
         // (ungrounded registry release, zero-engagement UGC) must never
@@ -6042,6 +6213,7 @@ mod tests {
             matched_deps,
             grounding,
             &db,
+            &SecurityLane::default(),
         )
     }
 
@@ -6944,3 +7116,7 @@ mod tests {
 #[cfg(test)]
 #[path = "pipeline_v2_release_grade_tests.rs"]
 mod release_grade_tests;
+
+#[cfg(test)]
+#[path = "pipeline_v2_security_tests.rs"]
+mod security_tests;
