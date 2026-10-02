@@ -171,9 +171,9 @@ mod autophagy_commands;
 mod autophagy_pulse;
 mod blind_spots;
 mod boot_context;
+mod brief_facts;
 mod brief_rejections;
 mod briefing_deterministic;
-pub(crate) mod briefing_seals;
 mod briefing_snapshot;
 mod briefing_window;
 mod calibration;
@@ -1164,7 +1164,6 @@ pub fn run() {
             indexed_documents_commands::get_document_content,
             // Intelligence History
             intelligence_history::get_intelligence_growth,
-            intelligence_history::get_session_diff,
             // Local Telemetry (privacy-first, never leaves machine)
             telemetry::track_event,
             telemetry::get_usage_analytics,

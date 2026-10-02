@@ -233,11 +233,36 @@ pub(super) fn looks_like_date(token: &str) -> bool {
 /// corpus entry — this tolerates the LLM reordering "React Server
 /// Components" as "Server Components in React".
 pub(super) fn is_term_grounded(term: &str, corpus_lower: &[String]) -> bool {
-    let term_lower = term.to_lowercase();
+    let lowered = term.to_lowercase();
+    let term_lower = strip_possessive(&lowered);
 
     // Exact substring match on any corpus entry
-    if corpus_lower.iter().any(|c| c.contains(&term_lower)) {
+    if corpus_lower.iter().any(|c| c.contains(term_lower)) {
         return true;
+    }
+
+    // A slash compound ("Rust/Tauri/Axum", "React Native/Flutter") is a list,
+    // not a new name: grounded when every part is. Live 2026-09-27..10-01 the
+    // morning-brief gate rejected ~70% of syntheses, and its most frequent
+    // "ungrounded" terms were slash lists of the user's own stack. Scoped npm
+    // names ("@scope/pkg") are whole identifiers and skip this.
+    if term_lower.contains('/') && !term_lower.starts_with('@') {
+        let parts: Vec<&str> = term_lower
+            .split('/')
+            .map(str::trim)
+            .filter(|p| p.len() >= 2)
+            .collect();
+        if parts.len() >= 2 && parts.iter().all(|p| is_term_grounded(p, corpus_lower)) {
+            return true;
+        }
+    }
+
+    // A plural of a grounded acronym or name ("CVEs" when the corpus says
+    // "CVE-2026-…").
+    if let Some(singular) = term_lower.strip_suffix('s').filter(|s| s.len() >= 3) {
+        if !singular.contains(' ') && corpus_lower.iter().any(|c| c.contains(singular)) {
+            return true;
+        }
     }
 
     // Multi-word: check if every component word appears in a single entry
@@ -263,4 +288,11 @@ pub(super) fn is_term_grounded(term: &str, corpus_lower: &[String]) -> bool {
     }
 
     false
+}
+
+/// "shopify's" -> "shopify" (ASCII or typographic apostrophe).
+fn strip_possessive(term: &str) -> &str {
+    term.strip_suffix("'s")
+        .or_else(|| term.strip_suffix("\u{2019}s"))
+        .unwrap_or(term)
 }

@@ -6,7 +6,7 @@
  * and section classification.
  */
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { parseBriefingContent, getRelativeTime, getFreshnessColor } from '../briefing-parser';
+import { parseBriefingContent, parseInline, getRelativeTime, getFreshnessColor } from '../briefing-parser';
 
 describe('parseBriefingContent', () => {
   it('parses single section', () => {
@@ -138,5 +138,42 @@ describe('getFreshnessColor', () => {
   it('returns red for 12+ hours', () => {
     const dayAgo = new Date(Date.now() - 24 * 3600 * 1000);
     expect(getFreshnessColor(dayAgo)).toBe('text-red-400');
+  });
+});
+
+describe('facts-first brief sections (Decision 2)', () => {
+  it('classifies the four new sections', () => {
+    const sections = parseBriefingContent(
+      '## Act now\n- a\n## Upgrades to plan\n- b\n## Worth knowing\n- c\n## Still open\nd',
+    );
+    expect(sections.map(s => s.type)).toEqual(['action', 'upgrades', 'worth_knowing', 'still_open']);
+  });
+});
+
+describe('parseInline', () => {
+  it('splits bold, code and http(s) links', () => {
+    expect(parseInline('Bump **rmcp** via `cargo update` — see [advisory](https://osv.dev/X).')).toEqual([
+      { kind: 'text', text: 'Bump ' },
+      { kind: 'bold', text: 'rmcp' },
+      { kind: 'text', text: ' via ' },
+      { kind: 'code', text: 'cargo update' },
+      { kind: 'text', text: ' — see ' },
+      { kind: 'link', text: 'advisory', url: 'https://osv.dev/X' },
+      { kind: 'text', text: '.' },
+    ]);
+  });
+
+  it('keeps a bold link label and never links a non-http URL', () => {
+    expect(parseInline('[**fastembed 7.1.0**](https://crates.io/crates/fastembed)')).toEqual([
+      { kind: 'link', text: 'fastembed 7.1.0', url: 'https://crates.io/crates/fastembed' },
+    ]);
+    const unsafe = parseInline('[click](javascript:alert(1))');
+    expect(unsafe.some(s => s.kind === 'link')).toBe(false);
+  });
+
+  it('returns plain text unchanged', () => {
+    expect(parseInline('Nothing new touches your code today.')).toEqual([
+      { kind: 'text', text: 'Nothing new touches your code today.' },
+    ]);
   });
 });

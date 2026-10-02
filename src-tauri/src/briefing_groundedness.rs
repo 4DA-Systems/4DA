@@ -434,6 +434,32 @@ mod tests {
         assert!(r.confidence >= 0.7, "confidence was {}", r.confidence);
     }
 
+    /// Live 2026-09-27..10-01: 82 of 115 morning syntheses were rejected, and
+    /// the top "ungrounded" terms were the user's own stack written as a slash
+    /// list, possessives and plurals of grounded names.
+    #[test]
+    fn slash_lists_possessives_and_plurals_of_given_terms_are_grounded() {
+        let c: Vec<String> = corpus(&[
+            "Tech stack: Rust, Tauri, Axum, React",
+            "Shopify engineering on React Native and Flutter",
+            "[CVE-2026-93981] hono/jsx renders plain strings unescaped",
+        ])
+        .iter()
+        .map(|s| s.to_lowercase())
+        .collect();
+        for term in [
+            "Rust/Tauri/Axum",
+            "React Native/Flutter",
+            "Shopify's",
+            "CVEs",
+        ] {
+            assert!(nlp::is_term_grounded(term, &c), "{term} should be grounded");
+        }
+        // A part that was never given is still a fabrication.
+        assert!(!nlp::is_term_grounded("Rust/Kubernetes", &c));
+        assert!(!nlp::is_term_grounded("Postgres", &c));
+    }
+
     // ---- Negative: the production screenshot bug ------------------------
 
     #[test]

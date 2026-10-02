@@ -3,7 +3,48 @@
 export interface ParsedSection {
   title: string;
   lines: string[];
-  type: 'action' | 'worth_knowing' | 'filtered' | 'general';
+  type: 'action' | 'upgrades' | 'worth_knowing' | 'still_open' | 'filtered' | 'general';
+}
+
+/** One run of inline brief text: plain, bold, code, or a link. */
+export type InlineSegment =
+  | { kind: 'text'; text: string }
+  | { kind: 'bold'; text: string }
+  | { kind: 'code'; text: string }
+  | { kind: 'link'; text: string; url: string };
+
+/**
+ * Split one brief line into inline segments. Supports the subset the brief
+ * prompt and the deterministic floor emit — `**bold**`, `` `code` `` and
+ * `[text](url)` — and nothing else: no HTML ever reaches the DOM, and a link
+ * is a link only when its URL is http(s) (anything else renders as text).
+ */
+export function parseInline(line: string): InlineSegment[] {
+  const out: InlineSegment[] = [];
+  const pattern = /\*\*([^*]+)\*\*|`([^`]+)`|\[([^\]]+)\]\(([^)\s]+)\)/g;
+  let last = 0;
+  for (const m of line.matchAll(pattern)) {
+    const start = m.index ?? 0;
+    if (start > last) out.push({ kind: 'text', text: line.slice(last, start) });
+    if (m[1] !== undefined) {
+      // `**[fastembed 7.1.0](url)**` — the floor bolds its upgrade links.
+      const inner = /^\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)$/i.exec(m[1]);
+      out.push(inner ? { kind: 'link', text: inner[1]!, url: inner[2]! } : { kind: 'bold', text: m[1] });
+    } else if (m[2] !== undefined) {
+      out.push({ kind: 'code', text: m[2] });
+    } else if (m[3] !== undefined && m[4] !== undefined) {
+      const url = m[4];
+      if (/^https?:\/\//i.test(url)) {
+        // A bold link — [**fastembed 7.1.0**](url) — keeps its label text.
+        out.push({ kind: 'link', text: m[3].replace(/\*\*/g, ''), url });
+      } else {
+        out.push({ kind: 'text', text: m[3] });
+      }
+    }
+    last = start + m[0].length;
+  }
+  if (last < line.length) out.push({ kind: 'text', text: line.slice(last) });
+  return out;
 }
 
 export function getRelativeTime(date: Date): string {
@@ -27,6 +68,11 @@ export function getFreshnessColor(date: Date): string {
 
 function classifySection(title: string): ParsedSection['type'] {
   const lower = title.toLowerCase();
+  // The facts-first brief's sections (Decision 2): Act now, Upgrades to plan,
+  // Worth knowing, Still open.
+  if (lower.includes('still open')) return 'still_open';
+  if (lower.includes('upgrade')) return 'upgrades';
+  if (lower.includes('act now')) return 'action';
   if (lower.includes('action') || lower.includes('urgent') || lower.includes('critical') || lower.includes('alert')) {
     return 'action';
   }

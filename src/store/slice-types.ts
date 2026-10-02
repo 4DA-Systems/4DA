@@ -328,7 +328,12 @@ export interface BriefingSlice {
   /** AD-035: the latest briefing's display-binding verdicts, or null when
    *  nothing binds (no briefing, stale briefing, fetch failed — fail-open). */
   briefVerdicts: BriefVerdicts | null;
-  generateBriefing: () => Promise<void>;
+  /**
+   * `auto: true` for app-initiated triggers (analysis finished, background
+   * refresh): the backend then reuses today's brief while its facts are
+   * unchanged. Omitted = the user asked, which always regenerates.
+   */
+  generateBriefing: (options?: { auto?: boolean }) => Promise<void>;
   generateFreeBriefing: () => Promise<void>;
   loadPersistedBriefing: () => Promise<void>;
   loadSourceHealth: () => Promise<void>;

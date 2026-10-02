@@ -252,7 +252,6 @@ pub const REGISTERED_COMMANDS: &[&str] = &[
     "search_documents",
     "get_document_content",
     "get_intelligence_growth",
-    "get_session_diff",
     "track_event",
     "get_usage_analytics",
     "clear_telemetry",

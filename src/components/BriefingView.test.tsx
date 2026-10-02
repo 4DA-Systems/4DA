@@ -122,36 +122,62 @@ describe('BriefingView', () => {
     });
   });
 
-  describe('content state (3-zone Intelligence Hierarchy)', () => {
-    it('renders pulse summary with item counts', () => {
+  describe('content state (brief + review queue)', () => {
+    const brief = [
+      '## Act now',
+      '- **rmcp** (crates.io, High): Unauthenticated session leak',
+      '  - atlas/bridge/src-tauri on 1.7.0: upgrade victauri-plugin',
+      '',
+      '## Upgrades to plan',
+      '- **[fastembed 7.1.0](https://crates.io/crates/fastembed/7.1.0)**: 4da/src-tauri on 5.17.4',
+      '',
+      '## Still open',
+      'vitest (navcal, since 2026-09-08)',
+    ].join('\n');
+
+    /** Decision 2: the written brief is the tab's hero, not an invisible artifact. */
+    it('renders the narrated brief with its sections', () => {
       setMockState({
-        aiBriefing: { content: '## Test\nContent', loading: false, error: null, model: null, lastGenerated: null },
-        appState: {
-          relevanceResults: [
-            { id: 1, title: 'Item A', top_score: 0.6, relevant: true },
-            { id: 2, title: 'Item B', top_score: 0.3, relevant: false },
-            { id: 3, title: 'Item C', top_score: 0.7, relevant: true },
-          ],
-        },
+        aiBriefing: { content: brief, loading: false, error: null, model: 'claude-sonnet-5', lastGenerated: null },
+        appState: { relevanceResults: [{ id: 1, title: 'Item A', top_score: 0.6, relevant: true }] },
       });
       render(<BriefingView />);
-      // PulseSummary shows "X items analyzed, Y relevant to you."
-      expect(screen.getByText(/pulse\.itemsAnalyzed/)).toBeInTheDocument();
+      expect(screen.getByTestId('narrated-brief')).toBeInTheDocument();
+      expect(screen.getByText('Act now')).toBeInTheDocument();
+      expect(screen.getByText('Upgrades to plan')).toBeInTheDocument();
+      expect(screen.getByText('rmcp')).toBeInTheDocument();
+      expect(screen.getByText(/upgrade victauri-plugin/)).toBeInTheDocument();
+      const link = screen.getByText('fastembed 7.1.0');
+      expect(link.closest('a')?.getAttribute('href')).toBe('https://crates.io/crates/fastembed/7.1.0');
+      expect(screen.getByText('briefing.viaModel')).toBeInTheDocument();
     });
 
-    it('renders attention cards for critical signal items', () => {
+    /** The 2026-10-01 false "Critical: hono" card came from keyword
+     *  signal_priority; the tab no longer promotes anything on that basis. */
+    it('does not promote keyword-classified critical items into the brief', () => {
       setMockState({
-        aiBriefing: { content: '## Test\nContent', loading: false, error: null, model: null, lastGenerated: null },
+        aiBriefing: { content: '## Act now\n- nothing here', loading: false, error: null, model: null, lastGenerated: null },
         appState: {
           relevanceResults: [
-            { id: 1, title: 'Critical CVE', top_score: 0.9, relevant: true, signal_priority: 'critical', signal_type: 'security', url: 'https://example.com' },
-            { id: 2, title: 'Normal Item', top_score: 0.5, relevant: true },
+            { id: 1, title: 'Critical: Security issue affects hono', top_score: 0.3, relevant: false, signal_priority: 'critical', signal_type: 'security_alert' },
           ],
         },
       });
       render(<BriefingView />);
-      // AttentionCards renders the critical signal item's action or title
-      expect(screen.getByText('Critical CVE')).toBeInTheDocument();
+      expect(screen.queryByText('Critical: Security issue affects hono')).not.toBeInTheDocument();
+    });
+
+    it('regenerates on demand as an explicit (non-auto) request', () => {
+      const generate = vi.fn();
+      setMockState({
+        aiBriefing: { content: brief, loading: false, error: null, model: 'deterministic', lastGenerated: null },
+        appState: { relevanceResults: [] },
+        generateBriefing: generate,
+      });
+      render(<BriefingView />);
+      expect(screen.getByText('briefing.narrated.computed')).toBeInTheDocument();
+      fireEvent.click(screen.getByText('briefing.narrated.regenerate'));
+      expect(generate).toHaveBeenCalledWith();
     });
 
     it('shows view all link when many relevant results', () => {
@@ -203,7 +229,7 @@ describe('BriefingView', () => {
         },
       });
       render(<BriefingView />);
-      // PulseSummary shows RelativeTimestamp when lastGenerated exists
+      // The brief header shows when it was written.
       expect(screen.getByText('Just now')).toBeInTheDocument();
     });
   });
@@ -301,10 +327,9 @@ describe('BriefingView', () => {
         appState: { relevanceResults: [] },
       });
       render(<BriefingView />);
-      // Error alert is shown alongside the 3-zone content panel
+      // Error alert is shown alongside the previous brief, which stays readable
       expect(screen.getByText('error.generic')).toBeInTheDocument();
-      // PulseSummary renders (even with no results it shows noData message)
-      expect(screen.getByText('pulse.noData')).toBeInTheDocument();
+      expect(screen.getByText('Old content')).toBeInTheDocument();
     });
 
     it('calls generateBriefing on retry and transitions to loading state', () => {

@@ -7,17 +7,8 @@
 use tracing::{error, info, warn};
 
 use crate::error::Result;
-use crate::prompt_safety::{sanitize_untrusted, wrap_unindexed_items, BriefingItem, BriefingSlate};
-use crate::scoring::get_ace_context;
-use crate::{get_analysis_state, get_database, get_settings_manager};
-
-/// Briefing slate selection (grounded-first) + auto-trigger reuse window —
-/// split into their own files for size hygiene; see each module doc.
-#[path = "briefing_slate.rs"]
-mod briefing_slate;
-use briefing_slate::{
-    fetch_db_fallback_items, order_briefing_slate, BRIEF_MAX_PER_SOURCE, BRIEF_SLATE_LIMIT,
-};
+use crate::prompt_safety::BriefingSlate;
+use crate::{get_database, get_settings_manager};
 
 // ============================================================================
 // AI Briefing Commands
@@ -42,24 +33,24 @@ pub async fn get_latest_briefing() -> Result<serde_json::Value> {
     }
 }
 
-// Deterministic security grounding for the briefing prompt — split into its
-// own module for the file-size gate. See `grounding.rs` for the CONFIRMED
-// SECURITY contract (PENDING-DECISION 2026-06-06, lever 2) and the dormancy
-// labelling added by the 2026-08-31 live audit.
+// When 4DA first held an advisory — the only honest age a brief may state.
+// The security facts themselves are built in `brief_facts`.
 mod grounding;
-use grounding::{build_grounded_security_section, explain_grounded_items};
+pub(crate) use grounding::first_seen_for_ids;
 
-/// Auto-trigger reuse window (2026-08-31 live audit) — the mechanism and its
-/// tests live in their own file for size hygiene; see the module doc there.
+/// Auto-trigger reuse (2026-08-31 live audit; fact fingerprint since
+/// Decision 2) — the mechanism and its tests live in their own file.
 #[path = "briefing_reuse.rs"]
 mod briefing_reuse;
-use briefing_reuse::try_reuse_recent_briefing;
+use briefing_reuse::{remember_fingerprint, try_reuse_recent_briefing};
 
 /// The narrated Brief's system prompt (incl. the MACHINE TRAILER verdict
 /// contract) — extracted for size hygiene and testability; see module doc.
 #[path = "briefing_prompt.rs"]
 mod briefing_prompt;
 use briefing_prompt::briefing_system_prompt;
+#[cfg(test)]
+pub(crate) use briefing_prompt::render_facts_for_prompt;
 
 /// AD-035 display binding: serves the LATEST briefing's filter verdicts,
 /// bounded by the reuse window, so Brief cards / Key Signals can demote
@@ -94,50 +85,41 @@ pub async fn get_brief_display_verdicts() -> Result<serde_json::Value> {
 }
 
 /// Internal briefing generation -- called by both the Tauri command and auto-trigger.
-/// `auto_triggered`: when true, an existing briefing inside the reuse window
-/// is returned instead of regenerating (see [`try_reuse_recent_briefing`]);
+///
+/// Facts first (Decision 2, 2026-10-02): `brief_facts` computes every claim
+/// the brief can make — confirmed security with its real fix path, breaking
+/// upgrades of direct dependencies, fresh worth-knowing candidates, and what
+/// was already reported. A Sonnet-class model explains those facts; without
+/// one, the same facts render as the deterministic floor.
+///
+/// `auto_triggered`: when true, today's briefing is reused while the facts it
+/// was written from are unchanged (see [`try_reuse_recent_briefing`]);
 /// explicit user triggers always regenerate.
-/// `anomaly_context`: optional unresolved anomaly descriptions to inject into the prompt.
+/// `anomaly_context`: unresolved system anomalies. Not sent to the model: the
+/// brief is about the user's code, never about 4DA's own pipeline.
 pub(crate) async fn generate_briefing_internal(
     auto_triggered: bool,
     anomaly_context: Option<Vec<String>>,
 ) -> Result<serde_json::Value> {
-    use chrono::{Duration, Utc};
-
     let trigger = if auto_triggered { "auto" } else { "manual" };
     info!(target: "4da::briefing", trigger = trigger, "Generating AI briefing");
+    if let Some(anomalies) = anomaly_context.as_ref().filter(|a| !a.is_empty()) {
+        info!(target: "4da::briefing", count = anomalies.len(), "Unresolved anomalies left out of the brief prompt");
+    }
+
+    let db = get_database()?;
+    // Facts read the DB, the preemption feed and the lockfile graph: keep
+    // that blocking work off the async runtime.
+    let facts = tokio::task::spawn_blocking(move || crate::brief_facts::build_brief_facts(db))
+        .await
+        .map_err(|e| {
+            crate::error::FourDaError::Internal(format!("brief facts task failed: {e}"))
+        })?;
 
     if auto_triggered {
-        if let Some(cached) = get_database()
-            .ok()
-            .and_then(|db| try_reuse_recent_briefing(&db))
-        {
+        if let Some(cached) = try_reuse_recent_briefing(db, &facts.fingerprint) {
             return Ok(cached);
         }
-    }
-
-    // Drain batched notifications
-    let mut batched = {
-        let state = crate::get_monitoring_state();
-        crate::monitoring::drain_batched_notifications(state)
-    };
-    // Briefing-input honesty (2026-08-31 live audit): the LLM itself reported
-    // that "silently queued" batched items were pipeline metadata with no
-    // content polluting its input. Nothing with a blank title reaches the
-    // prompt — there is nothing for the model to read, so it narrates the
-    // emptiness instead.
-    let before_empty_filter = batched.len();
-    batched.retain(|b| !b.title.trim().is_empty());
-    let dropped_empty = before_empty_filter - batched.len();
-    if dropped_empty > 0 {
-        warn!(
-            target: "4da::briefing",
-            dropped = dropped_empty,
-            "Dropped batched notifications with empty titles from briefing input"
-        );
-    }
-    if !batched.is_empty() {
-        info!(target: "4da::briefing", count = batched.len(), "Including batched notifications");
     }
 
     let llm_settings = {
@@ -146,440 +128,229 @@ pub(crate) async fn generate_briefing_internal(
         guard.get().llm.clone()
     };
 
-    // Decide which brief to produce. A genuine NARRATED brief needs a Sonnet-class+ model
-    // (`is_brief_capable`). Without one — no LLM at all, or a model too weak for genuine
-    // synthesis (Haiku / *-mini / consumer-hardware local) — we serve the deterministic,
-    // grounded floor below instead of erroring or faking synthesis with a weak model.
+    // A genuine NARRATED brief needs a Sonnet-class+ model (`is_brief_capable`).
+    // Without one — no LLM at all, or a model too weak for genuine synthesis
+    // (Haiku / *-mini / consumer-hardware local) — the deterministic floor
+    // renders the same facts instead of erroring or faking synthesis.
     let has_llm = crate::llm_gate::compute_has_llm(&llm_settings.provider, &llm_settings.api_key);
     let brief_capable = has_llm && crate::llm_capability::is_brief_capable(&llm_settings);
 
-    // Get items from analysis state or DB. `grounded_ids` carries the canonical
-    // grounding verdict for the slate: `ScoreBreakdown.strongly_grounded` on the
-    // analysis path, persisted `source_item_dependencies` links on the DB path.
-    let (mem_items, explanations, mem_grounded): (
-        Vec<crate::db::DigestSourceItem>,
-        std::collections::HashMap<i64, String>,
-        std::collections::HashSet<i64>,
-    ) = {
-        let state = get_analysis_state().lock();
-        if let Some(ref results) = state.results {
-            let items: Vec<crate::db::DigestSourceItem> = results
-                .iter()
-                .filter(|r| r.relevant && !r.excluded)
-                .map(|r| crate::db::DigestSourceItem {
-                    id: r.id as i64,
-                    title: r.title.clone(),
-                    url: r.url.clone(),
-                    source_type: r.source_type.clone(),
-                    created_at: Utc::now(),
-                    relevance_score: Some(r.top_score as f64),
-                    topics: vec![],
-                    content_type: r
-                        .score_breakdown
-                        .as_ref()
-                        .and_then(|b| b.content_type.clone()),
-                })
-                .collect();
-            let expl: std::collections::HashMap<i64, String> = results
-                .iter()
-                .filter(|r| r.explanation.is_some())
-                .map(|r| (r.id as i64, r.explanation.clone().unwrap_or_default()))
-                .collect();
-            let grounded: std::collections::HashSet<i64> = results
-                .iter()
-                .filter(|r| r.relevant && !r.excluded)
-                .filter(|r| {
-                    r.score_breakdown
-                        .as_ref()
-                        .is_some_and(|b| b.strongly_grounded)
-                })
-                .map(|r| r.id as i64)
-                .collect();
-            (items, expl, grounded)
-        } else {
-            (
-                vec![],
-                std::collections::HashMap::new(),
-                std::collections::HashSet::new(),
-            )
-        }
-    };
-
-    let mut explanations = explanations;
-    let (items, grounded_ids) = if mem_items.is_empty() {
-        let db = get_database()?;
-        let period_start = Utc::now() - Duration::hours(72);
-        let user_lang = crate::i18n::get_user_language();
-        let fetched = fetch_db_fallback_items(&db, period_start, &user_lang)?;
-        let ids: Vec<i64> = fetched.iter().map(|i| i.id).collect();
-        let grounded = db.strongly_grounded_packages(&ids).unwrap_or_else(|e| {
-            error!(target: "4da::briefing", error = %e, "Grounding lookup failed; slate falls back to score order");
-            std::collections::HashMap::new()
-        });
-        // This path has no in-memory explanations, so every item reached the
-        // model as "No context match" and it filtered releases of the user's
-        // own direct dependencies as "not a confirmed dependency" (2026-09-25:
-        // @xyflow/react, react-i18next, all exact registry links).
-        explain_grounded_items(&mut explanations, &grounded);
-        (fetched, grounded.into_keys().collect())
-    } else {
-        // The in-memory path has explanations, but a scoring explanation need
-        // not name the dependency, so the same note is added from the
-        // persisted links.
-        if let Ok(db) = get_database() {
-            let ids: Vec<i64> = mem_items.iter().map(|i| i.id).collect();
-            if let Ok(grounded) = db.strongly_grounded_packages(&ids) {
-                explain_grounded_items(&mut explanations, &grounded);
-            }
-        }
-        (mem_items, mem_grounded)
-    };
-
-    // Grounded-first slate: canonical grounding beats raw score, one source can't
-    // crowd the brief, ungrounded items are deprioritized but never dropped.
-    let items = order_briefing_slate(
-        items,
-        &grounded_ids,
-        BRIEF_MAX_PER_SOURCE,
-        BRIEF_SLATE_LIMIT,
-    );
-
-    // Deterministic floor: served when there's no Sonnet-class model OR no items to
-    // narrate. Computed from the OSV-verified preemption feed + ranked signals — works
-    // offline, stays private, and cannot hallucinate. Every user gets a real brief; a weak
-    // model never fakes one (it falls here instead).
-    if !brief_capable || items.is_empty() {
-        let briefing =
-            crate::briefing_deterministic::build_deterministic_brief(&items, &explanations);
+    if !brief_capable {
         info!(
             target: "4da::briefing",
             has_llm,
-            capable = brief_capable,
-            item_count = items.len(),
             model = %llm_settings.model,
-            "Served deterministic grounded brief (no Sonnet-class model or no items)"
+            "Served deterministic facts brief (no Sonnet-class model)"
         );
-        if let Ok(db) = get_database() {
-            if let Err(e) = db.save_briefing(
-                &briefing,
-                Some("deterministic"),
-                items.len(),
-                Some(0),
-                Some(0),
-            ) {
-                error!(target: "4da::briefing", error = %e, "Failed to persist deterministic briefing");
-            }
-        }
-        *crate::digest_config::LATEST_BRIEFING.lock() = Some(briefing.clone());
-        return Ok(serde_json::json!({
-            "success": true,
-            "briefing": briefing,
-            "item_count": items.len(),
-            "model": "deterministic",
-            "deterministic": true,
-            "auto_triggered": auto_triggered,
-        }));
+        return Ok(serve_deterministic(
+            db,
+            &facts,
+            auto_triggered,
+            crate::briefing_deterministic::FloorReason::NoCapableModel,
+        ));
     }
 
-    let ace_ctx = get_ace_context();
-
-    // Wrap every item in <source_item> framing with sanitized title/URL/etc.
-    // so that article titles from HN/Reddit/RSS cannot inject instructions
-    // into the prompt. See `prompt_safety` module for defense semantics.
-    //
-    // `items_text` (what the model reads) and `slate_ids` (what a verdict
-    // index maps back to) are produced by ONE pass inside `build_prompt_slate`,
-    // which also owns the filter/take cut. Do NOT recompute either here: a
-    // second chain that drifts from the prompt is the #560/#580 defect that
-    // silently bound verdicts to unrelated items.
+    // `titles_only` (llm_egress): article excerpts leave the machine only when
+    // the user allows bodies, or the model runs on this machine.
+    let send_body = crate::llm_egress::body_allowed(&llm_settings);
+    let on_machine = crate::llm_egress::provider_is_on_machine(&llm_settings);
     let BriefingSlate {
-        text: items_text,
+        text: candidates_text,
         ids: slate_ids,
-    } = briefing_prompt::build_prompt_slate(&items, &explanations);
+    } = briefing_prompt::build_candidate_slate(&facts.worth_knowing, send_body);
 
-    let tech_summary = if ace_ctx.detected_tech.is_empty() {
-        "Not detected".to_string()
-    } else {
-        ace_ctx
-            .detected_tech
-            .iter()
-            .take(8)
-            .cloned()
-            .collect::<Vec<_>>()
-            .join(", ")
-    };
-    let topics_summary = if ace_ctx.active_topics.is_empty() {
-        "None active".to_string()
-    } else {
-        ace_ctx
-            .active_topics
-            .iter()
-            .take(8)
-            .cloned()
-            .collect::<Vec<_>>()
-            .join(", ")
-    };
-
-    // Analyst persona + grounding rules + the MACHINE TRAILER verdict
-    // contract (AD-035). Lives in briefing_prompt.rs next to the slate builder
-    // that renders the `index` attributes the trailer addresses.
-    let system_prompt = briefing_system_prompt();
-
-    let batched_section = if batched.is_empty() {
-        String::new()
-    } else {
-        // Batched notifications also carry untrusted titles — wrap them the
-        // same way as primary items so injection attempts cannot slip through
-        // this alternate entry point.
-        //
-        // UNINDEXED on purpose. These entries have no `source_items.id` (the
-        // id below is the literal "batched"), so there is nothing a verdict
-        // could be recorded against. Numbering them would open a second index
-        // namespace that also starts at 1, and a verdict aimed here would
-        // resolve — fully in range — to an unrelated item of the primary
-        // slate. No index attribute, nothing to address.
-        let batched_wrapped: String = wrap_unindexed_items(batched.iter().map(|b| BriefingItem {
-            id: "batched",
-            title: &b.title,
-            url: None,
-            source_type: Some(&b.source_type),
-            score_percent: Some((b.score * 100.0) as u32),
-            why_matched: None,
-        }));
-        format!(
-            "\n\nSince your last check, {} items were queued silently:\n{}\n",
-            batched.len(),
-            batched_wrapped
-        )
-    };
-
+    // Project context: full cards on this machine, nouns only for a cloud
+    // model (decision B, NETWORK.md "nouns, never your prose").
+    let projects = crate::project_cards::judge_context(db, on_machine);
     let decision_context = crate::digest_config::build_decision_context_for_briefing();
-
-    // Unresolved system anomalies are generated by internal code paths, not
-    // external sources, but we still sanitize defensively to prevent any
-    // future code path from accidentally piping external text here.
-    let anomaly_section = match anomaly_context {
-        Some(ref anomalies) if !anomalies.is_empty() => {
-            let list = anomalies
-                .iter()
-                .map(|a| format!("  - {}", sanitize_untrusted(a)))
-                .collect::<Vec<_>>()
-                .join("\n");
-            format!("\n- Unresolved system anomalies (mention if relevant):\n{list}")
-        }
-        _ => String::new(),
-    };
-
-    // Inject sealed temporal context (compound memory from previous briefings)
-    let seal_context = crate::open_db_connection()
-        .map(|conn| crate::briefing_seals::build_seal_context(&conn))
-        .unwrap_or_default();
-
-    // Inject hot topic consolidation context
-    let hot_topics_context = crate::open_db_connection()
-        .map(|conn| {
-            let hot = crate::topic_hotness::get_hot_topics(&conn, 5);
-            if hot.is_empty() {
-                String::new()
-            } else {
-                let list: Vec<String> = hot
-                    .iter()
-                    .map(|t| {
-                        format!(
-                            "  - {} ({} mentions across {} sources)",
-                            t.topic_key, t.mention_count, t.distinct_sources
-                        )
-                    })
-                    .collect();
-                format!(
-                    "\n- Cross-source hot topics (consolidate instead of repeating):\n{}",
-                    list.join("\n")
-                )
-            }
-        })
-        .unwrap_or_default();
-
-    let continuity_context = crate::open_db_connection()
-        .map(|conn| {
-            let today_topics: Vec<String> = items
-                .iter()
-                .take(10)
-                .flat_map(|item| crate::extract_topics(&item.title, "", &[]))
-                .collect::<std::collections::HashSet<_>>()
-                .into_iter()
-                .collect();
-
-            let signals = crate::briefing_seals::detect_continuity(&conn, &today_topics);
-            if signals.is_empty() {
-                return String::new();
-            }
-
-            let mut parts = Vec::new();
-            for s in &signals {
-                match s.signal_type {
-                    crate::briefing_seals::ContinuityType::DevelopingStory => {
-                        parts.push(format!(
-                            "  - Developing story (day {}): {}",
-                            s.days_running, s.topic
-                        ));
-                    }
-                    crate::briefing_seals::ContinuityType::EmergingSignal => {
-                        parts.push(format!("  - Emerging: {}", s.topic));
-                    }
-                    crate::briefing_seals::ContinuityType::Faded => {
-                        parts.push(format!("  - Faded: {}", s.topic));
-                    }
-                }
-            }
-            format!("\n- Topic continuity signals:\n{}", parts.join("\n"))
-        })
-        .unwrap_or_default();
-
-    // Deterministic, dep-scoped security truth (lever 2). Anchors all security
-    // claims so the LLM cannot infer impact from un-scoped CVE news items.
-    let security_section = build_grounded_security_section();
-
+    let facts_text = briefing_prompt::render_facts_for_prompt(&facts);
+    let today = chrono::Local::now().format("%A %Y-%m-%d").to_string();
     let user_prompt = format!(
-        "My active projects and context:\n\
-         - Tech stack: {tech}\n\
-         - Currently working on: {topics}\n\
-         - Skip these topics: {anti}\n\
-         {decisions}{anomalies}{hot_topics}{seal}{continuity}{security}\n\n\
-         Today's {count} items (sorted by relevance):\n\n\
-         {items}{batched}\n\n\
+        "Today is {today}.\n\nMy projects:\n{projects}{decisions}\n\n{facts_text}\n\
+         Today's {count} items (WORTH KNOWING candidates: judge-approved articles published in the last \
+         {window} days, never featured before{excerpt_note}):\n\n{candidates}\n\n\
          Give me my intelligence briefing.",
-        tech = tech_summary,
-        topics = topics_summary,
-        // v20b (AD-031): anti_topics was dropped with the implicit-capture
-        // layer. In production the table held 0 rows, so this branch was
-        // always "None specified" — made unconditional to keep the prompt
-        // byte-identical.
-        anti = "None specified",
         decisions = decision_context,
-        anomalies = anomaly_section,
-        hot_topics = hot_topics_context,
-        seal = seal_context,
-        continuity = continuity_context,
-        security = security_section,
-        count = items.len(),
-        items = items_text,
-        batched = batched_section,
+        count = slate_ids.len(),
+        window = crate::brief_facts::WORTH_KNOWING_WINDOW_DAYS,
+        excerpt_note = if send_body {
+            "; each carries an excerpt of the article"
+        } else {
+            "; titles only, per the user's privacy setting"
+        },
+        candidates = if candidates_text.is_empty() {
+            "(none today)".to_string()
+        } else {
+            candidates_text
+        },
     );
 
-    // llm-egress: no-item-body the prompt slate is title, URL, source, score and 4DA's match explanation (briefing_prompt::build_prompt_slate)
+    // llm-egress: routed through llm_egress::body_allowed above; excerpts are omitted under titles_only
     let llm_client = crate::llm::LLMClient::with_purpose(llm_settings.clone(), "digest");
-    let messages = vec![crate::llm::Message {
-        role: "user".to_string(),
-        content: user_prompt,
-    }];
+    let system_prompt = briefing_system_prompt();
+    let package_facts = crate::brief_facts::package_facts(&facts);
     let start_time = std::time::Instant::now();
 
-    match llm_client.complete(&system_prompt, messages).await {
-        Ok(response) => {
-            let elapsed = start_time.elapsed();
-            info!(target: "4da::briefing",
-                tokens = response.input_tokens + response.output_tokens,
-                elapsed_ms = elapsed.as_millis(),
-                trigger = trigger,
-                "AI briefing generated"
+    // One retry when the deterministic version check catches a number the
+    // facts do not hold — told exactly which, so the retry can do better
+    // than a re-roll. After that the facts are served as the floor.
+    let mut attempt = 0;
+    let mut correction = String::new();
+    let (content, rejects, total_tokens) = loop {
+        attempt += 1;
+        let messages = vec![crate::llm::Message {
+            role: "user".to_string(),
+            content: format!("{user_prompt}{correction}"),
+        }];
+        let response = match llm_client.complete(&system_prompt, messages).await {
+            Ok(r) => r,
+            Err(e) => {
+                error!(target: "4da::briefing", error = %e, "Failed to generate briefing");
+                return Ok(serde_json::json!({
+                    "success": false,
+                    "error": provider_error_message(&e.to_string()),
+                    "briefing": null
+                }));
+            }
+        };
+        let (content, rejects) =
+            crate::brief_rejections::extract_rejects_trailer(&response.content);
+        let violations =
+            crate::briefing_groundedness::check_factual_claims(&content, &package_facts);
+        if violations.is_empty() {
+            break (
+                content,
+                rejects,
+                response.input_tokens + response.output_tokens,
             );
-            // Extract + strip the machine trailer FIRST: every downstream
-            // consumer (live JSON render, LATEST_BRIEFING, save_briefing,
-            // daily seal) must only ever see the stripped markdown.
-            let (content, rejects) =
-                crate::brief_rejections::extract_rejects_trailer(&response.content);
-            *crate::digest_config::LATEST_BRIEFING.lock() = Some(content.clone());
+        }
+        warn!(
+            target: "4da::briefing",
+            attempt,
+            violations = ?violations,
+            "Brief stated a version the facts do not hold"
+        );
+        if attempt >= 2 {
+            warn!(target: "4da::briefing", "Serving the facts brief instead of a narration with an unsupported version");
+            return Ok(serve_deterministic(
+                db,
+                &facts,
+                auto_triggered,
+                crate::briefing_deterministic::FloorReason::NarrationRejected,
+            ));
+        }
+        correction = format!(
+            "\n\nYour previous draft stated upgrade versions the FACTS do not hold: {}. \
+             Write the brief again using only the versions given in the FACTS.",
+            violations.join("; ")
+        );
+    };
+    let elapsed = start_time.elapsed();
+    info!(target: "4da::briefing",
+        tokens = total_tokens,
+        elapsed_ms = elapsed.as_millis(),
+        trigger = trigger,
+        attempts = attempt,
+        "AI briefing generated"
+    );
+    *crate::digest_config::LATEST_BRIEFING.lock() = Some(content.clone());
 
-            if let Ok(db) = get_database() {
-                let total_tokens = response.input_tokens + response.output_tokens;
-                match db.save_briefing(
-                    &content,
-                    Some(&llm_settings.model),
-                    items.len(),
-                    Some(total_tokens),
-                    Some(elapsed.as_millis() as u64),
-                ) {
-                    Ok(briefing_id) => {
-                        // Join trailer indices back to the narrated slate's real
-                        // item ids. `slate_ids` came out of the same pass that
-                        // rendered the prompt, so index n addresses exactly the
-                        // item shown at index n. Malformed or out-of-range
-                        // trailers record nothing.
-                        crate::brief_rejections::record_rejections(
-                            &db,
-                            briefing_id,
-                            &rejects,
-                            &slate_ids,
-                        );
-                    }
-                    Err(e) => {
-                        error!(target: "4da::briefing", error = %e, "Failed to persist briefing");
-                    }
-                }
-            }
-
-            // Seal today's briefing for compound temporal memory
-            if let Ok(conn) = crate::open_db_connection() {
-                let today = chrono::Utc::now().format("%Y-%m-%d").to_string();
-                let top_topics: Vec<String> = items
-                    .iter()
-                    .take(10)
-                    .flat_map(|item| crate::extract_topics(&item.title, "", &[]))
-                    .collect::<std::collections::HashSet<_>>()
-                    .into_iter()
-                    .take(10)
-                    .collect();
-                crate::briefing_seals::create_daily_seal(
-                    &conn,
-                    &today,
-                    &content,
-                    items.len() as i64,
-                    &top_topics,
-                );
-            }
-
-            Ok(serde_json::json!({
-                "success": true,
-                "briefing": content,
-                "item_count": items.len(),
-                "model": llm_settings.model,
-                "tokens_used": response.input_tokens + response.output_tokens,
-                "latency_ms": elapsed.as_millis(),
-                "auto_triggered": auto_triggered,
-            }))
+    match db.save_briefing(
+        &content,
+        Some(&llm_settings.model),
+        slate_ids.len(),
+        Some(total_tokens),
+        Some(elapsed.as_millis() as u64),
+    ) {
+        Ok(briefing_id) => {
+            // Join trailer indices back to the candidate slate's real ids.
+            // `slate_ids` came out of the same pass that rendered the prompt.
+            crate::brief_rejections::record_rejections(db, briefing_id, &rejects, &slate_ids);
+            remember_fingerprint(db, briefing_id, &facts.fingerprint);
         }
         Err(e) => {
-            error!(target: "4da::briefing", error = %e, "Failed to generate briefing");
-            let e_str = e.to_string();
-            let error_msg = if e_str.contains("Connection refused") || e_str.contains("connect") {
-                "Ollama is not running. Start it with 'ollama serve' or check your LLM settings."
-                    .to_string()
-            } else if e_str.contains("401")
-                || e_str.contains("authentication_error")
-                || e_str.contains("invalid x-api-key")
-                || e_str.contains("invalid_api_key")
-            {
-                "Your API key was rejected by the provider (invalid or expired). A saved key isn't verified until it's used — re-enter it in Settings → AI Provider, or switch to a local Ollama model."
-                    .to_string()
-            } else if e_str.contains("403") || e_str.contains("permission") {
-                "API key lacks permission for this model. Check your plan and key permissions in Settings.".to_string()
-            } else if e_str.contains("429") || e_str.contains("rate_limit") {
-                "Rate limit exceeded. Wait a moment and try again, or check your API plan limits."
-                    .to_string()
-            } else if e_str.contains("model") {
-                "The configured model may not be available. Try 'ollama pull qwen3:14b' or 'ollama pull gemma3:12b'.".to_string()
-            } else {
-                e_str
-            };
-            Ok(serde_json::json!({
-                "success": false,
-                "error": error_msg,
-                "briefing": null
-            }))
+            error!(target: "4da::briefing", error = %e, "Failed to persist briefing");
         }
     }
+    // Featured = named in the brief. A candidate left out for space is
+    // neither featured nor rejected, and may be offered again tomorrow.
+    let featured = crate::brief_facts::featured_in(&content, &facts.worth_knowing);
+    crate::brief_facts::record_reported(db, &facts, &featured);
+
+    Ok(serde_json::json!({
+        "success": true,
+        "briefing": content,
+        "item_count": slate_ids.len(),
+        "model": llm_settings.model,
+        "tokens_used": total_tokens,
+        "latency_ms": elapsed.as_millis(),
+        "auto_triggered": auto_triggered,
+    }))
 }
 
+/// The facts rendered without a model: always available, cannot fabricate.
+fn serve_deterministic(
+    db: &crate::db::Database,
+    facts: &crate::brief_facts::BriefFacts,
+    auto_triggered: bool,
+    reason: crate::briefing_deterministic::FloorReason,
+) -> serde_json::Value {
+    let briefing = crate::briefing_deterministic::build_deterministic_brief(facts, reason);
+    match db.save_briefing(
+        &briefing,
+        Some("deterministic"),
+        facts.worth_knowing.len(),
+        Some(0),
+        Some(0),
+    ) {
+        Ok(id) => remember_fingerprint(db, id, &facts.fingerprint),
+        Err(e) => {
+            error!(target: "4da::briefing", error = %e, "Failed to persist deterministic briefing");
+        }
+    }
+    // The floor shows its first articles; those are featured like any other.
+    let shown: Vec<i64> = facts
+        .worth_knowing
+        .iter()
+        .take(crate::briefing_deterministic::FLOOR_ARTICLES)
+        .map(|c| c.id)
+        .collect();
+    crate::brief_facts::record_reported(db, facts, &shown);
+    *crate::digest_config::LATEST_BRIEFING.lock() = Some(briefing.clone());
+    serde_json::json!({
+        "success": true,
+        "briefing": briefing,
+        "item_count": facts.worth_knowing.len(),
+        "model": "deterministic",
+        "deterministic": true,
+        "auto_triggered": auto_triggered,
+    })
+}
+
+/// The user-facing message for a provider error.
+fn provider_error_message(e_str: &str) -> String {
+    if e_str.contains("Connection refused") || e_str.contains("connect") {
+        "Ollama is not running. Start it with 'ollama serve' or check your LLM settings."
+            .to_string()
+    } else if e_str.contains("401")
+        || e_str.contains("authentication_error")
+        || e_str.contains("invalid x-api-key")
+        || e_str.contains("invalid_api_key")
+    {
+        "Your API key was rejected by the provider (invalid or expired). A saved key isn't verified until it's used — re-enter it in Settings → AI Provider, or switch to a local Ollama model."
+            .to_string()
+    } else if e_str.contains("403") || e_str.contains("permission") {
+        "API key lacks permission for this model. Check your plan and key permissions in Settings."
+            .to_string()
+    } else if e_str.contains("429") || e_str.contains("rate_limit") {
+        "Rate limit exceeded. Wait a moment and try again, or check your API plan limits."
+            .to_string()
+    } else if e_str.contains("model") {
+        "The configured model may not be available. Try 'ollama pull qwen3:14b' or 'ollama pull gemma3:12b'.".to_string()
+    } else {
+        e_str.to_string()
+    }
+}
 /// Generate an AI-powered briefing from recent relevant items
 /// Uses the configured LLM (Ollama by default) to synthesize insights
 ///
@@ -637,6 +408,36 @@ pub async fn generate_ai_briefing(
 
 #[cfg(test)]
 mod tests {
+    /// End-to-end on a REAL corpus snapshot with the user's configured model:
+    /// facts -> prompt -> model -> version check -> persist -> novelty. Costs
+    /// one model call; writes only to the snapshot. Run with
+    /// `FOURDA_DB_PATH=<snapshot> FOURDA_DATA_DIR=<dir with settings.json>
+    ///  FOURDA_BRIEF_LIVE=1 cargo test --lib live_snapshot_generate_brief -- --ignored --nocapture`.
+    #[tokio::test]
+    #[ignore = "calls the configured LLM against a real database snapshot"]
+    async fn live_snapshot_generate_brief() {
+        if std::env::var("FOURDA_BRIEF_LIVE").is_err() || std::env::var("FOURDA_DB_PATH").is_err() {
+            return;
+        }
+        let first = super::generate_briefing_internal(false, None)
+            .await
+            .expect("generation runs");
+        println!("{}", serde_json::to_string_pretty(&first).unwrap());
+        assert_eq!(first["success"], true, "{first}");
+        let text = first["briefing"].as_str().expect("a brief");
+        assert!(
+            text.contains("## ") || text.contains("Nothing new touches your code today"),
+            "{text}"
+        );
+
+        // Same facts, same day: an AUTO trigger must reuse, not regenerate.
+        let second = super::generate_briefing_internal(true, None)
+            .await
+            .expect("reuse runs");
+        assert_eq!(second["cached"], true, "auto trigger regenerated: {second}");
+        assert_eq!(second["briefing"], first["briefing"]);
+    }
+
     // ========================================================================
     // Briefing JSON response structure tests
     // ========================================================================
