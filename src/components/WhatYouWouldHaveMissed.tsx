@@ -8,19 +8,19 @@ import { useAppStore } from '../store';
 import { useShallow } from 'zustand/react/shallow';
 import type { SourceRelevance } from '../types/analysis';
 import { getRelevancePresentation, isSurfacedSignal } from '../utils/score';
-import { useLicense } from '../hooks/use-license';
 import { isBriefSuppressed, useActiveBriefFilteredIds } from '../hooks/use-brief-verdicts';
-import { SignalUpgradeCTA } from './SignalUpgradeCTA';
 
 /**
- * "What You Would Have Missed" — the most persuasive feature in 4DA.
+ * "What You Would Have Missed" — the ONE surfaced item genuinely tied to the
+ * user's stack (the security advisory for a package in THEIR Cargo.toml, the
+ * breaking change in THEIR dependency), or an honest "you're clear".
  *
- * Takes today's analysis results and tells the user: out of N items scanned,
- * 4DA surfaced K that matter. Here's the ONE you would have missed — the
- * security advisory for a package in YOUR Cargo.toml, the breaking change
- * in YOUR dependency, the opportunity that matched YOUR exact stack.
- *
- * This is the feature that makes users think "I can never go back."
+ * The card carries no counters (doctrine rule 3, audit 2026-10-02). It used to
+ * lead with "3011 noise rejected / 314 signal surfaced / 90.6% filtered /
+ * ranked from 3325 items scanned": the denominator was everything fetched and
+ * merged, and the card only rendered at a >= 80% rejection rate, so the number
+ * could only ever look impressive — it informed no action. The hero item is
+ * the information; the counts were decoration.
  */
 
 /**
@@ -41,17 +41,13 @@ function hasConfirmedStackLink(r: SourceRelevance): boolean {
 }
 
 /**
- * Split a run into what 4DA surfaced and what it rejected, by the ONE
- * definition of signal (`isSurfacedSignal`). The hero pool is drawn from
- * `surfaced` only: an item the pipeline did not call relevant, or that an
- * exclusion demoted, must never be "the one you would have missed".
+ * The hero candidates: the surfaced set only, by the ONE definition of signal
+ * (`isSurfacedSignal`, same as the header chip). An item the pipeline did not
+ * call relevant, or that an exclusion demoted, must never be "the one you
+ * would have missed".
  */
-export function partitionSignal(results: SourceRelevance[]): {
-  surfaced: SourceRelevance[];
-  rejected: number;
-} {
-  const surfaced = results.filter(isSurfacedSignal);
-  return { surfaced, rejected: results.length - surfaced.length };
+export function heroCandidates(results: SourceRelevance[]): SourceRelevance[] {
+  return results.filter(isSurfacedSignal);
 }
 
 export function findMostCriticalSave(results: SourceRelevance[]): SourceRelevance | null {
@@ -152,6 +148,8 @@ const tint = (color: string, percent: number) =>
 const onTint = (color: string) =>
   `color-mix(in srgb, ${color} 85%, var(--color-text-primary))`;
 
+const CLEAR_COLOR = 'var(--color-success)';
+
 export const WhatYouWouldHaveMissed = memo(function WhatYouWouldHaveMissed() {
   const { t } = useTranslation();
   const { results, analysisComplete } = useAppStore(
@@ -161,117 +159,40 @@ export const WhatYouWouldHaveMissed = memo(function WhatYouWouldHaveMissed() {
     })),
   );
 
-  const { isPro } = useLicense();
-
   // AD-035: the hero pick honors the latest briefing's filter verdicts —
   // an item the briefing called noise must not be today's "critical save".
-  // Stats (scanned/rejected counts) stay truthful over the FULL result set;
-  // only the hero selection is bound. is_critical_alert items are exempt.
+  // is_critical_alert items are exempt.
   const briefFilteredIds = useActiveBriefFilteredIds();
 
   const insight = useMemo(() => {
     if (!analysisComplete || results.length === 0) return null;
-
-    // Same predicate as the header's "N relevant" chip — see isSurfacedSignal.
-    // A `top_score >= 0.35` filter lived here until 2026-09-04 and put a
-    // second, larger "signal" number on the same screen as the header's.
-    const { surfaced: relevant, rejected } = partitionSignal(results);
-    const totalScanned = results.length;
-    const rejectionRate = totalScanned > 0 ? ((rejected / totalScanned) * 100).toFixed(1) : '0';
+    const relevant = heroCandidates(results);
     const heroPool = relevant.filter(r => !isBriefSuppressed(r, briefFilteredIds));
     if (heroPool.length < relevant.length) {
       console.info(
         `[brief-verdicts] ${relevant.length - heroPool.length} hero candidate(s) demoted by the latest briefing's verdicts`,
       );
     }
-    const criticalSave = findMostCriticalSave(heroPool);
-
-    return { relevant, totalScanned, rejected, rejectionRate, criticalSave };
+    return { relevantCount: relevant.length, criticalSave: findMostCriticalSave(heroPool) };
   }, [results, analysisComplete, briefFilteredIds]);
 
-  if (!insight || insight.totalScanned < 5) return null;
+  // Nothing surfaced → nothing to say; the feed's own empty state speaks.
+  if (!insight || insight.relevantCount === 0) return null;
 
-  const { relevant, totalScanned, rejected, rejectionRate, criticalSave } = insight;
+  const { relevantCount, criticalSave } = insight;
   const signalLabel = criticalSave ? getSignalLabel(criticalSave) : null;
   const signalColor = criticalSave ? getSignalColor(criticalSave) : 'var(--color-accent-gold)';
 
-  // Only show when there's a compelling story (enough rejection + a critical save)
-  if (relevant.length === 0 || parseFloat(rejectionRate) < 80) return null;
-
-  // Free tier: compelling teaser without full analytics
-  if (!isPro) {
-    return (
-      <div className="mb-5 bg-bg-secondary border border-border rounded-xl overflow-hidden">
-        <div className="px-4 py-3 border-b border-border/50 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-accent-gold" />
-            <span className="text-xs font-medium text-accent-gold">
-              {t('missed.title')}
-            </span>
-          </div>
-          <span className="text-[10px] text-text-muted">
-            {t('missed.scanned', { count: totalScanned })}
-          </span>
-        </div>
-        <div className="px-4 py-5 space-y-3">
-          <p className="text-sm text-text-secondary text-center">
-            {t('missed.freeTeaser', {
-              rejected,
-              relevant: relevant.length,
-            })}
-          </p>
-          <p className="text-xs text-text-muted text-center">
-            {t('missed.freeSubtext')}
-          </p>
-          <SignalUpgradeCTA compact source="missed-teaser" />
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div className="mb-5 bg-bg-secondary border border-border rounded-xl overflow-hidden">
-      {/* Header bar */}
-      <div className="px-4 py-3 border-b border-border/50 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-accent-gold" />
-          <span className="text-xs font-medium text-accent-gold">
-            {t('missed.title')}
-          </span>
-        </div>
-        <span className="text-[10px] text-text-muted">
-          {t('missed.scanned', { count: totalScanned })}
+      <div className="px-4 py-3 border-b border-border/50 flex items-center gap-2">
+        <div className="w-2 h-2 rounded-full bg-accent-gold" />
+        <span className="text-xs font-medium text-accent-gold">
+          {t('missed.title')}
         </span>
       </div>
 
-      <div className="p-4 space-y-3">
-        {/* The stats */}
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-6">
-            <div>
-              <div className="text-2xl font-bold font-mono text-text-primary">{rejected}</div>
-              <div className="text-[10px] text-text-muted">
-                {t('missed.noiseRejected')}
-              </div>
-            </div>
-            <div className="w-px h-8 bg-border/50" />
-            <div>
-              <div className="text-2xl font-bold font-mono text-success">{relevant.length}</div>
-              <div className="text-[10px] text-text-muted">
-                {t('missed.signalSurfaced')}
-              </div>
-            </div>
-          </div>
-
-          {/* Rejection rate badge */}
-          <div className="ms-auto px-2.5 py-1 rounded-full bg-accent-gold/10 border border-accent-gold/20">
-            <span className="text-xs font-mono font-medium text-accent-gold">{rejectionRate}%</span>
-            <span className="text-[10px] text-text-muted ms-1">
-              {t('missed.filtered')}
-            </span>
-          </div>
-        </div>
-
+      <div className="p-4">
         {/* The critical save — "this is the one" — or an honest "you're clear"
             state when nothing is genuinely tied to the user's stack. */}
         {criticalSave ? (
@@ -340,35 +261,23 @@ export const WhatYouWouldHaveMissed = memo(function WhatYouWouldHaveMissed() {
         ) : (
           <div
             className="rounded-lg p-3 border"
-            style={{ backgroundColor: '#22C55E0F', borderColor: '#22C55E33' }}
+            style={{ backgroundColor: tint(CLEAR_COLOR, 6), borderColor: tint(CLEAR_COLOR, 20) }}
           >
             <div className="flex items-start gap-3">
               <div
                 className="w-1 self-stretch min-h-[36px] rounded-full flex-shrink-0"
-                style={{ backgroundColor: '#22C55E' }}
+                style={{ backgroundColor: CLEAR_COLOR }}
               />
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-text-primary font-medium">{t('missed.clearTitle')}</p>
                 <p className="text-xs text-text-muted mt-1">
-                  {t('missed.clearBody', { relevant: relevant.length })}
+                  {t('missed.clearBody', { relevant: relevantCount })}
                 </p>
               </div>
             </div>
           </div>
         )}
-
-        {/* Grounded summary — only claims the numbers the pipeline actually
-            computed (items scanned, items filtered). The old counterfactual
-            ("would have been buried in N other items") asserted an alternate
-            reality the system cannot verify. */}
-        <p className="text-[11px] text-text-muted text-center">
-          {t('missed.grounded', {
-            total: totalScanned,
-            rejected,
-          })}
-        </p>
       </div>
     </div>
   );
 });
-
