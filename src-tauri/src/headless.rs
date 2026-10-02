@@ -528,13 +528,13 @@ async fn run_one_cycle(handle: &AppHandle, trigger: &'static str, force_osv: boo
     // get_preemption_alerts), so a headless-only or GUI-closed deployment leaves
     // the DB-as-interface starved — the engine freshens the plan's exact inputs
     // (deps in step 0b, OSV matches in step 3) yet never computed the plan from
-    // them. `build_upgrade_plan_with_drops` is deterministic + DB-only (no LLM,
-    // no network), so this is cheap; `persist_upgrade_plan` always writes (even an
+    // them. `build_upgrade_plan` is deterministic + DB-only (no LLM, no
+    // network), so this is cheap; `persist_upgrade_plan` always writes (even an
     // empty plan = "evaluated, nothing to do"). Best-effort: it logs its failures.
     if let Ok(db) = crate::get_database() {
-        let (plan, drops) = crate::evidence::build_upgrade_plan_with_drops(&db);
-        let steps = plan.len();
-        crate::evidence::persist_upgrade_plan(&db, &plan, drops, run_id);
+        let plan = crate::evidence::build_upgrade_plan(&db);
+        let steps = plan.items.len();
+        crate::evidence::persist_upgrade_plan(&db, &plan.items, &plan.steps, plan.drops, run_id);
         info!(target: "4da::headless", steps, "Upgrade Plan snapshot refreshed");
     }
 

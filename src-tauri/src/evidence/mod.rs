@@ -27,8 +27,10 @@ pub(crate) mod install_drift;
 mod list_transport;
 mod liveness;
 mod materializer;
+mod plan_snapshot;
 mod types;
 mod upgrade_plan;
+mod upgrade_steps;
 mod validate;
 
 #[cfg(test)]
@@ -47,9 +49,9 @@ pub use liveness::{
 // absent (below the relevance floor) or shouting N rows.
 pub use dormant_notice::collapse_dormant_alerts;
 
-// Phase 1 dependency Upgrade Plan brain. `_with_drops` returns the ranked plan
-// plus the validation-drop canary the persisted snapshot records.
-pub use upgrade_plan::build_upgrade_plan_with_drops;
+// Phase 1 dependency Upgrade Plan brain: the ranked plan, its machine-readable
+// work order (AD-049) and the validation-drop canary the snapshot records.
+pub use upgrade_plan::{build_upgrade_plan, BuiltPlan};
 
 // Preemption LIST transport (AD-036): the single visibility filter (returned
 // counts == rendered cards) plus the list-payload trim, applied only in
@@ -70,10 +72,10 @@ pub use types::{
 };
 
 // Phase 2 (D-1, DB-as-interface): persist the ranked plan for out-of-process
-// readers (the MCP server / a future CLI). `read_upgrade_plan_snapshot` is not
-// yet called in-process (the app reads the plan live from the feed) — the MCP
-// read path is a later, operator-gated distribution stone.
+// readers (the `4da plan` CLI and the MCP `upgrade_planner`, which read the
+// kv_store key themselves). `read_upgrade_plan_snapshot` is not yet called
+// in-process (the app reads the plan live from the feed).
 #[allow(unused_imports)]
-pub use upgrade_plan::{persist_upgrade_plan, read_upgrade_plan_snapshot};
+pub use plan_snapshot::{persist_upgrade_plan, read_upgrade_plan_snapshot};
 #[allow(unused_imports)]
 pub use validate::{validate_item, ValidationError};

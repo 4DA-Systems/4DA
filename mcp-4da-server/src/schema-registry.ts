@@ -109,7 +109,7 @@ export const TOOL_REGISTRY: Record<string, ToolRegistryEntry> = {
     annotations: { title: "Dependency health", ...READ_NETWORK },
   },
   upgrade_planner: {
-    summary: "Prioritized upgrade plan: the smallest version that fixes each vulnerability, quick wins vs breaking majors, transitive fixes waiting on upstream. Call when the user asks what to upgrade, or after dependency_health surfaces problems.",
+    summary: "Prioritized upgrade plan: the 4DA app's work order when computed (per-line targets, manifest vs lockfile fix), else the smallest version that fixes each vulnerability from the lockfiles. Call when the user asks what to upgrade.",
     definition: upgradePlannerTool,
     category: "security",
     tags: ["upgrade", "dependencies", "recommendations", "versions"],

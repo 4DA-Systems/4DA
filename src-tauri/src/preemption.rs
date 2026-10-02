@@ -2109,7 +2109,11 @@ fn compute_preemption_fast_full_feed() -> std::result::Result<EvidenceFeed, Stri
 fn append_upgrade_plan_items(items: &mut Vec<EvidenceItem>) {
     match crate::get_database() {
         Ok(db) => {
-            let (mut plan, drops) = crate::evidence::build_upgrade_plan_with_drops(db);
+            let crate::evidence::BuiltPlan {
+                items: mut plan,
+                steps,
+                drops,
+            } = crate::evidence::build_upgrade_plan(db);
             // Dormancy cap (2026-08-31) BEFORE persisting: the upgrade steps
             // are exactly the cards the live audit caught nagging Critical
             // about repos dead since February, and the persisted snapshot the
@@ -2131,7 +2135,7 @@ fn append_upgrade_plan_items(items: &mut Vec<EvidenceItem>) {
             // empty plan — so a reader distinguishes "evaluated, nothing to do"
             // from "never computed". Best-effort; never blocks the feed.
             // GUI compute — no engine run to attribute (engine_run_id = None).
-            crate::evidence::persist_upgrade_plan(db, &plan, drops, None);
+            crate::evidence::persist_upgrade_plan(db, &plan, &steps, drops, None);
             if !plan.is_empty() {
                 info!(
                     target: "4da::preemption",

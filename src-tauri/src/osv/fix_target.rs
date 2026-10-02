@@ -109,8 +109,10 @@ pub(crate) fn clean_version(installed: &str, ranges: &[&Option<String>]) -> Opti
 
 /// How far an upgrade moves, by semver compatibility: a step the package
 /// manager's default caret range would NOT take is `Major` (for `0.y.z`, a
-/// minor bump breaks; for `0.0.z`, any bump does).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// minor bump breaks; for `0.0.z`, any bump does). Serialized as
+/// `"patch"` / `"minor"` / `"major"` in the plan's work order (AD-049).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
 pub enum UpgradeType {
     Patch,
     Minor,

@@ -106,6 +106,26 @@ precision 1.00, recall 0.995:
   `<cwd>/data/4da.db`. An existing one there is still found and used.
 - Hacker News is contacted only when `ecosystem_pulse` is called, never at startup.
 
+### Changed: `upgrade_planner` returns the 4DA app's plan when there is one
+
+The tool used to compute its own plan from the lockfiles in the current
+directory, even on a machine where the 4DA app had already computed one. An
+agent could be told a different target than the app showed for the same
+install. When the app's database holds its persisted Upgrade Plan (schema 4),
+the tool now returns that plan's work order with `provenance.mode: "app_plan"`:
+one step per package, keyed by the app's item id, with the ecosystem, each
+installed version and its minimum clean target, the upgrade type
+(patch/minor/major), the projects holding it (direct or transitive, dev or
+not) and the mechanism. `manifest_bump` means edit the manifest;
+`lockfile_or_parent_update` means the package is only transitive, so update its
+parent or refresh the lockfile rather than adding it as a direct dependency.
+Past the plan's `expires_at` the result says `stale: true` and is still the
+app's plan. Without a usable plan (no app database, nothing computed yet, or a
+snapshot from another app version) the tool runs the standalone heuristic as
+before and says why in `appPlanUnavailable`. The server reads the plan; it
+does not reimplement the app's matching. `package` narrows either plan to one
+package.
+
 ## 5.1.0 — 2026-09-11
 
 ### Fixed: scoped packages in pnpm and yarn lockfiles were never scanned

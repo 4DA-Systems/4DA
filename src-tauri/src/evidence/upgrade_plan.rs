@@ -36,129 +36,36 @@ use crate::osv::types::MatchedAdvisory;
 use super::types::{
     Action, Confidence, EvidenceCitation, EvidenceItem, EvidenceKind, LensHints, Urgency,
 };
+use super::upgrade_steps::{self, UpgradeStep};
+// The plan tests persist and read the envelope through this module.
+#[cfg(test)]
+use super::plan_snapshot::{persist_upgrade_plan, read_upgrade_plan_snapshot};
 
 /// Max advisory citations attached to one step (keeps items bounded; the count
 /// in the title/explanation still reflects the true total).
 const MAX_CITATIONS: usize = 8;
 
-/// `kv_store` key under which the persisted plan snapshot lives (single,
-/// latest-wins). The MCP server reads this same key from the shared SQLite file.
-const PLAN_KV_KEY: &str = "upgrade_plan_snapshot";
-
-/// Persisted-shape version. Bump on an incompatible change to
-/// [`super::types::UpgradePlanSnapshot`] / the item JSON; a reader that sees a
-/// higher version treats the snapshot as absent (fail closed).
-const PLAN_SCHEMA_VERSION: u32 = 3;
-
-/// Persist the ranked plan to `kv_store` (blueprint D-1, DB-as-interface) so it
-/// survives restart and is readable out-of-process (the `4da plan` CLI reads
-/// this key; the MCP handoff reads it too). Called from BOTH the GUI feed compute
-/// and the headless engine cycle — persists EVERY computed plan, including an
-/// empty one, so a reader can tell "evaluated, nothing to do" (fresh
-/// `generated_at`, 0 items) from "never computed" (no key). Best-effort: a write
-/// error is logged, never propagated into the caller.
-pub fn persist_upgrade_plan(
-    db: &Database,
-    items: &[EvidenceItem],
-    validation_drop_count: u32,
-    engine_run_id: Option<i64>,
-) {
-    let generated = chrono::Utc::now();
-    // Freshness FLOOR of the security data: the oldest ecosystem sync timestamp
-    // (lexicographic min of the fixed-width `YYYY-MM-DD HH:MM:SS` = chronological
-    // oldest). A reader pairs this with `expires_at` to judge staleness honestly.
-    let source_freshness = db
-        .get_osv_sync_statuses()
-        .ok()
-        .and_then(|statuses| statuses.into_iter().filter_map(|s| s.last_synced_at).min());
-    // Staleness horizon: the plan is only as fresh as the security data it read,
-    // and that data is refreshed on the OSV sync cadence. State that horizon so a
-    // reader judges staleness without knowing 4DA's policy.
-    let expires = generated + chrono::Duration::hours(crate::osv::sync::osv_sync_max_age_hours());
-    // The inventory the plan was computed from (already sorted by the query) —
-    // used for both the change-detection hash and the coverage gate.
-    let instances = db.get_all_dependency_instances().unwrap_or_default();
-    let dependency_inventory_hash = {
-        use sha2::{Digest, Sha256};
-        let mut hasher = Sha256::new();
-        // Volatile columns (row id, detected_at) are excluded on purpose — the
-        // hash tracks the identity set (project, ecosystem, package, version).
-        for r in &instances {
-            hasher.update(r.project_path.as_bytes());
-            hasher.update([0u8]);
-            hasher.update(r.ecosystem.as_bytes());
-            hasher.update([0u8]);
-            hasher.update(r.package_name.as_bytes());
-            hasher.update([0u8]);
-            hasher.update(r.version.as_bytes());
-            hasher.update(*b"\n");
-        }
-        hex::encode(hasher.finalize())
-    };
-    let snapshot = super::types::UpgradePlanSnapshot {
-        schema_version: PLAN_SCHEMA_VERSION,
-        generated_at: generated.to_rfc3339(),
-        expires_at: expires.to_rfc3339(),
-        generator_version: env!("CARGO_PKG_VERSION").to_string(),
-        entitlement_scope_at_generation: if crate::settings::is_signal() {
-            "signal".to_string()
-        } else {
-            "free".to_string()
-        },
-        // Green iff the multi-version inventory (Phase 92) is populated — a reader
-        // must not trust negative/close verdicts without it.
-        multi_version_coverage: !instances.is_empty(),
-        dependency_inventory_hash,
-        validation_drop_count,
-        source_freshness,
-        engine_run_id,
-        item_count: items.len(),
-        items: items.to_vec(),
-    };
-    match serde_json::to_string(&snapshot) {
-        Ok(json) => {
-            if let Err(e) = db.set_kv(PLAN_KV_KEY, &json) {
-                tracing::warn!(target: "4da::upgrade_plan", error = %e, "failed to persist upgrade plan snapshot");
-            }
-        }
-        Err(e) => {
-            tracing::warn!(target: "4da::upgrade_plan", error = %e, "failed to serialize upgrade plan snapshot");
-        }
-    }
+/// The ranked plan, its work order and the validation-drop canary — built in
+/// one pass, so a step exists exactly when its item does.
+pub struct BuiltPlan {
+    pub items: Vec<EvidenceItem>,
+    /// The machine-readable work order (AD-049), keyed by item id.
+    pub steps: Vec<UpgradeStep>,
+    pub drops: u32,
 }
 
-/// Read the persisted plan snapshot. Returns `None` when absent, unparseable, or
-/// written by an incompatible schema version (fail closed — a reader must never
-/// act on a snapshot it cannot fully trust).
-///
-/// Test-exercised only: the shipped `4da plan` CLI reads the `kv_store` key via
-/// raw SQL (it deliberately does not link `fourda_lib`), so it does NOT call this
-/// `Database`-based reader. This fn's production caller is the in-app Phase-2a
-/// reader (operator-gated), still pending.
-// Moved 2026-09-24 from 2026-10-01: the in-app Phase-2a reader that wires this
-// is still operator-gated, and deleting a tested, fail-closed reader ahead of
-// that decision would pre-empt it. Same review date as the seven markers #681
-// moved. If Phase-2a is not scheduled by then, delete this fn and its tests.
-#[allow(dead_code)] // REMOVE BY 2026-11-15 — wired by the in-app Phase-2a reader
-pub fn read_upgrade_plan_snapshot(db: &Database) -> Option<super::types::UpgradePlanSnapshot> {
-    let json = db.get_kv(PLAN_KV_KEY).ok().flatten()?;
-    let snapshot: super::types::UpgradePlanSnapshot = serde_json::from_str(&json).ok()?;
-    if snapshot.schema_version != PLAN_SCHEMA_VERSION {
-        tracing::debug!(
-            target: "4da::upgrade_plan",
-            found = snapshot.schema_version,
-            expected = PLAN_SCHEMA_VERSION,
-            "upgrade plan snapshot schema mismatch — treated as absent"
-        );
-        return None;
-    }
-    Some(snapshot)
+/// Items and drop count only — the shape the plan tests assert on.
+#[cfg(test)]
+pub fn build_upgrade_plan_with_drops(db: &Database) -> (Vec<EvidenceItem>, u32) {
+    let plan = build_upgrade_plan(db);
+    (plan.items, plan.drops)
 }
 
 /// Build the ranked dependency Upgrade Plan as validated [`EvidenceItem`]s,
-/// most-actionable first, and the count of steps dropped because they failed
-/// `validate_item`. Returns `(empty, 0)` on cold-start (no matches) or if the
-/// matcher errors — never breaks on a data quirk.
+/// most-actionable first, with each item's [`UpgradeStep`]s and the count of
+/// items dropped because they failed `validate_item` (their steps go with
+/// them). Empty on cold-start (no matches) or if the matcher errors — never
+/// breaks on a data quirk.
 ///
 /// Consumed by `preemption::compute_preemption_evidence_feed` (the Signal-tier
 /// feed) which renders the items as the "Upgrade Plan" group and persists the
@@ -166,12 +73,16 @@ pub fn read_upgrade_plan_snapshot(db: &Database) -> Option<super::types::Upgrade
 /// "thin plan" canary (a silent drop in a release build once shipped a truncated
 /// citation as a dropped step; a reader that sees a non-zero count knows the
 /// plan may under-report).
-pub fn build_upgrade_plan_with_drops(db: &Database) -> (Vec<EvidenceItem>, u32) {
+pub fn build_upgrade_plan(db: &Database) -> BuiltPlan {
     let matches = match crate::osv::matching::get_matched_advisories(db) {
         Ok(m) => m,
         Err(e) => {
             tracing::warn!(target: "4da::upgrade_plan", error = %e, "matcher failed — empty plan");
-            return (Vec::new(), 0);
+            return BuiltPlan {
+                items: Vec::new(),
+                steps: Vec::new(),
+                drops: 0,
+            };
         }
     };
 
@@ -200,7 +111,7 @@ pub fn build_upgrade_plan_with_drops(db: &Database) -> (Vec<EvidenceItem>, u32) 
     // into ONE Watch item at the end of the plan.
     let (informational, steps): (Vec<PackageGroup<'_>>, Vec<PackageGroup<'_>>) =
         groups.into_iter().partition(|g| g.informational);
-    let mut candidates: Vec<EvidenceItem> = steps
+    let mut candidates: Vec<(EvidenceItem, Vec<UpgradeStep>)> = steps
         .into_iter()
         .map(|g| g.into_evidence_item(now))
         .collect();
@@ -208,10 +119,14 @@ pub fn build_upgrade_plan_with_drops(db: &Database) -> (Vec<EvidenceItem>, u32) 
         candidates.push(informational_item(informational, now));
     }
     let mut items = Vec::with_capacity(candidates.len());
+    let mut work_order = Vec::with_capacity(candidates.len());
     let mut drops = 0u32;
-    for item in candidates {
+    for (item, item_steps) in candidates {
         match super::validate::validate_item(&item) {
-            Ok(()) => items.push(item),
+            Ok(()) => {
+                items.push(item);
+                work_order.extend(item_steps);
+            }
             Err(e) => {
                 debug_assert!(false, "upgrade_plan emitted an invalid item: {e:?}");
                 tracing::warn!(
@@ -224,7 +139,11 @@ pub fn build_upgrade_plan_with_drops(db: &Database) -> (Vec<EvidenceItem>, u32) 
             }
         }
     }
-    (items, drops)
+    BuiltPlan {
+        items,
+        steps: work_order,
+        drops,
+    }
 }
 
 /// One package's aggregated upgrade step.
@@ -407,7 +326,8 @@ impl PackageGroup<'_> {
         self.representatives().len()
     }
 
-    fn into_evidence_item(self, now_millis: i64) -> EvidenceItem {
+    /// The row's item and its one work-order step, from the same lines.
+    fn into_evidence_item(self, now_millis: i64) -> (EvidenceItem, Vec<UpgradeStep>) {
         let n = self.advisory_count();
         let m = self.projects.len();
         let major = self.lines.iter().any(LineTarget::is_major);
@@ -558,7 +478,14 @@ impl PackageGroup<'_> {
             ),
         };
 
-        EvidenceItem {
+        let step = upgrade_steps::step_for(
+            &id,
+            &self.ecosystem_norm,
+            &self.package,
+            &self.lines,
+            &self.advisories,
+        );
+        let item = EvidenceItem {
             id,
             kind: EvidenceKind::Alert,
             title,
@@ -576,7 +503,8 @@ impl PackageGroup<'_> {
             lens_hints: LensHints::upgrade_plan(),
             created_at: now_millis,
             expires_at: None,
-        }
+        };
+        (item, vec![step])
     }
 }
 
@@ -682,7 +610,20 @@ fn installed_in(advisory: &MatchedAdvisory, projects: &[String]) -> String {
 /// unmaintained and where, without fourteen "Upgrade X" steps that have no
 /// version to upgrade to (live 2026-09-06: gtk ×10, paste, proc-macro-error
 /// ×2, ttf-parser — Tauri's Linux GTK3 bindings and their transitive tail).
-fn informational_item(groups: Vec<PackageGroup<'_>>, now_millis: i64) -> EvidenceItem {
+/// Its work order is one `no_fix` step per package named.
+fn informational_item(
+    groups: Vec<PackageGroup<'_>>,
+    now_millis: i64,
+) -> (EvidenceItem, Vec<UpgradeStep>) {
+    const ID: &str = "upgrade-plan:informational";
+    let steps = upgrade_steps::merge_same_package(
+        groups
+            .iter()
+            .map(|g| {
+                upgrade_steps::step_for(ID, &g.ecosystem_norm, &g.package, &g.lines, &g.advisories)
+            })
+            .collect(),
+    );
     // Count DEPENDENCIES, not rows: a package that split into several rows
     // (`split_by_applicable_advisories`) must still be named once and counted
     // once — "7 unmaintained dependencies" is a claim about dependencies. The
@@ -751,8 +692,8 @@ fn informational_item(groups: Vec<PackageGroup<'_>>, now_millis: i64) -> Evidenc
         relevance_note: truncate(&format!("Affected projects: {}", projects.join(", ")), 200),
     });
 
-    EvidenceItem {
-        id: "upgrade-plan:informational".to_string(),
+    let item = EvidenceItem {
+        id: ID.to_string(),
         kind: EvidenceKind::Alert,
         title,
         explanation,
@@ -772,7 +713,8 @@ fn informational_item(groups: Vec<PackageGroup<'_>>, now_millis: i64) -> Evidenc
         lens_hints: LensHints::upgrade_plan(),
         created_at: now_millis,
         expires_at: None,
-    }
+    };
+    (item, steps)
 }
 
 /// The plan's four informational actions (doctrine rule 5: none executes an
