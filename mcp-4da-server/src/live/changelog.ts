@@ -122,6 +122,8 @@ const FENCE = /^\s*(```|~~~)/;
 const RULE = /^\s*(?:[-=*_]\s*){3,}$/;
 /** A whole-line bold label ("**Breaking Changes:**") acts as a sub-heading. */
 const BOLD_LABEL = /^\s*\*\*([^*]+)\*\*:?\s*$/;
+/** A line that opens or closes layout markup rather than describing a change. */
+const HTML_LAYOUT = /^<\/?(?:details|summary|div|p|br|hr|img|picture|source|table|tr|td|th|thead|tbody|center|sup|sub)\b/i;
 /** A bullet that is only a label: "remove:", "**Breaking**:", "deps:". */
 const LABEL_BULLET = /^\W*([A-Za-z][\w -]{0,30}?)\W*:\W*$/;
 
@@ -144,7 +146,11 @@ function flush(state: ParseState): void {
   if (state.pending && state.current) {
     const text = sanitizeEntry(state.pending.text);
     const under = state.pending.under;
-    if (text) state.current.entries.push({ kind: classifyEntry(text, state.pending.context), text, ...(under ? { under } : {}) });
+    // Layout markup is not a change: actix-web 4 wraps pre-release notes in
+    // `<details> <summary>...</summary>`, and both lines were counted as removals.
+    if (text && !HTML_LAYOUT.test(text)) {
+      state.current.entries.push({ kind: classifyEntry(text, state.pending.context), text, ...(under ? { under } : {}) });
+    }
   }
   state.pending = null;
 }
