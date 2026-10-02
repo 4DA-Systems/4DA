@@ -101,7 +101,7 @@ const manifest = {
   },
   compatibility: {
     platforms: [platform],
-    runtimes: { node: ">=20.0.0" },
+    runtimes: { node: ">=22.0.0" },
   },
 };
 writeFileSync(join(stage, "manifest.json"), JSON.stringify(manifest, null, 2));

@@ -65,6 +65,18 @@ export class LiveIntelligence {
   private enabled: boolean;
 
   private lastVulnScan: VulnerabilityScanResult | null = null;
+  /** Whether the stored scan included direct devDependencies. */
+  private lastVulnScanIncludesDev = false;
+  /**
+   * Order of scan REQUESTS. A scan's result is stored only if no later request
+   * has stored one already: the init warmup (runtime scope) used to finish
+   * after an agent's `include_dev` scan and replace it, so `upgrade_planner`
+   * read a scan without the dev dependencies the agent had just scanned and
+   * sent node-fetch 2.6.0 to the ESM-only 3.3.2 with no advisories (2 of 6
+   * runs, 2026-10-03 pre-publish verification).
+   */
+  private scanRequests = 0;
+  private storedScanRequest = 0;
   private lastHeadlines: LiveHeadline[] = [];
   private resolvedDeps: ResolvedDependency[] = [];
   private auditDeps: ResolvedDependency[] = [];
@@ -266,9 +278,14 @@ export class LiveIntelligence {
     }
 
     const generation = this.generation;
+    const request = ++this.scanRequests;
     try {
       const result = await this.osvScanner.scan(deps, projectPath);
-      if (generation === this.generation) this.lastVulnScan = result;
+      if (generation === this.generation && request > this.storedScanRequest) {
+        this.lastVulnScan = result;
+        this.lastVulnScanIncludesDev = options?.includeDev ?? false;
+        this.storedScanRequest = request;
+      }
       return result;
     } catch {
       // Network failure — return last known or empty
@@ -311,10 +328,19 @@ export class LiveIntelligence {
   async ensureVulnerabilities(
     projectPath: string,
     timeoutMs: number,
+    options?: { includeDev?: boolean },
   ): Promise<VulnerabilityScanResult | null> {
     if (!this.enabled) return null;
     this.refreshIfLockfilesChanged();
-    if (this.lastVulnScan && !this.lastVulnScan.offline) return this.lastVulnScan;
+    const wantDev = options?.includeDev ?? false;
+    if (this.lastVulnScan && !this.lastVulnScan.offline && (!wantDev || this.lastVulnScanIncludesDev)) {
+      return this.lastVulnScan;
+    }
+    // A caller that needs direct devDependencies covered (a briefing whose task
+    // names a dev dependency) cannot use the runtime-scope warmup: it reported
+    // "vulnerabilities: []" for node-fetch 2.6.0, which has two advisories
+    // (2026-10-03 pre-publish verification). Scan at the wider scope, bounded.
+    if (wantDev) return this.awaitScan(this.scanVulnerabilities(projectPath, { includeDev: true }), timeoutMs);
 
     if (!this.warmup) {
       if (this.warmupFailedAt !== null && Date.now() - this.warmupFailedAt < WARMUP_RETRY_MS) {
@@ -350,6 +376,27 @@ export class LiveIntelligence {
     }
   }
 
+  /** A scan's result within `timeoutMs`, or null when it times out, comes back offline, or is overtaken by a re-resolution. */
+  private async awaitScan(
+    pending: Promise<VulnerabilityScanResult>,
+    timeoutMs: number,
+  ): Promise<VulnerabilityScanResult | null> {
+    const generation = this.generation;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const deadline = new Promise<null>((resolve) => {
+      timer = setTimeout(() => resolve(null), Math.max(0, timeoutMs));
+    });
+    try {
+      const settled = await Promise.race([pending, deadline]);
+      if (settled === null || generation !== this.generation || settled.offline) return null;
+      return settled;
+    } catch {
+      return null;
+    } finally {
+      if (timer !== undefined) clearTimeout(timer);
+    }
+  }
+
   /**
    * Fetch relevant headlines for the user's tech stack.
    */
@@ -369,6 +416,11 @@ export class LiveIntelligence {
    */
   getVulnerabilities(): VulnerabilityScanResult | null {
     return this.lastVulnScan;
+  }
+
+  /** Whether the stored scan covered direct devDependencies (false when there is none). */
+  lastScanIncludesDev(): boolean {
+    return this.lastVulnScan !== null && this.lastVulnScanIncludesDev;
   }
 
   /**

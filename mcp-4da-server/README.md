@@ -25,11 +25,20 @@ One command to install. No API keys. No accounts. Your code never leaves your ma
 
 ## Install
 
+Requires Node.js 22 or later.
+
 ```bash
 claude mcp add 4da -- npx @4da/mcp-server
 ```
 
-Installed as a **Claude Code plugin** (this directory carries `.claude-plugin/plugin.json`), it also adds a hook: when your agent edits a dependency's version in `package.json`, `Cargo.toml`, `pyproject.toml`, `requirements.txt` or `go.mod`, the agent is told which packages moved and given the exact `upgrade_impact` call to make before it builds. The hook is plain Node, contacts nothing, and stays silent for every other edit.
+**As a Claude Code plugin** (the MCP server plus a hook):
+
+```bash
+claude plugin marketplace add 4DA-Systems/4DA --sparse .claude-plugin mcp-4da-server
+claude plugin install 4da@4da
+```
+
+The hook: when your agent edits a dependency's version in `package.json`, `Cargo.toml`, `pyproject.toml`, `requirements.txt` or `go.mod`, it is told which packages moved and given the exact `dependency_check` and `upgrade_impact` calls to make before it installs and builds. The hook is plain Node, contacts nothing, and stays silent for every other edit.
 
 <details>
 <summary><b>Cursor / Windsurf</b></summary>
@@ -92,9 +101,9 @@ Then ask your AI: **"What changes if I upgrade X to Y?"**, **"Scan for vulnerabi
 
 ## How It Works
 
-The server reads every lockfile of the project it is started in, including independently-locked projects below the root (a repo with `src-tauri/Cargo.lock` beside a root `pnpm-lock.yaml` is scanned whole) and skipping what `.gitignore` excludes: `package-lock.json` / `npm-shrinkwrap.json`, `pnpm-lock.yaml` (v5–v9), `yarn.lock` (v1 and berry), `Cargo.lock` (Cargo workspaces included), `poetry.lock`, `uv.lock`, `Pipfile.lock`, `requirements.txt` pins, and `go.mod` / `go.sum` (Go's build list). Every installed copy is scanned, not one version per name, with the lockfile's own dev flags. It re-reads them whenever a lockfile changes, and for npm it also checks what `node_modules` actually holds.
+The server reads every lockfile of the project it is started in, including independently-locked projects below the root (a repo with `src-tauri/Cargo.lock` beside a root `pnpm-lock.yaml` is scanned whole) and skipping what `.gitignore` excludes: `package-lock.json` / `npm-shrinkwrap.json`, `pnpm-lock.yaml` (v5–v9), `yarn.lock` (v1 and berry), `bun.lock`, `Cargo.lock` (Cargo workspaces included), `poetry.lock`, `uv.lock`, `Pipfile.lock`, `requirements.txt` pins, and `go.mod` / `go.sum` (Go's build list). Every installed copy is scanned, not one version per name, with the lockfile's own dev flags. It re-reads them whenever a lockfile changes, and for npm it also checks what `node_modules` actually holds.
 
-Measured against osv-scanner on 12 projects (npm, pnpm, Cargo, Poetry, requirements.txt, Go): precision 1.00, recall 0.995.
+Measured against osv-scanner on 12 projects (npm, pnpm, Cargo, Poetry, requirements.txt, Go): precision 1.00, recall 0.995; re-run before release from the installed package on those and 11 more never used to build the readers (yarn, pnpm, bun, uv, Pipfile, Go included), with every difference settled by OSV or Go's own build list.
 
 - **OSV.dev** for known vulnerabilities, matched to exact installed versions
 - **npm registry, crates.io, PyPI, Go module proxy** for versions, deprecations and yanks
@@ -110,7 +119,7 @@ Results are cached (24h for registry data, 1h for vulnerabilities, 30min for new
 
 **Ecosystems supported:** npm, crates.io (Rust), PyPI (Python), Go. `upgrade_impact`: npm and crates.io.
 
-**Known limits, stated plainly:** a `requirements.txt` without a lockfile names only your direct pins, so their transitive dependencies are not scanned (use `uv lock`, `poetry lock` or `pip-compile`). Many packages ship no changelog in their registry archive (fastembed, vite, zod among them); `upgrade_impact` then says so and gives the release-notes URL instead of guessing. Breaking entries are recognised from the changelog's headings and wording: measured on 23 held-out upgrades against three blind raters, 87% of entries it marks breaking are breaking and about 60% of breaking entries are marked (behaviour changes filed under bug fixes are the usual miss), so read every entry of a major upgrade; each answer says this in `_meta.classification`.
+**Known limits, stated plainly:** a `requirements.txt` without a lockfile names only your direct pins, so their transitive dependencies are not scanned (use `uv lock`, `poetry lock` or `pip-compile`). Many packages ship no changelog in their registry archive (fastembed, vite, zod among them); `upgrade_impact` then says so and gives the release-notes URL instead of guessing. Breaking entries are flagged from the changelog's headings and wording, and every entry carries the heading it sits under (`under`). Measured on 47 upgrades never used to build the rules, against three blind raters who saw each entry's heading: 99% of entries flagged breaking were breaking (95% CI 95-100%) and about 65% of breaking entries were flagged. Earlier corpora, before the last parser fixes, measured 73-87%, so treat the flags as a pre-sort: read every entry of a major upgrade. Each answer says this in `_meta.classification`.
 
 ## What You Can Ask
 
@@ -259,7 +268,7 @@ git clone https://github.com/4DA-Systems/4DA.git
 cd 4DA/mcp-4da-server
 pnpm install
 pnpm build
-pnpm test    # 626 tests, offline
+pnpm test    # 640 tests, offline
 ```
 
 ## License

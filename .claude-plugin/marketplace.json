@@ -1,0 +1,20 @@
+{
+  "name": "4da",
+  "owner": {
+    "name": "4DA Systems",
+    "url": "https://4da.ai"
+  },
+  "metadata": {
+    "description": "4DA's Claude Code plugin: upgrade intelligence for your agent, with a hook on dependency edits."
+  },
+  "plugins": [
+    {
+      "name": "4da",
+      "source": "./mcp-4da-server",
+      "description": "What changes between the version you run and the one you want, which of your files it touches, which vulnerabilities it fixes; a hook points the agent at it whenever a dependency version is edited.",
+      "version": "6.0.0",
+      "homepage": "https://4da.ai/mcp/",
+      "license": "Apache-2.0"
+    }
+  ]
+}

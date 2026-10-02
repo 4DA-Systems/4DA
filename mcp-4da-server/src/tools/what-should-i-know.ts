@@ -22,7 +22,7 @@
 
 import type { FourDADatabase } from "../db.js";
 import type { LiveIntelligence } from "../live/index.js";
-import type { ResolvedDependency, VulnerabilityScanResult } from "../live/types.js";
+import type { VulnerabilityScanResult } from "../live/types.js";
 import { isActionableVulnerability } from "../live/maintenance.js";
 import { presentedSeverity } from "../live/severity-scope.js";
 import { maxVersion } from "../live/version-compare.js";
@@ -238,14 +238,12 @@ export async function executeWhatShouldIKnow(
   const relevance = createRelevanceScorer([task, ...files].join(" "));
 
   // ── 0. The vulnerability scan — awaited, bounded, never assumed ───────
-  const { scan, scanStatus, scanBlock } = await awaitScan(liveIntel);
+  const taskPackages = () =>
+    detectTaskPackages(task, files, [...(liveIntel?.getResolvedDeps?.() ?? []), ...(liveIntel?.getAuditDeps?.() ?? [])]);
+  const { scan, scanStatus, scanBlock } = await awaitScan(liveIntel, () => taskPackages().some((p) => p.dev));
 
   // ── 1. The dependencies this task touches ─────────────────────────────
-  const deps: ResolvedDependency[] = [
-    ...(liveIntel?.getResolvedDeps?.() ?? []),
-    ...(liveIntel?.getAuditDeps?.() ?? []),
-  ];
-  const packages = detectTaskPackages(task, files, deps);
+  const packages = taskPackages();
   const vulns = scan?.vulnerabilities ?? [];
   const taskDependencies = packages.map((pkg) => describePackage(db, pkg, vulns));
 
@@ -346,7 +344,11 @@ export async function executeWhatShouldIKnow(
 // Steps
 // ============================================================================
 
-async function awaitScan(liveIntel: BriefingLiveIntel | null): Promise<{
+async function awaitScan(
+  liveIntel: BriefingLiveIntel | null,
+  /** Evaluated after re-resolution: whether a task package is a direct devDependency. */
+  needsDevScope: () => boolean = () => false,
+): Promise<{
   scan: VulnerabilityScanResult | null;
   scanStatus: ScanStatus;
   scanBlock: BriefingScan;
@@ -364,7 +366,11 @@ async function awaitScan(liveIntel: BriefingLiveIntel | null): Promise<{
       reResolved = false;
     }
     try {
-      scan = await liveIntel.ensureVulnerabilities(liveIntel.getProjectRoot() ?? process.cwd(), SCAN_WAIT_MS);
+      // The startup scan leaves direct devDependencies out; a task about one
+      // (node-fetch 2.6.0, a devDependency) read "vulnerabilities: []" from it.
+      scan = await liveIntel.ensureVulnerabilities(liveIntel.getProjectRoot() ?? process.cwd(), SCAN_WAIT_MS, {
+        includeDev: needsDevScope(),
+      });
     } catch {
       scan = null;
     }

@@ -215,11 +215,16 @@ export function summarize(input: SummaryInput): string {
   if (input.changelog === "missing") breaking = "no changelog in the package archive (see release_notes_url)";
   else if (input.changelog === "no_entries") {
     breaking = "the package's changelog has no entries for these releases, so breaking changes are unknown (see release_notes_url)";
-  } else if (input.touching > 0) {
-    const names = input.touchingSymbols.slice(0, 5).join(", ");
-    const verb = input.breaking === 1 ? "it touches" : `${input.touching} of them touch`;
-    breaking = `${atLeast}${input.breaking} breaking change${input.breaking === 1 ? "" : "s"} (${verb} your code: ${names})`;
-  } else breaking = `${atLeast}${input.breaking} breaking change${input.breaking === 1 ? "" : "s"}`;
+  } else {
+    // "flagged", not "N breaking changes": the flags come from headings and
+    // wording and are neither exhaustive nor always right (_meta.classification).
+    const flagged = `${atLeast}${input.breaking} entr${input.breaking === 1 ? "y" : "ies"} flagged breaking`;
+    if (input.touching > 0) {
+      const names = input.touchingSymbols.slice(0, 5).join(", ");
+      const verb = input.breaking === 1 ? "it touches" : `${input.touching} touch`;
+      breaking = `${flagged} (${verb} your code: ${names})`;
+    } else breaking = flagged;
+  }
   const advisories =
     input.advisoriesFixed === null ? "advisories unknown (OSV unreachable)" : `${input.advisoriesFixed} advisories fixed`;
   return `${input.pkg} ${input.from} -> ${input.to}: ${parts.join(", ")}, ${breaking}, ${advisories}.`;
