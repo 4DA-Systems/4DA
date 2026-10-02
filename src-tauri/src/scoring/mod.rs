@@ -647,9 +647,10 @@ pub(crate) use types::{ScoringInput, ScoringOptions};
 // advisory's applicability comes from the same version-confirmed matcher
 // Preemption reads (transitive copies included), severity from the advisory
 // itself, never a default Critical; editorial security stories and every
-// non-security signal type cap at Advisory; (2) dependency grounding needs a
-// dependency EVENT near a token-bounded name match, and org-name packages
-// (`openai`, `stripe`) need package evidence — company news no longer grounds;
+// non-security signal type cap at Advisory; (2) dependency grounding matches
+// context words as whole tokens (not substrings: "gem" in "Gemini"), and
+// org-name packages (`openai`, `stripe`) need package evidence — company
+// news no longer grounds;
 // (3) registry releases are graded only against projects that INSTALL the
 // package (a project that builds it is not a pin). (2) reaches any item that
 // mentions a dependency, so the bump is NOT registered: the whole corpus
