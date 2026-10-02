@@ -51,7 +51,9 @@ export class PyPIRegistry {
     isDev: boolean,
   ): Promise<RegistryPackageInfo> {
     const normalizedName = name.toLowerCase().replace(/_/g, "-");
-    const cacheKey = `pypi-reg:${name.toLowerCase()}`;
+    // Keyed by the installed version too: the cached answer carries currentVersion
+    // and its distance, so a name-only key served one project's answer to another.
+    const cacheKey = `pypi-reg:${name.toLowerCase()}@${currentVersion ?? ""}:${isDev ? 1 : 0}`;
     const cached = this.cache.get<RegistryPackageInfo>(cacheKey);
     if (cached !== null) return cached;
 

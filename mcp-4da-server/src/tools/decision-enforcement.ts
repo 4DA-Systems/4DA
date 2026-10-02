@@ -30,7 +30,6 @@ import {
 export interface CheckDecisionAlignmentParams {
   technology: string;
   pattern?: string;
-  context?: string;
 }
 
 interface DecisionRow {
@@ -102,10 +101,6 @@ export const checkDecisionAlignmentTool = {
         type: "string",
         description:
           "Architecture pattern to check (e.g., 'microservices', 'event-driven')",
-      },
-      context: {
-        type: "string",
-        description: "Additional context about the proposed change",
       },
     },
     required: ["technology"],

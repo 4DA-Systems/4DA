@@ -15,7 +15,7 @@ import type { LiveHeadline } from "./types.js";
 const HN_ALGOLIA_URL = "https://hn.algolia.com/api/v1/search";
 const HN_TIMEOUT_MS = 8_000;
 const HN_CACHE_TTL = 1800; // 30 minutes
-const MAX_QUERIES = 5;
+const MAX_QUERIES = 8;
 const RESULTS_PER_QUERY = 10;
 const MIN_POINTS = 10;
 
@@ -139,7 +139,9 @@ function scoreAndMap(hits: HNHit[], techStack: string[]): LiveHeadline[] {
     // "reactors" and weather stories arrived this way), not ecosystem news.
     .filter(({ matchedTech }) => matchedTech.length > 0)
     .map(({ hit, matchedTech }) => {
-      const techBoost = Math.min(matchedTech.length * 0.2, 0.4);
+      // A headline naming a dependency outranks language-level news.
+      const named = matchedTech.filter((t) => !LANGUAGE_TERMS.has(t));
+      const techBoost = named.length > 0 ? Math.min(0.3 + named.length * 0.1, 0.5) : 0.1;
       const pointsBoost = Math.min(hit.points / 500, 0.3);
       const commentsBoost = Math.min(hit.num_comments / 200, 0.2);
       const score = Math.min(0.1 + techBoost + pointsBoost + commentsBoost, 1.0);
@@ -153,12 +155,17 @@ function scoreAndMap(hits: HNHit[], techStack: string[]): LiveHeadline[] {
         comments: hit.num_comments,
         published: hit.created_at,
         relevanceScore: Math.round(score * 100) / 100,
-        relevanceReason: `Matches your stack: ${matchedTech.join(", ")}`,
+        relevanceReason: named.length > 0
+          ? `Names ${named.join(", ")} (used in your projects)`
+          : `Language-level news: ${matchedTech.join(", ")}`,
       };
     })
     .sort((a, b) => b.relevanceScore - a.relevanceScore)
     .slice(0, 15);
 }
+
+/** Search terms that name a language rather than a dependency. */
+const LANGUAGE_TERMS = new Set(["rust", "python", "zig", "kotlin", "swift", "ruby", "elixir"]);
 
 const SKIP_TERMS = new Set([
   "javascript", "typescript", // too generic, floods results

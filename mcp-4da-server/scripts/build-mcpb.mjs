@@ -51,11 +51,12 @@ execSync("npm install --omit=dev --no-audit --no-fund --ignore-scripts=false", {
 
 // 3. Manifest — generated from package.json so versions can never drift.
 const standaloneTools = [
-  { name: "vulnerability_scan", description: "Scan the project's dependencies for known CVEs via OSV.dev — severity, fix versions, upgrade commands." },
+  { name: "upgrade_impact", description: "What changes between the installed and a target version of one dependency: breaking changes, deprecations, security fixes, and the files that import it." },
+  { name: "vulnerability_scan", description: "Scan every installed copy in the project's lockfiles for known vulnerabilities via OSV.dev — severity, fix versions, where each is pinned." },
   { name: "dependency_health", description: "Version freshness, deprecations, and known issues across npm, Rust, Python, Go." },
-  { name: "upgrade_planner", description: "Ranked upgrade plan: quick wins vs breaking majors." },
+  { name: "upgrade_planner", description: "Ranked upgrade plan: the smallest version that fixes each vulnerability, breaking majors flagged." },
   { name: "dependency_check", description: "Verdict with evidence before adding a dependency or applying a version bump (npm, crates.io)." },
-  { name: "what_should_i_know", description: "Pre-task briefing: advisories and decisions relevant to the task at hand." },
+  { name: "what_should_i_know", description: "Pre-task briefing scoped to the dependencies the task touches, with a delegation verdict." },
   { name: "ecosystem_pulse", description: "What moved in the project's ecosystem lately." },
   { name: "get_context", description: "The detected stack, so the agent stops guessing versions." },
   { name: "decision_memory", description: "Record and recall architecture decisions across sessions." },
@@ -68,9 +69,9 @@ const manifest = {
   name: "4da-mcp-server",
   display_name: "4DA — Developer Intelligence",
   version: pkg.version,
-  description: "Stack-aware developer intelligence: CVE scans, dependency health, upgrade plans, decision memory. Privacy-first — only public package names leave your machine.",
+  description: "Upgrade intelligence: what an upgrade changes and where it touches your code, CVE scans, upgrade plans, decision memory. Only public package names and versions leave your machine.",
   long_description:
-    "Point 4DA at a project folder and your agent gets ten tools: vulnerability scanning (full lockfile tree against OSV.dev), dependency health, ranked upgrade plans, pre-install dependency checks, pre-task briefings, ecosystem pulse, detected stack context, decision memory and alignment checks, and cross-session agent memory. The only data that ever leaves your machine is public package names and versions sent to OSV.dev and public registries — your code, paths, and prompts never do.",
+    "Point 4DA at a project folder and your agent gets eleven tools: upgrade impact (what changes between the version you run and the one you want, read from the package's own changelog, and which of your files import it), vulnerability scanning (every lockfile, every installed copy, against OSV.dev), a pre-install verdict on each dependency bump (advisories, release age, publish-trust drop, new install scripts), dependency health, ranked upgrade plans, pre-task briefings, ecosystem pulse, detected stack context, decision memory and alignment checks, and cross-session agent memory. The only data that ever leaves your machine is public package names and versions sent to OSV.dev and the packages' own registries — your code, paths, and prompts never do.",
   author: { name: "4DA Systems", url: "https://4da.ai" },
   homepage: "https://4da.ai/mcp/",
   documentation: "https://4da.ai/mcp/",

@@ -133,7 +133,8 @@ describe("upgrade_planner — transitive CVEs become waiting_on_upstream steps",
     expect(transitive!.scope).toBe("transitive");
     expect(transitive!.action).toBe("waiting_on_upstream");
     expect(transitive!.targetVersion).toBe("5.0.15");
-    expect(transitive!.upgradeType).toBe("unknown");
+    // Computed from current -> target (it read "unknown" before 2026-10-02).
+    expect(transitive!.upgradeType).toBe("patch");
     expect(transitive!.breaking).toBe(false);
     expect(transitive!.reasons.some((r) => r.includes("Transitive dependency"))).toBe(true);
     expect(result.waitingOnUpstream).toBe(1);
@@ -142,8 +143,8 @@ describe("upgrade_planner — transitive CVEs become waiting_on_upstream steps",
   it("ranks fixable-now (direct) above waiting-on-upstream at equal risk", async () => {
     const scan = makeScan(
       [
-        makeEntry({}),
-        makeEntry({ package: "zustand", currentVersion: "5.0.14", isDirect: false, vulnId: "GHSA-test-0002" }),
+        makeEntry({ fixedVersion: "19.2.7" }),
+        makeEntry({ package: "zustand", currentVersion: "5.0.14", isDirect: false, vulnId: "GHSA-test-0002", fixedVersion: "5.0.15" }),
       ],
       webDir,
     );
@@ -155,6 +156,25 @@ describe("upgrade_planner — transitive CVEs become waiting_on_upstream steps",
     expect(transitiveIdx).toBeGreaterThan(directIdx);
     expect(result.recommendations[directIdx].scope).toBe("direct");
     expect(result.recommendations[directIdx].action).toBe("upgrade_direct");
+    // The smallest version that fixes it, not the newest release.
+    expect(result.recommendations[directIdx].targetVersion).toBe("19.2.7");
+  });
+
+  it("says no_fix_available, never upgrade_direct with no target, when no fixed release exists", async () => {
+    const result = await executeUpgradePlanner(noDb, {}, makeIntel(makeScan([makeEntry({ fixedVersion: null })], webDir)));
+    const react = result.recommendations.find((r) => r.package === "react")!;
+    expect(react.action).toBe("no_fix_available");
+    expect(result.summary).toMatch(/no fixed release/);
+  });
+
+  it("does not count unmaintained-package notices as vulnerabilities", async () => {
+    const scan = makeScan(
+      [makeEntry({ package: "paste", currentVersion: "1.0.15", isDirect: false, vulnId: "RUSTSEC-2024-0436", summary: "paste - no longer maintained" })],
+      webDir,
+    );
+    const result = await executeUpgradePlanner(noDb, {}, makeIntel(scan));
+    expect(result.recommendations.find((r) => r.package === "paste")).toBeUndefined();
+    expect(result.summary).toMatch(/1 unmaintained-package notice/);
   });
 
   it("excludes known-dev transitive vulns by default, keeps unknown-scope ones", async () => {

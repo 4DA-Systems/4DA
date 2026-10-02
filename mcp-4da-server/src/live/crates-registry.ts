@@ -37,7 +37,9 @@ export class CratesRegistry {
     currentVersion: string | null,
     isDev: boolean,
   ): Promise<RegistryPackageInfo> {
-    const cacheKey = `crates-reg:${name}`;
+    // Keyed by the installed version too: the cached answer carries currentVersion
+    // and its distance, so a name-only key served one project's answer to another.
+    const cacheKey = `crates-reg:${name}@${currentVersion ?? ""}:${isDev ? 1 : 0}`;
     const cached = this.cache.get<RegistryPackageInfo>(cacheKey);
     if (cached !== null) return cached;
 

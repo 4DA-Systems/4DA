@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: Apache-2.0
 /**
- * Tool exports for 4DA MCP Server — 15 tools across 5 categories
+ * Tool exports for 4DA MCP Server — 16 tools across 5 categories
  *
- * Security (4)     — vulnerability scanning, dependency health, upgrade planning, dependency check
+ * Security (5)     — vulnerability scanning, dependency health, upgrade planning, upgrade impact, dependency check
  * Intelligence (6) — briefing, ecosystem news, context, content feed, signals, knowledge gaps, feedback
  * Decisions (2)    — decision memory, alignment checking
  * Agent (1)        — cross-session persistent memory
@@ -29,6 +29,11 @@ export {
   dependencyCheckTool,
   executeDependencyCheck,
 } from "./dependency-check.js";
+
+export {
+  upgradeImpactTool,
+  executeUpgradeImpact,
+} from "./upgrade-impact.js";
 
 // Intelligence
 export {

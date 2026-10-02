@@ -82,6 +82,7 @@ export function resolveGroup(group: ResolutionGroup): GroupResolution {
       read.versions,
       group.targets,
       resolved,
+      read.instances,
     ),
     ...driftAudit,
   ];

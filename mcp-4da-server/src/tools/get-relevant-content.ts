@@ -34,9 +34,13 @@ Use this to find content relevant to the user's current context.`,
       },
       source_type: {
         type: "string",
-        description:
-          'Filter by source type: "hackernews", "arxiv", or "reddit". Leave empty for all sources.',
-        enum: ["hackernews", "arxiv", "reddit"],
+        description: "Only items from this source. Leave empty for all sources.",
+        // Every source the app fetches; the enum used to list three of them.
+        enum: [
+          "hackernews", "reddit", "lobsters", "devto", "arxiv", "huggingface", "papers_with_code",
+          "github", "crates_io", "npm_registry", "pypi", "go_modules", "cve", "osv", "stackoverflow",
+          "rss", "youtube", "mastodon", "lemmy", "bluesky", "twitter", "producthunt",
+        ],
       },
       limit: {
         type: "number",
@@ -58,7 +62,7 @@ Use this to find content relevant to the user's current context.`,
 export function executeGetRelevantContent(
   db: FourDADatabase,
   params: GetRelevantContentParams
-): RelevantItem[] {
+): Array<RelevantItem & { judge_relevance: number | null }> {
   const minScore = Math.max(0, Math.min(1, params.min_score ?? 0.35));
   const limit = Math.max(1, Math.min(100, params.limit ?? 20));
   const sinceHours = Math.max(1, Math.min(168, params.since_hours ?? 24)); // Max 1 week
@@ -74,5 +78,31 @@ export function executeGetRelevantContent(
     // numbers the live scoring brain doesn't stand behind.
     items = db.getRelevantContent(0.0, params.source_type, limit, 720, true);
   }
-  return items;
+  // Items the relevance judge rejected are not "relevant content", whatever
+  // their score: measured 2026-10-01, 151 of 950 feed-relevant items carried
+  // a latest judge verdict below 0.5. Unjudged items stay (scored, not yet
+  // judged) and carry `judge_relevance: null`.
+  const verdicts = latestJudgeVerdicts(db, items.map((item) => item.id));
+  return items
+    .filter((item) => (verdicts.get(item.id) ?? 1) >= 0.5)
+    .map((item) => ({ ...item, judge_relevance: verdicts.get(item.id) ?? null }));
+}
+
+/** Latest relevance-judge verdict per item, when the desktop app has judged it. */
+function latestJudgeVerdicts(db: FourDADatabase, ids: number[]): Map<number, number> {
+  const out = new Map<number, number>();
+  if (ids.length === 0) return out;
+  try {
+    const rows = db
+      .getRawDb()
+      .prepare(
+        `SELECT source_item_id AS id, relevance_score AS v FROM llm_judgments
+         WHERE id IN (SELECT MAX(id) FROM llm_judgments WHERE source_item_id IN (${ids.map(() => "?").join(",")}) GROUP BY source_item_id)`,
+      )
+      .all(...ids) as Array<{ id: number; v: number }>;
+    for (const row of rows) out.set(row.id, Math.round(row.v * 100) / 100);
+  } catch {
+    // No llm_judgments table: nothing judged.
+  }
+  return out;
 }

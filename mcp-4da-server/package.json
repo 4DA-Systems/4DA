@@ -1,8 +1,8 @@
 {
   "name": "@4da/mcp-server",
-  "version": "5.1.0",
+  "version": "6.0.0",
   "mcpName": "io.github.4DA-Systems/4da-mcp-server",
-  "description": "Dependency intelligence for AI coding agents. Live CVE scanning, dependency health, upgrade planning, pre-install dependency checks, ecosystem news, decision memory — zero config, privacy-first. 10 tools standalone, 15 total with desktop app.",
+  "description": "Upgrade intelligence for AI coding agents: what changes between your installed and target version (changelog, breaking changes, the files you import it from), a pre-install verdict on each bump, vulnerability scanning at osv-scanner parity across npm/pnpm/yarn, Cargo, Python and Go lockfiles, ranked upgrade plans, task-scoped briefings, decision memory. Local, no account. 11 tools standalone, 16 with the desktop app.",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
@@ -20,8 +20,7 @@
   ],
   "scripts": {
     "clean": "node -e \"const fs=require('fs');fs.rmSync('dist',{recursive:true,force:true})\"",
-    "build": "pnpm run clean && tsc && pnpm run copy-schemas",
-    "copy-schemas": "node -e \"const fs=require('fs');const path=require('path');const src='src/schemas';const dst='dist/schemas';if(!fs.existsSync(dst))fs.mkdirSync(dst,{recursive:true});fs.readdirSync(src).filter(f=>f.endsWith('.json')).forEach(f=>fs.copyFileSync(path.join(src,f),path.join(dst,f)))\"",
+    "build": "pnpm run clean && tsc",
     "dev": "tsc --watch",
     "start": "node dist/index.js",
     "inspect": "npx @modelcontextprotocol/inspector node dist/index.js",

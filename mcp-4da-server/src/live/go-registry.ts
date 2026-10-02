@@ -38,7 +38,9 @@ export class GoRegistry {
     currentVersion: string | null,
     isDev: boolean,
   ): Promise<RegistryPackageInfo> {
-    const cacheKey = `go-reg:${name}`;
+    // Keyed by the installed version too: the cached answer carries currentVersion
+    // and its distance, so a name-only key served one project's answer to another.
+    const cacheKey = `go-reg:${name}@${currentVersion ?? ""}:${isDev ? 1 : 0}`;
     const cached = this.cache.get<RegistryPackageInfo>(cacheKey);
     if (cached !== null) return cached;
 

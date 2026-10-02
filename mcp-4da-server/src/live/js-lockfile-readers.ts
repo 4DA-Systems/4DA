@@ -18,6 +18,8 @@
  * file, link) is dropped instead of being queried as a package name.
  */
 
+import type { InstanceSet } from "./lockfile-types.js";
+
 const DEPENDENCY_BLOCKS = new Set(["dependencies:", "devDependencies:", "optionalDependencies:"]);
 
 /** A bare npm package name, scoped or not: no whitespace, no `/` beyond the scope, no version. */
@@ -69,15 +71,21 @@ export function parsePnpmKey(rawKey: string): [string, string] | null {
  * single-project file. A direct pin therefore wins over a transitive copy of the same
  * name. Every other package comes from a key exactly two columns deep under
  * `packages:` or `snapshots:`.
+ *
+ * `instances`, when given, receives EVERY copy (a package keyed at two versions is
+ * two copies), with the `dev: true|false` that v5/v6 lockfiles write under each
+ * package key. pnpm 9 dropped that field, so its copies have unknown scope.
  */
-export function readPnpmLock(content: string, versions: Map<string, string>): void {
+export function readPnpmLock(content: string, versions: Map<string, string>, instances?: InstanceSet): void {
   const transitive: Array<[string, string]> = [];
+  const devByKey = new Map<string, boolean>();
   const setFirst = (name: string, version: string): void => {
     if (!versions.has(name)) versions.set(name, version);
   };
   let section = "";
   let blockIndent = -1; // column of the dependency block being read, or -1
   let pending: string | null = null; // v6/v9: a name whose `version:` line follows
+  let packageKey: string | null = null; // the packages/snapshots key whose fields are being read
 
   for (const line of content.split(/\r?\n/)) {
     const text = line.trim();
@@ -88,12 +96,17 @@ export function readPnpmLock(content: string, versions: Map<string, string>): vo
       section = text.endsWith(":") ? text.slice(0, -1) : "";
       blockIndent = DEPENDENCY_BLOCKS.has(text) ? 0 : -1;
       pending = null;
+      packageKey = null;
       continue;
     }
     if (section === "packages" || section === "snapshots") {
       if (indent === 2 && text.endsWith(":")) {
         const parsed = parsePnpmKey(text.slice(0, -1));
+        packageKey = parsed ? `${parsed[0]}\0${parsed[1]}` : null;
         if (parsed) transitive.push(parsed);
+      } else if (indent === 4 && packageKey) {
+        const dev = /^dev:\s*(true|false)\s*$/.exec(text);
+        if (dev) devByKey.set(packageKey, dev[1] === "true");
       }
       continue;
     }
@@ -124,6 +137,11 @@ export function readPnpmLock(content: string, versions: Map<string, string>): vo
   }
 
   for (const [name, version] of transitive) setFirst(name, version);
+  if (!instances) return;
+  for (const [name, version] of versions) {
+    if (!transitive.some(([n, v]) => n === name && v === version)) instances.add(name, version);
+  }
+  for (const [name, version] of transitive) instances.add(name, version, devByKey.get(`${name}\0${version}`));
 }
 
 /**
@@ -132,7 +150,12 @@ export function readPnpmLock(content: string, versions: Map<string, string>): vo
  * berry: `"@scope/pkg@npm:^1.0.0":` then `  version: 1.2.3`.
  * Workspace, link, portal, file, exec and patch entries do not name a registry version.
  */
-export function readYarnLock(content: string, versions: Map<string, string>): void {
+export function readYarnLock(
+  content: string,
+  versions: Map<string, string>,
+  instances?: InstanceSet,
+  specs?: Map<string, string>,
+): void {
   for (const block of content.split(/\r?\n(?=\S)/)) {
     const firstLine = block.split(/\r?\n/)[0];
     const header = /^"?(@?[^@\s"]+)@/.exec(firstLine);
@@ -140,6 +163,16 @@ export function readYarnLock(content: string, versions: Map<string, string>): vo
     if (/@(?:workspace|link|portal|file|exec|patch):/.test(firstLine)) continue;
     const line = /^\s+version:?\s+"?([^"\s]+)"?\s*$/m.exec(block);
     const version = line ? exactVersion(line[1]) : null;
-    if (version) versions.set(header[1], version);
+    if (!version) continue;
+    // One block per resolved version. Blocks are sorted by spec, so the first
+    // block of a name can be an old nested copy; `specs` lets the caller pick
+    // the copy a package.json range resolves to instead.
+    if (!versions.has(header[1])) versions.set(header[1], version);
+    instances?.add(header[1], version);
+    if (specs) {
+      for (const spec of firstLine.replace(/:\s*$/, "").split(",")) {
+        specs.set(unquote(spec.trim()).replace(/@npm:/, "@"), version);
+      }
+    }
   }
 }

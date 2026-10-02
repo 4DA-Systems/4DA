@@ -237,7 +237,10 @@ function listTsSourceFiles(dir) {
 }
 
 // ─── 6. Tool Count Consistency ──────────────────────────────────────────────
-// Verify registry, dispatch, and schemas all agree on tool count.
+// Verify the registry and dispatch agree on the tool set. Schemas are no
+// longer a separate copy: each registry entry points at the tool module's own
+// definition (schema-registry.ts), and schema-contract.test.ts holds every
+// definition to the parameters its executor reads.
 
 function checkToolConsistency() {
   try {
@@ -253,19 +256,14 @@ function checkToolConsistency() {
     const dispatchKeys = dispatchTs.match(/^\s+(\w+):\s*(?:\(|execute)/gm);
     const dispatchCount = dispatchKeys ? dispatchKeys.length : 0;
 
-    const schemaDir = path.join(MCP_SRC, "schemas");
-    const schemaCount = fs.existsSync(schemaDir)
-      ? fs.readdirSync(schemaDir).filter(f => f.endsWith(".json")).length
-      : 0;
-
     if (registryCount !== dispatchCount) {
       issues.push(
         `Tool count mismatch: registry has ${registryCount} but dispatch has ${dispatchCount}`
       );
     }
-    if (registryCount !== schemaCount) {
-      issues.push(
-        `Tool count mismatch: registry has ${registryCount} but schemas has ${schemaCount}`
+    if (fs.existsSync(path.join(MCP_SRC, "schemas"))) {
+      warnings.push(
+        "mcp-4da-server/src/schemas/ exists again — tool schemas live on each tool's TS definition; a second copy drifts."
       );
     }
   } catch (e) {

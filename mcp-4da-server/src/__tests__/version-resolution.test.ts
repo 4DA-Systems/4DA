@@ -122,7 +122,10 @@ describe("resolveVersions — per-directory", () => {
     expect(direct.map((d) => d.name)).toEqual(["react"]);
     expect(audit.find((d) => d.name === "react")?.isDirect).toBe(true);
     expect(audit.find((d) => d.name === "zustand")?.isDirect).toBe(false);
-    expect(audit.find((d) => d.name === "zustand")?.devScopeKnown).toBe(false);
+    // package-lock marks every dev-only entry `dev: true`, so an entry without
+    // it is a known runtime transitive (it used to read as unknown scope).
+    expect(audit.find((d) => d.name === "zustand")?.devScopeKnown).toBe(true);
+    expect(audit.find((d) => d.name === "zustand")?.isDev).toBe(false);
   });
 
   it("enumerates scoped transitive packages from pnpm v9 lockfiles", () => {

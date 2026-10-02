@@ -27,6 +27,9 @@ export type GapCandidate = SourceItemBriefRow & {
  */
 const NON_GAP_CONTENT_TYPES = ["show_and_tell", "tutorial", "question", "help_request", "hiring", "clickbait"];
 
+/** Sources whose rows are structured facts about a package (advisory records, registry releases). */
+const STRUCTURED_EVIDENCE = ["cve", "osv", "crates_io", "npm_registry", "pypi", "go_modules"];
+
 /**
  * Every unread candidate item, loaded ONCE and matched per dependency.
  * Grounding (each guard killed an observed false-positive class):
@@ -43,6 +46,18 @@ export function loadCandidates(db: FourDADatabase): GapCandidate[] {
   const has = (column: string) => db.hasColumn("source_items", column);
   const hasContentType = has("content_type");
   const hasRelevance = has("relevance_score");
+  // Prose evidence (news, social, papers) must have passed the relevance
+  // judge: its latest verdict >= 0.5, or, without judgments, the feed kept it.
+  // Structured rows (advisories, registry releases) are matched by subject and
+  // version instead. Measured 2026-10-01: "Breaking Windows Malware
+  // Detection" (judge 0.1) evidenced a high `windows` crate gap, and
+  // judge-rejected OpenAI company news an `openai` one.
+  const structured = `si.source_type IN (${STRUCTURED_EVIDENCE.map((s) => `'${s}'`).join(", ")})`;
+  const judgedIn = db.hasColumn("llm_judgments", "source_item_id")
+    ? `AND (${structured} OR (SELECT relevance_score FROM llm_judgments lj WHERE lj.source_item_id = si.id ORDER BY lj.id DESC LIMIT 1) >= 0.5)`
+    : has("feed_relevant")
+      ? `AND (${structured} OR si.feed_relevant = 1)`
+      : "";
   const engaged =
     db.hasColumn("interactions", "item_id") && db.hasColumn("interactions", "action_type")
       ? "AND si.id NOT IN (SELECT item_id FROM interactions WHERE item_id IS NOT NULL AND action_type IN ('click', 'save'))"
@@ -66,6 +81,7 @@ export function loadCandidates(db: FourDADatabase): GapCandidate[] {
           ${hasContentType ? `AND (si.content_type IS NULL OR si.content_type NOT IN (${excludedTypes}))` : ""}
           ${engaged}
           ${judged}
+          ${judgedIn}
         ORDER BY si.created_at DESC, si.id DESC`,
     )
     .all() as Array<Omit<GapCandidate, "title_lower">>;
@@ -81,6 +97,10 @@ export function loadCandidates(db: FourDADatabase): GapCandidate[] {
 const GENERIC_WORD_DEPS = new Set([
   "tower", "base64", "image", "time", "rand", "log", "tracing", "url", "zip",
   "tar", "glob", "regex", "chrono", "notify", "either", "bytes", "flate",
+  // Company, product and protocol names a headline uses for the thing itself
+  // (2026-10-01: "RSA has launched Agent ID", "Windows 11 emergency update",
+  // "OpenAI halts release of Astra 6.1" evidenced rsa, windows, openai gaps).
+  "rsa", "windows", "openai", "stripe", "docker", "redis", "sentry", "next", "ai", "anthropic",
 ]);
 
 // A token that ties the text to software packaging rather than the English word:

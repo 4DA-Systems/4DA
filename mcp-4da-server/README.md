@@ -5,26 +5,31 @@
 [![Node](https://img.shields.io/badge/Node-%3E%3D20-brightgreen)](https://nodejs.org/)
 [![smithery badge](https://smithery.ai/badge/@4da/mcp-server)](https://smithery.ai/server/@4da/mcp-server)
 
-**Dependency intelligence for AI coding agents.** Live CVE scanning, dependency health checks, upgrade planning, ecosystem news, and persistent decision memory. Zero config, privacy-first.
+**Upgrade intelligence for AI coding agents.** Before your agent bumps a dependency it learns what changes between the version you run and the one you want, which of your files that touches, and which vulnerabilities the move fixes, from your own lockfiles, on your machine. Plus vulnerability scanning at osv-scanner parity, ranked upgrade plans and decision memory. Zero config, no account.
 
 ```
-You:     "Check my dependency health"
-Claude:  Health: 72/100. 47 dependencies scanned, 3 vulnerable, 1 deprecated, 8 outdated.
+You:     "Upgrade axum to 0.8"
+Agent →  upgrade_impact { package: "axum", to_version: "0.8.4" }
 
-         CRITICAL  openssl-sys 0.9.93  CVE-2025-4231        -> 0.9.96
-         HIGH      serde       1.0.197 RUSTSEC-2026-12      -> 1.0.210
-         MEDIUM    cookie      0.17.0  deprecated           -> 0.18.1
-
-         Quick wins: 6 patch upgrades, 2 minor. Run upgrade_planner for full plan.
+         axum 0.7.9 -> 0.8.4: 5 releases (0.8.2 yanked), changelog from the 0.8.4 crate.
+         12 breaking entries, 8 touch symbols you import (Path, Query, Router, extract, serve):
+           breaking  Remove OptionalFromRequestParts impl for `Query`        (you use Query)
+           breaking  Require `Sync` for all handlers added to `Router`       (you use Router)
+           ...
+         Your code: 10 files import axum.
 ```
 
-One command to install. No API keys. No accounts. No code leaves your machine.
+*(Real output, abridged, run on this repository, 2026-10-02.)*
+
+One command to install. No API keys. No accounts. Your code never leaves your machine.
 
 ## Install
 
 ```bash
 claude mcp add 4da -- npx @4da/mcp-server
 ```
+
+Installed as a **Claude Code plugin** (this directory carries `.claude-plugin/plugin.json`), it also adds a hook: when your agent edits a dependency's version in `package.json`, `Cargo.toml`, `pyproject.toml`, `requirements.txt` or `go.mod`, the agent is told which packages moved and given the exact `upgrade_impact` call to make before it builds. The hook is plain Node, contacts nothing, and stays silent for every other edit.
 
 <details>
 <summary><b>Cursor / Windsurf</b></summary>
@@ -83,36 +88,39 @@ npx @4da/mcp-server --setup
 ```
 </details>
 
-Then ask your AI: **"Check my dependency health"** or **"Scan for vulnerabilities"**
+Then ask your AI: **"What changes if I upgrade X to Y?"**, **"Scan for vulnerabilities"** or **"What should I upgrade first?"**
 
 ## How It Works
 
-On startup, the server reads your manifest and lock files (`package.json`, `Cargo.toml`, `go.mod`, `pyproject.toml`), resolves exact dependency versions, and queries live APIs. It re-reads them whenever a lockfile changes, so a long-running server never answers for yesterday's dependency set. For npm it also checks what `node_modules` actually holds: an installed copy that differs from the lockfile is reported with its reinstall command, instead of hiding behind a patched lockfile.
+The server reads every lockfile of the project it is started in, including independently-locked projects below the root (a repo with `src-tauri/Cargo.lock` beside a root `pnpm-lock.yaml` is scanned whole) and skipping what `.gitignore` excludes: `package-lock.json` / `npm-shrinkwrap.json`, `pnpm-lock.yaml` (v5–v9), `yarn.lock` (v1 and berry), `Cargo.lock` (Cargo workspaces included), `poetry.lock`, `uv.lock`, `Pipfile.lock`, `requirements.txt` pins, and `go.mod` / `go.sum` (Go's build list). Every installed copy is scanned, not one version per name, with the lockfile's own dev flags. It re-reads them whenever a lockfile changes, and for npm it also checks what `node_modules` actually holds.
 
-- **OSV.dev** for known CVEs across all ecosystems
-- **npm registry** for version freshness, deprecation status, and weekly downloads
-- **crates.io sparse index** for Rust package versions (avoids the 1 req/s API limit)
+Measured against osv-scanner on 12 projects (npm, pnpm, Cargo, Poetry, requirements.txt, Go): precision 1.00, recall 0.995.
+
+- **OSV.dev** for known vulnerabilities, matched to exact installed versions
+- **npm registry, crates.io, PyPI, Go module proxy** for versions, deprecations and yanks
+- **The package's own registry archive** (registry.npmjs.org, static.crates.io) for the changelog `upgrade_impact` reads; never GitHub
 - **npm full packument** and the **crates.io versions API** for `dependency_check` (publish times, publishers, install scripts, per-version dependencies). These requests carry the package name only; the version you have installed is never sent to a registry. Packuments are cached on disk and revalidated with `If-None-Match`; crates.io API reads are spaced one per second.
-- **PyPI JSON API** for Python package metadata with license normalization
-- **Go module proxy** for Go module versions
-- **Hacker News Algolia API** for ecosystem news filtered by your tech stack
+- **Hacker News Algolia API**, only when you call `ecosystem_pulse`
 
 Results are cached (24h for registry data, 1h for vulnerabilities, 30min for news) and rate-limited per source.
 
-**What's sent over the network:** package names + versions, generic tech keywords. The same data visible in your `package.json`. No source code, no file paths, no personal data. Set `FOURDA_OFFLINE=true` to disable all network calls.
+**What's sent over the network:** package names and versions (the same data visible in your lockfile), and, only for `ecosystem_pulse`, the names of a few of your dependencies as search terms. No source code, no file paths, no personal data. The call-site scan of `upgrade_impact` runs locally. Set `FOURDA_OFFLINE=true` to disable all network calls.
 
 > The one exception: if you *explicitly* configure an OpenAI embedding provider (`FOURDA_EMBED_PROVIDER=openai`) for semantic recall, the decision/memory text you store is sent to OpenAI to be embedded. The default — no embedding provider, or a local Ollama one — keeps everything on your machine, and `FOURDA_OFFLINE=true` overrides it regardless.
 
-**Ecosystems supported:** npm, crates.io (Rust), PyPI (Python), Go.
+**Ecosystems supported:** npm, crates.io (Rust), PyPI (Python), Go. `upgrade_impact`: npm and crates.io.
+
+**Known limits, stated plainly:** a `requirements.txt` without a lockfile names only your direct pins, so their transitive dependencies are not scanned (use `uv lock`, `poetry lock` or `pip-compile`). Many packages ship no changelog in their registry archive (fastembed, vite, zod among them); `upgrade_impact` then says so and gives the release-notes URL instead of guessing.
 
 ## What You Can Ask
 
 ```
+"What changes if I upgrade axum to 0.8?"      -> upgrade_impact
 "Check my dependency health"                  -> dependency_health
 "Scan for vulnerabilities"                    -> vulnerability_scan
 "Which deps should I upgrade first?"          -> upgrade_planner
 "Is it safe to bump axios to 1.14.1?"         -> dependency_check
-"What should I know before I start coding?"   -> what_should_i_know
+"I'm about to bump fastembed 5 -> 7"          -> what_should_i_know
 "What's happening in the ecosystem?"          -> ecosystem_pulse
 "What's my tech stack?"                       -> get_context
 "Record a decision: we chose Postgres"        -> decision_memory
@@ -120,27 +128,28 @@ Results are cached (24h for registry data, 1h for vulnerabilities, 30min for new
 "Remember: never use ORM for batch inserts"   -> agent_memory
 ```
 
-## All 15 Tools
+## All 16 Tools
 
 ### Dependency Security
 
 | Tool | What it does |
 |------|-------------|
-| `vulnerability_scan` | Live CVE scanning via OSV.dev. Severity, fix versions, CVSS scores. |
-| `dependency_health` | Health score (0-100) + version freshness, deprecation, CVE counts per dependency. |
-| `upgrade_planner` | Ranked upgrade recommendations. Quick wins vs. breaking changes. Risk-sorted. |
+| `upgrade_impact` | What changes between the installed and a target version of one dependency: releases in between, changelog entries classified breaking / deprecation / security, the breaking ones that touch symbols you import, the files that import it, advisories fixed. |
+| `vulnerability_scan` | Every installed copy in every lockfile matched against OSV.dev. Scope-adjusted severity, the fix version on your release line, where each version is pinned. Concise by default; `response_format: "detailed"` for everything. |
+| `dependency_health` | Version freshness, deprecation (of the version you run) and vulnerability counts per dependency. |
+| `upgrade_planner` | The smallest version that fixes each vulnerability, majors flagged, transitive fixes waiting on upstream. `package` for a one-package plan. |
 | `dependency_check` | Call before adding a dependency or applying a bump. Verdict per item (`proceed` / `wait` / `review` / `avoid` / `unknown`) with evidence: advisories on the target, release age (holds releases under 3 days unless they fix an advisory you have), publish-trust drop, new install scripts, brand-new transitive dependencies, yanked or deprecated. npm and crates.io. |
 
 ### Intelligence
 
 | Tool | What it does |
 |------|-------------|
-| `what_should_i_know` | Pre-task intelligence briefing: vulns, decisions, signals, ecosystem updates. |
-| `ecosystem_pulse` | Live ecosystem news from Hacker News, filtered by your detected tech stack. |
+| `what_should_i_know` | Pre-task briefing built from the task: the dependencies it names, their versions and confirmed vulnerabilities, majors crossed, your recorded decisions, and a delegation verdict only confirmed evidence can raise. |
+| `ecosystem_pulse` | Hacker News headlines that name your dependencies, then your languages (labelled as such). Fetched only when called. |
 | `get_context` | Your tech stack, resolved dependency versions, interests, detected topics. |
-| `get_relevant_content`* | Scored content feed — articles, advisories, releases ranked by relevance. |
-| `get_actionable_signals`* | Classified alerts: security advisories, breaking changes, trending repos. |
-| `knowledge_gaps`* | Dependencies you use daily but never read about. Surfaces missed CVEs and updates. |
+| `get_relevant_content`* | Scored content feed that passed the desktop app's relevance judge. |
+| `get_actionable_signals`* | Judge-accepted feed items the app classified (advisories, breaking changes), plus your live vulnerabilities. |
+| `knowledge_gaps`* | Dependencies with judge-accepted advisories or releases you have not looked at. |
 | `record_feedback`* | Save or dismiss items so 4DA can record explicit interaction history. |
 
 ### Decisions & Memory
@@ -165,15 +174,16 @@ A user-invoked workflow (shown as a slash command by hosts that surface MCP prom
 
 ## Standalone vs. Full Mode
 
-The MCP server works without the desktop app. On first run it creates a local database and scans your project:
+The MCP server works without the desktop app. It keeps a small local database in your user data folder (`%LOCALAPPDATA%\4da-mcp`, `~/Library/Application Support/4da-mcp` or `~/.local/share/4da-mcp`, never inside your repository) and scans your project on every start:
 
 | Capability | Standalone | With 4DA Desktop |
 |------------|-----------|-------------------|
+| Upgrade impact (changelog, breaking changes, your call sites) | Yes | Yes |
 | Vulnerability scanning (OSV.dev) | Yes | Yes |
 | Dependency health (4 registries) | Yes | Yes |
 | Upgrade planner | Yes | Yes |
 | Pre-install dependency check | Yes | Yes |
-| Ecosystem news (Hacker News) | Yes | Yes |
+| Ecosystem news (Hacker News, on request) | Yes | Yes |
 | Pre-task intelligence briefing | Yes | Yes |
 | Tech stack detection + resolved versions | Yes | Yes |
 | Decision memory + alignment checking | Yes | Yes |
@@ -234,10 +244,10 @@ npx @4da/mcp-server --version    # Print version
 ## FAQ
 
 **Does this send my code anywhere?**
-No. The server sends package names and versions to public APIs ([OSV.dev](https://osv.dev), npm registry, crates.io, PyPI, Go proxy) and generic tech keywords to [HN Algolia](https://hn.algolia.com/api). The same public data visible in your `package.json`. No source code, no file paths, no personal data. Set `FOURDA_OFFLINE=true` to disable all network calls. (The sole exception is opt-in OpenAI embeddings — see the network note above.)
+No. The server sends package names and versions to public APIs ([OSV.dev](https://osv.dev), npm registry, crates.io, PyPI, Go proxy), downloads the target version's archive from the package's own registry for `upgrade_impact`, and, only when you call `ecosystem_pulse`, sends a few dependency names as search terms to [HN Algolia](https://hn.algolia.com/api). No source code, no file paths, no personal data: the call-site scan runs locally. Set `FOURDA_OFFLINE=true` to disable all network calls. (The sole exception is opt-in OpenAI embeddings — see the network note above.)
 
 **Do I need the 4DA desktop app?**
-No. 10 tools work standalone: vulnerability scanning, dependency health, upgrade planning, pre-install dependency checks, ecosystem news, pre-task briefings, project context, decision memory, alignment checking, and agent memory. The desktop app adds a scored content feed from 20+ sources, graded against your actual stack.
+No. 11 tools work standalone: upgrade impact, pre-install dependency checks, vulnerability scanning, dependency health, upgrade planning, ecosystem news, pre-task briefings, project context, decision memory, alignment checking, and agent memory. The desktop app adds a scored content feed from 20+ sources, judged against your actual stack.
 
 **Which AI tools does this work with?**
 Any tool that supports [MCP](https://modelcontextprotocol.io): Claude Code, Claude Desktop, Cursor, Windsurf, VS Code (Copilot), and any custom MCP client.
@@ -249,7 +259,7 @@ git clone https://github.com/4DA-Systems/4DA.git
 cd 4DA/mcp-4da-server
 pnpm install
 pnpm build
-pnpm test    # 71 contract tests
+pnpm test    # 612 tests, offline
 ```
 
 ## License

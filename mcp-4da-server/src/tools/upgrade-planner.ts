@@ -26,8 +26,10 @@
 
 import type { FourDADatabase } from "../db.js";
 import type { LiveIntelligence } from "../live/index.js";
+import { isMaintenanceNotice } from "../live/maintenance.js";
+import { computeSemverDistance } from "../live/semver-utils.js";
+import { compareVersions, maxVersion } from "../live/version-compare.js";
 import { formatAppPlan, readAppPlan, type AppPlanResult } from "./app-plan.js";
-import { compareSemver, maxSemver } from "../live/semver-utils.js";
 import { dirsLabel, driftFor } from "./install-drift-notes.js";
 import { relativeDir } from "./vulnerability-scan-format.js";
 
@@ -35,13 +37,23 @@ export interface UpgradePlannerParams {
   include_dev?: boolean;
   max_recommendations?: number;
   risk_threshold?: "all" | "low" | "medium" | "high" | "critical";
+  package?: string;
 }
 
 interface UpgradeRecommendation {
   package: string;
   ecosystem: string;
   currentVersion: string | null;
+  /**
+   * Where to upgrade to. With a vulnerability: the SMALLEST version that fixes
+   * every fixable advisory on the installed line, not the newest major (which
+   * sent node-fetch 2.6.1 to the ESM-only 3.x when 2.6.7 fixes both CVEs).
+   * Otherwise the latest stable release.
+   */
   targetVersion: string | null;
+  /** Latest stable release, when it differs from the target. */
+  latestVersion?: string | null;
+  /** Distance from currentVersion to targetVersion. */
   upgradeType: "patch" | "minor" | "major" | "unknown";
   risk: "low" | "medium" | "high" | "critical";
   reasons: string[];
@@ -52,9 +64,11 @@ interface UpgradeRecommendation {
   /**
    * Direct deps you can bump yourself; transitive fixes arrive via a parent
    * update or lockfile refresh; `reinstall` = the lockfile's version is fine
-   * but node_modules holds another one, so the fix is `installFix`.
+   * but node_modules holds another one, so the fix is `installFix`;
+   * `no_fix_available` = vulnerable with no fixed release to move to;
+   * `not_built_on_this_host` = every advisory is against code this host never compiles.
    */
-  action: "upgrade_direct" | "waiting_on_upstream" | "reinstall";
+  action: "upgrade_direct" | "waiting_on_upstream" | "reinstall" | "no_fix_available" | "not_built_on_this_host";
   /** False when the dependency is gated behind a target spec not active on this host (label, never suppressed). */
   platformActive: boolean;
   /** npm: the version node_modules holds, when it differs from `currentVersion` (the lockfile's). */
@@ -89,7 +103,7 @@ const PROVENANCE_NOTE =
 export const upgradePlannerTool = {
   name: "upgrade_planner",
   description:
-    "Ranked dependency upgrade plan — call before upgrading, adding, or auditing any dependency to pick the safest order. When the 4DA desktop app has computed its plan, returns that plan's work order (provenance app_plan): per package the ecosystem, each installed version with its minimum clean target, upgrade type (patch/minor/major), the projects that hold it (direct/dev) and the mechanism (manifest_bump, lockfile_or_parent_update, mixed, no_fix); flagged stale past its freshness horizon. Otherwise falls back to a standalone heuristic from local lockfiles (provenance standalone_heuristic): vulnerability severity, deprecation and version distance — run vulnerability_scan first for a CVE-aware fallback. Privacy: the fallback may query public registries and OSV with package names and versions; it never sends source code.",
+    "Ranked dependency upgrade plan — call before upgrading, adding, or auditing any dependency to pick the safest order. When the 4DA desktop app has computed its plan, returns that plan's work order (provenance app_plan): per package the ecosystem, each installed version with its minimum clean target, upgrade type (patch/minor/major), the projects that hold it (direct/dev) and the mechanism (manifest_bump, lockfile_or_parent_update, mixed, no_fix); flagged stale past its freshness horizon. Otherwise falls back to a standalone plan from local lockfiles (provenance standalone_heuristic): the smallest version that fixes each vulnerability, deprecation and version distance — run vulnerability_scan first for a CVE-aware fallback. `package` narrows either plan to one package. Privacy: the fallback may query public registries and OSV with package names and versions; it never sends source code.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -106,6 +120,10 @@ export const upgradePlannerTool = {
         enum: ["all", "low", "medium", "high", "critical"],
         description: "Only show upgrades at or above this risk level. Default: all",
       },
+      package: {
+        type: "string",
+        description: "Plan for this one package only (exact name, any ecosystem). Default: every dependency.",
+      },
     },
   },
 };
@@ -116,6 +134,13 @@ function severityToRisk(severities: string[]): UpgradeRecommendation["risk"] {
   if (severities.includes("critical")) return "critical";
   if (severities.includes("high")) return "high";
   return "medium";
+}
+
+/** Distance between the installed and target versions (patch/minor/major), or unknown. */
+function upgradeTypeBetween(current: string | null, target: string | null): UpgradeRecommendation["upgradeType"] {
+  if (!current || !target) return "unknown";
+  const distance = computeSemverDistance(current, target);
+  return !distance || distance.label === "up-to-date" ? "unknown" : distance.label;
 }
 
 function higherRisk(
@@ -162,8 +187,10 @@ async function executeStandalonePlanner(
   liveIntel.refreshIfLockfilesChanged();
 
   const includeDev = params.include_dev ?? false;
+  const only = params.package?.trim();
   let deps = liveIntel.getResolvedDeps();
   if (!includeDev) deps = deps.filter((d) => !d.isDev);
+  if (only) deps = deps.filter((d) => d.name === only);
 
   // Fetch registry data (live lookups for direct deps; cached where fresh)
   const registryData = await liveIntel.fetchRegistryHealth(deps);
@@ -185,8 +212,17 @@ async function executeStandalonePlanner(
     string,
     Array<{ severity: string; vulnId: string; summary: string; fixedVersion: string | null; platformActive: boolean }>
   >();
+  // "X is unmaintained" (RUSTSEC informational) is not a CVE and has nothing
+  // to upgrade to; it was counted as "1 known CVE" on paste, ttf-parser and
+  // five unic-* crates. Counted separately, never ranked.
+  const maintenanceNotices = new Set<string>();
   if (vulnResult) {
     for (const v of vulnResult.vulnerabilities) {
+      if (only && v.package !== only) continue;
+      if (isMaintenanceNotice(v)) {
+        maintenanceNotices.add(`${v.package}@${v.currentVersion}`);
+        continue;
+      }
       const key = instanceKey(v.ecosystem, v.package, v.currentVersion);
       if (!vulnsByPackage.has(key)) vulnsByPackage.set(key, []);
       vulnsByPackage.get(key)!.push({
@@ -207,23 +243,34 @@ async function executeStandalonePlanner(
     directPackages.add(instanceKey(dep.ecosystem, dep.name, dep.currentVersion));
     const reasons: string[] = [];
     let risk: UpgradeRecommendation["risk"] = "low";
-    let targetVersion = dep.latestStableVersion || dep.latestVersion;
+    const latestStable = dep.latestStableVersion || dep.latestVersion;
+    let targetVersion = latestStable;
     let platformActive = true;
+    let fixable = false;
 
     // Check vulnerabilities
     const vulns = vulnsByPackage.get(instanceKey(dep.ecosystem, dep.name, dep.currentVersion));
     if (vulns && vulns.length > 0) {
-      risk = severityToRisk(vulns.map((v) => v.severity));
-      reasons.push(`${vulns.length} known CVE${vulns.length !== 1 ? "s" : ""} (${vulns.map((v) => v.vulnId).join(", ")})`);
+      reasons.push(`${vulns.length} known vulnerabilit${vulns.length !== 1 ? "ies" : "y"} (${vulns.map((v) => v.vulnId).join(", ")})`);
       if (vulns.every((v) => !v.platformActive)) {
+        // Code this host never compiles is not this host's exposure: listed,
+        // never ranked as high (openssl topped the plan on Windows).
         platformActive = false;
+        risk = "low";
         reasons.push("Affected code is gated behind a target not active on this platform");
+      } else {
+        risk = severityToRisk(vulns.filter((v) => v.platformActive).map((v) => v.severity));
       }
 
-      // Use fixed version as target if available
+      // The smallest version that fixes every fixable advisory: each
+      // fixedVersion is already the fix on the installed release line.
       const fixedVersions = vulns.map((v) => v.fixedVersion).filter((f): f is string => Boolean(f));
-      if (fixedVersions.length > 0 && !targetVersion) {
-        targetVersion = maxSemver(fixedVersions);
+      if (fixedVersions.length > 0) {
+        targetVersion = maxVersion(fixedVersions, dep.ecosystem);
+        fixable = true;
+        if (fixedVersions.length < vulns.length) {
+          reasons.push(`${vulns.length - fixedVersions.length} of them have no published fix`);
+        }
       }
     }
 
@@ -275,39 +322,43 @@ async function executeStandalonePlanner(
 
     // Never recommend a downgrade: when the current version is a prerelease
     // AHEAD of the latest stable (rsa 0.10.0-rc.18 vs stable 0.9.10), the
-    // stable line is not an upgrade target. Fall back to the highest vuln
-    // fix version that IS ahead of current, else no target ("review").
+    // stable line is not an upgrade target.
     if (
       targetVersion &&
       dep.currentVersion &&
-      compareSemver(dep.currentVersion, targetVersion) >= 0
+      compareVersions(dep.currentVersion, targetVersion, dep.ecosystem) >= 0
     ) {
-      const vulnFixesAhead = (vulns ?? [])
-        .map((v) => v.fixedVersion)
-        .filter((f): f is string => Boolean(f))
-        .filter((f) => compareSemver(f, dep.currentVersion!) > 0);
-      targetVersion = vulnFixesAhead.length > 0 ? maxSemver(vulnFixesAhead) : null;
+      targetVersion = null;
     }
 
-    const label = dep.versionsBehind?.label;
-    const upgradeType: UpgradeRecommendation["upgradeType"] =
-      !label || label === "up-to-date" ? "unknown" : label;
+    const upgradeType = upgradeTypeBetween(dep.currentVersion, targetVersion);
     // Drift is the only problem: the lockfile's version is the target, and
     // reinstalling it is the whole step.
     const reinstallOnly = drifted.length > 0 && lockfileReasons === 0;
+    const vulnerable = Boolean(vulns && vulns.length > 0);
+    const action: UpgradeRecommendation["action"] = reinstallOnly
+      ? "reinstall"
+      : vulnerable && !platformActive
+        ? "not_built_on_this_host"
+        : vulnerable && !fixable
+          ? "no_fix_available"
+          : targetVersion
+            ? "upgrade_direct"
+            : "no_fix_available";
 
     recommendations.push({
       package: dep.name,
       ecosystem: dep.ecosystem,
       currentVersion: dep.currentVersion,
       targetVersion: reinstallOnly ? dep.currentVersion : targetVersion,
+      ...(latestStable && latestStable !== targetVersion ? { latestVersion: latestStable } : {}),
       upgradeType,
       risk,
       reasons,
-      breaking: dep.versionsBehind?.label === "major",
+      breaking: upgradeType === "major",
       isDev: dep.isDev,
       scope: "direct",
-      action: reinstallOnly ? "reinstall" : "upgrade_direct",
+      action,
       platformActive,
       ...(installedVersion ? { installedVersion, installFix } : {}),
     });
@@ -322,6 +373,8 @@ async function executeStandalonePlanner(
     const transitive = new Map<string, typeof vulnResult.vulnerabilities>();
     for (const v of vulnResult.vulnerabilities) {
       if (v.isDirect) continue;
+      if (only && v.package !== only) continue;
+      if (isMaintenanceNotice(v)) continue;
       if (directPackages.has(instanceKey(v.ecosystem, v.package, v.currentVersion))) continue;
       if (!includeDev && v.isDev && v.devScopeKnown) continue;
       const key = instanceKey(v.ecosystem, v.package, v.currentVersion);
@@ -334,25 +387,26 @@ async function executeStandalonePlanner(
       const fixedVersions = entries.map((e) => e.fixedVersion).filter((f): f is string => Boolean(f));
       const platformActive = !entries.every((e) => !e.platformActive);
       const reasons = [
-        `${entries.length} known CVE${entries.length !== 1 ? "s" : ""} (${entries.map((e) => e.vulnId).join(", ")})`,
+        `${entries.length} known vulnerabilit${entries.length !== 1 ? "ies" : "y"} (${entries.map((e) => e.vulnId).join(", ")})`,
         "Transitive dependency — not declared in your manifest; the fix arrives via a parent package update or a lockfile refresh",
       ];
       if (!platformActive) {
         reasons.push("Affected code is gated behind a target not active on this platform");
       }
+      const target = fixedVersions.length > 0 ? maxVersion(fixedVersions, first.ecosystem) : null;
 
       recommendations.push({
         package: first.package,
         ecosystem: first.ecosystem,
         currentVersion: first.currentVersion,
-        targetVersion: fixedVersions.length > 0 ? maxSemver(fixedVersions) : null,
-        upgradeType: "unknown",
-        risk: severityToRisk(entries.map((e) => e.severity)),
+        targetVersion: target,
+        upgradeType: upgradeTypeBetween(first.currentVersion, target),
+        risk: platformActive ? severityToRisk(entries.filter((e) => e.platformActive).map((e) => e.severity)) : "low",
         reasons,
         breaking: false,
         isDev: entries.every((e) => e.isDev),
         scope: "transitive",
-        action: "waiting_on_upstream",
+        action: !platformActive ? "not_built_on_this_host" : target ? "waiting_on_upstream" : "no_fix_available",
         platformActive,
       });
     }
@@ -386,20 +440,34 @@ async function executeStandalonePlanner(
 
   const maxRecs = params.max_recommendations ?? 20;
   const limited = filtered.slice(0, maxRecs);
-  const direct = limited.filter((r) => r.scope === "direct");
-  const quickWins = direct.filter((r) => !r.breaking).length;
-  const breakingChanges = direct.filter((r) => r.breaking).length;
-  const waitingOnUpstream = limited.filter((r) => r.scope === "transitive").length;
+  const upgrades = limited.filter((r) => r.scope === "direct" && r.action === "upgrade_direct");
+  const quickWins = upgrades.filter((r) => !r.breaking).length;
+  const breakingChanges = upgrades.filter((r) => r.breaking).length;
+  const waitingOnUpstream = limited.filter((r) => r.action === "waiting_on_upstream").length;
   const reinstalls = limited.filter((r) => r.action === "reinstall").length;
+  const noFix = limited.filter((r) => r.action === "no_fix_available").length;
+  const inactive = limited.filter((r) => r.action === "not_built_on_this_host").length;
 
   // Summary
   const parts: string[] = [];
-  parts.push(`${limited.length} recommendation${limited.length !== 1 ? "s" : ""}`);
-  if (direct.length > 0) parts.push(`${direct.length} fixable directly (${quickWins} quick win${quickWins !== 1 ? "s" : ""}, ${breakingChanges} breaking)`);
+  parts.push(
+    filtered.length > limited.length
+      ? `Showing ${limited.length} of ${filtered.length} recommendations (raise max_recommendations for the rest)`
+      : `${limited.length} recommendation${limited.length !== 1 ? "s" : ""}`,
+  );
+  if (upgrades.length > 0) parts.push(`${upgrades.length} upgradable directly (${quickWins} non-breaking, ${breakingChanges} crossing a major version)`);
   if (reinstalls > 0) parts.push(`${reinstalls} need only a reinstall (node_modules behind the lockfile)`);
   if (waitingOnUpstream > 0) parts.push(`${waitingOnUpstream} transitive, waiting on upstream`);
+  if (noFix > 0) parts.push(`${noFix} vulnerable with no fixed release yet`);
+  if (inactive > 0) parts.push(`${inactive} vulnerable only in code not built on this host`);
   const criticalCount = limited.filter((r) => r.risk === "critical").length;
   if (criticalCount > 0) parts.push(`${criticalCount} critical`);
+  if (maintenanceNotices.size > 0) {
+    parts.push(`${maintenanceNotices.size} unmaintained-package notice${maintenanceNotices.size !== 1 ? "s" : ""} not ranked (no fix exists; see vulnerability_scan maintenance_notices)`);
+  }
+  if (only && deps.length === 0 && limited.length === 0) {
+    parts.push(`"${only}" is not a dependency of this project (or is a devDependency: pass include_dev)`);
+  }
   if (!vulnerabilityDataAvailable) {
     parts.push("CVE data not loaded — run vulnerability_scan first for a security-aware plan");
   }

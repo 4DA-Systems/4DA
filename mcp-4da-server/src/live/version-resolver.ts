@@ -12,7 +12,8 @@
 import type { OsvEcosystem, ResolvedDependency } from "./types.js";
 import { targetActiveOnHost } from "./platform.js";
 import { activeCratesForHost, hostTriple } from "./cargo-platform.js";
-import { resolveVersionSource } from "./lockfile-parsers.js";
+import { resolveVersionSource, type PackageInstance } from "./lockfile-parsers.js";
+import { normalizePythonName } from "./lockfile-parsers-pygo.js";
 
 // Alias -> OSV ecosystem. Mirrors the desktop app's canonical
 // `Ecosystem::parse` (src-tauri/src/ecosystem.rs) so both sides recognize the
@@ -147,14 +148,16 @@ export function resolveAuditVersions(
   targets: Record<string, string> = {},
 ): ResolvedDependency[] {
   const ecosystem = mapEcosystem(language);
-  const versionMap = resolveVersionSource(cwd, ecosystem).versions;
-  return resolveAuditVersionsFrom(cwd, deps, devDeps, ecosystem, versionMap, targets);
+  const read = resolveVersionSource(cwd, ecosystem);
+  return resolveAuditVersionsFrom(cwd, deps, devDeps, ecosystem, read.versions, targets, undefined, read.instances);
 }
 
 /**
  * `resolveAuditVersions` over a version map the caller already read. `direct`
  * lets the caller pass direct entries it has already enriched (install state)
- * so the audit set carries the same objects' context.
+ * so the audit set carries the same objects' context. `instances` is every
+ * installed copy the lockfile holds; without it the version map (one copy per
+ * name) is all there is.
  */
 export function resolveAuditVersionsFrom(
   cwd: string,
@@ -164,6 +167,7 @@ export function resolveAuditVersionsFrom(
   versionMap: Map<string, string>,
   targets: Record<string, string> = {},
   direct: ResolvedDependency[] = resolveVersionsFrom(cwd, deps, devDeps, ecosystem, versionMap, targets),
+  instances: PackageInstance[] = [...versionMap].map(([name, version]) => ({ name, version })),
 ): ResolvedDependency[] {
   // Canonicalize the same way resolveVersions does, so a dep declared under its
   // import spelling still marks the lock file's canonical entry as direct.
@@ -201,9 +205,12 @@ export function resolveAuditVersionsFrom(
   const hostCrates = ecosystem === "crates.io" ? activeCratesForHost(cwd) : null;
   const triple = hostCrates ? hostTriple() : null;
 
-  for (const [name, version] of versionMap) {
+  for (const { name, version, dev } of instances) {
     const normalized = normalizePackageName(name, ecosystem);
-    const isDirect = directNames.has(normalized) || devNames.has(normalized);
+    // Direct only for the copy a manifest dependency resolves to; another
+    // installed version of the same name is somebody else's transitive.
+    const isDirect =
+      (directNames.has(normalized) || devNames.has(normalized)) && versionMap.get(name) === version;
     const declaredTarget = targets[name] ?? null;
     const builtOnHost = hostCrates ? hostCrates.has(name) : true;
     // Prefer the manifest's own cfg() spec when it has one — it is the more
@@ -215,9 +222,12 @@ export function resolveAuditVersionsFrom(
       name,
       version,
       ecosystem,
-      isDev: devNames.has(normalized),
+      // A direct dependency's scope is its manifest section; a transitive's is
+      // whatever the lockfile recorded for that copy (npm `dev`, pnpm 5/6
+      // `dev`, Pipfile `develop`, poetry `category`), else unknown.
+      isDev: isDirect ? devNames.has(normalized) : dev === true,
       isDirect,
-      devScopeKnown: isDirect,
+      devScopeKnown: isDirect || dev !== undefined,
       target,
       platformActive: targetActiveOnHost(declaredTarget) && builtOnHost,
       sourceDirs: [cwd],
@@ -233,7 +243,8 @@ export function resolveAuditVersionsFrom(
 }
 
 function normalizePackageName(name: string, ecosystem: OsvEcosystem): string {
-  return ecosystem === "PyPI" ? name.toLowerCase() : name;
+  // PEP 503: the lockfile readers store Python names normalised the same way.
+  return ecosystem === "PyPI" ? normalizePythonName(name) : name;
 }
 
 function dependencyKey(dep: ResolvedDependency): string {

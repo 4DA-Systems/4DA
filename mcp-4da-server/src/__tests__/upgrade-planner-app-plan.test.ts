@@ -191,6 +191,15 @@ describe("upgrade_planner returns the app's plan when there is one", () => {
     expect(two.totalSteps).toBe(3);
     expect(two.summary).toContain("3 in the full plan");
   });
+
+  it("package narrows the app's plan to that package, as it does the standalone plan", async () => {
+    const db = dbWith("one-package", JSON.stringify(envelope()));
+    const one = (await executeUpgradePlanner(db, { package: "UNDICI" }, null)) as AppPlanResult;
+    expect(one.steps.map((s) => s.item_id)).toEqual([UNDICI_ID]);
+    expect(one.totalSteps).toBe(3);
+    const none = (await executeUpgradePlanner(db, { package: "not-in-plan" }, null)) as AppPlanResult;
+    expect(none.steps).toEqual([]);
+  });
 });
 
 describe("upgrade_planner falls back to the standalone heuristic, and says why", () => {

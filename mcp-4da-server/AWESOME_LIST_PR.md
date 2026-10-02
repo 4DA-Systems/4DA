@@ -14,7 +14,7 @@ numeric-prefix group at the top of the section — confirm the exact neighbours
 against the section's current contents before opening the PR:
 
 ```markdown
-- [4DA-Systems/4DA](https://github.com/4DA-Systems/4DA/tree/main/mcp-4da-server) 📇 🏠 🍎 🪟 🐧 - 15 MCP tools (10 standalone): live vulnerability scanning (OSV.dev) across npm/Rust/Python/Go, dependency health, upgrade planning and pre-install dependency checks, codebase-aware content scoring, Hacker News ecosystem pulse, decision memory, knowledge-gap detection, and cross-agent persistent memory. Privacy-first - everything stays local. `npx @4da/mcp-server`
+- [4DA-Systems/4DA](https://github.com/4DA-Systems/4DA/tree/main/mcp-4da-server) 📇 🏠 🍎 🪟 🐧 - 16 MCP tools (11 standalone): what an upgrade changes and where it touches your code, live vulnerability scanning (OSV.dev) across npm/Rust/Python/Go, dependency health, upgrade planning and pre-install dependency checks, codebase-aware content scoring, Hacker News ecosystem pulse, decision memory, knowledge-gap detection, and cross-agent persistent memory. Privacy-first - everything stays local. `npx @4da/mcp-server`
 ```
 
 ## PR Description / Body

@@ -173,11 +173,14 @@ const APP_PROVENANCE_NOTE =
 /** Shape the app's plan as the tool result; `risk_threshold` / `max_recommendations` narrow it. */
 export function formatAppPlan(
   read: Extract<AppPlanRead, { kind: "plan" }>,
-  params: { risk_threshold?: string; max_recommendations?: number },
+  params: { risk_threshold?: string; max_recommendations?: number; package?: string },
 ): AppPlanResult {
   const { snapshot, stale } = read;
   const threshold = params.risk_threshold ?? "all";
   let steps = snapshot.steps;
+  // `package` narrows the app's plan the same way it narrows the standalone one.
+  const wanted = params.package?.trim().toLowerCase();
+  if (wanted) steps = steps.filter((s) => s.package.toLowerCase() === wanted);
   if (threshold !== "all" && threshold in RISK_LEVELS) {
     steps = steps.filter((s) => (URGENCY_RISK[s.urgency ?? ""] ?? 1) >= RISK_LEVELS[threshold]);
   }

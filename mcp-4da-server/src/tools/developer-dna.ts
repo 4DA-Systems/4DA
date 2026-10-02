@@ -117,7 +117,10 @@ interface InteractionRow {
 
 interface DependencyEntry {
   name: string;
+  /** One project that declares it. */
   project_path: string;
+  /** How many of the user's projects declare it. */
+  projects: number;
 }
 
 interface EngagedTopic {
@@ -215,15 +218,21 @@ export function executeDeveloperDna(
   // 3. Top Dependencies — from project_dependencies table
   // -------------------------------------------------------------------------
   let topDependencies: DependencyEntry[] = [];
+  /** How many of the user's projects declare each dependency (lowercased name). */
+  const projectCounts = new Map<string, number>();
   try {
+    // "Top" means most used: declared by the most projects. It meant the
+    // first N alphabetically ("@11ty/eleventy..." led the live profile).
     const depRows = rawDb
       .prepare(
-        `SELECT package_name, project_path
+        `SELECT package_name, MIN(project_path) AS project_path, COUNT(DISTINCT project_path) AS projects
          FROM project_dependencies
-         ORDER BY package_name
+         GROUP BY LOWER(package_name)
+         ORDER BY projects DESC, package_name
          LIMIT ?`,
       )
-      .all(maxDependencies) as DependencyRow[];
+      .all(maxDependencies * 3) as Array<DependencyRow & { projects: number }>;
+    for (const row of depRows) projectCounts.set(row.package_name.toLowerCase(), row.projects);
 
     // Filter out invalid package names (template literals, path aliases, non-packages)
     const isValidPackageName = (name: string): boolean => {
@@ -239,19 +248,12 @@ export function executeDeveloperDna(
 
     topDependencies = depRows
       .filter((r) => isValidPackageName(r.package_name))
+      .slice(0, maxDependencies)
       .map((r) => ({
         name: r.package_name,
         project_path: r.project_path,
+        projects: r.projects,
       }));
-
-    // Deduplicate (case-insensitive)
-    const seen = new Set<string>();
-    topDependencies = topDependencies.filter(d => {
-      const key = d.name.toLowerCase();
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    });
   } catch {
     // table may not exist
   }
@@ -371,9 +373,10 @@ export function executeDeveloperDna(
                 days_stale: daysSince,
               });
             }
-          } else {
-            // Never interacted with content about this dependency — null, not
-            // a -1 sentinel leaking into user-facing output.
+          } else if ((projectCounts.get(depLower) ?? 0) >= 3) {
+            // Never read about a dependency three or more projects rely on.
+            // Every never-read dependency used to be listed, so the section
+            // was the whole dependency list and said nothing.
             blindSpots.push({
               dependency: dep.name,
               severity: "low",

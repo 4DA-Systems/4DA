@@ -1,8 +1,21 @@
 # Changelog
 
-## Unreleased
+## 6.0.0 — 2026-10-02
 
-### Added: `dependency_check` — a verdict before you add or bump a dependency
+### New: `upgrade_impact`
+
+What changes between the version you run and the one you want, for one npm
+or crates.io dependency: the releases in between (publish dates, npm
+deprecations, crates yanks), the changelog shipped inside the target
+version's own registry archive with every entry classified breaking /
+deprecation / security, the breaking entries that mention symbols your code
+imports from the package (`touches_your_code`), the files that import it, and
+the advisories the upgrade fixes or leaves. Only the package's registry and
+OSV.dev are contacted; when the archive ships no changelog (fastembed, vite and
+zod do not) the answer says so and gives the release-notes URL instead of
+guessing.
+
+### New: `dependency_check` — a verdict before you add or bump a dependency
 
 An agent calls it with up to 25 `{ ecosystem, package, to, from? }` items (npm
 and crates.io) before it edits a manifest. Each item gets `proceed`, `wait`,
@@ -25,13 +38,73 @@ versions are picked out of the full release list locally: npm's full packument
 crates.io versions API (spaced one request per second, with a descriptive
 User-Agent) plus the sparse index for per-version dependencies.
 
-### Added: the `deps` prompt
+### New: the `deps` prompt
 
 The server now declares the MCP `prompts` capability. `deps` is a user-invoked
 workflow: plan with `upgrade_planner`, vet each bump with `dependency_check`,
 apply only `proceed` items in small batches with the project's tests after
 each, report everything else with its evidence, and re-run
 `vulnerability_scan` at the end.
+
+### New: a Claude Code plugin hook on dependency edits
+
+The plugin (`.claude-plugin/plugin.json`) now ships `hooks/hooks.json`: after
+an Edit or MultiEdit that changes a dependency's version in `package.json`,
+`Cargo.toml`, `pyproject.toml`, `requirements.txt` or `go.mod`, the agent is
+told which packages moved and given the exact `upgrade_impact` call. A tool is
+called when the agent thinks to; a hook fires on the edit itself. Plain Node,
+no network, silent for every other edit, and it can never fail the edit.
+
+### Fixed: the vulnerability scan read lockfiles losslessly
+
+Measured against osv-scanner on 12 projects, the matching was exact but the
+lockfile reading lost findings (precision 0.74, recall 0.48 per advisory). Now
+precision 1.00, recall 0.995:
+- every installed copy is scanned, not one version per package name (nested
+  npm copies, two versions of a crate: 4DA's own `rsa 0.9.10` was missed);
+- npm/pnpm/Pipfile/poetry dev flags make a transitive's dev scope known;
+- Go: full pseudo-versions and `+incompatible`, `replace` directives, Go's build
+  list from `go.mod` (and `go.sum` before go 1.17);
+- `requirements.txt` extras, dotted names, markers, comments and `--hash`
+  options; `poetry.lock` of any vintage, `uv.lock`, Poetry and PEP 621 manifests;
+- Cargo virtual workspaces, and standalone mode scans every independently
+  locked project under the root, honouring `.gitignore`;
+- PEP 440 version order and PEP 503 names when choosing the fix version.
+
+### Changed: answers only confirmed evidence can raise
+
+- `what_should_i_know` is built from the task: the dependencies it names,
+  their installed versions, version-confirmed vulnerabilities, majors crossed.
+  Feed headlines no longer drive the delegation verdict (a security keyword
+  in an arXiv paper or in OpenAI company news forced `human_only` for any task).
+- `get_actionable_signals` no longer classifies items by keyword; it shows the
+  desktop app's classifications only when its relevance judge accepted the item,
+  and a headline is never above medium unless it comes from an advisory database.
+- `get_relevant_content` and `knowledge_gaps` leave out judge-rejected items.
+- `upgrade_planner` targets the smallest version that fixes the advisories, not
+  the newest major; unmaintained-package notices are not counted as CVEs.
+
+### Changed: the protocol surface
+
+- Every tool now lists all its parameters in `tools/list` (most were hidden).
+- Server `instructions` for hosts with tool search; argument errors come back as
+  `isError` with the fix; `structuredContent` beside the text; compact JSON;
+  invisible and control characters stripped from third-party text.
+- `tools/list` no longer waits for the project scan (6.6 s measured).
+- `agent_memory` and `decision_memory` match their published schemas (recall
+  takes `query`, store takes `subject`; the old schema could not be followed).
+
+### Breaking
+
+- `vulnerability_scan` answers in a concise form by default. Pass
+  `response_format: "detailed"` for the previous full report.
+- `get_actionable_signals` returns fewer items: unclassified and judge-rejected
+  ones are gone by design.
+- Tool schemas are no longer separate JSON files (`dist/schemas/`); the
+  `4da://schema/<tool>` resources serve them from the tool definitions.
+- A standalone database is created in the user data folder, not in
+  `<cwd>/data/4da.db`. An existing one there is still found and used.
+- Hacker News is contacted only when `ecosystem_pulse` is called, never at startup.
 
 ### Changed: `upgrade_planner` returns the 4DA app's plan when there is one
 
@@ -50,7 +123,8 @@ Past the plan's `expires_at` the result says `stale: true` and is still the
 app's plan. Without a usable plan (no app database, nothing computed yet, or a
 snapshot from another app version) the tool runs the standalone heuristic as
 before and says why in `appPlanUnavailable`. The server reads the plan; it
-does not reimplement the app's matching.
+does not reimplement the app's matching. `package` narrows either plan to one
+package.
 
 ## 5.1.0 — 2026-09-11
 

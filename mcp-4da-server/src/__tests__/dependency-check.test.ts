@@ -311,7 +311,7 @@ describe("deps prompt", () => {
     expect(listPrompts().map((p) => p.name)).toEqual(["deps"]);
     const text = getPrompt("deps", { scope: "security only" })!.messages[0].content.text;
     // The final step re-runs vulnerability_scan; step 1 may also mention it.
-    const order = ["upgrade_planner", "dependency_check", "`proceed`", "tests", "`review`", "vulnerability_scan"].map((k) =>
+    const order = ["upgrade_planner", "dependency_check", "`proceed`", "upgrade_impact", "tests", "`review`", "vulnerability_scan"].map((k) =>
       k === "vulnerability_scan" ? text.lastIndexOf(k) : text.indexOf(k),
     );
     expect(order.every((i) => i >= 0)).toBe(true);

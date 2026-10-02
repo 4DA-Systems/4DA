@@ -67,10 +67,47 @@ const VERDICT_RULE =
 
 export const dependencyCheckTool = {
   name: "dependency_check",
-  description:
-    "Pre-flight verdict for adding a dependency or bumping one to a specific version — call BEFORE you edit a manifest or run an install/update command. " +
-    "Returns proceed | wait | review | avoid | unknown per item with evidence: advisories on the target, release age, publish-trust drop, new install scripts, brand-new transitive dependencies, yanked/deprecated. " +
-    "Privacy: registries receive package names only; OSV receives names and versions.",
+  description: [
+    "Pre-flight verdict for adding a dependency or changing one to a specific version. Call BEFORE you add a package to a manifest or apply a version bump (including bumps proposed by upgrade_planner or a bot), and act on the verdict.",
+    "",
+    "Per item it returns `verdict` (proceed | wait | review | avoid | unknown), a one-line `reason`, and `signals`, each with `id`, `value`, `evidence` and the verdict that signal implies alone (`effect`):",
+    "- advisories: known OSV advisories affecting `to`, and those this change fixes on `from`. High/critical on `to` -> avoid; other -> review.",
+    "- release_age: days since `to` was published. Under 3 days -> wait, unless `to` fixes an advisory affecting `from` (a security fix is not held).",
+    "- publish_trust: trust level of `to` vs `from` (or, for a new dependency, the previous release on the same line). 2 = trusted publisher (npm `_npmUser.trustedPublisher`, crates.io `trustpub_data`), 1 = npm provenance attestation, 0 = neither. A drop -> review.",
+    "- install_script_added (npm): `to` runs preinstall/install/postinstall and `from` did not -> review. For a new dependency, information only.",
+    "- new_dependencies: runtime dependencies added since the baseline, each with its first-publish age. Any under 30 days old, or no longer on the registry -> review.",
+    "- yanked_or_deprecated: `to` yanked, unpublished or deprecated -> avoid.",
+    "- upgrade_type: patch | minor | major (a 0.x minor counts as major) | downgrade | new_dependency. Information only.",
+    "",
+    "Verdict precedence: avoid > review > unknown > wait > proceed. `unknown` means a registry or OSV.dev lookup failed, or the package is not on the public registry (private package, or a misspelled/hallucinated name); it is never a silent proceed. Apply only `proceed` items; report the others with their evidence. For WHAT the bump changes in your code, call upgrade_impact.",
+    "",
+    "Privacy: registry requests carry the package NAME only (npm full packument, crates.io versions API and sparse index); the installed and target versions are never sent to a registry. OSV.dev receives package names and versions, as vulnerability_scan does. Set FOURDA_OFFLINE=true to disable all lookups (every item then returns unknown).",
+  ].join("\n"),
+  inputSchema: {
+    type: "object" as const,
+    properties: {
+      items: {
+        type: "array",
+        minItems: 1,
+        maxItems: 25,
+        description: "The proposed changes to check, 1 to 25.",
+        items: {
+          type: "object",
+          properties: {
+            ecosystem: { type: "string", enum: ["npm", "crates.io"], description: "Package registry." },
+            package: {
+              type: "string",
+              description: 'Package name exactly as published (e.g. "axios", "@scope/pkg", "serde_json").',
+            },
+            to: { type: "string", description: 'Exact version you intend to install (e.g. "1.14.1"), not a range.' },
+            from: { type: "string", description: "Exact version currently installed. Omit when adding a new dependency." },
+          },
+          required: ["ecosystem", "package", "to"],
+        },
+      },
+    },
+    required: ["items"],
+  },
 };
 
 interface ItemResult {

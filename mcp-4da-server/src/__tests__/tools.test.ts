@@ -683,12 +683,16 @@ describe("4DA MCP Tool Handlers", () => {
         .toISOString()
         .replace("T", " ")
         .slice(0, 19);
+      // Both from a structured source, so only the pipeline-version guard
+      // decides (an unjudged prose item is excluded by the judge gate anyway).
       const stale = insertSourceItem(db, {
+        source_type: "osv",
         title: "stale security alert",
         content: "cve",
         created_at: twentyDaysAgo,
       });
       const current = insertSourceItem(db, {
+        source_type: "crates_io",
         title: "current release item",
         content: "release",
         created_at: twentyDaysAgo,

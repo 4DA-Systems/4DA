@@ -114,8 +114,51 @@ function getDefaultDbPath(): string {
     return appDataPath;
   }
 
-  // 5. Final fallback
-  return path.resolve(process.cwd(), "data", "4da.db");
+  // 5. No desktop database: the standalone database, in the user's data dir.
+  return standaloneDbPath();
+}
+
+/**
+ * Where a standalone install keeps its database: a per-user data directory.
+ * It used to be `<cwd>/data/4da.db` — inside the user's own repository, where
+ * it could be committed, and one per directory the server happened to start
+ * in, so agent memory and decisions did not follow the user between projects.
+ */
+export function standaloneDbPath(): string {
+  const home = os.homedir();
+  const base =
+    process.platform === "win32"
+      ? process.env.LOCALAPPDATA || path.join(home, "AppData", "Local")
+      : process.platform === "darwin"
+        ? path.join(home, "Library", "Application Support")
+        : process.env.XDG_DATA_HOME || path.join(home, ".local", "share");
+  return path.join(base, "4da-mcp", "standalone.db");
+}
+
+/** Marker table written into every standalone database. */
+const STANDALONE_MARKER = "mcp_standalone";
+
+/**
+ * Whether an EXISTING database is a standalone one. The marker decides; a
+ * database created before the marker existed is recognised by its minimal
+ * schema (schema_version 1, a few dozen tables) — the desktop app's database
+ * carries 140+ tables and a schema version past 100. Getting this wrong was a
+ * bug: from the second session on, a standalone database read as the desktop
+ * app's, so tools/list advertised five tools with no data behind them and the
+ * project was never rescanned.
+ */
+function detectStandalone(db: BetterSqlite3.Database): boolean {
+  try {
+    const tables = (db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as { name: string }[]).map(
+      (t) => t.name,
+    );
+    if (tables.includes(STANDALONE_MARKER)) return true;
+    if (!tables.includes("schema_version") || tables.length >= 40) return false;
+    const row = db.prepare("SELECT MAX(version) AS v FROM schema_version").get() as { v: number | null } | undefined;
+    return row?.v === 1;
+  } catch {
+    return false;
+  }
 }
 
 // =============================================================================
@@ -270,10 +313,16 @@ export class FourDADatabase {
       );
     }
 
-    // Standalone mode: create schema for a brand-new database
+    // Standalone mode: create schema for a brand-new database, and recognise
+    // an existing standalone database as one on every later session.
     if (isNew) {
       this.createMinimalSchema();
       this._isStandalone = true;
+    } else {
+      this._isStandalone = detectStandalone(this.db);
+    }
+    if (this._isStandalone) {
+      this.db.exec(`CREATE TABLE IF NOT EXISTS ${STANDALONE_MARKER} (created_at TEXT DEFAULT (datetime('now')))`);
     }
 
     // Schema upgrade for standalone databases created before `is_direct` was
@@ -366,6 +415,7 @@ export class FourDADatabase {
       return {
         valid: true,
         tables: tables.map((t) => t.name),
+        standalone: detectStandalone(testDb),
       };
     } catch (error) {
       return {
@@ -753,8 +803,11 @@ export class FourDADatabase {
       "INSERT OR IGNORE INTO tech_stack (technology) VALUES (?)",
     );
 
-    // Run all inserts in a single transaction for speed
+    // Run all inserts in a single transaction for speed. A rescan replaces
+    // this project's dependency rows rather than accumulating removed ones.
+    const clearDeps = this.db.prepare("DELETE FROM project_dependencies WHERE project_path = ?");
     const populate = this.db.transaction(() => {
+      clearDeps.run(scan.projectPath);
       // Languages -> detected_tech + tech_stack + active_topics
       for (const lang of scan.languages) {
         insertTech.run(lang, "language", 0.95, "project_scan");
