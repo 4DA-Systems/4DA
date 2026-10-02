@@ -184,7 +184,9 @@ export function formatAppPlan(
   if (threshold !== "all" && threshold in RISK_LEVELS) {
     steps = steps.filter((s) => (URGENCY_RISK[s.urgency ?? ""] ?? 1) >= RISK_LEVELS[threshold]);
   }
-  const selected = params.max_recommendations ? steps.slice(0, params.max_recommendations) : steps;
+  // The same default as the standalone plan (20). All 53 steps of a real plan
+  // came to ~11k tokens, past the size Claude Code warns about (2026-10-03).
+  const selected = steps.slice(0, params.max_recommendations ?? 20);
 
   const count = (m: AppPlanStep["mechanism"]) => selected.filter((s) => s.mechanism === m).length;
   const majors = selected.filter((s) => s.lines.some((l) => l.upgrade_type === "major")).length;
@@ -198,7 +200,9 @@ export function formatAppPlan(
   if (count("mixed") > 0) parts.push(`${count("mixed")} mixed (direct in some projects, transitive in others)`);
   if (count("no_fix") > 0) parts.push(`${count("no_fix")} with no fix published`);
   if (majors > 0) parts.push(`${majors} cross a major version`);
-  if (selected.length < snapshot.steps.length) parts.push(`${snapshot.steps.length} in the full plan`);
+  if (selected.length < snapshot.steps.length) {
+    parts.push(`${snapshot.steps.length} in the full plan (raise max_recommendations for the rest)`);
+  }
   const staleness = stale
     ? `STALE: past its freshness horizon (${snapshot.expiresAt}). The advisories or installs may have changed since; open the 4DA app to recompute.`
     : null;

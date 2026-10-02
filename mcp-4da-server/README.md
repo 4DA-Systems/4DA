@@ -144,7 +144,7 @@ Results are cached (24h for registry data, 1h for vulnerabilities, 30min for new
 | Tool | What it does |
 |------|-------------|
 | `upgrade_impact` | What changes between the installed and a target version of one dependency: releases in between, changelog entries classified breaking / deprecation / security, the breaking ones that touch your code (symbols you import, and route or pattern syntax in your string literals, e.g. axum 0.8's `/:id` -> `/{id}`), the files that import it, advisories fixed. |
-| `vulnerability_scan` | Every installed copy in every lockfile matched against OSV.dev. Scope-adjusted severity, the fix version on your release line, where each version is pinned. Concise by default; `response_format: "detailed"` for everything. |
+| `vulnerability_scan` | Every installed copy in every lockfile matched against OSV.dev. Scope-adjusted severity, the fix version on your release line, where each version is pinned. Concise by default (one row per vulnerable package version, the 40 most severe, about 4k tokens on a 290-advisory project); `response_format: "detailed"` for every advisory. |
 | `dependency_health` | Version freshness, deprecation (of the version you run) and vulnerability counts per dependency. |
 | `upgrade_planner` | The smallest version that fixes each vulnerability, majors flagged, transitive fixes waiting on upstream. `package` for a one-package plan. |
 | `dependency_check` | Call before adding a dependency or applying a bump. Verdict per item (`proceed` / `wait` / `review` / `avoid` / `unknown`) with evidence: advisories on the target, release age (holds releases under 3 days unless they fix an advisory you have), publish-trust drop, new install scripts, brand-new transitive dependencies, yanked or deprecated. npm and crates.io. |
@@ -268,7 +268,7 @@ git clone https://github.com/4DA-Systems/4DA.git
 cd 4DA/mcp-4da-server
 pnpm install
 pnpm build
-pnpm test    # 640 tests, offline
+pnpm test    # 648 tests, offline
 ```
 
 ## License

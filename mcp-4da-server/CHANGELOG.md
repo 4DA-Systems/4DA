@@ -151,8 +151,14 @@ zero findings.
 - `upgrade_impact`'s summary says "N entries flagged breaking", not "N
   breaking changes": the flags are a pre-sort, and every entry now carries its
   heading (`under`).
-- `vulnerability_scan` answers in a concise form by default. Pass
-  `response_format: "detailed"` for the previous full report.
+- `vulnerability_scan` answers in a concise form by default: `vulnerable_packages`
+  has one row per vulnerable package version (worst severity, the version that
+  fixes all its advisories, advisory count and first ids), the 40 most severe,
+  with 25 recommendations and a count of anything left out. `by_severity` still
+  counts every advisory. Pass `response_format: "detailed"` for the previous
+  full report, one row per advisory. One row per advisory came to about 25k
+  tokens on large projects, the size at which Claude Code cuts a tool answer
+  off.
 - `get_actionable_signals` returns fewer items: unclassified and judge-rejected
   ones are gone by design.
 - Tool schemas are no longer separate JSON files (`dist/schemas/`); the
