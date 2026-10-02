@@ -330,6 +330,64 @@ fn featured_in_counts_only_titles_the_brief_names() {
     );
 }
 
+fn parent_rmcp_facts() -> BriefFacts {
+    let mut f = security(KEY, AlertUrgency::High, "1.7.0", "2.1.0");
+    f.sites[0].fix_path = FixPath::Parent {
+        parent: "victauri-plugin".into(),
+        parent_version: "0.8.4".into(),
+        to: "2.1.0".into(),
+        by_requirement: false,
+    };
+    BriefFacts {
+        security: vec![f],
+        ..BriefFacts::default()
+    }
+}
+
+/// Live 2026-10-03: the narration fell to the floor twice over a sentence
+/// that put rmcp's fix after victauri-plugin's name. The phrasing the prompt
+/// now prescribes must pass the check; the misattributed one must not.
+#[test]
+fn the_prescribed_parent_phrasing_passes_the_version_check() {
+    let pf = package_facts(&parent_rmcp_facts());
+    let good = "- **rmcp** (atlas/bridge/src-tauri): upgrade victauri-plugin (its 0.8.4 line \
+                cannot reach rmcp >= 2.1.0); a lockfile refresh will not fix it.";
+    assert!(
+        crate::briefing_groundedness::check_factual_claims(good, &pf).is_empty(),
+        "{:?}",
+        crate::briefing_groundedness::check_factual_claims(good, &pf)
+    );
+    let bad = "Upgrade victauri-plugin to reach >= 2.1.0.";
+    assert_eq!(
+        crate::briefing_groundedness::check_factual_claims(bad, &pf).len(),
+        1,
+        "a version after the wrong package is still caught"
+    );
+}
+
+#[test]
+fn the_correction_note_names_the_owner_of_a_misplaced_version() {
+    let pf = package_facts(&parent_rmcp_facts());
+    let violations = crate::briefing_groundedness::check_factual_claims(
+        "Upgrade victauri-plugin to reach >= 2.1.0.",
+        &pf,
+    );
+    let note = correction_note(&violations, &pf);
+    assert!(
+        note.contains("2.1.0 belongs to rmcp, not victauri-plugin"),
+        "{note}"
+    );
+    assert!(note.contains("\"rmcp >= 2.1.0\""), "{note}");
+    let invented = correction_note(
+        &["hono cited version 4.7.5 as an upgrade target (on record: 4.13.5)".to_string()],
+        &pf,
+    );
+    assert!(
+        invented.contains("4.7.5 is not a version of hono"),
+        "{invented}"
+    );
+}
+
 /// The prompt allows quoting a version an article states; the version check
 /// must allow it too, or a correct brief falls to the floor.
 #[test]

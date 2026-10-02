@@ -723,6 +723,49 @@ pub(crate) fn package_facts(facts: &BriefFacts) -> Vec<crate::briefing_groundedn
         .collect()
 }
 
+/// The retry instruction after a version fault. It says WHICH package each
+/// misplaced version belongs to: live 2026-10-03 the brief wrote rmcp's fix
+/// (2.1.0) in the sentence telling the user to upgrade victauri-plugin, the
+/// checker read it as victauri-plugin's target, and a generic "use only the
+/// versions in the FACTS" retry repeated the same sentence — 2.1.0 IS in the
+/// facts, just not for that package.
+pub(crate) fn correction_note(
+    violations: &[String],
+    facts: &[crate::briefing_groundedness::PackageFact],
+) -> String {
+    let mut lines: Vec<String> = Vec::new();
+    for v in violations {
+        let pkg = v.split(" cited version ").next().unwrap_or("").trim();
+        let ver = v
+            .split(" cited version ")
+            .nth(1)
+            .and_then(|rest| rest.split(" as ").next())
+            .unwrap_or("")
+            .trim();
+        let owners: Vec<&str> = facts
+            .iter()
+            .filter(|f| f.versions.iter().any(|x| x == ver))
+            .map(|f| f.name.as_str())
+            .collect();
+        lines.push(if owners.is_empty() {
+            format!("- {ver} is not a version of {pkg} (or of any package) in the FACTS; remove it")
+        } else {
+            format!(
+                "- {ver} belongs to {}, not {pkg}: write it right after \"{}\" (e.g. \"{} >= {ver}\")",
+                owners.join(" / "),
+                owners[0],
+                owners[0]
+            )
+        });
+    }
+    format!(
+        "\n\nYour previous draft attached versions to the wrong package:\n{}\n\
+         Write the brief again. Put every version immediately after the name of the package it \
+         belongs to, and never after a different package's name.",
+        lines.join("\n")
+    )
+}
+
 /// Dotted version tokens in free text ("7.1", "v2.12.1").
 fn version_tokens(text: &str) -> Vec<String> {
     text.split(|c: char| !(c.is_ascii_alphanumeric() || c == '.'))
