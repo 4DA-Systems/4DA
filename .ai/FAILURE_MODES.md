@@ -1383,3 +1383,41 @@ every git call goes through `ace::git::scanned_repo_git`; `status` is
 skipped when the repository defines its own content filters. Prefer parsing
 files to running tools in a user's project, and never add a spawn there
 without a test that pins its working directory and options.
+
+---
+
+### The dependency tables held things that are not dependencies (2026-10-02)
+
+**Symptom.** `project_dependencies` carried a "crate" named
+`` synthetic input via the `input` tool without `trusted`" `` (a string
+literal's continuation line), `use x as y` aliases, a tsconfig path alias
+(`@/lib`), and underscore twins of declared crates (`tower_http` beside
+`tower-http`). A workspace's own members sat in `user_dependencies` as
+installed copies of themselves. 4DA's root `typescript`, a devDependency,
+read `is_dev = 0`. Excluded and foreign projects kept 5,081 instances and
+7,219 edges written weeks earlier.
+
+**Root cause.** Five independent gaps. (1) The manifest scan merged every
+`use X::` / `import` first segment from up to 50 source files into the
+runtime dependencies, with no grammar check, although it only ran where a
+manifest already said what the project depends on. (2) Cargo.lock entries
+without a `source` (workspace members, path crates) were stored like registry
+packages, and a member's `x = { workspace = true }` inheriting a `path`
+dependency passed the manifest's local-dependency check. (3) The Cargo walk
+wrote `is_dev = 0` for every crate; the pnpm scope walk followed edges that
+only satisfy an OPTIONAL peer (`i18next` -> `typescript`). (4) Rows copied
+from the manifest into `user_dependencies` were pruned only by a lockfile
+walk, so a member crate without its own lockfile kept them forever. (5) The
+excluded-project purge and the orphan reconcile never covered rows of
+projects that are excluded or foreign but still on disk with a manifest.
+
+**The rule.** A manifest and its lockfile are the only authority on what a
+project depends on; source files are never read for package names
+(`ProjectScanner::check_manifests`). A lockfile package without a `source` is
+the project, not an install of it (`ace::cargo_lock_facts`). Dev scope is
+reachability from the manifest's roots, and an optional peer edge carries no
+scope (`ace::dep_scope`). Every writer's rows need a pruner that runs when
+that writer stops writing them: undeclared manifest rows after each scan
+(`prune_undeclared_manifest_rows`), foreign clones in the orphan reconcile
+(`repo_identity::is_inside_foreign_checkout`), and every path-keyed table in
+the excluded-project purge.

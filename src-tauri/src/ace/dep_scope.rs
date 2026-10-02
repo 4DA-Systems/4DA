@@ -17,8 +17,10 @@
 //! - Runtime roots are an importer's `dependencies` + `optionalDependencies`;
 //!   dev roots are its `devDependencies`. Every importer counts: the walk
 //!   attributes a workspace's whole lockfile to the directory that holds it.
-//! - Reachability follows EVERY child edge of a reached package — a runtime
-//!   package's own optional dependencies ship with it.
+//! - Reachability follows every child edge of a reached package — a runtime
+//!   package's own optional dependencies ship with it — EXCEPT an edge that
+//!   only satisfies an optional peer (`peerDependenciesMeta: optional`): the
+//!   consumer provides that peer, and the consumer's roots say where it ships.
 //! - A package is dev-only iff a dev root reaches it and no runtime root does.
 //!   Reached from neither (an orphan, a lockfile shape this parser does not
 //!   know) is NOT dev: unknown is never dev, because a security surface must
@@ -220,13 +222,31 @@ fn pnpm_roots(content: &str) -> Roots {
     roots
 }
 
-/// Parent -> children, from the same edges the walk stores.
+/// Parent -> children, from the same edges the walk stores, minus the edges
+/// that only satisfy an OPTIONAL peer.
+///
+/// pnpm v9 lists a resolved optional peer under the consumer's snapshot
+/// `optionalDependencies`, so following it made the peer runtime-reachable.
+/// Live 2026-10-02: `i18next` and `react-i18next` declare `typescript` as an
+/// optional peer, so 4DA's own `typescript` — a root devDependency, and
+/// nothing a runtime package needs — read `is_dev = 0, scope = runtime`. An
+/// optional peer is whatever the CONSUMER provides; the consumer's own
+/// declaration (its importer roots) decides where it ships. Required peers
+/// keep their edge: the runtime package cannot work without them.
 fn pnpm_graph(content: &str) -> HashMap<Node, Vec<Node>> {
+    let optional_peers = pnpm_optional_peers(content);
     let mut graph: HashMap<Node, Vec<Node>> = HashMap::new();
     for edge in ProjectScanner::parse_pnpm_lock_edges(content) {
         let Some(parent_version) = edge.parent_version.as_deref() else {
             continue;
         };
+        let parent = node(&edge.parent, parent_version);
+        if optional_peers
+            .get(&parent)
+            .is_some_and(|peers| peers.contains(&edge.child.to_ascii_lowercase()))
+        {
+            continue;
+        }
         let Some(child) = edge
             .child_version
             .as_deref()
@@ -234,12 +254,63 @@ fn pnpm_graph(content: &str) -> HashMap<Node, Vec<Node>> {
         else {
             continue;
         };
-        graph
-            .entry(node(&edge.parent, parent_version))
-            .or_default()
-            .push(child);
+        graph.entry(parent).or_default().push(child);
     }
     graph
+}
+
+/// Package -> the lowercased names its `peerDependenciesMeta` marks
+/// `optional: true`, from the `packages:` section (every lockfile generation
+/// keeps package metadata there).
+fn pnpm_optional_peers(content: &str) -> HashMap<Node, HashSet<String>> {
+    let mut out: HashMap<Node, HashSet<String>> = HashMap::new();
+    let mut in_packages = false;
+    let mut package: Option<Node> = None;
+    let mut in_meta = false;
+    let mut peer: Option<String> = None;
+    for line in content.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        match indent_of(line) {
+            0 => {
+                in_packages = trimmed == "packages:";
+                package = None;
+                in_meta = false;
+            }
+            _ if !in_packages => {}
+            2 => {
+                let key = trimmed
+                    .strip_suffix(": {}")
+                    .or_else(|| trimmed.strip_suffix(':'))
+                    .map(unquote);
+                package = key
+                    .and_then(parse_pnpm_package_key)
+                    .map(|(name, version)| node(&name, &version));
+                in_meta = false;
+            }
+            4 => {
+                in_meta = trimmed == "peerDependenciesMeta:";
+                peer = None;
+            }
+            6 if in_meta => {
+                peer = trimmed
+                    .strip_suffix(':')
+                    .map(|name| unquote(name).to_ascii_lowercase());
+            }
+            8 if in_meta => {
+                let optional = trimmed
+                    .strip_prefix("optional:")
+                    .is_some_and(|v| v.trim() == "true");
+                if let (true, Some(pkg), Some(name)) = (optional, package.as_ref(), peer.as_ref()) {
+                    out.entry(pkg.clone()).or_default().insert(name.clone());
+                }
+            }
+            _ => {}
+        }
+    }
+    out
 }
 
 /// Resolve a version reference — from an importer map or a child map — to the

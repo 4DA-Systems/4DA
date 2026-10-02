@@ -15,6 +15,7 @@ pub(crate) mod mappers;
 #[cfg(test)]
 mod platform_reach_tests;
 mod queries;
+mod scan_reconcile;
 #[cfg(test)]
 mod scope_tests;
 #[cfg(test)]
@@ -28,6 +29,7 @@ pub use hygiene::{
     NonProjectPurge, OrphanedProjectPurge,
 };
 pub(crate) use queries::is_excluded_project_path;
+pub use scan_reconcile::prune_undeclared_manifest_rows;
 pub use types::{
     CrossProjectPackage, DependencyAlert, DependencyEdgeRow, DependencyInstanceInput,
     DependencyInstanceRow, StoredDependency,

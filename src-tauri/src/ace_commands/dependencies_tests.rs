@@ -155,7 +155,6 @@ windows-sys = "0.60"
         dependencies: Vec::new(),
         dev_dependencies: Vec::new(),
         indirect_dependencies: Vec::new(),
-        import_scraped_dependencies: Vec::new(),
         target_dependencies: Vec::new(),
         detected_at: String::new(),
         project_license: None,
@@ -199,4 +198,102 @@ fn walk_selects_only_dirs_holding_a_lockfile() {
 
     let selected = collect_lockfile_dirs(&[tmp.path().to_path_buf()]);
     assert_eq!(selected, vec![app]);
+}
+
+/// A workspace root's lockfile, cut down from the live 2026-10-02 shape: the
+/// members `acme-cli` / `acme-core` have no `source`; `tempfile` is a
+/// dev-dependency and `fastrand` reaches the project only through it.
+const WORKSPACE_LOCK: &str = r#"version = 4
+
+[[package]]
+name = "acme-cli"
+version = "0.8.8"
+dependencies = [
+ "acme-core",
+ "serde",
+ "tempfile",
+]
+
+[[package]]
+name = "acme-core"
+version = "0.8.8"
+dependencies = [
+ "serde",
+]
+
+[[package]]
+name = "fastrand"
+version = "2.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "serde"
+version = "1.0.200"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+
+[[package]]
+name = "tempfile"
+version = "3.10.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+dependencies = [
+ "fastrand",
+]
+"#;
+
+/// Workspace members are not installs of themselves, and dev-only crates keep
+/// their dev flag through the walk (it used to write `is_dev = 0` for every
+/// crate, overwriting the manifest's `[dev-dependencies]`).
+#[test]
+fn cargo_walk_skips_workspace_members_and_keeps_dev_flags() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    std::fs::write(
+        dir.join("Cargo.toml"),
+        "[workspace]\nmembers = [\"crates/*\"]\n\n[workspace.dependencies]\n\
+         acme-core = { path = \"crates/acme-core\", version = \"0.8.8\" }\n\
+         serde = \"1\"\n\n[dev-dependencies]\ntempfile = \"3\"\n",
+    )
+    .unwrap();
+    std::fs::write(dir.join("Cargo.lock"), WORKSPACE_LOCK).unwrap();
+
+    let db = crate::test_utils::test_db();
+    let project = "/ws/acme";
+    // A stale row from before the fix: the member stored as an install.
+    db.store_transitive_dependency(project, "acme-core", Some("0.8.8"), "rust", false)
+        .unwrap();
+    let scanner = crate::ace::scanner::ProjectScanner::new();
+    let (_, stored) = store_cargo_lock(&db, &scanner, dir, project, WORKSPACE_LOCK);
+    assert!(
+        !stored.iter().any(|(n, _)| n.starts_with("acme-")),
+        "members are not packages: {stored:?}"
+    );
+
+    let rows = db.get_project_dependencies(project).unwrap();
+    let row = |name: &str| rows.iter().find(|r| r.package_name == name);
+    assert!(row("acme-core").is_none(), "the stale member row is pruned");
+    assert!(row("acme-cli").is_none());
+    assert!(!row("serde").expect("serde").is_dev);
+    assert!(
+        row("tempfile").expect("tempfile").is_dev,
+        "declared dev-only"
+    );
+    assert!(
+        row("fastrand").expect("fastrand").is_dev,
+        "reached only via tempfile"
+    );
+
+    let instances = db.get_dependency_instances(project).unwrap();
+    assert!(!instances
+        .iter()
+        .any(|i| i.package_name.starts_with("acme-")));
+    let inst = |name: &str| {
+        instances
+            .iter()
+            .find(|i| i.package_name == name)
+            .unwrap_or_else(|| panic!("{name} instance"))
+    };
+    assert_eq!(inst("tempfile").scope, "dev");
+    assert!(inst("tempfile").is_dev && inst("tempfile").is_direct);
+    assert_eq!(inst("serde").scope, "runtime");
+    assert!(!inst("serde").is_dev);
 }

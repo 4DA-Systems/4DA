@@ -504,3 +504,89 @@ fn real_repo_lockfiles_parse_with_the_v9_graph() {
         }
     }
 }
+
+/// The live 2026-10-02 shape, cut down from 4DA's own `pnpm-lock.yaml`:
+/// `typescript` is a root devDependency, and the runtime `i18next` names it as
+/// an OPTIONAL peer, which pnpm v9 resolves under the snapshot's
+/// `optionalDependencies`. `react` is a REQUIRED peer of `react-i18next` and
+/// must stay runtime-reachable through it.
+const V9_OPTIONAL_PEER: &str = "\
+lockfileVersion: '9.0'
+
+importers:
+
+  .:
+    dependencies:
+      i18next:
+        specifier: ^26.4.2
+        version: 26.4.2(typescript@6.0.3)
+      react-i18next:
+        specifier: ^17.0.15
+        version: 17.0.15(i18next@26.4.2(typescript@6.0.3))(react@19.3.0)(typescript@6.0.3)
+    devDependencies:
+      react:
+        specifier: ^19.3.0
+        version: 19.3.0
+      typescript:
+        specifier: ~6.0.3
+        version: 6.0.3
+
+packages:
+
+  i18next@26.4.2:
+    resolution: {integrity: sha512-a}
+    peerDependencies:
+      typescript: ^5 || ^6 || ^7
+    peerDependenciesMeta:
+      typescript:
+        optional: true
+
+  react-i18next@17.0.15:
+    resolution: {integrity: sha512-b}
+    peerDependencies:
+      i18next: '>= 26.2.0'
+      react: '>= 16.8.0'
+      typescript: ^5 || ^6 || ^7
+    peerDependenciesMeta:
+      typescript:
+        optional: true
+
+  react@19.3.0:
+    resolution: {integrity: sha512-c}
+
+  typescript@6.0.3:
+    resolution: {integrity: sha512-d}
+
+snapshots:
+
+  i18next@26.4.2(typescript@6.0.3):
+    optionalDependencies:
+      typescript: 6.0.3
+
+  react-i18next@17.0.15(i18next@26.4.2(typescript@6.0.3))(react@19.3.0)(typescript@6.0.3):
+    dependencies:
+      i18next: 26.4.2(typescript@6.0.3)
+      react: 19.3.0
+    optionalDependencies:
+      typescript: 6.0.3
+
+  react@19.3.0: {}
+
+  typescript@6.0.3: {}
+";
+
+#[test]
+fn an_optional_peer_does_not_make_a_dev_tool_runtime() {
+    let scope = DevScope::from_pnpm_lock(V9_OPTIONAL_PEER);
+    assert!(
+        scope.is_dev_only("typescript", "6.0.3"),
+        "typescript is a root devDependency; i18next only offers to use it"
+    );
+    assert_eq!(scope.label("typescript", "6.0.3"), "dev");
+    assert!(
+        !scope.is_dev_only("react", "19.3.0"),
+        "a REQUIRED peer of a runtime package still ships with it"
+    );
+    assert_eq!(scope.label("react", "19.3.0"), "runtime");
+    assert_eq!(scope.label("i18next", "26.4.2"), "runtime");
+}

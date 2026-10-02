@@ -226,3 +226,74 @@ fn porcelain_parsing_skips_rename_sources_and_manifests() {
         "a manifest-only change is not activity"
     );
 }
+
+fn backdate(path: &Path, days: u64) {
+    let when = std::time::SystemTime::now() - std::time::Duration::from_secs(days * 86_400);
+    let f = std::fs::File::options()
+        .write(true)
+        .open(path)
+        .expect("open for backdate");
+    f.set_times(
+        std::fs::FileTimes::new()
+            .set_accessed(when)
+            .set_modified(when),
+    )
+    .expect("set times");
+}
+
+/// A gitignored project (live: `victauri-gauntlet` inside the 4DA repo) has
+/// no git history of its own, so `log` and `status` both come back empty. It
+/// is judged by its own files, not by the busy repository around it, and a
+/// lockfile rewritten by a build does not count as work on it.
+#[test]
+fn a_gitignored_nested_project_is_judged_by_its_own_files() {
+    let tmp = tempfile::tempdir().expect("tempdir");
+    let repo = tmp.path();
+    if !git_at(repo, 0, &["init", "-q"]) {
+        return;
+    }
+    std::fs::write(repo.join(".gitignore"), "harness/\n").expect("write");
+    std::fs::write(repo.join("main.rs"), "fn main() {}\n").expect("write");
+    commit_all(repo, 0, "the repository is busy today");
+
+    let harness = repo.join("harness");
+    std::fs::create_dir_all(harness.join("src")).expect("mkdir");
+    let source = harness.join("src").join("main.rs");
+    std::fs::write(&source, "fn main() {}\n").expect("write");
+    std::fs::write(harness.join("Cargo.toml"), "[package]\nname = \"h\"\n").expect("write");
+    std::fs::write(harness.join("Cargo.lock"), "version = 4\n").expect("write");
+    backdate(&source, 150);
+    backdate(&harness.join("Cargo.toml"), 150);
+    // Cargo.lock keeps today's mtime: upkeep, not work.
+
+    let d = days(last_activity_from_fs(&harness));
+    assert!((149..=150).contains(&d), "got {d} days");
+    assert!(is_dormant_days(d));
+}
+
+/// `dormant_project_paths` reads `detected_projects.last_activity`, matches
+/// exact paths in comparison form, and never treats an unknown timestamp as
+/// dormant.
+#[test]
+fn dormant_project_paths_are_exact_and_conservative() {
+    let conn = rusqlite::Connection::open_in_memory().expect("db");
+    conn.execute_batch("CREATE TABLE detected_projects (path TEXT, last_activity TEXT);")
+        .expect("schema");
+    let old = (chrono::Utc::now() - chrono::Duration::days(200)).to_rfc3339();
+    let fresh = chrono::Utc::now().to_rfc3339();
+    for (path, last) in [
+        (r"D:\Repo\cli", old.as_str()),
+        (r"D:\Repo", fresh.as_str()),
+        (r"D:\Repo\site", ""),
+        (r"D:\Repo\garbled", "not a date"),
+    ] {
+        conn.execute(
+            "INSERT INTO detected_projects VALUES (?1, ?2)",
+            rusqlite::params![path, last],
+        )
+        .expect("insert");
+    }
+    let dormant = dormant_project_paths(&conn);
+    assert_eq!(dormant.len(), 1, "{dormant:?}");
+    assert!(dormant.contains("d:/repo/cli"));
+}

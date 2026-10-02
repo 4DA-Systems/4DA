@@ -2,12 +2,12 @@
 //! Canonical registry of language builtin / standard-library module names.
 //!
 //! THE single home for "is this import a builtin, not a package?" — consumed
-//! by the import-scrape path in [`crate::ace::scanner`] (so builtins are never
-//! persisted as user dependencies) and by the startup self-heal purge in
-//! `db::dependencies` (so rows import-scraped before this fix existed are
-//! removed from existing installs).
+//! by the file watcher's topic extraction (`ace::watcher`) and by the startup
+//! self-heal purge in `db::dependencies` (so rows import-scraped by older
+//! builds are removed from existing installs). The manifest scan no longer
+//! reads source imports at all (`ProjectScanner::check_manifests`).
 //!
-//! Why this matters: the import scraper merges any imported module name into a
+//! Why this matters: the old import scraper merged any imported module name into a
 //! project's dependency list with `version = NULL, is_direct = 1`. Node
 //! builtins (`fs`, `path`, `http`, ...) and Python stdlib modules (`os`,
 //! `json`, ...) are not packages — they can never be version-resolved, never
@@ -266,23 +266,16 @@ pub(crate) fn is_python_stdlib(module: &str) -> bool {
     PYTHON_STDLIB_SET.contains(module)
 }
 
-/// True when a Go import path is standard library. Canonical Go rule (used by
-/// `go` tooling itself): stdlib import paths have no dot in their first path
-/// segment (`fmt`, `net/http`, `encoding/json`), while module paths start with
-/// a domain (`github.com/...`, `golang.org/...`).
-pub(crate) fn is_go_stdlib_import(import_path: &str) -> bool {
-    !import_path.split('/').next().unwrap_or("").contains('.')
-}
-
 /// Go stdlib LAST-SEGMENT names, for the LEGACY (provenance-unknown) purge
 /// arm only. Pre-fix go import-scraped rows were stored by last path segment
-/// (`net/http` -> "http", `encoding/json` -> "json"), so the full-path
-/// [`is_go_stdlib_import`] rule cannot classify them — and applying its
-/// no-dot heuristic to bare names would purge every legitimate go module row
+/// (`net/http` -> "http", `encoding/json` -> "json"), so go's full-path rule
+/// (a stdlib path has no dot in its first segment) cannot classify them — and
+/// applying that heuristic to bare names would purge every legitimate go module row
 /// ("gin", "cobra"). This curated list carries the same documented one-shot
 /// churn tradeoff as the rest of the legacy arm: a real module whose last
 /// segment collides (github.com/pkg/errors -> "errors") is purged once, then
-/// re-scraped with provenance='import_scrape' and immune thereafter.
+/// re-added by the next manifest scan with provenance='manifest' and immune
+/// thereafter.
 const GO_STDLIB_LAST_SEGMENTS: &[&str] = &[
     "bufio", "bytes", "context", "crypto", "embed", "encoding", "errors", "flag", "fmt", "http",
     "io", "json", "log", "math", "net", "os", "path", "filepath", "reflect", "regexp", "runtime",
@@ -350,20 +343,6 @@ mod tests {
         }
         for name in ["numpy", "flask", "requests", "django"] {
             assert!(!is_python_stdlib(name), "package must not match: {name}");
-        }
-    }
-
-    #[test]
-    fn go_stdlib_first_segment_dot_rule() {
-        for p in ["fmt", "net/http", "encoding/json", "os", "strings"] {
-            assert!(is_go_stdlib_import(p), "stdlib import: {p}");
-        }
-        for p in [
-            "github.com/gin-gonic/gin",
-            "golang.org/x/tools",
-            "k8s.io/api",
-        ] {
-            assert!(!is_go_stdlib_import(p), "module import: {p}");
         }
     }
 

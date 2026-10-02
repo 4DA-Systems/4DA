@@ -188,8 +188,25 @@ pub async fn ace_full_scan(paths: Vec<String>) -> Result<serde_json::Value> {
     let dependency_scan_paths = scan_paths.clone();
     if let Err(e) = tauri::async_runtime::spawn_blocking(move || {
         if let Ok(db) = crate::get_database() {
+            let scan_started = crate::open_db_connection().ok().and_then(|c| {
+                c.query_row("SELECT datetime('now')", [], |r| r.get::<_, String>(0))
+                    .ok()
+            });
             super::dependencies::store_direct_dependencies(db);
             super::dependencies::store_lockfile_dependencies(db, &dependency_scan_paths);
+            // Rows only the manifest sync wrote, for declarations that are gone
+            // and that no lockfile confirmed in this scan.
+            if let (Some(started), Ok(conn)) = (scan_started, crate::open_db_connection()) {
+                match crate::db::prune_undeclared_manifest_rows(&conn, &started) {
+                    Ok(n) if n > 0 => {
+                        info!(target: "4da::ace", removed = n, "Pruned user_dependencies rows no manifest declares any more");
+                    }
+                    Ok(_) => {}
+                    Err(e) => {
+                        warn!(target: "4da::ace", error = %e, "Undeclared manifest-row prune failed");
+                    }
+                }
+            }
         }
         // The dependency vocabulary just changed; re-apply the topic mint
         // rule to what is already held (own-crate modules, fixture
@@ -224,10 +241,15 @@ pub async fn ace_full_scan(paths: Vec<String>) -> Result<serde_json::Value> {
     let reconcile = tauri::async_runtime::spawn_blocking(
         || -> std::result::Result<crate::db::OrphanedProjectPurge, String> {
             let conn = crate::open_db_connection().map_err(|e| e.to_string())?;
-            crate::db::prune_orphaned_project_dependencies(
-                &conn,
-                &crate::db::project_gone_from_disk,
-            )
+            // Also retired: rows under a nested checkout of somebody else's
+            // repository. Both walks skip such a clone, so rows written before
+            // they learned to were never refreshed or pruned.
+            crate::db::prune_orphaned_project_dependencies(&conn, &|path: &str| {
+                crate::db::project_gone_from_disk(path)
+                    || crate::ace::repo_identity::is_inside_foreign_checkout(std::path::Path::new(
+                        path,
+                    ))
+            })
             .map_err(|e| e.to_string())
         },
     )
@@ -242,7 +264,7 @@ pub async fn ace_full_scan(paths: Vec<String>) -> Result<serde_json::Value> {
                 snapshots = c.dependency_snapshots,
                 instances = c.dependency_instances,
                 edges = c.dependency_edges,
-                "Pruned dependencies of deleted/moved/manifest-less projects"
+                "Pruned dependencies of deleted/moved/manifest-less projects and foreign clones"
             );
         }
         Ok(Ok(_)) => {}

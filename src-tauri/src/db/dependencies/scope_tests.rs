@@ -444,6 +444,35 @@ fn excluded_project_rows_and_orphan_alerts_are_purged() {
     );
 }
 
+/// 2026-10-02: the installed inventory of an excluded project outlived the
+/// exclusion too (5,081 instances, 7,219 edges on the live box). Edges keep
+/// the RAW path, so both storage forms must match the exclusion.
+#[test]
+fn excluded_project_inventory_is_purged() {
+    let db = test_db();
+    let conn = db.conn.lock();
+    conn.execute_batch(
+        "INSERT INTO dependency_instances (project_path, ecosystem, package_name, version, is_direct, is_dev, scope, detected_at)
+         VALUES ('c:/users/me/documents/old-app', 'npm', 'react', '18.2.0', 1, 0, 'runtime', datetime('now')),
+                ('d:/4da', 'npm', 'react', '19.3.0', 1, 0, 'runtime', datetime('now'));
+         INSERT INTO dependency_edges (project_path, ecosystem, parent_package, parent_version, child_package, child_version, scope, detected_at)
+         VALUES ('C:\\Users\\me\\Documents\\old-app', 'javascript', 'react', '18.2.0', 'loose-envify', '1.4.0', 'runtime', datetime('now')),
+                ('D:\\4DA', 'javascript', 'react', '19.3.0', 'scheduler', '0.27.0', 'runtime', datetime('now'));",
+    )
+    .unwrap();
+    let excluded = vec![r"C:\Users\me\Documents\old-app".to_string()];
+    let counts = crate::db::purge_excluded_project_rows(&conn, &excluded).unwrap();
+    assert_eq!(counts.inventory, 2, "one instance and one edge");
+    let left: i64 = conn
+        .query_row(
+            "SELECT (SELECT COUNT(*) FROM dependency_instances) + (SELECT COUNT(*) FROM dependency_edges)",
+            [],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(left, 2, "the included project's inventory is untouched");
+}
+
 /// AD-046: a transitive row's `is_dev` follows the lockfile's LATEST verdict,
 /// in both directions; a row the manifest marked direct keeps the manifest's.
 /// The old `MIN(existing, new)` could only ever clear the flag — every row was
