@@ -44,7 +44,8 @@ RELEASE-NOTES.md (base64); layout markup (`<details>`) is skipped.
 ### New: `dependency_check` — a verdict before you add or bump a dependency
 
 An agent calls it with up to 25 `{ ecosystem, package, to, from? }` items (npm
-and crates.io) before it edits a manifest. Each item gets `proceed`, `wait`,
+and crates.io) before it edits a manifest; `to: "latest"` checks the newest
+stable release and reports which version that was (`to_requested`). Each item gets `proceed`, `wait`,
 `review`, `avoid` or `unknown`, a one-line reason, and the signals behind it,
 each with evidence: known OSV advisories on the target (and the ones the change
 fixes), release age (under 3 days is `wait`, unless the release fixes an
