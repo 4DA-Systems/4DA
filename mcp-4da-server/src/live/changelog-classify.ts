@@ -38,7 +38,26 @@ export function sanitizeEntry(text: string, cap: number = MAX_ENTRY_CHARS): stri
  * "We determined this change is not a breaking change" was counted as
  * breaking on the first live run.
  */
-const EXPLICIT_BREAKING_MARKER = /\bBREAKING\b|⚠|^\s*\*{0,2}\w+(?:\([^)]*\))?!:|^\s*\*{0,2}[Bb]reaking\*{0,2}:/;
+// `BREAKING` but not the file name `BREAKING-CHANGES.md` (ratatui links it from routine entries);
+// a leading "Breaking -" / "[Breaking]" label too (webpack-merge 5, handlebars-rust).
+// Case-sensitive on purpose: lowercase "breaking" is prose, handled (with negation) below.
+const EXPLICIT_BREAKING_MARKER =
+  /\bBREAKING\b(?![-_.]\w)|⚠|^\s*\*{0,2}\w+(?:\([^)]*\))?!:|^\s*\*{0,2}[Bb]reaking\*{0,2}\s*(?::|[-–—]\s)|^\s*\[(?:[Bb]reaking|[Rr]emoved)\]/;
+/**
+ * Text ABOUT breaking changes rather than one: a pointer to the list ("⚠️ List
+ * of breaking changes can be found here"), a CI label check, a docs fix
+ * (ratatui 0.24-0.26: 8 of 16 marker-based flags on 2026-10-03 were these).
+ */
+const META_BREAKING =
+  /\b(?:list|lists|see|found|documented|described|summary|guide|doc|docs|documentation|label|labels|check|technically|despite|mentioning)\b[^.]{0,40}\bbreaking[- ]changes?\b|\bbreaking[- ]changes?\b[^.]{0,30}\b(?:can be found|are (?:listed|documented|described)|described|label|labels|doc|docs|documentation)\b|BREAKING[-_]CHANGES/i;
+/**
+ * Intent, not a change: "We reserve the right to drop support for ...",
+ * "will be removed in a future release".
+ */
+const FUTURE_INTENT =
+  /\b(?:reserve the right|will(?: be)?|may(?: be)?|might|plan(?:s|ning)? to|intend(?:s)? to|in (?:a|the) future|eventually)\b[^.]{0,40}\b(?:drop|dropp|remov|renam|deprecat)/i;
+/** A fix-led entry ("Fixed nightly build where Generator was renamed to Coroutine"): removal words in it are prose. */
+const LEADING_FIX = /^\W*(?:\*\*[^*]{1,40}\*\*:?\s*)?(?:fix|fixed|fixes|fixing)\b/i;
 /**
  * "breaking change" in prose, except when negated, when it is a compound
  * ("reproducibility-breaking": rand 0.9's changed outputs, not its API), and
@@ -63,25 +82,60 @@ const SECURITY = /\bsecurity\b|\bCVE-\d{4}-\d+|\bGHSA-[\w-]+|\bRUSTSEC-\d{4}-\d+
  * "No longer panics when ..." (a fix), bare "MSRV" matched "Add
  * `Cargo.lock.msrv` file", and only past-tense "removed"/"renamed" were seen,
  * so rand 0.9's "Rename fn `thread_rng()` to `rng()`" was missed.
+ *
+ * Removal and rename wording is breaking unless what went is internal (see
+ * INTERNAL_CHANGE); the other API wording stands whatever else the line mentions
+ * ("MSRV is now 1.70 because of a dependency update").
  */
+const REMOVAL_HEURISTIC = new RegExp(
+  [
+    "\\bremoved\\b",
+    "\\bremoves\\b",
+    "\\b(?:has|have|was|were) been dropped\\b",
+    "\\brenamed?\\b",
+    // The removed thing is the object of "remove": a code name within a few words
+    // ("Remove first parameter (`rng`) of ..."), not a backtick somewhere later
+    // ("Remove a window when ... `cd`able", a security fix).
+    "^\\W*(?:remove|delete)\\b(?:\\s+[\\w-]+){0,3}\\s*\\(?`",
+    // ... or a qualified name without backticks ("remove Socket#rooms object").
+    "^\\W*(?:remove|delete)\\b(?:\\s+[\\w-]+){0,2}\\s+[A-Za-z_]\\w*(?:#|::|\\.)[A-Za-z_]",
+  ].join("|"),
+  "i",
+);
+/** Wording that changes the API or its requirements, whatever else the line mentions. */
 const BREAKING_HEURISTIC = new RegExp(
   [
-    "\\bno longer (?:accepts?|returns?|supports?|exports?|exported|re-?exports?|available|provides?|allow(?:s|ed)?|implements?|public|includes?|ships?|compiles?|works? with|required?)\\b",
-    "\\bremoved\\b",
-    "\\brenamed?\\b",
-    "^\\W*(?:remove|delete)\\b.*`",
-    "\\bdrop(?:ped|s)? support\\b",
-    "\\bdropped\\b.*\\bsupport\\b",
+    // Not "no longer require(s)": that is a relaxation ("`Data::get_ref()` no longer
+    // requires `T: Sized`", four actix-web 4 entries the panel called non-breaking).
+    "\\bno longer (?:accepts?|returns?|supports?|exports?|exported|exposed|re-?exports?|available|provides?|allow(?:s|ed)?|implements?|public|includes?|ships?|compiles?|works? with)\\b",
+    "\\bcan no longer\\b",
+    "\\bnow (?:also )?returns?\\b",
+    // Rust: marking a public type non-exhaustive breaks exhaustive matches and struct literals.
+    "\\b(?:now )?marked (?:as )?`?#\\[non_exhaustive\\]",
+    "\\bdrop(?:ped|s)? (?:support|compatibility)\\b",
+    "\\bdropped\\b.*\\b(?:support|compatibility)\\b",
+    // A raise names a version: "Bump MSRV to 1.63"; "Update MSRV in cron job" (config 0.14, CI) does not.
     // A window of .{0,60}, not [^.]: versions carry dots ("MSRV: Rust 1.64.0 or later is now required").
-    "\\b(?:bump|bumped|raise|raised|increase|increased|update|updated|require|requires|now)\\b.{0,60}\\b(?:MSRV|minimum supported rust version|rust-version)\\b",
-    "\\b(?:MSRV|minimum supported rust version)\\b.{0,60}\\b(?:is now|to|bumped|raised|increased|or later)\\b",
+    "\\b(?:bump|bumped|raise|raised|increase|increased|update|updated|require|requires|now)\\b.{0,60}\\b(?:MSRV|minimum supported rust version|rust-version)\\b.{0,30}\\d+\\.\\d+",
+    // A raise names the new version ("MSRV is now 1.70", "MSRV: Rust 1.64.0 or later");
+    // "Move MSRV metadata to `Cargo.toml`" names none.
+    "\\b(?:MSRV|minimum supported rust version)\\b.{0,60}?\\b(?:is now|to|bumped to|raised to|increased to)\\s+(?:rust\\s+|rustc\\s+)?v?\\d",
+    "\\b(?:MSRV|minimum supported rust version)\\b.{0,60}\\d+\\.\\d+.{0,20}\\bor later\\b",
     "\\bnow (?:requires?|required|returns?|takes?|accepts? only)\\b",
     "\\b(?:function|method|type|the) signatures?\\b",
     "\\bsignatures? (?:of|has|have|changed)\\b",
     "\\b(?:changed?|new|different)\\b[^.]{0,30}\\b(?:return|argument|parameter) types?\\b",
     "\\b(?:return|argument|parameter) types? (?:have |has )?(?:changed|change)\\b",
     "\\btypes have changed\\b",
-    "`[^`]+`\\s+instead of\\s+`[^`]+`",
+    // An API that now implements/returns/takes a different type; "Use `Cell` instead
+    // of `RefCell` in `Format`" is an internal choice, not an API change.
+    "\\b(?:implements?|returns?|takes?|accepts?|requires?|yields?|expects?)\\b[^.]{0,40}`[^`]+`\\s+instead of\\s+`[^`]+`",
+    "\\(instead of `",
+    // An API that now receives/uses a different type, or moved out of the crate
+    // (actix-web 4: "`guard::fn_guard` functions now receives a `&GuardContext`",
+    // "`test::start`; moved to new `actix-test` crate").
+    "\\bnow (?:receives?|uses?)\\b[^.]{0,30}`",
+    "\\bmoved (?:in)?to (?:the |a )?(?:new |separate )?`?[\\w-]+`? (?:crate|package|module)\\b",
     "\\bto keep the (?:old|previous|former) behaviou?r\\b",
     "\\bincompatib",
   ].join("|"),
@@ -89,20 +143,32 @@ const BREAKING_HEURISTIC = new RegExp(
 );
 /** Removals that change nothing a caller sees: "Removed unused imports", "Removed Webpack". */
 const INTERNAL_CHANGE =
-  /\b(?:unused|internal(?:ly)?|dead code|tests?|ci|lint(?:ing)?|typos?|comments?|docs?|documentation|readme|redundant|duplicated?|webpack|dev-?dependenc(?:y|ies)|warnings?|examples?|benchmarks?)\b/i;
+  /\b(?:unused|unneeded|unnecessary|internal(?:ly)?|dead code|tests?|ci|lint(?:ing)?|typos?|comments?|docs?|documentation|readme|redundant|duplicated?|webpack|dev-?dependenc(?:y|ies)|dependency|warnings?|examples?|benchmarks?|release process|build process|tooling|usage|incorrect|wrong|erroneous|stray|spurious)\b/i;
 const DEPRECATION = /deprecat/i;
+/**
+ * An entry whose main verb is "deprecate" is a deprecation even when it names
+ * the replacement ("Deprecated `Itertools::group_by` (renamed `chunk_by`)"):
+ * the old name still works.
+ */
+const LEADING_DEPRECATION = /^\W*(?:\*\*[^*]{1,40}\*\*:?\s*)?(?:deprecated?|deprecates|deprecating)\b/i;
 
 /** Kind of a single changelog line by its own wording. */
 export function classifyText(text: string): EntryKind {
+  if (META_BREAKING.test(text)) return SECURITY.test(text) ? "security" : "change";
   if (EXPLICIT_BREAKING_MARKER.test(text)) return "breaking";
   if (NON_BREAKING_LABEL.test(text)) {
     if (SECURITY.test(text)) return "security";
     return DEPRECATION.test(text) ? "deprecation" : "change";
   }
   if (YANK_NOTICE.test(text)) return "change";
+  if (LEADING_DEPRECATION.test(text)) return "deprecation";
+  // A rename that keeps the old name working ("Rename `x => y`, deprecating the old name").
+  if (/\brenam/i.test(text) && DEPRECATION.test(text) && !/\bremov/i.test(text)) return "deprecation";
   if (EXPLICIT_BREAKING_PROSE.test(text)) return "breaking";
   if (SECURITY.test(text)) return "security";
-  if (BREAKING_HEURISTIC.test(text) && !INTERNAL_CHANGE.test(text)) return "breaking";
+  if (FUTURE_INTENT.test(text)) return DEPRECATION.test(text) ? "deprecation" : "change";
+  if (BREAKING_HEURISTIC.test(text)) return "breaking";
+  if (REMOVAL_HEURISTIC.test(text) && !INTERNAL_CHANGE.test(text) && !LEADING_FIX.test(text)) return "breaking";
   if (DEPRECATION.test(text)) return "deprecation";
   return "change";
 }
@@ -141,12 +207,13 @@ export function classifyEntry(text: string, context: EntryContext | null): Entry
     return context;
   }
   if (context === "removal") {
+    if (META_BREAKING.test(text)) return "change";
     if (EXPLICIT_BREAKING_MARKER.test(text)) return "breaking";
     if (DEPRECATION.test(text) && !/\bremov/i.test(text)) return "deprecation";
     return INTERNAL_CHANGE.test(text) ? "change" : "breaking";
   }
   if (context === "additive") {
-    if (EXPLICIT_BREAKING_MARKER.test(text)) return "breaking";
+    if (!META_BREAKING.test(text) && EXPLICIT_BREAKING_MARKER.test(text)) return "breaking";
     if (SECURITY.test(text)) return "security";
     return DEPRECATION.test(text) ? "deprecation" : "change";
   }

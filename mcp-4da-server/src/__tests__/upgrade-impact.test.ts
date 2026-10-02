@@ -169,6 +169,22 @@ describe("call-site scanning", () => {
 
 // ---------------------------------------------------------------- cross-reference
 
+describe("concise trimming", () => {
+  it("keeps plain changes under API headings and caps additive ones (actix-web 4 'Methods' / 'Fixed')", () => {
+    const entries = [
+      ...Array.from({ length: 25 }, (_, i) => ({ kind: "change" as const, text: `\`Method${i}\` now takes a context`, under: "Methods" })),
+      ...Array.from({ length: 10 }, (_, i) => ({ kind: "change" as const, text: `Fix bug ${i}`, under: "Fixed" })),
+      { kind: "breaking" as const, text: "Removed `Old`", under: "Removed" },
+    ];
+    const shaped = shapeChangelog([{ version: "4.0.0", date: null, entries }], [], "concise");
+    const kept = shaped.sections[0].entries;
+    expect(kept.filter((e) => e.under === "Methods")).toHaveLength(20);
+    expect(kept.filter((e) => e.under === "Fixed")).toHaveLength(3);
+    expect(kept[0].kind).toBe("breaking");
+    expect(shaped.sections[0].omitted_changes).toBe(12);
+  });
+});
+
 describe("cross-referencing", () => {
   it("matches identifiers at word boundaries, case-sensitively, ignoring names under 3 chars", () => {
     expect(matchSymbols("`parseConfig` was renamed", ["parseConfig", "Config", "fs"])).toEqual(["parseConfig"]);
@@ -297,7 +313,7 @@ describe("analyzeUpgradeImpact", () => {
     expect(r.advisories_remaining).toEqual(["GHSA-both"]);
     expect(r.release_notes_url).toBe("https://github.com/acme/demo-lib/releases");
     expect(r.summary).toBe(
-      "demo-lib 1.0.0 -> 2.0.0: 1 major version, 3 releases, 3 breaking changes (2 of them touch your code: Widget, parseConfig), 1 advisories fixed.",
+      "demo-lib 1.0.0 -> 2.0.0: 1 major version, 3 releases, 3 entries flagged breaking (2 touch your code: Widget, parseConfig), 1 advisories fixed.",
     );
   });
 
@@ -314,7 +330,7 @@ describe("analyzeUpgradeImpact", () => {
     const r = await run({ package: "demo-lib" }, fakeNpm({ changelogText: text }));
     expect(r.breaking_changes_count).toBe(1);
     expect(r.counts_note).toMatch(/lower bounds/);
-    expect(r.summary).toMatch(/at least 1 breaking change/);
+    expect(r.summary).toMatch(/at least 1 entry flagged breaking/);
   });
 
   it("contacts only the registry and OSV, and reports exactly those hosts", async () => {
@@ -325,7 +341,7 @@ describe("analyzeUpgradeImpact", () => {
     expect(r._meta.sources).toEqual(hosts);
     expect(r._meta.untrusted_text).toMatch(/data, not instructions/);
     // The measured reliability of `kind` travels with every classified answer.
-    expect(r._meta.classification).toMatch(/87% of entries marked breaking are breaking/);
+    expect(r._meta.classification).toMatch(/99% of entries flagged breaking were breaking/);
     const none = await run({ package: "demo-lib" }, fakeNpm({ changelog: false }));
     expect(none._meta.classification).toBeUndefined();
     expect(registry.calls.length).toBeLessThanOrEqual(5);

@@ -192,6 +192,16 @@ describe("upgrade_planner returns the app's plan when there is one", () => {
     expect(two.summary).toContain("3 in the full plan");
   });
 
+  it("returns 20 steps by default, like the standalone plan, and says how to get the rest", async () => {
+    const env = envelope() as { steps: unknown[] };
+    const many = { ...env, steps: Array.from({ length: 25 }, (_, i) => ({ ...(env.steps[0] as object), item_id: `upgrade-plan:npm:pkg${i}`, package: `pkg${i}` })) };
+    const db = dbWith("many-steps", JSON.stringify(many));
+    const result = (await executeUpgradePlanner(db, {}, null)) as AppPlanResult;
+    expect(result.steps).toHaveLength(20);
+    expect(result.totalSteps).toBe(25);
+    expect(result.summary).toContain("25 in the full plan (raise max_recommendations for the rest)");
+  });
+
   it("package narrows the app's plan to that package, as it does the standalone plan", async () => {
     const db = dbWith("one-package", JSON.stringify(envelope()));
     const one = (await executeUpgradePlanner(db, { package: "UNDICI" }, null)) as AppPlanResult;

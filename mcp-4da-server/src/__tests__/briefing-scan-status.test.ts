@@ -520,6 +520,8 @@ describe("get_actionable_signals — one signal per vulnerability", () => {
     expect(row).toBeDefined();
     expect(row!.signal_priority).toBe("low");
     expect(row!.action).toBe("Not built on this host — Upgrade nix to 0.30.0");
+    // The title agrees with the priority instead of shouting the advisory's own grade.
+    expect(row!.title.startsWith("NOT BUILT HERE (critical):")).toBe(true);
   });
 
   it("maintenance notices drop to low with no fix to apply", () => {

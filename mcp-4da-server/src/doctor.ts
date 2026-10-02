@@ -31,7 +31,10 @@ export function runDoctor(): void {
   // 1. Node.js version
   const nodeVersion = process.version;
   const major = parseInt(nodeVersion.slice(1).split(".")[0], 10);
-  const nodeRequired = 20;
+  // 22, matching package.json engines: better-sqlite3 >= 12.10 ships no Node 20
+  // prebuild, so a Node 20 install compiles from source and fails without a
+  // C++ toolchain (measured 2026-10-03 on node:20-bookworm-slim and alpine).
+  const nodeRequired = 22;
   checks.push({
     name: "Node.js version",
     status: major >= nodeRequired ? "pass" : "fail",

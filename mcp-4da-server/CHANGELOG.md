@@ -20,16 +20,26 @@ entry names (axum 0.8's `/:single` -> `/{single}`) is matched in the
 importing files' route and pattern strings, with file and line
 (`matched_literals`).
 
-How far the classification goes, measured: on 23 upgrades held out from
-tuning, rated blind by three raters (Fleiss kappa 0.945), 87% of entries
-marked breaking are breaking (the pre-release classifier: 77%) and about 60%
-of breaking entries are marked. Every answer states this in
-`_meta.classification`. Counts are `null` when the changelog has no entry for
-the releases crossed, and labelled lower bounds when it covers only some.
-Changelog formats read: keep-a-changelog and changesets headings, category
-headings at the release's own level (date-fns), releases as bullets
-(indexmap), History.md label lists (express), day-first dates (knex),
-RELEASE-NOTES.md (base64).
+Every entry carries the heading or parent bullet it sits under (`under`):
+"`rt::{Arbiter}` re-exports." means nothing until you see it sits under
+"Removed". Concise output keeps up to 20 plain changes per release under API
+or neutral headings ("Changed", "Methods", "Types") and 3 under additive ones,
+and says how many it left out.
+
+How far the "breaking" flags go, measured: five corpora of real upgrades,
+each rated blind by three independent raters. The last, 47 upgrades never
+used to build the rules, rated by raters who saw each entry's heading
+(Fleiss kappa 0.982), is the release measurement: 98.6% of entries flagged
+breaking were breaking (95% CI 94.9-99.6%) and about 65% of breaking entries
+were flagged. Earlier fresh corpora, before the last parser fixes, measured
+73-87%, so the summary says "flagged", every answer states the measurement in
+`_meta.classification`, and the agent is told to read every entry of a major
+upgrade. Counts are `null` when the changelog has no entry for the releases
+crossed, and labelled lower bounds when it covers only some. Changelog formats
+read: keep-a-changelog and changesets headings, category headings at the
+release's own level (date-fns), plain and bold label lines, releases as
+bullets (indexmap), History.md label lists (express), day-first dates (knex),
+RELEASE-NOTES.md (base64); layout markup (`<details>`) is skipped.
 
 ### New: `dependency_check` — a verdict before you add or bump a dependency
 
@@ -62,14 +72,18 @@ apply only `proceed` items in small batches with the project's tests after
 each, report everything else with its evidence, and re-run
 `vulnerability_scan` at the end.
 
-### New: a Claude Code plugin hook on dependency edits
+### New: a Claude Code plugin, with a hook on dependency edits
 
-The plugin (`.claude-plugin/plugin.json`) now ships `hooks/hooks.json`: after
-an Edit or MultiEdit that changes a dependency's version in `package.json`,
-`Cargo.toml`, `pyproject.toml`, `requirements.txt` or `go.mod`, the agent is
-told which packages moved and given the exact `upgrade_impact` call. A tool is
-called when the agent thinks to; a hook fires on the edit itself. Plain Node,
-no network, silent for every other edit, and it can never fail the edit.
+Install with `claude plugin marketplace add 4DA-Systems/4DA --sparse
+.claude-plugin mcp-4da-server` and `claude plugin install 4da@4da` (the
+repository now carries the marketplace manifest the plugin needed to be
+installable at all). After an Edit or MultiEdit that changes a dependency's
+version in `package.json`, `Cargo.toml`, `pyproject.toml`, `requirements.txt`
+or `go.mod`, the agent is told which packages moved and given the exact
+`dependency_check` and `upgrade_impact` calls. A tool is called when the agent
+thinks to; a hook fires on the edit itself. Plain Node, no network, silent for
+every other edit, and it can never fail the edit. Verified end to end in a real
+Claude Code session: the hook's context reaches the agent on the edit.
 
 ### Fixed: the vulnerability scan read lockfiles losslessly
 
@@ -85,7 +99,17 @@ precision 1.00, recall 0.995:
   options; `poetry.lock` of any vintage, `uv.lock`, Poetry and PEP 621 manifests;
 - Cargo virtual workspaces, and standalone mode scans every independently
   locked project under the root, honouring `.gitignore`;
+- `bun.lock` (Bun 1.2+), with dev scope from the workspaces;
 - PEP 440 version order and PEP 503 names when choosing the fix version.
+
+Before release the scan was re-run, from the packed tarball installed fresh,
+on those 12 projects and on 11 more never used to build the readers (npm,
+yarn v1, pnpm, bun, Cargo, Go, uv, Pipfile, Poetry): every project matches
+osv-scanner or an independent oracle (OSV queried directly; Go's own
+`go list -m all` build list, where the server reports modules osv-scanner
+misses). The only misses are transitives of a `requirements.txt` without a
+lockfile, documented below. Eight projects locked at current releases report
+zero findings.
 
 ### Changed: answers only confirmed evidence can raise
 
@@ -99,6 +123,13 @@ precision 1.00, recall 0.995:
 - `get_relevant_content` and `knowledge_gaps` leave out judge-rejected items.
 - `upgrade_planner` targets the smallest version that fixes the advisories, not
   the newest major; unmaintained-package notices are not counted as CVEs.
+- A scan that finishes late no longer replaces a newer one: the startup scan
+  (devDependencies left out) could overwrite an agent's `include_dev` scan, and
+  the planner then sent the devDependency node-fetch 2.6.0 to the ESM-only 3.3.2
+  with no advisories (2 runs in 6). A plan or briefing that needs
+  devDependencies covered scans at that scope instead of reading a narrower scan.
+- Desktop mode finds the app's database on Linux (`$XDG_DATA_HOME/4da/data`, as
+  the app writes it) and honours the app's `FOURDA_DATA_DIR`.
 
 ### Changed: the protocol surface
 
@@ -112,8 +143,22 @@ precision 1.00, recall 0.995:
 
 ### Breaking
 
-- `vulnerability_scan` answers in a concise form by default. Pass
-  `response_format: "detailed"` for the previous full report.
+- Node.js 22 or later. better-sqlite3 publishes no Node 20 binary from 12.10,
+  so a Node 20 install compiled from source and failed on any machine without
+  Python and a C++ toolchain (every slim container); Node 20 reached end of
+  life in April 2026. Verified installs: Node 20 (with a toolchain), 22 and 24
+  on Windows; Node 22 on Debian and Alpine Linux.
+- `upgrade_impact`'s summary says "N entries flagged breaking", not "N
+  breaking changes": the flags are a pre-sort, and every entry now carries its
+  heading (`under`).
+- `vulnerability_scan` answers in a concise form by default: `vulnerable_packages`
+  has one row per vulnerable package version (worst severity, the version that
+  fixes all its advisories, advisory count and first ids), the 40 most severe,
+  with 25 recommendations and a count of anything left out. `by_severity` still
+  counts every advisory. Pass `response_format: "detailed"` for the previous
+  full report, one row per advisory. One row per advisory came to about 25k
+  tokens on large projects, the size at which Claude Code cuts a tool answer
+  off.
 - `get_actionable_signals` returns fewer items: unclassified and judge-rejected
   ones are gone by design.
 - Tool schemas are no longer separate JSON files (`dist/schemas/`); the

@@ -35,6 +35,8 @@ export function installFixFor(lockfilePath: string): InstallFixCommand | null {
       return "npm ci";
     case "yarn.lock":
       return "yarn install";
+    case "bun.lock":
+      return "bun install";
     default:
       return null;
   }

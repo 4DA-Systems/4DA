@@ -27,6 +27,7 @@ const LOCK_MARKERS = [
   "npm-shrinkwrap.json",
   "pnpm-lock.yaml",
   "yarn.lock",
+  "bun.lock",
   "Cargo.lock",
   "poetry.lock",
   "uv.lock",
@@ -86,7 +87,7 @@ export function scanProjectTree(root: string): ProjectTreeEntry[] {
 
 /** Lockfiles that make an ecosystem scannable in a directory even when no direct dependency was parsed. */
 const LOCKS_BY_LANGUAGE: Record<string, string[]> = {
-  npm: ["package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml", "yarn.lock"],
+  npm: ["package-lock.json", "npm-shrinkwrap.json", "pnpm-lock.yaml", "yarn.lock", "bun.lock"],
   rust: ["Cargo.lock"],
   python: ["poetry.lock", "uv.lock", "Pipfile.lock", "requirements.txt"],
   go: ["go.mod"],

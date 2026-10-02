@@ -197,7 +197,13 @@ async function executeStandalonePlanner(
   const drift = liveIntel.getInstallDrift();
   const root = liveIntel.getProjectRoot() ?? process.cwd();
 
-  // Vulnerability data from the last scan this session (no network here).
+  // Vulnerability data from the last scan this session. A plan that includes
+  // dev dependencies must not read a scan that left them out: it would plan
+  // them CVE-blind while saying vulnerability data was available. Rescan at
+  // the wider scope instead (one OSV round trip, cached).
+  if (includeDev && liveIntel.getVulnerabilities() !== null && !liveIntel.lastScanIncludesDev()) {
+    await liveIntel.scanVulnerabilities(root, { includeDev: true });
+  }
   const vulnResult = liveIntel.getVulnerabilities();
   const vulnerabilityDataAvailable = vulnResult !== null;
   // Keyed by ecosystem + name + INSTANCE version. A name-only key attached every

@@ -328,6 +328,9 @@ export function executeGetActionableSignals(
           priority = "low";
           relevance = 0.3;
           action = `Not built on this host — ${action}`;
+          // The title must agree with the priority: "MEDIUM: ... (glib@0.18.5)" at
+          // priority low read as a medium issue on a Windows host that never builds glib.
+          if (!maintenance) label = `NOT BUILT HERE (${presented})`;
         }
 
         if (params.priority_filter && priority !== params.priority_filter) continue;

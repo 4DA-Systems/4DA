@@ -7,11 +7,18 @@
  * Concise is the default because a multi-major upgrade (vite 6 -> 7 crosses
  * dozens of releases) produces hundreds of "fix typo"-class entries that
  * would bury the five that matter. Concise keeps EVERY breaking, deprecation
- * and security entry, plus up to three others per version, and states how
+ * and security entry; of the plain changes it keeps up to 20 per version that
+ * sit under an API or neutral heading ("Changed", "Methods", "Types", or none)
+ * and up to 3 under an additive one ("Added", "Fixed", "Docs"), and states how
  * many it left out — omission is always visible, never silent.
+ *
+ * The neutral allowance is where the classifier's misses live: on the
+ * 2026-10-03 panel, 11 of 15 breaking changes it called plain sat under
+ * actix-web 4's "Functions" / "Methods" / "Types" headings, and three-per-version
+ * hid them from the agent entirely.
  */
 
-import type { EntryKind } from "../live/changelog-classify.js";
+import { classifyHeading, type EntryKind } from "../live/changelog-classify.js";
 import type { ChangelogSection } from "../live/changelog.js";
 import { compareVersionPrecedence, parseSemverPrecedence } from "../live/semver-precedence.js";
 import { matchSymbols } from "./upgrade-impact-callsites.js";
@@ -21,6 +28,8 @@ export type ResponseFormat = "concise" | "detailed";
 export interface ReportEntry {
   kind: EntryKind;
   text: string;
+  /** The changelog heading or parent bullet the entry sits under ("Removed", "Breaking Changes"). */
+  under?: string;
   touches_your_code?: boolean;
   matched_symbols?: string[];
   /** String literals in your code that use the syntax this entry retires (route patterns and the like). */
@@ -48,7 +57,8 @@ export interface ShapedChangelog {
   duplicates?: number;
 }
 
-const CONCISE_OTHER_PER_VERSION = 3;
+const CONCISE_NEUTRAL_PER_VERSION = 20;
+const CONCISE_ADDITIVE_PER_VERSION = 3;
 const DETAILED_ENTRY_CAP = 400;
 const KIND_ORDER: Record<EntryKind, number> = { breaking: 0, security: 1, deprecation: 2, change: 3 };
 
@@ -83,7 +93,7 @@ export function shapeChangelog(
       return true;
     });
     const entries: ReportEntry[] = unique.map((e) => {
-      const entry: ReportEntry = { kind: e.kind, text: e.text };
+      const entry: ReportEntry = { kind: e.kind, text: e.text, ...(e.under ? { under: e.under } : {}) };
       if (e.kind === "breaking" || e.kind === "deprecation") {
         const matched = matchSymbols(e.text, symbols);
         if (matched.length > 0) {
@@ -112,9 +122,14 @@ export function shapeChangelog(
     if (format === "concise") {
       const important = entries.filter((e) => e.kind !== "change");
       const others = entries.filter((e) => e.kind === "change");
-      kept = [...important, ...others.slice(0, CONCISE_OTHER_PER_VERSION)];
-      if (others.length > CONCISE_OTHER_PER_VERSION) {
-        shaped.omitted_changes = others.length - CONCISE_OTHER_PER_VERSION;
+      const additive = (e: ReportEntry) => (e.under ? classifyHeading(e.under) === "additive" : false);
+      const neutral = others.filter((e) => !additive(e)).slice(0, CONCISE_NEUTRAL_PER_VERSION);
+      const minor = others.filter(additive).slice(0, CONCISE_ADDITIVE_PER_VERSION);
+      // Keep document order among the kept plain changes.
+      const keptOthers = others.filter((e) => neutral.includes(e) || minor.includes(e));
+      kept = [...important, ...keptOthers];
+      if (others.length > keptOthers.length) {
+        shaped.omitted_changes = others.length - keptOthers.length;
       }
     } else {
       const room = Math.max(0, DETAILED_ENTRY_CAP - emitted);
@@ -200,11 +215,16 @@ export function summarize(input: SummaryInput): string {
   if (input.changelog === "missing") breaking = "no changelog in the package archive (see release_notes_url)";
   else if (input.changelog === "no_entries") {
     breaking = "the package's changelog has no entries for these releases, so breaking changes are unknown (see release_notes_url)";
-  } else if (input.touching > 0) {
-    const names = input.touchingSymbols.slice(0, 5).join(", ");
-    const verb = input.breaking === 1 ? "it touches" : `${input.touching} of them touch`;
-    breaking = `${atLeast}${input.breaking} breaking change${input.breaking === 1 ? "" : "s"} (${verb} your code: ${names})`;
-  } else breaking = `${atLeast}${input.breaking} breaking change${input.breaking === 1 ? "" : "s"}`;
+  } else {
+    // "flagged", not "N breaking changes": the flags come from headings and
+    // wording and are neither exhaustive nor always right (_meta.classification).
+    const flagged = `${atLeast}${input.breaking} entr${input.breaking === 1 ? "y" : "ies"} flagged breaking`;
+    if (input.touching > 0) {
+      const names = input.touchingSymbols.slice(0, 5).join(", ");
+      const verb = input.breaking === 1 ? "it touches" : `${input.touching} touch`;
+      breaking = `${flagged} (${verb} your code: ${names})`;
+    } else breaking = flagged;
+  }
   const advisories =
     input.advisoriesFixed === null ? "advisories unknown (OSV unreachable)" : `${input.advisoriesFixed} advisories fixed`;
   return `${input.pkg} ${input.from} -> ${input.to}: ${parts.join(", ")}, ${breaking}, ${advisories}.`;

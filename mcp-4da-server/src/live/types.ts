@@ -12,7 +12,7 @@ export type OsvEcosystem =
   | "Pub";
 
 /** The reinstall command that brings node_modules back in line with a directory's lockfile. */
-export type InstallFixCommand = "pnpm install" | "npm ci" | "yarn install";
+export type InstallFixCommand = "pnpm install" | "npm ci" | "yarn install" | "bun install";
 
 export interface ResolvedDependency {
   name: string;
