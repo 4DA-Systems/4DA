@@ -268,7 +268,7 @@ git clone https://github.com/4DA-Systems/4DA.git
 cd 4DA/mcp-4da-server
 pnpm install
 pnpm build
-pnpm test    # 656 tests, offline
+pnpm test    # 659 tests, offline
 ```
 
 ## License

@@ -267,6 +267,29 @@ describe("dependency_check verdicts (fixtures)", () => {
   });
 });
 
+// 2026-10-03 agent eval: 7 of 24 dependency_check trials passed `to: "latest"`
+// when asked about adding a package, and were rejected with a retry.
+describe('to: "latest"', () => {
+  it("resolves to the newest release and says it was asked for; a deprecated latest is still judged (avoid)", async () => {
+    const out = await check([{ ecosystem: "npm", package: "steady-lib", to: "Latest" }]);
+    const r = out.results[0] as { to: string; to_requested?: string; verdict: string };
+    expect(r.to).toBe("1.0.3");
+    expect(r.to_requested).toBe("latest");
+    expect(r.verdict).toBe("avoid");
+  });
+
+  it("works on crates.io too", async () => {
+    const out = await check([{ ecosystem: "crates.io", package: "fixture-crate", to: "latest" }]);
+    expect(out.results[0]).toMatchObject({ to: "2.0.1", to_requested: "latest" });
+  });
+
+  it("an unknown package stays unknown, and `from` is still an exact version", async () => {
+    const out = await check([{ ecosystem: "npm", package: "no-such-pkg-xyz", to: "latest" }]);
+    expect(out.results[0]).toMatchObject({ verdict: "unknown", to: "latest" });
+    await expect(check([{ ecosystem: "npm", package: "steady-lib", from: "latest", to: "1.0.1" }])).rejects.toThrow(/from must be an exact version/);
+  });
+});
+
 describe("install scripts and packument caching", () => {
   it("a postinstall added in `to` -> review", async () => {
     const lib = fixture("npm-steady-lib.json");

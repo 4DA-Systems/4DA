@@ -26,7 +26,7 @@
 import type { FourDADatabase } from "../db.js";
 import type { LiveIntelligence } from "../live/index.js";
 import { isMaintenanceNotice } from "../live/maintenance.js";
-import { parseSemverPrecedence } from "../live/semver-precedence.js";
+import { compareVersionPrecedence, parseSemverPrecedence } from "../live/semver-precedence.js";
 import type { PackageReleaseIndex, RegistryLookup, ReleaseMetadataSource } from "../live/release-metadata.js";
 import type { ResolvedDependency, VulnerabilityEntry } from "../live/types.js";
 import {
@@ -99,7 +99,7 @@ export const dependencyCheckTool = {
               type: "string",
               description: 'Package name exactly as published (e.g. "axios", "@scope/pkg", "serde_json").',
             },
-            to: { type: "string", description: 'Exact version you intend to install (e.g. "1.14.1"), not a range.' },
+            to: { type: "string", description: 'Exact version you intend to install (e.g. "1.14.1"), or "latest" for the newest stable release; not a range.' },
             from: { type: "string", description: "Exact version currently installed. Omit when adding a new dependency." },
           },
           required: ["ecosystem", "package", "to"],
@@ -115,6 +115,8 @@ interface ItemResult {
   package: string;
   from: string | null;
   to: string;
+  /** "latest" when the caller asked for it and `to` is what it resolved to. */
+  to_requested?: string;
   verdict: Verdict;
   reason: string;
   signals: Signal[];
@@ -126,7 +128,7 @@ export async function executeDependencyCheck(
   liveIntel: LiveIntelligence | null,
   opts: { now?: Date } = {},
 ) {
-  const items = validateItems(params.items);
+  const requested = validateItems(params.items);
   const now = opts.now ?? new Date();
   const checkedAt = now.toISOString();
 
@@ -134,13 +136,17 @@ export async function executeDependencyCheck(
     const reason = "Live lookups are disabled (FOURDA_OFFLINE=true); nothing about these versions could be checked.";
     return finish(
       checkedAt,
-      items.map((item) => ({ ...head(item), verdict: "unknown" as const, reason, signals: [] })),
+      requested.map((item) => ({ ...head(item), verdict: "unknown" as const, reason, signals: [] })),
       { offline: true, osvCached: false },
     );
   }
 
   const sources = liveIntel.getReleaseSources();
-  const indexes = await fetchIndexes(items, sources);
+  const indexes = await fetchIndexes(requested, sources);
+  // `to: "latest"` becomes the newest stable release the registry lists. Agents
+  // adding a package pass it naturally; rejecting it cost a retry in 7 of 24
+  // dependency_check trials of the 2026-10-03 agent eval.
+  const items = requested.map((item) => resolveLatest(item, indexes.get(lookupKey(item))!));
 
   const osvDeps: ResolvedDependency[] = items.flatMap((item) =>
     [item.to, item.from].filter((v): v is string => Boolean(v)).map((version) => osvDep(item, version)),
@@ -260,7 +266,7 @@ function validateItems(raw: unknown): CheckItem[] {
     const where = `items[${i}]`;
     if (o.ecosystem !== "npm" && o.ecosystem !== "crates.io") throw new Error(`${where}.ecosystem must be "npm" or "crates.io"`);
     if (typeof o.package !== "string" || !o.package.trim()) throw new Error(`${where}.package must be a non-empty string`);
-    const to = exactVersion(o.to, `${where}.to`);
+    const to = typeof o.to === "string" && o.to.trim().toLowerCase() === LATEST ? LATEST : exactVersion(o.to, `${where}.to`);
     const from = o.from === undefined || o.from === null || o.from === "" ? undefined : exactVersion(o.from, `${where}.from`);
     return { ecosystem: o.ecosystem, package: o.package.trim(), to, ...(from ? { from } : {}) };
   });
@@ -268,8 +274,28 @@ function validateItems(raw: unknown): CheckItem[] {
 
 function exactVersion(v: unknown, where: string): string {
   const s = typeof v === "string" ? v.trim().replace(/^v(?=\d)/, "") : "";
-  if (!parseSemverPrecedence(s)) throw new Error(`${where} must be an exact version like 1.2.3 (got ${JSON.stringify(v)}), not a range`);
+  if (!parseSemverPrecedence(s)) {
+    const latest = where.endsWith(".to") ? ' or "latest"' : "";
+    throw new Error(`${where} must be an exact version like 1.2.3${latest} (got ${JSON.stringify(v)}), not a range`);
+  }
   return s;
+}
+
+const LATEST = "latest";
+
+/**
+ * `to: "latest"` -> the highest release that is neither a prerelease nor
+ * withdrawn (a deprecated latest stays: deprecation is a finding to report).
+ * Left as "latest" when the registry read failed or lists no release; the item
+ * is then blocked with the registry's own reason, or "not a published version".
+ */
+function resolveLatest(item: CheckItem, lookup: RegistryLookup<PackageReleaseIndex>): CheckItem & { requested?: string } {
+  if (item.to !== LATEST || lookup.status !== "ok") return item;
+  const candidates = Object.values(lookup.data.releases).filter((r) => !r.withdrawn && parseSemverPrecedence(r.version));
+  const stable = candidates.filter((r) => parseSemverPrecedence(r.version)!.prerelease.length === 0);
+  const pool = stable.length > 0 ? stable : candidates;
+  const newest = pool.reduce<string | null>((max, r) => (max === null || (compareVersionPrecedence(r.version, max) ?? 0) > 0 ? r.version : max), null);
+  return newest ? { ...item, to: newest, requested: LATEST } : item;
 }
 
 function osvDep(item: CheckItem, version: string): ResolvedDependency {
@@ -297,7 +323,13 @@ function refs(entries: VulnerabilityEntry[] | undefined): AdvisoryRef[] {
 
 const instanceKey = (eco: string, name: string, version: string) => `${eco}\0${name}\0${version}`;
 const lookupKey = (item: CheckItem) => `${item.ecosystem}\0${item.package}`;
-const head = (item: CheckItem) => ({ ecosystem: item.ecosystem, package: item.package, from: item.from ?? null, to: item.to });
+const head = (item: CheckItem & { requested?: string }) => ({
+  ecosystem: item.ecosystem,
+  package: item.package,
+  from: item.from ?? null,
+  to: item.to,
+  ...(item.requested ? { to_requested: item.requested } : {}),
+});
 
 function finish(checkedAt: string, results: ItemResult[], meta: { offline: boolean; osvCached: boolean }) {
   const counts = new Map<Verdict, number>();
