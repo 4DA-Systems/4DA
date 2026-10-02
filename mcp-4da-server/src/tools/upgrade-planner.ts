@@ -17,8 +17,8 @@
  *   standalone plan, not the 4DA app's cross-project, version-confirmed plan.
  * - `projectPath` reports the directory set the dependencies were actually
  *   resolved from, not whatever `process.cwd()` happens to be.
- * - When no vulnerability scan has run, the plan says so instead of silently
- *   producing a CVE-blind ranking.
+ * - When no vulnerability scan has run, the planner runs one (bounded); if it
+ *   cannot finish, the plan says it is CVE-blind instead of ranking silently.
  * - When node_modules holds a different version than the lockfile, the row
  *   says so (`installedVersion`) and a reinstall is the step when nothing
  *   else about the lockfile's version needs changing.
@@ -28,9 +28,10 @@ import type { FourDADatabase } from "../db.js";
 import type { LiveIntelligence } from "../live/index.js";
 import { isMaintenanceNotice } from "../live/maintenance.js";
 import { computeSemverDistance } from "../live/semver-utils.js";
-import { compareVersions, maxVersion } from "../live/version-compare.js";
+import { compareVersions, maxVersion, namesPackage } from "../live/version-compare.js";
 import { formatAppPlan, readAppPlan, type AppPlanResult } from "./app-plan.js";
 import { dirsLabel, driftFor } from "./install-drift-notes.js";
+import { emptyAnswerNote } from "./package-presence.js";
 import { relativeDir } from "./vulnerability-scan-format.js";
 
 export interface UpgradePlannerParams {
@@ -96,6 +97,9 @@ interface UpgradePlanResult {
   appPlanUnavailable?: string;
 }
 
+/** How long a plan waits for its own OSV scan before answering CVE-blind (the scan keeps running). */
+const PLANNER_SCAN_TIMEOUT_MS = 60_000;
+
 const PROVENANCE_NOTE =
   "Point-in-time heuristic from local lockfiles plus live registry/OSV lookups. " +
   "Not the 4DA desktop app's cross-project, version-confirmed plan (none was available).";
@@ -103,7 +107,7 @@ const PROVENANCE_NOTE =
 export const upgradePlannerTool = {
   name: "upgrade_planner",
   description:
-    "Ranked dependency upgrade plan — call before upgrading, adding, or auditing any dependency to pick the safest order. When the 4DA desktop app has computed its plan, returns that plan's work order (provenance app_plan): per package the ecosystem, each installed version with its minimum clean target, upgrade type (patch/minor/major), the projects that hold it (direct/dev) and the mechanism (manifest_bump, lockfile_or_parent_update, mixed, no_fix); flagged stale past its freshness horizon. Otherwise falls back to a standalone plan from local lockfiles (provenance standalone_heuristic): the smallest version that fixes each vulnerability, deprecation and version distance — run vulnerability_scan first for a CVE-aware fallback. `package` narrows either plan to one package. Privacy: the fallback may query public registries and OSV with package names and versions; it never sends source code.",
+    "Ranked dependency upgrade plan — call before upgrading, adding, or auditing any dependency to pick the safest order. When the 4DA desktop app has computed its plan, returns that plan's work order (provenance app_plan): per package the ecosystem, each installed version with its minimum clean target, upgrade type (patch/minor/major), the projects that hold it (direct/dev) and the mechanism (manifest_bump, lockfile_or_parent_update, mixed, no_fix); flagged stale past its freshness horizon. Otherwise falls back to a standalone plan from local lockfiles (provenance standalone_heuristic): the smallest version that fixes each vulnerability (direct and transitive), deprecation and version distance; it runs the OSV scan itself when none has run. `package` narrows either plan to one package. Privacy: the fallback may query public registries and OSV with package names and versions; it never sends source code.",
   inputSchema: {
     type: "object" as const,
     properties: {
@@ -188,23 +192,23 @@ async function executeStandalonePlanner(
 
   const includeDev = params.include_dev ?? false;
   const only = params.package?.trim();
+  const named = (name: string, ecosystem: string) => !only || namesPackage(only, name, ecosystem);
   let deps = liveIntel.getResolvedDeps();
   if (!includeDev) deps = deps.filter((d) => !d.isDev);
-  if (only) deps = deps.filter((d) => d.name === only);
+  if (only) deps = deps.filter((d) => named(d.name, d.ecosystem));
 
   // Fetch registry data (live lookups for direct deps; cached where fresh)
   const registryData = await liveIntel.fetchRegistryHealth(deps);
   const drift = liveIntel.getInstallDrift();
   const root = liveIntel.getProjectRoot() ?? process.cwd();
 
-  // Vulnerability data from the last scan this session. A plan that includes
-  // dev dependencies must not read a scan that left them out: it would plan
-  // them CVE-blind while saying vulnerability data was available. Rescan at
-  // the wider scope instead (one OSV round trip, cached).
-  if (includeDev && liveIntel.getVulnerabilities() !== null && !liveIntel.lastScanIncludesDev()) {
-    await liveIntel.scanVulnerabilities(root, { includeDev: true });
-  }
-  const vulnResult = liveIntel.getVulnerabilities();
+  // Vulnerability data at the plan's scope, loaded here (bounded) when no scan
+  // has run. Telling the agent to "run vulnerability_scan first" made the first
+  // plan of every session CVE-blind (2026-10-03 agent eval). A plan that
+  // includes dev dependencies must not read a scan that left them out, so
+  // ensureVulnerabilities rescans at the wider scope when needed.
+  const vulnResult =
+    (await liveIntel.ensureVulnerabilities(root, PLANNER_SCAN_TIMEOUT_MS, { includeDev })) ?? liveIntel.getVulnerabilities();
   const vulnerabilityDataAvailable = vulnResult !== null;
   // Keyed by ecosystem + name + INSTANCE version. A name-only key attached every
   // instance's CVEs to whichever row asked first: the direct anyhow 1.0.104 was
@@ -224,7 +228,7 @@ async function executeStandalonePlanner(
   const maintenanceNotices = new Set<string>();
   if (vulnResult) {
     for (const v of vulnResult.vulnerabilities) {
-      if (only && v.package !== only) continue;
+      if (!named(v.package, v.ecosystem)) continue;
       if (isMaintenanceNotice(v)) {
         maintenanceNotices.add(`${v.package}@${v.currentVersion}`);
         continue;
@@ -379,7 +383,7 @@ async function executeStandalonePlanner(
     const transitive = new Map<string, typeof vulnResult.vulnerabilities>();
     for (const v of vulnResult.vulnerabilities) {
       if (v.isDirect) continue;
-      if (only && v.package !== only) continue;
+      if (!named(v.package, v.ecosystem)) continue;
       if (isMaintenanceNotice(v)) continue;
       if (directPackages.has(instanceKey(v.ecosystem, v.package, v.currentVersion))) continue;
       if (!includeDev && v.isDev && v.devScopeKnown) continue;
@@ -471,11 +475,12 @@ async function executeStandalonePlanner(
   if (maintenanceNotices.size > 0) {
     parts.push(`${maintenanceNotices.size} unmaintained-package notice${maintenanceNotices.size !== 1 ? "s" : ""} not ranked (no fix exists; see vulnerability_scan maintenance_notices)`);
   }
-  if (only && deps.length === 0 && limited.length === 0) {
-    parts.push(`"${only}" is not a dependency of this project (or is a devDependency: pass include_dev)`);
-  }
+  const nothing = vulnerabilityDataAvailable ? "nothing to upgrade (no known vulnerability, deprecation, or newer release of a direct dependency)" : "no vulnerability data to plan from";
+  if (only && limited.length === 0) parts.push(emptyAnswerNote(only, liveIntel, includeDev, nothing));
   if (!vulnerabilityDataAvailable) {
-    parts.push("CVE data not loaded — run vulnerability_scan first for a security-aware plan");
+    parts.push(liveIntel.isEnabled()
+      ? `No vulnerability data: the OSV scan did not finish within ${PLANNER_SCAN_TIMEOUT_MS / 1000}s or OSV was unreachable, so this plan is CVE-blind. Call again to use the scan once it completes`
+      : "No vulnerability data: offline mode (FOURDA_OFFLINE), so this plan is CVE-blind");
   }
 
   return {

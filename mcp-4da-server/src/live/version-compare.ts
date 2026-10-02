@@ -138,3 +138,9 @@ export function samePackageName(a: string, b: string, ecosystem: OsvEcosystem | 
   }
   return false;
 }
+
+/** Whether a user-typed package name (`package` parameters) names this dependency: registry rules, then case-insensitive. */
+export function namesPackage(query: string, name: string, ecosystem: OsvEcosystem | string): boolean {
+  const q = query.trim();
+  return samePackageName(q, name, ecosystem) || q.toLowerCase() === name.toLowerCase();
+}

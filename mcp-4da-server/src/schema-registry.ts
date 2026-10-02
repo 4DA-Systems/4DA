@@ -93,7 +93,7 @@ const WRITE_LOCAL = { readOnlyHint: false, openWorldHint: false, destructiveHint
 export const TOOL_REGISTRY: Record<string, ToolRegistryEntry> = {
   // --- Dependency Security (standalone) ---
   vulnerability_scan: {
-    summary: "Scan this project's lockfiles (npm/pnpm/yarn, Cargo, Python, Go) for known vulnerabilities via OSV.dev, transitives included, with fix versions and where each version is pinned. Call when the user asks about security, vulnerabilities or CVEs, or before you recommend a dependency.",
+    summary: "Scan this project's lockfiles (npm/pnpm/yarn/bun, Cargo, Python, Go) for known OSV.dev vulnerabilities, transitives included, with fix versions and where each is pinned; `package` for one dep. Call when the user asks about security, vulnerabilities or CVEs, or before recommending a dependency.",
     definition: vulnerabilityScanTool,
     category: "security",
     tags: ["security", "vulnerabilities", "cve", "dependencies", "osv"],
