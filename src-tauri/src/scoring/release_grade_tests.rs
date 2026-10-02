@@ -404,11 +404,7 @@ fn victauri_core_is_graded_only_against_the_projects_that_install_it() {
         v("0.9.0"),
         vec![
             pin("d:/4da/src-tauri", "0.9.0", false),
-            pin(
-                "d:/work/agent-hub/apps/bridge/src-tauri",
-                "0.8.4",
-                true,
-            ),
+            pin("d:/work/agent-hub/apps/bridge/src-tauri", "0.8.4", true),
             pin("d:/runyourempire/victauri", "0.8.8", false),
             pin(
                 "d:/runyourempire/victauri/crates/victauri-cli",
@@ -460,11 +456,7 @@ fn victauri_macros_has_no_project_that_can_act_on_it() {
         v("0.9.0"),
         vec![
             pin("d:/4da/src-tauri", "0.9.0", false),
-            pin(
-                "d:/work/agent-hub/apps/bridge/src-tauri",
-                "0.8.4",
-                false,
-            ),
+            pin("d:/work/agent-hub/apps/bridge/src-tauri", "0.8.4", false),
             pin("d:/runyourempire/victauri", "0.8.8", false),
             pin(
                 "d:/runyourempire/victauri/crates/victauri-plugin",
@@ -545,11 +537,7 @@ fn tokio_minor_names_the_lagging_direct_declarers() {
             pin("d:/4da/src-tauri", "1.53.1", true),
             pin("d:/4da/victauri-gauntlet", "1.52.1", true),
             pin("d:/work/agent-hub", "1.52.3", true),
-            pin(
-                "d:/work/agent-hub/apps/bridge/src-tauri",
-                "1.52.3",
-                false,
-            ),
+            pin("d:/work/agent-hub/apps/bridge/src-tauri", "1.52.3", false),
             pin("d:/work/agent-hub/crates/hubd", "1.52.3", true),
             pin("d:/runyourempire/victauri", "1.52.1", true),
         ],
@@ -603,11 +591,7 @@ fn every_direct_declarer_current_is_never_above_patch() {
         v("1.26.1"),
         vec![
             pin("d:/4da/src-tauri", "1.26.1", true),
-            pin(
-                "d:/work/agent-hub/apps/bridge/src-tauri",
-                "1.23.3",
-                false,
-            ),
+            pin("d:/work/agent-hub/apps/bridge/src-tauri", "1.23.3", false),
         ],
         &[],
         |_| false,

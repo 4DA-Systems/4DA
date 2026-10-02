@@ -1040,3 +1040,36 @@ fn test_backfill_releases_the_writer_between_batches() {
     assert_eq!(batches, 1, "one batch of one item");
     assert_eq!(linked, 1, "the batch's link is still written");
 }
+
+#[test]
+fn org_name_package_never_links_from_a_title_word() {
+    // Live 2026-10-02: OpenAI company news linked to the `openai` npm dep.
+    let item = UnlinkedItem {
+        id: 90,
+        title: "OpenAI still doesn't seem to have a handle on all of its rogue AI activity"
+            .to_string(),
+        content: String::new(),
+        source_type: "hackernews".to_string(),
+        content_type: None,
+        source_id: "47000001".to_string(),
+        url: None,
+    };
+    assert!(classify_item_dep_match(&item, "openai").is_none());
+}
+
+#[test]
+fn org_name_package_still_links_through_its_registry_row() {
+    let item = UnlinkedItem {
+        id: 91,
+        title: "npm: openai v7.25.0".to_string(),
+        content: String::new(),
+        source_type: "npm_registry".to_string(),
+        content_type: None,
+        source_id: "openai@7.25.0".to_string(),
+        url: None,
+    };
+    assert_eq!(
+        classify_item_dep_match(&item, "openai").map(|(t, _)| t),
+        Some("exact_registry")
+    );
+}
