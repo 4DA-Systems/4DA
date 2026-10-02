@@ -745,12 +745,26 @@ pub(crate) fn load_ace_packages_for_ecosystem(ecosystem: &str) -> Vec<String> {
         return Vec::new();
     }
 
+    // A release watch list answers "what are you working on?". The active-root
+    // scope in `get_all_dependencies` admits every project under a repository
+    // with a recent commit, so a project nested in a busy monorepo but itself
+    // untouched for months (its own `last_activity`) still chose what to
+    // watch. Those are dropped here; a package another, live project uses is
+    // still watched through that project's row.
+    //
+    // The CVE and OSV sources call this too, but only to ask whether the
+    // ecosystem is tracked at all (`is_empty`). A dormant project's advisories
+    // are still true (AD-043), so when ONLY dormant projects use an ecosystem
+    // the unfiltered list is returned and that answer cannot change.
+    let dormant = crate::ace::dormancy::dormant_project_paths(&conn);
     let mut packages: Vec<String> = match crate::temporal::get_all_dependencies(&conn) {
-        Ok(deps) => deps
-            .into_iter()
-            .filter(|d| manifest_types.contains(&d.manifest_type.as_str()) && !d.is_dev)
-            .map(|d| d.package_name)
-            .collect(),
+        Ok(deps) => watched_package_names(
+            deps.into_iter()
+                .filter(|d| manifest_types.contains(&d.manifest_type.as_str()) && !d.is_dev)
+                .map(|d| (d.project_path, d.package_name))
+                .collect(),
+            &dormant,
+        ),
         Err(e) => {
             tracing::debug!(target: "4da::sources", error = %e, ecosystem = ecosystem, "No ACE deps available");
             Vec::new()
@@ -771,6 +785,26 @@ pub(crate) fn load_ace_packages_for_ecosystem(ecosystem: &str) -> Vec<String> {
     packages.sort();
     packages.dedup();
     packages
+}
+
+/// Package names of `(project_path, package_name)` rows whose project is not
+/// in `dormant` (`comparison_form` paths) — unless that leaves nothing, in
+/// which case every name is kept (see `load_ace_packages_for_ecosystem`).
+fn watched_package_names(
+    rows: Vec<(String, String)>,
+    dormant: &std::collections::HashSet<String>,
+) -> Vec<String> {
+    let is_live = |path: &str| {
+        let path = crate::project_inclusion::comparison_form(path);
+        !dormant.contains(path.trim_end_matches('/'))
+    };
+    if !rows.iter().any(|(path, _)| is_live(path)) {
+        return rows.into_iter().map(|(_, name)| name).collect();
+    }
+    rows.into_iter()
+        .filter(|(path, _)| is_live(path))
+        .map(|(_, name)| name)
+        .collect()
 }
 
 /// Load ACE-tracked packages WITH their installed versions for version-aware
@@ -821,6 +855,32 @@ pub(crate) fn load_default_rss_feeds() -> Vec<String> {
 #[cfg(test)]
 mod strict_manifest_tests {
     use super::*;
+
+    /// A project nested in an active repository but itself dormant (live:
+    /// `D:\4DA\cli`, untouched since 2026-02) no longer chooses what the
+    /// release sources watch; its package stays watched only when a live
+    /// project also uses it. An ecosystem used ONLY by dormant projects keeps
+    /// its names, so the security sources' "is this ecosystem tracked?" check
+    /// is unchanged (AD-043).
+    #[test]
+    fn dormant_nested_projects_do_not_choose_the_watch_list() {
+        let dormant: std::collections::HashSet<String> = ["d:/repo/cli".to_string()].into();
+        let rows = vec![
+            (r"D:\repo".to_string(), "react".to_string()),
+            ("d:/repo/cli".to_string(), "commander".to_string()),
+            ("d:/repo/cli/".to_string(), "react".to_string()),
+            ("d:/repo/cli-next".to_string(), "chalk".to_string()),
+        ];
+        let mut names = watched_package_names(rows, &dormant);
+        names.sort();
+        assert_eq!(names, vec!["chalk".to_string(), "react".to_string()]);
+
+        let only_dormant = vec![("d:/repo/cli".to_string(), "commander".to_string())];
+        assert_eq!(
+            watched_package_names(only_dormant, &dormant),
+            vec!["commander".to_string()]
+        );
+    }
 
     #[test]
     fn ecosystem_token_canonicalizes_aliases() {

@@ -91,6 +91,42 @@ pub(crate) fn same_remote(a: Option<&str>, b: Option<&str>) -> bool {
     }
 }
 
+/// Is `path` inside a checkout of a DIFFERENT repository than the one
+/// enclosing it — the directory both walks skip as foreign code?
+///
+/// The walks only stop WRITING a foreign clone's rows; rows written before the
+/// skip existed are never revisited, because nothing walks there any more.
+/// Live 2026-10-02: 2,094 `dependency_instances` and 677 edges of a nested
+/// third-party clone (`github.com/vercel/workflow` under the user's own repo)
+/// last written 2026-09-04 and never refreshed or pruned. This is the same
+/// test as [`step_into`], asked of a stored path: find the nearest repository
+/// at or above it, then the nearest one above THAT, and compare origins.
+/// Anything it cannot read (no `.git`, no config, a missing path) is NOT
+/// foreign.
+pub(crate) fn is_inside_foreign_checkout(path: &Path) -> bool {
+    let Some(inner) = nearest_repo_root(Some(path)) else {
+        return false;
+    };
+    let Some(outer) = nearest_repo_root(inner.parent()) else {
+        return false;
+    };
+    !same_remote(
+        origin_remote(&inner).as_deref(),
+        origin_remote(&outer).as_deref(),
+    )
+}
+
+fn nearest_repo_root(start: Option<&Path>) -> Option<PathBuf> {
+    let mut cursor = start;
+    while let Some(d) = cursor {
+        if d.join(".git").exists() {
+            return Some(d.to_path_buf());
+        }
+        cursor = d.parent();
+    }
+    None
+}
+
 /// `remote "origin"` URL of the repository whose `.git` entry sits directly
 /// in `dir` (`None` when there is no `.git`, no config, or no origin).
 pub(crate) fn origin_remote(dir: &Path) -> Option<String> {
@@ -236,6 +272,36 @@ mod tests {
             },
             "a nested clone of somebody else's repo must be skipped"
         );
+    }
+
+    /// The stored-path form of the same test, used to retire rows a foreign
+    /// clone left behind before the walks learned to skip it.
+    #[test]
+    fn stored_paths_inside_a_nested_foreign_clone_are_foreign() {
+        let tmp = tempfile::tempdir().unwrap();
+        let own = tmp.path().join("own-app");
+        write_repo(&own, Some("https://github.com/me/own-app.git"));
+        let clone = own.join("vendor-clone");
+        write_repo(&clone, Some("https://github.com/other/thing.git"));
+        let deep = clone.join(".github").join("actions").join("wait");
+        std::fs::create_dir_all(&deep).unwrap();
+
+        assert!(is_inside_foreign_checkout(&clone));
+        assert!(
+            is_inside_foreign_checkout(&deep),
+            "anything under the clone"
+        );
+        // The user's own repository and its subdirectories are not.
+        assert!(!is_inside_foreign_checkout(&own));
+        let sub = own.join("packages").join("web");
+        std::fs::create_dir_all(&sub).unwrap();
+        assert!(!is_inside_foreign_checkout(&sub));
+        // A same-origin nested checkout (a parked worktree) is not.
+        let same = own.join("scratch-copy");
+        write_repo(&same, Some("git@github.com:me/own-app.git"));
+        assert!(!is_inside_foreign_checkout(&same));
+        // No repository at all, or a path that does not exist: not foreign.
+        assert!(!is_inside_foreign_checkout(&tmp.path().join("nowhere")));
     }
 
     /// A nested checkout of the SAME repository (a worktree parked inside the

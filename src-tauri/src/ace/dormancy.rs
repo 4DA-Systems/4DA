@@ -70,6 +70,38 @@ pub fn is_dormant_days(days: i64) -> bool {
     days > DORMANT_AFTER_DAYS
 }
 
+/// Detected projects past the dormancy threshold, in
+/// `project_inclusion::comparison_form`. Exact project paths, never prefixes:
+/// `D:\repo` dormant says nothing about `D:\repo\app`, which carries its own
+/// `last_activity`. A project with no readable timestamp is not dormant.
+///
+/// This answers "what is the user working on?" — the question a release or
+/// news watch list asks. It is NOT a security scope: a dormant project's
+/// advisories are still true and are named once, never hidden (AD-043).
+pub(crate) fn dormant_project_paths(
+    conn: &rusqlite::Connection,
+) -> std::collections::HashSet<String> {
+    let Ok(mut stmt) = conn.prepare("SELECT path, last_activity FROM detected_projects") else {
+        return std::collections::HashSet::new();
+    };
+    let Ok(rows) = stmt.query_map([], |r| {
+        Ok((
+            r.get::<_, String>(0)?,
+            r.get::<_, Option<String>>(1)?.unwrap_or_default(),
+        ))
+    }) else {
+        return std::collections::HashSet::new();
+    };
+    rows.flatten()
+        .filter(|(_, last)| project_dormant_days(last).is_some_and(is_dormant_days))
+        .map(|(path, _)| {
+            crate::project_inclusion::comparison_form(&path)
+                .trim_end_matches('/')
+                .to_string()
+        })
+        .collect()
+}
+
 /// Lockfiles that make a directory an independent project rather than a
 /// workspace member. A workspace member shares its workspace root's lockfile
 /// and is built as part of it, so it rightly inherits the repository's
@@ -113,8 +145,18 @@ pub fn last_activity_from_fs(project_dir: &Path) -> Option<String> {
             if let Some(ts) = nested_project_activity(&root, project_dir) {
                 return Some(ts);
             }
-            // git could not answer (not installed, timed out): fall through to
-            // the repository-level evidence. Unknown must never read as dormant.
+            // git has no history for it. For a directory the repository
+            // IGNORES that is the normal case, not a failure: `log` and
+            // `status` both come back empty. Its own files are then the only
+            // evidence of when it was worked on — the repository's heartbeat
+            // says nothing about it (live 2026-10-02: the gitignored
+            // `victauri-gauntlet`, sources last edited 2026-04-29, read as
+            // active "today" because the enclosing repo was).
+            if let Some(ts) = own_files_activity(project_dir) {
+                return Some(ts);
+            }
+            // Nothing readable at all: fall through to the repository-level
+            // evidence. Unknown must never read as dormant.
         }
     }
 
@@ -275,6 +317,61 @@ fn nested_project_activity(repo_root: &Path, project_dir: &Path) -> Option<Strin
         (c, u) => c.or(u),
     }
     .map(|t| t.to_rfc3339())
+}
+
+/// Build output, caches and installed packages: a build or an install touches
+/// them without anyone working on the project.
+const NOT_WORK_DIRS: &[&str] = &[
+    ".git",
+    "node_modules",
+    "target",
+    "dist",
+    "build",
+    ".next",
+    "__pycache__",
+    ".venv",
+    "venv",
+    "vendor",
+];
+
+/// Newest mtime among a project's own files, skipping manifests and lockfiles
+/// (upkeep, as in [`nested_project_activity`]) and build/install output.
+/// Bounded in depth and entries so a large tree cannot stall a scan.
+fn own_files_activity(project_dir: &Path) -> Option<String> {
+    const MAX_DEPTH: usize = 4;
+    const MAX_ENTRIES: usize = 5_000;
+    let mut newest: Option<SystemTime> = None;
+    let mut seen = 0usize;
+    let mut stack = vec![(project_dir.to_path_buf(), 0usize)];
+    while let Some((dir, depth)) = stack.pop() {
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            continue;
+        };
+        for entry in entries.flatten() {
+            seen += 1;
+            if seen > MAX_ENTRIES {
+                break;
+            }
+            let name = entry.file_name().to_string_lossy().to_string();
+            let Ok(meta) = entry.metadata() else {
+                continue;
+            };
+            if meta.is_dir() {
+                if depth < MAX_DEPTH && !NOT_WORK_DIRS.contains(&name.as_str()) {
+                    stack.push((entry.path(), depth + 1));
+                }
+                continue;
+            }
+            if ACTIVITY_MANIFESTS.contains(&name.as_str()) || OWN_LOCKFILES.contains(&name.as_str())
+            {
+                continue;
+            }
+            if let Ok(modified) = meta.modified() {
+                newest = Some(newest.map_or(modified, |n| n.max(modified)));
+            }
+        }
+    }
+    newest.map(|t| chrono::DateTime::<chrono::Utc>::from(t).to_rfc3339())
 }
 
 fn parse_commit_time(stdout: &str) -> Option<chrono::DateTime<chrono::Utc>> {

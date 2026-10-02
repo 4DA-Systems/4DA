@@ -14,6 +14,7 @@
 
 pub mod behavior;
 pub(crate) mod builtin_modules;
+pub(crate) mod cargo_lock_facts;
 pub(crate) mod cargo_resolve;
 pub mod context;
 pub mod db;
@@ -491,15 +492,10 @@ impl ACE {
                                     }
 
                                     for dep in &signal.dependencies {
-                                        // Provenance: declared in the manifest, or
-                                        // merely INFERRED from source import lines?
-                                        // The builtin self-heal purge keys on this.
-                                        let detected_from =
-                                            if signal.import_scraped_dependencies.contains(dep) {
-                                                "import_scrape"
-                                            } else {
-                                                "manifest"
-                                            };
+                                        // Provenance: every row is declared by the
+                                        // manifest (source imports are not read —
+                                        // see `ProjectScanner::check_manifests`).
+                                        let detected_from = "manifest";
                                         if let Err(e) = crate::temporal::upsert_dependency(
                                             &conn,
                                             &project_path,

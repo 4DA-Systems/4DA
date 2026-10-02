@@ -1152,6 +1152,7 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                                 user_deps = counts.user_dependencies,
                                 project_deps = counts.project_dependencies,
                                 alerts = counts.alerts,
+                                inventory = counts.inventory,
                                 excluded_paths = user_excluded.len(),
                                 "Startup cleanup: excluded-project dependency rows purged"
                             );

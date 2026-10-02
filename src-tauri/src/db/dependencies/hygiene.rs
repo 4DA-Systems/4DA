@@ -47,11 +47,14 @@ pub struct ExcludedPurge {
     pub user_dependencies: usize,
     pub project_dependencies: usize,
     pub alerts: usize,
+    /// Rows deleted from the installed inventory (`dependency_instances`,
+    /// `dependency_edges`) and `dependency_snapshots`.
+    pub inventory: usize,
 }
 
 impl ExcludedPurge {
     pub fn total(&self) -> usize {
-        self.user_dependencies + self.project_dependencies + self.alerts
+        self.user_dependencies + self.project_dependencies + self.alerts + self.inventory
     }
 }
 
@@ -79,11 +82,23 @@ pub fn purge_excluded_project_rows(
         return Ok(out);
     }
     let tx = conn.unchecked_transaction()?;
+    // The inventory tables were missing here, so an excluded project's
+    // `dependency_instances` / `dependency_edges` outlived the exclusion
+    // forever (live 2026-10-02: 5,081 instances and 7,219 edges under seven
+    // excluded project paths, last written 09-04 and 09-24). The readers scope
+    // instances to included projects, but the rows still weighed on every
+    // full-table read and the upgrade plan's inventory hash.
     for table in [
         "user_dependencies",
         "project_dependencies",
         "dependency_alerts",
+        "dependency_instances",
+        "dependency_edges",
+        "dependency_snapshots",
     ] {
+        if !table_exists(&tx, table) {
+            continue;
+        }
         let paths: Vec<String> = {
             let mut stmt = tx.prepare(&format!(
                 "SELECT DISTINCT project_path FROM {table} WHERE project_path IS NOT NULL"
@@ -101,7 +116,8 @@ pub fn purge_excluded_project_rows(
             match table {
                 "user_dependencies" => out.user_dependencies += n,
                 "project_dependencies" => out.project_dependencies += n,
-                _ => out.alerts += n,
+                "dependency_alerts" => out.alerts += n,
+                _ => out.inventory += n,
             }
         }
     }

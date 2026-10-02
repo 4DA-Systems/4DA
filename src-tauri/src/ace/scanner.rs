@@ -179,13 +179,6 @@ pub struct ProjectSignal {
     /// advisory matching).
     #[serde(default)]
     pub indirect_dependencies: Vec<String>,
-    /// The subset of `dependencies` that came from the SOURCE-IMPORT scrape
-    /// rather than the manifest itself (the merge in `check_manifests` only
-    /// adds names not already declared, so the sets are disjoint). Persisted
-    /// with provenance `detected_from = 'import_scrape'` so the builtin
-    /// self-heal purge can tell inferred rows from declared ones.
-    #[serde(default)]
-    pub import_scraped_dependencies: Vec<String>,
     /// Platform-gated DIRECT deps from `[target.'cfg(...)'.dependencies]`:
     /// (package name, target spec e.g. "cfg(windows)"). Used to flag advisories
     /// that aren't relevant on the user's build platform.
@@ -435,10 +428,19 @@ impl ProjectScanner {
         Ok(())
     }
 
+    /// Parse every manifest in `dir`. Dependencies come from manifests only.
+    ///
+    /// Source files are NOT read for dependency names. Source imports were
+    /// only ever scraped in a directory that HAS a manifest, and the manifest
+    /// (with its lockfile) is the authority on what the project depends on:
+    /// Cargo refuses an undeclared crate, npm resolves only what is installed,
+    /// and a Python or Go import name is not the package name. The scrape could
+    /// therefore only add noise, and it did. Live 2026-10-02, each of its 19
+    /// rows was one of: a declared crate again in underscore spelling, a
+    /// `use x as y` alias read as the crate `x as y`, a tsconfig path alias
+    /// (`@/lib`), an undeclared phantom import, or a string literal's
+    /// continuation line read as `use synthetic input via ...`.
     fn check_manifests(&self, dir: &Path, signals: &mut Vec<ProjectSignal>) -> Result<()> {
-        // Track where new signals start so we can merge imports into all of them
-        let signals_start = signals.len();
-
         // Check each manifest type
         let manifest_types = [
             ManifestType::CargoToml,
@@ -475,71 +477,6 @@ impl ProjectScanner {
             }
         }
 
-        // Supplement manifest deps with import-extracted packages.
-        // Only scan if we found at least one manifest (confirms this is a project dir).
-        if signals.len() > signals_start {
-            let mut import_deps: HashSet<String> = HashSet::new();
-            let mut files_scanned = 0u32;
-            const MAX_SOURCE_FILES: u32 = 50;
-
-            // Scan source files in the manifest directory.
-            // `files_scanned` must increment on every file we READ, not only
-            // when imports are found — the old "only on hit" counting let a
-            // directory of import-less files blow past the cap and read (and
-            // on OneDrive, hydrate) every one of them.
-            if let Ok(entries) = fs::read_dir(dir) {
-                for entry in entries.flatten() {
-                    if files_scanned >= MAX_SOURCE_FILES {
-                        break;
-                    }
-                    let path = entry.path();
-                    if path.is_file() {
-                        files_scanned += 1;
-                        let extracted = extract_imports_from_source(&path);
-                        if !extracted.is_empty() {
-                            import_deps.extend(extracted);
-                        }
-                    }
-                }
-            }
-
-            // Also scan src/ subdirectory if it exists (common convention)
-            let src_dir = dir.join("src");
-            if src_dir.is_dir() {
-                if let Ok(entries) = fs::read_dir(&src_dir) {
-                    for entry in entries.flatten() {
-                        if files_scanned >= MAX_SOURCE_FILES {
-                            break;
-                        }
-                        let path = entry.path();
-                        if path.is_file() {
-                            files_scanned += 1;
-                            let extracted = extract_imports_from_source(&path);
-                            if !extracted.is_empty() {
-                                import_deps.extend(extracted);
-                            }
-                        }
-                    }
-                }
-            }
-
-            // Merge unique import deps into ALL signals from this directory,
-            // recording them as import-scraped so persistence can label their
-            // provenance (detected_from = 'import_scrape').
-            if !import_deps.is_empty() {
-                for signal in &mut signals[signals_start..] {
-                    for dep in &import_deps {
-                        if !signal.dependencies.contains(dep)
-                            && !signal.dev_dependencies.contains(dep)
-                        {
-                            signal.dependencies.push(dep.clone());
-                            signal.import_scraped_dependencies.push(dep.clone());
-                        }
-                    }
-                }
-            }
-        }
-
         Ok(())
     }
 
@@ -559,7 +496,6 @@ impl ProjectScanner {
             dependencies: Vec::new(),
             dev_dependencies: Vec::new(),
             indirect_dependencies: Vec::new(),
-            import_scraped_dependencies: Vec::new(),
             target_dependencies: Vec::new(),
             detected_at: chrono::Utc::now().to_rfc3339(),
             project_license: None,
@@ -567,7 +503,13 @@ impl ProjectScanner {
         };
 
         match manifest_type {
-            ManifestType::CargoToml => self.parse_cargo_toml(&content, &mut signal),
+            ManifestType::CargoToml => {
+                self.parse_cargo_toml(&content, &mut signal);
+                // A workspace member's `x = { workspace = true }` can inherit a
+                // `path` dependency: the project's own crate, not a package.
+                let local = super::cargo_lock_facts::workspace_local_crate_names(path);
+                super::cargo_lock_facts::drop_local_crates(&local, &mut signal);
+            }
             ManifestType::PackageJson => self.parse_package_json(&content, &mut signal),
             ManifestType::PyprojectToml => self.parse_pyproject_toml(&content, &mut signal),
             ManifestType::RequirementsTxt => self.parse_requirements_txt(&content, &mut signal),
@@ -2499,142 +2441,6 @@ fn is_local_npm_spec(spec: &str) -> bool {
         || s.contains("://")
 }
 
-/// Extract import/dependency names from source file imports.
-/// Scans first 100 lines for language-specific import patterns.
-/// Returns unique package/crate names found.
-pub(crate) fn extract_imports_from_source(path: &Path) -> Vec<String> {
-    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
-
-    // Only process known source files
-    if !matches!(ext, "rs" | "ts" | "tsx" | "js" | "jsx" | "py" | "go") {
-        return Vec::new();
-    }
-
-    // Never force a cloud download to read import lines.
-    if is_cloud_placeholder(path) {
-        return Vec::new();
-    }
-
-    let content = match fs::read_to_string(path) {
-        Ok(c) => c,
-        Err(_) => return Vec::new(),
-    };
-
-    let mut imports = HashSet::new();
-
-    for line in content.lines().take(100) {
-        let trimmed = line.trim();
-
-        match ext {
-            // Rust: use foo::bar, use foo::{...}
-            "rs" => {
-                if let Some(rest) = trimmed.strip_prefix("use ") {
-                    if let Some(crate_name) = rest.split("::").next() {
-                        let name = crate_name.trim_end_matches(';').trim();
-                        // Skip std-distribution crates and path keywords
-                        if !matches!(
-                            name,
-                            "std"
-                                | "core"
-                                | "alloc"
-                                | "proc_macro"
-                                | "self"
-                                | "super"
-                                | "crate"
-                                | ""
-                        ) {
-                            imports.insert(name.to_string());
-                        }
-                    }
-                }
-            }
-            // TypeScript/JavaScript: import ... from 'pkg', import 'pkg'.
-            // Node builtins (fs, path, http, ... and ANY node:-prefixed
-            // specifier) are language runtime, not dependencies — persisting
-            // them minted phantom version-less rows and a bogus
-            // "Security: http" decision window (see ace::builtin_modules).
-            "ts" | "tsx" | "js" | "jsx" if trimmed.starts_with("import ") => {
-                // import { x } from 'pkg' or import x from 'pkg'
-                if let Some(from_part) = trimmed.split(" from ").nth(1) {
-                    let pkg = from_part
-                        .trim()
-                        .trim_matches(|c| c == '\'' || c == '"' || c == ';');
-                    if !pkg.starts_with('.') && !pkg.starts_with('/') && !pkg.is_empty() {
-                        // Extract package name (handle scoped: @scope/pkg)
-                        let name = if pkg.starts_with('@') {
-                            pkg.splitn(3, '/').take(2).collect::<Vec<_>>().join("/")
-                        } else {
-                            pkg.split('/').next().unwrap_or(pkg).to_string()
-                        };
-                        if !super::builtin_modules::is_node_builtin(&name) {
-                            imports.insert(name);
-                        }
-                    }
-                }
-                // import 'pkg' (side-effect import)
-                else if let Some(start) = trimmed.find('\'').or_else(|| trimmed.find('"')) {
-                    let rest = &trimmed[start + 1..];
-                    if let Some(end) = rest.find('\'').or_else(|| rest.find('"')) {
-                        let pkg = &rest[..end];
-                        if !pkg.starts_with('.') && !pkg.starts_with('/') && !pkg.is_empty() {
-                            let name = if pkg.starts_with('@') {
-                                pkg.splitn(3, '/').take(2).collect::<Vec<_>>().join("/")
-                            } else {
-                                pkg.split('/').next().unwrap_or(pkg).to_string()
-                            };
-                            if !super::builtin_modules::is_node_builtin(&name) {
-                                imports.insert(name);
-                            }
-                        }
-                    }
-                }
-            }
-            // Python: from pkg import ..., import pkg. Stdlib modules (os,
-            // sys, json, ...) are not packages — skip them.
-            "py" => {
-                if let Some(rest) = trimmed.strip_prefix("from ") {
-                    if let Some(pkg) = rest.split_whitespace().next() {
-                        let top = pkg.split('.').next().unwrap_or(pkg);
-                        if !top.is_empty() && !super::builtin_modules::is_python_stdlib(top) {
-                            imports.insert(top.to_string());
-                        }
-                    }
-                } else if let Some(rest) = trimmed.strip_prefix("import ") {
-                    for part in rest.split(',') {
-                        let pkg = part.split_whitespace().next().unwrap_or("");
-                        let top = pkg.split('.').next().unwrap_or(pkg);
-                        if !top.is_empty() && !super::builtin_modules::is_python_stdlib(top) {
-                            imports.insert(top.to_string());
-                        }
-                    }
-                }
-            }
-            // Go: import "pkg". Stdlib imports (fmt, os, net/http — first
-            // path segment has no dot) are skipped: "net/http" would persist
-            // as a phantom dependency named "http".
-            "go" if (trimmed.starts_with("import ") || trimmed.starts_with('"')) => {
-                if let Some(start) = trimmed.find('"') {
-                    let rest = &trimmed[start + 1..];
-                    if let Some(end) = rest.find('"') {
-                        let pkg = &rest[..end];
-                        if !super::builtin_modules::is_go_stdlib_import(pkg) {
-                            // Extract last path segment as package name
-                            if let Some(name) = pkg.rsplit('/').next() {
-                                if !name.is_empty() {
-                                    imports.insert(name.to_string());
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            _ => {}
-        }
-    }
-
-    imports.into_iter().collect()
-}
-
 /// Signal indicating the user is actively learning a topic.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LearningSignal {
@@ -3083,7 +2889,6 @@ tempfile.workspace = true
             dependencies: Vec::new(),
             dev_dependencies: Vec::new(),
             indirect_dependencies: Vec::new(),
-            import_scraped_dependencies: Vec::new(),
             target_dependencies: Vec::new(),
             detected_at: String::new(),
             project_license: None,
@@ -3121,7 +2926,6 @@ libc = "0.2"
             dependencies: Vec::new(),
             dev_dependencies: Vec::new(),
             indirect_dependencies: Vec::new(),
-            import_scraped_dependencies: Vec::new(),
             target_dependencies: Vec::new(),
             detected_at: String::new(),
             project_license: None,
@@ -3175,7 +2979,6 @@ pretty_assertions = "1.0"
             dependencies: Vec::new(),
             dev_dependencies: Vec::new(),
             indirect_dependencies: Vec::new(),
-            import_scraped_dependencies: Vec::new(),
             target_dependencies: Vec::new(),
             detected_at: String::new(),
             project_license: None,
@@ -3235,7 +3038,6 @@ tokio = { version = "1", features = ["full"] }
             dependencies: Vec::new(),
             dev_dependencies: Vec::new(),
             indirect_dependencies: Vec::new(),
-            import_scraped_dependencies: Vec::new(),
             target_dependencies: Vec::new(),
             detected_at: String::new(),
             project_license: None,
@@ -3302,7 +3104,6 @@ tokio = { version = "1", features = ["full"] }
             dependencies: Vec::new(),
             dev_dependencies: Vec::new(),
             indirect_dependencies: Vec::new(),
-            import_scraped_dependencies: Vec::new(),
             target_dependencies: Vec::new(),
             detected_at: String::new(),
             project_license: None,
@@ -3346,7 +3147,6 @@ tokio = { version = "1", features = ["full"] }
             dependencies: Vec::new(),
             dev_dependencies: Vec::new(),
             indirect_dependencies: Vec::new(),
-            import_scraped_dependencies: Vec::new(),
             target_dependencies: Vec::new(),
             detected_at: String::new(),
             project_license: None,
@@ -3373,7 +3173,6 @@ tokio = { version = "1", features = ["full"] }
             dependencies: Vec::new(),
             dev_dependencies: Vec::new(),
             indirect_dependencies: Vec::new(),
-            import_scraped_dependencies: Vec::new(),
             target_dependencies: Vec::new(),
             detected_at: String::new(),
             project_license: None,
@@ -3876,125 +3675,6 @@ dev_dependencies:
     }
 
     #[test]
-    fn test_extract_imports_rust() {
-        let dir = tempfile::tempdir().unwrap();
-        let file = dir.path().join("main.rs");
-        std::fs::write(
-            &file,
-            "use serde::Serialize;\nuse tokio::runtime;\nuse std::collections::HashMap;\nuse crate::db;\n",
-        )
-        .unwrap();
-        let mut imports = extract_imports_from_source(&file);
-        imports.sort();
-        assert!(imports.contains(&"serde".to_string()));
-        assert!(imports.contains(&"tokio".to_string()));
-        // std, crate should be excluded
-        assert!(!imports.contains(&"std".to_string()));
-        assert!(!imports.contains(&"crate".to_string()));
-    }
-
-    #[test]
-    fn test_extract_imports_typescript() {
-        let dir = tempfile::tempdir().unwrap();
-        let file = dir.path().join("index.ts");
-        std::fs::write(
-            &file,
-            "import React from 'react';\nimport { useState } from 'react';\nimport { foo } from './local';\nimport '@tanstack/react-query';\n",
-        )
-        .unwrap();
-        let mut imports = extract_imports_from_source(&file);
-        imports.sort();
-        assert!(imports.contains(&"react".to_string()));
-        assert!(imports.contains(&"@tanstack/react-query".to_string()));
-        // relative imports should be excluded
-        assert!(!imports.iter().any(|i| i.contains("local")));
-    }
-
-    #[test]
-    fn test_extract_imports_python() {
-        let dir = tempfile::tempdir().unwrap();
-        let file = dir.path().join("app.py");
-        std::fs::write(
-            &file,
-            "from flask import Flask\nimport numpy as np\nimport os, sys\nfrom pandas.core import frame\n",
-        )
-        .unwrap();
-        let mut imports = extract_imports_from_source(&file);
-        imports.sort();
-        assert!(imports.contains(&"flask".to_string()));
-        assert!(imports.contains(&"numpy".to_string()));
-        assert!(imports.contains(&"pandas".to_string()));
-        // Stdlib modules are language runtime, not dependencies.
-        assert!(!imports.contains(&"os".to_string()));
-        assert!(!imports.contains(&"sys".to_string()));
-    }
-
-    #[test]
-    fn test_extract_imports_skips_node_builtins() {
-        let dir = tempfile::tempdir().unwrap();
-        let file = dir.path().join("server.ts");
-        std::fs::write(
-            &file,
-            concat!(
-                "import fs from 'fs';\n",
-                "import { createServer } from 'http';\n",
-                "import path from 'node:path';\n",
-                "import 'node:crypto';\n",
-                "import { promises } from 'fs/promises';\n",
-                "import express from 'express';\n",
-                "import { z } from '@scope/zod-like';\n",
-            ),
-        )
-        .unwrap();
-        let mut imports = extract_imports_from_source(&file);
-        imports.sort();
-        assert_eq!(
-            imports,
-            vec!["@scope/zod-like".to_string(), "express".to_string()],
-            "builtins (bare, node:-prefixed, and the fs/promises subpath) are skipped"
-        );
-    }
-
-    #[test]
-    fn test_extract_imports_skips_go_stdlib() {
-        let dir = tempfile::tempdir().unwrap();
-        let file = dir.path().join("main.go");
-        std::fs::write(
-            &file,
-            "package main\nimport (\n\t\"fmt\"\n\t\"net/http\"\n\t\"encoding/json\"\n\t\"github.com/gin-gonic/gin\"\n)\n",
-        )
-        .unwrap();
-        let imports = extract_imports_from_source(&file);
-        assert_eq!(
-            imports,
-            vec!["gin".to_string()],
-            "stdlib (fmt, net/http, encoding/json) skipped; module import kept"
-        );
-    }
-
-    #[test]
-    fn test_extract_imports_rust_skips_std_dist_crates() {
-        let dir = tempfile::tempdir().unwrap();
-        let file = dir.path().join("lib.rs");
-        std::fs::write(
-            &file,
-            "use core::fmt;\nuse alloc::vec::Vec;\nuse serde::Serialize;\n",
-        )
-        .unwrap();
-        let imports = extract_imports_from_source(&file);
-        assert_eq!(imports, vec!["serde".to_string()]);
-    }
-
-    #[test]
-    fn test_extract_imports_unsupported_extension() {
-        let dir = tempfile::tempdir().unwrap();
-        let file = dir.path().join("readme.md");
-        std::fs::write(&file, "# Hello\nimport something").unwrap();
-        let imports = extract_imports_from_source(&file);
-        assert!(imports.is_empty());
-    }
-
-    #[test]
     fn test_detect_learning_directories_empty() {
         let dir = tempfile::tempdir().unwrap();
         let signals = detect_learning_directories(dir.path());
@@ -4043,7 +3723,6 @@ axum = "0.7"
             dependencies: Vec::new(),
             dev_dependencies: Vec::new(),
             indirect_dependencies: Vec::new(),
-            import_scraped_dependencies: Vec::new(),
             target_dependencies: Vec::new(),
             detected_at: String::new(),
             project_license: None,
@@ -4064,62 +3743,40 @@ axum = "0.7"
         assert!(signal.frameworks.contains(&"axum".to_string()));
     }
 
+    /// Source imports never become dependencies. The live junk (2026-10-02):
+    /// a string literal's continuation line starting with `use ` became the
+    /// crate `synthetic input via ...`; `use foo_bar::x` duplicated the
+    /// declared `foo-bar`; `use a_b as c` became the crate `a_b as c`.
     #[test]
-    fn test_check_manifests_merges_imports() {
+    fn check_manifests_never_reads_dependencies_from_source_imports() {
         let dir = tempfile::tempdir().unwrap();
-
-        // Create a Cargo.toml with one dependency
         std::fs::write(
             dir.path().join("Cargo.toml"),
-            r#"[package]
-name = "test-project"
-version = "0.1.0"
-
-[dependencies]
-serde = "1.0"
-"#,
+            "[package]\nname = \"test-project\"\nversion = \"0.1.0\"\n\n\
+             [dependencies]\nserde = \"1.0\"\ntower-http = \"0.6\"\n",
         )
         .unwrap();
-
-        // Create a source file that imports something NOT in the manifest
-        std::fs::write(
-            dir.path().join("main.rs"),
-            "use tracing::info;\nuse serde::Serialize;\n",
-        )
-        .unwrap();
-
-        // Also create src/ with another import
         let src = dir.path().join("src");
         std::fs::create_dir(&src).unwrap();
         std::fs::write(
             src.join("lib.rs"),
-            "use anyhow::Result;\nuse serde::Deserialize;\n",
+            "use tower_http::cors;\nuse tracing::info;\nuse other_core as core2;\n\
+             const HELP: &str = \"inputs are\n    use synthetic input via the `input` tool without `trusted`\";\n",
         )
         .unwrap();
+        std::fs::write(dir.path().join("main.ts"), "import x from '@/lib';\n").unwrap();
 
         let scanner = ProjectScanner::new();
         let mut signals = Vec::new();
         scanner.check_manifests(dir.path(), &mut signals).unwrap();
 
         assert_eq!(signals.len(), 1);
-        let signal = &signals[0];
-        assert_eq!(signal.project_name, Some("test-project".to_string()));
-        // serde was in manifest — should be present
-        assert!(signal.dependencies.contains(&"serde".to_string()));
-        // tracing and anyhow were imported but not in manifest — should be merged
-        assert!(
-            signal.dependencies.contains(&"tracing".to_string()),
-            "tracing should be merged from main.rs imports"
-        );
-        assert!(
-            signal.dependencies.contains(&"anyhow".to_string()),
-            "anyhow should be merged from src/lib.rs imports"
-        );
-        // serde should NOT be duplicated (already in deps from manifest)
+        let mut deps = signals[0].dependencies.clone();
+        deps.sort();
         assert_eq!(
-            signal.dependencies.iter().filter(|d| *d == "serde").count(),
-            1,
-            "serde should not be duplicated"
+            deps,
+            vec!["serde".to_string(), "tower-http".to_string()],
+            "exactly the manifest's declarations"
         );
     }
 

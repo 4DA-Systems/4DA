@@ -366,62 +366,65 @@ fn process_cargo_lock(
     let Ok(content) = std::fs::read_to_string(&cargo_lock) else {
         return 0;
     };
+    let (count, packages) = store_cargo_lock(db, scanner, dir, project_path, &content);
+    crate::ace::cargo_resolve::record_unreachable_crates(db, dir, project_path, &packages);
+    count
+}
 
-    let direct_deps: Vec<String> =
-        if let Ok(toml_content) = std::fs::read_to_string(dir.join("Cargo.toml")) {
-            let mut signal = crate::ace::scanner::ProjectSignal {
-                manifest_type: crate::ace::scanner::ManifestType::CargoToml,
-                manifest_path: dir.join("Cargo.toml"),
-                project_name: None,
-                languages: vec!["rust".to_string()],
-                frameworks: Vec::new(),
-                dependencies: Vec::new(),
-                dev_dependencies: Vec::new(),
-                indirect_dependencies: Vec::new(),
-                import_scraped_dependencies: Vec::new(),
-                target_dependencies: Vec::new(),
-                detected_at: String::new(),
-                project_license: None,
-                project_relevance: 1.0, // lockfile processing uses default; relevance applied at manifest scan
-            };
-            scanner.parse_cargo_toml(&toml_content, &mut signal);
-            let mut all = signal.dependencies;
-            all.extend(signal.dev_dependencies);
-            // `[target.'cfg(...)'.dependencies]` entries are DIRECT deps —
-            // the manifest names them. Dropping them classified every
-            // cfg-gated crate as transitive, costing it the direct-dependency
-            // urgency rank. The manifest scan always counted them.
-            all.extend(
-                signal
-                    .target_dependencies
-                    .iter()
-                    .map(|(name, _)| name.clone()),
-            );
-            all
-        } else {
-            Vec::new()
-        };
+/// Everything [`process_cargo_lock`] stores from one lockfile, minus the
+/// `cargo tree` host-reachability probe. Returns the transitive count and the
+/// packages stored (the project's own crates excluded).
+fn store_cargo_lock(
+    db: &Database,
+    scanner: &crate::ace::scanner::ProjectScanner,
+    dir: &Path,
+    project_path: &str,
+    content: &str,
+) -> (u32, Vec<(String, String)>) {
+    use crate::ace::cargo_lock_facts::{self, CargoDevScope};
 
-    // Capture the parent->child graph for reachability (Step 1, silent).
-    let edges = crate::ace::scanner::ProjectScanner::parse_cargo_lock_edges(&content);
+    let roots = cargo_manifest_roots(scanner, dir, content);
+    let direct_deps: Vec<String> = roots
+        .runtime
+        .iter()
+        .chain(roots.dev.iter())
+        .cloned()
+        .collect();
+
+    // Capture the parent->child graph for reachability (Step 1, silent). The
+    // project's own crates stay in the GRAPH — reachability runs through them.
+    let edges = crate::ace::scanner::ProjectScanner::parse_cargo_lock_edges(content);
     db.store_dependency_edges(project_path, "rust", &edges).ok();
 
+    // ...but never in the INVENTORY: a workspace member or path crate (no
+    // `source` in the lockfile) is the project itself, not an installed copy
+    // of a package.
+    let local = cargo_lock_facts::local_packages(content);
+    let packages: Vec<(String, String)> =
+        crate::ace::scanner::ProjectScanner::parse_cargo_lock(content)
+            .into_iter()
+            .filter(|key| !local.contains(key))
+            .collect();
+    let scope = CargoDevScope::new(content, &roots.runtime, &roots.dev);
+
+    let mut instances = instances_from_packages(&packages, &direct_deps, false);
+    for instance in &mut instances {
+        instance.is_dev = scope.is_dev_only(&instance.package_name);
+        instance.scope = scope.label(&instance.package_name).to_string();
+    }
+    db.store_dependency_instances(project_path, "rust", &instances)
+        .ok();
+
     let mut count = 0u32;
-    let packages = crate::ace::scanner::ProjectScanner::parse_cargo_lock(&content);
-    db.store_dependency_instances(
-        project_path,
-        "rust",
-        &instances_from_packages(&packages, &direct_deps, false),
-    )
-    .ok();
     for (name, version) in &packages {
+        let is_dev = scope.is_dev_only(name);
         if direct_deps.is_empty() || !direct_deps.iter().any(|d| d == name) {
             db.store_transitive_dependency(
                 project_path,
                 name,
                 Some(version.as_str()),
                 "rust",
-                false,
+                is_dev,
             )
             .ok();
             count += 1;
@@ -431,15 +434,68 @@ fn process_cargo_lock(
                 name,
                 Some(version.as_str()),
                 "rust",
-                false,
+                is_dev,
                 None,
             )
             .ok();
         }
     }
     prune_stale_rows(db, project_path, "rust", &packages, &direct_deps);
-    crate::ace::cargo_resolve::record_unreachable_crates(db, dir, project_path, &packages);
-    count
+    (count, packages)
+}
+
+/// The roots a `Cargo.toml` declares, minus the project's own crates.
+struct CargoRoots {
+    /// `[dependencies]`, `[workspace.dependencies]`, `[target.*.dependencies]`.
+    runtime: Vec<String>,
+    /// `[dev-dependencies]` not also declared as a runtime root.
+    dev: Vec<String>,
+}
+
+/// Read the directory's `Cargo.toml` (empty roots when there is none) and
+/// drop every name the lockfile resolves only from the project's own tree.
+fn cargo_manifest_roots(
+    scanner: &crate::ace::scanner::ProjectScanner,
+    dir: &Path,
+    lock_content: &str,
+) -> CargoRoots {
+    let manifest_path = dir.join("Cargo.toml");
+    let Ok(toml_content) = std::fs::read_to_string(&manifest_path) else {
+        return CargoRoots {
+            runtime: Vec::new(),
+            dev: Vec::new(),
+        };
+    };
+    let mut signal = crate::ace::scanner::ProjectSignal {
+        manifest_type: crate::ace::scanner::ManifestType::CargoToml,
+        manifest_path: manifest_path.clone(),
+        project_name: None,
+        languages: vec!["rust".to_string()],
+        frameworks: Vec::new(),
+        dependencies: Vec::new(),
+        dev_dependencies: Vec::new(),
+        indirect_dependencies: Vec::new(),
+        target_dependencies: Vec::new(),
+        detected_at: String::new(),
+        project_license: None,
+        project_relevance: 1.0, // lockfile processing uses default; relevance applied at manifest scan
+    };
+    scanner.parse_cargo_toml(&toml_content, &mut signal);
+    let mut local = crate::ace::cargo_lock_facts::workspace_local_crate_names(&manifest_path);
+    local.extend(crate::ace::cargo_lock_facts::local_only_names(lock_content));
+    crate::ace::cargo_lock_facts::drop_local_crates(&local, &mut signal);
+
+    // `[target.'cfg(...)'.dependencies]` entries are DIRECT runtime deps —
+    // the manifest names them. Dropping them classified every cfg-gated crate
+    // as transitive, costing it the direct-dependency urgency rank.
+    let mut runtime = signal.dependencies;
+    runtime.extend(signal.target_dependencies.into_iter().map(|(name, _)| name));
+    let dev = signal
+        .dev_dependencies
+        .into_iter()
+        .filter(|d| !runtime.contains(d))
+        .collect();
+    CargoRoots { runtime, dev }
 }
 
 /// Process a yarn.lock file, storing transitive deps and updating direct dep versions.
@@ -781,7 +837,6 @@ fn read_package_json_deps(
             dependencies: Vec::new(),
             dev_dependencies: Vec::new(),
             indirect_dependencies: Vec::new(),
-            import_scraped_dependencies: Vec::new(),
             target_dependencies: Vec::new(),
             detected_at: String::new(),
             project_license: None,
@@ -811,7 +866,6 @@ fn read_pyproject_deps(
             dependencies: Vec::new(),
             dev_dependencies: Vec::new(),
             indirect_dependencies: Vec::new(),
-            import_scraped_dependencies: Vec::new(),
             target_dependencies: Vec::new(),
             detected_at: String::new(),
             project_license: None,
@@ -838,7 +892,6 @@ fn read_go_mod_deps(scanner: &crate::ace::scanner::ProjectScanner, dir: &PathBuf
             dependencies: Vec::new(),
             dev_dependencies: Vec::new(),
             indirect_dependencies: Vec::new(),
-            import_scraped_dependencies: Vec::new(),
             target_dependencies: Vec::new(),
             detected_at: String::new(),
             project_license: None,
