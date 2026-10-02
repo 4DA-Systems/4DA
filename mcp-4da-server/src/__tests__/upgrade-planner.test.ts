@@ -221,10 +221,49 @@ describe("upgrade_planner — projectPath honesty", () => {
 });
 
 describe("upgrade_planner — CVE-blind disclosure and provenance", () => {
-  it("discloses when no vulnerability scan has run", async () => {
+  it("discloses a CVE-blind plan when no scan can run (offline)", async () => {
     const result = await executeUpgradePlanner(noDb, {}, makeIntel(null));
     expect(result.vulnerabilityDataAvailable).toBe(false);
-    expect(result.summary).toContain("vulnerability_scan");
+    expect(result.summary).toContain("offline mode (FOURDA_OFFLINE), so this plan is CVE-blind");
+  });
+
+  // 2026-10-03 agent eval: a fresh session's first plan answered "CVE data not
+  // loaded — run vulnerability_scan first", and `package: "diff"` (a vulnerable
+  // transitive) came back "not a dependency of this project".
+  describe("online, with no scan run yet", () => {
+    function onlineIntel(scanCalls: Array<{ includeDev?: boolean }>): LiveIntelligence {
+      const prior = process.env.FOURDA_OFFLINE;
+      delete process.env.FOURDA_OFFLINE;
+      const li = new LiveIntelligence(new Database(":memory:"));
+      process.env.FOURDA_OFFLINE = prior;
+      li.initFromDependencyGroups([{ dir: webDir, language: "javascript", deps: ["react"], devDeps: [] }]);
+      const zustand = makeEntry({ package: "zustand", currentVersion: "5.0.14", isDirect: false, vulnId: "GHSA-zust-0001", fixedVersion: "5.0.15" });
+      (li as unknown as { osvScanner: unknown }).osvScanner = {
+        scan: async () => ({ ...makeScan([zustand], webDir), offline: false, cached: false }),
+      };
+      li.fetchRegistryHealth = async () => [];
+      const scan = li.scanVulnerabilities.bind(li);
+      li.scanVulnerabilities = (p, o) => (scanCalls.push(o ?? {}), scan(p, o));
+      return li;
+    }
+
+    it("runs the scan itself and plans the vulnerable transitive asked for by name", async () => {
+      const calls: Array<{ includeDev?: boolean }> = [];
+      const result = (await executeUpgradePlanner(noDb, { package: "Zustand", include_dev: true }, onlineIntel(calls))) as {
+        vulnerabilityDataAvailable: boolean; recommendations: Array<{ package: string; targetVersion: string; scope: string; action: string }>; summary: string;
+      };
+      expect(calls).toEqual([{ includeDev: true }]);
+      expect(result.vulnerabilityDataAvailable).toBe(true);
+      expect(result.recommendations).toMatchObject([{ package: "zustand", targetVersion: "5.0.15", scope: "transitive", action: "waiting_on_upstream" }]);
+      expect(result.summary).not.toContain("not a dependency");
+    });
+
+    it("says what the lockfile holds when there is nothing to plan, instead of 'not a dependency'", async () => {
+      const result = await executeUpgradePlanner(noDb, { package: "react" }, onlineIntel([]));
+      expect(result.summary).toContain("react 19.2.6 (direct): nothing to upgrade");
+      const missing = await executeUpgradePlanner(noDb, { package: "left-pad" }, onlineIntel([]));
+      expect(missing.summary).toContain(`"left-pad" is not in this project's lockfiles`);
+    });
   });
 
   it("always labels itself a standalone heuristic", async () => {
