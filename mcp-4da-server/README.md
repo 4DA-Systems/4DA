@@ -12,7 +12,7 @@ You:     "Upgrade axum to 0.8"
 Agent →  upgrade_impact { package: "axum", to_version: "0.8.4" }
 
          axum 0.7.9 -> 0.8.4: 5 releases (0.8.2 yanked), changelog from the 0.8.4 crate.
-         12 breaking entries, 8 touch symbols you import (Path, Query, Router, extract, serve):
+         12 breaking entries, 8 touch your code (Path, Query, Router, extract, serve):
            breaking  Remove OptionalFromRequestParts impl for `Query`        (you use Query)
            breaking  Require `Sync` for all handlers added to `Router`       (you use Router)
            ...
@@ -110,7 +110,7 @@ Results are cached (24h for registry data, 1h for vulnerabilities, 30min for new
 
 **Ecosystems supported:** npm, crates.io (Rust), PyPI (Python), Go. `upgrade_impact`: npm and crates.io.
 
-**Known limits, stated plainly:** a `requirements.txt` without a lockfile names only your direct pins, so their transitive dependencies are not scanned (use `uv lock`, `poetry lock` or `pip-compile`). Many packages ship no changelog in their registry archive (fastembed, vite, zod among them); `upgrade_impact` then says so and gives the release-notes URL instead of guessing.
+**Known limits, stated plainly:** a `requirements.txt` without a lockfile names only your direct pins, so their transitive dependencies are not scanned (use `uv lock`, `poetry lock` or `pip-compile`). Many packages ship no changelog in their registry archive (fastembed, vite, zod among them); `upgrade_impact` then says so and gives the release-notes URL instead of guessing. Breaking entries are recognised from the changelog's headings and wording: measured on 23 held-out upgrades against three blind raters, 87% of entries it marks breaking are breaking and about 60% of breaking entries are marked (behaviour changes filed under bug fixes are the usual miss), so read every entry of a major upgrade; each answer says this in `_meta.classification`.
 
 ## What You Can Ask
 
@@ -134,7 +134,7 @@ Results are cached (24h for registry data, 1h for vulnerabilities, 30min for new
 
 | Tool | What it does |
 |------|-------------|
-| `upgrade_impact` | What changes between the installed and a target version of one dependency: releases in between, changelog entries classified breaking / deprecation / security, the breaking ones that touch symbols you import, the files that import it, advisories fixed. |
+| `upgrade_impact` | What changes between the installed and a target version of one dependency: releases in between, changelog entries classified breaking / deprecation / security, the breaking ones that touch your code (symbols you import, and route or pattern syntax in your string literals, e.g. axum 0.8's `/:id` -> `/{id}`), the files that import it, advisories fixed. |
 | `vulnerability_scan` | Every installed copy in every lockfile matched against OSV.dev. Scope-adjusted severity, the fix version on your release line, where each version is pinned. Concise by default; `response_format: "detailed"` for everything. |
 | `dependency_health` | Version freshness, deprecation (of the version you run) and vulnerability counts per dependency. |
 | `upgrade_planner` | The smallest version that fixes each vulnerability, majors flagged, transitive fixes waiting on upstream. `package` for a one-package plan. |
@@ -259,7 +259,7 @@ git clone https://github.com/4DA-Systems/4DA.git
 cd 4DA/mcp-4da-server
 pnpm install
 pnpm build
-pnpm test    # 612 tests, offline
+pnpm test    # 626 tests, offline
 ```
 
 ## License

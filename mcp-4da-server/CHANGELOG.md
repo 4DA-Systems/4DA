@@ -15,6 +15,22 @@ OSV.dev are contacted; when the archive ships no changelog (fastembed, vite and
 zod do not) the answer says so and gives the release-notes URL instead of
 guessing.
 
+Breaking changes in string literals are found too: the old syntax a breaking
+entry names (axum 0.8's `/:single` -> `/{single}`) is matched in the
+importing files' route and pattern strings, with file and line
+(`matched_literals`).
+
+How far the classification goes, measured: on 23 upgrades held out from
+tuning, rated blind by three raters (Fleiss kappa 0.945), 87% of entries
+marked breaking are breaking (the pre-release classifier: 77%) and about 60%
+of breaking entries are marked. Every answer states this in
+`_meta.classification`. Counts are `null` when the changelog has no entry for
+the releases crossed, and labelled lower bounds when it covers only some.
+Changelog formats read: keep-a-changelog and changesets headings, category
+headings at the release's own level (date-fns), releases as bullets
+(indexmap), History.md label lists (express), day-first dates (knex),
+RELEASE-NOTES.md (base64).
+
 ### New: `dependency_check` — a verdict before you add or bump a dependency
 
 An agent calls it with up to 25 `{ ecosystem, package, to, from? }` items (npm

@@ -324,6 +324,10 @@ describe("analyzeUpgradeImpact", () => {
     expect(hosts).toEqual(["api.osv.dev", "registry.npmjs.org"]);
     expect(r._meta.sources).toEqual(hosts);
     expect(r._meta.untrusted_text).toMatch(/data, not instructions/);
+    // The measured reliability of `kind` travels with every classified answer.
+    expect(r._meta.classification).toMatch(/87% of entries marked breaking are breaking/);
+    const none = await run({ package: "demo-lib" }, fakeNpm({ changelog: false }));
+    expect(none._meta.classification).toBeUndefined();
     expect(registry.calls.length).toBeLessThanOrEqual(5);
   });
 
