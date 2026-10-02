@@ -224,10 +224,15 @@ pub(crate) async fn generate_briefing_internal(
                 response.input_tokens + response.output_tokens,
             );
         }
+        // The rejected draft is logged (bounded) so a false fault can be
+        // diagnosed from the log alone: on 2026-10-03 the live brief fell to
+        // the floor twice and nothing showed which sentence tripped the check.
+        let draft: String = content.chars().take(1200).collect();
         warn!(
             target: "4da::briefing",
             attempt,
             violations = ?violations,
+            draft = %draft,
             "Brief stated a version the facts do not hold"
         );
         if attempt >= 2 {
@@ -239,11 +244,7 @@ pub(crate) async fn generate_briefing_internal(
                 crate::briefing_deterministic::FloorReason::NarrationRejected,
             ));
         }
-        correction = format!(
-            "\n\nYour previous draft stated upgrade versions the FACTS do not hold: {}. \
-             Write the brief again using only the versions given in the FACTS.",
-            violations.join("; ")
-        );
+        correction = crate::brief_facts::correction_note(&violations, &package_facts);
     };
     let elapsed = start_time.elapsed();
     info!(target: "4da::briefing",

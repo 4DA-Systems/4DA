@@ -257,6 +257,7 @@ One line naming every UNCHANGED fact as "package (project, since DATE)" (no such
 Rules:
 - Every version number, advisory id, date and project label you write must appear in the FACTS or in a candidate's excerpt. Never compute, round or guess a version or a fix.
 - Copy project labels exactly as the FACTS write them (`atlas/bridge/src-tauri`, not `atlas` and never the name of a package). A package that pulls in another is a dependency, not a project.
+- Write every version immediately after the name of the package it belongs to. When a fix goes through a parent, name both: "upgrade victauri-plugin (its 0.8.4 line cannot reach rmcp >= 2.1.0)" — never "upgrade victauri-plugin to reach >= 2.1.0", which reads as a victauri-plugin version.
 - Severity words follow the fact: "critical" only for CRITICAL, "high" only for HIGH. Never call anything urgent that the FACTS do not.
 - Security comes ONLY from ACT NOW and ALSO OPEN. A security article among the candidates is general awareness; never tell the user they are affected by it.
 - Never claim an article affects a project unless its excerpt names that project's dependency or what the project does. Otherwise write "if you use X, ...".
