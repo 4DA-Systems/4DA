@@ -23,19 +23,31 @@ const HULL_PADDING = 60;
  *  Categories keep their hues. */
 export const NON_STACK_OPACITY = 0.85;
 
-/** Writes the live viewport zoom to a CSS variable on the React Flow wrapper.
- *  Stack ring/halo widths divide by it (calc(px / var(--graph-zoom))), so the
- *  gold beacon holds a constant ON-SCREEN size at every zoom level instead of
- *  vanishing at fit view. Renders nothing; updates bypass React entirely. */
+/** Below this zoom only the labels that carry the map's meaning render —
+ *  cluster headers, the lane header, and stack nodes. At fit zoom a 150-node
+ *  map puts neighbours ~20px apart on screen: every-node labels at a readable
+ *  size would pile into an unreadable smear, and at their old fixed 10px they
+ *  rendered ~4px tall (audit 2026-10-02). Hover always reveals a label. */
+export const LABEL_DETAIL_ZOOM = 0.75;
+
+/** Writes the live viewport zoom to the React Flow wrapper: `--graph-zoom`
+ *  (stack ring/halo widths and label font sizes divide by it, so they hold a
+ *  constant ON-SCREEN size from fit view to close-up) and `data-graph-lod`
+ *  (`far` below LABEL_DETAIL_ZOOM — content-graph.css hides non-stack labels
+ *  there). Renders nothing; updates bypass React entirely. */
 export function ZoomCssVar() {
   const zoom = useStore((s) => s.transform[2]);
   const ref = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     const host = ref.current?.closest('.react-flow') as HTMLElement | null;
     host?.style.setProperty('--graph-zoom', String(zoom));
+    host?.setAttribute('data-graph-lod', zoom < LABEL_DETAIL_ZOOM ? 'far' : 'near');
   }, [zoom]);
   return <div ref={ref} style={{ display: 'none' }} />;
 }
+
+/** Space between the lane header and the lane's first row (graph units). */
+const LANE_HEADER_OFFSET = 70;
 
 export function toFlowNodes(graphNodes: ContentGraphNode[], clusters: GraphCluster[]): Node[] {
   const lastViewed = localStorage.getItem(LAST_VIEW_KEY);
@@ -110,7 +122,31 @@ export function toFlowNodes(graphNodes: ContentGraphNode[], clusters: GraphClust
     style: { pointerEvents: 'none' as const },
   }));
 
-  return [...hullNodes, ...contentNodes, ...clusterNodes];
+  // Unconnected lane (layout.rs): nodes in no cluster sit in a grid under the
+  // map. Its header says what they are — related to nothing in this window —
+  // so proximity never reads as a relation the edge model disowns.
+  const laneNodes = graphNodes.filter((n) => n.cluster_id === null);
+  const laneHeader: Node[] =
+    laneNodes.length > 0
+      ? [
+          {
+            id: 'lane-unconnected',
+            type: 'laneLabel' as const,
+            position: {
+              x: Math.min(...laneNodes.map((n) => n.x)),
+              y: Math.min(...laneNodes.map((n) => n.y)) - LANE_HEADER_OFFSET,
+            },
+            data: { count: laneNodes.length },
+            selectable: false,
+            draggable: false,
+            connectable: false,
+            focusable: false,
+            style: { pointerEvents: 'none' as const },
+          },
+        ]
+      : [];
+
+  return [...hullNodes, ...contentNodes, ...clusterNodes, ...laneHeader];
 }
 
 export function toFlowEdges(graphEdges: ContentGraphEdge[]): Edge[] {

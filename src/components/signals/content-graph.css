@@ -52,3 +52,18 @@
 .react-flow__minimap {
   border-radius: 8px;
 }
+
+/*
+ * Node-label level of detail. ZoomCssVar writes data-graph-lod on the React
+ * Flow wrapper: at far zoom (fit view of a full map) only stack-node labels
+ * render — cluster and lane headers carry the overview — and every label is
+ * sized by 1/zoom, so what shows is readable instead of ~4px smear. A hovered
+ * node shows its full title in the tooltip, so its own label steps aside.
+ */
+.react-flow[data-graph-lod='far'] .cg-node-label[data-stack='false'] {
+  display: none;
+}
+
+.cg-node-label[data-hovered='true'] {
+  visibility: hidden;
+}

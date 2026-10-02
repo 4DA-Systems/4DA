@@ -22,7 +22,8 @@ export interface GraphNode {
   member_ids: number[];
   /** Content category: 'security' | 'release' | 'discussion' | 'research'. */
   category: string;
-  /** A member is linked to one of the user's declared dependencies. */
+  /** A member carries the pipeline's strong-grounding verdict — the same
+   *  predicate as Signal's "Affects You" pool (content_graph/loading.rs). */
   affects_you: boolean;
   x: number;
   y: number;
