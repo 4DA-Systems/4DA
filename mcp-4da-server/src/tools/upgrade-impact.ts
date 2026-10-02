@@ -39,6 +39,7 @@ import {
   type UpgradeNet,
 } from "../live/upgrade-sources.js";
 import { scanCallSites, type CallSiteReport } from "./upgrade-impact-callsites.js";
+import { flagOldSyntax } from "./upgrade-impact-literals.js";
 import { nearestVersions, shapeChangelog, summarize, upgradeType, type ResponseFormat } from "./upgrade-impact-report.js";
 
 export interface UpgradeImpactParams {
@@ -242,6 +243,11 @@ export async function analyzeUpgradeImpact(
     ? selectRange(changelog.sections, from, to, between[0]?.version ?? to)
     : { sections: [], coversRange: false };
   const shaped = shapeChangelog(range.sections, yourCode.symbols_used, params.response_format === "detailed" ? "detailed" : "concise");
+  // Route and pattern syntax the upgrade retires, found in this project's string literals.
+  const literal = await flagOldSyntax(shaped.sections, yourCode.files, ctx.projectRoot);
+  shaped.touching += literal.newlyTouching;
+  shaped.touchingSymbols = [...shaped.touchingSymbols, ...literal.examples];
+  const counted = changelog.found && range.sections.length > 0;
   const advisoriesFixed = advFrom && advTo ? advFrom.filter((id) => !advTo.includes(id)) : null;
 
   const copies = params.from_version ? null : installedCopies(ctx.installed, pkg, eco, ctx.projectRoot);
@@ -275,11 +281,15 @@ export async function analyzeUpgradeImpact(
           ...(shaped.duplicates ? { duplicates_omitted: shaped.duplicates } : {}),
         }
       : { found: false, ...(changelog.file ? { file: changelog.file } : {}), reason: changelog.reason },
-    // Without a changelog these are unknown, not zero: an agent eval read
-    // "0 breaking changes" on vite 7 -> 8 as "nothing breaks" (2026-10-02).
-    breaking_changes_count: changelog.found ? shaped.breaking : null,
-    deprecations_count: changelog.found ? shaped.deprecations : null,
-    security_fixes_count: changelog.found ? shaped.security : null,
+    // Without changelog entries for these releases the counts are unknown, not
+    // zero: an agent eval read "0 breaking changes" on vite 7 -> 8 as "nothing
+    // breaks" (2026-10-02), and semver 7.0.0 ships a changelog that stops at 6.3.0.
+    breaking_changes_count: counted ? shaped.breaking : null,
+    deprecations_count: counted ? shaped.deprecations : null,
+    security_fixes_count: counted ? shaped.security : null,
+    ...(counted && !range.coversRange
+      ? { counts_note: "The changelog does not cover every release in this range; the counts are lower bounds." }
+      : {}),
     your_code: yourCode,
     advisories_fixed: advisoriesFixed,
     advisories_remaining: advTo,
@@ -294,7 +304,7 @@ export async function analyzeUpgradeImpact(
       breaking: shaped.breaking,
       touching: shaped.touching,
       touchingSymbols: shaped.touchingSymbols,
-      changelogFound: changelog.found,
+      changelog: !changelog.found ? "missing" : !counted ? "no_entries" : range.coversRange ? "complete" : "partial",
       advisoriesFixed: advisoriesFixed ? advisoriesFixed.length : null,
     }),
   };

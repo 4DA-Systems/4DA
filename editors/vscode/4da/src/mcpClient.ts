@@ -18,6 +18,18 @@ import * as vscode from 'vscode';
 // Public Interfaces (consumed by statusBar, hoverProvider, diagnostics, signalPanel)
 // ============================================================================
 
+const NPM_CONTEXTS = new Set(['npm', 'typescript', 'typescriptreact', 'javascript', 'javascriptreact']);
+
+/**
+ * Comparison key for a package name. npm names are exact ("lodash.merge" and
+ * "lodash-merge" are different packages); PyPI (PEP 503) and crates.io treat
+ * "-", "_" and "." runs as the same.
+ */
+export function packageKey(name: string, ecosystem: string): string {
+    const lower = name.trim().toLowerCase();
+    return NPM_CONTEXTS.has(ecosystem.toLowerCase()) ? lower : lower.replace(/[-_.]+/g, '-');
+}
+
 export interface Signal {
     title: string;
     url?: string;
@@ -109,23 +121,28 @@ interface McpRelevantItem {
     discovered_ago: string;
 }
 
-interface McpProjectHealthResponse {
-    projects: Array<{
-        project_path: string;
-        project_name: string;
-        dependency_count: number;
-        dependencies: Array<{
-            name: string;
-            version: string;
-            language: string;
-        }>;
-        health: {
-            security_score: number;
-            security_issues: number;
-        };
+/** `dependency_health` (direct dependencies with their registry facts). */
+interface McpDependencyHealthResponse {
+    dependencies: Array<{
+        name: string;
+        ecosystem: string;
+        currentVersion: string | null;
+        latestVersion: string | null;
+        latestStableVersion?: string | null;
     }>;
-    total_projects: number;
-    summary: string;
+}
+
+/** `vulnerability_scan`, concise form: advisories matched to the exact installed versions. */
+interface McpVulnerabilityScanResponse {
+    vulnerabilities: Array<{
+        package: string;
+        current_version: string;
+        vuln_id: string;
+        aliases?: string[];
+        severity: string;
+        fixed_version: string | null;
+        summary: string;
+    }>;
 }
 
 // ============================================================================
@@ -185,7 +202,7 @@ export class MCPClient {
 
     // Cache to avoid hammering the MCP server
     private signalCache: { data: Signal[]; timestamp: number } | null = null;
-    private healthCache = new Map<string, { data: McpProjectHealthResponse; timestamp: number }>();
+    private healthCache = new Map<string, { data: unknown; timestamp: number }>();
     private static CACHE_TTL_MS = 30_000; // 30 seconds
 
     /**
@@ -362,84 +379,62 @@ export class MCPClient {
     }
 
     /**
-     * Get dependency info for a specific package.
-     * Uses MCP `project_health` tool and cross-references with the package name.
+     * Get dependency info for a specific package: its installed and latest
+     * version (`dependency_health`) and the advisories matched to its exact
+     * installed version (`vulnerability_scan`).
+     *
+     * This used to call a `project_health` tool the server never had, so every
+     * lookup came back empty, and then flagged any package whose name appeared
+     * inside a feed headline ("react" in a "preact" headline). Alerts now come
+     * only from version-confirmed advisories.
      */
     async getDependencyInfo(
         packageName: string,
         ecosystem: string
     ): Promise<DependencyInfo | null> {
+        const empty: DependencyInfo = { name: packageName, ecosystem, alerts: [] };
         try {
-            if (!await this.ensureConnected()) {
-                return { name: packageName, ecosystem, alerts: [] };
-            }
+            if (!await this.ensureConnected()) return empty;
 
-            // Check health cache
-            const cacheKey = '_all_';
-            const cached = this.healthCache.get(cacheKey);
-            let healthData: McpProjectHealthResponse;
+            const [health, scan] = await Promise.all([
+                this.cachedTool<McpDependencyHealthResponse>('dependency_health', { limit: 1000, include_dev: true }),
+                this.cachedTool<McpVulnerabilityScanResponse>('vulnerability_scan', {}),
+            ]);
+            const wanted = packageKey(packageName, ecosystem);
+            const same = (name: string) => packageKey(name, ecosystem) === wanted;
 
-            if (cached && Date.now() - cached.timestamp < MCPClient.CACHE_TTL_MS) {
-                healthData = cached.data;
-            } else {
-                const result = await this.callTool('project_health', {});
-                if (!result) {
-                    return { name: packageName, ecosystem, alerts: [] };
-                }
-                healthData = result as McpProjectHealthResponse;
-                this.healthCache.set(cacheKey, { data: healthData, timestamp: Date.now() });
-            }
-
-            // Find the package in project dependencies
-            let foundVersion: string | undefined;
-            const alerts: DependencyAlert[] = [];
-
-            for (const project of healthData.projects || []) {
-                for (const dep of project.dependencies || []) {
-                    if (dep.name === packageName) {
-                        foundVersion = dep.version;
-                        // If this project has security issues, flag the package
-                        if (project.health.security_issues > 0) {
-                            alerts.push({
-                                type: 'security',
-                                severity: 'medium',
-                                title: `Potential security concern in ${project.project_name}`,
-                            });
-                        }
-                    }
-                }
-            }
-
-            // Also check signals for security mentions of this package
-            const signals = await this.getSignals();
-            for (const signal of signals) {
-                if (signal.signalType === 'security_alert' &&
-                    signal.title.toLowerCase().includes(packageName.toLowerCase())) {
-                    alerts.push({
-                        type: 'security_alert',
-                        severity: signal.priority === 'critical' ? 'critical' : 'high',
-                        title: signal.title,
-                    });
-                }
-                if (signal.signalType === 'breaking_change' &&
-                    signal.title.toLowerCase().includes(packageName.toLowerCase())) {
-                    alerts.push({
-                        type: 'breaking_change',
-                        severity: 'medium',
-                        title: signal.title,
-                    });
-                }
-            }
+            const dep = health?.dependencies?.find(d => same(d.name));
+            const alerts: DependencyAlert[] = (scan?.vulnerabilities ?? [])
+                .filter(v => same(v.package))
+                .map(v => ({
+                    type: 'security',
+                    severity: v.severity,
+                    title: v.summary,
+                    cveId: v.aliases?.find(a => a.startsWith('CVE-')) ?? v.vuln_id,
+                    affectedVersions: v.fixed_version
+                        ? `${v.current_version} (fixed in ${v.fixed_version})`
+                        : `${v.current_version} (no fixed release yet)`,
+                }));
 
             return {
                 name: packageName,
-                version: foundVersion,
+                version: dep?.currentVersion ?? scan?.vulnerabilities?.find(v => same(v.package))?.current_version ?? undefined,
+                latestVersion: dep?.latestStableVersion ?? dep?.latestVersion ?? undefined,
                 ecosystem,
                 alerts,
             };
         } catch {
-            return { name: packageName, ecosystem, alerts: [] };
+            return empty;
         }
+    }
+
+    /** One tool result per name, reused for CACHE_TTL_MS across hovers and diagnostics. */
+    private async cachedTool<T>(name: string, args: Record<string, unknown>): Promise<T | null> {
+        const cached = this.healthCache.get(name);
+        if (cached && Date.now() - cached.timestamp < MCPClient.CACHE_TTL_MS) return cached.data as T;
+        const result = await this.callTool(name, args);
+        if (result) this.healthCache.set(name, { data: result, timestamp: Date.now() });
+        return (result as T | null) ?? null;
     }
 
     /**

@@ -19,7 +19,7 @@
  */
 
 import { compareVersionPrecedence } from "./semver-precedence.js";
-import { classifyEntry, classifyHeading, sanitizeEntry, type EntryKind } from "./changelog-classify.js";
+import { classifyEntry, classifyHeading, sanitizeEntry, type EntryContext, type EntryKind } from "./changelog-classify.js";
 
 export interface ChangelogEntry {
   kind: EntryKind;
@@ -32,7 +32,7 @@ export interface ChangelogSection {
   entries: ChangelogEntry[];
 }
 
-const NAME_STEMS = ["changelog", "changes", "history", "releases", "news"];
+const NAME_STEMS = ["changelog", "changes", "history", "releases", "release-notes", "release_notes", "releasenotes", "news"];
 const NAME_EXTS = ["", ".md", ".markdown", ".txt", ".rst"];
 
 /** True for a root-level basename that names a changelog (case-insensitive). */
@@ -62,7 +62,7 @@ export function findChangelogFile(paths: Iterable<string>): string | null {
 const VERSION = String.raw`\d+\.\d+(?:\.\d+)?(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?`;
 const ISO_DATE = /\b(\d{4})[-/.](\d{2})[-/.](\d{2})\b/;
 const MONTH_DATE =
-  /\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.? \d{1,2}(?:st|nd|rd|th)?,? \d{4}\b|\b\d{1,2} (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{4}\b/i;
+  /\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.? \d{1,2}(?:st|nd|rd|th)?,? \d{4}\b|\b\d{1,2} (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*,? \d{4}\b/i;
 
 /** `[optional prefix] version rest`: prefix is a keyword, a `v`, or a package name. */
 const HEADING = new RegExp(
@@ -116,15 +116,19 @@ const FENCE = /^\s*(```|~~~)/;
 const RULE = /^\s*(?:[-=*_]\s*){3,}$/;
 /** A whole-line bold label ("**Breaking Changes:**") acts as a sub-heading. */
 const BOLD_LABEL = /^\s*\*\*([^*]+)\*\*:?\s*$/;
+/** A bullet that is only a label: "remove:", "**Breaking**:", "deps:". */
+const LABEL_BULLET = /^\W*([A-Za-z][\w -]{0,30}?)\W*:\W*$/;
 
 interface ParseState {
   sections: ChangelogSection[];
   current: ChangelogSection | null;
   /** ATX level of the heading that opened `current`; a non-release heading at or above it ends the section. */
   sectionLevel: number;
-  headingKind: EntryKind | null;
-  parentKind: EntryKind | null;
-  pending: { text: string; context: EntryKind | null; indent: number } | null;
+  headingKind: EntryContext | null;
+  /** Context a parent bullet lends to the bullets nested under it, and that parent's indent. */
+  parentKind: EntryContext | null;
+  parentIndent: number | null;
+  pending: { text: string; context: EntryContext | null; indent: number } | null;
 }
 
 function flush(state: ParseState): void {
@@ -135,6 +139,17 @@ function flush(state: ParseState): void {
   state.pending = null;
 }
 
+/**
+ * Headings that name a kind of change (keep-a-changelog and conventional-commit
+ * categories), as opposed to a new document part ("Migration guide", "Older releases").
+ */
+const CATEGORY_HEADING =
+  /^\W*(added|changed|changes|deprecated|deprecations|removed|removals|fixed|fixes|bug ?fixes|security|features?|new features|enhancements?|improvements?|performance( improvements)?|breaking( changes?)?|⚠️?\s*breaking( changes?)?|dependencies|dependency updates|documentation|docs|internal|misc(ellaneous)?|other( changes)?|chores?|refactor(ing)?|reverts?|build|tests?)\W*$/i;
+
+function isCategoryHeading(raw: string): boolean {
+  return CATEGORY_HEADING.test(raw.trim());
+}
+
 function openSection(state: ParseState, heading: { version: string; date: string | null }, level: number): void {
   flush(state);
   state.sectionLevel = level;
@@ -142,6 +157,7 @@ function openSection(state: ParseState, heading: { version: string; date: string
   state.sections.push(state.current);
   state.headingKind = null;
   state.parentKind = null;
+  state.parentIndent = null;
 }
 
 function addLine(state: ParseState, line: string): void {
@@ -150,12 +166,24 @@ function addLine(state: ParseState, line: string): void {
     flush(state);
     const indent = bullet[1].length;
     const text = bullet[2];
-    if (indent === 0) {
-      // A top-level bullet ending in ":" ("- Breaking:") lends its kind to the bullets nested under it.
+    // The outermost bullet level of a list, wherever it is indented (express's
+    // History.md lists sit at two spaces), lends context to bullets nested under it.
+    const outer = state.parentIndent === null || indent <= state.parentIndent;
+    if (outer) {
+      state.parentIndent = indent;
+      // A label-only bullet ("* remove:", "- Breaking:") is a heading for its children, not an entry.
+      const label = LABEL_BULLET.exec(text);
+      if (label) {
+        state.parentKind = classifyHeading(label[1]) ?? state.headingKind;
+        return;
+      }
+      // A breaking bullet lends "breaking" to its sub-points (date-fns 3.0: "**BREAKING**: Functions
+      // that accept Interval arguments ..." with one nested bullet per affected function); one
+      // ending in ":" lends any signalling kind.
       const own = classifyEntry(text, state.headingKind);
-      state.parentKind = /:\s*$/.test(text) && own !== "change" ? own : null;
+      state.parentKind = own === "breaking" || (/:\s*$/.test(text) && own !== "change") ? own : null;
     }
-    const context = indent > 0 && state.parentKind ? state.parentKind : state.headingKind;
+    const context = !outer && state.parentKind ? state.parentKind : state.headingKind;
     state.pending = { text, context, indent };
     return;
   }
@@ -178,7 +206,7 @@ function addLine(state: ParseState, line: string): void {
 /** Parse a changelog into version sections, in document order (usually newest first). */
 export function parseChangelog(text: string): ChangelogSection[] {
   const lines = text.replace(/\r\n?/g, "\n").split("\n");
-  const state: ParseState = { sections: [], current: null, sectionLevel: 0, headingKind: null, parentKind: null, pending: null };
+  const state: ParseState = { sections: [], current: null, sectionLevel: 0, headingKind: null, parentKind: null, parentIndent: null, pending: null };
   let inFence = false;
   let inComment = false;
 
@@ -211,9 +239,13 @@ export function parseChangelog(text: string): ChangelogSection[] {
       else {
         flush(state);
         // "## Migration guide" after the last release must not be read as part of it.
-        if (state.current && level <= state.sectionLevel) state.current = null;
+        // A change-category heading ("## Changed", "## Breaking Changes") at the
+        // release's own level is still inside it: date-fns 3.0.0 writes
+        // "## v3.0.0" then "## Changed", and its ten BREAKING entries were dropped.
+        if (state.current && level <= state.sectionLevel && !isCategoryHeading(atx[2])) state.current = null;
         state.headingKind = classifyHeading(atx[2]);
         state.parentKind = null;
+        state.parentIndent = null;
       }
       continue;
     }
@@ -236,11 +268,22 @@ export function parseChangelog(text: string): ChangelogSection[] {
       flush(state);
       continue;
     }
+    // A release as a top-level bullet with its changes nested under it
+    // (indexmap's RELEASES.md: "- 2.0.0" then "  - **MSRV**: Rust 1.64.0 ...").
+    const versionBullet = BULLET.exec(line);
+    if (versionBullet && versionBullet[1].length === 0 && /^\[?v?\d/.test(versionBullet[2])) {
+      const heading = parseVersionHeading(versionBullet[2]);
+      if (heading && !/\s\w+\s\w+/.test(versionBullet[2].replace(ISO_DATE, "").replace(MONTH_DATE, ""))) {
+        openSection(state, heading, 7);
+        continue;
+      }
+    }
     const bold = BOLD_LABEL.exec(line);
     if (bold && state.current) {
       flush(state);
       state.headingKind = classifyHeading(bold[1]);
       state.parentKind = null;
+      state.parentIndent = null;
       continue;
     }
     if (state.current) addLine(state, line);
