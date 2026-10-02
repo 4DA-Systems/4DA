@@ -202,9 +202,21 @@ fn parse_github_advisory(item: &serde_json::Value) -> Option<CveAdvisory> {
                     .get("vulnerable_version_range")
                     .and_then(|v| v.as_str())
                     .unwrap_or("");
+                // The global-advisories API names the fix `first_patched_version`
+                // (a string; `{ "identifier": … }` on older payloads).
+                // `patched_versions` is the REPOSITORY-advisory field — reading
+                // only it left `Fixed in:` off 1,129 of 1,132 live cve items
+                // (2026-10-02; GHSA-hxh3-vqpv-xpqv returns
+                // `"first_patched_version": "4.13.7"`).
                 let patched = vuln
-                    .get("patched_versions")
-                    .and_then(|v| v.as_str())
+                    .get("first_patched_version")
+                    .and_then(|v| {
+                        v.as_str()
+                            .or_else(|| v.get("identifier").and_then(|i| i.as_str()))
+                    })
+                    .or_else(|| vuln.get("patched_versions").and_then(|v| v.as_str()))
+                    .map(str::trim)
+                    .filter(|v| !v.is_empty())
                     .map(String::from);
 
                 if !name.is_empty() {
@@ -269,12 +281,29 @@ pub(crate) fn advisories_to_source_items(advisories: &[CveAdvisory]) -> Vec<Sour
                     )
                 })
                 .collect();
-            let fixed = a
+            // `Fixed in:` is one list for the whole item, so it is written only
+            // when it is unambiguous: every entry is the SAME package and every
+            // branch has a fix (GitHub lists one vulnerability entry per
+            // release line; the scorer reads "1.9.8, 2.1.4" as per-branch
+            // fixes). A multi-package advisory relies on the per-package
+            // `Affected range:` entries instead — one package's fix compared
+            // against another package's version is a wrong verdict.
+            let single_package = a.affected_packages.windows(2).all(|w| {
+                w[0].name.eq_ignore_ascii_case(&w[1].name) && w[0].ecosystem == w[1].ecosystem
+            });
+            let fixes: Option<Vec<&str>> = a
                 .affected_packages
                 .iter()
-                .filter_map(|p| p.patched_version.as_deref())
-                .map(str::trim)
-                .find(|v| !v.is_empty());
+                .map(|p| p.patched_version.as_deref().map(str::trim))
+                .collect();
+            let fixed = fixes
+                .filter(|_| single_package)
+                .map(|mut fixes| {
+                    fixes.sort_unstable();
+                    fixes.dedup();
+                    fixes.join(", ")
+                })
+                .filter(|f| !f.is_empty());
             let mut content = format!(
                 "{}\n\nSeverity: {}\nAffected: {}\n",
                 a.description,
@@ -554,6 +583,56 @@ mod tests {
         assert_eq!(a.cve_id, "CVE-2026-9999");
         assert_eq!(a.affected_packages.len(), 1);
         assert_eq!(a.affected_packages[0].name, "test-pkg");
+    }
+
+    /// The live global-advisories payload (GHSA-hxh3-vqpv-xpqv, fetched
+    /// 2026-10-02) carries the fix as `first_patched_version`; the item must
+    /// carry `Affected range:` AND `Fixed in:` so the scorer's text route can
+    /// decide the version verdict before the OSV mirror syncs.
+    #[test]
+    fn first_patched_version_reaches_the_fixed_in_line() {
+        let json = serde_json::json!({
+            "ghsa_id": "GHSA-hxh3-vqpv-xpqv",
+            "cve_id": "CVE-2026-93981",
+            "summary": "hono/jsx renders plain strings unescaped in boundary components, leading to XSS",
+            "description": "Details.",
+            "severity": "medium",
+            "cvss": { "score": 4.7 },
+            "html_url": "https://github.com/advisories/GHSA-hxh3-vqpv-xpqv",
+            "vulnerabilities": [{
+                "package": { "ecosystem": "npm", "name": "hono" },
+                "vulnerable_version_range": "< 4.13.7",
+                "first_patched_version": "4.13.7",
+                "vulnerable_functions": []
+            }]
+        });
+        let a = parse_github_advisory(&json).expect("parses");
+        assert_eq!(
+            a.affected_packages[0].patched_version.as_deref(),
+            Some("4.13.7")
+        );
+        let item = &advisories_to_source_items(&[a])[0];
+        assert!(item
+            .content
+            .contains("Affected range: hono (npm): < 4.13.7\n"));
+        assert!(item.content.contains("Fixed in: 4.13.7\n"));
+        assert!(item.content.contains("Severity: MEDIUM\n"));
+
+        // Older payload shape: `{ "identifier": … }`.
+        let older = serde_json::json!({
+            "ghsa_id": "GHSA-old",
+            "summary": "s",
+            "vulnerabilities": [{
+                "package": { "ecosystem": "npm", "name": "x" },
+                "vulnerable_version_range": "< 1.0.1",
+                "first_patched_version": { "identifier": "1.0.1" }
+            }]
+        });
+        let a = parse_github_advisory(&older).expect("parses");
+        assert_eq!(
+            a.affected_packages[0].patched_version.as_deref(),
+            Some("1.0.1")
+        );
     }
 
     #[test]

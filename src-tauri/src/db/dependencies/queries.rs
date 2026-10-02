@@ -408,8 +408,29 @@ impl Database {
     /// ephemeral worktrees and temp clones that would duplicate findings.
     /// Scoped to active repo roots (see [`scope_to_active_roots`]).
     pub fn get_auditable_user_dependencies(&self) -> SqliteResult<Vec<StoredDependency>> {
+        self.auditable_user_dependencies(None)
+    }
+
+    /// [`Self::get_auditable_user_dependencies`] and
+    /// [`Self::get_auditable_scanned_dependencies`] for ONE package
+    /// (case-insensitive) — the same filters, so the scorer's per-item
+    /// security verdict reads exactly the inventory Preemption's matcher reads.
+    pub fn get_auditable_dependencies_for_package(
+        &self,
+        package_name: &str,
+    ) -> SqliteResult<(Vec<StoredDependency>, Vec<StoredDependency>)> {
+        Ok((
+            self.auditable_user_dependencies(Some(package_name))?,
+            self.auditable_scanned_dependencies(Some(package_name))?,
+        ))
+    }
+
+    fn auditable_user_dependencies(
+        &self,
+        package_name: Option<&str>,
+    ) -> SqliteResult<Vec<StoredDependency>> {
         let conn = self.conn.lock();
-        let mut stmt = conn.prepare(
+        let mut stmt = conn.prepare_cached(
             "SELECT id, project_path, package_name, version, ecosystem, is_dev, is_direct, detected_at, last_seen_at, license
              FROM user_dependencies
              WHERE project_path NOT LIKE '%/.claude/%'
@@ -419,10 +440,11 @@ impl Database {
                AND project_path NOT LIKE '%/tmp/%'
                AND project_path NOT LIKE '%\\tmp\\%'
                AND project_path NOT LIKE '%AppData%Local%Temp%'
+               AND (?1 IS NULL OR LOWER(package_name) = LOWER(?1))
              ORDER BY ecosystem, package_name",
         )?;
 
-        let rows = stmt.query_map([], map_dependency_row)?;
+        let rows = stmt.query_map(params![package_name], map_dependency_row)?;
         let included = retain_included(
             rows.filter_map(|r| match r {
                 Ok(v) => Some(v),
@@ -543,8 +565,15 @@ impl Database {
     /// failure, so no `Database` handle can exist against a pre-migration
     /// schema. See the note on [`Self::platform_inactive_packages`].
     pub fn get_auditable_scanned_dependencies(&self) -> SqliteResult<Vec<StoredDependency>> {
+        self.auditable_scanned_dependencies(None)
+    }
+
+    fn auditable_scanned_dependencies(
+        &self,
+        package_name: Option<&str>,
+    ) -> SqliteResult<Vec<StoredDependency>> {
         let conn = self.conn.lock();
-        let mut stmt = conn.prepare(&format!(
+        let mut stmt = conn.prepare_cached(&format!(
             "SELECT {SCANNED_DEPENDENCY_COLUMNS}
              FROM project_dependencies
              WHERE project_path NOT LIKE '%/.claude/%'
@@ -555,10 +584,11 @@ impl Database {
                AND project_path NOT LIKE '%\\tmp\\%'
                AND project_path NOT LIKE '%AppData%Local%Temp%'
                AND project_relevance >= 0.15
+               AND (?1 IS NULL OR LOWER(package_name) = LOWER(?1))
              ORDER BY language, package_name"
         ))?;
 
-        let rows = stmt.query_map([], map_scanned_row)?;
+        let rows = stmt.query_map(params![package_name], map_scanned_row)?;
 
         Ok(retain_included(
             rows.filter_map(|r| match r {
@@ -797,6 +827,25 @@ impl Database {
              ORDER BY project_path, ecosystem, package_name, version",
         )?;
         let rows = stmt.query_map([], map_instance_row)?;
+        Ok(collect_instance_rows(rows))
+    }
+
+    /// [`Self::get_all_dependency_instances`] for ONE package name
+    /// (case-insensitive, every ecosystem) — the per-advisory slice of the
+    /// bulk read the OSV matcher indexes.
+    pub fn get_dependency_instances_named(
+        &self,
+        package_name: &str,
+    ) -> SqliteResult<Vec<DependencyInstanceRow>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare_cached(
+            "SELECT id, project_path, ecosystem, package_name, version,
+                    is_direct, is_dev, scope, detected_at
+             FROM dependency_instances
+             WHERE LOWER(package_name) = LOWER(?1)
+             ORDER BY project_path, ecosystem, package_name, version",
+        )?;
+        let rows = stmt.query_map(params![package_name], map_instance_row)?;
         Ok(collect_instance_rows(rows))
     }
 

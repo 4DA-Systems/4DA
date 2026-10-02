@@ -4,6 +4,7 @@
 //! Syncs advisories from the OSV API for the user's actual dependencies,
 //! then cross-references with version matching to produce verified alerts.
 
+pub(crate) mod advisory_match;
 pub(crate) mod cache;
 pub(crate) mod exposure;
 pub(crate) mod fix_target;

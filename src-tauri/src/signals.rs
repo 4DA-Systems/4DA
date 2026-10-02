@@ -72,6 +72,60 @@ impl SignalType {
         };
         crate::i18n::t(key, lang, &[])
     }
+
+    /// The highest tier this signal TYPE may ever reach. Alert and Critical
+    /// are interruptions — "something in your build needs action" — and only
+    /// two types can say that: a security advisory and a breaking change.
+    /// A tutorial, a trend piece or a tool announcement is worth knowing, never
+    /// worth a klaxon, however well it is grounded. Live 2026-10-02: all 15
+    /// ALERT-tier Key Signals were learning / tech_trend / tool_discovery /
+    /// editorial-security rows ("TypeScript Partial, Required…", "Progressive
+    /// Hydration in React", "Why Playwright MCP Uses So Many Tokens"), each
+    /// grounded by a `react` / `typescript` edge — 0 of 15 alert-worthy.
+    pub fn max_priority(&self) -> SignalPriority {
+        match self {
+            SignalType::SecurityAlert | SignalType::BreakingChange => SignalPriority::Critical,
+            SignalType::ToolDiscovery
+            | SignalType::TechTrend
+            | SignalType::Learning
+            | SignalType::CompetitiveIntel => SignalPriority::Advisory,
+        }
+    }
+}
+
+/// Priority of a security advisory the version-confirmed matcher placed
+/// inside the affected range of an installed copy — the ONLY security signal
+/// that may reach Alert or Critical (an editorial security story, an advisory
+/// whose applicability is unknown, and one confirmed not to apply all cap
+/// lower at the scorer).
+///
+/// The tier is the advisory's OWN severity (mirror CVSS band / curated label,
+/// else the item's `CVSS:` / `Severity:` line) — never a default: an
+/// ungraded advisory is an Alert, not a Critical. Reach then lowers it: a
+/// transitive-only exposure is one tier down (the fix usually arrives through
+/// the parent crate's upgrade), a dev-only exposure is never more than an
+/// Advisory (it does not ship).
+pub fn confirmed_advisory_priority(
+    tier: Option<&str>,
+    is_direct: bool,
+    is_dev: bool,
+) -> SignalPriority {
+    let base = match tier {
+        Some("critical" | "high") => SignalPriority::Critical,
+        Some("low") => SignalPriority::Advisory,
+        // medium, or ungraded
+        _ => SignalPriority::Alert,
+    };
+    if is_dev {
+        return base.min(SignalPriority::Advisory);
+    }
+    if is_direct {
+        return base;
+    }
+    match base {
+        SignalPriority::Critical => SignalPriority::Alert,
+        _ => SignalPriority::Advisory,
+    }
 }
 
 /// Signal priority tiers — corroboration-based graduation.
@@ -695,6 +749,13 @@ impl SignalClassifier {
         if priority > SignalPriority::Advisory && !dependency_confirmed {
             priority = SignalPriority::Advisory;
         }
+
+        // 2026-10-02: the TYPE bounds the tier — grounding cannot lift a
+        // tutorial or a trend piece into an interruption (see
+        // `SignalType::max_priority`). The scorer additionally holds a
+        // security_alert below Alert unless the version-confirmed matcher
+        // places an installed copy inside the advisory's range.
+        priority = priority.min(signal_type.max_priority());
 
         // Generate action text using ONLY declared tech match (prevents "python workflow" for Rust devs)
         let action = self.generate_action(
@@ -1742,6 +1803,131 @@ mod tests {
             c.priority <= SignalPriority::Advisory,
             "Default corroboration (1 source) should cap at Advisory, got {:?}",
             c.priority
+        );
+    }
+
+    #[test]
+    fn only_security_and_breaking_types_may_interrupt() {
+        assert_eq!(
+            SignalType::SecurityAlert.max_priority(),
+            SignalPriority::Critical
+        );
+        assert_eq!(
+            SignalType::BreakingChange.max_priority(),
+            SignalPriority::Critical
+        );
+        for t in [
+            SignalType::ToolDiscovery,
+            SignalType::TechTrend,
+            SignalType::Learning,
+            SignalType::CompetitiveIntel,
+        ] {
+            assert_eq!(t.max_priority(), SignalPriority::Advisory, "{t:?}");
+        }
+    }
+
+    /// The live 2026-10-02 ALERT-tier rows: every one dependency-grounded
+    /// (react / typescript / tokio / playwright edges), maximally
+    /// corroborated here — none may classify above Advisory unless it is a
+    /// security or breaking-change signal.
+    #[test]
+    fn grounded_tutorials_and_trends_never_reach_alert() {
+        let classifier = SignalClassifier::new();
+        let titles = [
+            (
+                "TypeScript `Partial`, `Required`, and `DeepPartial` in 2026: Which Utility Type to use",
+                "A tutorial guide to learn TypeScript utility types with examples, a beginner introduction and best practices.",
+            ),
+            (
+                "Progressive Hydration in React — Client Islands & Triggers",
+                "Learn how to implement progressive hydration in React: a step-by-step tutorial guide with examples.",
+            ),
+            (
+                "Stop Reading cookies() in Next.js Layouts — Preserve PPR",
+                "A guide and tutorial explaining best practices; learn how to keep partial prerendering.",
+            ),
+            (
+                "The Native TypeScript Compiler Cut Our Typecheck from 13s to 3.5s",
+                "We switched to the new native compiler tool, a new release and launch that is faster; introducing the open source tool.",
+            ),
+            (
+                "Topcoat is pushing the boundary of server applications with Rust",
+                "Introducing a new open source framework and tool launch for tokio server apps, now available.",
+            ),
+            (
+                "Why Playwright MCP Uses So Many Tokens",
+                "A trend analysis: adoption is growing, the industry is shifting and the ecosystem momentum is rising.",
+            ),
+        ];
+        for (title, content) in titles {
+            let c = classifier.classify(
+                title,
+                content,
+                0.95,
+                &[
+                    "react".into(),
+                    "typescript".into(),
+                    "tokio".into(),
+                    "playwright".into(),
+                ],
+                &[],
+                &CorroborationContext {
+                    source_count: 5,
+                    dependency_match: true,
+                    chain_phase: Some("peak".to_string()),
+                },
+            );
+            if let Some(c) = c {
+                if !matches!(
+                    c.signal_type,
+                    SignalType::SecurityAlert | SignalType::BreakingChange
+                ) {
+                    assert!(
+                        c.priority <= SignalPriority::Advisory,
+                        "{title}: {:?} reached {:?}",
+                        c.signal_type,
+                        c.priority
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn confirmed_advisory_priority_reads_severity_and_reach() {
+        use SignalPriority::*;
+        // Direct runtime: the advisory's own tier.
+        assert_eq!(
+            confirmed_advisory_priority(Some("critical"), true, false),
+            Critical
+        );
+        assert_eq!(
+            confirmed_advisory_priority(Some("high"), true, false),
+            Critical
+        );
+        assert_eq!(
+            confirmed_advisory_priority(Some("medium"), true, false),
+            Alert
+        );
+        assert_eq!(
+            confirmed_advisory_priority(Some("low"), true, false),
+            Advisory
+        );
+        // Ungraded is never a default Critical.
+        assert_eq!(confirmed_advisory_priority(None, true, false), Alert);
+        // GHSA-9pj6-vhgr-3mwh: HIGH, transitive in a sibling bridge app -> Alert.
+        assert_eq!(
+            confirmed_advisory_priority(Some("high"), false, false),
+            Alert
+        );
+        assert_eq!(
+            confirmed_advisory_priority(Some("medium"), false, false),
+            Advisory
+        );
+        // Dev-only never interrupts.
+        assert_eq!(
+            confirmed_advisory_priority(Some("critical"), true, true),
+            Advisory
         );
     }
 }
