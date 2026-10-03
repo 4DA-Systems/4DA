@@ -278,18 +278,17 @@ test('a loosened tag pattern that would accept a -test tag fails the gate', () =
   );
 });
 
-test('an ungated publish-mcp job fails the gate', () => {
-  // npm publishes cannot be undone. This job had no tag classification at all.
+test('an npm publish in release.yml fails the gate', () => {
+  // The MCP server ships only from publish-mcp-server.yml (trusted publishing).
   const root = copyFixture();
-  replaceInFile(
-    root,
-    '.github/workflows/release.yml',
-    "    if: needs.create-release.outputs.production == 'true'\n    runs-on: ubuntu-latest\n    timeout-minutes: 20",
-    '    runs-on: ubuntu-latest\n    timeout-minutes: 20'
+  const file = path.join(root, '.github/workflows/release.yml');
+  fs.appendFileSync(
+    file,
+    '\n  publish-mcp:\n    runs-on: ubuntu-latest\n    steps:\n      - run: npm publish --access public\n'
   );
   assert.ok(
-    checkReleaseChannel(root).some((f) => f.includes('publish-mcp') && f.includes('cannot be undone')),
-    'an ungated npm publish must fail the gate'
+    checkReleaseChannel(root).some((f) => f.includes('must not publish to npm')),
+    'a second npm publisher must fail the gate'
   );
 });
 

@@ -230,15 +230,14 @@ function checkReleaseChannel(root = path.resolve(__dirname, '..')) {
       );
     }
   }
-  // npm publishes are irreversible, and publish-mcp had no tag classification
-  // at all — a desktop dry-run tag would have attempted one. Gated at job level.
-  const mcpJob = releaseYml.slice(releaseYml.indexOf('  publish-mcp:'));
-  if (!releaseYml.includes('  publish-mcp:')) {
-    fail('release.yml must contain the publish-mcp job.');
-  } else if (!mcpJob.slice(0, 700).includes(PRODUCTION_TAG_GUARD)) {
+  // The MCP server ships only from publish-mcp-server.yml on an mcp-v* tag:
+  // npm Trusted Publishing is bound to that one workflow, and the package
+  // disallows token publishes. A second, token-based npm publisher here could
+  // never succeed, and a desktop tag must never be what releases the MCP server.
+  if (/^[^#\n]*\bnpm publish\b|NPM_TOKEN/m.test(releaseYml)) {
     fail(
-      'release.yml job "publish-mcp" must be gated on ' + PRODUCTION_TAG_GUARD +
-        ' — an npm publish cannot be undone, and a dry-run tag must not trigger one.'
+      'release.yml must not publish to npm. The MCP server is released only by ' +
+        'publish-mcp-server.yml (trusted publishing); an npm publish cannot be undone.'
     );
   }
 

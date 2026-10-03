@@ -99,9 +99,8 @@ jobs:
     # signing material (SSL.com eSigner, Apple, Tauri updater key), so it waits
     # on the `release` environment: a required maintainer approval, and a
     # deployment policy that admits only `v*` / `mcp-v*` tags. All four matrix
-    # legs (and `publish-mcp`, which starts at the same moment) request the
-    # environment together and are approved in ONE review. `create-release`
-    # stays ungated on purpose: it only makes a DRAFT release, visible to
+    # legs request the environment together and are approved in ONE review.
+    # `create-release` stays ungated on purpose: it only makes a DRAFT release, visible to
     # maintainers only. Once the signing secrets move from repo-level to
     # environment secrets, only jobs naming this environment can read them.
     environment: release
@@ -1002,71 +1001,3 @@ jobs:
               release_id: ${{ needs.create-release.outputs.release_id }},
               draft: false,
             })
-
-  publish-mcp:
-    name: Publish MCP Server to npm
-    needs: create-release
-    # npm publishes are IRREVERSIBLE. This job had no tag classification at
-    # all, so a `v0.0.N-test` desktop dry run would attempt to publish the MCP
-    # server. It is a no-op today only because the version in the manifest is
-    # already on npm — bump that version, run a desktop dry run, and it ships.
-    # The MCP server has its own `mcp-v*` tag and workflow; a desktop tag
-    # should never be what releases it.
-    if: needs.create-release.outputs.production == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    # Same approval gate as build-tauri (see the note there). Both jobs start
-    # right after create-release, so one review approves them together.
-    environment: release
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v4
-        with:
-          version: 10.34.6 # must match package.json packageManager
-
-      - name: Setup Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v4
-        with:
-          node-version: '22'
-          cache: 'pnpm'
-          registry-url: 'https://registry.npmjs.org'
-
-      - name: Install and build MCP server
-        working-directory: mcp-4da-server
-        run: |
-          pnpm install --frozen-lockfile
-          pnpm run build
-
-      - name: Publish to npm
-        working-directory: mcp-4da-server
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: |
-          if [ -n "$NODE_AUTH_TOKEN" ]; then
-            # Was `npm publish ... || echo "Publish skipped (version may already
-            # exist)"`, which reported EVERY failure - expired token, 2FA
-            # challenge, provenance/OIDC rejection, network fault, broken
-            # tarball - as a benign version collision, and exited 0. Only a
-            # genuine "already published" is benign; everything else must fail.
-            set -o pipefail
-            if OUTPUT=$(npm publish --access public --provenance 2>&1); then
-              echo "$OUTPUT"
-              echo "Published successfully."
-            else
-              echo "$OUTPUT"
-              if echo "$OUTPUT" | grep -qiE 'EPUBLISHCONFLICT|cannot publish over|previously published version'; then
-                echo "::notice::This version is already on npm - nothing to publish."
-              else
-                echo "::error::npm publish failed for a reason other than an existing version."
-                exit 1
-              fi
-            fi
-          else
-            echo "NPM_TOKEN secret not set - skipping npm publish."
-            echo "To enable: add NPM_TOKEN to repo secrets (npm token create --type granular)"
-          fi
