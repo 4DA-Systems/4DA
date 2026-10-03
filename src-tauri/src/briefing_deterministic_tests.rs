@@ -29,8 +29,10 @@ fn rmcp(status: FactStatus) -> SecurityFact {
                 parent_version: "0.8.4".into(),
                 to: "2.1.0".into(),
                 by_requirement: false,
+                proven: None,
             },
         }],
+        not_compiled: vec![],
         first_seen: Some("2026-09-16".into()),
         status,
     }
@@ -117,6 +119,47 @@ fn unchanged_facts_fold_into_still_open() {
     );
     assert!(
         out.contains("fastembed (4da/src-tauri on 5.17.4, since 2026-10-02)"),
+        "{out}"
+    );
+}
+
+/// AD-051: the floor names the advisories it does not count, and why, and
+/// carries the proven parent release in the fix clause.
+#[test]
+fn the_floor_names_uncounted_advisories_and_the_proven_parent() {
+    let mut fact = rmcp(FactStatus::New);
+    fact.advisory_count = 1;
+    fact.not_compiled = vec![
+        crate::brief_facts::NotCompiledNote {
+            advisory_id: "GHSA-33f5-2c5q-wgwj".into(),
+            summary: "OAuth metadata".into(),
+        },
+        crate::brief_facts::NotCompiledNote {
+            advisory_id: "GHSA-9g45-5xwm-f3wc".into(),
+            summary: "headers on redirect".into(),
+        },
+    ];
+    if let FixPath::Parent { proven, .. } = &mut fact.sites[0].fix_path {
+        *proven = Some(crate::brief_facts::ProvenParent {
+            parent_version: "0.9.0".into(),
+            child_version: "3.4.1".into(),
+            label: "4da/src-tauri".into(),
+        });
+    }
+    let facts = BriefFacts {
+        security: vec![fact],
+        ..BriefFacts::default()
+    };
+    let out = build_deterministic_brief(&facts, FloorReason::NoCapableModel);
+    assert!(
+        out.contains(
+            "Not counted: GHSA-33f5-2c5q-wgwj, GHSA-9g45-5xwm-f3wc — the code they name is \
+             feature-gated out of this build."
+        ),
+        "{out}"
+    );
+    assert!(
+        out.contains("upgrade victauri-plugin to 0.9.0 (4da/src-tauri already runs it, resolved to rmcp 3.4.1)"),
         "{out}"
     );
 }

@@ -75,6 +75,7 @@ fn a_semver_incompatible_transitive_fix_names_the_parent() {
             parent_version: "0.8.4".into(),
             to: "2.1.0".into(),
             by_requirement: false,
+            proven: None,
         }
     );
     let clause = fix_clause("rmcp", &path);
@@ -107,6 +108,7 @@ fn an_exact_npm_pin_sends_the_fix_to_the_parent() {
             parent_version: "5.5.6".into(),
             to: "5.28.5".into(),
             by_requirement: true,
+            proven: None,
         }
     );
     // An UNREADABLE requirement falls back to semver compatibility: a patch
@@ -337,6 +339,7 @@ fn parent_rmcp_facts() -> BriefFacts {
         parent_version: "0.8.4".into(),
         to: "2.1.0".into(),
         by_requirement: false,
+        proven: None,
     };
     BriefFacts {
         security: vec![f],
@@ -365,6 +368,56 @@ fn the_prescribed_parent_phrasing_passes_the_version_check() {
     );
 }
 
+fn proven_090() -> ProvenParent {
+    ProvenParent {
+        parent_version: "0.9.0".into(),
+        child_version: "3.4.1".into(),
+        label: "4da/src-tauri".into(),
+    }
+}
+
+/// Screenshot_3845: "upgrade victauri-plugin to pull in rmcp >= 2.1.0" left
+/// the user to find the release while 4da/src-tauri already ran it. With the
+/// lockfile proof the clause names the release and the evidence, and the
+/// brief may quote both versions without a fault.
+#[test]
+fn a_proven_parent_release_is_named_with_its_evidence() {
+    let path = FixPath::Parent {
+        parent: "victauri-plugin".into(),
+        parent_version: "0.8.4".into(),
+        to: "2.1.0".into(),
+        by_requirement: false,
+        proven: Some(proven_090()),
+    };
+    let clause = fix_clause("rmcp", &path);
+    assert!(
+        clause.ends_with(
+            "upgrade victauri-plugin to 0.9.0 (4da/src-tauri already runs it, resolved to rmcp 3.4.1)"
+        ),
+        "{clause}"
+    );
+    let mut facts = parent_rmcp_facts();
+    facts.security[0].sites[0].fix_path = path;
+    let pf = package_facts(&facts);
+    let plugin = pf.iter().find(|p| p.name == "victauri-plugin").unwrap();
+    assert!(plugin.versions.contains(&"0.9.0".to_string()));
+    let rmcp = pf.iter().find(|p| p.name == "rmcp").unwrap();
+    assert!(rmcp.versions.contains(&"3.4.1".to_string()));
+    // The narration the prompt prescribes for it passes the version check.
+    let prose = "- **rmcp** (atlas/bridge/src-tauri): upgrade victauri-plugin to 0.9.0 \
+                 (4da/src-tauri already runs it, resolved to rmcp 3.4.1).";
+    assert!(crate::briefing_groundedness::check_factual_claims(prose, &pf).is_empty());
+    // Without the proof, 0.9.0 is an invented victauri-plugin upgrade target
+    // and the check faults it (the resolved rmcp version is not a target).
+    let unproven = package_facts(&parent_rmcp_facts());
+    let v = crate::briefing_groundedness::check_factual_claims(prose, &unproven);
+    assert_eq!(v.len(), 1, "{v:?}");
+    assert!(
+        v[0].contains("victauri-plugin cited version 0.9.0"),
+        "{v:?}"
+    );
+}
+
 /// Live 2026-10-03: the model quoted the facts' own fix clause verbatim and
 /// the version check faulted it, because the clause put rmcp's fix after
 /// victauri-plugin's name. Every clause, quoted as-is in an upgrade
@@ -379,12 +432,21 @@ fn every_fix_clause_quoted_verbatim_passes_the_version_check() {
             parent_version: "0.8.4".into(),
             to: "2.1.0".into(),
             by_requirement: false,
+            proven: None,
         },
         FixPath::Parent {
             parent: "victauri-plugin".into(),
             parent_version: "0.8.4".into(),
             to: "2.1.0".into(),
             by_requirement: true,
+            proven: None,
+        },
+        FixPath::Parent {
+            parent: "victauri-plugin".into(),
+            parent_version: "0.8.4".into(),
+            to: "2.1.0".into(),
+            by_requirement: false,
+            proven: Some(proven_090()),
         },
         FixPath::ParentUnknown { to: "2.1.0".into() },
         FixPath::Reinstall { to: "2.1.0".into() },
@@ -590,6 +652,7 @@ fn security(key: &str, urgency: AlertUrgency, installed: &str, to: &str) -> Secu
             dormant_days: None,
             fix_path: FixPath::Refresh { to: to.into() },
         }],
+        not_compiled: vec![],
         first_seen: None,
         status: FactStatus::New,
     }
@@ -623,4 +686,102 @@ fn the_fingerprint_moves_with_the_facts_not_their_order() {
         fingerprint(&[a.clone()], &[medium], &[]),
         fingerprint(&[a], &[], &[]),
     );
+}
+
+/// Live 2026-10-04: every upgrade already reported, and the model still wrote
+/// an "Upgrades to plan" section of filler. Sections without news are cut;
+/// the rest of the brief is untouched.
+#[test]
+fn sections_without_news_are_cut_deterministically() {
+    let narrated = "## Act now\n- rmcp: upgrade victauri-plugin.\n\n\
+                    ## Upgrades to plan\nNo new upgrade facts today — all 8 tracked upgrades are unchanged.\n\n\
+                    ## Worth knowing\nNothing else worth your time today.\n\n\
+                    ## Still open\nvitest (navcal, since 2026-10-03)";
+    let mut facts = parent_rmcp_facts(); // one NEW security fact, no upgrades
+    let out = drop_sections_without_news(narrated, &facts);
+    assert!(out.starts_with("## Act now\n- rmcp"), "{out}");
+    assert!(!out.contains("Upgrades to plan"), "{out}");
+    assert!(!out.contains("No new upgrade facts"), "{out}");
+    assert!(
+        out.contains("## Worth knowing") && out.contains("## Still open"),
+        "{out}"
+    );
+
+    // An unchanged security fact empties Act now too.
+    facts.security[0].status = FactStatus::Unchanged {
+        since: "2026-10-03".into(),
+    };
+    let out = drop_sections_without_news(narrated, &facts);
+    assert!(out.starts_with("## Worth knowing"), "{out}");
+
+    // A NEW upgrade keeps its section.
+    let mut with_upgrade = parent_rmcp_facts();
+    with_upgrade.upgrades = vec![UpgradeFact {
+        key: "crates.io:fastembed".into(),
+        package: "fastembed".into(),
+        ecosystem: "crates.io".into(),
+        announced: "7.1.0".into(),
+        published: None,
+        yanked: false,
+        dev_only: false,
+        majors_behind: 2,
+        pre_one: false,
+        sites: vec![],
+        item_id: 1,
+        url: None,
+        status: FactStatus::New,
+    }];
+    assert!(drop_sections_without_news(narrated, &with_upgrade).contains("## Upgrades to plan"));
+
+    // Never cut a brief down to nothing.
+    let only = "## Upgrades to plan\nfiller";
+    assert_eq!(
+        drop_sections_without_news(only, &BriefFacts::default()),
+        only
+    );
+}
+
+/// Live, on a REAL corpus snapshot (no model call): resolve the Cargo
+/// projects named in `FOURDA_RESOLVE_DIRS` (`;`-separated) so their feature
+/// sets are cached, then print what the matcher dropped as not compiled and
+/// the security facts the brief would be written from. Run with
+/// `FOURDA_DB_PATH=<snapshot> FOURDA_DATA_DIR=<dir> FOURDA_RESOLVE_DIRS=<dirs>
+///  cargo test --lib live_snapshot_reachability -- --ignored --nocapture`.
+#[test]
+#[ignore = "runs cargo tree and reads a real database snapshot"]
+fn live_snapshot_reachability() {
+    let (Ok(_), Ok(dirs)) = (
+        std::env::var("FOURDA_DB_PATH"),
+        std::env::var("FOURDA_RESOLVE_DIRS"),
+    ) else {
+        return;
+    };
+    let db = crate::get_database().expect("snapshot db");
+    for dir in dirs.split(';').filter(|d| !d.trim().is_empty()) {
+        let resolved =
+            crate::ace::cargo_resolve::host_resolved_crates(&db, std::path::Path::new(dir));
+        println!("resolved {dir}: {:?} crates", resolved.map(|r| r.len()));
+    }
+    let (matched, excluded) =
+        crate::osv::matching::get_matched_advisories_with_not_compiled(&db).expect("matcher");
+    println!("matched advisories: {}", matched.len());
+    for n in &excluded {
+        println!(
+            "NOT COMPILED {} {} {:?} in {} via {:?}",
+            n.advisory_id, n.package_name, n.installed_version, n.project_path, n.files
+        );
+    }
+    let facts = build_brief_facts(&db);
+    for f in facts.security.iter().chain(facts.also_open.iter()) {
+        println!(
+            "FACT {} [{:?}] {} advisories {:?}: {}",
+            f.package, f.urgency, f.advisory_count, f.advisory_ids, f.title
+        );
+        for s in &f.sites {
+            println!("  {}: {}", s.label, fix_clause(&f.package, &s.fix_path));
+        }
+        for n in &f.not_compiled {
+            println!("  not counted: {} ({})", n.advisory_id, n.summary);
+        }
+    }
 }

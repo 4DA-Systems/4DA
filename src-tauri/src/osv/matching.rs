@@ -11,14 +11,24 @@ use crate::error::{FourDaError, Result};
 use semver::Version;
 
 use super::fix_target;
-use super::types::{MatchedAdvisory, MatchedDependency, Range};
+use super::reachability::ReachFilter;
+use super::types::{MatchedAdvisory, MatchedDependency, NotCompiledMatch, Range};
 
 /// Get all advisories that match the user's installed dependencies.
 /// Merges deps from both `user_dependencies` (user-curated) and
 /// `project_dependencies` (ACE-scanned) to ensure coverage.
 /// Version matching is attempted for SEMVER ranges; conservative (assume affected)
-/// fallback for non-semver or unparseable versions.
+/// fallback for non-semver or unparseable versions. A crates.io copy whose
+/// build gates off every file the advisory names is not matched (AD-051).
 pub fn get_matched_advisories(db: &Database) -> Result<Vec<MatchedAdvisory>> {
+    get_matched_advisories_with_not_compiled(db).map(|(matches, _)| matches)
+}
+
+/// [`get_matched_advisories`], plus the copies it left out because their
+/// build does not compile the code the advisory names.
+pub(crate) fn get_matched_advisories_with_not_compiled(
+    db: &Database,
+) -> Result<(Vec<MatchedAdvisory>, Vec<NotCompiledMatch>)> {
     let advisories = db
         .get_all_osv_advisories()
         .map_err(|e| FourDaError::Internal(format!("Failed to read OSV advisories: {e}")))?;
@@ -63,7 +73,7 @@ pub fn get_matched_advisories(db: &Database) -> Result<Vec<MatchedAdvisory>> {
     }
 
     if advisories.is_empty() || deps.is_empty() {
-        return Ok(Vec::new());
+        return Ok((Vec::new(), Vec::new()));
     }
 
     // Index deps by (package_name_lower, ecosystem_normalized) for fast lookup
@@ -122,6 +132,7 @@ pub fn get_matched_advisories(db: &Database) -> Result<Vec<MatchedAdvisory>> {
             .push(&advisory.affected_ranges);
     }
     let mut clean_cache: HashMap<(String, String, String), Option<String>> = HashMap::new();
+    let mut reach = ReachFilter::default();
 
     let mut matches: Vec<MatchedAdvisory> = Vec::new();
     let mut seen = std::collections::HashSet::new();
@@ -215,6 +226,7 @@ pub fn get_matched_advisories(db: &Database) -> Result<Vec<MatchedAdvisory>> {
             }
         }
 
+        reach.retain_compiled(db, advisory, &mut dependency_instances);
         if dependency_instances.is_empty() {
             continue;
         }
@@ -313,10 +325,20 @@ pub fn get_matched_advisories(db: &Database) -> Result<Vec<MatchedAdvisory>> {
         total = matches.len(),
         confirmed = confirmed,
         conservative = matches.len() - confirmed,
+        not_compiled = reach.excluded.len(),
         "OSV matching: final results"
     );
 
-    Ok(matches)
+    let mut excluded = reach.excluded;
+    excluded.sort_by(|a, b| {
+        (&a.advisory_id, &a.project_path, &a.installed_version).cmp(&(
+            &b.advisory_id,
+            &b.project_path,
+            &b.installed_version,
+        ))
+    });
+    excluded.dedup();
+    Ok((matches, excluded))
 }
 
 fn normalize_project_path(path: &str) -> String {

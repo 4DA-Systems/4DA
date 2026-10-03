@@ -42,12 +42,22 @@
 //! nothing". Cargo missing, a stale lockfile, a cold `--offline` registry, a
 //! held package-cache lock: all of them mean unknown.
 //!
+//! # Features, for advisory reachability
+//!
+//! The same run also records each crate's RESOLVED feature set (`{f}` in the
+//! tree format). A crate can be compiled while the module an advisory names is
+//! not: atlas's bridge builds `rmcp` 1.7.0 with only its server features, so
+//! the OAuth-client file three of rmcp's four 2026-09 advisories live in is
+//! `cfg`-gated out of the build. [`cached_crate_features`] hands that set to
+//! `osv::reachability`, which evaluates the gates. It reads the cache only and
+//! never spawns cargo, so the matcher stays cheap; no cache means unknown.
+//!
 //! Mirrors `mcp-4da-server/src/live/cargo-platform.ts`, which resolves the
 //! same predicate for the MCP server's `vulnerability_scan`. The shared
 //! definition of "platform-inactive" is documented in
 //! [`crate::platform_filter`].
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 use std::io::Read;
 use std::path::Path;
 use std::process::Stdio;
@@ -73,7 +83,11 @@ const MAX_TREE_OUTPUT_BYTES: usize = 32 * 1024 * 1024;
 /// Bumped when the cache VALUE shape or the resolution mechanism changes, so
 /// an upgrade re-resolves instead of trusting a verdict a different
 /// definition produced.
-const CACHE_VERSION: u32 = 1;
+///
+/// v2 (2026-10-03): adds `features`, and keys the entry by the normalised
+/// project path so the matcher, which only has the DB's lowercased path,
+/// finds it.
+const CACHE_VERSION: u32 = 2;
 
 /// One cached answer, keyed in `kv_store` by project path.
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -83,6 +97,16 @@ struct CachedResolve {
     lock_hash: String,
     /// Lowercased crate names the host build resolves.
     resolved: Vec<String>,
+    /// `name@version` -> the features cargo resolved for that copy (the union
+    /// when the host and target builds resolve it differently).
+    #[serde(default)]
+    features: BTreeMap<String, Vec<String>>,
+}
+
+/// What one `cargo tree` run answers.
+struct Resolve {
+    names: HashSet<String>,
+    features: BTreeMap<String, BTreeSet<String>>,
 }
 
 /// Lowercased names of the crates `dir`'s Cargo project compiles on THIS
@@ -99,17 +123,52 @@ pub(crate) fn host_resolved_crates(db: &Database, dir: &Path) -> Option<HashSet<
     let cache_key = cache_key_for(dir);
 
     if let Some(hit) = read_cache(db, &cache_key, &lock_hash) {
-        return Some(hit);
+        return Some(hit.resolved.into_iter().collect());
     }
 
-    let resolved = parse_tree_names(&run_cargo_tree(dir)?);
+    let stdout = run_cargo_tree(dir)?;
+    let resolve = Resolve {
+        names: parse_tree_names(&stdout),
+        features: parse_tree_features(&stdout),
+    };
     // An empty answer for a project that HAS a lockfile is not credible —
     // treat it as unknown rather than declaring the whole tree unreachable.
-    if resolved.is_empty() {
+    if resolve.names.is_empty() {
         return None;
     }
-    write_cache(db, &cache_key, &lock_hash, &resolved);
-    Some(resolved)
+    write_cache(db, &cache_key, &lock_hash, &resolve);
+    Some(resolve.names)
+}
+
+/// The features cargo resolved for each `(name, version)` copy in the
+/// project at `project_path`, from the cache the last ACE scan wrote.
+///
+/// Never runs cargo. `None` (unknown) when there is no entry, or the
+/// `Cargo.lock` changed since it was written: a feature set from another
+/// lockfile would be a guess.
+pub(crate) fn cached_crate_features(
+    db: &Database,
+    project_path: &str,
+) -> Option<HashMap<(String, String), HashSet<String>>> {
+    let dir = Path::new(project_path);
+    let lock_content = std::fs::read(dir.join("Cargo.lock")).ok()?;
+    let cached = read_cache(db, &cache_key_for(dir), &hex_digest(&lock_content))?;
+    if cached.features.is_empty() {
+        return None;
+    }
+    Some(
+        cached
+            .features
+            .into_iter()
+            .filter_map(|(key, feats)| {
+                let (name, version) = key.rsplit_once('@')?;
+                Some((
+                    (name.to_string(), version.to_string()),
+                    feats.into_iter().collect(),
+                ))
+            })
+            .collect(),
+    )
 }
 
 /// The crates `packages` lists that the host build never compiles.
@@ -171,11 +230,17 @@ pub(crate) fn record_unreachable_crates(
     }
 }
 
+/// Keyed by the path as the DB stores it (lowercase, forward slashes, no
+/// trailing slash), so the scan that writes the entry and the matcher that
+/// reads it by a dependency row's `project_path` agree on the key.
 fn cache_key_for(dir: &Path) -> String {
-    format!(
-        "cargo_resolve:{}",
-        hex_digest(dir.to_string_lossy().as_bytes())
-    )
+    let normalised = dir
+        .to_string_lossy()
+        .replace('\\', "/")
+        .to_lowercase()
+        .trim_end_matches('/')
+        .to_string();
+    format!("cargo_resolve:{}", hex_digest(normalised.as_bytes()))
 }
 
 fn hex_digest(bytes: &[u8]) -> String {
@@ -188,7 +253,7 @@ fn hex_digest(bytes: &[u8]) -> String {
     })
 }
 
-fn read_cache(db: &Database, key: &str, lock_hash: &str) -> Option<HashSet<String>> {
+fn read_cache(db: &Database, key: &str, lock_hash: &str) -> Option<CachedResolve> {
     let json = db.get_kv(key).ok().flatten()?;
     let cached: CachedResolve = serde_json::from_str(&json).ok()?;
     if cached.version != CACHE_VERSION || cached.lock_hash != lock_hash {
@@ -199,16 +264,21 @@ fn read_cache(db: &Database, key: &str, lock_hash: &str) -> Option<HashSet<Strin
     if cached.resolved.is_empty() {
         return None;
     }
-    Some(cached.resolved.into_iter().collect())
+    Some(cached)
 }
 
-fn write_cache(db: &Database, key: &str, lock_hash: &str, resolved: &HashSet<String>) {
-    let mut names: Vec<String> = resolved.iter().cloned().collect();
+fn write_cache(db: &Database, key: &str, lock_hash: &str, resolve: &Resolve) {
+    let mut names: Vec<String> = resolve.names.iter().cloned().collect();
     names.sort();
     let payload = CachedResolve {
         version: CACHE_VERSION,
         lock_hash: lock_hash.to_string(),
         resolved: names,
+        features: resolve
+            .features
+            .iter()
+            .map(|(k, v)| (k.clone(), v.iter().cloned().collect()))
+            .collect(),
     };
     match serde_json::to_string(&payload) {
         Ok(json) => {
@@ -268,6 +338,9 @@ fn cargo_tree_command(dir: &Path, target_dir: &Path) -> std::process::Command {
             // against one is reachable; proc-macro deps ride along with normal.
             "--edges",
             "normal,build,dev",
+            // `{p}` is `name vX.Y.Z [(source)]`, `{f}` the resolved features.
+            "--format",
+            "{p}|{f}",
         ])
         .current_dir(target_dir)
         // Cargo's scratch writes land here, never in `dir`.
@@ -355,9 +428,9 @@ fn child_succeeded(child: &mut std::process::Child) -> bool {
     matches!(child.wait(), Ok(status) if status.success())
 }
 
-/// `cargo tree --prefix none` emits one package per line as
-/// `name vX.Y.Z [(source)] [(proc-macro)] [(*)]`. Anything that does not
-/// start with a crate-name token is not a package line.
+/// `cargo tree --prefix none --format "{p}|{f}"` emits one package per line
+/// as `name vX.Y.Z [(source)] [(proc-macro)]|feat,feat [(*)]`. Anything that
+/// does not start with a crate-name token is not a package line.
 fn parse_tree_names(stdout: &str) -> HashSet<String> {
     stdout
         .lines()
@@ -372,9 +445,114 @@ fn parse_tree_names(stdout: &str) -> HashSet<String> {
         .collect()
 }
 
+/// `name@version` -> resolved features, from the same output. A copy built
+/// for both the host (build scripts, proc-macros) and the target appears twice
+/// with different sets; the union is kept, so a feature counts as off only if
+/// no build of that copy turns it on.
+fn parse_tree_features(stdout: &str) -> BTreeMap<String, BTreeSet<String>> {
+    let mut out: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for line in stdout.lines() {
+        let Some((package, feats)) = line.split_once('|') else {
+            continue;
+        };
+        let mut tokens = package.split_whitespace();
+        let (Some(name), Some(version)) = (tokens.next(), tokens.next()) else {
+            continue;
+        };
+        let Some(version) = version.strip_prefix('v') else {
+            continue;
+        };
+        let feats = feats.trim().trim_end_matches("(*)").trim();
+        out.entry(format!("{}@{version}", name.to_lowercase()))
+            .or_default()
+            .extend(
+                feats
+                    .split(',')
+                    .map(str::trim)
+                    .filter(|f| !f.is_empty())
+                    .map(str::to_string),
+            );
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn features_are_read_per_copy_and_unioned_across_host_and_target() {
+        // Shape measured on atlas's bridge, 2026-10-03.
+        let out = "rmcp v1.7.0|base64,default,macros,server,transport-streamable-http-server\n\
+                   rmcp-macros v1.7.0 (proc-macro)|\n\
+                   serde v1.0.228|alloc,default,derive,rc,std\n\
+                   serde v1.0.228|alloc,default,derive,std (*)\n\
+                   fourda v1.0.2 (D:\\4DA\\src-tauri)|default\n";
+        let f = parse_tree_features(out);
+        let rmcp = &f["rmcp@1.7.0"];
+        assert!(rmcp.contains("server"));
+        assert!(
+            !rmcp.contains("auth"),
+            "an off feature is absent, not guessed"
+        );
+        assert!(
+            f["rmcp-macros@1.7.0"].is_empty(),
+            "no features is an empty set"
+        );
+        assert!(
+            f["serde@1.0.228"].contains("rc"),
+            "host and target sets are unioned"
+        );
+        assert!(
+            !f["serde@1.0.228"].contains("(*)"),
+            "the dedupe marker is not a feature"
+        );
+        assert!(
+            f["fourda@1.0.2"].contains("default"),
+            "a path source is skipped over"
+        );
+    }
+
+    #[test]
+    fn the_cache_key_is_the_normalised_path_the_matcher_holds() {
+        // ACE writes with the walked dir; the matcher reads with the DB's
+        // lowercased, forward-slash project_path. They must meet.
+        assert_eq!(
+            cache_key_for(Path::new("D:\\Projects\\Atlas\\apps\\bridge\\src-tauri\\")),
+            cache_key_for(Path::new("d:/projects/atlas/apps/bridge/src-tauri"))
+        );
+    }
+
+    #[test]
+    fn cached_features_are_unknown_without_a_lockfile() {
+        let db = crate::test_utils::test_db();
+        let dir = std::env::temp_dir().join("4da-cargo-features-absent");
+        std::fs::create_dir_all(&dir).ok();
+        assert!(cached_crate_features(&db, &dir.to_string_lossy()).is_none());
+    }
+
+    #[test]
+    fn cached_features_round_trip_and_go_stale_with_the_lockfile() {
+        let db = crate::test_utils::test_db();
+        let dir = std::env::temp_dir().join(format!("4da-cargo-features-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("Cargo.lock"), "version = 4\n").unwrap();
+        let lock_hash = hex_digest(b"version = 4\n");
+        let resolve = Resolve {
+            names: HashSet::from(["rmcp".to_string()]),
+            features: parse_tree_features("rmcp v1.7.0|server,macros\n"),
+        };
+        write_cache(&db, &cache_key_for(&dir), &lock_hash, &resolve);
+
+        let got = cached_crate_features(&db, &dir.to_string_lossy()).expect("cached");
+        let feats = &got[&("rmcp".to_string(), "1.7.0".to_string())];
+        assert!(feats.contains("server") && !feats.contains("auth"));
+
+        // An edited lockfile makes the cached set a guess: unknown.
+        std::fs::write(dir.join("Cargo.lock"), "version = 4\n# edited\n").unwrap();
+        assert!(cached_crate_features(&db, &dir.to_string_lossy()).is_none());
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn parses_package_lines_and_ignores_decorations() {
@@ -415,7 +593,7 @@ mod tests {
         // `lockfile_only_crates` then marks NOTHING inactive. An empty set
         // treated as an answer would bury every advisory in the tree.
         assert!(parse_tree_names("").is_empty());
-        assert!(parse_tree_names("warning: nothing to print.\n").contains("warning:") == false);
+        assert!(!parse_tree_names("warning: nothing to print.\n").contains("warning:"));
     }
 
     #[test]

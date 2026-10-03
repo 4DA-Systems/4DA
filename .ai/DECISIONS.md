@@ -754,6 +754,24 @@
 
 ---
 
+### AD-051: A Cargo Advisory Matches Only When the Build Compiles the Code It Names
+
+- **Decision:** 2026-10-03, operator directive on Screenshot_3845. No schema change, no `PIPELINE_VERSION` bump; the `cargo_resolve` kv cache moves to v2.
+  1. **Feature-level reachability, read not guessed.** The ACE lockfile scan's `cargo tree` run (already offline, `--locked`, run from an app-owned directory) also records each crate copy's resolved feature set (`--format "{p}|{f}"`, host and target sets unioned). `osv::reachability` reads the files an advisory's own text names (`crates/rmcp/src/transport/auth.rs`), parses the crate's registry checkout with `syn` from `lib.rs` down the `mod` chain, and evaluates every `#[cfg(..)]` on the way against that feature set.
+  2. **Only a definite "not compiled" excludes.** A copy is dropped from a match only when EVERY named file is gated off. No named file, a file missing from the checkout, a `cfg` that is not a feature (`unix`, `test`, `target_os`), `#[path]`, a `mod` declared inside a macro, a parse failure, a missing feature cache (or one for another `Cargo.lock`) or a missing checkout all keep the advisory. The matcher reads the cache only and never runs cargo.
+  3. **One place.** It is applied inside `osv::matching::get_matched_advisories`, so Preemption, the brief, the upgrade plan and the morning notification agree. The dropped copies are returned by `get_matched_advisories_with_not_compiled`; the brief lists them as "Not counted" with their ids, and the narration rules forbid presenting them.
+  4. **The brief names a proven parent release.** When a transitive fix needs the parent to move and another project on the machine already runs a newer parent resolved past every advisory (`osv::parent_hint`, the read Preemption's upgrade plan already uses), the fix clause names that release and the evidence: "upgrade victauri-plugin to 0.9.0 (4da/src-tauri already runs it, resolved to rmcp 3.4.1)". Both versions join the brief's allowed version set.
+- **Rationale:** the 2026-10-03 brief led Act now with GHSA-33f5 (rmcp's OAuth-client metadata validation) for atlas's bridge. The bridge builds rmcp 1.7.0 with only its server features (`cargo tree`): three of its four rmcp advisories sit in `transport/auth.rs` (`cfg(feature = "auth")`) and the reqwest client transport (`cfg(feature = "__reqwest")`), which that build does not contain. The one that applies, GHSA-9pj6 (the HTTP server's session table), was buried under the headline. And "upgrade victauri-plugin to pull in rmcp >= 2.1.0" left the user to find the release, although the facts to name it were on disk.
+- **Considered:**
+  - *Classify advisories as client- or server-side from their text:* Rejected. Keyword guesses would bury real findings, and accuracy-first forbids a guess either way. The file path and the crate's own `cfg` gates are evidence.
+  - *Run `cargo metadata` / `cargo tree -e features` from the matcher:* Rejected. It would put a subprocess on Preemption's IPC path. The scan already runs cargo once per lockfile and caches the result against the lockfile hash.
+  - *Demote instead of drop:* Rejected for code the build provably does not contain. That code is not a vulnerability of the project, and a demoted row still costs attention. The brief still names what it did not count.
+  - *Mirror it in the MCP server's `vulnerability_scan` now:* Deferred. That tool has its own TypeScript reader (`mcp-4da-server/src/live/cargo-platform.ts`) and needs the same cache.
+- **Date:** 2026-10-03
+- **Status:** Final
+
+---
+
 ## Decision Template
 
 When adding a new decision:

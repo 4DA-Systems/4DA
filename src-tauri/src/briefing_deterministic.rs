@@ -141,6 +141,22 @@ fn security_line(f: &SecurityFact) -> String {
             fix_clause(&f.package, &s.fix_path)
         ));
     }
+    if !f.not_compiled.is_empty() {
+        let ids: Vec<&str> = f
+            .not_compiled
+            .iter()
+            .map(|n| n.advisory_id.as_str())
+            .collect();
+        line.push_str(&format!(
+            "  - Not counted: {} — the code {} feature-gated out of this build.\n",
+            ids.join(", "),
+            if ids.len() == 1 {
+                "it names is"
+            } else {
+                "they name is"
+            }
+        ));
+    }
     line
 }
 

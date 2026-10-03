@@ -2462,6 +2462,7 @@ dependencies = [
  "serde_json",
  "sha2 0.11.0",
  "sqlite-vec",
+ "syn 2.0.119",
  "sysinfo",
  "tar",
  "tauri",
