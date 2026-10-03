@@ -16,3 +16,18 @@ strictDepBuilds: true
 onlyBuiltDependencies:
   - esbuild
   - workerd
+
+# --- Audit exceptions (read by the pnpm 11 audit in scripts/audit-lockfiles.cjs) ---
+# Only for an advisory with NO published fix. Each entry gives the advisory id,
+# why it cannot be fixed, why it is not reachable here, and a review date.
+auditConfig:
+  ignoreGhsas:
+    # braces <= 3.0.3: stack-exhaustion DoS on deeply nested brace patterns
+    # (raised to high 2026-10-02). No fixed release exists: GitHub lists the
+    # patched version as null, and npm's newest braces is 3.0.3 (2024-05).
+    # Path: @11ty/eleventy 3.1.6 (latest) -> chokidar 3 -> braces, the
+    # build/dev-server file watcher expanding this site's OWN glob patterns.
+    # Nothing attacker-controlled reaches it, and none of it ships (the site
+    # is static output). Remove when braces or chokidar 3 publishes a fix, or
+    # when eleventy moves to chokidar 4. Review by 2026-11-03.
+    - GHSA-vfj7-8cjw-p6xm
