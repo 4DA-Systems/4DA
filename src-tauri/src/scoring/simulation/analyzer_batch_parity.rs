@@ -207,6 +207,7 @@ fn apply_analyzer_batch_layer(results: &mut Vec<crate::SourceRelevance>) -> usiz
     super::super::sort_results(results);
     super::super::dedup_results(results);
     super::super::fuzzy_dedup_results(results);
+    super::super::release_story_dedup_results(results);
     super::super::topic_dedup_results(results);
     super::super::temporal_cluster_results(results);
     super::super::apply_domain_diversity(results);
