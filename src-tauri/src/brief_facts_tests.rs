@@ -608,6 +608,15 @@ fn the_fingerprint_moves_with_the_facts_not_their_order() {
         fingerprint(&[fixed, b.clone()], &[], &[]),
         "a new install changes it"
     );
+    // A new advisory on an already-open package changes it (2026-10-03:
+    // GHSA-c9xm joined rmcp's three and the brief kept saying "3").
+    let mut grown = a.clone();
+    grown.advisory_ids = vec!["GHSA-c9xm-49cp-xcr9".into()];
+    assert_ne!(
+        fingerprint(&[a.clone()], &[], &[]),
+        fingerprint(&[grown], &[], &[]),
+        "a new advisory on an open package is news"
+    );
     // A fixed lower-severity item changes it too (it was left out before).
     let medium = security("m", AlertUrgency::Medium, "1.0.0", "1.0.1");
     assert_ne!(

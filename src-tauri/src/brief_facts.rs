@@ -643,7 +643,14 @@ pub(crate) fn featured_in(content: &str, candidates: &[WorthKnowingCandidate]) -
 /// fix, and the installed versions. Built from the structured fix path, not
 /// its wording, so rephrasing the clause never makes an old fact "NEW".
 pub(crate) fn security_signature(f: &SecurityFact) -> String {
-    let mut parts: Vec<String> = vec![format!("{:?}", f.urgency)];
+    // The advisory set is part of the state: a NEW advisory on a package that
+    // is already open is news. Live 2026-10-03, GHSA-c9xm-49cp-xcr9 joined
+    // rmcp's three during the day; urgency, versions and fix were unchanged, so
+    // the fingerprint held and the brief kept saying "3 advisories" until the
+    // next day.
+    let mut ids: Vec<&str> = f.advisory_ids.iter().map(String::as_str).collect();
+    ids.sort_unstable();
+    let mut parts: Vec<String> = vec![format!("{:?}", f.urgency), ids.join(",")];
     for s in &f.sites {
         parts.push(format!(
             "{}={}->{:?}",
