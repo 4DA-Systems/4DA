@@ -1639,15 +1639,20 @@ pub fn is_morning_briefing_due(state: &MonitoringState) -> bool {
     }
 
     let (target_hour, target_min) = parse_briefing_time(&briefing_time_str);
-    let now_mins = now.hour() * 60 + now.minute();
-    let target_mins = target_hour * 60 + target_min;
-    let mins_since_target = ((now_mins as i32 - target_mins as i32) + 1440) % 1440;
+    morning_window_open(
+        now.hour() * 60 + now.minute(),
+        target_hour * 60 + target_min,
+    )
+}
 
-    if mins_since_target > 1410 {
-        return false;
-    }
-
-    true
+/// Is today's morning brief due at `now_mins` (minutes past local midnight)?
+/// Only at or after the configured time, on the same day. The old rule
+/// computed minutes-since-target modulo a day, so 00:00-07:30 read as "past
+/// 08:00": a 01:31 cold boot on 2026-10-03 fired that day's brief with zero
+/// items, recorded the date as done, and the real 08:00 brief never came. A
+/// late catch-up still works (open the app at 10:00, get the 08:00 brief).
+pub(crate) fn morning_window_open(now_mins: u32, target_mins: u32) -> bool {
+    now_mins >= target_mins
 }
 
 /// Check if morning briefing should fire and generate notification content.
@@ -1701,15 +1706,12 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
     // Case (b) handles: user opens app at 10:00 but briefing time is 08:00.
     // Without catch-up, they'd miss the briefing entirely.
     let (target_hour, target_min) = parse_briefing_time(&briefing_time_str);
-    let now_mins = now.hour() * 60 + now.minute();
-    let target_mins = target_hour * 60 + target_min;
-
-    // Minutes elapsed since the target time (with midnight rollover)
-    let mins_since_target = ((now_mins as i32 - target_mins as i32) + 1440) % 1440;
-
-    // Not yet reached the target time today (more than 30 min before)
-    if mins_since_target > 1410 {
-        // We're BEFORE the target time (1410 = 1440-30, meaning we're 30+ min early)
+    if !morning_window_open(
+        now.hour() * 60 + now.minute(),
+        target_hour * 60 + target_min,
+    ) {
+        // Before today's briefing time — not yesterday's catch-up (see
+        // `morning_window_open`).
         return None;
     }
 
@@ -4525,6 +4527,21 @@ mod tests {
             normalized_advisory_key("axios@1.12.2: 23 known vulnerabilities"),
             normalized_advisory_key("next@3 affected installed versions: 25 known vulnerabilities")
         );
+    }
+
+    #[test]
+    fn morning_brief_is_due_only_at_or_after_its_time_today() {
+        let eight = 8 * 60;
+        // The 2026-10-03 defect: a 01:31 cold boot fired that day's brief.
+        assert!(!morning_window_open(60 + 31, eight));
+        assert!(!morning_window_open(0, eight), "midnight is not past 08:00");
+        assert!(!morning_window_open(7 * 60 + 59, eight));
+        assert!(morning_window_open(eight, eight));
+        assert!(
+            morning_window_open(10 * 60, eight),
+            "late catch-up still fires"
+        );
+        assert!(morning_window_open(23 * 60 + 59, eight));
     }
 
     #[test]

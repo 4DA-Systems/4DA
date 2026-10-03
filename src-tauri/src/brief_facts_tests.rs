@@ -77,7 +77,7 @@ fn a_semver_incompatible_transitive_fix_names_the_parent() {
             by_requirement: false,
         }
     );
-    let clause = fix_clause(&path);
+    let clause = fix_clause("rmcp", &path);
     assert!(clause.contains("upgrade victauri-plugin"), "{clause}");
     assert!(clause.contains("will NOT fix it"), "{clause}");
     // Inferred, not read: the clause must not claim a requirement it never saw.
@@ -147,7 +147,7 @@ fn direct_unknown_and_missing_fixes() {
         fix_path(Some("1.7.0"), Some("2.1.0"), Some(false), None),
         FixPath::ParentUnknown { to: "2.1.0".into() }
     );
-    let no_fix = fix_clause(&FixPath::NoFix);
+    let no_fix = fix_clause("rsa", &FixPath::NoFix);
     assert!(no_fix.contains("no fix published") && !no_fix.contains("bump"));
 }
 
@@ -363,6 +363,44 @@ fn the_prescribed_parent_phrasing_passes_the_version_check() {
         1,
         "a version after the wrong package is still caught"
     );
+}
+
+/// Live 2026-10-03: the model quoted the facts' own fix clause verbatim and
+/// the version check faulted it, because the clause put rmcp's fix after
+/// victauri-plugin's name. Every clause, quoted as-is in an upgrade
+/// sentence, must pass the checker.
+#[test]
+fn every_fix_clause_quoted_verbatim_passes_the_version_check() {
+    let paths = [
+        FixPath::Bump { to: "2.1.0".into() },
+        FixPath::Refresh { to: "2.1.0".into() },
+        FixPath::Parent {
+            parent: "victauri-plugin".into(),
+            parent_version: "0.8.4".into(),
+            to: "2.1.0".into(),
+            by_requirement: false,
+        },
+        FixPath::Parent {
+            parent: "victauri-plugin".into(),
+            parent_version: "0.8.4".into(),
+            to: "2.1.0".into(),
+            by_requirement: true,
+        },
+        FixPath::ParentUnknown { to: "2.1.0".into() },
+        FixPath::Reinstall { to: "2.1.0".into() },
+        FixPath::Update { to: "2.1.0".into() },
+    ];
+    for path in paths {
+        let mut facts = parent_rmcp_facts();
+        facts.security[0].sites[0].fix_path = path.clone();
+        let pf = package_facts(&facts);
+        let sentence = format!(
+            "- **rmcp 1.7.0** (atlas/bridge/src-tauri): {}.",
+            fix_clause("rmcp", &path)
+        );
+        let v = crate::briefing_groundedness::check_factual_claims(&sentence, &pf);
+        assert!(v.is_empty(), "{path:?}: {sentence} -> {v:?}");
+    }
 }
 
 #[test]

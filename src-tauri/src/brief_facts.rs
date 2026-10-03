@@ -348,12 +348,17 @@ pub(crate) struct ParentLink {
     pub requirement: Option<String>,
 }
 
-/// One line of fix advice, worded for both the prompt and the floor.
-pub(crate) fn fix_clause(path: &FixPath) -> String {
+/// One line of fix advice, worded for both the prompt and the floor. Every
+/// version sits right after the name of the package it belongs to: the model
+/// copies this clause, and on 2026-10-03 the old wording ("transitive via
+/// victauri-plugin 0.8.4, ... the fix (>= 2.1.0)") put rmcp's fix after
+/// victauri-plugin's name, so the version check faulted the brief that quoted
+/// it faithfully.
+pub(crate) fn fix_clause(package: &str, path: &FixPath) -> String {
     match path {
-        FixPath::Bump { to } => format!("bump it to >= {to}"),
+        FixPath::Bump { to } => format!("bump {package} to >= {to}"),
         FixPath::Refresh { to } => {
-            format!("transitive; refreshing the lockfile reaches >= {to} (no manifest change)")
+            format!("transitive; refreshing the lockfile reaches {package} >= {to} (no manifest change)")
         }
         FixPath::Parent {
             parent,
@@ -361,8 +366,8 @@ pub(crate) fn fix_clause(path: &FixPath) -> String {
             to,
             by_requirement: true,
         } => format!(
-            "transitive via {parent} {parent_version}, whose requirement excludes the fix (>= {to}); \
-             a lockfile refresh will NOT fix it: upgrade {parent}"
+            "transitive; {parent} {parent_version} requires a {package} line that excludes the fix \
+             ({package} >= {to}), so a lockfile refresh will NOT fix it: upgrade {parent}"
         ),
         FixPath::Parent {
             parent,
@@ -370,18 +375,19 @@ pub(crate) fn fix_clause(path: &FixPath) -> String {
             to,
             by_requirement: false,
         } => format!(
-            "transitive via {parent} {parent_version}; the fix (>= {to}) is a semver-incompatible jump that \
-             {parent}'s current line does not take, so a lockfile refresh will NOT fix it: upgrade {parent}"
+            "transitive; {parent} {parent_version} stays on an older {package} line, and the fix \
+             ({package} >= {to}) is a semver-incompatible jump, so a lockfile refresh will NOT fix it: \
+             upgrade {parent}"
         ),
         FixPath::ParentUnknown { to } => format!(
-            "transitive; the fix (>= {to}) is a semver-incompatible jump, so a lockfile refresh will NOT \
-             reach it: upgrade the dependency that pulls it in"
+            "transitive; the fix ({package} >= {to}) is a semver-incompatible jump, so a lockfile \
+             refresh will NOT reach it: upgrade the dependency that pulls {package} in"
         ),
         FixPath::Reinstall { to } => format!(
-            "the lockfile already pins {to} but node_modules still runs the old copy: reinstall"
+            "the lockfile already pins {package} {to} but node_modules still runs the old copy: reinstall"
         ),
         FixPath::NoFix => "no fix published: pin, patch locally, replace, or accept the risk".to_string(),
-        FixPath::Update { to } => format!("update to >= {to}"),
+        FixPath::Update { to } => format!("update {package} to >= {to}"),
     }
 }
 
@@ -634,15 +640,16 @@ pub(crate) fn featured_in(content: &str, candidates: &[WorthKnowingCandidate]) -
 }
 
 /// What, if it changed, makes a security fact news again: the urgency, the
-/// fix, and the installed versions.
+/// fix, and the installed versions. Built from the structured fix path, not
+/// its wording, so rephrasing the clause never makes an old fact "NEW".
 pub(crate) fn security_signature(f: &SecurityFact) -> String {
     let mut parts: Vec<String> = vec![format!("{:?}", f.urgency)];
     for s in &f.sites {
         parts.push(format!(
-            "{}={}->{}",
+            "{}={}->{:?}",
             s.label,
             s.installed.as_deref().unwrap_or("?"),
-            fix_clause(&s.fix_path)
+            s.fix_path
         ));
     }
     parts.join("|")

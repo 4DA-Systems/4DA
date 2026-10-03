@@ -138,7 +138,7 @@ fn security_line(f: &SecurityFact) -> String {
         line.push_str(&format!(
             "  - {} on {installed}{dev}: {}\n",
             s.label,
-            fix_clause(&s.fix_path)
+            fix_clause(&f.package, &s.fix_path)
         ));
     }
     line
