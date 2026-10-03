@@ -1590,6 +1590,15 @@ fn test_shared_dependency_names_a_cluster_without_a_shared_term() {
 }
 
 #[test]
+fn test_idiom_filler_never_labels() {
+    // Live 2026-10-03: an authorization cluster labelled "pass".
+    let kw = labels::extract_title_keywords("An async job is not a free pass on authorization");
+    assert!(!kw.contains(&"pass".to_string()), "{kw:?}");
+    assert!(!kw.contains(&"free".to_string()), "{kw:?}");
+    assert!(kw.contains(&"authorization".to_string()), "{kw:?}");
+}
+
+#[test]
 fn test_generic_words_never_label_but_nextjs_does() {
     // Live: "tests · never · next" and "concurrent · building".
     let kw = labels::extract_title_keywords(
