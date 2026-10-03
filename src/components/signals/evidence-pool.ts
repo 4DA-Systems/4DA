@@ -25,6 +25,9 @@ export type EvidencePool = 'affects_you' | 'in_orbit' | 'ambient';
  */
 const ORBIT_DOMAIN_THRESHOLD = 0.7;
 
+/** Registry advisory sources: one row per published advisory. */
+const ADVISORY_SOURCES = new Set(['cve', 'osv']);
+
 /**
  * True when the item has a verifiable edge to the user's own machine state —
  * a matched dependency, or a security advisory the backend confirmed affects
@@ -43,7 +46,12 @@ export function isGrounded(r: SourceRelevance): boolean {
     // doesn't name the package still surfaces).
     r.is_critical_alert === true ||
     r.applicability === 'affected' ||
-    r.applicability === 'likely_affected' ||
+    // `likely_affected` is a version-path signal only on a REGISTRY advisory
+    // row (cve / osv). On an editorial security story it comes from a weak,
+    // uncorroborated name match — live 2026-10-04, "Google Rewrites Critical C
+    // Dependencies to Rust…" (HN, no matched dependency) sat in Affects You.
+    // Editorial stories earn the pool through grounding + a dependency event.
+    (r.applicability === 'likely_affected' && ADVISORY_SOURCES.has(r.source_type ?? '')) ||
     // Canonical dependency grounding: the backend's single verdict (strong,
     // non-dev, non-ambiguous edge). NOT matched_deps.length — a bare word-like
     // subterm hit (e.g. "windows" from windows-sys on a "Windows 0-day" OS
