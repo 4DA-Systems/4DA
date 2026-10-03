@@ -60,9 +60,14 @@ jobs:
       # future outage. OIDC needs npm >= 11.5.1 (Node 22 bundles npm 10) and
       # the `id-token: write` permission this job already has. Prerequisite,
       # one-time, on npmjs.com: package @4da/mcp-server -> Settings ->
-      # Trusted Publisher -> GitHub Actions, repository 4DA-Systems/4DA,
-      # workflow publish-mcp-server.yml. Until that is configured this step
-      # fails with an auth error, same as the dead token did.
+      # Trusted Publisher -> GitHub Actions, organization 4DA-Systems,
+      # repository 4DA, workflow publish-mcp-server.yml, environment release
+      # (binding the environment means only this approval-gated job can
+      # publish). Then Settings -> Publishing access -> "Require two-factor
+      # authentication and disallow tokens": trusted publishing keeps working
+      # (it uses OIDC, not a token) and no token can publish the package.
+      # Until the Trusted Publisher is configured this step fails with an auth
+      # error, same as the dead token did.
       #
       # Idempotent: a partial failure after npm publish (e.g. the registry
       # step) must be retryable by re-pushing the tag without a version bump.
@@ -70,6 +75,7 @@ jobs:
       # — to publish an already-tagged version through THIS flow, delete and
       # re-create the tag on a commit that contains this workflow revision.
       - name: Publish to npm via Trusted Publishing (skip if version already live)
+        id: npm_publish
         run: |
           PKG_VERSION=$(node -p "require('./package.json').version")
           if npm view "@4da/mcp-server@$PKG_VERSION" version >/dev/null 2>&1; then
@@ -78,7 +84,31 @@ jobs:
             npm install -g npm@11
             npm --version
             npm publish --access public
+            echo "published=true" >> "$GITHUB_OUTPUT"
           fi
+
+      # A version published by this job must carry what trusted publishing
+      # promises: a SLSA provenance attestation and a trusted-publisher
+      # identity. dependency_check (and pnpm's trustPolicy) treat a release
+      # that lacks them after one that had them as a trust DOWNGRADE, so a
+      # silently unattested publish would make our own tool flag us. Fail
+      # loudly instead. Retries cover registry propagation.
+      - name: Verify the published version carries provenance and a trusted publisher
+        if: steps.npm_publish.outputs.published == 'true'
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          for attempt in 1 2 3 4 5 6 7 8 9 10; do
+            PRED=$(npm view "@4da/mcp-server@$PKG_VERSION" dist.attestations.provenance.predicateType 2>/dev/null || true)
+            TP=$(npm view "@4da/mcp-server@$PKG_VERSION" _npmUser.trustedPublisher.id 2>/dev/null || true)
+            if [ -n "$PRED" ] && [ -n "$TP" ]; then
+              echo "provenance: $PRED | trusted publisher: $TP"
+              exit 0
+            fi
+            echo "attempt $attempt: provenance='$PRED' trustedPublisher='$TP' — waiting for the registry"
+            sleep 15
+          done
+          echo "::error::@4da/mcp-server@$PKG_VERSION was published without provenance or a trusted-publisher identity. Check the npm Trusted Publisher configuration (repository 4DA-Systems/4DA, workflow publish-mcp-server.yml, environment release)."
+          exit 1
 
       - name: Install mcp-publisher (version-pinned + SHA-256 verified)
         # Was: `curl -L .../releases/latest/download/... | tar xz mcp-publisher`
