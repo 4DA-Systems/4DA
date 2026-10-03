@@ -728,9 +728,11 @@ pub(crate) async fn apply_llm_reranking(
                     breakdown.disagreement = reconciled.disagreement;
                 }
 
-                if !judgment.reasoning.is_empty()
-                    && judgment.reasoning != "No judgment provided by LLM"
-                {
+                if crate::reconciler::advisor_explains(
+                    &judgment.reasoning,
+                    judgment.relevant,
+                    result.relevant,
+                ) {
                     result.explanation = Some(judgment.reasoning.clone());
                 }
 

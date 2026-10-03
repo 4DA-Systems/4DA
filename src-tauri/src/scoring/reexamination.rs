@@ -59,7 +59,9 @@ const CONVERGE_MAX_CHUNKS: usize = 12;
 /// 1 (2026-10-02): a project that builds the package is not a pin
 /// (`release_ownership`), and a grade that says "not news" holds the row at
 /// the already-installed ceiling.
-pub(crate) const RELEASE_GRADE_RULES: u32 = 1;
+/// 2 (2026-10-03): a dormant project (`ace::dormancy`, no activity in
+/// `DORMANT_AFTER_DAYS`) is not a pin either.
+pub(crate) const RELEASE_GRADE_RULES: u32 = 2;
 
 /// Stable hash of the developer's pins: every included project's (path, package,
 /// version, direct, dev), sorted, plus [`RELEASE_GRADE_RULES`]. `DefaultHasher` is

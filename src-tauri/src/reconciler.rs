@@ -138,9 +138,32 @@ fn detect_disagreement(
     None
 }
 
+/// Whether the advisor's reasoning may become the item's explanation. Only
+/// when it AGREES with what the user sees: the advisor called the item
+/// relevant, or its hard floor removed the item. A skeptical advisor on an
+/// item the pipeline keeps is a disagreement — `breakdown.disagreement` shows
+/// it — not the item's explanation. Live 2026-10-03: 15 surfaced releases
+/// (e.g. "crates.io: jsonwebtoken v11.1.0", graded Breaking for a project)
+/// read "This is a generic crate landing page … provides no new information".
+pub(crate) fn advisor_explains(reasoning: &str, advisor_relevant: bool, shown: bool) -> bool {
+    !reasoning.is_empty()
+        && reasoning != "No judgment provided by LLM"
+        && (advisor_relevant || !shown)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_skeptical_advisor_never_explains_an_item_it_does_not_remove() {
+        let why = "This is a generic crate landing page; it provides no new information.";
+        assert!(!advisor_explains(why, false, true), "shown + skeptical");
+        assert!(advisor_explains(why, false, false), "removed by the floor");
+        assert!(advisor_explains("Directly affects your stack.", true, true));
+        assert!(!advisor_explains("", true, true));
+        assert!(!advisor_explains("No judgment provided by LLM", true, true));
+    }
 
     /// Tiny helper to build an AdvisorSignal with only the fields the
     /// reconciler reads. Keeps test setup noise low.

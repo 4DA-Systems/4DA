@@ -282,6 +282,43 @@ fn loader_reads_every_project_in_the_registry_language_only() {
 }
 
 #[test]
+fn a_dormant_project_is_not_a_release_pin() {
+    // Live 2026-10-03: a scratch folder untouched since April graded
+    // `base64 0.23.1` a "Breaking upgrade" for itself.
+    let db = crate::test_utils::test_db();
+    db.store_dependency("/proj/live", "base64", Some("0.23.1"), "rust", false, None)
+        .unwrap();
+    db.store_dependency(
+        "/proj/scratch",
+        "base64",
+        Some("0.22.1"),
+        "rust",
+        false,
+        None,
+    )
+    .unwrap();
+    {
+        let conn = db.conn.lock();
+        // ACE owns detected_projects; the bare test schema does not carry it.
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS detected_projects (
+               id INTEGER PRIMARY KEY AUTOINCREMENT,
+               path TEXT NOT NULL UNIQUE, name TEXT NOT NULL, last_activity TEXT);
+             INSERT INTO detected_projects (path, name, last_activity) VALUES
+               ('/proj/scratch', 'scratch', '2026-04-28T19:28:43+00:00'),
+               ('/proj/live', 'live', strftime('%Y-%m-%dT%H:%M:%S+00:00', 'now'));",
+        )
+        .unwrap();
+    }
+    let pins = load_pins(&db, "base64", "rust");
+    assert_eq!(pins.len(), 1, "only the live project pins: {pins:?}");
+    assert_eq!(pins[0].0, "/proj/live");
+    let g = grade_registry_release(&db, "crates_io", "crates.io: base64 v0.23.1", "")
+        .expect("the live pin grades the row");
+    assert!(g.not_news(), "every live installer already runs 0.23.1");
+}
+
+#[test]
 fn loader_reads_the_transitive_flag() {
     let db = crate::test_utils::test_db();
     db.store_dependency("/proj/app", "sha2", Some("0.10.9"), "rust", false, None)
