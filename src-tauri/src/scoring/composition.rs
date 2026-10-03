@@ -226,6 +226,7 @@ mod tests {
             dep_match_score: 0.0,
             matched_deps: vec![],
             strongly_grounded: false,
+            dependency_event: false,
             degraded_inputs: vec![],
             domain_relevance: 1.0,
             content_quality_mult: 1.0,

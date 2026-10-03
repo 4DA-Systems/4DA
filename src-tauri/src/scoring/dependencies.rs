@@ -561,7 +561,7 @@ const COMMON_ENGLISH_WORDS: &[&str] = &[
 /// "dispatch" and "0-day" on "10-day" — every one of them a free corroboration
 /// for whatever package name sat nearby.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum MarkerFit {
+pub(super) enum MarkerFit {
     /// A whole token: a word boundary on BOTH sides.
     Token,
     /// A word-start stem: a boundary on the LEFT only, so the stem covers its
@@ -609,7 +609,12 @@ const LANGUAGE_CONTEXT_MARKERS: &[(&str, MarkerFit)] = &[
 /// The boundary tests read the FULL text, not the window slice: a window edge
 /// that cuts "important" after "import" must not manufacture a token end.
 /// `start`/`end` are snapped to char boundaries here.
-fn markers_in_window(text: &str, start: usize, end: usize, markers: &[(&str, MarkerFit)]) -> bool {
+pub(super) fn markers_in_window(
+    text: &str,
+    start: usize,
+    end: usize,
+    markers: &[(&str, MarkerFit)],
+) -> bool {
     let start = snap_to_char_boundary(text, start.min(text.len()), false);
     let end = snap_to_char_boundary(text, end.min(text.len()), true);
     let Some(window) = text.get(start..end) else {
@@ -1097,7 +1102,7 @@ fn is_package_boundary_char(c: char) -> bool {
 /// are NOT all the same length — `normalize_package_name` strips a leading `@`,
 /// so `@foo` yields the forms `["foo", "@foo"]`. A caller that assumes one
 /// uniform `name_len` reads past (or into) the name it matched.
-fn package_name_positions(
+pub(super) fn package_name_positions(
     text: &str,
     package_name: &str,
     normalized_name: &str,
@@ -1268,7 +1273,7 @@ fn has_adjacent_version_literal(text: &str, positions: &[(usize, usize)]) -> boo
 /// react's version. (Bare integers do pass `version_triplet`, so the
 /// confidence-multiplier path in `compare_version_in_content` deliberately
 /// keeps its pre-existing laxity; grounding PROOF is held to more.)
-fn version_literal_at_start(after_name: &str) -> bool {
+pub(super) fn version_literal_at_start(after_name: &str) -> bool {
     for (i, ch) in after_name.char_indices() {
         if i >= 20 {
             return false;

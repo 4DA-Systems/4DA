@@ -3863,6 +3863,27 @@ pub(crate) fn score_item(
     // (advisory_id / fixed_version / affected_versions / dep_path /
     // installed_version / is_version_affected extracted above, before
     // necessity, so the version verdict informs it.)
+    // ── Dependency-event claim (display only) ─────────────────────────
+    // Is this item about something happening TO a dependency — a release, a
+    // breaking change, a vulnerability — or an article that merely uses it?
+    // Decides the "Affects You" claim and the explanation's verb. It reads
+    // values already computed above and feeds NO score, rank, verdict,
+    // necessity or priority (AD-034: no PIPELINE_VERSION bump).
+    let dependency_event =
+        super::dependency_event::is_dependency_event(&super::dependency_event::EventInputs {
+            source_type: input.source_type,
+            title: input.title,
+            content: input.content,
+            registry_advisory,
+            security_confirmed,
+            applicability: applicability.as_deref(),
+            via_registry_subject: grounding.via_registry_subject,
+            release_class,
+            already_installed_release,
+            strongly_grounded: grounding.strong,
+            deps: &raw.matched_deps,
+        });
+
     let sec_affected_project_count = if security_confirmed {
         security_lane.exposed_projects.len() as u32
     } else {
@@ -3917,6 +3938,7 @@ pub(crate) fn score_item(
             installed_version: installed_version.as_deref(),
             via_registry_subject: grounding.via_registry_subject,
             registry_advisory,
+            dependency_event,
             release_chain: release_grade
                 .as_ref()
                 .and_then(super::release_grade::ReleaseGrade::chain_text),
@@ -3945,6 +3967,7 @@ pub(crate) fn score_item(
         dep_match_score: raw.dep_match_score,
         matched_deps: matched_dep_names,
         strongly_grounded: grounding.strong || security_confirmed,
+        dependency_event,
         degraded_inputs,
         // Categorical ceiling for post-pipeline writers: a capped item
         // (ungrounded registry release, zero-engagement UGC) must never

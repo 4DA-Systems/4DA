@@ -18,6 +18,7 @@ function item(partial: {
   dep_match_score?: number;
   matched_deps?: string[];
   strongly_grounded?: boolean;
+  dependency_event?: boolean;
   is_critical_alert?: boolean;
   top_score?: number;
   relevant?: boolean;
@@ -35,6 +36,7 @@ function item(partial: {
       dep_match_score: partial.dep_match_score ?? 0,
       matched_deps: partial.matched_deps ?? [],
       strongly_grounded: partial.strongly_grounded ?? false,
+      dependency_event: partial.dependency_event,
     },
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
   } as any as SourceRelevance;
@@ -152,6 +154,24 @@ describe('findMostCriticalSave hero selection', () => {
       strongly_grounded: false,
     });
     expect(findMostCriticalSave([phantom])).toBeNull();
+  });
+  it('does not hero a grounded tutorial with no dependency event', () => {
+    // Grounded (it names the package) but nothing is happening TO it — the
+    // same claim rule as the Signal tab's Affects You pool (2026-10-04).
+    const tutorial = item({
+      signal_type: 'tool_discovery',
+      matched_deps: ['react'],
+      strongly_grounded: true,
+      dependency_event: false,
+    });
+    expect(findMostCriticalSave([tutorial])).toBeNull();
+    const release = item({
+      signal_type: 'tool_discovery',
+      matched_deps: ['tauri'],
+      strongly_grounded: true,
+      dependency_event: true,
+    });
+    expect(findMostCriticalSave([tutorial, release])).toBe(release);
   });
 });
 

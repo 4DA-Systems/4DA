@@ -21,6 +21,9 @@ mod dedup;
 #[cfg(test)]
 mod dep_axis_live_verify;
 mod dependencies;
+mod dependency_event;
+#[cfg(test)]
+mod dependency_event_live;
 #[cfg(test)]
 mod drain_cost_profile;
 pub(crate) mod epochs;

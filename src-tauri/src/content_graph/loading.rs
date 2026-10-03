@@ -52,18 +52,36 @@ const RESERVE_RESEARCH: usize = 8;
 /// had judged ungrounded — so the map contradicted Key Signals.
 ///
 /// Mirrors the frontend predicate:
-/// - `strongly_grounded = true` (strong, non-ambiguous, corroborated dep edge),
-///   or a backend-confirmed affected version (`is_version_affected = true`);
+/// - a backend-confirmed affected version (`is_version_affected = true`), or
+/// - `strongly_grounded = true` (strong, non-ambiguous, corroborated dep edge)
+///   AND a dependency EVENT (`dependency_event = true`, 2026-10-04): a
+///   release, a breaking change, a vulnerability — not a tutorial that merely
+///   uses the package ("Progressive Hydration in React");
 /// - EXCEPT a confirmed not-affected advisory (`is_version_affected = false`
 ///   → `applicability = "not_affected"`), which never occupies the stack pool.
+///
+/// Breakdowns stored before the event claim existed carry no
+/// `dependency_event`. For REGISTRY rows (releases and osv/cve advisories) the
+/// old grounding-only rule stands: a grounded registry row is a release of, or
+/// an advisory about, the user's own dependency by construction, and only the
+/// release grade can narrow that (it re-stores on the next rescore). For
+/// EDITORIAL rows a missing field does NOT glow: grounding alone is exactly the
+/// tutorial false positive this claim removes, and asserting it for the days
+/// until the row re-stores would put the map back in disagreement with
+/// Signal, which recomputes the claim every cycle.
 ///
 /// Items with no persisted breakdown evaluate to NULL → not grounded (the
 /// honest default: no verdict, no claim). Any grounding false positive (e.g.
 /// ambiguous company names like "openai") is a scoring-side fix that reaches
 /// both surfaces at once — the graph deliberately has no opinion of its own.
 pub(super) const GROUNDED_SQL: &str = "(SELECT
-           (COALESCE(json_extract(e.breakdown, '$.breakdown.strongly_grounded'), 0) = 1
-            OR json_extract(e.breakdown, '$.breakdown.is_version_affected') = 1)
+           (json_extract(e.breakdown, '$.breakdown.is_version_affected') = 1
+            OR (COALESCE(json_extract(e.breakdown, '$.breakdown.strongly_grounded'), 0) = 1
+                AND (json_extract(e.breakdown, '$.breakdown.dependency_event') = 1
+                     OR (json_extract(e.breakdown, '$.breakdown.dependency_event') IS NULL
+                         AND si.source_type IN (\
+'osv','cve','npm_registry','npm','crates_io','crates','pypi','go_modules','go',\
+'maven','nuget','packagist','rubygems','cocoapods')))))
            AND COALESCE(json_extract(e.breakdown, '$.breakdown.is_version_affected'), 1) != 0
          FROM scoring_explanations e WHERE e.source_item_id = si.id)";
 
