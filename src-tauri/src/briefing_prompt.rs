@@ -135,7 +135,7 @@ fn render_security(n: usize, f: &SecurityFact) -> String {
             "   - {}: {installed}{} — fix: {}\n",
             s.label,
             site_notes(s.dev_only, s.scratch, s.dormant_days),
-            fix_clause(&s.fix_path)
+            fix_clause(&f.package, &s.fix_path)
         ));
     }
     if let Some(date) = &f.first_seen {
@@ -209,7 +209,7 @@ pub(crate) fn render_facts_for_prompt(facts: &BriefFacts) -> String {
                 labels.join(", "),
                 f.sites
                     .first()
-                    .map(|s| fix_clause(&s.fix_path))
+                    .map(|s| fix_clause(&f.package, &s.fix_path))
                     .unwrap_or_default(),
                 status_label(&f.status),
             ));
