@@ -132,6 +132,21 @@ pub struct StoredAdvisory {
     pub severity_label: Option<String>,
 }
 
+/// A version-confirmed copy an advisory does NOT apply to: every source file
+/// the advisory names is `cfg`-gated out of that project's build (AD-051,
+/// `osv::reachability`). Kept so a surface can say why it is not listed.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NotCompiledMatch {
+    pub advisory_id: String,
+    pub summary: String,
+    pub package_name: String,
+    pub ecosystem: String,
+    pub project_path: String,
+    pub installed_version: Option<String>,
+    /// The crate-relative files the advisory names, all gated off.
+    pub files: Vec<String>,
+}
+
 /// An advisory matched to a user dependency with version verification.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MatchedAdvisory {

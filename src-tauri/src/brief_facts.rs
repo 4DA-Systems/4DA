@@ -85,6 +85,10 @@ pub(crate) enum FixPath {
         parent_version: String,
         to: String,
         by_requirement: bool,
+        /// A newer `parent` another project on this machine already runs,
+        /// resolved to a copy of the package no known advisory affects
+        /// (`osv::parent_hint`). `None` when no lockfile here proves one.
+        proven: Option<ProvenParent>,
     },
     /// Transitive, the jump is semver-incompatible, the parent is unknown.
     ParentUnknown { to: String },
@@ -95,6 +99,24 @@ pub(crate) enum FixPath {
     NoFix,
     /// A fix exists, scope unknown.
     Update { to: String },
+}
+
+/// Lockfile proof that a parent release clears the package: the project
+/// labelled `label` runs `parent` `parent_version` resolved to the package at
+/// `child_version`. Read from the user's own lockfiles, never a registry.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct ProvenParent {
+    pub parent_version: String,
+    pub child_version: String,
+    pub label: String,
+}
+
+/// An advisory on this package that the fact's projects do not compile: every
+/// source file it names is feature-gated out of their build (AD-051).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct NotCompiledNote {
+    pub advisory_id: String,
+    pub summary: String,
 }
 
 /// One project's copy of a vulnerable package.
@@ -123,6 +145,9 @@ pub(crate) struct SecurityFact {
     pub advisory_ids: Vec<String>,
     pub title: String,
     pub sites: Vec<SecuritySite>,
+    /// Advisories on the package that these projects' builds do not compile,
+    /// so the brief can say why they are not counted.
+    pub not_compiled: Vec<NotCompiledNote>,
     pub first_seen: Option<String>,
     pub status: FactStatus,
 }
@@ -314,6 +339,7 @@ pub(crate) fn fix_path(
                                 parent_version: link.direct_version.clone(),
                                 to,
                                 by_requirement: true,
+                                proven: None,
                             }
                         }
                         None => {}
@@ -328,6 +354,7 @@ pub(crate) fn fix_path(
                         parent_version: link.direct_version.clone(),
                         to,
                         by_requirement: false,
+                        proven: None,
                     },
                     None => FixPath::ParentUnknown { to },
                 },
@@ -365,19 +392,23 @@ pub(crate) fn fix_clause(package: &str, path: &FixPath) -> String {
             parent_version,
             to,
             by_requirement: true,
+            proven,
         } => format!(
             "transitive; {parent} {parent_version} requires a {package} line that excludes the fix \
-             ({package} >= {to}), so a lockfile refresh will NOT fix it: upgrade {parent}"
+             ({package} >= {to}), so a lockfile refresh will NOT fix it: upgrade {parent}{}",
+            proven_clause(package, proven.as_ref())
         ),
         FixPath::Parent {
             parent,
             parent_version,
             to,
             by_requirement: false,
+            proven,
         } => format!(
             "transitive; {parent} {parent_version} stays on an older {package} line, and the fix \
              ({package} >= {to}) is a semver-incompatible jump, so a lockfile refresh will NOT fix it: \
-             upgrade {parent}"
+             upgrade {parent}{}",
+            proven_clause(package, proven.as_ref())
         ),
         FixPath::ParentUnknown { to } => format!(
             "transitive; the fix ({package} >= {to}) is a semver-incompatible jump, so a lockfile \
@@ -389,6 +420,21 @@ pub(crate) fn fix_clause(package: &str, path: &FixPath) -> String {
         FixPath::NoFix => "no fix published: pin, patch locally, replace, or accept the risk".to_string(),
         FixPath::Update { to } => format!("update {package} to >= {to}"),
     }
+}
+
+/// The evidence that names the parent release to move to. Live 2026-10-03
+/// (Screenshot_3845): "upgrade victauri-plugin to pull in rmcp >= 2.1.0" left
+/// the user to find the release, while 4da/src-tauri already ran
+/// victauri-plugin 0.9.0 against rmcp 3.4.1. It follows "upgrade {parent}",
+/// so each version sits after its own package, as the version check
+/// (`check_factual_claims`, nearest preceding package) requires.
+fn proven_clause(package: &str, proven: Option<&ProvenParent>) -> String {
+    proven.map_or_else(String::new, |p| {
+        format!(
+            " to {} ({} already runs it, resolved to {package} {})",
+            p.parent_version, p.label, p.child_version
+        )
+    })
 }
 
 /// Short project label that names the repository: `atlas/bridge/src-tauri`,
@@ -689,10 +735,15 @@ pub(crate) fn package_facts(facts: &BriefFacts) -> Vec<crate::briefing_groundedn
                     parent,
                     parent_version,
                     to,
+                    proven,
                     ..
                 } => {
                     add(&f.package, Some(to));
                     add(parent, Some(parent_version));
+                    if let Some(p) = proven {
+                        add(parent, Some(&p.parent_version));
+                        add(&f.package, Some(&p.child_version));
+                    }
                 }
                 FixPath::NoFix => {}
             }
@@ -735,6 +786,43 @@ pub(crate) fn package_facts(facts: &BriefFacts) -> Vec<crate::briefing_groundedn
             },
         )
         .collect()
+}
+
+/// Remove a narrated section the facts say has nothing new to report. Live
+/// 2026-10-04 (first dogfood morning): with every upgrade already reported,
+/// the model still wrote "## Upgrades to plan / No new upgrade facts today —
+/// all 8 tracked upgrades ... are unchanged", despite the rules to omit an
+/// empty section and never narrate 4DA itself. Such a section can only hold
+/// filler, so it is cut deterministically instead of by one more prompt rule.
+pub(crate) fn drop_sections_without_news(brief: &str, facts: &BriefFacts) -> String {
+    let mut empty: Vec<&str> = Vec::new();
+    if !facts.security.iter().any(|f| f.status.is_new()) {
+        empty.push("## act now");
+    }
+    if !facts.upgrades.iter().any(|u| u.status.is_new()) {
+        empty.push("## upgrades to plan");
+    }
+    if empty.is_empty() {
+        return brief.to_string();
+    }
+    let mut out: Vec<&str> = Vec::new();
+    let mut skipping = false;
+    for line in brief.lines() {
+        if line.starts_with("## ") {
+            let heading = line.trim().to_lowercase();
+            skipping = empty.iter().any(|h| heading == *h);
+        }
+        if !skipping {
+            out.push(line);
+        }
+    }
+    let joined = out.join("\n");
+    let trimmed = joined.trim_start_matches('\n');
+    if trimmed.trim().is_empty() {
+        // Never turn a brief into nothing: keep the model's text.
+        return brief.to_string();
+    }
+    trimmed.to_string()
 }
 
 /// The retry instruction after a version fault. It says WHICH package each

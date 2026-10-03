@@ -166,11 +166,37 @@ fn rmcp_fact(status: FactStatus) -> SecurityFact {
                 parent_version: "0.8.4".into(),
                 to: "2.1.0".into(),
                 by_requirement: false,
+                proven: None,
             },
         }],
+        not_compiled: vec![],
         first_seen: Some("2026-09-16".into()),
         status,
     }
+}
+
+/// AD-051: advisories the project's build does not compile are listed as
+/// "Not counted" with their ids, and the rules forbid presenting them.
+#[test]
+fn not_compiled_advisories_are_shown_as_not_counted() {
+    let mut fact = rmcp_fact(FactStatus::New);
+    fact.not_compiled = vec![crate::brief_facts::NotCompiledNote {
+        advisory_id: "GHSA-33f5-2c5q-wgwj".into(),
+        summary:
+            "RMCP: Missing Resource Field Validation in OAuth Protected Resource Metadata Discovery"
+                .into(),
+    }];
+    let text = render_facts_for_prompt(&BriefFacts {
+        security: vec![fact],
+        ..BriefFacts::default()
+    });
+    assert!(
+        text.contains("Not counted — the code these advisories name is feature-gated out")
+            && text.contains("GHSA-33f5-2c5q-wgwj (RMCP: Missing Resource Field Validation"),
+        "{text}"
+    );
+    let system = briefing_system_prompt();
+    assert!(system.contains("listed as \"Not counted\" is not a finding"));
 }
 
 #[test]

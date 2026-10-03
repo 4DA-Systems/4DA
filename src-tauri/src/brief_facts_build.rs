@@ -114,8 +114,17 @@ fn build_security_facts(
             return (Vec::new(), Vec::new());
         }
     };
-    let matched = crate::osv::matching::get_matched_advisories(db).unwrap_or_default();
+    let (matched, not_compiled) =
+        crate::osv::matching::get_matched_advisories_with_not_compiled(db).unwrap_or_default();
     let conn = crate::open_db_connection().ok();
+    let ctx = FactCtx {
+        db,
+        matched: &matched,
+        not_compiled: &not_compiled,
+        conn: conn.as_ref(),
+        novelty,
+        liveness,
+    };
 
     let mut act = Vec::new();
     let mut also = Vec::new();
@@ -124,8 +133,7 @@ fn build_security_facts(
         .iter()
         .filter(|a| a.osv_verified && !a.platform_inactive)
     {
-        let Some(fact) = security_fact(alert, &matched, conn.as_ref(), novelty, liveness, labels)
-        else {
+        let Some(fact) = security_fact(alert, &ctx, labels) else {
             continue;
         };
         // A scratch tree its own repository gitignores (victauri-gauntlet)
@@ -151,14 +159,28 @@ fn build_security_facts(
     (act, also)
 }
 
+/// What every security fact of one build reads.
+struct FactCtx<'a> {
+    db: &'a Database,
+    matched: &'a [crate::osv::types::MatchedAdvisory],
+    not_compiled: &'a [crate::osv::types::NotCompiledMatch],
+    conn: Option<&'a rusqlite::Connection>,
+    novelty: &'a Novelty,
+    liveness: &'a crate::evidence::ProjectLiveness,
+}
+
 fn security_fact(
     alert: &PreemptionAlert,
-    matched: &[crate::osv::types::MatchedAdvisory],
-    conn: Option<&rusqlite::Connection>,
-    novelty: &Novelty,
-    liveness: &crate::evidence::ProjectLiveness,
+    ctx: &FactCtx<'_>,
     labels: &mut LabelCache,
 ) -> Option<SecurityFact> {
+    let FactCtx {
+        matched,
+        conn,
+        novelty,
+        liveness,
+        ..
+    } = *ctx;
     let package = alert.affected_dependencies.first()?.clone();
     let projects: Vec<String> = alert
         .affected_projects
@@ -206,6 +228,15 @@ fn security_fact(
         _ => alert.title.trim().to_string(),
     };
 
+    // Newer parents other projects here already resolved past the advisories
+    // (the same read Preemption's upgrade plan names them from).
+    let parent_links = crate::osv::exposure::canonical(&ecosystem)
+        .map(|eco| {
+            let lines = crate::osv::fix_target::line_targets(&group, &projects);
+            crate::osv::parent_hint::load_parent_links(ctx.db, eco, &package, &lines)
+        })
+        .unwrap_or_default();
+
     let mut sites = Vec::new();
     for project in &alert.affected_projects {
         let pnorm = norm_path(project);
@@ -231,7 +262,8 @@ fn security_fact(
             } else {
                 None
             };
-            fix_path(installed.as_deref(), fix, is_direct, parent.as_ref())
+            let path = fix_path(installed.as_deref(), fix, is_direct, parent.as_ref());
+            with_proven_parent(path, &parent_links, &pnorm, labels)
         };
         sites.push(SecuritySite {
             label: labels.label(project),
@@ -258,6 +290,7 @@ fn security_fact(
     let first_seen = conn.and_then(|c| {
         crate::digest_commands::first_seen_for_ids(c, &advisory_ids).map(|(date, _)| date)
     });
+    let not_compiled = not_compiled_notes(ctx.not_compiled, &group, &pkg_key, &projects);
     let mut fact = SecurityFact {
         key,
         package,
@@ -268,11 +301,78 @@ fn security_fact(
         advisory_ids,
         title,
         sites,
+        not_compiled,
         first_seen,
         status: FactStatus::New,
     };
     fact.status = novelty.status(&fact.key, &security_signature(&fact), &local_today());
     Some(fact)
+}
+
+/// Attach the lockfile proof of a parent release that clears the package, if
+/// another project here runs one. Only a link for the SAME parent at the SAME
+/// installed version counts: the brief names the direct dependency at the top
+/// of the chain, and a hint about a different link would name the wrong one.
+fn with_proven_parent(
+    path: FixPath,
+    links: &[crate::osv::parent_hint::ParentLink],
+    project: &str,
+    labels: &mut LabelCache,
+) -> FixPath {
+    let FixPath::Parent {
+        parent,
+        parent_version,
+        to,
+        by_requirement,
+        proven: None,
+    } = path
+    else {
+        return path;
+    };
+    let proven = links
+        .iter()
+        .filter(|l| {
+            l.project == project
+                && l.parent.eq_ignore_ascii_case(&parent)
+                && l.parent_version == parent_version
+        })
+        .find_map(|l| l.resolutions.first())
+        .map(|r| ProvenParent {
+            parent_version: r.parent_version.clone(),
+            child_version: r.child_version.clone(),
+            label: labels.label(&r.project),
+        });
+    FixPath::Parent {
+        parent,
+        parent_version,
+        to,
+        by_requirement,
+        proven,
+    }
+}
+
+/// The package's advisories that NONE of the fact's projects compile. One the
+/// matcher kept for some project stays counted, so it is not noted here.
+fn not_compiled_notes(
+    excluded: &[crate::osv::types::NotCompiledMatch],
+    group: &[&crate::osv::types::MatchedAdvisory],
+    pkg_key: &str,
+    projects: &[String],
+) -> Vec<NotCompiledNote> {
+    let mut notes: Vec<NotCompiledNote> = Vec::new();
+    for n in excluded {
+        let in_scope = canonical_package(&n.package_name) == pkg_key
+            && projects.contains(&norm_path(&n.project_path));
+        let still_counted = group.iter().any(|m| m.advisory_id == n.advisory_id);
+        if in_scope && !still_counted && !notes.iter().any(|x| x.advisory_id == n.advisory_id) {
+            notes.push(NotCompiledNote {
+                advisory_id: n.advisory_id.clone(),
+                summary: n.summary.trim().to_string(),
+            });
+        }
+    }
+    notes.sort_by(|a, b| a.advisory_id.cmp(&b.advisory_id));
+    notes
 }
 
 /// Walk `dependency_edges` up from `package` in `project` to the DIRECT
