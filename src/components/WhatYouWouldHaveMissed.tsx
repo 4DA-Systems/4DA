@@ -36,8 +36,14 @@ const KIND_PRIORITY_ORDER: SignalKind[] = ['security', 'breaking', 'tool'];
 function hasConfirmedStackLink(r: SourceRelevance): boolean {
   // Gate on the backend's canonical grounding verdict, NOT dep_match_score or
   // matched_deps length. matched_deps names what the card can display, but the
-  // strong-grounding flag is the source of truth for "affects you" placement.
-  return r.is_critical_alert === true || r.score_breakdown?.strongly_grounded === true;
+  // strong-grounding flag is the source of truth for "affects you" placement —
+  // and, like the Signal tab's Affects You pool (`evidence-pool.ts`), it needs
+  // a dependency EVENT: a tutorial that merely uses the package is grounded
+  // but nothing is happening to it (`dependency_event === false`).
+  return (
+    r.is_critical_alert === true ||
+    (r.score_breakdown?.strongly_grounded === true && r.score_breakdown.dependency_event !== false)
+  );
 }
 
 /**

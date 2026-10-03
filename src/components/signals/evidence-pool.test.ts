@@ -89,6 +89,47 @@ describe('computeEvidencePool', () => {
     expect(computeEvidencePool(r)).toBe('in_orbit');
   });
 
+  it('keeps a grounded tutorial with no dependency event out of Affects You', () => {
+    // Live 2026-10-04: "Progressive Hydration in React" sat in Affects You as
+    // "Names your dependency react". Grounded (it names react) but nothing is
+    // happening TO react — it belongs in Orbit.
+    const r = item({
+      title: 'Progressive Hydration in React — Client Islands & Triggers',
+      score_breakdown: {
+        strongly_grounded: true,
+        dependency_event: false,
+        matched_deps: ['react'],
+        domain_relevance: 0.85,
+      } as never,
+    });
+    expect(isGrounded(r)).toBe(false);
+    expect(computeEvidencePool(r)).toBe('in_orbit');
+  });
+
+  it('admits a grounded dependency event to Affects You', () => {
+    const r = item({
+      title: 'Announcing Tauri 2.12',
+      score_breakdown: { strongly_grounded: true, dependency_event: true, matched_deps: ['tauri'] } as never,
+    });
+    expect(computeEvidencePool(r)).toBe('affects_you');
+  });
+
+  it('a dependency event without grounding is not enough', () => {
+    const r = item({
+      score_breakdown: { strongly_grounded: false, dependency_event: true, domain_relevance: 0.2 } as never,
+    });
+    expect(isGrounded(r)).toBe(false);
+  });
+
+  it('keeps the advisory routes independent of the event flag', () => {
+    const breakdown = { strongly_grounded: true, dependency_event: false } as never;
+    expect(computeEvidencePool(item({ is_critical_alert: true, score_breakdown: breakdown }))).toBe('affects_you');
+    expect(computeEvidencePool(item({ applicability: 'affected', score_breakdown: breakdown }))).toBe('affects_you');
+    expect(computeEvidencePool(item({ applicability: 'likely_affected', score_breakdown: breakdown }))).toBe(
+      'affects_you',
+    );
+  });
+
   it('defaults a bare item (no breakdown) to Ambient', () => {
     expect(computeEvidencePool(item({}))).toBe('ambient');
     expect(groundingDeps(item({}))).toEqual([]);

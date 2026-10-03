@@ -48,7 +48,14 @@ export function isGrounded(r: SourceRelevance): boolean {
     // non-dev, non-ambiguous edge). NOT matched_deps.length — a bare word-like
     // subterm hit (e.g. "windows" from windows-sys on a "Windows 0-day" OS
     // headline) populates matched_deps but is not real grounding.
-    r.score_breakdown?.strongly_grounded === true
+    // ...AND a dependency EVENT (2026-10-04): grounding proves the item names
+    // the package; "Affects You" claims something is happening TO it — a
+    // release, a breaking change, a vulnerability. A tutorial that merely
+    // uses the dependency ("Progressive Hydration in React") is grounded but
+    // not an event (`dependency_event === false`) and belongs in Orbit. An
+    // absent flag (a breakdown from a backend that predates the claim) keeps
+    // the old grounding-only rule.
+    (r.score_breakdown?.strongly_grounded === true && r.score_breakdown.dependency_event !== false)
   );
 }
 

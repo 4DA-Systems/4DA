@@ -133,6 +133,18 @@ pub struct ScoreBreakdown {
     /// Critical gate both read — do not re-derive grounding from `matched_deps`.
     #[serde(default)]
     pub strongly_grounded: bool,
+    /// Dependency-EVENT claim: the item is about something happening TO a
+    /// grounding dependency — a registry advisory the user is (likely)
+    /// affected by, a registry release graded as news (breaking / minor /
+    /// yanked), or an editorial item with release, change or security
+    /// vocabulary at the dependency's name (`scoring::dependency_event`).
+    /// A tutorial that merely uses the dependency is grounded but NOT an
+    /// event. Display/claim only — it feeds no score, rank, verdict or
+    /// priority: the "Affects You" pool and the "Names your dependency"
+    /// explanation read it (an editorial `strongly_grounded` item without it
+    /// says "Mentions X (your dependency)").
+    #[serde(default)]
+    pub dependency_event: bool,
     /// Degraded-input markers for the scoring run that produced this breakdown
     /// (2026-08-23 audit, item 11). Non-empty means an input axis silently
     /// collapsed and the scores are NOT full-fidelity: "context_knn_failed"

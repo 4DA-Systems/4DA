@@ -1776,8 +1776,25 @@ fn test_affects_you_follows_the_persisted_grounding_verdict() {
         )
         .expect("breakdown");
     };
+    // 2026-10-04 dependency-event claim: an editorial item is "your stack"
+    // only when grounded AND about an event happening to the dependency.
+    insert_singleton(&conn, 6, 8, 5, 0.83, "-1 hours", Some(1));
+    insert_singleton(&conn, 7, 8, 6, 0.82, "-1 hours", Some(1));
+    insert_singleton_src(&conn, 8, 8, 7, "crates_io", 0.81, Some(1));
     breakdown(1, r#"{"breakdown":{"strongly_grounded":false}}"#);
-    breakdown(2, r#"{"breakdown":{"strongly_grounded":true}}"#);
+    breakdown(
+        2,
+        r#"{"breakdown":{"strongly_grounded":true,"dependency_event":true}}"#,
+    );
+    // A grounded tutorial: names the package, nothing happens to it.
+    breakdown(
+        6,
+        r#"{"breakdown":{"strongly_grounded":true,"dependency_event":false}}"#,
+    );
+    // Stored before the claim existed: editorial → no claim; registry →
+    // the old grounding-only rule.
+    breakdown(7, r#"{"breakdown":{"strongly_grounded":true}}"#);
+    breakdown(8, r#"{"breakdown":{"strongly_grounded":true}}"#);
     // Grounded by name but the installed version is confirmed past the fix.
     breakdown(
         3,
@@ -1813,6 +1830,35 @@ fn test_affects_you_follows_the_persisted_grounding_verdict() {
         "version-confirmed affected advisory grounds the item"
     );
     assert!(!affects(5), "no persisted verdict → no claim");
+    assert!(
+        !affects(6),
+        "a grounded tutorial with no dependency event does not touch your stack"
+    );
+    assert!(
+        !affects(7),
+        "an editorial breakdown stored before the event claim makes no claim"
+    );
+    assert!(
+        affects(8),
+        "a grounded registry row stored before the event claim keeps the old rule"
+    );
+}
+
+/// The registry list spelled into `GROUNDED_SQL` must be every registry
+/// source plus the advisory sources — the same classes the scorer treats as
+/// registry rows (`dep_linker::REGISTRY_SOURCE_TYPES`, osv/cve).
+#[test]
+fn test_grounded_sql_registry_list_matches_the_scorer() {
+    let sql = super::loading::GROUNDED_SQL;
+    for st in crate::dep_linker::REGISTRY_SOURCE_TYPES
+        .iter()
+        .chain(["osv", "cve"].iter())
+    {
+        assert!(
+            sql.contains(&format!("'{st}'")),
+            "GROUNDED_SQL is missing registry source {st}"
+        );
+    }
 }
 
 /// Phase profile of a real build — `#[ignore]`d; run on demand against a

@@ -29,6 +29,7 @@ struct Fixture {
     installed_version: Option<String>,
     via_registry_subject: bool,
     registry_advisory: bool,
+    dependency_event: bool,
     release_chain: Option<(String, String)>,
 }
 
@@ -60,6 +61,7 @@ impl Default for Fixture {
             installed_version: None,
             via_registry_subject: false,
             registry_advisory: false,
+            dependency_event: true,
             release_chain: None,
         }
     }
@@ -93,6 +95,7 @@ impl Fixture {
             installed_version: self.installed_version.as_deref(),
             via_registry_subject: self.via_registry_subject,
             registry_advisory: self.registry_advisory,
+            dependency_event: self.dependency_event,
             release_chain: self.release_chain.clone(),
         }
     }
@@ -895,4 +898,33 @@ fn a_dependency_in_several_projects_names_one_and_counts_the_rest() {
         "one named location plus a count, never a wall of paths: {}",
         sec.display
     );
+}
+
+// 2026-10-04: a grounded editorial item with no dependency EVENT is an article
+// that uses the dependency ("Progressive Hydration in React"). Its dependency
+// line must not read as news about the package.
+#[test]
+fn grounded_mention_without_an_event_does_not_claim_to_name_the_dependency() {
+    let mut f = Fixture {
+        title: "Progressive Hydration in React".to_string(),
+        display_deps: vec![dep("react", 0.5, true, Some("19.2.7"))],
+        dep_match_score: 0.5,
+        dependency_event: false,
+        ..Fixture::default()
+    };
+    let chain = f.build();
+    let line = chain
+        .iter()
+        .find(|x| x.kind == FactorKind::DependencyMatch)
+        .expect("dependency factor");
+    assert_eq!(line.display, "Mentions react (your dependency)");
+    assert!(line.evidence.contains("mentioned in the item text"));
+
+    f.dependency_event = true;
+    let chain = f.build();
+    let line = chain
+        .iter()
+        .find(|x| x.kind == FactorKind::DependencyMatch)
+        .expect("dependency factor");
+    assert_eq!(line.display, "Names your dependency react");
 }

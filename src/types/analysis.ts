@@ -111,6 +111,14 @@ export interface ScoreBreakdown {
    * truth for "Affects You" placement — do not re-derive from matched_deps.length.
    */
   strongly_grounded?: boolean;
+  /**
+   * Dependency-EVENT claim: the item is about something happening TO a
+   * grounding dependency (an advisory that affects it, a release graded as
+   * news, or release/change/security vocabulary at its name). A tutorial that
+   * merely uses the dependency is grounded but not an event. Display/claim
+   * only — "Affects You" requires it alongside strongly_grounded.
+   */
+  dependency_event?: boolean;
   /** Domain relevance (0.15 off-domain to 1.0 primary stack match) */
   domain_relevance?: number;
   /** Content quality multiplier (0.5 clickbait to 1.2 authoritative) */

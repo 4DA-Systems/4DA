@@ -472,6 +472,48 @@ describe('SignalsPanel', () => {
     expect(screen.getByText('New tool spotted — no confirmed link to your stack')).toBeInTheDocument();
     expect(screen.queryByText(/🎯/)).not.toBeInTheDocument();
   });
+
+  it('keeps a grounded tutorial (no dependency event) out of Affects You', () => {
+    // Live 2026-10-04: "Progressive Hydration in React" was labelled
+    // "🎯 react" in Affects You. It names react, but nothing is happening TO
+    // react — the backend's dependency_event claim is false.
+    render(
+      <SignalsPanel
+        results={[
+          makeSignalItem({
+            id: 1,
+            signal_action: 'Progressive Hydration in React',
+            score_breakdown: {
+              matched_deps: ['react'],
+              strongly_grounded: true,
+              dependency_event: false,
+              domain_relevance: 0.85,
+            } as never,
+          }),
+        ]}
+      />,
+    );
+    expect(screen.getByText('Progressive Hydration in React')).toBeInTheDocument();
+    expect(screen.queryByText('signals.poolAffectsYou')).not.toBeInTheDocument();
+    expect(screen.queryByText('signals.affectsYouCount')).not.toBeInTheDocument();
+    expect(screen.queryByText(/🎯/)).not.toBeInTheDocument();
+  });
+
+  it('admits a grounded dependency event to Affects You', () => {
+    render(
+      <SignalsPanel
+        results={[
+          makeSignalItem({
+            id: 1,
+            signal_action: 'Announcing Tauri 2.12',
+            score_breakdown: { matched_deps: ['tauri'], strongly_grounded: true, dependency_event: true } as never,
+          }),
+        ]}
+      />,
+    );
+    expect(screen.getByText('signals.poolAffectsYou')).toBeInTheDocument();
+    expect(screen.getByText(/tauri/)).toBeInTheDocument();
+  });
 });
 
 // =============================================================================

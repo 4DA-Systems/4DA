@@ -84,6 +84,12 @@ pub(crate) struct ChainInputs<'a> {
     /// rendered for an npm-worm story whose only link to react was the words
     /// "React Query Codegen" in its title.
     pub registry_advisory: bool,
+    /// The item is a dependency EVENT (`scoring::dependency_event`). An
+    /// editorial item that names the dependency without one is an article
+    /// that USES it ("Progressive Hydration in React"), and must not read as
+    /// news about it: its dependency line says "Mentions X (your dependency)"
+    /// instead of "Names your dependency X".
+    pub dependency_event: bool,
     /// v37: the graded release's (headline, evidence) — which projects the
     /// release concerns, on which versions (`release_grade::chain_text`).
     /// Replaces the ungraded "Release of your dependency X (direct, installed
@@ -301,9 +307,15 @@ pub(crate) fn build_explanation_chain(inp: &ChainInputs<'_>) -> Vec<ExplanationF
                 format!("Release of your {noun} {}", names.join(", ")),
                 format!("{evidence} \u{2014} the subject of this release"),
             ),
-            None => (
+            None if inp.dependency_event => (
                 format!("Names your {noun} {}", names.join(", ")),
                 format!("{evidence} \u{2014} named in the item text"),
+            ),
+            // Grounded, but no release / change / security event at the
+            // name: the item uses the dependency, it is not news about it.
+            None => (
+                format!("Mentions {} (your {noun})", names.join(", ")),
+                format!("{evidence} \u{2014} mentioned in the item text"),
             ),
         };
         factors.push(WeightedFactor {
