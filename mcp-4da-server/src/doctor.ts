@@ -14,7 +14,7 @@
  */
 
 import { existsSync } from "node:fs";
-import { FourDADatabase } from "./db.js";
+import { FourDADatabase, nativeBindingProblem } from "./db.js";
 import { checkBuildStaleness } from "./build-staleness.js";
 
 interface Check {
@@ -43,12 +43,14 @@ export function runDoctor(): void {
       : `${nodeVersion} — Node.js ${nodeRequired}+ required`,
   });
 
-  // 2. Native bindings — if we reached here, the dynamic import in db.ts succeeded
-  // (it calls process.exit(1) with a diagnostic message on failure)
+  // 2. Native bindings — opening a database, not just importing the package:
+  // the import succeeds without the compiled module (npm 12 blocking its
+  // install script left none, and this check used to say "loaded").
+  const bindingProblem = nativeBindingProblem();
   checks.push({
     name: "SQLite native bindings",
-    status: "pass",
-    detail: "better-sqlite3 loaded successfully",
+    status: bindingProblem ? "fail" : "pass",
+    detail: bindingProblem ?? "better-sqlite3 opened an in-memory database",
   });
 
   // 3. Database discovery — deep integrity_check is appropriate here: --doctor is

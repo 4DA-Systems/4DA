@@ -15,23 +15,19 @@ import { dirname } from "node:path";
 // Type-only import (erased at compile time) — keeps Database.Database type usable.
 // Runtime import is dynamic below, so native binding failures get a clear error message.
 import type BetterSqlite3 from "better-sqlite3";
+import { checkNativeBindings, isNativeBindingError, nativeBindingMessage } from "./native-bindings.js";
 
 let Database: typeof BetterSqlite3;
 try {
   Database = (await import("better-sqlite3")).default;
 } catch (err) {
-  const msg = err instanceof Error ? err.message : String(err);
-  console.error(
-    "\n  [4DA] Failed to load better-sqlite3 native bindings.\n\n" +
-    "  This usually means your system is missing C++ build tools.\n" +
-    "  Install the appropriate tools for your platform:\n\n" +
-    "    macOS:   xcode-select --install\n" +
-    "    Ubuntu:  sudo apt install build-essential python3\n" +
-    "    Windows: npm install -g windows-build-tools\n\n" +
-    `  Error: ${msg}\n\n` +
-    "  After installing build tools, run: npm rebuild better-sqlite3\n"
-  );
+  console.error(`\n  [4DA] ${nativeBindingMessage(err)}\n`);
   process.exit(1);
+}
+
+/** Null when better-sqlite3 can open a database here; otherwise why not, with the fix. */
+export function nativeBindingProblem(): string | null {
+  return checkNativeBindings(Database);
 }
 
 const __filename = fileURLToPath(import.meta.url);
@@ -315,7 +311,9 @@ export class FourDADatabase {
       this.db.pragma("journal_mode = WAL");
     } catch (error) {
       throw new Error(
-        `Failed to open 4DA database at ${absolutePath}: ${error instanceof Error ? error.message : String(error)}`
+        isNativeBindingError(error)
+          ? nativeBindingMessage(error)
+          : `Failed to open 4DA database at ${absolutePath}: ${error instanceof Error ? error.message : String(error)}`
       );
     }
 

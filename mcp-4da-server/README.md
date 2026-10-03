@@ -27,6 +27,10 @@ One command to install. No API keys. No accounts. Your code never leaves your ma
 
 Requires Node.js 22 or later.
 
+> **npm 12+:** npm 12 blocks dependency install scripts unless you allow them, which leaves the SQLite module (`better-sqlite3`) unbuilt. Allow it once, then clear the npx cache:
+> `npm config set allow-scripts=better-sqlite3 --location=user` and `npx clear-npx-cache`.
+> `npx @4da/mcp-server --doctor` checks this by opening a database. npm 10 and 11, which every current Node release ships, are not affected.
+
 ```bash
 claude mcp add 4da -- npx @4da/mcp-server
 ```
@@ -268,7 +272,7 @@ git clone https://github.com/4DA-Systems/4DA.git
 cd 4DA/mcp-4da-server
 pnpm install
 pnpm build
-pnpm test    # 659 tests, offline
+pnpm test    # 662 tests, offline
 ```
 
 ## License
