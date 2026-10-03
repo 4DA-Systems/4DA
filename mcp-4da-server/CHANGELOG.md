@@ -156,7 +156,16 @@ zero findings.
   so a Node 20 install compiled from source and failed on any machine without
   Python and a C++ toolchain (every slim container); Node 20 reached end of
   life in April 2026. Verified installs: Node 20 (with a toolchain), 22 and 24
-  on Windows; Node 22 on Debian and Alpine Linux.
+  on Windows; Node 22 on Debian and Alpine Linux; Node 24 on Debian.
+- npm 12 blocks dependency install scripts unless allowed, so better-sqlite3
+  is left unbuilt by both `npx` and `npm install`. `--doctor` now opens a
+  database instead of trusting the import; it had reported the bindings as
+  loaded while every tool failed with "Could not locate the bindings file".
+  That error now carries the fix: `npm config set
+  allow-scripts=better-sqlite3 --location=user` and `npx clear-npx-cache`, or
+  `npm install-scripts approve better-sqlite3` and `npm rebuild
+  better-sqlite3`. Each was verified on npm 12.2.0. npm 10 and 11, which every
+  current Node release ships, are not affected.
 - `upgrade_impact`'s summary says "N entries flagged breaking", not "N
   breaking changes": the flags are a pre-sort, and every entry now carries its
   heading (`under`).
