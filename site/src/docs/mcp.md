@@ -2,7 +2,7 @@
 layout: docs.njk
 eyebrow: "Integrate"
 title: "MCP server & agents — 4DA Docs"
-description: "Plug 4DA into Claude Code, Cursor, Windsurf, or any MCP client with one command. 14 tools, 9 standalone."
+description: "Plug 4DA into Claude Code, Cursor, Windsurf, or any MCP client with one command. 16 tools, 11 standalone."
 permalink: "/docs/mcp/"
 templateEngineOverride: md
 ---
@@ -32,9 +32,9 @@ Point any MCP-compatible client — Claude Code, Cursor, Windsurf, VS Code (Copi
 }
 ```
 
-## The 14 tools
+## The 16 tools
 
-**9 tools work standalone**, with zero setup — vulnerability scanning, dependency health, upgrade planning, ecosystem news, pre-task briefings, decision memory, and cross-session agent memory.
+**11 tools work standalone**, with zero setup — upgrade impact (what changes between your version and the next, and which of your files it touches), pre-install dependency checks, vulnerability scanning, dependency health, upgrade planning, ecosystem news, pre-task briefings, decision memory, and cross-session agent memory.
 
 **5 more activate with the desktop app** — your scored content feed, actionable signals, knowledge gaps, feedback learning, and Developer DNA.
 
