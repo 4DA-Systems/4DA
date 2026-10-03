@@ -329,6 +329,43 @@ pub(crate) fn matcher_verdict(db: &Database, ids: &[String]) -> Option<SecurityV
     Some(verdict)
 }
 
+/// An advisory-registry row (cve / osv) IS a security alert, whatever words
+/// its title happens to use. The keyword classifier reads vocabulary, so an
+/// advisory without security keywords was typed by its other words or not at
+/// all (live 2026-10-03: "[GHSA-c9xm-49cp-xcr9] rmcp OAuth client fetches
+/// server-controlled resource_metadata URLs" read as an "Emerging trend";
+/// "[RUSTSEC-2026-0190] anyhow: Unsoundness in `Error::downcast_mut()`" got no
+/// signal at all) and sat outside the Security lane. The tier is still the
+/// caller's: the version-confirmed priority path runs on `SecurityAlert`.
+/// Editorial items pass through untouched.
+pub(crate) fn advisory_signal_type(
+    is_registry_advisory: bool,
+    title: &str,
+    classified: Option<crate::signals::SignalClassification>,
+) -> Option<crate::signals::SignalClassification> {
+    use crate::signals::{SignalClassification, SignalHorizon, SignalPriority, SignalType};
+    if !is_registry_advisory {
+        return classified;
+    }
+    Some(match classified {
+        Some(mut c) => {
+            c.signal_type = SignalType::SecurityAlert;
+            c.horizon = SignalHorizon::Tactical;
+            c
+        }
+        None => SignalClassification {
+            signal_type: SignalType::SecurityAlert,
+            priority: SignalPriority::Advisory,
+            confidence: 0.5,
+            action: format!("Security advisory: {title}"),
+            triggers: Vec::new(),
+            horizon: SignalHorizon::Tactical,
+            dependency_confirmed: false,
+            corroboration_sources: 0,
+        },
+    })
+}
+
 #[cfg(test)]
 #[path = "security_verdict_tests.rs"]
 mod tests;

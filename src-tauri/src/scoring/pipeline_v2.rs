@@ -2634,14 +2634,19 @@ fn classify_signals(
 
     let topics = crate::extract_topics(input.title, input.content, input.source_tags);
     let corroboration = super::pipeline_signals::build_corroboration(db, &topics, matched_deps);
-    match clf.classify(
+    let classified = super::security_verdict::advisory_signal_type(
+        is_registry_advisory_source(input.source_type),
         input.title,
-        input.content,
-        combined_score,
-        &ctx.declared_tech,
-        &ctx.ace_ctx.detected_tech,
-        &corroboration,
-    ) {
+        clf.classify(
+            input.title,
+            input.content,
+            combined_score,
+            &ctx.declared_tech,
+            &ctx.ace_ctx.detected_tech,
+            &corroboration,
+        ),
+    );
+    match classified {
         Some(mut c) => {
             // ── ToolDiscovery freshness gate ─────────────────────────────
             // "New tool spotted / in your orbit" must not be said about a
