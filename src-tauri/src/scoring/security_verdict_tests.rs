@@ -240,3 +240,52 @@ fn priority_labels_round_trip() {
     }
     assert_eq!(priority_from_label("bogus"), None);
 }
+
+// ── advisory_signal_type ────────────────────────────────────────────────
+
+fn trend_classification() -> crate::signals::SignalClassification {
+    crate::signals::SignalClassification {
+        signal_type: crate::signals::SignalType::TechTrend,
+        priority: crate::signals::SignalPriority::Advisory,
+        confidence: 0.6,
+        action: "Emerging trend".to_string(),
+        triggers: vec!["oauth".to_string(), "client".to_string()],
+        horizon: crate::signals::SignalHorizon::Strategic,
+        dependency_confirmed: false,
+        corroboration_sources: 0,
+    }
+}
+
+#[test]
+fn registry_advisory_typed_by_other_words_becomes_security() {
+    // Live 2026-10-03: GHSA-c9xm-49cp-xcr9 read as an "Emerging trend".
+    let c = advisory_signal_type(
+        true,
+        "[GHSA-c9xm-49cp-xcr9] rmcp OAuth client fetches server-controlled resource_metadata URLs",
+        Some(trend_classification()),
+    )
+    .expect("an advisory row always classifies");
+    assert_eq!(c.signal_type, crate::signals::SignalType::SecurityAlert);
+    assert_eq!(c.horizon, crate::signals::SignalHorizon::Tactical);
+    assert_eq!(c.triggers, vec!["oauth".to_string(), "client".to_string()]);
+}
+
+#[test]
+fn registry_advisory_the_classifier_skipped_still_classifies() {
+    // Live 2026-10-03: RUSTSEC-2026-0190 (anyhow) carried no signal at all.
+    let title = "[RUSTSEC-2026-0190] anyhow: Unsoundness in `Error::downcast_mut()`";
+    let c = advisory_signal_type(true, title, None).expect("advisory row classifies");
+    assert_eq!(c.signal_type, crate::signals::SignalType::SecurityAlert);
+    assert_eq!(c.priority, crate::signals::SignalPriority::Advisory);
+    assert!(c.action.contains("RUSTSEC-2026-0190"));
+}
+
+#[test]
+fn editorial_items_keep_the_classifier_verdict() {
+    let c = advisory_signal_type(false, "Some HN story", Some(trend_classification()));
+    assert_eq!(
+        c.map(|c| c.signal_type),
+        Some(crate::signals::SignalType::TechTrend)
+    );
+    assert!(advisory_signal_type(false, "Some HN story", None).is_none());
+}

@@ -498,6 +498,10 @@ pub(super) fn extract_title_keywords(title: &str) -> Vec<String> {
         "never",
         "ever",
         "next",
+        // Idiom filler (2026-10-03: "A batch API is not a free PASS…" and
+        // "An async job is not a free PASS…" labelled an auth cluster "pass").
+        "pass",
+        "free",
         "why",
         "building",
         "build",
