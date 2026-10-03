@@ -495,12 +495,20 @@ pub(crate) fn load_pins(
         .map(|rs| rs.flatten().collect())
         .unwrap_or_default();
     drop(stmt);
+    // A release asks "what is the user working on?" — the question a watch
+    // list asks — so a dormant project is not a pin (live 2026-10-03: a
+    // scratch folder untouched since April graded `base64 0.23.1` a
+    // "Breaking upgrade" for itself). Advisories are a different question and
+    // still name dormant projects (AD-043); this filter is releases only.
+    let dormant = crate::ace::dormancy::dormant_project_paths(&conn);
     drop(conn);
     let user_excluded = crate::project_inclusion::user_excluded_paths();
     rows.into_iter()
         .filter(|(path, _, eco, _, _)| {
             dependencies::ecosystem_congruent(lang, eco)
                 && !crate::project_inclusion::is_excluded_from_intelligence(path, &user_excluded)
+                && !dormant
+                    .contains(crate::project_inclusion::comparison_form(path).trim_end_matches('/'))
         })
         .map(|(path, v, _, direct, dev)| (path, v, direct, dev))
         .collect()
