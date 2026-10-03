@@ -45,6 +45,7 @@ pub(crate) mod reexamination;
 mod registry_grounding_tests;
 pub(crate) mod release_grade;
 pub(crate) mod release_ownership;
+mod release_story;
 pub(crate) mod release_version;
 mod role_inference;
 pub(crate) mod security_verdict;
@@ -84,6 +85,7 @@ pub(crate) use dependencies::{
 };
 pub(crate) use explanation::{calculate_confidence, compute_temporal_freshness};
 pub(crate) use pipeline_v2::finalize_scores;
+pub(crate) use release_story::release_story_dedup_results;
 pub(crate) use telemetry::ScoringTelemetry;
 pub(crate) use temporal_cluster::temporal_cluster_results;
 pub(crate) use triage::{triage_item, TriageReason, TriageThresholds};

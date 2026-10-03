@@ -295,6 +295,7 @@ pub(crate) async fn score_items_full(
     let pre_fuzzy = results.len();
     scoring::fuzzy_dedup_results(&mut results);
     telemetry.fuzzy_dedup_removed = pre_fuzzy - results.len();
+    telemetry.fuzzy_dedup_removed += scoring::release_story_dedup_results(&mut results);
     let pre_topic = results.len();
     scoring::topic_dedup_results(&mut results);
     telemetry.topic_dedup_removed = pre_topic - results.len();
