@@ -52,7 +52,22 @@ describe('computeEvidencePool', () => {
 
   it('routes an affected/likely_affected applicability to Affects You', () => {
     expect(computeEvidencePool(item({ applicability: 'affected' }))).toBe('affects_you');
-    expect(computeEvidencePool(item({ applicability: 'likely_affected' }))).toBe('affects_you');
+    expect(
+      computeEvidencePool(item({ applicability: 'likely_affected', source_type: 'osv' })),
+    ).toBe('affects_you');
+  });
+
+  it('does NOT trust likely_affected on an editorial security story', () => {
+    // Live 2026-10-04: an HN story with no matched dependency carried
+    // likely_affected from a weak name match and sat in Affects You.
+    const r = item({
+      title: 'Google Rewrites Critical C Dependencies to Rust Using AI and Differential Fuzzing',
+      source_type: 'hackernews',
+      applicability: 'likely_affected',
+      score_breakdown: { strongly_grounded: false, dependency_event: false, matched_deps: [], domain_relevance: 1.0 } as never,
+    });
+    expect(isGrounded(r)).toBe(false);
+    expect(computeEvidencePool(r)).toBe('in_orbit');
   });
 
   it('routes a high domain-relevance but ungrounded item to In Your Orbit', () => {
@@ -125,7 +140,7 @@ describe('computeEvidencePool', () => {
     const breakdown = { strongly_grounded: true, dependency_event: false } as never;
     expect(computeEvidencePool(item({ is_critical_alert: true, score_breakdown: breakdown }))).toBe('affects_you');
     expect(computeEvidencePool(item({ applicability: 'affected', score_breakdown: breakdown }))).toBe('affects_you');
-    expect(computeEvidencePool(item({ applicability: 'likely_affected', score_breakdown: breakdown }))).toBe(
+    expect(computeEvidencePool(item({ applicability: 'likely_affected', source_type: 'cve', score_breakdown: breakdown }))).toBe(
       'affects_you',
     );
   });
