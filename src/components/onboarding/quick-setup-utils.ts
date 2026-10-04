@@ -5,6 +5,42 @@ import type { OllamaStatus, PullProgress } from './types';
 
 export type ProviderType = 'anthropic' | 'openai' | 'ollama' | 'openai-compatible';
 
+/**
+ * Shown in the key field after `import_env_key` stored the real key server-side.
+ * It is a display marker, never a key: format checks and the live probe skip it,
+ * and the backend (`IMPORTED_KEY_PLACEHOLDER` in settings_commands.rs) treats it
+ * as "unchanged" so it can never overwrite the imported key.
+ */
+export const IMPORTED_FROM_ENV = '(imported from environment)';
+
+/**
+ * Token sent to a local OpenAI-compatible server (LM Studio, llama.cpp, Jan).
+ * They ignore auth unless the user turned it on, but the provider gate treats
+ * an openai-compatible provider without a key as "no LLM" — this keeps a
+ * keyless local server counted as configured.
+ */
+export const LOCAL_SERVER_TOKEN = 'local-server';
+
+/** A detected local server, ready to save as the provider. */
+export interface LocalServerChoice {
+  name: string;
+  baseUrl: string;
+  model: string;
+}
+
+/**
+ * Turn a detected local server into a saveable choice. The LLM client appends
+ * `/chat/completions` to the base URL, so OpenAI-compatible servers need the
+ * `/v1` root. Returns null when the server has no model loaded — saving it
+ * would leave every completion failing.
+ */
+export function localServerChoice(server: { name: string; base_url: string; models?: string[] }): LocalServerChoice | null {
+  const model = server.models?.[0];
+  if (!model) return null;
+  const root = server.base_url.replace(/\/+$/, '');
+  return { name: server.name, baseUrl: root.endsWith('/v1') ? root : `${root}/v1`, model };
+}
+
 export interface UseQuickSetupProps {
   isAnimating: boolean;
   onComplete: () => void;
@@ -63,6 +99,7 @@ export async function refreshOllamaAfterPull(): Promise<OllamaStatus | null> {
 export function validateApiKey(provider: ProviderType, key: string): boolean {
   const trimmed = key.trim();
   if (trimmed.length === 0) return false;
+  if (key === IMPORTED_FROM_ENV) return true; // real key already stored server-side
   if (provider === 'anthropic') return key.startsWith('sk-ant-') && key.length > 20;
   if (provider === 'openai') return key.startsWith('sk-') && key.length > 20;
   return trimmed.length > 10;
@@ -85,6 +122,9 @@ export async function probeKeyBeforeSave(
   // Only the two BYOK cloud providers with a non-empty key are probed.
   if (provider !== 'anthropic' && provider !== 'openai') return { ok: true };
   if (apiKey.trim().length === 0) return { ok: true };
+  // The imported key was read from the environment server-side; the marker in
+  // the field is not a key and would fail every format check.
+  if (apiKey === IMPORTED_FROM_ENV) return { ok: true };
 
   try {
     const result = await cmd('validate_api_key', { provider, key: apiKey, baseUrl: null });
@@ -115,10 +155,16 @@ export async function saveLlmProvider(
   provider: ProviderType,
   apiKey: string,
   ollamaStatus: OllamaStatus | null,
+  localServer: LocalServerChoice | null = null,
 ): Promise<void> {
   const noProvider = { provider: 'none', apiKey: '', model: '', baseUrl: null, openaiApiKey: null };
 
-  if (provider === 'ollama') {
+  if (provider === 'openai-compatible' && localServer) {
+    await cmd('set_llm_provider', {
+      provider: 'openai-compatible', apiKey: apiKey.trim() || LOCAL_SERVER_TOKEN, model: localServer.model,
+      baseUrl: localServer.baseUrl, openaiApiKey: null,
+    });
+  } else if (provider === 'ollama') {
     if (ollamaStatus?.running) {
       const ollamaModel = pickOllamaModel(ollamaStatus.models);
       await cmd('set_llm_provider', {

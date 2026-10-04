@@ -9,7 +9,7 @@ import { normalizeOllamaStatus } from '../../utils/normalize-ollama';
 import { fallbackSuggestions, SECTION_KEY, getPersistedSections } from './onboarding-constants';
 import type { SectionState } from './onboarding-constants';
 import type { ExperienceLevel } from './setup-experience';
-import type { UseQuickSetupProps, ProviderType } from './quick-setup-utils';
+import type { UseQuickSetupProps, ProviderType, LocalServerChoice } from './quick-setup-utils';
 import {
   buildInitialPullProgress, refreshOllamaAfterPull,
   validateApiKey, saveLlmProvider, probeKeyBeforeSave,
@@ -37,6 +37,7 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
   const [pullingModels, setPullingModels] = useState(false);
   const [pullProgress, setPullProgress] = useState<Record<string, PullProgress>>({});
   const [aiConfigured, setAiConfigured] = useState(false);
+  const [localServer, setLocalServer] = useState<LocalServerChoice | null>(null);
 
   // Projects + Interests state
   const [detectedTech, setDetectedTech] = useState<string[]>([]);
@@ -219,8 +220,20 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
     if (ollamaStatus?.running) void pullMissingModels(ollamaStatus);
   }, [ollamaStatus, pullMissingModels]);
 
+  // A detected local server (LM Studio, llama.cpp, Jan) is a complete choice on
+  // its own: base URL + loaded model, no key needed.
+  const handleLocalServerSelect = (choice: LocalServerChoice) => {
+    setProvider('openai-compatible');
+    setLocalServer(choice);
+    setApiKey('');
+    setApiKeyHint(null);
+    setAiConfigured(true);
+    setProjectsOpen(true);
+  };
+
   const handleProviderChange = (p: ProviderType) => {
     setProvider(p);
+    setLocalServer(null);
     setAiConfigured(p === 'ollama' && !!ollamaStatus?.running && !!ollamaStatus.has_embedding_model && !!ollamaStatus.has_llm_model);
     if (p !== 'ollama') setProjectsOpen(true);
   };
@@ -252,7 +265,7 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
         return;
       }
 
-      await saveLlmProvider(provider, apiKey, ollamaStatus);
+      await saveLlmProvider(provider, apiKey, ollamaStatus, localServer);
 
       // Auto-trigger embedding engine preparation (fire-and-forget)
       // This ensures semantic search is ready by the time the user finishes onboarding
@@ -298,12 +311,12 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
     localeOpen, setLocaleOpen, localeConfigured, setLocaleConfigured,
     experienceOpen, setExperienceOpen, experienceLevel, setExperienceLevel,
     selectedStacks, setSelectedStacks,
-    ollamaStatus, provider, apiKey, pullingModels, pullProgress, aiConfigured,
+    ollamaStatus, provider, apiKey, pullingModels, pullProgress, aiConfigured, localServer,
     detectedTech, discoveryDone,
     suggestions, interests, newInterest, setNewInterest, role, setRole,
     error, setError, isSaving, apiKeyHint, skippedDownload,
     removeTag, addInterest, toggleInterest,
-    handleProviderChange, handleApiKeyChange, handleContinue, handleSkipDownload,
+    handleProviderChange, handleLocalServerSelect, handleApiKeyChange, handleContinue, handleSkipDownload,
     downloadLocalModels,
   };
 }
