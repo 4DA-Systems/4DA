@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 
 // ---------------------------------------------------------------------------
 // Tauri API mocks
@@ -21,6 +21,13 @@ const mockStartAnalysis = vi.fn();
 const mockGenerateBriefing = vi.fn();
 const mockSetActiveView = vi.fn();
 
+let briefingError: string | null = null;
+const mockStartTrial = vi.fn();
+
+vi.mock('../../hooks/use-license', () => ({
+  useLicense: () => ({ isPro: false, trialStatus: null }),
+}));
+
 vi.mock('../../store', () => ({
   useAppStore: vi.fn((selector: (s: Record<string, unknown>) => unknown) => {
     const mockState: Record<string, unknown> = {
@@ -35,9 +42,10 @@ vi.mock('../../store', () => ({
       aiBriefing: {
         content: null,
         loading: false,
-        error: null,
+        error: briefingError,
         model: null,
       },
+      startTrial: mockStartTrial,
       startAnalysis: mockStartAnalysis,
       generateBriefing: mockGenerateBriefing,
       setActiveView: mockSetActiveView,
@@ -52,7 +60,6 @@ vi.mock('../../store', () => ({
 import {
   BriefingLoadingState,
   BriefingReadyState,
-  BriefingNoDataState,
 } from '../BriefingEmptyStates';
 
 describe('BriefingLoadingState', () => {
@@ -113,35 +120,38 @@ describe('BriefingReadyState', () => {
   });
 });
 
-describe('BriefingNoDataState', () => {
+describe('BriefingReadyState — failure recovery', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    briefingError = null;
   });
 
-  it('renders without crash', () => {
-    render(<BriefingNoDataState />);
-    expect(screen.getByText('briefing.noIntelligence')).toBeInTheDocument();
+  it('shows a failed generation and lets the user try again', async () => {
+    mockGenerateBriefing.mockResolvedValue(undefined);
+    briefingError = 'provider returned 529';
+    render(<BriefingReadyState />);
+
+    expect(screen.getByRole('alert')).toHaveTextContent('briefing.generateFailed');
+    const button = screen.getByLabelText('briefing.generateAria');
+    await act(async () => {
+      fireEvent.click(button);
+    });
+    await act(async () => {
+      fireEvent.click(button);
+    });
+    // Not stuck disabled after the first attempt settles
+    expect(mockGenerateBriefing).toHaveBeenCalledTimes(2);
   });
 
-  it('shows run analysis message', () => {
-    render(<BriefingNoDataState />);
-    expect(screen.getByText('briefing.runAnalysis')).toBeInTheDocument();
-  });
+  it('says so when the free trial cannot start', async () => {
+    mockStartTrial.mockResolvedValue(false);
+    render(<BriefingReadyState />);
 
-  it('shows analyze now button', () => {
-    render(<BriefingNoDataState />);
-    expect(screen.getByText('results.analyzeNow')).toBeInTheDocument();
-  });
+    await act(async () => {
+      fireEvent.click(screen.getByText('pro.startTrial'));
+    });
 
-  it('calls startAnalysis when button is clicked', () => {
-    render(<BriefingNoDataState />);
-    fireEvent.click(screen.getByText('results.analyzeNow'));
-    expect(mockStartAnalysis).toHaveBeenCalledTimes(1);
-  });
-
-  it('shows keyboard shortcut hint', () => {
-    render(<BriefingNoDataState />);
-    expect(screen.getByText('briefing.orPress')).toBeInTheDocument();
-    expect(screen.getByText('R')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('briefing.trialStartFailed');
+    expect(mockGenerateBriefing).not.toHaveBeenCalled();
   });
 });

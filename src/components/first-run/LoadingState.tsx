@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { BrandMark } from '../void-engine/BrandMark';
 import { getStageNarration } from '../../utils/first-run-messages';
 import { SimplexUnfoldSVG } from '../geometry/SimplexUnfoldSVG';
+import { estimateRemainingSeconds } from './utils';
 import type { Phase, ScanSummary } from './utils';
 
 // ============================================================================
@@ -153,11 +154,11 @@ export function LoadingState({
 }: LoadingStateProps) {
   const { t } = useTranslation();
 
-  // Estimated time remaining — initialized from parent's source-count estimate
-  // Uses a ref-based counter to avoid infinite timer chains in test environments
-  const initialSeconds = estimatedSecondsProp ?? 240;
-  const [estimatedSeconds, setEstimatedSeconds] = useState(initialSeconds);
-  const counterRef = useRef(initialSeconds);
+  // Estimated time remaining: the parent's source-count guess, corrected by
+  // the analysis's real progress rate as it arrives (estimateRemainingSeconds).
+  const priorSeconds = estimatedSecondsProp ?? 240;
+  const [estimatedSeconds, setEstimatedSeconds] = useState(priorSeconds);
+  const startedAt = useRef(Date.now());
 
   // Show "Skip ahead" button after 5 seconds in fetching/analyzing phases
   const [showSkip, setShowSkip] = useState(false);
@@ -167,20 +168,24 @@ export function LoadingState({
     return () => clearTimeout(timer);
   }, [phase]);
 
+  // Before any progress is reported, count the prior down once a second and
+  // stop at zero. Once real progress flows, re-estimate on each update instead
+  // — the estimate then moves with the work, and no timer runs unbounded.
   useEffect(() => {
     if (phase === 'intelligence' || phase === 'celebrating' || phase === 'fading') return;
+    const estimate = () =>
+      estimateRemainingSeconds(priorSeconds, (Date.now() - startedAt.current) / 1000, progress);
+    const now = estimate();
+    setEstimatedSeconds(now);
+    if (progress > 0 || now <= 0) return;
 
     const interval = setInterval(() => {
-      if (counterRef.current <= 0) {
-        clearInterval(interval);
-        return;
-      }
-      counterRef.current -= 1;
-      setEstimatedSeconds(counterRef.current);
+      const next = estimate();
+      setEstimatedSeconds(next);
+      if (next <= 0) clearInterval(interval);
     }, 1000);
-
     return () => clearInterval(interval);
-  }, [phase]);
+  }, [phase, progress, priorSeconds]);
 
   // Intelligence preview phase
   if (phase === 'intelligence') {

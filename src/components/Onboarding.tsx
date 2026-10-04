@@ -45,6 +45,8 @@ export function Onboarding({ onComplete }: OnboardingProps) {
   const [step, setStep] = useState<Step>(getPersistedStep);
   const [isAnimating, setIsAnimating] = useState(true);
   const [hasProviderConfigured, setHasProviderConfigured] = useState(false);
+  const [finishing, setFinishing] = useState(false);
+  const [completionError, setCompletionError] = useState<string | null>(null);
   const modalRef = useRef<HTMLDivElement>(null);
 
   // Check AI provider configuration state when approaching the choice gate
@@ -136,32 +138,32 @@ export function Onboarding({ onComplete }: OnboardingProps) {
 
   // Persist the onboarding-complete flag, then enter the app.
   //
-  // Previously all three completion paths swallowed a failed
-  // mark_onboarding_complete AND cleared the wizard-step key. On a full
-  // disk the flag never persists, so every boot restarted the wizard
-  // from 'welcome' with no error — an invisible loop. Now: retry once
-  // (transient FS hiccup), and on persistent failure KEEP the step key
-  // so the next boot resumes where the user was instead of restarting,
-  // and log loudly. The user still enters the app for this session.
+  // A failed mark_onboarding_complete (full disk, settings locked) used to be
+  // logged and skipped, so the wizard silently came back on the next launch.
+  // Now: retry once (transient FS hiccup); on persistent failure stay here and
+  // say so, offering a retry or an informed "continue anyway". The step key is
+  // kept until the flag is saved, so a later launch resumes where the user was.
   const persistCompletionAndEnter = async () => {
+    if (finishing) return;
+    setFinishing(true);
+    setCompletionError(null);
+    let lastError: unknown = null;
     let persisted = false;
     for (let attempt = 0; attempt < 2 && !persisted; attempt++) {
       try {
         await cmd('mark_onboarding_complete');
         persisted = true;
       } catch (e) {
-        if (attempt === 1) {
-          console.error(
-            'Could not save onboarding completion (disk full or settings locked?). ' +
-              'The setup wizard will resume on next launch until this succeeds.',
-            e,
-          );
-        }
+        lastError = e;
       }
     }
-    if (persisted) {
-      try { localStorage.removeItem(WIZARD_STEP_KEY); } catch { /* noop */ }
+    if (!persisted) {
+      console.error('Could not save onboarding completion', lastError);
+      setCompletionError(t('onboarding.completion.saveFailed', { error: String(lastError) }));
+      setFinishing(false);
+      return;
     }
+    try { localStorage.removeItem(WIZARD_STEP_KEY); } catch { /* noop */ }
     onComplete();
   };
 
@@ -184,7 +186,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
   const showProgress = step !== 'choice';
 
   return (
-    <div ref={modalRef} className="fixed inset-0 z-50 overflow-y-auto bg-bg-primary" role="dialog" aria-modal="true" aria-label="Setup wizard">
+    <div ref={modalRef} className="fixed inset-0 z-50 overflow-y-auto bg-bg-primary" role="dialog" aria-modal="true" aria-label={t('onboarding.wizardAria')}>
       {/* Inner wrapper: progress is an in-flow HEADER, the step content is
           centered in the flex-1 region below it, and the version is an in-flow
           FOOTER. Keeping progress/version in normal flow (not absolute)
@@ -217,7 +219,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
           </p>
 
           {/* Step circles — only display steps, not the choice gate */}
-          <div className="flex items-center gap-1" role="group" aria-label={`Step ${displayIndex + 1} of ${displaySteps.length}: ${stepLabels[step]}`}>
+          <div className="flex items-center gap-1" role="group" aria-label={`${t('onboarding.stepProgress', { current: displayIndex + 1, total: displaySteps.length })}: ${stepLabels[step]}`}>
             {displaySteps.map((s, i) => (
               <div key={s} className="flex items-center">
                 <div
@@ -262,6 +264,27 @@ export function Onboarding({ onComplete }: OnboardingProps) {
           never overlap the step circles above them. */}
       <div className="flex-1 w-full flex items-center justify-center">
       <div className="max-w-2xl w-full">
+        {completionError && (
+          <div role="alert" className="mb-6 p-4 bg-red-900/30 border border-red-500/30 rounded-lg text-sm text-red-200 space-y-3">
+            <p>{completionError}</p>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={() => { void persistCompletionAndEnter(); }}
+                disabled={finishing}
+                className="px-4 py-1.5 bg-red-500/20 text-red-100 rounded-md hover:bg-red-500/30 transition-colors disabled:opacity-50"
+              >
+                {t('action.retry')}
+              </button>
+              <button
+                onClick={onComplete}
+                disabled={finishing}
+                className="px-4 py-1.5 text-red-200/80 hover:text-red-100 transition-colors disabled:opacity-50"
+              >
+                {t('onboarding.completion.continueAnyway')}
+              </button>
+            </div>
+          </div>
+        )}
         {step === 'welcome' && (
           // "Skip" routes to the choice gate — the honest decision point that
           // surfaces provider status and the "keyword matching only" tradeoff —
@@ -282,6 +305,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
           <OnboardingChoiceGate
             isAnimating={isAnimating}
             hasProviderConfigured={hasProviderConfigured}
+            busy={finishing}
             onStartUsing={() => void handleSkipToContent()}
             onContinueSetup={nextStep}
             onScanProjects={handleScanAndComplete}
@@ -299,6 +323,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
         {step === 'calibrate' && (
           <CalibrationStep
             isAnimating={isAnimating}
+            finishing={finishing}
             onComplete={() => void handleSetupComplete()}
             onBack={prevStep}
           />

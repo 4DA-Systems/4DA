@@ -5,6 +5,8 @@ import { useTranslation } from 'react-i18next';
 interface OnboardingChoiceGateProps {
   isAnimating: boolean;
   hasProviderConfigured: boolean;
+  /** Finishing onboarding is in flight; every exit is disabled meanwhile. */
+  busy?: boolean;
   onStartUsing: () => void;
   onContinueSetup: () => void;
   onScanProjects: () => void | Promise<void>;
@@ -13,6 +15,7 @@ interface OnboardingChoiceGateProps {
 export function OnboardingChoiceGate({
   isAnimating,
   hasProviderConfigured,
+  busy = false,
   onStartUsing,
   onContinueSetup,
   onScanProjects,
@@ -21,12 +24,13 @@ export function OnboardingChoiceGate({
   const [scanning, setScanning] = useState(false);
 
   const handleScan = () => {
-    if (scanning) return;
+    if (scanning || busy) return;
     setScanning(true);
-    void Promise.resolve(onScanProjects()).catch(() => {
-      // The scan handler proceeds on error; reset state defensively.
-      setScanning(false);
-    });
+    // Reset once the handler settles: on success the gate unmounts anyway, and
+    // when finishing fails the user must get the buttons back to retry.
+    void Promise.resolve(onScanProjects())
+      .catch(() => { /* surfaced by the parent */ })
+      .finally(() => setScanning(false));
   };
 
   return (
@@ -78,7 +82,7 @@ export function OnboardingChoiceGate({
           {/* Primary, recommended path: a fully-local project scan */}
           <button
             onClick={handleScan}
-            disabled={scanning}
+            disabled={scanning || busy}
             className="w-full px-8 py-4 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-all font-semibold text-lg hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
           >
             <span className="inline-flex items-center justify-center gap-2">
@@ -107,7 +111,7 @@ export function OnboardingChoiceGate({
           {/* Secondary path: manual full setup */}
           <button
             onClick={onContinueSetup}
-            disabled={scanning}
+            disabled={scanning || busy}
             className="w-full px-8 py-2.5 bg-bg-secondary text-text-secondary rounded-lg border border-border hover:border-[#3A3A3A] transition-all text-sm disabled:opacity-50"
           >
             {t('onboarding.choice.continueSetup', 'Continue full setup')}
@@ -122,7 +126,7 @@ export function OnboardingChoiceGate({
           {/* Tertiary, muted path: keyword matching only */}
           <button
             onClick={onStartUsing}
-            disabled={scanning}
+            disabled={scanning || busy}
             className="w-full px-8 py-2 bg-transparent text-text-muted rounded-lg border border-transparent hover:text-text-secondary transition-all text-sm disabled:opacity-50"
           >
             {t('onboarding.choice.keywordOnly', 'Not now — keyword matching only')}

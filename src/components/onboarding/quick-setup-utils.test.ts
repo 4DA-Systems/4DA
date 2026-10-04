@@ -23,6 +23,7 @@ import {
   localServerChoice,
   IMPORTED_FROM_ENV,
   LOCAL_SERVER_TOKEN,
+  modelDownloadSize,
 } from './quick-setup-utils';
 import type { OllamaStatus } from './types';
 
@@ -263,5 +264,17 @@ describe('local OpenAI-compatible servers', () => {
       provider: 'openai-compatible', apiKey: LOCAL_SERVER_TOKEN, model: 'qwen3-14b',
       baseUrl: 'http://localhost:1234/v1', openaiApiKey: null,
     });
+  });
+});
+
+describe('modelDownloadSize', () => {
+  it('sums the default models onboarding pulls', () => {
+    expect(modelDownloadSize(['llama3.2', 'nomic-embed-text'])).toBe('2.3 GB');
+    expect(modelDownloadSize(['nomic-embed-text'])).toBe('274 MB');
+  });
+
+  it('gives no number rather than a wrong one for an unknown model', () => {
+    expect(modelDownloadSize(['llama3.2', 'some-other-model'])).toBeNull();
+    expect(modelDownloadSize([])).toBeNull();
   });
 });

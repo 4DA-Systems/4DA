@@ -8,6 +8,8 @@ import type { CalibrationResult, Recommendation } from '../../types/calibration'
 
 interface CalibrationStepProps {
   isAnimating: boolean;
+  /** Saving the "setup finished" flag is in flight. */
+  finishing?: boolean;
   onComplete: () => void;
   onBack: () => void;
 }
@@ -30,7 +32,7 @@ const axisFallback: Record<string, string> = {
   dependency: 'Dependencies',
 };
 
-export function CalibrationStep({ isAnimating, onComplete, onBack }: CalibrationStepProps) {
+export function CalibrationStep({ isAnimating, finishing = false, onComplete, onBack }: CalibrationStepProps) {
   const { t } = useTranslation();
   const embeddingMode = useAppStore(s => s.embeddingMode);
   // Setup-complete counts come from the persisted backend profile (the same
@@ -38,8 +40,11 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
   // and produced fabricated counts (e.g. "16 interests" with 0 persisted).
   const [setupCounts, setSetupCounts] = useState<{ tech: number; interests: number } | null>(null);
   const [result, setResult] = useState<CalibrationResult | null>(null);
-  const [loading, setLoading] = useState(false);
+  // Starts true: calibration runs on mount, and a false first frame used to
+  // flash an "analysis needed" panel before the run had even begun.
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [pullProgress, setPullProgress] = useState<PullProgress | null>(null);
   const [actionInProgress, setActionInProgress] = useState<string | null>(null);
   const hasAutoRun = useRef(false);
@@ -78,21 +83,21 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
     return () => { cancelled = true; };
   }, []);
 
+  // Progress events only drive the bar. Completion comes from the pull
+  // command itself: when the model is already installed, or the pull fails,
+  // no `done` event is ever sent, and waiting on one left the button stuck.
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     void safeListen<PullProgress>('ollama-pull-progress', (event) => {
       setPullProgress(event.payload);
-      if (event.payload.done) {
-        setActionInProgress(null);
-        setTimeout(() => setPullProgress(null), 1500);
-        setTimeout(() => { void runCalibration(); }, 2000);
-      }
     }).then(fn => { unlisten = fn; });
     return () => { unlisten?.(); };
-  }, [runCalibration]);
+  }, []);
 
   const handleAction = async (rec: Recommendation) => {
     if (!rec.action_type || actionInProgress) return;
+    setError(null);
+    setNotice(null);
     switch (rec.action_type) {
       case 'pull_embedding_model': {
         setActionInProgress('pull_embedding_model');
@@ -101,6 +106,9 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
             model: result?.rig_requirements.recommended_model || 'nomic-embed-text',
             baseUrl: null,
           });
+          setActionInProgress(null);
+          setTimeout(() => setPullProgress(null), 1500);
+          await runCalibration();
         } catch (e) {
           setError(t('calibration.onboarding.pullFailed', { error: e instanceof Error ? e.message : String(e) }));
           setActionInProgress(null);
@@ -115,9 +123,11 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
           if (detected.length > 0) {
             await cmd('set_selected_stacks', { profileIds: detected.slice(0, 3).map(d => d.profile_id) });
             await runCalibration();
+          } else {
+            setNotice(t('calibration.onboarding.noStacksDetected'));
           }
-        } catch {
-          // Non-critical
+        } catch (e) {
+          setError(t('calibration.onboarding.detectFailed', { error: e instanceof Error ? e.message : String(e) }));
         } finally {
           setActionInProgress(null);
         }
@@ -147,8 +157,21 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
       </p>
 
       {error && (
-        <div style={{ padding: 10, background: 'color-mix(in srgb, var(--color-error) 12%, var(--color-bg-primary))', border: '1px solid var(--color-error)', borderRadius: 6, color: 'var(--color-error)', fontSize: 12, marginBottom: 12 }}>
-          {error}
+        <div role="alert" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: 10, background: 'color-mix(in srgb, var(--color-error) 12%, var(--color-bg-primary))', border: '1px solid var(--color-error)', borderRadius: 6, color: 'var(--color-error)', fontSize: 12, marginBottom: 12 }}>
+          <span>{error}</span>
+          <button
+            onClick={() => { void runCalibration(); }}
+            disabled={loading}
+            style={{ flexShrink: 0, padding: '3px 10px', background: 'transparent', color: 'var(--color-error)', border: '1px solid var(--color-error)', borderRadius: 4, fontSize: 11, fontWeight: 600, cursor: loading ? 'not-allowed' : 'pointer' }}
+          >
+            {t('action.retry')}
+          </button>
+        </div>
+      )}
+
+      {notice && (
+        <div role="status" style={{ padding: 10, background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text-secondary)', fontSize: 12, marginBottom: 12 }}>
+          {notice}
         </div>
       )}
 
@@ -156,8 +179,10 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
         <div style={{ marginBottom: 12 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 2 }}>
             <span style={{ fontSize: 11, color: 'var(--color-text-secondary)' }}>{t('calibration.pulling', { model: pullProgress.model })}</span>
-            <span style={{ fontSize: 11, color: 'var(--color-accent-gold)', fontFamily: 'JetBrains Mono, monospace' }}>
-              {pullProgress.done ? t('calibration.pullDone') : `${pullProgress.percent}%`}
+            <span style={{ fontSize: 11, color: pullProgress.status === 'failed' ? 'var(--color-error)' : 'var(--color-accent-gold)', fontFamily: 'JetBrains Mono, monospace' }}>
+              {pullProgress.status === 'failed'
+                ? t('onboarding.setupAi.pullFailedShort')
+                : pullProgress.done ? t('calibration.pullDone') : `${pullProgress.percent}%`}
             </span>
           </div>
           <div style={{ height: 4, background: 'var(--color-border)', borderRadius: 2, overflow: 'hidden' }}>
@@ -256,14 +281,6 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
         </>
       )}
 
-      {/* No-result explanation */}
-      {!loading && !result && !error && (
-        <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--color-text-secondary)', fontSize: 13 }}>
-          <p>{t('calibration.onboarding.noContent')}</p>
-          <p style={{ fontSize: 11, color: 'var(--color-text-muted)', marginTop: 4 }}>{t('calibration.onboarding.noContentHint')}</p>
-        </div>
-      )}
-
       {/* Setup summary */}
       {result && (
         <div style={{ background: 'var(--color-bg-secondary)', border: '1px solid var(--color-border)', borderRadius: 8, padding: 12, marginBottom: 16 }}>
@@ -321,9 +338,12 @@ export function CalibrationStep({ isAnimating, onComplete, onBack }: Calibration
         </button>
         <button
           onClick={onComplete}
-          className="px-6 py-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium rounded-lg transition-colors"
+          disabled={finishing}
+          className="px-6 py-2 bg-orange-500 hover:bg-orange-600 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {result ? t('onboarding.interests.finishSetup') : t('onboarding.nav.skipForNow')}
+          {finishing
+            ? t('onboarding.setup.savingSettings')
+            : result ? t('onboarding.interests.finishSetup') : t('onboarding.nav.skipForNow')}
         </button>
       </div>
     </div>

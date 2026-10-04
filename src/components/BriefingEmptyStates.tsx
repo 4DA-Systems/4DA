@@ -3,8 +3,6 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 import { useLicense } from '../hooks/use-license';
-import { SimplexUnfoldSVG } from './geometry/SimplexUnfoldSVG';
-import { AmbientGlow } from './AmbientGlow';
 
 /** Analysis in progress — spinner + live progress */
 export function BriefingLoadingState() {
@@ -21,7 +19,7 @@ export function BriefingLoadingState() {
     : t('briefing.loadingStageInit', 'Preparing analysis...');
 
   return (
-    <div className="bg-bg-primary rounded-lg" role="status" aria-busy="true" aria-label="Gathering intelligence">
+    <div className="bg-bg-primary rounded-lg" role="status" aria-busy="true" aria-label={t('briefing.gatheringIntelligence')}>
       <div className="flex flex-col items-center justify-center py-20 px-8">
         <div className="w-20 h-20 mb-6 bg-orange-500/10 rounded-2xl border border-orange-500/20 flex items-center justify-center">
           <div className="w-6 h-6 border-2 border-orange-400 border-t-transparent rounded-full animate-spin" />
@@ -58,30 +56,44 @@ export function BriefingReadyState() {
   const generateBriefing = useAppStore(s => s.generateBriefing);
   const startTrial = useAppStore(s => s.startTrial);
   const isLoading = useAppStore(s => s.aiBriefing.loading);
+  const briefingError = useAppStore(s => s.aiBriefing.error);
   const { isPro, trialStatus } = useLicense();
-  const [clicked, setClicked] = useState(false);
+  // Covers the gap between the click and the store flipping to loading; reset
+  // when the request settles, so a failed generation can be retried here.
+  const [requested, setRequested] = useState(false);
   const [startingTrial, setStartingTrial] = useState(false);
+  const [trialFailed, setTrialFailed] = useState(false);
 
   const canStartTrial = !trialStatus?.started_at;
 
+  const generate = async () => {
+    setRequested(true);
+    try {
+      await generateBriefing();
+    } finally {
+      setRequested(false);
+    }
+  };
+
   const handleGenerate = () => {
-    if (clicked || isLoading) return;
-    setClicked(true);
-    void generateBriefing();
+    if (requested || isLoading) return;
+    void generate();
   };
 
   const handleStartTrial = async () => {
     setStartingTrial(true);
+    setTrialFailed(false);
     const ok = await startTrial();
     setStartingTrial(false);
     if (ok) {
       // Trial started — now generate immediately
-      setClicked(true);
-      void generateBriefing();
+      void generate();
+    } else {
+      setTrialFailed(true);
     }
   };
 
-  const busy = clicked || isLoading;
+  const busy = requested || isLoading;
 
   return (
     <div className="bg-bg-primary rounded-lg">
@@ -90,8 +102,13 @@ export function BriefingReadyState() {
         <p className="text-sm text-text-muted text-center max-w-md mb-6">
           {t('briefing.resultsAnalyzed', { count: results.length })}
         </p>
+        {briefingError && !busy && (
+          <p role="alert" className="text-xs text-red-400 text-center max-w-md mb-4">
+            {t('briefing.generateFailed', { error: briefingError })}
+          </p>
+        )}
         {isPro ? (
-          <button onClick={handleGenerate} disabled={busy} aria-label="Generate intelligence briefing" className="px-6 py-2.5 bg-orange-500 text-white text-sm font-medium rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+          <button onClick={handleGenerate} disabled={busy} aria-label={t('briefing.generateAria')} className="px-6 py-2.5 bg-orange-500 text-white text-sm font-medium rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
             {busy ? (
               <span className="flex items-center gap-2">
                 <span className="w-3.5 h-3.5 border-2 border-text-primary/30 border-t-text-primary rounded-full animate-spin" />
@@ -102,7 +119,7 @@ export function BriefingReadyState() {
         ) : (
           <div className="flex flex-col items-center gap-3">
             <div className="flex items-center gap-2">
-              <button onClick={handleGenerate} disabled={busy} aria-label="Generate intelligence briefing" className="px-6 py-2.5 bg-orange-500 text-white text-sm font-medium rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+              <button onClick={handleGenerate} disabled={busy} aria-label={t('briefing.generateAria')} className="px-6 py-2.5 bg-orange-500 text-white text-sm font-medium rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                 {busy ? (
                   <span className="flex items-center gap-2">
                     <span className="w-3.5 h-3.5 border-2 border-text-primary/30 border-t-text-primary rounded-full animate-spin" />
@@ -120,71 +137,15 @@ export function BriefingReadyState() {
                 </button>
               )}
             </div>
+            {trialFailed && (
+              <p role="alert" className="text-xs text-red-400">
+                {t('briefing.trialStartFailed')}
+              </p>
+            )}
             <p className="text-xs text-text-muted mt-1">
               {t('briefing.signalFeatureNote', 'AI briefings are a Signal feature. Start a free trial to try it.')}
             </p>
           </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/** Stack-aware hint nudging users toward AI provider setup */
-function KeywordModeHint({ onClick }: { onClick: () => void }) {
-  const { t } = useTranslation();
-  const tech = useAppStore(s => s.discoveredContext.tech);
-  const interests = useAppStore(s => s.userContext?.interests ?? []);
-
-  const relevantTech = tech.filter(item => item.confidence >= 0.5);
-  const techCount = relevantTech.length;
-  const topTech = relevantTech.slice(0, 3).map(item => item.name);
-
-  const hint = techCount > 0
-    ? t('briefing.keywordHintWithStack', {
-        techList: topTech.join(', '),
-        more: techCount > 3 ? ` +${techCount - 3} more ` : ' ',
-      })
-    : interests.length > 0
-    ? t('briefing.keywordHintWithInterests', { count: interests.length })
-    : t('briefing.configureAiHint');
-
-  return (
-    <button
-      onClick={onClick}
-      className="text-xs text-amber-400/80 hover:text-amber-300 transition-colors mt-4 px-3 py-1.5 bg-amber-500/5 rounded-lg border border-amber-500/10 hover:border-amber-500/20"
-    >
-      {hint}
-    </button>
-  );
-}
-
-/** No analysis yet — "Analyze Now" CTA */
-export function BriefingNoDataState() {
-  const { t } = useTranslation();
-  const startAnalysis = useAppStore(s => s.startAnalysis);
-  const setShowSettings = useAppStore(s => s.setShowSettings);
-  const embeddingMode = useAppStore(s => s.embeddingMode);
-
-  return (
-    <div className="relative bg-bg-primary rounded-lg">
-      <AmbientGlow />
-      <div className="relative flex flex-col items-center justify-center py-20 px-8">
-        <div className="w-[120px] h-[120px] mb-6 rounded-2xl border border-border/30 overflow-hidden" role="img" aria-label="4DA">
-          <SimplexUnfoldSVG size={120} />
-        </div>
-        <h2 className="text-xl font-medium text-text-primary mb-2">{t('briefing.noIntelligence')}</h2>
-        <p className="text-sm text-text-muted text-center max-w-md mb-6">
-          {t('briefing.runAnalysis')}
-        </p>
-        <button onClick={() => { void startAnalysis(); }} aria-label="Start content analysis" className="px-6 py-2.5 bg-orange-500 text-white text-sm font-medium rounded-lg hover:bg-orange-600 transition-colors">
-          {t('results.analyzeNow')}
-        </button>
-        <p className="text-xs text-text-muted mt-3">
-          {t('briefing.orPress')} <kbd className="px-1.5 py-0.5 bg-bg-tertiary rounded text-text-muted">R</kbd>
-        </p>
-        {embeddingMode === 'keyword-only' && (
-          <KeywordModeHint onClick={() => setShowSettings(true)} />
         )}
       </div>
     </div>

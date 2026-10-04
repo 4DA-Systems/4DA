@@ -27,11 +27,15 @@ export function StackSelectStep({ selected, onSelectionChange, compact }: StackS
   const [profiles, setProfiles] = useState<StackProfileSummary[]>([]);
   const [detections, setDetections] = useState<StackDetection[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadFailed, setLoadFailed] = useState(false);
   const [autoSelected, setAutoSelected] = useState(false);
+  const [attempt, setAttempt] = useState(0);
 
-  // Load profiles and auto-detect on mount
+  // Load profiles and auto-detect on mount (and on Retry)
   useEffect(() => {
     let cancelled = false;
+    setLoading(true);
+    setLoadFailed(false);
     void (async () => {
       try {
         const [profileList, detected] = await Promise.all([
@@ -53,14 +57,16 @@ export function StackSelectStep({ selected, onSelectionChange, compact }: StackS
           }
         }
       } catch {
-        // Non-fatal — profiles will be empty
+        // Stacks are optional, but an empty grid with no message reads as
+        // "4DA supports no stacks" — say it failed and offer a retry.
+        if (!cancelled) setLoadFailed(true);
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
     return () => { cancelled = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [attempt]);
 
   const toggleProfile = useCallback((id: string) => {
     const next = selected.includes(id)
@@ -76,6 +82,20 @@ export function StackSelectStep({ selected, onSelectionChange, compact }: StackS
       <div className="flex items-center gap-2 text-sm text-text-secondary py-4">
         <div className="w-4 h-4 border-2 border-orange-500 border-t-transparent rounded-full animate-spin" />
         {t('onboarding.stack.loading')}
+      </div>
+    );
+  }
+
+  if (loadFailed) {
+    return (
+      <div role="alert" className="flex items-center justify-between gap-3 text-sm text-text-secondary py-3">
+        <span>{t('onboarding.stack.loadFailed')}</span>
+        <button
+          onClick={() => setAttempt(a => a + 1)}
+          className="px-3 py-1 text-xs border border-border rounded-md hover:text-text-primary hover:border-gray-500 transition-colors"
+        >
+          {t('action.retry')}
+        </button>
       </div>
     );
   }
@@ -174,7 +194,7 @@ export function StackSelectStep({ selected, onSelectionChange, compact }: StackS
         </p>
       )}
 
-      {selected.length === 0 && !compact && (
+      {selected.length === 0 && (
         <p className="text-xs text-text-muted mt-2">
           {t('onboarding.stack.noSelection')}
         </p>

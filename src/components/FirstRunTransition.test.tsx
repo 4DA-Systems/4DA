@@ -161,7 +161,7 @@ describe('FirstRunTransition', () => {
     expect(status).toHaveAttribute('aria-label', 'Analysis error');
 
     // Retry button exists
-    const retryBtn = screen.getByLabelText('Retry analysis');
+    const retryBtn = screen.getByLabelText('firstRun.retryAnalysisAria');
     expect(retryBtn).toBeDefined();
 
     // Continue anyway button exists
@@ -186,7 +186,7 @@ describe('FirstRunTransition', () => {
       await vi.runAllTimersAsync();
     });
 
-    const retryBtn = screen.getByLabelText('Retry analysis');
+    const retryBtn = screen.getByLabelText('firstRun.retryAnalysisAria');
     await act(async () => {
       fireEvent.click(retryBtn);
     });
@@ -477,7 +477,7 @@ describe('FirstRunTransition', () => {
     });
 
     // Stack insight about dependencies should appear
-    expect(screen.getByText((content) => content.includes('articles about your dependencies'))).toBeDefined();
+    expect(screen.getByText('firstRun.insightDependencies')).toBeDefined();
   });
 
   // -------------------------------------------------------------------------
@@ -516,9 +516,8 @@ describe('FirstRunTransition', () => {
 
     const insights = buildStackInsights(results, scanSummary);
 
-    expect(insights.length).toBeGreaterThan(0);
-    expect(insights[0]).toContain('articles about your dependencies');
-    expect(insights[0]).toContain('tokio');
+    expect(insights[0]).toEqual({ kind: 'dependencies', count: 1, deps: 'tokio' });
+    expect(insights).toContainEqual({ kind: 'skillGap', count: 1 });
   });
 
   // -------------------------------------------------------------------------

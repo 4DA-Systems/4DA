@@ -32,7 +32,7 @@ export function SetupProjects({
                 {tech}
                 <button
                   onClick={() => onRemoveTag(tech)}
-                  aria-label={`Remove ${tech}`}
+                  aria-label={t('onboarding.projects.removeTech', { tech })}
                   className="hover:text-text-primary text-green-400/70"
                 >
                   &times;

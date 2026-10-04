@@ -149,7 +149,9 @@ export const createLicenseSlice: StateCreator<AppStore, [], [], LicenseSlice> = 
         set({
           trialStatus: {
             active: true,
-            days_remaining: result.days_remaining ?? 45,
+            // The backend always reports the real length (gating.rs TRIAL_DURATION_DAYS = 14);
+            // the fallback must not promise more than that.
+            days_remaining: result.days_remaining ?? 14,
             started_at: new Date().toISOString(),
             has_license: false,
           },

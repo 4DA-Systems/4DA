@@ -6,6 +6,7 @@ import { getCelebrationMessage } from '../../utils/first-run-messages';
 import { getSourceFullName } from '../../config/sources';
 import { getRelevancePresentation } from '../../utils/score';
 import { useAppStore } from '../../store';
+import type { StackInsight } from './utils';
 
 interface TopSignal {
   title: string;
@@ -26,7 +27,7 @@ interface CelebrationStateProps {
   totalCount: number;
   sourceBreakdown: Array<[string, number]>;
   topSignal: TopSignal | null;
-  stackInsights: string[];
+  stackInsights: StackInsight[];
   embeddingMode: string | null;
   detectedTech?: Array<{ name: string; category: string; confidence: number }>;
   /** True when there is no profile signal to rank against (setup skipped, no
@@ -196,7 +197,13 @@ export function CelebrationState({
           </p>
           {stackInsights.slice(0, 3).map((insight, i) => (
             <div key={i} className="px-4 py-2.5 bg-bg-secondary rounded-lg border border-border text-start">
-              <p className="text-xs text-text-secondary leading-relaxed">{insight}</p>
+              <p className="text-xs text-text-secondary leading-relaxed">
+                {insight.kind === 'dependencies'
+                  ? t('firstRun.insightDependencies', { count: insight.count, deps: insight.deps })
+                  : insight.kind === 'stack'
+                    ? t('firstRun.insightStack', { count: insight.count, stack: insight.stack })
+                    : t('firstRun.insightSkillGap', { count: insight.count })}
+              </p>
             </div>
           ))}
         </div>
