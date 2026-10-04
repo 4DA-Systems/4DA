@@ -1731,7 +1731,87 @@ fn test_short_title_strips_prefixes_and_cuts_on_words() {
     let cut = labels::short_title(
         "Self Healing Execution Graphs - How to Catch Cascading Agent Failures Before They Spread",
     );
-    assert!(cut.ends_with('…') && cut.chars().count() <= 37, "{cut}");
+    assert!(cut.ends_with('…') && cut.chars().count() <= 29, "{cut}");
+    // Live 2026-10-04: "PHILBIN: THE SAFEST (AND FASTEST)…" — a name heads it.
+    assert_eq!(
+        labels::short_title("Philbin: The safest (and fastest) AEGIS library"),
+        "Philbin"
+    );
+}
+
+/// Live 2026-10-04: three clusters on one map were all labelled "RUST".
+/// Every cluster in a duplicate group gains its own next distinctive term,
+/// and no two clusters ever share a label.
+#[test]
+fn test_duplicate_cluster_labels_are_disambiguated() {
+    let groups: [&[&str]; 3] = [
+        &[
+            "Deser: Rethinking Rust Serialization",
+            "Gluon: an embeddable language written in Rust",
+        ],
+        &[
+            "Google Rewrites Critical C Dependencies to Rust Using Fuzzing",
+            "Porting a 1996 Pascal Calculator to Rust",
+        ],
+        &[
+            "Is trait-based dependency injection possible in Rust?",
+            "Rust's derive often implies inline",
+        ],
+    ];
+    let mut items: Vec<RawItem> = Vec::new();
+    let mut clusters: Vec<GraphCluster> = Vec::new();
+    let mut id = 0i64;
+    for (gi, titles) in groups.iter().enumerate() {
+        let mut node_ids = Vec::new();
+        for t in titles.iter() {
+            id += 1;
+            let mut v = vec![0.0f32; 8];
+            v[gi] = 1.0;
+            v[3 + (id as usize % 5)] = 0.2;
+            items.push(raw(id, t, "hackernews", 0.5, v));
+            node_ids.push(id);
+        }
+        clusters.push(GraphCluster {
+            id: format!("cluster_{gi}"),
+            label: String::new(),
+            node_ids,
+            source_count: 1,
+            coherence: 0.0,
+            centroid_x: 0.0,
+            centroid_y: 0.0,
+        });
+    }
+    // The rest of the window (in no cluster): keeps "rust" from reading as
+    // hackernews boilerplate (>=80% of one source's titles).
+    for t in [
+        "Postgres row-level security, measured",
+        "SQLite backup API",
+        "UUID v7 index performance",
+        "WSL containers are generally available",
+    ] {
+        id += 1;
+        items.push(raw(id, t, "hackernews", 0.5, vec![0.0; 8]));
+    }
+    labels::assign_cluster_labels(&items, &mut clusters);
+    let labels: Vec<String> = clusters.iter().map(|c| c.label.to_lowercase()).collect();
+    let unique: HashSet<&String> = labels.iter().collect();
+    assert_eq!(unique.len(), labels.len(), "labels collide: {labels:?}");
+    for l in &labels {
+        assert!(
+            l.starts_with("rust · "),
+            "the shared theme leads, the distinction follows: {labels:?}"
+        );
+    }
+    // Deterministic across runs.
+    let mut again = clusters.clone();
+    for c in &mut again {
+        c.label.clear();
+    }
+    labels::assign_cluster_labels(&items, &mut again);
+    assert_eq!(
+        clusters.iter().map(|c| &c.label).collect::<Vec<_>>(),
+        again.iter().map(|c| &c.label).collect::<Vec<_>>()
+    );
 }
 
 /// "Touches your stack" = the scoring pipeline's persisted grounding verdict

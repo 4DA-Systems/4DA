@@ -46,9 +46,6 @@ export function ZoomCssVar() {
   return <div ref={ref} style={{ display: 'none' }} />;
 }
 
-/** Space between the lane header and the lane's first row (graph units). */
-const LANE_HEADER_OFFSET = 70;
-
 export function toFlowNodes(graphNodes: ContentGraphNode[], clusters: GraphCluster[]): Node[] {
   const lastViewed = localStorage.getItem(LAST_VIEW_KEY);
   const lastViewedMs = lastViewed ? new Date(lastViewed).getTime() : 0;
@@ -81,7 +78,7 @@ export function toFlowNodes(graphNodes: ContentGraphNode[], clusters: GraphClust
   // grouping is visible at fit zoom — proximity alone stops carrying it once
   // clusters shrink to 2-5 members.
   const positionOf = new Map(graphNodes.map((n) => [n.id, { x: n.x, y: n.y }]));
-  const hullNodes: Node[] = clusters.map((c) => {
+  const hullRadius = (c: GraphCluster): number => {
     let radius = 0;
     for (const id of c.node_ids) {
       const p = positionOf.get(id);
@@ -89,7 +86,11 @@ export function toFlowNodes(graphNodes: ContentGraphNode[], clusters: GraphClust
       const d = Math.hypot(p.x - c.centroid_x, p.y - c.centroid_y);
       if (d > radius) radius = d;
     }
-    radius += HULL_PADDING;
+    return radius + HULL_PADDING;
+  };
+  const radii = new Map(clusters.map((c) => [c.id, hullRadius(c)]));
+  const hullNodes: Node[] = clusters.map((c) => {
+    const radius = radii.get(c.id) ?? HULL_PADDING;
     return {
       id: `hull-${c.id}`,
       type: 'clusterHull' as const,
@@ -113,7 +114,8 @@ export function toFlowNodes(graphNodes: ContentGraphNode[], clusters: GraphClust
     // is almost always 1 (clusters form from same-source neighbours), so it
     // read as a meaningless "(1)" on every label (doctrine rule 3: no vanity
     // metrics). Item count tells the user how big the cluster actually is.
-    data: { label: c.label, count: c.node_ids.length },
+    // radius: how far LabelCollisionLayer may nudge the header in its hull.
+    data: { label: c.label, count: c.node_ids.length, radius: radii.get(c.id) ?? HULL_PADDING },
     selectable: false,
     draggable: false,
     connectable: false,
@@ -132,9 +134,11 @@ export function toFlowNodes(graphNodes: ContentGraphNode[], clusters: GraphClust
           {
             id: 'lane-unconnected',
             type: 'laneLabel' as const,
+            // Anchored AT the first row's top edge; LaneLabelNode hangs the
+            // header above it, so it can never reach down into the row.
             position: {
               x: Math.min(...laneNodes.map((n) => n.x)),
-              y: Math.min(...laneNodes.map((n) => n.y)) - LANE_HEADER_OFFSET,
+              y: Math.min(...laneNodes.map((n) => n.y)),
             },
             data: { count: laneNodes.length },
             selectable: false,

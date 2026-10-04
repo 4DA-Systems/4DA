@@ -67,3 +67,43 @@
 .cg-node-label[data-hovered='true'] {
   visibility: hidden;
 }
+
+/*
+ * Label collision avoidance (LabelCollisionLayer → content-graph-label-
+ * layout.ts). The resolver picks each node label's side of the mark and
+ * suppresses the labels that cannot fit without covering a higher-priority
+ * one (cluster header > stack node > other). The node wrapper is the mark's
+ * size, so 100% = the mark; the 3px gap is flow units (NODE_LABEL_GAP).
+ */
+.cg-node-label {
+  position: absolute;
+  top: calc(100% + 3px);
+  left: 50%;
+  transform: translateX(-50%);
+  text-align: center;
+}
+
+.cg-node-label[data-cg-place='above'] {
+  top: auto;
+  bottom: calc(100% + 3px);
+}
+
+.cg-node-label[data-cg-place='right'] {
+  top: 50%;
+  left: calc(100% + 3px);
+  transform: translateY(-50%);
+  text-align: left;
+}
+
+.cg-node-label[data-cg-place='left'] {
+  top: 50%;
+  left: auto;
+  right: calc(100% + 3px);
+  transform: translateY(-50%);
+  text-align: right;
+}
+
+/* Suppressed: the title stays one hover away (the node's tooltip). */
+.react-flow [data-cg-suppressed='true'] {
+  display: none;
+}

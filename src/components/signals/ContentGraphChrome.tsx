@@ -6,26 +6,46 @@ import { useTranslation } from 'react-i18next';
 
 import { CATEGORY_COLORS, CATEGORY_SHAPES } from './ContentGraphNode';
 import { zoomInvariant } from './graph-zoom';
+import {
+  HEADER_COUNT_FONT_PX,
+  HEADER_FONT_PX,
+  HEADER_LETTER_SPACING_EM,
+  HEADER_LINE,
+  LANE_HEADER_GAP_PX,
+  LANE_HEADER_RULE_PX,
+} from './content-graph-label-layout';
 
-export function ClusterLabelNode({ data }: { data: { label: string; count: number } }) {
+/** Cluster header. LabelCollisionLayer nudges it inside its hull (the
+ *  --cg-dx / --cg-dy custom properties, flow units) or suppresses it
+ *  (data-cg-suppressed) so headers never print across each other. */
+export function ClusterLabelNode({ id, data }: { id: string; data: { label: string; count: number } }) {
   return (
     <div
+      data-cg-label-id={`cluster:${id}`}
       style={{
         color: 'var(--color-text-secondary)',
-        fontSize: zoomInvariant(12),
+        fontSize: zoomInvariant(HEADER_FONT_PX),
+        lineHeight: HEADER_LINE,
         fontWeight: 600,
         fontFamily: 'Inter, sans-serif',
-        letterSpacing: '0.03em',
+        letterSpacing: `${HEADER_LETTER_SPACING_EM}em`,
         textTransform: 'uppercase',
         pointerEvents: 'none',
         whiteSpace: 'nowrap',
         // Halo in the page color lifts the label off edge lines in both themes
         textShadow: '0 1px 4px var(--color-bg-primary)',
-        transform: 'translateX(-50%)',
+        transform: 'translate(calc(-50% + var(--cg-dx, 0px)), var(--cg-dy, 0px))',
       }}
     >
       {data.label}
-      <span style={{ color: 'var(--color-text-muted)', fontWeight: 400, marginLeft: 4, fontSize: zoomInvariant(11) }}>
+      <span
+        style={{
+          color: 'var(--color-text-muted)',
+          fontWeight: 400,
+          marginLeft: 4,
+          fontSize: zoomInvariant(HEADER_COUNT_FONT_PX),
+        }}
+      >
         ({data.count})
       </span>
     </div>
@@ -33,23 +53,28 @@ export function ClusterLabelNode({ data }: { data: { label: string; count: numbe
 }
 
 /** Header over the unconnected lane (layout.rs): items in this window that
- *  relate to no theme — said plainly instead of implied by placement. */
+ *  relate to no theme — said plainly instead of implied by placement. The
+ *  node sits AT the first row's top edge and the header hangs above it
+ *  (translateY -100%): its zoom-invariant text grows upward, never down
+ *  into the row's labels (live 2026-10-04 it covered them at fit zoom). */
 export function LaneLabelNode({ data }: { data: { count: number } }) {
   const { t } = useTranslation();
   return (
     <div
       style={{
         color: 'var(--color-text-muted)',
-        fontSize: zoomInvariant(12),
+        fontSize: zoomInvariant(HEADER_FONT_PX),
+        lineHeight: HEADER_LINE,
         fontWeight: 600,
         fontFamily: 'Inter, sans-serif',
-        letterSpacing: '0.03em',
+        letterSpacing: `${HEADER_LETTER_SPACING_EM}em`,
         textTransform: 'uppercase',
         pointerEvents: 'none',
         whiteSpace: 'nowrap',
         borderBottom: '1px dashed var(--color-border)',
-        paddingBottom: 4,
+        paddingBottom: zoomInvariant(LANE_HEADER_RULE_PX - 1),
         textShadow: '0 1px 4px var(--color-bg-primary)',
+        transform: `translateY(calc(-100% - ${zoomInvariant(LANE_HEADER_GAP_PX)}))`,
       }}
     >
       {t('signals.graphLaneLabel', { count: data.count })}
