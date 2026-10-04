@@ -21,6 +21,7 @@ import assert from 'node:assert/strict';
 
 import { deliverLicenseEmail, deliverRecoveryEmail, isRecoveryEmailConfigured } from './recovery-email.js';
 import { BADGE_MAX_CHARS } from './email-shell.js';
+import { BILLING_PORTAL_URL, isLifetimeExpiry } from './billing.js';
 
 const CONFIGURED = { RESEND_API_KEY: 'test-key', RESEND_FROM_EMAIL: '4DA <licenses@4da.ai>' };
 const KEY = '4DA-eyJ0aWVyIjoic2lnbmFsIn0.c2ln';
@@ -533,4 +534,35 @@ test('duplicates with no licence on any record still report no_licence silently'
     assert.equal(await deliverRecoveryEmail(CONFIGURED, stripe, 'x@y.co'), 'no_licence');
     assert.equal(f.calls.length, 0, 'nothing is mailed');
   } finally { f.restore(); c.restore(); }
+});
+
+test('a subscription key email links the customer portal (cancel / card / invoices)', async () => {
+  const f = stubFetch(200);
+  const c = captureConsole();
+  try {
+    await deliverLicenseEmail(CONFIGURED, 'buyer@example.com', KEY, 'signal', '2026-11-08T00:00:00.000Z', 'purchase');
+    const { html, text } = f.calls[0].body;
+    assert.ok(html.includes(BILLING_PORTAL_URL), 'portal link in the HTML part');
+    assert.ok(text.includes(BILLING_PORTAL_URL), 'portal link in the plaintext part');
+    assert.match(text, /cancel/i);
+  } finally { f.restore(); c.restore(); }
+});
+
+test('a lifetime key email does NOT send the buyer to a subscription portal', async () => {
+  const f = stubFetch(200);
+  const c = captureConsole();
+  try {
+    await deliverLicenseEmail(CONFIGURED, 'buyer@example.com', KEY, 'signal', '2099-10-04T00:00:00.000Z', 'purchase');
+    const { html, text } = f.calls[0].body;
+    assert.ok(!html.includes(BILLING_PORTAL_URL));
+    assert.ok(!text.includes(BILLING_PORTAL_URL));
+  } finally { f.restore(); c.restore(); }
+});
+
+test('isLifetimeExpiry only recognises the 2099 lifetime expiry', () => {
+  assert.equal(isLifetimeExpiry('2099-10-04T00:00:00.000Z'), true);
+  assert.equal(isLifetimeExpiry(new Date('2099-01-01T00:00:00Z')), true);
+  assert.equal(isLifetimeExpiry('2027-10-11T00:00:00.000Z'), false);
+  assert.equal(isLifetimeExpiry(undefined), false);
+  assert.equal(isLifetimeExpiry('not a date'), false);
 });

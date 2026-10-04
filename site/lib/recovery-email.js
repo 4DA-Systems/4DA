@@ -42,6 +42,7 @@
 // `meta` resolves the signal_*/streets_* namespace. entitlement.js imports
 // nothing, so this stays a one-way dependency with no cycle.
 import { isRevoked, meta } from './entitlement.js';
+import { BILLING_PORTAL_URL, isLifetimeExpiry } from './billing.js';
 import { renderShell, emailButton, keyPanel, BRAND, FONT_STACK } from './email-shell.js';
 
 const RESEND_ENDPOINT = 'https://api.resend.com/emails';
@@ -185,6 +186,9 @@ function buildActivateUrl(licenseKey) {
 function buildLicenseEmail(licenseKey, tier, expiresAt, context = 'recovery') {
   const activateUrl = buildActivateUrl(licenseKey);
   const expiryLine = formatExpiry(expiresAt);
+  // Subscribers must be able to cancel or fix a failed card without writing to
+  // us; lifetime buyers have no subscription to manage.
+  const showPortal = !isLifetimeExpiry(expiresAt);
 
   const heading = escapeHtml(SUBJECT[context] || SUBJECT.recovery);
   const content = `              <h1 style="margin: 0 0 6px; font-family: ${FONT_STACK}; font-size: 22px; line-height: 1.3; font-weight: 600; color: ${BRAND.ink};">${heading}</h1>
@@ -196,7 +200,14 @@ ${keyPanel(escapeHtml(licenseKey))}
 ${emailButton(escapeHtml(activateUrl), 'Activate in 4DA')}
               <p style="margin: 22px 0 0; font-family: ${FONT_STACK}; font-size: 13px; line-height: 1.65; color: ${BRAND.muted};">
                 Not working? Open 4DA and paste the key into <strong style="color: ${BRAND.ink};">Settings &rarr; License</strong>.
-              </p>`;
+              </p>${
+                showPortal
+                  ? `
+              <p style="margin: 12px 0 0; font-family: ${FONT_STACK}; font-size: 13px; line-height: 1.65; color: ${BRAND.muted};">
+                Manage your subscription &mdash; update your card, download invoices or cancel &mdash; at <a href="${escapeHtml(BILLING_PORTAL_URL)}" style="color: ${BRAND.ink};">billing.stripe.com</a> (sign in with this email address).
+              </p>`
+                  : ''
+              }`;
 
   const html = renderShell({
     title: heading,
@@ -223,6 +234,9 @@ ${emailButton(escapeHtml(activateUrl), 'Activate in 4DA')}
     '',
     "If the deep link doesn't work, open 4DA, go to Settings -> License, and",
     'paste the key.',
+    ...(showPortal
+      ? ['', 'Manage your subscription (update card, invoices, cancel) — sign in with this email:', BILLING_PORTAL_URL]
+      : []),
     footerText(context),
   ].join('\n');
 
