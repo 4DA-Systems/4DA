@@ -5,6 +5,21 @@ mod tests {
     use crate::error::FourDaError;
     use crate::settings::{LLMProvider, RerankConfig};
     use crate::settings_commands::validate_input_length;
+    use crate::settings_commands::{incoming_key_replaces_stored, IMPORTED_KEY_PLACEHOLDER};
+
+    // ========================================================================
+    // set_llm_provider: which incoming keys replace the stored secret
+    // ========================================================================
+
+    #[test]
+    fn env_import_placeholder_never_overwrites_the_imported_key() {
+        // The UI shows this marker after `import_env_key` stored the real key;
+        // saving it verbatim used to replace the real key with the marker text.
+        assert!(!incoming_key_replaces_stored(IMPORTED_KEY_PLACEHOLDER));
+        assert!(!incoming_key_replaces_stored(""));
+        assert!(incoming_key_replaces_stored("a-freshly-pasted-key"));
+        assert!(incoming_key_replaces_stored("local-server"));
+    }
 
     // ========================================================================
     // validate_input_length tests

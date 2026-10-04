@@ -4,6 +4,8 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { cmd } from '../../lib/commands';
+import { IMPORTED_FROM_ENV, localServerChoice } from './quick-setup-utils';
+import type { LocalServerChoice } from './quick-setup-utils';
 import type { OllamaStatus, PullProgress } from './types';
 
 type ProviderType = 'anthropic' | 'openai' | 'ollama' | 'openai-compatible';
@@ -21,6 +23,7 @@ interface LocalServer {
   name: string;
   base_url: string;
   model_count: number;
+  models?: string[];
   running: boolean;
 }
 
@@ -33,6 +36,8 @@ interface SetupAIProviderProps {
   onProviderChange: (provider: ProviderType) => void;
   onApiKeyChange: (key: string) => void;
   onDownloadModels?: () => void;
+  localServer?: LocalServerChoice | null;
+  onLocalServerSelect?: (choice: LocalServerChoice) => void;
 }
 
 export function SetupAIProvider({
@@ -44,6 +49,8 @@ export function SetupAIProvider({
   onProviderChange,
   onApiKeyChange,
   onDownloadModels,
+  localServer = null,
+  onLocalServerSelect,
 }: SetupAIProviderProps) {
   const { t } = useTranslation();
   const [envDetection, setEnvDetection] = useState<EnvDetection | null>(null);
@@ -64,7 +71,7 @@ export function SetupAIProvider({
     try {
       await cmd('import_env_key', { provider: envProvider });
       onProviderChange(envProvider);
-      onApiKeyChange('(imported from environment)');
+      onApiKeyChange(IMPORTED_FROM_ENV);
     } catch {
       // Silently fail — user can still enter manually
     } finally {
@@ -239,14 +246,25 @@ export function SetupAIProvider({
                 <div className="text-[10px] text-text-muted mt-0.5">{t('onboarding.setupAi.ollamaDesc')}</div>
               </button>
               {/* Auto-detected local servers */}
-              {localServers.filter(s => s.name !== 'Ollama').map((server) => (
+              {localServers.filter(s => s.name !== 'Ollama').map((server) => {
+                // Selecting a server saves its URL and a loaded model; with no
+                // model loaded there is nothing usable to save, so the card is
+                // inert (its "0 models" line already says why).
+                const choice = localServerChoice(server);
+                const selected = provider === 'openai-compatible' && localServer?.name === server.name;
+                return (
                 <button
                   key={server.name}
+                  disabled={!choice}
+                  aria-pressed={selected}
                   onClick={() => {
-                    onProviderChange('openai-compatible');
-                    onApiKeyChange('');
+                    if (choice) onLocalServerSelect?.(choice);
                   }}
-                  className="p-3 rounded-lg text-start bg-bg-tertiary border-2 border-transparent hover:border-border transition-all"
+                  className={`p-3 rounded-lg text-start transition-all disabled:opacity-50 disabled:cursor-not-allowed ${
+                    selected
+                      ? 'bg-orange-500/20 border-2 border-orange-500'
+                      : 'bg-bg-tertiary border-2 border-transparent hover:border-border'
+                  }`}
                 >
                   <div className="text-sm font-medium text-text-primary flex items-center gap-1.5">
                     {server.name}
@@ -256,7 +274,8 @@ export function SetupAIProvider({
                     {t('onboarding.setupAi.modelCount', { count: server.model_count })} &middot; {server.base_url}
                   </div>
                 </button>
-              ))}
+                );
+              })}
             </div>
           </div>
 

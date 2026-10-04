@@ -94,6 +94,18 @@ pub async fn get_llm_usage() -> Result<serde_json::Value> {
     }))
 }
 
+/// What the UI shows in the key field after `import_env_key` stored the real key
+/// server-side. Must match `IMPORTED_FROM_ENV` in
+/// `src/components/onboarding/quick-setup-utils.ts` and `AIProviderSection.tsx`.
+pub(crate) const IMPORTED_KEY_PLACEHOLDER: &str = "(imported from environment)";
+
+/// Does a key sent by the UI replace the stored one? An empty value and the
+/// env-import placeholder both mean "unchanged" — the real key is already
+/// stored, and saving the marker text would overwrite it.
+pub(crate) fn incoming_key_replaces_stored(key: &str) -> bool {
+    !key.is_empty() && key != IMPORTED_KEY_PLACEHOLDER
+}
+
 /// Update LLM provider settings
 #[tauri::command]
 pub async fn set_llm_provider(
@@ -151,8 +163,11 @@ pub async fn set_llm_provider(
     let mut guard = manager.lock();
 
     // If the incoming key is empty, preserve the existing key — the caller
-    // didn't change it (the frontend never sends the actual key back).
-    let effective_api_key = if api_key.is_empty() {
+    // didn't change it (the frontend never sends the actual key back). The
+    // env-import placeholder means the same thing: `import_env_key` already
+    // stored the real key, and the UI only displays this marker in its place.
+    // Saving it verbatim overwrote the imported key with the marker text.
+    let effective_api_key = if !incoming_key_replaces_stored(&api_key) {
         guard.get().llm.api_key.clone()
     } else {
         match crate::settings::keystore::store_secret("llm_api_key", &api_key) {
@@ -167,7 +182,7 @@ pub async fn set_llm_provider(
         api_key
     };
     let effective_openai_key = match openai_api_key {
-        Some(ref k) if !k.is_empty() => {
+        Some(ref k) if incoming_key_replaces_stored(k) => {
             if let Ok(false) = crate::settings::keystore::store_secret("openai_api_key", k) {
                 warn!(target: "4da::settings", "Keychain unavailable for OpenAI key — plaintext fallback");
             }

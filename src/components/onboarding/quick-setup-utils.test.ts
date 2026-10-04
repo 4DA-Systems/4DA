@@ -20,6 +20,9 @@ import {
   validateApiKey,
   buildInitialPullProgress,
   probeKeyBeforeSave,
+  localServerChoice,
+  IMPORTED_FROM_ENV,
+  LOCAL_SERVER_TOKEN,
 } from './quick-setup-utils';
 import type { OllamaStatus } from './types';
 
@@ -220,5 +223,45 @@ describe('pickOllamaModel', () => {
     expect(pickOllamaModel(['nomic-embed-text', 'mistral:7b'])).toBe('mistral:7b');
     expect(pickOllamaModel(['nomic-embed-text'])).toBe('llama3.2');
     expect(pickOllamaModel(undefined)).toBe('llama3.2');
+  });
+});
+
+describe('env-imported key placeholder', () => {
+  beforeEach(() => cmdMock.mockReset());
+
+  it('is accepted by the format check for every provider', () => {
+    expect(validateApiKey('anthropic', IMPORTED_FROM_ENV)).toBe(true);
+    expect(validateApiKey('openai', IMPORTED_FROM_ENV)).toBe(true);
+  });
+
+  it('is never sent to the live key probe', async () => {
+    const r = await probeKeyBeforeSave('anthropic', IMPORTED_FROM_ENV);
+    expect(r.ok).toBe(true);
+    expect(cmdMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('local OpenAI-compatible servers', () => {
+  beforeEach(() => cmdMock.mockReset());
+
+  it('localServerChoice appends /v1 and takes the first loaded model', () => {
+    expect(localServerChoice({ name: 'LM Studio', base_url: 'http://localhost:1234', models: ['qwen3-14b', 'x'] }))
+      .toEqual({ name: 'LM Studio', baseUrl: 'http://localhost:1234/v1', model: 'qwen3-14b' });
+    expect(localServerChoice({ name: 'Jan', base_url: 'http://localhost:1337/v1/', models: ['m'] })?.baseUrl)
+      .toBe('http://localhost:1337/v1');
+  });
+
+  it('localServerChoice refuses a server with no model loaded', () => {
+    expect(localServerChoice({ name: 'llama.cpp', base_url: 'http://localhost:8080', models: [] })).toBeNull();
+    expect(localServerChoice({ name: 'llama.cpp', base_url: 'http://localhost:8080' })).toBeNull();
+  });
+
+  it('saveLlmProvider persists the server base URL, model and a local token', async () => {
+    const choice = { name: 'LM Studio', baseUrl: 'http://localhost:1234/v1', model: 'qwen3-14b' };
+    await saveLlmProvider('openai-compatible', '', null, choice);
+    expect(persistedProvider()).toEqual({
+      provider: 'openai-compatible', apiKey: LOCAL_SERVER_TOKEN, model: 'qwen3-14b',
+      baseUrl: 'http://localhost:1234/v1', openaiApiKey: null,
+    });
   });
 });

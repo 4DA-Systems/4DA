@@ -185,10 +185,23 @@ pub async fn detect_local_servers() -> Result<serde_json::Value> {
                 } else {
                     data["data"].as_array().map_or(0, std::vec::Vec::len)
                 };
+                // OpenAI-compatible servers list loaded models as `data[].id`;
+                // onboarding needs one to save a usable provider (an empty
+                // model makes every completion fail).
+                let models: Vec<String> = data["data"]
+                    .as_array()
+                    .map(|arr| {
+                        arr.iter()
+                            .filter_map(|m| m["id"].as_str().map(str::to_string))
+                            .take(20)
+                            .collect()
+                    })
+                    .unwrap_or_default();
                 detected.push(serde_json::json!({
                     "name": name,
                     "base_url": base_url,
                     "model_count": model_count,
+                    "models": models,
                     "running": true
                 }));
                 info!(target: "4da::llm", server = name, models = model_count, "Detected local LLM server");
