@@ -9,13 +9,19 @@
 // key valid to the end of the period that has actually been paid for, plus
 // grace. Stateless — Stripe is the only source of truth — so it scales with no
 // database and needs no revocation list: cancelled subscriptions stop renewing
-// and lapse at period end; refunded / charged-back customers never renew.
+// and lapse at period end; refunded / charged-back customers never renew; a
+// failing card gets a 7-day lease that stops when Stripe gives up.
+//
+// A key of any age is accepted, so the key in the PURCHASE email works on any
+// computer for the life of the subscription. A successful call also marks the
+// customer `renews_in_app`, which tells the invoice.paid webhook to stop
+// mailing them a replacement key every month (activate.js handleInvoicePaid).
 //
 // Responses (always JSON, never cached):
 //   200 {status:'renewed', license_key, expires_at}  — install this key
 //   200 {status:'current'}                           — what you hold is newest
 //   200 {status:'lifetime'}                          — lifetime keys never renew
-//   403 {status:'not_entitled'|'lapsed'}             — keep your key; it will lapse
+//   403 {status:'not_entitled'}                      — keep your key; it will lapse
 //   400 / 401                                        — malformed / not our signature
 //   429 / 503 {retryable:true}                       — try again later, keep your key
 //
@@ -32,7 +38,7 @@ import {
   extendsAccess,
   parseLicenseKey,
   pickEntitlingSubscription,
-  renewedExpiry,
+  renewedExpiryFor,
   subscriptionPeriodEnd,
 } from '../../../lib/renewal.js';
 
@@ -71,7 +77,7 @@ async function findEntitledCustomer(stripe, email) {
       const subs = await stripe.subscriptions.list({ customer: customer.id, status: 'all', limit: 20 });
       const sub = pickEntitlingSubscription(subs.data);
       const end = sub ? subscriptionPeriodEnd(sub) : null;
-      if (end !== null && (!best || end > best.periodEnd)) best = { customer, periodEnd: end };
+      if (end !== null && (!best || end > best.periodEnd)) best = { customer, sub, periodEnd: end };
     }
     if (best) break;
   }
@@ -90,7 +96,10 @@ async function reusableStoredKey(customer, email, expiry) {
 
 async function issue(env, stripe, customer, presented, expiry) {
   const stored = await reusableStoredKey(customer, presented.email, expiry);
-  if (stored) return { key: stored, expiresAt: meta(customer.metadata, 'expires_at') || expiry.toISOString() };
+  if (stored) {
+    await markRenewsInApp(stripe, customer);
+    return { key: stored, expiresAt: meta(customer.metadata, 'expires_at') || expiry.toISOString() };
+  }
 
   const now = new Date();
   const tier = meta(customer.metadata, 'tier') || presented.tier || 'signal';
@@ -112,9 +121,22 @@ async function issue(env, stripe, customer, presented, expiry) {
       [metaKey('license')]: key,
       [metaKey('expires_at')]: payload.expires_at,
       [metaKey('issued_at')]: payload.issued_at,
+      [metaKey('renews_in_app')]: 'true',
     },
   });
   return { key, expiresAt: payload.expires_at };
+}
+
+/** Record once that this customer's app renews by itself, so the webhook stops
+ * mailing them a key every billing period. Best-effort: a failed write only
+ * means one more renewal email. */
+async function markRenewsInApp(stripe, customer) {
+  if (meta(customer.metadata, 'renews_in_app') === 'true') return;
+  try {
+    await stripe.customers.update(customer.id, { metadata: { [metaKey('renews_in_app')]: 'true' } });
+  } catch (err) {
+    console.error('renews_in_app marker write failed (non-fatal):', err?.message);
+  }
 }
 
 export async function onRequest({ request, env }) {
@@ -134,9 +156,8 @@ export async function onRequest({ request, env }) {
   if (!(await signatureIsOurs(parsed))) return json({ status: 'error', reason: 'invalid_signature' }, 401);
 
   const presented = parsed.payload;
-  const kind = classifyPresentedKey(presented, Date.now());
+  const kind = classifyPresentedKey(presented);
   if (kind === 'lifetime') return json({ status: 'lifetime' }, 200);
-  if (kind === 'lapsed') return json({ status: 'lapsed' }, 403);
   if (kind !== 'eligible') return json({ status: 'error', reason: 'invalid_key_format' }, 400);
 
   if (env.LICENSE_KV) {
@@ -154,8 +175,11 @@ export async function onRequest({ request, env }) {
     const entitled = await findEntitledCustomer(stripe, presented.email);
     if (!entitled) return json({ status: 'not_entitled' }, 403);
 
-    const expiry = renewedExpiry(entitled.periodEnd);
-    if (!extendsAccess(presented.expires_at, expiry)) return json({ status: 'current' }, 200);
+    const expiry = renewedExpiryFor(entitled.sub, Date.now());
+    if (!extendsAccess(presented.expires_at, expiry)) {
+      await markRenewsInApp(stripe, entitled.customer);
+      return json({ status: 'current' }, 200);
+    }
 
     const { key, expiresAt } = await issue(env, stripe, entitled.customer, presented, expiry);
     console.log('Licence renewed silently for customer', entitled.customer.id, 'until', expiresAt);

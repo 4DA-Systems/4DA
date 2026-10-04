@@ -58,20 +58,3 @@ export async function signLicenseToken(payload, privHex) {
   const sig = await ed.signAsync(payloadBytes, seed); // 64-byte Uint8Array
   return `4DA-${payloadB64}.${bytesToB64(sig)}`;
 }
-
-/**
- * Generate a stable, unguessable refresh credential (the user-facing "license
- * key" in the lease model). Format: `4DA-LIC-<52 base32 chars>` (~256 bits).
- * Distinguishable from signed tokens by the `-LIC-` marker and absence of `.`.
- */
-export function generateRefreshKey() {
-  const raw = new Uint8Array(32);
-  crypto.getRandomValues(raw);
-  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'; // RFC4648 base32, no padding
-  let out = '';
-  for (let i = 0; i < raw.length; i++) {
-    out += alphabet[raw[i] & 31];
-    out += alphabet[(raw[i] >> 5) & 31];
-  }
-  return `4DA-LIC-${out}`;
-}

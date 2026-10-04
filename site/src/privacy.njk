@@ -273,7 +273,7 @@ permalink: "/privacy.html"
     <ul>
       <li>Sends <strong>only your license key</strong> (which embeds the email address you purchased with) to our licensing endpoint at 4da.ai</li>
       <li>Is confirmed against your subscription status with our payment provider (Stripe)</li>
-      <li>Happens only when your key is within 10 days of expiry &mdash; in practice about once per billing period &mdash; and never for free users or Lifetime licenses</li>
+      <li>Happens only when your key is within 10 days of expiry &mdash; in practice about once per billing period &mdash; or when you paste an expired subscription key to activate it, and never for free users or Lifetime licenses</li>
       <li>Does <strong>not</strong> send device identifiers, usage data, or any other personal data; if it fails, your current key keeps working until its own expiry</li>
     </ul>
     <p>Older license keys issued through the <a href="https://keygen.sh">Keygen</a> license service are validated with Keygen's API, which receives the license key only. Keygen may log the IP address of the request as part of standard server operations; see <a href="https://keygen.sh/privacy/">Keygen's Privacy Policy</a>. Our own endpoint is hosted on Cloudflare, which may likewise log request IP addresses.</p>
@@ -362,7 +362,7 @@ permalink: "/privacy.html"
         <tr><td>Cloudflare</td><td>Website</td><td>Server logs, analytics</td><td>Website hosting</td></tr>
         <tr><td>PostHog</td><td>Website (all pages)</td><td>Page views and product events (e.g. which download button was pressed), plus the IP and browser data any web request carries</td><td>Aggregate traffic and funnel analytics. Not used for advertising or cross-site tracking.</td></tr>
         <tr><td>Stripe</td><td>Website (Signal checkout and subscription billing)</td><td>Your email address, payment details (entered on Stripe's own checkout page &mdash; we never see or store card numbers), and your billing history. Your issued licence key and its expiry are stored against your Stripe customer record so we can re-send it to you.</td><td>Taking payment, managing subscriptions and renewals, and issuing refunds. See <a href="https://stripe.com/privacy">Stripe's Privacy Policy</a>.</td></tr>
-        <tr><td>Resend</td><td>Website (sending your licence key: at purchase, at each renewal, and when you ask us to re-send it)</td><td>Your purchase email address and your licence key</td><td>Emailing your licence key to you, so that a closed browser tab never costs you the key you paid for. When you request a re-send we email the key rather than displaying it, because we cannot verify that whoever typed an address owns it.</td></tr>
+        <tr><td>Resend</td><td>Website (sending your licence key: at purchase, at renewal until your App renews it automatically, and when you ask us to re-send it)</td><td>Your purchase email address and your licence key</td><td>Emailing your licence key to you, so that a closed browser tab never costs you the key you paid for. When you request a re-send we email the key rather than displaying it, because we cannot verify that whoever typed an address owns it.</td></tr>
         <tr><td>Shopify</td><td>Store</td><td>Purchase and shipping information</td><td>Merchandise sales</td></tr>
       </tbody>
     </table>

@@ -129,6 +129,14 @@ pub async fn activate_license(
     if license_key.is_empty() {
         return Err("License key cannot be empty".into());
     }
+    // An expired subscription key (the one in the purchase email, pasted on a
+    // new computer) is exchanged for the current key while the subscription is
+    // live, so customers never hunt for "the latest" key in their inbox.
+    let license_key = if license_key.starts_with("4DA-") {
+        crate::settings::current_key_for_activation(&license_key).await?
+    } else {
+        license_key
+    };
 
     // Strategy: try Keygen API validation first (for Keygen-format keys like BE3529-...),
     // then fall back to local ed25519 verification (for self-signed 4DA- keys).

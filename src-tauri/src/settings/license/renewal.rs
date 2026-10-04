@@ -20,6 +20,9 @@
 //! - **Never accepts a worse key.** A returned key is installed only if it
 //!   verifies against the embedded public key, names the same email and
 //!   expires later than the key it replaces.
+//! - **The purchase key is permanent.** Pasting an expired subscription key
+//!   (the one from the purchase email, on a new computer) trades it for the
+//!   current key instead of failing — see [`current_key_for_activation`].
 
 use std::time::Duration;
 
@@ -32,8 +35,10 @@ const RENEW_URL: &str = "https://4da.ai/api/license/renew";
 
 /// Start asking this many days before the held key expires.
 pub(crate) const RENEW_WINDOW_DAYS: i64 = 10;
-/// Keep asking for this long after expiry (an app that was offline over the
-/// renewal date recovers on its own). Mirrors the server's MAX_LAPSE_DAYS.
+/// Keep asking in the background for this long after expiry (an app that was
+/// offline over the renewal date recovers on its own). This bounds traffic
+/// from cancelled installs only: the server renews a key of any age while the
+/// subscription is live, and pasting the key renews it at any age.
 pub(crate) const MAX_LAPSE_DAYS: i64 = 60;
 
 const FIRST_CHECK_DELAY: Duration = Duration::from_mins(2);
@@ -224,6 +229,37 @@ pub(crate) async fn renew_once() -> Option<RenewOutcome> {
         }
     }
     Some(outcome)
+}
+
+/// A pasted `4DA-` key that is genuinely ours but past its expiry is still the
+/// customer's credential while their subscription is live: exchange it for the
+/// current key so activation succeeds. Returns the key to activate, or a
+/// message that says why it can't be. A key that is not ours, or not expired,
+/// comes back unchanged for the normal activation path to judge.
+pub(crate) async fn current_key_for_activation(key: &str) -> Result<String, String> {
+    let Some(old) = signature_valid_payload(key) else {
+        return Ok(key.to_string());
+    };
+    if super::verify_license_key(key).is_ok() {
+        return Ok(key.to_string());
+    }
+    match post_renewal(key).await {
+        RenewOutcome::Renewed(new_key) => {
+            accept_renewed_key(&old, &new_key, super::verify_license_key)?;
+            info!(target: "4da::license", "Expired key exchanged for the current one at activation");
+            Ok(new_key)
+        }
+        RenewOutcome::NotEntitled(_) => Err(
+            "This key has expired and its subscription is no longer active. Renew at 4da.ai/signal.".to_string(),
+        ),
+        RenewOutcome::Current | RenewOutcome::Lifetime => Err(
+            "This key has expired and no newer key exists for it. Recover your current key at 4da.ai/signal.".to_string(),
+        ),
+        RenewOutcome::Retry(reason) => {
+            warn!(target: "4da::license", reason = %reason, "Activation-time renewal failed");
+            Err("This key has expired, and 4DA could not reach 4da.ai to renew it. Check your connection and try again.".to_string())
+        }
+    }
 }
 
 /// Start the background renewal loop: first check shortly after launch, then

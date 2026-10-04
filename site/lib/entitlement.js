@@ -1,9 +1,9 @@
 // Shared entitlement-lifecycle helpers for the Stripe-backed licence system.
 //
 // Imported by BOTH the webhook that WRITES entitlement state
-// (functions/api/license/activate.js) and the lease endpoint that READS it
-// (functions/api/license/refresh.js). The sharing is the whole point. Before
-// this module existed, refresh.js gated lifetime access on
+// (functions/api/license/activate.js) and the renewal endpoint that READS it
+// (functions/api/license/renew.js). The sharing is the whole point. Before
+// this module existed, a since-deleted lease endpoint gated lifetime access on
 // `streets_status !== 'refunded'` while NOTHING anywhere in the repo ever wrote
 // 'refunded' — a reader checking for a value no writer produced. The list of
 // terminal statuses now has exactly one definition, and both sides use it, so

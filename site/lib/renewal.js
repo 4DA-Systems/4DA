@@ -29,14 +29,27 @@
  * late (Stripe retry, an app that was offline) never interrupts a payer. */
 export const RENEWAL_GRACE_DAYS = 7;
 
-/** A key may be presented for renewal up to this long after it expired. Beyond
- * it the customer must recover by email — an ancient leaked key is not a
- * perpetual renewal credential. */
-export const MAX_LAPSE_DAYS = 60;
+// A key of ANY age is a valid renewal credential while its subscription is
+// live. There used to be a 60-day lapse bound "so an ancient leaked key is not a
+// perpetual credential" — but every key for an email carries exactly the same
+// power (the live Stripe subscription is the only gate), so an old leaked key
+// is no worse than last month's. The bound only stranded honest customers: the
+// key in their PURCHASE email stopped working on a new computer, which is what
+// forced a fresh key into their inbox every month. The app still stops asking
+// on its own 60 days after expiry; that bounds traffic, not entitlement.
 
 /** Stripe subscription statuses that still entitle. past_due = Stripe is
- * retrying a failed card (dunning); the customer keeps access meanwhile. */
+ * retrying a failed card (dunning); the customer keeps access meanwhile, but
+ * only on a short lease — see renewedExpiryFor. */
 export const ENTITLING_SUB_STATUSES = ['active', 'trialing', 'past_due'];
+
+/** During dunning a key runs at most this far ahead of now. Stripe advances the
+ * period the moment it TRIES to charge, so the period end is not proof of
+ * payment while the card is failing; handing out a key to it would give every
+ * failed card a free month. The app renews every 12h inside this window, so a
+ * customer who fixes their card never notices; one whose card never recovers
+ * lapses within a week of Stripe giving up. */
+export const PAST_DUE_LEASE_DAYS = 7;
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const KEY_RE = /^4DA-([A-Za-z0-9+/]+={0,2})\.([A-Za-z0-9+/]+={0,2})$/;
@@ -75,13 +88,12 @@ export function parseLicenseKey(key) {
 
 /**
  * What kind of key is this, before we touch Stripe?
- * @returns {'lifetime'|'lapsed'|'eligible'|'invalid'}
+ * @returns {'lifetime'|'eligible'|'invalid'}
  */
-export function classifyPresentedKey(payload, nowMs) {
+export function classifyPresentedKey(payload) {
   const exp = Date.parse(payload?.expires_at);
   if (Number.isNaN(exp)) return 'invalid';
   if (new Date(exp).getUTCFullYear() >= 2099) return 'lifetime';
-  if (nowMs - exp > MAX_LAPSE_DAYS * DAY_MS) return 'lapsed';
   return 'eligible';
 }
 
@@ -116,6 +128,15 @@ export function pickEntitlingSubscription(subs) {
 /** Expiry for a renewed key: paid period end + grace. */
 export function renewedExpiry(periodEndSeconds) {
   return new Date(periodEndSeconds * 1000 + RENEWAL_GRACE_DAYS * DAY_MS);
+}
+
+/** Expiry for a renewed key given the entitling subscription itself: the paid
+ * period end + grace, capped to a short lease while the card is failing. */
+export function renewedExpiryFor(sub, nowMs) {
+  const full = renewedExpiry(subscriptionPeriodEnd(sub));
+  if (sub?.status !== 'past_due') return full;
+  const lease = new Date(nowMs + PAST_DUE_LEASE_DAYS * DAY_MS);
+  return lease < full ? lease : full;
 }
 
 /**
