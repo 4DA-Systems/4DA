@@ -238,8 +238,8 @@ pnpm run test
 # Full validation (types + lint + format + tests)
 pnpm run validate:all
 
-# MCP server build
-cd mcp-4da-server && pnpm run build
+# MCP server: its own repository since 2026-10-04
+git clone https://github.com/4DA-Systems/4da-mcp-server.git && cd 4da-mcp-server && pnpm install && pnpm run build
 ```
 
 ---

@@ -70,7 +70,7 @@ data/                   # Runtime data (gitignored)
   settings.json         # User config (use settings.example.json as template)
   4da.db                # SQLite database
 mcp-memory-server/      # MCP server for persistent dev memory
-mcp-4da-server/         # MCP server exposing 4DA tools (16 tools; 11 standalone)
+mcp-4da-server/         # stub: @4da/mcp-server moved to github.com/4DA-Systems/4da-mcp-server
 ```
 
 **Path accuracy note:** `db` and `scoring` are **directories**, not single files. There is no

@@ -16,6 +16,9 @@ const path = require("path");
 const https = require("https");
 
 const REPO = "4DA-Systems/4DA";
+// The MCP server's own repository since 2026-10-04. Its .mcpb releases live
+// there from 6.0.1 on; mcp-v4.6.6 .. mcp-v6.0.0 stay on the desktop repo.
+const MCP_REPO = "4DA-Systems/4da-mcp-server";
 const OUT = path.join(__dirname, "..", "docs", "private", "distribution", "funnel-metrics.jsonl");
 
 function getJson(url) {
@@ -50,8 +53,12 @@ function gh(args) {
   const views = gh(`repos/${REPO}/traffic/views --jq "{count:.count,uniques:.uniques}"`);
   const clones = gh(`repos/${REPO}/traffic/clones --jq "{count:.count,uniques:.uniques}"`);
 
-  // .mcpb adoption: download counts across all mcp-v* release assets
-  const releases = gh(`repos/${REPO}/releases --jq "[.[] | select(.tag_name | startswith(\\"mcp-v\\")) | {tag:.tag_name, assets:[.assets[] | {name:.name, downloads:.download_count}]}]"`);
+  // .mcpb adoption: download counts across all mcp-v* release assets, in both
+  // repositories (older releases stay on the desktop repo).
+  const mcpReleases = (slug) =>
+    gh(`repos/${slug}/releases --jq "[.[] | select(.tag_name | startswith(\\"mcp-v\\")) | {tag:.tag_name, assets:[.assets[] | {name:.name, downloads:.download_count}]}]"`) || [];
+  const releases = [...mcpReleases(MCP_REPO), ...mcpReleases(REPO)];
+  const mcpRepo = gh(`repos/${MCP_REPO} --jq "{stars:.stargazers_count,forks:.forks_count,open_issues:.open_issues_count}"`);
 
   const snapshot = {
     at: new Date().toISOString(),
@@ -59,7 +66,7 @@ function gh(args) {
       week: npmWeek ? npmWeek.downloads : null,
       month: npmMonth ? npmMonth.downloads : null,
     },
-    github: { repo, views_14d: views, clones_14d: clones },
+    github: { repo, views_14d: views, clones_14d: clones, mcp_repo: mcpRepo },
     mcpb_releases: releases,
   };
 
@@ -70,6 +77,7 @@ function gh(args) {
   console.log(`funnel @ ${snapshot.at}`);
   console.log(`  npm @4da/mcp-server: ${snapshot.npm.week ?? "?"}/wk  ${snapshot.npm.month ?? "?"}/mo (mostly mirrors — watch the TREND, not the level)`);
   if (repo) console.log(`  github: ${repo.stars} stars, ${views ? views.uniques : "?"} unique visitors /14d, ${clones ? clones.uniques : "?"} unique cloners /14d`);
+  if (mcpRepo) console.log(`  github ${MCP_REPO}: ${mcpRepo.stars} stars, ${mcpRepo.open_issues} open issues/PRs`);
   if (releases) {
     for (const r of releases) {
       const total = r.assets.reduce((s, a) => s + (a.downloads || 0), 0);

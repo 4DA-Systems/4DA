@@ -2,9 +2,10 @@
   "mcpServers": {
     "4da": {
       "args": [
-        "./mcp-4da-server/dist/index.js"
+        "-y",
+        "@4da/mcp-server@latest"
       ],
-      "command": "node",
+      "command": "npx",
       "env": {
         "FOURDA_DB_PATH": "./data/4da.db"
       }

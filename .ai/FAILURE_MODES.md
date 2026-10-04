@@ -268,7 +268,7 @@ if updated == 0 {
 **Guards in place (2026-07-29).**
 - `tauri.conf.json` points at `releases/download/desktop-latest/latest.json`, a desktop-only updater manifest pointer.
 - `.github/workflows/release.yml` requires `latest.json` before publishing and uploads it to the `desktop-latest` release.
-- `.github/workflows/build-mcpb-extensions.yml` marks MCP bundle releases as prereleases so future MCP tags cannot become GitHub's global latest.
+- `.github/workflows/build-mcpb-extensions.yml` marked MCP bundle releases as prereleases so MCP tags could not become GitHub's global latest. Since 2026-10-04 the MCP server releases from its own repository (4DA-Systems/4da-mcp-server), so no MCP release is created here at all, and `check-release-channel.cjs` fails any workflow in this repository that would publish one.
 - `scripts/check-release-channel.cjs` runs in pre-commit, CI, and `pnpm run validate` to enforce endpoint, manifest, prerelease, and app-version consistency.
 
 **If it happens.** Check the installed exe path and mtime, then inspect the configured updater URL. `https://github.com/4DA-Systems/4DA/releases/latest` is not a valid desktop updater authority; only the `desktop-latest` manifest pointer is.

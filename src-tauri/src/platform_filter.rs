@@ -36,9 +36,9 @@
 //! Preemption's HIGH `quinn-proto` finding on 2026-09-07.
 //!
 //! The MCP server resolves the same predicate for `vulnerability_scan` in
-//! `mcp-4da-server/src/live/version-resolver.ts` (`platformActive =
+//! `src/live/version-resolver.ts` (`platformActive =
 //! targetActiveOnHost(declaredTarget) && builtOnHost`) using
-//! `mcp-4da-server/src/live/cargo-platform.ts`. Keep the two definitions in
+//! `src/live/cargo-platform.ts`, both in github.com/4DA-Systems/4da-mcp-server. Keep the two definitions in
 //! step: a crate not resolved for the host is platform-inactive on both.
 
 use std::collections::HashSet;

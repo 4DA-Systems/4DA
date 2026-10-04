@@ -378,7 +378,7 @@ docs/legal/DEED-*
 credentials.json
 service-account*.json
 
-# MCP server build artifacts
+# Left behind by the in-tree MCP server (moved to 4DA-Systems/4da-mcp-server)
 mcp-4da-server/dist/
 mcp-4da-server/node_modules/
 

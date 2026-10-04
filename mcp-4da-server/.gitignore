@@ -1,4 +1,0 @@
-
-# Runtime database (standalone mode creates it on first run) — never commit
-data/
-dist-mcpb/

@@ -636,9 +636,10 @@ export class MCPClient {
             path.join(appData, '4da', 'mcp-server', 'dist', 'index.js'),
         );
 
-        // 4. Development path (relative to extension)
+        // 4. Development path: a checkout of github.com/4DA-Systems/4da-mcp-server
+        //    next to this repository (the server left 4DA's tree on 2026-10-04).
         candidates.push(
-            path.resolve(__dirname, '..', '..', '..', '..', 'mcp-4da-server', 'dist', 'index.js'),
+            path.resolve(__dirname, '..', '..', '..', '..', '..', '4da-mcp-server', 'dist', 'index.js'),
         );
 
         for (const candidate of candidates) {

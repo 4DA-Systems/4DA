@@ -10,9 +10,12 @@
   "plugins": [
     {
       "name": "4da",
-      "source": "./mcp-4da-server",
+      "source": {
+        "source": "github",
+        "repo": "4DA-Systems/4da-mcp-server"
+      },
       "description": "What changes between the version you run and the one you want, which of your files it touches, which vulnerabilities it fixes; a hook points the agent at it whenever a dependency version is edited.",
-      "version": "6.0.0",
+      "version": "6.0.1",
       "homepage": "https://4da.ai/mcp/",
       "license": "Apache-2.0"
     }
