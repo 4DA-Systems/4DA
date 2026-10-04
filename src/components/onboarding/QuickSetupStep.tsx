@@ -43,6 +43,8 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
     isSaving,
     apiKeyHint,
     skippedDownload,
+    cancellingDownload,
+    cancelDownload,
     removeTag,
     addInterest,
     toggleInterest,
@@ -55,6 +57,13 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
     downloadLocalModels,
     setNewInterest,
   } = useQuickSetup({ isAnimating, onComplete, onBack });
+
+  // Brand names stay untranslated; a picked local server is named as itself.
+  const providerName = provider === 'anthropic'
+    ? 'Anthropic'
+    : provider === 'openai'
+      ? 'OpenAI'
+      : localServer?.name ?? t('onboarding.setupAi.otherLabel');
 
   // --- Section header component ---
   const SectionHeader = ({
@@ -75,7 +84,7 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
     <button
       onClick={onToggle}
       aria-expanded={isOpen}
-      aria-label={title}
+      aria-label={`${title}: ${subtitle}`}
       className="w-full flex items-center justify-between p-4 bg-bg-secondary rounded-lg border border-border hover:border-[#3A3A3A] transition-colors"
     >
       <div className="flex items-center gap-3">
@@ -127,7 +136,7 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
           <SectionHeader
             title={t('onboarding.setup.aiProvider')}
             subtitle={aiConfigured
-              ? (provider === 'ollama' ? t('onboarding.setup.localAiReady') : `${provider === 'anthropic' ? 'Anthropic' : 'OpenAI'} ${t('onboarding.setup.configured')}`)
+              ? (provider === 'ollama' ? t('onboarding.setup.localAiReady') : `${providerName} ${t('onboarding.setup.configured')}`)
               : ollamaStatus !== null
                 ? t('onboarding.setup.basicModeAvailable')
                 : t('onboarding.setup.autoDetecting')}
@@ -147,6 +156,8 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
                 onProviderChange={handleProviderChange}
                 onApiKeyChange={handleApiKeyChange}
                 onDownloadModels={downloadLocalModels}
+                onCancelDownload={() => { void cancelDownload(); }}
+                cancellingDownload={cancellingDownload}
                 localServer={localServer}
                 onLocalServerSelect={handleLocalServerSelect}
               />

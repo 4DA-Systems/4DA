@@ -46,7 +46,7 @@ export function ErrorState({ status, onRetry, onContinue }: ErrorStateProps) {
         <div className="flex items-center gap-3">
           <button
             onClick={onRetry}
-            aria-label="Retry analysis"
+            aria-label={t('firstRun.retryAnalysisAria')}
             className="px-6 py-3 bg-orange-500 text-white font-medium rounded-lg hover:bg-orange-600 transition-colors"
           >
             {t('firstRun.tryAgain')}

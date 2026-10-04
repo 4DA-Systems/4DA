@@ -264,6 +264,55 @@ pub(super) async fn check_ollama_status_impl(
     }))
 }
 
+/// One parsed line of Ollama's streaming `/api/pull` response.
+#[derive(Debug, PartialEq)]
+enum PullLine {
+    Progress {
+        status: String,
+        percent: u32,
+        done: bool,
+    },
+    /// Ollama reports failures (unknown model, disk full, registry down)
+    /// in-band as `{"error": "..."}` on an HTTP 200 stream.
+    Error(String),
+}
+
+fn parse_pull_line(line: &str) -> Option<PullLine> {
+    let value = serde_json::from_str::<serde_json::Value>(line).ok()?;
+    if let Some(error) = value["error"].as_str() {
+        return Some(PullLine::Error(error.to_string()));
+    }
+    let status = value["status"].as_str().unwrap_or("").to_string();
+    let total = value["total"].as_u64().unwrap_or(0);
+    let completed = value["completed"].as_u64().unwrap_or(0);
+    let percent = if total > 0 {
+        (completed as f64 / total as f64 * 100.0).min(100.0) as u32
+    } else {
+        0
+    };
+    let done = status == "success";
+    Some(PullLine::Progress {
+        status,
+        percent,
+        done,
+    })
+}
+
+/// Final progress event for a failed pull, so progress bars show the failure
+/// instead of freezing mid-download. `done` stays false: listeners read it as
+/// "model installed". The command's `Err` is the authoritative signal.
+fn emit_pull_failed(app: &AppHandle, model: &str) {
+    let _ = app.emit(
+        "ollama-pull-progress",
+        serde_json::json!({
+            "model": model,
+            "status": "failed",
+            "percent": 0,
+            "done": false
+        }),
+    );
+}
+
 /// Implementation for pull_ollama_model command.
 pub(super) async fn pull_ollama_model_impl(
     app: AppHandle,
@@ -301,6 +350,7 @@ pub(super) async fn pull_ollama_model_impl(
     use futures::StreamExt;
     let mut stream = response.bytes_stream();
     let mut buffer = Vec::new();
+    let mut saw_success = false;
 
     while let Some(chunk) = stream.next().await {
         // Check for cancellation on each chunk
@@ -330,28 +380,40 @@ pub(super) async fn pull_ollama_model_impl(
                 continue;
             }
 
-            if let Ok(progress) = serde_json::from_str::<serde_json::Value>(trimmed) {
-                let status = progress["status"].as_str().unwrap_or("").to_string();
-                let total = progress["total"].as_u64().unwrap_or(0);
-                let completed = progress["completed"].as_u64().unwrap_or(0);
-                let percent = if total > 0 {
-                    (completed as f64 / total as f64 * 100.0) as u32
-                } else {
-                    0
-                };
-                let done = status == "success";
-
-                let _ = app.emit(
-                    "ollama-pull-progress",
-                    serde_json::json!({
-                        "model": model,
-                        "status": status,
-                        "percent": percent,
-                        "done": done
-                    }),
-                );
+            match parse_pull_line(trimmed) {
+                Some(PullLine::Progress {
+                    status,
+                    percent,
+                    done,
+                }) => {
+                    saw_success |= done;
+                    let _ = app.emit(
+                        "ollama-pull-progress",
+                        serde_json::json!({
+                            "model": model,
+                            "status": status,
+                            "percent": percent,
+                            "done": done
+                        }),
+                    );
+                }
+                Some(PullLine::Error(message)) => {
+                    warn!(target: "4da::ollama", model = %model, error = %message, "Model pull failed");
+                    emit_pull_failed(&app, &model);
+                    return Err(format!("Ollama could not pull {model}: {message}").into());
+                }
+                None => {}
             }
         }
+    }
+
+    // Ollama ends every successful pull with a `success` status line. A stream
+    // that closes without one (server restarted, connection cut) did not
+    // install the model, so it must not be reported as a completed pull.
+    if !saw_success {
+        warn!(target: "4da::ollama", model = %model, "Model pull stream ended without success");
+        emit_pull_failed(&app, &model);
+        return Err(format!("Ollama stopped before {model} finished downloading").into());
     }
 
     info!(target: "4da::ollama", model = %model, "Model pull complete");
@@ -367,4 +429,52 @@ pub(super) fn cancel_ollama_pull_impl() -> Result<String> {
     OLLAMA_PULL_ABORT.store(true, Ordering::Relaxed);
     info!(target: "4da::ollama", "Ollama pull cancellation requested");
     Ok("Cancellation requested".to_string())
+}
+
+#[cfg(test)]
+mod pull_line_tests {
+    use super::{parse_pull_line, PullLine};
+
+    #[test]
+    fn in_band_error_is_a_failure_not_progress() {
+        assert_eq!(
+            parse_pull_line(r#"{"error":"pull model manifest: file does not exist"}"#),
+            Some(PullLine::Error(
+                "pull model manifest: file does not exist".to_string()
+            ))
+        );
+    }
+
+    #[test]
+    fn download_progress_reports_percent() {
+        assert_eq!(
+            parse_pull_line(r#"{"status":"pulling 6a0746a1ec1a","total":200,"completed":50}"#),
+            Some(PullLine::Progress {
+                status: "pulling 6a0746a1ec1a".to_string(),
+                percent: 25,
+                done: false,
+            })
+        );
+    }
+
+    #[test]
+    fn only_the_success_line_marks_done() {
+        assert_eq!(
+            parse_pull_line(r#"{"status":"success"}"#),
+            Some(PullLine::Progress {
+                status: "success".to_string(),
+                percent: 0,
+                done: true,
+            })
+        );
+        assert!(matches!(
+            parse_pull_line(r#"{"status":"verifying sha256 digest"}"#),
+            Some(PullLine::Progress { done: false, .. })
+        ));
+    }
+
+    #[test]
+    fn non_json_lines_are_ignored() {
+        assert_eq!(parse_pull_line("not json"), None);
+    }
 }

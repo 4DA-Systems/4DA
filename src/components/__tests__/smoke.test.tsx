@@ -171,7 +171,7 @@ import { ProGate } from '../ProGate';
 
 import { ViewTabBar } from '../ViewTabBar';
 import { FeedbackButtons } from '../result-item/FeedbackButtons';
-import { BriefingLoadingState, BriefingReadyState, BriefingNoDataState } from '../BriefingEmptyStates';
+import { BriefingLoadingState, BriefingReadyState } from '../BriefingEmptyStates';
 import { SignalsPanel } from '../SignalsPanel';
 import { OllamaStatus } from '../OllamaStatus';
 import { SplashScreen } from '../SplashScreen';
@@ -271,10 +271,6 @@ const SMOKE_COMPONENTS: Array<{
   {
     name: 'BriefingReadyState',
     render: () => <BriefingReadyState />,
-  },
-  {
-    name: 'BriefingNoDataState',
-    render: () => <BriefingNoDataState />,
   },
   {
     name: 'SignalsPanel (empty results)',

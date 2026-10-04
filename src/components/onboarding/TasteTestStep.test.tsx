@@ -15,6 +15,15 @@ vi.mock('@tauri-apps/api/event', () => ({
   emit: vi.fn(),
 }));
 
+// Render the real English strings (with interpolation), so these tests read
+// as the user sees the step rather than as translation keys.
+vi.mock('react-i18next', async () => {
+  const en = (await import('../../locales/en/ui.json')).default as Record<string, string>;
+  const t = (key: string, opts?: Record<string, unknown>) =>
+    (en[key] ?? key).replace(/\{\{(\w+)\}\}/g, (_, name: string) => String(opts?.[name] ?? ''));
+  return { useTranslation: () => ({ t, i18n: { language: 'en' } }) };
+});
+
 // ---------------------------------------------------------------------------
 // Child component mocks
 // ---------------------------------------------------------------------------
@@ -351,7 +360,58 @@ describe('TasteTestStep', () => {
       await vi.runAllTimersAsync();
     });
 
-    expect(screen.getByText(/Failed to start taste test/)).toBeInTheDocument();
+    expect(screen.getByText(/Couldn't start calibration/)).toBeInTheDocument();
+    // The button is usable again for a retry, not stuck on "Starting..."
+    expect(screen.getByText('Start calibration')).not.toBeDisabled();
+  });
+
+  it('goes straight to the profile when start reports the test already complete', async () => {
+    vi.mocked(invoke)
+      .mockResolvedValueOnce(mockCompleteResult) // taste_test_start -> complete
+      .mockResolvedValueOnce(mockCompleteResult.summary); // taste_test_finalize
+
+    render(
+      <TasteTestStep isAnimating={false} onComplete={mockOnComplete} onSkip={mockOnSkip} />,
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('Start calibration'));
+      await vi.runAllTimersAsync();
+    });
+
+    expect(invoke).toHaveBeenCalledWith('taste_test_finalize', {});
+    expect(screen.getByTestId('calibration-summary')).toBeInTheDocument();
+  });
+
+  it('a failed finalize offers a retry that recovers, instead of a blank card', async () => {
+    vi.mocked(invoke)
+      .mockResolvedValueOnce(mockNextCardResult) // taste_test_start
+      .mockResolvedValueOnce(mockCompleteResult) // taste_test_respond -> complete
+      .mockRejectedValueOnce('database is locked') // taste_test_finalize (1st)
+      .mockResolvedValueOnce(mockCompleteResult.summary); // taste_test_finalize (retry)
+
+    render(
+      <TasteTestStep isAnimating={false} onComplete={mockOnComplete} onSkip={mockOnSkip} />,
+    );
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('Start calibration'));
+      await vi.runAllTimersAsync();
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('interested-btn'));
+      await vi.runAllTimersAsync();
+    });
+
+    expect(screen.getByRole('alert')).toHaveTextContent("Couldn't build your profile: database is locked");
+    expect(screen.queryByTestId('taste-test-card')).not.toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(screen.getByText('Retry'));
+      await vi.runAllTimersAsync();
+    });
+
+    expect(screen.getByTestId('calibration-summary')).toBeInTheDocument();
   });
 
   // -------------------------------------------------------------------------

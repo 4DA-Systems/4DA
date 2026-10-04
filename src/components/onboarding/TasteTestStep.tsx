@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-/* eslint-disable i18next/no-literal-string */
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { cmd } from '../../lib/commands';
 
 import type { TasteProfileSummary } from '../../types/calibration';
@@ -25,6 +25,7 @@ interface CardState {
 }
 
 export function TasteTestStep({ isAnimating, onComplete, onSkip }: TasteTestStepProps) {
+  const { t } = useTranslation();
   const [phase, setPhase] = useState<Phase>('intro');
   const [currentCard, setCurrentCard] = useState<CardState | null>(null);
   const [progress, setProgress] = useState(0);
@@ -35,8 +36,22 @@ export function TasteTestStep({ isAnimating, onComplete, onSkip }: TasteTestStep
   const [starting, setStarting] = useState(false);
   const cardShownAt = useRef<number>(0);
 
+  // Every answer is already recorded; this only builds the profile from them,
+  // so a failure here is retryable without re-asking any card.
+  const finalize = useCallback(async () => {
+    setPhase('finalizing');
+    setError(null);
+    try {
+      setSummary(await cmd('taste_test_finalize'));
+      setPhase('complete');
+    } catch (e) {
+      setError(t('tasteTest.finalizeFailed', { error: String(e) }));
+    }
+  }, [t]);
+
   const startTest = useCallback(async () => {
     setStarting(true);
+    setError(null);
     try {
       const result = await cmd('taste_test_start');
       if (result.type === 'nextCard') {
@@ -45,12 +60,15 @@ export function TasteTestStep({ isAnimating, onComplete, onSkip }: TasteTestStep
         setConfidence(result.confidence);
         cardShownAt.current = Date.now();
         setPhase('cards');
+      } else {
+        await finalize();
       }
     } catch (e) {
-      setError(`Failed to start taste test: ${e}`);
+      setError(t('tasteTest.startFailed', { error: String(e) }));
+    } finally {
       setStarting(false);
     }
-  }, []);
+  }, [finalize, t]);
 
   const respond = useCallback(async (response: string) => {
     if (!currentCard) return;
@@ -60,6 +78,7 @@ export function TasteTestStep({ isAnimating, onComplete, onSkip }: TasteTestStep
       : undefined;
 
     setCardAnimating(true);
+    setError(null);
     await new Promise(r => setTimeout(r, 150));
 
     try {
@@ -75,22 +94,14 @@ export function TasteTestStep({ isAnimating, onComplete, onSkip }: TasteTestStep
         setConfidence(result.confidence);
         cardShownAt.current = Date.now();
         setCardAnimating(false);
-      } else if (result.type === 'complete') {
-        setPhase('finalizing');
-        try {
-          const finalSummary = await cmd('taste_test_finalize');
-          setSummary(finalSummary);
-          setPhase('complete');
-        } catch (e) {
-          setError(`Failed to finalize: ${e}`);
-          setPhase('cards');
-        }
+      } else {
+        await finalize();
       }
     } catch (e) {
-      setError(`Failed to respond: ${e}`);
+      setError(t('tasteTest.respondFailed', { error: String(e) }));
       setCardAnimating(false);
     }
-  }, [currentCard]);
+  }, [currentCard, finalize, t]);
 
   // Keyboard navigation for taste test cards
   useEffect(() => {
@@ -131,16 +142,14 @@ export function TasteTestStep({ isAnimating, onComplete, onSkip }: TasteTestStep
   if (phase === 'intro') {
     return (
       <div className={`text-center space-y-6 transition-opacity duration-300 ${isAnimating ? 'opacity-0' : 'opacity-100'}`}>
-        <div className="text-4xl mb-2">&#x1f3af;</div>
+        <div className="text-4xl mb-2" aria-hidden="true">&#x1f3af;</div>
         <h2 className="text-xl font-semibold text-text-primary">
-          Let's calibrate your feed
+          {t('tasteTest.introTitle')}
         </h2>
         <p className="text-text-secondary text-sm max-w-md mx-auto">
-          We'll show you up to 15 articles — just tell us which ones you'd read.
-          Your responses train 4DA's scoring engine so it surfaces content that matches your interests,
-          and helps AI tools working on your behalf make better decisions.
+          {t('tasteTest.introBody')}
         </p>
-        {error && <p className="text-red-400 text-xs">{error}</p>}
+        {error && <p role="alert" className="text-red-400 text-xs">{error}</p>}
         <div className="flex items-center justify-center gap-4 pt-2">
           <button
             onClick={() => { void startTest(); }}
@@ -150,15 +159,15 @@ export function TasteTestStep({ isAnimating, onComplete, onSkip }: TasteTestStep
             {starting ? (
               <span className="flex items-center gap-2">
                 <span className="w-3.5 h-3.5 border-2 border-black/30 border-t-black rounded-full animate-spin" />
-                Starting...
+                {t('tasteTest.starting')}
               </span>
-            ) : 'Start calibration'}
+            ) : t('tasteTest.start')}
           </button>
           <button
             onClick={onSkip}
             className="text-text-muted text-sm hover:text-text-secondary transition-colors"
           >
-            Skip for now
+            {t('onboarding.nav.skipForNow')}
           </button>
         </div>
       </div>
@@ -167,6 +176,7 @@ export function TasteTestStep({ isAnimating, onComplete, onSkip }: TasteTestStep
 
   // Cards phase
   if (phase === 'cards' && currentCard) {
+    const kbd = 'px-1 py-0.5 bg-bg-tertiary rounded text-[9px]';
     return (
       <div className="space-y-4">
         {/* Progress bar */}
@@ -179,20 +189,20 @@ export function TasteTestStep({ isAnimating, onComplete, onSkip }: TasteTestStep
               />
             </div>
             <span className="text-xs text-text-muted">
-              {Math.round(confidence * 100)}% confident
+              {t('tasteTest.confident', { percent: Math.round(confidence * 100) })}
             </span>
           </div>
           <p className="text-[10px] text-text-muted mt-1 text-end">
             {confidence < 0.3
-              ? 'Keep going \u2014 more responses improve accuracy'
+              ? t('tasteTest.keepGoing')
               : confidence < 0.7
-                ? 'Good start \u2014 a few more will help'
-                : 'Strong calibration \u2014 you can continue or finish now'
+                ? t('tasteTest.goodStart')
+                : t('tasteTest.strongCalibration')
             }
           </p>
         </div>
 
-        {error && <p className="text-red-400 text-xs">{error}</p>}
+        {error && <p role="alert" className="text-red-400 text-xs">{error}</p>}
 
         <TasteTestCard
           card={currentCard}
@@ -203,26 +213,49 @@ export function TasteTestStep({ isAnimating, onComplete, onSkip }: TasteTestStep
         />
 
         <div className="text-center space-y-2">
+          {/* eslint-disable i18next/no-literal-string -- key glyphs, not words */}
           <p className="text-[10px] text-text-muted/60">
-            Keyboard: <kbd className="px-1 py-0.5 bg-bg-tertiary rounded text-[9px]">&rarr;</kbd> interested &middot; <kbd className="px-1 py-0.5 bg-bg-tertiary rounded text-[9px]">&larr;</kbd> skip &middot; <kbd className="px-1 py-0.5 bg-bg-tertiary rounded text-[9px]">&uarr;</kbd> love &middot; <kbd className="px-1 py-0.5 bg-bg-tertiary rounded text-[9px]">Esc</kbd> done
+            {t('tasteTest.keyboard')} <kbd className={kbd}>&rarr;</kbd> {t('tasteTest.keyInterested')} &middot; <kbd className={kbd}>&larr;</kbd> {t('tasteTest.keySkip')} &middot; <kbd className={kbd}>&uarr;</kbd> {t('tasteTest.keyLove')} &middot; <kbd className={kbd}>Esc</kbd> {t('tasteTest.keyDone')}
           </p>
+          {/* eslint-enable i18next/no-literal-string */}
           <button
             onClick={onSkip}
             className="text-text-muted text-xs hover:text-text-secondary transition-colors"
           >
-            Skip calibration
+            {t('tasteTest.skipCalibration')}
           </button>
         </div>
       </div>
     );
   }
 
-  // Finalizing phase
+  // Finalizing phase — or its failure, which offers a retry instead of a dead end
   if (phase === 'finalizing') {
+    if (error) {
+      return (
+        <div className="text-center space-y-4">
+          <p role="alert" className="text-red-400 text-sm">{error}</p>
+          <div className="flex items-center justify-center gap-4">
+            <button
+              onClick={() => { void finalize(); }}
+              className="bg-white text-black font-medium text-sm py-2 px-5 rounded-md hover:bg-gray-100 transition-colors"
+            >
+              {t('action.retry')}
+            </button>
+            <button
+              onClick={onSkip}
+              className="text-text-muted text-sm hover:text-text-secondary transition-colors"
+            >
+              {t('tasteTest.skipCalibration')}
+            </button>
+          </div>
+        </div>
+      );
+    }
     return (
-      <div className="text-center space-y-4">
+      <div className="text-center space-y-4" role="status">
         <div className="animate-spin w-8 h-8 border-2 border-white border-t-transparent rounded-full mx-auto" />
-        <p className="text-text-secondary text-sm">Analyzing your preferences...</p>
+        <p className="text-text-secondary text-sm">{t('tasteTest.analyzing')}</p>
       </div>
     );
   }

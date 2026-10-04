@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../../lib/commands';
 import { safeListen } from '../../lib/tauri-events';
@@ -50,6 +50,10 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [apiKeyHint, setApiKeyHint] = useState<string | null>(null);
   const [skippedDownload, setSkippedDownload] = useState(false);
+  const [cancellingDownload, setCancellingDownload] = useState(false);
+  // Set while the user's own Cancel is in flight, so the pull's resulting
+  // "cancelled" rejection is not reported as a download failure.
+  const cancelRequested = useRef(false);
 
   // Persist section state to localStorage
   useEffect(() => {
@@ -64,14 +68,17 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
     if (status.has_embedding_model && status.has_llm_model) return;
 
     setPullingModels(true);
+    cancelRequested.current = false;
     const { models, initial } = buildInitialPullProgress(status);
     setPullProgress(initial);
 
-    const unlisten = await safeListen<PullProgress>('ollama-pull-progress', (event) => {
-      setPullProgress((prev) => ({ ...prev, [event.payload.model]: event.payload }));
-    });
-
+    let unlisten: (() => void) | null = null;
     try {
+      // Inside the try: if subscribing throws, the finally below still clears
+      // pullingModels — otherwise the provider picker stays hidden for good.
+      unlisten = await safeListen<PullProgress>('ollama-pull-progress', (event) => {
+        setPullProgress((prev) => ({ ...prev, [event.payload.model]: event.payload }));
+      });
       for (const model of models) {
         setPullProgress((prev) => ({
           ...prev, [model]: { model, status: 'downloading', percent: 0, done: false },
@@ -88,12 +95,29 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
         setAiConfigured(true);
       }
     } catch (e) {
-      setError(`Model download failed: ${e}`);
+      if (!cancelRequested.current) {
+        setError(t('onboarding.setup.downloadFailed', { error: String(e) }));
+      }
     } finally {
-      unlisten();
+      unlisten?.();
+      cancelRequested.current = false;
+      setCancellingDownload(false);
       setPullingModels(false);
     }
-  }, []);
+  }, [t]);
+
+  const cancelDownload = useCallback(async () => {
+    if (cancellingDownload) return;
+    cancelRequested.current = true;
+    setCancellingDownload(true);
+    try {
+      await cmd('cancel_ollama_pull');
+    } catch (e) {
+      cancelRequested.current = false;
+      setCancellingDownload(false);
+      setError(t('onboarding.setup.cancelDownloadFailed', { error: String(e) }));
+    }
+  }, [cancellingDownload, t]);
 
   useEffect(() => {
     let cancelled = false;
@@ -117,11 +141,11 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
           setProvider('ollama');
         }
       } catch {
-        setOllamaStatus({ running: false, version: null, models: [], base_url: 'http://localhost:11434' } as OllamaStatus);
+        setOllamaStatus({ running: false, version: null, models: [], base_url: 'http://localhost:11434' });
       }
     })();
     return () => { cancelled = true; };
-  }, [pullMissingModels]);
+  }, []);
 
   // --- Auto-discover projects ---
   useEffect(() => {
@@ -291,7 +315,7 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
       try { localStorage.removeItem(SECTION_KEY); } catch { /* noop */ }
       onComplete();
     } catch (e) {
-      setError(`Failed to save settings: ${e}`);
+      setError(t('onboarding.setup.saveFailed', { error: String(e) }));
     } finally {
       setIsSaving(false);
     }
@@ -314,9 +338,9 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
     ollamaStatus, provider, apiKey, pullingModels, pullProgress, aiConfigured, localServer,
     detectedTech, discoveryDone,
     suggestions, interests, newInterest, setNewInterest, role, setRole,
-    error, setError, isSaving, apiKeyHint, skippedDownload,
+    error, setError, isSaving, apiKeyHint, skippedDownload, cancellingDownload,
     removeTag, addInterest, toggleInterest,
     handleProviderChange, handleLocalServerSelect, handleApiKeyChange, handleContinue, handleSkipDownload,
-    downloadLocalModels,
+    downloadLocalModels, cancelDownload,
   };
 }

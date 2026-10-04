@@ -47,6 +47,27 @@ export interface UseQuickSetupProps {
   onBack: () => void;
 }
 
+/**
+ * Download size of the default models onboarding pulls, as listed on
+ * ollama.com/library (llama3.2 = 3B Q4_K_M, nomic-embed-text = v1.5 F16).
+ */
+const MODEL_DOWNLOAD_MB: Record<string, number> = { 'llama3.2': 2000, 'nomic-embed-text': 274 };
+
+/**
+ * Total download size for the given models, e.g. "2.3 GB". Null when any model
+ * has no known size — the caller then shows no number rather than a wrong one.
+ */
+export function modelDownloadSize(models: readonly string[]): string | null {
+  if (models.length === 0) return null;
+  let total = 0;
+  for (const m of models) {
+    const mb = MODEL_DOWNLOAD_MB[m];
+    if (mb === undefined) return null;
+    total += mb;
+  }
+  return total >= 1000 ? `${(total / 1000).toFixed(1)} GB` : `${total} MB`;
+}
+
 /** Build the initial pull-progress map for models that need downloading. */
 export function buildInitialPullProgress(status: OllamaStatus): {
   models: string[];

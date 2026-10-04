@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 /* eslint-disable i18next/no-literal-string -- brand names (Anthropic, OpenAI, Ollama) are intentional */
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useId } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { cmd } from '../../lib/commands';
-import { IMPORTED_FROM_ENV, localServerChoice } from './quick-setup-utils';
+import { IMPORTED_FROM_ENV, localServerChoice, modelDownloadSize } from './quick-setup-utils';
 import type { LocalServerChoice } from './quick-setup-utils';
 import type { OllamaStatus, PullProgress } from './types';
 
@@ -36,6 +36,8 @@ interface SetupAIProviderProps {
   onProviderChange: (provider: ProviderType) => void;
   onApiKeyChange: (key: string) => void;
   onDownloadModels?: () => void;
+  onCancelDownload?: () => void;
+  cancellingDownload?: boolean;
   localServer?: LocalServerChoice | null;
   onLocalServerSelect?: (choice: LocalServerChoice) => void;
 }
@@ -49,12 +51,16 @@ export function SetupAIProvider({
   onProviderChange,
   onApiKeyChange,
   onDownloadModels,
+  onCancelDownload,
+  cancellingDownload = false,
   localServer = null,
   onLocalServerSelect,
 }: SetupAIProviderProps) {
   const { t } = useTranslation();
   const [envDetection, setEnvDetection] = useState<EnvDetection | null>(null);
   const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  const keyInputId = useId();
   const [localServers, setLocalServers] = useState<LocalServer[]>([]);
 
   useEffect(() => {
@@ -68,18 +74,21 @@ export function SetupAIProvider({
 
   const handleImportEnvKey = async (envProvider: 'anthropic' | 'openai') => {
     setImporting(true);
+    setImportError(null);
     try {
       await cmd('import_env_key', { provider: envProvider });
       onProviderChange(envProvider);
       onApiKeyChange(IMPORTED_FROM_ENV);
-    } catch {
-      // Silently fail — user can still enter manually
+    } catch (e) {
+      // The key field stays usable, so pasting the key by hand still works.
+      setImportError(t('onboarding.setupAi.importFailed', { error: String(e) }));
     } finally {
       setImporting(false);
     }
   };
 
   const ollamaReady = ollamaStatus?.running && ollamaStatus.has_embedding_model && ollamaStatus.has_llm_model;
+  const downloadSize = modelDownloadSize(Object.keys(pullProgress));
 
   return (
     <div className="mt-2 p-4 bg-bg-secondary rounded-lg border border-border space-y-3">
@@ -137,6 +146,9 @@ export function SetupAIProvider({
               </button>
             </div>
           )}
+          {importError && (
+            <p role="alert" className="text-xs text-red-400">{importError}</p>
+          )}
         </div>
       )}
 
@@ -157,14 +169,18 @@ export function SetupAIProvider({
           </div>
           {Object.entries(pullProgress).map(([model, p]) => {
             const isCancelled = p.status === 'cancelled';
+            const isFailed = p.status === 'failed';
+            const isStopped = isCancelled || isFailed;
             return (
               <div key={model} className="space-y-1">
                 <div className="flex items-center justify-between text-xs">
                   <span className="text-text-primary font-mono font-medium">{model}</span>
-                  <span className={isCancelled ? 'text-red-400' : 'text-text-muted'}>
+                  <span className={isStopped ? 'text-red-400' : 'text-text-muted'}>
                     {isCancelled
                       ? t('action.cancelled')
-                      : p.done
+                      : isFailed
+                        ? t('onboarding.setupAi.pullFailedShort')
+                        : p.done
                         ? t('onboarding.apiKeys.pullComplete')
                         : p.status || `${p.percent}%`}
                   </span>
@@ -172,9 +188,9 @@ export function SetupAIProvider({
                 <div className="w-full h-1.5 bg-bg-tertiary rounded-full overflow-hidden">
                   <div
                     className={`h-full rounded-full transition-all duration-300 ${
-                      isCancelled ? 'bg-red-500' : p.done ? 'bg-green-500' : 'bg-orange-500'
+                      isStopped ? 'bg-red-500' : p.done ? 'bg-green-500' : 'bg-orange-500'
                     }`}
-                    style={{ width: `${isCancelled ? 100 : p.done ? 100 : p.percent}%` }}
+                    style={{ width: `${isStopped ? 100 : p.done ? 100 : p.percent}%` }}
                   />
                 </div>
               </div>
@@ -182,13 +198,16 @@ export function SetupAIProvider({
           })}
           <div className="flex items-center justify-between">
             <p className="text-xs text-text-muted">
-              {t('onboarding.apiKeys.pullWaitMessage')}
+              {downloadSize
+                ? t('onboarding.apiKeys.pullSizeMessage', { size: downloadSize })
+                : t('onboarding.apiKeys.pullWaitMessage')}
             </p>
             <button
-              onClick={() => { void cmd('cancel_ollama_pull'); }}
-              className="px-3 py-1.5 text-xs text-red-400 border border-red-500/30 rounded-lg hover:bg-red-500/10 transition-colors"
+              onClick={() => onCancelDownload?.()}
+              disabled={cancellingDownload}
+              className="px-3 py-1.5 text-xs text-red-400 border border-red-500/30 rounded-lg hover:bg-red-500/10 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {t('action.cancelDownload')}
+              {cancellingDownload ? t('onboarding.setupAi.cancellingDownload') : t('action.cancelDownload')}
             </button>
           </div>
         </div>
@@ -283,7 +302,7 @@ export function SetupAIProvider({
           {(provider === 'anthropic' || provider === 'openai') && (
             <div>
               <div className="flex items-center justify-between mb-2">
-                <label className="text-xs text-text-muted">
+                <label htmlFor={keyInputId} className="text-xs text-text-muted">
                   {provider === 'anthropic' ? 'Anthropic' : 'OpenAI'} {t('settings.llm.apiKey')}
                 </label>
                 <a
@@ -298,6 +317,7 @@ export function SetupAIProvider({
                 </a>
               </div>
               <input
+                id={keyInputId}
                 type="password"
                 value={apiKey}
                 onChange={(e) => onApiKeyChange(e.target.value)}
@@ -307,11 +327,19 @@ export function SetupAIProvider({
             </div>
           )}
 
+          {/* A picked local server is complete as-is: say what will be used */}
+          {provider === 'openai-compatible' && localServer && (
+            <div role="status" className="p-3 bg-green-900/20 border border-green-500/30 rounded-lg text-xs text-green-300">
+              {t('onboarding.setupAi.localServerSelected', { name: localServer.name, model: localServer.model })}
+            </div>
+          )}
+
           {/* OpenAI-compatible provider input */}
-          {provider === 'openai-compatible' && (
+          {provider === 'openai-compatible' && !localServer && (
             <div className="space-y-2">
-              <label className="text-xs text-text-muted">{t('onboarding.setupAi.otherProviderHint')}</label>
+              <label htmlFor={keyInputId} className="text-xs text-text-muted">{t('onboarding.setupAi.otherProviderHint')}</label>
               <input
+                id={keyInputId}
                 type="password"
                 value={apiKey}
                 onChange={(e) => onApiKeyChange(e.target.value)}
@@ -323,7 +351,7 @@ export function SetupAIProvider({
           )}
 
           {/* Cloud data disclosure — informed consent at the BYOK moment */}
-          {(provider === 'anthropic' || provider === 'openai' || provider === 'openai-compatible') && (
+          {(provider === 'anthropic' || provider === 'openai' || (provider === 'openai-compatible' && !localServer)) && (
             <p className="text-[10px] text-text-muted leading-relaxed border-s-2 border-border/60 ps-2">
               {t(
                 'onboarding.setupAi.cloudDataDisclosure',

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { cmd } from '../../lib/commands';
@@ -29,21 +29,47 @@ export function CalibrationSummary({ summary, onContinue }: CalibrationSummaryPr
 
   // Detected interests are editable: the taste test is a guess, and users
   // should be able to correct what was surfaced before it shapes their feed.
-  // Each change persists immediately via add_interest/remove_interest.
+  // Each change is saved first and shown only once saved, so the list on
+  // screen is always what the feed will actually use.
   const [interests, setInterests] = useState<string[]>(summary.topInterests);
   const [draft, setDraft] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const addInputId = useId();
 
-  const removeInterest = (topic: string) => {
-    setInterests((prev) => prev.filter((i) => i !== topic));
-    void cmd('remove_interest', { topic }).catch(() => {});
+  const removeInterest = async (topic: string) => {
+    if (saving) return;
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await cmd('remove_interest', { topic });
+      setInterests((prev) => prev.filter((i) => i !== topic));
+    } catch (e) {
+      setSaveError(t('onboarding.calib.saveFailed', { error: String(e) }));
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const addInterest = () => {
+  const addInterest = async () => {
     const topic = draft.trim();
-    setDraft('');
-    if (!topic || interests.some((i) => i.toLowerCase() === topic.toLowerCase())) return;
-    setInterests((prev) => [...prev, topic]);
-    void cmd('add_interest', { topic }).catch(() => {});
+    if (saving || !topic) return;
+    if (interests.some((i) => i.toLowerCase() === topic.toLowerCase())) {
+      setDraft('');
+      return;
+    }
+    setSaving(true);
+    setSaveError(null);
+    try {
+      await cmd('add_interest', { topic });
+      setInterests((prev) => [...prev, topic]);
+      setDraft('');
+    } catch (e) {
+      // The draft is kept so the user can retry without retyping.
+      setSaveError(t('onboarding.calib.saveFailed', { error: String(e) }));
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -110,7 +136,8 @@ export function CalibrationSummary({ summary, onContinue }: CalibrationSummaryPr
             >
               {interest}
               <button
-                onClick={() => removeInterest(interest)}
+                onClick={() => { void removeInterest(interest); }}
+                disabled={saving}
                 aria-label={t('onboarding.calib.removeAria', { interest })}
                 className="text-text-muted hover:text-error transition-colors leading-none text-sm"
               >
@@ -119,23 +146,28 @@ export function CalibrationSummary({ summary, onContinue }: CalibrationSummaryPr
             </span>
           ))}
         </div>
+        {saveError && (
+          <p role="alert" className="text-xs text-red-400 mb-2">{saveError}</p>
+        )}
         <div className="flex gap-2">
+          <label htmlFor={addInputId} className="sr-only">{t('onboarding.calib.addPlaceholder')}</label>
           <input
+            id={addInputId}
             type="text"
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
             onKeyDown={(e) => {
               if (e.key === 'Enter') {
                 e.preventDefault();
-                addInterest();
+                void addInterest();
               }
             }}
             placeholder={t('onboarding.calib.addPlaceholder')}
             className="flex-1 bg-bg-primary border border-border rounded-md px-2.5 py-1.5 text-xs text-text-primary placeholder-text-muted focus:border-orange-500 focus:outline-none"
           />
           <button
-            onClick={addInterest}
-            disabled={!draft.trim()}
+            onClick={() => { void addInterest(); }}
+            disabled={!draft.trim() || saving}
             className="px-3 py-1.5 text-xs font-medium bg-bg-tertiary text-text-secondary border border-border rounded-md hover:text-text-primary hover:border-gray-500 transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {t('onboarding.calib.add')}

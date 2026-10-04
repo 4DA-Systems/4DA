@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
+import { useId } from 'react';
 import { useTranslation } from 'react-i18next';
 
 interface SetupInterestsProps {
@@ -25,18 +26,20 @@ export function SetupInterests({
   onToggleInterest,
 }: SetupInterestsProps) {
   const { t } = useTranslation();
+  const roleSelectId = useId();
   return (
     <div className="mt-2 p-4 bg-bg-secondary rounded-lg border border-border space-y-3">
       {/* Role selector */}
       <div>
-        <label className="block text-xs text-text-muted mb-2">{t('onboarding.interests.roleLabel')}</label>
+        <label htmlFor={roleSelectId} className="block text-xs text-text-muted mb-2">{t('onboarding.interests.roleLabel')}</label>
         <select
+          id={roleSelectId}
           value={role}
           onChange={(e) => onRoleChange(e.target.value)}
           className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-lg text-text-primary text-sm focus:border-orange-500 focus:outline-none"
         >
           {roles.map((r) => (
-            <option key={r} value={r}>{r}</option>
+            <option key={r} value={r}>{t(`onboarding.role.${r.toLowerCase()}`)}</option>
           ))}
         </select>
       </div>
