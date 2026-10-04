@@ -19,17 +19,9 @@
 //! Regenerate after a schema change:
 //! `UPDATE_APP_SCHEMA_CONTRACT=1 cargo test --lib app_schema_contract`
 
-use std::path::{Path, PathBuf};
-
 use rusqlite::Connection;
 
 use super::Database;
-
-fn contract_path() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("contract")
-        .join("app-schema.sql")
-}
 
 /// The schema a fresh install holds once every startup initialiser has run.
 fn build_app_schema() -> (tempfile::TempDir, Database) {
@@ -112,11 +104,25 @@ fn render_schema(conn: &Connection) -> String {
     out
 }
 
+/// The contract is the schema of the build users install, which uses the
+/// default features (release.yml passes only `--target` to tauri-action).
+/// Optional features may add tables (`experimental` creates the achievement
+/// tables through a migration hook that is a stub otherwise). A superset can
+/// never break a query the MCP server issues, and the default-feature CI leg
+/// checks the file, so the other legs skip the comparison rather than each
+/// needing its own copy.
+#[cfg(not(any(
+    feature = "experimental",
+    feature = "team-sync",
+    feature = "enterprise"
+)))]
 #[test]
 fn app_schema_contract_is_current() {
     let (_dir, db) = build_app_schema();
     let rendered = render_schema(&db.conn.lock());
-    let path = contract_path();
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("contract")
+        .join("app-schema.sql");
 
     if std::env::var_os("UPDATE_APP_SCHEMA_CONTRACT").is_some() {
         std::fs::create_dir_all(path.parent().expect("contract dir")).expect("mkdir contract");
