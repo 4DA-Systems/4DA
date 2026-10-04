@@ -154,6 +154,10 @@ impl Database {
     /// thin-context judge, which the judge may rescue (`reconcile_judge_gate`).
     /// An older thin-context judgment does not count.
     ///
+    /// Sources that never enter the feed (`sources::feed_admission`) are not
+    /// judged at all: the judgment exists to decide feed admission, and the
+    /// persist boundary rejects those rows whatever the judge says.
+    ///
     /// Ranked read (audit items 12+26): the top-band SELECTION threshold stays
     /// on relevance_score (evidence decides membership); which of the band's
     /// members get judged first follows the shared rank-then-evidence order.
@@ -167,7 +171,8 @@ impl Database {
         let [ingest, drain] = crate::judge_gate::CARD_PROMPT_VERSIONS;
         let sql = format!(
             "SELECT si.id FROM source_items si
-             WHERE (si.relevance_score >= ?1
+             WHERE si.source_type NOT IN ({feed_excluded})
+               AND ((si.relevance_score >= ?1
                     AND si.created_at >= datetime('now', '-7 days')
                     AND NOT EXISTS (SELECT 1 FROM llm_judgments lj WHERE lj.source_item_id = si.id))
                 OR (si.source_type IN ({gated})
@@ -177,9 +182,10 @@ impl Database {
                         NOT IN ('duplicate_curated', 'superseded_release')
                     AND NOT EXISTS (SELECT 1 FROM llm_judgments lj
                                     WHERE lj.source_item_id = si.id
-                                      AND lj.prompt_version IN (?4, ?5)))
+                                      AND lj.prompt_version IN (?4, ?5))))
              ORDER BY {ranked}
              LIMIT ?2",
+            feed_excluded = crate::sources::feed_admission::feed_excluded_sources_sql(),
             gated = crate::judge_gate::gated_sources_sql(),
             ranked = super::ranked_order_expr("si")
         );
@@ -520,6 +526,29 @@ mod tests {
 
         let unjudged = db.get_unjudged_item_ids(0.3, 0.37, 10).unwrap();
         assert!(unjudged.is_empty());
+    }
+
+    #[test]
+    fn get_unjudged_skips_sources_that_never_enter_the_feed() {
+        let db = test_db();
+        {
+            let conn = db.conn.lock();
+            for (source, sid) in [
+                ("reddit", "u1"),
+                ("lemmy", "u2"),
+                ("youtube", "u3"),
+                ("hackernews", "u4"),
+            ] {
+                conn.execute(
+                    "INSERT INTO source_items (source_type, source_id, title, content, content_hash, embedding, relevance_score)
+                     VALUES (?1, ?2, 'Scored item', '', ?2, X'00', 0.8)",
+                    rusqlite::params![source, sid],
+                )
+                .unwrap();
+            }
+        }
+        let unjudged = db.get_unjudged_item_ids(0.3, 0.37, 10).unwrap();
+        assert_eq!(unjudged, vec![4], "only the admitted source is judged");
     }
 
     #[test]

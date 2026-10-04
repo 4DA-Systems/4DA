@@ -191,7 +191,7 @@ fn reconcile_leaves_never_judged_items_untouched() {
 #[test]
 fn serendipity_verdicts_immune_while_fresh_reconcilable_after_ttl() {
     let db = test_db();
-    let lucky = insert_test_item(&db, "lemmy", "sr1", "Anti-bubble pick", "body");
+    let lucky = insert_test_item(&db, "bluesky", "sr1", "Anti-bubble pick", "body");
     db.persist_feed_verdicts(&[(lucky, true, VerdictSource::Serendipity)], 1)
         .unwrap();
 
@@ -361,7 +361,7 @@ fn sunk_sweep_spares_the_epsilon_jitter_band() {
 #[test]
 fn sunk_sweep_never_touches_serendipity_verdicts() {
     let db = test_db();
-    let lucky = insert_test_item(&db, "lemmy", "sv3", "Anti-bubble pick", "body");
+    let lucky = insert_test_item(&db, "bluesky", "sv3", "Anti-bubble pick", "body");
     db.persist_feed_verdicts(&[(lucky, true, VerdictSource::Serendipity)], 18)
         .unwrap();
     set_live_score(&db, lucky, 0.10, 18);
@@ -583,7 +583,7 @@ fn disagreeing_run_clears_a_pending_flip() {
 fn reasoned_and_serendipity_flips_apply_immediately() {
     let db = test_db();
     let reasoned = insert_test_item(&db, "hackernews", "fl3", "LLM reject", "body");
-    let lucky = insert_test_item(&db, "lemmy", "fl4", "Anti-bubble", "body");
+    let lucky = insert_test_item(&db, "bluesky", "fl4", "Anti-bubble", "body");
 
     db.persist_feed_verdicts(&[(reasoned, true, VerdictSource::Score)], 18)
         .unwrap();
@@ -1764,7 +1764,7 @@ fn risen_twins_yield_to_the_curated_original() {
     );
     let copy = insert_test_item(
         &db,
-        "reddit",
+        "bluesky",
         "rt2",
         "A 2026 survey of Rust GUI libraries",
         "body",
@@ -1832,7 +1832,7 @@ fn curated_twins_in_the_standing_feed_are_retired() {
     );
     let b = insert_test_item(
         &db,
-        "reddit",
+        "bluesky",
         "ct2",
         "A 2026 survey of Rust GUI libraries",
         "body",
