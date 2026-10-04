@@ -118,6 +118,15 @@ fn is_release_announcement(title: &str) -> bool {
 /// older release announcements of a project whose newer release is present.
 /// Must run after `sort_results` (highest score first survives). Returns
 /// the number of rows folded into a survivor.
+///
+/// Runs twice: in the analyzer's batch layer, and on the differential merge
+/// (`merge_differential_results`, after `dedup_results` re-sorted it). The
+/// second call is what folds a release story that arrives in a LATER batch
+/// against rows already on display — live 2026-10-04 "Rust 1.99 is out…"
+/// (one batch) and "Announcing Rust 1.98.0" (re-selected by a later one)
+/// were both shown. Because a folded row may itself be an earlier survivor,
+/// its own `similar_titles` move with it, and a title the survivor already
+/// lists is not counted twice.
 pub(crate) fn release_story_dedup_results(results: &mut Vec<SourceRelevance>) -> usize {
     // project -> [(index, version, version string)] in score order.
     let mut by_project: HashMap<String, Vec<(usize, Vec<u32>, String)>> = HashMap::new();
@@ -183,9 +192,15 @@ pub(crate) fn release_story_dedup_results(results: &mut Vec<SourceRelevance>) ->
         return 0;
     }
     for &(dup, survivor) in &folded {
-        let title = results[dup].title.clone();
-        results[survivor].similar_count += 1;
-        results[survivor].similar_titles.push(title);
+        let mut carried = vec![results[dup].title.clone()];
+        carried.extend(results[dup].similar_titles.iter().cloned());
+        let target = &mut results[survivor];
+        for title in carried {
+            if title != target.title && !target.similar_titles.contains(&title) {
+                target.similar_count += 1;
+                target.similar_titles.push(title);
+            }
+        }
     }
     let drop: std::collections::HashSet<usize> = folded.iter().map(|(d, _)| *d).collect();
     let mut idx = 0;

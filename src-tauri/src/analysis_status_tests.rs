@@ -651,4 +651,144 @@ mod tests {
         assert!(!full_display, "no merge base → partial set");
         assert_eq!(cold.len(), 1);
     }
+
+    // ========================================================================
+    // Release-story rules across the merge (live 2026-10-04)
+    //
+    // `release_story_dedup_results` (#809/#820) ran only inside the analyzer
+    // batch, so a release story arriving in a LATER differential batch was
+    // never folded against rows already on display: "Rust 1.99 is out…"
+    // (id 139639) and "Announcing Rust 1.98.0" (id 31683, re-selected by a
+    // later batch) were both shown.
+    // ========================================================================
+
+    fn editorial(id: u64, title: &str, top_score: f32) -> crate::types::SourceRelevance {
+        serde_json::from_value(serde_json::json!({
+            "id": id, "title": title, "url": format!("https://example.com/{id}"),
+            "top_score": top_score, "evidence_score": top_score,
+            "matches": [], "relevant": true, "source_type": "rss",
+        }))
+        .expect("construct SourceRelevance")
+    }
+
+    fn merge(
+        prev: Vec<crate::types::SourceRelevance>,
+        new_results: Vec<crate::types::SourceRelevance>,
+    ) -> Vec<crate::types::SourceRelevance> {
+        let scored_ids: std::collections::HashSet<u64> = new_results.iter().map(|r| r.id).collect();
+        crate::analysis::merge_differential_results(Some(prev), new_results, &scored_ids).1
+    }
+
+    fn ids(rows: &[crate::types::SourceRelevance]) -> Vec<u64> {
+        rows.iter().map(|r| r.id).collect()
+    }
+
+    #[test]
+    fn differential_merge_folds_an_older_release_arriving_later() {
+        let mut shown = editorial(139_639, "Rust 1.99.0 released", 0.90);
+        shown.similar_count = 1;
+        shown.similar_titles = vec!["Announcing Rust 1.99.0".into()];
+        let merged = merge(
+            vec![
+                shown,
+                editorial(2, "Deser: Rethinking Rust Serialization", 0.70),
+            ],
+            vec![editorial(31_683, "Announcing Rust 1.98.0", 0.80)],
+        );
+        assert_eq!(
+            ids(&merged),
+            vec![139_639, 2],
+            "1.98 folds under the shown 1.99"
+        );
+        assert_eq!(merged[0].similar_count, 2);
+        assert!(merged[0]
+            .similar_titles
+            .contains(&"Announcing Rust 1.98.0".to_string()));
+
+        // A later batch re-selecting the folded row folds it again — it never
+        // reappears, and the survivor does not count its title twice.
+        let again = merge(
+            merged,
+            vec![editorial(31_683, "Announcing Rust 1.98.0", 0.85)],
+        );
+        assert_eq!(ids(&again), vec![139_639, 2]);
+        assert_eq!(again[0].similar_count, 2, "no double count on re-fold");
+    }
+
+    #[test]
+    fn differential_merge_folds_a_shown_release_under_a_later_patch() {
+        // In-batch semantics: the newest ANNOUNCED version's survivor wins,
+        // even at a lower score. The folded 1.99 row brings its own copies.
+        let mut shown = editorial(1, "Announcing Rust 1.99.0", 0.90);
+        shown.similar_count = 2;
+        shown.similar_titles = vec!["Rust 1.99 is out".into(), "Rust 1.99.0 released".into()];
+        let merged = merge(
+            vec![shown],
+            vec![editorial(5, "Rust 1.99.1 released", 0.60)],
+        );
+        assert_eq!(ids(&merged), vec![5]);
+        assert_eq!(merged[0].similar_count, 3);
+        assert_eq!(
+            merged[0].similar_titles,
+            vec![
+                "Announcing Rust 1.99.0".to_string(),
+                "Rust 1.99 is out".to_string(),
+                "Rust 1.99.0 released".to_string(),
+            ],
+            "the folded survivor's own copies move with it"
+        );
+    }
+
+    #[test]
+    fn differential_merge_folds_a_second_copy_of_a_shown_story() {
+        let merged = merge(
+            vec![editorial(
+                1,
+                "Rust 1.99 is out, and cargo-semver-checks ships with it",
+                0.90,
+            )],
+            vec![editorial(9, "Rust 1.99.0 released", 0.70)],
+        );
+        assert_eq!(ids(&merged), vec![1]);
+        assert_eq!(
+            merged[0].similar_titles,
+            vec!["Rust 1.99.0 released".to_string()]
+        );
+    }
+
+    #[test]
+    fn differential_merge_keeps_tutorials_and_future_mentions() {
+        let merged = merge(
+            vec![
+                editorial(1, "Announcing Rust 1.99.0", 0.80),
+                editorial(2, "Announcing TypeScript 6.0", 0.75),
+            ],
+            vec![
+                editorial(3, "TypeScript 5.9 decorators in real codebases", 0.70),
+                editorial(
+                    4,
+                    "The `allocator_api` feature has been stabilized, on track to release in Rust 1.100",
+                    0.95,
+                ),
+            ],
+        );
+        assert_eq!(
+            ids(&merged),
+            vec![4, 1, 2, 3],
+            "a tutorial never folds; a future-version mention never swallows 1.99"
+        );
+        assert!(merged.iter().all(|r| r.similar_count == 0));
+    }
+
+    #[test]
+    fn differential_merge_never_folds_excluded_rows() {
+        let mut excluded = editorial(2, "Announcing Rust 1.98.0", 0.80);
+        excluded.excluded = true;
+        let merged = merge(
+            vec![editorial(1, "Rust 1.99.0 released", 0.90)],
+            vec![excluded],
+        );
+        assert_eq!(ids(&merged), vec![1, 2]);
+        assert_eq!(merged[0].similar_count, 0);
+    }
 }
