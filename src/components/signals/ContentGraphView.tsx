@@ -38,6 +38,7 @@ import {
   minimapNodeColor,
   markGraphViewed,
 } from './ContentGraphFlowHelpers';
+import { LabelCollisionLayer } from './ContentGraphLabelLayer';
 
 const nodeTypes = {
   contentNode: ContentGraphNodeComponent,
@@ -234,6 +235,7 @@ export default function ContentGraphView() {
         style={{ flex: '1 1 0%', minHeight: 0 }}
       >
         <ZoomCssVar />
+        <LabelCollisionLayer />
         {legend.categories.length > 0 && (
           <Panel position="top-left">
             <GraphLegend

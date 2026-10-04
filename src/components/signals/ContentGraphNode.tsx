@@ -7,6 +7,13 @@ import { useTranslation } from 'react-i18next';
 // the Controls/MiniMap rendered by ContentGraphView without editing that file.
 import './content-graph.css';
 import { zoomInvariant } from './graph-zoom';
+import {
+  NODE_LABEL_FONT_PX,
+  NODE_LABEL_LINE,
+  NODE_LABEL_MAX_W,
+  nodeLabelText,
+  nodeMarkSize,
+} from './content-graph-label-layout';
 
 interface ContentNodeData {
   title: string;
@@ -78,23 +85,7 @@ function brighten(hex: string): string {
   return `rgb(${r}, ${g}, ${b})`;
 }
 
-function truncate(text: string, max: number): string {
-  if (text.length <= max) return text;
-  return text.slice(0, max - 1) + '…';
-}
-
-// The node color already encodes the source, so a redundant "crates.io: " /
-// "npm: " prefix just eats label space. Strip a leading KNOWN-source prefix
-// only — never a generic "word:" so real titles like "Rust 1.80: released"
-// keep their colon.
-const SOURCE_PREFIX =
-  /^(crates\.io|npm|pypi|pep|github|gh|hn|reddit|arxiv|dev\.to|lobsters|lobste\.rs|stack ?overflow|so|product ?hunt|hugging ?face|hf|go modules?|youtube|yt|bluesky|mastodon|cve|osv|rss)\s*[:\-–]\s+/i;
-
-function cleanTitle(raw: string): string {
-  return raw.replace(SOURCE_PREFIX, '').trim() || raw;
-}
-
-const ContentGraphNode = memo(function ContentGraphNode({ data, selected }: NodeProps<ContentNode>) {
+const ContentGraphNode = memo(function ContentGraphNode({ id, data, selected }: NodeProps<ContentNode>) {
   const { t } = useTranslation();
   const [hovered, setHovered] = useState(false);
   const onEnter = useCallback(() => setHovered(true), []);
@@ -103,14 +94,10 @@ const ContentGraphNode = memo(function ContentGraphNode({ data, selected }: Node
   const color = CATEGORY_COLORS[data.category] ?? DEFAULT_CATEGORY_COLOR;
   const shape = CATEGORY_SHAPES[data.category] ?? DEFAULT_SHAPE;
   const memberCount = data.member_count ?? 1;
-  // Stories grow with how much they collapsed (sqrt: 26 advisories shouldn't
-  // be 26x the dot); plain items keep the relevance sizing.
-  const size =
-    memberCount > 1
-      ? Math.min(72, 36 + Math.sqrt(memberCount) * 6)
-      : 28 + data.relevance_score * 28;
+  // Shared with the label-collision resolver so the boxes it places are the
+  // boxes that paint (content-graph-label-layout.ts).
+  const size = nodeMarkSize(memberCount, data.relevance_score);
   const glow = getGlowStyle(data.signal_priority);
-  const label = cleanTitle(data.title);
   const extraCount = memberCount - 1;
 
   // "Touches your stack" is a RING + HALO, never a fill override. The
@@ -228,23 +215,24 @@ const ContentGraphNode = memo(function ContentGraphNode({ data, selected }: Node
       {/* Label size divides by the live zoom (zoomInvariant) so it reads at
           >=11px on screen at fit view; content-graph.css hides non-stack
           labels at far zoom (data-graph-lod) unless hovered — level of
-          detail instead of an unreadable smear of 150 titles. */}
+          detail instead of an unreadable smear of 150 titles. Placement
+          (below / above / beside the mark) and collision suppression are
+          written onto this element by LabelCollisionLayer as
+          data-cg-place / data-cg-suppressed, outside React (no re-render
+          per zoom step); content-graph.css positions each variant. A
+          suppressed label's title stays reachable in the hover tooltip. */}
       <span
         className="cg-node-label"
+        data-cg-label-id={`node:${id}`}
         data-stack={isStack ? 'true' : 'false'}
         data-hovered={hovered ? 'true' : 'false'}
         style={{
-          position: 'absolute',
-          top: size + 3,
-          left: '50%',
-          transform: 'translateX(-50%)',
-          width: zoomInvariant(150),
+          width: zoomInvariant(NODE_LABEL_MAX_W),
           color: hovered || isStack ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
-          fontSize: zoomInvariant(11),
+          fontSize: zoomInvariant(NODE_LABEL_FONT_PX),
           fontFamily: 'Inter, sans-serif',
           fontWeight: 500,
-          lineHeight: 1.15,
-          textAlign: 'center',
+          lineHeight: NODE_LABEL_LINE,
           overflow: 'hidden',
           textOverflow: 'ellipsis',
           whiteSpace: 'nowrap',
@@ -253,7 +241,7 @@ const ContentGraphNode = memo(function ContentGraphNode({ data, selected }: Node
           textShadow: '0 1px 4px var(--color-bg-primary), 0 0 2px var(--color-bg-primary)',
         }}
       >
-        {truncate(label, 24)}
+        {nodeLabelText(data.title)}
       </span>
 
       {hovered && (
