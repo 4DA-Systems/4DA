@@ -264,6 +264,30 @@ export function stripeIdOf(ref) {
 }
 
 /**
+ * The subscription an invoice belongs to, on EVERY Stripe API version.
+ *
+ * API 2025-03-31.basil REMOVED the top-level `invoice.subscription`; the id now
+ * lives at `invoice.parent.subscription_details.subscription`. Webhook payloads
+ * are rendered at the ENDPOINT's API version, and this project's endpoint was
+ * created in 2026 — so on the live account `invoice.subscription` is simply
+ * absent, and the renewal handler that tested it skipped every renewal as "not
+ * a subscription invoice". Monthly subscribers kept being charged while their
+ * 35-day key ran out and no new key was minted or emailed.
+ *
+ * Reads the current location first, then the pre-basil field, so the handler is
+ * correct whichever version the endpoint is pinned to. Returns null for a
+ * one-off (non-subscription) invoice.
+ */
+export function invoiceSubscriptionId(invoice) {
+  const parent = invoice?.parent;
+  if (parent?.type === 'subscription_details' || parent?.subscription_details) {
+    const id = stripeIdOf(parent.subscription_details?.subscription);
+    if (id) return id;
+  }
+  return stripeIdOf(invoice?.subscription);
+}
+
+/**
  * Find or create the Stripe customer an event belongs to.
  *
  * ORDERING IS THE FIX: this used to lower-case `email` BEFORE the caller's
