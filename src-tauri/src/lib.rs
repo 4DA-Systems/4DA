@@ -322,6 +322,7 @@ pub mod provenance;
 pub mod query;
 mod quit_command;
 mod reconciler;
+pub(crate) mod release_changelog;
 pub(crate) mod runtime_paths;
 pub(crate) mod scheduler_gate;
 mod scheduler_state;
@@ -1043,6 +1044,7 @@ pub fn run() {
             content_commands::get_item_content,
             content_commands::get_item_summary,
             content_commands::generate_item_summary,
+            release_changelog::commands::get_release_changes,
             content_commands::get_saved_items,
             content_commands::remove_saved_item,
             // Source Health

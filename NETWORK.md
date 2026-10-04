@@ -23,7 +23,9 @@ All shared outbound requests use a pooled `reqwest` client
 - **User-Agent:** `Mozilla/5.0 (compatible; desktop-app)` — the default for source fetching,
   connectivity checks, license validation, and article scraping.
 - **Exceptions (purpose-built User-Agents):**
-  - crates.io adapter → `4DA-Developer-OS/1.0 (https://4da.ai)` (`sources/crates_io.rs`)
+  - crates.io adapter → `4DA-Developer-OS/1.0 (https://4da.ai)` (`sources/crates_io.rs`); the
+    release-changelog lane sends the same to `static.crates.io` and `4DA-Developer-OS/1.0` to
+    `registry.npmjs.org` (`release_changelog/fetch.rs`)
   - HuggingFace / PapersWithCode / GitHub Advisory adapters → `4DA-Developer-OS/1.0`
     (`sources/huggingface.rs`, `sources/papers_with_code.rs`, `sources/cve.rs`)
   - OSV dependency sync → `4DA/1.0 (local-osv-mirror)` (`osv/sync.rs`)
@@ -120,6 +122,34 @@ On startup, 4DA refreshes its cost/context-window table for known LLM models
 - **Data sent:** plain `GET`, no user data, no parameters. Falls back to bundled/cached pricing on
   failure.
 - **Disable:** offline operation skips it silently; the bundled table is used.
+
+### 1e. Release changelogs (registry package archives)
+
+When a release of one of your dependencies is graded as news for a project that pins it (a
+breaking upgrade, a new minor, or a yanked pin), 4DA reads the changelog that ships **inside the
+package itself** to say what changed between your version and the new one
+(`src-tauri/src/release_changelog/`):
+
+| Host | Request | Data sent |
+|---|---|---|
+| `static.crates.io` | `GET /crates/{crate}/{crate}-{version}.crate` | The crate name and the **new, public** version. User-Agent `4DA-Developer-OS/1.0 (https://4da.ai)` |
+| `registry.npmjs.org` | `GET /{package}/{version}` (version manifest, for `dist.tarball`), then that tarball | The package name and the **new, public** version |
+
+- **Same party, nothing new disclosed:** `static.crates.io` is crates.io's own download host,
+  and both registries already receive these package names from the release watch (§1b). The
+  version sent is the one the registry itself announced. **Your installed version is never sent**;
+  the range is cut on your machine.
+- **Never contacted for this:** GitHub, docs sites, or any host a registry document points to.
+  The archive URL must be https on one of the two hosts above, and a redirect off them is not
+  followed. If the package ships no changelog, the card says so; nothing else is fetched.
+- **Read, never run:** archive contents are read in memory as text. Nothing is written to disk
+  or executed; only a root-level changelog file is kept. Archives over 5 MB compressed or 64 MB
+  uncompressed are refused; a single file over 2 MB is skipped.
+- **Budget:** each archive is fetched **once** and cached in the local database. In the
+  background (after a fetch cycle) at most 6 archives per cycle, 1.1 s apart; opening a release
+  card reads its archive on demand if the background pass has not. 30 s timeout per archive.
+- **Disable:** disabling the crates.io / npm sources (Settings → Sources) stops the release rows,
+  and with them this lane.
 
 ---
 
@@ -325,6 +355,7 @@ use (`src-tauri/src/embeddings_providers/fastembed.rs`):
   | `registry.npmjs.org` | your npm package names | release / version intelligence |
   | `pypi.org` | your Python package names | as above |
   | `crates.io` | your crate names | as above |
+  | `static.crates.io` / `registry.npmjs.org` (§1e) | the crate / package name and the new public version of a graded release — never your installed version | the release card's "what changed" |
   | `registry.npmjs.org` full packument (MCP `dependency_check`, §2j) | the npm package name being checked — name only | release vetting |
   | `crates.io/api/v1/crates/{crate}/versions` (MCP `dependency_check`, §2j) | the crate name being checked — name only | release vetting |
   | `proxy.golang.org` | your **full Go module paths** | as above |

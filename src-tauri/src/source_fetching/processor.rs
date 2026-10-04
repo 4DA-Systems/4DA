@@ -340,6 +340,11 @@ pub(crate) async fn fill_cache_background(app: &AppHandle) -> Result<super::Fetc
     // scoring pass, which re-embeds the enriched items first.
     crate::content_enrichment::enrich_thin_items(db).await;
 
+    // "What changed" for graded release rows, read from each new version's
+    // registry archive. Spawned, not awaited: the next scoring pass never
+    // waits on an archive download (release_changelog/mod.rs).
+    crate::release_changelog::spawn_backlog();
+
     void_signal_cache_filled(app);
 
     // Sources just fetched over the network, so the network works: clear any

@@ -111,13 +111,19 @@ rten = { version = "0.24", optional = true }     # Model loading for ocrs (text-
 # whisper-rs = "0.14"       # DISABLED: Requires vcpkg/system deps - audio.rs stubbed
 zip = "8.6"                                        # ZIP archive extraction (OSV cache + extractors)
 tar = { version = "0.4.45", optional = true }        # TAR archive extraction
-flate2 = { version = "1.0", optional = true }     # Gzip compression/decompression
+# Gzip decompression. Not optional: the release-changelog lane reads registry
+# package archives (.crate / .tgz) in every build (release_changelog/archive.rs).
+flate2 = "1.0"
 
 # Language detection (fast, zero-dependency)
 whichlang = "0.1"
 
 # Semantic version parsing (CVE version range matching)
 semver = "1"
+
+# Changelog heading/entry patterns (release_changelog/). Already in the tree
+# transitively at the same version, so no new crate enters NOTICE.
+regex = "1"
 
 # Rust source parsing: is the module an advisory names cfg-gated out of the
 # user's build? (osv::reachability, AD-051). Already in the graph via serde_derive.
@@ -229,9 +235,9 @@ harness = false
 
 [features]
 default = ["fastembed-local"]
-fastembed-local = ["dep:fastembed", "dep:tar", "dep:flate2"]
+fastembed-local = ["dep:fastembed", "dep:tar"]
 ocr = ["dep:ocrs", "dep:rten"]
-archive = ["dep:tar", "dep:flate2"]
+archive = ["dep:tar"]
 void-universe = []
 sql-check = []
 experimental = []

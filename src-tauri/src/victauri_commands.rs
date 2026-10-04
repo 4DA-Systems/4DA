@@ -161,6 +161,7 @@ pub const REGISTERED_COMMANDS: &[&str] = &[
     "get_item_content",
     "get_item_summary",
     "generate_item_summary",
+    "get_release_changes",
     "get_saved_items",
     "remove_saved_item",
     "get_source_health_status",
