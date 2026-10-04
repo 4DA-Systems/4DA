@@ -893,7 +893,8 @@ pub(crate) fn merge_differential_results(
     let mut merged = previous_results.unwrap_or_default();
     merged.retain(|r| !scored_ids.contains(&r.id));
     merged.extend(new_results);
-    scoring::dedup_results(&mut merged);
+    scoring::dedup_results(&mut merged); // also leaves `merged` in sort_results order
+    scoring::release_story_dedup_results(&mut merged); // #809/#820 rules across batches
     (full_display, merged)
 }
 
