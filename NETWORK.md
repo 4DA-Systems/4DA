@@ -8,8 +8,9 @@ optional dependency-vulnerability sync, which sends only **package names** (not 
 disclosed explicitly in the "Conditional / opt-in" section and can be turned off.
 
 4DA is local-first and privacy-first. There is **no telemetry, no analytics, and no crash
-reporting** (see "Never" at the bottom). The only 4DA-operated endpoint the app ever contacts is a
-user-initiated license-recovery lookup at `4da.ai`. Everything else is either a public third-party
+reporting** (see "Never" at the bottom). The only 4DA-operated server the app ever contacts is
+`4da.ai`, for exactly two licence operations: a user-initiated recovery lookup (§2e) and, for paid
+**subscription** keys only, a key-only renewal near expiry (§2k). Everything else is either a public third-party
 content API, a cloud service you explicitly configured (BYOK LLM / translation), or a one-time
 setup download.
 
@@ -237,11 +238,11 @@ Only contacted when you enter a license key (`src-tauri/src/settings/license/key
   ed25519/minisign key — purely cryptographic, no server contact.
 - **Disable:** don't enter a license key (free tier makes no call).
 
-### 2e. License recovery (user-initiated — the only 4DA-operated endpoint)
+### 2e. License recovery (user-initiated)
 
 (`src-tauri/src/settings_commands_license.rs`)
 
-- **Host:** `4da.ai` — **the only 4DA-operated server the app ever contacts.**
+- **Host:** `4da.ai` — the only 4DA-operated server the app ever contacts (see also §2k).
 - **Endpoint:** `GET https://4da.ai/api/license/activate?email={email}`
   (builds before 2026-08-20 call the same endpoint at its old `/api/streets/activate` path)
 - **Trigger:** only when you click "Recover License by Email" in Settings.
@@ -298,6 +299,28 @@ calls it, and sends nothing while `FOURDA_OFFLINE=true`.
 | `index.crates.io` | `GET /{prefix}/{crate}` (sparse index) | **Crate name only** |
 | `api.osv.dev` | `POST /v1/querybatch`, `GET /v1/vulns/{id}` | Package names **and versions** (the installed and the proposed one), as `vulnerability_scan` already sends |
 
+### 2k. License renewal (Signal subscriptions only)
+
+(`src-tauri/src/settings/license/renewal.rs`, server `site/functions/api/license/renew.js`)
+
+A subscription key carries its own expiry (monthly ~35 days, annual ~1 year). So that a paying
+subscriber is never dropped to Free between billing periods, the app renews the key itself.
+
+- **Host:** `4da.ai`
+- **Endpoint:** `POST https://4da.ai/api/license/renew`
+- **Data sent:** `{"key": <your current licence key>}` — **the key only** (it already embeds the
+  purchase email). No device fingerprint, machine identifiers, usage data or telemetry.
+- **When:** only if you hold a monthly/annual Signal key **and** it expires within 10 days (or
+  expired less than 60 days ago). First check ~2 minutes after launch, then at most every 12 hours —
+  in practice about once per billing period. **Free users, lifetime keys and Keygen keys never call.**
+- **Data returned:** a renewed key valid to the end of the period you have paid for (checked live
+  against Stripe), or "current" / "not entitled". Nothing is stored on our side beyond the key
+  already kept against your Stripe customer record.
+- **Offline / refused:** the current key is kept and simply runs to its own expiry — the call can
+  never downgrade you.
+- **Disable:** remove the licence key (Settings → License). A cancelled subscription stops renewing
+  on its own.
+
 The installed version and the proposed version are never sent to a registry: both are picked out
 of the full release list on your machine. Only OSV receives versions.
 
@@ -331,8 +354,9 @@ use (`src-tauri/src/embeddings_providers/fastembed.rs`):
   it to a bug report (`src-tauri/src/diagnostics.rs`).
 - **No telemetry / analytics.** Zero usage tracking. All telemetry/metrics tables are **local SQLite
   only** and never leave the machine.
-- **No phoning home.** The only 4DA-operated endpoint is the user-initiated `4da.ai` license
-  recovery (§2e). There is no background 4DA backend receiving data.
+- **No phoning home.** The only 4DA-operated endpoints are the user-initiated `4da.ai` license
+  recovery (§2e) and, for subscription keys near expiry only, the key-only renewal (§2k). There is
+  no background 4DA backend receiving data, and free or lifetime installs never contact `4da.ai`.
 - **No raw-content transmission.** Project files, source code, file contents, and git history never
   leave your machine. Not the text of your files, not your commit messages, not your diffs.
   Enforced by `scripts/check-privacy-egress.cjs`, which fails the build if a raw-content column is
