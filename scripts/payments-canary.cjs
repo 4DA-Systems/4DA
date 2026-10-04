@@ -165,7 +165,13 @@ async function runChecks({ fetch, withCheckout = false, storefront, throttleDela
         if (res.status !== 200) fail(`HTTP ${res.status} ${JSON.stringify(body).slice(0, 200)}`);
         // cs_live_ — a test-mode key swapped into production would mint cs_test_
         // sessions that take no real money.
-        if (!url.startsWith('https://checkout.stripe.com/') || !url.includes('cs_live_')) {
+        let parsed = null;
+        try {
+          parsed = new URL(url);
+        } catch {
+          parsed = null;
+        }
+        if (!parsed || parsed.protocol !== 'https:' || parsed.hostname !== 'checkout.stripe.com' || !parsed.pathname.includes('/cs_live_')) {
           fail(`not a live Stripe Checkout URL: ${url.slice(0, 80)}`);
         }
         return 'cs_live session';
