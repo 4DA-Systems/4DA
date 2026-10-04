@@ -52,7 +52,7 @@ function fakeFetch(overrides = {}) {
     if (url.includes('/api/license/activate?email=')) return answer.recovery();
     if (url.endsWith('/download/win/')) return answer.download();
     if (url.endsWith('/api/signal/checkout')) return answer.checkout(JSON.parse(init.body).plan);
-    if (url.includes('myshopify.com')) {
+    if (new URL(url).hostname === '4da-2.myshopify.com') {
       const q = JSON.parse(init.body).query;
       if (q.includes('products(')) return answer.products();
       if (q.includes('localization')) return answer.countries();
@@ -157,7 +157,7 @@ test('a Shopify throttle is reported as inconclusive, never as an outage', async
 test('an unreachable site is a failure, not a skip', async () => {
   const { fetch: base } = fakeFetch();
   const fetch = async (url, init) => {
-    if (url.startsWith('https://4da.ai')) throw new Error('getaddrinfo ENOTFOUND 4da.ai');
+    if (new URL(url).hostname === '4da.ai') throw new Error('getaddrinfo ENOTFOUND 4da.ai');
     return base(url, init);
   };
   const results = await runChecks({ fetch, storefront, throttleDelayMs: 0 });
