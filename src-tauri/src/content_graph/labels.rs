@@ -87,6 +87,30 @@ pub(super) fn assign_cluster_labels(items: &[RawItem], clusters: &mut [GraphClus
     }
 
     let n_clusters = clusters.len().max(1) as f32;
+    // Every cluster's terms in c-TF-IDF order (no hit floor): the reserve
+    // `disambiguate_labels` draws from when two clusters share a label.
+    let ranked: Vec<Vec<String>> = tfs
+        .iter()
+        .map(|tf| {
+            let mut all: Vec<(&str, f32)> = tf
+                .iter()
+                .map(|(term, &count)| {
+                    let d = df.get(term.as_str()).copied().unwrap_or(1) as f32;
+                    (term.as_str(), count as f32 * (1.0 + n_clusters / d).ln())
+                })
+                .collect();
+            // Equal scores (typically one-title terms) break toward the
+            // LONGER word: "misalignment" distinguishes, "amid" does not
+            // (alphabetical order crowned "openai · amid", live 2026-10-04).
+            all.sort_by(|a, b| {
+                b.1.partial_cmp(&a.1)
+                    .unwrap_or(std::cmp::Ordering::Equal)
+                    .then_with(|| b.0.len().cmp(&a.0.len()))
+                    .then_with(|| a.0.cmp(b.0))
+            });
+            all.into_iter().map(|(t, _)| t.to_string()).collect()
+        })
+        .collect();
     for (cluster, tf) in clusters.iter_mut().zip(&tfs) {
         // Titles (not occurrences) carrying each term.
         let hits_of = |term: &str| {
@@ -135,13 +159,7 @@ pub(super) fn assign_cluster_labels(items: &[RawItem], clusters: &mut [GraphClus
             // twice; keep the first-ranked of the pair.
             let mut chosen: Vec<&str> = Vec::new();
             for (w, _) in ordered {
-                let overlaps = chosen.iter().any(|c| {
-                    c.split(['-', '_']).any(|part| part == w)
-                        || w.split(['-', '_']).any(|part| part == *c)
-                        || w.strip_suffix('s') == Some(*c)
-                        || c.strip_suffix('s') == Some(w)
-                });
-                if !overlaps {
+                if !chosen.iter().any(|c| same_name(c, w)) {
                     chosen.push(w);
                 }
                 if chosen.len() == 3 {
@@ -157,6 +175,64 @@ pub(super) fn assign_cluster_labels(items: &[RawItem], clusters: &mut [GraphClus
             fallback_label(cluster, &item_map)
         };
     }
+    disambiguate_labels(clusters, &ranked);
+}
+
+/// A compound and its own sub-word ("tauri-apps" + "tauri"), or a word and
+/// its plural ("agent" + "agents"), name the same thing.
+fn same_name(a: &str, b: &str) -> bool {
+    a.split(['-', '_']).any(|part| part == b)
+        || b.split(['-', '_']).any(|part| part == a)
+        || a.strip_suffix('s') == Some(b)
+        || b.strip_suffix('s') == Some(a)
+}
+
+/// Rounds of term-appending before the ordinal last resort.
+const DISAMBIGUATE_ROUNDS: usize = 3;
+
+/// Two clusters must never share a label: three discs all named "RUST" (live
+/// 2026-10-04) tell the user nothing about how they differ. Every cluster in
+/// a duplicate group gains its next distinctive term — the best-ranked
+/// c-TF-IDF term not already in the label — so each reads as what sets it
+/// apart ("rust · serialization", "rust · injection"). A group that still
+/// collides after [`DISAMBIGUATE_ROUNDS`] (members out of words) is numbered.
+fn disambiguate_labels(clusters: &mut [GraphCluster], ranked: &[Vec<String>]) {
+    for round in 0..=DISAMBIGUATE_ROUNDS {
+        let mut groups: HashMap<String, Vec<usize>> = HashMap::new();
+        for (i, c) in clusters.iter().enumerate() {
+            groups.entry(c.label.to_lowercase()).or_default().push(i);
+        }
+        let mut dups: Vec<Vec<usize>> = groups.into_values().filter(|g| g.len() > 1).collect();
+        if dups.is_empty() {
+            return;
+        }
+        dups.sort();
+        for group in dups {
+            for (n, &i) in group.iter().enumerate() {
+                if round == DISAMBIGUATE_ROUNDS {
+                    // Out of words: an ordinal is still a true distinction.
+                    if n > 0 {
+                        clusters[i].label = format!("{} #{}", clusters[i].label, n + 1);
+                    }
+                    continue;
+                }
+                let label_lower = clusters[i].label.to_lowercase();
+                let present: Vec<&str> = label_lower
+                    .split(|c: char| !c.is_alphanumeric() && c != '-' && c != '_' && c != '.')
+                    .filter(|w| !w.is_empty())
+                    .collect();
+                let next = ranked.get(i).and_then(|terms| {
+                    terms.iter().find(|t| {
+                        let shown = display_term(t);
+                        !present.iter().any(|p| same_name(p, t) || *p == shown)
+                    })
+                });
+                if let Some(term) = next {
+                    clusters[i].label = format!("{} · {}", clusters[i].label, display_term(term));
+                }
+            }
+        }
+    }
 }
 
 /// Registry sources whose items are package releases — a cluster made only of
@@ -164,7 +240,13 @@ pub(super) fn assign_cluster_labels(items: &[RawItem], clusters: &mut [GraphClus
 const REGISTRY_SOURCES: &[&str] = &["crates_io", "npm_registry", "pypi", "go_modules"];
 
 /// Longest representative-title label, in characters (word-boundary cut).
-const TITLE_LABEL_MAX: usize = 36;
+/// Headers render uppercase and letter-spaced over the map: a 36-char title
+/// ("PHILBIN: THE SAFEST (AND FASTEST)…", live 2026-10-04) spanned two
+/// neighbouring clusters at fit zoom.
+const TITLE_LABEL_MAX: usize = 28;
+/// A title's head before ": " replaces the whole title when at least this
+/// long — "Philbin: The safest (and fastest) AEGIS library" → "Philbin".
+const TITLE_HEAD_MIN: usize = 6;
 
 /// Label for a cluster no shared title term describes. Never "assorted" —
 /// a label that admits it names nothing tells the user nothing. In order:
@@ -261,7 +343,7 @@ pub(super) fn short_title(title: &str) -> String {
     }
     // Cut at a subtitle separator when the head alone is a usable name.
     if let Some((head, _)) = t.split_once(": ") {
-        if head.chars().count() >= 8 {
+        if head.chars().count() >= TITLE_HEAD_MIN {
             t = head;
         }
     }
