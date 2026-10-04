@@ -1,0 +1,161 @@
+# Payments canary — can a customer actually buy from 4DA right now?
+#
+# Runs scripts/payments-canary.cjs against PRODUCTION (4da.ai + the Shopify
+# storefront). Every selling path has failed silently at least once with 2xx
+# responses that nothing alerted on — see the header of the script for the
+# incidents. This is the only thing that asks production.
+#
+# Cadence: cheap checks every 3 hours; the live Stripe Checkout check (mints one
+# unpaid, self-expiring session per plan) once a day at 21:17 UTC ≈ 07:17 AEST,
+# so the operator wakes up to a fresh result.
+#
+# On failure: opens (or reuses) ONE issue labelled `payments-canary`, with the
+# consecutive-failure streak in its title so a long outage cannot read like a
+# new one (the lesson of nightly-audit #367). On recovery: comments and closes
+# it, so an open payments-canary issue always means "broken right now".
+
+name: payments-canary
+
+on:
+  schedule:
+    - cron: "17 */3 * * *"
+    - cron: "17 21 * * *"
+  workflow_dispatch:
+    inputs:
+      checkout:
+        description: "Also mint live Stripe Checkout sessions (one per plan)"
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: payments-canary
+  cancel-in-progress: false
+
+jobs:
+  canary:
+    name: payments-canary
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v4
+        with:
+          node-version: '22'
+
+      - name: Run payments canary
+        id: canary
+        continue-on-error: true
+        env:
+          WITH_CHECKOUT: ${{ github.event.schedule == '17 21 * * *' || (github.event_name == 'workflow_dispatch' && inputs.checkout) }}
+          CANARY_REPORT_FILE: canary-report.txt
+        run: |
+          if [ "$WITH_CHECKOUT" = "true" ]; then
+            node scripts/payments-canary.cjs --checkout
+          else
+            node scripts/payments-canary.cjs
+          fi
+
+      - name: Open, update or close the tracking issue
+        if: always()
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v7
+        env:
+          CANARY_OUTCOME: ${{ steps.canary.outcome }}
+        with:
+          script: |
+            const fs = require('fs');
+            const report = fs.existsSync('canary-report.txt')
+              ? fs.readFileSync('canary-report.txt', 'utf8')
+              : '(the canary produced no report — it crashed before finishing; see the run log)';
+            const failed = process.env.CANARY_OUTCOME !== 'success';
+            const runUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId}`;
+            const now = new Date().toISOString().replace('T', ' ').slice(0, 16) + ' UTC';
+
+            const open = await github.rest.issues.listForRepo({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              labels: 'payments-canary',
+              per_page: 10,
+            });
+            const match = open.data.find((i) => i.title.startsWith('Payments canary failing'));
+
+            if (!failed) {
+              if (match) {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: match.number,
+                  body: `Recovered at ${now} — every payment check passed.\n\n- Run: ${runUrl}\n\n\`\`\`\n${report}\n\`\`\``,
+                });
+                await github.rest.issues.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: match.number,
+                  state: 'closed',
+                });
+                core.info(`Closed recovered issue #${match.number}`);
+              }
+              return;
+            }
+
+            let streak = 1;
+            if (match) {
+              const comments = await github.paginate(github.rest.issues.listComments, {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: match.number,
+                per_page: 100,
+              });
+              streak = comments.filter((c) => (c.body || '').includes('Payments canary fired')).length + 1;
+            }
+            const body = [
+              `Payments canary fired at ${now}. **Customers may be unable to buy.**`,
+              '',
+              `Consecutive failing runs: **${streak}** (runs every 3h).`,
+              `- Run: ${runUrl}`,
+              '',
+              '```',
+              report,
+              '```',
+            ].join('\n');
+            const title = streak === 1
+              ? `Payments canary failing — ${now}`
+              : `Payments canary failing — ${streak} consecutive runs`;
+
+            if (match) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: match.number,
+                body,
+              });
+              if (match.title !== title) {
+                await github.rest.issues.update({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: match.number,
+                  title,
+                });
+              }
+            } else {
+              const created = await github.rest.issues.create({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                title,
+                body,
+                labels: ['payments-canary', 'bug'],
+              });
+              core.info(`Opened issue #${created.data.number}`);
+            }
+
+      - name: Fail the job if the canary failed
+        if: steps.canary.outcome != 'success'
+        run: |
+          echo "::error::Payments canary failed — details in the run summary and the payments-canary issue."
+          exit 1
