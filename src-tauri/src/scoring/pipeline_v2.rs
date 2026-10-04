@@ -3992,7 +3992,10 @@ pub(crate) fn score_item(
         skill_gap_boost,
         necessity_score: necessity_result.score,
         necessity_reason: if necessity_result.score > 0.0 {
-            Some(necessity_result.reason)
+            Some(super::necessity::claim_verb(
+                necessity_result.reason,
+                dependency_event,
+            ))
         } else {
             None
         },

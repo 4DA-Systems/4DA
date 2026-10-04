@@ -86,25 +86,98 @@ fn dotted_version(token: &str) -> Option<String> {
     Some(parts.join("."))
 }
 
-/// Merge editorial rows that announce the same `<project> <version>`.
+/// `1.99` → `[1, 99, 0]` so `1.99` and `1.99.0` compare equal and `1.100 > 1.99`.
+fn version_parts(version: &str) -> Vec<u32> {
+    let mut parts: Vec<u32> = version
+        .split('.')
+        .map(|p| p.parse::<u32>().unwrap_or(0))
+        .collect();
+    parts.resize(3, 0);
+    parts
+}
+
+/// Release-announcement wording — the only kind of older-version row a newer
+/// release supersedes.
+fn is_release_announcement(title: &str) -> bool {
+    let t = title.to_lowercase();
+    [
+        "announcing",
+        "released",
+        "release notes",
+        "is out",
+        "is here",
+        "now available",
+        "ships",
+        "lands",
+    ]
+    .iter()
+    .any(|w| t.contains(w))
+}
+
+/// Merge editorial rows that announce the same `<project> <version>`, and
+/// older release announcements of a project whose newer release is present.
 /// Must run after `sort_results` (highest score first survives). Returns
 /// the number of rows folded into a survivor.
 pub(crate) fn release_story_dedup_results(results: &mut Vec<SourceRelevance>) -> usize {
-    let mut first_by_key: HashMap<(String, String), usize> = HashMap::new();
-    let mut folded: Vec<(usize, usize)> = Vec::new();
+    // project -> [(index, version, version string)] in score order.
+    let mut by_project: HashMap<String, Vec<(usize, Vec<u32>, String)>> = HashMap::new();
     for (idx, item) in results.iter().enumerate() {
         if item.excluded || STRUCTURED_SOURCES.contains(&item.source_type.as_str()) {
             continue;
         }
-        let Some(key) = release_story_key(&item.title) else {
+        let Some((project, version)) = release_story_key(&item.title) else {
             continue;
         };
-        match first_by_key.get(&key) {
-            Some(&survivor) => folded.push((idx, survivor)),
-            None => {
-                first_by_key.insert(key, idx);
+        let parts = version_parts(&version);
+        by_project
+            .entry(project)
+            .or_default()
+            .push((idx, parts, version));
+    }
+    let mut folded: Vec<(usize, usize)> = Vec::new();
+    for rows in by_project.values() {
+        // 1. One row per (project, version): the first (highest-scored) copy
+        //    survives, later copies fold into it.
+        let mut version_survivor: HashMap<&Vec<u32>, usize> = HashMap::new();
+        for (idx, parts, _) in rows {
+            match version_survivor.get(parts) {
+                Some(&survivor) => folded.push((*idx, survivor)),
+                None => {
+                    version_survivor.insert(parts, *idx);
+                }
             }
         }
+        // 2. The newest ANNOUNCED release supersedes older announcements:
+        //    "Announcing Rust 1.98.0" folds under "Rust 1.99.0 released".
+        //    Only announcements decide "newest" — a post that MENTIONS a
+        //    future version ("on track to release in Rust 1.100") must never
+        //    swallow the real 1.99 release (live 2026-10-04) — and only
+        //    announcements fold, so a "TypeScript 5.9 decorators" tutorial
+        //    stays.
+        let announced = |idx: usize| is_release_announcement(&results[idx].title);
+        let Some((newest_parts, newest_survivor)) = version_survivor
+            .iter()
+            .filter(|(_, &idx)| announced(idx))
+            .max_by(|a, b| a.0.cmp(b.0))
+            .map(|(p, &idx)| (*p, idx))
+        else {
+            continue;
+        };
+        for (parts, &idx) in &version_survivor {
+            if *parts < newest_parts && announced(idx) {
+                folded.push((idx, newest_survivor));
+            }
+        }
+    }
+    // A row folded into a survivor that itself folds is re-pointed to the
+    // final survivor, so no title is attached to a dropped row.
+    let final_of: HashMap<usize, usize> = folded.iter().copied().collect();
+    for entry in &mut folded {
+        let mut target = entry.1;
+        while let Some(&next) = final_of.get(&target) {
+            target = next;
+        }
+        entry.1 = target;
     }
     if folded.is_empty() {
         return 0;
@@ -167,6 +240,54 @@ mod tests {
             "matches": [], "relevant": true, "source_type": source,
         }))
         .expect("SourceRelevance from JSON")
+    }
+
+    #[test]
+    fn a_newer_release_supersedes_an_older_announcement_but_not_a_tutorial() {
+        // Live 2026-10-04: "Announcing Rust 1.98.0" still showed after 1.99.
+        let mut results = vec![
+            item(1, "Announcing Rust 1.98.0", "rss"),
+            item(2, "Rust 1.99.0 released", "mastodon"),
+            item(3, "TypeScript 5.9 decorators in real codebases", "devto"),
+            item(4, "Announcing TypeScript 7.0", "rss"),
+            item(5, "This Week in Rust 668", "rss"),
+        ];
+        let folded = release_story_dedup_results(&mut results);
+        let ids: Vec<u64> = results.iter().map(|r| r.id).collect();
+        assert_eq!(
+            folded, 1,
+            "only the superseded Rust 1.98 announcement folds"
+        );
+        assert_eq!(ids, vec![2, 3, 4, 5]);
+        assert!(results[0]
+            .similar_titles
+            .contains(&"Announcing Rust 1.98.0".to_string()));
+    }
+
+    #[test]
+    fn a_future_version_mention_never_swallows_the_real_release() {
+        // Live 2026-10-04: "on track to release in Rust 1.100" outranked the
+        // 1.99 release in the first draft of this rule.
+        let mut results = vec![
+            item(1, "The `allocator_api` feature has been stabilized, on track to release in Rust 1.100", "reddit"),
+            item(2, "Announcing Rust 1.99.0", "rss"),
+            item(3, "Rust 1.98.0 is out", "reddit"),
+            item(4, "Rust 1.99.0 released", "mastodon"),
+        ];
+        release_story_dedup_results(&mut results);
+        let ids: Vec<u64> = results.iter().map(|r| r.id).collect();
+        assert_eq!(
+            ids,
+            vec![1, 2],
+            "1.99 survives; 1.98 and the 1.99 copy fold into it"
+        );
+        assert_eq!(results[1].similar_count, 2);
+    }
+
+    #[test]
+    fn versions_compare_numerically() {
+        assert!(version_parts("1.100") > version_parts("1.99"));
+        assert_eq!(version_parts("1.99"), version_parts("1.99.0"));
     }
 
     #[test]

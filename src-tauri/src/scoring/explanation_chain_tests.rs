@@ -876,6 +876,36 @@ fn an_editorial_security_story_names_the_dependency_instead_of_affecting_it() {
 }
 
 #[test]
+fn an_editorial_security_story_without_a_dependency_event_only_mentions_it() {
+    // Live 2026-10-04: OpenAI company news read "Security story names
+    // openai in …" — the text mentioned the company, not the package.
+    let mut f = Fixture::default();
+    f.is_security = true;
+    f.registry_advisory = false;
+    f.dependency_event = false;
+    f.necessity_score = 0.85;
+    f.display_deps = vec![dep_in("openai", "d:/work/site")];
+    f.dep_match_score = 0.5;
+    let sec = f
+        .build()
+        .into_iter()
+        .find(|c| c.kind == crate::FactorKind::SecurityAdvisory)
+        .expect("security factor must be emitted");
+    assert_eq!(sec.display, "Security story mentions openai (work/site)");
+
+    f.display_deps = vec![dep("openai", 0.5, true, None)];
+    let sec = f
+        .build()
+        .into_iter()
+        .find(|c| c.kind == crate::FactorKind::SecurityAdvisory)
+        .expect("security factor must be emitted");
+    assert_eq!(
+        sec.display,
+        "Security story mentions your dependency openai"
+    );
+}
+
+#[test]
 fn a_dependency_in_several_projects_names_one_and_counts_the_rest() {
     let mut f = Fixture::default();
     f.is_security = true;

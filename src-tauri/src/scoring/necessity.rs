@@ -148,6 +148,26 @@ impl Urgency {
 
 /// Maximum multi-project amplification factor
 const MAX_PROJECT_AMPLIFICATION: f32 = 1.5;
+
+/// The editorial-security reason prefix. Its verb is a claim ("names your
+/// dependency") that [`claim_verb`] softens when the item is not a dependency
+/// event.
+const EDITORIAL_SECURITY_NAMES: &str = "Security story names your dependency";
+
+/// The reason's verb must match the dependency-event claim (`scoring::
+/// dependency_event`, #812): an editorial security story whose text only
+/// MENTIONS a dependency — no event at the name — says "mentions", the same
+/// verb the explanation factor uses. Live 2026-10-04: OpenAI company news read
+/// "Security story names your dependency openai". Necessity is computed before
+/// the event flag, so the verb is settled when the breakdown is assembled.
+pub(crate) fn claim_verb(reason: String, dependency_event: bool) -> String {
+    match reason.strip_prefix(EDITORIAL_SECURITY_NAMES) {
+        Some(rest) if !dependency_event => {
+            format!("Security story mentions your dependency{rest}")
+        }
+        _ => reason,
+    }
+}
 /// Recency decay half-life in hours (1 week)
 const RECENCY_HALF_LIFE_HOURS: f64 = 168.0;
 /// Minimum recency multiplier (floor at 50%)
@@ -331,7 +351,7 @@ fn try_security_path(
         let reason = if inputs.registry_advisory {
             format!("Security vulnerability affects {dep_names}")
         } else {
-            format!("Security story names your dependency {dep_names}")
+            format!("{EDITORIAL_SECURITY_NAMES} {dep_names}")
         };
         Some((
             score,
