@@ -30,6 +30,7 @@ import * as ed from '@noble/ed25519';
 import { generateRefreshKey } from '../../../lib/ed25519-license.js';
 import {
   hasOtherStandingCharge,
+  invoiceSubscriptionId,
   isRevoked,
   isTerminal,
   meta,
@@ -291,8 +292,10 @@ async function handleCheckoutCompleted(env, stripe, session) {
 }
 
 async function handleInvoicePaid(env, stripe, invoice) {
-  // Only process subscription invoices (not one-time payments)
-  if (!invoice.subscription) {
+  // Only process subscription invoices (not one-time payments). Never read
+  // `invoice.subscription` directly — it does not exist from API basil onward;
+  // see invoiceSubscriptionId.
+  if (!invoiceSubscriptionId(invoice)) {
     return { skipped: 'not a subscription invoice' };
   }
 

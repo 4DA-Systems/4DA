@@ -17,13 +17,17 @@
 //   - "duplicate delivery is a no-op"    -> the missing event-id dedup store.
 //   - "severity never downgrades"        -> out-of-order Stripe deliveries.
 //   - "resolveCustomerId guards first"   -> the TypeError-instead-of-error bug.
+//   - "invoiceSubscriptionId"           -> every renewal skipped on API basil+,
+//                                           where invoice.subscription is gone.
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 
 import {
   TERMINAL_STATUSES,
   hasOtherStandingCharge,
+  invoiceSubscriptionId,
   meta,
   metaKey,
   isLifetimeEntitled,
@@ -437,4 +441,57 @@ test('isRevoked means the money went back — stricter than isTerminal', () => {
   // Legacy-prefixed records read through the namespace fallback.
   assert.equal(isRevoked({ streets_status: 'refunded' }), true);
   assert.equal(isRevoked({ streets_status: 'cancelled' }), false);
+});
+
+// ---------------------------------------------------------------------------
+// Renewals: where an invoice's subscription lives
+// ---------------------------------------------------------------------------
+
+test('invoiceSubscriptionId reads the basil+ parent location (the live shape)', () => {
+  // Abridged invoice.paid payload as rendered at API 2025-03-31.basil and later:
+  // there is NO top-level `subscription` key at all.
+  const invoice = {
+    object: 'invoice',
+    billing_reason: 'subscription_cycle',
+    customer: 'cus_1',
+    parent: {
+      type: 'subscription_details',
+      quote_details: null,
+      subscription_details: { metadata: {}, subscription: 'sub_123' },
+    },
+  };
+  assert.equal(invoiceSubscriptionId(invoice), 'sub_123');
+});
+
+test('invoiceSubscriptionId still reads the pre-basil top-level field', () => {
+  assert.equal(invoiceSubscriptionId({ subscription: 'sub_old' }), 'sub_old');
+  assert.equal(invoiceSubscriptionId({ subscription: { id: 'sub_exp', object: 'subscription' } }), 'sub_exp');
+});
+
+test('invoiceSubscriptionId handles an expanded subscription under parent', () => {
+  const invoice = {
+    parent: { type: 'subscription_details', subscription_details: { subscription: { id: 'sub_x' } } },
+  };
+  assert.equal(invoiceSubscriptionId(invoice), 'sub_x');
+});
+
+test('invoiceSubscriptionId is null for one-off invoices', () => {
+  assert.equal(invoiceSubscriptionId({ parent: null }), null);
+  assert.equal(invoiceSubscriptionId({ parent: { type: 'quote_details', quote_details: { quote: 'qt_1' } } }), null);
+  assert.equal(invoiceSubscriptionId({}), null);
+  assert.equal(invoiceSubscriptionId(null), null);
+});
+
+test('the renewal handler never reads the removed invoice.subscription field', () => {
+  // activate.js imports the Stripe SDK, which site/ CI cannot install, so it
+  // cannot be imported here. Guard the source instead: a direct read of
+  // `invoice.subscription` is exactly the regression that silently stopped
+  // every renewal on the live (basil+) webhook endpoint.
+  const src = readFileSync(new URL('../functions/api/license/activate.js', import.meta.url), 'utf8');
+  const code = src
+    .split('\n')
+    .filter((l) => !l.trim().startsWith('//'))
+    .join('\n');
+  assert.doesNotMatch(code, /invoice\.subscription\b/);
+  assert.match(code, /invoiceSubscriptionId\(invoice\)/);
 });
