@@ -18,7 +18,6 @@ const SPDX_MATCH = /^\/\/\s*SPDX-License-Identifier:/;
 const DIRS = [
   'src',
   'src-tauri/src',
-  'mcp-4da-server/src',
   'mcp-memory-server/src',
 ];
 

@@ -12,8 +12,8 @@
 //! Conservative by design: anything that cannot be confidently evaluated is
 //! treated as ACTIVE, so a real advisory is never hidden on a guess.
 //!
-//! Mirrors `mcp-4da-server/src/live/platform.ts` so the app and the MCP server
-//! agree on relevance.
+//! Mirrors `src/live/platform.ts` in the MCP server's repository
+//! (github.com/4DA-Systems/4da-mcp-server) so the app and the MCP server agree on relevance.
 
 /// Host target facts. `os`/`arch` are rustc-style; on a natively-compiled binary
 /// these compile-time constants equal the machine 4DA is running on.

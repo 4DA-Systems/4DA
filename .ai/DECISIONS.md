@@ -202,7 +202,7 @@
 - **Status:** Final
 - **Update (2026-06-27):** Two details corrected against the live `LICENSE` and published packages:
   - **Conversion period is 3 years, not 2.** `LICENSE` sets `Change Date: 2029-04-20` ("the third anniversary"), converting to Apache License 2.0.
-  - **The published MCP server is Apache-2.0, not MIT.** `@4da/mcp-server` (`mcp-4da-server/package.json`) ships `"license": "Apache-2.0"`. The split is deliberate: the app is FSL-1.1-Apache-2.0; the published npm MCP server is Apache-2.0 for maximum ecosystem adoption. Do not "fix" this to MIT.
+  - **The published MCP server is Apache-2.0, not MIT.** `@4da/mcp-server` (`package.json` of github.com/4DA-Systems/4da-mcp-server, its own repository since 2026-10-04) ships `"license": "Apache-2.0"`. The split is deliberate: the app is FSL-1.1-Apache-2.0; the published npm MCP server is Apache-2.0 for maximum ecosystem adoption. Do not "fix" this to MIT.
 
 ### AD-017: Signal Tier Feature Gate ($12/mo, $99/yr)
 - **Decision:** Gate the Signal analysis layer behind a paid tier. The free tier retains all source adapters, the scoring engine, the feed UI, and basic signal detection.
@@ -393,7 +393,7 @@
   - Keep all-slim and document the Resources path better: Rejected — documentation cannot fix clients that structurally never read Resources; the tools stay broken for them.
 - **Date:** 2026-08-23
 - **Status:** Final
-- **Code:** `mcp-4da-server/src/schema-registry.ts`, tests in `mcp-4da-server/src/__tests__/schema-registry.test.ts`.
+- **Code:** `src/schema-registry.ts`, tests in `src/__tests__/schema-registry.test.ts`, in github.com/4DA-Systems/4da-mcp-server (`mcp-4da-server/` until 2026-10-04).
 
 ---
 

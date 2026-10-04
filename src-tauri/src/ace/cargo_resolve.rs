@@ -52,7 +52,7 @@
 //! `osv::reachability`, which evaluates the gates. It reads the cache only and
 //! never spawns cargo, so the matcher stays cheap; no cache means unknown.
 //!
-//! Mirrors `mcp-4da-server/src/live/cargo-platform.ts`, which resolves the
+//! Mirrors `src/live/cargo-platform.ts` in github.com/4DA-Systems/4da-mcp-server, which resolves the
 //! same predicate for the MCP server's `vulnerability_scan`. The shared
 //! definition of "platform-inactive" is documented in
 //! [`crate::platform_filter`].

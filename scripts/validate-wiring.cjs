@@ -19,12 +19,8 @@
  *  [2] React.lazy import resolution
  *      Every lazy(() => import('X')) must point at an existing file.
  *
- *  [3] MCP tool wiring
- *      Every tool file in mcp-4da-server/src/tools/ must be:
- *        (a) exported from index.ts
- *        (b) in DISPATCH_MAP in tool-dispatch.ts
- *        (c) in TOOL_REGISTRY in schema-registry.ts
- *        (d) have a matching *.json in schemas/
+ *  [3] (retired 2026-10-04) MCP tool wiring: the MCP server moved to
+ *      4DA-Systems/4da-mcp-server, where schema-contract.test.ts checks it.
  *
  *  [4] TIER_VIEWS cross-file consistency
  *      ViewTabBar.tsx and ui-slice.ts must have identical TIER_VIEWS constants.
@@ -62,7 +58,6 @@ const path = require('node:path');
 const REPO_ROOT = path.join(__dirname, '..');
 const SRC = path.join(REPO_ROOT, 'src');
 const SRC_TAURI = path.join(REPO_ROOT, 'src-tauri', 'src');
-const MCP = path.join(REPO_ROOT, 'mcp-4da-server', 'src');
 
 const failures = [];
 const checks = [];
@@ -181,67 +176,6 @@ check('React.lazy import resolution', () => {
   return {
     ok: missing.length === 0,
     details: missing.length > 0 ? missing.join('\n    ') : 'all lazy imports resolve',
-  };
-});
-
-// ═════════════════════════════════════════════════════════════════════════
-// CHECK 3: MCP tool wiring
-// ═════════════════════════════════════════════════════════════════════════
-// Strategy: parse the canonical DISPATCH_MAP (tool-dispatch.ts) as the
-// source of truth for tool names → executor fn names. Then verify each:
-//   - executor is exported from tools/index.ts barrel
-//   - tool name appears in TOOL_REGISTRY
-//   - referenced schemaFile exists on disk (if specified)
-// This approach doesn't assume any naming convention between file name
-// and tool name, so it works with LLMStatus, GetAgentFeedbackStats, etc.
-check('MCP tool wiring', () => {
-  const toolsDir = path.join(MCP, 'tools');
-  if (!existsDir(toolsDir)) return { ok: true, details: 'MCP not present — skipped' };
-
-  const indexTs = readFileSafe(path.join(toolsDir, 'index.ts')) ?? '';
-  const dispatchTs = readFileSafe(path.join(MCP, 'tool-dispatch.ts')) ?? '';
-  const registryTs = readFileSafe(path.join(MCP, 'schema-registry.ts')) ?? '';
-  const schemasDir = path.join(MCP, 'schemas');
-
-  // Parse DISPATCH_MAP entries: "  tool_name: executeFn,"
-  const dispatchRe = /^\s+([a-z_]+):\s*(execute[A-Za-z0-9_]+)\b/gm;
-  const dispatchPairs = [];
-  let m;
-  while ((m = dispatchRe.exec(dispatchTs)) !== null) {
-    dispatchPairs.push({ tool: m[1], executor: m[2] });
-  }
-
-  if (dispatchPairs.length === 0) {
-    return { ok: false, details: 'Could not parse DISPATCH_MAP in tool-dispatch.ts' };
-  }
-
-  const issues = [];
-
-  // Check each dispatch entry against index.ts and registry
-  for (const { tool, executor } of dispatchPairs) {
-    // Must be exported from tools/index.ts barrel
-    if (!indexTs.includes(executor)) {
-      issues.push(`${tool}: executor "${executor}" not exported from tools/index.ts`);
-    }
-    // Must be in TOOL_REGISTRY
-    const registryRe = new RegExp(`^\\s+${tool}:\\s*\\{`, 'm');
-    if (!registryRe.test(registryTs)) {
-      issues.push(`${tool}: not in TOOL_REGISTRY`);
-    }
-  }
-
-  // Check every schemaFile reference in registry resolves to an existing file
-  const schemaRefRe = /schemaFile:\s*"([^"]+)"/g;
-  while ((m = schemaRefRe.exec(registryTs)) !== null) {
-    const schemaFile = m[1];
-    if (!existsFile(path.join(schemasDir, schemaFile))) {
-      issues.push(`TOOL_REGISTRY references "${schemaFile}" but file does not exist`);
-    }
-  }
-
-  return {
-    ok: issues.length === 0,
-    details: issues.length > 0 ? issues.join('\n    ') : `all ${dispatchPairs.length} MCP tools wired end-to-end`,
   };
 });
 

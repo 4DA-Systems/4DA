@@ -17,7 +17,6 @@ const FIXTURE_FILES = [
   'src-tauri/src/db/migrations.rs',
   '.github/workflows/release.yml',
   'scripts/pin-codesigntool-sha.sh',
-  '.github/workflows/build-mcpb-extensions.yml',
   'docs/NETWORK-TRANSPARENCY.md',
   'docs/SECURITY-AUDIT-GUIDE.md',
   'src-tauri/desktop-template.desktop',
@@ -112,17 +111,18 @@ test('rejects missing latest.json as a release warning', () => {
   assert.ok(errors.some((error) => error.includes('must not downgrade')));
 });
 
-test('rejects MCP releases that can become GitHub latest', () => {
+test('rejects any workflow here that releases the MCP server', () => {
+  // The MCP Registry grants io.github.4DA-Systems/* to every repository of the
+  // organisation, so a publisher left in this repository would still succeed.
   const root = copyFixture();
-  const workflow = path.join(root, '.github/workflows/build-mcpb-extensions.yml');
   fs.writeFileSync(
-    workflow,
-    fs.readFileSync(workflow, 'utf8').replaceAll(' \\\n              --prerelease', '').replaceAll('\n          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --prerelease', ''),
+    path.join(root, '.github/workflows/publish-mcp-server.yml'),
+    "on:\n  push:\n    tags:\n      - 'mcp-v*'\njobs:\n  publish:\n    runs-on: ubuntu-latest\n    steps:\n      - run: ./mcp-publisher publish\n",
   );
-
-  const errors = checkReleaseChannel(root);
-  assert.ok(errors.some((error) => error.includes('MCP .mcpb releases must be marked prerelease')));
-  assert.ok(errors.some((error) => error.includes('Existing MCP .mcpb releases must be edited')));
+  assert.ok(
+    checkReleaseChannel(root).some((error) => error.includes('releases the MCP server')),
+    'an MCP publisher in this repository must fail the gate',
+  );
 });
 
 test('rejects placeholder or unenforced CodeSignTool checksum pins', () => {
@@ -279,7 +279,7 @@ test('a loosened tag pattern that would accept a -test tag fails the gate', () =
 });
 
 test('an npm publish in release.yml fails the gate', () => {
-  // The MCP server ships only from publish-mcp-server.yml (trusted publishing).
+  // The MCP server ships only from 4DA-Systems/4da-mcp-server (trusted publishing).
   const root = copyFixture();
   const file = path.join(root, '.github/workflows/release.yml');
   fs.appendFileSync(

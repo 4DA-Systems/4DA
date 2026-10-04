@@ -36,8 +36,8 @@ pub const SCORE_WRITE_HYSTERESIS: f64 = 0.05;
 /// semantics cannot fork per-surface again. Membership/threshold FILTERS keep
 /// comparing `relevance_score` — evidence decides membership, rank decides
 /// order. Mirrored (with a column-existence guard for older DBs) in
-/// `mcp-4da-server/src/db.ts`; that mirror names this const as its source of
-/// truth.
+/// `src/db.ts` of github.com/4DA-Systems/4da-mcp-server; that mirror names this const as its
+/// source of truth.
 ///
 /// SQLite sorts NULLs last under DESC, so items with neither column set sink
 /// to the bottom without extra clauses.

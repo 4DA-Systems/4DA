@@ -89,7 +89,7 @@ function trackedFiles() {
   // was two false learning promises living in commands.rs, invisible to a
   // frontend-only scan. Test files are dropped by EXCLUDE.
   const out = execSync(
-    'git ls-files "src/**" "src-tauri/src/**" "site/src/**" "site/scan/**" "docs/**" "*.md" "CLAUDE.md" "src-tauri/tauri.conf.json" "mcp-4da-server/README.md" "mcp-4da-server/src/**" "editors/**"',
+    'git ls-files "src/**" "src-tauri/src/**" "site/src/**" "site/scan/**" "docs/**" "*.md" "CLAUDE.md" "src-tauri/tauri.conf.json" "mcp-4da-server/README.md" "editors/**"',
     { cwd: ROOT, encoding: 'utf8' },
   );
   return out

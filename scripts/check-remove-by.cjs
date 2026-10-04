@@ -44,7 +44,7 @@ const path = require('path');
 const ROOT = path.resolve(__dirname, '..');
 
 // Directories whose source is subject to the convention.
-const SCAN_DIRS = ['src', 'src-tauri/src', 'scripts', 'mcp-4da-server/src'];
+const SCAN_DIRS = ['src', 'src-tauri/src', 'scripts'];
 
 const SCAN_EXTENSIONS = new Set(['.rs', '.ts', '.tsx', '.js', '.jsx', '.cjs', '.mjs']);
 

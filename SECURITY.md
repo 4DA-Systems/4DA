@@ -83,7 +83,7 @@ With your permission, we will acknowledge your contribution in the release notes
 
 - The 4DA desktop application (all platforms)
 - The update and auto-update mechanism
-- Bundled MCP servers (mcp-memory-server, mcp-4da-server)
+- The bundled MCP server mcp-memory-server (`@4da/mcp-server` has its own policy: https://github.com/4DA-Systems/4da-mcp-server/security/policy)
 
 ### Out of Scope
 

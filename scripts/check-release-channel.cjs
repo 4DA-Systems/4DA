@@ -54,7 +54,6 @@ function checkReleaseChannel(root = path.resolve(__dirname, '..')) {
   const migrationsRs = read(root, 'src-tauri/src/db/migrations.rs');
   const releaseYml = read(root, '.github/workflows/release.yml');
   const codeSignPinHelper = read(root, 'scripts/pin-codesigntool-sha.sh');
-  const mcpbWorkflow = read(root, '.github/workflows/build-mcpb-extensions.yml');
   const networkTransparency = read(root, 'docs/NETWORK-TRANSPARENCY.md');
   const securityAuditGuide = read(root, 'docs/SECURITY-AUDIT-GUIDE.md');
 
@@ -230,14 +229,15 @@ function checkReleaseChannel(root = path.resolve(__dirname, '..')) {
       );
     }
   }
-  // The MCP server ships only from publish-mcp-server.yml on an mcp-v* tag:
-  // npm Trusted Publishing is bound to that one workflow, and the package
-  // disallows token publishes. A second, token-based npm publisher here could
-  // never succeed, and a desktop tag must never be what releases the MCP server.
+  // The MCP server ships only from its own repository (4DA-Systems/4da-mcp-server,
+  // release.yml on an mcp-v* tag): npm Trusted Publishing is bound to that one
+  // workflow, and the package disallows token publishes. A second, token-based
+  // npm publisher here could never succeed, and a desktop tag must never be what
+  // releases the MCP server.
   if (/^[^#\n]*\bnpm publish\b|NPM_TOKEN/m.test(releaseYml)) {
     fail(
       'release.yml must not publish to npm. The MCP server is released only by ' +
-        'publish-mcp-server.yml (trusted publishing); an npm publish cannot be undone.'
+        '4DA-Systems/4da-mcp-server (trusted publishing); an npm publish cannot be undone.'
     );
   }
 
@@ -279,11 +279,24 @@ function checkReleaseChannel(root = path.resolve(__dirname, '..')) {
     fail('pin-codesigntool-sha.sh must replace the current pinned CodeSignTool SHA-256.');
   }
 
-  if (!mcpbWorkflow.includes('--prerelease')) {
-    fail('MCP .mcpb releases must be marked prerelease so they cannot become GitHub global latest.');
-  }
-  if (!mcpbWorkflow.includes('gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --prerelease')) {
-    fail('Existing MCP .mcpb releases must be edited to prerelease on every bundle publish.');
+  // No workflow in this repository may release the MCP server any more. Its MCP
+  // Registry name (io.github.4DA-Systems/*) is granted to EVERY repository of
+  // the organisation through GitHub OIDC, so a leftover or resurrected
+  // publisher here would still succeed, from code this repository no longer
+  // holds. (Until 2026-10-04 this check kept MCP .mcpb releases marked
+  // prerelease so they could not become the desktop app's GitHub latest.)
+  const workflowsDir = path.join(root, '.github', 'workflows');
+  const workflowFiles = fs.existsSync(workflowsDir)
+    ? fs.readdirSync(workflowsDir).filter((f) => /\.ya?ml$/.test(f))
+    : [];
+  for (const file of workflowFiles) {
+    const text = fs.readFileSync(path.join(workflowsDir, file), 'utf8');
+    if (/^[^#\n]*(mcp-publisher|build-mcpb|['"]mcp-v\*['"])/m.test(text)) {
+      fail(
+        `.github/workflows/${file} releases the MCP server. It is released only from ` +
+          '4DA-Systems/4da-mcp-server; remove the workflow (or the step) from this repository.'
+      );
+    }
   }
 
   return errors;

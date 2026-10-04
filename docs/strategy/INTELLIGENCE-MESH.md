@@ -59,7 +59,7 @@ Before the pivot, here's what actually exists. Read this first; don't design aga
 | Search synthesis | `search_synthesis.rs` | `[N]` citation markers | Validation + graceful degradation |
 | Content personalization | `content_personalization/llm_engine.rs` | 2-3 sentence length contract | Token budget enforcement |
 | Digest commands | `digest_commands.rs` | Anomaly context injection | Same injection surface as judge |
-| MCP synthesis tools | `mcp-4da-server/src/tools/*` | Task-complexity routing | Capability-declared providers |
+| MCP synthesis tools | `src/tools/*` (4DA-Systems/4da-mcp-server) | Task-complexity routing | Capability-declared providers |
 | Ollama fallback model | `llm.rs:345` | Hardcoded `llama3.2` | Configurable + health-checked |
 | Embedding dimension | `embeddings.rs:280` | Hardcoded 384 | Native dims + explicit migration |
 

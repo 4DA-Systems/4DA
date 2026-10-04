@@ -1,8 +1,7 @@
 # pnpm settings for the root project (the desktop app's frontend).
 #
-# Not a multi-package workspace: `packages` is empty on purpose. site/ and
-# mcp-4da-server/ are separate projects with their own pnpm-workspace.yaml and
-# lockfile. Security overrides and the d3-color patch stay in package.json
+# Not a multi-package workspace: `packages` is empty on purpose. site/ is a
+# separate project with its own pnpm-workspace.yaml and lockfile. Security overrides and the d3-color patch stay in package.json
 # (`pnpm.overrides`, `pnpm.patchedDependencies`), which pnpm 10 reads; pnpm 11
 # does not (see scripts/check-pnpm-overrides.cjs).
 packages: []

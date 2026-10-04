@@ -26,8 +26,10 @@ const OLD_HARDCODED_DIRS = ['.', 'site', 'paddle-webhook', 'mcp-4da-server'];
  * lockfile that no longer exists; anything else on the old list must stay audited.
  * paddle-webhook: retired 2026-09-24 (not deployed anywhere; Signal checkout runs
  * on Stripe through site/functions).
+ * mcp-4da-server: moved to its own repository 2026-10-04
+ * (4DA-Systems/4da-mcp-server), whose CI audits its lockfile.
  */
-const RETIRED_DIRS = new Set(['paddle-webhook']);
+const RETIRED_DIRS = new Set(['paddle-webhook', 'mcp-4da-server']);
 
 test('discovery finds every tracked lockfile, not just the pnpm ones', () => {
   const found = discoverLockfiles();
@@ -54,9 +56,12 @@ test('THE case: discovery covers strictly more than the list it replaced', () =>
     }
     assert.ok(dirs.has(d), `regression: ${d} was covered by the old loop and must stay covered`);
   }
+  // Compared with what is left of the old list: retired directories no longer
+  // have a lockfile for either approach to cover.
+  const stillTracked = OLD_HARDCODED_DIRS.filter((d) => !RETIRED_DIRS.has(d));
   assert.ok(
-    dirs.size > OLD_HARDCODED_DIRS.length,
-    `discovery must cover MORE than the ${OLD_HARDCODED_DIRS.length} hardcoded dirs, got ${dirs.size} — ` +
+    dirs.size > stillTracked.length,
+    `discovery must cover MORE than the ${stillTracked.length} still-tracked hardcoded dirs, got ${dirs.size} — ` +
       'if this fails, the audit has been narrowed back to a list',
   );
 });

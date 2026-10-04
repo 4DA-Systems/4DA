@@ -31,7 +31,7 @@ Already using Claude Code, Cursor, or Windsurf? One command:
 npx @4da/mcp-server
 ```
 
-This scans your project, detects your stack, and gives your AI assistant live vulnerability scanning, dependency health, upgrade planning, and ecosystem intelligence. No API keys. No accounts. Works standalone — no desktop app required. [Full MCP documentation.](mcp-4da-server/)
+This scans your project, detects your stack, and gives your AI assistant live vulnerability scanning, dependency health, upgrade planning, and ecosystem intelligence. No API keys. No accounts. Works standalone — no desktop app required. [Full MCP documentation.](https://github.com/4DA-Systems/4da-mcp-server)
 
 <p align="center">
   <img src="site/screenshots/01-brief.png" alt="4DA Brief tab — top picks and live signal stream scored against your stack" width="800" />

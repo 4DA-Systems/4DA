@@ -257,7 +257,7 @@ the allowlist is rejected.
 
 ### 2j. MCP server `dependency_check` (only when an agent calls the tool)
 
-The `@4da/mcp-server` tool `dependency_check` (`mcp-4da-server/src/live/npm-packument.ts`,
+The `@4da/mcp-server` tool `dependency_check` (`src/live/npm-packument.ts` in [4DA-Systems/4da-mcp-server](https://github.com/4DA-Systems/4da-mcp-server),
 `crates-versions.ts`) judges a version an agent is about to install. It runs only when an agent
 calls it, and sends nothing while `FOURDA_OFFLINE=true`.
 
