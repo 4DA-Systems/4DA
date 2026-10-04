@@ -9,7 +9,8 @@
 //
 // POST: Stripe webhook — handles:
 //   - checkout.session.completed   -> initial license generation
-//   - invoice.paid                 -> subscription renewal (fresh key + extended expiry)
+//   - invoice.paid                 -> subscription renewal (fresh key + extended expiry;
+//                                     emailed only until the app renews by itself)
 //   - customer.subscription.deleted -> cancellation (mark metadata)
 //   - charge.refunded              -> refund (mark metadata terminal)
 //   - charge.dispute.created       -> chargeback (mark metadata terminal)
@@ -27,7 +28,6 @@
 
 import Stripe from 'stripe';
 import * as ed from '@noble/ed25519';
-import { generateRefreshKey } from '../../../lib/ed25519-license.js';
 import {
   hasOtherStandingCharge,
   invoiceSubscriptionId,
@@ -212,27 +212,6 @@ async function generateAndStoreLicense(env, stripe, customerId, email, tier, bil
 // `if (!email)` guard ran, so a session with no email threw a TypeError and the
 // webhook answered a bare 500 that Stripe then retried.
 
-// Lease model: ensure the customer has a STABLE, unguessable refresh credential
-// stored in metadata (generated once, reused forever). The desktop lease client
-// presents this to /api/license/refresh to mint short-lived entitlement tokens.
-// Idempotent — never regenerates an existing key (that would break the user's
-// stored credential). Additive: the legacy long-token flow is untouched.
-async function ensureRefreshKey(stripe, customerId) {
-  try {
-    const c = await stripe.customers.retrieve(customerId);
-    if (c.deleted) return null;
-    if (c.metadata?.refresh_key) return c.metadata.refresh_key;
-    const key = generateRefreshKey();
-    await stripe.customers.update(customerId, { metadata: { refresh_key: key } });
-    return key;
-  } catch (err) {
-    // Non-fatal: the legacy token was already issued; refresh_key can be
-    // back-filled on the next event. Never fail the webhook over this.
-    console.error('ensureRefreshKey failed (non-fatal):', err?.message);
-    return null;
-  }
-}
-
 // ---------------------------------------------------------------------------
 // Webhook event handlers
 // ---------------------------------------------------------------------------
@@ -268,9 +247,6 @@ async function handleCheckoutCompleted(env, stripe, session) {
   const customerId = await resolveCustomerId(stripe, session.customer, email);
 
   const { licenseKey, expiresAt } = await generateAndStoreLicense(env, stripe, customerId, email, tier, billingPeriod);
-  // Lease model: back the account with a stable refresh credential for the
-  // short-lived-token flow (additive; legacy long token above still delivered).
-  const refreshKey = await ensureRefreshKey(stripe, customerId);
 
   // Mail the buyer their own copy. Until this existed, the success page
   // rendering the key was the ONLY delivery: a buyer who closed the tab inside
@@ -287,7 +263,7 @@ async function handleCheckoutCompleted(env, stripe, session) {
     'purchase',
   );
 
-  console.log('License generated:', email, 'tier:', tier, 'period:', billingPeriod, 'customer:', customerId, 'len:', licenseKey.length, 'refresh_key:', refreshKey ? 'set' : 'none', 'emailed:', mailed);
+  console.log('License generated:', email, 'tier:', tier, 'period:', billingPeriod, 'customer:', customerId, 'len:', licenseKey.length, 'emailed:', mailed);
   return { license_generated: true, emailed: mailed };
 }
 
@@ -340,10 +316,20 @@ async function handleInvoicePaid(env, stripe, invoice) {
   // Regenerate license with fresh expiry
   const { licenseKey, expiresAt } = await generateAndStoreLicense(env, stripe, customerId, email, existingTier, billingPeriod);
 
-  // A renewal SILENTLY replaces the key the customer is holding — the previous
-  // one stops working at its original expiry. Without this mail the first they
-  // learn of it is the app refusing their key, so a renewal has to be delivered
-  // as deliberately as a purchase.
+  // An app that renews by itself (POST /api/license/renew marked this customer
+  // renews_in_app) already holds this period's key, so a key in the inbox every
+  // month is noise that reads like a chore ("it replaces your previous key").
+  // The purchase-email key stays valid as their credential on any computer.
+  // Desktop builds without the renewal client never set the marker, so they
+  // keep getting the key by email exactly as before.
+  if (meta(customer.metadata, 'renews_in_app') === 'true') {
+    console.log('License renewed (app renews in-app, not emailed):', 'tier:', existingTier, 'period:', billingPeriod, 'customer:', customerId, 'reason:', invoice.billing_reason);
+    return { license_renewed: true, emailed: 'skipped_renews_in_app' };
+  }
+
+  // Older desktop builds cannot fetch the renewed key, so it has to reach them
+  // as deliberately as a purchase — otherwise the first they learn of it is the
+  // app refusing their key.
   const mailed = await deliverLicenseEmail(
     env,
     email,
@@ -376,21 +362,21 @@ async function handleInvoicePaid(env, stripe, invoice) {
 //     on its own: generateAndStoreLicense sets `streets_status: 'active'`
 //     unconditionally, so without that guard a re-delivered renewal silently
 //     un-terminates the customer;
-//   * /api/license/refresh stops minting new lease tokens for the lifetime tier
-//     (functions/api/license/refresh.js, via isLifetimeEntitled());
+//   * /api/license/renew stops renewing the customer: it reads the live
+//     subscription, and isRevoked() skips refunded / charged-back customers;
 //   * the session_id GET path reports the status to the buyer.
 //
 // So a refunded MONTHLY customer loses access within ~35 days, and a refunded
 // LIFETIME customer keeps the key they are already holding until 2099. That is
 // the honest statement of the current position. Before this change there was no
 // refund or chargeback handler at all, so a refunded customer was never even
-// marked, and `refresh.js` gated on a 'refunded' status that no writer produced.
+// marked.
 //
 // RECOMMENDATION, deliberately NOT implemented here because it is a licence
 // FORMAT change and needs its own review: issue lifetime purchases a
-// short-dated key like every other tier and let the refresh endpoint renew it.
-// That makes refresh.js load-bearing for all tiers and turns this metadata
-// write into real revocation with a bounded window, instead of a 73-year one.
+// short-dated key like every other tier and let /api/license/renew renew it.
+// That turns this metadata write into real revocation with a bounded window,
+// instead of a 73-year one.
 // ---------------------------------------------------------------------------
 
 async function applyTerminalStatus(stripe, customerId, status, context) {

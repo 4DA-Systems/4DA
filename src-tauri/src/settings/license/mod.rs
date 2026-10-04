@@ -21,6 +21,7 @@ pub use keygen::{
     save_license_backup, save_license_backup_to, validate_license_key_keygen,
     validate_license_key_keygen_fresh, KeygenValidationCache, KeygenValidationResult,
 };
+pub(crate) use renewal::current_key_for_activation;
 pub use renewal::spawn_license_renewal_task;
 pub use revalidation::{
     get_last_validated_at, reconcile_license_from_proof, take_downgrade_flag,

@@ -6,7 +6,6 @@
 //   3. verifies against the corresponding public key (as ed25519_dalek does),
 //   4. is REJECTED when the payload is tampered,
 //   5. carries a short expiry the verifier enforces,
-// and that generateRefreshKey() matches the refresh endpoint's accept-regex.
 //
 // The real private key (LICENSE_PRIVATE_KEY_HEX) isn't needed here: signature
 // equivalence to Rust ed25519_dalek is already proven by
@@ -14,7 +13,7 @@
 // the chain. Run: `node scripts/test-lease.mjs` (or `pnpm run test:lease`). Exit 0 = pass.
 
 import * as ed from '@noble/ed25519';
-import { signLicenseToken, generateRefreshKey } from '../lib/ed25519-license.js';
+import { signLicenseToken } from '../lib/ed25519-license.js';
 
 ed.etc.sha512Async = async (...msgs) => {
   let t = 0;
@@ -89,11 +88,6 @@ const days = (new Date(decoded.expires_at) - new Date(decoded.issued_at)) / 864e
 check('lease window is ~7 days (short-lived)', days > 6.9 && days < 7.1);
 check('token not currently expired', new Date(decoded.expires_at) > new Date());
 
-// refresh-key format matches the endpoint's guard
-const rk = generateRefreshKey();
-check('refresh key matches endpoint regex', /^4DA-LIC-[A-Z2-7]{16,80}$/.test(rk));
-const rk2 = generateRefreshKey();
-check('refresh keys are unique', rk !== rk2);
 
 console.log(failures === 0 ? '\nALL LEASE CONTRACT CHECKS PASSED' : `\n${failures} CHECK(S) FAILED`);
 process.exit(failures === 0 ? 0 : 1);

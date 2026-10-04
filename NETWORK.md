@@ -312,10 +312,14 @@ subscriber is never dropped to Free between billing periods, the app renews the 
   purchase email). No device fingerprint, machine identifiers, usage data or telemetry.
 - **When:** only if you hold a monthly/annual Signal key **and** it expires within 10 days (or
   expired less than 60 days ago). First check ~2 minutes after launch, then at most every 12 hours —
-  in practice about once per billing period. **Free users, lifetime keys and Keygen keys never call.**
+  in practice about once per billing period. Also once when you paste an **expired** subscription key
+  into Settings → License, to exchange it for the current one. **Free users, lifetime keys and Keygen
+  keys never call.**
 - **Data returned:** a renewed key valid to the end of the period you have paid for (checked live
-  against Stripe), or "current" / "not entitled". Nothing is stored on our side beyond the key
-  already kept against your Stripe customer record.
+  against Stripe; at most 7 days ahead while a failed card is being retried), or "current" /
+  "not entitled". Nothing is stored on our side beyond the key already kept against your Stripe
+  customer record, plus a one-time marker that your app renews by itself — which stops the monthly
+  email carrying a replacement key.
 - **Offline / refused:** the current key is kept and simply runs to its own expiry — the call can
   never downgrade you.
 - **Disable:** remove the licence key (Settings → License). A cancelled subscription stops renewing

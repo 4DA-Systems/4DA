@@ -4,13 +4,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
-  MAX_LAPSE_DAYS,
+  PAST_DUE_LEASE_DAYS,
   RENEWAL_GRACE_DAYS,
   classifyPresentedKey,
   extendsAccess,
   parseLicenseKey,
   pickEntitlingSubscription,
   renewedExpiry,
+  renewedExpiryFor,
   subscriptionPeriodEnd,
 } from './renewal.js';
 
@@ -44,14 +45,13 @@ test('rejects refresh credentials, junk, wrong-size signatures and payloads with
 });
 
 test('lifetime keys never renew', () => {
-  assert.equal(classifyPresentedKey({ expires_at: '2099-10-04T13:32:22.574Z' }, NOW), 'lifetime');
+  assert.equal(classifyPresentedKey({ expires_at: '2099-10-04T13:32:22.574Z' }), 'lifetime');
 });
 
-test('a key may be renewed before expiry and up to MAX_LAPSE_DAYS after it — not beyond', () => {
-  assert.equal(classifyPresentedKey({ expires_at: new Date(NOW + 3 * DAY).toISOString() }, NOW), 'eligible');
-  assert.equal(classifyPresentedKey({ expires_at: new Date(NOW - (MAX_LAPSE_DAYS - 1) * DAY).toISOString() }, NOW), 'eligible');
-  assert.equal(classifyPresentedKey({ expires_at: new Date(NOW - (MAX_LAPSE_DAYS + 1) * DAY).toISOString() }, NOW), 'lapsed');
-  assert.equal(classifyPresentedKey({ expires_at: 'garbage' }, NOW), 'invalid');
+test('a subscription key of any age is a renewal credential — the live subscription is the only gate', () => {
+  assert.equal(classifyPresentedKey({ expires_at: new Date(NOW + 3 * DAY).toISOString() }), 'eligible');
+  assert.equal(classifyPresentedKey({ expires_at: new Date(NOW - 400 * DAY).toISOString() }), 'eligible', 'the key from the purchase email, a year on');
+  assert.equal(classifyPresentedKey({ expires_at: 'garbage' }), 'invalid');
 });
 
 test('period end is read from items on API basil+ and from the subscription on older versions', () => {
@@ -84,4 +84,18 @@ test('a renewal is only handed out when it actually extends access', () => {
   assert.equal(extendsAccess(presented, new Date('2026-11-08T00:30:00Z')), false, 'within 1h is the same key');
   assert.equal(extendsAccess(presented, new Date('2026-11-01T00:00:00Z')), false);
   assert.equal(extendsAccess(presented, 'not a date'), false);
+});
+
+test('a paying subscription renews to period end + grace', () => {
+  const end = NOW / 1000 + 30 * 86400;
+  const sub = { status: 'active', items: { data: [{ current_period_end: end }] } };
+  assert.equal(renewedExpiryFor(sub, NOW).getTime(), NOW + (30 + RENEWAL_GRACE_DAYS) * DAY);
+});
+
+test('a failing card (past_due) gets a short lease, never the period Stripe is still trying to charge for', () => {
+  const end = NOW / 1000 + 30 * 86400;
+  const sub = { status: 'past_due', items: { data: [{ current_period_end: end }] } };
+  assert.equal(renewedExpiryFor(sub, NOW).getTime(), NOW + PAST_DUE_LEASE_DAYS * DAY);
+  const nearEnd = { status: 'past_due', items: { data: [{ current_period_end: NOW / 1000 - 6 * 86400 }] } };
+  assert.equal(renewedExpiryFor(nearEnd, NOW).getTime(), NOW + (RENEWAL_GRACE_DAYS - 6) * DAY, 'never past the paid end + grace');
 });

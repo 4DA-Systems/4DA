@@ -773,6 +773,29 @@
 
 ---
 
+### AD-052: Subscription Keys Renew Silently; the Purchase Key Is the Customer's Credential for Life
+
+- **Decision:** 2026-10-05, operator directive ("monthly subscribers having to renew every month… must be fixed before launch"; then "streamline the monthly renewal… what is our best strategy at scale"). Ratifies the silent-renewal direction left open on 2026-09-27 (PR #361 closed as superseded).
+  1. **The held key is the credential.** Near expiry (≤ 10 days left) the app sends its current `4DA-` key — nothing else — to `POST 4da.ai/api/license/renew` (`settings/license/renewal.rs`, `site/functions/api/license/renew.js`). The server verifies it against the app's own public key, reads the LIVE subscription for the email inside it from Stripe, and answers with a key valid to the paid period's end + 7 days. Stripe stays the only source of truth; no database, no revocation list.
+  2. **A key of any age renews while the subscription is live.** The purchase-email key works on any computer for the life of the subscription: pasting an expired one exchanges it for the current key at activation. (#828 shipped a 60-day lapse bound; it added no security — every key for an email carries the same power, gated by the live subscription — and it is what forced a fresh key into the inbox every month.) The app's own background polling still stops 60 days after expiry, which bounds traffic from cancelled installs only.
+  3. **No monthly key email once the app renews by itself.** A successful renew call marks the Stripe customer `renews_in_app`; `invoice.paid` then mints and stores the key (so email recovery hands out the newest) but does not mail it. Desktop builds without the renewal client never set the marker and keep receiving the key by email.
+  4. **Never a downgrade, never a worse key.** Network errors, outages, 429/503 and refusals keep the current key, which runs to its own expiry. A returned key is installed only if it verifies, names the same email and expires later.
+  5. **Revocation falls out.** Cancelled subscriptions stop renewing and lapse at period end; refunded / charged-back customers (`isRevoked`) are never renewed. **past_due gets a 7-day lease**, never the full period: Stripe advances the period when it *tries* to charge, so the period end is not proof of payment, and renewing to it gave every failed card a free month. The app renews every 12h inside that lease, so a customer who fixes their card never notices.
+  6. **Narrow network surface.** Free, lifetime and Keygen keys never call. Subscribers call about once per billing period (12h cadence only inside the window), plus once when pasting an expired key. Disclosed in NETWORK.md §2k and privacy policy §2.8; Terms §4.3 already described it.
+  7. **One mechanism.** The `4DA-LIC-` refresh-credential lease (`/api/license/refresh`, `ensureRefreshKey`) is deleted: no customer ever received that credential and no client ever called it.
+- **Rationale:** Every renewal used to reach the customer only as an emailed key they had to click or paste. A monthly subscriber who ignored it was dropped to Free while still being billed, every month; at any scale that is churn and support load by construction. A monthly email saying "this replaces your previous key" also reads as a chore even when the app has already handled it, and on Resend's free tier (100/day) monthly key mail alone hits the cap at ~3,000 subscribers.
+- **Considered:**
+  - *Long-lived keys for subscribers (e.g. 1 year for monthly):* Rejected. A cancelled monthly would keep ~11 months of access, the exact leak fixed when expiries were aligned to billing periods.
+  - *Online check on every launch:* Rejected. Violates INV-032 (local-first, works offline) and adds a network call per launch for every user.
+  - *Accounts / sign-in instead of keys:* Rejected. Adds a login, a password-reset path and a user database to a product whose promise is local and private; the signed key already is an account identifier.
+  - *A licensing vendor (Keygen, Lemon Squeezy, Paddle):* Rejected for now. Same lease model with a third party in the data path and a per-transaction fee; Stripe already holds the truth.
+  - *Device limits on a key:* Deferred. Needs server state; revisit only if key sharing shows up in renew-call volume per key.
+  - *Annual / lifetime only:* A pricing decision, not a fix; monthly remains on sale.
+- **Date:** 2026-10-05
+- **Status:** Final
+
+---
+
 ## Decision Template
 
 When adding a new decision:
