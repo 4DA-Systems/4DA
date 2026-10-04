@@ -59,6 +59,7 @@ import { useAppListeners } from './hooks/use-app-listeners';
 import { ALL_SOURCE_IDS, loadSourceMeta } from './config/sources';
 import { runWhenIdle } from './lib/defer';
 import { isSurfacedSignal } from './utils/score';
+import { useSignalDisplayOrder } from './components/signals/signal-display-order';
 
 function App() {
   const { t } = useTranslation();
@@ -79,13 +80,17 @@ function App() {
   const [newItemIds, setNewItemIds] = useState<Set<number>>(new Set());
   const newItemTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Data selectors (may change, use useShallow)
-  const { activeView, showOnlyRelevant, filteredResults } = useAppStore(
+  const { activeView, showOnlyRelevant, relevanceResults } = useAppStore(
     useShallow((s) => ({
       activeView: s.activeView,
       showOnlyRelevant: s.showOnlyRelevant,
-      filteredResults: s.appState.relevanceResults,
+      relevanceResults: s.appState.relevanceResults,
     })),
   );
+  // Keyboard shortcuts walk what the Signal list shows, in on-screen order
+  // (lanes, filters, collapse state) — the highlighted row is the acted-on row.
+  const displayedResults = useSignalDisplayOrder(s => s.visible);
+  const filteredResults = displayedResults ?? relevanceResults;
 
   // Action selectors (stable references, no need for useShallow)
   const setActiveView = useAppStore(s => s.setActiveView);

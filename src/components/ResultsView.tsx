@@ -1,22 +1,21 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-import { useRef, useMemo, useCallback, useEffect, type SyntheticEvent } from 'react';
-import { useVirtualizer } from '@tanstack/react-virtual';
+import { useRef, useMemo, useCallback, useEffect, useState, type SyntheticEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
-import { ResultItem } from './ResultItem';
 import { LoadingOrEmptyState } from './LoadingOrEmptyState';
 import { NoResultsState } from './NoResultsState';
 import { ContextPanel } from './context-panel';
 import { ResultFiltersBar } from './search/ResultFiltersBar';
 import { useTranslatedContent } from './ContentTranslationProvider';
+import { ResultLaneList } from './ResultLaneList';
+import { SignalLanes } from './SignalLanes';
 import { useAppStore } from '../store';
 import { useResultFilters } from '../hooks';
-import { computeEvidencePool, type EvidencePool } from './signals/evidence-pool';
-import { EVIDENCE_POOLS } from './signals/signal-config';
-
-// Pool display order (highest-trust first) for partitioning the feed.
-const POOL_RANK: Record<EvidencePool, number> = { affects_you: 0, in_orbit: 1, ambient: 2 };
-const POOL_STYLE = Object.fromEntries(EVIDENCE_POOLS.map((p) => [p.key, p])) as Record<EvidencePool, (typeof EVIDENCE_POOLS)[number]>;
+import {
+  STACK_LANE_CAP, flattenVisible, locateInLanes, partitionLanes, visibleLaneItems,
+} from './signals/signal-lanes';
+import { useSignalDisplayOrder } from './signals/signal-display-order';
+import type { FeedbackAction, SourceRelevance } from '../types';
 
 interface ResultsViewProps {
   newItemIds: Set<number>;
@@ -78,31 +77,36 @@ export function ResultsView({
     saveAllAbove,
   } = useResultFilters();
 
-  // Partition the feed by evidence pool (grounding), not score band, when ranking
-  // by relevance. Score can't separate signal from noise — a stack-relevant item and
-  // pure noise both score ~0.9; grounding can. Cold-start (profileEmpty) keeps the
-  // flat "fresh picks" view since there's no stack to ground against yet.
-  const poolingActive = sortBy === 'score' && !profileEmpty;
-  const { displayResults, poolHeaders } = useMemo(() => {
-    const empty = new Map<number, { key: EvidencePool; count: number }>();
-    if (!poolingActive) return { displayResults: filteredResults, poolHeaders: empty };
-    const withPool = filteredResults.map((r, i) => ({ r, i, pool: computeEvidencePool(r) }));
-    withPool.sort((a, b) => (POOL_RANK[a.pool] - POOL_RANK[b.pool]) || (a.i - b.i));
-    const counts: Record<string, number> = {};
-    withPool.forEach((x) => { counts[x.pool] = (counts[x.pool] || 0) + 1; });
-    const headers = new Map<number, { key: EvidencePool; count: number }>();
-    let prev: EvidencePool | null = null;
-    withPool.forEach((x, idx) => { if (x.pool !== prev) { headers.set(idx, { key: x.pool, count: counts[x.pool]! }); prev = x.pool; } });
-    return { displayResults: withPool.map((x) => x.r), poolHeaders: headers };
-  }, [filteredResults, poolingActive]);
+  // Split the feed into lanes by evidence pool (grounding), not score band, when
+  // ranking by relevance: score can't separate signal from noise — a stack item
+  // and pure noise both score ~0.9; grounding can (see signals/signal-lanes.ts).
+  // Cold-start (profileEmpty) and the non-score sorts keep the flat list.
+  const lanesActive = sortBy === 'score' && !profileEmpty;
+  const stackExpanded = useSignalDisplayOrder(s => s.stackExpanded);
+  const moreExpanded = useSignalDisplayOrder(s => s.moreExpanded);
+  const setStackExpanded = useSignalDisplayOrder(s => s.setStackExpanded);
+  const setMoreExpanded = useSignalDisplayOrder(s => s.setMoreExpanded);
+  const setVisible = useSignalDisplayOrder(s => s.setVisible);
+  const lanes = useMemo(() => (lanesActive ? partitionLanes(filteredResults) : null), [lanesActive, filteredResults]);
+  const visibleLanes = useMemo(
+    () => (lanes ? visibleLaneItems(lanes, { stackExpanded, moreExpanded }) : null),
+    [lanes, stackExpanded, moreExpanded],
+  );
+  const displayResults = useMemo(
+    () => (visibleLanes ? flattenVisible(visibleLanes) : filteredResults),
+    [visibleLanes, filteredResults],
+  );
+
+  // Keyboard shortcuts index into what is on screen, in on-screen order.
+  useEffect(() => { setVisible(displayResults); }, [displayResults, setVisible]);
+  useEffect(() => () => setVisible(null), [setVisible]);
 
   const parentRef = useRef<HTMLDivElement>(null);
-  const virtualizer = useVirtualizer({
-    count: displayResults.length,
-    getScrollElement: () => parentRef.current,
-    estimateSize: () => 120,
-    overscan: 5,
-  });
+  const [scrollTarget, setScrollTarget] = useState<{ id: number } | null>(null);
+  const onRecordInteraction = useCallback(
+    (itemId: number, actionType: FeedbackAction, item: SourceRelevance) => { void recordInteraction(itemId, actionType, item); },
+    [recordInteraction],
+  );
 
   const relevantCount = useMemo(() => filteredResults.filter(r => r.relevant).length, [filteredResults]);
   const topPicksCount = useMemo(() => filteredResults.filter(r => r.top_score >= 0.72).length, [filteredResults]);
@@ -110,9 +114,9 @@ export function ResultsView({
   const totalCount = state.relevanceResults.length;
 
   // Topic cluster detection: find where 2+ consecutive items share a primary_topic.
-  // Disabled while pooling — pools are the primary partition.
+  // Disabled while lanes are active — lanes are the primary partition.
   const topicClusterStarts = useMemo(() => {
-    if (sortBy !== 'score' || poolingActive) return new Map<number, string>();
+    if (sortBy !== 'score' || lanesActive) return new Map<number, string>();
     const starts = new Map<number, string>();
     let i = 0;
     while (i < filteredResults.length) {
@@ -127,15 +131,18 @@ export function ResultsView({
       }
     }
     return starts;
-  }, [filteredResults, sortBy, poolingActive]);
+  }, [filteredResults, sortBy, lanesActive]);
 
   // Deep-link from the command search: scroll to + expand a specific item.
   useEffect(() => {
     if (searchFocusItemId == null) return;
-    const idx = displayResults.findIndex(r => r.id === searchFocusItemId);
-    if (idx >= 0) {
+    // In a collapsed part of a lane — open it first; this effect re-runs.
+    const loc = lanes ? locateInLanes(lanes, searchFocusItemId) : null;
+    if (loc?.lane === 'stack' && loc.index >= STACK_LANE_CAP && !stackExpanded) { setStackExpanded(true); return; }
+    if (loc?.lane === 'more' && !moreExpanded) { setMoreExpanded(true); return; }
+    if (displayResults.some(r => r.id === searchFocusItemId)) {
       const id = searchFocusItemId;
-      requestAnimationFrame(() => virtualizer.scrollToIndex(idx, { align: 'center' }));
+      setScrollTarget({ id });
       setExpandedItem(id);
       setSearchFocusItemId(null);
       return;
@@ -147,7 +154,7 @@ export function ResultsView({
     }
     // Off-feed corpus item not in this list — clear; the user is already on Signal.
     setSearchFocusItemId(null);
-  }, [searchFocusItemId, displayResults, virtualizer, setExpandedItem, setSearchFocusItemId, showOnlyRelevant, setShowOnlyRelevant, state.relevanceResults]);
+  }, [searchFocusItemId, lanes, stackExpanded, moreExpanded, setStackExpanded, setMoreExpanded, displayResults, setExpandedItem, setSearchFocusItemId, showOnlyRelevant, setShowOnlyRelevant, state.relevanceResults]);
 
   useEffect(() => {
     const items = [
@@ -157,6 +164,42 @@ export function ResultsView({
     if (items.length > 0) requestTranslation(items);
   }, [filteredResults, state.nearMisses, requestTranslation]);
   const sourcesWithResults = useMemo(() => new Set(state.relevanceResults.map(r => r.source_type || 'hackernews')), [state.relevanceResults]);
+
+  const listProps = {
+    scrollElementRef: parentRef,
+    focusedIndex,
+    expandedItem,
+    feedbackGiven,
+    onToggleExpand: handleToggleExpand,
+    onRecordInteraction,
+    comparePool: filteredResults,
+    scrollTarget,
+  };
+
+  // Flat list headers. Lanes cover every relevance-sorted view with a profile,
+  // so the flat list is either cold start (one honest header + topic clusters)
+  // or a non-score sort (no headers).
+  const renderFlatPrefix = (_item: SourceRelevance, idx: number) => (
+    <>
+      {sortBy === 'score' && profileEmpty && idx === 0 && (
+        <div className="flex items-center gap-3 mb-3 mt-2 first:mt-0">
+          <span className="text-xs font-medium px-2 py-1 rounded-lg bg-gray-500/10 text-text-muted">
+            {t('results.freshPicksGroup', 'Fresh picks — not yet personalized')}
+          </span>
+          <div className="flex-1 h-px bg-border" />
+        </div>
+      )}
+      {topicClusterStarts.has(idx) && (
+        <div className="flex items-center gap-2 mb-2 mt-1">
+          <div className="flex-1 h-px bg-border/50" />
+          <span className="text-[10px] text-text-muted/70 uppercase tracking-wider font-medium px-1.5">
+            {topicClusterStarts.get(idx)}
+          </span>
+          <div className="flex-1 h-px bg-border/50" />
+        </div>
+      )}
+    </>
+  );
 
   return (
     <div className="space-y-6">
@@ -245,7 +288,7 @@ export function ResultsView({
               detectedStack={discoveredContext?.tech?.map(item => item.name) ?? []}
               onStartAnalysis={() => { void startAnalysis(); }}
             />
-          ) : displayResults.length === 0 ? (
+          ) : filteredResults.length === 0 ? (
             <NoResultsState
               totalAnalyzed={state.relevanceResults.length}
               showOnlyRelevant={showOnlyRelevant}
@@ -255,99 +298,24 @@ export function ResultsView({
               resetSourceFilters={resetSourceFilters}
               getTranslated={getTranslated}
             />
+          ) : visibleLanes && lanes ? (
+            <SignalLanes
+              lanes={lanes}
+              visible={visibleLanes}
+              stackExpanded={stackExpanded}
+              moreExpanded={moreExpanded}
+              onToggleStack={() => setStackExpanded(!stackExpanded)}
+              onToggleMore={() => setMoreExpanded(!moreExpanded)}
+              {...listProps}
+            />
           ) : (
-            <div
-              role="listbox"
-              aria-label={t('results.title')}
-              aria-activedescendant={focusedIndex >= 0 && displayResults[focusedIndex] ? `result-item-${displayResults[focusedIndex].id}` : undefined}
-              tabIndex={-1}
-              style={{ height: `${virtualizer.getTotalSize()}px`, width: '100%', position: 'relative' }}
-            >
-              {virtualizer.getVirtualItems().map((virtualRow) => {
-                const item = displayResults[virtualRow.index]!;
-                const idx = virtualRow.index;
-                // Evidence-pool partition header (grounding-based) when ranking by
-                // relevance; otherwise fall back to score-band group headers.
-                const poolHeader = poolingActive ? poolHeaders.get(idx) : undefined;
-                let groupHeader: string | null = null;
-                if (!poolingActive) {
-                  if (sortBy === 'score' && profileEmpty) {
-                    // Cold start: one honest header — these are fresh, not personalized.
-                    if (idx === 0) groupHeader = t('results.freshPicksGroup', 'Fresh picks — not yet personalized');
-                  } else if (sortBy === 'score' && idx > 0) {
-                    const prev = displayResults[idx - 1]!;
-                    if (prev.top_score >= 0.72 && item.top_score < 0.72) {
-                      groupHeader = t('results.relevantGroup');
-                    } else if (prev.top_score >= 0.50 && item.top_score < 0.50) {
-                      groupHeader = t('results.belowThreshold');
-                    }
-                  } else if (sortBy === 'score' && idx === 0 && item.top_score >= 0.72) {
-                    groupHeader = t('results.topPicksGroup');
-                  } else if (sortBy === 'score' && idx === 0 && item.top_score >= 0.50) {
-                    groupHeader = t('results.relevantGroup');
-                  }
-                }
-                return (
-                  <div
-                    key={item.id}
-                    style={{
-                      position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      width: '100%',
-                      transform: `translateY(${virtualRow.start}px)`,
-                    }}
-                    ref={virtualizer.measureElement}
-                    data-index={virtualRow.index}
-                  >
-                    {poolHeader && (() => {
-                      const ps = POOL_STYLE[poolHeader.key];
-                      return (
-                        <div className={`flex items-center gap-2 mb-3 mt-4 first:mt-0 pb-1 border-b ${ps.borderColor} ${ps.dim ? 'opacity-70' : ''}`}>
-                          <span aria-hidden="true">{ps.icon}</span>
-                          <span className={`text-sm font-medium ${ps.color}`}>{t(ps.labelKey)}</span>
-                          <span className="text-[10px] text-text-muted">{poolHeader.count}</span>
-                          <span className="text-[10px] text-text-muted ms-1 hidden sm:inline">· {t(ps.sublabelKey)}</span>
-                        </div>
-                      );
-                    })()}
-                    {groupHeader && (
-                      <div className="flex items-center gap-3 mb-3 mt-2 first:mt-0">
-                        <span className={`text-xs font-medium px-2 py-1 rounded-lg ${
-                          groupHeader === t('results.topPicksGroup') ? 'bg-orange-500/10 text-orange-400' :
-                          groupHeader === t('results.relevantGroup') ? 'bg-green-500/10 text-green-400' :
-                          'bg-gray-500/10 text-text-muted'
-                        }`}>
-                          {groupHeader}
-                        </span>
-                        <div className="flex-1 h-px bg-border" />
-                      </div>
-                    )}
-                    {topicClusterStarts.has(idx) && (
-                      <div className="flex items-center gap-2 mb-2 mt-1">
-                        <div className="flex-1 h-px bg-border/50" />
-                        <span className="text-[10px] text-text-muted/70 uppercase tracking-wider font-medium px-1.5">
-                          {topicClusterStarts.get(idx)}
-                        </span>
-                        <div className="flex-1 h-px bg-border/50" />
-                      </div>
-                    )}
-                    <div className="pb-3">
-                      <ResultItem
-                        item={item}
-                        isExpanded={expandedItem === item.id}
-                        isFocused={focusedIndex === idx}
-                        onToggleExpand={handleToggleExpand}
-                        feedbackGiven={feedbackGiven}
-                        onRecordInteraction={(itemId, actionType, item) => { void recordInteraction(itemId, actionType, item); }}
-                        comparePool={expandedItem === item.id ? filteredResults : undefined}
-                        itemIndex={idx}
-                      />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+            <ResultLaneList
+              {...listProps}
+              items={filteredResults}
+              indexOffset={0}
+              ariaLabel={t('results.title')}
+              renderPrefix={renderFlatPrefix}
+            />
           )}
         </div>
       </section>
