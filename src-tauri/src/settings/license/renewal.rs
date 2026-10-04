@@ -36,8 +36,8 @@ pub(crate) const RENEW_WINDOW_DAYS: i64 = 10;
 /// renewal date recovers on its own). Mirrors the server's MAX_LAPSE_DAYS.
 pub(crate) const MAX_LAPSE_DAYS: i64 = 60;
 
-const FIRST_CHECK_DELAY: Duration = Duration::from_secs(120);
-const CHECK_INTERVAL: Duration = Duration::from_secs(12 * 60 * 60);
+const FIRST_CHECK_DELAY: Duration = Duration::from_mins(2);
+const CHECK_INTERVAL: Duration = Duration::from_hours(12);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
 
 /// What the renewal endpoint told us.
