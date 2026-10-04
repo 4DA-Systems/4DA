@@ -61,6 +61,7 @@ export function LaneLabelNode({ data }: { data: { count: number } }) {
   const { t } = useTranslation();
   return (
     <div
+      data-cg-label-id="lane"
       style={{
         color: 'var(--color-text-muted)',
         fontSize: zoomInvariant(HEADER_FONT_PX),

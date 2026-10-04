@@ -27,6 +27,9 @@ export interface LabelBox {
   /** A soft obstacle, not a label: never placed or reported, but every label
    *  pays `weight` for covering it — so labels step off it when they can. */
   obstacle?: boolean;
+  /** With `obstacle`: a HARD obstacle — painted text (a "+N" story badge)
+   *  that no label may cover; a label with no clear placement is suppressed. */
+  hard?: boolean;
 }
 
 export interface LabelPlacement {
@@ -72,7 +75,8 @@ export function resolveLabelCollisions(
   boxes: LabelBox[],
   gap = 0,
 ): Map<string, LabelPlacement> {
-  const obstacles = boxes.filter((b) => b.obstacle);
+  const obstacles = boxes.filter((b) => b.obstacle && !b.hard);
+  const hardObstacles = boxes.filter((b) => b.obstacle && b.hard);
   const order = boxes
     .filter((b) => !b.obstacle)
     .sort((a, b) => b.priority - a.priority || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
@@ -118,6 +122,9 @@ export function resolveLabelCollisions(
       for (const j of near) {
         const p = placed[j];
         if (p && rectsOverlap(p, r, gap)) return;
+      }
+      for (const o of hardObstacles) {
+        if (rectsOverlap(o, r, gap)) return;
       }
       for (const j of near) {
         if (j > idx && rectsOverlap(pending[j]!, r, gap)) cost += pending[j]!.weight;

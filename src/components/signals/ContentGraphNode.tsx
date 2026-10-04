@@ -192,6 +192,9 @@ const ContentGraphNode = memo(function ContentGraphNode({ id, data, selected }: 
 
       {extraCount > 0 && (
         <span
+          // Painted text the label resolver treats as a hard obstacle
+          // (content-graph-label-layout.ts BADGE_*; verified on screen).
+          className="cg-node-badge"
           style={{
             position: 'absolute',
             top: -6,

@@ -70,6 +70,17 @@ describe('resolveLabelCollisions', () => {
     expect(countOverlaps([mark, box('lab', 0, 5, 1)])).toBe(0); // obstacles are not labels
   });
 
+  it('never lets a label cover a HARD obstacle (a story badge)', () => {
+    const badge = box('badge:1', 0, 0, 0, { w: 20, h: 16, obstacle: true, hard: true });
+    const out = resolveLabelCollisions([badge, box('lab', 0, 5, 1)]);
+    expect(out.get('lab')!.visible).toBe(false);
+    const moved = resolveLabelCollisions([
+      badge,
+      box('lab', 0, 5, 1, { candidates: [DEFAULT_OFFSET, { dx: 0, dy: 40, key: 'below' }] }),
+    ]);
+    expect(moved.get('lab')!.offset.key).toBe('below');
+  });
+
   it('is deterministic and order-independent', () => {
     const boxes = [box('b', 5, 0, 1), box('a', 0, 0, 1), box('c', 300, 0, 1)];
     const one = resolveLabelCollisions(boxes);
@@ -137,6 +148,29 @@ describe('graph label layout', () => {
       return all.filter(([, p]) => p.visible).length / Math.max(all.length, 1);
     };
     expect(shown('cluster:')).toBeGreaterThanOrEqual(shown('node:'));
+  });
+
+  it('models every "+N" story badge as a hard obstacle at the badge position', () => {
+    const input = denseInput(0.4);
+    input.nodes[0] = { ...input.nodes[0]!, memberCount: 3 };
+    const badges = buildLabelBoxes(input).filter((b) => b.id.startsWith('badge:'));
+    expect(badges).toHaveLength(1);
+    expect(badges[0]!.hard && badges[0]!.obstacle).toBe(true);
+    const placements = layoutGraphLabels(input);
+    const labels = buildLabelBoxes(input).filter((b) => !b.obstacle);
+    for (const l of labels) {
+      const p = placements.get(l.id)!;
+      if (!p.visible) continue;
+      const r = { x: l.x + p.offset.dx, y: l.y + p.offset.dy, w: l.w, h: l.h };
+      expect(rectsOverlap(r, badges[0]!)).toBe(false);
+    }
+  });
+
+  it('a header may step just outside its hull when the inside is taken', () => {
+    const header = buildLabelBoxes(denseInput(0.17)).find((b) => b.id === 'cluster:cluster-0')!;
+    const dys = header.candidates.map((c) => c.dy);
+    expect(Math.min(...dys)).toBeLessThan(-220 + 30); // above the rim (radius 220)
+    expect(Math.max(...dys)).toBeGreaterThan(220);
   });
 
   it('the lane header hangs ABOVE its first row', () => {
