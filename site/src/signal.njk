@@ -340,18 +340,18 @@ permalink: "/signal.html"
       <p class="pricing-sub">The free tier is a complete product. Signal is for developers who want the analysis layer.</p>
 
       <div class="toggle">
-        <button id="toggle-monthly" class="active" onclick="setPlan('monthly')">Monthly</button>
-        <button id="toggle-annual" onclick="setPlan('annual')">Annual <span class="save-badge">SAVE $45</span></button>
+        <button id="toggle-monthly" onclick="setPlan('monthly')">Monthly</button>
+        <button id="toggle-annual" class="active" onclick="setPlan('annual')">Annual <span class="save-badge">SAVE $45</span></button>
         <button id="toggle-lifetime" onclick="setPlan('lifetime')">Lifetime</button>
       </div>
 
       <div class="price-card">
         <div class="price-amount">
-          <span class="currency">$</span><span id="price-value">12</span><span class="period" id="price-period">/mo</span>
+          <span class="currency">$</span><span id="price-value">99</span><span class="period" id="price-period">/yr</span>
         </div>
-        <div class="price-annual-note" id="annual-note">&nbsp;</div>
+        <div class="price-annual-note" id="annual-note">$8.25/mo billed annually</div>
         <div class="price-math" id="price-math">
-          <span>$12</span> / 160 work hours = <span>$0.075/hr</span> for an intelligence system that watches your ecosystem 24/7
+          <span>$99</span> / 12 months = <span>$8.25/mo</span> &mdash; save $45/yr
         </div>
         <button class="price-btn" id="checkout-btn" onclick="startCheckout()">Subscribe to Signal</button>
         <div class="price-trial">14-day free trial included in the app. No credit card required to try.</div>
@@ -421,7 +421,10 @@ permalink: "/signal.html"
   </footer>
 
   <script>
-    var currentPlan = 'monthly';
+    // Annual is preselected: one renewal a year instead of twelve, so twelve
+    // times fewer chances for a card to fail and a subscriber to lapse. The
+    // static markup above renders the same plan, so nothing flashes on load.
+    var currentPlan = 'annual';
 
     function setPlan(plan) {
       currentPlan = plan;
