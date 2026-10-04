@@ -128,8 +128,20 @@ const WEIGHT_STACK_MARK = 3;
 const MARK_PREFIX = 'mark:';
 /** Gold stack ring outer width, screen px (ContentGraphNode stackRing). */
 const STACK_RING_PX = 5;
-const PRIORITY_HEADER = 1e5;
-const PRIORITY_STACK = 1e3;
+/** Story badge geometry, FLOW units (ContentGraphNode: top -6, right -10,
+ *  padding 1px 5px, 1px border, 9px JetBrains Mono at line-height 1.4). */
+const BADGE_PREFIX = 'badge:';
+const BADGE_TOP = -6;
+const BADGE_RIGHT = 10;
+const BADGE_H = 9 * 1.4 + 2 + 2;
+const badgeWidth = (extra: number): number => `+${extra}`.length * 9 * 0.6 + 10 + 2;
+/** Slack added to every measured text width (screen px): canvas metrics and
+ *  the scaled DOM glyph run differ by a pixel or two. */
+const LABEL_INK_PAD_PX = 2;
+/** A cluster header's anchor sits this far above the centroid (flow units). */
+export const HEADER_ANCHOR_DY = 30;
+export const PRIORITY_HEADER = 1e5;
+export const PRIORITY_STACK = 1e3;
 /** Avoidance weights: a header should sooner cover two stack labels than
  *  another header; a stack label sooner two plain ones than one stack. */
 const WEIGHT_HEADER = 8;
@@ -157,15 +169,23 @@ function headerTextWidth(label: string, count: number, measure: MeasureText): nu
 function headerCandidates(w: number, h: number, gap: number, radius: number): LabelOffset[] {
   const step = h + gap;
   const slide = Math.min(w / 3, radius);
+  const far = Math.min(w / 2, radius);
   const dys: number[] = [0];
   for (let k = 1; k * step <= radius; k++) dys.push(-k * step, k * step);
   const out: LabelOffset[] = [];
   for (const dy of dys) {
-    for (const dx of [0, -slide, slide]) {
+    for (const dx of [0, -slide, slide, -far, far]) {
       if (Math.hypot(dx, dy) > radius && !(dx === 0 && dy === 0)) continue;
       out.push(dx === 0 && dy === 0 ? DEFAULT_OFFSET : { dx, dy, key: 'nudge' });
     }
   }
+  // Last resort: just outside the hull's rim, centred over / under it — for a
+  // cluster made wholly of stack marks there is no free spot INSIDE (live
+  // 2026-10-04: "TAURI · PLUGIN" printed across its own gold marks).
+  out.push(
+    { dx: 0, dy: -(radius - HEADER_ANCHOR_DY) - h - gap, key: 'nudge' },
+    { dx: 0, dy: radius + HEADER_ANCHOR_DY + gap, key: 'nudge' },
+  );
   return out;
 }
 
@@ -178,7 +198,7 @@ export function buildLabelBoxes(input: LabelLayoutInput): LabelBox[] {
     const { lane } = input;
     const ls = HEADER_LETTER_SPACING_EM * HEADER_FONT_PX;
     const text = lane.text.toUpperCase();
-    const w = (input.measure(text, HEADER_FONT_PX, 600) + text.length * ls) * s;
+    const w = (input.measure(text, HEADER_FONT_PX, 600) + text.length * ls + LABEL_INK_PAD_PX) * s;
     const h = (HEADER_FONT_PX * HEADER_LINE + LANE_HEADER_RULE_PX) * s;
     boxes.push({
       id: 'lane',
@@ -192,7 +212,7 @@ export function buildLabelBoxes(input: LabelLayoutInput): LabelBox[] {
   }
 
   for (const c of input.headers) {
-    const w = headerTextWidth(c.label, c.count, input.measure) * s;
+    const w = (headerTextWidth(c.label, c.count, input.measure) + LABEL_INK_PAD_PX) * s;
     const h = HEADER_FONT_PX * HEADER_LINE * s;
     boxes.push({
       id: `cluster:${c.id}`,
@@ -224,9 +244,25 @@ export function buildLabelBoxes(input: LabelLayoutInput): LabelBox[] {
         obstacle: true,
       });
     }
+    if (n.memberCount > 1) {
+      // The "+N" story badge is painted text: a HARD obstacle (live
+      // 2026-10-04: "+1" printed under "tauri-plugin-opener v2…").
+      const bw = badgeWidth(n.memberCount - 1);
+      boxes.push({
+        id: `${BADGE_PREFIX}${n.id}`,
+        x: n.x + size + BADGE_RIGHT - bw,
+        y: n.y + BADGE_TOP,
+        w: bw,
+        h: BADGE_H,
+        priority: 0,
+        candidates: [DEFAULT_OFFSET],
+        obstacle: true,
+        hard: true,
+      });
+    }
     if (!n.stack && !input.includeNonStack) continue;
     const text = nodeLabelText(n.title);
-    const w = Math.min(input.measure(text, NODE_LABEL_FONT_PX, 500), NODE_LABEL_MAX_W) * s;
+    const w = Math.min(input.measure(text, NODE_LABEL_FONT_PX, 500) + LABEL_INK_PAD_PX, NODE_LABEL_MAX_W) * s;
     const h = NODE_LABEL_FONT_PX * NODE_LABEL_LINE * s;
     boxes.push({
       id: `node:${n.id}`,

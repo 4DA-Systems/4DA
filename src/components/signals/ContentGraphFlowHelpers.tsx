@@ -10,6 +10,7 @@ import type {
   GraphCluster,
 } from '../../types/graph';
 import { CATEGORY_COLORS, type ContentNode } from './ContentGraphNode';
+import { HEADER_ANCHOR_DY } from './content-graph-label-layout';
 
 const LAST_VIEW_KEY = '4da:graph:lastViewedAt';
 
@@ -109,7 +110,7 @@ export function toFlowNodes(graphNodes: ContentGraphNode[], clusters: GraphClust
   const clusterNodes: Node[] = clusters.map((c) => ({
     id: `cluster-${c.id}`,
     type: 'clusterLabel' as const,
-    position: { x: c.centroid_x, y: c.centroid_y - 30 },
+    position: { x: c.centroid_x, y: c.centroid_y - HEADER_ANCHOR_DY },
     // Show the cluster's ITEM count (node_ids), not source_count — the latter
     // is almost always 1 (clusters form from same-source neighbours), so it
     // read as a meaningless "(1)" on every label (doctrine rule 3: no vanity
