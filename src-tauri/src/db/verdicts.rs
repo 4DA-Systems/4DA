@@ -247,6 +247,12 @@ pub enum VerdictReason {
     /// "Announcing axum 0.8.0" in the feed). A fact about the row, so it binds
     /// every promotion at this boundary; see `verdicts_stale_news.rs`.
     StaleNews,
+    /// The item's source is fetched and scored but never admitted to the
+    /// feed (`sources::feed_admission::FEED_EXCLUDED_SOURCES`: reddit, lemmy,
+    /// youtube — 0 of 20 useful, 2026-10-04). A fact about the source, so it
+    /// binds every promotion at this boundary, serendipity included; see
+    /// `verdicts_feed_sources.rs`.
+    SourceNotInFeed,
 }
 
 impl VerdictReason {
@@ -262,6 +268,7 @@ impl VerdictReason {
             Self::SupersededRelease => "superseded_release",
             Self::AwaitingJudge => "awaiting_judge",
             Self::StaleNews => "stale_news",
+            Self::SourceNotInFeed => "source_not_in_feed",
         }
     }
 }
@@ -436,10 +443,18 @@ impl Database {
                     })
                     .optional()?
                     .unwrap_or((None, None, None, None));
-                // Stale news first: a fact about the row outranks every
-                // judgment, serendipity picks included — an archive page is
-                // not news whichever lane promotes it.
+                // Source admission, then stale news: facts about the row
+                // outrank every judgment, serendipity picks included — a
+                // source cut from the feed, or an archive page, stays out
+                // whichever lane promotes it.
                 let (relevant, reason) = if *relevant
+                    && source_type
+                        .as_deref()
+                        .is_some_and(|s| !crate::sources::feed_admission::admits_to_feed(s))
+                {
+                    stale += 1;
+                    (&false, &Some(VerdictReason::SourceNotInFeed))
+                } else if *relevant
                     && stale_news::stale_at_ingest(source_type.as_deref(), ingest_age_days)
                 {
                     stale += 1;
@@ -913,6 +928,10 @@ impl Database {
 // The `stale_news` rule (predicate + held-row sweep) lives beside it.
 #[path = "verdicts_stale_news.rs"]
 mod stale_news;
+
+// The `source_not_in_feed` held-row sweep (feed-excluded sources).
+#[path = "verdicts_feed_sources.rs"]
+mod feed_sources;
 
 #[cfg(test)]
 #[path = "verdicts_tests.rs"]

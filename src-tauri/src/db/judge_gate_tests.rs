@@ -50,7 +50,7 @@ fn a_gated_promotion_needs_a_card_aware_judgment() {
         item(&db, "devto", "d1"),
         item(&db, "devto", "d2"),
         item(&db, "mastodon", "m1"),
-        item(&db, "reddit", "r1"),
+        item(&db, "rss", "r1"),
         item(&db, "hackernews", "h1"),
     );
     judge(&db, passes, 0.7, card);
@@ -92,7 +92,7 @@ fn the_sweep_rejects_below_the_bar_and_releases_what_the_judge_cleared() {
         item(&db, "devto", "c1"),
         item(&db, "lobsters", "c2"),
         item(&db, "mastodon", "w1"),
-        item(&db, "reddit", "w2"),
+        item(&db, "rss", "w2"),
     );
     db.persist_feed_verdicts(
         &[
@@ -186,7 +186,7 @@ fn the_judge_queue_includes_gated_items_without_a_card_aware_judgment() {
         item(&db, "devto", "q1"),
         item(&db, "mastodon", "q2"),
         item(&db, "hackernews", "q3"),
-        item(&db, "reddit", "q4"),
+        item(&db, "rss", "q4"),
     );
     {
         let conn = db.conn.lock();

@@ -371,6 +371,16 @@ async fn analyze_cached_content_inner(
                 "Display set converged on the durable verdict"
             );
         }
+        // News is news for a while: rows past their source's live-feed
+        // window leave the display set (scores and verdicts untouched).
+        let aged = crate::analysis_display_window::age_out_display_news(db, &mut cycle.results);
+        if aged > 0 {
+            info!(
+                target: "4da::verdicts",
+                aged,
+                "News past its live-feed window left the display set"
+            );
+        }
     }
 
     // Stale-SCORE drain, beside the cycle rather than inside its batch.

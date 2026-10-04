@@ -22,6 +22,7 @@ pub mod cve;
 pub(crate) mod cve_matching;
 pub mod devto;
 pub mod fallback;
+pub(crate) mod feed_admission;
 pub mod freshness;
 pub mod github;
 pub mod go_modules;

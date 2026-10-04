@@ -48,6 +48,9 @@ pub(crate) struct VerdictReconciliation {
     /// when ingested (archive pages, feed back catalogues) — reason
     /// `stale_news` (2026-10-02 audit).
     pub stale_news_demoted: usize,
+    /// Held rows of sources that never enter the feed (reddit, lemmy,
+    /// youtube — `sources::feed_admission`), reason `source_not_in_feed`.
+    pub source_cut_demoted: usize,
 }
 
 impl VerdictReconciliation {
@@ -146,6 +149,20 @@ pub(crate) async fn reconcile_stale_verdicts_cycle(budget: usize) -> Result<Verd
             demoted = sunk,
             version = scoring::PIPELINE_VERSION,
             "In-version sweep: curated items whose live score sank below the demote line un-curated"
+        );
+    }
+
+    // Sources cut from the feed (0 of 20 useful, 2026-10-04) leave it — a
+    // fact about the source, applied before every promotion lane below; the
+    // persist boundary re-applies it to anything they promote.
+    let source_cut = db
+        .demote_feed_excluded_sources()
+        .map_err(|e| format!("Failed to demote feed-excluded sources: {e}"))?;
+    if source_cut > 0 {
+        info!(
+            target: "4da::verdicts",
+            demoted = source_cut,
+            "Source cut: held rows of sources that never enter the feed un-curated"
         );
     }
 
@@ -251,6 +268,7 @@ pub(crate) async fn reconcile_stale_verdicts_cycle(budget: usize) -> Result<Verd
     let base = VerdictReconciliation {
         sunk_demoted: sunk,
         stale_news_demoted: stale_news,
+        source_cut_demoted: source_cut,
         promoted: risen.promoted,
         deferred_promotions: risen.deferred,
         twin_demoted: twins + risen.twins,

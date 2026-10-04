@@ -158,6 +158,7 @@ mod ai_costs;
 mod alert_triage;
 mod analysis;
 mod analysis_backfill;
+mod analysis_display_window;
 mod analysis_narration;
 mod analysis_rerank;
 mod analysis_verdicts;
