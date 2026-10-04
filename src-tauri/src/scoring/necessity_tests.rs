@@ -817,3 +817,16 @@ fn test_release_grade_requires_grounding() {
     let r = compute_necessity(&inputs);
     assert_ne!(r.category, NecessityCategory::BreakingChange);
 }
+
+#[test]
+fn the_editorial_security_verb_follows_the_dependency_event_claim() {
+    let named = "Security story names your dependency openai".to_string();
+    assert_eq!(
+        claim_verb(named.clone(), false),
+        "Security story mentions your dependency openai"
+    );
+    assert_eq!(claim_verb(named.clone(), true), named);
+    // A registry advisory's reason is never rewritten.
+    let advisory = "Security vulnerability affects hono".to_string();
+    assert_eq!(claim_verb(advisory.clone(), false), advisory);
+}

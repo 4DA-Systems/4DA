@@ -223,11 +223,19 @@ pub(crate) fn build_explanation_chain(inp: &ChainInputs<'_>) -> Vec<ExplanationF
                 (Some(dep), None, true) => {
                     format!("Security advisory affects your dependency {dep}")
                 }
-                (Some(dep), Some(location), false) => {
+                // An editorial story NAMES the dependency only when it is a
+                // dependency event (#812); otherwise it merely mentions it.
+                (Some(dep), Some(location), false) if inp.dependency_event => {
                     format!("Security story names {dep} in {location}")
                 }
-                (Some(dep), None, false) => {
+                (Some(dep), None, false) if inp.dependency_event => {
                     format!("Security story names your dependency {dep}")
+                }
+                (Some(dep), Some(location), false) => {
+                    format!("Security story mentions {dep} ({location})")
+                }
+                (Some(dep), None, false) => {
+                    format!("Security story mentions your dependency {dep}")
                 }
                 (None, _, _) => match inp.advisory_id.map(str::trim).filter(|s| !s.is_empty()) {
                     Some(id) => format!("Security advisory {id}"),
