@@ -276,7 +276,7 @@ Plug your intelligence system directly into Claude Code, Cursor, Windsurf, VS Co
 npx @4da/mcp-server
 ```
 
-11 tools work standalone with zero setup (upgrade impact, pre-install dependency checks, vulnerability scanning, dependency health, upgrade planning, ecosystem news, pre-task briefings, project context, decision memory, alignment checking, agent memory). 5 more activate with the desktop app (scored content feed, actionable signals, knowledge gaps, feedback learning, developer DNA). [Full tool reference.](mcp-4da-server/)
+11 tools work standalone with zero setup (upgrade impact, pre-install dependency checks, vulnerability scanning, dependency health, upgrade planning, ecosystem news, pre-task briefings, project context, decision memory, alignment checking, agent memory). 5 more activate with the desktop app (scored content feed, actionable signals, knowledge gaps, feedback learning, developer DNA). [Full tool reference.](https://github.com/4DA-Systems/4da-mcp-server#all-16-tools)
 
 </details>
 

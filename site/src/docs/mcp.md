@@ -34,7 +34,7 @@ Point any MCP-compatible client — Claude Code, Cursor, Windsurf, VS Code (Copi
 
 ## The 16 tools
 
-**11 tools work standalone**, with zero setup — upgrade impact (what changes between your version and the next, and which of your files it touches), pre-install dependency checks, vulnerability scanning, dependency health, upgrade planning, ecosystem news, pre-task briefings, decision memory, and cross-session agent memory.
+**11 tools work standalone**, with zero setup — upgrade impact (what changes between your version and the next, and which of your files it touches), pre-install dependency checks, vulnerability scanning, dependency health, upgrade planning, ecosystem news, pre-task briefings, project context, decision memory, alignment checking against your past decisions, and cross-session agent memory.
 
 **5 more activate with the desktop app** — your scored content feed, actionable signals, knowledge gaps, feedback learning, and Developer DNA.
 
