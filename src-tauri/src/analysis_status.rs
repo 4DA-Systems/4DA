@@ -615,13 +615,12 @@ async fn analyze_cached_content_inner_impl(
                 0,
             );
 
-            // Re-score existing items for updated freshness/affinities (7-day window)
-            // Respects free-tier 30-day history gate via get_items_tiered
-            let all_items = db
-                .get_items_tiered(168, 1000)
+            // Re-score existing items for updated freshness/affinities (7-day
+            // window + the curated rows it no longer reaches; tier-gated).
+            let window = crate::analysis_curated_carry::full_window_candidates(db)
                 .map_err(|e| format!("Failed to load cached items: {e}"))?;
 
-            if all_items.is_empty() {
+            if window.items.is_empty() {
                 // Cache is stale — fetch fresh content
                 warn!(target: "4da::analysis", "No items in 7-day window, fetching fresh content");
                 emit_progress(
@@ -638,14 +637,14 @@ async fn analyze_cached_content_inner_impl(
             }
 
             let batch =
-                scoring::score_items_full(app, db, &all_items, silent, run.llm_rerank).await?;
+                scoring::score_items_full(app, db, &window.items, silent, run.llm_rerank).await?;
             info!(
                 target: "4da::analysis",
                 run_type = run.run_type,
                 elapsed_ms = elapsed_ms(analysis_started),
                 "Cache-first analysis finished"
             );
-            return Ok(CycleResults::full_from_batch(batch));
+            return Ok(window.cycle(batch));
         }
 
         info!(target: "4da::analysis", new_items = new_items.len(), "Found new items for differential scoring");
@@ -823,21 +822,21 @@ async fn analyze_cached_content_inner_impl(
         });
     }
 
-    // Full analysis path (no previous results or first run)
-    // Use 7-day window to include items from recent fetches
-    // Respects free-tier 30-day history gate via get_items_tiered
+    // Full analysis path (no previous results or first run): the 7-day
+    // newest-N window plus the curated rows it no longer reaches, so a cold
+    // start shows the feed the last session showed (`analysis_curated_carry`).
     let select_started = Instant::now();
-    let cached_items = db
-        .get_items_tiered(168, 1000)
+    let window = crate::analysis_curated_carry::full_window_candidates(db)
         .map_err(|e| format!("Failed to load cached items: {e}"))?;
     info!(
         target: "4da::analysis",
-        items = cached_items.len(),
+        items = window.items.len(),
+        carried = window.carried.len(),
         elapsed_ms = elapsed_ms(select_started),
         "Selected full-analysis candidates"
     );
 
-    let total_cached = cached_items.len();
+    let total_cached = window.items.len();
     info!(target: "4da::analysis", cached_items = total_cached, "Loaded items from cache");
 
     if total_cached == 0 {
@@ -861,14 +860,14 @@ async fn analyze_cached_content_inner_impl(
     // Stale-version drain removed from this batch on 2026-08-27 — see the note
     // on the differential path above and `drain_stale_scores_budgeted`.
 
-    let batch = scoring::score_items_full(app, db, &cached_items, silent, run.llm_rerank).await?;
+    let batch = scoring::score_items_full(app, db, &window.items, silent, run.llm_rerank).await?;
     info!(
         target: "4da::analysis",
         run_type = run.run_type,
         elapsed_ms = elapsed_ms(analysis_started),
         "Cache-first analysis finished"
     );
-    Ok(CycleResults::full_from_batch(batch))
+    Ok(window.cycle(batch))
 }
 
 /// Merge the carried-over previous results (display state) with this run's
