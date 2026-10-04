@@ -676,6 +676,9 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
 
     // Validate license integrity (reset tier if no key present)
     crate::settings::validate_license_on_startup();
+    // Silent renewal for Signal subscriptions: key-only, near expiry only
+    // (settings/license/renewal.rs, NETWORK.md §2k).
+    crate::settings::spawn_license_renewal_task();
 
     // Initialize embedding calibration — adapts sigmoid parameters to the
     // current model's similarity distribution. Must run BEFORE first analysis.

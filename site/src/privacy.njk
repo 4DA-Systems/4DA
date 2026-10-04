@@ -267,17 +267,17 @@ permalink: "/privacy.html"
       <li>This feature is entirely opt-in and can be disabled at any time.</li>
     </ul>
 
-    <h3>2.8 License Validation (Signal Tier)</h3>
-    <p>If you purchase a Signal subscription, the App validates your license key using the <a href="https://keygen.sh">Keygen</a> license management service. This is the <strong>only external call that 4DA Systems controls</strong>. This validation:</p>
+    <h3>2.8 License Validation and Renewal (Signal Tier)</h3>
+    <p>Signal license keys are cryptographically signed. The App verifies them <strong>on your device</strong> using the Ed25519 signature embedded in the key itself &mdash; this requires no network access whatsoever.</p>
+    <p>For <strong>monthly and annual subscriptions</strong>, the App renews your key automatically shortly before it expires, so a paying subscriber is never dropped to the free tier between billing periods. This renewal:</p>
     <ul>
-      <li>Sends your <strong>license key</strong> to Keygen's validation API</li>
-      <li>Does <strong>not</strong> send your name, email address, device identifiers, or any other personal data</li>
-      <li>Occurs at activation and periodically thereafter (cached for 90 days to minimise network calls)</li>
-      <li>Results are cached locally to allow offline usage between validations</li>
+      <li>Sends <strong>only your license key</strong> (which embeds the email address you purchased with) to our licensing endpoint at 4da.ai</li>
+      <li>Is confirmed against your subscription status with our payment provider (Stripe)</li>
+      <li>Happens only when your key is within 10 days of expiry &mdash; in practice about once per billing period &mdash; and never for free users or Lifetime licenses</li>
+      <li>Does <strong>not</strong> send device identifiers, usage data, or any other personal data; if it fails, your current key keeps working until its own expiry</li>
     </ul>
-    <p>The App also supports <strong>offline license verification</strong> using Ed25519 digital signatures embedded in the license key itself. This verification requires no network access whatsoever.</p>
-    <p>Keygen may log the IP address of the request as part of standard server operations. See <a href="https://keygen.sh/privacy/">Keygen's Privacy Policy</a> for details.</p>
-    <p>The free tier of 4DA does not perform any license validation and makes no calls to Keygen.</p>
+    <p>Older license keys issued through the <a href="https://keygen.sh">Keygen</a> license service are validated with Keygen's API, which receives the license key only. Keygen may log the IP address of the request as part of standard server operations; see <a href="https://keygen.sh/privacy/">Keygen's Privacy Policy</a>. Our own endpoint is hosted on Cloudflare, which may likewise log request IP addresses.</p>
+    <p>The free tier of 4DA does not perform any license validation and makes no license-related network calls.</p>
 
     <h3>2.9 Auto-Updates</h3>
     <p>The App checks for updates using the standard Tauri updater, which queries GitHub Releases. This check:</p>
@@ -357,6 +357,7 @@ permalink: "/privacy.html"
         <tr><td>arXiv</td><td>App</td><td>Standard HTTP requests (your IP visible)</td><td>Content aggregation</td></tr>
         <tr><td>RSS/Atom feeds</td><td>App</td><td>Standard HTTP requests (your IP visible)</td><td>Content aggregation</td></tr>
         <tr><td>Keygen</td><td>App (Signal tier only)</td><td>License key</td><td>License validation</td></tr>
+        <tr><td>4DA licensing endpoint (4da.ai)</td><td>App (Signal monthly / annual subscriptions only, near key expiry)</td><td>License key</td><td>Automatic license renewal, confirmed against your Stripe subscription</td></tr>
         <tr><td>User's SMTP provider</td><td>App (optional, user-configured)</td><td>Digest email contents</td><td>Email delivery</td></tr>
         <tr><td>Cloudflare</td><td>Website</td><td>Server logs, analytics</td><td>Website hosting</td></tr>
         <tr><td>PostHog</td><td>Website (all pages)</td><td>Page views and product events (e.g. which download button was pressed), plus the IP and browser data any web request carries</td><td>Aggregate traffic and funnel analytics. Not used for advertising or cross-site tracking.</td></tr>

@@ -4,6 +4,7 @@
 mod clock;
 mod gating;
 mod keygen;
+mod renewal;
 mod revalidation;
 mod verify;
 
@@ -20,6 +21,7 @@ pub use keygen::{
     save_license_backup, save_license_backup_to, validate_license_key_keygen,
     validate_license_key_keygen_fresh, KeygenValidationCache, KeygenValidationResult,
 };
+pub use renewal::spawn_license_renewal_task;
 pub use revalidation::{
     get_last_validated_at, reconcile_license_from_proof, take_downgrade_flag,
     validate_license_on_startup,
