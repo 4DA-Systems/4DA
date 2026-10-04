@@ -59,6 +59,7 @@ import type { BlindSpotTeaser } from '../../src-tauri/bindings/bindings/BlindSpo
 import type { BlindSpotAssessment } from '../../src-tauri/bindings/bindings/BlindSpotAssessment';
 import type { CalibrationSprintCard } from '../../src-tauri/bindings/bindings/CalibrationSprintCard';
 import type { CalibrationSprintStatus } from '../../src-tauri/bindings/bindings/CalibrationSprintStatus';
+import type { ReleaseChanges } from '../../src-tauri/bindings/bindings/ReleaseChanges';
 
 // ============================================================================
 // Preemption & Intelligence Types — Intelligence Reconciliation Phase 3
@@ -475,6 +476,7 @@ interface CommandMap {
   get_item_content: { params: { itemId: number }; result: ItemContent };
   get_item_summary: { params: { itemId: number }; result: ItemSummary };
   generate_item_summary: { params: { itemId: number }; result: ItemSummary };
+  get_release_changes: { params: { itemId: number }; result: ReleaseChanges | null };
 
   // -- Natural Language Query --
   natural_language_query: { params: { queryText: string }; result: NLQResult };

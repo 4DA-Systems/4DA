@@ -7,6 +7,8 @@ import { useAppStore } from '../../store';
 import { ArticleReader } from '../ArticleReader';
 import { ScoreAutopsy } from '../ScoreAutopsy';
 import { EvidenceChain } from './EvidenceChain';
+import { ReleaseChangesCard } from './ReleaseChangesCard';
+import { useReleaseChanges } from '../../hooks/use-release-changes';
 import { FeedbackButtons } from './FeedbackButtons';
 import { SecurityTriageButtons } from './SecurityTriageButtons';
 
@@ -79,6 +81,7 @@ export function ResultItemExpanded({
   onGenerateSummary,
 }: ResultItemExpandedProps) {
   const { t } = useTranslation();
+  const release = useReleaseChanges(item.id, item.source_type, true);
   return (
     <div id={`result-detail-${item.id}`} className="px-4 pb-3 border-t border-border/50 mt-2 pt-3">
       {/* Urgency + Category Badges */}
@@ -114,6 +117,9 @@ export function ResultItemExpanded({
           {item.score_breakdown.necessity_reason}
         </p>
       )}
+
+      {/* What changed — graded registry releases only (changelog from the package archive) */}
+      <ReleaseChangesCard changes={release.changes} loading={release.loading} />
 
       {/* Advisory Evidence Section (security items only) */}
       {item.score_breakdown?.necessity_category === 'security_vulnerability' && (
