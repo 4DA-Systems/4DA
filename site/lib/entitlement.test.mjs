@@ -33,6 +33,8 @@ import {
   isLifetimeEntitled,
   isRevoked,
   isTerminal,
+  licenseEmail,
+  licenseEmailSearchQuery,
   resolveCustomerId,
   sessionProvesPurchase,
   sessionWithinWindow,
@@ -494,4 +496,36 @@ test('the renewal handler never reads the removed invoice.subscription field', (
     .join('\n');
   assert.doesNotMatch(code, /invoice\.subscription\b/);
   assert.match(code, /invoiceSubscriptionId\(invoice\)/);
+});
+
+// A subscriber can change their email in the Stripe customer portal ("Email
+// address" is enabled there). Keys must keep naming the purchase email, and
+// silent renewal must still find the customer, or a paying subscriber whose app
+// renews by itself silently drops to Free when their key runs out.
+test('every key names the purchase-time email, not the current Stripe email', () => {
+  const changed = { email: 'new@b.co', metadata: { signal_license_email: 'old@b.co' } };
+  assert.equal(licenseEmail(changed), 'old@b.co');
+  assert.equal(licenseEmail({ email: 'a@b.co', metadata: {} }), 'a@b.co', 'records minted before the anchor');
+  assert.equal(licenseEmail({ email: 'a@b.co', metadata: { streets_license_email: 'l@b.co' } }), 'l@b.co');
+  assert.equal(licenseEmail(null), null);
+});
+
+test('the anchor search query escapes quotes and backslashes', () => {
+  assert.equal(licenseEmailSearchQuery('a@b.co'), "metadata['signal_license_email']:'a@b.co'");
+  assert.equal(licenseEmailSearchQuery("o'neil@b.co"), String.raw`metadata['signal_license_email']:'o\'neil@b.co'`);
+  assert.equal(licenseEmailSearchQuery(String.raw`x\y@b.co`), String.raw`metadata['signal_license_email']:'x\\y@b.co'`);
+});
+
+test('renewals mint for the anchored email and renew finds a customer whose email changed', () => {
+  const strip = (path) =>
+    readFileSync(new URL(path, import.meta.url), 'utf8')
+      .split('\n')
+      .filter((l) => !l.trim().startsWith('//'))
+      .join('\n');
+  const activate = strip('../functions/api/license/activate.js');
+  assert.match(activate, /\[metaKey\('license_email'\)\]: email/, 'first key records the anchor');
+  assert.match(activate, /generateAndStoreLicense\(\s*env,\s*stripe,\s*customerId,\s*licenseEmail\(customer\)/);
+  const renew = strip('../functions/api/license/renew.js');
+  assert.match(renew, /customers\.search\(\{ query: licenseEmailSearchQuery\(email\)/);
+  assert.match(renew, /licenseEmail\(c\) === email/);
 });

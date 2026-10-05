@@ -31,7 +31,7 @@ import Stripe from 'stripe';
 import * as ed from '@noble/ed25519';
 import { hexToBytes, signLicenseToken } from '../../../lib/ed25519-license.js'; // also wires SHA-512
 import { APP_LICENSE_PUBLIC_KEY_HEX } from '../../../lib/license-health.js';
-import { isRevoked, meta, metaKey } from '../../../lib/entitlement.js';
+import { isRevoked, licenseEmail, licenseEmailSearchQuery, meta, metaKey } from '../../../lib/entitlement.js';
 import { checkAndCount } from '../../../lib/abuse-guards.js';
 import {
   classifyPresentedKey,
@@ -66,22 +66,33 @@ async function signatureIsOurs(parsed) {
   }
 }
 
-/** The customer (for this email) holding the best entitling subscription. */
+/** The best entitling subscription among `customers`, folded into `best`. */
+async function bestEntitlement(stripe, customers, best) {
+  for (const customer of customers || []) {
+    if (customer.deleted || isRevoked(customer.metadata)) continue;
+    const subs = await stripe.subscriptions.list({ customer: customer.id, status: 'all', limit: 20 });
+    const sub = pickEntitlingSubscription(subs.data);
+    const end = sub ? subscriptionPeriodEnd(sub) : null;
+    if (end !== null && (!best || end > best.periodEnd)) best = { customer, sub, periodEnd: end };
+  }
+  return best;
+}
+
+/** The customer whose keys name this email, holding the best entitling
+ * subscription. Looks up the Stripe email first, then the purchase-time anchor
+ * (`licenseEmail`), so a subscriber who changed their email in the customer
+ * portal still renews. */
 async function findEntitledCustomer(stripe, email) {
   const emails = email === email.toLowerCase() ? [email] : [email, email.toLowerCase()];
   let best = null;
   for (const address of emails) {
     const customers = await stripe.customers.list({ email: address, limit: 10 });
-    for (const customer of customers.data || []) {
-      if (customer.deleted || isRevoked(customer.metadata)) continue;
-      const subs = await stripe.subscriptions.list({ customer: customer.id, status: 'all', limit: 20 });
-      const sub = pickEntitlingSubscription(subs.data);
-      const end = sub ? subscriptionPeriodEnd(sub) : null;
-      if (end !== null && (!best || end > best.periodEnd)) best = { customer, sub, periodEnd: end };
-    }
-    if (best) break;
+    best = await bestEntitlement(stripe, customers.data, best);
+    if (best) return best;
   }
-  return best;
+  const anchored = await stripe.customers.search({ query: licenseEmailSearchQuery(email), limit: 10 });
+  const matching = (anchored.data || []).filter((c) => licenseEmail(c) === email);
+  return bestEntitlement(stripe, matching, best);
 }
 
 /** A stored key on the customer that already covers `expiry`, if any — reusing
