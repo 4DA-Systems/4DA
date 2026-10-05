@@ -5,6 +5,17 @@ import tailwindcss from "@tailwindcss/vite";
 // @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
 
+// Paths normalised to forward slashes and lower case: the watcher reports
+// Windows paths with either separator and drive-letter case varies.
+const norm = (p: string) => p.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+const claudeDir = norm(
+  decodeURIComponent(new URL("./.claude", import.meta.url).pathname).replace(/^\/([a-zA-Z]:)/, "$1"),
+);
+const isInside = (file: string, dir: string) => {
+  const f = norm(file);
+  return f === dir || f.startsWith(`${dir}/`);
+};
+
 // https://vite.dev/config/
 export default defineConfig(async () => ({
   plugins: [react(), tailwindcss()],
@@ -53,7 +64,11 @@ export default defineConfig(async () => ({
         "**/src-tauri/**",
         "**/data/**",
         "**/temp/**",
-        "**/.claude/**",
+        // THIS project's .claude/ only. The glob "**/.claude/**" also matched
+        // the project root itself when the tree lives under .claude/ (every
+        // agent worktree: D:/4DA/.claude/worktrees/<name>/), so a dev server
+        // started in a worktree ignored ALL edits and kept serving stale code.
+        (file: string) => isInside(file, claudeDir),
         "**/4da-stderr.txt",
       ],
     },
