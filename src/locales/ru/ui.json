@@ -2339,6 +2339,8 @@
   "signals.laneShowFewer": "Свернуть",
   "signals.laneShowMore": "Показать ещё {{count}}",
   "signals.laneHideMore": "Скрыть остальное",
+  "signals.laneShowWorth": "Показать {{count}} «Стоит знать»",
+  "signals.laneHideWorth": "Скрыть «Стоит знать»",
   "settings.stack.title": "Your Stack",
   "settings.stack.desc": "Pick which detected projects count as your stack. Turning one off drops its dependencies from relevance grounding — useful for test fixtures, scaffolding, or experiments you don't want shaping \"Affects You\". Takes effect on the next analysis.",
   "settings.stack.loading": "Loading projects…",

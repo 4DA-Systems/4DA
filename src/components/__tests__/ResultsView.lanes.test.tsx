@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 /**
  * Signal lanes in ResultsView: lane assignment, the Lane 1 cap and its
- * "Show all N" control, the collapsed Lane 3, hidden empty lanes, the flat
+ * "Show all N" control, Lane 2 collapsed by default (Decision 6), the collapsed Lane 3, hidden empty lanes, the flat
  * fallback for non-score sorts and cold start, the keyboard display order,
  * deep links into collapsed lanes, and axe.
  */
@@ -105,10 +105,11 @@ const lane = (container: HTMLElement, key: string) => container.querySelector<HT
 describe('ResultsView signal lanes', () => {
   beforeEach(() => {
     nextId = 1;
-    useSignalDisplayOrder.setState({ visible: null, stackExpanded: false, moreExpanded: false });
+    useSignalDisplayOrder.setState({ visible: null, stackExpanded: false, worthExpanded: false, moreExpanded: false });
   });
 
   it('renders Lane 1 and Lane 2 as headed sections, stack items first', () => {
+    useSignalDisplayOrder.setState({ worthExpanded: true });
     const results = [...news(3), ...stack(2)];
     const { container } = setup(results);
     expect(screen.getByRole('heading', { level: 3, name: 'signals.laneStack' })).toBeInTheDocument();
@@ -116,6 +117,19 @@ describe('ResultsView signal lanes', () => {
     expect(titles(lane(container, 'stack')!)).toEqual(['stack-0', 'stack-1']);
     expect(titles(lane(container, 'worth')!)).toEqual(['news-0', 'news-1', 'news-2']);
     expect(screen.getByRole('listbox', { name: 'signals.laneStack' })).toBeInTheDocument();
+  });
+
+  it('collapses Lane 2 by default behind an explicit "Show N worth knowing" control (Decision 6)', () => {
+    const { container } = setup([...stack(2), ...news(3)]);
+    expect(titles(lane(container, 'worth')!)).toEqual([]);
+    expect(screen.getByRole('heading', { level: 3, name: 'signals.laneWorth' })).toBeInTheDocument();
+    const btn = screen.getByRole('button', { name: 'signals.laneShowWorth:3' });
+    expect(btn).toHaveAttribute('aria-expanded', 'false');
+    fireEvent.click(btn);
+    expect(titles(lane(container, 'worth')!)).toEqual(['news-0', 'news-1', 'news-2']);
+    const hide = screen.getByRole('button', { name: 'signals.laneHideWorth' });
+    expect(hide).toHaveAttribute('aria-expanded', 'true');
+    expect(hide).toHaveAttribute('aria-controls', 'signal-lane-worth-list');
   });
 
   it(`caps Lane 1 at ${STACK_LANE_CAP} with an explicit "Show all N" control`, () => {
@@ -136,6 +150,7 @@ describe('ResultsView signal lanes', () => {
   });
 
   it(`shows ${WORTH_LANE_SIZE} in Lane 2 and collapses the rest behind "Show N more"`, () => {
+    useSignalDisplayOrder.setState({ worthExpanded: true });
     const { container } = setup([...stack(1), ...news(WORTH_LANE_SIZE + 6)]);
     expect(titles(lane(container, 'worth')!)).toHaveLength(WORTH_LANE_SIZE);
     expect(titles(lane(container, 'more')!)).toHaveLength(0);
@@ -173,6 +188,10 @@ describe('ResultsView signal lanes', () => {
   });
 
   it('publishes the on-screen order for keyboard shortcuts (collapsed rows excluded)', () => {
+    const a = setup([...news(WORTH_LANE_SIZE + 2), ...stack(2)]);
+    expect(useSignalDisplayOrder.getState().visible!.map((r) => r.title)).toEqual(['stack-0', 'stack-1']);
+    a.unmount();
+    useSignalDisplayOrder.setState({ worthExpanded: true });
     setup([...news(WORTH_LANE_SIZE + 2), ...stack(2)]);
     const visible = useSignalDisplayOrder.getState().visible!.map((r) => r.title);
     expect(visible.slice(0, 3)).toEqual(['stack-0', 'stack-1', 'news-0']);
@@ -180,6 +199,7 @@ describe('ResultsView signal lanes', () => {
   });
 
   it('marks the focused row using the global on-screen index across lanes', () => {
+    useSignalDisplayOrder.setState({ worthExpanded: true });
     filterState = { filteredResults: [...news(3), ...stack(2)] };
     storeState = baseState();
     render(<ResultsView newItemIds={new Set()} focusedIndex={2} />);
@@ -194,8 +214,15 @@ describe('ResultsView signal lanes', () => {
     expect(useSignalDisplayOrder.getState().moreExpanded).toBe(true);
   });
 
+  it('opens the collapsed Lane 2 when a deep link targets an item inside it', () => {
+    const results = [...stack(1), ...news(3)];
+    const target = results[2]!;
+    act(() => { setup(results, {}, { searchFocusItemId: target.id }); });
+    expect(useSignalDisplayOrder.getState().worthExpanded).toBe(true);
+  });
+
   it('has no axe violations with all three lanes rendered', async () => {
-    useSignalDisplayOrder.setState({ moreExpanded: true });
+    useSignalDisplayOrder.setState({ worthExpanded: true, moreExpanded: true });
     const { container } = setup([...stack(STACK_LANE_CAP + 2), ...news(WORTH_LANE_SIZE + 2)]);
     expect(await axe(container)).toHaveNoViolations();
   });

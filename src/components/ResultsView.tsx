@@ -83,14 +83,16 @@ export function ResultsView({
   // Cold-start (profileEmpty) and the non-score sorts keep the flat list.
   const lanesActive = sortBy === 'score' && !profileEmpty;
   const stackExpanded = useSignalDisplayOrder(s => s.stackExpanded);
+  const worthExpanded = useSignalDisplayOrder(s => s.worthExpanded);
   const moreExpanded = useSignalDisplayOrder(s => s.moreExpanded);
   const setStackExpanded = useSignalDisplayOrder(s => s.setStackExpanded);
+  const setWorthExpanded = useSignalDisplayOrder(s => s.setWorthExpanded);
   const setMoreExpanded = useSignalDisplayOrder(s => s.setMoreExpanded);
   const setVisible = useSignalDisplayOrder(s => s.setVisible);
   const lanes = useMemo(() => (lanesActive ? partitionLanes(filteredResults) : null), [lanesActive, filteredResults]);
   const visibleLanes = useMemo(
-    () => (lanes ? visibleLaneItems(lanes, { stackExpanded, moreExpanded }) : null),
-    [lanes, stackExpanded, moreExpanded],
+    () => (lanes ? visibleLaneItems(lanes, { stackExpanded, worthExpanded, moreExpanded }) : null),
+    [lanes, stackExpanded, worthExpanded, moreExpanded],
   );
   const displayResults = useMemo(
     () => (visibleLanes ? flattenVisible(visibleLanes) : filteredResults),
@@ -139,6 +141,7 @@ export function ResultsView({
     // In a collapsed part of a lane — open it first; this effect re-runs.
     const loc = lanes ? locateInLanes(lanes, searchFocusItemId) : null;
     if (loc?.lane === 'stack' && loc.index >= STACK_LANE_CAP && !stackExpanded) { setStackExpanded(true); return; }
+    if (loc?.lane === 'worth' && !worthExpanded) { setWorthExpanded(true); return; }
     if (loc?.lane === 'more' && !moreExpanded) { setMoreExpanded(true); return; }
     if (displayResults.some(r => r.id === searchFocusItemId)) {
       const id = searchFocusItemId;
@@ -154,7 +157,7 @@ export function ResultsView({
     }
     // Off-feed corpus item not in this list — clear; the user is already on Signal.
     setSearchFocusItemId(null);
-  }, [searchFocusItemId, lanes, stackExpanded, moreExpanded, setStackExpanded, setMoreExpanded, displayResults, setExpandedItem, setSearchFocusItemId, showOnlyRelevant, setShowOnlyRelevant, state.relevanceResults]);
+  }, [searchFocusItemId, lanes, stackExpanded, worthExpanded, moreExpanded, setStackExpanded, setWorthExpanded, setMoreExpanded, displayResults, setExpandedItem, setSearchFocusItemId, showOnlyRelevant, setShowOnlyRelevant, state.relevanceResults]);
 
   useEffect(() => {
     const items = [
@@ -303,8 +306,10 @@ export function ResultsView({
               lanes={lanes}
               visible={visibleLanes}
               stackExpanded={stackExpanded}
+              worthExpanded={worthExpanded}
               moreExpanded={moreExpanded}
               onToggleStack={() => setStackExpanded(!stackExpanded)}
+              onToggleWorth={() => setWorthExpanded(!worthExpanded)}
               onToggleMore={() => setMoreExpanded(!moreExpanded)}
               {...listProps}
             />

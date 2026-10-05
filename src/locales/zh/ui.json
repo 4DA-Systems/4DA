@@ -2324,6 +2324,8 @@
   "signals.laneShowFewer": "收起",
   "signals.laneShowMore": "再显示 {{count}} 条",
   "signals.laneHideMore": "隐藏其余",
+  "signals.laneShowWorth": "显示 {{count}} 条值得了解",
+  "signals.laneHideWorth": "隐藏值得了解",
   "settings.stack.title": "Your Stack",
   "settings.stack.desc": "Pick which detected projects count as your stack. Turning one off drops its dependencies from relevance grounding — useful for test fixtures, scaffolding, or experiments you don't want shaping \"Affects You\". Takes effect on the next analysis.",
   "settings.stack.loading": "Loading projects…",

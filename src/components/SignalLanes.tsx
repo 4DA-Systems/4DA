@@ -14,8 +14,10 @@ interface SignalLanesProps extends SharedListProps {
   lanes: Lanes;
   visible: Lanes;
   stackExpanded: boolean;
+  worthExpanded: boolean;
   moreExpanded: boolean;
   onToggleStack: () => void;
+  onToggleWorth: () => void;
   onToggleMore: () => void;
 }
 
@@ -36,7 +38,7 @@ function LaneHeading({ id, icon, label, sub, color, border }: {
 }
 
 export function SignalLanes({
-  lanes, visible, stackExpanded, moreExpanded, onToggleStack, onToggleMore, ...shared
+  lanes, visible, stackExpanded, worthExpanded, moreExpanded, onToggleStack, onToggleWorth, onToggleMore, ...shared
 }: SignalLanesProps) {
   const { t } = useTranslation();
   const stackHidden = lanes.stack.length > STACK_LANE_CAP;
@@ -80,21 +82,38 @@ export function SignalLanes({
 
       {lanes.worth.length > 0 && (
         <section aria-labelledby="signal-lane-worth-heading" data-lane="worth">
-          <LaneHeading
-            id="signal-lane-worth-heading"
-            icon="🛰"
-            label={t('signals.laneWorth')}
-            sub={t('signals.laneWorthSub')}
-            color="text-blue-400"
-            border="border-blue-500/30"
-          />
-          <ResultLaneList
-            {...shared}
-            id="signal-lane-worth-list"
-            items={visible.worth}
-            indexOffset={worthOffset}
-            labelledBy="signal-lane-worth-heading"
-          />
+          {worthExpanded ? (
+            <LaneHeading
+              id="signal-lane-worth-heading"
+              icon="🛰"
+              label={t('signals.laneWorth')}
+              sub={t('signals.laneWorthSub')}
+              color="text-blue-400"
+              border="border-blue-500/30"
+            />
+          ) : (
+            <h3 id="signal-lane-worth-heading" className="sr-only">{t('signals.laneWorth')}</h3>
+          )}
+          <button
+            type="button"
+            className={toggleClass}
+            aria-expanded={worthExpanded}
+            aria-controls={worthExpanded ? 'signal-lane-worth-list' : undefined}
+            onClick={onToggleWorth}
+          >
+            {worthExpanded
+              ? t('signals.laneHideWorth')
+              : t('signals.laneShowWorth', { count: lanes.worth.length })}
+          </button>
+          {worthExpanded && (
+            <ResultLaneList
+              {...shared}
+              id="signal-lane-worth-list"
+              items={visible.worth}
+              indexOffset={worthOffset}
+              labelledBy="signal-lane-worth-heading"
+            />
+          )}
         </section>
       )}
 

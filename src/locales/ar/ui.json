@@ -2335,6 +2335,8 @@
   "signals.laneShowFewer": "عرض أقل",
   "signals.laneShowMore": "عرض {{count}} إضافية",
   "signals.laneHideMore": "إخفاء الباقي",
+  "signals.laneShowWorth": "عرض {{count}} مما يستحق المعرفة",
+  "signals.laneHideWorth": "إخفاء ما يستحق المعرفة",
   "settings.stack.title": "Your Stack",
   "settings.stack.desc": "Pick which detected projects count as your stack. Turning one off drops its dependencies from relevance grounding — useful for test fixtures, scaffolding, or experiments you don't want shaping \"Affects You\". Takes effect on the next analysis.",
   "settings.stack.loading": "Loading projects…",

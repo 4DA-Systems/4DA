@@ -14,17 +14,21 @@ interface SignalDisplayOrderState {
   /** Visible rows in display order; null when the Signal list is not mounted. */
   visible: SourceRelevance[] | null;
   stackExpanded: boolean;
+  worthExpanded: boolean;
   moreExpanded: boolean;
   setVisible: (visible: SourceRelevance[] | null) => void;
   setStackExpanded: (v: boolean) => void;
+  setWorthExpanded: (v: boolean) => void;
   setMoreExpanded: (v: boolean) => void;
 }
 
 export const useSignalDisplayOrder = create<SignalDisplayOrderState>((set) => ({
   visible: null,
   stackExpanded: false,
+  worthExpanded: false,
   moreExpanded: false,
   setVisible: (visible) => set({ visible }),
   setStackExpanded: (stackExpanded) => set({ stackExpanded }),
+  setWorthExpanded: (worthExpanded) => set({ worthExpanded }),
   setMoreExpanded: (moreExpanded) => set({ moreExpanded }),
 }));

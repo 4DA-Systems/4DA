@@ -133,16 +133,22 @@ describe('visibleLaneItems / flattenVisible / locateInLanes', () => {
     ...Array.from({ length: WORTH_LANE_SIZE + 3 }, (_, i) => orbit(0.9 - i / 100)),
   ]);
 
-  it('caps Lane 1 and hides Lane 3 by default', () => {
-    const v = visibleLaneItems(lanes, { stackExpanded: false, moreExpanded: false });
+  it('caps Lane 1 and hides Lanes 2 and 3 by default', () => {
+    const v = visibleLaneItems(lanes, { stackExpanded: false, worthExpanded: false, moreExpanded: false });
     expect(v.stack).toHaveLength(STACK_LANE_CAP);
-    expect(v.worth).toHaveLength(WORTH_LANE_SIZE);
+    expect(v.worth).toHaveLength(0);
     expect(v.more).toHaveLength(0);
+    expect(flattenVisible(v)).toEqual(v.stack);
+  });
+
+  it('shows Lane 2 once it is opened', () => {
+    const v = visibleLaneItems(lanes, { stackExpanded: false, worthExpanded: true, moreExpanded: false });
+    expect(v.worth).toHaveLength(WORTH_LANE_SIZE);
     expect(flattenVisible(v)).toEqual([...v.stack, ...v.worth]);
   });
 
   it('shows every row once expanded', () => {
-    const v = visibleLaneItems(lanes, { stackExpanded: true, moreExpanded: true });
+    const v = visibleLaneItems(lanes, { stackExpanded: true, worthExpanded: true, moreExpanded: true });
     expect(v.stack).toHaveLength(STACK_LANE_CAP + 4);
     expect(v.more).toHaveLength(3);
     expect(flattenVisible(v)).toHaveLength(STACK_LANE_CAP + 4 + WORTH_LANE_SIZE + 3);

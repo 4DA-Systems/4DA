@@ -2346,6 +2346,8 @@
   "signals.laneShowFewer": "表示を減らす",
   "signals.laneShowMore": "さらに {{count}} 件を表示",
   "signals.laneHideMore": "残りを隠す",
+  "signals.laneShowWorth": "知っておく価値ありを {{count}} 件表示",
+  "signals.laneHideWorth": "知っておく価値ありを隠す",
   "settings.stack.title": "Your Stack",
   "settings.stack.desc": "Pick which detected projects count as your stack. Turning one off drops its dependencies from relevance grounding — useful for test fixtures, scaffolding, or experiments you don't want shaping \"Affects You\". Takes effect on the next analysis.",
   "settings.stack.loading": "Loading projects…",
