@@ -1478,6 +1478,8 @@
   "signals.laneShowFewer": "Show fewer",
   "signals.laneShowMore": "Show {{count}} more",
   "signals.laneHideMore": "Hide the rest",
+  "signals.laneShowWorth": "Show {{count}} worth knowing",
+  "signals.laneHideWorth": "Hide worth knowing",
   "signals.noSignals": "No actionable signals surfaced in this run.",
   "signals.clear": "Clear filters",
   "signals.noMatch": "No signals match the active filters.",

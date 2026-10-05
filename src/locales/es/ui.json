@@ -2390,6 +2390,8 @@
   "signals.laneShowFewer": "Mostrar menos",
   "signals.laneShowMore": "Mostrar {{count}} más",
   "signals.laneHideMore": "Ocultar el resto",
+  "signals.laneShowWorth": "Mostrar {{count}} que vale la pena saber",
+  "signals.laneHideWorth": "Ocultar lo que vale la pena saber",
   "settings.stack.title": "Your Stack",
   "settings.stack.desc": "Pick which detected projects count as your stack. Turning one off drops its dependencies from relevance grounding — useful for test fixtures, scaffolding, or experiments you don't want shaping \"Affects You\". Takes effect on the next analysis.",
   "settings.stack.loading": "Loading projects…",

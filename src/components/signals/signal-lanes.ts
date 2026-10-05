@@ -9,7 +9,11 @@
 //                          the incoming display order (score). Capped with an
 //                          explicit "Show all N" control — never a silent cut.
 //   Lane 2 "Worth knowing" the first WORTH_LANE_SIZE of everything else
-//                          (In Your Orbit, then Ambient), by pipeline score.
+//                          (In Your Orbit, then Ambient), by pipeline score,
+//                          COLLAPSED by default (Decision 6, 2026-10-05): it
+//                          measured 0/10 useful (two blind labellers, n=234
+//                          run), and no stored ranking rescues it — judge
+//                          relevance gives 1/5 and 1/10 on the same rows.
 //   Lane 3 "More"          the remainder, collapsed behind "Show N more".
 //
 // News lanes measured 12-27% useful but hold 36 of the 60 useful items, so they
@@ -109,6 +113,7 @@ export function partitionLanes(results: SourceRelevance[]): SignalLanes {
 
 export interface LaneExpansion {
   stackExpanded: boolean;
+  worthExpanded: boolean;
   moreExpanded: boolean;
 }
 
@@ -116,7 +121,7 @@ export interface LaneExpansion {
 export function visibleLaneItems(lanes: SignalLanes, exp: LaneExpansion): SignalLanes {
   return {
     stack: exp.stackExpanded ? lanes.stack : lanes.stack.slice(0, STACK_LANE_CAP),
-    worth: lanes.worth,
+    worth: exp.worthExpanded ? lanes.worth : [],
     more: exp.moreExpanded ? lanes.more : [],
   };
 }
