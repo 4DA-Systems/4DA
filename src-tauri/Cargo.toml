@@ -127,7 +127,7 @@ regex = "1"
 
 # Rust source parsing: is the module an advisory names cfg-gated out of the
 # user's build? (osv::reachability, AD-051). Already in the graph via serde_derive.
-syn = { version = "2", features = ["full"] }
+syn = { version = "3", features = ["full"] }
 
 # System startup (launch at login)
 tauri-plugin-autostart = "2"
