@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-// Status strip under the content graph: coverage notes and the window toggle.
+// Status strip under the theme map: coverage notes and the window toggle.
 // Split from ContentGraphView (size gate).
 import { useTranslation } from 'react-i18next';
 
@@ -23,9 +23,10 @@ export default function ContentGraphFooter({ meta, days, onDaysChange }: Props) 
       <div className="flex gap-4 text-[11px]" style={{ color: 'var(--color-text-muted)', fontFamily: 'JetBrains Mono, monospace' }}>
         {meta && (
           <>
-            <span>{meta.total_items} {t('signals.graphNodes', 'nodes')}</span>
-            <span>{meta.total_edges} {t('signals.graphEdges', 'edges')}</span>
-            <span>{meta.cluster_count} {t('signals.graphClusters', 'clusters')}</span>
+            {/* No edge count: the map draws no edges, so the number informs
+                nothing (doctrine rule 3). */}
+            <span>{meta.total_items} {t('signals.graphItems')}</span>
+            <span>{meta.cluster_count} {t('signals.graphThemes')}</span>
             {meta.collapsed_items > 0 && (
               <span>{t('signals.graphCollapsedNote', { items: meta.collapsed_items, stories: meta.story_count })}</span>
             )}

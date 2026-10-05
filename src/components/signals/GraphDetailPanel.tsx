@@ -9,11 +9,11 @@ import { isSafeUrl } from '../../utils/sanitize-html';
 import { getSourceLabel } from '../../config/sources';
 import { getRelevancePresentation } from '../../utils/score';
 import type { SourceRelevance } from '../../types';
-import { CATEGORY_COLORS, type ContentNode } from './ContentGraphNode';
+import type { GraphNode } from '../../types/graph';
+import { CategoryMark } from './graph-marks';
 
 interface GraphDetailPanelProps {
-  nodeId: number;
-  data: ContentNode['data'];
+  node: GraphNode;
   onClose: () => void;
 }
 
@@ -38,7 +38,9 @@ function openExternal(url: string) {
     .catch(() => window.open(url, '_blank', 'noopener,noreferrer'));
 }
 
-export default function GraphDetailPanel({ nodeId, data, onClose }: GraphDetailPanelProps) {
+export default function GraphDetailPanel({ node, onClose }: GraphDetailPanelProps) {
+  const nodeId = node.id;
+  const data = node;
   const { t } = useTranslation();
   const recordInteraction = useAppStore((s) => s.recordInteraction);
   const feedback = useAppStore((s) => s.feedbackGiven[nodeId]);
@@ -89,7 +91,6 @@ export default function GraphDetailPanel({ nodeId, data, onClose }: GraphDetailP
   const createdAt = rep?.created_at;
   const matchedPackage = rep?.matched_package;
   const relevance = getRelevancePresentation(data.relevance_score);
-  const categoryColor = CATEGORY_COLORS[data.category] ?? '#6B7280';
 
   const handleOpen = useCallback(
     (itemId: number, itemUrl: string, title: string, sourceType: string, score: number) => {
@@ -170,11 +171,7 @@ export default function GraphDetailPanel({ nodeId, data, onClose }: GraphDetailP
       {/* Header */}
       <div className="flex items-center justify-between px-3 py-2 border-b shrink-0" style={{ borderColor: 'var(--color-border)' }}>
         <div className="flex items-center gap-2 min-w-0">
-          <span
-            className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
-            style={{ backgroundColor: categoryColor }}
-            aria-hidden="true"
-          />
+          <CategoryMark category={data.category} stack={data.affects_you} size={10} />
           <span className="text-[11px] font-medium text-text-secondary truncate">
             {t(`signals.graphCat_${data.category}`, data.category)}
           </span>

@@ -236,8 +236,6 @@ pub(super) fn compute_clusters(items: &[RawItem], edges: &[GraphEdge]) -> Vec<Gr
                 node_ids,
                 source_count: sources.len(),
                 coherence: 0.0,
-                centroid_x: 0.0,
-                centroid_y: 0.0,
             }
         })
         .collect();
