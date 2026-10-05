@@ -7,16 +7,13 @@ import { useTranslation } from 'react-i18next';
 
 import type { GraphNode } from '../../types/graph';
 import { CategoryMark } from './graph-marks';
+import { TILE_HEADER_H, TILE_LINE_H, TILE_PAD, type Rect } from './theme-map-layout';
 import {
-  TILE_HEADER_H,
-  TILE_LINE_H,
   TILE_COLUMN_GAP,
-  TILE_PAD,
   cleanTitle,
   displayThemeLabel,
   tileColumns,
   visibleLines,
-  type Rect,
   type Theme,
 } from './theme-map-model';
 
@@ -26,32 +23,43 @@ interface RowProps {
   isNew: boolean;
   selected: boolean;
   onOpen: (node: GraphNode) => void;
+  /** Wrap the full title over several lines instead of truncating (panels). */
+  wrap?: boolean;
+  /** Muted trailing context, e.g. the theme a stack item relates to. */
+  context?: string;
 }
 
 /** One item: category mark + title. New since the last visit reads brighter. */
-export function ItemRow({ node, stack = false, isNew, selected, onOpen }: RowProps) {
+export function ItemRow({ node, stack = false, isNew, selected, onOpen, wrap = false, context }: RowProps) {
   const extra = node.member_count - 1;
   return (
     <button
       type="button"
       onClick={() => onOpen(node)}
-      title={node.title}
+      title={context ? `${node.title} — ${displayThemeLabel(context)}` : node.title}
       aria-pressed={selected}
-      className="flex items-center gap-2 w-full min-w-0 text-start rounded px-1 -mx-1 transition-colors hover:bg-bg-tertiary focus-visible:outline focus-visible:outline-1"
+      className={`flex ${wrap ? 'items-start py-1' : 'items-center'} gap-2 w-full min-w-0 text-start rounded px-1 -mx-1 transition-colors hover:bg-bg-tertiary focus-visible:outline focus-visible:outline-1`}
       style={{
-        height: TILE_LINE_H,
+        height: wrap ? undefined : TILE_LINE_H,
         backgroundColor: selected ? 'var(--color-bg-tertiary)' : undefined,
       }}
     >
-      <CategoryMark category={node.category} stack={stack} />
+      <span className="inline-flex shrink-0" style={{ marginTop: wrap ? 4 : 0 }}>
+        <CategoryMark category={node.category} stack={stack} />
+      </span>
       <span
-        className="truncate text-[12px]"
+        className={wrap ? 'text-[12px] leading-snug' : 'truncate text-[12px]'}
         style={{
           color: isNew || selected ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
           fontWeight: isNew ? 500 : 400,
         }}
       >
         {cleanTitle(node.title)}
+        {context && (
+          <span className="ms-1.5 text-[10px]" style={{ color: 'var(--color-text-muted)' }}>
+            {displayThemeLabel(context)}
+          </span>
+        )}
       </span>
       {extra > 0 && (
         <span
@@ -82,12 +90,18 @@ interface TileProps {
 
 /** A theme tile: name + count, then as many of its most important titles as
  *  the tile's height allows; the remainder is one "+N more" line that opens
- *  the whole theme in the side panel. */
+ *  the whole theme in the side panel. A theme whose community held stack
+ *  items spends one line naming them, in gold — the link between this news
+ *  and the user's packages. */
 export function ThemeTile({ theme, rect, gap, isNew, selectedId, themeSelected, onOpenItem, onOpenTheme }: TileProps) {
   const { t } = useTranslation();
   const h = rect.h - gap;
   const cols = tileColumns(rect.w - gap);
-  const { shown, more } = visibleLines(h, theme.items.length, cols);
+  const stackLine = theme.stack.length > 0 ? 1 : 0;
+  const { shown, more } = visibleLines(h, theme.items.length, cols, stackLine);
+  // A tile too small for a "+N more" line still says what it hides.
+  const hiddenQuietly = more === 0 ? theme.items.length - shown : 0;
+  const stackNames = theme.stack.map((n) => cleanTitle(n.title)).join(', ');
   const hasSecurity = theme.items.some((n) => n.category === 'security');
   return (
     <section
@@ -117,7 +131,24 @@ export function ThemeTile({ theme, rect, gap, isNew, selectedId, themeSelected, 
         <span className="shrink-0 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
           {theme.items.length}
         </span>
+        {hiddenQuietly > 0 && (
+          <span className="shrink-0 ms-auto text-[10px]" style={{ color: 'var(--color-text-muted)' }}>
+            {t('signals.graphStoryMore', { count: hiddenQuietly })}
+          </span>
+        )}
       </button>
+      {stackLine > 0 && (
+        <button
+          type="button"
+          onClick={() => onOpenTheme(theme)}
+          title={stackNames}
+          className="flex items-center gap-1.5 min-w-0 text-start shrink-0 text-[11px]"
+          style={{ height: TILE_LINE_H, color: 'var(--color-accent-gold)' }}
+        >
+          <span className="shrink-0 font-medium">{t('signals.laneStack')}:</span>
+          <span className="truncate">{stackNames}</span>
+        </button>
+      )}
       <div
         className="grid min-w-0"
         style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, columnGap: TILE_COLUMN_GAP }}
@@ -142,6 +173,8 @@ export function ThemeTile({ theme, rect, gap, isNew, selectedId, themeSelected, 
 
 interface StackProps {
   items: GraphNode[];
+  /** Stack item id → the theme its community belongs to, shown muted. */
+  themeOf: Map<number, string>;
   isNew: (node: GraphNode) => boolean;
   selectedId: number | null;
   onOpenItem: (node: GraphNode) => void;
@@ -150,7 +183,7 @@ interface StackProps {
 /** "Your stack": every item tied to the user's own dependencies, in one
  *  place, most urgent first — never scattered across themes or left in the
  *  unthemed pile (4 of 16 were, live 2026-10-05). */
-export function StackColumn({ items, isNew, selectedId, onOpenItem }: StackProps) {
+export function StackColumn({ items, themeOf, isNew, selectedId, onOpenItem }: StackProps) {
   const { t } = useTranslation();
   return (
     <aside
@@ -172,7 +205,15 @@ export function StackColumn({ items, isNew, selectedId, onOpenItem }: StackProps
       </div>
       <div className="flex flex-col px-3 pb-2 overflow-y-auto min-h-0">
         {items.map((n) => (
-          <ItemRow key={n.id} node={n} stack isNew={isNew(n)} selected={selectedId === n.id} onOpen={onOpenItem} />
+          <ItemRow
+            key={n.id}
+            node={n}
+            stack
+            isNew={isNew(n)}
+            selected={selectedId === n.id}
+            onOpen={onOpenItem}
+            context={themeOf.get(n.id)}
+          />
         ))}
       </div>
     </aside>

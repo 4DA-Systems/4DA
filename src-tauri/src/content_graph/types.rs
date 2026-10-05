@@ -80,6 +80,12 @@ pub struct GraphCluster {
     /// really is. Emitted so coherence is measurable on every corpus, not
     /// asserted (Wave 4 self-measurement).
     pub coherence: f32,
+    /// Stack items (`affects_you`) that belonged to this theme's community.
+    /// They live in the map's "Your stack" column, not in the theme; this
+    /// keeps the link so the theme can say which of the user's packages it
+    /// is about (blinded audit 2026-10-05: raters could not tell which news
+    /// related to the stack once it moved to its own column).
+    pub stack_node_ids: Vec<i64>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]

@@ -50,8 +50,20 @@ export default function ThemeDetailPanel({ theme, isNew, onOpenItem, onClose }: 
         </button>
       </div>
       <div className="flex-1 overflow-y-auto px-3 py-2">
+        {theme.stack.length > 0 && (
+          <div className="mb-2 pb-2 border-b" style={{ borderColor: 'var(--color-border)' }}>
+            <div className="text-[11px] font-medium mb-1" style={{ color: 'var(--color-accent-gold)' }}>
+              {t('signals.laneStack')}
+            </div>
+            {theme.stack.map((n) => (
+              <ItemRow key={n.id} node={n} stack wrap isNew={isNew(n)} selected={false} onOpen={onOpenItem} />
+            ))}
+          </div>
+        )}
+        {/* Full titles, wrapped: a 320px panel that truncated them made the
+            drill-down as clipped as the tile it expands (audit 2026-10-06). */}
         {theme.items.map((n) => (
-          <ItemRow key={n.id} node={n} isNew={isNew(n)} selected={false} onOpen={onOpenItem} />
+          <ItemRow key={n.id} node={n} wrap isNew={isNew(n)} selected={false} onOpen={onOpenItem} />
         ))}
       </div>
     </div>
