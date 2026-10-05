@@ -308,7 +308,7 @@ fn load_embedding_model(
         }
     }
     tracing::info!(target: "4da::embeddings", cache = %cache_dir.display(), "Downloading embedding model (nomic-embed-text v1.5, ~550MB first run)");
-    let options = fastembed::InitOptions::new(fastembed::EmbeddingModel::NomicEmbedTextV15)
+    let options = fastembed::TextInitOptions::new(fastembed::EmbeddingModel::NomicEmbedTextV15)
         .with_cache_dir(cache_dir)
         .with_show_download_progress(true);
     fastembed::TextEmbedding::try_new(options).map_err(|e| {
