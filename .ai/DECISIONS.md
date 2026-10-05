@@ -795,6 +795,18 @@
 - **Date:** 2026-10-05
 - **Status:** Final
 
+### AD-053: Stripe (via Link) Is the Merchant of Record for Signal
+
+- **Decision:** 2026-10-05, proposed by Claude after the subscription at-scale audit; takes effect when the operator enables Managed Payments in the Stripe Dashboard. Every Signal Checkout Session sets `managed_payments: { enabled: true }`. Stripe, through Link, becomes the seller of record: it calculates, collects, files and remits sales tax, VAT and GST in 80+ countries, localises the currency (Adaptive Pricing), picks the payment methods, sends receipts and invoices, and handles disputes and transaction-level support. 4DA keeps the product, the licence keys, the webhook and the renewal path unchanged (AD-052).
+- **Rationale:** Checkout collected no tax at all. A seller outside the EU and UK owes VAT on digital services to consumers there from the FIRST sale (no threshold), and many other countries have digital-services regimes of their own. Doing it ourselves means Stripe Tax plus registrations and quarterly filings in each jurisdiction: a recurring accounting cost and a liability that grows with every new country, carried by a one-person company. The extra 3.5% per transaction (A$0.42 on a A$12 month) buys all of it, and prices in local currency remove the AUD friction for overseas buyers. Subscriptions created outside Managed Payments can never be moved into it, so the switch is cheapest before the first subscriber; none exists.
+- **Considered:**
+  - *Stripe Tax + own registrations (0.5%):* Cheaper per transaction, but the filing burden and liability stay with us. Revisit if volume makes 3% of revenue larger than the cost of a tax accountant plus registrations.
+  - *Paddle / Lemon Squeezy:* Also merchants of record, but a rewrite of checkout, webhook and renewal against a new API, with a second company in the data path.
+  - *Do nothing until revenue is material:* Rejected. The liability accrues from the first EU/UK sale, and subscriptions sold now could never be moved to Managed Payments later.
+- **Consequences:** Statements read `LINK.COM* 4DA SYSTEMS`; Link may refund within 60 days and may cancel and delete a customer on a data-deletion request (renewal then answers `not_entitled`, as for any cancellation); customers can manage subscriptions at link.com as well as in our portal. Prices are tax-INCLUSIVE (Dashboard → Tax settings → "Include tax in prices"): Australian Consumer Law and EU/UK price-display rules require the advertised consumer price to be the total price, so A$12 shown is A$12 paid and the tax comes out of our margin. Terms §4.1/4.2/4.4/5.6 and the privacy processor table say so.
+- **Date:** 2026-10-05
+- **Status:** Accepted 2026-10-06 — the operator enabled Managed Payments in the Dashboard. Verified read-only the same day: status "Ready to use"; Include tax in prices = Yes; product 4DA Signal tax code `txcd_10202003` (Downloadable Software – business use), Managed Payments "Eligible".
+
 ---
 
 ## Decision Template
