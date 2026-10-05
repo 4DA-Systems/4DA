@@ -805,7 +805,7 @@
   - *Do nothing until revenue is material:* Rejected. The liability accrues from the first EU/UK sale, and subscriptions sold now could never be moved to Managed Payments later.
 - **Consequences:** Statements read `LINK.COM* 4DA SYSTEMS`; Link may refund within 60 days and may cancel and delete a customer on a data-deletion request (renewal then answers `not_entitled`, as for any cancellation); customers can manage subscriptions at link.com as well as in our portal. Prices are tax-INCLUSIVE (Dashboard → Tax settings → "Include tax in prices"): Australian Consumer Law and EU/UK price-display rules require the advertised consumer price to be the total price, so A$12 shown is A$12 paid and the tax comes out of our margin. Terms §4.1/4.2/4.4/5.6 and the privacy processor table say so.
 - **Date:** 2026-10-05
-- **Status:** Proposed (operator to ratify by enabling Managed Payments)
+- **Status:** Accepted 2026-10-06 — the operator enabled Managed Payments in the Dashboard. Verified read-only the same day: status "Ready to use"; Include tax in prices = Yes; product 4DA Signal tax code `txcd_10202003` (Downloadable Software – business use), Managed Payments "Eligible".
 
 ---
 
