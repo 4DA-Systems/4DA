@@ -1203,6 +1203,31 @@ pub(crate) const OLLAMA_NUM_CTX: u32 = 8192;
 // 14 days to 2026-09-24): lowering this below 8,192 truncates them again.
 const _: () = assert!(OLLAMA_NUM_CTX >= 8192);
 
+/// How long Ollama keeps a 4DA model loaded after a request. Ollama's default
+/// is 5 minutes, but the judge lanes run every ~10–12 minutes, so the judge
+/// model was evicted between every pass and reloaded on the next one —
+/// measured 2026-10-04: 117 loads of gemma4:26b in ~24 h, 46–112 s each.
+pub(crate) const OLLAMA_KEEP_ALIVE: &str = "30m";
+
+/// The `keep_alive` 4DA sends, given the user's `OLLAMA_KEEP_ALIVE`. A
+/// per-request `keep_alive` overrides the server's setting, so a user who set
+/// one deliberately (say `24h`, or `0` to free VRAM at once) keeps it: 4DA only
+/// fills in its own value when the variable is unset or blank.
+fn ollama_keep_alive_for(env: Option<&str>) -> Option<&'static str> {
+    match env {
+        Some(v) if !v.trim().is_empty() => None,
+        _ => Some(OLLAMA_KEEP_ALIVE),
+    }
+}
+
+/// Add `keep_alive` to an Ollama request body unless the user configured it.
+pub(crate) fn apply_ollama_keep_alive(body: &mut serde_json::Value) {
+    let env = std::env::var("OLLAMA_KEEP_ALIVE").ok();
+    if let Some(keep_alive) = ollama_keep_alive_for(env.as_deref()) {
+        body["keep_alive"] = serde_json::Value::String(keep_alive.to_string());
+    }
+}
+
 /// The `/api/chat` body for every 4DA call to Ollama.
 ///
 /// `think: false` is sent unconditionally: 4DA never wants hidden reasoning,
@@ -1228,12 +1253,51 @@ pub(crate) fn ollama_chat_body(
     if json_format {
         body["format"] = serde_json::Value::String("json".to_string());
     }
+    apply_ollama_keep_alive(&mut body);
     body
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn keep_alive_defaults_when_user_has_not_set_one() {
+        assert_eq!(ollama_keep_alive_for(None), Some(OLLAMA_KEEP_ALIVE));
+        assert_eq!(ollama_keep_alive_for(Some("")), Some(OLLAMA_KEEP_ALIVE));
+        assert_eq!(ollama_keep_alive_for(Some("  ")), Some(OLLAMA_KEEP_ALIVE));
+    }
+
+    #[test]
+    fn keep_alive_defers_to_the_users_server_setting() {
+        assert_eq!(ollama_keep_alive_for(Some("24h")), None);
+        assert_eq!(ollama_keep_alive_for(Some("0")), None);
+        assert_eq!(ollama_keep_alive_for(Some("-1")), None);
+    }
+
+    #[test]
+    fn keep_alive_outlasts_the_judge_cadence() {
+        // The judge lanes run every ~10–12 min; anything shorter evicts the
+        // model between passes and every pass pays a full reload again.
+        let minutes: u64 = OLLAMA_KEEP_ALIVE
+            .strip_suffix('m')
+            .and_then(|m| m.parse().ok())
+            .expect("OLLAMA_KEEP_ALIVE is expressed in minutes");
+        assert!(
+            minutes >= 15,
+            "keep_alive {minutes}m is shorter than a judge pass gap"
+        );
+    }
+
+    #[test]
+    fn ollama_body_carries_keep_alive_matching_the_env_rule() {
+        let body = ollama_chat_body("gemma4:12b", vec![], false);
+        let env = std::env::var("OLLAMA_KEEP_ALIVE").ok();
+        match ollama_keep_alive_for(env.as_deref()) {
+            Some(k) => assert_eq!(body["keep_alive"], k),
+            None => assert!(body.get("keep_alive").is_none()),
+        }
+    }
 
     #[test]
     fn ollama_body_disables_thinking_and_pins_context() {
