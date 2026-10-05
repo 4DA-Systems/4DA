@@ -207,12 +207,16 @@ async fn load_model(base_url: &str, model: &str) -> bool {
     let Ok(client) = reqwest::Client::builder().timeout(LOAD_TIMEOUT).build() else {
         return false;
     };
+    let mut body = serde_json::json!({
+        "model": model,
+        "options": { "num_ctx": crate::llm::OLLAMA_NUM_CTX },
+    });
+    // The warm-up load sets the residency window too; without it the model
+    // is evicted 5 min after this load, before the first judge pass reuses it.
+    crate::llm::apply_ollama_keep_alive(&mut body);
     client
         .post(format!("{base_url}/api/generate"))
-        .json(&serde_json::json!({
-            "model": model,
-            "options": { "num_ctx": crate::llm::OLLAMA_NUM_CTX },
-        }))
+        .json(&body)
         .send()
         .await
         .and_then(reqwest::Response::error_for_status)
