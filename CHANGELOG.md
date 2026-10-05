@@ -4,6 +4,103 @@ All notable changes to 4DA will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.3] - 2026-10-05
+
+Curated highlights of the work since 1.0.2 — a selection, not an exhaustive commit log.
+
+**Upgrading from 1.0.2:** the database migrates from schema 113 to 124 on first launch. A
+backup (`4da.db.backup.v113`) is written before migrating, and every migration step runs in
+its own transaction. The scoring pipeline moves from version 27 to 38, so the first launch
+re-scores everything 4DA already holds; expect the first analysis to take longer than usual.
+Going back to 1.0.2 afterwards is refused with a clear message rather than risking the
+upgraded database.
+
+**The download is larger (Windows installer ~280 MB, up from ~125 MB).** The offline
+embedding model is now nomic-embed-text v1.5 — the same model Ollama serves — bundled so
+that local and Ollama embeddings share one vector space and work with no network. It is
+the bulk of the size.
+
+**The Windows installer in this release is not code-signed.** Windows code signing is
+still being set up. macOS is signed and notarized as normal; Linux is unaffected. Verify
+the SHA-256 against `SHASUMS256.txt` before running the Windows installer.
+
+### Signal
+
+- **No monthly renewal chore.** A Signal subscription key now renews itself inside the app
+  shortly before it expires; the app sends only the key it holds, and the subscription's
+  status at the payment processor decides the answer. The key from the purchase email keeps
+  working for the life of the subscription — pasting it on a new computer exchanges it for
+  the current one. Once the app has renewed on its own, the monthly key email stops.
+- Subscribers can cancel and update their card themselves from the billing portal linked
+  on the Signal page, the purchase confirmation and the terms.
+- Release cards say what changed, read from the package's own registry archive.
+- The Signal view is organised into three lanes: Your stack, Worth knowing, More.
+- A newer release supersedes older announcements of the same project; a release story
+  appears once, not once per source that carried it.
+
+### First run
+
+- Every step of onboarding now says what went wrong and offers a way on — no step can
+  leave you on a spinner or an empty card. Model downloads, taste-test calibration, stack
+  detection, interest edits and finishing setup all report failures and offer Retry.
+- Importing an API key from an environment variable keeps the imported key (it was
+  overwritten by its own display placeholder).
+- A detected local OpenAI-compatible server (LM Studio, llama.cpp, Jan) can be picked
+  directly and is saved with its address and loaded model.
+- A failed Ollama model download is reported as failed; it used to be reported as
+  complete when Ollama returned an error mid-stream.
+- The first-analysis countdown follows the analysis's real progress.
+- The taste test, celebration insights and remaining labels are translated in all 13
+  languages.
+
+### Brief, Preemption and Blind Spots
+
+- The Brief is written from computed facts, shown on its tab, once a day, saying only what
+  changed since the last one (AD-050).
+- A Cargo advisory matches only when your build compiles the code it names, and the brief
+  names the parent release that brings a vulnerable copy in (AD-051).
+- Upgrade plans give per-project, per-line targets and a machine-readable work order that
+  the MCP server's `upgrade_planner` reads.
+- Pinned is not installed: transitive dev-only scope comes from the lockfile graph, runtime
+  exposure ranks above dev-only, and live install drift shows on Preemption.
+- The package registries watch your declared dependencies (npm, PyPI, Go, crates.io,
+  Stack Overflow) rather than a fixed popular list.
+
+### Feed and scoring
+
+- An LLM judge, measured against labelled data for the first time, decides admission for
+  low-yield sources and RSS; it runs on a local model sized to your GPU when one is
+  configured, with your project cards as context.
+- News leaves the live list after 21 days; Reddit, Lemmy and YouTube no longer enter the
+  feed.
+- After a restart the feed shows what it showed before.
+- One security truth across surfaces: one vulnerability, one severity, and only exposed
+  installs are findings.
+
+### Privacy and security
+
+- The "titles only" setting now reaches every cloud prompt that carries article text,
+  including the ingest judge.
+- A scanned project can no longer configure the tools 4DA runs on it.
+- Signal Terminal cross-site-scripting closed at the sink.
+- Team sync fails closed when the team key is missing instead of encrypting under zero
+  bytes.
+
+### Windows and reliability
+
+- Background work no longer opens console windows over the screen.
+- Windows reports a large GPU's real VRAM instead of a saturated 4 GB.
+- The dependency backfill no longer freezes the window during startup.
+- A migration that would empty a child table is refused rather than committed, and
+  quarantining a database now requires evidence of corruption.
+- Claude 5 models answer instead of returning nothing; Sonnet 5 is the default.
+
+### MCP server
+
+- `@4da/mcp-server` now lives in its own repository
+  ([4DA-Systems/4da-mcp-server](https://github.com/4DA-Systems/4da-mcp-server)) and is
+  released from there; this desktop release no longer publishes it.
+
 ## [1.0.2] - 2026-08-30
 
 Supersedes 1.0.1, which was tagged and built but never published: a syntax error in the
