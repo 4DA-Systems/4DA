@@ -52,6 +52,32 @@ export function meta(metadata, field) {
   return current === undefined ? md[LEGACY_META_PREFIX + field] : current;
 }
 
+// ---------------------------------------------------------------------------
+// The licence email is anchored at purchase.
+//
+// Every key names an email, and silent renewal (renew.js) finds the paying
+// customer from it. The customer portal lets a subscriber change their Stripe
+// email, so if renewals minted keys for `customer.email` the app's key would
+// stop naming any customer: its renewals would answer not_entitled and a paying
+// subscriber would drop to Free. So the first key's email is recorded as
+// `signal_license_email` and every later key keeps it; mail still goes to the
+// customer's CURRENT address.
+// ---------------------------------------------------------------------------
+
+/** The email every key for this customer names: the purchase-time anchor, or
+ * the customer's email for records minted before the anchor existed. */
+export function licenseEmail(customer) {
+  return meta(customer?.metadata, 'license_email') || customer?.email || null;
+}
+
+/** Stripe Search query finding customers whose keys name `email` even though
+ * their Stripe email has since changed. Quotes and backslashes are escaped per
+ * the Search query language. */
+export function licenseEmailSearchQuery(email) {
+  const escaped = String(email).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+  return `metadata['${metaKey('license_email')}']:'${escaped}'`;
+}
+
 /**
  * Severity ranking. Webhook deliveries are NOT ordered — Stripe can deliver
  * `customer.subscription.deleted` after `charge.dispute.created` for the same

@@ -33,6 +33,7 @@ import {
   invoiceSubscriptionId,
   isRevoked,
   isTerminal,
+  licenseEmail,
   meta,
   metaKey,
   resolveCustomerId,
@@ -200,6 +201,9 @@ async function generateAndStoreLicense(env, stripe, customerId, email, tier, bil
       [metaKey('issued_at')]: now.toISOString(),
       [metaKey('expires_at')]: expiresAt.toISOString(),
       [metaKey('status')]: 'active',
+      // The email every key names from now on (see licenseEmail): renewals keep
+      // it even if the customer later changes their Stripe email.
+      [metaKey('license_email')]: email,
     },
   });
 
@@ -313,8 +317,17 @@ async function handleInvoicePaid(env, stripe, invoice) {
     throw new Error(`No email for customer ${customerId}`);
   }
 
-  // Regenerate license with fresh expiry
-  const { licenseKey, expiresAt } = await generateAndStoreLicense(env, stripe, customerId, email, existingTier, billingPeriod);
+  // Regenerate license with fresh expiry. The key names the purchase-time
+  // email, not today's customer.email: a subscriber who changed their email in
+  // the portal must keep a key their app can renew. Mail goes to `email`.
+  const { licenseKey, expiresAt } = await generateAndStoreLicense(
+    env,
+    stripe,
+    customerId,
+    licenseEmail(customer),
+    existingTier,
+    billingPeriod,
+  );
 
   // An app that renews by itself (POST /api/license/renew marked this customer
   // renews_in_app) already holds this period's key, so a key in the inbox every
