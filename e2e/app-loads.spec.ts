@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 
-const APP_URL = 'http://localhost:4444';
+// Relative to playwright.config's baseURL, so a run on another port tests its own server.
+const APP_URL = '/';
 
 test.describe('App Startup', () => {
   test.beforeEach(async ({ page }) => {
@@ -57,14 +58,11 @@ test.describe('App Startup', () => {
   });
 
   test('header renders with brand element', async ({ page }) => {
-    const header = page.getByRole('banner').or(page.locator('header'));
+    // The app bar carries the brand as its accessible name ("4DA") plus the
+    // animated BrandMark; it has no visible "4DA" text (the h1 lives in <main>).
+    const header = page.getByRole('banner', { name: '4DA' });
     await expect(header).toBeVisible({ timeout: 10000 });
-
-    // Brand text or logo should be present in the header
-    const brandText = header.getByText(/4da/i);
-    const brandLogo = header.locator('img[alt*="logo" i], svg[aria-label*="logo" i], [data-testid="brand-logo"]');
-    const hasBrand = (await brandText.count()) > 0 || (await brandLogo.count()) > 0;
-    expect(hasBrand).toBe(true);
+    await expect(header.locator('.brand-mark-container svg')).toBeVisible();
   });
 
   test('settings button renders in header', async ({ page }) => {

@@ -9,13 +9,13 @@ test('trigger morning briefing and capture output', async ({ page }) => {
   });
 
   // Step 1: Navigate to the app
-  console.log('--- Step 1: Navigating to http://localhost:4444 ---');
-  await page.goto('http://localhost:4444', { waitUntil: 'networkidle', timeout: 30000 });
+  console.log('--- Step 1: Navigating to the app ---');
+  await page.goto('/', { waitUntil: 'networkidle', timeout: 30000 });
   await page.waitForTimeout(2000); // Let the app fully render
 
   // Step 2: Take initial screenshot
   console.log('--- Step 2: Taking initial screenshot ---');
-  await page.screenshot({ path: '/d/4DA/e2e-results/briefing-01-before.png', fullPage: true });
+  await page.screenshot({ path: 'e2e-results/briefing-01-before.png', fullPage: true });
 
   // Step 3: Execute __testBriefing() in the browser console
   console.log('--- Step 3: Triggering __testBriefing() ---');
@@ -60,7 +60,7 @@ test('trigger morning briefing and capture output', async ({ page }) => {
 
   // Step 5: Take post-briefing screenshot
   console.log('--- Step 5: Taking post-briefing screenshot ---');
-  await page.screenshot({ path: '/d/4DA/e2e-results/briefing-02-after.png', fullPage: true });
+  await page.screenshot({ path: 'e2e-results/briefing-02-after.png', fullPage: true });
 
   // Step 6: Check console logs
   console.log('--- Step 6: Console logs collected ---');

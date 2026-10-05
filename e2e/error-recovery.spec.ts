@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-const APP_URL = 'http://localhost:4444';
+import { MAIN_TABS, appBar, crashFallbacks, gotoMainShell, mainTablist } from './support/app';
 
 // Tauri IPC errors that are expected and should not fail tests
 const EXPECTED_ERROR_PATTERNS = [
@@ -18,39 +18,27 @@ function isExpectedError(message: string): boolean {
 
 test.describe('Error Recovery & Resilience', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto(APP_URL, { waitUntil: 'networkidle', timeout: 15000 });
-    test.skip(
-      await page.locator('[data-testid="onboarding"]').isVisible(),
-      'App in onboarding state'
-    );
+    // Wait for the shell: the checks below used to run while the splash was
+    // still up, find no tablist, and skip themselves.
+    await gotoMainShell(page);
   });
 
   test('tabs render without triggering error boundary', async ({ page }) => {
-    const tablist = page.getByRole('tablist');
-    const hasTablist = await tablist.isVisible().catch(() => false);
-    test.skip(!hasTablist, 'No tab list visible');
-
-    // No error boundary fallback should be visible
-    const errorBoundary = page.locator('[data-testid="error-boundary"]')
-      .or(page.getByText(/something went wrong/i))
-      .or(page.getByText(/error occurred/i));
-    const hasError = await errorBoundary.isVisible().catch(() => false);
-    expect(hasError).toBe(false);
-
-    // Tabs should be present and functional
-    const tabs = tablist.getByRole('tab');
-    const tabCount = await tabs.count();
-    expect(tabCount).toBeGreaterThanOrEqual(1);
+    const tablist = mainTablist(page);
+    await expect(tablist.getByRole('tab')).toHaveCount(MAIN_TABS.length);
+    for (const { label } of MAIN_TABS) {
+      await tablist.getByRole('tab', { name: label, exact: true }).click();
+      await expect(page.getByRole('tabpanel', { name: label })).toBeVisible();
+      // Every IPC call fails in browser mode; each view must contain that.
+      await expect(crashFallbacks(page)).toHaveCount(0);
+    }
   });
 
   test('rapid tab switching does not crash', async ({ page }) => {
-    const tablist = page.getByRole('tablist');
-    const hasTablist = await tablist.isVisible().catch(() => false);
-    test.skip(!hasTablist, 'No tab list visible');
-
+    const tablist = mainTablist(page);
     const tabs = tablist.getByRole('tab');
     const tabCount = await tabs.count();
-    test.skip(tabCount < 2, 'Not enough tabs for switching test');
+    expect(tabCount).toBe(MAIN_TABS.length);
 
     // Rapidly switch between tabs 20 times
     for (let i = 0; i < 20; i++) {
@@ -60,13 +48,12 @@ test.describe('Error Recovery & Resilience', () => {
     }
 
     // App should still be responsive — no crash, no error boundary
-    const errorBoundary = page.getByText(/something went wrong/i)
-      .or(page.getByText(/error occurred/i));
-    const hasError = await errorBoundary.isVisible().catch(() => false);
-    expect(hasError).toBe(false);
+    await expect(crashFallbacks(page)).toHaveCount(0);
 
     // Tabs should still be functional
     await expect(tablist).toBeVisible();
+    await tabs.first().click();
+    await expect(tabs.first()).toHaveAttribute('aria-selected', 'true');
   });
 
   test('rapid modal open/close does not crash', async ({ page }) => {
@@ -96,25 +83,23 @@ test.describe('Error Recovery & Resilience', () => {
       }
     });
 
-    const searchInput = page.getByRole('searchbox')
-      .or(page.getByPlaceholder(/search|filter|find/i))
-      .or(page.locator('input[type="search"]'));
-    const hasSearch = await searchInput.isVisible().catch(() => false);
-    test.skip(!hasSearch, 'No search input visible');
+    const searchInput = appBar(page).getByRole('combobox', { name: 'Search 4DA' });
+    await expect(searchInput).toBeVisible();
 
     // Submit empty search
-    await searchInput.first().focus();
+    await searchInput.focus();
     await page.keyboard.press('Enter');
     await page.waitForTimeout(500);
 
     // Type and clear rapidly
-    await searchInput.first().fill('test');
-    await searchInput.first().fill('');
+    await searchInput.fill('test');
+    await searchInput.fill('');
     await page.keyboard.press('Enter');
     await page.waitForTimeout(500);
 
-    // No unexpected console errors should have occurred
+    // No unexpected console errors, and the app is still standing
     expect(consoleErrors).toHaveLength(0);
+    await expect(crashFallbacks(page)).toHaveCount(0);
   });
 
   test('no critical console errors on page load', async ({ page }) => {

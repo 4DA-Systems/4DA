@@ -1,14 +1,10 @@
 import { test, expect } from '@playwright/test';
 
-const APP_URL = 'http://localhost:4444';
+import { gotoMainShell } from './support/app';
 
 test.describe('Settings Modal Roundtrip', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto(APP_URL, { waitUntil: 'networkidle', timeout: 15000 });
-    test.skip(
-      await page.locator('[data-testid="onboarding"]').isVisible(),
-      'App in onboarding state'
-    );
+    await gotoMainShell(page);
   });
 
   test('settings opens via header button click', async ({ page }) => {
@@ -81,22 +77,19 @@ test.describe('Settings Modal Roundtrip', () => {
     const modal = page.getByRole('dialog');
     await expect(modal).toBeVisible({ timeout: 3000 });
 
-    // Find toggle switches or checkboxes
-    const toggles = modal.getByRole('switch').or(modal.getByRole('checkbox'));
-    const toggleCount = await toggles.count();
-    test.skip(toggleCount === 0, 'No toggles found in settings');
+    // General has no toggle without a backend (monitoring status never
+    // loads); the LLM re-ranking checkbox on Intelligence is pure form state.
+    await modal.getByRole('tab', { name: 'Intelligence', exact: true }).click();
+    const toggle = modal.getByRole('checkbox', { name: 'Enable LLM re-ranking' });
+    await expect(toggle).toBeVisible();
+    const initialState = await toggle.isChecked();
 
-    const firstToggle = toggles.first();
-    const initialState = await firstToggle.isChecked();
-
-    await firstToggle.click();
-    const newState = await firstToggle.isChecked();
-    expect(newState).not.toBe(initialState);
+    await toggle.click();
+    await expect(toggle).toBeChecked({ checked: !initialState });
 
     // Toggle back to restore original state
-    await firstToggle.click();
-    const restoredState = await firstToggle.isChecked();
-    expect(restoredState).toBe(initialState);
+    await toggle.click();
+    await expect(toggle).toBeChecked({ checked: initialState });
   });
 
   test('About tab shows app information', async ({ page }) => {
@@ -105,16 +98,14 @@ test.describe('Settings Modal Roundtrip', () => {
     await expect(modal).toBeVisible({ timeout: 3000 });
 
     // Navigate to About tab
-    const aboutTab = modal.getByRole('tab', { name: /about/i })
-      .or(modal.getByText(/about/i));
-    const hasAbout = await aboutTab.isVisible().catch(() => false);
-    test.skip(!hasAbout, 'No About tab found');
+    const aboutTab = modal.getByRole('tab', { name: 'About', exact: true });
+    await aboutTab.click();
+    await expect(aboutTab).toHaveAttribute('aria-selected', 'true');
 
-    await aboutTab.first().click();
-
-    // About should show app name and version
-    const appName = modal.getByText(/4da/i);
-    await expect(appName.first()).toBeVisible();
+    // About shows the app identity
+    const panel = modal.getByRole('tabpanel', { name: 'About' });
+    await expect(panel.getByRole('heading', { name: '4DA', level: 3 })).toBeVisible();
+    await expect(panel.getByText('4 Dimensional Autonomy')).toBeVisible();
   });
 
   test('settings can be reopened after closing', async ({ page }) => {

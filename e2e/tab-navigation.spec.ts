@@ -15,7 +15,10 @@
 
 import { test, expect } from '@playwright/test';
 
-const APP_URL = 'http://localhost:4444';
+import { crashFallbacks } from './support/app';
+
+// Relative to playwright.config's baseURL, so a run on another port tests its own server.
+const APP_URL = '/';
 
 test.describe('Tab navigation', () => {
   test.beforeEach(async ({ page }) => {
@@ -75,9 +78,9 @@ test.describe('Tab navigation', () => {
     const errorOverlay = page.locator('vite-error-overlay');
     expect(await errorOverlay.count()).toBe(0);
 
-    // No React error boundary fallback with "Something went wrong"
-    const errorBoundary = page.getByText(/something went wrong/i);
-    expect(await errorBoundary.count()).toBe(0);
+    // The view mounted and no React error boundary replaced it.
+    await expect(page.getByRole('tabpanel', { name: 'Preemption' }).getByRole('heading', { level: 2 })).toBeVisible();
+    await expect(crashFallbacks(page)).toHaveCount(0);
   });
 
   test('blindspots tab renders its view without error overlay', async ({ page }) => {
@@ -93,7 +96,14 @@ test.describe('Tab navigation', () => {
     const errorOverlay = page.locator('vite-error-overlay');
     expect(await errorOverlay.count()).toBe(0);
 
-    const errorBoundary = page.getByText(/something went wrong/i);
-    expect(await errorBoundary.count()).toBe(0);
+    // The view mounted and no React error boundary replaced it. With no
+    // backend the scan fails and Blind Spots shows its designed, recoverable
+    // error state ("Coverage scan unavailable" + Retry, whose body text is the
+    // generic "Something went wrong. Please try again.") — that is the view
+    // handling an IPC failure, not a crash, so the old `/something went
+    // wrong/` text match was a false positive.
+    const panel = page.getByRole('tabpanel', { name: 'Blind Spots' });
+    await expect(panel.getByRole('heading', { name: 'Coverage Gaps', level: 2 })).toBeVisible();
+    await expect(crashFallbacks(page)).toHaveCount(0);
   });
 });

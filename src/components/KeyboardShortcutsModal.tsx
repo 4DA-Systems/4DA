@@ -10,6 +10,7 @@ export function KeyboardShortcutsModal({ onClose }: KeyboardShortcutsModalProps)
   const { t } = useTranslation();
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const modalRef = useRef<HTMLDivElement>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     closeButtonRef.current?.focus();
@@ -27,35 +28,50 @@ export function KeyboardShortcutsModal({ onClose }: KeyboardShortcutsModalProps)
       if (e.key === 'Escape') {
         e.stopPropagation();
         onClose();
-        return;
       }
+    };
+
+    // Tab is trapped at the document, not on the wrapper: when focus is
+    // already outside the modal (a click on the dialog's plain text drops it
+    // to <body>, as does the app shell mounting under a modal opened during
+    // boot) the wrapper never sees the key and Tab walks the page behind it.
+    const handleTab = (e: KeyboardEvent) => {
       if (e.key !== 'Tab') return;
-      const focusable = modal.querySelectorAll<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+      // Cycle only through the dialog's own tabbable controls. Querying the
+      // wrapper also matched the tabIndex=-1 backdrop button, so Tab from the
+      // last control "wrapped" onto the backdrop and Shift+Tab then left the
+      // modal for the page behind it.
+      const dialog = dialogRef.current;
+      if (!dialog) return;
+      const focusable = dialog.querySelectorAll<HTMLElement>(
+        'button:not([tabindex="-1"]), [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
       );
       const first = focusable[0];
       const last = focusable[focusable.length - 1];
+      const outside = !dialog.contains(document.activeElement);
       if (e.shiftKey) {
-        if (document.activeElement === first) {
+        if (outside || document.activeElement === first) {
           e.preventDefault();
           last?.focus();
         }
-      } else {
-        if (document.activeElement === last) {
-          e.preventDefault();
-          first?.focus();
-        }
+      } else if (outside || document.activeElement === last) {
+        e.preventDefault();
+        first?.focus();
       }
     };
 
     modal.addEventListener('keydown', handleKeyDown);
-    return () => modal.removeEventListener('keydown', handleKeyDown);
+    document.addEventListener('keydown', handleTab);
+    return () => {
+      modal.removeEventListener('keydown', handleKeyDown);
+      document.removeEventListener('keydown', handleTab);
+    };
   }, [onClose]);
 
   return (
     <div ref={modalRef} className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
       <button type="button" className="absolute inset-0 w-full h-full cursor-default" onClick={onClose} aria-label={t('shortcuts.close')} tabIndex={-1} />
-      <div role="dialog" aria-modal="true" aria-labelledby="keyboard-shortcuts-title" className="relative bg-bg-secondary border border-border rounded-xl w-full max-w-sm max-h-[90vh] overflow-y-auto shadow-2xl">
+      <div ref={dialogRef} role="dialog" aria-modal="true" aria-labelledby="keyboard-shortcuts-title" className="relative bg-bg-secondary border border-border rounded-xl w-full max-w-sm max-h-[90vh] overflow-y-auto shadow-2xl">
         <div className="px-6 py-4 border-b border-border flex items-center justify-between">
           <h2 id="keyboard-shortcuts-title" className="text-lg font-medium text-text-primary">{t('shortcuts.title')}</h2>
           <button

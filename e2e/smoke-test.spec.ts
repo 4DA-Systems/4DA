@@ -1,5 +1,7 @@
 import { test, expect, type Page, type ConsoleMessage } from '@playwright/test';
 
+import { MAIN_TABS, crashFallbacks } from './support/app';
+
 const SCREENSHOT_DIR = 'e2e-screenshots';
 let consoleMessages: ConsoleMessage[] = [];
 
@@ -32,25 +34,23 @@ test.describe('4DA Smoke Tests', () => {
 
     const tablist = page.getByRole('tablist', { name: /content views/i });
     await expect(tablist).toBeVisible();
-    const intelligenceTab = tablist.getByRole('tab', { name: 'Intelligence' });
-    await intelligenceTab.click();
-    await expect(intelligenceTab).toHaveAttribute('aria-selected', 'true');
-    await page.waitForTimeout(2000);
+    const briefTab = tablist.getByRole('tab', { name: 'Brief', exact: true });
+    await briefTab.click();
+    await expect(briefTab).toHaveAttribute('aria-selected', 'true');
+    const briefPanel = page.getByRole('tabpanel', { name: 'Brief' });
+    await expect(briefPanel).toBeVisible();
     await page.screenshot({ path: SCREENSHOT_DIR + '/01-briefing-view.png', fullPage: true });
 
     const findings: string[] = [];
+    // Every state the Brief can be in without a briefing yet must render a
+    // recognisable, actionable surface (no-data warm-up, loading, or ready).
     const checks = [
-      { loc: 'text=Daily Overview', lbl: 'Daily Overview - free-tier briefing' },
-      { loc: 'text=Intelligence Briefing', lbl: 'Intelligence Briefing' },
-      { loc: 'text=No Intelligence Yet', lbl: 'No Intelligence Yet - no analysis run' },
-      { loc: 'text=Briefing Ready to Generate', lbl: 'Briefing Ready to Generate' },
-      { loc: 'text=Gathering Intelligence', lbl: 'Gathering Intelligence - in progress' },
-      { loc: 'text=Upgrade to Signal', lbl: 'Upgrade to Signal CTA' },
-      { loc: 'text=Start 30-Day Free Trial', lbl: 'Start 30-Day Free Trial button' },
-      { loc: 'text=Generate AI Briefing', lbl: 'Generate AI Briefing button' },
+      { loc: briefPanel.getByRole('heading', { name: 'Your Intelligence System' }), lbl: 'Warm-up - no analysis run yet' },
+      { loc: briefPanel.getByRole('status', { name: 'Gathering Intelligence' }), lbl: 'Gathering Intelligence - in progress' },
+      { loc: briefPanel.getByText('Briefing Ready to Generate'), lbl: 'Briefing Ready to Generate' },
     ];
     for (const c of checks) {
-      if (await page.locator(c.loc).first().isVisible().catch(() => false)) {
+      if (await c.loc.first().isVisible().catch(() => false)) {
         findings.push('FOUND: ' + c.lbl);
       }
     }
@@ -65,9 +65,10 @@ test.describe('4DA Smoke Tests', () => {
     test.skip(appState === 'onboarding', 'Cannot check EngagementPulse during onboarding');
 
     const tablist = page.getByRole('tablist', { name: /content views/i });
-    const intelligenceTab = tablist.getByRole('tab', { name: 'Intelligence' });
-    await intelligenceTab.click();
-    await page.waitForTimeout(3000);
+    const briefTab = tablist.getByRole('tab', { name: 'Brief', exact: true });
+    await briefTab.click();
+    await expect(briefTab).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByRole('tabpanel', { name: 'Brief' })).toBeVisible();
 
     const heatmapContainer = page.locator('[title="7-day activity"]');
     const streakElement = page.locator('text=streak');
@@ -87,18 +88,18 @@ test.describe('4DA Smoke Tests', () => {
     test.skip(appState === 'onboarding', 'Cannot check results during onboarding');
 
     const tablist = page.getByRole('tablist', { name: /content views/i });
-    const resultsTab = tablist.getByRole('tab', { name: 'All Results' });
+    const resultsTab = tablist.getByRole('tab', { name: 'Signal', exact: true });
     await resultsTab.click();
     await expect(resultsTab).toHaveAttribute('aria-selected', 'true');
-    await page.waitForTimeout(2000);
+    const resultsRegion = page.getByRole('tabpanel', { name: 'Signal' }).getByRole('region', { name: 'Analysis Results' });
+    await expect(resultsRegion).toBeVisible();
+    await expect(resultsRegion.getByRole('heading', { name: 'Analysis Results' })).toBeVisible();
 
     await page.screenshot({ path: SCREENSHOT_DIR + '/03-results-view.png', fullPage: true });
 
     console.log('=== TEST 3: RESULTS VIEW ===');
     const stateChecks = [
-      { loc: 'text=Results', lbl: 'Results heading' },
       { loc: 'text=No results yet', lbl: 'No results yet' },
-      { loc: 'text=Analyze Now', lbl: 'Analyze Now button' },
     ];
     for (const c of stateChecks) {
       if (await page.locator(c.loc).first().isVisible().catch(() => false)) {
@@ -157,16 +158,16 @@ test.describe('4DA Smoke Tests', () => {
     if (appState !== 'main') { test.skip(true, `App in ${appState} state`); return; }
 
     const tablist = page.getByRole('tablist', { name: /content views/i });
-    const tabs = tablist.getByRole('tab');
-    const count = await tabs.count();
+    await expect(tablist.getByRole('tab')).toHaveCount(MAIN_TABS.length);
 
-    for (let i = 0; i < count; i++) {
-      await tabs.nth(i).click();
-      await page.waitForTimeout(1000); // allow lazy load
-
-      // No error boundary should be visible
-      const hasError = await page.locator('text=Something went wrong').isVisible().catch(() => false);
-      expect(hasError).toBe(false);
+    for (const { label } of MAIN_TABS) {
+      await tablist.getByRole('tab', { name: label, exact: true }).click();
+      // The view mounted (lazy load resolved) ...
+      await expect(page.getByRole('tabpanel', { name: label })).toBeVisible();
+      await page.waitForTimeout(1000); // let its IPC calls settle (and fail, in browser mode)
+      // ... and no error boundary replaced it. A view's own designed error
+      // state (e.g. Blind Spots' "Coverage scan unavailable" + Retry) is fine.
+      await expect(crashFallbacks(page)).toHaveCount(0);
     }
   });
 
@@ -200,16 +201,12 @@ test.describe('4DA Smoke Tests', () => {
 
     if (appState === 'main') {
       const tablist = page.getByRole('tablist', { name: /content views/i });
-      const tabNames = ['Intelligence', 'All Results', 'Insights', 'Saved', 'Toolkit', 'Playbook'];
-      for (const name of tabNames) {
-        const tab = tablist.getByRole('tab', { name });
-        if (await tab.isVisible().catch(() => false)) {
-          await tab.click();
-          await page.waitForTimeout(500);
-          console.log('Tab ' + name + ': OK');
-        } else {
-          console.log('Tab ' + name + ': NOT FOUND');
-        }
+      for (const { label } of MAIN_TABS) {
+        const tab = tablist.getByRole('tab', { name: label, exact: true });
+        await tab.click();
+        await expect(tab).toHaveAttribute('aria-selected', 'true');
+        await page.waitForTimeout(500);
+        console.log('Tab ' + label + ': OK');
       }
       await page.screenshot({ path: SCREENSHOT_DIR + '/05-after-tab-navigation.png', fullPage: true });
     }

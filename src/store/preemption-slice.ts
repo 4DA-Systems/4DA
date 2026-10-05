@@ -2,7 +2,7 @@
 import type { StateCreator } from 'zustand';
 import type { AppStore } from './types';
 import { cmd } from '../lib/commands';
-import { isSignalGateError } from '../utils/error-messages';
+import { isSignalGateError, translateError } from '../utils/error-messages';
 import {
   loadPersistedDismissals,
   persistDismissal,
@@ -103,7 +103,9 @@ export const createPreemptionSlice: StateCreator<
         if (isSignalGateError(error)) {
           set({ preemptionPaywalled: true, preemptionLoading: false });
         } else {
-          set({ preemptionError: String(error), preemptionLoading: false });
+          // Same user-facing wording as the Blind Spots slice — a raw
+          // `String(error)` put "TypeError: ..." / backend internals in the banner.
+          set({ preemptionError: translateError(error), preemptionLoading: false });
         }
       }
     };

@@ -1,10 +1,12 @@
 import { test, expect, type Page } from '@playwright/test';
 
+import { MAIN_TABS } from './support/app';
+
 /**
  * 4DA Critical Path E2E Tests
  *
  * These tests verify the frontend renders and navigates correctly when
- * the Vite dev server is running on localhost:4444.
+ * the Vite dev server is running (playwright.config baseURL).
  *
  * The Tauri backend is NOT required — invoke() calls will fail, but the
  * React app still mounts. The app may show:
@@ -90,12 +92,15 @@ test.describe('4DA Critical Path', () => {
       const stepGroup = page.getByRole('group', { name: /step/i });
       await expect(stepGroup).toBeVisible();
     } else {
-      // Main view: verify the tab bar and action bar region are present
+      // Main view: the tab bar and the app bar (banner) with its analysis
+      // controls. The old "Analysis controls" region was folded into the
+      // UnifiedAppBar banner.
       const tablist = page.getByRole('tablist', { name: /content views/i });
       await expect(tablist).toBeVisible();
 
-      const actionBar = page.getByRole('region', { name: /analysis controls/i });
-      await expect(actionBar).toBeVisible();
+      const appBar = page.getByRole('banner', { name: '4DA' });
+      await expect(appBar).toBeVisible();
+      await expect(appBar.getByRole('button', { name: 'Run analysis' })).toBeVisible();
 
       // Verify the header with app title is visible
       const heading = page.getByRole('heading', { name: '4DA', level: 1 });
@@ -110,18 +115,19 @@ test.describe('4DA Critical Path', () => {
     const tablist = page.getByRole('tablist', { name: /content views/i });
     await expect(tablist).toBeVisible();
 
-    // Define the tabs we expect to find
-    const tabNames = ['Intelligence', 'All Results', 'Insights', 'Saved', 'Toolkit', 'Playbook'];
+    // Main nav is locked at four tabs (intelligence doctrine rule 2).
+    const tabNames = MAIN_TABS.map((t) => t.label);
+    await expect(tablist.getByRole('tab')).toHaveCount(tabNames.length);
 
     // Verify all tabs exist
     for (const name of tabNames) {
-      const tab = tablist.getByRole('tab', { name });
+      const tab = tablist.getByRole('tab', { name, exact: true });
       await expect(tab).toBeVisible();
     }
 
     // Click through each tab and verify it becomes selected
     for (const name of tabNames) {
-      const tab = tablist.getByRole('tab', { name });
+      const tab = tablist.getByRole('tab', { name, exact: true });
       await tab.click();
       await expect(tab).toHaveAttribute('aria-selected', 'true');
 
@@ -130,7 +136,7 @@ test.describe('4DA Critical Path', () => {
       // except for the current one)
       for (const otherName of tabNames) {
         if (otherName === name) continue;
-        const otherTab = tablist.getByRole('tab', { name: otherName });
+        const otherTab = tablist.getByRole('tab', { name: otherName, exact: true });
         await expect(otherTab).toHaveAttribute('aria-selected', 'false');
       }
     }
@@ -153,14 +159,19 @@ test.describe('4DA Critical Path', () => {
     const title = page.locator('#settings-modal-title');
     await expect(title).toHaveText('Settings');
 
-    // Verify settings tabs are present
-    const settingsTablist = dialog.getByRole('tablist');
-    await expect(settingsTablist).toBeVisible();
-
-    const settingsTabs = ['General', 'Sources', 'Profile', 'Discovery', 'Health'];
-    for (const tabName of settingsTabs) {
-      await expect(settingsTablist.getByRole('tab', { name: tabName })).toBeVisible();
+    // Settings tabs live in one tablist per side-rail group.
+    const groups: Record<string, string[]> = {
+      Configuration: ['General', 'Intelligence', 'Sources', 'Projects'],
+      Account: ['About'],
+    };
+    for (const [group, tabNames] of Object.entries(groups)) {
+      const groupTablist = dialog.getByRole('tablist', { name: group });
+      await expect(groupTablist).toBeVisible();
+      for (const tabName of tabNames) {
+        await expect(groupTablist.getByRole('tab', { name: tabName, exact: true })).toBeVisible();
+      }
     }
+    await expect(dialog.getByRole('tab', { name: 'General', exact: true })).toHaveAttribute('aria-selected', 'true');
 
     // Close the settings modal via the close button
     const closeButton = dialog.getByRole('button', { name: /close settings/i });
