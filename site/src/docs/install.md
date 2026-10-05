@@ -44,7 +44,7 @@ No API keys. No accounts. No desktop app required. See **[MCP server & agents](/
 | GPU | not needed | not needed | optional (faster) |
 | Disk | ~500 MB | ~500 MB | + 5–9 GB per model |
 
-Supported: Windows 10 (1803+) / 11, macOS 10.15+, Ubuntu 22.04+ (WebKitGTK 4.1). Installers are ~30 MB on Windows and macOS; the Linux AppImage is ~112 MB because it bundles its own runtime. The local embedding model ships inside the installer and works fully offline on first run.
+Supported: Windows 10 (1803+) / 11, macOS 10.15+, Ubuntu 22.04+ (WebKitGTK 4.1). Installers are about 280–300 MB on Windows and macOS and about 370 MB for the Linux AppImage. Most of that is the local embedding model, which ships inside the installer and works fully offline on first run.
 
 ## Build from source
 
