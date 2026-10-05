@@ -93,71 +93,158 @@ export interface Rect {
   h: number;
 }
 
-/**
- * Order-preserving binary treemap: split the ordered list where the weight
- * halves balance, cut the rectangle across its longer side in proportion,
- * recurse. Neighbours in the list stay neighbours on screen (themes arrive
- * similarity-ordered), and cutting the long side keeps tiles near-square at
- * any viewport aspect — the map always fills the space it is given.
- */
-export function binaryTreemap(weights: number[], rect: Rect): Rect[] {
-  const n = weights.length;
-  const out: Rect[] = new Array(n);
-  if (n === 0) return out;
-  const prefix = [0];
-  for (const w of weights) prefix.push(prefix[prefix.length - 1]! + Math.max(0, w));
-
-  const split = (i0: number, i1: number, r: Rect) => {
-    if (i1 - i0 === 1) {
-      out[i0] = r;
-      return;
-    }
-    const base = prefix[i0]!;
-    const total = prefix[i1]! - base;
-    let k = i0 + 1;
-    if (total > 0) {
-      let best = Infinity;
-      for (let j = i0 + 1; j < i1; j++) {
-        const d = Math.abs(prefix[j]! - base - total / 2);
-        if (d < best) {
-          best = d;
-          k = j;
-        }
-      }
-    } else {
-      k = i0 + Math.floor((i1 - i0) / 2);
-    }
-    const f = total > 0 ? (prefix[k]! - base) / total : (k - i0) / (i1 - i0);
-    if (r.w >= r.h) {
-      const w0 = r.w * f;
-      split(i0, k, { x: r.x, y: r.y, w: w0, h: r.h });
-      split(k, i1, { x: r.x + w0, y: r.y, w: r.w - w0, h: r.h });
-    } else {
-      const h0 = r.h * f;
-      split(i0, k, { x: r.x, y: r.y, w: r.w, h: h0 });
-      split(k, i1, { x: r.x, y: r.y + h0, w: r.w, h: r.h - h0 });
-    }
-  };
-  split(0, n, rect);
-  return out;
-}
-
-/** Tile area weight: member count plus one, so a 2-item theme still gets
- *  room for its header and both titles (the count itself is printed). */
-export function themeWeight(theme: Theme): number {
-  return theme.items.length + 1;
-}
-
 /** Tile typography, px — shared by the tile and its capacity estimate. */
 export const TILE_PAD = 10;
 export const TILE_HEADER_H = 22;
 export const TILE_LINE_H = 20;
+/** Space between tiles, px: each tile draws inset by half of it per side,
+ *  so a layout box is TILE_GAP larger than the tile painted in it. */
+export const TILE_GAP = 8;
+/** Shortest tile worth drawing: its header and two titles. */
+export const TILE_MIN_HEIGHT = 2 * TILE_PAD + TILE_HEADER_H + 2 * TILE_LINE_H;
 
-/** How many item lines fit in a tile of height `h`; when not every item
- *  fits, the last line is spent on "+N more". */
-export function visibleLines(h: number, itemCount: number): { shown: number; more: number } {
+/** Width ÷ height the strip layout aims for: tiles hold lines of text, so
+ *  wider than square reads best. */
+export const TILE_TARGET_ASPECT = 1.8;
+/** Narrowest tile a title reads in, px; the layout avoids anything narrower. */
+export const TILE_MIN_WIDTH = 150;
+/** Layout-box area the smallest theme is guaranteed: the minimum tile box
+ *  (gap included) plus 50% slack, since rows of fixed order cannot give
+ *  every tile its ideal shape at once. */
+export const MIN_TILE_AREA = 1.5 * (TILE_MIN_WIDTH + TILE_GAP) * (TILE_MIN_HEIGHT + TILE_GAP + 1);
+
+/**
+ * Ordered strip treemap: tiles fill rows left to right, top to bottom, in
+ * list order, with the row breaks chosen so every tile sits as close to the
+ * target aspect as the space allows. List neighbours stay
+ * screen neighbours (themes arrive similarity-ordered) and the map reads like
+ * text. The rows always fill `rect` exactly — no zoom, no wasted width.
+ * (An order-preserving binary split was tried first: at 1194×800 it cut
+ * 65×228 slivers no title fits in.)
+ */
+export function stripTreemap(
+  weights: number[],
+  rect: Rect,
+  targetAspect = TILE_TARGET_ASPECT,
+  minWidth = TILE_MIN_WIDTH + TILE_GAP,
+  minHeight = TILE_MIN_HEIGHT + TILE_GAP + 1,
+): Rect[] {
+  const n = weights.length;
+  const out: Rect[] = new Array(n);
+  if (n === 0) return out;
+  const ws = weights.map((w) => Math.max(0, w));
+  const total = ws.reduce((a, b) => a + b, 0);
+  if (total <= 0 || rect.w <= 0 || rect.h <= 0) {
+    // Degenerate: equal slices so every tile still gets a finite box.
+    ws.forEach((_, i) => {
+      out[i] = { x: rect.x + (rect.w * i) / n, y: rect.y, w: rect.w / n, h: rect.h };
+    });
+    return out;
+  }
+  const scale = (rect.w * rect.h) / total;
+  const prefix = [0];
+  for (const w of ws) prefix.push(prefix[prefix.length - 1]! + w);
+  // Cost of tiles i..j-1 as one row: each tile's squared distance from the
+  // target aspect (1 = perfect), so one badly stretched tile costs more
+  // than several slightly-off ones.
+  const rowCost = (i: number, j: number): number => {
+    const sum = prefix[j]! - prefix[i]!;
+    if (sum <= 0) return Infinity;
+    const h = (sum * scale) / rect.w;
+    // A row too short for two titles costs every one of its tiles.
+    let acc = h < minHeight ? 100 * (j - i) * (minHeight / Math.max(h, 1)) ** 2 : 0;
+    for (let t = i; t < j; t++) {
+      const w = (ws[t]! * scale) / h;
+      const aspect = w / h;
+      const off = aspect > targetAspect ? aspect / targetAspect : targetAspect / Math.max(aspect, 1e-9);
+      acc += off * off;
+      // A tile too narrow for a title costs far more than an off aspect.
+      if (w < minWidth) acc += 100 * (minWidth / Math.max(w, 1)) ** 2;
+    }
+    return acc;
+  };
+  // Optimal row breaks, order preserved (dynamic programming, as in
+  // justified text): a greedy pass left the last row as one stretched sliver.
+  const best: number[] = [0];
+  const from: number[] = [0];
+  for (let j = 1; j <= n; j++) {
+    best[j] = Infinity;
+    for (let i = 0; i < j; i++) {
+      const c = best[i]! + rowCost(i, j);
+      if (c < best[j]!) {
+        best[j] = c;
+        from[j] = i;
+      }
+    }
+  }
+  const rows: number[][] = [];
+  for (let j = n; j > 0; j = from[j]!) {
+    const i = from[j]!;
+    rows.unshift(Array.from({ length: j - i }, (_, k) => i + k));
+  }
+
+  let y = rect.y;
+  rows.forEach((r, ri) => {
+    const sum = r.reduce((a, i) => a + ws[i]!, 0);
+    // The last row takes the remainder so rounding never leaves a gap.
+    const h = ri === rows.length - 1 ? rect.y + rect.h - y : (sum * scale) / rect.w;
+    let x = rect.x;
+    r.forEach((i, k) => {
+      const w = k === r.length - 1 ? rect.x + rect.w - x : sum > 0 ? (rect.w * ws[i]!) / sum : rect.w / r.length;
+      out[i] = { x, y, w, h };
+      x += w;
+    });
+    y += h;
+  });
+  return out;
+}
+
+
+/**
+ * Tile weights: member count plus one shared offset `c`, chosen so the
+ * SMALLEST theme still gets `minArea` of the `area` available. Pure count
+ * weights gave a 2-item theme a 65px-wide sliver at 1194×800 (live
+ * 2026-10-05: "Re…", "Sin…"). A common offset keeps the order of sizes —
+ * bigger themes still get bigger tiles — and the exact count is printed on
+ * every tile. When the area cannot fit every theme at the minimum, all
+ * tiles get equal weight (the best that space allows).
+ */
+export function themeWeights(counts: number[], area: number, minArea = MIN_TILE_AREA): number[] {
+  const k = counts.length;
+  if (k === 0) return [];
+  const sum = counts.reduce((a, b) => a + b, 0);
+  const smallest = Math.min(...counts);
+  const r = area > 0 ? minArea / area : 1;
+  if (r * k >= 1) return counts.map(() => 1);
+  // (smallest + c) / (sum + k·c) >= r  ⇔  c >= (r·sum − smallest) / (1 − r·k)
+  const c = Math.max(1, (r * sum - smallest) / (1 - r * k));
+  return counts.map((n) => n + c);
+}
+
+
+/** Narrowest column of titles inside a tile, and the space between columns. */
+export const TILE_COLUMN_MIN_W = 300;
+export const TILE_COLUMN_GAP = 16;
+const MAX_TILE_COLUMNS = 3;
+
+/** Title columns a tile of width `w` holds. A row's large theme can come out
+ *  1080px wide and two lines tall (live, 1700×1184): one column there showed
+ *  2 of 13 titles beside 800px of empty space. */
+export function tileColumns(w: number): number {
+  const inner = w - 2 * TILE_PAD + TILE_COLUMN_GAP;
+  return Math.min(MAX_TILE_COLUMNS, Math.max(1, Math.floor(inner / (TILE_COLUMN_MIN_W + TILE_COLUMN_GAP))));
+}
+
+/** How many titles fit in a tile of height `h` with `cols` columns. When not
+ *  every item fits and there are 3+ slots, the last slot is spent on "+N
+ *  more"; with fewer slots every slot is a title instead (a one-line tile
+ *  reading only "+2 more" showed nothing, live 2026-10-05) — the header
+ *  still prints the count and opens the whole theme. */
+export function visibleLines(h: number, itemCount: number, cols = 1): { shown: number; more: number } {
   const lines = Math.max(0, Math.floor((h - 2 * TILE_PAD - TILE_HEADER_H) / TILE_LINE_H));
-  if (itemCount <= lines) return { shown: itemCount, more: 0 };
-  const shown = Math.max(0, lines - 1);
+  const slots = lines * Math.max(1, cols);
+  if (itemCount <= slots) return { shown: itemCount, more: 0 };
+  if (slots < 3) return { shown: slots, more: 0 };
+  const shown = slots - 1;
   return { shown, more: itemCount - shown };
 }

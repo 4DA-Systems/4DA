@@ -10,9 +10,11 @@ import { CategoryMark } from './graph-marks';
 import {
   TILE_HEADER_H,
   TILE_LINE_H,
+  TILE_COLUMN_GAP,
   TILE_PAD,
   cleanTitle,
   displayThemeLabel,
+  tileColumns,
   visibleLines,
   type Rect,
   type Theme,
@@ -84,7 +86,8 @@ interface TileProps {
 export function ThemeTile({ theme, rect, gap, isNew, selectedId, themeSelected, onOpenItem, onOpenTheme }: TileProps) {
   const { t } = useTranslation();
   const h = rect.h - gap;
-  const { shown, more } = visibleLines(h, theme.items.length);
+  const cols = tileColumns(rect.w - gap);
+  const { shown, more } = visibleLines(h, theme.items.length, cols);
   const hasSecurity = theme.items.some((n) => n.category === 'security');
   return (
     <section
@@ -104,6 +107,7 @@ export function ThemeTile({ theme, rect, gap, isNew, selectedId, themeSelected, 
       <button
         type="button"
         onClick={() => onOpenTheme(theme)}
+        title={displayThemeLabel(theme.label)}
         className="flex items-baseline gap-1.5 min-w-0 text-start shrink-0 hover:underline"
         style={{ height: TILE_HEADER_H }}
       >
@@ -114,7 +118,10 @@ export function ThemeTile({ theme, rect, gap, isNew, selectedId, themeSelected, 
           {theme.items.length}
         </span>
       </button>
-      <div className="flex flex-col min-w-0">
+      <div
+        className="grid min-w-0"
+        style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, columnGap: TILE_COLUMN_GAP }}
+      >
         {theme.items.slice(0, shown).map((n) => (
           <ItemRow key={n.id} node={n} isNew={isNew(n)} selected={selectedId === n.id} onOpen={onOpenItem} />
         ))}

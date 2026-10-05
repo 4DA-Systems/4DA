@@ -395,15 +395,41 @@ pub(super) fn short_title(title: &str) -> String {
 }
 
 /// Tokens normalised for counting ("next.js" → "nextjs"), shown in their
-/// usual spelling.
+/// usual spelling — acronyms and brand names included, since the map prints
+/// labels in sentence case ("Llm", "Openai · api" read as typos; live
+/// 2026-10-05). Other words stay lowercase.
 fn display_term(term: &str) -> String {
-    match term {
-        "nextjs" => "next.js".to_string(),
-        "nodejs" => "node.js".to_string(),
-        "vuejs" => "vue.js".to_string(),
-        "threejs" => "three.js".to_string(),
-        other => other.to_string(),
-    }
+    let shown = match term {
+        "nextjs" => "next.js",
+        "nodejs" => "node.js",
+        "vuejs" => "vue.js",
+        "threejs" => "three.js",
+        "ai" => "AI",
+        "api" | "apis" => "API",
+        "cli" => "CLI",
+        "css" => "CSS",
+        "html" => "HTML",
+        "http" => "HTTP",
+        "json" => "JSON",
+        "jwt" => "JWT",
+        "llm" => "LLM",
+        "llms" => "LLMs",
+        "mcp" => "MCP",
+        "sql" => "SQL",
+        "ui" => "UI",
+        "wasm" => "WASM",
+        "devday" => "DevDay",
+        "github" => "GitHub",
+        "graphql" => "GraphQL",
+        "javascript" => "JavaScript",
+        "openai" => "OpenAI",
+        "postgresql" => "PostgreSQL",
+        "sqlite" => "SQLite",
+        "typescript" => "TypeScript",
+        "webassembly" => "WebAssembly",
+        other => other,
+    };
+    shown.to_string()
 }
 
 /// The token a registry stamps on every title it emits ("npm: …",

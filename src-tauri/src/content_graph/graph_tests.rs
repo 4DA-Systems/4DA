@@ -949,12 +949,6 @@ fn test_build_graph_deterministic_across_processes() {
                  source_item_id INTEGER PRIMARY KEY, pipeline_version INTEGER NOT NULL,
                  breakdown TEXT NOT NULL, scored_at TEXT NOT NULL DEFAULT (datetime('now'))
              );
-             CREATE TABLE graph_layout_anchors (
-                 window_days INTEGER NOT NULL, cluster_key TEXT NOT NULL,
-                 x REAL NOT NULL, y REAL NOT NULL, member_ids TEXT NOT NULL,
-                 updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-                 PRIMARY KEY (window_days, cluster_key)
-             );
              CREATE TABLE user_dependencies (
                  id INTEGER PRIMARY KEY, package_name TEXT NOT NULL
              );
@@ -1273,8 +1267,8 @@ fn test_live_sql_injection_pair_is_labelled_sql() {
     );
     assert_never_assorted(&label);
     assert!(
-        label.split(" · ").any(|t| t == "sql"),
-        "the shared topic is sql: {label}"
+        label.split(" · ").any(|t| t == "SQL"),
+        "the shared topic is SQL, in its usual spelling: {label}"
     );
 }
 
@@ -1478,7 +1472,7 @@ fn test_live_mixed_api_cluster_leads_with_its_covering_term() {
     );
     assert_never_assorted(&label);
     assert!(
-        label.split(" · ").next() == Some("api") || label.split(" · ").next() == Some("openai"),
+        label.split(" · ").next() == Some("API") || label.split(" · ").next() == Some("OpenAI"),
         "a term covering >= 30% of members leads: {label}"
     );
     assert!(!label.contains("v7.0.126"), "{label}");

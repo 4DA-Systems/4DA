@@ -15,11 +15,9 @@ import ContentGraphFooter from './ContentGraphFooter';
 import { StackColumn, ThemeTile, UnthemedList } from './ThemeMapParts';
 import { useContentGraph } from './use-content-graph';
 import { GRAPH_CATEGORIES } from './graph-marks';
-import { binaryTreemap, buildThemeMap, themeWeight, type Theme } from './theme-map-model';
+import { TILE_GAP, buildThemeMap, stripTreemap, themeWeights, type Theme } from './theme-map-model';
 
 const LAST_VIEW_KEY = '4da:graph:lastViewedAt';
-/** Space between treemap tiles, px. */
-const TILE_GAP = 8;
 
 function readLastViewed(): number {
   try {
@@ -78,7 +76,11 @@ export default function ContentGraphView() {
 
   const rects = useMemo(() => {
     if (!map || treemapSize.w === 0 || treemapSize.h === 0) return [];
-    return binaryTreemap(map.themes.map(themeWeight), { x: 0, y: 0, w: treemapSize.w, h: treemapSize.h });
+    const weights = themeWeights(
+      map.themes.map((t) => t.items.length),
+      treemapSize.w * treemapSize.h,
+    );
+    return stripTreemap(weights, { x: 0, y: 0, w: treemapSize.w, h: treemapSize.h });
   }, [map, treemapSize.w, treemapSize.h]);
 
   const categories = useMemo(() => {

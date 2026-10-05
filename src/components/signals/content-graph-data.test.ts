@@ -7,14 +7,18 @@ import type { ContentGraph, GraphCluster, GraphNode } from '../../types/graph';
 import type { SourceRelevance } from '../../types';
 import { graphNodeSetKey, surfacedSignature } from './use-content-graph';
 import {
+  TILE_GAP,
   TILE_HEADER_H,
   TILE_LINE_H,
   TILE_PAD,
-  binaryTreemap,
+  stripTreemap,
   buildThemeMap,
   byImportance,
   cleanTitle,
+  MIN_TILE_AREA,
   displayThemeLabel,
+  themeWeights,
+  tileColumns,
   visibleLines,
 } from './theme-map-model';
 
@@ -117,7 +121,7 @@ describe('treemap layout', () => {
 
   it('tiles the whole rectangle with no overlap, areas proportional to weight', () => {
     const weights = [10, 6, 4, 3, 3, 2];
-    const rects = binaryTreemap(weights, { x: 0, y: 0, w: 1200, h: 700 });
+    const rects = stripTreemap(weights, { x: 0, y: 0, w: 1200, h: 700 });
     const total = weights.reduce((a, b) => a + b, 0);
     const sum = rects.reduce((a, r) => a + area(r), 0);
     expect(sum).toBeCloseTo(1200 * 700, 3);
@@ -133,17 +137,51 @@ describe('treemap layout', () => {
     }
   });
 
-  it('keeps tiles near-square on a wide viewport (the old map used 37% of the width)', () => {
-    const weights = Array.from({ length: 15 }, (_, i) => 15 - i);
-    const rects = binaryTreemap(weights, { x: 0, y: 0, w: 1360, h: 760 });
-    const worst = Math.max(...rects.map((r) => Math.max(r.w / r.h, r.h / r.w)));
-    expect(worst).toBeLessThan(4);
+  it('keeps tiles text-shaped at both window sizes measured live', () => {
+    // 18 themes as seen 2026-10-05, after the minimum-area offset.
+    const counts = [2, 10, 3, 4, 5, 2, 2, 12, 3, 2, 18, 2, 13, 2, 6, 8, 2, 2];
+    for (const [w, h] of [[820, 480], [1360, 860]] as const) {
+      const rects = stripTreemap(themeWeights(counts, w * h), { x: 0, y: 0, w, h });
+      for (const r of rects) {
+        // Readable: wide enough for a title, tall enough for header + two
+        // lines, never a tall sliver. (Wide is fine — titles are lines.)
+        // The painted tile is TILE_GAP smaller than its layout box.
+        expect(r.w - TILE_GAP).toBeGreaterThan(120);
+        expect(visibleLines(r.h - TILE_GAP, 99).shown).toBeGreaterThanOrEqual(2);
+        expect(r.h / r.w).toBeLessThan(1.5);
+      }
+    }
+  });
+
+  it('reads in list order: row by row, left to right', () => {
+    const rects = stripTreemap([3, 3, 3, 3, 3, 3], { x: 0, y: 0, w: 900, h: 300 });
+    for (let i = 1; i < rects.length; i++) {
+      const a = rects[i - 1]!;
+      const b = rects[i]!;
+      expect(b.y > a.y + 1e-6 || (Math.abs(b.y - a.y) < 1e-6 && b.x > a.x)).toBe(true);
+    }
+  });
+
+  it('gives the smallest theme at least the minimum readable area, sizes still ordered', () => {
+    const counts = [14, 13, 8, 5, 3, 2, 2, 2];
+    const area = 820 * 500;
+    const weights = themeWeights(counts, area);
+    const rects = stripTreemap(weights, { x: 0, y: 0, w: 820, h: 500 });
+    for (const r of rects) expect(r.w * r.h).toBeGreaterThanOrEqual(MIN_TILE_AREA - 1e-6);
+    for (let i = 1; i < counts.length; i++) {
+      if (counts[i]! < counts[i - 1]!) expect(weights[i]!).toBeLessThan(weights[i - 1]!);
+    }
+  });
+
+  it('falls back to equal tiles when the space cannot hold every theme at the minimum', () => {
+    expect(themeWeights([10, 2, 2], 3 * MIN_TILE_AREA - 1)).toEqual([1, 1, 1]);
+    expect(themeWeights([], 1000)).toEqual([]);
   });
 
   it('handles empty, single and zero-weight inputs', () => {
-    expect(binaryTreemap([], { x: 0, y: 0, w: 10, h: 10 })).toEqual([]);
-    expect(binaryTreemap([5], { x: 1, y: 2, w: 10, h: 10 })).toEqual([{ x: 1, y: 2, w: 10, h: 10 }]);
-    const zero = binaryTreemap([0, 0], { x: 0, y: 0, w: 10, h: 10 });
+    expect(stripTreemap([], { x: 0, y: 0, w: 10, h: 10 })).toEqual([]);
+    expect(stripTreemap([5], { x: 1, y: 2, w: 10, h: 10 })).toEqual([{ x: 1, y: 2, w: 10, h: 10 }]);
+    const zero = stripTreemap([0, 0], { x: 0, y: 0, w: 10, h: 10 });
     expect(zero.every((r) => Number.isFinite(r.w) && Number.isFinite(r.h))).toBe(true);
   });
 });
@@ -154,7 +192,20 @@ describe('tile capacity and text', () => {
     expect(visibleLines(h, 3)).toEqual({ shown: 3, more: 0 });
     expect(visibleLines(h, 4)).toEqual({ shown: 4, more: 0 });
     expect(visibleLines(h, 9)).toEqual({ shown: 3, more: 6 });
-    expect(visibleLines(10, 2)).toEqual({ shown: 0, more: 2 });
+    // Under 3 lines every line is a title; the header carries the count.
+    const twoLines = 2 * TILE_PAD + TILE_HEADER_H + 2 * TILE_LINE_H;
+    expect(visibleLines(twoLines, 5)).toEqual({ shown: 2, more: 0 });
+    expect(visibleLines(10, 2)).toEqual({ shown: 0, more: 0 });
+  });
+
+  it('spreads a wide tile over title columns and counts slots across them', () => {
+    expect(tileColumns(250)).toBe(1);
+    expect(tileColumns(700)).toBe(2);
+    expect(tileColumns(1080)).toBe(3);
+    expect(tileColumns(4000)).toBe(3);
+    // 1080×115 live: 2 lines × 3 columns = 6 slots → 5 titles + "+8 more".
+    const h = 2 * TILE_PAD + TILE_HEADER_H + 2 * TILE_LINE_H + 10;
+    expect(visibleLines(h, 13, 3)).toEqual({ shown: 5, more: 8 });
   });
 
   it('writes theme labels in sentence case without mangling package names', () => {
