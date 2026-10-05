@@ -7,20 +7,25 @@ import type { ContentGraph, GraphCluster, GraphNode } from '../../types/graph';
 import type { SourceRelevance } from '../../types';
 import { graphNodeSetKey, surfacedSignature } from './use-content-graph';
 import {
+  buildThemeMap,
+  byImportance,
+  cleanTitle,
+  displayThemeLabel,
+  tileColumns,
+  visibleLines,
+} from './theme-map-model';
+import {
+  MIN_TILE_AREA,
   TILE_GAP,
   TILE_HEADER_H,
   TILE_LINE_H,
   TILE_PAD,
+  stableThemeLayout,
   stripTreemap,
-  buildThemeMap,
-  byImportance,
-  cleanTitle,
-  MIN_TILE_AREA,
-  displayThemeLabel,
   themeWeights,
-  tileColumns,
-  visibleLines,
-} from './theme-map-model';
+  type LayoutTheme,
+  type Rect,
+} from './theme-map-layout';
 
 function node(id: number, over: Partial<GraphNode> = {}): GraphNode {
   return {
@@ -43,7 +48,7 @@ function node(id: number, over: Partial<GraphNode> = {}): GraphNode {
 }
 
 function cluster(id: string, node_ids: number[], label = id): GraphCluster {
-  return { id, label, node_ids, source_count: 1, coherence: 0.7 };
+  return { id, label, node_ids, source_count: 1, coherence: 0.7, stack_node_ids: [] };
 }
 
 function graph(nodes: GraphNode[], clusters: GraphCluster[] = []): ContentGraph {
@@ -123,9 +128,9 @@ describe('treemap layout', () => {
     const weights = [10, 6, 4, 3, 3, 2];
     const rects = stripTreemap(weights, { x: 0, y: 0, w: 1200, h: 700 });
     const total = weights.reduce((a, b) => a + b, 0);
-    const sum = rects.reduce((a, r) => a + area(r), 0);
+    const sum = rects.reduce((a: number, r: Rect) => a + area(r), 0);
     expect(sum).toBeCloseTo(1200 * 700, 3);
-    rects.forEach((r, i) => expect(area(r) / (1200 * 700)).toBeCloseTo(weights[i]! / total, 6));
+    rects.forEach((r: Rect, i: number) => expect(area(r) / (1200 * 700)).toBeCloseTo(weights[i]! / total, 6));
     for (let i = 0; i < rects.length; i++) {
       for (let j = i + 1; j < rects.length; j++) {
         const a = rects[i]!;
@@ -140,14 +145,17 @@ describe('treemap layout', () => {
   it('keeps tiles text-shaped at both window sizes measured live', () => {
     // 18 themes as seen 2026-10-05, after the minimum-area offset.
     const counts = [2, 10, 3, 4, 5, 2, 2, 12, 3, 2, 18, 2, 13, 2, 6, 8, 2, 2];
-    for (const [w, h] of [[820, 480], [1360, 860]] as const) {
+    // At a cramped size (820x480 = the 1200x800 window) a tile may drop to one
+    // title line: that is the price of keeping theme SIZE visible — the
+    // alternative (equal tiles) erased it (audit 2026-10-06). Such a tile
+    // says "+N more" in its header. At normal size every tile holds two.
+    for (const [w, h, minLines] of [[820, 480, 1], [1360, 860, 2]] as const) {
       const rects = stripTreemap(themeWeights(counts, w * h), { x: 0, y: 0, w, h });
       for (const r of rects) {
-        // Readable: wide enough for a title, tall enough for header + two
-        // lines, never a tall sliver. (Wide is fine — titles are lines.)
-        // The painted tile is TILE_GAP smaller than its layout box.
+        // Readable: wide enough for a title, never a tall sliver. (Wide is
+        // fine — titles are lines.) The painted tile is TILE_GAP smaller.
         expect(r.w - TILE_GAP).toBeGreaterThan(120);
-        expect(visibleLines(r.h - TILE_GAP, 99).shown).toBeGreaterThanOrEqual(2);
+        expect(visibleLines(r.h - TILE_GAP, 99).shown).toBeGreaterThanOrEqual(minLines);
         expect(r.h / r.w).toBeLessThan(1.5);
       }
     }
@@ -218,5 +226,80 @@ describe('tile capacity and text', () => {
     expect(cleanTitle('crates.io: tokio v1.53.2')).toBe('tokio v1.53.2');
     expect(cleanTitle('npm: @ai-sdk/openai v4.0.83')).toBe('@ai-sdk/openai v4.0.83');
     expect(cleanTitle('Rust 1.80: released')).toBe('Rust 1.80: released');
+  });
+});
+
+describe('audit fixes (2026-10-06)', () => {
+  const W = 1330;
+  const H = 810;
+  const rect = { x: 0, y: 0, w: W, h: H };
+  const counts = [12, 11, 10, 9, 9, 8, 6, 4, 4, 3, 3, 3, 2, 2, 2, 2, 2, 2, 2, 2];
+  const themes = (cs: number[], area: number): LayoutTheme[] => {
+    const ws = themeWeights(cs, area);
+    let next = 1;
+    return cs.map((c, i) => {
+      const members = Array.from({ length: c }, () => next++);
+      return { id: `t${i}`, members, weight: ws[i]! };
+    });
+  };
+  const centre = (r: Rect) => [r.x + r.w / 2, r.y + r.h / 2] as const;
+
+  it('keeps theme size visible at 1200x800 (20 themes no longer fall back to equal tiles)', () => {
+    const treemapArea = 840 * 480;
+    const ws = themeWeights(counts, treemapArea);
+    expect(new Set(ws.map((w) => w.toFixed(3))).size).toBeGreaterThan(1);
+    expect(ws[0]!).toBeGreaterThan(ws[ws.length - 1]!);
+  });
+
+  it('a theme disappearing leaves the other tiles where they were', () => {
+    const base = themes(counts, W * H);
+    const first = stableThemeLayout(base, rect, null);
+    const dropped = base.filter((_, i) => i !== 4);
+    const second = stableThemeLayout(dropped, rect, first.remembered);
+    const diag = Math.hypot(W, H);
+    let moved = 0;
+    dropped.forEach((t, i) => {
+      const before = first.rects[base.indexOf(t)]!;
+      const after = second.rects[i]!;
+      const [x0, y0] = centre(before);
+      const [x1, y1] = centre(after);
+      if (Math.hypot(x1 - x0, y1 - y0) / diag > 0.1) moved++;
+    });
+    // A fresh layout moved 81% of tiles this far; the remembered rows keep
+    // almost all of them in place.
+    expect(moved / dropped.length).toBeLessThan(0.2);
+  });
+
+  it('matches themes across builds by shared members, not by id', () => {
+    const base = themes([6, 5, 4], W * H);
+    const first = stableThemeLayout(base, rect, null);
+    const renamed = base.map((t, i) => ({ ...t, id: `new-${i}` }));
+    const second = stableThemeLayout(renamed, rect, first.remembered);
+    expect(second.rects).toEqual(first.rects);
+    expect(second.remembered.rows).toEqual(first.remembered.rows);
+  });
+
+  it('drops a remembered layout that no longer fits and lays out fresh', () => {
+    const base = themes([6, 5, 4, 3], W * H);
+    const remembered = { rows: [base.map((t) => t.id)], members: Object.fromEntries(base.map((t) => [t.id, t.members])) };
+    // One row of four in a tall narrow box is far worse than the optimum.
+    const narrow = { x: 0, y: 0, w: 320, h: 900 };
+    const out = stableThemeLayout(base, narrow, remembered);
+    expect(out.remembered.rows.length).toBeGreaterThan(1);
+  });
+
+  it('a theme keeps the stack items its community held, and stack rows know their theme', () => {
+    const nodes = [node(1, { cluster_id: 'a' }), node(2, { cluster_id: 'a' }), node(3, { affects_you: true })];
+    const c = { ...cluster('a', [1, 2], 'openai'), stack_node_ids: [3] };
+    const map = buildThemeMap(graph(nodes, [c]));
+    expect(map.themes[0]!.stack.map((n) => n.id)).toEqual([3]);
+    expect(map.stackTheme.get(3)).toBe('openai');
+    expect(map.stack.map((n) => n.id)).toEqual([3]);
+  });
+
+  it('a stack line costs the tile one title line', () => {
+    const h = 2 * TILE_PAD + TILE_HEADER_H + 4 * TILE_LINE_H;
+    expect(visibleLines(h, 9, 1, 1)).toEqual({ shown: 2, more: 7 });
+    expect(visibleLines(h, 3, 1, 1)).toEqual({ shown: 3, more: 0 });
   });
 });

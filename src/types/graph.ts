@@ -44,6 +44,8 @@ export interface GraphCluster {
   source_count: number;
   /** Mean pairwise embedding cosine among members — theme tightness. */
   coherence: number;
+  /** Stack items from this theme's community (they live in the stack column). */
+  stack_node_ids: number[];
 }
 
 export interface GraphMeta {

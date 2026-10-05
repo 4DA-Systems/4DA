@@ -15,9 +15,32 @@ import ContentGraphFooter from './ContentGraphFooter';
 import { StackColumn, ThemeTile, UnthemedList } from './ThemeMapParts';
 import { useContentGraph } from './use-content-graph';
 import { GRAPH_CATEGORIES } from './graph-marks';
-import { TILE_GAP, buildThemeMap, stripTreemap, themeWeights, type Theme } from './theme-map-model';
+import { buildThemeMap, type Theme } from './theme-map-model';
+import { TILE_GAP, stableThemeLayout, themeWeights, type RememberedLayout } from './theme-map-layout';
 
 const LAST_VIEW_KEY = '4da:graph:lastViewedAt';
+/** Where each window's last layout is remembered (per viewer, per device —
+ *  a convenience: without it the map simply lays out fresh). */
+const layoutKey = (days: number) => `4da:graph:layout:${days}d`;
+
+function readLayout(days: number): RememberedLayout | null {
+  try {
+    const raw = localStorage.getItem(layoutKey(days));
+    if (!raw) return null;
+    const v = JSON.parse(raw) as RememberedLayout;
+    return Array.isArray(v?.rows) && v.members && typeof v.members === 'object' ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeLayout(days: number, layout: RememberedLayout) {
+  try {
+    localStorage.setItem(layoutKey(days), JSON.stringify(layout));
+  } catch {
+    // Blocked storage: the next visit lays out fresh instead.
+  }
+}
 
 function readLastViewed(): number {
   try {
@@ -73,15 +96,30 @@ export default function ContentGraphView() {
   }, [graph]);
 
   const map = useMemo(() => (graph ? buildThemeMap(graph) : null), [graph]);
+  // The layout remembered from the previous build, read once per loaded map.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const previousLayout = useMemo(() => readLayout(days), [days, graph]);
 
-  const rects = useMemo(() => {
-    if (!map || treemapSize.w === 0 || treemapSize.h === 0) return [];
+  // Tiles stay where the user last saw them while that still fits
+  // (stableThemeLayout); a fresh layout otherwise.
+  const layout = useMemo(() => {
+    if (!map || treemapSize.w === 0 || treemapSize.h === 0) return null;
     const weights = themeWeights(
       map.themes.map((t) => t.items.length),
       treemapSize.w * treemapSize.h,
     );
-    return stripTreemap(weights, { x: 0, y: 0, w: treemapSize.w, h: treemapSize.h });
-  }, [map, treemapSize.w, treemapSize.h]);
+    const themes = map.themes.map((t, i) => ({
+      id: t.id,
+      members: t.items.flatMap((n) => n.member_ids),
+      weight: weights[i]!,
+    }));
+    return stableThemeLayout(themes, { x: 0, y: 0, w: treemapSize.w, h: treemapSize.h }, previousLayout);
+  }, [map, treemapSize.w, treemapSize.h, previousLayout]);
+  const rects = layout?.rects ?? [];
+
+  useEffect(() => {
+    if (layout) writeLayout(days, layout.remembered);
+  }, [layout, days]);
 
   const categories = useMemo(() => {
     const seen = new Set(graph?.nodes.map((n) => n.category) ?? []);
@@ -106,15 +144,23 @@ export default function ContentGraphView() {
   return (
     <div
       className="flex flex-col"
-      style={{ height: 'calc(100vh - 190px)', minHeight: 500, backgroundColor: 'var(--color-bg-primary)' }}
+      // 210px = the app chrome above this view (measured 204px at
+      // 1700×1184): 190px pushed the footer 14px below the window.
+      style={{ height: 'calc(100vh - 210px)', minHeight: 500, backgroundColor: 'var(--color-bg-primary)' }}
     >
       <div className="relative flex gap-3 px-4 pt-2 pb-3" style={{ flex: '1 1 0%', minHeight: 0 }}>
         {map.stack.length > 0 && (
-          <StackColumn items={map.stack} isNew={isNew} selectedId={selectedId} onOpenItem={openItem} />
+          <StackColumn
+            items={map.stack}
+            themeOf={map.stackTheme}
+            isNew={isNew}
+            selectedId={selectedId}
+            onOpenItem={openItem}
+          />
         )}
         <div className="flex flex-col gap-2 min-w-0" style={{ flex: '1 1 0%', minHeight: 0 }}>
           <div className="flex items-center justify-between gap-3 shrink-0" style={{ minHeight: 24 }}>
-            <GraphLegend categories={categories} />
+            <GraphLegend categories={categories} hasStack={map.stack.length > 0} />
             {/* Stale-map pill: a quiet probe rebuild found a DIFFERENT item
                 set (use-content-graph). Swapping is explicit — a silent swap
                 would reflow the map mid-read. */}

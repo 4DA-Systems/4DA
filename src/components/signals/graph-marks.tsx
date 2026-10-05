@@ -14,13 +14,17 @@ interface Shape {
   borderRadius: string;
   rotate: boolean;
   donut: boolean;
+  /** Outline only. A filled grey square and a filled grey dot read as the
+   *  same mark at this size — blinded raters named 0 releases on the map
+   *  (audit 2026-10-06); outline vs fill survives where corners do not. */
+  hollow: boolean;
 }
 
 const SHAPES: Record<string, Shape> = {
-  discussion: { borderRadius: '50%', rotate: false, donut: false },
-  release: { borderRadius: '2px', rotate: false, donut: false },
-  security: { borderRadius: '1px', rotate: true, donut: false },
-  research: { borderRadius: '50%', rotate: false, donut: true },
+  discussion: { borderRadius: '50%', rotate: false, donut: false, hollow: false },
+  release: { borderRadius: '1px', rotate: false, donut: false, hollow: true },
+  security: { borderRadius: '1px', rotate: true, donut: false, hollow: false },
+  research: { borderRadius: '50%', rotate: false, donut: true, hollow: false },
 };
 
 /** The mark's colour: red for security, gold inside the stack column,
@@ -39,7 +43,7 @@ interface MarkProps {
   surface?: string;
 }
 
-export function CategoryMark({ category, stack = false, size = 8, surface = 'var(--color-bg-secondary)' }: MarkProps) {
+export function CategoryMark({ category, stack = false, size = 9, surface = 'var(--color-bg-secondary)' }: MarkProps) {
   const shape = SHAPES[category] ?? SHAPES.discussion!;
   // A rotated square's diagonal is √2 wider; shrink it to the same footprint.
   const side = shape.rotate ? Math.round(size * 0.78) : size;
@@ -63,7 +67,9 @@ export function CategoryMark({ category, stack = false, size = 8, surface = 'var
           height: side,
           borderRadius: shape.borderRadius,
           transform: shape.rotate ? 'rotate(45deg)' : undefined,
-          backgroundColor: markColor(category, stack),
+          backgroundColor: shape.hollow ? 'transparent' : markColor(category, stack),
+          border: shape.hollow ? `2px solid ${markColor(category, stack)}` : undefined,
+          boxSizing: 'border-box',
         }}
       >
         {shape.donut && (

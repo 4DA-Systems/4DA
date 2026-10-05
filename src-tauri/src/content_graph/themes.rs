@@ -10,7 +10,8 @@
 //! - A stack item (`affects_you`) leaves its theme. It is the most actionable
 //!   thing on the map and gets its own column; live 2026-10-05, 4 of 16 stack
 //!   items had sat in the "not connected" lane and 10 were spread over three
-//!   release-only themes.
+//!   release-only themes. The theme remembers them in `stack_node_ids`, so
+//!   the link between a theme and the user's packages survives the move.
 //! - A theme left with fewer than 2 members is no theme; its last member is
 //!   unthemed.
 //!
@@ -43,6 +44,12 @@ pub(super) fn finalize_themes(
     let themes: Vec<GraphCluster> = clusters
         .into_iter()
         .map(|mut c| {
+            c.stack_node_ids = c
+                .node_ids
+                .iter()
+                .copied()
+                .filter(|id| stack.contains(id))
+                .collect();
             c.node_ids.retain(|id| !stack.contains(id));
             c
         })

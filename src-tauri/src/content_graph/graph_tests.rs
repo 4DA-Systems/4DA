@@ -1095,6 +1095,7 @@ fn test_cluster_label_terms_all_need_two_hits() {
         node_ids: vec![1, 2, 3, 4],
         source_count: 4,
         coherence: 0.0,
+        stack_node_ids: Vec::new(),
     }];
     labels::assign_cluster_labels(&items, &mut clusters);
     let label = &clusters[0].label;
@@ -1214,6 +1215,7 @@ fn label_for(titles: &[(&str, &str)], others: &[(&str, &str)]) -> String {
         node_ids: (1..=titles.len() as i64).collect(),
         source_count: 1,
         coherence: 0.0,
+        stack_node_ids: Vec::new(),
     }];
     labels::assign_cluster_labels(&items, &mut clusters);
     clusters.remove(0).label
@@ -1362,6 +1364,7 @@ fn test_shared_dependency_names_a_cluster_without_a_shared_term() {
         node_ids: vec![1, 2],
         source_count: 1,
         coherence: 0.0,
+        stack_node_ids: Vec::new(),
     }];
     labels::assign_cluster_labels(&items, &mut clusters);
     assert_eq!(clusters[0].label, "stripe");
@@ -1555,6 +1558,7 @@ fn test_duplicate_cluster_labels_are_disambiguated() {
             node_ids,
             source_count: 1,
             coherence: 0.0,
+            stack_node_ids: Vec::new(),
         });
     }
     // The rest of the window (in no cluster): keeps "rust" from reading as
@@ -1784,6 +1788,7 @@ fn theme(id: &str, node_ids: Vec<i64>) -> GraphCluster {
         node_ids,
         source_count: 1,
         coherence: 0.0,
+        stack_node_ids: Vec::new(),
     }
 }
 
@@ -1811,6 +1816,11 @@ fn test_stack_items_leave_their_theme_and_small_remainders_are_unthemed() {
     );
     assert_eq!(themes.len(), 1);
     assert_eq!(themes[0].node_ids, vec![1, 2]);
+    assert_eq!(
+        themes[0].stack_node_ids,
+        vec![3],
+        "the theme still names the stack item it lost to the column"
+    );
     let cid = |id: i64| {
         nodes
             .iter()
