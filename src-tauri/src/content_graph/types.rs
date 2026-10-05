@@ -28,6 +28,8 @@ pub struct GraphNode {
     pub signal_priority: Option<String>,
     pub created_at: String,
     pub primary_topic: Option<String>,
+    /// The theme this node belongs to; `None` for stack items (they get
+    /// their own column) and for items related to no theme.
     pub cluster_id: Option<String>,
     /// Total items this node represents (1 = a plain item; >1 = a story that
     /// collapsed near-duplicate items behind one representative).
@@ -39,11 +41,9 @@ pub struct GraphNode {
     /// The primary color channel — source identity moved to the tooltip.
     pub category: String,
     /// Any member carries the scoring pipeline's strong-grounding verdict
-    /// (the same predicate as Signal's "Affects You" pool) — rendered as the
-    /// gold "touches your stack" ring.
+    /// (the same predicate as Signal's "Affects You" pool) — the map's
+    /// "Your stack" column.
     pub affects_you: bool,
-    pub x: f32,
-    pub y: f32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
@@ -57,15 +57,18 @@ pub struct GraphEdge {
     pub methods: Vec<String>,
 }
 
+/// Mutual top-k nearest neighbours by embedding — the relation themes are
+/// built from. (Signal-chain and convergence edges were display-only and
+/// left with the node canvas.)
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, TS)]
 #[ts(export)]
 #[serde(rename_all = "snake_case")]
 pub enum EdgeType {
     Semantic,
-    Chain,
-    Convergence,
 }
 
+/// A theme: a Louvain community of 2+ non-stack items. Emitted in display
+/// order — related themes adjacent (themes.rs).
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export)]
 pub struct GraphCluster {
@@ -77,8 +80,6 @@ pub struct GraphCluster {
     /// really is. Emitted so coherence is measurable on every corpus, not
     /// asserted (Wave 4 self-measurement).
     pub coherence: f32,
-    pub centroid_x: f32,
-    pub centroid_y: f32,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]

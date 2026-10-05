@@ -15,9 +15,9 @@ build edges, all target platforms). npm packages are the production
 dependency closure reported by `pnpm licenses list --prod`. Dev-only
 dependencies are omitted because they are not distributed.
 
-Totals: 851 Rust crates, 40 npm packages.
+Totals: 829 Rust crates, 20 npm packages.
 
-Rust Crates (851)
+Rust Crates (829)
 -----------------
 
 adler2 2.0.1 - 0BSD OR MIT OR Apache-2.0 - https://github.com/oyvindln/adler2
@@ -29,8 +29,8 @@ ahash 0.8.12 - MIT OR Apache-2.0 - https://github.com/tkaitchuck/ahash
 aho-corasick 1.1.5 - Unlicense OR MIT - https://github.com/BurntSushi/aho-corasick
 aligned 0.4.3 - MIT OR Apache-2.0 - https://github.com/rust-embedded-community/aligned
 aligned-vec 0.6.4 - MIT - https://github.com/sarah-ek/aligned-vec/
-alloc-no-stdlib 2.0.4 - BSD-3-Clause - https://github.com/dropbox/rust-alloc-no-stdlib
-alloc-stdlib 0.2.4 - BSD-3-Clause - https://github.com/dropbox/rust-alloc-no-stdlib
+alloc-no-stdlib 3.0.0 - BSD-3-Clause - https://github.com/dropbox/rust-alloc-no-stdlib
+alloc-stdlib 0.3.0 - BSD-3-Clause - https://github.com/dropbox/rust-alloc-no-stdlib
 allocator-api2 0.2.21 - MIT OR Apache-2.0 - https://github.com/zakarumych/allocator-api2
 ammonia 4.2.0 - MIT OR Apache-2.0 - https://github.com/rust-ammonia/ammonia
 android_system_properties 0.1.6 - MIT OR Apache-2.0 - https://github.com/nical/android_system_properties
@@ -53,7 +53,7 @@ atk 0.18.2 - MIT - https://github.com/gtk-rs/gtk3-rs
 atk-sys 0.18.2 - MIT - https://github.com/gtk-rs/gtk3-rs
 atoi_simd 0.18.1 - MIT OR Apache-2.0 - https://github.com/RoDmitry/atoi_simd
 atomic-waker 1.1.2 - Apache-2.0 OR MIT - https://github.com/smol-rs/atomic-waker
-auto-launch 0.5.0 - MIT - https://github.com/zzzgydi/auto-launch.git
+auto-launch 0.6.0 - MIT - https://github.com/zzzgydi/auto-launch.git
 autocfg 1.5.1 - Apache-2.0 OR MIT - https://github.com/cuviper/autocfg
 av-scenechange 0.14.1 - MIT - https://github.com/rust-av/av-scenechange
 av1-grain 0.2.5 - BSD-2-Clause - https://github.com/rust-av/av1-grain
@@ -75,8 +75,8 @@ block-buffer 0.12.1 - MIT OR Apache-2.0 - https://github.com/RustCrypto/utils
 block-padding 0.3.3 - MIT OR Apache-2.0 - https://github.com/RustCrypto/utils
 block2 0.6.2 - MIT - https://github.com/madsmtm/objc2
 blocking 1.7.0 - Apache-2.0 OR MIT - https://github.com/smol-rs/blocking
-brotli 8.0.4 - BSD-3-Clause AND MIT - https://github.com/dropbox/rust-brotli
-brotli-decompressor 5.0.3 - BSD-3-Clause/MIT - https://github.com/dropbox/rust-brotli-decompressor
+brotli 9.0.0 - BSD-3-Clause AND MIT - https://github.com/dropbox/rust-brotli
+brotli-decompressor 6.0.1 - BSD-3-Clause/MIT - https://github.com/dropbox/rust-brotli-decompressor
 bs58 0.5.1 - MIT/Apache-2.0 - https://github.com/Nullus157/bs58-rs
 built 0.8.1 - MIT - https://github.com/lukaslueg/built
 bumpalo 3.20.3 - MIT OR Apache-2.0 - https://github.com/fitzgen/bumpalo
@@ -90,13 +90,13 @@ cairo-sys-rs 0.18.2 - MIT - https://github.com/gtk-rs/gtk-rs-core
 calamine 0.36.1 - MIT - https://github.com/tafia/calamine
 camino 1.2.6 - MIT OR Apache-2.0 - https://github.com/camino-rs/camino
 cargo_metadata 0.19.2 - MIT - https://github.com/oli-obk/cargo_metadata
-cargo_toml 0.22.3 - Apache-2.0 OR MIT - https://gitlab.com/lib.rs/cargo_toml
+cargo_toml 1.0.1 - Apache-2.0 OR MIT - https://gitlab.com/lib.rs/cargo_toml
 cargo-platform 0.1.9 - MIT OR Apache-2.0 - https://github.com/rust-lang/cargo
 castaway 0.2.4 - MIT - https://github.com/sagebind/castaway
 cbc 0.1.2 - MIT OR Apache-2.0 - https://github.com/RustCrypto/block-modes
 cc 1.2.62 - MIT OR Apache-2.0 - https://github.com/rust-lang/cc-rs
 cesu8 1.1.0 - Apache-2.0/MIT - https://github.com/emk/cesu8-rs
-cfb 0.7.3 - MIT - https://github.com/mdsteele/rust-cfb
+cfb 0.14.0 - MIT - https://github.com/mdsteele/rust-cfb
 cff-parser 0.2.0 - MIT OR Apache-2.0 - https://github.com/jrmuizel/cff-parser
 cfg_aliases 0.2.2 - MIT - https://github.com/katharostech/cfg_aliases
 cfg-expr 0.15.8 - MIT OR Apache-2.0 - https://github.com/EmbarkStudios/cfg-expr
@@ -135,13 +135,10 @@ crossbeam-utils 0.8.23 - MIT OR Apache-2.0 - https://github.com/crossbeam-rs/cro
 crunchy 0.2.4 - MIT - https://github.com/eira-fransham/crunchy
 crypto-common 0.1.7 - MIT OR Apache-2.0 - https://github.com/RustCrypto/traits
 crypto-common 0.2.2 - MIT OR Apache-2.0 - https://github.com/RustCrypto/traits
-cssparser 0.36.0 - MPL-2.0 - https://github.com/servo/rust-cssparser
 cssparser 0.37.0 - MPL-2.0 - https://github.com/servo/rust-cssparser
 cssparser 0.38.0 - MPL-2.0 - https://github.com/servo/rust-cssparser
-cssparser-macros 0.6.1 - MPL-2.0 - https://github.com/servo/rust-cssparser
 cssparser-macros 0.7.1 - MPL-2.0 - https://github.com/servo/rust-cssparser
-ctor 0.8.0 - Apache-2.0 OR MIT - https://github.com/mmastrac/rust-ctor
-ctor-proc-macro 0.0.7 - Apache-2.0 OR MIT - https://github.com/mmastrac/rust-ctor
+ctor 1.0.13 - Apache-2.0 OR MIT - https://github.com/mmastrac/linktime
 ctutils 0.4.2 - Apache-2.0 OR MIT - https://github.com/RustCrypto/utils
 curve25519-dalek 5.0.0 - BSD-3-Clause - https://github.com/dalek-cryptography/curve25519-dalek/tree/main/curve25519-dalek
 curve25519-dalek-derive 0.1.1 - MIT/Apache-2.0 - https://github.com/dalek-cryptography/curve25519-dalek
@@ -172,11 +169,8 @@ derive_more 2.1.1 - MIT - https://github.com/JelteF/derive_more
 derive_more-impl 2.1.1 - MIT - https://github.com/JelteF/derive_more
 digest 0.10.7 - MIT OR Apache-2.0 - https://github.com/RustCrypto/traits
 digest 0.11.3 - MIT OR Apache-2.0 - https://github.com/RustCrypto/traits
-dirs 4.0.0 - MIT OR Apache-2.0 - https://github.com/soc/dirs-rs
-dirs 5.0.1 - MIT OR Apache-2.0 - https://github.com/soc/dirs-rs
 dirs 6.0.0 - MIT OR Apache-2.0 - https://github.com/soc/dirs-rs
-dirs-sys 0.3.7 - MIT OR Apache-2.0 - https://github.com/dirs-dev/dirs-sys-rs
-dirs-sys 0.4.1 - MIT OR Apache-2.0 - https://github.com/dirs-dev/dirs-sys-rs
+dirs 7.0.0 - MIT OR Apache-2.0 - https://codeberg.org/dirs/dirs-rs
 dirs-sys 0.5.0 - MIT OR Apache-2.0 - https://github.com/dirs-dev/dirs-sys-rs
 dispatch2 0.3.1 - Zlib OR Apache-2.0 OR MIT - https://github.com/madsmtm/objc2
 displaydoc 0.2.7 - MIT OR Apache-2.0 - https://github.com/yaahc/displaydoc
@@ -185,12 +179,10 @@ dlopen2_derive 0.4.3 - MIT - https://github.com/OpenByteDev/dlopen2
 dlv-list 0.5.2 - MIT OR Apache-2.0 - https://github.com/sgodwincs/dlv-list-rs
 document-features 0.2.12 - MIT OR Apache-2.0 - https://github.com/slint-ui/document-features
 docx-rs 0.4.22 - MIT - https://github.com/bokuweb/docx-rs
-dom_query 0.27.0 - MIT - https://github.com/niklak/dom_query
+dom_query 0.28.0 - MIT - https://github.com/niklak/dom_query
 dpi 0.1.2 - Apache-2.0 AND MIT - https://github.com/rust-windowing/winit
 dtoa 1.0.11 - MIT OR Apache-2.0 - https://github.com/dtolnay/dtoa
 dtoa-short 0.3.5 - MPL-2.0 - https://github.com/upsuper/dtoa-short
-dtor 0.3.0 - Apache-2.0 OR MIT - https://github.com/mmastrac/rust-ctor
-dtor-proc-macro 0.0.6 - Apache-2.0 OR MIT - https://github.com/mmastrac/rust-ctor
 dunce 1.0.5 - CC0-1.0 OR MIT-0 OR Apache-2.0 - https://gitlab.com/kornelski/dunce
 dyn-clone 1.0.20 - MIT OR Apache-2.0 - https://github.com/dtolnay/dyn-clone
 ecb 0.1.2 - MIT - https://github.com/magic-akari/ecb
@@ -286,7 +278,6 @@ hf-hub 0.5.0 - Apache-2.0 - https://github.com/huggingface/hf-hub
 hkdf 0.13.0 - MIT OR Apache-2.0 - https://github.com/RustCrypto/KDFs/
 hmac 0.13.0 - MIT OR Apache-2.0 - https://github.com/RustCrypto/MACs
 hostname 0.4.2 - MIT - https://github.com/djc/hostname
-html5ever 0.38.0 - MIT OR Apache-2.0 - https://github.com/servo/html5ever
 html5ever 0.39.0 - MIT OR Apache-2.0 - https://github.com/servo/html5ever
 html5ever 0.40.1 - MIT OR Apache-2.0 - https://github.com/servo/html5ever
 http 1.5.0 - MIT OR Apache-2.0 - https://github.com/hyperium/http
@@ -317,7 +308,7 @@ imgref 1.12.3 - CC0-1.0 OR Apache-2.0 - https://github.com/kornelski/imgref
 indexmap 1.9.3 - Apache-2.0 OR MIT - https://github.com/bluss/indexmap
 indexmap 2.14.2 - Apache-2.0 OR MIT - https://github.com/indexmap-rs/indexmap
 indicatif 0.18.6 - MIT - https://github.com/console-rs/indicatif
-infer 0.19.0 - MIT - https://github.com/bojand/infer
+infer 0.22.0 - MIT - https://github.com/bojand/infer
 inotify 0.11.5 - ISC - https://github.com/hannobraun/inotify-rs
 inotify-sys 0.1.8 - ISC - https://github.com/hannobraun/inotify-sys
 inout 0.1.4 - MIT OR Apache-2.0 - https://github.com/RustCrypto/utils
@@ -344,9 +335,9 @@ jni-sys 0.4.1 - MIT OR Apache-2.0 - https://github.com/jni-rs/jni-sys
 jni-sys-macros 0.4.1 - MIT OR Apache-2.0 - https://github.com/jni-rs/jni-sys
 jobserver 0.1.35 - MIT OR Apache-2.0 - https://github.com/rust-lang/jobserver-rs
 js-sys 0.3.106 - MIT OR Apache-2.0 - https://github.com/wasm-bindgen/wasm-bindgen/tree/master/crates/js-sys
-json-patch 3.0.1 - MIT/Apache-2.0 - https://github.com/idubrov/json-patch
-jsonptr 0.6.3 - MIT OR Apache-2.0 - https://github.com/chanced/jsonptr
-keyboard-types 0.7.0 - MIT OR Apache-2.0 - https://github.com/pyfisch/keyboard-types
+json-patch 4.2.0 - MIT/Apache-2.0 - https://github.com/idubrov/json-patch
+jsonptr 0.7.1 - MIT OR Apache-2.0 - https://github.com/chanced/jsonptr
+keyboard-types 0.8.3 - MIT OR Apache-2.0 - https://github.com/rust-windowing/keyboard-types
 keyring 3.6.3 - MIT OR Apache-2.0 - https://github.com/hwchen/keyring-rs.git
 kqueue 1.2.1 - MIT - https://gitlab.com/rust-kqueue/rust-kqueue
 kqueue-sys 1.1.2 - MIT - https://gitlab.com/rust-kqueue/rust-kqueue-sys
@@ -378,7 +369,6 @@ mac-notification-sys 0.6.15 - MIT/Apache-2.0 - https://github.com/h4llow3En/mac-
 macro_rules_attribute 0.2.3 - Apache-2.0 OR MIT OR Zlib - https://github.com/danielhenrymantilla/macro_rules_attribute-rs
 macro_rules_attribute-proc_macro 0.2.3 - Apache-2.0 OR MIT OR Zlib - https://github.com/danielhenrymantilla/macro_rules_attribute-rs
 maplit 1.0.2 - MIT/Apache-2.0 - https://github.com/bluss/maplit
-markup5ever 0.38.0 - MIT OR Apache-2.0 - https://github.com/servo/html5ever
 markup5ever 0.39.0 - MIT OR Apache-2.0 - https://github.com/servo/html5ever
 markup5ever 0.40.0 - MIT OR Apache-2.0 - https://github.com/servo/html5ever
 matchers 0.2.0 - MIT - https://github.com/hawkw/matchers
@@ -397,11 +387,13 @@ mio 1.2.3 - MIT - https://github.com/tokio-rs/mio
 monostate 0.1.18 - MIT OR Apache-2.0 - https://github.com/dtolnay/monostate
 monostate-impl 0.1.18 - MIT OR Apache-2.0 - https://github.com/dtolnay/monostate
 moxcms 0.8.1 - BSD-3-Clause OR Apache-2.0 - https://github.com/awxkee/moxcms.git
-muda 0.19.3 - Apache-2.0 OR MIT - https://github.com/tauri-apps/muda
+muda 0.20.0 - Apache-2.0 OR MIT - https://github.com/tauri-apps/muda
 ndarray 0.17.2 - MIT OR Apache-2.0 - https://github.com/rust-ndarray/ndarray
 ndk 0.9.0 - MIT OR Apache-2.0 - https://github.com/rust-mobile/ndk
+ndk-context 0.1.1 - MIT OR Apache-2.0 - https://github.com/rust-windowing/android-ndk-rs
 ndk-sys 0.6.0+11769913 - MIT OR Apache-2.0 - https://github.com/rust-mobile/ndk
 new_debug_unreachable 1.0.6 - MIT - https://github.com/mbrubeck/rust-debug-unreachable
+nix 0.31.3 - MIT - https://github.com/nix-rust/nix
 no_std_io2 0.9.4 - Apache-2.0 OR MIT - https://github.com/wcampbell0x2a/no-std-io2
 nom 7.1.3 - MIT - https://github.com/Geal/nom
 nom 8.0.0 - MIT - https://github.com/rust-bakery/nom
@@ -436,6 +428,8 @@ objc2-io-kit 0.3.2 - Zlib OR Apache-2.0 OR MIT - https://github.com/madsmtm/objc
 objc2-io-surface 0.3.2 - Zlib OR Apache-2.0 OR MIT - https://github.com/madsmtm/objc2
 objc2-osa-kit 0.3.2 - Zlib OR Apache-2.0 OR MIT - https://github.com/madsmtm/objc2
 objc2-quartz-core 0.3.2 - Zlib OR Apache-2.0 OR MIT - https://github.com/madsmtm/objc2
+objc2-security 0.3.2 - Zlib OR Apache-2.0 OR MIT - https://github.com/madsmtm/objc2
+objc2-service-management 0.3.2 - Zlib OR Apache-2.0 OR MIT - https://github.com/madsmtm/objc2
 objc2-ui-kit 0.3.2 - Zlib OR Apache-2.0 OR MIT - https://github.com/madsmtm/objc2
 objc2-user-notifications 0.3.2 - Zlib OR Apache-2.0 OR MIT - https://github.com/madsmtm/objc2
 objc2-web-kit 0.3.2 - Zlib OR Apache-2.0 OR MIT - https://github.com/madsmtm/objc2
@@ -449,6 +443,7 @@ ordered-multimap 0.7.3 - MIT - https://github.com/sgodwincs/ordered-multimap-rs
 ordered-stream 0.2.0 - MIT OR Apache-2.0 - https://github.com/danieldg/ordered-stream
 ort 2.0.0-rc.13 - MIT OR Apache-2.0 - https://github.com/pykeio/ort
 ort-sys 2.0.0-rc.13 - MIT OR Apache-2.0 - https://github.com/pykeio/ort
+os_info 3.15.0 - MIT - https://github.com/stanislav-tkach/os_info
 osakit 0.3.1 - MIT OR Apache-2.0 - https://github.com/mdevils/rust-osakit
 pango 0.18.3 - MIT - https://github.com/gtk-rs/gtk-rs-core
 pango-sys 0.18.0 - MIT - https://github.com/gtk-rs/gtk-rs-core
@@ -526,7 +521,6 @@ rayon-cond 0.4.0 - Apache-2.0/MIT - https://github.com/cuviper/rayon-cond
 rayon-core 1.13.0 - MIT OR Apache-2.0 - https://github.com/rayon-rs/rayon
 reborrow 0.5.5 - MIT - https://github.com/sarah-ek/reborrow/
 redox_syscall 0.5.18 - MIT - https://gitlab.redox-os.org/redox-os/syscall
-redox_users 0.4.6 - MIT - https://gitlab.redox-os.org/redox-os/users
 redox_users 0.5.3 - MIT - https://gitlab.redox-os.org/redox-os/users
 ref-cast 1.0.27 - MIT OR Apache-2.0 - https://github.com/dtolnay/ref-cast
 ref-cast-impl 1.0.27 - MIT OR Apache-2.0 - https://github.com/dtolnay/ref-cast
@@ -565,7 +559,6 @@ scraper 0.27.0 - ISC - https://github.com/rust-scraper/scraper
 security-framework 2.11.1 - MIT OR Apache-2.0 - https://github.com/kornelski/rust-security-framework
 security-framework 3.7.0 - MIT OR Apache-2.0 - https://github.com/kornelski/rust-security-framework
 security-framework-sys 2.17.0 - MIT OR Apache-2.0 - https://github.com/kornelski/rust-security-framework
-selectors 0.36.1 - MPL-2.0 - https://github.com/servo/stylo
 selectors 0.38.0 - MPL-2.0 - https://github.com/servo/stylo
 semver 1.0.28 - MIT OR Apache-2.0 - https://github.com/dtolnay/semver
 serde 1.0.229 - MIT OR Apache-2.0 - https://github.com/serde-rs/serde
@@ -599,6 +592,7 @@ simdutf8 0.1.5 - MIT OR Apache-2.0 - https://github.com/rusticstuff/simdutf8
 siphasher 1.0.3 - MIT/Apache-2.0 - https://github.com/jedisct1/rust-siphash
 slab 0.4.12 - MIT - https://github.com/tokio-rs/slab
 smallvec 1.15.1 - MIT OR Apache-2.0 - https://github.com/servo/rust-smallvec
+smappservice-rs 0.1.3 - MIT - https://github.com/gethopp/smappservice-rs
 socket2 0.6.5 - MIT OR Apache-2.0 - https://github.com/rust-lang/socket2
 socks 0.3.4 - MIT/Apache-2.0 - https://github.com/sfackler/rust-socks
 softbuffer 0.4.8 - MIT OR Apache-2.0 - https://github.com/rust-windowing/softbuffer
@@ -628,24 +622,24 @@ sysinfo 0.39.6 - MIT - https://github.com/GuillaumeGomez/sysinfo
 system-configuration 0.7.0 - MIT OR Apache-2.0 - https://github.com/mullvad/system-configuration-rs
 system-configuration-sys 0.6.0 - MIT OR Apache-2.0 - https://github.com/mullvad/system-configuration-rs
 system-deps 6.2.2 - MIT OR Apache-2.0 - https://github.com/gdesmott/system-deps
-tao 0.35.3 - Apache-2.0 - https://github.com/tauri-apps/tao
+tao 0.37.1 - Apache-2.0 - https://github.com/tauri-apps/tao
 tao-macros 0.1.4 - MIT OR Apache-2.0 - https://github.com/tauri-apps/tao
 tar 0.4.46 - MIT OR Apache-2.0 - https://github.com/composefs/tar-rs
 target-lexicon 0.12.16 - Apache-2.0 WITH LLVM-exception - https://github.com/bytecodealliance/target-lexicon
-tauri 2.11.6 - Apache-2.0 OR MIT - https://github.com/tauri-apps/tauri
-tauri-build 2.6.3 - Apache-2.0 OR MIT - https://github.com/tauri-apps/tauri
-tauri-codegen 2.6.3 - Apache-2.0 OR MIT - https://github.com/tauri-apps/tauri
-tauri-macros 2.6.3 - Apache-2.0 OR MIT - https://github.com/tauri-apps/tauri
-tauri-plugin 2.6.2 - Apache-2.0 OR MIT - https://github.com/tauri-apps/tauri
-tauri-plugin-autostart 2.5.1 - Apache-2.0 OR MIT - https://github.com/tauri-apps/plugins-workspace
-tauri-plugin-deep-link 2.4.10 - Apache-2.0 OR MIT - https://github.com/tauri-apps/plugins-workspace
-tauri-plugin-notification 2.4.0 - Apache-2.0 OR MIT - https://github.com/tauri-apps/plugins-workspace
-tauri-plugin-opener 2.5.5 - Apache-2.0 OR MIT - https://github.com/tauri-apps/plugins-workspace
-tauri-plugin-single-instance 2.4.5 - Apache-2.0 OR MIT - https://github.com/tauri-apps/plugins-workspace
-tauri-plugin-updater 2.12.0 - Apache-2.0 OR MIT - https://github.com/tauri-apps/plugins-workspace
-tauri-runtime 2.11.3 - Apache-2.0 OR MIT - https://github.com/tauri-apps/tauri
-tauri-runtime-wry 2.11.4 - Apache-2.0 OR MIT - https://github.com/tauri-apps/tauri
-tauri-utils 2.9.3 - Apache-2.0 OR MIT - https://github.com/tauri-apps/tauri
+tauri 2.12.1 - Apache-2.0 OR MIT - https://github.com/tauri-apps/tauri
+tauri-build 2.7.1 - Apache-2.0 OR MIT - https://github.com/tauri-apps/tauri
+tauri-codegen 2.7.1 - Apache-2.0 OR MIT - https://github.com/tauri-apps/tauri
+tauri-macros 2.7.1 - Apache-2.0 OR MIT - https://github.com/tauri-apps/tauri
+tauri-plugin 2.7.1 - Apache-2.0 OR MIT - https://github.com/tauri-apps/tauri
+tauri-plugin-autostart 2.7.0 - Apache-2.0 OR MIT - https://github.com/tauri-apps/plugins-workspace
+tauri-plugin-deep-link 2.6.1 - Apache-2.0 OR MIT - https://github.com/tauri-apps/plugins-workspace
+tauri-plugin-notification 2.5.1 - Apache-2.0 OR MIT - https://github.com/tauri-apps/plugins-workspace
+tauri-plugin-opener 2.7.0 - Apache-2.0 OR MIT - https://github.com/tauri-apps/plugins-workspace
+tauri-plugin-single-instance 2.5.2 - Apache-2.0 OR MIT - https://github.com/tauri-apps/plugins-workspace
+tauri-plugin-updater 2.13.1 - Apache-2.0 OR MIT - https://github.com/tauri-apps/plugins-workspace
+tauri-runtime 2.12.1 - Apache-2.0 OR MIT - https://github.com/tauri-apps/tauri
+tauri-runtime-wry 2.12.1 - Apache-2.0 OR MIT - https://github.com/tauri-apps/tauri
+tauri-utils 2.10.1 - Apache-2.0 OR MIT - https://github.com/tauri-apps/tauri
 tauri-winres 0.3.6 - MIT - https://github.com/tauri-apps/winres
 tauri-winrt-notification 0.7.3 - MIT OR Apache-2.0 - https://github.com/tauri-apps/winrt-notification
 tauri-winrt-notification 0.8.1 - MIT OR Apache-2.0 - https://github.com/tauri-apps/winrt-notification
@@ -671,10 +665,8 @@ tokio-rustls 0.26.4 - MIT OR Apache-2.0 - https://github.com/rustls/tokio-rustls
 tokio-stream 0.1.19 - MIT - https://github.com/tokio-rs/tokio
 tokio-util 0.7.19 - MIT - https://github.com/tokio-rs/tokio
 toml 0.8.2 - MIT OR Apache-2.0 - https://github.com/toml-rs/toml
-toml 0.9.12+spec-1.1.0 - MIT OR Apache-2.0 - https://github.com/toml-rs/toml
 toml 1.1.6+spec-1.1.0 - MIT OR Apache-2.0 - https://github.com/toml-rs/toml
 toml_datetime 0.6.3 - MIT OR Apache-2.0 - https://github.com/toml-rs/toml
-toml_datetime 0.7.5+spec-1.1.0 - MIT OR Apache-2.0 - https://github.com/toml-rs/toml
 toml_datetime 1.1.1+spec-1.1.0 - MIT OR Apache-2.0 - https://github.com/toml-rs/toml
 toml_edit 0.19.15 - MIT OR Apache-2.0 - https://github.com/toml-rs/toml
 toml_edit 0.20.2 - MIT OR Apache-2.0 - https://github.com/toml-rs/toml
@@ -691,7 +683,7 @@ tracing-attributes 0.1.31 - MIT - https://github.com/tokio-rs/tracing
 tracing-core 0.1.36 - MIT - https://github.com/tokio-rs/tracing
 tracing-log 0.2.0 - MIT - https://github.com/tokio-rs/tracing
 tracing-subscriber 0.3.23 - MIT - https://github.com/tokio-rs/tracing
-tray-icon 0.24.2 - MIT OR Apache-2.0 - https://github.com/tauri-apps/tray-icon
+tray-icon 0.25.1 - MIT OR Apache-2.0 - https://github.com/tauri-apps/tray-icon
 try-lock 0.2.5 - MIT - https://github.com/seanmonstar/try-lock
 ts-rs 12.0.1 - MIT - https://github.com/Aleph-Alpha/ts-rs
 ts-rs-macros 12.0.1 - MIT - https://github.com/Aleph-Alpha/ts-rs
@@ -701,11 +693,6 @@ typed-path 0.12.3 - MIT OR Apache-2.0 - https://github.com/chipsenkbeil/typed-pa
 typeid 1.0.3 - MIT OR Apache-2.0 - https://github.com/dtolnay/typeid
 typenum 1.20.1 - MIT OR Apache-2.0 - https://github.com/paholg/typenum
 uds_windows 1.2.1 - MIT - https://github.com/haraldh/rust_uds_windows
-unic-char-property 0.9.0 - MIT/Apache-2.0 - https://github.com/open-i18n/rust-unic/
-unic-char-range 0.9.0 - MIT/Apache-2.0 - https://github.com/open-i18n/rust-unic/
-unic-common 0.9.0 - MIT/Apache-2.0 - https://github.com/open-i18n/rust-unic/
-unic-ucd-ident 0.9.0 - MIT/Apache-2.0 - https://github.com/open-i18n/rust-unic/
-unic-ucd-version 0.9.0 - MIT/Apache-2.0 - https://github.com/open-i18n/rust-unic/
 unicode_categories 0.1.1 - MIT OR Apache-2.0 - https://github.com/swgillespie/unicode-categories
 unicode-bidi 0.3.18 - MIT OR Apache-2.0 - https://github.com/servo/unicode-bidi
 unicode-ident 1.0.26 - (MIT OR Apache-2.0) AND Unicode-3.0 - https://github.com/dtolnay/unicode-ident
@@ -721,7 +708,7 @@ ureq 3.4.2 - MIT OR Apache-2.0 - https://github.com/algesten/ureq
 ureq-proto 0.6.4 - MIT OR Apache-2.0 - https://github.com/algesten/ureq-proto
 url 2.5.8 - MIT OR Apache-2.0 - https://github.com/servo/rust-url
 urlencoding 2.1.3 - MIT - https://github.com/kornelski/rust_urlencoding
-urlpattern 0.3.0 - MIT - https://github.com/denoland/rust-urlpattern
+urlpattern 0.6.0 - MIT - https://github.com/denoland/rust-urlpattern
 utf8_iter 1.0.4 - Apache-2.0 OR MIT - https://github.com/hsivonen/utf8_iter
 utf8-zero 0.8.1 - MIT OR Apache-2.0 - https://github.com/algesten/utf8-zero
 uuid 1.26.1 - Apache-2.0 OR MIT - https://github.com/uuid-rs/uuid
@@ -754,46 +741,39 @@ webkit2gtk 2.0.2 - MIT - https://github.com/tauri-apps/webkit2gtk-rs
 webkit2gtk-sys 2.0.2 - MIT - https://github.com/tauri-apps/webkit2gtk-rs
 webpki-root-certs 1.0.9 - CDLA-Permissive-2.0 - https://github.com/rustls/webpki-roots
 webpki-roots 1.0.9 - CDLA-Permissive-2.0 - https://github.com/rustls/webpki-roots
-webview2-com 0.38.2 - MIT - https://github.com/wravery/webview2-rs
+webview2-com 0.39.1 - MIT - https://github.com/wravery/webview2-rs
 webview2-com-macros 0.8.1 - MIT - https://github.com/wravery/webview2-rs
-webview2-com-sys 0.38.2 - MIT - https://github.com/wravery/webview2-rs
+webview2-com-sys 0.39.1 - MIT - https://github.com/wravery/webview2-rs
 weezl 0.1.12 - MIT OR Apache-2.0 - https://github.com/image-rs/weezl
 whichlang 0.1.1 - MIT - https://github.com/quickwit-oss/whichlang
 winapi 0.3.9 - MIT/Apache-2.0 - https://github.com/retep998/winapi-rs
 winapi-i686-pc-windows-gnu 0.4.0 - MIT/Apache-2.0 - https://github.com/retep998/winapi-rs
 winapi-util 0.1.11 - Unlicense OR MIT - https://github.com/BurntSushi/winapi-util
 winapi-x86_64-pc-windows-gnu 0.4.0 - MIT/Apache-2.0 - https://github.com/retep998/winapi-rs
-window-vibrancy 0.6.0 - Apache-2.0 OR MIT - https://github.com/tauri-apps/tauri-plugin-vibrancy
+window-vibrancy 0.8.1 - Apache-2.0 OR MIT - https://github.com/tauri-apps/tauri-plugin-vibrancy
 windows 0.61.3 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
 windows 0.62.2 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
 windows_aarch64_gnullvm 0.42.2 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
-windows_aarch64_gnullvm 0.48.5 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
 windows_aarch64_gnullvm 0.52.6 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
 windows_aarch64_gnullvm 0.53.1 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
 windows_aarch64_msvc 0.42.2 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
-windows_aarch64_msvc 0.48.5 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
 windows_aarch64_msvc 0.52.6 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
 windows_aarch64_msvc 0.53.1 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
 windows_i686_gnu 0.42.2 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
-windows_i686_gnu 0.48.5 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
 windows_i686_gnu 0.52.6 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
 windows_i686_gnu 0.53.1 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
 windows_i686_gnullvm 0.52.6 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
 windows_i686_gnullvm 0.53.1 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
 windows_i686_msvc 0.42.2 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
-windows_i686_msvc 0.48.5 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
 windows_i686_msvc 0.52.6 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
 windows_i686_msvc 0.53.1 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
 windows_x86_64_gnu 0.42.2 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
-windows_x86_64_gnu 0.48.5 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
 windows_x86_64_gnu 0.52.6 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
 windows_x86_64_gnu 0.53.1 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
 windows_x86_64_gnullvm 0.42.2 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
-windows_x86_64_gnullvm 0.48.5 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
 windows_x86_64_gnullvm 0.52.6 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
 windows_x86_64_gnullvm 0.53.1 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
 windows_x86_64_msvc 0.42.2 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
-windows_x86_64_msvc 0.48.5 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
 windows_x86_64_msvc 0.52.6 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
 windows_x86_64_msvc 0.53.1 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
 windows-collections 0.2.0 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
@@ -808,37 +788,35 @@ windows-link 0.1.3 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
 windows-link 0.2.1 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
 windows-numerics 0.2.0 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
 windows-numerics 0.3.1 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
-windows-registry 0.5.3 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
+windows-registry 0.6.1 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
 windows-result 0.3.4 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
 windows-result 0.4.1 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
 windows-strings 0.4.2 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
 windows-strings 0.5.1 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
 windows-sys 0.45.0 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
-windows-sys 0.48.0 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
 windows-sys 0.52.0 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
 windows-sys 0.59.0 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
 windows-sys 0.60.2 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
 windows-sys 0.61.2 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
 windows-targets 0.42.2 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
-windows-targets 0.48.5 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
 windows-targets 0.52.6 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
 windows-targets 0.53.5 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
 windows-threading 0.1.0 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
 windows-threading 0.2.1 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
 windows-version 0.1.7 - MIT OR Apache-2.0 - https://github.com/microsoft/windows-rs
 winnow 0.5.40 - MIT - https://github.com/winnow-rs/winnow
-winnow 0.7.15 - MIT - https://github.com/winnow-rs/winnow
 winnow 1.0.4 - MIT - https://github.com/winnow-rs/winnow
-winreg 0.10.1 - MIT - https://github.com/gentoo90/winreg-rs
 winreg 0.55.0 - MIT - https://github.com/gentoo90/winreg-rs
 winreg 0.56.0 - MIT - https://github.com/gentoo90/winreg-rs
 wit-bindgen 0.57.1 - Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT - https://github.com/bytecodealliance/wit-bindgen
 writeable 0.6.4 - Unicode-3.0 - https://github.com/unicode-org/icu4x
-wry 0.55.1 - Apache-2.0 OR MIT - https://github.com/tauri-apps/wry
+wry 0.57.0 - Apache-2.0 OR MIT - https://github.com/tauri-apps/wry
 x11 2.21.0 - MIT - https://github.com/AltF02/x11-rs.git
 x11-dl 2.21.0 - MIT - https://github.com/AltF02/x11-rs.git
 x11rb 0.13.2 - MIT OR Apache-2.0 - https://github.com/psychon/x11rb
+x11rb 0.14.0 - MIT OR Apache-2.0 - https://github.com/psychon/x11rb
 x11rb-protocol 0.13.2 - MIT OR Apache-2.0 - https://github.com/psychon/x11rb
+x11rb-protocol 0.14.0 - MIT OR Apache-2.0 - https://github.com/psychon/x11rb
 x25519-dalek 3.0.0 - BSD-3-Clause - https://github.com/dalek-cryptography/curve25519-dalek/tree/main/x25519-dalek
 xattr 1.6.1 - MIT OR Apache-2.0 - https://github.com/Stebalien/xattr
 y4m 0.8.0 - MIT - https://github.com/image-rs/y4m.git
@@ -872,7 +850,7 @@ zvariant 5.15.0 - MIT - https://github.com/z-galaxy/zbus/
 zvariant_derive 5.15.0 - MIT - https://github.com/z-galaxy/zbus/
 zvariant_utils 4.2.0 - MIT - https://github.com/z-galaxy/zbus/
 
-npm Packages (40)
+npm Packages (20)
 -----------------
 
 @babel/runtime 7.29.7 - MIT - https://babel.dev/docs/en/next/babel-runtime
@@ -883,27 +861,8 @@ npm Packages (40)
 @tauri-apps/api 2.11.1 - Apache-2.0 OR MIT - https://github.com/tauri-apps/tauri#readme
 @tauri-apps/plugin-opener 2.5.5 - MIT OR Apache-2.0 - https://github.com/tauri-apps/plugins-workspace#readme
 @tauri-apps/plugin-updater 2.12.0 - MIT OR Apache-2.0 - https://github.com/tauri-apps/plugins-workspace#readme
-@types/d3-color 3.1.3 - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/d3-color
-@types/d3-drag 3.0.7 - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/d3-drag
-@types/d3-interpolate 3.0.4 - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/d3-interpolate
-@types/d3-selection 3.0.12 - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/d3-selection
-@types/d3-transition 3.0.9 - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/d3-transition
-@types/d3-zoom 3.0.8 - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/d3-zoom
 @types/react 19.3.0 - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/react
-@types/react-dom 19.3.0 - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/react-dom
-@xyflow/react 12.12.0 - MIT - https://reactflow.dev
-@xyflow/system 0.0.83 - MIT - https://github.com/xyflow/xyflow#readme
-classcat 5.0.5 - MIT - https://github.com/jorgebucaran/classcat#readme
 csstype 3.2.3 - MIT - https://github.com/frenic/csstype#readme
-d3-color 3.1.0 - ISC - https://d3js.org/d3-color/
-d3-dispatch 3.0.1 - ISC - https://d3js.org/d3-dispatch/
-d3-drag 3.0.0 - ISC - https://d3js.org/d3-drag/
-d3-ease 3.0.1 - BSD-3-Clause - https://d3js.org/d3-ease/
-d3-interpolate 3.0.1 - ISC - https://d3js.org/d3-interpolate/
-d3-selection 3.0.0 - ISC - https://d3js.org/d3-selection/
-d3-timer 3.0.1 - ISC - https://d3js.org/d3-timer/
-d3-transition 3.0.1 - ISC - https://d3js.org/d3-transition/
-d3-zoom 3.0.0 - ISC - https://d3js.org/d3-zoom/
 html-parse-stringify 4.0.1 - MIT - https://github.com/i18next/html-parse-stringify
 i18next 26.4.2 - MIT - https://www.i18next.com
 i18next-resources-to-backend 1.2.3 - MIT - https://github.com/i18next/i18next-resources-to-backend
@@ -913,10 +872,9 @@ react-i18next 17.0.15 - MIT - https://github.com/i18next/react-i18next
 scheduler 0.28.0 - MIT - https://react.dev/
 typescript 6.0.3 - Apache-2.0 - https://www.typescriptlang.org/
 use-sync-external-store 1.7.0 - MIT - https://github.com/react/react#readme
-zustand 4.5.7 - MIT - https://github.com/pmndrs/zustand
 zustand 5.0.15 - MIT - https://github.com/pmndrs/zustand
 
-Reciprocal-Licence Components (9)
+Reciprocal-Licence Components (6)
 ---------------------------------
 
 The components below are licensed under weak-copyleft terms (MPL-2.0,
@@ -927,14 +885,11 @@ version used is recorded in the lockfiles in this repository
 (src-tauri/Cargo.lock, pnpm-lock.yaml). Obtaining a copy of the source
 for any of them requires no request to 4DA Systems.
 
-cssparser 0.36.0 - MPL-2.0 - https://github.com/servo/rust-cssparser
 cssparser 0.37.0 - MPL-2.0 - https://github.com/servo/rust-cssparser
 cssparser 0.38.0 - MPL-2.0 - https://github.com/servo/rust-cssparser
-cssparser-macros 0.6.1 - MPL-2.0 - https://github.com/servo/rust-cssparser
 cssparser-macros 0.7.1 - MPL-2.0 - https://github.com/servo/rust-cssparser
 dtoa-short 0.3.5 - MPL-2.0 - https://github.com/upsuper/dtoa-short
 option-ext 0.2.0 - MPL-2.0 - https://github.com/soc/option-ext.git
-selectors 0.36.1 - MPL-2.0 - https://github.com/servo/stylo
 selectors 0.38.0 - MPL-2.0 - https://github.com/servo/stylo
 
 Full Licence Text - @fontsource-variable/inter 5.3.0 (SIL Open Font License 1.1)

@@ -111,7 +111,7 @@ pub(super) fn assign_cluster_labels(items: &[RawItem], clusters: &mut [GraphClus
             all.into_iter().map(|(t, _)| t.to_string()).collect()
         })
         .collect();
-    for (cluster, tf) in clusters.iter_mut().zip(&tfs) {
+    for ((cluster, tf), cluster_ranked) in clusters.iter_mut().zip(&tfs).zip(&ranked) {
         // Titles (not occurrences) carrying each term.
         let hits_of = |term: &str| {
             cluster
@@ -172,7 +172,7 @@ pub(super) fn assign_cluster_labels(items: &[RawItem], clusters: &mut [GraphClus
                 .collect::<Vec<_>>()
                 .join(" · ")
         } else {
-            fallback_label(cluster, &item_map)
+            fallback_label(cluster, &item_map, cluster_ranked, &keywords_of)
         };
     }
     disambiguate_labels(clusters, &ranked);
@@ -239,10 +239,8 @@ fn disambiguate_labels(clusters: &mut [GraphCluster], ranked: &[Vec<String>]) {
 /// one registry's items IS that registry's releases (a group-by, stated).
 const REGISTRY_SOURCES: &[&str] = &["crates_io", "npm_registry", "pypi", "go_modules"];
 
-/// Longest representative-title label, in characters (word-boundary cut).
-/// Headers render uppercase and letter-spaced over the map: a 36-char title
-/// ("PHILBIN: THE SAFEST (AND FASTEST)…", live 2026-10-04) spanned two
-/// neighbouring clusters at fit zoom.
+/// Longest representative-title label, in characters (word-boundary cut) —
+/// the last-resort label for a member with no usable keyword.
 const TITLE_LABEL_MAX: usize = 28;
 /// A title's head before ": " replaces the whole title when at least this
 /// long — "Philbin: The safest (and fastest) AEGIS library" → "Philbin".
@@ -253,10 +251,17 @@ const TITLE_HEAD_MIN: usize = 6;
 /// 1. one registry source → "<registry> releases" (true by construction);
 /// 2. a dependency linked to at least two members (and the coverage floor)
 ///    → that package — the members demonstrably share it;
-/// 3. the title of the member nearest the cluster's embedding centroid —
-///    the most typical member, shortened — so the label is concrete words a
-///    human can check against the dots.
-fn fallback_label(cluster: &GraphCluster, item_map: &HashMap<i64, &RawItem>) -> String {
+/// 3. the two most distinctive words of the member nearest the cluster's
+///    embedding centroid (its most typical member), in the cluster's own
+///    c-TF-IDF order — "jwt · decoding", never a title cut mid-sentence. The
+///    old cut title ("JWT Decoding vs…", "Breaking the…", live 2026-10-05)
+///    read as one article's headline, not as the name of a theme.
+fn fallback_label(
+    cluster: &GraphCluster,
+    item_map: &HashMap<i64, &RawItem>,
+    cluster_ranked: &[String],
+    keywords_of: &dyn Fn(i64) -> Vec<String>,
+) -> String {
     let members: Vec<&RawItem> = cluster
         .node_ids
         .iter()
@@ -299,7 +304,26 @@ fn fallback_label(cluster: &GraphCluster, item_map: &HashMap<i64, &RawItem>) -> 
         .filter(|m| !REGISTRY_SOURCES.contains(&m.source_type.as_str()))
         .collect();
     let pool = if prose.is_empty() { &members } else { &prose };
-    short_title(&representative(pool).title)
+    let rep = representative(pool);
+    let own = keywords_of(rep.id);
+    let mut chosen: Vec<&str> = Vec::new();
+    for term in cluster_ranked.iter().filter(|t| own.contains(t)) {
+        if !chosen.iter().any(|c| same_name(c, term)) {
+            chosen.push(term);
+        }
+        if chosen.len() == 2 {
+            break;
+        }
+    }
+    if chosen.is_empty() {
+        // A title with no usable word at all (every token boilerplate).
+        return short_title(&rep.title);
+    }
+    chosen
+        .iter()
+        .map(|w| display_term(w))
+        .collect::<Vec<_>>()
+        .join(" · ")
 }
 
 /// The member whose embedding is nearest the members' mean — deterministic
@@ -371,15 +395,41 @@ pub(super) fn short_title(title: &str) -> String {
 }
 
 /// Tokens normalised for counting ("next.js" → "nextjs"), shown in their
-/// usual spelling.
+/// usual spelling — acronyms and brand names included, since the map prints
+/// labels in sentence case ("Llm", "Openai · api" read as typos; live
+/// 2026-10-05). Other words stay lowercase.
 fn display_term(term: &str) -> String {
-    match term {
-        "nextjs" => "next.js".to_string(),
-        "nodejs" => "node.js".to_string(),
-        "vuejs" => "vue.js".to_string(),
-        "threejs" => "three.js".to_string(),
-        other => other.to_string(),
-    }
+    let shown = match term {
+        "nextjs" => "next.js",
+        "nodejs" => "node.js",
+        "vuejs" => "vue.js",
+        "threejs" => "three.js",
+        "ai" => "AI",
+        "api" | "apis" => "API",
+        "cli" => "CLI",
+        "css" => "CSS",
+        "html" => "HTML",
+        "http" => "HTTP",
+        "json" => "JSON",
+        "jwt" => "JWT",
+        "llm" => "LLM",
+        "llms" => "LLMs",
+        "mcp" => "MCP",
+        "sql" => "SQL",
+        "ui" => "UI",
+        "wasm" => "WASM",
+        "devday" => "DevDay",
+        "github" => "GitHub",
+        "graphql" => "GraphQL",
+        "javascript" => "JavaScript",
+        "openai" => "OpenAI",
+        "postgresql" => "PostgreSQL",
+        "sqlite" => "SQLite",
+        "typescript" => "TypeScript",
+        "webassembly" => "WebAssembly",
+        other => other,
+    };
+    shown.to_string()
 }
 
 /// The token a registry stamps on every title it emits ("npm: …",

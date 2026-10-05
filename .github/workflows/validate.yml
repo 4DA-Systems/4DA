@@ -417,6 +417,54 @@ jobs:
           }
           Remove-Item test-output.txt -ErrorAction SilentlyContinue
 
+  # Browser E2E (Playwright) against the frontend with a mocked Tauri IPC layer
+  # (e2e/support/app.ts). It was never run in CI and drifted: by 2026-10-05,
+  # 13 of 63 specs failed and 15 more skipped themselves without asserting,
+  # hiding three real app defects (#848). Running it on every frontend change
+  # keeps it honest. playwright.config.ts starts its own Vite on E2E_PORT and
+  # never reuses a server.
+  e2e:
+    name: E2E (browser)
+    needs: changes
+    # Same trigger set as Frontend; see the `!cancelled()` note there.
+    if: ${{ !cancelled() && (needs.changes.outputs.frontend == 'true' || needs.changes.outputs.workflows == 'true' || needs.changes.outputs.uncovered == 'true' || github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group' || github.event_name == 'schedule') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 10.34.6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run E2E suite
+        # Serial: the suite was stabilised and verified with one worker; the
+        # mocked backend is per-page, but a single Vite keeps timing predictable.
+        run: pnpm exec playwright test --workers=1
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: e2e-report
+          path: |
+            e2e-report/
+            e2e-results/
+          retention-days: 7
+
   mcp-contract:
     name: MCP schema contract
     # @4da/mcp-server (github.com/4DA-Systems/4da-mcp-server) reads this app's
@@ -484,7 +532,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # v1
+        uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # v1
         with:
           toolchain: stable
           components: rustfmt, clippy
@@ -666,7 +714,7 @@ jobs:
       # and a dependency install it would not otherwise need; the alternative was
       # a gate that silently skips on exactly the PRs that move dependencies.
       - name: Install Rust toolchain (for `cargo metadata`)
-        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # v1
+        uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # v1
         with:
           toolchain: stable
 
@@ -741,7 +789,7 @@ jobs:
       # Same recipe as the NOTICE gate in `repo-guards`, so what this job
       # generates is byte-for-byte what that gate will verify.
       - name: Install Rust toolchain (for `cargo metadata`)
-        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # v1
+        uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # v1
         with:
           toolchain: stable
 
@@ -902,7 +950,7 @@ jobs:
         # repo's rust-toolchain.toml (1.93.1) still governs the actual build via
         # rustup where it is honored; this job's value is fast, parallel,
         # contention-free clippy/audit/test on a dedicated runner.
-        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # v1
+        uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # v1
         with:
           toolchain: stable
           components: clippy, rustfmt
@@ -947,7 +995,7 @@ jobs:
 
       - name: Install cargo-audit + cargo-deny (prebuilt)
         if: matrix.label == 'default'
-        uses: taiki-e/install-action@9983c65e42da123ff25d1f78505eb6de315aa172 # v2
+        uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2
         with:
           tool: cargo-audit,cargo-deny
 
@@ -1000,7 +1048,7 @@ jobs:
       # hundreds of times. Hermetic mirrors a contributor's `cargo test`.
       - name: Install cargo-nextest (prebuilt)
         if: github.event_name != 'pull_request'
-        uses: taiki-e/install-action@9983c65e42da123ff25d1f78505eb6de315aa172 # v2
+        uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2
         with:
           tool: cargo-nextest
 
@@ -1109,7 +1157,7 @@ jobs:
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev
 
       - name: Install Rust toolchain
-        uses: dtolnay/rust-toolchain@02cb101ec7c40f2c49e1d9714d64511d8e1b74de # v1
+        uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # v1
         with:
           toolchain: stable
           components: clippy, rustfmt
@@ -1254,7 +1302,7 @@ jobs:
     # protection change is needed to enforce it. It runs on pull_request AND
     # merge_group (where it scans the final squash commits) and SKIPS on
     # workflow_dispatch/schedule (skipped == pass below).
-    needs: [changes, pr-metadata, repo-guards, dependabot-notice, frontend, mcp-contract, relay, rust, rust-calibration]
+    needs: [changes, pr-metadata, repo-guards, dependabot-notice, frontend, e2e, mcp-contract, relay, rust, rust-calibration]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

@@ -5,23 +5,23 @@
 //! Content Graph — relationship visualization for surfaced intelligence.
 //!
 //! Pipeline: load scored items → collapse near-duplicates into STORIES
-//! (story.rs — one node per advisory storm / mirrored announcement) → compute
-//! semantic + signal-chain edges between stories → connected-component
-//! clusters with c-TF-IDF labels → two-phase cluster-first layout →
-//! sparsify display edges to backbone + top-K.
+//! (story.rs — one node per advisory storm / mirrored announcement / release
+//! published to two registries) → mutual-kNN semantic edges between stories
+//! → Louvain communities → themes (themes.rs: stack items leave their theme,
+//! themes ordered so related ones are adjacent) with c-TF-IDF labels.
 //!
-//! Everything is computed deterministically in Rust; the frontend renders
-//! positioned nodes without any JS layout.
+//! The frontend renders the result as a theme map — a stack column, a
+//! treemap of themes and an unthemed list — so nothing here computes screen
+//! positions. Everything is deterministic.
 
-mod anchors;
 mod category;
 mod clustering;
 mod detail;
 mod edges;
 mod labels;
-mod layout;
 mod loading;
 mod story;
+mod themes;
 mod types;
 
 use std::collections::{HashMap, HashSet};
@@ -56,8 +56,6 @@ const KNN_FLOOR: f32 = 0.55;
 /// by relevance; the rest stay in the List view (counted honestly in
 /// `meta.hidden_items`).
 const SINGLETON_CAP: usize = 40;
-/// Per-node top-K edges kept for display (plus the spanning backbone).
-const TOP_K_EDGES: usize = 4;
 /// Per-source composition cap on NOT-yet-judged stories: no single
 /// source_type may fill more than this fraction of the node budget with
 /// unjudged items (live 2026-07-21: crates.io held 59 of 150 nodes — a
@@ -193,35 +191,24 @@ pub(crate) fn build_graph_timed(
         + overflow.iter().map(|s| s.member_count).sum::<usize>();
     stories.truncate(max_nodes);
 
-    let mut rep_of: HashMap<i64, i64> = HashMap::new();
-    for s in &stories {
-        for &member in &s.member_ids {
-            rep_of.insert(member, s.item.id);
-        }
-    }
     let story_items: Vec<types::RawItem> =
         stories.iter().map(|s| story::clone_raw(&s.item)).collect();
 
-    // Semantic edges first; communities form from THESE ONLY. Chain edges are
-    // keyword-topic paths (rendered context) — feeding them into community
-    // detection welded semantically unrelated items into fake themes (live
-    // forensics 2026-07-19: 2 of 30 clusters existed solely on chain edges,
-    // 5 more part-welded, one politics item chained into an "api" cluster).
+    // Communities form from semantic edges only: keyword-topic chain edges
+    // welded unrelated items into fake themes (live forensics 2026-07-19),
+    // and with no edges drawn on screen they no longer earned their query.
     let mut edge_list = Vec::new();
     edges::compute_semantic_edges(&story_items, &mut edge_list);
     let clusters = clustering::compute_clusters(&story_items, &edge_list);
     mark("edges+louvain", &mut phases);
-
-    edges::compute_chain_edges(conn, &rep_of, &mut edge_list);
-    edges::merge_duplicate_edges(&mut edge_list);
-    mark("chains", &mut phases);
 
     // Visibility: anything connected or aggregated appears; isolated plain
     // items appear in the unconnected lane up to SINGLETON_CAP by
     // relevance. Curated singletons are EXEMPT from the cap (they carry a
     // persisted feed-curation verdict — the corpus the map claims to show),
     // as are quota-reserved category items (P2.12) — both would otherwise
-    // lose their slot to higher-scored not-yet-judged items.
+    // lose their slot to higher-scored not-yet-judged items — and stack
+    // items, which the map always shows in their own column.
     struct Vis {
         id: i64,
         relevance: f32,
@@ -237,7 +224,7 @@ pub(crate) fn build_graph_timed(
             relevance: s.item.relevance_score,
             connected: degree.get(&s.item.id).copied().unwrap_or(0) > 0,
             is_story: s.member_count > 1,
-            exempt: s.item.curated || s.item.reserved,
+            exempt: s.item.curated || s.item.reserved || s.affects_you,
         })
         .collect();
     handles.sort_by(|a, b| {
@@ -288,34 +275,22 @@ pub(crate) fn build_graph_timed(
                 )
                 .to_string(),
                 affects_you: s.affects_you,
-                x: 0.0,
-                y: 0.0,
             }
         })
         .collect();
 
     edge_list.retain(|e| visible_ids.contains(&e.source) && visible_ids.contains(&e.target));
-    let mut clusters: Vec<GraphCluster> = clusters
+    let clusters: Vec<GraphCluster> = clusters
         .into_iter()
         .map(|mut c| {
             c.node_ids.retain(|id| visible_ids.contains(id));
             c
         })
-        .filter(|c| c.node_ids.len() >= 2)
         .collect();
-    // A node whose community fell below 2 visible members belongs to no
-    // rendered cluster — it sits in the unconnected lane, and its cluster_id
-    // must say so (the frontend counts the lane from `cluster_id == null`).
-    let kept_cluster_ids: HashSet<&str> = clusters.iter().map(|c| c.id.as_str()).collect();
-    for node in &mut nodes {
-        if node
-            .cluster_id
-            .as_deref()
-            .is_some_and(|id| !kept_cluster_ids.contains(id))
-        {
-            node.cluster_id = None;
-        }
-    }
+    // Stack items leave their theme, a theme keeps 2+ remaining members, and
+    // every node's cluster_id is rewritten to match (None = stack/unthemed —
+    // the frontend partitions on exactly these fields).
+    let mut clusters = themes::finalize_themes(clusters, &mut nodes, &story_items);
     labels::assign_cluster_labels(&story_items, &mut clusters);
 
     // Coherence: mean pairwise member cosine per cluster, and the pair-count
@@ -352,32 +327,7 @@ pub(crate) fn build_graph_timed(
         None
     };
 
-    // Temporal layout anchors (P2.11): clusters overlapping a persisted
-    // anchor's member set seed at the remembered position, so day-over-day
-    // maps stay spatially recognizable. Read-only here — persisting is the
-    // Tauri command's side effect, keeping build_graph a pure function of
-    // (corpus, anchor state) and the determinism contract intact.
-    let stored_anchors = anchors::load_anchors(conn, days);
-    let cluster_members: Vec<(String, HashSet<i64>)> = clusters
-        .iter()
-        .map(|c| {
-            let members: HashSet<i64> = c
-                .node_ids
-                .iter()
-                .filter_map(|id| stories.iter().find(|s| s.item.id == *id))
-                .flat_map(|s| s.member_ids.iter().copied())
-                .collect();
-            (c.id.clone(), members)
-        })
-        .collect();
-    let anchor_seeds = anchors::match_anchors(&cluster_members, &stored_anchors);
-
-    // Layout sees the full retained edge set (affinity fidelity); display
-    // gets the sparsified backbone + top-K.
-    mark("labels+coherence+anchors", &mut phases);
-    layout::compute_layout(&mut nodes, &edge_list, &mut clusters, &anchor_seeds);
-    edges::sparsify_edges(&mut edge_list, TOP_K_EDGES);
-    mark("layout", &mut phases);
+    mark("themes+labels+coherence", &mut phases);
 
     let story_count = nodes.iter().filter(|n| n.member_count > 1).count();
     let collapsed_items: usize = nodes.iter().map(|n| n.member_count.saturating_sub(1)).sum();
@@ -445,11 +395,7 @@ pub async fn build_content_graph(
         let conn = crate::open_db_connection()?;
         let d = days.unwrap_or(DEFAULT_DAYS);
         let m = max_nodes.unwrap_or(DEFAULT_MAX_NODES);
-        let graph = build_graph(&conn, d, m)?;
-        // Persist this build's cluster geometry as the next build's layout
-        // anchors (P2.11). Deliberately OUTSIDE build_graph: builds stay pure.
-        anchors::persist_layout_anchors(&conn, d, &graph);
-        Ok(graph)
+        build_graph(&conn, d, m)
     })
     .await
     .map_err(|e| crate::error::FourDaError::Internal(format!("graph build task failed: {e}")))?

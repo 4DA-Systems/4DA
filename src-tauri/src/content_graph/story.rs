@@ -13,10 +13,12 @@
 //! story node removes the clique at the source and leaves edges that carry
 //! actual structure.
 //!
-//! Two grouping signals, merged transitively via union-find:
+//! Three grouping signals, merged transitively via union-find:
 //! - **Advisory key** (exact): security alerts for the same dependency, keyed
 //!   on the dep_linker package — the same identity the feed's advisory
 //!   stacking uses, so List and Graph collapse the same items.
+//! - **Release twins** (exact): one release published to two registries at
+//!   the same version (an npm package and its crate).
 //! - **Near-duplicate embeddings** (generic): cosine at or above
 //!   [`STORY_COSINE`], or a slightly relaxed cosine backed by strong title
 //!   overlap. Precision-first: a missed collapse is minor visual noise; a
@@ -146,6 +148,66 @@ fn advisory_title_subject(title: &str) -> Option<String> {
     Some(tokens.join(" "))
 }
 
+/// Registry sources whose titles are "<prefix>: <package> v<version>".
+const REGISTRY_RELEASE_SOURCES: &[&str] = &["crates_io", "npm_registry", "pypi", "go_modules"];
+
+/// A registry release, reduced to what identifies it across ecosystems.
+struct ReleaseIdentity {
+    source: String,
+    /// Package-name words: "@tauri-apps/plugin-opener" → {tauri, apps, plugin, opener}.
+    words: Vec<String>,
+    version: String,
+}
+
+impl ReleaseIdentity {
+    /// The JS and Rust halves of one release (npm `@tauri-apps/plugin-opener`
+    /// 2.7.0 + crate `tauri-plugin-opener` 2.7.0, live 2026-10-05) are one
+    /// event for the user. Twins need: different registries, the exact same
+    /// version, and one name's words all inside the other's with at least
+    /// two words — so `openai` 7.28 never meets `@ai-sdk/openai` 4.0.
+    fn is_twin_of(&self, other: &ReleaseIdentity) -> bool {
+        if self.source == other.source || self.version != other.version {
+            return false;
+        }
+        let (small, large) = if self.words.len() <= other.words.len() {
+            (&self.words, &other.words)
+        } else {
+            (&other.words, &self.words)
+        };
+        small.len() >= 2 && small.iter().all(|w| large.contains(w))
+    }
+}
+
+/// Parse "npm: @tauri-apps/plugin-opener v2.7.0" into its release identity.
+fn release_identity(item: &RawItem) -> Option<ReleaseIdentity> {
+    if !REGISTRY_RELEASE_SOURCES.contains(&item.source_type.as_str()) {
+        return None;
+    }
+    let body = item
+        .title
+        .split_once(": ")
+        .map_or(item.title.as_str(), |(_, rest)| rest);
+    let (name, version) = body.trim().rsplit_once(' ')?;
+    let version = version.strip_prefix('v')?;
+    if !version.starts_with(|c: char| c.is_ascii_digit()) {
+        return None;
+    }
+    let words: Vec<String> = name
+        .to_lowercase()
+        .split(|c: char| !c.is_ascii_alphanumeric())
+        .filter(|w| !w.is_empty())
+        .map(str::to_string)
+        .collect();
+    if words.is_empty() {
+        return None;
+    }
+    Some(ReleaseIdentity {
+        source: item.source_type.clone(),
+        words,
+        version: version.to_string(),
+    })
+}
+
 /// Collapse `items` into stories. Output order follows the input order of
 /// each story's representative (input is relevance-sorted, so stories stay
 /// relevance-sorted). Deterministic throughout.
@@ -170,11 +232,33 @@ pub(super) fn collapse_stories(items: Vec<RawItem>) -> Vec<StoryItem> {
         }
     }
 
-    // Signal 2: near-duplicate embeddings (optionally corroborated by titles).
+    // Signal 2: one release published to two ecosystems at once.
+    let releases: Vec<Option<ReleaseIdentity>> = items.iter().map(release_identity).collect();
+    for i in 0..n {
+        for j in (i + 1)..n {
+            if let (Some(a), Some(b)) = (&releases[i], &releases[j]) {
+                if a.is_twin_of(b) {
+                    uf.union(i, j);
+                }
+            }
+        }
+    }
+
+    // Signal 3: near-duplicate embeddings (optionally corroborated by titles).
     // Pre-normalized once: the dominant cost of a whole graph build.
     let unit = unit_vectors(&items);
     for i in 0..n {
         for j in (i + 1)..n {
+            // Two releases of DIFFERENT packages are never near-duplicates,
+            // however alike their templated titles: "crates.io:
+            // tauri-plugin-autostart v2.7.0" folded into "…-opener v2.7.0"
+            // (prefix + version = 50% word overlap, live 2026-10-05) and hid
+            // a stack release behind another one.
+            if let (Some(a), Some(b)) = (&releases[i], &releases[j]) {
+                if a.words != b.words && !a.is_twin_of(b) {
+                    continue;
+                }
+            }
             let sim = dot(&unit[i], &unit[j]);
             let near_dup = sim >= STORY_COSINE
                 || (sim >= STORY_COSINE_WITH_OVERLAP
@@ -508,6 +592,112 @@ mod tests {
         assert!(
             (norm - 1.0).abs() < 1e-5,
             "centroid must be unit-norm, got {norm}"
+        );
+    }
+
+    fn release(id: i64, source: &str, title: &str, embedding: Vec<f32>) -> RawItem {
+        let mut r = item(id, title, embedding);
+        r.source_type = source.to_string();
+        r
+    }
+
+    #[test]
+    fn one_release_on_two_registries_is_one_story() {
+        // Orthogonal embeddings: only the release identity can group them.
+        let npm = release(
+            1,
+            "npm_registry",
+            "npm: @tauri-apps/plugin-opener v2.7.0",
+            vec![1.0, 0.0],
+        );
+        let krate = release(
+            2,
+            "crates_io",
+            "crates.io: tauri-plugin-opener v2.7.0",
+            vec![0.0, 1.0],
+        );
+        let stories = collapse_stories(vec![npm, krate]);
+        assert_eq!(stories.len(), 1);
+        assert_eq!(stories[0].member_ids, vec![1, 2]);
+    }
+
+    #[test]
+    fn release_twins_need_same_version_other_registry_and_two_name_words() {
+        let cases = [
+            // Different versions of the "same" package.
+            (
+                "npm: @tauri-apps/plugin-opener v2.7.0",
+                "crates.io: tauri-plugin-opener v2.7.1",
+            ),
+            // Same registry: a re-fetch, not a twin (the feed's own twin rule owns it).
+            (
+                "crates.io: tauri-plugin-opener v2.7.0",
+                "crates.io: tauri-plugin-opener-extra v2.7.0",
+            ),
+            // One-word names are too generic to identify a package across ecosystems.
+            ("npm: openai v4.0.83", "crates.io: async-openai v4.0.83"),
+            // Words not contained: a different package.
+            (
+                "npm: @ai-sdk/openai v4.0.83",
+                "crates.io: openai-api-rs v4.0.83",
+            ),
+        ];
+        for (a, b) in cases {
+            let sa = if a.starts_with("npm") {
+                "npm_registry"
+            } else {
+                "crates_io"
+            };
+            let sb = if b.starts_with("npm") {
+                "npm_registry"
+            } else {
+                "crates_io"
+            };
+            let stories = collapse_stories(vec![
+                release(1, sa, a, vec![1.0, 0.0]),
+                release(2, sb, b, vec![0.0, 1.0]),
+            ]);
+            assert_eq!(stories.len(), 2, "{a} / {b} must stay separate");
+        }
+    }
+
+    #[test]
+    fn different_packages_released_together_never_collapse() {
+        // Identical embeddings + 50% title-word overlap ("crates.io:" and
+        // the version) — the near-duplicate rule alone would fold them.
+        let a = release(
+            1,
+            "crates_io",
+            "crates.io: tauri-plugin-opener v2.7.0",
+            vec![1.0, 0.0],
+        );
+        let b = release(
+            2,
+            "crates_io",
+            "crates.io: tauri-plugin-autostart v2.7.0",
+            vec![1.0, 0.0],
+        );
+        assert_eq!(collapse_stories(vec![a, b]).len(), 2);
+        // The same release fetched twice still collapses.
+        let c = release(3, "crates_io", "crates.io: tokio v1.53.2", vec![1.0, 0.0]);
+        let d = release(4, "crates_io", "crates.io: tokio v1.53.2", vec![1.0, 0.0]);
+        assert_eq!(collapse_stories(vec![c, d]).len(), 1);
+    }
+
+    #[test]
+    fn release_identity_parses_registry_titles_only() {
+        let r = release_identity(&release(
+            1,
+            "npm_registry",
+            "npm: @ai-sdk/openai v4.0.83",
+            vec![],
+        ))
+        .expect("parses");
+        assert_eq!(r.words, vec!["ai", "sdk", "openai"]);
+        assert_eq!(r.version, "4.0.83");
+        assert!(release_identity(&item(2, "Tokio v1.53 released", vec![])).is_none());
+        assert!(
+            release_identity(&release(3, "crates_io", "crates.io: tokio latest", vec![])).is_none()
         );
     }
 

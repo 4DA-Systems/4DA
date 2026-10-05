@@ -17,9 +17,7 @@ mod signal_chains_grounding;
 mod signal_chains_persistence;
 #[path = "signal_chains_prediction.rs"]
 mod signal_chains_prediction;
-use signal_chains_candidates::{
-    load_chain_candidate_items_by_id, load_recent_chain_candidate_items, ChainCandidateItem,
-};
+use signal_chains_candidates::{load_recent_chain_candidate_items, ChainCandidateItem};
 use signal_chains_grounding::{chain_policy, dependency_evidence};
 use signal_chains_persistence::record_signal_chain_events;
 pub use signal_chains_prediction::*;
@@ -110,23 +108,6 @@ pub fn detect_and_record_chains(conn: &rusqlite::Connection) -> Result<Vec<Signa
         }
     }
     Ok(chains)
-}
-
-/// Detect chains among a SPECIFIC item set (by id), instead of the global
-/// 200-most-recent window.
-///
-/// The content graph needs this: it loads its nodes by RELEVANCE while
-/// `detect_chains` reads by RECENCY — live-measured 2026-07-19, the two sets
-/// shared 0 of 150 items, so graph chain edges could structurally never fire.
-pub fn detect_chains_for_items(
-    conn: &rusqlite::Connection,
-    item_ids: &[i64],
-) -> Result<Vec<SignalChain>> {
-    if item_ids.is_empty() {
-        return Ok(vec![]);
-    }
-    let items = load_chain_candidate_items_by_id(conn, item_ids)?;
-    detect_chains_from_items(conn, items)
 }
 
 /// Core chain detection over an already-loaded item set.
