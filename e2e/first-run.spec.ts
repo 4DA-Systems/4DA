@@ -1,16 +1,31 @@
 import { test, expect, type Page, type ConsoleMessage } from '@playwright/test';
 
+import { installTauriIpcMock, mockSettings } from './support/app';
+
 /**
  * First-run flow tests — validate the user journey from app load through navigation.
  * These tests handle both onboarding and main-view states gracefully.
  */
 
+/**
+ * FirstRunTransition: a full-screen role="status" whose name tracks its phase.
+ * A bare `[role="status"][aria-busy]` also matched the splash screen ("Ready!")
+ * and the empty-state panels, so a plain cold boot was misread as first-run.
+ */
+const FIRST_RUN_STATUS =
+  /^(Preparing analysis|Showing project intelligence|Scanning sources|Analyzing results|Analysis error|Completing|Scan complete|Analysis complete)/;
+
+function firstRunStatus(page: Page) {
+  return page.getByRole('status', { name: FIRST_RUN_STATUS });
+}
+
 /** Wait for app to be interactive — returns which state we landed in */
 async function waitForApp(page: Page): Promise<'splash' | 'onboarding' | 'first-run' | 'main'> {
-  // Wait for something visible
-  const splash = page.locator('[data-testid="splash-screen"], .splash-screen');
+  // Wait for something visible. The splash is the status region that carries
+  // the "Refresh if stuck" escape hatch.
+  const splash = page.getByRole('status').filter({ has: page.getByRole('button', { name: /refresh if stuck/i }) });
   const onboarding = page.getByRole('dialog', { name: /setup wizard/i });
-  const firstRun = page.locator('[role="status"][aria-busy]');
+  const firstRun = firstRunStatus(page);
   const tablist = page.getByRole('tablist', { name: /content views/i });
 
   const result = await Promise.race([
@@ -66,20 +81,21 @@ test.describe('First-Run Flow', () => {
   });
 
   test('onboarding wizard has navigable sections', async ({ page }) => {
-    const state = await waitForApp(page);
-
-    if (state !== 'onboarding') {
-      test.skip(true, `App in ${state} state, not onboarding`);
-      return;
-    }
+    // Plain browser mode never reaches onboarding (with no backend the
+    // settings never load, so the onboarding decision is never made). A
+    // backend reporting onboarding_complete=false is what opens the wizard.
+    await installTauriIpcMock(page, {
+      settings: { ...mockSettings({ provider: 'anthropic', model: 'claude-sonnet-5' }), onboarding_complete: false },
+    });
+    await page.goto('/');
+    expect(await waitForApp(page)).toBe('onboarding');
 
     const dialog = page.getByRole('dialog', { name: /setup wizard/i });
     await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('group', { name: /step/i })).toBeVisible();
 
     // Should have at least one button for navigation
-    const buttons = dialog.getByRole('button');
-    const count = await buttons.count();
-    expect(count).toBeGreaterThan(0);
+    await expect(dialog.getByRole('button').first()).toBeVisible();
   });
 
   test('main view shows analysis progress indicators', async ({ page }) => {
@@ -90,19 +106,15 @@ test.describe('First-Run Flow', () => {
       return;
     }
 
-    // In first-run or main state, look for progress indicators or results
     if (state === 'first-run') {
-      // FirstRunTransition should show progress or status
-      const statusEl = page.locator('[role="status"]');
-      await expect(statusEl).toBeVisible({ timeout: 5_000 });
+      // FirstRunTransition announces its current phase.
+      await expect(firstRunStatus(page)).toBeVisible({ timeout: 5_000 });
     } else {
-      // Main view — should have action bar or results
-      const actionBar = page.locator('[data-testid="action-bar"], button:has-text("Analyze")');
-      const hasActionBar = await actionBar.first().isVisible().catch(() => false);
-      // At minimum, the app shell should be rendered
-      const header = page.locator('header');
-      const hasHeader = await header.first().isVisible().catch(() => false);
-      expect(hasActionBar || hasHeader).toBeTruthy();
+      // Main view: the app bar's live status line reports the analysis state
+      // and the Run analysis control is available.
+      const appBar = page.getByRole('banner', { name: '4DA' });
+      await expect(appBar.getByRole('status')).toHaveText(/^(Ready to analyze|Analyzing\.\.\.|Analysis complete)$/);
+      await expect(appBar.getByRole('button', { name: 'Run analysis' })).toBeVisible();
     }
   });
 

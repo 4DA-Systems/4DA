@@ -1,14 +1,10 @@
 import { test, expect } from '@playwright/test';
 
-const APP_URL = 'http://localhost:4444';
+import { appBar, gotoMainShell } from './support/app';
 
 test.describe('Keyboard Navigation & Accessibility', () => {
   test.beforeEach(async ({ page }) => {
-    await page.goto(APP_URL, { waitUntil: 'networkidle', timeout: 15000 });
-    test.skip(
-      await page.locator('[data-testid="onboarding"]').isVisible(),
-      'App in onboarding state'
-    );
+    await gotoMainShell(page);
   });
 
   test('pressing ? opens keyboard shortcuts modal', async ({ page }) => {
@@ -64,40 +60,28 @@ test.describe('Keyboard Navigation & Accessibility', () => {
     await page.keyboard.press('Escape');
   });
 
-  test('Tab navigates through action bar items', async ({ page }) => {
-    const actionBar = page.getByRole('toolbar').or(page.locator('[data-testid="action-bar"]'));
-    const hasActionBar = await actionBar.isVisible().catch(() => false);
-    test.skip(!hasActionBar, 'Action bar not visible');
+  test('Tab navigates through app bar controls in order', async ({ page }) => {
+    // The analysis controls live in the app bar (banner), not a toolbar.
+    const bar = appBar(page);
+    await bar.getByRole('combobox', { name: 'Search 4DA' }).focus();
 
-    // Focus the action bar area
-    await actionBar.first().focus();
-
-    // Tab should move through interactive elements
-    const buttons = actionBar.getByRole('button');
-    const buttonCount = await buttons.count();
-    expect(buttonCount).toBeGreaterThan(0);
-
-    // Tab through and verify focus moves to action bar buttons
     await page.keyboard.press('Tab');
-    const focusedInBar = await actionBar.locator(':focus').count();
-    expect(focusedInBar).toBeGreaterThanOrEqual(0); // At least attempted navigation
+    await expect(bar.getByRole('button', { name: 'Run analysis' })).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(bar.getByRole('button', { name: /switch to (light|dark) theme/i })).toBeFocused();
+    await page.keyboard.press('Tab');
+    await expect(bar.getByRole('button', { name: 'Settings', exact: true })).toBeFocused();
   });
 
   test('keyboard shortcuts do not fire when input is focused', async ({ page }) => {
     // Find a search input if available
-    const searchInput = page.getByRole('searchbox')
-      .or(page.getByPlaceholder(/search/i))
-      .or(page.locator('input[type="search"]'));
-    const hasSearch = await searchInput.isVisible().catch(() => false);
-    test.skip(!hasSearch, 'No search input visible');
+    const searchInput = appBar(page).getByRole('combobox', { name: 'Search 4DA' });
+    await searchInput.focus();
+    await searchInput.pressSequentially('?,');
 
-    // Focus the search input and type ?
-    await searchInput.first().focus();
-    await searchInput.first().type('?');
-
-    // The shortcuts modal should NOT open when typing in an input
-    const modal = page.getByRole('dialog');
-    const modalVisible = await modal.isVisible().catch(() => false);
-    expect(modalVisible).toBe(false);
+    // Neither the shortcuts (?) nor the settings (,) dialog opens; the
+    // characters go into the input.
+    await expect(searchInput).toHaveValue('?,');
+    await expect(page.getByRole('dialog')).toHaveCount(0);
   });
 });

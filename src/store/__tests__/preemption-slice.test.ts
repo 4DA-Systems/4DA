@@ -45,6 +45,14 @@ describe('preemption-slice — paywall classification', () => {
     expect(s.preemptionLoading).toBe(false);
   });
 
+  it('shows a user-facing message, not the raw exception text', async () => {
+    mockCmd.mockRejectedValue(new TypeError("Cannot read properties of undefined (reading 'invoke')"));
+    await useAppStore.getState().loadPreemption();
+    const s = useAppStore.getState();
+    expect(s.preemptionError).toBeTruthy();
+    expect(s.preemptionError).not.toMatch(/TypeError|reading 'invoke'/);
+  });
+
   it('clears the paywall flag on a subsequent successful load', async () => {
     mockCmd.mockRejectedValue(GATE_ERROR);
     await useAppStore.getState().loadPreemption();

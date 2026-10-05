@@ -121,7 +121,9 @@ export const SettingsIntelligenceTab = memo(function SettingsIntelligenceTab({
         )}
 
         {/* Your Stack — user-controlled project allowlist for grounding */}
-        <YourStackSection />
+        <PanelErrorBoundary name="Your Stack">
+          <YourStackSection />
+        </PanelErrorBoundary>
 
         {/* Standing Queries — persistent monitoring searches (Signal) */}
         <PanelErrorBoundary name="Standing Queries">
