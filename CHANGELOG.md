@@ -15,6 +15,11 @@ re-scores everything 4DA already holds; expect the first analysis to take longer
 Going back to 1.0.2 afterwards is refused with a clear message rather than risking the
 upgraded database.
 
+**The download is larger (Windows installer ~280 MB, up from ~125 MB).** The offline
+embedding model is now nomic-embed-text v1.5 — the same model Ollama serves — bundled so
+that local and Ollama embeddings share one vector space and work with no network. It is
+the bulk of the size.
+
 **The Windows installer in this release is not code-signed.** Windows code signing is
 still being set up. macOS is signed and notarized as normal; Linux is unaffected. Verify
 the SHA-256 against `SHASUMS256.txt` before running the Windows installer.

@@ -6,7 +6,8 @@ set -euo pipefail
 # Comprehensive pre-release validation: tests, builds, sovereignty, versions
 # ─────────────────────────────────────────────────────────────────────────────
 
-REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
+# `pwd -W` (Git Bash) yields D:/... — node reads an MSYS /d/... path as D:\d\...
+REPO_ROOT="$(cd "$(dirname "$0")/.." && (pwd -W 2>/dev/null || pwd))"
 cd "$REPO_ROOT"
 
 # ── Colors ───────────────────────────────────────────────────────────────────
@@ -118,12 +119,16 @@ step_elapsed
 step 2 "Rust tests (cargo test --lib)"
 step_start
 
-RUST_OUTPUT=$(cd src-tauri && cargo test --lib 2>&1) || true
+# The exit code decides pass/fail; the summary line only supplies counts.
+# grep -E, not -P: Git Bash rejects -P ("supports only unibyte and UTF-8
+# locales"), which silently zeroed every count here until 2026-10-05.
+RUST_EXIT=0
+RUST_OUTPUT=$(cd src-tauri && cargo test --lib 2>&1) || RUST_EXIT=$?
 RUST_RESULT=$(echo "$RUST_OUTPUT" | grep -E "^test result:" | tail -1 || true)
 
-if echo "$RUST_RESULT" | grep -q "ok\."; then
-  RUST_TEST_COUNT=$(echo "$RUST_RESULT" | grep -oP '\d+ passed' | grep -oP '\d+' || echo "0")
-  RUST_FAILED=$(echo "$RUST_RESULT" | grep -oP '\d+ failed' | grep -oP '\d+' || echo "0")
+if [ "$RUST_EXIT" -eq 0 ] && echo "$RUST_RESULT" | grep -q "ok\."; then
+  RUST_TEST_COUNT=$(echo "$RUST_RESULT" | grep -oE '[0-9]+ passed' | grep -oE '[0-9]+' || echo "0")
+  RUST_FAILED=$(echo "$RUST_RESULT" | grep -oE '[0-9]+ failed' | grep -oE '[0-9]+' || echo "0")
   if [ "${RUST_FAILED:-0}" -gt 0 ]; then
     fail "Rust tests: ${RUST_TEST_COUNT} passed, ${RUST_FAILED} failed"
     record_fail "Rust tests: ${RUST_FAILED} failures"
@@ -131,9 +136,9 @@ if echo "$RUST_RESULT" | grep -q "ok\."; then
     pass "Rust tests: ${RUST_TEST_COUNT} passed"
     record_pass "Rust tests: ${RUST_TEST_COUNT} passed"
   fi
-elif echo "$RUST_RESULT" | grep -q "FAILED"; then
-  RUST_TEST_COUNT=$(echo "$RUST_RESULT" | grep -oP '\d+ passed' | grep -oP '\d+' || echo "0")
-  RUST_FAILED=$(echo "$RUST_RESULT" | grep -oP '\d+ failed' | grep -oP '\d+' || echo "0")
+elif [ "$RUST_EXIT" -ne 0 ] || echo "$RUST_RESULT" | grep -q "FAILED"; then
+  RUST_TEST_COUNT=$(echo "$RUST_RESULT" | grep -oE '[0-9]+ passed' | grep -oE '[0-9]+' || echo "0")
+  RUST_FAILED=$(echo "$RUST_RESULT" | grep -oE '[0-9]+ failed' | grep -oE '[0-9]+' || echo "0")
   fail "Rust tests: ${RUST_TEST_COUNT} passed, ${RUST_FAILED} failed"
   echo "$RUST_OUTPUT" | grep -E "^failures:" -A 50 | head -30 || true
   record_fail "Rust tests: ${RUST_FAILED} failures"
@@ -151,16 +156,17 @@ step_elapsed
 step 3 "Frontend tests (vitest)"
 step_start
 
-FRONTEND_OUTPUT=$(pnpm run test -- --run 2>&1) || true
+FRONTEND_EXIT=0
+FRONTEND_OUTPUT=$(pnpm run test -- --run 2>&1) || FRONTEND_EXIT=$?
 
 # Vitest outputs "Tests  N passed" or "Tests  N passed | M failed"
-FRONTEND_PASSED_LINE=$(echo "$FRONTEND_OUTPUT" | grep -oP 'Tests\s+\d+ passed' | head -1 || true)
-FRONTEND_FAILED_LINE=$(echo "$FRONTEND_OUTPUT" | grep -oP '\d+ failed' | head -1 || true)
+FRONTEND_PASSED_LINE=$(echo "$FRONTEND_OUTPUT" | grep -oE 'Tests[[:space:]]+[0-9]+ passed' | head -1 || true)
+FRONTEND_FAILED_LINE=$(echo "$FRONTEND_OUTPUT" | grep -oE '[0-9]+ failed' | head -1 || true)
 
 if [ -n "$FRONTEND_PASSED_LINE" ]; then
-  FRONTEND_TEST_COUNT=$(echo "$FRONTEND_PASSED_LINE" | grep -oP '\d+' | head -1 || echo "0")
-  FRONTEND_FAILED=$(echo "$FRONTEND_FAILED_LINE" | grep -oP '\d+' || echo "0")
-  if [ "${FRONTEND_FAILED:-0}" -gt 0 ] && [ "${FRONTEND_FAILED}" != "0" ]; then
+  FRONTEND_TEST_COUNT=$(echo "$FRONTEND_PASSED_LINE" | grep -oE '[0-9]+' | head -1 || echo "0")
+  FRONTEND_FAILED=$(echo "$FRONTEND_FAILED_LINE" | grep -oE '[0-9]+' || echo "0")
+  if [ "$FRONTEND_EXIT" -ne 0 ] || [ "${FRONTEND_FAILED:-0}" -gt 0 ]; then
     fail "Frontend tests: ${FRONTEND_TEST_COUNT} passed, ${FRONTEND_FAILED} failed"
     record_fail "Frontend tests: ${FRONTEND_FAILED} failures"
   else
@@ -232,7 +238,7 @@ E2E_EXIT=0
 E2E_OUTPUT=$(pnpm run test:e2e 2>&1) || E2E_EXIT=$?
 
 if [ "$E2E_EXIT" -eq 0 ]; then
-  E2E_PASSED=$(echo "$E2E_OUTPUT" | grep -oP '\d+ passed' | head -1 || true)
+  E2E_PASSED=$(echo "$E2E_OUTPUT" | grep -oE '[0-9]+ passed' | head -1 || true)
   pass "E2E tests: ${E2E_PASSED:-passed}"
   record_pass "E2E tests: ${E2E_PASSED:-passed}"
 else
@@ -451,6 +457,7 @@ if [ -f "$RELEASE_BINARY" ]; then
     if (idx >= 0) { data.history[idx] = entry; } else { data.history.push(entry); }
     if (data.history.length > 50) data.history = data.history.slice(-50);
     data.latest = entry;
+    fs.mkdirSync(require('path').dirname(file), { recursive: true });
     fs.writeFileSync(file, JSON.stringify(data, null, 2) + '\n');
   "
 
