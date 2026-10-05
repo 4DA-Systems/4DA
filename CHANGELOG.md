@@ -86,7 +86,18 @@ the SHA-256 against `SHASUMS256.txt` before running the Windows installer.
 - Team sync fails closed when the team key is missing instead of encrypting under zero
   bytes.
 
+### Accessibility
+
+- Dialogs keep keyboard focus inside them: Tab and Shift+Tab no longer slip to the page
+  behind Settings, the setup wizard, the keyboard-shortcuts sheet or the team invite —
+  including when the last button is disabled or focus had landed on plain dialog text.
+- Escape in the team-invite dialog closes just that dialog, not all of Settings.
+
 ### Windows and reliability
+
+- A failure in the "Your stack" settings section stays in that section instead of
+  replacing the whole Settings dialog, and Preemption errors read as messages rather than
+  raw program errors.
 
 - Background work no longer opens console windows over the screen.
 - Windows reports a large GPU's real VRAM instead of a saturated 4 GB.
