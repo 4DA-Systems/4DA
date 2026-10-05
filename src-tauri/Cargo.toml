@@ -88,7 +88,7 @@ getrandom = "0.4"
 chrono = { version = "0.4", features = ["serde"] }
 
 # Directory utilities (for home dir resolution)
-dirs = "5"
+dirs = "7"
 
 # Async trait support
 async-trait = "0.1"
