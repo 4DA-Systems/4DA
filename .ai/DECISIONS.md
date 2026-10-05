@@ -803,7 +803,7 @@
   - *Stripe Tax + own registrations (0.5%):* Cheaper per transaction, but the filing burden and liability stay with us. Revisit if volume makes 3% of revenue larger than the cost of a tax accountant plus registrations.
   - *Paddle / Lemon Squeezy:* Also merchants of record, but a rewrite of checkout, webhook and renewal against a new API, with a second company in the data path.
   - *Do nothing until revenue is material:* Rejected. The liability accrues from the first EU/UK sale, and subscriptions sold now could never be moved to Managed Payments later.
-- **Consequences:** Statements read `LINK.COM* 4DA SYSTEMS`; Link may refund within 60 days and may cancel and delete a customer on a data-deletion request (renewal then answers `not_entitled`, as for any cancellation); customers can manage subscriptions at link.com as well as in our portal. Terms §4.1/4.2/4.4/5.6 and the privacy processor table say so.
+- **Consequences:** Statements read `LINK.COM* 4DA SYSTEMS`; Link may refund within 60 days and may cancel and delete a customer on a data-deletion request (renewal then answers `not_entitled`, as for any cancellation); customers can manage subscriptions at link.com as well as in our portal. Prices are tax-INCLUSIVE (Dashboard → Tax settings → "Include tax in prices"): Australian Consumer Law and EU/UK price-display rules require the advertised consumer price to be the total price, so A$12 shown is A$12 paid and the tax comes out of our margin. Terms §4.1/4.2/4.4/5.6 and the privacy processor table say so.
 - **Date:** 2026-10-05
 - **Status:** Proposed (operator to ratify by enabling Managed Payments)
 
