@@ -92,7 +92,13 @@ export async function onRequest({ request, env }) {
     const stripe = new Stripe(env.STRIPE_SECRET_KEY, { httpClient: Stripe.createFetchHttpClient() });
     const sessionParams = {
       mode: config.mode,
-      payment_method_types: ['card'],
+      // Stripe, through Link, is the merchant of record (AD-053): it calculates,
+      // collects and remits sales tax / VAT / GST, localises the currency and
+      // picks the payment methods (cards, Apple Pay, Google Pay, Link, local
+      // methods), so payment_method_types / automatic_tax must not be set.
+      // Requires Managed Payments enabled in the Dashboard and an eligible
+      // tax_code on every Signal product.
+      managed_payments: { enabled: true },
       line_items: [{ price: priceId, quantity: 1 }],
       metadata: config.metadata,
       success_url: `${siteUrl}/signal/success?session_id={CHECKOUT_SESSION_ID}`,
