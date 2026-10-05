@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
+import { tabbableIn, trapTabKey } from '../../lib/focus-trap';
 
 interface TeamInviteDialogProps {
   onClose: () => void;
@@ -23,26 +24,13 @@ export function TeamInviteDialog({ onClose }: TeamInviteDialogProps) {
     const previouslyFocused = document.activeElement as HTMLElement;
     const dialog = dialogRef.current;
     if (dialog) {
-      const firstInput = dialog.querySelector<HTMLElement>('input, button, select, textarea');
-      firstInput?.focus();
+      tabbableIn(dialog)[0]?.focus();
     }
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { onClose(); return; }
-      if (e.key === 'Tab' && dialog) {
-        const focusable = dialog.querySelectorAll<HTMLElement>(
-          'input, button, select, textarea, [tabindex]:not([tabindex="-1"])'
-        );
-        const first = focusable[0];
-        const last = focusable[focusable.length - 1];
-        if (e.shiftKey && document.activeElement === first) {
-          e.preventDefault();
-          last?.focus();
-        } else if (!e.shiftKey && document.activeElement === last) {
-          e.preventDefault();
-          first?.focus();
-        }
-      }
+      // stopPropagation: the app-wide Escape on window would also close Settings.
+      if (e.key === 'Escape') { e.stopPropagation(); onClose(); return; }
+      trapTabKey(e, dialog);
     };
 
     document.addEventListener('keydown', handleKeyDown);
