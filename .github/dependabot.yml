@@ -53,9 +53,11 @@ updates:
     groups:
       minor-and-patch:
         update-types: ["minor", "patch"]
+    # semver-*-days are not supported for github-actions (Dependabot rejects
+    # the whole file: "semver-major-days is not supported for the package
+    # ecosystem 'github-actions'"), so actions get the flat cooldown only.
     cooldown:
       default-days: 3
-      semver-major-days: 7
     labels:
       - "dependencies"
       - "github-actions"
@@ -153,6 +155,16 @@ updates:
     commit-message:
       prefix: "chore(npm)"
       include: "scope"
+    ignore:
+      # DEFERRED 2026-10-05 (#773), same reason as the mcp-memory-server block
+      # below (#442). better-sqlite3 13 dropped prebuild-install: every install
+      # compiles with node-gyp, and node-gyp 10.2 cannot find the hosted
+      # windows runner's Visual Studio 18 ("unknown version"), so the Frontend
+      # job fails at `pnpm install`. Root scripts (check-deploy-truth,
+      # judge-cohort-monitor, dogfood-check, source-pipeline-health) need it.
+      # Lift once 13.x ships prebuilds again or node-gyp supports VS 18.
+      - dependency-name: "better-sqlite3"
+        versions: [">=13"]
 
   # ── MCP memory server ─────────────────────────────────────────────
   - package-ecosystem: "npm"

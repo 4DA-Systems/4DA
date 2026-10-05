@@ -417,6 +417,54 @@ jobs:
           }
           Remove-Item test-output.txt -ErrorAction SilentlyContinue
 
+  # Browser E2E (Playwright) against the frontend with a mocked Tauri IPC layer
+  # (e2e/support/app.ts). It was never run in CI and drifted: by 2026-10-05,
+  # 13 of 63 specs failed and 15 more skipped themselves without asserting,
+  # hiding three real app defects (#848). Running it on every frontend change
+  # keeps it honest. playwright.config.ts starts its own Vite on E2E_PORT and
+  # never reuses a server.
+  e2e:
+    name: E2E (browser)
+    needs: changes
+    # Same trigger set as Frontend; see the `!cancelled()` note there.
+    if: ${{ !cancelled() && (needs.changes.outputs.frontend == 'true' || needs.changes.outputs.workflows == 'true' || needs.changes.outputs.uncovered == 'true' || github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group' || github.event_name == 'schedule') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        with:
+          version: 10.34.6
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright Chromium
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run E2E suite
+        # Serial: the suite was stabilised and verified with one worker; the
+        # mocked backend is per-page, but a single Vite keeps timing predictable.
+        run: pnpm exec playwright test --workers=1
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: e2e-report
+          path: |
+            e2e-report/
+            e2e-results/
+          retention-days: 7
+
   mcp-contract:
     name: MCP schema contract
     # @4da/mcp-server (github.com/4DA-Systems/4da-mcp-server) reads this app's
@@ -1254,7 +1302,7 @@ jobs:
     # protection change is needed to enforce it. It runs on pull_request AND
     # merge_group (where it scans the final squash commits) and SKIPS on
     # workflow_dispatch/schedule (skipped == pass below).
-    needs: [changes, pr-metadata, repo-guards, dependabot-notice, frontend, mcp-contract, relay, rust, rust-calibration]
+    needs: [changes, pr-metadata, repo-guards, dependabot-notice, frontend, e2e, mcp-contract, relay, rust, rust-calibration]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
