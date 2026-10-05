@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-import { useEffect, useState, useCallback, memo, useMemo, type ReactNode } from 'react';
+import { useEffect, useRef, useState, useCallback, memo, useMemo, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { PanelErrorBoundary } from './PanelErrorBoundary';
@@ -15,6 +15,7 @@ import { SettingsTeamTab } from './settings/SettingsTeamTab';
 import { TeamInviteDialog } from './settings/TeamInviteDialog';
 import { useAppStore } from '../store';
 import { translateError } from '../utils/error-messages';
+import { tabbableIn, trapTabKey } from '../lib/focus-trap';
 
 // ============================================================================
 // Types
@@ -85,6 +86,7 @@ interface SettingsModalProps {
 export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsModalProps) {
   const { t } = useTranslation();
   const tier = useAppStore(s => s.tier);
+  const dialogRef = useRef<HTMLDivElement>(null);
   const showTeamInviteDialog = useAppStore(s => s.showTeamInviteDialog);
   const setShowTeamInviteDialog = useAppStore(s => s.setShowTeamInviteDialog);
   const settingsInitialTab = useAppStore(s => s.settingsInitialTab);
@@ -184,25 +186,30 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
   // eslint-disable-next-line react-hooks/exhaustive-deps -- run when the deep link is set
   }, [settingsInitialTab]);
 
-  // Focus trap
+  // Focus trap. The dialog is found by ref, not document.querySelector — that
+  // returned whichever [role="dialog"] came first in the page.
   useEffect(() => {
     const previouslyFocused = document.activeElement as HTMLElement | null;
-    const modal = document.querySelector('[role="dialog"]') as HTMLElement;
+    const modal = dialogRef.current;
     if (!modal) return;
-    const getFocusable = () => modal.querySelectorAll<HTMLElement>(
-      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
-    );
-    getFocusable()[0]?.focus();
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { e.stopPropagation(); onClose(); return; }
-      if (e.key !== 'Tab') return;
-      const focusable = getFocusable();
-      const first = focusable[0], last = focusable[focusable.length - 1];
-      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last?.focus(); }
-      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first?.focus(); }
+    tabbableIn(modal)[0]?.focus();
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      // A nested dialog (Team invite) closes itself; Escape there used to
+      // close the whole of Settings because this listener ran first.
+      if (modal.querySelector('[aria-modal="true"]')) return;
+      e.stopPropagation();
+      onClose();
     };
-    modal.addEventListener('keydown', handleKeyDown);
-    return () => { modal.removeEventListener('keydown', handleKeyDown); previouslyFocused?.focus(); };
+    // Document-level so Tab is trapped even after focus has dropped to <body>.
+    const handleTab = (e: KeyboardEvent) => trapTabKey(e, modal);
+    modal.addEventListener('keydown', handleEscape);
+    document.addEventListener('keydown', handleTab);
+    return () => {
+      modal.removeEventListener('keydown', handleEscape);
+      document.removeEventListener('keydown', handleTab);
+      previouslyFocused?.focus();
+    };
   }, [onClose]);
 
   // Monitoring action wrappers
@@ -215,7 +222,7 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
     catch (error) { setSettingsStatus(`Error: ${translateError(error)}`); }
   };
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
+    <div ref={dialogRef} className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4" role="dialog" aria-modal="true" aria-labelledby="settings-modal-title">
       <div className="bg-bg-secondary border border-border rounded-xl w-full max-w-4xl max-h-[calc(100vh-4rem)] flex flex-col overflow-hidden shadow-2xl">
         {/* Header */}
         <div className="px-6 py-4 border-b border-border flex items-center justify-between flex-shrink-0">
