@@ -2251,8 +2251,6 @@ async fn content_graph_nodes_have_required_fields() {
             node.get("relevance_score").is_some(),
             "node[{i}] must have relevance_score"
         );
-        assert!(node.get("x").is_some(), "node[{i}] must have x position");
-        assert!(node.get("y").is_some(), "node[{i}] must have y position");
         assert!(
             node.get("created_at").is_some(),
             "node[{i}] must have created_at"
@@ -2360,6 +2358,11 @@ async fn content_graph_clusters_are_consistent() {
     let nodes = graph["nodes"].as_array().expect("nodes must be array");
     let node_ids: std::collections::HashSet<i64> =
         nodes.iter().filter_map(|n| n["id"].as_i64()).collect();
+    let stack_ids: std::collections::HashSet<i64> = nodes
+        .iter()
+        .filter(|n| n["affects_you"].as_bool() == Some(true))
+        .filter_map(|n| n["id"].as_i64())
+        .collect();
 
     let meta = &graph["meta"];
     let reported_count = meta["cluster_count"].as_u64().unwrap_or(0) as usize;
@@ -2396,6 +2399,12 @@ async fn content_graph_clusters_are_consistent() {
             assert!(
                 node_ids.contains(&id),
                 "cluster[{i}] member {id} must reference an existing node"
+            );
+            // The map partitions stack / themes / unthemed: a stack item
+            // lives in its own column, never inside a theme.
+            assert!(
+                !stack_ids.contains(&id),
+                "cluster[{i}] member {id} touches the stack and must not be in a theme"
             );
         }
     }

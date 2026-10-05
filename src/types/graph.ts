@@ -25,14 +25,13 @@ export interface GraphNode {
   /** A member carries the pipeline's strong-grounding verdict — the same
    *  predicate as Signal's "Affects You" pool (content_graph/loading.rs). */
   affects_you: boolean;
-  x: number;
-  y: number;
 }
 
 export interface GraphEdge {
   source: number;
   target: number;
-  edge_type: 'semantic' | 'chain' | 'convergence';
+  /** Mutual top-k nearest neighbours — the relation themes are built from. */
+  edge_type: 'semantic';
   weight: number;
   label: string | null;
   methods: string[];
@@ -45,8 +44,6 @@ export interface GraphCluster {
   source_count: number;
   /** Mean pairwise embedding cosine among members — theme tightness. */
   coherence: number;
-  centroid_x: number;
-  centroid_y: number;
 }
 
 export interface GraphMeta {

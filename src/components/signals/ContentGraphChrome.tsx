@@ -1,106 +1,9 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-// Presentation chrome for the content graph: cluster labels, loading/empty
-// states, and the category legend. Extracted from ContentGraphView so the
-// view stays within size limits and owns only data flow + interactions.
+// Presentation chrome for the theme map: loading / empty / error states and
+// the one-line category legend. Split from ContentGraphView (size gate).
 import { useTranslation } from 'react-i18next';
 
-import { CATEGORY_COLORS, CATEGORY_SHAPES } from './ContentGraphNode';
-import { zoomInvariant } from './graph-zoom';
-import {
-  HEADER_COUNT_FONT_PX,
-  HEADER_FONT_PX,
-  HEADER_LETTER_SPACING_EM,
-  HEADER_LINE,
-  LANE_HEADER_GAP_PX,
-  LANE_HEADER_RULE_PX,
-} from './content-graph-label-layout';
-
-/** Cluster header. LabelCollisionLayer nudges it inside its hull (the
- *  --cg-dx / --cg-dy custom properties, flow units) or suppresses it
- *  (data-cg-suppressed) so headers never print across each other. */
-export function ClusterLabelNode({ id, data }: { id: string; data: { label: string; count: number } }) {
-  return (
-    <div
-      data-cg-label-id={`cluster:${id}`}
-      style={{
-        color: 'var(--color-text-secondary)',
-        fontSize: zoomInvariant(HEADER_FONT_PX),
-        lineHeight: HEADER_LINE,
-        fontWeight: 600,
-        fontFamily: 'Inter, sans-serif',
-        letterSpacing: `${HEADER_LETTER_SPACING_EM}em`,
-        textTransform: 'uppercase',
-        pointerEvents: 'none',
-        whiteSpace: 'nowrap',
-        // Halo in the page color lifts the label off edge lines in both themes
-        textShadow: '0 1px 4px var(--color-bg-primary)',
-        transform: 'translate(calc(-50% + var(--cg-dx, 0px)), var(--cg-dy, 0px))',
-      }}
-    >
-      {data.label}
-      <span
-        style={{
-          color: 'var(--color-text-muted)',
-          fontWeight: 400,
-          marginLeft: 4,
-          fontSize: zoomInvariant(HEADER_COUNT_FONT_PX),
-        }}
-      >
-        ({data.count})
-      </span>
-    </div>
-  );
-}
-
-/** Header over the unconnected lane (layout.rs): items in this window that
- *  relate to no theme — said plainly instead of implied by placement. The
- *  node sits AT the first row's top edge and the header hangs above it
- *  (translateY -100%): its zoom-invariant text grows upward, never down
- *  into the row's labels (live 2026-10-04 it covered them at fit zoom). */
-export function LaneLabelNode({ data }: { data: { count: number } }) {
-  const { t } = useTranslation();
-  return (
-    <div
-      data-cg-label-id="lane"
-      style={{
-        color: 'var(--color-text-muted)',
-        fontSize: zoomInvariant(HEADER_FONT_PX),
-        lineHeight: HEADER_LINE,
-        fontWeight: 600,
-        fontFamily: 'Inter, sans-serif',
-        letterSpacing: `${HEADER_LETTER_SPACING_EM}em`,
-        textTransform: 'uppercase',
-        pointerEvents: 'none',
-        whiteSpace: 'nowrap',
-        borderBottom: '1px dashed var(--color-border)',
-        paddingBottom: zoomInvariant(LANE_HEADER_RULE_PX - 1),
-        textShadow: '0 1px 4px var(--color-bg-primary)',
-        transform: `translateY(calc(-100% - ${zoomInvariant(LANE_HEADER_GAP_PX)}))`,
-      }}
-    >
-      {t('signals.graphLaneLabel', { count: data.count })}
-    </div>
-  );
-}
-
-/// Soft disc behind each cluster's members: the theme grouping is visible at
-/// fit zoom instead of only inferable from proximity (the "starfield" gap —
-/// live audit 2026-07-19). Non-interactive by construction.
-export function ClusterHullNode({ data }: { data: { radius: number } }) {
-  const d = data.radius * 2;
-  return (
-    <div
-      style={{
-        width: d,
-        height: d,
-        borderRadius: '50%',
-        border: '1px dashed var(--color-border)',
-        backgroundColor: 'color-mix(in srgb, var(--color-text-primary) 3%, transparent)',
-        pointerEvents: 'none',
-      }}
-    />
-  );
-}
+import { CategoryMark } from './graph-marks';
 
 export function ErrorState({ onRetry }: { onRetry: () => void }) {
   const { t } = useTranslation();
@@ -164,132 +67,22 @@ export function EmptyState() {
 }
 
 interface GraphLegendProps {
-  categories: string[];
-  anyAffects: boolean;
-  /** Edge types present in the current graph — line semantics were
-   *  previously hover-only (audit 2026-07-19). */
-  edgeTypes: string[];
+  categories: readonly string[];
 }
 
-// Mirrors EDGE_STYLES in ContentGraphEdge (the swatch IS the line style).
-const EDGE_LEGEND: Record<string, { color: string; dasharray?: string; width: number; labelKey: string; fallback: string }> = {
-  semantic: { color: '#6366F1', width: 1.5, labelKey: 'signals.graphEdgeSemantic', fallback: 'related content' },
-  chain: { color: '#F59E0B', dasharray: '4 2', width: 1.5, labelKey: 'signals.graphEdgeChain', fallback: 'signal chain (your stack)' },
-  convergence: { color: '#22C55E', width: 2.5, labelKey: 'signals.graphEdgeConvergence', fallback: 'both' },
-};
-const EDGE_LEGEND_ORDER = ['semantic', 'chain', 'convergence'] as const;
-
-export function GraphLegend({ categories, anyAffects, edgeTypes }: GraphLegendProps) {
+/** One line: the category silhouettes present in this map. Red marks
+ *  security and gold marks your stack (graph-marks.tsx), so colour needs no
+ *  key beyond the column it already heads. */
+export function GraphLegend({ categories }: GraphLegendProps) {
   const { t } = useTranslation();
   return (
-    <div
-      style={{
-        display: 'flex',
-        flexWrap: 'wrap',
-        gap: '4px 12px',
-        maxWidth: 300,
-        padding: '8px 10px',
-        backgroundColor: 'var(--color-bg-secondary)',
-        border: '1px solid var(--color-border)',
-        borderRadius: 8,
-        fontFamily: 'Inter, sans-serif',
-      }}
-    >
-      {categories.map((cat) => {
-        const shape = CATEGORY_SHAPES[cat];
-        return (
-          <span
-            key={cat}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 5,
-              fontSize: 10,
-              color: 'var(--color-text-secondary)',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            <span
-              style={{
-                width: 9,
-                height: 9,
-                borderRadius: shape?.borderRadius ?? '50%',
-                transform: shape?.rotate ? 'rotate(45deg)' : undefined,
-                backgroundColor: CATEGORY_COLORS[cat],
-                position: 'relative',
-                display: 'inline-block',
-              }}
-            >
-              {shape?.donut && (
-                <span
-                  style={{
-                    position: 'absolute',
-                    inset: '30%',
-                    borderRadius: '50%',
-                    backgroundColor: 'var(--color-bg-secondary)',
-                  }}
-                />
-              )}
-            </span>
-            {t(`signals.graphCat_${cat}`)}
-          </span>
-        );
-      })}
-      {anyAffects && (
-        <span
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 5,
-            fontSize: 10,
-            color: 'var(--color-text-secondary)',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {/* Mirrors the node treatment: the category mark keeps its own
-              fill; "your stack" is the gold ring around it. */}
-          <span
-            style={{
-              width: 9,
-              height: 9,
-              borderRadius: '50%',
-              backgroundColor: 'transparent',
-              boxShadow: '0 0 0 2px var(--color-accent-gold)',
-              display: 'inline-block',
-            }}
-          />
-          {t('signals.graphAffectsYou')}
+    <div className="flex items-center flex-wrap gap-x-3 gap-y-1">
+      {categories.map((cat) => (
+        <span key={cat} className="inline-flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
+          <CategoryMark category={cat} surface="var(--color-bg-primary)" />
+          {t(`signals.graphCat_${cat}`)}
         </span>
-      )}
-      {EDGE_LEGEND_ORDER.filter((k) => edgeTypes.includes(k)).map((k) => {
-        const s = EDGE_LEGEND[k]!;
-        return (
-          <span
-            key={k}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 5,
-              fontSize: 10,
-              color: 'var(--color-text-secondary)',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            <svg width="18" height="6" aria-hidden="true">
-              <line
-                x1="0"
-                y1="3"
-                x2="18"
-                y2="3"
-                stroke={s.color}
-                strokeWidth={s.width}
-                strokeDasharray={s.dasharray}
-              />
-            </svg>
-            {t(s.labelKey, s.fallback)}
-          </span>
-        );
-      })}
+      ))}
     </div>
   );
 }

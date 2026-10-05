@@ -168,35 +168,6 @@ fn test_knn_edges_deterministic() {
 }
 
 #[test]
-fn test_merge_duplicate_edges() {
-    let mut edge_list = vec![
-        GraphEdge {
-            source: 1,
-            target: 2,
-            edge_type: EdgeType::Semantic,
-            weight: 0.85,
-            label: Some("similarity: 0.85".to_string()),
-            methods: vec!["semantic".to_string()],
-        },
-        GraphEdge {
-            source: 1,
-            target: 2,
-            edge_type: EdgeType::Chain,
-            weight: 0.70,
-            label: Some("chain: tokio".to_string()),
-            methods: vec!["signal_chain".to_string()],
-        },
-    ];
-
-    edges::merge_duplicate_edges(&mut edge_list);
-
-    assert_eq!(edge_list.len(), 1, "duplicate edges should merge");
-    assert_eq!(edge_list[0].edge_type, EdgeType::Convergence);
-    assert_eq!(edge_list[0].methods.len(), 2);
-    assert!((edge_list[0].weight - 0.85).abs() < f32::EPSILON);
-}
-
-#[test]
 fn test_cluster_formation() {
     let items = vec![
         raw(1, "A", "hn", 0.8, vec![1.0, 0.0]),
@@ -252,48 +223,6 @@ fn test_cluster_labels_prefer_distinctive_terms() {
             cluster.label
         );
     }
-}
-
-#[test]
-fn test_sparsify_keeps_backbone_connectivity() {
-    // A 10-node clique: sparsify must keep every node reachable and cut
-    // well below the full 45 edges.
-    let mut edge_list = Vec::new();
-    for i in 1..=10i64 {
-        for j in (i + 1)..=10 {
-            edge_list.push(edge(i, j, 0.8 + (i as f32) * 0.001));
-        }
-    }
-    edges::sparsify_edges(&mut edge_list, 3);
-
-    assert!(
-        edge_list.len() < 45,
-        "clique should shrink, kept {}",
-        edge_list.len()
-    );
-    // Connectivity: union everything and confirm one component.
-    let mut parent: std::collections::HashMap<i64, i64> = (1..=10).map(|i| (i, i)).collect();
-    fn find(parent: &std::collections::HashMap<i64, i64>, mut x: i64) -> i64 {
-        while parent[&x] != x {
-            x = parent[&x];
-        }
-        x
-    }
-    for e in &edge_list {
-        let (a, b) = (find(&parent, e.source), find(&parent, e.target));
-        if a != b {
-            parent.insert(a.max(b), a.min(b));
-        }
-    }
-    let roots: std::collections::HashSet<i64> = (1..=10).map(|i| find(&parent, i)).collect();
-    assert_eq!(roots.len(), 1, "sparsified graph must stay connected");
-}
-
-#[test]
-fn test_sparsify_leaves_sparse_graphs_alone() {
-    let mut edge_list = vec![edge(1, 2, 0.9), edge(2, 3, 0.8)];
-    edges::sparsify_edges(&mut edge_list, 4);
-    assert_eq!(edge_list.len(), 2);
 }
 
 #[test]
@@ -416,22 +345,12 @@ fn test_label_requires_two_title_hits() {
     assert_eq!(clusters.len(), 1);
     labels::assign_cluster_labels(&items, &mut clusters);
     // No term appears in 2+ titles → no term label; the fallback names the
-    // typical member (equal embeddings: the earliest), never "assorted".
+    // typical member (equal embeddings: the earliest) by its two most
+    // distinctive words (ties: longer first), never "assorted".
     assert_eq!(
-        clusters[0].label, "Rust async runtime deep dive",
-        "no term appears in 2+ titles → representative-title label"
+        clusters[0].label, "runtime · async",
+        "no term appears in 2+ titles → the typical member's own words"
     );
-}
-
-/// The graph's chain floor must sit strictly between the ungrounded
-/// confidence cap and the grounded band start (~0.43, see chain_policy):
-/// exactly the dependency-grounded chains render. If the policy bands
-/// move, this breaks loudly instead of silently letting keyword welds
-/// back onto the map.
-#[test]
-fn chain_floor_sits_between_confidence_bands() {
-    assert!(edges::CHAIN_MIN_CONFIDENCE > crate::signal_chains::UNGROUNDED_CONFIDENCE_CAP);
-    assert!(edges::CHAIN_MIN_CONFIDENCE < 0.43);
 }
 
 #[test]
@@ -646,7 +565,7 @@ fn test_build_graph_is_deterministic_end_to_end() {
         let mut nodes: Vec<String> = g
             .nodes
             .iter()
-            .map(|n| format!("{}:{:.2}:{:.2}:{:?}", n.id, n.x, n.y, n.cluster_id))
+            .map(|n| format!("{}:{:?}", n.id, n.cluster_id))
             .collect();
         nodes.sort();
         let mut edges: Vec<String> = g
@@ -980,143 +899,6 @@ fn test_windows_differ_tracks_verdict_age() {
     );
 }
 
-/// P2.11: greedy anchor matching — best Jaccard wins, each anchor used once,
-/// sub-floor overlap never matches.
-#[test]
-fn test_match_anchors_greedy_and_floored() {
-    use std::collections::HashSet;
-
-    let clusters = vec![
-        ("cluster_a".to_string(), HashSet::from([1i64, 2, 3, 4])),
-        ("cluster_b".to_string(), HashSet::from([5i64, 6, 7, 8])),
-        ("cluster_c".to_string(), HashSet::from([100i64, 101])),
-    ];
-    let anchors = vec![
-        super::anchors::StoredAnchor {
-            x: 10.0,
-            y: 10.0,
-            member_ids: HashSet::from([1, 2, 3, 9]),
-        },
-        super::anchors::StoredAnchor {
-            x: 20.0,
-            y: 20.0,
-            member_ids: HashSet::from([5, 6, 7, 8]),
-        },
-        super::anchors::StoredAnchor {
-            x: 30.0,
-            y: 30.0,
-            member_ids: HashSet::from([200, 201]),
-        },
-    ];
-
-    let seeds = super::anchors::match_anchors(&clusters, &anchors);
-    assert_eq!(
-        seeds.get("cluster_a"),
-        Some(&(10.0, 10.0)),
-        "overlap 3/5 matches"
-    );
-    assert_eq!(seeds.get("cluster_b"), Some(&(20.0, 20.0)), "exact match");
-    assert!(
-        !seeds.contains_key("cluster_c"),
-        "zero overlap never matches"
-    );
-}
-
-/// P2.11 end-to-end: stored anchors invert the two clusters' default
-/// left-right arrangement, and persisting the built graph round-trips.
-#[test]
-fn test_layout_anchors_seed_and_roundtrip() {
-    use crate::test_utils::test_db;
-
-    let db = test_db();
-    let conn = db.conn.lock();
-
-    // Two tight 4-item themes on a cone (within-group cosine 0.80 — clusters,
-    // not stories), mirroring the determinism fixture's construction.
-    let mut id = 0i64;
-    for gi in 0..2usize {
-        for m in 0..4usize {
-            id += 1;
-            let mut emb = vec![0.0f32; 16];
-            emb[gi] = 0.894_427;
-            emb[2 + gi * 4 + m] = 0.447_214;
-            let blob = crate::db::embedding_to_blob(&emb);
-            conn.execute(
-                "INSERT INTO source_items (id, source_type, source_id, title, content,
-                    content_hash, embedding, embedding_status, relevance_score, created_at)
-                 VALUES (?1, 'hackernews', ?2, ?3, '', ?4, ?5, 'complete', ?6, datetime('now', '-1 hours'))",
-                rusqlite::params![
-                    id,
-                    format!("hn{id}"),
-                    format!("group{gi} item {m}"),
-                    format!("h{id}"),
-                    blob,
-                    0.9 - gi as f64 * 0.01
-                ],
-            )
-            .expect("insert");
-        }
-    }
-
-    // Baseline (no anchors): record the natural x-order of the two clusters.
-    let baseline = build_graph(&conn, 7, 150).expect("baseline build");
-    assert_eq!(baseline.clusters.len(), 2, "fixture forms two clusters");
-    let centroid_x = |g: &ContentGraph, members: &[i64]| -> f32 {
-        g.clusters
-            .iter()
-            .find(|c| {
-                members.iter().all(|m| {
-                    g.nodes
-                        .iter()
-                        .any(|n| n.member_ids.contains(m) && c.node_ids.contains(&n.id))
-                })
-            })
-            .map(|c| c.centroid_x)
-            .expect("cluster for members")
-    };
-    let base_a = centroid_x(&baseline, &[1, 2, 3, 4]);
-    let base_b = centroid_x(&baseline, &[5, 6, 7, 8]);
-
-    // Anchors deliberately INVERT that arrangement with a wide margin.
-    let (ax, bx) = if base_a <= base_b {
-        (3000.0, -2000.0)
-    } else {
-        (-2000.0, 3000.0)
-    };
-    conn.execute(
-        "INSERT INTO graph_layout_anchors (window_days, cluster_key, x, y, member_ids)
-         VALUES (7, 'k_a', ?1, 500.0, '[1,2,3,4]'), (7, 'k_b', ?2, 500.0, '[5,6,7,8]')",
-        rusqlite::params![ax, bx],
-    )
-    .expect("insert anchors");
-
-    let anchored = build_graph(&conn, 7, 150).expect("anchored build");
-    let anc_a = centroid_x(&anchored, &[1, 2, 3, 4]);
-    let anc_b = centroid_x(&anchored, &[5, 6, 7, 8]);
-    assert_eq!(
-        (anc_a > anc_b),
-        (ax > bx),
-        "anchored arrangement must follow the anchors, not the spiral (a={anc_a}, b={anc_b})"
-    );
-    assert_ne!(
-        (base_a > base_b),
-        (anc_a > anc_b),
-        "anchors genuinely inverted the baseline arrangement"
-    );
-
-    // Round-trip: persisting the anchored build and rebuilding keeps the
-    // arrangement (approximate stability, not frozen geometry).
-    super::anchors::persist_layout_anchors(&conn, 7, &anchored);
-    let rebuilt = build_graph(&conn, 7, 150).expect("rebuild");
-    let re_a = centroid_x(&rebuilt, &[1, 2, 3, 4]);
-    let re_b = centroid_x(&rebuilt, &[5, 6, 7, 8]);
-    assert_eq!(
-        (re_a > re_b),
-        (anc_a > anc_b),
-        "arrangement survives persist and rebuild"
-    );
-}
-
 /// P2.17: cross-process determinism. Same-process double builds share one
 /// HashMap seed; every canonical-ordering fix claims independence from it,
 /// and this is the test that would catch a regression: the same on-disk
@@ -1130,10 +912,7 @@ fn test_build_graph_deterministic_across_processes() {
         let graph = build_graph(&conn, 7, 150).expect("child build");
         let mut sig = String::new();
         for n in &graph.nodes {
-            sig.push_str(&format!(
-                "{}:{:.4}:{:.4}:{:?};",
-                n.id, n.x, n.y, n.cluster_id
-            ));
+            sig.push_str(&format!("{}:{:?};", n.id, n.cluster_id));
         }
         for e in &graph.edges {
             sig.push_str(&format!("{}-{}:{:?};", e.source, e.target, e.edge_type));
@@ -1169,12 +948,6 @@ fn test_build_graph_deterministic_across_processes() {
              CREATE TABLE scoring_explanations (
                  source_item_id INTEGER PRIMARY KEY, pipeline_version INTEGER NOT NULL,
                  breakdown TEXT NOT NULL, scored_at TEXT NOT NULL DEFAULT (datetime('now'))
-             );
-             CREATE TABLE graph_layout_anchors (
-                 window_days INTEGER NOT NULL, cluster_key TEXT NOT NULL,
-                 x REAL NOT NULL, y REAL NOT NULL, member_ids TEXT NOT NULL,
-                 updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-                 PRIMARY KEY (window_days, cluster_key)
              );
              CREATE TABLE user_dependencies (
                  id INTEGER PRIMARY KEY, package_name TEXT NOT NULL
@@ -1322,8 +1095,6 @@ fn test_cluster_label_terms_all_need_two_hits() {
         node_ids: vec![1, 2, 3, 4],
         source_count: 4,
         coherence: 0.0,
-        centroid_x: 0.0,
-        centroid_y: 0.0,
     }];
     labels::assign_cluster_labels(&items, &mut clusters);
     let label = &clusters[0].label;
@@ -1443,8 +1214,6 @@ fn label_for(titles: &[(&str, &str)], others: &[(&str, &str)]) -> String {
         node_ids: (1..=titles.len() as i64).collect(),
         source_count: 1,
         coherence: 0.0,
-        centroid_x: 0.0,
-        centroid_y: 0.0,
     }];
     labels::assign_cluster_labels(&items, &mut clusters);
     clusters.remove(0).label
@@ -1498,8 +1267,8 @@ fn test_live_sql_injection_pair_is_labelled_sql() {
     );
     assert_never_assorted(&label);
     assert!(
-        label.split(" · ").any(|t| t == "sql"),
-        "the shared topic is sql: {label}"
+        label.split(" · ").any(|t| t == "SQL"),
+        "the shared topic is SQL, in its usual spelling: {label}"
     );
 }
 
@@ -1517,31 +1286,41 @@ fn test_live_registry_pair_is_named_as_releases() {
 }
 
 #[test]
-fn test_no_shared_term_falls_back_to_representative_title() {
+fn test_no_shared_term_falls_back_to_representative_words() {
     // Live: "devto · assorted" and "hacker news · assorted" — pairs whose
-    // titles share no content word. The label is the typical member's title,
-    // shortened: concrete words the user can check against the dots.
+    // titles share no content word. Later the fallback printed the typical
+    // member's title cut mid-sentence ("JWT Decoding vs…", "Breaking the…",
+    // 2026-10-05), which read as one headline, not a theme name. Now: that
+    // member's two most distinctive words, joined like every other label.
     let titles = [
         (
-            "You Are Lying to Your Compiler. Use \"satisfies\" Instead of \"as\".",
+            "JWT Decoding vs Cryptographic Signature Verification: What Developers Can Learn",
             "devto",
         ),
         (
-            "TypeScript `using` in Real Codebases: Database Connections, File Handles, and Async Cleanup",
+            "Base64URL Explained: Encoding Data for URLs and Tokens",
             "devto",
         ),
     ];
     let label = label_for(&titles, &[]);
     assert_never_assorted(&label);
+    assert!(!label.contains('…'), "never a cut title: {label}");
+    let words: Vec<&str> = label.split(" · ").collect();
     assert!(
-        label.chars().count() <= 37,
-        "title labels stay header-sized: {label}"
+        (1..=2).contains(&words.len()),
+        "one or two words, like other labels: {label}"
     );
-    let head = label.trim_end_matches('…');
-    assert!(
-        titles.iter().any(|(t, _)| t.starts_with(head)),
-        "fallback label must be a member's own words: {label}"
-    );
+    let lower = titles
+        .iter()
+        .map(|(t, _)| t.to_lowercase())
+        .collect::<Vec<_>>()
+        .join(" ");
+    for w in &words {
+        assert!(
+            lower.contains(&w.to_lowercase()),
+            "a member's own word: {w} in {label}"
+        );
+    }
 
     let label = label_for(
         &[
@@ -1554,6 +1333,7 @@ fn test_no_shared_term_falls_back_to_representative_title() {
         &[],
     );
     assert_never_assorted(&label);
+    assert!(!label.contains('…'), "never a cut title: {label}");
 }
 
 #[test]
@@ -1582,8 +1362,6 @@ fn test_shared_dependency_names_a_cluster_without_a_shared_term() {
         node_ids: vec![1, 2],
         source_count: 1,
         coherence: 0.0,
-        centroid_x: 0.0,
-        centroid_y: 0.0,
     }];
     labels::assign_cluster_labels(&items, &mut clusters);
     assert_eq!(clusters[0].label, "stripe");
@@ -1694,7 +1472,7 @@ fn test_live_mixed_api_cluster_leads_with_its_covering_term() {
     );
     assert_never_assorted(&label);
     assert!(
-        label.split(" · ").next() == Some("api") || label.split(" · ").next() == Some("openai"),
+        label.split(" · ").next() == Some("API") || label.split(" · ").next() == Some("OpenAI"),
         "a term covering >= 30% of members leads: {label}"
     );
     assert!(!label.contains("v7.0.126"), "{label}");
@@ -1777,8 +1555,6 @@ fn test_duplicate_cluster_labels_are_disambiguated() {
             node_ids,
             source_count: 1,
             coherence: 0.0,
-            centroid_x: 0.0,
-            centroid_y: 0.0,
         });
     }
     // The rest of the window (in no cluster): keeps "rust" from reading as
@@ -1977,4 +1753,186 @@ fn profile_build_graph_phases() {
             graph.nodes.iter().filter(|n| n.affects_you).count()
         );
     }
+}
+
+// ---------------------------------------------------------------------------
+// Themes (themes.rs): stack partition + similarity order
+
+fn graph_node(id: i64, affects_you: bool) -> GraphNode {
+    GraphNode {
+        id,
+        title: format!("n{id}"),
+        url: None,
+        source_type: "hackernews".to_string(),
+        relevance_score: 0.5,
+        signal_type: None,
+        signal_priority: None,
+        created_at: String::new(),
+        primary_topic: None,
+        cluster_id: Some("stale".to_string()),
+        member_count: 1,
+        member_ids: vec![id],
+        category: "discussion".to_string(),
+        affects_you,
+    }
+}
+
+fn theme(id: &str, node_ids: Vec<i64>) -> GraphCluster {
+    GraphCluster {
+        id: id.to_string(),
+        label: String::new(),
+        node_ids,
+        source_count: 1,
+        coherence: 0.0,
+    }
+}
+
+#[test]
+fn test_stack_items_leave_their_theme_and_small_remainders_are_unthemed() {
+    let items: Vec<RawItem> = (1..=6)
+        .map(|id| {
+            raw(
+                id,
+                &format!("t{id}"),
+                "hackernews",
+                0.5,
+                vec![1.0, id as f32 * 0.01],
+            )
+        })
+        .collect();
+    let mut nodes: Vec<GraphNode> = (1..=6)
+        .map(|id| graph_node(id, id == 3 || id == 5))
+        .collect();
+    // a = {1,2,3} keeps 1,2 ; b = {4,5} keeps only 4 → no theme.
+    let themes = themes::finalize_themes(
+        vec![theme("a", vec![1, 2, 3]), theme("b", vec![4, 5])],
+        &mut nodes,
+        &items,
+    );
+    assert_eq!(themes.len(), 1);
+    assert_eq!(themes[0].node_ids, vec![1, 2]);
+    let cid = |id: i64| {
+        nodes
+            .iter()
+            .find(|n| n.id == id)
+            .unwrap()
+            .cluster_id
+            .clone()
+    };
+    assert_eq!(cid(1).as_deref(), Some("a"));
+    assert_eq!(cid(3), None, "a stack item is in no theme");
+    assert_eq!(cid(4), None, "a 1-member remainder is unthemed");
+    assert_eq!(cid(6), None, "a node in no community keeps no stale id");
+}
+
+#[test]
+fn test_themes_are_ordered_so_similar_themes_are_adjacent() {
+    // Two topic families on orthogonal axes: {big, rust2} on x, {web1, web2}
+    // on y. Input order interleaves them; the chain must put each family
+    // side by side, starting from the largest theme.
+    let v = |x: f32, y: f32| vec![x, y, 0.0];
+    let items = vec![
+        raw(1, "a", "hackernews", 0.5, v(1.0, 0.05)),
+        raw(2, "b", "hackernews", 0.5, v(1.0, 0.0)),
+        raw(3, "c", "hackernews", 0.5, v(0.98, 0.1)),
+        raw(4, "d", "hackernews", 0.5, v(0.05, 1.0)),
+        raw(5, "e", "hackernews", 0.5, v(0.0, 1.0)),
+        raw(6, "f", "hackernews", 0.5, v(0.9, 0.2)),
+        raw(7, "g", "hackernews", 0.5, v(0.95, 0.15)),
+        raw(8, "h", "hackernews", 0.5, v(0.1, 0.98)),
+        raw(9, "i", "hackernews", 0.5, v(0.15, 0.95)),
+    ];
+    let mut nodes: Vec<GraphNode> = (1..=9).map(|id| graph_node(id, false)).collect();
+    let ordered = themes::finalize_themes(
+        vec![
+            theme("big", vec![1, 2, 3]),
+            theme("web1", vec![4, 5]),
+            theme("rust2", vec![6, 7]),
+            theme("web2", vec![8, 9]),
+        ],
+        &mut nodes,
+        &items,
+    );
+    let ids: Vec<&str> = ordered.iter().map(|c| c.id.as_str()).collect();
+    assert_eq!(ids.len(), 4);
+    let pos = |id: &str| ids.iter().position(|x| *x == id).unwrap() as i64;
+    assert_eq!(
+        (pos("big") - pos("rust2")).abs(),
+        1,
+        "rust family adjacent: {ids:?}"
+    );
+    assert_eq!(
+        (pos("web1") - pos("web2")).abs(),
+        1,
+        "web family adjacent: {ids:?}"
+    );
+    assert_eq!(
+        themes::finalize_themes(
+            vec![
+                theme("big", vec![1, 2, 3]),
+                theme("web1", vec![4, 5]),
+                theme("rust2", vec![6, 7]),
+                theme("web2", vec![8, 9]),
+            ],
+            &mut nodes,
+            &items,
+        )
+        .iter()
+        .map(|c| c.id.clone())
+        .collect::<Vec<_>>(),
+        ids,
+        "deterministic"
+    );
+}
+
+/// A low-scored, not-yet-judged stack item is never dropped by the singleton
+/// cap: the map always shows the user's stack (its own column).
+#[test]
+fn test_stack_items_exempt_from_singleton_cap() {
+    use crate::test_utils::test_db;
+
+    let db = test_db();
+    let conn = db.conn.lock();
+    let dims = SINGLETON_CAP + 4;
+    for i in 0..(SINGLETON_CAP + 2) {
+        insert_singleton(
+            &conn,
+            i as i64 + 1,
+            dims,
+            i,
+            0.9 - i as f64 * 0.001,
+            "-1 hours",
+            None,
+        );
+    }
+    let stack_id = (SINGLETON_CAP + 3) as i64;
+    insert_singleton_src(
+        &conn,
+        stack_id,
+        dims,
+        SINGLETON_CAP + 2,
+        "crates_io",
+        0.1,
+        None,
+    );
+    conn.execute(
+        "INSERT INTO scoring_explanations (source_item_id, pipeline_version, breakdown)
+         VALUES (?1, 1, ?2)",
+        rusqlite::params![stack_id, r#"{"breakdown":{"strongly_grounded":true}}"#],
+    )
+    .expect("breakdown");
+
+    let graph = build_graph(&conn, 7, 150).expect("build");
+    let node = graph.nodes.iter().find(|n| n.id == stack_id);
+    assert!(
+        node.is_some_and(|n| n.affects_you),
+        "stack item shown despite the cap"
+    );
+    assert!(
+        graph
+            .clusters
+            .iter()
+            .all(|c| !c.node_ids.contains(&stack_id)),
+        "and it sits in no theme"
+    );
 }

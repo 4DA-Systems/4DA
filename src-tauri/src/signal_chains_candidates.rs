@@ -65,40 +65,6 @@ pub(super) fn load_recent_chain_candidate_items(
     Ok(items)
 }
 
-pub(super) fn load_chain_candidate_items_by_id(
-    conn: &rusqlite::Connection,
-    item_ids: &[i64],
-) -> Result<Vec<ChainCandidateItem>> {
-    let columns = SourceItemColumns::read(conn);
-    let signal_at_expr = columns.signal_at_expr();
-    let tags_expr = columns.tags_expr();
-    let mut items: Vec<ChainCandidateItem> = Vec::new();
-
-    for chunk in item_ids.chunks(500) {
-        let placeholders = vec!["?"; chunk.len()].join(",");
-        let sql = format!(
-            "SELECT si.id,
-                    COALESCE(si.title, ''),
-                    COALESCE(si.source_type, 'unknown'),
-                    {signal_at_expr} AS signal_at,
-                    substr(COALESCE(si.content, ''), 1, 500),
-                    {tags_expr}
-                 FROM source_items si
-                 WHERE si.id IN ({placeholders})"
-        );
-        let mut stmt = conn.prepare(&sql)?;
-        let params: Vec<&dyn rusqlite::types::ToSql> = chunk
-            .iter()
-            .map(|id| id as &dyn rusqlite::types::ToSql)
-            .collect();
-        let rows = stmt.query_map(params.as_slice(), map_candidate_row)?;
-        items.extend(rows.filter_map(valid_candidate_row));
-    }
-
-    items.sort_by_key(|(id, ..)| *id);
-    Ok(items)
-}
-
 fn map_candidate_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<ChainCandidateItem> {
     Ok((
         row.get(0)?,
