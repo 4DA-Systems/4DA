@@ -172,8 +172,11 @@ export interface LayoutTheme {
 /** Minimum member overlap (Jaccard) for a theme to inherit a remembered slot. */
 const MATCH_MIN_JACCARD = 0.3;
 /** A remembered layout is kept while its cost stays within this factor of
- *  the optimal one — familiarity is worth a little shape, not a lot. */
-const KEEP_COST_FACTOR = 1.5;
+ *  the optimal one. Replayed on three real consecutive builds (2026-10-06):
+ *  2x kept 95% of tiles in place at 1700x1184 through a heavy re-score,
+ *  1.5x kept 58%; 3x also held at 1200x800 but only by squeezing a tile
+ *  below the readable minimum (150x78), so familiarity stops at 2x. */
+const KEEP_COST_FACTOR = 2;
 
 function jaccard(a: number[], b: Set<number>): number {
   let inter = 0;
@@ -210,9 +213,9 @@ function matchThemes(themes: LayoutTheme[], prev: RememberedLayout): Map<number,
  * reusing the remembered rows cut that to 5%. Themes that match a
  * remembered one (member overlap) keep their row and order; new themes join
  * the row of their nearest placed neighbour in `themes` order (similarity
- * order). The remembered rows are used only while every tile still fits and
- * the cost stays within KEEP_COST_FACTOR of the optimal layout; otherwise
- * the optimal layout is used — and becomes what is remembered.
+ * order). The remembered rows are used while their cost stays within
+ * KEEP_COST_FACTOR of the optimal layout; otherwise the remembered ORDER is
+ * kept with fresh row breaks. With nothing remembered, the optimal layout.
  */
 export function stableThemeLayout(
   themes: LayoutTheme[],
@@ -251,7 +254,17 @@ export function stableThemeLayout(
       placed.add(i);
     });
     const kept = candidate.filter((r) => r.length > 0);
-    if (rowsCost(kept, ws, rect) <= optimal.cost * KEEP_COST_FACTOR + 1e-9) rows = kept;
+    if (rowsCost(kept, ws, rect) <= optimal.cost * KEEP_COST_FACTOR + 1e-9) {
+      rows = kept;
+    } else {
+      // The remembered rows no longer fit (themes came, went or changed
+      // size): keep the remembered ORDER and only re-break the rows. On
+      // real consecutive builds a fresh layout here moved 89-95% of tiles
+      // far; keeping the order halves that.
+      const order = kept.flat();
+      const reordered = optimalRows(order.map((i) => ws[i]!), rect);
+      rows = reordered.rows.map((r) => r.map((k) => order[k]!));
+    }
   }
 
   const rects = ws.reduce((a, b) => a + b, 0) > 0 && rect.w > 0 && rect.h > 0 ? layoutRows(rows, ws, rect) : stripTreemap(ws, rect);

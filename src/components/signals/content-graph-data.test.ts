@@ -279,13 +279,16 @@ describe('audit fixes (2026-10-06)', () => {
     expect(second.remembered.rows).toEqual(first.remembered.rows);
   });
 
-  it('drops a remembered layout that no longer fits and lays out fresh', () => {
+  it('re-breaks rows that no longer fit but keeps the remembered order', () => {
     const base = themes([6, 5, 4, 3], W * H);
-    const remembered = { rows: [base.map((t) => t.id)], members: Object.fromEntries(base.map((t) => [t.id, t.members])) };
+    // Remembered in an order the similarity order would not produce.
+    const order = [base[2]!, base[0]!, base[3]!, base[1]!];
+    const remembered = { rows: [order.map((t) => t.id)], members: Object.fromEntries(base.map((t) => [t.id, t.members])) };
     // One row of four in a tall narrow box is far worse than the optimum.
     const narrow = { x: 0, y: 0, w: 320, h: 900 };
     const out = stableThemeLayout(base, narrow, remembered);
     expect(out.remembered.rows.length).toBeGreaterThan(1);
+    expect(out.remembered.rows.flat()).toEqual(order.map((t) => t.id));
   });
 
   it('a theme keeps the stack items its community held, and stack rows know their theme', () => {
