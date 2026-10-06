@@ -16,7 +16,7 @@
 //   makes the map taller;
 // - the group ORDER is remembered between builds (matched by shared members).
 
-import type { ContentGraph, GraphEdge } from '../../types/graph';
+import type { ContentGraph } from '../../types/graph';
 import { matchByMembers } from './theme-map-layout';
 
 /** Target spacing between neighbouring members inside a group disc (flow
@@ -219,7 +219,7 @@ export function layoutGraph(
   const { centres } = best;
 
   const degree = new Map<number, number>();
-  for (const e of graph.edges as GraphEdge[]) {
+  for (const e of graph.edges) {
     degree.set(e.source, (degree.get(e.source) ?? 0) + 1);
     degree.set(e.target, (degree.get(e.target) ?? 0) + 1);
   }
