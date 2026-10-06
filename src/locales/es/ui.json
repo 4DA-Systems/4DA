@@ -1392,6 +1392,8 @@
   "signals.freeSubtext": "Desbloquea para ver qué señales necesitan tu atención y qué acción tomar.",
   "signals.viewList": "Lista",
   "signals.viewGraph": "Gráfico",
+  "signals.viewThemes": "Temas",
+  "signals.graphEdgeRelated": "relacionado",
   "signals.graphEmpty": "No se encontraron relaciones de contenido",
   "signals.graphEmptySub": "Las conexiones aparecerán a medida que se analice el contenido",
   "signals.graphItems": "elementos",

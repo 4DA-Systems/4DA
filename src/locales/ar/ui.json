@@ -2046,6 +2046,8 @@
   "signals.freeSubtext": "افتح لمعرفة الإشارات التي تحتاج انتباهك والإجراء المطلوب.",
   "signals.viewList": "قائمة",
   "signals.viewGraph": "رسم بياني",
+  "signals.viewThemes": "المواضيع",
+  "signals.graphEdgeRelated": "مرتبط",
   "signals.graphEmpty": "لم يتم العثور على علاقات محتوى",
   "signals.graphEmptySub": "ستظهر الروابط عند تحليل المحتوى",
   "signals.graphItems": "عناصر",

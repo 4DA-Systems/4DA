@@ -185,13 +185,14 @@ function jaccard(a: number[], b: Set<number>): number {
   return union === 0 ? 0 : inter / union;
 }
 
-/** Match current themes to remembered keys, one-to-one, best overlap first. */
-function matchThemes(themes: LayoutTheme[], prev: RememberedLayout): Map<number, string> {
+/** Match current items (by member ids) to remembered keys, one-to-one, best
+ *  overlap first. Shared by the Themes and Graph views' layout memory. */
+export function matchByMembers(memberIds: number[][], prev: Record<string, number[]>): Map<number, string> {
   const pairs: { t: number; key: string; j: number }[] = [];
-  for (const [key, ids] of Object.entries(prev.members)) {
+  for (const [key, ids] of Object.entries(prev)) {
     const set = new Set(ids);
-    themes.forEach((th, t) => {
-      const j = jaccard(th.members, set);
+    memberIds.forEach((members, t) => {
+      const j = jaccard(members, set);
       if (j >= MATCH_MIN_JACCARD) pairs.push({ t, key, j });
     });
   }
@@ -224,7 +225,7 @@ export function stableThemeLayout(
 ): { rects: Rect[]; remembered: RememberedLayout } {
   const ws = themes.map((t) => Math.max(0, t.weight));
   const optimal = optimalRows(ws, rect);
-  const match = prev ? matchThemes(themes, prev) : new Map<number, string>();
+  const match = prev ? matchByMembers(themes.map((t) => t.members), prev.members) : new Map<number, string>();
   const keyOf = (i: number) => match.get(i) ?? themes[i]!.id;
 
   let rows = optimal.rows;

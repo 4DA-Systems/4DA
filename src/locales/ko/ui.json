@@ -2048,6 +2048,8 @@
   "signals.freeSubtext": "잠금 해제하여 어떤 신호에 주의가 필요한지, 어떤 조치를 취해야 하는지 확인하세요.",
   "signals.viewList": "목록",
   "signals.viewGraph": "그래프",
+  "signals.viewThemes": "주제",
+  "signals.graphEdgeRelated": "관련",
   "signals.graphEmpty": "콘텐츠 관계를 찾을 수 없습니다",
   "signals.graphEmptySub": "콘텐츠가 분석되면 연결이 표시됩니다",
   "signals.graphItems": "항목",

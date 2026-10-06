@@ -1387,6 +1387,8 @@
   "signals.freeSubtext": "アンロックして、どのシグナルに注意が必要で、どのアクションを取るべきかを確認しましょう。",
   "signals.viewList": "リスト",
   "signals.viewGraph": "グラフ",
+  "signals.viewThemes": "テーマ",
+  "signals.graphEdgeRelated": "関連",
   "signals.graphEmpty": "コンテンツの関連性が見つかりません",
   "signals.graphEmptySub": "コンテンツが分析されると接続が表示されます",
   "signals.graphItems": "件",

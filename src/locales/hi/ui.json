@@ -2097,6 +2097,8 @@
   "signals.freeSubtext": "अनलॉक करें और देखें कि किन सिग्नलों पर ध्यान देना है और क्या कार्रवाई करनी है।",
   "signals.viewList": "सूची",
   "signals.viewGraph": "ग्राफ़",
+  "signals.viewThemes": "विषय",
+  "signals.graphEdgeRelated": "संबंधित",
   "signals.graphEmpty": "कोई सामग्री संबंध नहीं मिला",
   "signals.graphEmptySub": "सामग्री का विश्लेषण होने पर कनेक्शन दिखाई देंगे",
   "signals.graphItems": "आइटम",
