@@ -17,6 +17,16 @@ const FeedbackLivenessBanner = lazy(() => import('./FeedbackLivenessBanner').the
 const PreemptionView = lazy(() => import('./preemption/PreemptionView'));
 const BlindSpotsView = lazy(() => import('./blindspots/BlindSpotsView'));
 const ContentGraphView = lazy(() => import('./signals/ContentGraphView'));
+const ThemeMapView = lazy(() => import('./signals/ThemeMapView'));
+
+/** Signal's sub-views: List (ranked lanes), Themes (the reading map) and
+ *  Graph (how items and themes relate). One table, so the toggle buttons can
+ *  never drift from the views they switch. */
+const SIGNAL_VIEWS = [
+  { mode: 'list', labelKey: 'signals.viewList' },
+  { mode: 'themes', labelKey: 'signals.viewThemes' },
+  { mode: 'graph', labelKey: 'signals.viewGraph' },
+] as const;
 
 const VIEW_LABEL_KEYS: Record<string, string> = {
   briefing: 'nav.briefing.label',
@@ -73,40 +83,32 @@ export function ViewRouter({ newItemIds, focusedIndex }: ViewRouterProps) {
       ) : (
         <div role="tabpanel" id="view-panel-results" aria-labelledby="tab-results">
           {/* The toggle lives OUTSIDE the error boundary so it stays clickable
-              even if one of the two views throws — the user can always switch
-              back instead of being stranded on an error screen. */}
+              even if one view throws — the user can always switch away
+              instead of being stranded on an error screen. */}
           <div className="flex justify-end px-4 pt-3 pb-1">
             <div className="inline-flex rounded-lg border border-border bg-bg-secondary p-0.5">
-              <button
-                onClick={() => setSignalViewMode('list')}
-                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
-                  signalViewMode === 'list'
-                    ? 'bg-bg-tertiary text-text-primary'
-                    : 'text-text-muted hover:text-text-secondary'
-                }`}
-                aria-pressed={signalViewMode === 'list'}
-              >
-                {t('signals.viewList', 'List')}
-              </button>
-              <button
-                onClick={() => setSignalViewMode('graph')}
-                className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
-                  signalViewMode === 'graph'
-                    ? 'bg-bg-tertiary text-text-primary'
-                    : 'text-text-muted hover:text-text-secondary'
-                }`}
-                aria-pressed={signalViewMode === 'graph'}
-              >
-                {t('signals.viewGraph', 'Graph')}
-              </button>
+              {SIGNAL_VIEWS.map(({ mode, labelKey }) => (
+                <button
+                  key={mode}
+                  onClick={() => setSignalViewMode(mode)}
+                  className={`px-3 py-1 text-xs font-medium rounded-md transition-colors ${
+                    signalViewMode === mode
+                      ? 'bg-bg-tertiary text-text-primary'
+                      : 'text-text-muted hover:text-text-secondary'
+                  }`}
+                  aria-pressed={signalViewMode === mode}
+                >
+                  {t(labelKey)}
+                </button>
+              ))}
             </div>
           </div>
-          {/* resetKey={signalViewMode}: switching List/Graph clears any captured
-              error so a crash in one view never blocks the other. */}
+          {/* resetKey={signalViewMode}: switching views clears any captured
+              error so a crash in one view never blocks the others. */}
           <ViewErrorBoundary viewName="Signal" resetKey={signalViewMode}>
-            {signalViewMode === 'graph' ? (
+            {signalViewMode !== 'list' ? (
               <Suspense fallback={<div className="flex items-center justify-center py-20 text-text-secondary text-sm">{t('action.loading')}</div>}>
-                <ContentGraphView />
+                {signalViewMode === 'themes' ? <ThemeMapView /> : <ContentGraphView />}
               </Suspense>
             ) : (
               <>

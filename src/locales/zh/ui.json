@@ -1387,6 +1387,8 @@
   "signals.freeSubtext": "解锁查看哪些信号需要您的关注以及应采取什么行动。",
   "signals.viewList": "列表",
   "signals.viewGraph": "图谱",
+  "signals.viewThemes": "主题",
+  "signals.graphEdgeRelated": "相关",
   "signals.graphEmpty": "未找到内容关联",
   "signals.graphEmptySub": "随着内容被分析，关联将会显示",
   "signals.graphItems": "条内容",

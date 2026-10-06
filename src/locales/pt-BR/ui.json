@@ -2110,6 +2110,8 @@
   "signals.freeSubtext": "Desbloqueie para ver quais sinais precisam da sua atenção e que ação tomar.",
   "signals.viewList": "Lista",
   "signals.viewGraph": "Gráfico",
+  "signals.viewThemes": "Temas",
+  "signals.graphEdgeRelated": "relacionado",
   "signals.graphEmpty": "Nenhuma relação de conteúdo encontrada",
   "signals.graphEmptySub": "As conexões aparecerão conforme o conteúdo for analisado",
   "signals.graphItems": "itens",

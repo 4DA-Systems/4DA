@@ -44,7 +44,7 @@ export type ActiveView =
   | 'preemption'
   | 'blindspots';
 
-type SignalViewMode = 'list' | 'graph';
+type SignalViewMode = 'list' | 'themes' | 'graph';
 
 export interface UiSlice {
   showSettings: boolean;

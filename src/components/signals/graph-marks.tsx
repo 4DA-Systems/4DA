@@ -10,7 +10,7 @@
 
 export const GRAPH_CATEGORIES = ['security', 'release', 'discussion', 'research'] as const;
 
-interface Shape {
+export interface Shape {
   borderRadius: string;
   rotate: boolean;
   donut: boolean;
@@ -26,6 +26,12 @@ const SHAPES: Record<string, Shape> = {
   security: { borderRadius: '1px', rotate: true, donut: false, hollow: false },
   research: { borderRadius: '50%', rotate: false, donut: true, hollow: false },
 };
+
+/** The silhouette for a category (discussion when unknown) — shared with the
+ *  graph's node marks so both views draw the same shapes. */
+export function categoryShape(category: string): Shape {
+  return SHAPES[category] ?? SHAPES.discussion!;
+}
 
 /** The mark's colour: red for security, gold inside the stack column,
  *  neutral otherwise. Tokens only, so both themes work. */

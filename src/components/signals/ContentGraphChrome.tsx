@@ -70,13 +70,15 @@ interface GraphLegendProps {
   categories: readonly string[];
   /** The map has a "Your stack" column — gold marks there need a key too. */
   hasStack: boolean;
+  /** Graph view: key the line between related items. */
+  showEdges?: boolean;
 }
 
 /** One line: the category silhouettes present in this map, plus the gold
  *  "your stack" colour. Without the gold entry, raters read the stack
  *  column's gold squares against a grey legend square and could not match
  *  them (audit 2026-10-06). */
-export function GraphLegend({ categories, hasStack }: GraphLegendProps) {
+export function GraphLegend({ categories, hasStack, showEdges = false }: GraphLegendProps) {
   const { t } = useTranslation();
   return (
     <div className="flex items-center flex-wrap gap-x-3 gap-y-1">
@@ -90,6 +92,14 @@ export function GraphLegend({ categories, hasStack }: GraphLegendProps) {
         <span className="inline-flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
           <CategoryMark category="discussion" stack surface="var(--color-bg-primary)" />
           {t('signals.laneStack')}
+        </span>
+      )}
+      {showEdges && (
+        <span className="inline-flex items-center gap-1.5 text-[11px]" style={{ color: 'var(--color-text-muted)' }}>
+          <svg width="16" height="6" aria-hidden="true">
+            <line x1="0" y1="3" x2="16" y2="3" stroke="var(--color-text-muted)" strokeWidth={1.5} />
+          </svg>
+          {t('signals.graphEdgeRelated')}
         </span>
       )}
     </div>

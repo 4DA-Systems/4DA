@@ -1385,6 +1385,8 @@
   "signals.freeSubtext": "Разблокируйте, чтобы увидеть, какие сигналы требуют вашего внимания и какие действия предпринять.",
   "signals.viewList": "Список",
   "signals.viewGraph": "Граф",
+  "signals.viewThemes": "Темы",
+  "signals.graphEdgeRelated": "связано",
   "signals.graphEmpty": "Связи между контентом не найдены",
   "signals.graphEmptySub": "Связи появятся по мере анализа контента",
   "signals.graphItems": "материалов",

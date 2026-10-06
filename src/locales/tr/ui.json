@@ -2073,6 +2073,8 @@
   "signals.freeSubtext": "Hangi sinyallerin dikkatinizi gerektirdiğini ve ne yapmanız gerektiğini görmek için kilidi açın.",
   "signals.viewList": "Liste",
   "signals.viewGraph": "Grafik",
+  "signals.viewThemes": "Temalar",
+  "signals.graphEdgeRelated": "ilişkili",
   "signals.graphEmpty": "İçerik ilişkisi bulunamadı",
   "signals.graphEmptySub": "İçerik analiz edildikçe bağlantılar görünecektir",
   "signals.graphItems": "öğe",

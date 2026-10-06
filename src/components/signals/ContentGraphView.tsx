@@ -1,217 +1,242 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-// Signal → Graph: the theme map. "Your stack" in its own column, this
-// window's themes as an order-preserving treemap that always fills the view
-// with readable titles, and the unthemed items in a collapsed list. Replaces
-// the force canvas that needed zoom 0.275 to fit and hid 136 of 150 titles
-// (theme-map-model.ts has the measurements).
-import { useCallback, useEffect, useMemo, useState } from 'react';
+// Signal → Graph: the relationship view. Every item as a mark inside its
+// theme (stack items inside the theme their community belongs to), lines
+// between related items, laid out client-side to the canvas shape
+// (graph-layout.ts). The Themes view is for reading; this one is for seeing
+// how items and themes relate.
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  ReactFlow,
+  Background,
+  Controls,
+  type FitViewOptions,
+  type Node,
+  type Edge,
+  type NodeChange,
+  useNodesState,
+  useEdgesState,
+} from '@xyflow/react';
+import '@xyflow/react/dist/style.css';
 import { useTranslation } from 'react-i18next';
 
 import type { GraphNode } from '../../types/graph';
+import { useTheme } from '../../lib/theme';
+import ContentGraphNodeComponent from './ContentGraphNode';
+import ContentGraphEdgeComponent from './ContentGraphEdge';
 import GraphDetailPanel from './GraphDetailPanel';
-import ThemeDetailPanel from './ThemeDetailPanel';
-import { LoadingState, EmptyState, ErrorState, GraphLegend } from './ContentGraphChrome';
+import { ClusterHullNode, ClusterLabelNode, LaneLabelNode } from './GraphCanvasChrome';
+import { EmptyState, ErrorState, GraphLegend, LoadingState } from './ContentGraphChrome';
 import ContentGraphFooter from './ContentGraphFooter';
-import { StackColumn, ThemeTile, UnthemedList } from './ThemeMapParts';
 import { useContentGraph } from './use-content-graph';
+import { ZoomCssVar, toFlowEdges, toFlowNodes } from './ContentGraphFlowHelpers';
+import { LabelCollisionLayer } from './ContentGraphLabelLayer';
 import { GRAPH_CATEGORIES } from './graph-marks';
-import { buildThemeMap, type Theme } from './theme-map-model';
-import { TILE_GAP, stableThemeLayout, themeWeights, type RememberedLayout } from './theme-map-layout';
+import { layoutGraph, type RememberedOrder } from './graph-layout';
+import { markViewed, readLastViewed, readMemory, writeMemory } from './graph-visit';
 
-const LAST_VIEW_KEY = '4da:graph:lastViewedAt';
-/** Where each window's last layout is remembered (per viewer, per device —
- *  a convenience: without it the map simply lays out fresh). */
-const layoutKey = (days: number) => `4da:graph:layout:${days}d`;
+const nodeTypes = {
+  contentNode: ContentGraphNodeComponent,
+  clusterLabel: ClusterLabelNode,
+  clusterHull: ClusterHullNode,
+  laneLabel: LaneLabelNode,
+};
+const edgeTypes = { contentEdge: ContentGraphEdgeComponent };
 
-function readLayout(days: number): RememberedLayout | null {
-  try {
-    const raw = localStorage.getItem(layoutKey(days));
-    if (!raw) return null;
-    const v = JSON.parse(raw) as RememberedLayout;
-    return Array.isArray(v?.rows) && v.members && typeof v.members === 'object' ? v : null;
-  } catch {
-    return null;
-  }
-}
-
-function writeLayout(days: number, layout: RememberedLayout) {
-  try {
-    localStorage.setItem(layoutKey(days), JSON.stringify(layout));
-  } catch {
-    // Blocked storage: the next visit lays out fresh instead.
-  }
-}
-
-function readLastViewed(): number {
-  try {
-    const raw = localStorage.getItem(LAST_VIEW_KEY);
-    return raw ? new Date(raw).getTime() || 0 : 0;
-  } catch {
-    return 0;
-  }
-}
-
-function markViewed() {
-  try {
-    localStorage.setItem(LAST_VIEW_KEY, new Date().toISOString());
-  } catch {
-    // Private window / blocked storage: "new" highlighting is a convenience.
-  }
-}
-
-/** Live client size of an element, via a callback ref — the treemap host
- *  only mounts once the graph has loaded, so a mount-time effect would miss it. */
-function useElementSize<T extends HTMLElement>() {
-  const [el, setEl] = useState<T | null>(null);
-  const [size, setSize] = useState({ w: 0, h: 0 });
-  useEffect(() => {
-    if (!el) return;
-    const update = () =>
-      setSize((s) => (s.w === el.clientWidth && s.h === el.clientHeight ? s : { w: el.clientWidth, h: el.clientHeight }));
-    update();
-    const ro = new ResizeObserver(update);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, [el]);
-  return [setEl, size] as const;
-}
-
-type Selection = { kind: 'item'; node: GraphNode } | { kind: 'theme'; theme: Theme } | null;
+/** Where each window's group order is remembered (per viewer, per device). */
+const orderKey = (days: number) => `4da:graph:graph-order:${days}d`;
+const isRememberedOrder = (v: unknown): v is RememberedOrder =>
+  !!v && Array.isArray((v as RememberedOrder).order) && typeof (v as RememberedOrder).members === 'object';
+/** Fit margins in SCREEN px: titles are zoom-invariant and 150 px wide,
+ *  centred on their mark, so a flow-unit padding clipped the outer titles at
+ *  small windows (live 2026-10-07, 1200x800). */
+const FIT_VIEW: FitViewOptions = { padding: { x: '80px', top: '24px', bottom: '20px' } };
+/** Canvas aspect, rounded: re-layout only when the canvas SHAPE changes, not
+ *  on every pixel of a window drag. */
+const aspectBucket = (w: number, h: number) => (w > 0 && h > 0 ? Math.round((w / h) * 10) / 10 : 0);
 
 export default function ContentGraphView() {
   const { t } = useTranslation();
+  const { isLight } = useTheme();
   const [days, setDays] = useState(7);
   const { graph, loading, loadError, stale, reload, applyFresh } = useContentGraph(days);
-  const [selection, setSelection] = useState<Selection>(null);
-  const [lastViewedMs, setLastViewedMs] = useState(0);
-  const [treemapRef, treemapSize] = useElementSize<HTMLDivElement>();
+  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
+  const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+  const [baseEdges, setBaseEdges] = useState<Edge[]>([]);
+  const [aspect, setAspect] = useState(0);
+  const [hostEl, setHostEl] = useState<HTMLDivElement | null>(null);
+  const flowRef = useRef<{ fitView: (opts?: FitViewOptions) => void } | null>(null);
+  const needsFitRef = useRef(false);
+  const lastViewedRef = useRef(0);
 
-  // "New" = arrived since the previous visit: read the old stamp, then move
-  // it to now, once per loaded map.
+  // Canvas shape → layout aspect. A resize within the same aspect bucket
+  // keeps the layout but re-fits it, so the map never sits half off-canvas.
+  useEffect(() => {
+    if (!hostEl) return;
+    let raf = 0;
+    let current = 0;
+    const update = () => {
+      const next = aspectBucket(hostEl.clientWidth, hostEl.clientHeight);
+      if (next !== current) {
+        current = next;
+        setAspect(next);
+      } else if (!needsFitRef.current) {
+        cancelAnimationFrame(raf);
+        raf = requestAnimationFrame(() => flowRef.current?.fitView(FIT_VIEW));
+      }
+    };
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(hostEl);
+    return () => {
+      ro.disconnect();
+      cancelAnimationFrame(raf);
+    };
+  }, [hostEl]);
+
+  // "New" = arrived since the previous visit (shared stamp with Themes).
   useEffect(() => {
     if (!graph) return;
-    setSelection(null);
-    setLastViewedMs(readLastViewed());
+    lastViewedRef.current = readLastViewed();
     markViewed();
+    setSelectedNode(null);
   }, [graph]);
 
-  const map = useMemo(() => (graph ? buildThemeMap(graph) : null), [graph]);
-  // The layout remembered from the previous build, read once per loaded map.
+  // The order remembered from the previous build, read once per loaded map.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const previousLayout = useMemo(() => readLayout(days), [days, graph]);
+  const previousOrder = useMemo(() => readMemory(orderKey(days), isRememberedOrder), [days, graph]);
 
-  // Tiles stay where the user last saw them while that still fits
-  // (stableThemeLayout); a fresh layout otherwise.
-  const layout = useMemo(() => {
-    if (!map || treemapSize.w === 0 || treemapSize.h === 0) return null;
-    const weights = themeWeights(
-      map.themes.map((t) => t.items.length),
-      treemapSize.w * treemapSize.h,
-    );
-    const themes = map.themes.map((t, i) => ({
-      id: t.id,
-      members: t.items.flatMap((n) => n.member_ids),
-      weight: weights[i]!,
-    }));
-    return stableThemeLayout(themes, { x: 0, y: 0, w: treemapSize.w, h: treemapSize.h }, previousLayout);
-  }, [map, treemapSize.w, treemapSize.h, previousLayout]);
-  const rects = layout?.rects ?? [];
+  const layout = useMemo(
+    () => (graph && aspect > 0 ? layoutGraph(graph, t('signals.laneStack'), aspect, previousOrder) : null),
+    [graph, aspect, previousOrder, t],
+  );
 
   useEffect(() => {
-    if (layout) writeLayout(days, layout.remembered);
-  }, [layout, days]);
+    if (!graph || !layout) return;
+    needsFitRef.current = true;
+    setNodes(toFlowNodes(graph, layout, lastViewedRef.current));
+    const flowEdges = toFlowEdges(graph, layout);
+    setEdges(flowEdges);
+    setBaseEdges(flowEdges);
+    writeMemory(orderKey(days), { order: layout.order, members: layout.members });
+  }, [graph, layout, days, setNodes, setEdges]);
+
+  const connectedNodeIds = useMemo(() => {
+    const ids = new Set<string>();
+    if (!hoveredNodeId) return ids;
+    for (const e of baseEdges) {
+      if (e.source === hoveredNodeId) ids.add(e.target);
+      if (e.target === hoveredNodeId) ids.add(e.source);
+    }
+    return ids;
+  }, [hoveredNodeId, baseEdges]);
+
+  // Hover focus: the item and its related items full strength, the rest
+  // dimmed; the unhover branch resets every node (an early return once left
+  // 128 of 129 nodes stuck at 25% — live 2026-07-19).
+  useEffect(() => {
+    setEdges(
+      hoveredNodeId
+        ? baseEdges.map((e) => (e.source === hoveredNodeId || e.target === hoveredNodeId ? { ...e, animated: true, style: { opacity: 1 } } : e))
+        : baseEdges,
+    );
+    setNodes((nds) =>
+      nds.map((n) => {
+        if (n.type !== 'contentNode') return n;
+        const opacity = hoveredNodeId === null || n.id === hoveredNodeId || connectedNodeIds.has(n.id) ? 1 : 0.25;
+        return { ...n, style: { opacity, transition: 'opacity 200ms ease' } };
+      }),
+    );
+  }, [hoveredNodeId, connectedNodeIds, baseEdges, setEdges, setNodes]);
+
+  const onNodeClick = useCallback((_: React.MouseEvent, node: Node) => {
+    if (node.type === 'contentNode') setSelectedNode(node.data as unknown as GraphNode);
+  }, []);
+  const closePanel = useCallback(() => {
+    setSelectedNode(null);
+    setNodes((nds) => (nds.some((n) => n.selected) ? nds.map((n) => (n.selected ? { ...n, selected: false } : n)) : nds));
+  }, [setNodes]);
+  const onPaneClick = useCallback(() => setSelectedNode(null), []);
+  const onNodeMouseEnter = useCallback((_: React.MouseEvent, node: Node) => {
+    if (node.type === 'contentNode') setHoveredNodeId(node.id);
+  }, []);
+  const onNodeMouseLeave = useCallback(() => setHoveredNodeId(null), []);
+  const onInit = useCallback((instance: { fitView: (opts?: FitViewOptions) => void }) => {
+    flowRef.current = instance;
+  }, []);
+
+  // Fit on the first batch of MEASURED dimensions after a layout: React Flow
+  // computes bounds from measured node sizes, which land asynchronously.
+  const handleNodesChange = useCallback(
+    (changes: NodeChange[]) => {
+      onNodesChange(changes);
+      if (needsFitRef.current && changes.some((c) => c.type === 'dimensions')) {
+        needsFitRef.current = false;
+        requestAnimationFrame(() => flowRef.current?.fitView(FIT_VIEW));
+      }
+    },
+    [onNodesChange],
+  );
 
   const categories = useMemo(() => {
     const seen = new Set(graph?.nodes.map((n) => n.category) ?? []);
     return GRAPH_CATEGORIES.filter((c) => seen.has(c));
   }, [graph]);
 
-  const isNew = useCallback(
-    (n: GraphNode) => (n.created_at ? new Date(n.created_at).getTime() > lastViewedMs : false),
-    [lastViewedMs],
-  );
-  const openItem = useCallback((node: GraphNode) => setSelection({ kind: 'item', node }), []);
-  const openTheme = useCallback((theme: Theme) => setSelection({ kind: 'theme', theme }), []);
-  const closePanel = useCallback(() => setSelection(null), []);
-
   if (loading) return <LoadingState />;
   if (loadError) return <ErrorState onRetry={reload} />;
-  if (!graph || !map || graph.nodes.length === 0) return <EmptyState />;
-
-  const selectedId = selection?.kind === 'item' ? selection.node.id : null;
-  const selectedThemeId = selection?.kind === 'theme' ? selection.theme.id : null;
+  if (!graph || graph.nodes.length === 0) return <EmptyState />;
 
   return (
-    <div
-      className="flex flex-col"
-      // 210px = the app chrome above this view (measured 204px at
-      // 1700×1184): 190px pushed the footer 14px below the window.
-      style={{ height: 'calc(100vh - 210px)', minHeight: 500, backgroundColor: 'var(--color-bg-primary)' }}
-    >
-      <div className="relative flex gap-3 px-4 pt-2 pb-3" style={{ flex: '1 1 0%', minHeight: 0 }}>
-        {map.stack.length > 0 && (
-          <StackColumn
-            items={map.stack}
-            themeOf={map.stackTheme}
-            isNew={isNew}
-            selectedId={selectedId}
-            onOpenItem={openItem}
+    // Flex column with a DEFINITE height: React Flow's root is height:100%,
+    // which resolves to 0 under a min-height-only parent (error #004).
+    <div className="flex flex-col" style={{ height: 'calc(100vh - 210px)', minHeight: 500, backgroundColor: 'var(--color-bg-primary)' }}>
+      {/* Legend above the canvas, not a Panel on it: a floating panel covered
+          the top row's theme names at 1200x800 (live 2026-10-07). */}
+      <div className="flex items-center justify-between gap-3 px-4 pb-2">
+        <GraphLegend categories={categories} hasStack={graph.nodes.some((n) => n.affects_you)} showEdges={baseEdges.length > 0} />
+        {stale && (
+          <button
+            onClick={applyFresh}
+            className="px-2.5 py-1 text-[11px] rounded border transition-colors hover:bg-bg-tertiary"
+            style={{ color: 'var(--color-accent-gold)', borderColor: 'var(--color-border)', backgroundColor: 'var(--color-bg-secondary)' }}
+          >
+            {t('signals.graphCorpusChanged')}
+          </button>
+        )}
+      </div>
+      <div ref={setHostEl} className="relative flex flex-col" style={{ flex: '1 1 0%', minHeight: 0 }}>
+        <ReactFlow
+          nodes={nodes}
+          edges={edges}
+          onNodesChange={handleNodesChange}
+          onEdgesChange={onEdgesChange}
+          onNodeClick={onNodeClick}
+          onPaneClick={onPaneClick}
+          onNodeMouseEnter={onNodeMouseEnter}
+          onNodeMouseLeave={onNodeMouseLeave}
+          nodeTypes={nodeTypes}
+          edgeTypes={edgeTypes}
+          onInit={onInit}
+          proOptions={{ hideAttribution: true }}
+          minZoom={0.1}
+          maxZoom={2}
+          nodesDraggable
+          nodesConnectable={false}
+          elementsSelectable
+          style={{ flex: '1 1 0%', minHeight: 0 }}
+        >
+          <ZoomCssVar />
+          <LabelCollisionLayer />
+          {/* SVG presentation attributes cannot resolve var(): concrete per theme. */}
+          <Background color={isLight ? '#DDDAD2' : '#2A2A2A'} gap={20} />
+          <Controls
+            showInteractive={false}
+            style={{ backgroundColor: 'var(--color-bg-secondary)', borderColor: 'var(--color-border)', borderRadius: 8 }}
           />
-        )}
-        <div className="flex flex-col gap-2 min-w-0" style={{ flex: '1 1 0%', minHeight: 0 }}>
-          <div className="flex items-center justify-between gap-3 shrink-0" style={{ minHeight: 24 }}>
-            <GraphLegend categories={categories} hasStack={map.stack.length > 0} />
-            {/* Stale-map pill: a quiet probe rebuild found a DIFFERENT item
-                set (use-content-graph). Swapping is explicit — a silent swap
-                would reflow the map mid-read. */}
-            {stale && (
-              <button
-                onClick={applyFresh}
-                className="px-2.5 py-1 text-[11px] rounded border transition-colors hover:bg-bg-tertiary shrink-0"
-                style={{
-                  color: 'var(--color-accent-gold)',
-                  borderColor: 'var(--color-border)',
-                  backgroundColor: 'var(--color-bg-secondary)',
-                }}
-              >
-                {t('signals.graphCorpusChanged')}
-              </button>
-            )}
-          </div>
-          <div ref={treemapRef} className="relative" style={{ flex: '1 1 0%', minHeight: 0, margin: -TILE_GAP / 2 }}>
-            {map.themes.map((theme, i) =>
-              rects[i] ? (
-                <ThemeTile
-                  key={theme.id}
-                  theme={theme}
-                  rect={rects[i]}
-                  gap={TILE_GAP}
-                  isNew={isNew}
-                  selectedId={selectedId}
-                  themeSelected={selectedThemeId === theme.id}
-                  onOpenItem={openItem}
-                  onOpenTheme={openTheme}
-                />
-              ) : null,
-            )}
-          </div>
-          {map.unthemed.length > 0 && (
-            <UnthemedList
-              key={graph.meta.time_window_days}
-              items={map.unthemed}
-              defaultOpen={map.themes.length === 0}
-              isNew={isNew}
-              selectedId={selectedId}
-              onOpenItem={openItem}
-            />
-          )}
-        </div>
-        {selection?.kind === 'theme' && (
-          <ThemeDetailPanel theme={selection.theme} isNew={isNew} onOpenItem={openItem} onClose={closePanel} />
-        )}
-        {selection?.kind === 'item' && (
-          <GraphDetailPanel key={selection.node.id} node={selection.node} onClose={closePanel} />
-        )}
+        </ReactFlow>
+        {selectedNode && <GraphDetailPanel key={selectedNode.id} node={selectedNode} onClose={closePanel} />}
       </div>
       <ContentGraphFooter meta={graph.meta} days={days} onDaysChange={setDays} />
     </div>

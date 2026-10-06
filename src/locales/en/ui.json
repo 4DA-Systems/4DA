@@ -1491,6 +1491,8 @@
   "signals.freeSubtext": "Unlock to see which signals need your attention and what action to take.",
   "signals.viewList": "List",
   "signals.viewGraph": "Graph",
+  "signals.viewThemes": "Themes",
+  "signals.graphEdgeRelated": "related",
   "signals.graphEmpty": "No content relationships found",
   "signals.graphEmptySub": "Connections will appear as content is analyzed",
   "signals.graphItems": "items",
