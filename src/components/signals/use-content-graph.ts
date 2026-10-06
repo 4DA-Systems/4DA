@@ -12,6 +12,18 @@ import { isSurfacedSignal } from '../../utils/score';
 /** Quiet period after the last results change before probing a rebuild —
  *  a background merge writes the results array several times in a burst. */
 const PROBE_DEBOUNCE_MS = 3000;
+/** Minimum time between probe builds (and after the map's own load). A
+ *  probe is a full graph build (~4 s of CPU); while an analysis re-scores,
+ *  the surfaced set changes every few seconds, and the 3 s debounce alone
+ *  let the app build the graph ~30 times in 3 minutes (live log,
+ *  2026-10-06). The pill only informs, so a minute of lag costs nothing. */
+const PROBE_MIN_INTERVAL_MS = 60_000;
+
+/** Delay before the next probe may start: the debounce, or the rest of the
+ *  minimum interval since the last build started, whichever is longer. */
+export function probeDelay(now: number, lastBuildAt: number, debounceMs = PROBE_DEBOUNCE_MS, minIntervalMs = PROBE_MIN_INTERVAL_MS): number {
+  return Math.max(debounceMs, lastBuildAt + minIntervalMs - now);
+}
 
 /** Identity of what the map SHOWS: every node and every member it stands for.
  *  Positions, labels and edges follow from this set; two builds with the same
@@ -64,6 +76,13 @@ export function useContentGraph(days: number): ContentGraphData {
   const relevanceResults = useAppStore((s) => s.appState.relevanceResults);
   const builtSigRef = useRef<string | null>(null);
   const shownKeyRef = useRef<string | null>(null);
+  const lastBuildAtRef = useRef(0);
+  const probeInFlightRef = useRef(false);
+  const daysRef = useRef(days);
+  daysRef.current = days;
+  // Bumped when a probe lands, so a change that arrived mid-flight is
+  // re-evaluated instead of starting a second, overlapping build.
+  const [probeTick, setProbeTick] = useState(0);
 
   const reload = useCallback(() => setReloadToken((n) => n + 1), []);
 
@@ -72,6 +91,7 @@ export function useContentGraph(days: number): ContentGraphData {
     setLoading(true);
     setLoadError(false);
     setFresh(null);
+    lastBuildAtRef.current = Date.now();
     cmd('build_content_graph', { days, maxNodes: 150 })
       .then((g: ContentGraph) => {
         if (cancelled) return;
@@ -92,25 +112,34 @@ export function useContentGraph(days: number): ContentGraphData {
     };
   }, [days, reloadToken]);
 
+  // One probe at a time, at most one a minute, and a finished probe always
+  // counts. The old effect discarded a probe whose results changed while it
+  // ran — the backend build cannot be cancelled, so the CPU was spent anyway
+  // and the next change started another one.
   useEffect(() => {
     if (loading || builtSigRef.current === null) return;
-    const sig = surfacedSignature(relevanceResults);
-    if (sig === builtSigRef.current) return;
-    let cancelled = false;
+    if (surfacedSignature(relevanceResults) === builtSigRef.current) return;
+    if (probeInFlightRef.current) return;
     const timer = setTimeout(() => {
-      cmd('build_content_graph', { days, maxNodes: 150 })
+      const probeDays = daysRef.current;
+      // Probe what is surfaced NOW, not what was surfaced when scheduled.
+      const sig = surfacedSignature(useAppStore.getState().appState.relevanceResults);
+      probeInFlightRef.current = true;
+      lastBuildAtRef.current = Date.now();
+      cmd('build_content_graph', { days: probeDays, maxNodes: 150 })
         .then((g: ContentGraph) => {
-          if (cancelled) return;
+          if (probeDays !== daysRef.current) return;
           builtSigRef.current = sig;
           setFresh(graphNodeSetKey(g) === shownKeyRef.current ? null : g);
         })
-        .catch((err) => console.warn('[ContentGraph] Staleness probe failed:', err));
-    }, PROBE_DEBOUNCE_MS);
-    return () => {
-      cancelled = true;
-      clearTimeout(timer);
-    };
-  }, [relevanceResults, days, loading]);
+        .catch((err) => console.warn('[ContentGraph] Staleness probe failed:', err))
+        .finally(() => {
+          probeInFlightRef.current = false;
+          setProbeTick((n) => n + 1);
+        });
+    }, probeDelay(Date.now(), lastBuildAtRef.current));
+    return () => clearTimeout(timer);
+  }, [relevanceResults, days, loading, probeTick]);
 
   const applyFresh = useCallback(() => {
     if (!fresh) return;

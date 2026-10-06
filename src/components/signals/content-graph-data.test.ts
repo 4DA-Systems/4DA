@@ -5,7 +5,7 @@ vi.mock('@tauri-apps/api/core', () => ({ invoke: vi.fn(() => Promise.resolve({})
 
 import type { ContentGraph, GraphCluster, GraphNode } from '../../types/graph';
 import type { SourceRelevance } from '../../types';
-import { graphNodeSetKey, surfacedSignature } from './use-content-graph';
+import { graphNodeSetKey, probeDelay, surfacedSignature } from './use-content-graph';
 import {
   buildThemeMap,
   byImportance,
@@ -82,6 +82,18 @@ describe('graph staleness signals', () => {
     const remerged = [mk(1, true), mk(2, false), mk(3, true), mk(4, false)];
     expect(surfacedSignature(remerged)).toBe(surfacedSignature(first));
     expect(surfacedSignature([...remerged, mk(5, true)])).not.toBe(surfacedSignature(first));
+  });
+});
+
+describe('staleness probe throttle', () => {
+  it('waits the debounce when the last build is long past', () => {
+    expect(probeDelay(1_000_000, 0, 3000, 60_000)).toBe(3000);
+  });
+
+  it('holds probes to one a minute after the last build started', () => {
+    // A build started 10 s ago: the next probe waits the other 50 s, not 3 s.
+    expect(probeDelay(100_000, 90_000, 3000, 60_000)).toBe(50_000);
+    expect(probeDelay(150_000, 90_000, 3000, 60_000)).toBe(3000);
   });
 });
 
