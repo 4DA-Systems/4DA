@@ -33,6 +33,7 @@ use std::collections::{BTreeMap, BTreeSet, HashSet};
 
 use serde::{Deserialize, Serialize};
 
+use crate::brief_cadence::{same_state, upgrade_signature};
 use crate::db::Database;
 use crate::preemption::AlertUrgency;
 use crate::scoring::release_version::lenient_semver;
@@ -570,9 +571,11 @@ impl Novelty {
     /// of the same run.
     pub(crate) fn status(&self, key: &str, signature: &str, today: &str) -> FactStatus {
         match self.facts.get(key) {
-            Some(r) if r.sig == signature && r.since.as_str() < today => FactStatus::Unchanged {
-                since: r.since.clone(),
-            },
+            Some(r) if same_state(&r.sig, signature) && r.since.as_str() < today => {
+                FactStatus::Unchanged {
+                    since: r.since.clone(),
+                }
+            }
             _ => FactStatus::New,
         }
     }
@@ -586,7 +589,12 @@ impl Novelty {
     ) {
         for (key, sig) in facts {
             match self.facts.get_mut(key) {
-                Some(r) if r.sig == sig => r.seen = today.to_string(),
+                // A legacy-shaped record of the same state adopts the
+                // current shape and keeps its first date.
+                Some(r) if same_state(&r.sig, sig) => {
+                    r.seen = today.to_string();
+                    r.sig = sig.to_string();
+                }
                 _ => {
                     self.facts.insert(
                         key.to_string(),
@@ -657,7 +665,7 @@ pub(crate) fn record_reported(db: &Database, facts: &BriefFacts, featured_ids: &
             facts
                 .upgrades
                 .iter()
-                .map(|u| (u.key.clone(), u.announced.clone())),
+                .map(|u| (u.key.clone(), upgrade_signature(u))),
         )
         .collect();
     novelty.record_facts(sigs.iter().map(|(k, s)| (k.as_str(), s.as_str())), &today);
@@ -696,6 +704,13 @@ pub(crate) fn security_signature(f: &SecurityFact) -> String {
     // next day.
     let mut ids: Vec<&str> = f.advisory_ids.iter().map(String::as_str).collect();
     ids.sort_unstable();
+    // Below HIGH the brief gives the advisory one line at most; its identity
+    // is the package key (in the fact key) and the advisory set. The fix path
+    // moves whenever upstream publishes (`Refresh { to }`, a parent version),
+    // and on 2026-10-06 that alone regenerated the brief (audit 2026-10-07).
+    if !matches!(f.urgency, AlertUrgency::Critical | AlertUrgency::High) {
+        return format!("{:?}|{}", f.urgency, ids.join(","));
+    }
     let mut parts: Vec<String> = vec![format!("{:?}", f.urgency), ids.join(",")];
     for s in &f.sites {
         parts.push(format!(
@@ -715,12 +730,31 @@ pub(crate) fn security_signature(f: &SecurityFact) -> String {
 /// package, versions merged: that checker resolves the FIRST fact for a name.
 pub(crate) fn package_facts(facts: &BriefFacts) -> Vec<crate::briefing_groundedness::PackageFact> {
     let mut by_name: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    // Dev-only when EVERY fact naming the package is dev-only: the
+    // "(dev tooling)" check (`briefing_dev_tags`) reads this, and one runtime
+    // pin makes the package runtime (navcal declares dotenv in
+    // `dependencies`; brief 401 still tagged it dev tooling, 2026-10-07).
+    let mut dev: BTreeMap<String, bool> = BTreeMap::new();
     let add = |map: &mut BTreeMap<String, BTreeSet<String>>, name: &str, version: Option<&str>| {
         let entry = map.entry(name.to_string()).or_default();
         if let Some(v) = version.map(str::trim).filter(|v| !v.is_empty()) {
             entry.insert(v.trim_start_matches(['v', 'V']).to_string());
         }
     };
+    let mut mark = |name: &str, is_dev: bool| {
+        *dev.entry(name.to_string()).or_insert(true) &= is_dev;
+    };
+    for f in facts.security.iter().chain(facts.also_open.iter()) {
+        for s in &f.sites {
+            mark(&f.package, s.dev_only);
+            if let FixPath::Parent { parent, .. } = &s.fix_path {
+                mark(parent, s.dev_only);
+            }
+        }
+    }
+    for u in &facts.upgrades {
+        mark(&u.package, u.dev_only);
+    }
     let mut add = |name: &str, version: Option<&str>| add(&mut by_name, name, version);
     for f in facts.security.iter().chain(facts.also_open.iter()) {
         for s in &f.sites {
@@ -781,6 +815,7 @@ pub(crate) fn package_facts(facts: &BriefFacts) -> Vec<crate::briefing_groundedn
         .into_iter()
         .map(
             |(name, versions)| crate::briefing_groundedness::PackageFact {
+                dev_only: dev.get(&name).copied().unwrap_or(false),
                 name,
                 versions: versions.into_iter().collect(),
             },
@@ -911,7 +946,7 @@ pub(crate) fn fingerprint(
         .chain(
             upgrades
                 .iter()
-                .map(|u| format!("u:{}:{}", u.key, u.announced)),
+                .map(|u| format!("u:{}:{}", u.key, upgrade_signature(u))),
         )
         .collect();
     lines.sort();

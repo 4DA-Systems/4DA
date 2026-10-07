@@ -3136,6 +3136,7 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
         Some(crate::briefing_groundedness::PackageFact {
             name: name.to_string(),
             versions,
+            dev_only: false,
         })
     };
     let package_facts: Vec<crate::briefing_groundedness::PackageFact> = briefing
@@ -3246,6 +3247,7 @@ Never use "research confirms" for blog posts. Never use "developers report" for 
                 |(name, versions)| crate::briefing_groundedness::PackageFact {
                     name,
                     versions: versions.into_iter().collect(),
+                    dev_only: false,
                 },
             )
             .collect()
