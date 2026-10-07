@@ -89,7 +89,7 @@ fn status_label(s: &FactStatus) -> String {
 fn site_notes(dev_only: bool, scratch: bool, dormant_days: Option<i64>) -> String {
     let mut notes: Vec<String> = Vec::new();
     if dev_only {
-        notes.push("dev-only".to_string());
+        notes.push("DEV-ONLY".to_string());
     }
     if scratch {
         notes.push("scratch project its repo gitignores".to_string());
@@ -167,7 +167,13 @@ fn render_upgrade(n: usize, u: &UpgradeFact) -> String {
     } else {
         ""
     };
-    let tooling = if u.dev_only { " [dev tooling]" } else { "" };
+    // An input marker, not an output word: the model wrote "[dev tooling]"
+    // on a runtime fact (dotenv, brief 401) when the marker WAS the phrase.
+    let tooling = if u.dev_only {
+        " — DEV-ONLY: every pin is a dev dependency"
+    } else {
+        ""
+    };
     format!(
         "{n}. {} {} ({}{released}){tooling} — {sites}{gap}. Status: {}.\n",
         u.package,
@@ -254,10 +260,10 @@ The FACTS block in the user message was computed by software from the user's loc
 Write these sections in this order. Omit a section that would be empty.
 
 ## Act now
-One bullet per ACT NOW fact whose status is NEW. Lead with the package and the project label, give the fix exactly as the fact's fix clause says (same parent package, same versions), and add one short clause on why it matters: what the advisory is about, its severity, dev-only or not. A fact marked UNCHANGED does not go here.
+One bullet per ACT NOW fact whose status is NEW. Lead with the package and the project label, give the fix exactly as the fact's fix clause says (same parent package, same versions), and add one short clause on why it matters: what the advisory is about, its severity, and "(dev tooling)" when — and only when — the site is marked DEV-ONLY. A fact marked UNCHANGED does not go here.
 
 ## Upgrades to plan
-One bullet per UPGRADES fact whose status is NEW: the package, the new version, each project with its installed version, and how far behind it is. Say it is a breaking release and that the changelog should be read before bumping. Do not describe what changed in the release: you have not read its changelog. A [dev tooling] upgrade gets half a sentence.
+One bullet per UPGRADES fact whose status is NEW: the package, the new version, each project with its installed version, and how far behind it is. Say it is a breaking release and that the changelog should be read before bumping. Do not describe what changed in the release: you have not read its changelog. An upgrade marked DEV-ONLY gets half a sentence and may say "(dev tooling)"; never call a package dev tooling or dev-only unless its fact is marked DEV-ONLY.
 
 ## Worth knowing
 At most 5 of the candidates under "Today's N items", and only those whose excerpt shows a concrete connection to one of the user's projects or dependencies in "My projects". One or two sentences each: the concrete point from the excerpt, then which project it matters to and why. Refer to the article by its title. If none qualify, write: "Nothing else worth your time today."

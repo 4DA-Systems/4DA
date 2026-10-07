@@ -228,6 +228,9 @@ fn is_claim_term(term: &str, pkg_set: &std::collections::HashSet<String>) -> boo
 pub struct PackageFact {
     pub name: String,
     pub versions: Vec<String>,
+    /// Every fact naming this package is a dev dependency. Only such a
+    /// package may be called "dev tooling" (`briefing_dev_tags`).
+    pub dev_only: bool,
 }
 
 /// Deterministically verify the version numbers a synthesis states for known
@@ -691,6 +694,7 @@ mod tests {
             .map(|(n, vs)| PackageFact {
                 name: (*n).to_string(),
                 versions: vs.iter().map(|v| (*v).to_string()).collect(),
+                dev_only: false,
             })
             .collect()
     }

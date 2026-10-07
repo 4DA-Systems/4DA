@@ -633,7 +633,11 @@ fn build_upgrade_facts(
         }
         .to_string();
         let key = format!("{ecosystem}:{pkg_key}");
-        let status = novelty.status(&key, &announced, &local_today());
+        let status = novelty.status(
+            &key,
+            &crate::brief_cadence::upgrade_signature_of(&announced, yanked),
+            &local_today(),
+        );
         facts.push(UpgradeFact {
             key,
             package: grade.package.clone(),

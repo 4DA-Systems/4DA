@@ -173,6 +173,7 @@ mod autophagy_commands;
 mod autophagy_pulse;
 mod blind_spots;
 mod boot_context;
+mod brief_cadence;
 mod brief_facts;
 mod brief_rejections;
 mod briefing_deterministic;
@@ -249,6 +250,7 @@ mod achievement_engine;
 #[path = "achievement_engine_stub.rs"]
 mod achievement_engine;
 mod briefing_dedupe;
+mod briefing_dev_tags;
 mod briefing_groundedness;
 #[cfg(test)]
 mod briefing_pipeline_tests;

@@ -785,3 +785,125 @@ fn live_snapshot_reachability() {
         }
     }
 }
+
+// ---- Cadence (audit 2026-10-07: four auto briefs on local 2026-10-06) ----
+
+fn upgrade_at(announced: &str) -> UpgradeFact {
+    let mut u = upgrade(false, 1);
+    u.key = "npm:@ai-sdk/openai".into();
+    u.package = "@ai-sdk/openai".into();
+    u.announced = announced.into();
+    u
+}
+
+/// @ai-sdk/openai 4.0.84 -> 4.0.85 regenerated the brief and re-dated the
+/// fact as NEW. A patch inside the reported line is not news.
+#[test]
+fn a_patch_inside_the_reported_line_keeps_fingerprint_and_status() {
+    let before = upgrade_at("4.0.84");
+    let after = upgrade_at("4.0.85");
+    assert_eq!(
+        fingerprint(&[], &[], &[before.clone()]),
+        fingerprint(&[], &[], &[after.clone()])
+    );
+    let mut n = Novelty::default();
+    n.record_facts(
+        [(before.key.as_str(), upgrade_signature(&before).as_str())],
+        "2026-10-05",
+    );
+    assert_eq!(
+        n.status(&after.key, &upgrade_signature(&after), "2026-10-06"),
+        FactStatus::Unchanged {
+            since: "2026-10-05".into()
+        }
+    );
+    // A record written before this change (the exact version) is the same
+    // state too, and adopts the new shape without losing its first date.
+    let mut legacy = Novelty::default();
+    legacy.record_facts([(after.key.as_str(), "4.0.84")], "2026-10-04");
+    assert!(!legacy
+        .status(&after.key, &upgrade_signature(&after), "2026-10-06")
+        .is_new());
+    legacy.record_facts(
+        [(after.key.as_str(), upgrade_signature(&after).as_str())],
+        "2026-10-06",
+    );
+    assert_eq!(legacy.facts[&after.key].since, "2026-10-04");
+    assert_eq!(legacy.facts[&after.key].sig, "4");
+}
+
+#[test]
+fn a_new_breaking_line_or_a_yank_moves_the_fingerprint() {
+    let fp = |u: UpgradeFact| fingerprint(&[], &[], &[u]);
+    assert_ne!(
+        fp(upgrade_at("4.9.0")),
+        fp(upgrade_at("5.0.0")),
+        "4.x -> 5.0"
+    );
+    assert_ne!(
+        fp(upgrade_at("0.8.0")),
+        fp(upgrade_at("0.9.0")),
+        "0.8 -> 0.9"
+    );
+    assert_eq!(
+        fp(upgrade_at("0.8.1")),
+        fp(upgrade_at("0.8.2")),
+        "0.8.1 -> 0.8.2"
+    );
+    let mut yanked = upgrade_at("4.0.85");
+    yanked.yanked = true;
+    assert_ne!(fp(upgrade_at("4.0.85")), fp(yanked));
+    // And novelty agrees: a new line is NEW again.
+    let mut n = Novelty::default();
+    let four = upgrade_at("4.0.85");
+    n.record_facts(
+        [(four.key.as_str(), upgrade_signature(&four).as_str())],
+        "2026-10-05",
+    );
+    let five = upgrade_at("5.0.0");
+    assert!(n
+        .status(&five.key, &upgrade_signature(&five), "2026-10-06")
+        .is_new());
+}
+
+/// A Medium advisory's fix path moves whenever upstream publishes; on
+/// 2026-10-06 that alone regenerated the brief.
+#[test]
+fn a_lower_severity_fix_path_change_keeps_the_fingerprint() {
+    let mut a = security("npm:dotenv:navcal", AlertUrgency::Medium, "1.0.0", "1.1.20");
+    a.advisory_ids = vec!["GHSA-b".into(), "GHSA-a".into()];
+    let mut b = security("npm:dotenv:navcal", AlertUrgency::Medium, "1.0.0", "1.1.21");
+    b.advisory_ids = vec!["GHSA-a".into(), "GHSA-b".into()];
+    assert_eq!(
+        fingerprint(&[], &[a.clone()], &[]),
+        fingerprint(&[], &[b.clone()], &[])
+    );
+    assert_eq!(security_signature(&b), "Medium|GHSA-a,GHSA-b");
+    // A new advisory on it still counts.
+    let mut grown = b.clone();
+    grown.advisory_ids.push("GHSA-c".into());
+    assert_ne!(fingerprint(&[], &[b], &[]), fingerprint(&[], &[grown], &[]));
+    // The act-now tier keeps the full state: a new fix is news there.
+    let high_a = security("k", AlertUrgency::High, "1.0.0", "1.1.20");
+    let high_b = security("k", AlertUrgency::High, "1.0.0", "1.1.21");
+    assert_ne!(
+        fingerprint(&[high_a], &[], &[]),
+        fingerprint(&[high_b], &[], &[])
+    );
+}
+
+#[test]
+fn act_now_ids_name_each_advisory_of_each_act_now_fact() {
+    let mut a = security("crates.io:rmcp:atlas", AlertUrgency::High, "1.7.0", "2.1.0");
+    a.advisory_ids = vec!["GHSA-a".into()];
+    let medium = security("npm:x:navcal", AlertUrgency::Medium, "1.0.0", "1.0.1");
+    let facts = BriefFacts {
+        security: vec![a],
+        also_open: vec![medium],
+        ..BriefFacts::default()
+    };
+    assert_eq!(
+        crate::brief_cadence::act_now_ids(&facts),
+        vec!["crates.io:rmcp:atlas#GHSA-a".to_string()]
+    );
+}

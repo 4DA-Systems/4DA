@@ -116,8 +116,9 @@ pub(crate) async fn generate_briefing_internal(
             crate::error::FourDaError::Internal(format!("brief facts task failed: {e}"))
         })?;
 
+    let act_now = crate::brief_cadence::act_now_ids(&facts);
     if auto_triggered {
-        if let Some(cached) = try_reuse_recent_briefing(db, &facts.fingerprint) {
+        if let Some(cached) = try_reuse_recent_briefing(db, &facts.fingerprint, &act_now) {
             return Ok(cached);
         }
     }
@@ -216,6 +217,7 @@ pub(crate) async fn generate_briefing_internal(
         let (content, rejects) =
             crate::brief_rejections::extract_rejects_trailer(&response.content);
         let content = crate::brief_facts::drop_sections_without_news(&content, &facts);
+        let content = crate::briefing_dev_tags::strip_unfounded_dev_tags(&content, &package_facts);
         let violations =
             crate::briefing_groundedness::check_factual_claims(&content, &package_facts);
         if violations.is_empty() {
@@ -268,7 +270,7 @@ pub(crate) async fn generate_briefing_internal(
             // Join trailer indices back to the candidate slate's real ids.
             // `slate_ids` came out of the same pass that rendered the prompt.
             crate::brief_rejections::record_rejections(db, briefing_id, &rejects, &slate_ids);
-            remember_fingerprint(db, briefing_id, &facts.fingerprint);
+            remember_fingerprint(db, briefing_id, &facts.fingerprint, &act_now);
         }
         Err(e) => {
             error!(target: "4da::briefing", error = %e, "Failed to persist briefing");
@@ -305,7 +307,12 @@ fn serve_deterministic(
         Some(0),
         Some(0),
     ) {
-        Ok(id) => remember_fingerprint(db, id, &facts.fingerprint),
+        Ok(id) => remember_fingerprint(
+            db,
+            id,
+            &facts.fingerprint,
+            &crate::brief_cadence::act_now_ids(facts),
+        ),
         Err(e) => {
             error!(target: "4da::briefing", error = %e, "Failed to persist deterministic briefing");
         }
