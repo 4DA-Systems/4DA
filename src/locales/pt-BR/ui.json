@@ -1816,6 +1816,7 @@
   "settings.ai.keyConnectionFailed": "Falha na conexão",
   "settings.ai.keySaved": "(chave salva)",
   "settings.ai.keySavedSecure": "Chave de API salva em armazenamento seguro. Deixe em branco para mantê-la.",
+  "settings.ai.keySavedFile": "Chave de API salva em settings.json, legível apenas pela sua conta de usuário — o armazenamento de credenciais do sistema estava indisponível. Deixe em branco para mantê-la.",
   "settings.ai.keyVerified": "Chave verificada",
   "settings.ai.keyVerifiedModels": "Chave verificada — acesso a {{models}}",
   "settings.ai.maxItemsBatch": "Máx. itens/lote",

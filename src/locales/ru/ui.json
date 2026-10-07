@@ -317,6 +317,7 @@
   "settings.ai.invalidKeyFormat": "Неверный формат ключа",
   "settings.ai.keyConnectionFailed": "Соединение не удалось",
   "settings.ai.keySavedSecure": "API-ключ сохранён в защищённом хранилище. Оставьте пустым, чтобы сохранить текущий.",
+  "settings.ai.keySavedFile": "API-ключ сохранён в settings.json и доступен только вашей учётной записи — системное хранилище учётных данных было недоступно. Оставьте пустым, чтобы сохранить его.",
   "settings.ai.keyVerified": "Ключ подтверждён",
   "settings.ai.keyVerifiedModels": "Ключ подтверждён — доступ к {{models}}",
   "settings.ai.privacyNote": "Ваш API-ключ подключается напрямую к провайдеру. 4DA никогда не хранит и не проксирует ваш ключ.",

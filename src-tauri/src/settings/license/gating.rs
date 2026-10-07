@@ -145,8 +145,18 @@ fn signal_feature_label(feature: &str) -> &'static str {
 /// giving users enough time for the analysis layer (chains, gaps, temporal views) to demonstrate value.
 const TRIAL_DURATION_DAYS: i64 = 14;
 
-/// Check if the free trial is still active (14 days from trial_started_at)
+/// Check if the free trial is still active (14 days from trial_started_at),
+/// judged against the anti-rollback clock floor so winding the system clock
+/// back cannot extend it.
 pub fn is_trial_active(license: &LicenseConfig) -> bool {
+    is_trial_active_at(license, super::license_effective_now())
+}
+
+/// [`is_trial_active`] at an explicit instant (the test seam).
+pub(crate) fn is_trial_active_at(
+    license: &LicenseConfig,
+    now: chrono::DateTime<chrono::Utc>,
+) -> bool {
     if is_paid_tier(license.tier.as_str()) {
         return false; // Not on trial, has a real license
     }
@@ -155,13 +165,11 @@ pub fn is_trial_active(license: &LicenseConfig) -> bool {
             if let Ok(start_date) = chrono::DateTime::parse_from_rfc3339(started) {
                 // Clamp at 0: a future-dated stamp (clock ran ahead at
                 // first launch, then NTP corrected it) yields negative
-                // elapsed, which would otherwise read as a ~379-day trial
-                // and is a deliberate tamper vector. Treat it as a trial
-                // that just started — fair, and not exploitable.
-                let days = chrono::Utc::now()
-                    .signed_duration_since(start_date)
-                    .num_days()
-                    .max(0);
+                // elapsed. It reads as a trial that just started; the
+                // startup merge (trial.rs) clamps a stamp >48 h ahead to
+                // now and prefers the earliest recorded stamp, so a future
+                // stamp cannot be held indefinitely.
+                let days = now.signed_duration_since(start_date).num_days().max(0);
                 days < TRIAL_DURATION_DAYS
             } else {
                 false
@@ -173,6 +181,14 @@ pub fn is_trial_active(license: &LicenseConfig) -> bool {
 
 /// Get trial status info
 pub fn get_trial_status(license: &LicenseConfig) -> TrialStatus {
+    get_trial_status_at(license, super::license_effective_now())
+}
+
+/// [`get_trial_status`] at an explicit instant (the test seam).
+pub(crate) fn get_trial_status_at(
+    license: &LicenseConfig,
+    now: chrono::DateTime<chrono::Utc>,
+) -> TrialStatus {
     if is_paid_tier(license.tier.as_str()) {
         return TrialStatus {
             active: false,
@@ -186,10 +202,7 @@ pub fn get_trial_status(license: &LicenseConfig) -> TrialStatus {
             if let Ok(start_date) = chrono::DateTime::parse_from_rfc3339(started) {
                 // Clamp elapsed at 0 (see is_trial_active): a future stamp
                 // must not inflate days_remaining past the trial length.
-                let elapsed_days = chrono::Utc::now()
-                    .signed_duration_since(start_date)
-                    .num_days()
-                    .max(0);
+                let elapsed_days = now.signed_duration_since(start_date).num_days().max(0);
                 let remaining = TRIAL_DURATION_DAYS - elapsed_days;
                 TrialStatus {
                     active: remaining > 0,
@@ -261,6 +274,20 @@ mod clock_skew_tests {
         let lic = free_with_trial(&now);
         assert!(is_trial_active(&lic));
         assert!(get_trial_status(&lic).days_remaining >= TRIAL_DURATION_DAYS as i32 - 1);
+    }
+
+    #[test]
+    fn rolled_back_clock_cannot_extend_the_trial() {
+        // Trial started 20 days before the (floored) now: expired. Evaluating
+        // at a rolled-back wall clock would say "active"; the floored instant
+        // is what the production path passes in.
+        let floor_now = chrono::Utc::now();
+        let started = (floor_now - chrono::Duration::days(20)).to_rfc3339();
+        let lic = free_with_trial(&started);
+        let rolled_back = floor_now - chrono::Duration::days(15);
+        assert!(is_trial_active_at(&lic, rolled_back), "precondition");
+        assert!(!is_trial_active_at(&lic, floor_now));
+        assert_eq!(get_trial_status_at(&lic, floor_now).days_remaining, 0);
     }
 
     #[test]

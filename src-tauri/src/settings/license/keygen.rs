@@ -24,7 +24,31 @@ pub struct KeygenValidationCache {
     pub tier: String,
     /// SHA-256 hash of the license key (detect key changes without storing the key)
     pub key_hash: String,
+    /// HMAC-SHA256(machine key, `validated_at|tier|key_hash`), hex — see
+    /// cache_mac.rs. Absent on caches written before audit 2026-10-07; such a
+    /// cache is never trusted for a paid tier offline.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub mac: Option<String>,
 }
+
+impl KeygenValidationCache {
+    /// A cache entry for `license_key` validated now, signed with the machine
+    /// MAC key when one is available.
+    pub(crate) fn signed_now(tier: &str, license_key: &str) -> Self {
+        let mut cache = Self {
+            validated_at: chrono::Utc::now().to_rfc3339(),
+            tier: tier.to_string(),
+            key_hash: hash_key(license_key),
+            mac: None,
+        };
+        cache.mac =
+            super::cache_mac::machine_mac_key().map(|k| super::cache_mac::compute_mac(&k, &cache));
+        cache
+    }
+}
+
+/// A `validated_at` further ahead of now than this is forged or corrupt.
+const MAX_FUTURE_VALIDATED_AT_HOURS: i64 = 48;
 
 /// Result returned by `validate_license_key_keygen`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -138,19 +162,48 @@ fn save_validation_cache(cache: &KeygenValidationCache) {
     );
 }
 
-/// Check if the cached validation is still fresh (< VALIDATION_CACHE_HOURS old)
-/// and matches the current license key.
-pub(crate) fn is_cache_valid(cache: &KeygenValidationCache, current_key: &str) -> bool {
-    // Key must match
-    if cache.key_hash != hash_key(current_key) {
+/// Is `validated_at` a believable instant relative to `now`: parseable, not
+/// more than [`MAX_FUTURE_VALIDATED_AT_HOURS`] ahead, and younger than
+/// `VALIDATION_CACHE_HOURS`? A far-future stamp used to read as a negative age,
+/// i.e. "fresh forever".
+fn cache_time_is_fresh(cache: &KeygenValidationCache, now: chrono::DateTime<chrono::Utc>) -> bool {
+    let Ok(validated) = chrono::DateTime::parse_from_rfc3339(&cache.validated_at) else {
+        return false;
+    };
+    let age = now.signed_duration_since(validated);
+    if age.num_hours() < -MAX_FUTURE_VALIDATED_AT_HOURS {
         return false;
     }
-    // Must not be stale
-    if let Ok(validated) = chrono::DateTime::parse_from_rfc3339(&cache.validated_at) {
-        let age = chrono::Utc::now().signed_duration_since(validated);
-        return age.num_hours() < VALIDATION_CACHE_HOURS as i64;
-    }
-    false
+    age.num_hours() < VALIDATION_CACHE_HOURS as i64
+}
+
+/// [`is_cache_valid`] at an explicit instant (the test seam).
+pub(crate) fn is_cache_valid_at(
+    cache: &KeygenValidationCache,
+    current_key: &str,
+    now: chrono::DateTime<chrono::Utc>,
+) -> bool {
+    cache.key_hash == hash_key(current_key) && cache_time_is_fresh(cache, now)
+}
+
+/// Check if the cached validation matches the current license key and is
+/// still fresh, judged against the anti-rollback clock floor.
+pub(crate) fn is_cache_valid(cache: &KeygenValidationCache, current_key: &str) -> bool {
+    is_cache_valid_at(cache, current_key, super::license_effective_now())
+}
+
+/// May this cache keep a PAID tier alive offline? Paid tier, believable and
+/// fresh timestamp, and a MAC that verifies under the machine key. Key match
+/// is checked separately by callers that have a key.
+fn cache_trusted_for_paid(
+    cache: &KeygenValidationCache,
+    now: chrono::DateTime<chrono::Utc>,
+    mac_key: Option<&[u8; 32]>,
+) -> bool {
+    use crate::settings::license::gating::is_paid_tier;
+    is_paid_tier(&cache.tier)
+        && cache_time_is_fresh(cache, now)
+        && mac_key.is_some_and(|k| super::cache_mac::mac_matches(k, cache))
 }
 
 // ============================================================================
@@ -211,11 +264,9 @@ pub fn save_license_backup_to(
                 warn!(target: "4da::license", error = %e, "Failed to write license backup");
             } else {
                 info!(target: "4da::license", "License backup saved");
-                #[cfg(unix)]
-                {
-                    use std::os::unix::fs::PermissionsExt;
-                    let _ = std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o600));
-                }
+                // The backup holds the licence key: owner-only on every OS
+                // (Windows previously inherited the data dir's ACL).
+                crate::settings::secret_storage::harden_owner_only(&path);
             }
         }
         Err(e) => {
@@ -332,7 +383,14 @@ async fn validate_license_key_keygen_inner(
     // Check cache first (unless explicitly skipped, e.g. during activation)
     if !skip_cache {
         if let Some(cache) = load_validation_cache() {
-            if is_cache_valid(&cache, license_key) {
+            // A paid result must carry a valid MAC; a free one can only reduce
+            // access, so it is honoured as-is.
+            let usable = if super::gating::is_paid_tier(&cache.tier) {
+                cache_vouches_for_key(Some(&cache), license_key)
+            } else {
+                is_cache_valid(&cache, license_key)
+            };
+            if usable {
                 info!(target: "4da::license", tier = %cache.tier, "Using cached Keygen validation");
                 return KeygenValidationResult {
                     online: false,
@@ -438,13 +496,8 @@ fn parse_keygen_response(status: u16, body: &str, license_key: &str) -> KeygenVa
 
         info!(target: "4da::license", tier = %tier, code = %validation_code, "Keygen validation succeeded");
 
-        // Cache the successful result
-        let cache = KeygenValidationCache {
-            validated_at: chrono::Utc::now().to_rfc3339(),
-            tier: tier.clone(),
-            key_hash: hash_key(license_key),
-        };
-        save_validation_cache(&cache);
+        // Cache the successful result (MAC-signed with the machine key)
+        save_validation_cache(&KeygenValidationCache::signed_now(&tier, license_key));
 
         KeygenValidationResult {
             online: true,
@@ -462,12 +515,7 @@ fn parse_keygen_response(status: u16, body: &str, license_key: &str) -> KeygenVa
             || validation_code == "FINGERPRINT_SCOPE_REQUIRED";
 
         if !is_machine_issue {
-            let cache = KeygenValidationCache {
-                validated_at: chrono::Utc::now().to_rfc3339(),
-                tier: "free".to_string(),
-                key_hash: hash_key(license_key),
-            };
-            save_validation_cache(&cache);
+            save_validation_cache(&KeygenValidationCache::signed_now("free", license_key));
         }
 
         // Map Keygen error codes to human-readable messages
@@ -535,11 +583,22 @@ fn key_is_usable(key: &str) -> bool {
 /// the tier check is what stops a cache recording a `free` result from vouching
 /// for anything.
 pub(crate) fn cache_vouches_for_key(cache: Option<&KeygenValidationCache>, key: &str) -> bool {
-    use crate::settings::license::gating::is_paid_tier;
-    match cache {
-        Some(c) => is_paid_tier(&c.tier) && is_cache_valid(c, key),
-        None => false,
-    }
+    cache_vouches_for_key_with(
+        cache,
+        key,
+        super::license_effective_now(),
+        super::cache_mac::machine_mac_key().as_ref(),
+    )
+}
+
+/// [`cache_vouches_for_key`] with explicit clock and MAC key (the test seam).
+pub(crate) fn cache_vouches_for_key_with(
+    cache: Option<&KeygenValidationCache>,
+    key: &str,
+    now: chrono::DateTime<chrono::Utc>,
+    mac_key: Option<&[u8; 32]>,
+) -> bool {
+    cache.is_some_and(|c| c.key_hash == hash_key(key) && cache_trusted_for_paid(c, now, mac_key))
 }
 
 /// Helper to check if a license key is available — four-layer fallback chain.
@@ -552,7 +611,6 @@ pub(crate) fn cache_vouches_for_key(cache: Option<&KeygenValidationCache>, key: 
 /// Returns true and re-hydrates `license` if ANY layer has the key.
 pub(crate) fn has_license_key_available(license: &mut LicenseConfig) -> bool {
     use super::keystore;
-    use crate::settings::license::gating::is_paid_tier;
 
     // Fast path: in-memory key is present (loaded from settings.json at startup).
     //
@@ -623,20 +681,17 @@ pub(crate) fn has_license_key_available(license: &mut LicenseConfig) -> bool {
     // Layer 4: check if we have a valid Keygen validation cache for a paid tier.
     // If the key was validated online recently, don't downgrade just because
     // both disk and keychain are temporarily unavailable.
+    // The cache must be MAC-verified, believable and fresh (cache_mac.rs).
     if let Some(cache) = load_validation_cache() {
-        if is_paid_tier(&cache.tier) {
-            if let Ok(validated) = chrono::DateTime::parse_from_rfc3339(&cache.validated_at) {
-                let age = chrono::Utc::now().signed_duration_since(validated);
-                if age.num_hours() < VALIDATION_CACHE_HOURS as i64 {
-                    info!(
-                        target: "4da::license",
-                        tier = %cache.tier,
-                        validated_at = %cache.validated_at,
-                        "License key missing but valid Keygen cache exists — preserving tier"
-                    );
-                    return true;
-                }
-            }
+        let mac_key = super::cache_mac::machine_mac_key();
+        if cache_trusted_for_paid(&cache, super::license_effective_now(), mac_key.as_ref()) {
+            info!(
+                target: "4da::license",
+                tier = %cache.tier,
+                validated_at = %cache.validated_at,
+                "License key missing but valid Keygen cache exists — preserving tier"
+            );
+            return true;
         }
     }
 
@@ -673,16 +728,56 @@ mod key_usable_tests {
         assert!(!key_is_usable("totally-made-up"));
     }
 
-    #[test]
-    fn cache_must_vouch_for_the_same_key_a_paid_tier_and_be_fresh() {
-        use super::{cache_vouches_for_key, hash_key, KeygenValidationCache};
-        let key = "BE3529-741BAF-DEADBEEF";
-        let now = chrono::Utc::now().to_rfc3339();
-        let mk = |tier: &str, hash: String, at: String| KeygenValidationCache {
+    /// A MAC-signed cache entry (test machine key).
+    fn signed(tier: &str, hash: String, at: String) -> super::KeygenValidationCache {
+        let mut c = super::KeygenValidationCache {
             validated_at: at,
             tier: tier.to_string(),
             key_hash: hash,
+            mac: None,
         };
+        let key = super::super::cache_mac::machine_mac_key().expect("test key");
+        c.mac = Some(super::super::cache_mac::compute_mac(&key, &c));
+        c
+    }
+
+    #[test]
+    fn unsigned_paid_cache_is_not_trusted_offline() {
+        use super::{cache_vouches_for_key, hash_key, KeygenValidationCache};
+        let key = "BE3529-741BAF-DEADBEEF";
+        let unsigned = KeygenValidationCache {
+            validated_at: chrono::Utc::now().to_rfc3339(),
+            tier: "signal".into(),
+            key_hash: hash_key(key),
+            mac: None,
+        };
+        assert!(!cache_vouches_for_key(Some(&unsigned), key));
+        // Hand-editing the tier of a signed free result breaks its MAC.
+        let mut forged = signed("free", hash_key(key), chrono::Utc::now().to_rfc3339());
+        forged.tier = "signal".into();
+        assert!(!cache_vouches_for_key(Some(&forged), key));
+    }
+
+    #[test]
+    fn far_future_validated_at_is_rejected_even_when_signed() {
+        use super::{cache_vouches_for_key, hash_key, is_cache_valid};
+        let key = "BE3529-741BAF-DEADBEEF";
+        let future = (chrono::Utc::now() + chrono::Duration::days(365)).to_rfc3339();
+        let c = signed("signal", hash_key(key), future);
+        assert!(!is_cache_valid(&c, key));
+        assert!(!cache_vouches_for_key(Some(&c), key));
+        // Within the 48h skew allowance it is still accepted.
+        let near = (chrono::Utc::now() + chrono::Duration::hours(2)).to_rfc3339();
+        let ok = signed("signal", hash_key(key), near);
+        assert!(cache_vouches_for_key(Some(&ok), key));
+    }
+
+    #[test]
+    fn cache_must_vouch_for_the_same_key_a_paid_tier_and_be_fresh() {
+        use super::{cache_vouches_for_key, hash_key};
+        let key = "BE3529-741BAF-DEADBEEF";
+        let now = chrono::Utc::now().to_rfc3339();
+        let mk = signed;
 
         // Positive control — without this, the fix could be satisfied by
         // always returning false, which would strand every real customer.

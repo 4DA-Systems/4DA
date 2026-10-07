@@ -21,6 +21,9 @@ export function APIKeyInput({
   validateKey,
 }: APIKeyInputProps) {
   const { t } = useTranslation();
+  // Truthful storage copy: only claim the OS credential store when the backend
+  // verified the key is there; otherwise say it is kept in settings.json.
+  const keyInFile = settings?.secret_storage?.secrets?.llm_api_key === 'file_fallback';
 
   return (
     <div>
@@ -41,10 +44,14 @@ export function APIKeyInput({
         placeholder={settings?.llm.has_api_key ? t('settings.ai.keySaved') : t('settings.ai.enterKey')}
         className={`w-full px-4 py-2 bg-bg-secondary border rounded-lg text-sm text-text-primary placeholder:text-text-muted focus:border-orange-500 focus:outline-none font-mono ${settings?.llm.has_api_key && !settingsForm.apiKey ? 'border-green-500/40' : 'border-border'}`}
       />
-      {/* Saved key indicator — shown when key exists in secure storage and user hasn't typed a replacement */}
+      {/* Saved key indicator — wording follows the backend's storage posture */}
       {/* eslint-disable i18next/no-literal-string */}
       {settings?.llm.has_api_key && !settingsForm.apiKey && validation.status === 'idle' && (
-        <p className="mt-1.5 text-xs text-green-400">&#x2713; {t('settings.ai.keySavedSecure')}</p>
+        keyInFile ? (
+          <p className="mt-1.5 text-xs text-amber-400">&#x2713; {t('settings.ai.keySavedFile')}</p>
+        ) : (
+          <p className="mt-1.5 text-xs text-green-400">&#x2713; {t('settings.ai.keySavedSecure')}</p>
+        )
       )}
       {/* eslint-enable i18next/no-literal-string */}
       {/* Real-time validation feedback */}

@@ -1079,8 +1079,8 @@ permalink: "/framework.html"
         <tr><th>Layer</th><th>Mechanism</th></tr>
       </thead>
       <tbody>
-        <tr><td>CSP</td><td>Restricts all network requests to a whitelist: user's own API providers, public data sources, local Ollama. No 4DA-owned endpoints.</td></tr>
-        <tr><td>Keychain</td><td>API keys stored in OS-level secure storage (Windows Credential Manager, macOS Keychain, Linux Secret Service). Never in plaintext on disk.</td></tr>
+        <tr><td>CSP</td><td>The interface itself cannot make network requests; every request goes through the local backend, to the user's own API providers, public data sources and local Ollama only. No 4DA-owned endpoints.</td></tr>
+        <tr><td>Keychain</td><td>API keys stored in OS-level secure storage (Windows Credential Manager, macOS Keychain, Linux Secret Service) and removed from the settings file once verified there. If that storage is unavailable, keys stay in the settings file, readable only by your user account, and the app says so.</td></tr>
         <tr><td>Zero Telemetry</td><td>No analytics, no tracking, no phone-home, no error reporting to any external service.</td></tr>
         <tr><td>Secrets Scanning</td><td>23+ pattern detectors prevent API keys, credentials, private keys, PII from ever entering version control.</td></tr>
         <tr><td>Local Database</td><td>SQLite on the user's filesystem. No cloud sync unless explicitly enabled through encrypted Team Sync.</td></tr>

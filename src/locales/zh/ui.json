@@ -319,6 +319,7 @@
   "settings.ai.invalidKeyFormat": "密钥格式无效",
   "settings.ai.keyConnectionFailed": "连接失败",
   "settings.ai.keySavedSecure": "API 密钥已保存到安全存储。留空以保留当前密钥。",
+  "settings.ai.keySavedFile": "API 密钥已保存在 settings.json 中，仅你的用户账户可读取——系统凭据存储不可用。留空以保留该密钥。",
   "settings.ai.keyVerified": "密钥已验证",
   "settings.ai.keyVerifiedModels": "密钥已验证 — 可访问 {{models}}",
   "settings.ai.privacyNote": "您的 API 密钥直接连接到提供商。4DA 不会远程存储或代理您的密钥。",

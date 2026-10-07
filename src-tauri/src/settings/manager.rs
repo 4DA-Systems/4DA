@@ -5,6 +5,7 @@
 //! usage tracking, and all SettingsManager methods.
 
 use super::keystore;
+use super::secret_storage;
 use super::types::*;
 use crate::error::Result;
 use std::fs;
@@ -16,16 +17,20 @@ use std::path::PathBuf;
 
 /// Atomic file replacement. On Unix, fs::rename is atomic on the same volume.
 /// On Windows, we need a different approach since rename can fail if target exists.
-fn atomic_replace(tmp: &std::path::Path, target: &std::path::Path) -> std::io::Result<()> {
+pub(crate) fn atomic_replace(
+    tmp: &std::path::Path,
+    target: &std::path::Path,
+) -> std::io::Result<()> {
     #[cfg(windows)]
     {
         // Try direct rename first (works if target doesn't exist)
         if std::fs::rename(tmp, target).is_ok() {
             return Ok(());
         }
-        // Target exists — use backup strategy for crash safety
-        let backup = target.with_extension("json.bak");
-        // Step 1: Rename existing to backup (original is preserved as .bak)
+        // Target exists — use a swap file for crash safety. Never the
+        // `.json.bak` name: that is the recovery backup and must survive.
+        let backup = target.with_extension("swap");
+        // Step 1: Rename existing to the swap file
         if target.exists() {
             let _ = std::fs::rename(target, &backup);
         }
@@ -61,6 +66,11 @@ pub struct SettingsManager {
     usage: UsageStats,
     settings_path: PathBuf,
     usage_path: PathBuf,
+    /// False only for hermetic test constructors: the keychain is never read
+    /// or written and every secret stays in the file.
+    keychain_enabled: bool,
+    /// Where each present secret is stored (see `secret_storage`).
+    secret_posture: secret_storage::PostureMap,
 }
 
 // Constructor (new) lives in manager_init.rs — separate impl block.
@@ -70,119 +80,63 @@ mod manager_init;
 impl SettingsManager {
     /// Save settings to disk (excludes usage -- that's saved separately).
     ///
-    /// API keys are written to disk AND mirrored to the platform keychain.
-    /// The on-disk file is the authoritative source; the keychain is secondary.
+    /// Keychain-authoritative (audit 2026-10-07, see `secret_storage`): each
+    /// present secret is mirrored to the OS credential store and removed from
+    /// the written JSON only once a fresh-handle read proves the store holds
+    /// it. A secret the store cannot hold stays in the (owner-only) file and
+    /// its posture becomes `FileFallback`. Empty secrets never touch the store.
     pub fn save(&mut self) -> Result<()> {
         // Every change to the privacy level is followed by a save, so this keeps
         // the lock-free mirror current (see `llm_egress`).
         crate::llm_egress::publish_content_level(&self.settings.privacy.llm_content_level);
-        if let Some(parent) = self.settings_path.parent() {
-            fs::create_dir_all(parent)?;
-        }
-
-        // Clean up any orphaned temp file from a previous crash
-        let tmp_path = self.settings_path.with_extension("json.tmp");
-        let _ = fs::remove_file(&tmp_path); // ignore error if doesn't exist
 
         self.ensure_keys_hydrated();
+        self.secret_posture = if self.keychain_enabled {
+            secret_storage::mirror_present_secrets(&self.settings)
+        } else {
+            secret_storage::file_only_posture(&self.settings)
+        };
 
-        // Mirror keys to the platform keychain as a secondary store.
-        // The on-disk settings.json is the authoritative source — the keychain
-        // is best-effort for OS-level integration (autofill, credential managers).
-        // Previous versions stripped keys from disk after keychain migration,
-        // which caused permanent key loss when the keychain became temporarily
-        // inaccessible (Windows Credential Manager race, dev-mode restarts, OS
-        // updates). Keys now always persist on disk; the file is already
-        // gitignored and permission-restricted to owner-only.
-        for (name, value) in Self::key_pairs(&self.settings) {
-            if !value.is_empty() {
-                let _ = keystore::store_secret(name, value);
-            }
-        }
-
-        let mut disk_settings = self.settings.clone();
-
-        // Team relay auth_token is a JWT — strip from disk (re-obtained on connect).
-        if let Some(ref mut relay) = disk_settings.team_relay {
-            relay.auth_token = None;
-        }
-
-        // License tier invariant: if a valid self-signed key is present, the tier
-        // written to disk MUST match the key's embedded tier.
-        if self.settings.license.license_key.starts_with("4DA-") {
-            if let Ok(payload) =
-                crate::settings::verify_license_key(&self.settings.license.license_key)
-            {
-                let expected_tier = match payload.tier.as_str() {
-                    "signal" | "team" | "enterprise" => payload.tier.clone(),
-                    "pro" | "community" | "cohort" => "signal".to_string(),
-                    _ => payload.tier.clone(),
-                };
-                let expired = chrono::DateTime::parse_from_rfc3339(&payload.expires_at)
-                    .map(|exp| {
-                        exp.with_timezone(&chrono::Utc) < crate::settings::license_effective_now()
-                    })
-                    .unwrap_or(false);
-                if !expired && disk_settings.license.tier != expected_tier {
-                    tracing::warn!(
-                        target: "4da::license",
-                        attempted_tier = %disk_settings.license.tier,
-                        correct_tier = %expected_tier,
-                        "Save-time invariant: correcting tier before write"
-                    );
-                    disk_settings.license.tier = expected_tier;
-                }
-            }
-        }
+        let mut disk_settings =
+            secret_storage::scrubbed_for_disk(&self.settings, &self.secret_posture);
+        Self::enforce_license_tier_invariant(&self.settings, &mut disk_settings);
 
         let json = serde_json::to_string_pretty(&disk_settings)?;
-
-        // Backup existing settings before overwrite — enables recovery from corruption.
-        // Only keeps one backup (settings.json.bak) to avoid clutter.
-        if self.settings_path.exists() {
-            let bak_path = self.settings_path.with_extension("json.bak");
-            let _ = fs::copy(&self.settings_path, &bak_path);
-        }
-
-        // Atomic write: write to temp file, verify, then rename, so a crash
-        // mid-write won't corrupt the original settings.json.
-        fs::write(&tmp_path, &json)?;
-
-        // Verify temp file is valid before replacing
-        let verify = fs::read_to_string(&tmp_path)?;
-        if serde_json::from_str::<serde_json::Value>(&verify).is_err() {
-            let _ = fs::remove_file(&tmp_path);
-            return Err("Settings serialization produced invalid JSON".into());
-        }
-
-        atomic_replace(&tmp_path, &self.settings_path)?;
-
-        // Restrict file permissions to owner-only
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            let _ = fs::set_permissions(&self.settings_path, fs::Permissions::from_mode(0o600));
-        }
-
-        #[cfg(windows)]
-        {
-            // Restrict settings.json to current user only (remove inherited permissions)
-            let path_str = self.settings_path.to_string_lossy();
-            if let Ok(user) = std::env::var("USERNAME") {
-                use std::os::windows::process::CommandExt;
-                let _ = std::process::Command::new("icacls")
-                    .args([
-                        path_str.as_ref(),
-                        "/inheritance:r",
-                        "/grant:r",
-                        &format!("{user}:(F)"),
-                    ])
-                    .creation_flags(0x08000000) // CREATE_NO_WINDOW
-                    .output();
-            }
-        }
-
+        secret_storage::write_settings_files(&self.settings_path, &json)?;
         Ok(())
+    }
+
+    /// License tier invariant: if a valid self-signed key is present, the tier
+    /// written to disk MUST match the key's embedded tier.
+    fn enforce_license_tier_invariant(settings: &Settings, disk_settings: &mut Settings) {
+        if !settings.license.license_key.starts_with("4DA-") {
+            return;
+        }
+        let Ok(payload) = crate::settings::verify_license_key(&settings.license.license_key) else {
+            return;
+        };
+        let expected_tier = match payload.tier.as_str() {
+            "signal" | "team" | "enterprise" => payload.tier.clone(),
+            "pro" | "community" | "cohort" => "signal".to_string(),
+            _ => payload.tier.clone(),
+        };
+        let expired = chrono::DateTime::parse_from_rfc3339(&payload.expires_at)
+            .map(|exp| exp.with_timezone(&chrono::Utc) < crate::settings::license_effective_now())
+            .unwrap_or(false);
+        if !expired && disk_settings.license.tier != expected_tier {
+            tracing::warn!(
+                target: "4da::license",
+                attempted_tier = %disk_settings.license.tier,
+                correct_tier = %expected_tier,
+                "Save-time invariant: correcting tier before write"
+            );
+            disk_settings.license.tier = expected_tier;
+        }
+    }
+
+    /// Where each present secret is stored, for the settings payload / UI.
+    pub fn secret_storage_status(&self) -> secret_storage::SecretStorageStatus {
+        secret_storage::status_of(&self.secret_posture)
     }
 
     /// Save usage stats to disk (atomic: temp file → rename)
@@ -204,23 +158,13 @@ impl SettingsManager {
     /// gates on `api_key.is_empty()`. If a key is empty in memory but
     /// present in the keychain, we pull it back. This is the permanent fix
     /// for the dev-mode hydration race: even if startup hydration fails,
-    /// every consumer re-checks before giving up.
+    /// every consumer re-checks before giving up. Never writes to the store.
     pub fn ensure_keys_hydrated(&mut self) {
-        let pairs: [(&str, bool); 5] = [
-            ("llm_api_key", self.settings.llm.api_key.is_empty()),
-            (
-                "openai_api_key",
-                self.settings.llm.openai_api_key.is_empty(),
-            ),
-            ("x_api_key", self.settings.x_api_key.is_empty()),
-            ("license_key", self.settings.license.license_key.is_empty()),
-            (
-                "translation_api_key",
-                self.settings.translation.api_key.is_empty(),
-            ),
-        ];
-        for (name, is_empty) in pairs {
-            if !is_empty {
+        if !self.keychain_enabled {
+            return;
+        }
+        for name in secret_storage::SECRET_NAMES {
+            if !secret_storage::secret_value(&self.settings, name).is_empty() {
                 continue;
             }
             if let Ok(Some(val)) = keystore::get_secret(name) {
@@ -230,28 +174,10 @@ impl SettingsManager {
                         key = name,
                         "Recovered key from keychain — was empty in memory"
                     );
-                    match name {
-                        "llm_api_key" => self.settings.llm.api_key = val,
-                        "openai_api_key" => self.settings.llm.openai_api_key = val,
-                        "x_api_key" => self.settings.x_api_key = SensitiveString::new(val),
-                        "license_key" => self.settings.license.license_key = val,
-                        "translation_api_key" => self.settings.translation.api_key = val,
-                        _ => {}
-                    }
+                    secret_storage::set_secret_value(&mut self.settings, name, val);
                 }
             }
         }
-    }
-
-    /// Key name / value pairs for all keychain-managed secrets.
-    fn key_pairs(s: &Settings) -> [(&'static str, &str); 5] {
-        [
-            ("llm_api_key", s.llm.api_key.as_str()),
-            ("openai_api_key", s.llm.openai_api_key.as_str()),
-            ("x_api_key", s.x_api_key.as_str()),
-            ("license_key", s.license.license_key.as_str()),
-            ("translation_api_key", s.translation.api_key.as_str()),
-        ]
     }
 
     /// Get current settings
@@ -280,23 +206,13 @@ impl SettingsManager {
 
     /// Update LLM provider settings.
     ///
-    /// Keys are persisted to disk AND mirrored to the platform keychain.
+    /// Keys are persisted by `save()` (keychain first, file fallback).
     pub fn set_llm_provider(&mut self, mut provider: LLMProvider) -> Result<()> {
         // Trim keys before storage: a trailing newline/space from a paste is
         // stored verbatim and later rejected by the provider as an invalid
         // key, which looks like a "saved but broken" key to the user.
         provider.api_key = provider.api_key.trim().to_string();
         provider.openai_api_key = provider.openai_api_key.trim().to_string();
-        if !provider.api_key.is_empty() {
-            if let Ok(false) = keystore::store_secret("llm_api_key", &provider.api_key) {
-                tracing::warn!(target: "4da::keystore", "Keychain unavailable for llm_api_key — plaintext fallback");
-            }
-        }
-        if !provider.openai_api_key.is_empty() {
-            if let Ok(false) = keystore::store_secret("openai_api_key", &provider.openai_api_key) {
-                tracing::warn!(target: "4da::keystore", "Keychain unavailable for openai_api_key — plaintext fallback");
-            }
-        }
         // BYOK = informed consent, recorded HERE at configuration time. The BYOK
         // setup UI shows the disclosure of what gets sent to the provider, so
         // saving a cloud provider with a key records that acceptance. We never
@@ -473,11 +389,6 @@ impl SettingsManager {
 
     /// Set X API Bearer Token
     pub fn set_x_api_key(&mut self, key: String) -> Result<()> {
-        if !key.is_empty() {
-            if let Ok(false) = keystore::store_secret("x_api_key", &key) {
-                tracing::warn!(target: "4da::keystore", "Keychain unavailable for x_api_key — plaintext fallback");
-            }
-        }
         self.settings.x_api_key = SensitiveString::new(key);
         self.save()
     }

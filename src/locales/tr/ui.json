@@ -1779,6 +1779,7 @@
   "settings.ai.keyConnectionFailed": "Bağlantı başarısız",
   "settings.ai.keySaved": "(anahtar kaydedildi)",
   "settings.ai.keySavedSecure": "API anahtarı güvenli depoya kaydedildi. Korumak için boş bırakın.",
+  "settings.ai.keySavedFile": "API anahtarı settings.json dosyasına kaydedildi ve yalnızca kullanıcı hesabınız tarafından okunabilir — sistem kimlik bilgisi deposu kullanılamıyordu. Korumak için boş bırakın.",
   "settings.ai.keyVerified": "Anahtar doğrulandı",
   "settings.ai.keyVerifiedModels": "Anahtar doğrulandı — {{models}} erişimi",
   "settings.ai.maxItemsBatch": "Maks öğe/yığın",

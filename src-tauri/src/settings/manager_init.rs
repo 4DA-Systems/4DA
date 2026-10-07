@@ -4,8 +4,9 @@
 
 use super::super::helpers::detect_system_locale;
 use super::super::keystore;
+use super::super::secret_storage::{self, PostureMap, SecretPosture};
 use super::super::types::*;
-use super::{atomic_replace, SettingsManager};
+use super::SettingsManager;
 use std::fs;
 use tracing::{info, warn};
 
@@ -67,6 +68,8 @@ impl SettingsManager {
                         usage: UsageStats::default(),
                         settings_path,
                         usage_path,
+                        keychain_enabled: hydrate_keychain,
+                        secret_posture: PostureMap::new(),
                     };
                 }
             }
@@ -140,17 +143,13 @@ impl SettingsManager {
         // Heal a corrupt-then-recovered settings.json on disk (atomic
         // write via tmp + rename) so the recovery is durable and the
         // health check stops reporting already-fixed corruption.
+        // Nothing is scrubbed here (empty posture): the keychain migration
+        // below has not run yet, so this writes back exactly what was loaded.
         if healed_from_corruption {
-            if let Ok(json) = serde_json::to_string_pretty(&settings) {
-                let tmp_path = settings_path.with_extension("json.heal-tmp");
-                if fs::write(&tmp_path, &json).is_ok()
-                    && fs::rename(&tmp_path, &settings_path).is_ok()
-                {
-                    info!(target: "4da::settings", "Healed corrupt settings.json on disk from recovery");
-                } else {
-                    let _ = fs::remove_file(&tmp_path);
-                    warn!(target: "4da::settings", "Could not heal settings.json on disk (will retry on next save)");
-                }
+            if persist_with_posture(&settings_path, &settings, &PostureMap::new()) {
+                info!(target: "4da::settings", "Healed corrupt settings.json on disk from recovery");
+            } else {
+                warn!(target: "4da::settings", "Could not heal settings.json on disk (will retry on next save)");
             }
         }
 
@@ -209,101 +208,19 @@ impl SettingsManager {
             info!(target: "4da::settings", "Migrated legacy tier 'pro' -> 'signal'");
             settings.license.tier = "signal".to_string();
             // Persist the migration so it only logs once (atomic write)
-            if let Some(parent) = settings_path.parent() {
-                let _ = fs::create_dir_all(parent);
-            }
-            if let Ok(json) = serde_json::to_string_pretty(&settings) {
-                let tmp_path = settings_path.with_extension("json.tmp");
-                if fs::write(&tmp_path, &json).is_ok() {
-                    let _ = atomic_replace(&tmp_path, &settings_path);
-                }
-            }
+            persist_with_posture(&settings_path, &settings, &PostureMap::new());
         }
 
         // Migrate the retired built-in local LLM (see migrate_retired_llm_provider).
         if migrate_retired_llm_provider(&mut settings) {
             info!(target: "4da::settings", "Migrated retired provider 'builtin' -> 'none' (built-in LLM was removed)");
             // Persist the migration so it only logs once (atomic write)
-            if let Some(parent) = settings_path.parent() {
-                let _ = fs::create_dir_all(parent);
-            }
-            if let Ok(json) = serde_json::to_string_pretty(&settings) {
-                let tmp_path = settings_path.with_extension("json.tmp");
-                if fs::write(&tmp_path, &json).is_ok() {
-                    let _ = atomic_replace(&tmp_path, &settings_path);
-                }
-            }
+            persist_with_posture(&settings_path, &settings, &PostureMap::new());
         }
 
-        // --- Mirror keys to platform keychain (secondary store) ---
-        // Keys always stay on disk (the authoritative source). The keychain
-        // is a best-effort mirror for OS-level credential integration.
-        let has_plaintext_keys = !settings.llm.api_key.is_empty()
-            || !settings.llm.openai_api_key.is_empty()
-            || !settings.x_api_key.is_empty()
-            || !settings.license.license_key.is_empty()
-            || !settings.translation.api_key.is_empty();
-
-        if has_plaintext_keys {
-            match keystore::migrate_from_plaintext(&settings) {
-                Ok(report) => {
-                    if !report.migrated.is_empty() {
-                        info!(
-                            target: "4da::keystore",
-                            mirrored = report.migrated.len(),
-                            failed = report.failed.len(),
-                            "Mirrored keys to platform keychain (disk remains authoritative)"
-                        );
-                    }
-                }
-                Err(e) => {
-                    warn!(
-                        target: "4da::keystore",
-                        error = %e,
-                        "Keychain mirroring failed — keys safe on disk"
-                    );
-                }
-            }
-        }
-
-        // --- Hydrate keys from keychain into in-memory settings ---
-        // Exponential backoff: the credential store can be briefly locked during
-        // dev-mode hot-reloads (old process still releasing handles). A single
-        // 150ms retry was insufficient — observed failures up to ~1s after restart.
-        if hydrate_keychain {
-            let hydrated = Self::hydrate_from_keychain(&mut settings);
-            if hydrated == 0 && !has_plaintext_keys {
-                let needs_key = !matches!(
-                    settings.llm.provider.as_str(),
-                    "none" | "ollama" | "local" | ""
-                );
-                if needs_key {
-                    let backoff_ms = [200, 500, 1000, 2000];
-                    for (attempt, delay) in backoff_ms.iter().enumerate() {
-                        std::thread::sleep(std::time::Duration::from_millis(*delay));
-                        let retried = Self::hydrate_from_keychain(&mut settings);
-                        if retried > 0 {
-                            info!(
-                                target: "4da::keystore",
-                                keys_recovered = retried,
-                                attempt = attempt + 2,
-                                delay_ms = delay,
-                                "Keychain hydration succeeded on retry"
-                            );
-                            break;
-                        }
-                        if attempt == backoff_ms.len() - 1 {
-                            warn!(
-                                target: "4da::keystore",
-                                provider = %settings.llm.provider,
-                                total_attempts = backoff_ms.len() + 1,
-                                "Keychain hydration exhausted all retries — ensure_keys_hydrated() will retry on first use"
-                            );
-                        }
-                    }
-                }
-            }
-        }
+        // --- Keychain-authoritative secrets: one-time migration + hydration ---
+        let mut secret_posture =
+            Self::establish_secret_posture(&mut settings, &settings_path, hydrate_keychain);
 
         // --- License self-heal: re-derive tier from the signed key ---
         // Universal backstop for the recurring "Signal dropped to Free" bug.
@@ -322,15 +239,7 @@ impl SettingsManager {
                 tier = %settings.license.tier,
                 "License tier self-healed from signed key at startup"
             );
-            if let Some(parent) = settings_path.parent() {
-                let _ = fs::create_dir_all(parent);
-            }
-            if let Ok(json) = serde_json::to_string_pretty(&settings) {
-                let tmp_path = settings_path.with_extension("json.tmp");
-                if fs::write(&tmp_path, &json).is_ok() {
-                    let _ = atomic_replace(&tmp_path, &settings_path);
-                }
-            }
+            secret_posture = Self::persist_startup(&settings_path, &settings, hydrate_keychain);
             // Keep all three license stores in agreement — write the backup into
             // the same data_dir we loaded from (not the global get_db_path).
             crate::settings::save_license_backup_to(
@@ -344,31 +253,31 @@ impl SettingsManager {
         // --- Reverse trial: auto-start the 14-day Signal trial on first launch ---
         // Every brand-new install experiences the full product (Preemption, Blind
         // Spots, Signal Chains, …) for 14 days, then converts or drops to Free.
-        // Fires exactly once: once `trial_started_at` is set it never re-triggers,
-        // and a real license (paid tier or key) opts out. Gated on
-        // `consider_reverse_trial` (true for the production `new()`, false for
-        // `new_without_keychain`) — kept separate from `hydrate_keychain` so a
-        // hermetic test can exercise the trial without the real keychain's
-        // license leaking in. Production `new()` passes both true, so behavior
-        // is identical to gating on `hydrate_keychain`.
+        // A real license (paid tier or key) opts out. The start stamp is
+        // machine-scoped (audit 2026-10-07): it is merged to the EARLIEST value
+        // across settings.json, the keychain and license_clock.json, so deleting
+        // settings.json cannot restart the trial and a far-future stamp is
+        // clamped to now. Gated on `consider_reverse_trial` (true for `new()`,
+        // false for `new_without_keychain`); the keychain copy is consulted only
+        // when `hydrate_keychain` is on, so the hermetic trial test stays local.
         if consider_reverse_trial
-            && settings.license.trial_started_at.is_none()
             && settings.license.license_key.is_empty()
             && settings.license.tier == "free"
         {
-            let now = chrono::Utc::now().to_rfc3339();
-            info!(target: "4da::license", "First launch — auto-starting 14-day Signal trial");
-            settings.license.trial_started_at = Some(now);
-            // Persist immediately so the trial window is stable across restarts
-            // (mirrors the tier-migration persist pattern above).
-            if let Some(parent) = settings_path.parent() {
-                let _ = fs::create_dir_all(parent);
-            }
-            if let Ok(json) = serde_json::to_string_pretty(&settings) {
-                let tmp_path = settings_path.with_extension("json.tmp");
-                if fs::write(&tmp_path, &json).is_ok() {
-                    let _ = atomic_replace(&tmp_path, &settings_path);
+            let stamp = crate::settings::reconcile_trial_stamp(
+                data_dir,
+                settings.license.trial_started_at.as_deref(),
+                hydrate_keychain,
+            );
+            if settings.license.trial_started_at.as_deref() != Some(stamp.as_str()) {
+                if settings.license.trial_started_at.is_none() {
+                    info!(target: "4da::license", "Trial stamp established (first launch, or restored from the machine-scope stores)");
+                } else {
+                    warn!(target: "4da::license", "Trial stamp in settings.json disagreed with the machine-scope stores — using the earliest");
                 }
+                settings.license.trial_started_at = Some(stamp);
+                // Persist immediately so the trial window is stable across restarts.
+                secret_posture = Self::persist_startup(&settings_path, &settings, hydrate_keychain);
             }
         }
 
@@ -379,51 +288,95 @@ impl SettingsManager {
             usage,
             settings_path,
             usage_path,
+            keychain_enabled: hydrate_keychain,
+            secret_posture,
         }
     }
 
-    /// Read keychain secrets into the in-memory settings struct.
-    /// Returns the count of keys successfully hydrated.
-    fn hydrate_from_keychain(settings: &mut super::super::types::Settings) -> u32 {
+    /// Run the one-time plaintext → keychain migration, then hydrate empty
+    /// secrets from the keychain, and report every present secret's posture.
+    fn establish_secret_posture(
+        settings: &mut Settings,
+        settings_path: &std::path::Path,
+        use_keychain: bool,
+    ) -> PostureMap {
+        if !use_keychain {
+            return secret_storage::file_only_posture(settings);
+        }
+        let had_plaintext = secret_storage::SECRET_NAMES
+            .iter()
+            .any(|n| !secret_storage::secret_value(settings, n).is_empty());
+        let mut posture = if had_plaintext {
+            Self::migrate_plaintext(settings, settings_path)
+        } else {
+            PostureMap::new()
+        };
+        Self::hydrate_with_retry(settings, had_plaintext);
+        // Anything present now that the migration did not classify came from
+        // the keychain itself.
+        for name in secret_storage::SECRET_NAMES {
+            if !secret_storage::secret_value(settings, name).is_empty() {
+                posture.entry(name).or_insert(SecretPosture::Keychain);
+            }
+        }
+        posture
+    }
+
+    /// All-or-nothing: scrub settings.json (and rewrite its .bak) only if every
+    /// plaintext secret verified in the keychain through a fresh handle.
+    fn migrate_plaintext(settings: &Settings, settings_path: &std::path::Path) -> PostureMap {
+        match secret_storage::migrate_plaintext_all_or_nothing(settings) {
+            Some(posture) => {
+                if persist_with_posture(settings_path, settings, &posture) {
+                    secret_storage::log_migration(&posture);
+                    posture
+                } else {
+                    warn!(target: "4da::keystore", "Secrets are in the keychain but settings.json could not be rewritten — keeping the file copy for now");
+                    secret_storage::file_only_posture(settings)
+                }
+            }
+            None => secret_storage::file_only_posture(settings),
+        }
+    }
+
+    /// Hydrate with exponential backoff: the credential store can be briefly
+    /// locked during dev-mode hot-reloads (old process still releasing handles).
+    /// A single 150ms retry was insufficient — observed failures up to ~1s.
+    fn hydrate_with_retry(settings: &mut Settings, had_plaintext: bool) {
+        let hydrated = Self::hydrate_from_keychain(settings);
+        let needs_key = !matches!(
+            settings.llm.provider.as_str(),
+            "none" | "ollama" | "local" | ""
+        );
+        if hydrated > 0 || had_plaintext || !needs_key {
+            return;
+        }
+        let backoff_ms = [200, 500, 1000, 2000];
+        for (attempt, delay) in backoff_ms.iter().enumerate() {
+            std::thread::sleep(std::time::Duration::from_millis(*delay));
+            let retried = Self::hydrate_from_keychain(settings);
+            if retried > 0 {
+                info!(target: "4da::keystore", keys_recovered = retried, attempt = attempt + 2, delay_ms = delay, "Keychain hydration succeeded on retry");
+                return;
+            }
+        }
+        warn!(target: "4da::keystore", provider = %settings.llm.provider, total_attempts = backoff_ms.len() + 1, "Keychain hydration exhausted all retries — ensure_keys_hydrated() will retry on first use");
+    }
+
+    /// Fill EMPTY secrets from the keychain. A value already in memory (loaded
+    /// from the file) is never replaced by an older keychain copy.
+    /// Returns the count of keys hydrated.
+    fn hydrate_from_keychain(settings: &mut Settings) -> u32 {
         let mut count = 0u32;
-        match keystore::get_secret("llm_api_key") {
-            Ok(Some(key)) if !key.is_empty() => {
-                info!(target: "4da::keystore", "Hydrated llm_api_key from keychain");
-                settings.llm.api_key = key;
-                count += 1;
+        for name in secret_storage::SECRET_NAMES {
+            if !secret_storage::secret_value(settings, name).is_empty() {
+                continue;
             }
-            Ok(Some(_)) => {
-                info!(target: "4da::keystore", "llm_api_key in keychain but empty");
-            }
-            Ok(None) => {
-                info!(target: "4da::keystore", "llm_api_key not found in keychain");
-            }
-            Err(e) => {
-                warn!(target: "4da::keystore", error = %e, "Failed to read llm_api_key from keychain");
-            }
-        }
-        if let Ok(Some(key)) = keystore::get_secret("openai_api_key") {
-            if !key.is_empty() {
-                settings.llm.openai_api_key = key;
-                count += 1;
-            }
-        }
-        if let Ok(Some(key)) = keystore::get_secret("x_api_key") {
-            if !key.is_empty() {
-                settings.x_api_key = super::super::types::SensitiveString::new(key);
-                count += 1;
-            }
-        }
-        if let Ok(Some(key)) = keystore::get_secret("license_key") {
-            if !key.is_empty() {
-                settings.license.license_key = key;
-                count += 1;
-            }
-        }
-        if let Ok(Some(key)) = keystore::get_secret("translation_api_key") {
-            if !key.is_empty() {
-                settings.translation.api_key = key;
-                count += 1;
+            if let Ok(Some(key)) = keystore::get_secret(name) {
+                if !key.is_empty() {
+                    secret_storage::set_secret_value(settings, name, key);
+                    count += 1;
+                }
             }
         }
         info!(
@@ -434,6 +387,42 @@ impl SettingsManager {
             "Keychain hydration complete"
         );
         count
+    }
+
+    /// Persist during construction after the migration: mirror present secrets
+    /// (when the keychain is in use), scrub the verified ones, write both files.
+    fn persist_startup(
+        settings_path: &std::path::Path,
+        settings: &Settings,
+        use_keychain: bool,
+    ) -> PostureMap {
+        let posture = if use_keychain {
+            secret_storage::mirror_present_secrets(settings)
+        } else {
+            secret_storage::file_only_posture(settings)
+        };
+        persist_with_posture(settings_path, settings, &posture);
+        posture
+    }
+}
+
+/// Write `settings` (scrubbed per `posture`) to settings.json and its .bak.
+/// Returns false (and logs) on failure.
+fn persist_with_posture(
+    settings_path: &std::path::Path,
+    settings: &Settings,
+    posture: &PostureMap,
+) -> bool {
+    let disk = secret_storage::scrubbed_for_disk(settings, posture);
+    let written = serde_json::to_string_pretty(&disk)
+        .map_err(std::io::Error::other)
+        .and_then(|json| secret_storage::write_settings_files(settings_path, &json));
+    match written {
+        Ok(()) => true,
+        Err(e) => {
+            warn!(target: "4da::settings", error = %e, "Failed to persist settings.json");
+            false
+        }
     }
 }
 
@@ -486,7 +475,12 @@ fn parse_settings_preserving(content: &str) -> Option<Settings> {
 /// `.corrupt` snapshot is kept (overwritten each time) to avoid clutter.
 fn snapshot_unparseable_settings(settings_path: &std::path::Path, content: &str) {
     let snap = settings_path.with_extension("json.corrupt");
-    match fs::write(&snap, content) {
+    let written = fs::write(&snap, content);
+    // Unparseable bytes may still contain secrets — owner-only like settings.json.
+    if written.is_ok() {
+        secret_storage::harden_owner_only(&snap);
+    }
+    match written {
         Ok(()) => warn!(
             target: "4da::settings",
             snapshot = %snap.display(),

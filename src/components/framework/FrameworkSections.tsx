@@ -229,8 +229,8 @@ export function PrivacySection() {
         <p className="text-xs text-text-muted uppercase tracking-wider mb-3 font-medium">Enforcement Layers</p>
         <div className="space-y-2">
           {[
-            { layer: 'CSP', mechanism: 'Network requests restricted to a whitelist. No 4DA-owned endpoints.' },
-            { layer: 'Keychain', mechanism: 'API keys in OS-level secure storage. Never plaintext on disk.' },
+            { layer: 'CSP', mechanism: 'The interface cannot reach the network; every request goes through the local backend. No 4DA-owned endpoints.' },
+            { layer: 'Keychain', mechanism: 'API keys in the OS credential store, removed from settings.json once verified there. If the store is unavailable they stay in settings.json, readable only by your user account, and Settings says so.' },
             { layer: 'Zero Telemetry', mechanism: 'No analytics, tracking, or error reporting. Verified by audit.' },
             { layer: 'Secrets Scan', mechanism: '26 patterns in pre-commit hooks prevent credential leaks.' },
             { layer: 'Local DB', mechanism: 'SQLite on your filesystem. No cloud sync unless explicitly enabled.' },

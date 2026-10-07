@@ -12,6 +12,9 @@ mod license;
 #[cfg(test)]
 mod license_tests;
 mod manager;
+pub mod secret_storage;
+#[cfg(test)]
+mod secret_storage_tests;
 pub mod types;
 pub mod validation;
 
