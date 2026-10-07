@@ -2634,8 +2634,9 @@ fn classify_signals(
 
     let topics = crate::extract_topics(input.title, input.content, input.source_tags);
     let corroboration = super::pipeline_signals::build_corroboration(db, &topics, matched_deps);
+    let registry_advisory = is_registry_advisory_source(input.source_type);
     let classified = super::security_verdict::advisory_signal_type(
-        is_registry_advisory_source(input.source_type),
+        registry_advisory,
         input.title,
         clf.classify(
             input.title,
@@ -2645,7 +2646,15 @@ fn classify_signals(
             &ctx.ace_ctx.detected_tech,
             &corroboration,
         ),
-    );
+    )
+    // v39: security_alert is reserved for registry advisories and security-
+    // advisory content. A paper / deep dive / discussion that uses security
+    // vocabulary keeps its feed score but leaves the signal lane (live item
+    // 133527, the JsVul arXiv dataset paper, audit 2026-10-07).
+    .filter(|c| {
+        c.signal_type != signals::SignalType::SecurityAlert
+            || super::security_verdict::security_signal_admitted(registry_advisory, content_type)
+    });
     match classified {
         Some(mut c) => {
             // ── ToolDiscovery freshness gate ─────────────────────────────
@@ -2751,7 +2760,14 @@ fn classify_signals(
                     } else {
                         "Security"
                     };
+                    // v39: "Security issue affects <dep>" is a claim about an
+                    // installed version — only a registry advisory the version
+                    // verdict confirms may make it. Editorial coverage and an
+                    // undecided advisory get a line that names no dependency.
                     c.action = match (security.exposed.is_some(), security.package) {
+                        _ if !security.confirms_exposure() => {
+                            super::security_verdict::unconfirmed_security_action(input.title)
+                        }
                         (true, Some(pkg)) => {
                             exposed_security_action(pkg, &security.exposed_projects, prefix)
                         }
@@ -2776,6 +2792,12 @@ fn classify_signals(
                 for dep in matched_deps.iter().filter(|d| d.corroborated).take(2) {
                     c.triggers.push(format!("dep:{}", dep.package_name));
                 }
+            }
+            // Editorial security coverage never claims reach into the stack,
+            // grounded or not (the classifier's "affects your X stack" reads a
+            // declared-tech word in the title, not an installed version).
+            if c.signal_type == signals::SignalType::SecurityAlert && !registry_advisory {
+                c.action = super::security_verdict::unconfirmed_security_action(input.title);
             }
 
             // Score-aware priority cap

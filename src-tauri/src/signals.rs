@@ -278,6 +278,14 @@ fn keyword_present_unnegated(text: &str, term: &str) -> bool {
     false
 }
 
+/// Number of distinct entries in `items` (order-independent).
+fn distinct_count(items: &[String]) -> usize {
+    let mut seen: Vec<&str> = items.iter().map(String::as_str).collect();
+    seen.sort_unstable();
+    seen.dedup();
+    seen.len()
+}
+
 fn negated_before(prefix: &str) -> bool {
     prefix.split_whitespace().rev().take(3).any(|w| {
         let w = w
@@ -585,7 +593,8 @@ impl SignalClassifier {
         let text_lower = format!("{title} {content}").to_lowercase();
         let title_lower = title.to_lowercase();
 
-        let mut best: Option<(SignalType, f32, Vec<String>)> = None;
+        // (type, confidence, triggers for display, DISTINCT non-boost keywords)
+        let mut best: Option<(SignalType, f32, Vec<String>, usize)> = None;
 
         for (signal_type, signal_patterns) in &self.patterns {
             for pattern in signal_patterns {
@@ -608,7 +617,11 @@ impl SignalClassifier {
                     }
                 }
 
-                // Boost words add extra confidence (word-boundary matched, not substring)
+                let keyword_count = distinct_count(&matched_keywords);
+
+                // Boost words add extra confidence (word-boundary matched, not
+                // substring) and are listed as triggers for display, but they
+                // never count toward the keyword minimum below.
                 for &bw in &pattern.boost_words {
                     if has_word_boundary(&text_lower, bw) {
                         score += 0.2;
@@ -620,25 +633,33 @@ impl SignalClassifier {
                     // Normalize: cap at 1.0
                     let confidence = (score / 3.0).min(1.0);
 
-                    if let Some((_, ref best_conf, _)) = best {
-                        if confidence > *best_conf {
-                            best = Some((signal_type.clone(), confidence, matched_keywords));
-                        }
-                    } else {
-                        best = Some((signal_type.clone(), confidence, matched_keywords));
+                    if best
+                        .as_ref()
+                        .is_none_or(|(_, conf, _, _)| confidence > *conf)
+                    {
+                        best = Some((
+                            signal_type.clone(),
+                            confidence,
+                            matched_keywords,
+                            keyword_count,
+                        ));
                     }
                 }
             }
         }
 
-        let (signal_type, confidence, triggers) = best?;
+        let (signal_type, confidence, triggers, keyword_count) = best?;
 
-        // Require at least 2 keyword matches to classify any signal.
-        // Single keyword matches produce too many false positives.
-        let trigger_count = triggers.len();
-        if trigger_count < 2 {
+        // Require at least 2 DISTINCT keyword matches to classify any signal.
+        // Single keyword matches produce too many false positives — and a boost
+        // word is not a second keyword: an arXiv dataset paper matched only
+        // "vulnerability", plus the boost "critical" from "making their
+        // security critical", and was typed security_alert (live item 133527,
+        // audit 2026-10-07).
+        if keyword_count < 2 {
             return None;
         }
+        let trigger_count = triggers.len();
 
         // ToolDiscovery precision gate: suppress for version bumps and vent posts.
         //
@@ -1045,6 +1066,87 @@ mod tests {
         assert!(c.confidence > 0.0);
         assert!(!c.triggers.is_empty());
         assert!(c.action.contains("sqlite"));
+    }
+
+    /// Live item 133527 (audit 2026-10-07): the JsVul arXiv dataset paper matched
+    /// ONE security keyword ("vulnerability", twice) plus the boost word
+    /// "critical" ("making their security critical") and was typed
+    /// security_alert. A boost word is not a second keyword.
+    #[test]
+    fn test_jsvul_dataset_abstract_is_not_a_security_alert() {
+        let classifier = SignalClassifier::new();
+        let declared = vec!["typescript".to_string(), "rust".to_string()];
+        let result = classifier.classify(
+            "A Function-level Dataset of Vulnerable and Fixed Source Code in JavaScript and TypeScript",
+            "JavaScript and TypeScript are widely used in modern web development, making their \
+             security critical; however, automated vulnerability detection is often constrained \
+             by the availability of high-quality training data. Here we present JsVul, a dataset \
+             curated from seven major sources. Unlike generic multi-language datasets that may \
+             retain noise -- such as minified code and cosmetic edits -- JsVul utilizes a \
+             language-specific pipeline. We collected pre-fix and post-fix versions of files \
+             around security fixes and, by filtering irrelevant artifacts and applying automated \
+             syntax normalization, isolated security-related changes. We ensured data integrity \
+             through multi-stage deduplication and heuristic-based labeling. Provided in a \
+             time-ordered JSONL format, JsVul supports robust model training in the JavaScript \
+             and TypeScript ecosystem and demonstrates the importance of language-aware \
+             preprocessing in building vulnerability datasets.",
+            0.8,
+            &declared,
+            &declared,
+            &CorroborationContext::default(),
+        );
+        assert!(
+            result
+                .as_ref()
+                .is_none_or(|c| c.signal_type != SignalType::SecurityAlert),
+            "JsVul paper typed {:?}",
+            result.map(|c| (c.signal_type, c.triggers))
+        );
+    }
+
+    #[test]
+    fn test_one_keyword_plus_one_boost_word_does_not_classify() {
+        let classifier = SignalClassifier::new();
+        let declared = vec!["rust".to_string()];
+        let result = classifier.classify(
+            "Critical thinking about vulnerability",
+            "An essay.",
+            0.9,
+            &declared,
+            &declared,
+            &CorroborationContext::default(),
+        );
+        assert!(result.is_none(), "classified {result:?}");
+    }
+
+    #[test]
+    fn test_boost_words_still_listed_and_raise_confidence() {
+        let classifier = SignalClassifier::new();
+        let declared: Vec<String> = vec![];
+        // Keywords in the body only, so confidence stays below the 1.0 cap.
+        let plain = classifier
+            .classify(
+                "Weekly notes",
+                "a vulnerability and an exploit were found",
+                0.8,
+                &declared,
+                &declared,
+                &CorroborationContext::default(),
+            )
+            .expect("two keywords classify");
+        let boosted = classifier
+            .classify(
+                "Weekly notes",
+                "a critical vulnerability and an exploit were found",
+                0.8,
+                &declared,
+                &declared,
+                &CorroborationContext::default(),
+            )
+            .expect("two keywords + boost classify");
+        assert_eq!(boosted.signal_type, SignalType::SecurityAlert);
+        assert!(boosted.confidence > plain.confidence);
+        assert!(boosted.triggers.iter().any(|t| t == "critical"));
     }
 
     #[test]

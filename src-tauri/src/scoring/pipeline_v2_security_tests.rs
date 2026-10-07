@@ -341,3 +341,127 @@ fn editorial_security_story_never_interrupts() {
     let result = score_item(&story, &ctx, &db, &signal_options(), Some(&classifier));
     assert_never_interrupts(&result);
 }
+
+// ============================================================================
+// v39 (audit 2026-10-07): "Security issue affects <dep>" is a version claim
+// ============================================================================
+
+const JSVUL_TITLE: &str =
+    "A Function-level Dataset of Vulnerable and Fixed Source Code in JavaScript and TypeScript";
+const JSVUL_ABSTRACT: &str = "JavaScript and TypeScript are widely used in modern web \
+development, making their security critical; however, automated vulnerability detection is often \
+constrained by the availability of high-quality training data. Here we present JsVul, a dataset \
+curated from seven major sources. We collected pre-fix and post-fix versions of files around \
+security fixes and, by filtering irrelevant artifacts and applying automated syntax \
+normalization, isolated security-related changes. JsVul supports robust model training in the \
+JavaScript and TypeScript ecosystem and demonstrates the importance of language-aware \
+preprocessing in building vulnerability datasets.";
+
+fn assert_no_affects_claim(result: &SourceRelevance) {
+    let action = result.signal_action.as_deref().unwrap_or_default();
+    assert!(
+        !action.contains("Security issue affects") && !action.contains("affects your"),
+        "unconfirmed security coverage claimed reach: {action:?} ({:?})",
+        result.signal_type
+    );
+}
+
+/// Live item 133527: the JsVul arXiv paper with `typescript` installed must not
+/// be a security_alert, and must never say it affects typescript.
+#[test]
+fn academic_security_paper_is_not_a_security_alert() {
+    let db = crate::test_utils::test_db();
+    let ctx = ctx_with_dep("typescript", "javascript", "5.9.3", "d:/4da");
+    let zero = vec![0.0_f32; crate::EMBEDDING_DIMS];
+    let classifier = signals::SignalClassifier::new();
+    let mut paper = input(
+        JSVUL_TITLE,
+        "https://arxiv.org/abs/2510.00001",
+        JSVUL_ABSTRACT,
+        &zero,
+    );
+    paper.source_type = "arxiv";
+    let result = score_item(&paper, &ctx, &db, &signal_options(), Some(&classifier));
+    assert_ne!(result.signal_type.as_deref(), Some("security_alert"));
+    assert_no_affects_claim(&result);
+}
+
+/// Editorial security coverage (no registry row) that grounds in an installed
+/// dependency keeps a security signal but never claims the dependency is
+/// affected — there is no advisory and no version verdict behind it.
+#[test]
+fn editorial_security_advisory_with_dep_match_names_no_dependency() {
+    let db = crate::test_utils::test_db();
+    let ctx = ctx_with_dep("hono", "javascript", "4.13.5", "d:/4da/mcp-4da-server");
+    let zero = vec![0.0_f32; crate::EMBEDDING_DIMS];
+    let classifier = signals::SignalClassifier::new();
+    let mut story = input(
+        "Critical hono vulnerability: XSS exploit in hono/jsx, patch now",
+        "https://example.com/hono-xss",
+        "A critical cross-site scripting vulnerability in hono lets an attacker exploit SSR. \
+         Patch released; upgrade hono urgently.",
+        &zero,
+    );
+    story.source_type = "hackernews";
+    let result = score_item(&story, &ctx, &db, &signal_options(), Some(&classifier));
+    assert!(
+        result
+            .score_breakdown
+            .as_ref()
+            .is_some_and(|b| b.strongly_grounded),
+        "the story must ground in hono for this test to reach the banner branch"
+    );
+    assert_eq!(result.signal_type.as_deref(), Some("security_alert"));
+    assert_no_affects_claim(&result);
+    let action = result.signal_action.as_deref().unwrap_or_default();
+    assert!(
+        action.starts_with("Review security implications:"),
+        "editorial action: {action}"
+    );
+}
+
+/// A registry advisory whose applicability is undecided (no range, no mirror
+/// row) keeps its security signal but names no affected dependency.
+#[test]
+fn undecided_registry_advisory_names_no_dependency() {
+    let db = crate::test_utils::test_db();
+    let ctx = ctx_with_dep("hono", "javascript", "4.13.8", "d:/4da/mcp-4da-server");
+    let zero = vec![0.0_f32; crate::EMBEDDING_DIMS];
+    let classifier = signals::SignalClassifier::new();
+    let content = "`hono/jsx` does not HTML-escape a plain string; an attacker can exploit this \
+                   cross-site scripting vulnerability.\n\nSeverity: MEDIUM\nAffected: hono (npm)";
+    let result = score_item(
+        &input(HONO_TITLE, HONO_URL, content, &zero),
+        &ctx,
+        &db,
+        &signal_options(),
+        Some(&classifier),
+    );
+    assert_eq!(result.signal_type.as_deref(), Some("security_alert"));
+    assert_no_affects_claim(&result);
+}
+
+/// A registry advisory the text route confirms (installed 4.13.5 inside
+/// `< 4.13.7`, mirror not yet synced) still produces the affects banner.
+#[test]
+fn confirmed_registry_advisory_keeps_the_affects_banner() {
+    let db = crate::test_utils::test_db();
+    let ctx = ctx_with_dep("hono", "javascript", "4.13.5", "d:/4da/mcp-4da-server");
+    let zero = vec![0.0_f32; crate::EMBEDDING_DIMS];
+    let classifier = signals::SignalClassifier::new();
+    let result = score_item(
+        &input(HONO_TITLE, HONO_URL, HONO_CONTENT, &zero),
+        &ctx,
+        &db,
+        &signal_options(),
+        Some(&classifier),
+    );
+    let bd = result.score_breakdown.as_ref().expect("breakdown");
+    assert_eq!(bd.is_version_affected, Some(true));
+    assert_eq!(result.signal_type.as_deref(), Some("security_alert"));
+    let action = result.signal_action.as_deref().unwrap_or_default();
+    assert!(
+        action.contains("Security issue affects") && action.contains("hono"),
+        "confirmed advisory banner: {action}"
+    );
+}

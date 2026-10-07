@@ -117,6 +117,15 @@ impl SecurityLane<'_> {
         }
     }
 
+    /// May the action line say "Security issue affects <dep>"? Only a
+    /// REGISTRY advisory whose version verdict confirms an installed copy
+    /// inside the range (audit 2026-10-07: an arXiv dataset paper rendered
+    /// "Security: Security issue affects typescript in d:/4da (+6 more)"
+    /// because the title says TypeScript — no advisory, no version).
+    pub(crate) fn confirms_exposure(&self) -> bool {
+        self.registry_advisory && (self.exposed.is_some() || self.affected == Some(true))
+    }
+
     /// Upper bound for ANY security_alert's final tier: Alert/Critical need a
     /// version-confirmed affected registry advisory; a confirmed
     /// not-affected one is Watch; everything else is Advisory at most.
@@ -154,6 +163,29 @@ pub(crate) fn exposed_security_action(
         Some(location) => format!("{prefix}: Security issue affects {package} in {location}"),
         None => format!("{prefix}: Security issue affects your dependency {package}"),
     }
+}
+
+/// Neutral action line for security coverage that is NOT a version-confirmed
+/// registry advisory: names the story, never a dependency or a project.
+pub(crate) fn unconfirmed_security_action(title: &str) -> String {
+    let lang = crate::i18n::get_user_language();
+    let short_title = crate::utils::truncate_display(title, 120);
+    crate::i18n::t(
+        "signals:action.securityReview",
+        &lang,
+        &[("title", &short_title)],
+    )
+}
+
+/// May an item carry the `security_alert` signal type at all? A registry
+/// advisory row (cve / osv) or an item whose content DNA is a security
+/// advisory — not a paper, deep dive or discussion that merely uses security
+/// vocabulary. Those keep their feed score; only the signal type drops.
+pub(crate) fn security_signal_admitted(
+    is_registry_advisory: bool,
+    content_type: &crate::content_dna::ContentType,
+) -> bool {
+    is_registry_advisory || *content_type == crate::content_dna::ContentType::SecurityAdvisory
 }
 
 /// The severity tier of one mirror row.

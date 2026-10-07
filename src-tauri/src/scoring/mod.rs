@@ -660,7 +660,20 @@ pub(crate) use types::{ScoringInput, ScoringOptions};
 // package (a project that builds it is not a pin). (2) reaches any item that
 // mentions a dependency, so the bump is NOT registered: the whole corpus
 // re-judges (AD-034: the version declares a corpus-wide blast radius).
-pub(crate) const PIPELINE_VERSION: i32 = 38;
+// v39 (2026-10-07, audit: an arXiv dataset paper rendered "Security: Security
+// issue affects typescript in d:/4da (+6 more)"): (1) the signal classifier's
+// two-keyword minimum counts DISTINCT keywords only — boost words ("critical")
+// still raise confidence but are no longer a second match; (2) security_alert
+// is reserved for registry advisories (cve / osv) and security-advisory
+// content — papers, deep dives and discussions leave the signal lane with
+// their score unchanged; (3) "Security issue affects <dep>" is composed only
+// for a registry advisory whose version verdict confirms exposure; everything
+// else gets a neutral line naming no dependency. The persisted signal_type /
+// signal_priority of any row can change (the keyword minimum applies to every
+// type), so the bump is NOT registered: the whole corpus re-scores locally.
+// LLM judge verdicts are keyed by the judge PROMPT_VERSION, not this constant,
+// so the drain spends no LLM calls beyond the fixed per-cycle judge envelope.
+pub(crate) const PIPELINE_VERSION: i32 = 39;
 
 /// Parse the topic tags carried in the `source_items.tags` column.
 ///
