@@ -200,3 +200,49 @@ describe('graph label layout', () => {
     expect(perPass).toBeLessThan(16);
   });
 });
+
+describe('labels stay on the visible canvas', () => {
+  // 1200x800 window: the graph canvas is ~1150 px wide; at zoom 1 flow
+  // units are screen px. Live 2026-10-07: "tauri-plugin-autostart …" and
+  // "A Function-level Datase…" were cut at the left/right edge.
+  const bounds = { x: 0, y: 0, w: 1150, h: 520 };
+  const node = (id: string, x: number, y: number, title: string): NodeLabelInput => ({
+    id, x, y, title, memberCount: 1, relevance: 0.9, stack: true, security: false,
+  });
+  const input = (nodes: NodeLabelInput[]): LabelLayoutInput => ({
+    zoom: 1, includeNonStack: true, nodes, headers: [], lane: null, measure: estimateTextWidth, bounds,
+  });
+
+  it('flips a label off the left, right and bottom edges onto the canvas', () => {
+    const nodes = [
+      node('left', 2, 200, 'tauri-plugin-autostart v2.5.1'),
+      node('right', 1150 - 40, 200, 'A Function-level Dataset for code'),
+      node('bottom', 500, 520 - 50, 'tauri-plugin-notification v2'),
+    ];
+    const boxes = buildLabelBoxes(input(nodes)).filter((b) => !b.obstacle);
+    const placements = layoutGraphLabels(input(nodes));
+    for (const b of boxes) {
+      const p = placements.get(b.id)!;
+      expect(p.visible).toBe(true);
+      const r = { x: b.x + p.offset.dx, y: b.y + p.offset.dy, w: b.w, h: b.h };
+      expect(r.x).toBeGreaterThanOrEqual(bounds.x);
+      expect(r.y).toBeGreaterThanOrEqual(bounds.y);
+      expect(r.x + r.w).toBeLessThanOrEqual(bounds.x + bounds.w);
+      expect(r.y + r.h).toBeLessThanOrEqual(bounds.y + bounds.h);
+    }
+    expect(placements.get('node:left')!.offset.key).toBe('right');
+    expect(placements.get('node:right')!.offset.key).toBe('left');
+    expect(placements.get('node:bottom')!.offset.key).toBe('above');
+  });
+
+  it('keeps the default placement when it already fits', () => {
+    const placements = layoutGraphLabels(input([node('mid', 500, 200, 'serde v1')]));
+    expect(placements.get('node:mid')!.offset.key).toBe('below');
+  });
+
+  it('without bounds behaves as before', () => {
+    const nodes = [node('left', 2, 200, 'tauri-plugin-autostart v2.5.1')];
+    const placements = layoutGraphLabels({ ...input(nodes), bounds: undefined });
+    expect(placements.get('node:left')!.offset.key).toBe('below');
+  });
+});

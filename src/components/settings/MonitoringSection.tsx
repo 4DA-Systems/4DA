@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { cmd, type SchedulerStatus } from '../../lib/commands';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useId } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { MonitoringStatus } from '../../types';
 
@@ -228,6 +228,7 @@ function MorningBriefingSection() {
   const [time, setTime] = useState('08:00');
   const [loaded, setLoaded] = useState(false);
   const [previewing, setPreviewing] = useState(false);
+  const timeId = useId();
 
   useEffect(() => {
     cmd('get_morning_briefing_config')
@@ -297,10 +298,11 @@ function MorningBriefingSection() {
 
       {enabled && (
         <div className="flex items-center gap-3">
-          <label className="text-xs text-text-secondary">
+          <label htmlFor={timeId} className="text-xs text-text-secondary">
             {t('settings.monitoring.briefingTime', 'Briefing time')}
           </label>
           <input
+            id={timeId}
             type="time"
             value={time}
             onChange={(e) => { void updateTime(e.target.value); }}
@@ -329,6 +331,7 @@ export function MonitoringSection({
   onUpdateInterval,
 }: MonitoringSectionProps) {
   const { t } = useTranslation();
+  const intervalId = useId();
   return (
     <div className="bg-bg-tertiary rounded-lg p-4 border border-border">
       <div className="flex items-center gap-3 mb-3">
@@ -376,12 +379,14 @@ export function MonitoringSection({
           {/* Schedule & Notifications */}
           <div className="border-t border-border/50 pt-3" />
           <div className="flex items-center gap-3">
-            <label className="text-sm text-text-secondary">{t('settings.monitoring.every')}</label>
+            <label htmlFor={intervalId} className="text-sm text-text-secondary">{t('settings.monitoring.every')}</label>
             <input
+              id={intervalId}
               type="number"
               min="5"
               max="1440"
-              value={monitoringInterval}
+              aria-label={t('settings.monitoring.intervalLabel', 'Check interval in minutes')}
+              value={Number.isFinite(monitoringInterval) ? monitoringInterval : 30}
               onChange={(e) => setMonitoringInterval(parseInt(e.target.value) || 30)}
               className="w-20 px-3 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary text-center focus:border-orange-500 focus:outline-none"
             />

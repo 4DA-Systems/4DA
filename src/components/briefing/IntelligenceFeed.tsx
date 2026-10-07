@@ -15,6 +15,8 @@ interface IntelligenceFeedProps {
   onDismiss: (item: SourceRelevance) => void;
   onRecordClick: (item: SourceRelevance) => void;
   onViewAll: () => void;
+  /** Unsave a saved row (the saved mark becomes a toggle when provided). */
+  onUnsave?: (item: SourceRelevance) => void;
   /**
    * Cached cold-boot render: suppress Save/Dismiss on historical rows and the
    * "view all" navigation (there is no live results set behind a cache).
@@ -35,6 +37,7 @@ export const IntelligenceFeed = memo(function IntelligenceFeed({
   onDismiss,
   onRecordClick,
   onViewAll,
+  onUnsave,
   readOnly = false,
 }: IntelligenceFeedProps) {
   const { t } = useTranslation();
@@ -83,6 +86,7 @@ export const IntelligenceFeed = memo(function IntelligenceFeed({
             onSave={onSave}
             onDismiss={onDismiss}
             onRecordClick={onRecordClick}
+            onUnsave={onUnsave}
             readOnly={readOnly}
           />
         ))}
@@ -108,6 +112,7 @@ interface FeedItemProps {
   onSave: (item: SourceRelevance) => void;
   onDismiss: (item: SourceRelevance) => void;
   onRecordClick: (item: SourceRelevance) => void;
+  onUnsave?: (item: SourceRelevance) => void;
   readOnly?: boolean;
 }
 
@@ -117,6 +122,7 @@ const FeedItem = memo(function FeedItem({
   onSave,
   onDismiss,
   onRecordClick,
+  onUnsave,
   readOnly = false,
 }: FeedItemProps) {
   const { t } = useTranslation();
@@ -231,14 +237,29 @@ const FeedItem = memo(function FeedItem({
         </div>
       )}
 
-      {/* Feedback indicator */}
-      {feedback && (
-        <span className={`flex-shrink-0 text-[10px] ${
-          feedback === 'save' ? 'text-green-400' : 'text-text-muted'
-        }`}>
+      {/* Feedback indicator. A saved row is a toggle: clicking unsaves it
+          (and retracts what the save taught). Audit 2026-10-07: it was a bare
+          "\u2713" with no accessible name and no way back. */}
+      {feedback === 'save' && onUnsave && !readOnly ? (
+        <button
+          type="button"
+          onClick={(e) => { e.stopPropagation(); onUnsave(item); }}
+          aria-pressed={true}
+          aria-label={t('feedback.saved', 'Saved')}
+          title={t('feedback.unsaveTitle', 'Saved. Click to unsave')}
+          className="flex-shrink-0 px-1.5 py-0.5 text-[10px] text-green-400 hover:bg-green-500/10 rounded transition-colors"
+        >
+          {'\u2713'}
+        </button>
+      ) : feedback ? (
+        <span
+          role="img"
+          aria-label={feedback === 'save' ? t('feedback.saved', 'Saved') : t('feedback.dismissed', 'Dismissed')}
+          className={`flex-shrink-0 text-[10px] ${feedback === 'save' ? 'text-green-400' : 'text-text-muted'}`}
+        >
           {feedback === 'save' ? '\u2713' : '\u2717'}
         </span>
-      )}
+      ) : null}
     </div>
   );
 });

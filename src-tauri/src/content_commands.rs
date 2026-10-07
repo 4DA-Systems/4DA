@@ -196,24 +196,203 @@ pub async fn get_saved_items() -> Result<Vec<SavedItem>> {
     Ok(items)
 }
 
-/// Remove a saved item (delete save interaction).
-#[tauri::command]
-pub async fn remove_saved_item(item_id: i64) -> Result<()> {
-    let conn = open_db_connection()?;
+/// The rows one Save writes land within this many seconds of its `save`
+/// interaction (three IPC calls fired together; generous for a slow disk).
+const SAVE_ROW_WINDOW_SECS: i64 = 120;
 
-    conn.execute(
+/// What an unsave removed, per table.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub(crate) struct RetractedSave {
+    pub saves: usize,
+    pub accuracy_feedback: usize,
+    pub feedback: usize,
+}
+
+/// Retract a Save, in one transaction. A Save writes three rows: the `save`
+/// interaction, an `accuracy_feedback` interaction scored 1.0 (save is the
+/// only feedback type mapped to 1.0) and a `feedback` row with `relevant = 1`
+/// (the calibration fitter's ground truth). Unsave used to delete only the
+/// first, so the learning the save taught stayed (audit 2026-10-07). Removes
+/// exactly the 1.0 accuracy rows and relevant=1 feedback rows written
+/// alongside one of this item's saves — never a click, dismiss or a
+/// relevance label given at another time.
+pub(crate) fn retract_save(
+    conn: &mut rusqlite::Connection,
+    item_id: i64,
+) -> rusqlite::Result<RetractedSave> {
+    let tx = conn.transaction()?;
+    let feedback = tx.execute(
+        "DELETE FROM feedback
+          WHERE source_item_id = ?1 AND relevant = 1
+            AND EXISTS (SELECT 1 FROM interactions s
+                         WHERE s.item_id = ?1 AND s.action_type = 'save'
+                           AND ABS(julianday(feedback.created_at) - julianday(s.timestamp)) * 86400 <= ?2)",
+        params![item_id, SAVE_ROW_WINDOW_SECS],
+    )?;
+    let accuracy_feedback = tx.execute(
+        "DELETE FROM interactions
+          WHERE item_id = ?1 AND action_type = 'accuracy_feedback'
+            AND json_extract(action_data, '$.actual_score') = 1.0
+            AND EXISTS (SELECT 1 FROM interactions s
+                         WHERE s.item_id = ?1 AND s.action_type = 'save'
+                           AND ABS(julianday(interactions.timestamp) - julianday(s.timestamp)) * 86400 <= ?2)",
+        params![item_id, SAVE_ROW_WINDOW_SECS],
+    )?;
+    let saves = tx.execute(
         "DELETE FROM interactions WHERE action_type = 'save' AND item_id = ?1",
         params![item_id],
-    )
-    .map_err(FourDaError::Db)?;
+    )?;
+    tx.commit()?;
+    Ok(RetractedSave {
+        saves,
+        accuracy_feedback,
+        feedback,
+    })
+}
 
-    info!(target: "4da::content", item_id = item_id, "Removed saved item");
+/// Remove a saved item and retract what saving it taught (see `retract_save`).
+#[tauri::command]
+pub async fn remove_saved_item(item_id: i64) -> Result<()> {
+    let mut conn = open_db_connection()?;
+    let removed = retract_save(&mut conn, item_id).map_err(FourDaError::Db)?;
+    if removed.feedback > 0 {
+        crate::db::invalidate_feedback_topic_cache();
+    }
+
+    info!(
+        target: "4da::content",
+        item_id = item_id,
+        saves = removed.saves,
+        accuracy_feedback = removed.accuracy_feedback,
+        feedback = removed.feedback,
+        "Removed saved item"
+    );
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    // ---- retract_save (unsave retracts what the save taught) ----
+
+    fn unsave_db() -> rusqlite::Connection {
+        let conn = rusqlite::Connection::open_in_memory().expect("in-memory db");
+        conn.execute_batch(
+            "CREATE TABLE interactions (
+                 id INTEGER PRIMARY KEY AUTOINCREMENT, item_id INTEGER, action_type TEXT,
+                 action_data TEXT, signal_strength REAL DEFAULT 0.5,
+                 timestamp TEXT DEFAULT (datetime('now')));
+             CREATE TABLE feedback (
+                 id INTEGER PRIMARY KEY AUTOINCREMENT, source_item_id INTEGER NOT NULL,
+                 relevant INTEGER NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')));",
+        )
+        .expect("schema");
+        conn
+    }
+
+    /// The three rows one Save writes (feedback-slice recordInteraction).
+    fn save(conn: &rusqlite::Connection, item: i64, at: &str) {
+        conn.execute(
+            "INSERT INTO interactions (item_id, action_type, signal_strength, timestamp) VALUES (?1, 'save', 1.0, ?2)",
+            params![item, at],
+        )
+        .expect("save row");
+        conn.execute(
+            "INSERT INTO interactions (item_id, action_type, action_data, signal_strength, timestamp)
+             VALUES (?1, 'accuracy_feedback', '{\"predicted_score\":0.6,\"actual_score\":1.0,\"calibration_error\":0.4}', 1.0, ?2)",
+            params![item, at],
+        )
+        .expect("accuracy row");
+        conn.execute(
+            "INSERT INTO feedback (source_item_id, relevant, created_at) VALUES (?1, 1, ?2)",
+            params![item, at],
+        )
+        .expect("feedback row");
+    }
+
+    fn count(conn: &rusqlite::Connection, sql: &str) -> i64 {
+        conn.query_row(sql, [], |r| r.get(0)).expect("count")
+    }
+
+    #[test]
+    fn retract_save_removes_exactly_the_rows_the_save_wrote() {
+        let mut conn = unsave_db();
+        save(&conn, 7, "2026-10-07 10:00:00");
+        // Unrelated learning that must survive the unsave:
+        save(&conn, 8, "2026-10-07 10:00:00"); // another item's save
+        conn.execute_batch(
+            "INSERT INTO interactions (item_id, action_type, action_data, timestamp)
+               VALUES (7, 'accuracy_feedback', '{\"actual_score\":0.7}', '2026-10-07 10:00:01'); -- a click
+             INSERT INTO interactions (item_id, action_type, timestamp) VALUES (7, 'click', '2026-10-07 10:00:01');
+             INSERT INTO feedback (source_item_id, relevant, created_at) VALUES (7, 1, '2026-10-01 09:00:00'); -- older label
+             INSERT INTO feedback (source_item_id, relevant, created_at) VALUES (7, 0, '2026-10-07 10:00:00');",
+        )
+        .expect("noise");
+
+        let removed = retract_save(&mut conn, 7).expect("retract");
+        assert_eq!(
+            removed,
+            RetractedSave {
+                saves: 1,
+                accuracy_feedback: 1,
+                feedback: 1
+            }
+        );
+        assert_eq!(
+            count(
+                &conn,
+                "SELECT COUNT(*) FROM interactions WHERE item_id = 7 AND action_type = 'save'"
+            ),
+            0
+        );
+        assert_eq!(
+            count(&conn, "SELECT COUNT(*) FROM interactions WHERE item_id = 7 AND action_type = 'accuracy_feedback'"),
+            1,
+            "the click's accuracy row stays"
+        );
+        assert_eq!(
+            count(
+                &conn,
+                "SELECT COUNT(*) FROM interactions WHERE item_id = 7 AND action_type = 'click'"
+            ),
+            1
+        );
+        assert_eq!(
+            count(
+                &conn,
+                "SELECT COUNT(*) FROM feedback WHERE source_item_id = 7"
+            ),
+            2,
+            "the older label and the relevant=0 row stay"
+        );
+        assert_eq!(
+            count(&conn, "SELECT COUNT(*) FROM interactions WHERE item_id = 8"),
+            2
+        );
+        assert_eq!(
+            count(
+                &conn,
+                "SELECT COUNT(*) FROM feedback WHERE source_item_id = 8"
+            ),
+            1
+        );
+    }
+
+    #[test]
+    fn retract_save_is_a_no_op_when_nothing_was_saved() {
+        let mut conn = unsave_db();
+        conn.execute(
+            "INSERT INTO feedback (source_item_id, relevant) VALUES (3, 1)",
+            [],
+        )
+        .expect("label");
+        assert_eq!(
+            retract_save(&mut conn, 3).expect("retract"),
+            RetractedSave::default()
+        );
+        assert_eq!(count(&conn, "SELECT COUNT(*) FROM feedback"), 1);
+    }
 
     // ---- ItemContent construction & serialization ----
 

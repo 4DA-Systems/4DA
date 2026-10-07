@@ -15,6 +15,7 @@ interface BriefingContentPanelProps {
   onSave: (item: SourceRelevance) => void;
   onDismiss: (item: SourceRelevance) => void;
   onRecordClick: (item: SourceRelevance) => void;
+  onUnsave?: (item: SourceRelevance) => void;
   onRegenerate: () => void;
   setActiveView: (view: ActiveView) => void;
 }
@@ -37,6 +38,7 @@ export const BriefingContentPanel = memo(function BriefingContentPanel({
   onSave,
   onDismiss,
   onRecordClick,
+  onUnsave,
   onRegenerate,
   setActiveView,
 }: BriefingContentPanelProps) {
@@ -66,6 +68,7 @@ export const BriefingContentPanel = memo(function BriefingContentPanel({
         onSave={onSave}
         onDismiss={onDismiss}
         onRecordClick={onRecordClick}
+        onUnsave={onUnsave}
         onViewAll={() => setActiveView('results')}
       />
     </>

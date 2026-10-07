@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-import { useMemo, memo } from 'react';
+import { useMemo, memo, type KeyboardEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '../store';
@@ -36,10 +36,43 @@ export const ViewTabBar = memo(function ViewTabBar() {
     return b;
   }, [resultsCount, windows]);
 
+  const activate = (id: ActiveView) => {
+    trackEvent(`view_open:${id}`, id);
+    setActiveView(id);
+  };
+
+  // WAI-ARIA tabs, roving tabindex: only the selected tab (or the first, when
+  // none is) is in the Tab order; arrows / Home / End move focus and activate.
+  const selectedIndex = TABS.findIndex((tab) => tab.id === activeView);
+  const focusableIndex = selectedIndex >= 0 ? selectedIndex : 0;
+
+  const onKeyDown = (e: KeyboardEvent<HTMLButtonElement>, current: number) => {
+    const list = e.currentTarget.closest('[role="tablist"]');
+    if (!list) return;
+    const rtl = window.getComputedStyle(list).direction === 'rtl';
+    const forward = rtl ? 'ArrowLeft' : 'ArrowRight';
+    const backward = rtl ? 'ArrowRight' : 'ArrowLeft';
+    let next: number;
+    if (e.key === forward) next = (current + 1) % TABS.length;
+    else if (e.key === backward) next = (current - 1 + TABS.length) % TABS.length;
+    else if (e.key === 'Home') next = 0;
+    else if (e.key === 'End') next = TABS.length - 1;
+    else return;
+    e.preventDefault();
+    const tab = TABS[next]!;
+    list.querySelector<HTMLButtonElement>(`#tab-${tab.id}`)?.focus();
+    activate(tab.id);
+  };
+
   return (
     <nav aria-label="Main views">
-    <div className="mb-4 flex items-center gap-1 bg-bg-secondary rounded-lg p-1 border border-border w-fit" role="tablist" aria-label="Content views">
-      {TABS.map(tab => {
+    <div
+      className="mb-4 flex items-center gap-1 bg-bg-secondary rounded-lg p-1 border border-border w-fit"
+      role="tablist"
+      aria-label="Content views"
+      aria-orientation="horizontal"
+    >
+      {TABS.map((tab, index) => {
         const showBadge = badges[tab.id] && activeView !== tab.id;
         return (
           <button
@@ -48,7 +81,9 @@ export const ViewTabBar = memo(function ViewTabBar() {
             role="tab"
             aria-selected={activeView === tab.id}
             aria-controls={`view-panel-${tab.id}`}
-            onClick={() => { trackEvent(`view_open:${tab.id}`, tab.id); setActiveView(tab.id); }}
+            tabIndex={index === focusableIndex ? 0 : -1}
+            onClick={() => activate(tab.id)}
+            onKeyDown={(e) => onKeyDown(e, index)}
             className={`relative px-3 py-1.5 text-sm rounded-md transition-all ${
               activeView === tab.id
                 ? `${tab.activeColor} font-medium`

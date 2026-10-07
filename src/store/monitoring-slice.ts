@@ -3,6 +3,21 @@ import type { StateCreator } from 'zustand';
 import { cmd } from '../lib/commands';
 import type { AppStore, MonitoringSlice } from './types';
 
+const positive = (v: unknown): number | null =>
+  typeof v === 'number' && Number.isFinite(v) && v > 0 ? Math.round(v) : null;
+
+/**
+ * The configured monitoring interval in minutes. `get_monitoring_status` has
+ * returned `interval_mins` / `interval_secs`, never `interval_minutes`, so the
+ * Settings field rendered blank (audit 2026-10-07). Accept every spelling.
+ */
+export function intervalMinutesFrom(raw: Record<string, unknown>): number | null {
+  const secs = positive(raw.interval_secs);
+  return (
+    positive(raw.interval_minutes) ?? positive(raw.interval_mins) ?? (secs ? Math.max(1, Math.round(secs / 60)) : null)
+  );
+}
+
 export const createMonitoringSlice: StateCreator<AppStore, [], [], MonitoringSlice> = (set, get) => ({
   monitoring: null,
   monitoringInterval: 30,
@@ -22,8 +37,12 @@ export const createMonitoringSlice: StateCreator<AppStore, [], [], MonitoringSli
   loadMonitoringStatus: async () => {
     try {
       const status = await cmd('get_monitoring_status');
-      set({ monitoring: status, monitoringInterval: status.interval_minutes });
       const raw = status as unknown as Record<string, unknown>;
+      const interval = intervalMinutesFrom(raw);
+      set({
+        monitoring: { ...status, interval_minutes: interval ?? get().monitoringInterval },
+        ...(interval != null ? { monitoringInterval: interval } : {}),
+      });
       if (raw.notification_threshold) {
         set({ notificationThreshold: raw.notification_threshold as string });
       }

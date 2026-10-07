@@ -7,7 +7,7 @@
 // at the top, by rank — and counted in "view all" while the header did not
 // count them.
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { IntelligenceFeed } from './IntelligenceFeed';
 import { makeItem } from '../../test/factories';
 
@@ -88,6 +88,44 @@ describe('IntelligenceFeed — one surfaced-signal predicate', () => {
       makeItem({ id: 116, title: 'Surfaced item 16', relevant: true, top_score: 0.7 }),
     ]);
     expect(screen.getByText('feed.viewAll')).toBeInTheDocument();
+  });
+
+  it('a saved row is a labelled toggle that unsaves', () => {
+    const onUnsave = vi.fn();
+    const item = makeItem({ id: 5, title: 'Saved thing', relevant: true, top_score: 0.8 });
+    render(
+      <IntelligenceFeed
+        results={[item]}
+        feedbackGiven={{ 5: 'save' }}
+        signalIds={new Set()}
+        onSave={noop}
+        onDismiss={noop}
+        onRecordClick={noop}
+        onViewAll={noop}
+        onUnsave={onUnsave}
+      />,
+    );
+    const toggle = screen.getByRole('button', { name: /feedback\.saved|^Saved$/ });
+    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    fireEvent.click(toggle);
+    expect(onUnsave).toHaveBeenCalledWith(item);
+  });
+
+  it('without an unsave handler the saved mark still has an accessible name', () => {
+    render(
+      <IntelligenceFeed
+        results={[makeItem({ id: 5, title: 'Saved thing', relevant: true, top_score: 0.8 })]}
+        feedbackGiven={{ 5: 'save' }}
+        signalIds={new Set()}
+        onSave={noop}
+        onDismiss={noop}
+        onRecordClick={noop}
+        onViewAll={noop}
+        readOnly
+      />,
+    );
+    expect(screen.getByRole('img', { name: /feedback\.saved|^Saved$/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /feedback\.saved|^Saved$/ })).toBeNull();
   });
 
   it('renders nothing when no surfaced signal remains', () => {

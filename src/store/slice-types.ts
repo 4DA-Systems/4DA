@@ -174,6 +174,8 @@ export interface FeedbackSlice {
     actionType: FeedbackAction,
     item: SourceRelevance,
   ) => Promise<void>;
+  /** Unsave: clears the saved state and retracts the save's backend rows. */
+  unsaveItem: (itemId: number) => Promise<void>;
 }
 
 export interface MonitoringSlice {
