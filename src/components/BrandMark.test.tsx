@@ -64,8 +64,9 @@ describe('BrandMark', () => {
 
   it('renders SVG with tetrahedron geometry (4 vertices)', () => {
     const { container } = render(<BrandMark signal={makeSignal()} />);
-    const circles = container.querySelectorAll('circle');
-    expect(circles.length).toBe(4); // 3 outer + 1 center
+    // Every sprite frame draws the 4 vertices; frame 0 is the resting pose.
+    const circles = container.querySelectorAll('.brand-mark-sharp [data-frame="0"] circle');
+    expect(circles.length).toBe(4);
   });
 
   it('shows "Dormant" label when no items and high staleness at large size', () => {
