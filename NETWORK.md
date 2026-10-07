@@ -3,16 +3,18 @@
 **This document lists every outbound network connection 4DA makes — nothing else leaves your
 machine.** Run Wireshark while 4DA is running and every host you see is accounted for below. Your
 raw project files, source code, git history, file contents, and personal information **never leave
-your machine**. The single flow that transmits anything *derived* from your local content is the
-optional dependency-vulnerability sync, which sends only **package names** (not code) to OSV — it is
-disclosed explicitly in the "Conditional / opt-in" section and can be turned off.
+your machine** by default. Every flow that transmits anything *derived* from your local content —
+chiefly the names of your dependencies, sent to package registries and OSV (never your code) — is
+listed exhaustively in §4 ("What IS derived from local content and does leave"). The one opt-in
+setting that sends text from your local files is cloud embeddings (`allow_cloud_embeddings`, off by
+default, §2a).
 
 4DA is local-first and privacy-first. There is **no telemetry, no analytics, and no crash
 reporting** (see "Never" at the bottom). The only 4DA-operated server the app ever contacts is
 `4da.ai`, for exactly two licence operations: a user-initiated recovery lookup (§2e) and, for paid
 **subscription** keys only, a key-only renewal near expiry (§2k). Everything else is either a public third-party
-content API, a cloud service you explicitly configured (BYOK LLM / translation), or a one-time
-setup download.
+content API, a cloud service you explicitly configured (BYOK LLM / translation / your own SMTP
+server), or a one-time setup download.
 
 ---
 
@@ -30,6 +32,10 @@ All shared outbound requests use a pooled `reqwest` client
   - HuggingFace / PapersWithCode / GitHub Advisory adapters → `4DA-Developer-OS/1.0`
     (`sources/huggingface.rs`, `sources/papers_with_code.rs`, `sources/cve.rs`)
   - OSV dependency sync → `4DA/1.0 (local-osv-mirror)` (`osv/sync.rs`)
+  - Mastodon / Lemmy adapters → `4DA/1.0 (+https://4da.ai)` (`sources/mastodon.rs`,
+    `sources/lemmy.rs`)
+  - Feed checks you trigger in Settings / Toolkit → `Mozilla/5.0 (compatible; 4DA/1.0)`
+    (`source_config_feeds.rs`) and `4DA/1.0 Feed Tester` (`toolkit_intelligence.rs`)
   - Team relay (only if you join/create a team) → `4DA-TeamSync/1.0` (`http_client.rs`)
 - No cookies, no login, no tracking headers are sent on any request.
 
@@ -42,13 +48,15 @@ These run automatically while the app is open. Every source can be individually 
 
 ### 1a. Connectivity pre-check (before every fetch cycle)
 
-Before fetching sources, 4DA races a `HEAD` request against three targets and uses whichever
-responds first (`src-tauri/src/source_fetching/fetcher.rs`):
+Before fetching sources, 4DA races a `HEAD` request against five targets and treats the network
+as online as soon as any one succeeds (`src-tauri/src/source_fetching/fetcher.rs`):
 
 | Host | Request |
 |---|---|
-| `1.1.1.1` (Cloudflare) | `HEAD https://1.1.1.1/cdn-cgi/trace` |
+| `api.github.com` | `HEAD https://api.github.com` |
 | `dns.google` (Google DNS) | `HEAD https://dns.google/resolve?name=example.com` |
+| `hacker-news.firebaseio.com` | `HEAD https://hacker-news.firebaseio.com/v0/topstories.json` |
+| `1.1.1.1` (Cloudflare) | `HEAD https://1.1.1.1/cdn-cgi/trace` |
 | `httpbin.org` | `HEAD https://httpbin.org/get` |
 
 - **Trigger:** once per analysis cycle, before source fetching begins.
@@ -83,7 +91,11 @@ All retrieve **public** developer content. Trigger cadence is the default fetch 
 | HuggingFace | `huggingface.co` | `/api/models` | auto | None |
 | PapersWithCode | `huggingface.co` | `/api/daily_papers` (PwC API now redirects here) | auto | None |
 | Stack Overflow | `api.stackexchange.com` | `/2.3/questions?...&site=stackoverflow&tagged={tag}&filter=withbody` | auto | None |
-| Go modules | `index.golang.org` | `/index?limit={n}` | auto | None |
+| Go modules | `proxy.golang.org` | `/{module}/@latest`, one request per module your `go.mod` files declare (200 ms apart). The global `index.golang.org` feed is never read | auto, only if Go modules were discovered | Your **full Go module paths** (see the derived-content table in §4) |
+| GitHub Advisories | `api.github.com` | `/advisories?per_page=…&sort=published&direction=desc&published=>={date}[&ecosystem={eco}]` (paged via `Link`) | auto | Unauthenticated. Ecosystem names + a date filter. UA `4DA-Developer-OS/1.0` (`sources/cve.rs`) |
+| OSV advisories | `api.osv.dev` | `POST /v1/query`, `POST /v1/querybatch`, `GET /v1/vulns/{id}` | auto, only if dependencies were discovered | Your package names + ecosystems (and, in strict-manifest mode, pinned versions) — see §2c (`sources/osv.rs`, `sources/osv_live.rs`) |
+| Mastodon | `hachyderm.io` | `GET /api/v1/timelines/tag/{tag}?limit={n}` (n ≤ 40); fallback `GET /tags/{tag}.rss` | auto | None. Public hashtag timelines for fixed dev tags (`rust`, `programming`, `javascript`, `python`, `golang`, `webdev`, `linux`, `devops`, `opensource`, `security`). UA `4DA/1.0 (+https://4da.ai)` (`sources/mastodon.rs`) |
+| Lemmy | `programming.dev` | `GET /api/v3/post/list?type_=All&sort=Hot&limit={n}` (n ≤ 50); fallback `GET /feeds/all.xml?sort=Hot` | auto | None. UA `4DA/1.0 (+https://4da.ai)` (`sources/lemmy.rs`) |
 
 **RSS default hosts** (`sources/rss.rs`, user-customizable): `feeds.arstechnica.com`,
 `www.theverge.com`, `techcrunch.com`, `blog.rust-lang.org`, `engineering.fb.com`, `medium.com`,
@@ -182,7 +194,22 @@ embeddings) — with no key configured, zero LLM network calls leave the machine
   fails any new model call that bypasses it). A model on this machine (Ollama, or a `base_url` on
   localhost) is exempt, because nothing leaves the machine.
 - **Auth:** your key, sent as `x-api-key` (Anthropic) or `Authorization: Bearer` (OpenAI-compatible).
-  Keys are stored only on your machine (keychain) and never sent anywhere but the provider you chose.
+  Keys are stored in your OS credential store (Windows Credential Manager / macOS Keychain / Linux
+  Secret Service) and removed from `settings.json` once the credential store has verified them. If
+  the credential store is unavailable they stay in `settings.json`, restricted to your user account
+  (owner-only permissions), and Settings shows which storage is in use. Either way they are never
+  sent anywhere but the provider you chose.
+- **Key check / model list:** when you test a key or open the model picker, 4DA calls that same
+  provider: `POST api.anthropic.com/v1/messages` (a 1-token "hi"), `GET api.openai.com/v1/models`,
+  `POST {base_url}/chat/completions` (a 1-token "hi") or `GET {base_url}/models`
+  (`src-tauri/src/settings/validation.rs`, `settings_commands_llm/mod.rs`). Local-server detection
+  probes only this machine: `localhost:11434/api/version`, `localhost:1234/v1/models`,
+  `localhost:8080/v1/models`, `localhost:1337/v1/models`.
+- **Embeddings:** `POST api.openai.com/v1/embeddings` is used **only** if you turn on
+  `allow_cloud_embeddings` (off by default; `src-tauri/src/embeddings.rs`). Setting an LLM key
+  alone never routes embeddings to the cloud. With it on, the text being embedded goes to OpenAI —
+  that includes **chunks of text from your local files** (README and other indexed context chunks,
+  `ace/readme_indexing.rs`, `reembed_space.rs`), not just item titles. See §4.
 - **Retention (zero-retention defaults):** first-party **OpenAI** requests send `store: false`,
   opting out of OpenAI storing the completion for their dashboard/retrieval. **Anthropic** has no
   per-request retention control — zero-data-retention is an account-level agreement you make with
@@ -257,7 +284,9 @@ Only contacted when you enter a license key (`src-tauri/src/settings/license/key
 (`src-tauri/tauri.conf.json` → `plugins.updater`)
 
 - **Host:** `github.com` (GitHub Releases)
-- **Endpoint:** `GET /4DA-Systems/4DA/releases/latest/download/latest.json`
+- **Endpoint:** `GET /4DA-Systems/4DA/releases/download/desktop-latest/latest.json`
+  (GitHub serves release downloads by redirecting to its asset CDN on a `*.githubusercontent.com`
+  host; an accepted update's installer is fetched the same way)
 - **Trigger:** shortly after startup, once per session; silent on failure.
 - **Data sent:** plain `GET` — no version reporting, no device info. Updates are
   **minisign-verified** against the embedded public key before install; the user must click to apply.
@@ -268,14 +297,28 @@ Only contacted when you enter a license key (`src-tauri/src/settings/license/key
 **user-configured `relay_url`**; encrypted metadata (XChaCha20-Poly1305) is synced to it only if you
 set up a team. With no team configured, zero calls are made. Disable by not joining a team.
 
+**Not in release builds:** team sync is compiled only with the `team-sync` Cargo feature, and
+outbound webhooks (`webhooks/`, `POST` to a URL you register, signed `X-4DA-Signature-256`) and SSO
+(`sso_crypto.rs`, `GET {issuer}/.well-known/openid-configuration` + its `jwks_uri` on the identity
+provider you configure) only with the `enterprise` feature. Neither feature is in the default build
+(`src-tauri/Cargo.toml`: `default = ["fastembed-local"]`), so shipped builds contain no code for them.
+
 ### 2h. Developer Toolkit HTTP probe (manual only)
 
 A user-triggered tool to test API endpoints. **Never automatic.** Restricted to an allowlist
 (`src-tauri/src/toolkit_http.rs`): `api.openai.com`, `api.anthropic.com`,
-`generativelanguage.googleapis.com`, `localhost`/`127.0.0.1`/`0.0.0.0`, `api.keygen.sh`,
+`generativelanguage.googleapis.com`, `api.keygen.sh`,
 `hacker-news.firebaseio.com`, `www.reddit.com`, `oauth.reddit.com`, `api.github.com`, `api.x.com`,
-`export.arxiv.org`, `www.youtube.com`, `lobste.rs`, `dev.to`, `www.producthunt.com`. Anything off
-the allowlist is rejected.
+`export.arxiv.org`, `www.youtube.com`, `lobste.rs`, `dev.to`, `www.producthunt.com`, plus
+`localhost`/`127.0.0.1`/`0.0.0.0` **on the Ollama port 11434 only** (no other local service is
+reachable). The host is taken from a real URL parser and must match exactly; URLs carrying a
+username/password are rejected, and every redirect hop is re-checked against the same allowlist.
+Anything off the allowlist is rejected.
+
+**Feed checks (manual only).** When you add or test a feed, 4DA fetches the URL you typed — a plain
+`GET`, internal/private addresses refused — to confirm it is a valid RSS/Atom feed or to discover the
+feed link on that page (`source_config_feeds.rs::validate_rss_feed`, `toolkit_intelligence.rs::toolkit_test_feed`).
+Adding a YouTube channel fetches `www.youtube.com/feeds/videos.xml?channel_id={id}` once to check it.
 
 ### 2i. Twitter / X (BYOK)
 
@@ -328,6 +371,22 @@ subscriber is never dropped to Free between billing periods, the app renews the 
 The installed version and the proposed version are never sent to a registry: both are picked out
 of the full release list on your machine. Only OSV receives versions.
 
+### 2l. Digest email over SMTP (opt-in)
+
+(`src-tauri/src/digest_email.rs`, `monitoring_jobs.rs`) — silent unless you configure **both** a
+digest email address and an SMTP server in the digest settings. Mail goes straight from your
+machine to the SMTP server you named; 4DA operates no mail server and never sees it.
+
+- **Host / port:** whatever you entered (`digest.smtp.host`, `digest.smtp.port`). No default host.
+- **Data sent:** your SMTP username and password (SMTP AUTH), the from/to addresses, and the
+  digest itself — period, item counts, source and topic breakdown, and the top items' titles,
+  links, relevance scores, the topics of yours they matched, and any summary / signal note. "Send test email" sends a fixed one-line message instead of the digest.
+- **Encryption:** with `use_tls = true` the connection is upgraded with STARTTLS before
+  authenticating. **With `use_tls = false`, your SMTP credentials and the digest are sent
+  unencrypted** over the network — only use that for a mail relay on your own machine or LAN.
+- **Trigger:** on the digest schedule (daily/weekly) while the app runs, plus the manual test.
+- **Disable:** clear the digest email address or the SMTP settings.
+
 ---
 
 ## 3. Setup-time (one-time downloads)
@@ -361,8 +420,11 @@ use (`src-tauri/src/embeddings_providers/fastembed.rs`):
 - **No phoning home.** The only 4DA-operated endpoints are the user-initiated `4da.ai` license
   recovery (§2e) and, for subscription keys near expiry only, the key-only renewal (§2k). There is
   no background 4DA backend receiving data, and free or lifetime installs never contact `4da.ai`.
-- **No raw-content transmission.** Project files, source code, file contents, and git history never
-  leave your machine. Not the text of your files, not your commit messages, not your diffs.
+- **No raw-content transmission (by default).** Project files, source code, file contents, and git
+  history never leave your machine. Not the text of your files, not your commit messages, not your
+  diffs. **One opt-in exception:** if you turn on `allow_cloud_embeddings` (off by default), the
+  chunks of local file text 4DA indexes as context (READMEs and other indexed files) are sent to
+  `api.openai.com/v1/embeddings` to be embedded — see the table below.
   Enforced by `scripts/check-privacy-egress.cjs`, which fails the build if a raw-content column is
   read outside the modules that mine and store it — because until 2026-08-28 this bullet was wrong:
   the LLM reranker was including your five most recent commit messages in the context summary it
@@ -389,9 +451,11 @@ use (`src-tauri/src/embeddings_providers/fastembed.rs`):
   | `proxy.golang.org` | your **full Go module paths** | as above |
   | `api.github.com/advisories` | your ecosystem names | advisory matching |
   | `api.github.com/search` | your languages | repo discovery |
-  | Reddit / Lemmy / Mastodon | the subreddits / communities you follow | feed fetch |
+  | Reddit | the subreddits you follow | feed fetch (Lemmy and Mastodon use fixed instances and tags — nothing of yours is sent) |
   | Stack Overflow | your tags | question fetch |
   | your configured LLM provider | dependency **names** (and, for the AI brief, the **installed and fix versions** of vulnerable or outdated ones), short project labels, git-derived work **topics**, declared interests, and the titles of items you saved — nouns and version numbers, never your prose | rerank + briefing (BYOK, off unless you supply a key) |
+  | `api.openai.com` `POST /v1/embeddings` (§2a) — **only with `allow_cloud_embeddings = true`** | the text being embedded, **including chunks of text from your local files** (the `context_chunks` 4DA indexes: READMEs and other indexed context), plus item text | cloud embeddings (off by default; never enabled by setting a key alone) |
+  | your SMTP server (§2l) — only if you configure digest email | SMTP credentials + the digest (item titles, links, scores, the topics of yours they matched); **unencrypted if `use_tls = false`** | digest email |
 
   Go module paths are the sharpest edge here: a private module path such as
   `github.com/yourcompany/internal-service` discloses the organisation and repository name to
@@ -406,23 +470,22 @@ use (`src-tauri/src/embeddings_providers/fastembed.rs`):
 ## Content Security Policy (CSP)
 
 The Tauri webview enforces a strict CSP (`src-tauri/tauri.conf.json` → `app.security.csp`). The
-`connect-src` allowlist for the frontend is exactly:
+`connect-src` for the frontend is exactly:
 
 ```
-connect-src 'self'
-  https://api.anthropic.com
-  https://api.openai.com
-  http://localhost:11434
-  https://hacker-news.firebaseio.com
-  https://export.arxiv.org
-  https://www.reddit.com
-  https://api.github.com
-  https://api.keygen.sh
+connect-src 'self' ipc: http://ipc.localhost
 ```
 
-Any JavaScript attempting to contact a host outside this list is blocked by the webview engine.
-(Most outbound calls are made by the **Rust backend**, not the frontend — the CSP governs the
-webview layer; the full backend inventory is the tables above.)
+That is the app's own bundled assets and Tauri's IPC bridge to the Rust backend — **no network
+host at all**. The webview cannot reach the internet: any JavaScript `fetch`, XHR, WebSocket or
+EventSource to any outside host (including `localhost` services such as Ollama) is blocked by the
+webview engine. `img-src` is `'self' data:` and `script-src` is `'self'`, so no remote images or
+scripts load either. **Every outbound connection in this document is made by the Rust backend**,
+and the tables above are the complete inventory of it.
+
+In development only (`pnpm run tauri dev`), `app.security.devCsp` applies instead: the same policy
+with `ws://localhost:4444 http://localhost:4444` added to `connect-src` so Vite's hot-reload
+can reach the local dev server. Release builds use `csp`, never `devCsp`.
 
 ---
 
