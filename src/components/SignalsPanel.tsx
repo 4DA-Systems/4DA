@@ -11,6 +11,7 @@ import { computeEvidencePool, groundingDeps, type EvidencePool } from './signals
 import { isBriefSuppressed, useActiveBriefFilteredIds } from '../hooks/use-brief-verdicts';
 import { normalizeUrlForDedup } from '../utils/normalize-url';
 import { isSurfacedSignal } from '../utils/score';
+import { useSignalDisplayOrder } from './signals/signal-display-order';
 
 // ============================================================================
 // Types
@@ -30,13 +31,17 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
   const [typeFilter, setTypeFilter] = useState<string | null>(null);
   const [priorityFilter, setPriorityFilter] = useState<string | null>(null);
   const { isPro } = useLicense();
+  // Signal is a stack instrument (Decisions 3/6): Affects You is the panel;
+  // the other pools measured as generic news and sit behind a disclosure.
+  const orbitExpanded = useSignalDisplayOrder((s) => s.orbitExpanded);
+  const setOrbitExpanded = useSignalDisplayOrder((s) => s.setOrbitExpanded);
 
   // AD-035: while the latest briefing is fresh, its filter verdicts demote
   // items out of the Key Signals lane — one item, one verdict. Demote-only:
   // the item stays in the ordinary feed; is_critical_alert rows are exempt.
   const briefFilteredIds = useActiveBriefFilteredIds();
 
-  const { signals, filtered, typeCounts, priorityCounts, poolCounts, pools, briefSuppressedCount } = useMemo(() => {
+  const { shown, filtered, typeCounts, priorityCounts, poolCounts, pools, briefSuppressedCount } = useMemo(() => {
     // Signal fields are computed before convergence, and a demotion (judge
     // reject, awaiting_judge, stale version) clears `relevant` but keeps them.
     // Gating on the signal fields alone put pipeline-rejected items in this
@@ -97,17 +102,22 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
       return true;
     });
 
-    const filtered = signals
+    // Default view = Affects You only (audit 2026-10-07: 2 grounded rows sat
+    // above ~77 generic "In Your Orbit" news rows). Counts, chips and the
+    // teaser read the SHOWN set, so the header never promises hidden rows.
+    const shown = orbitExpanded ? signals : signals.filter((s) => s.pool === 'affects_you');
+
+    const filtered = shown
       .filter((s) => !typeFilter || s.signal_type === typeFilter)
       .filter((s) => !priorityFilter || s.signal_priority === priorityFilter);
 
     const typeCounts: Record<string, number> = {};
     const priorityCounts: Record<string, number> = {};
     const poolCounts: Record<EvidencePool, number> = { affects_you: 0, in_orbit: 0, ambient: 0 };
-    for (const s of signals) {
+    for (const s of signals) poolCounts[s.pool] += 1;
+    for (const s of shown) {
       typeCounts[s.signal_type] = (typeCounts[s.signal_type] || 0) + 1;
       priorityCounts[s.signal_priority] = (priorityCounts[s.signal_priority] || 0) + 1;
-      poolCounts[s.pool] += 1;
     }
 
     // Group by evidence pool, not by signal type. Each signal belongs to
@@ -119,7 +129,7 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
     }));
 
     return {
-      signals,
+      shown,
       filtered,
       typeCounts,
       priorityCounts,
@@ -127,7 +137,7 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
       pools,
       briefSuppressedCount: briefSuppressed.length,
     };
-  }, [results, typeFilter, priorityFilter, briefFilteredIds]);
+  }, [results, typeFilter, priorityFilter, briefFilteredIds, orbitExpanded]);
 
   // Hide-when-empty: a bordered card whose only content is "no signals" is dead
   // chrome that reads as a broken panel. Same contract as WhatYouWouldHaveMissed —
@@ -136,11 +146,21 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
   // score >= 0.30, so a run of ordinary posts legitimately yields none. Guarded
   // on `signals` (pre-filter), NOT `filtered` — the "no signals match your
   // filters" message below stays for user-applied filters.
-  if (signals.length === 0) return null;
+  // Keyed on Affects You: with nothing grounded, the panel is only generic
+  // orbit news — it hides and the Your stack lane below carries the view.
+  const affectsYouCount = poolCounts.affects_you;
+  if (affectsYouCount === 0) return null;
 
   const criticalCount = priorityCounts['critical'] || 0;
   const highCount = priorityCounts['alert'] || 0;
-  const affectsYouCount = poolCounts.affects_you;
+  const orbitCount = poolCounts.in_orbit + poolCounts.ambient;
+  const toggleOrbit = () => {
+    // A chip for a type that only existed in the other view would strand the
+    // list on "no match" — the disclosure resets the narrowing.
+    setTypeFilter(null);
+    setPriorityFilter(null);
+    setOrbitExpanded(!orbitExpanded);
+  };
 
   return (
     <div className="mb-6 bg-bg-secondary rounded-lg border border-border overflow-hidden">
@@ -158,8 +178,8 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
           <div className="text-start">
             <h2 className="font-medium text-text-primary">{t('signals.title')}</h2>
             <p className="text-xs text-text-muted">
-              {t('signals.actionable', { count: signals.length })}
-              {affectsYouCount > 0 && (
+              {t('signals.actionable', { count: shown.length })}
+              {orbitExpanded && (
                 <span className="ms-2 text-emerald-400">
                   {t('signals.affectsYouCount', { count: affectsYouCount })}
                 </span>
@@ -213,9 +233,7 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
           </div>
           <div className="text-center py-2 space-y-3">
             <p className="text-sm text-text-secondary">
-              {t('signals.freeTeaser', {
-                count: signals.length,
-              })}
+              {t('signals.freeTeaser', { count: shown.length })}
             </p>
             <p className="text-xs text-text-muted">
               {t('signals.freeSubtext')}
@@ -329,6 +347,18 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
               ))
             )}
           </div>
+
+          {orbitCount > 0 && (
+            <button
+              type="button"
+              onClick={toggleOrbit}
+              aria-expanded={orbitExpanded}
+              data-testid="signals-orbit-toggle"
+              className="w-full mt-4 px-3 py-2 text-xs font-medium rounded-lg border border-border text-text-secondary hover:text-text-primary hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-gold/50 transition-colors"
+            >
+              {orbitExpanded ? t('signals.orbitHide') : t('signals.orbitShow', { count: orbitCount })}
+            </button>
+          )}
         </div>
       )}
     </div>

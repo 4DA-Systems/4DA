@@ -14,6 +14,16 @@ vi.mock('@tauri-apps/api/event', () => ({
   emit: vi.fn(),
 }));
 
+// Pass the key through, suffixed with `count` when given, so header / teaser /
+// toggle counts are observable ("signals.actionable:2").
+vi.mock('react-i18next', () => ({
+  useTranslation: () => ({
+    t: (key: string, opts?: { count?: number }) =>
+      opts && typeof opts.count === 'number' ? `${key}:${opts.count}` : key,
+    i18n: { language: 'en', changeLanguage: vi.fn() },
+  }),
+}));
+
 let mockIsPro = true;
 vi.mock('../../hooks/use-license', () => ({
   useLicense: () => ({ isPro: mockIsPro, trialStatus: null, expired: false, daysRemaining: 30 }),
@@ -40,15 +50,19 @@ vi.mock('../../store', () => ({
 // Component under test
 // ---------------------------------------------------------------------------
 import { SignalsPanel } from '../SignalsPanel';
+import { useSignalDisplayOrder } from '../signals/signal-display-order';
 import { makeItem } from '../../test/factories';
 import type { SourceRelevance } from '../../types';
 
+// Default fixture is grounded (Affects You) — the only pool shown by default.
+// Grounded without matched_deps so no dependency chip renders.
 function makeSignalItem(overrides: Partial<SourceRelevance> = {}) {
   return makeItem({
     signal_type: 'security_alert',
     signal_priority: 'alert',
     signal_action: 'Update dependency immediately',
     signal_triggers: ['CVE-2025-001'],
+    score_breakdown: { matched_deps: [], strongly_grounded: true } as never,
     // Distinct stories get distinct URLs (makeItem's shared default URL would
     // trip the panel's one-story-one-row dedup for unrelated fixtures).
     url: `https://example.com/article-${overrides.id ?? 1}`,
@@ -56,11 +70,116 @@ function makeSignalItem(overrides: Partial<SourceRelevance> = {}) {
   });
 }
 
+/** An ungrounded, on-stack item: lands in the In Your Orbit pool. */
+function makeOrbitItem(overrides: Partial<SourceRelevance> = {}) {
+  return makeSignalItem({
+    signal_type: 'tech_trend',
+    signal_priority: 'advisory',
+    score_breakdown: { matched_deps: [], domain_relevance: 0.85 } as never,
+    ...overrides,
+  });
+}
+
+const visibleText = { ignore: 'script, style, [aria-hidden="true"]' };
+const clickOrbitToggle = () => fireEvent.click(screen.getByTestId('signals-orbit-toggle'));
+
+beforeEach(() => {
+  useSignalDisplayOrder.setState({ orbitExpanded: false });
+});
+
 describe('SignalsPanel', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockIsPro = true;
     mockBriefVerdicts = null;
+  });
+
+  // ===========================================================================
+  // Affects You is the default view (audit 2026-10-07, Decisions 3/6)
+  // ===========================================================================
+
+  it('renders only Affects You rows by default', () => {
+    render(
+      <SignalsPanel
+        results={[
+          makeSignalItem({ id: 1, signal_action: 'Grounded row' }),
+          makeOrbitItem({ id: 2, signal_action: 'Orbit row A' }),
+          makeOrbitItem({ id: 3, signal_action: 'Orbit row B' }),
+        ]}
+      />,
+    );
+    expect(screen.getByText('Grounded row')).toBeInTheDocument();
+    expect(screen.queryByText('Orbit row A')).not.toBeInTheDocument();
+    expect(screen.queryByText('Orbit row B')).not.toBeInTheDocument();
+    expect(screen.queryByText('signals.poolInOrbit')).not.toBeInTheDocument();
+    const toggle = screen.getByTestId('signals-orbit-toggle');
+    expect(toggle).toHaveTextContent('signals.orbitShow');
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  });
+
+  it('reveals orbit rows when the toggle is clicked, and hides them again', () => {
+    render(
+      <SignalsPanel
+        results={[
+          makeSignalItem({ id: 1, signal_action: 'Grounded row' }),
+          makeOrbitItem({ id: 2, signal_action: 'Orbit row' }),
+        ]}
+      />,
+    );
+    clickOrbitToggle();
+    expect(screen.getByText('Orbit row')).toBeInTheDocument();
+    expect(screen.getByText('signals.poolInOrbit')).toBeInTheDocument();
+    expect(screen.getByTestId('signals-orbit-toggle')).toHaveTextContent('signals.orbitHide');
+    expect(useSignalDisplayOrder.getState().orbitExpanded).toBe(true);
+
+    clickOrbitToggle();
+    expect(screen.queryByText('Orbit row')).not.toBeInTheDocument();
+  });
+
+  it('hides the whole panel when nothing affects you', () => {
+    const { container } = render(
+      <SignalsPanel
+        results={[
+          makeOrbitItem({ id: 1, signal_action: 'Generic news' }),
+          makeOrbitItem({ id: 2, signal_action: 'More generic news' }),
+        ]}
+      />,
+    );
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('omits the toggle when there is nothing outside Affects You', () => {
+    render(<SignalsPanel results={[makeSignalItem({ id: 1 })]} />);
+    expect(screen.queryByTestId('signals-orbit-toggle')).not.toBeInTheDocument();
+  });
+
+  it('filter chips count the default (Affects You) view only', () => {
+    render(
+      <SignalsPanel
+        results={[
+          makeSignalItem({ id: 1 }),
+          makeSignalItem({ id: 2 }),
+          makeOrbitItem({ id: 3 }),
+          makeOrbitItem({ id: 4 }),
+          makeOrbitItem({ id: 5 }),
+        ]}
+      />,
+    );
+    // Header and toggle counts read the default view.
+    expect(screen.getByText('signals.actionable:2')).toBeInTheDocument();
+    expect(screen.getByTestId('signals-orbit-toggle')).toHaveTextContent('signals.orbitShow:3');
+    const chip = (label: string) =>
+      screen.queryAllByText(label).find((el) => el.closest('button[aria-pressed]'))?.closest('button');
+    expect(chip('Security')).toHaveTextContent('2');
+    expect(chip('Trends')).toBeUndefined();
+    // No advisory priority in the default view (all three advisories are orbit).
+    expect(screen.queryByRole('button', { name: /Filter by priority: .*advis/i })).not.toBeInTheDocument();
+
+    clickOrbitToggle();
+    expect(chip('Trends')).toHaveTextContent('3');
+    expect(screen.getByText('signals.actionable:5')).toBeInTheDocument();
+    // Expanded, the header distinguishes the grounded subset.
+    expect(screen.getByText('signals.affectsYouCount:2')).toBeInTheDocument();
   });
 
   it('renders nothing when there are no results', () => {
@@ -123,35 +242,19 @@ describe('SignalsPanel', () => {
         ]}
       />,
     );
-    expect(screen.getByText('signals.actionable')).toBeInTheDocument();
-  });
-
-  it('leads the header with an "affecting you" count when a grounded signal exists', () => {
-    render(
-      <SignalsPanel
-        results={[
-          makeSignalItem({
-            id: 1,
-            signal_priority: 'critical',
-            signal_action: 'Emergency patch',
-            // Grounded: a strong, non-ambiguous edge to the user's dependency.
-            score_breakdown: { matched_deps: ['react'], strongly_grounded: true } as never,
-          }),
-        ]}
-      />,
-    );
-    expect(screen.getByText('signals.affectsYouCount')).toBeInTheDocument();
+    expect(screen.getByText('signals.actionable:2')).toBeInTheDocument();
   });
 
   it('does NOT surface a raw critical badge for an ungrounded critical signal', () => {
-    // The core fix: a critical-priority signal with no tie to the user's stack
-    // must not scream "critical" in the header. It is routed to the Ambient pool
-    // and the header leads with grounded ("affecting you") counts only.
+    // A critical-priority signal with no tie to the user's stack must not
+    // scream "critical": it is routed to the Ambient pool, hidden by default,
+    // and the default chips count grounded rows only.
     render(
       <SignalsPanel
         results={[
+          makeSignalItem({ id: 1, signal_priority: 'advisory', signal_action: 'Grounded advisory' }),
           makeSignalItem({
-            id: 1,
+            id: 2,
             signal_priority: 'critical',
             signal_action: 'Some industry CVE in the news',
             // Ungrounded: no matched_deps, low domain relevance.
@@ -160,10 +263,12 @@ describe('SignalsPanel', () => {
         ]}
       />,
     );
-    expect(screen.queryByText('signals.critical')).not.toBeInTheDocument();
-    expect(screen.queryByText('signals.affectsYouCount')).not.toBeInTheDocument();
-    // It still renders as a signal, just in the de-emphasized Ambient pool.
+    expect(screen.queryByRole('button', { name: /Filter by priority: CRITICAL/ })).not.toBeInTheDocument();
+    expect(screen.queryByText('Some industry CVE in the news')).not.toBeInTheDocument();
+    // Still reachable — in the de-emphasized Ambient pool behind the toggle.
+    clickOrbitToggle();
     expect(screen.getByText('Some industry CVE in the news')).toBeInTheDocument();
+    expect(screen.getByText('signals.poolAmbient')).toBeInTheDocument();
   });
 
   it('routes a grounded critical into the Affects You pool', () => {
@@ -396,7 +501,7 @@ describe('SignalsPanel', () => {
     const rows = screen.getAllByText(/^Row (one|two|three)$/);
     expect(rows).toHaveLength(1);
     // The header count reflects the deduped list, not the raw row count.
-    expect(screen.getByText('signals.actionable')).toBeInTheDocument();
+    expect(screen.getByText('signals.actionable:1')).toBeInTheDocument();
   });
 
   it('keeps the highest-priority copy when the same URL appears twice', () => {
@@ -457,8 +562,9 @@ describe('SignalsPanel', () => {
     render(
       <SignalsPanel
         results={[
+          makeSignalItem({ id: 1, signal_action: 'Grounded anchor' }),
           makeSignalItem({
-            id: 1,
+            id: 2,
             signal_action: 'New tool spotted — no confirmed link to your stack',
             score_breakdown: {
               matched_deps: ['tokio'],
@@ -469,8 +575,9 @@ describe('SignalsPanel', () => {
         ]}
       />,
     );
+    clickOrbitToggle();
     expect(screen.getByText('New tool spotted — no confirmed link to your stack')).toBeInTheDocument();
-    expect(screen.queryByText(/🎯/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/🎯/, visibleText)).not.toBeInTheDocument();
   });
 
   it('keeps a grounded tutorial (no dependency event) out of Affects You', () => {
@@ -480,8 +587,9 @@ describe('SignalsPanel', () => {
     render(
       <SignalsPanel
         results={[
+          makeSignalItem({ id: 1, signal_action: 'Grounded anchor' }),
           makeSignalItem({
-            id: 1,
+            id: 2,
             signal_action: 'Progressive Hydration in React',
             score_breakdown: {
               matched_deps: ['react'],
@@ -493,10 +601,14 @@ describe('SignalsPanel', () => {
         ]}
       />,
     );
+    // Not in the default (Affects You) view...
+    expect(screen.queryByText('Progressive Hydration in React')).not.toBeInTheDocument();
+    // ...it is an orbit row, with no dependency chip.
+    clickOrbitToggle();
     expect(screen.getByText('Progressive Hydration in React')).toBeInTheDocument();
-    expect(screen.queryByText('signals.poolAffectsYou')).not.toBeInTheDocument();
-    expect(screen.queryByText('signals.affectsYouCount')).not.toBeInTheDocument();
-    expect(screen.queryByText(/🎯/)).not.toBeInTheDocument();
+    expect(screen.getByText('signals.poolInOrbit')).toBeInTheDocument();
+    expect(screen.getByText('signals.affectsYouCount:1')).toBeInTheDocument();
+    expect(screen.queryByText(/🎯/, visibleText)).not.toBeInTheDocument();
   });
 
   it('admits a grounded dependency event to Affects You', () => {
