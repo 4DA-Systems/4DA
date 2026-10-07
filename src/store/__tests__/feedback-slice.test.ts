@@ -203,4 +203,41 @@ describe('feedback-slice', () => {
       },
     );
   });
+
+  // ---------------------------------------------------------------------------
+  // unsaveItem — retracts the save in the backend and clears the saved state
+  // ---------------------------------------------------------------------------
+  describe('unsaveItem', () => {
+    beforeEach(() => {
+      cmdMock.mockReset();
+      cmdMock.mockResolvedValue(undefined);
+    });
+
+    it('calls remove_saved_item and clears the saved state', async () => {
+      useAppStore.setState({ feedbackGiven: { 7: 'save' } });
+      await useAppStore.getState().unsaveItem(7);
+      expect(cmdMock).toHaveBeenCalledWith('remove_saved_item', { itemId: 7 });
+      expect(useAppStore.getState().feedbackGiven[7]).toBeUndefined();
+    });
+
+    it('restores the saved state and names the command when it fails', async () => {
+      cmdMock.mockRejectedValue(new Error('db locked'));
+      useAppStore.setState({ feedbackGiven: { 7: 'save' } });
+      await useAppStore.getState().unsaveItem(7);
+      expect(useAppStore.getState().feedbackGiven[7]).toBe('save');
+      const warning = useAppStore.getState().toasts.find(t => t.type === 'warning');
+      expect(warning!.message).toContain('remove_saved_item');
+    });
+
+    it("the save toast's Undo retracts the save in the backend too", async () => {
+      const item = { id: 9, title: 'Serde 2', source_type: 'hackernews', top_score: 0.5 } as never;
+      await useAppStore.getState().recordInteraction(9, 'save', item);
+      const toast = useAppStore.getState().toasts.find(t => t.type === 'success');
+      cmdMock.mockClear();
+      toast!.action!.onClick();
+      await Promise.resolve();
+      expect(cmdMock).toHaveBeenCalledWith('remove_saved_item', { itemId: 9 });
+      expect(useAppStore.getState().feedbackGiven[9]).toBeUndefined();
+    });
+  });
 });

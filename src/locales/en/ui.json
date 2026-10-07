@@ -1129,6 +1129,7 @@
   "intelligence.antiPatterns": "{{count}} scoring anti-pattern(s) detected and corrected",
   "feedback.openLink": "Open Link",
   "feedback.saved": "Saved",
+  "feedback.unsaveTitle": "Saved. Click to unsave",
   "feedback.dismissed": "Dismissed",
   "feedback.marked": "Marked",
   "feedback.notRelevant": "Not Relevant",

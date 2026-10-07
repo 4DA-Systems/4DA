@@ -62,6 +62,8 @@ export const BriefingView = memo(function BriefingView() {
   const handleSave = useCallback((it: SourceRelevance) => { void recordInteraction(it.id, 'save', it); }, [recordInteraction]);
   const handleDismiss = useCallback((it: SourceRelevance) => { void recordInteraction(it.id, 'dismiss', it); }, [recordInteraction]);
   const handleRecordClick = useCallback((it: SourceRelevance) => { void recordInteraction(it.id, 'click', it); }, [recordInteraction]);
+  const unsaveItem = useAppStore(s => s.unsaveItem);
+  const handleUnsave = useCallback((it: SourceRelevance) => { void unsaveItem(it.id); }, [unsaveItem]);
 
   // One-click recovery for users who skipped the onboarding scan: run the same
   // fully-local ace_auto_discover, then refresh context (the nudge auto-hides once
@@ -222,6 +224,7 @@ export const BriefingView = memo(function BriefingView() {
         onSave={handleSave}
         onDismiss={handleDismiss}
         onRecordClick={handleRecordClick}
+        onUnsave={handleUnsave}
         onRegenerate={() => { void generateBriefing(); }}
         setActiveView={setActiveView}
       />

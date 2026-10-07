@@ -1051,6 +1051,7 @@
   "intelligence.antiPatterns": "检测并修正了 {{count}} 个评分反模式",
   "feedback.openLink": "打开链接",
   "feedback.saved": "已保存",
+  "feedback.unsaveTitle": "已保存。点击取消保存",
   "feedback.dismissed": "已隐藏",
   "feedback.marked": "已标记",
   "feedback.notRelevant": "不相关",

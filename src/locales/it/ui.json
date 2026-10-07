@@ -1051,6 +1051,7 @@
   "intelligence.antiPatterns": "{{count}} anti-pattern di punteggio rilevato/i e corretto/i",
   "feedback.openLink": "Apri link",
   "feedback.saved": "Salvato",
+  "feedback.unsaveTitle": "Salvato. Fai clic per rimuovere",
   "feedback.dismissed": "Ignorato",
   "feedback.marked": "Segnato",
   "feedback.notRelevant": "Non rilevante",

@@ -946,6 +946,7 @@
   "feedback.notRelevant": "غير ذي صلة",
   "feedback.openLink": "فتح الرابط",
   "feedback.saved": "تم الحفظ",
+  "feedback.unsaveTitle": "تم الحفظ. انقر لإلغاء الحفظ",
   "feedback.sessionSaves": "{{count}} تم حفظه في هذه الجلسة",
   "feedback.shareCopied": "تم نسخ الدرجة إلى الحافظة",
   "feedback.snoozed": "مؤجل",

@@ -984,6 +984,7 @@
   "feedback.notRelevant": "Não relevante",
   "feedback.openLink": "Abrir link",
   "feedback.saved": "Salvo",
+  "feedback.unsaveTitle": "Salvo. Clique para remover",
   "feedback.sessionSaves": "{{count}} salvos nesta sessão",
   "feedback.shareCopied": "Pontuação copiada para a área de transferência",
   "feedback.snoozed": "Adiado",

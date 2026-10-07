@@ -1051,6 +1051,7 @@
   "intelligence.antiPatterns": "{{count}} 件のスコアリングアンチパターンが検出・修正されました",
   "feedback.openLink": "リンクを開く",
   "feedback.saved": "保存済み",
+  "feedback.unsaveTitle": "保存済み。クリックで保存を解除",
   "feedback.dismissed": "非表示",
   "feedback.marked": "マーク済み",
   "feedback.notRelevant": "関連なし",

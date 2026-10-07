@@ -941,6 +941,7 @@
   "feedback.notRelevant": "관련 없음",
   "feedback.openLink": "링크 열기",
   "feedback.saved": "저장됨",
+  "feedback.unsaveTitle": "저장됨. 클릭하여 저장 취소",
   "feedback.sessionSaves": "이 세션에서 {{count}}개 저장",
   "feedback.shareCopied": "점수가 클립보드에 복사되었습니다",
   "feedback.snoozed": "스누즈됨",

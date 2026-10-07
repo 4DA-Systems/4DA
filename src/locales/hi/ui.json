@@ -1004,6 +1004,7 @@
   "feedback.notRelevant": "प्रासंगिक नहीं",
   "feedback.openLink": "लिंक खोलें",
   "feedback.saved": "सहेजा गया",
+  "feedback.unsaveTitle": "सहेजा गया। हटाने के लिए क्लिक करें",
   "feedback.sessionSaves": "{{count}} इस सत्र में सहेजे गए",
   "feedback.shareCopied": "स्कोर क्लिपबोर्ड पर कॉपी किया गया",
   "feedback.snoozed": "स्नूज़ किया गया",

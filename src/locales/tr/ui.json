@@ -959,6 +959,7 @@
   "feedback.notRelevant": "İlgili Değil",
   "feedback.openLink": "Bağlantıyı Aç",
   "feedback.saved": "Kaydedildi",
+  "feedback.unsaveTitle": "Kaydedildi. Kaldırmak için tıklayın",
   "feedback.sessionSaves": "Bu oturumda {{count}} kaydedildi",
   "feedback.shareCopied": "Puan panoya kopyalandı",
   "feedback.snoozed": "Ertelendi",

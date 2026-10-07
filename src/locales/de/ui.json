@@ -1056,6 +1056,7 @@
   "intelligence.antiPatterns": "{{count}} Bewertungs-Antimuster erkannt und korrigiert",
   "feedback.openLink": "Link öffnen",
   "feedback.saved": "Gespeichert",
+  "feedback.unsaveTitle": "Gespeichert. Klicken zum Entfernen",
   "feedback.dismissed": "Verworfen",
   "feedback.marked": "Markiert",
   "feedback.notRelevant": "Nicht relevant",

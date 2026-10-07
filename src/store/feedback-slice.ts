@@ -214,12 +214,17 @@ export const createFeedbackSlice: StateCreator<AppStore, [], [], FeedbackSlice> 
         addToast('success', confirmMessage, {
           label: 'Undo',
           onClick: () => {
-            // Revert feedback
-            set(state => {
-              const next = { ...state.feedbackGiven };
-              delete next[itemId];
-              return { feedbackGiven: next };
-            });
+            // Revert feedback. Undoing a save also retracts what it wrote
+            // in the backend (save + accuracy + relevance rows).
+            if (actionType === 'save') {
+              void get().unsaveItem(itemId);
+            } else {
+              set(state => {
+                const next = { ...state.feedbackGiven };
+                delete next[itemId];
+                return { feedbackGiven: next };
+              });
+            }
             // Revert score adjustment
             if (delta !== 0) {
               get().setAppStateFull(s => ({
@@ -234,6 +239,26 @@ export const createFeedbackSlice: StateCreator<AppStore, [], [], FeedbackSlice> 
       }
     } catch (error) {
       console.error('Failed to record interaction:', error);
+    }
+  },
+
+  unsaveItem: async (itemId) => {
+    const previous = get().feedbackGiven[itemId];
+    set(state => {
+      const next = { ...state.feedbackGiven };
+      delete next[itemId];
+      return { feedbackGiven: next };
+    });
+    try {
+      // Removes the save AND the accuracy / relevance rows it wrote, so the
+      // learning the save taught is retracted too (remove_saved_item).
+      await cmd('remove_saved_item', { itemId });
+    } catch (error) {
+      console.warn("Feedback command 'remove_saved_item' failed:", error);
+      if (previous) {
+        set(state => ({ feedbackGiven: { ...state.feedbackGiven, [itemId]: previous } }));
+      }
+      get().addToast('warning', feedbackFailureMessage(['remove_saved_item']));
     }
   },
 });

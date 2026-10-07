@@ -1049,6 +1049,7 @@
   "intelligence.antiPatterns": "Обнаружено и исправлено {{count}} антипаттернов оценки",
   "feedback.openLink": "Открыть ссылку",
   "feedback.saved": "Сохранено",
+  "feedback.unsaveTitle": "Сохранено. Нажмите, чтобы убрать",
   "feedback.dismissed": "Отклонено",
   "feedback.marked": "Отмечено",
   "feedback.notRelevant": "Не релевантно",
