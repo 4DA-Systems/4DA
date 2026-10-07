@@ -14,13 +14,27 @@
 
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
-use tracing::{info, warn};
+use tracing::info;
 
 use crate::error::Result;
-use crate::evidence::{
-    Action as EvidenceAction, Confidence, EvidenceCitation, EvidenceFeed, EvidenceItem,
-    EvidenceKind, LensHints, Urgency,
-};
+use crate::evidence::{Action as EvidenceAction, EvidenceFeed, EvidenceItem, Urgency};
+
+// The pass itself lives in sibling files (this one is on the size-exception
+// list and must not grow): the cache, the token index + engagement, release
+// truth, the per-dependency scan, and the EvidenceItem conversion.
+#[path = "knowledge_gaps_cache.rs"]
+mod gaps_cache;
+#[path = "knowledge_gaps_evidence.rs"]
+mod gaps_evidence;
+#[path = "knowledge_gaps_match.rs"]
+mod gaps_match;
+#[path = "knowledge_gaps_scan.rs"]
+mod gaps_scan;
+#[path = "knowledge_gaps_truth.rs"]
+mod gaps_truth;
+
+pub use gaps_cache::{cached_knowledge_gaps, refresh_knowledge_gaps_in_background};
+pub use gaps_evidence::GapBasis;
 
 // ============================================================================
 // Types
@@ -29,8 +43,19 @@ use crate::evidence::{
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct KnowledgeGap {
     pub dependency: String,
+    /// The attributed projects' installed version(s): "0.4.44" or a range.
     pub version: Option<String>,
+    /// Display label: "path" or "path (+N more)".
     pub project_path: String,
+    /// Exactly the projects the gap is true for.
+    #[serde(default)]
+    pub projects: Vec<String>,
+    /// What makes the gap true (sets its confidence).
+    #[serde(default)]
+    pub basis: GapBasis,
+    /// The newest release the projects are behind (`Release` basis).
+    #[serde(default)]
+    pub latest_release: Option<String>,
     pub missed_items: Vec<MissedItem>,
     pub gap_severity: GapSeverity,
     pub days_since_last_engagement: u32,
@@ -417,222 +442,20 @@ fn dep_is_relevant(
     (is_direct && !is_dev) || is_dep_in_domain(name, domain)
 }
 
+/// Detect knowledge gaps across all tracked dependencies. Uncached and
+/// CPU-bound — every caller should read [`cached_knowledge_gaps`] instead.
+///
+/// The per-dependency rules (name, domain, stack and activity filters;
+/// release truth; advisory exposure; severity) live in `gaps_scan`, which
+/// loads everything they need once per pass.
 pub fn detect_knowledge_gaps(conn: &rusqlite::Connection) -> Result<Vec<KnowledgeGap>> {
     let start = std::time::Instant::now();
-    // Get all tracked dependencies
     let deps = crate::temporal::get_all_dependencies(conn)?;
     if deps.is_empty() {
         return Ok(vec![]);
     }
-
-    // Build user's tech domain for filtering
-    let domain = build_tech_domain(conn);
-
-    // Load primary stack for competing tech filtering
-    let primary_stack = load_primary_stack(conn);
-    let anti_deps = crate::competing_tech::get_anti_dependencies(&primary_stack);
-
-    // Get active project paths (committed to in last 30 days), normalized for
-    // comparison. git_signals stores OS-native paths (e.g. "D:\4DA") while
-    // project_dependencies stores lowercase forward-slash paths (e.g.
-    // "d:/4da/src-tauri"); comparing them raw silently scoped out EVERY
-    // dependency as "dormant" and zeroed the entire Coverage Gaps surface.
-    let active_projects: Vec<String> = get_active_project_paths(conn)
-        .iter()
-        .map(|p| normalize_project_path(p))
-        .collect();
-
-    // Deduplicate deps by package name (same dep across projects → one gap)
-    let mut seen_deps: std::collections::HashMap<String, Vec<String>> =
-        std::collections::HashMap::new();
-    for dep in &deps {
-        seen_deps
-            .entry(dep.package_name.clone())
-            .or_default()
-            .push(dep.project_path.clone());
-    }
-
-    info!(
-        target: "4da::knowledge_decay",
-        unique_deps = seen_deps.len(),
-        total_deps = deps.len(),
-        "Processing dependencies for knowledge gaps"
-    );
-
-    // One scan, reused by every dependency below.
-    let candidates = load_gap_candidates(conn)?;
-
-    let mut gaps = Vec::new();
-    let mut processed_count: usize = 0;
-
-    for dep in &deps {
-        // Skip if we already processed this dependency name
-        let paths = match seen_deps.remove(&dep.package_name) {
-            Some(p) => p,
-            None => continue, // Already processed
-        };
-
-        processed_count += 1;
-        if processed_count > MAX_SCANNED_DEPS {
-            // Runaway guard only. Never a silent truncation: if this fires, the
-            // surface is knowingly incomplete and must say so.
-            warn!(
-                target: "4da::knowledge_decay",
-                scanned = MAX_SCANNED_DEPS,
-                remaining = seen_deps.len(),
-                "Knowledge-gap scan hit its dependency ceiling — coverage is incomplete"
-            );
-            break;
-        }
-
-        if !dep_name_is_matchable(&dep.package_name) {
-            continue;
-        }
-
-        // Skip Node.js builtins and internal modules — not real packages
-        if dep.package_name.starts_with("node:")
-            || NODE_BUILTINS.contains(&dep.package_name.as_str())
-            || dep.package_name.starts_with("content_") // internal 4DA modules
-            || dep.package_name == "fourda-macros"
-            || dep.package_name == "nlp"
-        {
-            continue;
-        }
-
-        // Domain filter — applied only to dependencies the user did NOT choose.
-        //
-        // A direct, non-dev dependency IS the user's stack: they wrote it into a
-        // manifest by hand. Asking it to *also* appear in the onboarding domain
-        // can only produce false negatives, because that domain is tiny and
-        // hand-entered (measured live: five entries — axum, react, tauri,
-        // typescript, +1). `hono`, a direct runtime dependency of
-        // `mcp-4da-server`, matched none of them and was dropped along with
-        // three unread advisories, one a cross-user data disclosure.
-        //
-        // Transitive and dev dependencies still need the filter: there are
-        // thousands of them and the user never chose any individually.
-        if !dep_is_relevant(dep.is_direct, dep.is_dev, &dep.package_name, &domain) {
-            continue;
-        }
-
-        // Competing tech filter: skip deps that are competitors to user's chosen stack
-        if anti_deps.contains(&dep.package_name.to_lowercase()) {
-            continue;
-        }
-
-        // Active project scoping: skip deps from dormant projects. Both sides are
-        // normalized (lowercase, forward slashes) so OS-native vs stored path
-        // formats compare correctly.
-        if !active_projects.is_empty()
-            && !active_projects.iter().any(|ap| {
-                paths.iter().any(|dp| {
-                    let dp = normalize_project_path(dp);
-                    dp.contains(ap) || ap.contains(&dp)
-                })
-            })
-        {
-            continue;
-        }
-
-        // Each named project's install WITH its ecosystem (AD-045): the gap
-        // merges projects by name, its judgements must not.
-        let installs_here = installs_for(conn, &dep.package_name, &paths);
-        let dep_lower = dep.package_name.to_lowercase();
-        let live = |c: &GapCandidate| -> Option<bool> {
-            if is_advisory_row(c) && linked_to(c, &dep_lower) {
-                crate::osv::exposure::advisory_row_reaches(
-                    conn,
-                    &c.source_id,
-                    &dep.package_name,
-                    &installs_here,
-                )
-            } else {
-                None
-            }
-        };
-
-        // Unread items whose title names this dependency (word-boundary matched).
-        let missed = keyword_misses_from(&candidates, &dep.package_name, &live);
-        // A release every carrying project already runs is not a missed
-        // update (AD-041): "@modelcontextprotocol/node v2.0.0: 1 version
-        // update — notably npm: @modelcontextprotocol/node v2.0.0" against an
-        // installed 2.0.0 (live 2026-09-08).
-        let installed_here: Vec<String> = installs_here
-            .iter()
-            .map(|install| install.version.clone())
-            .collect();
-        let missed = drop_already_installed_releases(missed, &dep.package_name, &installed_here);
-        if missed.is_empty() {
-            continue;
-        }
-
-        // Check if user has engaged with any items about this dep
-        let days_since = days_since_last_engagement(conn, &dep.package_name)?;
-
-        // Classify severity. A security advisory only escalates the gap while
-        // the installed version is genuinely still inside its affected range
-        // AND a registry advisory the linker bound to this dependency is among
-        // the citations — an editorial story naming the package is a citation,
-        // never proof of exposure (2026-09-06). The tier it escalates TO is
-        // the advisory's own (Phase 120).
-        let vulnerable = still_vulnerable(conn, &dep.package_name, dep.version.as_deref(), &paths)
-            && grounded_security_advisory(&candidates, &dep.package_name, &live);
-        // Which of this dependency's projects actually carry the exposure.
-        // `seen_deps` merges every project declaring the name (any version,
-        // any ecosystem), so without this the gap said "relay (+1 more)"
-        // for a bug only relay's copy has (2026-09-07).
-        let exposed: Vec<(String, crate::osv::exposure::Install)> = if vulnerable {
-            affected_project_paths(conn, &dep.package_name, &paths)
-        } else {
-            Vec::new()
-        };
-        let tier_installs: Vec<crate::osv::exposure::Install> = if exposed.is_empty() {
-            dep.version
-                .iter()
-                .map(|v| crate::osv::exposure::Install::new(Some(dep.language.as_str()), v.clone()))
-                .collect()
-        } else {
-            exposed.iter().map(|(_, install)| install.clone()).collect()
-        };
-        let severity = classify_severity(
-            &missed,
-            days_since,
-            &dep.package_name,
-            vulnerable,
-            advisory_tier_for(conn, &dep.package_name, &tier_installs),
-        );
-
-        if severity == GapSeverity::Low && days_since < 14 {
-            continue; // Skip low-severity recent items
-        }
-
-        // Project paths for display: the exposed subset when the exposure is
-        // what makes this a gap, every declaring project otherwise.
-        let (display_paths, version): (Vec<String>, Option<String>) = if exposed.is_empty() {
-            (paths.clone(), dep.version.clone())
-        } else {
-            (
-                exposed.iter().map(|(p, _)| p.clone()).collect(),
-                exposed.first().map(|(_, install)| install.version.clone()),
-            )
-        };
-        let project_display = if display_paths.len() == 1 {
-            display_paths[0].clone()
-        } else {
-            format!("{} (+{} more)", display_paths[0], display_paths.len() - 1)
-        };
-
-        gaps.push(KnowledgeGap {
-            dependency: dep.package_name.clone(),
-            version,
-            project_path: project_display,
-            missed_items: missed,
-            gap_severity: severity,
-            days_since_last_engagement: days_since,
-        });
-    }
-
-    let gaps = finalize_gaps(gaps);
+    let scan = gaps_scan::GapScan::load(conn)?;
+    let gaps = finalize_gaps(scan.scan(&deps));
     info!(
         target: "4da::knowledge_decay",
         gaps = gaps.len(),
@@ -805,35 +628,24 @@ fn load_gap_candidates(conn: &rusqlite::Connection) -> Result<Vec<GapCandidate>>
 /// Word-boundary matching is what keeps short names honest — "next" matches
 /// "Next.js" and "next release" but never "unexpected". It is the reason the
 /// caller does not need to exclude dependencies by name length.
-/// Drop rows that announce a version every project in this gap already runs
-/// (or a lower one). Unknown installs drop nothing — a release we cannot
-/// compare is still worth a look.
-fn drop_already_installed_releases(
-    missed: Vec<MissedItem>,
-    dep_name: &str,
-    installed: &[String],
-) -> Vec<MissedItem> {
-    use crate::scoring::release_version::{
-        already_installed, announced_release_version, lenient_semver,
-    };
-    let installed: Vec<semver::Version> = installed
-        .iter()
-        .filter_map(|v| lenient_semver(v, None))
-        .collect();
-    if installed.is_empty() {
-        return missed;
-    }
-    missed
-        .into_iter()
-        .filter(|m| {
-            announced_release_version(&m.title, &m.source_type, dep_name)
-                .is_none_or(|announced| !already_installed(&announced, &installed))
-        })
-        .collect()
-}
-
+///
+/// Whether a release row is NEWS for any project is decided per project by
+/// `gaps_truth` (release grading), not here. Production goes through the
+/// token index (`gaps_scan`); this full-scan form is the reference the
+/// equivalence tests hold the index to.
+#[cfg(test)]
 fn keyword_misses_from(
     candidates: &[GapCandidate],
+    package_name: &str,
+    live: LiveVerdict<'_>,
+) -> Vec<MissedItem> {
+    misses_among(candidates.iter(), package_name, live)
+}
+
+/// [`keyword_misses_from`] over a pre-selected candidate stream — the token
+/// index's hits (`gaps_match`), which arrive already in recency order.
+fn misses_among<'c>(
+    candidates: impl Iterator<Item = &'c GapCandidate>,
     package_name: &str,
     live: LiveVerdict<'_>,
 ) -> Vec<MissedItem> {
@@ -842,10 +654,8 @@ fn keyword_misses_from(
     // Deduplicate by normalized title (first 10 words, lowercased, stripped punctuation)
     let mut seen_titles: std::collections::HashSet<String> = std::collections::HashSet::new();
     candidates
-        .iter()
         // Cheap substring reject first; the boundary walk only runs on hits.
-        .filter(|c| c.title_lower.contains(&dep_lower))
-        .filter(|c| crate::utils::has_word_boundary_match_with_ext(&c.title_lower, &dep_lower))
+        .filter(|c| gaps_match::title_names(&c.title_lower, &dep_lower))
         // A registry advisory cites a dependency only through the linker's
         // `Affected:` proof, never a title word (2026-09-06).
         .filter(|c| !is_advisory_row(c) || linked_to(c, &dep_lower))
@@ -982,45 +792,6 @@ pub fn is_low_quality_signal(title: &str) -> bool {
     }
 
     false
-}
-
-fn days_since_last_engagement(conn: &rusqlite::Connection, package_name: &str) -> Result<u32> {
-    let pattern = format!("%{package_name}%");
-
-    let result: Option<String> = conn
-        .query_row(
-            "SELECT MAX(f.created_at)
-             FROM feedback f
-             JOIN source_items si ON si.id = f.source_item_id
-             WHERE si.title LIKE ?1",
-            params![pattern],
-            |row| row.get(0),
-        )
-        .ok()
-        .flatten();
-
-    if let Some(date_str) = result {
-        if let Ok(date) = chrono::NaiveDateTime::parse_from_str(&date_str, "%Y-%m-%d %H:%M:%S") {
-            let now = chrono::Utc::now().naive_utc();
-            let days = (now - date).num_days().max(0) as u32;
-            Ok(days)
-        } else {
-            Ok(999) // Can't parse date, treat as very old
-        }
-    } else {
-        // Fallback: check if this tech was recently detected by ACE
-        if let Ok(ace) = crate::get_ace_engine() {
-            if let Ok(techs) = ace.get_detected_tech() {
-                for tech in &techs {
-                    if tech.name.to_lowercase() == package_name.to_lowercase() {
-                        // Tech is actively detected in the user's projects — not stale
-                        return Ok(0);
-                    }
-                }
-            }
-        }
-        Ok(999) // No engagement ever
-    }
 }
 
 fn quality_weight(m: &MissedItem, dep_name: &str) -> f32 {
@@ -1549,117 +1320,6 @@ fn gap_is_substantive(gap: &KnowledgeGap) -> bool {
     })
 }
 
-fn missed_item_to_citation(m: &MissedItem, dep_name: &str) -> EvidenceCitation {
-    let freshness_days = chrono::NaiveDateTime::parse_from_str(&m.created_at, "%Y-%m-%d %H:%M:%S")
-        .map(|dt| {
-            let secs = chrono::Utc::now().timestamp() - dt.and_utc().timestamp();
-            (secs as f32 / 86_400.0).max(0.0)
-        })
-        .unwrap_or(0.0);
-    let category = classify_missed_item(&m.title, &m.source_type, dep_name);
-    EvidenceCitation {
-        source: m.source_type.clone(),
-        title: truncate_gap_title(&m.title),
-        url: m.url.clone(),
-        freshness_days,
-        relevance_note: truncate_gap_note(&format!("Unread {category}")),
-    }
-}
-
-fn build_gap_explanation(
-    dep: &str,
-    version: Option<&str>,
-    days_since: u32,
-    missed: &[MissedItem],
-) -> String {
-    let mut parts: Vec<String> = Vec::with_capacity(3);
-
-    // Categorize what was missed
-    let mut security = 0u32;
-    let mut breaking = 0u32;
-    let mut updates = 0u32;
-    let mut other = 0u32;
-    for m in missed {
-        match classify_missed_item(&m.title, &m.source_type, dep) {
-            "security advisory" => security += 1,
-            "breaking change" => breaking += 1,
-            "version update" => updates += 1,
-            _ => other += 1,
-        }
-    }
-
-    // Lead with the most critical category
-    if security > 0 {
-        parts.push(format!(
-            "{security} unread security {}",
-            if security == 1 {
-                "advisory"
-            } else {
-                "advisories"
-            }
-        ));
-    }
-    if breaking > 0 {
-        parts.push(format!(
-            "{breaking} breaking {}",
-            if breaking == 1 { "change" } else { "changes" }
-        ));
-    }
-    if updates > 0 {
-        parts.push(format!(
-            "{updates} version {}",
-            if updates == 1 { "update" } else { "updates" }
-        ));
-    }
-    if other > 0 && parts.is_empty() {
-        parts.push(format!(
-            "{other} unread {}",
-            if other == 1 { "signal" } else { "signals" }
-        ));
-    }
-
-    let categories = parts.join(", ");
-
-    // Version context
-    let ver = version.map(|v| format!(" v{v}")).unwrap_or_default();
-
-    // Engagement recency
-    let recency = if days_since >= 999 {
-        "never reviewed".to_string()
-    } else if days_since > 30 {
-        format!("last reviewed {days_since}d ago")
-    } else {
-        format!("{days_since}d since last review")
-    };
-
-    // Highlight the most notable missed item — by CONSEQUENCE, not list order.
-    // Security advisories and breaking changes outrank a version update: a CVE must
-    // never be buried under a routine release just because the release appears first
-    // in the list. A version update still outranks a raw first(), so a surfaced gap
-    // never falls back to a noisy alpha-crate item (the af79d241 anti-noise intent).
-    let highlight = missed
-        .iter()
-        .find(|m| {
-            let c = classify_missed_item(&m.title, &m.source_type, dep);
-            c == "security advisory" || c == "breaking change"
-        })
-        .or_else(|| {
-            missed
-                .iter()
-                .find(|m| classify_missed_item(&m.title, &m.source_type, dep) == "version update")
-        })
-        .or_else(|| missed.first());
-
-    let mut explanation = format!("{dep}{ver}: {categories} · {recency}");
-
-    if let Some(item) = highlight {
-        let short_title = crate::utils::truncate_display(&item.title, 80);
-        explanation.push_str(&format!(" — notably \"{short_title}\""));
-    }
-
-    explanation
-}
-
 fn build_gap_actions(missed: &[MissedItem], dep: &str) -> Vec<EvidenceAction> {
     let mut actions = Vec::with_capacity(3);
     let has_security = missed
@@ -1676,7 +1336,7 @@ fn build_gap_actions(missed: &[MissedItem], dep: &str) -> Vec<EvidenceAction> {
         actions.push(EvidenceAction {
             action_id: "review_security".to_string(),
             label: "Review advisories".to_string(),
-            description: "Check unread security advisories for this dependency.".to_string(),
+            description: "Check the security advisories for this dependency.".to_string(),
         });
     }
     if has_breaking {
@@ -1697,70 +1357,10 @@ fn build_gap_actions(missed: &[MissedItem], dep: &str) -> Vec<EvidenceAction> {
         actions.push(EvidenceAction {
             action_id: "investigate".to_string(),
             label: "Investigate".to_string(),
-            description: "Review missed signals for this dependency.".to_string(),
+            description: "Review the signals for this dependency.".to_string(),
         });
     }
     actions
-}
-
-impl KnowledgeGap {
-    /// Convert a legacy `KnowledgeGap` into the canonical `EvidenceItem`.
-    /// Used by `get_knowledge_gaps` (command boundary) and callable from
-    /// any future lens that wants gap-shaped evidence.
-    pub fn to_evidence_item(&self) -> EvidenceItem {
-        let title = truncate_gap_title(&format!("Knowledge gap: {}", self.dependency));
-
-        let explanation = build_gap_explanation(
-            &self.dependency,
-            self.version.as_deref(),
-            self.days_since_last_engagement,
-            &self.missed_items,
-        );
-
-        let evidence: Vec<EvidenceCitation> = self
-            .missed_items
-            .iter()
-            .take(5)
-            .map(|m| missed_item_to_citation(m, &self.dependency))
-            .collect();
-
-        EvidenceItem {
-            id: format!("kg_{}", self.dependency),
-            kind: EvidenceKind::Gap,
-            title,
-            explanation,
-            confidence: Confidence::heuristic(0.7),
-            urgency: gap_severity_to_urgency(&self.gap_severity),
-            reversibility: None,
-            evidence,
-            evidence_total: None,
-            affected_projects: vec![self.project_path.clone()],
-            affected_deps: vec![self.dependency.clone()],
-            suggested_actions: build_gap_actions(&self.missed_items, &self.dependency),
-            precedents: Vec::new(),
-            refutation_condition: None,
-            lens_hints: LensHints {
-                briefing: false,
-                preemption: false,
-                blind_spots: true,
-                evidence: true,
-                // Knowledge-decay gaps are not platform-target-scoped (Phase 2c).
-                other_build_target: false,
-                // Not an upgrade-plan step (Phase 1 dep plan).
-                upgrade_plan: false,
-                // Decay gaps track ENGAGEMENT drift, not signal availability —
-                // the zero-signal-coverage classification never applies here.
-                no_coverage: false,
-                // Host reachability is a property of an ADVISORY against an
-                // installed crate; a decay gap is about the user's reading,
-                // so neither 2026-09-07 hint applies here.
-                lockfile_only: false,
-                dormant_notice: false,
-            },
-            created_at: chrono::Utc::now().timestamp_millis(),
-            expires_at: None,
-        }
-    }
 }
 
 // ============================================================================
@@ -1769,11 +1369,22 @@ impl KnowledgeGap {
 
 /// Returns the canonical `EvidenceFeed` for the Knowledge Gaps view.
 /// Schema-validates every item; violators drop with a structured log.
+///
+/// MUST stay `async` + blocking pool (a source-scan test enforces it). A
+/// non-async Tauri command runs inline in the IPC handler, which WebView2
+/// calls on the UI thread: live 2026-10-07 this pass (6 s idle, 111 s under
+/// load) froze the whole app and queued every other IPC call behind it.
 #[tauri::command]
-pub fn get_knowledge_gaps() -> Result<EvidenceFeed> {
+pub async fn get_knowledge_gaps() -> Result<EvidenceFeed> {
     crate::settings::require_signal_feature("get_knowledge_gaps")?;
+    tauri::async_runtime::spawn_blocking(knowledge_gaps_feed)
+        .await
+        .map_err(|e| crate::error::FourDaError::Internal(format!("knowledge gaps task: {e}")))?
+}
+
+fn knowledge_gaps_feed() -> Result<EvidenceFeed> {
     let conn = crate::open_db_connection()?;
-    let gaps = detect_knowledge_gaps(&conn)?;
+    let gaps = cached_knowledge_gaps(&conn)?;
     let items: Vec<EvidenceItem> = gaps
         .iter()
         .filter(|g| !g.missed_items.is_empty())
@@ -1799,6 +1410,10 @@ pub fn get_knowledge_gaps() -> Result<EvidenceFeed> {
 // ============================================================================
 // Tests
 // ============================================================================
+
+#[cfg(test)]
+#[path = "knowledge_gaps_live_tests.rs"]
+mod live_tests;
 
 #[cfg(test)]
 mod tests {
@@ -1919,6 +1534,9 @@ mod tests {
             dependency: "tokio".to_string(),
             version: Some("1.36.0".to_string()),
             project_path: "/proj/a".to_string(),
+            projects: Vec::new(),
+            basis: GapBasis::Editorial,
+            latest_release: None,
             missed_items: vec![
                 MissedItem {
                     item_id: 1,
@@ -1956,6 +1574,9 @@ mod tests {
             dependency: format!("chatter-{i}"),
             version: None,
             project_path: "/proj/a".to_string(),
+            projects: Vec::new(),
+            basis: GapBasis::Editorial,
+            latest_release: None,
             missed_items: vec![MissedItem {
                 item_id: i as i64,
                 title: format!("Why we chose chatter-{i} for our side project"),
@@ -1971,6 +1592,9 @@ mod tests {
             dependency: "jsonwebtoken".to_string(),
             version: Some("9.3.1".to_string()),
             project_path: "d:/4da/relay".to_string(),
+            projects: vec!["d:/4da/relay".to_string()],
+            basis: GapBasis::Advisory,
+            latest_release: None,
             missed_items: vec![MissedItem {
                 item_id: 71038,
                 title: "[GHSA-h395-gr6q-cpjc] jsonwebtoken: Type Confusion leads to authorization bypass"
@@ -2073,57 +1697,9 @@ mod tests {
         );
     }
 
-    /// Live 2026-09-08: "@modelcontextprotocol/node v2.0.0: 1 version update
-    /// — notably npm: @modelcontextprotocol/node v2.0.0" against an
-    /// installed 2.0.0. A release every carrying project already runs is
-    /// not a missed update (AD-041); one project behind keeps it; an unknown
-    /// install drops nothing.
-    #[test]
-    fn releases_every_project_already_runs_are_not_missed_updates() {
-        let missed = |titles: &[(&str, &str)]| -> Vec<MissedItem> {
-            titles
-                .iter()
-                .enumerate()
-                .map(|(i, (title, source))| MissedItem {
-                    item_id: i as i64 + 1,
-                    title: (*title).to_string(),
-                    url: None,
-                    source_type: (*source).to_string(),
-                    created_at: "2026-09-08 00:00:00".to_string(),
-                })
-                .collect()
-        };
-        let rows = || {
-            missed(&[
-                ("npm: @modelcontextprotocol/node v2.0.0", "npm_registry"),
-                ("npm: @modelcontextprotocol/node v2.1.0", "npm_registry"),
-                ("Announcing @modelcontextprotocol/node 1.9.0", "rss"),
-                ("Why @modelcontextprotocol/node matters", "devto"),
-            ])
-        };
-        let dep = "@modelcontextprotocol/node";
-        let kept: Vec<String> = drop_already_installed_releases(rows(), dep, &["2.0.0".into()])
-            .into_iter()
-            .map(|m| m.title)
-            .collect();
-        assert_eq!(
-            kept,
-            vec![
-                "npm: @modelcontextprotocol/node v2.1.0".to_string(),
-                "Why @modelcontextprotocol/node matters".to_string(),
-            ],
-            "the installed 2.0.0 and the older 1.9.0 announcement are not missed updates"
-        );
-        let behind =
-            drop_already_installed_releases(rows(), dep, &["1.8.0".into(), "2.0.0".into()]);
-        assert_eq!(
-            behind.len(),
-            4,
-            "one project on 1.8.0 keeps every release new"
-        );
-        let unknown = drop_already_installed_releases(rows(), dep, &[]);
-        assert_eq!(unknown.len(), 4, "an unknown install drops nothing");
-    }
+    // AD-041 ("a release every carrying project already runs is not a missed
+    // update") is now enforced PER PROJECT by release grading — see
+    // `knowledge_gaps_truth_tests.rs` (`a_release_every_project_runs_is_no_gap`).
 
     #[test]
     fn gap_is_substantive_requires_actionable_consequence() {
@@ -2241,11 +1817,6 @@ mod tests {
             "should include version: {}",
             item.explanation
         );
-        assert!(
-            item.explanation.contains("30d"),
-            "should mention days since review: {}",
-            item.explanation
-        );
     }
 
     #[test]
@@ -2265,15 +1836,15 @@ mod tests {
     }
 
     #[test]
-    fn gap_explanation_never_engaged() {
+    fn gap_explanation_has_no_reading_habit_framing() {
+        // Audit 2026-10-07: a gap is about the projects, not the user's
+        // reading — "never reviewed" / "unread" framing is gone.
         let mut g = sample_gap();
         g.days_since_last_engagement = 999;
         let item = g.to_evidence_item();
-        assert!(
-            item.explanation.contains("never reviewed"),
-            "should say never reviewed: {}",
-            item.explanation
-        );
+        for banned in ["never reviewed", "last reviewed", "nread"] {
+            assert!(!item.explanation.contains(banned), "{}", item.explanation);
+        }
     }
 
     #[test]
@@ -2311,11 +1882,11 @@ mod tests {
     fn gap_citation_relevance_note_is_descriptive() {
         let g = sample_gap();
         let item = g.to_evidence_item();
-        assert!(
-            item.evidence[0].relevance_note.contains("Unread"),
-            "citation note should categorize: {}",
-            item.evidence[0].relevance_note
+        assert_eq!(
+            item.evidence[0].relevance_note, "Version update",
+            "citation note should categorize"
         );
+        assert_eq!(item.evidence[1].relevance_note, "Security advisory");
         assert!(
             !item.evidence[0].relevance_note.contains("missed item #"),
             "citation note should not be generic: {}",
@@ -2687,6 +2258,9 @@ mod tests {
             dependency: "hono".to_string(),
             version: Some("4.13.2".to_string()),
             project_path: "d:/4da/mcp-4da-server".to_string(),
+            projects: vec!["d:/4da/mcp-4da-server".to_string()],
+            basis: GapBasis::Advisory,
+            latest_release: None,
             missed_items: keyword_misses_from(&candidates, "hono", &no_live),
             gap_severity: GapSeverity::Critical,
             days_since_last_engagement: 13,

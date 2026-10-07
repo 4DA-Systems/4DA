@@ -153,11 +153,21 @@ pub struct Confidence {
 
 impl Confidence {
     // Constructors exist only for provenances a producer actually emits.
-    // `Checklist` and `Calibrated` stay in `ConfidenceProvenance` (they are
-    // part of the exported schema and `validate_item` enforces the Calibrated
-    // sample-size rule), but no producer builds them, so their builders were
-    // deleted 2026-09-24 (Phase 9 closed without a caller). Add a builder back
-    // in the same change as its first producer.
+    // `Calibrated` stays in `ConfidenceProvenance` (it is part of the exported
+    // schema and `validate_item` enforces its sample-size rule) but no
+    // producer builds it, so its builder was deleted 2026-09-24. Add a builder
+    // back in the same change as its first producer — as `checklist` was
+    // (2026-10-07, knowledge gaps' lockfile version comparison).
+
+    /// Constructor for deterministic rule-based confidence (a lockfile
+    /// version compared against an announced release).
+    pub fn checklist(value: f32) -> Self {
+        Self {
+            value,
+            provenance: ConfidenceProvenance::Checklist,
+            sample_size: None,
+        }
+    }
 
     /// Constructor for weighted-formula confidence.
     pub fn heuristic(value: f32) -> Self {

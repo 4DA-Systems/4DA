@@ -224,7 +224,7 @@ pub async fn generate_weekly_digest() -> Result<WeeklyDigest> {
     };
 
     // 4. Knowledge gaps (reuse existing detection)
-    let knowledge_gaps = match crate::knowledge_decay::detect_knowledge_gaps(&conn) {
+    let knowledge_gaps = match crate::knowledge_decay::cached_knowledge_gaps(&conn) {
         Ok(gaps) => gaps
             .into_iter()
             .take(5)

@@ -782,7 +782,7 @@ async fn api_gaps(
     check_auth(&headers, &state)?;
 
     match crate::open_db_connection() {
-        Ok(conn) => match crate::knowledge_decay::detect_knowledge_gaps(&conn) {
+        Ok(conn) => match crate::knowledge_decay::cached_knowledge_gaps(&conn) {
             Ok(gaps) => {
                 let entries: Vec<serde_json::Value> = gaps
                     .iter()

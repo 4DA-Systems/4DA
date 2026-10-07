@@ -39,6 +39,8 @@ use semver::Version;
 use crate::db::Database;
 
 use super::dependencies;
+/// Re-exported for knowledge gaps, which grades releases outside `scoring`.
+pub(crate) use super::dependencies::{project_label, registry_manifest_language};
 use super::release_version::lenient_semver;
 
 /// How far one project's pinned copy is behind the announced release.
@@ -467,6 +469,10 @@ fn own_project_paths(own: Vec<(String, String, bool, bool)>) -> Vec<String> {
     paths
 }
 
+/// One raw `user_dependencies` pin: (project_path, version, ecosystem,
+/// is_direct, is_dev).
+pub(crate) type PinRow = (String, String, String, bool, bool);
+
 /// (project_path, version, is_direct, is_dev) for every included project that
 /// carries `subject` in `lang`.
 pub(crate) fn load_pins(
@@ -482,7 +488,7 @@ pub(crate) fn load_pins(
     ) else {
         return Vec::new();
     };
-    let rows: Vec<(String, String, String, bool, bool)> = stmt
+    let rows: Vec<PinRow> = stmt
         .query_map(rusqlite::params![subject], |r| {
             Ok((
                 r.get(0)?,
@@ -495,18 +501,31 @@ pub(crate) fn load_pins(
         .map(|rs| rs.flatten().collect())
         .unwrap_or_default();
     drop(stmt);
-    // A release asks "what is the user working on?" — the question a watch
-    // list asks — so a dormant project is not a pin (live 2026-10-03: a
-    // scratch folder untouched since April graded `base64 0.23.1` a
-    // "Breaking upgrade" for itself). Advisories are a different question and
-    // still name dormant projects (AD-043); this filter is releases only.
     let dormant = crate::ace::dormancy::dormant_project_paths(&conn);
     drop(conn);
     let user_excluded = crate::project_inclusion::user_excluded_paths();
+    filter_pin_rows(rows, lang, &dormant, &user_excluded)
+}
+
+/// The pin filters every release consumer shares (the scorer, the brief,
+/// knowledge gaps' once-per-pass pin book): the registry's own manifest
+/// language, included projects only, and never a dormant one.
+///
+/// A release asks "what is the user working on?" — the question a watch
+/// list asks — so a dormant project is not a pin (live 2026-10-03: a
+/// scratch folder untouched since April graded `base64 0.23.1` a
+/// "Breaking upgrade" for itself). Advisories are a different question and
+/// still name dormant projects (AD-043); this filter is releases only.
+pub(crate) fn filter_pin_rows(
+    rows: Vec<PinRow>,
+    lang: &str,
+    dormant: &std::collections::HashSet<String>,
+    user_excluded: &[String],
+) -> Vec<(String, String, bool, bool)> {
     rows.into_iter()
         .filter(|(path, _, eco, _, _)| {
             dependencies::ecosystem_congruent(lang, eco)
-                && !crate::project_inclusion::is_excluded_from_intelligence(path, &user_excluded)
+                && !crate::project_inclusion::is_excluded_from_intelligence(path, user_excluded)
                 && !dormant
                     .contains(crate::project_inclusion::comparison_form(path).trim_end_matches('/'))
         })
