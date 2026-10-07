@@ -118,7 +118,10 @@ export function rowsCost(rows: number[][], ws: number[], rect: Rect, shape: Shap
  *  and the last row / last tile take the remainder so no gap is left. */
 export function layoutRows(rows: number[][], ws: number[], rect: Rect): Rect[] {
   const out: Rect[] = new Array(ws.length);
-  const total = ws.reduce((a, b) => a + b, 0);
+  // Heights share out the weight of the rows actually laid out — never more
+  // than rect.h, even if a caller's rows repeat an index (audit 2026-10-07:
+  // duplicated rows overflowed the map onto the unthemed bar).
+  const total = rows.reduce((acc, r) => acc + r.reduce((a, i) => a + ws[i]!, 0), 0);
   let y = rect.y;
   rows.forEach((r, ri) => {
     const sum = r.reduce((a, i) => a + ws[i]!, 0);
@@ -208,6 +211,25 @@ export function matchByMembers(memberIds: number[][], prev: Record<string, numbe
 }
 
 /**
+ * One distinct key per theme: its remembered match, else its own id. An
+ * unmatched theme whose id is already some other theme's matched key gets a
+ * suffixed key — sharing one key wrote that key twice into the remembered
+ * rows, and the next build laid that theme out twice (live 2026-10-07:
+ * 23 slots for 19 themes, the last row pushed onto the unthemed bar).
+ */
+function uniqueKeys(themes: LayoutTheme[], match: Map<number, string>): string[] {
+  const used = new Set(match.values());
+  return themes.map((t, i) => {
+    const matched = match.get(i);
+    if (matched !== undefined) return matched;
+    let key = t.id;
+    for (let n = 2; used.has(key); n++) key = `${t.id}~${n}`;
+    used.add(key);
+    return key;
+  });
+}
+
+/**
  * Lay out themes so the map stays recognisable between visits. A plain
  * re-layout moved 81% of tiles by more than a tenth of the screen when one
  * theme disappeared (audit simulation on the live corpus, 2026-10-06);
@@ -226,14 +248,24 @@ export function stableThemeLayout(
   const ws = themes.map((t) => Math.max(0, t.weight));
   const optimal = optimalRows(ws, rect);
   const match = prev ? matchByMembers(themes.map((t) => t.members), prev.members) : new Map<number, string>();
-  const keyOf = (i: number) => match.get(i) ?? themes[i]!.id;
+  const keys = uniqueKeys(themes, match);
+  const keyOf = (i: number) => keys[i]!;
 
   let rows = optimal.rows;
   if (prev && match.size > 0) {
     const indexOfKey = new Map<string, number>();
     themes.forEach((_, i) => indexOfKey.set(keyOf(i), i));
-    const candidate: number[][] = prev.rows.map((r) => r.map((k) => indexOfKey.get(k)).filter((i): i is number => i !== undefined));
-    const placed = new Set(candidate.flat());
+    // Each theme lands in exactly one slot, even if a remembered layout
+    // (written before keys were unique) lists a key twice.
+    const placed = new Set<number>();
+    const candidate: number[][] = prev.rows.map((r) =>
+      r.flatMap((k) => {
+        const i = indexOfKey.get(k);
+        if (i === undefined || placed.has(i)) return [];
+        placed.add(i);
+        return [i];
+      }),
+    );
     themes.forEach((_, i) => {
       if (placed.has(i)) return;
       // Join the row of the nearest already-placed theme before it in

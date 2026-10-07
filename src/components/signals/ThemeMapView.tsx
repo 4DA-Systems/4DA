@@ -144,7 +144,8 @@ export default function ThemeMapView() {
               </button>
             )}
           </div>
-          <div ref={treemapRef} className="relative" style={{ flex: '1 1 0%', minHeight: 0, margin: -TILE_GAP / 2 }}>
+          {/* overflow-hidden: no tile can ever paint over the unthemed bar below. */}
+          <div ref={treemapRef} className="relative overflow-hidden" style={{ flex: '1 1 0%', minHeight: 0, margin: -TILE_GAP / 2 }}>
             {map.themes.map((theme, i) =>
               rects[i] ? (
                 <ThemeTile
