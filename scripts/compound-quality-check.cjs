@@ -257,11 +257,13 @@ function checkTestCoverage(changedFiles, fileChanges) {
     // Derive the "sibling path" that would exist if the test is in __tests__/.
     // e.g. src/components/__tests__/Foo → src/components/Foo
     const siblingPath = baseName.replace(/\/__tests__\//, '/');
+    // A qualified test (Foo.loop.test.tsx, Foo.a11y.test.tsx) covers Foo.tsx.
+    const unqualified = baseName.replace(/(\/[^/.]+)\.[^/]+$/, '$1');
 
     // If the corresponding source was deleted or modified, the test deletion is intentional.
     const sourceChanged = deletedOrModifiedSources.some(src => {
       const srcBase = src.replace(/\.(ts|tsx)$/, '');
-      return srcBase === baseName || srcBase === siblingPath;
+      return srcBase === baseName || srcBase === siblingPath || srcBase === unqualified;
     });
     if (sourceChanged) return false;
 
