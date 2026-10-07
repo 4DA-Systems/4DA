@@ -17,7 +17,6 @@ vi.mock('./dismissal-utils', () => ({
   removeDismissal: vi.fn(),
 }));
 vi.mock('../SignalUpgradeCTA', () => ({ SignalUpgradeCTA: () => <div /> }));
-vi.mock('./ScoreBar', () => ({ default: () => <div /> }));
 vi.mock('./StackCoverageMap', () => ({ TierSection: () => null, EmergingSignals: () => null }));
 vi.mock('./CollapsedSections', () => ({
   CoveredSection: () => null,
@@ -33,9 +32,10 @@ const assessment = {
   from_cache: false,
 };
 
+let cachedAssessment: unknown = null;
 const cmdMock = vi.fn((name: string) => {
   if (name === 'assess_blind_spots_with_ai') return Promise.resolve(assessment);
-  if (name === 'get_source_health') return Promise.resolve({ total_active: 1, total_failing: 0, total_disabled: 0 });
+  if (name === 'get_cached_blind_spot_assessment') return Promise.resolve(cachedAssessment);
   return Promise.resolve(null);
 });
 vi.mock('../../lib/commands', () => ({ cmd: (...a: unknown[]) => cmdMock(...(a as [string])) }));
@@ -71,6 +71,7 @@ const assessCalls = () => cmdMock.mock.calls.filter(c => c[0] === 'assess_blind_
 
 beforeEach(() => {
   cmdMock.mockClear();
+  cachedAssessment = null;
   mockDepRows = [depRow('react (npm)')];
 });
 
@@ -102,5 +103,35 @@ describe('BlindSpotsView — auto-assess on dep-set change', () => {
     render(<BlindSpotsView />);
     await new Promise(r => setTimeout(r, 50));
     expect(assessCalls()).toHaveLength(0);
+  });
+
+  // Audit 2026-10-07: the last-assessed set lived in a ref that was empty on
+  // every mount, so every tab open re-ran the model (19 Sonnet calls). The
+  // persisted verdict is read first; only a stale/missing one auto-assesses.
+  it('does NOT re-run on mount when the persisted verdict is current', async () => {
+    cachedAssessment = { ...assessment, from_cache: true, stale: false };
+    mockState = baseState({ auto_assess_blind_spots: true, llm: { has_api_key: true } });
+    render(<BlindSpotsView />);
+    await waitFor(() => expect(cmdMock).toHaveBeenCalledWith('get_cached_blind_spot_assessment'));
+    await new Promise(r => setTimeout(r, 50));
+    expect(assessCalls()).toHaveLength(0);
+  });
+
+  it('re-assesses (without force) when the persisted verdict is stale', async () => {
+    cachedAssessment = { ...assessment, from_cache: true, stale: true };
+    mockState = baseState({ auto_assess_blind_spots: true, llm: { has_api_key: true } });
+    render(<BlindSpotsView />);
+    await waitFor(() => expect(assessCalls()).toHaveLength(1));
+    expect(assessCalls()[0]).toEqual(['assess_blind_spots_with_ai', { force: false }]);
+  });
+
+  it('auto-runs at most once per mount even as the report refreshes', async () => {
+    mockState = baseState({ auto_assess_blind_spots: true, llm: { has_api_key: true } });
+    const { rerender } = render(<BlindSpotsView />);
+    await waitFor(() => expect(assessCalls()).toHaveLength(1));
+    mockState = { ...mockState, blindSpotReport: { items: [], score: 40, total_tracked: 1, weak_match_count: 0, data_freshness: null } };
+    rerender(<BlindSpotsView />);
+    await new Promise(r => setTimeout(r, 50));
+    expect(assessCalls()).toHaveLength(1);
   });
 });

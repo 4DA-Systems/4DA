@@ -36,7 +36,7 @@ describe('IPC timeout budget', () => {
   it('an AI blind-spot triage that answers after the 30 s default still resolves', async () => {
     backendAnswersAfter(35_085, { model: 'test-model', assessments: [] });
     const settled = vi.fn();
-    const call = cmd('assess_blind_spots_with_ai').then(
+    const call = cmd('assess_blind_spots_with_ai', { force: true }).then(
       (result) => {
         settled('ok');
         return result;

@@ -14,7 +14,6 @@ import { useBlindSpotsData } from '../../hooks/use-blind-spots-data';
 
 import { BlindSpotsPaywall } from './BlindSpotsPaywall';
 import { loadPersistedDismissals, persistDismissal, removeDismissal } from './dismissal-utils';
-import ScoreBar from './ScoreBar';
 import { TierSection, EmergingSignals } from './StackCoverageMap';
 import { CoveredSection, NoCoverageSection, OtherBuildTargetsSection, ProbablyFineSection } from './CollapsedSections';
 import type { DepAssessment } from '../../../src-tauri/bindings/bindings/DepAssessment';
@@ -47,15 +46,6 @@ const BlindSpotsView = memo(function BlindSpotsView() {
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => { void loadBlindSpots(); }, [loadBlindSpots]);
-
-  // Fetch source health diagnostics — shows WHY blind spots exist
-  // (adapter failing, circuit open, stale, etc.)
-  const [sourceHealth, setSourceHealth] = useState<{
-    total_active: number; total_failing: number; total_disabled: number;
-  } | null>(null);
-  useEffect(() => {
-    void cmd('get_source_health').then(setSourceHealth).catch(() => {});
-  }, []);
 
   const handleRetry = useCallback(() => { void loadBlindSpots(); }, [loadBlindSpots]);
 
@@ -108,9 +98,9 @@ const BlindSpotsView = memo(function BlindSpotsView() {
   const runAssess = useCallback((manual: boolean) => {
     setAiLoading(true);
     setAiError(null);
-    cmd('assess_blind_spots_with_ai')
+    cmd('assess_blind_spots_with_ai', { force: manual })
       .then((res) => {
-        applyAssessment(res as BlindSpotAssessment);
+        applyAssessment(res);
         if (manual) {
           recordTrustEvent({ eventType: 'acted_on', sourceType: 'gap', notes: 'blind_spot_ai_assess' });
         }
@@ -123,16 +113,25 @@ const BlindSpotsView = memo(function BlindSpotsView() {
 
   const handleAssess = useCallback(() => runAssess(true), [runAssess]);
 
-  // Persist the triage across view re-mounts / webview reloads: the backend
-  // caches the last assessment in-process, so on mount we re-hydrate it. This
-  // is what makes the result survive the dev-mode HMR reload loop (which drops
-  // the in-flight assess callback) — and keeps it shown when navigating away
-  // and back in production. Cheap: no LLM call, just a cache read.
+  // The backend persists the last triage in kv_store (survives restarts),
+  // keyed on the dependencies with security/breaking evidence. Read it FIRST,
+  // once the report is in: it is shown as-is, and an automatic re-assessment
+  // is allowed only when that evidence moved since (`stale`) or none exists.
+  // Audit 2026-10-07: an in-memory cache + a per-mount ref re-ran the model on
+  // every tab open. A failed read never auto-spends.
+  const [cacheState, setCacheState] = useState<'pending' | 'fresh' | 'needs_assess'>('pending');
   useEffect(() => {
+    if (!report || paywalled) return;
+    let alive = true;
     void cmd('get_cached_blind_spot_assessment')
-      .then((res) => applyAssessment(res as BlindSpotAssessment | null))
-      .catch(() => {});
-  }, [applyAssessment]);
+      .then((cached) => {
+        if (!alive) return;
+        applyAssessment(cached);
+        setCacheState(cached && !cached.stale ? 'fresh' : 'needs_assess');
+      })
+      .catch(() => { if (alive) setCacheState('fresh'); });
+    return () => { alive = false; };
+  }, [report, paywalled, applyAssessment]);
 
   const { depRows, unmatchedSignals, recommendations } = useBlindSpotsData(report, dismissed);
 
@@ -149,26 +148,19 @@ const BlindSpotsView = memo(function BlindSpotsView() {
     }
   }, [depRows]);
 
-  // Auto-assess on dep-set change: when the toggle is on and a cloud LLM key is
-  // present, run the triage once per distinct surfaced dep-set. The backend
-  // caches by that exact set, so an unchanged set is a free instant cache read;
-  // a model call happens only when a dependency newly surfaces or drops off.
-  // We track the last auto-assessed signature in a ref so re-renders and the
-  // hourly background scan (which doesn't change the set) don't re-fire it.
-  const autoAssessedSigRef = useRef<string | null>(null);
+  // Auto-assess: toggle on + cloud key + surfaced gaps + the persisted verdict
+  // is missing or stale. At most once per mount; the backend re-checks the
+  // stable key too, so even this call is free when nothing moved.
+  const autoRanRef = useRef(false);
   useEffect(() => {
+    if (cacheState !== 'needs_assess' || autoRanRef.current) return;
     if (autoAssess === false || !hasLlmKey || paywalled) return;
-    const gapNames = depRows
-      .filter((d) => d.gap?.lens_hints.other_build_target !== true)
-      .filter((d) => d.status === 'blind_spot' || d.status === 'falling_behind' || d.status === 'no_coverage')
-      .map((d) => d.name)
-      .sort();
-    if (gapNames.length === 0) return;
-    const sig = gapNames.join('|');
-    if (autoAssessedSigRef.current === sig) return;
-    autoAssessedSigRef.current = sig;
+    const hasGaps = depRows.some((d) => d.gap?.lens_hints.other_build_target !== true
+      && (d.status === 'blind_spot' || d.status === 'falling_behind' || d.status === 'no_coverage'));
+    if (!hasGaps) return;
+    autoRanRef.current = true;
     runAssess(false);
-  }, [autoAssess, hasLlmKey, paywalled, depRows, runAssess]);
+  }, [cacheState, autoAssess, hasLlmKey, paywalled, depRows, runAssess]);
 
   if (loading) {
     return (
@@ -218,16 +210,12 @@ const BlindSpotsView = memo(function BlindSpotsView() {
       </div>
     );
   }
-  if (!report) {
-    // Intelligence Doctrine Rule 6: silent until data arrives
-    if (isColdStart) return null;
-    return (
-      <div className="flex items-center justify-center py-20 text-text-muted text-sm">
-        {t('blindspots.empty')}
-      </div>
-    );
-  }
+  // Intelligence Doctrine Rule 6: silent until data arrives — no report is not
+  // "no gaps", it is nothing to say yet.
+  if (!report) return null;
 
+  // Internal only (doctrine rule 3: a 0-100 "gap pressure" informs no action):
+  // it gates the cold-start and empty-state branches, never rendered.
   const score = report.score ?? 0;
   const totalTracked = report.total_tracked ?? depRows.length;
   // Phase 2c: deps whose coverage gap applies only to a build target the user
@@ -248,17 +236,22 @@ const BlindSpotsView = memo(function BlindSpotsView() {
   const hasContent = hasProblems || unmatchedSignals.length > 0;
   const dataFreshness = report.data_freshness;
 
-  // Phase B: when the AI triage has run, split the host-relevant gap deps into
-  // "worth reviewing" vs "probably fine" by the model's verdict. A dep that
-  // wasn't assessed defaults to worth-reviewing — we never hide what wasn't
-  // judged. Recommendations are keyed by display name for the rows to show.
+  // Phase B: when the AI triage has run, split the JUDGED gap deps into
+  // "worth reviewing" vs "probably fine" by the model's verdict. A dep the
+  // (persisted) verdict doesn't cover is never hidden and never re-labelled:
+  // an unjudged Needs-attention dep joins "worth reviewing"; unjudged drifting
+  // / no-coverage deps keep their own sections — a routine release that
+  // entered the window after the last triage is not "Needs attention".
   const aiMap = ai?.map ?? null;
   const aiActive = aiMap !== null;
-  // Zero-coverage deps stay in the AI triage pool (the backend's rubric covers
-  // them); in the non-AI view they render in their own NoCoverageSection.
+  const judged = (d: typeof depRows[number]) => aiMap?.has(d.name) === true;
   const gapDeps = [...stackDeps, ...ecosystemDeps, ...noCoverageDeps];
-  const worthReviewing = aiActive ? gapDeps.filter(d => aiMap.get(d.name)?.worth_reviewing !== false) : [];
-  const probablyFine = aiActive ? gapDeps.filter(d => aiMap.get(d.name)?.worth_reviewing === false) : [];
+  const worthReviewing = aiActive
+    ? [...gapDeps.filter(d => judged(d) && aiMap.get(d.name)?.worth_reviewing !== false), ...stackDeps.filter(d => !judged(d))]
+    : [];
+  const probablyFine = aiActive ? gapDeps.filter(d => judged(d) && aiMap.get(d.name)?.worth_reviewing === false) : [];
+  const ecosystemRest = ecosystemDeps.filter(d => !judged(d));
+  const noCoverageRest = noCoverageDeps.filter(d => !judged(d));
   const aiRecs = aiActive
     ? new Map(Array.from(aiMap.entries()).map(([k, v]) => [k, v.recommendation] as const))
     : undefined;
@@ -269,7 +262,6 @@ const BlindSpotsView = memo(function BlindSpotsView() {
         <h2 className="text-xl font-semibold text-text-primary tracking-tight">{t('blindspots.title')}</h2>
         <p className="text-sm text-text-muted mt-1">{t('blindspots.subtitle')}</p>
       </header>
-      <ScoreBar score={score} />
       {totalTracked > 0 && (
         <div className="flex items-center gap-4 px-4 py-2.5 rounded-lg bg-bg-secondary border border-border -mt-1">
           {hasContent && (
@@ -330,13 +322,6 @@ const BlindSpotsView = memo(function BlindSpotsView() {
           )}
         </div>
       )}
-      {sourceHealth && sourceHealth.total_failing > 0 && (
-        <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-orange-500/10 border border-orange-500/20 text-xs text-orange-400">
-          <span className="w-1.5 h-1.5 rounded-full bg-orange-400 shrink-0" />
-          {t('blindspots.sourceHealth.failing', { count: sourceHealth.total_failing })}
-          {sourceHealth.total_disabled > 0 && <span className="text-text-muted ml-1">{t('blindspots.sourceHealth.stale', { count: sourceHealth.total_disabled })}</span>}
-        </div>
-      )}
       {dataFreshness?.is_stale && (
         <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300">
           <span className="w-1.5 h-1.5 rounded-full bg-amber-300 shrink-0" />
@@ -358,11 +343,9 @@ const BlindSpotsView = memo(function BlindSpotsView() {
         </div>
       )}
       {!hasContent ? (
-        score < 0 ? (
-          <div className="bg-bg-secondary rounded-lg border border-border px-5 py-8 text-center">
-            <p className="text-sm text-text-muted">{t('blindspots.scoreContext.building')}</p>
-          </div>
-        ) : score > 0 && score <= 10 ? (
+        /* Doctrine rule 6: a cold-start (-1 sentinel) or day-one report renders
+           NOTHING here — never a "building / check back soon" panel. */
+        score < 0 || isColdStart ? null : score > 0 && score <= 10 ? (
           /* Genuinely excellent: the system actively evaluated and found very few issues */
           <div className="bg-bg-secondary rounded-lg border border-emerald-500/20 px-5 py-6">
             <div className="flex items-start gap-4">
@@ -399,9 +382,8 @@ const BlindSpotsView = memo(function BlindSpotsView() {
       ) : (
         <>
           {aiActive ? (
-            /* Phase B: AI triage active — one "worth reviewing" group + a
-               collapsed "probably fine" bucket, replacing the stack/ecosystem
-               split. Each row carries its one-line AI recommendation. */
+            /* Phase B: AI triage active — "worth reviewing" + a collapsed
+               "probably fine" bucket, each row with its one-line recommendation. */
             <>
               {worthReviewing.length > 0 && (
                 <TierSection
@@ -425,39 +407,35 @@ const BlindSpotsView = memo(function BlindSpotsView() {
                 aiRecommendations={aiRecs}
               />
             </>
-          ) : (
-            <>
-              {stackDeps.length > 0 && (
-                <TierSection
-                  dotColor="#EF4444"
-                  borderColor="rgba(239, 68, 68, 0.2)"
-                  title={t('blindspots.tier.stack')}
-                  subtitle={t('blindspots.tier.stackSubtitle', { count: stackDeps.length })}
-                  badgeText={t('blindspots.tier.needsAttention')}
-                  badgeColor="#EF4444"
-                  depRows={stackDeps}
-                  onDismissSignal={handleDismiss}
-                  onAddWatch={handleAddWatch}
-                  emptyText={t('blindspots.tier.stackEmpty')}
-                />
-              )}
-              {ecosystemDeps.length > 0 && (
-                <TierSection
-                  dotColor="#F59E0B"
-                  borderColor="rgba(245, 158, 11, 0.15)"
-                  title={t('blindspots.tier.ecosystem')}
-                  subtitle={t('blindspots.tier.ecosystemSubtitle', { count: ecosystemDeps.length })}
-                  badgeText={t('blindspots.tier.drifting')}
-                  badgeColor="#F59E0B"
-                  depRows={ecosystemDeps}
-                  onDismissSignal={handleDismiss}
-                  onAddWatch={handleAddWatch}
-                  emptyText={t('blindspots.tier.ecosystemEmpty')}
-                />
-              )}
-              <NoCoverageSection depRows={noCoverageDeps} onDismissSignal={handleDismiss} onAddWatch={handleAddWatch} />
-            </>
+          ) : stackDeps.length > 0 ? (
+            <TierSection
+              dotColor="#EF4444"
+              borderColor="rgba(239, 68, 68, 0.2)"
+              title={t('blindspots.tier.stack')}
+              subtitle={t('blindspots.tier.stackSubtitle', { count: stackDeps.length })}
+              badgeText={t('blindspots.tier.needsAttention')}
+              badgeColor="#EF4444"
+              depRows={stackDeps}
+              onDismissSignal={handleDismiss}
+              onAddWatch={handleAddWatch}
+              emptyText={t('blindspots.tier.stackEmpty')}
+            />
+          ) : null}
+          {ecosystemRest.length > 0 && (
+            <TierSection
+              dotColor="#F59E0B"
+              borderColor="rgba(245, 158, 11, 0.15)"
+              title={t('blindspots.tier.ecosystem')}
+              subtitle={t('blindspots.tier.ecosystemSubtitle', { count: ecosystemRest.length })}
+              badgeText={t('blindspots.tier.drifting')}
+              badgeColor="#F59E0B"
+              depRows={ecosystemRest}
+              onDismissSignal={handleDismiss}
+              onAddWatch={handleAddWatch}
+              emptyText={t('blindspots.tier.ecosystemEmpty')}
+            />
           )}
+          <NoCoverageSection depRows={noCoverageRest} onDismissSignal={handleDismiss} onAddWatch={handleAddWatch} />
           <EmergingSignals items={unmatchedSignals} onDismiss={handleDismiss} />
           {recommendations.length > 0 && (
             <div className="space-y-1.5">

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { describe, it, expect } from 'vitest';
 import {
-  getScoreTier, extractItemId, depFromItem, signalMatchesDep, sourceTypeLabel,
+  extractItemId, depFromItem, signalMatchesDep, sourceTypeLabel,
   URGENCY_ORDER,
 } from '../types';
 import type { EvidenceItem } from '../../../../src-tauri/bindings/bindings/EvidenceItem';
@@ -27,34 +27,6 @@ function makeItem(overrides: Partial<EvidenceItem>): EvidenceItem {
     ...overrides,
   } as EvidenceItem;
 }
-
-describe('getScoreTier', () => {
-  it('returns emerald for excellent coverage (0-10)', () => {
-    expect(getScoreTier(0).color).toContain('emerald');
-    expect(getScoreTier(5).color).toContain('emerald');
-    expect(getScoreTier(10).color).toContain('emerald');
-  });
-
-  it('returns green for good coverage (11-25)', () => {
-    expect(getScoreTier(11).color).toContain('green');
-    expect(getScoreTier(25).color).toContain('green');
-  });
-
-  it('returns yellow for moderate gaps (26-50)', () => {
-    const tier = getScoreTier(30);
-    expect(tier.color).toContain('yellow');
-  });
-
-  it('returns orange for significant gaps (51-75)', () => {
-    const tier = getScoreTier(60);
-    expect(tier.color).toContain('orange');
-  });
-
-  it('returns red for critical blind spots (76-100)', () => {
-    const tier = getScoreTier(90);
-    expect(tier.color).toContain('red');
-  });
-});
 
 describe('extractItemId', () => {
   it('extracts numeric ID from bs_missed_ prefix', () => {
