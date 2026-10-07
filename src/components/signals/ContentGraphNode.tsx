@@ -140,7 +140,12 @@ const ContentGraphNode = memo(function ContentGraphNode({ id, data, selected }: 
 
       {/* Zoom-invariant label. At far zoom content-graph.css shows only the
           labels that carry action — stack and security — beside the theme
-          headers; LabelCollisionLayer places and suppresses the rest. */}
+          headers; LabelCollisionLayer places and suppresses the rest.
+          Shrink-to-fit (max-width, not width): the painted box is the text
+          box the resolver keeps on-canvas. A fixed 150px box hung up to 75px
+          past the text, so an edge label the resolver had flipped fully on
+          canvas still measured off it (live 2026-10-07: "uuid v1.27.0" box
+          left -14 vs canvas 24 while its text started at 75). */}
       <span
         className="cg-node-label"
         data-cg-label-id={`node:${id}`}
@@ -148,7 +153,7 @@ const ContentGraphNode = memo(function ContentGraphNode({ id, data, selected }: 
         data-security={isSecurity ? 'true' : 'false'}
         data-hovered={hovered ? 'true' : 'false'}
         style={{
-          width: zoomInvariant(NODE_LABEL_MAX_W),
+          maxWidth: zoomInvariant(NODE_LABEL_MAX_W),
           color: hovered || isStack || isSecurity ? 'var(--color-text-primary)' : 'var(--color-text-secondary)',
           fontSize: zoomInvariant(NODE_LABEL_FONT_PX),
           fontFamily: 'Inter, sans-serif',

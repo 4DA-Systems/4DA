@@ -14,6 +14,7 @@ import {
   type LabelOffset,
   type LabelPlacement,
 } from './content-graph-label-collision';
+import { fitNodeLabelCandidates } from './content-graph-label-fit';
 
 export {
   DEFAULT_OFFSET,
@@ -286,7 +287,8 @@ export function buildLabelBoxes(input: LabelLayoutInput): LabelBox[] {
     const box = { x: n.x + size / 2 - w / 2, y: n.y + size + NODE_LABEL_GAP, w, h };
     // Below (the default), above, then beside the mark — the renderer maps
     // each key to a placement (content-graph.css, [data-cg-place]). At the
-    // canvas edge only the placements that stay on-canvas are offered.
+    // canvas edge only the placements that stay on-canvas are offered —
+    // slid along their side if need be, none when the mark is off-canvas.
     const candidates: LabelOffset[] = [
       { dx: 0, dy: 0, key: 'below' },
       { dx: 0, dy: -(size + 2 * NODE_LABEL_GAP + h), key: 'above' },
@@ -298,7 +300,7 @@ export function buildLabelBoxes(input: LabelLayoutInput): LabelBox[] {
       ...box,
       priority: (n.stack ? PRIORITY_STACK : n.security ? PRIORITY_SECURITY : 0) + n.relevance * 100,
       weight: n.stack || n.security ? WEIGHT_STACK : 1,
-      candidates: inBoundsCandidates(box, candidates, input.bounds),
+      candidates: fitNodeLabelCandidates(box, { x: n.x, y: n.y, w: size, h: size }, candidates, input.bounds, s),
     });
   }
   return boxes;

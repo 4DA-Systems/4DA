@@ -74,7 +74,9 @@
   position: absolute;
   top: calc(100% + 3px);
   left: 50%;
-  transform: translateX(-50%);
+  /* --cg-dx / --cg-dy: the resolver's slide along the chosen side, flow units
+     (= this node's CSS px), keeping an edge label on the canvas. */
+  transform: translate(calc(-50% + var(--cg-dx, 0px)), var(--cg-dy, 0px));
   text-align: center;
 }
 
@@ -86,7 +88,7 @@
 .cg-node-label[data-cg-place='right'] {
   top: 50%;
   left: calc(100% + 3px);
-  transform: translateY(-50%);
+  transform: translate(var(--cg-dx, 0px), calc(-50% + var(--cg-dy, 0px)));
   text-align: left;
 }
 
@@ -94,7 +96,7 @@
   top: 50%;
   left: auto;
   right: calc(100% + 3px);
-  transform: translateY(-50%);
+  transform: translate(var(--cg-dx, 0px), calc(-50% + var(--cg-dy, 0px)));
   text-align: right;
 }
 
