@@ -1292,6 +1292,8 @@ interface NlqQueryItem {
   source_type: string;
   timestamp: string | null;
   match_reason: string;
+  /** Title contains the query as a whole word/phrase; pinned first, relevance ~1.0. */
+  exact_match: boolean;
 }
 
 /** Free-tier ghost preview (mirrors Rust `GhostPreview`). */

@@ -90,7 +90,7 @@ describe('intelligence provider', () => {
   it('maps items to results and appends a ghost upsell row', async () => {
     cmdImpl = () => Promise.resolve({
       items: [
-        { id: 1, file_path: null, file_name: 'tokio 1.40', preview: 'async runtime', relevance: 0.92, source_type: 'hn', timestamp: null, match_reason: 'matches async' },
+        { id: 1, file_path: null, file_name: 'tokio 1.40', preview: 'async runtime', relevance: 0.92, source_type: 'hn', timestamp: null, match_reason: 'matches async', exact_match: false },
       ],
       ghost_preview: { total_results: 13, hidden_results: 12, decision_count: 0, gap_count: 0, synthesis_available: false },
       is_pro: false,
@@ -106,7 +106,7 @@ describe('intelligence provider', () => {
 
   it('deep-links an in-feed pick to the Signal view', async () => {
     cmdImpl = () => Promise.resolve({
-      items: [{ id: 42, file_path: null, file_name: 'X', preview: '', relevance: 0.5, source_type: 'hn', timestamp: null, match_reason: '' }],
+      items: [{ id: 42, file_path: null, file_name: 'X', preview: '', relevance: 0.5, source_type: 'hn', timestamp: null, match_reason: '', exact_match: false }],
       ghost_preview: null, is_pro: true, total_count: 1,
     });
     const setActiveView = vi.fn();
@@ -121,7 +121,7 @@ describe('intelligence provider', () => {
 
   it('opens the source URL for an off-feed pick (the inspect-bug fix)', async () => {
     cmdImpl = () => Promise.resolve({
-      items: [{ id: 7, file_path: 'https://example.com/article', file_name: 'X', preview: '', relevance: 0.6, source_type: 'hn', timestamp: null, match_reason: '' }],
+      items: [{ id: 7, file_path: 'https://example.com/article', file_name: 'X', preview: '', relevance: 0.6, source_type: 'hn', timestamp: null, match_reason: '', exact_match: false }],
       ghost_preview: null, is_pro: true, total_count: 1,
     });
     const setActiveView = vi.fn();
