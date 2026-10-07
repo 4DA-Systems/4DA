@@ -66,6 +66,8 @@ pub async fn get_monitoring_status() -> Result<serde_json::Value> {
         "enabled": state.is_enabled(),
         "interval_secs": state.get_interval(),
         "interval_mins": state.get_interval() / 60,
+        // The frontend's MonitoringStatus reads `interval_minutes`.
+        "interval_minutes": state.get_interval() / 60,
         "is_checking": state.is_checking.load(std::sync::atomic::Ordering::Relaxed),
         "last_check": last_check,
         "secs_since_check": secs_since_check,

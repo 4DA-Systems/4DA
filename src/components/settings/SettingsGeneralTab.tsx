@@ -108,6 +108,8 @@ export const SettingsGeneralTab = memo(function SettingsGeneralTab({
           </div>
           <input
             type="range"
+            aria-label={t('settings.dataHealth.retentionLabel', 'Data retention in days')}
+            aria-valuetext={`${retentionDays} ${t('settings.dataHealth.days')}`}
             min={7}
             max={365}
             step={1}

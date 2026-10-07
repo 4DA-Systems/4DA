@@ -43,6 +43,19 @@ function renderTab() {
   );
 }
 
+describe('SettingsGeneralTab — retention slider', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('has an accessible name and a spoken value', async () => {
+    vi.mocked(cmd).mockImplementation((name: string) =>
+      Promise.resolve(name === 'get_data_health' ? { retention_days: 90 } : {}),
+    );
+    renderTab();
+    const slider = await screen.findByRole('slider', { name: 'settings.dataHealth.retentionLabel' });
+    await waitFor(() => expect(slider).toHaveAttribute('aria-valuetext', '90 settings.dataHealth.days'));
+  });
+});
+
 describe('SettingsGeneralTab — maintenance button', () => {
   beforeEach(() => vi.clearAllMocks());
 
