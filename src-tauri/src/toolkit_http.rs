@@ -46,17 +46,14 @@ pub struct HttpHistoryEntry {
 // HTTP Probe
 // ============================================================================
 
-/// Allowlist of domains that toolkit HTTP requests may target.
-/// Covers LLM providers, source APIs, license validation, and localhost.
+/// Allowlist of remote domains that toolkit HTTP requests may target.
+/// Covers LLM providers, source APIs and license validation. Local hosts are
+/// handled separately by [`LOCAL_HOSTS`] and are pinned to the Ollama port.
 const ALLOWED_DOMAINS: &[&str] = &[
     // LLM providers
     "api.openai.com",
     "api.anthropic.com",
     "generativelanguage.googleapis.com",
-    // Localhost (Ollama, dev servers)
-    "localhost",
-    "127.0.0.1",
-    "0.0.0.0",
     // License validation
     "api.keygen.sh",
     // Source APIs
@@ -72,20 +69,73 @@ const ALLOWED_DOMAINS: &[&str] = &[
     "www.producthunt.com",
 ];
 
-/// Check if a URL targets an allowed domain.
-fn is_domain_allowed(url: &str) -> bool {
-    // Parse the host from the URL
-    let host = url
-        .strip_prefix("https://")
-        .or_else(|| url.strip_prefix("http://"))
-        .and_then(|rest| rest.split('/').next())
-        .and_then(|host_port| host_port.split(':').next())
-        .unwrap_or("");
+/// Local hosts the probe may reach — only on [`OLLAMA_PORT`]. Any other local
+/// port (Victauri's MCP bridge, the Signal Terminal, dev servers, a user's own
+/// services) is out of bounds: the probe is a renderer-reachable command, so an
+/// open localhost allowance would turn it into a bridge to every local service.
+const LOCAL_HOSTS: &[&str] = &["localhost", "127.0.0.1", "0.0.0.0"];
 
+/// The only local port the probe may target (Ollama's default).
+const OLLAMA_PORT: u16 = 11434;
+
+/// Redirect hops the probe follows before giving up.
+const MAX_PROBE_REDIRECTS: usize = 5;
+
+/// Decide whether a parsed URL is a permitted probe target.
+///
+/// The host comes from a real URL parser (`url::Url`), never from string
+/// splitting: `https://api.openai.com:443@attacker.example/` has host
+/// `attacker.example`, which a hand-split parser read as `api.openai.com`.
+/// Userinfo is rejected outright, and the host must match exactly — a
+/// trailing-dot FQDN (`api.openai.com.`) is not silently normalised in.
+fn is_parsed_url_allowed(url: &url::Url) -> bool {
+    if !matches!(url.scheme(), "http" | "https") {
+        return false;
+    }
+    if !url.username().is_empty() || url.password().is_some() {
+        return false;
+    }
+    let Some(host) = url.host_str() else {
+        return false;
+    };
+    if LOCAL_HOSTS.iter().any(|h| host.eq_ignore_ascii_case(h)) {
+        return url.port_or_known_default() == Some(OLLAMA_PORT);
+    }
     ALLOWED_DOMAINS
         .iter()
         .any(|allowed| host.eq_ignore_ascii_case(allowed))
 }
+
+/// Parse and check a probe URL string.
+fn is_url_allowed(url: &str) -> bool {
+    url::Url::parse(url).is_ok_and(|parsed| is_parsed_url_allowed(&parsed))
+}
+
+/// Client for the toolkit probe: every redirect hop is re-checked against the
+/// same allowlist, so an allowed host cannot bounce the request elsewhere.
+static TOOLKIT_CLIENT: std::sync::LazyLock<reqwest::Client> = std::sync::LazyLock::new(|| {
+    reqwest::Client::builder()
+        .user_agent("Mozilla/5.0 (compatible; desktop-app)")
+        .timeout(std::time::Duration::from_secs(30))
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .redirect(reqwest::redirect::Policy::custom(|attempt| {
+            if attempt.previous().len() >= MAX_PROBE_REDIRECTS {
+                attempt.error(format!("too many redirects (limit {MAX_PROBE_REDIRECTS})"))
+            } else if is_parsed_url_allowed(attempt.url()) {
+                attempt.follow()
+            } else {
+                attempt.error("redirect blocked: hop leaves the toolkit allowlist")
+            }
+        }))
+        .build()
+        .unwrap_or_else(|e| {
+            warn!(target: "4da::toolkit", error = %e, "Failed to build toolkit client; redirects disabled");
+            reqwest::Client::builder()
+                .redirect(reqwest::redirect::Policy::none())
+                .build()
+                .unwrap_or_default()
+        })
+});
 
 #[tauri::command]
 pub async fn toolkit_http_request(request: HttpProbeRequest) -> Result<HttpProbeResponse> {
@@ -97,10 +147,9 @@ pub async fn toolkit_http_request(request: HttpProbeRequest) -> Result<HttpProbe
     }
 
     // Enforce domain allowlist to prevent data exfiltration
-    if !is_domain_allowed(&request.url) {
+    if !is_url_allowed(&request.url) {
         return Err(FourDaError::Config(format!(
-            "Domain not allowed. Requests are restricted to known APIs (LLM providers, source APIs, localhost). URL: {}",
-            request.url
+            "Domain not allowed. Requests are restricted to known APIs (LLM providers, source APIs) and local Ollama (port {OLLAMA_PORT}); URLs with embedded credentials are rejected."
         )));
     }
 
@@ -109,7 +158,7 @@ pub async fn toolkit_http_request(request: HttpProbeRequest) -> Result<HttpProbe
         .parse::<reqwest::Method>()
         .map_err(|e| FourDaError::Config(format!("Invalid HTTP method: {e}")))?;
 
-    let mut req = crate::http_client::HTTP_CLIENT.request(method, &request.url);
+    let mut req = TOOLKIT_CLIENT.request(method, &request.url);
 
     for (key, value) in &request.headers {
         req = req.header(key.as_str(), value.as_str());
@@ -285,6 +334,95 @@ mod tests {
             let valid = url.starts_with("http://") || url.starts_with("https://");
             assert!(valid, "URL '{}' should be accepted", url);
         }
+    }
+
+    // -- Allowlist: parser-based host matching (audit 2026-10-07) -------------
+
+    #[test]
+    fn allowlist_rejects_userinfo_disguises() {
+        for url in [
+            "https://api.openai.com:443@attacker.example/",
+            "https://api.openai.com@evil/",
+            "https://user:pass@api.openai.com/",
+            "http://api.openai.com@127.0.0.1:11434/",
+        ] {
+            assert!(!is_url_allowed(url), "{url} must be rejected");
+        }
+    }
+
+    #[test]
+    fn allowlist_ignores_host_lookalikes_in_path_and_query() {
+        for url in [
+            "https://evil/?x=api.openai.com",
+            "https://evil/api.openai.com",
+            "https://evil#api.openai.com",
+            "https://api.openai.com.evil.example/",
+        ] {
+            assert!(!is_url_allowed(url), "{url} must be rejected");
+        }
+    }
+
+    #[test]
+    fn allowlist_rejects_trailing_dot_fqdn() {
+        assert!(!is_url_allowed("https://API.OPENAI.COM./"));
+        assert!(!is_url_allowed("https://api.openai.com./v1/models"));
+    }
+
+    #[test]
+    fn allowlist_accepts_plain_allowed_hosts() {
+        for url in [
+            "https://api.openai.com/v1/models",
+            "https://API.OPENAI.COM/v1/models",
+            "https://api.anthropic.com/v1/messages",
+            "https://api.github.com/repos/x/y",
+            "https://hacker-news.firebaseio.com/v0/topstories.json",
+            "https://api.openai.com:443/v1/models",
+        ] {
+            assert!(is_url_allowed(url), "{url} must be allowed");
+        }
+    }
+
+    #[test]
+    fn allowlist_pins_local_hosts_to_ollama_port() {
+        for url in [
+            "http://localhost:11434/api/tags",
+            "http://127.0.0.1:11434/api/tags",
+            "http://0.0.0.0:11434/",
+        ] {
+            assert!(is_url_allowed(url), "{url} must be allowed");
+        }
+        for url in [
+            "http://localhost:7373/mcp",
+            "http://127.0.0.1:7373/mcp",
+            "http://localhost/",
+            "https://localhost/",
+            "http://localhost:4444/",
+            "http://[::1]:11434/",
+        ] {
+            assert!(!is_url_allowed(url), "{url} must be rejected");
+        }
+    }
+
+    #[test]
+    fn allowlist_rejects_non_http_schemes_and_garbage() {
+        for url in [
+            "ftp://api.openai.com/",
+            "file:///etc/passwd",
+            "",
+            "not a url",
+        ] {
+            assert!(!is_url_allowed(url), "{url:?} must be rejected");
+        }
+    }
+
+    #[test]
+    fn redirect_hops_are_checked_against_the_same_allowlist() {
+        let ok = url::Url::parse("https://api.github.com/x").unwrap();
+        let bad = url::Url::parse("https://attacker.example/x").unwrap();
+        let local = url::Url::parse("http://127.0.0.1:7373/mcp").unwrap();
+        assert!(is_parsed_url_allowed(&ok));
+        assert!(!is_parsed_url_allowed(&bad));
+        assert!(!is_parsed_url_allowed(&local));
     }
 
     // -- History limit clamping -----------------------------------------------
