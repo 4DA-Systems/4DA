@@ -92,6 +92,8 @@ pub const REGISTERED_COMMANDS: &[&str] = &[
     "ace_get_active_topics",
     "ace_full_scan",
     "ace_auto_discover",
+    "ace_preview_discovery_dirs",
+    "ace_candidate_dev_roots",
     "ace_get_scan_summary",
     "ace_record_interaction",
     "ace_find_similar_topics",

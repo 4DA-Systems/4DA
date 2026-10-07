@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-//! ACE scanning commands: full scan, auto-discover, scan summary, and path helpers.
+//! ACE scanning commands: full scan, scan summary, and path helpers.
 
 use std::path::{Path, PathBuf};
 
@@ -7,13 +7,13 @@ use tracing::{debug, info, warn};
 
 use crate::ace;
 use crate::error::Result;
-use crate::{get_ace_engine, get_ace_engine_mut, get_settings_manager};
+use crate::{get_ace_engine, get_ace_engine_mut};
 
 use super::index_discovered_readmes;
 
 /// Strip the Windows extended-length path prefix (`\\?\`) so that
 /// `Path::starts_with` comparisons work consistently.
-fn strip_extended_prefix(path: &Path) -> PathBuf {
+pub(super) fn strip_extended_prefix(path: &Path) -> PathBuf {
     #[cfg(target_os = "windows")]
     {
         let s = path.to_string_lossy();
@@ -28,7 +28,7 @@ fn strip_extended_prefix(path: &Path) -> PathBuf {
 /// Check if a path should never be scanned: system directories, bare drive
 /// roots, and network shares. Named `is_system_directory` for history; it is
 /// the scan-target reject filter.
-fn is_system_directory(path: &Path) -> bool {
+pub(super) fn is_system_directory(path: &Path) -> bool {
     #[cfg(target_os = "windows")]
     {
         let raw = path.to_string_lossy();
@@ -391,100 +391,6 @@ pub async fn ace_full_scan(paths: Vec<String>) -> Result<serde_json::Value> {
             "total_topics": total_topics.len(),
             "topics": total_topics.into_iter().collect::<Vec<_>>()
         }
-    }))
-}
-
-/// Single-flight guard for ACE auto-discovery. Concurrent runs double the work
-/// (duplicate context_dirs) and can contend with the analysis pipeline — which
-/// stalled first-run scoring at 92%; only one discovery runs at a time.
-static ACE_DISCOVERY_RUNNING: std::sync::atomic::AtomicBool =
-    std::sync::atomic::AtomicBool::new(false);
-
-/// RAII reset so the flag clears on every exit path (including `?` errors).
-struct AceDiscoveryGuard;
-impl Drop for AceDiscoveryGuard {
-    fn drop(&mut self) {
-        ACE_DISCOVERY_RUNNING.store(false, std::sync::atomic::Ordering::SeqCst);
-    }
-}
-
-/// Trigger autonomous context discovery - finds dev directories and projects automatically
-#[tauri::command]
-pub async fn ace_auto_discover() -> Result<serde_json::Value> {
-    // Single-flight: skip if a discovery is already in progress. Concurrent
-    // runs doubled context_dirs and contended with the analysis pipeline,
-    // stalling first-run scoring at 92%.
-    if ACE_DISCOVERY_RUNNING
-        .compare_exchange(
-            false,
-            true,
-            std::sync::atomic::Ordering::SeqCst,
-            std::sync::atomic::Ordering::SeqCst,
-        )
-        .is_err()
-    {
-        info!(target: "4da::ace", "Auto-discovery already running — skipping concurrent run");
-        return Ok(serde_json::json!({
-            "success": false,
-            "message": "Discovery already in progress",
-            "status": "already_running"
-        }));
-    }
-    let _discovery_guard = AceDiscoveryGuard;
-
-    info!(target: "4da::ace", "Starting autonomous context discovery");
-
-    // Phase 1: Discover common dev directories
-    let discovered_dirs = crate::settings::discover_dev_directories();
-
-    if discovered_dirs.is_empty() {
-        return Ok(serde_json::json!({
-            "success": false,
-            "message": "No development directories found on this system",
-            "directories_found": 0,
-            "projects_found": 0
-        }));
-    }
-
-    info!(target: "4da::ace", dirs = discovered_dirs.len(), "Found potential dev directories");
-
-    // Phase 2: Deep scan for actual project directories
-    let project_dirs = crate::settings::find_project_directories(&discovered_dirs, 3);
-
-    // Decide what to add - parent dirs or individual projects
-    let dirs_to_add = if project_dirs.len() > 50 {
-        debug!(target: "4da::ace", projects = project_dirs.len(), "Too many projects, using parent directories");
-        discovered_dirs.clone()
-    } else if !project_dirs.is_empty() {
-        debug!(target: "4da::ace", projects = project_dirs.len(), "Found specific projects");
-        project_dirs.clone()
-    } else {
-        debug!(target: "4da::ace", "No specific projects found, using dev directories");
-        discovered_dirs.clone()
-    };
-
-    // Save to settings
-    {
-        let mut settings = get_settings_manager().lock();
-        if let Err(e) = settings.add_context_dirs(dirs_to_add.clone()) {
-            return Err(format!("Failed to save discovered directories: {e}").into());
-        }
-        if let Err(e) = settings.mark_auto_discovery_completed() {
-            tracing::warn!("Failed to mark state: {e}");
-        }
-    }
-
-    // Now run full ACE scan on discovered directories
-    info!(target: "4da::ace", dirs = dirs_to_add.len(), "Running full scan on directories");
-    let scan_result = ace_full_scan(dirs_to_add.clone()).await?;
-
-    Ok(serde_json::json!({
-        "success": true,
-        "directories_found": discovered_dirs.len(),
-        "projects_found": project_dirs.len(),
-        "directories_added": dirs_to_add.len(),
-        "directories": dirs_to_add,
-        "scan_result": scan_result
     }))
 }
 
