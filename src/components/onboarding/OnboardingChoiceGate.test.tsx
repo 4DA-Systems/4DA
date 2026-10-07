@@ -9,7 +9,14 @@ vi.mock('react-i18next', () => ({
   }),
 }));
 
+const cmdMock = vi.fn();
+vi.mock('../../lib/commands', () => ({
+  cmd: (...args: unknown[]) => cmdMock(...args),
+}));
+
 import { OnboardingChoiceGate } from './OnboardingChoiceGate';
+
+const HOME_FOLDERS = ['C:\\Users\\dev\\code', 'C:\\Users\\dev\\Documents'];
 
 describe('OnboardingChoiceGate', () => {
   const mockStartUsing = vi.fn();
@@ -17,6 +24,12 @@ describe('OnboardingChoiceGate', () => {
   const mockScanProjects = vi.fn();
 
   beforeEach(() => {
+    cmdMock.mockReset();
+    cmdMock.mockImplementation((command: string) => {
+      if (command === 'ace_preview_discovery_dirs') return Promise.resolve(HOME_FOLDERS);
+      if (command === 'ace_candidate_dev_roots') return Promise.resolve(['D:\\repos']);
+      return Promise.resolve();
+    });
     mockStartUsing.mockClear();
     mockContinueSetup.mockClear();
     mockScanProjects.mockClear();
@@ -41,20 +54,66 @@ describe('OnboardingChoiceGate', () => {
     expect(screen.getByText(/keyword matching only/i)).toBeInTheDocument();
   });
 
-  it('calls onScanProjects when the scan button is clicked', () => {
+  it('lists the folders it would scan before anything is read', async () => {
+    renderGate();
+
+    expect(await screen.findByText(HOME_FOLDERS[0]!)).toBeInTheDocument();
+    expect(screen.getByText(HOME_FOLDERS[1]!)).toBeInTheDocument();
+    // Listing is the only call: no scan happens on mount.
+    expect(cmdMock).toHaveBeenCalledWith('ace_preview_discovery_dirs');
+    expect(cmdMock).not.toHaveBeenCalledWith('ace_auto_discover', expect.anything());
+    expect(mockScanProjects).not.toHaveBeenCalled();
+  });
+
+  it('calls onScanProjects with only the ticked folders', async () => {
     mockScanProjects.mockResolvedValue(undefined);
     renderGate();
 
+    const second = await screen.findByLabelText(HOME_FOLDERS[1]!);
+    fireEvent.click(second);
     fireEvent.click(screen.getByText('Scan my projects'));
     expect(mockScanProjects).toHaveBeenCalledTimes(1);
+    expect(mockScanProjects).toHaveBeenCalledWith([HOME_FOLDERS[0]]);
     expect(mockContinueSetup).not.toHaveBeenCalled();
     expect(mockStartUsing).not.toHaveBeenCalled();
+  });
+
+  it('cannot scan with no folder ticked', async () => {
+    renderGate();
+
+    fireEvent.click(await screen.findByLabelText(HOME_FOLDERS[0]!));
+    fireEvent.click(screen.getByLabelText(HOME_FOLDERS[1]!));
+    const scanBtn = screen.getByText('Scan my projects').closest('button')!;
+    expect(scanBtn).toBeDisabled();
+    fireEvent.click(scanBtn);
+    expect(mockScanProjects).not.toHaveBeenCalled();
+  });
+
+  it('offers other drives only on request, unticked, and adds typed folders ticked', async () => {
+    mockScanProjects.mockResolvedValue(undefined);
+    renderGate();
+    await screen.findByText(HOME_FOLDERS[0]!);
+    expect(cmdMock).not.toHaveBeenCalledWith('ace_candidate_dev_roots');
+
+    fireEvent.click(screen.getByText('onboarding.projects.findMore'));
+    const repos = await screen.findByLabelText('D:\\repos');
+    expect(repos).not.toBeChecked();
+
+    fireEvent.change(screen.getByPlaceholderText('onboarding.projects.addFolderPlaceholder'), {
+      target: { value: 'E:\\work\\app' },
+    });
+    fireEvent.click(screen.getByText('onboarding.projects.addFolder'));
+    expect(screen.getByLabelText('E:\\work\\app')).toBeChecked();
+
+    fireEvent.click(screen.getByText('Scan my projects'));
+    expect(mockScanProjects).toHaveBeenCalledWith([...HOME_FOLDERS, 'E:\\work\\app']);
   });
 
   it('shows an inline scanning state while the scan runs', async () => {
     // Never-resolving promise keeps the scanning state visible.
     mockScanProjects.mockReturnValue(new Promise(() => {}));
     renderGate();
+    await screen.findByText(HOME_FOLDERS[0]!);
 
     fireEvent.click(screen.getByText('Scan my projects'));
     await waitFor(() => {

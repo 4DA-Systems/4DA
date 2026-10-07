@@ -382,7 +382,7 @@ interface CommandMap {
   ace_get_suggested_interests: { params: Record<string, never>; result: SuggestedInterest[] };
   ace_get_detected_tech: { params: Record<string, never>; result: { detected_tech: Array<{ name: string; category: string; confidence: number }> } };
   ace_get_active_topics: { params: Record<string, never>; result: { topics: Array<{ topic: string; weight: number }> } };
-  ace_auto_discover: { params: Record<string, never>; result: { success: boolean; directories_found: number; projects_found: number; directories_added: number; directories: string[]; scan_result: { manifest_scan: { detected_tech: number; confidence: number }; git_scan: { repos_analyzed: number; total_commits: number }; combined: { total_topics: number; topics: string[] } } } };
+  ace_auto_discover: { params: { dirs?: string[] | null }; result: { success: boolean; status?: 'already_running' | 'no_directories'; message?: string; directories_found: number; projects_found: number; directories_added: number; directories: string[]; scan_result: { manifest_scan: { detected_tech: number; confidence: number }; git_scan: { repos_analyzed: number; total_commits: number }; combined: { total_topics: number; topics: string[] } } } };
   ace_full_scan: { params: { paths: string[] }; result: { success: boolean; manifest_scan: { detected_tech: number; confidence: number }; git_scan: { repos_analyzed: number; total_commits: number }; combined: { total_topics: number; topics: string[] } } };
   ace_get_unresolved_anomalies: { params: Record<string, never>; result: { anomalies: Anomaly[]; count: number } };
   ace_detect_anomalies: { params: Record<string, never>; result: { anomalies: Anomaly[]; count: number } };
@@ -393,6 +393,8 @@ interface CommandMap {
   ace_find_similar_topics: { params: { query: string; topK: number }; result: { query: string; results: Array<{ topic: string; similarity: number }> } };
   ace_save_watcher_state: { params: Record<string, never>; result: void };
   ace_get_scan_summary: { params: Record<string, never>; result: ScanSummary };
+  ace_preview_discovery_dirs: { params: Record<string, never>; result: string[] };
+  ace_candidate_dev_roots: { params: Record<string, never>; result: string[] };
 
   // -- Learned Preferences (P6) --
   get_learned_preferences: { params: Record<string, never>; result: { facets: Array<{ facet_id: string; class: string; key: string; value: string; stability: number; state: string; user_state: string; evidence_count: number; first_seen_at: number; last_seen_at: number }>; count: number } };
@@ -1896,6 +1898,7 @@ const LONG_RUNNING_COMMANDS = new Set<string>([
   'run_cached_analysis',
   'index_context',
   'ace_full_scan',
+  'ace_auto_discover',
   'pull_ollama_model',
   'prepare_embedding_engine',
   'natural_language_query',

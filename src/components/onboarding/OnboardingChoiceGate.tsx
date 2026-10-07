@@ -2,6 +2,9 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
+import { DiscoveryFolderPicker } from './DiscoveryFolderPicker';
+import { useDiscoveryFolders } from './use-discovery-folders';
+
 interface OnboardingChoiceGateProps {
   isAnimating: boolean;
   hasProviderConfigured: boolean;
@@ -9,7 +12,8 @@ interface OnboardingChoiceGateProps {
   busy?: boolean;
   onStartUsing: () => void;
   onContinueSetup: () => void;
-  onScanProjects: () => void | Promise<void>;
+  /** Scan exactly these folders (the ones the user left ticked). */
+  onScanProjects: (dirs: string[]) => void | Promise<void>;
 }
 
 export function OnboardingChoiceGate({
@@ -22,13 +26,15 @@ export function OnboardingChoiceGate({
 }: OnboardingChoiceGateProps) {
   const { t } = useTranslation();
   const [scanning, setScanning] = useState(false);
+  const discovery = useDiscoveryFolders();
+  const nothingTicked = discovery.selected.length === 0;
 
   const handleScan = () => {
-    if (scanning || busy) return;
+    if (scanning || busy || nothingTicked) return;
     setScanning(true);
     // Reset once the handler settles: on success the gate unmounts anyway, and
     // when finishing fails the user must get the buttons back to retry.
-    void Promise.resolve(onScanProjects())
+    void Promise.resolve(onScanProjects(discovery.selected))
       .catch(() => { /* surfaced by the parent */ })
       .finally(() => setScanning(false));
   };
@@ -46,7 +52,7 @@ export function OnboardingChoiceGate({
       <p className="text-text-secondary text-sm max-w-md mx-auto mb-6">
         {t(
           'onboarding.choice.description',
-          '4DA is already learning about your projects in the background. You can start exploring now or fine-tune your setup first.',
+          'Choose how 4DA learns your stack: scan your project folders (stays on this device), set it up by hand, or start with defaults.',
         )}
       </p>
 
@@ -82,7 +88,7 @@ export function OnboardingChoiceGate({
           {/* Primary, recommended path: a fully-local project scan */}
           <button
             onClick={handleScan}
-            disabled={scanning || busy}
+            disabled={scanning || busy || nothingTicked}
             className="w-full px-8 py-4 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-all font-semibold text-lg hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
           >
             <span className="inline-flex items-center justify-center gap-2">
@@ -98,6 +104,9 @@ export function OnboardingChoiceGate({
               '100% local — nothing ever leaves your machine. Personalizes 4DA to your real stack.',
             )}
           </p>
+          <div className="w-full p-3 bg-bg-secondary rounded-lg border border-border">
+            <DiscoveryFolderPicker discovery={discovery} disabled={busy} />
+          </div>
 
           {/* Separator */}
           <div className="flex items-center gap-3 w-full my-1" role="separator">

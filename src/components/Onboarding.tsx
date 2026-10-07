@@ -2,6 +2,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../lib/commands';
+import { runDiscovery } from '../lib/discovery';
 import { tabbableIn, trapTabKey } from '../lib/focus-trap';
 import { useAppVersion } from '../hooks/use-app-version';
 
@@ -153,11 +154,11 @@ export function Onboarding({ onComplete }: OnboardingProps) {
 
   const handleSkipToContent = persistCompletionAndEnter;
 
-  // Consented, recommended local scan: run the same project discovery the
-  // setup step awaits, then finish onboarding. Nothing leaves the machine.
-  const handleScanAndComplete = async () => {
+  // Consented, recommended local scan of the folders the user ticked, then
+  // finish onboarding. Nothing leaves the machine.
+  const handleScanAndComplete = async (dirs: string[]) => {
     try {
-      await cmd('ace_auto_discover');
+      await runDiscovery(dirs);
     } catch {
       // Non-critical — proceed even if discovery fails
     }

@@ -5,6 +5,7 @@ import { cmd } from '../../lib/commands';
 import { safeListen } from '../../lib/tauri-events';
 import { useAppStore } from '../../store';
 import type { CalibrationResult, Recommendation } from '../../types/calibration';
+import { useTrialEndDate } from './use-trial-end-date';
 
 interface CalibrationStepProps {
   isAnimating: boolean;
@@ -33,7 +34,8 @@ const axisFallback: Record<string, string> = {
 };
 
 export function CalibrationStep({ isAnimating, finishing = false, onComplete, onBack }: CalibrationStepProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const trialEnds = useTrialEndDate(i18n.language);
   const embeddingMode = useAppStore(s => s.embeddingMode);
   // Setup-complete counts come from the persisted backend profile (the same
   // source Settings reads) — NOT optimistic frontend store state, which drifted
@@ -326,10 +328,12 @@ export function CalibrationStep({ isAnimating, finishing = false, onComplete, on
         </div>
       )}
 
-      {/* Trial hint */}
-      <p className="mt-4 text-[10px] text-text-muted/60 text-center">
-        {t('onboarding.trialHint')}
-      </p>
+      {/* Trial hint — only while the auto-started trial is running */}
+      {trialEnds && (
+        <p className="mt-4 text-[10px] text-text-muted/60 text-center">
+          {t('onboarding.trialHint', { date: trialEnds })}
+        </p>
+      )}
 
       {/* Navigation */}
       <div className="flex justify-between mt-4">

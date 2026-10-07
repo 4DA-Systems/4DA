@@ -4,7 +4,7 @@ import { useState, useEffect, useId } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { cmd } from '../../lib/commands';
-import { IMPORTED_FROM_ENV, localServerChoice, modelDownloadSize } from './quick-setup-utils';
+import { IMPORTED_FROM_ENV, isOllamaReady, localServerChoice, modelDownloadSize } from './quick-setup-utils';
 import type { LocalServerChoice } from './quick-setup-utils';
 import type { OllamaStatus, PullProgress } from './types';
 
@@ -29,7 +29,8 @@ interface LocalServer {
 
 interface SetupAIProviderProps {
   ollamaStatus: OllamaStatus | null;
-  provider: ProviderType;
+  /** `null` until the user picks a provider. */
+  provider: ProviderType | null;
   apiKey: string;
   pullingModels: boolean;
   pullProgress: Record<string, PullProgress>;
@@ -87,7 +88,7 @@ export function SetupAIProvider({
     }
   };
 
-  const ollamaReady = ollamaStatus?.running && ollamaStatus.has_embedding_model && ollamaStatus.has_llm_model;
+  const ollamaReady = isOllamaReady(ollamaStatus);
   const downloadSize = modelDownloadSize(Object.keys(pullProgress));
 
   return (
@@ -213,8 +214,9 @@ export function SetupAIProvider({
         </div>
       )}
 
-      {/* Provider selector */}
-      {!ollamaReady && !pullingModels && (
+      {/* Provider selector — stays visible when local AI is ready, so a
+          detected Ollama is a visible default the user can change. */}
+      {!pullingModels && (
         <>
           {/* CLOUD section — recommended for best results */}
           <div>
