@@ -2431,6 +2431,8 @@
   "signals.laneHideMore": "Rest ausblenden",
   "signals.laneShowWorth": "{{count}} wissenswerte anzeigen",
   "signals.laneHideWorth": "Wissenswertes ausblenden",
+  "signals.orbitShow": "Show {{count}} in your orbit",
+  "signals.orbitHide": "Hide in your orbit",
   "settings.stack.title": "Your Stack",
   "settings.stack.desc": "Pick which detected projects count as your stack. Turning one off drops its dependencies from relevance grounding — useful for test fixtures, scaffolding, or experiments you don't want shaping \"Affects You\". Takes effect on the next analysis.",
   "settings.stack.loading": "Loading projects…",
