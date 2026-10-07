@@ -351,7 +351,7 @@ fn generate_blind_spot_report_uncached() -> Result<BlindSpotReport> {
     let attention = crate::attention::generate_report(30)?;
 
     // 2. Get knowledge gaps
-    let gaps = crate::knowledge_decay::detect_knowledge_gaps(&conn)?;
+    let gaps = crate::knowledge_decay::cached_knowledge_gaps(&conn)?;
 
     // 3. Get all user dependencies with project coverage
     let deps = get_dependency_coverage(&conn)?;

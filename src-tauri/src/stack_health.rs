@@ -66,7 +66,7 @@ pub fn compute_stack_health(conn: &rusqlite::Connection) -> StackHealth {
     }
 
     // 2. Load knowledge gaps for cross-referencing
-    let gaps = match crate::knowledge_decay::detect_knowledge_gaps(conn) {
+    let gaps = match crate::knowledge_decay::cached_knowledge_gaps(conn) {
         Ok(g) => g,
         Err(e) => {
             warn!(target: "4da::stack_health", error = %e, "Failed to load knowledge gaps, continuing without");
