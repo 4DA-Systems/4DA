@@ -121,9 +121,34 @@ export interface LabelLayoutInput {
   headers: HeaderLabelInput[];
   lane: LaneLabelInput | null;
   measure: MeasureText;
+  /** The visible canvas, flow units. When given, a label prefers placements
+   *  that stay fully inside it (flips side at the canvas edge) — live
+   *  2026-10-07 at 1200x800 three labels were cut off at the left/right edge. */
+  bounds?: { x: number; y: number; w: number; h: number };
 }
 
 const PRIORITY_LANE = 1e7;
+
+/**
+ * Keep only the candidates whose box stays inside `bounds`. When none does
+ * (a label wider than the canvas, a node half off-screen), the list is left
+ * as it was — clipping is then unavoidable and suppression would hide more.
+ */
+export function inBoundsCandidates(
+  box: { x: number; y: number; w: number; h: number },
+  candidates: LabelOffset[],
+  bounds: LabelLayoutInput['bounds'],
+): LabelOffset[] {
+  if (!bounds) return candidates;
+  const inside = candidates.filter(
+    (c) =>
+      box.x + c.dx >= bounds.x &&
+      box.y + c.dy >= bounds.y &&
+      box.x + c.dx + box.w <= bounds.x + bounds.w &&
+      box.y + c.dy + box.h <= bounds.y + bounds.h,
+  );
+  return inside.length > 0 ? inside : candidates;
+}
 /** Cost of a label covering a stack mark (vs 0.15 per placement step). */
 const WEIGHT_STACK_MARK = 3;
 /** Obstacle ids: stack marks the labels keep clear of. Not labels. */
@@ -210,14 +235,12 @@ export function buildLabelBoxes(input: LabelLayoutInput): LabelBox[] {
   for (const c of input.headers) {
     const w = (headerTextWidth(c.label, c.count, input.measure) + LABEL_INK_PAD_PX) * s;
     const h = HEADER_FONT_PX * HEADER_LINE * s;
+    const box = { x: c.x - w / 2, y: c.y, w, h };
     boxes.push({
       id: `cluster:${c.id}`,
-      x: c.x - w / 2,
-      y: c.y,
-      w,
-      h,
+      ...box,
       priority: PRIORITY_HEADER + c.count,
-      candidates: headerCandidates(w, h, gap, c.radius),
+      candidates: inBoundsCandidates(box, headerCandidates(w, h, gap, c.radius), input.bounds),
       weight: WEIGHT_HEADER,
     });
   }
@@ -260,22 +283,22 @@ export function buildLabelBoxes(input: LabelLayoutInput): LabelBox[] {
     const text = nodeLabelText(n.title);
     const w = Math.min(input.measure(text, NODE_LABEL_FONT_PX, 500) + LABEL_INK_PAD_PX, NODE_LABEL_MAX_W) * s;
     const h = NODE_LABEL_FONT_PX * NODE_LABEL_LINE * s;
+    const box = { x: n.x + size / 2 - w / 2, y: n.y + size + NODE_LABEL_GAP, w, h };
+    // Below (the default), above, then beside the mark — the renderer maps
+    // each key to a placement (content-graph.css, [data-cg-place]). At the
+    // canvas edge only the placements that stay on-canvas are offered.
+    const candidates: LabelOffset[] = [
+      { dx: 0, dy: 0, key: 'below' },
+      { dx: 0, dy: -(size + 2 * NODE_LABEL_GAP + h), key: 'above' },
+      { dx: size / 2 + w / 2 + NODE_LABEL_GAP, dy: -(size / 2 + NODE_LABEL_GAP + h / 2), key: 'right' },
+      { dx: -(size / 2 + w / 2 + NODE_LABEL_GAP), dy: -(size / 2 + NODE_LABEL_GAP + h / 2), key: 'left' },
+    ];
     boxes.push({
       id: `node:${n.id}`,
-      x: n.x + size / 2 - w / 2,
-      y: n.y + size + NODE_LABEL_GAP,
-      w,
-      h,
+      ...box,
       priority: (n.stack ? PRIORITY_STACK : n.security ? PRIORITY_SECURITY : 0) + n.relevance * 100,
       weight: n.stack || n.security ? WEIGHT_STACK : 1,
-      // Below (the default), above, then beside the mark — the renderer maps
-      // each key to a placement (content-graph.css, [data-cg-place]).
-      candidates: [
-        { dx: 0, dy: 0, key: 'below' },
-        { dx: 0, dy: -(size + 2 * NODE_LABEL_GAP + h), key: 'above' },
-        { dx: size / 2 + w / 2 + NODE_LABEL_GAP, dy: -(size / 2 + NODE_LABEL_GAP + h / 2), key: 'right' },
-        { dx: -(size / 2 + w / 2 + NODE_LABEL_GAP), dy: -(size / 2 + NODE_LABEL_GAP + h / 2), key: 'left' },
-      ],
+      candidates: inBoundsCandidates(box, candidates, input.bounds),
     });
   }
   return boxes;

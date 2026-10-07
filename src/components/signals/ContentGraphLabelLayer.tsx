@@ -3,7 +3,7 @@
 // result onto the label elements. Renders nothing; like ZoomCssVar, every
 // update bypasses React — no node re-renders per zoom step.
 import { useCallback, useEffect, useRef } from 'react';
-import { useStore, type Node } from '@xyflow/react';
+import { useStore, useStoreApi, type Node } from '@xyflow/react';
 import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 
@@ -15,6 +15,7 @@ import {
   resolveLabelCollisions,
   type HeaderLabelInput,
   type LaneLabelInput,
+  type LabelLayoutInput,
   type LabelPlacement,
   type MeasureText,
   type NodeLabelInput,
@@ -109,17 +110,46 @@ export function applyLabelPlacements(host: ParentNode, placements: Map<string, L
 
 /** One model pass: build the boxes at this zoom, resolve, write placements.
  *  Returns each label's priority for the rendered-rect check that follows. */
-export function runLabelPass(host: ParentNode, zoom: number, nodes: Node[], t: TFunction): Map<string, number> {
+export function runLabelPass(
+  host: ParentNode,
+  zoom: number,
+  nodes: Node[],
+  t: TFunction,
+  bounds?: LabelLayoutInput['bounds'],
+): Map<string, number> {
   const boxes = buildLabelBoxes({
     zoom,
     includeNonStack: zoom >= LABEL_DETAIL_ZOOM,
     measure: measureText,
+    bounds,
     ...collectInputs(nodes, t),
   });
   applyLabelPlacements(host, resolveLabelCollisions(boxes, LABEL_GAP_PX * invariantScale(zoom)));
   return new Map(
     boxes.filter((b) => !b.obstacle).map((b) => [b.id, b.id === 'lane' ? Infinity : b.priority]),
   );
+}
+
+/** Pan steps smaller than this (screen px) do not re-run the label pass:
+ *  only labels at the canvas edge depend on the pan, and they need a
+ *  re-check only when the view has moved noticeably. */
+const PAN_STEP_PX = 24;
+/** Inset from the canvas edge a label must keep, screen px. */
+const EDGE_INSET_PX = 4;
+
+/** The visible canvas in flow units, inset slightly from the edge. */
+export function visibleFlowBounds(
+  width: number,
+  height: number,
+  [tx, ty, zoom]: [number, number, number],
+): LabelLayoutInput['bounds'] {
+  if (!(width > 0 && height > 0 && zoom > 0)) return undefined;
+  return {
+    x: (EDGE_INSET_PX - tx) / zoom,
+    y: (EDGE_INSET_PX - ty) / zoom,
+    w: (width - 2 * EDGE_INSET_PX) / zoom,
+    h: (height - 2 * EDGE_INSET_PX) / zoom,
+  };
 }
 
 /** Quiet period after the last pass before checking the rendered rects — a
@@ -130,8 +160,19 @@ export function LabelCollisionLayer() {
   const { t } = useTranslation();
   const zoom = useStore((s) => s.transform[2]);
   const nodes = useStore((s) => s.nodes);
+  // Pan, quantised: labels at the canvas edge flip side as the view moves.
+  const panX = useStore((s) => Math.round(s.transform[0] / PAN_STEP_PX));
+  const panY = useStore((s) => Math.round(s.transform[1] / PAN_STEP_PX));
+  const width = useStore((s) => s.width);
+  const height = useStore((s) => s.height);
   const ref = useRef<HTMLDivElement | null>(null);
   const latest = useRef<{ zoom: number; nodes: Node[]; t: TFunction } | null>(null);
+  const viewRef = useRef<() => LabelLayoutInput['bounds']>(() => undefined);
+  const store = useStoreApi();
+  viewRef.current = () => {
+    const s = store.getState();
+    return visibleFlowBounds(s.width, s.height, s.transform);
+  };
   const frame = useRef<number | null>(null);
   const verifyTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -146,7 +187,7 @@ export function LabelCollisionLayer() {
       const host = ref.current?.closest('.react-flow');
       const cur = latest.current;
       if (!host || !cur) return;
-      const priorities = runLabelPass(host, cur.zoom, cur.nodes, cur.t);
+      const priorities = runLabelPass(host, cur.zoom, cur.nodes, cur.t, viewRef.current());
       if (verifyTimer.current !== null) clearTimeout(verifyTimer.current);
       verifyTimer.current = setTimeout(() => {
         verifyTimer.current = null;
@@ -158,7 +199,7 @@ export function LabelCollisionLayer() {
   useEffect(() => {
     latest.current = { zoom, nodes, t };
     schedule();
-  }, [zoom, nodes, t, schedule]);
+  }, [zoom, nodes, t, schedule, panX, panY, width, height]);
 
   // Text widths are measured in the label font: when webfonts finish loading
   // every cached width is stale — re-measure and re-place.

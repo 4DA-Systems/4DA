@@ -7,6 +7,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 // store keeps this a test of the EFFECT WIRING, not of React Flow.
 const fakeState = {
   transform: [0, 0, 0.2] as [number, number, number],
+  width: 0, // no measured canvas: no edge bounds, as before
+  height: 0,
   nodes: [
     { id: 'a', type: 'contentNode', position: { x: 0, y: 0 }, data: { title: 'npm: openai v7.27.0', member_count: 1, relevance_score: 0.9, affects_you: true } },
     { id: 'b', type: 'contentNode', position: { x: 4, y: 2 }, data: { title: 'npm: stripe v23.0.0', member_count: 1, relevance_score: 0.8, affects_you: true } },
@@ -15,9 +17,10 @@ const fakeState = {
 };
 vi.mock('@xyflow/react', () => ({
   useStore: (selector: (s: typeof fakeState) => unknown) => selector(fakeState),
+  useStoreApi: () => ({ getState: () => fakeState }),
 }));
 
-import { LabelCollisionLayer } from './ContentGraphLabelLayer';
+import { LabelCollisionLayer, visibleFlowBounds } from './ContentGraphLabelLayer';
 
 function Graph() {
   return (
@@ -90,5 +93,16 @@ describe('LabelCollisionLayer effect wiring', () => {
     });
     expect(label(container, 'node:c').getAttribute('data-cg-place')).not.toBe('stale');
     fakeState.transform = [0, 0, 0.2];
+  });
+});
+
+describe('visibleFlowBounds', () => {
+  it('maps the canvas to flow units through the pan and zoom', () => {
+    const b = visibleFlowBounds(1000, 500, [-200, 100, 2])!;
+    expect(b.x).toBeCloseTo((4 + 200) / 2);
+    expect(b.y).toBeCloseTo((4 - 100) / 2);
+    expect(b.w).toBeCloseTo((1000 - 8) / 2);
+    expect(b.h).toBeCloseTo((500 - 8) / 2);
+    expect(visibleFlowBounds(0, 0, [0, 0, 1])).toBeUndefined();
   });
 });
