@@ -319,6 +319,7 @@
   "settings.ai.invalidKeyFormat": "無効なキー形式",
   "settings.ai.keyConnectionFailed": "接続に失敗しました",
   "settings.ai.keySavedSecure": "APIキーはセキュアストレージに保存済みです。保持するには空白のままにしてください。",
+  "settings.ai.keySavedFile": "APIキーは settings.json に保存されました（あなたのユーザーアカウントのみ読み取り可能）。OSの資格情報ストアが利用できませんでした。保持するには空白のままにしてください。",
   "settings.ai.keyVerified": "キーが確認されました",
   "settings.ai.keyVerifiedModels": "キーが確認されました — {{models}}にアクセス可能",
   "settings.ai.privacyNote": "APIキーはプロバイダーに直接接続されます。4DAがキーをリモートで保存・中継することはありません。",

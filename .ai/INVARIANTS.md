@@ -177,12 +177,14 @@ if confidence < 0.3 {
   SQLite.** No second store may hold a copy that can disagree with the database.
 - **Four subsystems persist state outside SQLite, by design.** Each is an exception with a
   reason, not a violation to be silently tolerated:
-  - `data/settings.json` — user configuration. `settings/manager.rs:74` states it plainly:
-    "The on-disk file is the authoritative source; the keychain is secondary." Settings must
-    be hand-editable and must survive a corrupt or quarantined database.
-  - **OS keychain** — API keys and webhook secrets (`settings/keystore.rs`,
-    `webhooks/secrets.rs`), via the `keyring` crate. A SQLite file offers no at-rest
-    protection for a credential; the platform keystore does.
+  - `data/settings.json` — user configuration (everything except secrets). Settings must be
+    hand-editable and must survive a corrupt or quarantined database.
+  - **OS keychain** — the authoritative store for API keys, the licence key and webhook
+    secrets (`settings/keystore.rs`, `settings/secret_storage.rs`, `webhooks/secrets.rs`), via
+    the `keyring` crate (audit 2026-10-07; this reverses `a003b9064`). A secret leaves
+    settings.json only after a fresh-handle read-back proves the keychain holds it; if the
+    keychain cannot, it stays in settings.json (owner-only) and the UI reports that posture.
+    A SQLite file offers no at-rest protection for a credential; the platform keystore does.
   - `data/calibrations/{identity_hash}/{task}.json` — fitted calibration curves
     (`calibration_store.rs`). Write-rarely/read-once artifacts keyed by a stable hash;
     the module documents the choice under "Why files, not SQLite".

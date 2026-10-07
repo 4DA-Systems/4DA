@@ -1794,6 +1794,7 @@
   "settings.ai.invalidKeyFormat": "잘못된 키 형식",
   "settings.ai.keyConnectionFailed": "연결 실패",
   "settings.ai.keySavedSecure": "API 키가 보안 저장소에 저장되었습니다. 유지하려면 비워 두십시오.",
+  "settings.ai.keySavedFile": "API 키가 settings.json에 저장되었습니다(사용자 계정만 읽을 수 있음). OS 자격 증명 저장소를 사용할 수 없었습니다. 유지하려면 비워 두십시오.",
   "settings.ai.keyVerified": "키가 확인되었습니다",
   "settings.ai.keyVerifiedModels": "키가 확인되었습니다 — {{models}}에 접근 가능",
   "settings.ai.privacyNote": "API 키는 제공자에게 직접 연결됩니다. 4DA는 키를 원격으로 저장하거나 중계하지 않습니다.",

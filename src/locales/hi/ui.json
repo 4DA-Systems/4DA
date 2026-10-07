@@ -1803,6 +1803,7 @@
   "settings.ai.keyConnectionFailed": "कनेक्शन विफल",
   "settings.ai.keySaved": "(कुंजी सहेजी गई)",
   "settings.ai.keySavedSecure": "API कुंजी सुरक्षित संग्रहण में सहेजी गई। मौजूदा रखने के लिए खाली छोड़ें।",
+  "settings.ai.keySavedFile": "API कुंजी settings.json में सहेजी गई, जिसे केवल आपका उपयोगकर्ता खाता पढ़ सकता है — सिस्टम का क्रेडेंशियल स्टोर उपलब्ध नहीं था। मौजूदा रखने के लिए खाली छोड़ें।",
   "settings.ai.keyVerified": "कुंजी सत्यापित",
   "settings.ai.keyVerifiedModels": "कुंजी सत्यापित — {{models}} तक पहुँच",
   "settings.ai.maxItemsBatch": "अधिकतम आइटम/बैच",

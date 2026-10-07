@@ -73,9 +73,9 @@ Your API keys are stored in your **operating system's native credential manager*
 - **macOS:** macOS Keychain
 - **Linux:** Secret Service API (GNOME Keyring or KWallet)
 
-API keys are never stored in plaintext configuration files. If you previously used a version of 4DA that stored keys in the settings file, the App automatically migrates them to the OS keychain and removes them from the plaintext file.
+API keys are stored in the OS keychain. If you previously used a version of 4DA that stored keys in the settings file, the App migrates them to the OS keychain and removes them from the settings file once the keychain has confirmed it holds them.
 
-If the OS keychain is unavailable (e.g., headless Linux environments or CI systems), the App falls back to in-memory storage for the duration of the session, and keys are not persisted to disk.
+If the OS keychain is unavailable (e.g., headless Linux environments or CI systems), the App keeps the key in its settings file on your machine, restricted so that only your user account can read it, and the App's settings tell you that the key is stored there rather than in the keychain.
 
 **Your API keys are never transmitted to 4DA Systems or any party other than the specific provider you configured.**
 

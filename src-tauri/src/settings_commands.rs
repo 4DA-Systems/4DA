@@ -71,7 +71,10 @@ pub async fn get_settings() -> Result<serde_json::Value> {
             "tier": settings.license.tier,
             "has_key": !settings.license.license_key.is_empty(),
             "activated_at": settings.license.activated_at,
-        }
+        },
+        // Where secrets actually live — the UI must not claim secure storage
+        // when the OS credential store could not hold them (audit 2026-10-07).
+        "secret_storage": guard.secret_storage_status(),
     }))
 }
 
@@ -167,27 +170,15 @@ pub async fn set_llm_provider(
     // env-import placeholder means the same thing: `import_env_key` already
     // stored the real key, and the UI only displays this marker in its place.
     // Saving it verbatim overwrote the imported key with the marker text.
+    // Storage (keychain first, owner-only file fallback) is decided by
+    // `SettingsManager::save()`, which also records the posture the UI shows.
     let effective_api_key = if !incoming_key_replaces_stored(&api_key) {
         guard.get().llm.api_key.clone()
     } else {
-        match crate::settings::keystore::store_secret("llm_api_key", &api_key) {
-            Ok(true) => info!(target: "4da::settings", "API key stored in platform keychain"),
-            Ok(false) => {
-                warn!(target: "4da::settings", "Keychain unavailable — API key will persist in settings.json (plaintext fallback)")
-            }
-            Err(e) => {
-                warn!(target: "4da::settings", error = %e, "Keychain write error — API key will persist in settings.json")
-            }
-        }
         api_key
     };
     let effective_openai_key = match openai_api_key {
-        Some(ref k) if incoming_key_replaces_stored(k) => {
-            if let Ok(false) = crate::settings::keystore::store_secret("openai_api_key", k) {
-                warn!(target: "4da::settings", "Keychain unavailable for OpenAI key — plaintext fallback");
-            }
-            k.clone()
-        }
+        Some(ref k) if incoming_key_replaces_stored(k) => k.clone(),
         _ => guard.get().llm.openai_api_key.clone(),
     };
 
@@ -208,7 +199,12 @@ pub async fn set_llm_provider(
     };
 
     guard.set_llm_provider(llm_provider)?;
-    info!(target: "4da::settings", "LLM provider updated");
+    let storage = guard.secret_storage_status();
+    if storage.mode == "file_fallback" {
+        warn!(target: "4da::settings", "LLM provider updated — OS credential store unavailable, key kept in settings.json (owner-only)");
+    } else {
+        info!(target: "4da::settings", mode = storage.mode, "LLM provider updated");
+    }
     Ok(())
 }
 

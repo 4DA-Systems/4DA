@@ -317,6 +317,7 @@
   "settings.ai.connectionFailed": "Error",
   "settings.ai.importFromEnv": "Importar del entorno",
   "settings.ai.keySavedSecure": "Clave API guardada en almacenamiento seguro. Déjalo en blanco para conservarla.",
+  "settings.ai.keySavedFile": "Clave API guardada en settings.json, legible solo por tu cuenta de usuario: el almacén de credenciales del sistema no estaba disponible. Déjalo en blanco para conservarla.",
   "settings.ai.keyVerified": "Clave verificada",
   "settings.ai.keyVerifiedModels": "Clave verificada — acceso a {{models}}",
   "settings.ai.invalidKeyFormat": "Formato de clave no válido",

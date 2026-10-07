@@ -383,8 +383,8 @@ Most software claims privacy through policy: "We don't sell your data." "We use 
 
 | Layer | Mechanism |
 |-------|-----------|
-| **CSP (Content Security Policy)** | Restricts all network requests to a whitelist: user's own API providers, public data sources, local Ollama. No 4DA-owned endpoints. |
-| **Keychain Integration** | API keys stored in OS-level secure storage (Windows Credential Manager, macOS Keychain, Linux Secret Service). Never in plaintext on disk. |
+| **CSP (Content Security Policy)** | The interface itself cannot make network requests; every request goes through the local backend, to the user's own API providers, public data sources and local Ollama only. No 4DA-owned endpoints. |
+| **Keychain Integration** | API keys stored in OS-level secure storage (Windows Credential Manager, macOS Keychain, Linux Secret Service) and removed from the settings file once verified there. If that storage is unavailable, keys stay in the settings file, readable only by your user account, and the app says so. |
 | **Zero Telemetry** | No analytics, no tracking, no phone-home, no error reporting to any external service. Verified by comprehensive codebase grep. |
 | **Pre-Commit Secrets Scanning** | 23+ pattern detectors prevent API keys, credentials, private keys, PII from ever entering version control. |
 | **Local Database** | SQLite on the user's filesystem. No cloud sync unless explicitly enabled through encrypted Team Sync. |

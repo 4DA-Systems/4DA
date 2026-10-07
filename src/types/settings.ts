@@ -7,7 +7,16 @@ interface LicenseConfig {
   activated_at: string | null;
 }
 
+/** Where secrets are persisted — `keychain` only when every present secret is
+ *  verified in the OS credential store; `file_fallback` when at least one is
+ *  kept in settings.json (owner-only). */
+export type SecretStorageMode = 'keychain' | 'file_fallback' | 'none';
+
 export interface Settings {
+  secret_storage?: {
+    mode: SecretStorageMode;
+    secrets: Record<string, 'keychain' | 'file_fallback'>;
+  };
   llm: {
     provider: string;
     model: string;

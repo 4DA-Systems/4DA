@@ -317,6 +317,7 @@
   "settings.ai.connectionFailed": "Échec",
   "settings.ai.importFromEnv": "Importer de l'environnement",
   "settings.ai.keySavedSecure": "Clé API enregistrée dans le stockage sécurisé. Laissez vide pour la conserver.",
+  "settings.ai.keySavedFile": "Clé API enregistrée dans settings.json, lisible uniquement par votre compte utilisateur — le magasin d'identifiants du système était indisponible. Laissez vide pour la conserver.",
   "settings.ai.keyVerified": "Clé vérifiée",
   "settings.ai.keyVerifiedModels": "Clé vérifiée — accès à {{models}}",
   "settings.ai.invalidKeyFormat": "Format de clé invalide",

@@ -317,6 +317,7 @@
   "settings.ai.connectionFailed": "Fehlgeschlagen",
   "settings.ai.importFromEnv": "Aus Umgebung importieren",
   "settings.ai.keySavedSecure": "API-Schlüssel im sicheren Speicher gespeichert. Leer lassen, um ihn beizubehalten.",
+  "settings.ai.keySavedFile": "API-Schlüssel in settings.json gespeichert, nur für dein Benutzerkonto lesbar — der Anmeldeinformationsspeicher des Systems war nicht verfügbar. Leer lassen, um ihn beizubehalten.",
   "settings.ai.keyVerified": "Schlüssel verifiziert",
   "settings.ai.keyVerifiedModels": "Schlüssel verifiziert — Zugriff auf {{models}}",
   "settings.ai.invalidKeyFormat": "Ungültiges Schlüsselformat",

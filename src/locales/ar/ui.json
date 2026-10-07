@@ -1752,6 +1752,7 @@
   "settings.ai.keyConnectionFailed": "فشل الاتصال",
   "settings.ai.keySaved": "(تم حفظ المفتاح)",
   "settings.ai.keySavedSecure": "تم حفظ مفتاح API في التخزين الآمن. اتركه فارغاً للاحتفاظ به.",
+  "settings.ai.keySavedFile": "تم حفظ مفتاح API في settings.json ولا يمكن قراءته إلا من حساب المستخدم الخاص بك — مخزن بيانات الاعتماد في النظام غير متاح. اتركه فارغاً للاحتفاظ به.",
   "settings.ai.keyVerified": "تم التحقق من المفتاح",
   "settings.ai.keyVerifiedModels": "تم التحقق من المفتاح — وصول إلى {{models}}",
   "settings.ai.maxItemsBatch": "أقصى عدد عناصر/دفعة",

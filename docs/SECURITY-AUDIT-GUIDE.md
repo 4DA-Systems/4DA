@@ -86,15 +86,26 @@ Ten things to verify, each with a single command. Run these from the repository 
 
 **How it works:**
 
-API keys are stored in the OS platform keychain under the service name `com.4da.app`:
+API keys are stored in the OS platform keychain:
 - **Windows:** Credential Manager
 - **macOS:** Keychain
 - **Linux:** Secret Service (GNOME Keyring / KWallet)
 
-Four key names are managed (see `keystore.rs` line 16):
+Five secrets held in `Settings` are managed (`secret_storage.rs`, `SECRET_NAMES`):
 ```
-llm_api_key, openai_api_key, x_api_key, license_key
+llm_api_key, openai_api_key, x_api_key, license_key, translation_api_key
 ```
+
+Service names (`keystore.rs`): the default profile uses `com.4da.app`. With
+`FOURDA_DATA_DIR` set, profile secrets (the five above, webhook and team secrets) use
+`com.4da.app.p.<first 12 hex of sha256(canonical data dir)>` and never fall back to the
+global service. Machine-scope secrets (`engine_receipt_signing_key`, `license_time_floor`,
+`4da_db_encryption_key`, `license_trial_started_at`, `license_cache_mac_key`) always use
+`com.4da.app`. Test builds use `com.4da.app.test` only.
+
+The keychain is authoritative. If the credential store cannot hold a key, the key stays
+in `settings.json`, restricted to the owner, and the settings payload reports
+`secret_storage.mode = "file_fallback"`.
 
 **Security measures implemented:**
 
@@ -102,7 +113,7 @@ llm_api_key, openai_api_key, x_api_key, license_key
 
 2. **Debug redaction** (`types.rs` lines 31-55): Custom `Debug` impl for `LLMProvider` prints `[REDACTED]` instead of key values. Same for `LicenseConfig` (lines 286-302) and the top-level `Settings` struct (lines 552-589) which redacts `x_api_key`.
 
-3. **Automatic migration** (`keystore.rs` lines 127-198): `migrate_from_plaintext()` moves keys from `settings.json` to the OS keychain. After migration, plaintext fields are cleared.
+3. **Automatic migration** (`secret_storage.rs`, `migrate_plaintext_all_or_nothing`): at startup, plaintext keys in `settings.json` are mirrored to the keychain and read back through a new handle. Only if EVERY key verifies are `settings.json` and `settings.json.bak` rewritten without them; any failure scrubs nothing. Both files are written via a temp file that is ACL-hardened (owner SID only, no inheritance) before it is renamed into place; `.bak` is built from the scrubbed JSON, never copied from the old file.
 
 4. **API error sanitization** (`llm.rs` lines 29-57): `sanitize_api_error()` redacts strings matching API key patterns (`sk-*`, `pk_*`, long alphanumeric tokens) from error messages before they reach logs or the frontend.
 

@@ -319,6 +319,7 @@
   "settings.ai.invalidKeyFormat": "Formato chiave non valido",
   "settings.ai.keyConnectionFailed": "Connessione fallita",
   "settings.ai.keySavedSecure": "Chiave API salvata in modo sicuro. Lascia vuoto per mantenerla.",
+  "settings.ai.keySavedFile": "Chiave API salvata in settings.json, leggibile solo dal tuo account utente: l'archivio credenziali del sistema non era disponibile. Lascia vuoto per mantenerla.",
   "settings.ai.keyVerified": "Chiave verificata",
   "settings.ai.keyVerifiedModels": "Chiave verificata — accesso a {{models}}",
   "settings.ai.privacyNote": "La tua chiave API si connette direttamente al fornitore. 4DA non memorizza né inoltra mai la tua chiave.",
