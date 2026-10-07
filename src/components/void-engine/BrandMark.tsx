@@ -1,47 +1,27 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-import {
-  useMemo,
-  useId,
-  useEffect,
-  useRef,
-  useState,
-  useCallback,
-} from "react";
+import { useMemo, useId, useEffect, useLayoutEffect, useRef } from "react";
+import type { CSSProperties } from "react";
 import type { VoidSignal } from "../../types";
 import {
-  TETRA_VERTS,
-  TETRA_EDGES,
-  TETRA_FACES,
-  rotY,
-  rotX,
-  project,
-  faceNormalZ,
-} from "./math3d";
+  BASE_FRAME_MS,
+  EDGE_COUNT,
+  FACE_COUNT,
+  VERT_COUNT,
+  computeGeometry,
+  drawBrandMark,
+  frameIntervalMs,
+} from "./brand-mark-geometry";
+import type { BrandMarkSlots } from "./brand-mark-geometry";
 import { deriveSignalVisuals } from "./signal-visuals";
 import { useTheme } from "../../lib/theme";
-
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
+import { isMotionAllowed, subscribeMotionGate } from "../../lib/motion-gate";
 
 interface BrandMarkProps {
   signal?: VoidSignal;
   size?: number;
 }
 
-type ProjVert = { x: number; y: number; z: number };
-type ProjEdge = {
-  x1: number;
-  y1: number;
-  x2: number;
-  y2: number;
-  depth: number;
-};
-type ProjFace = { points: string; depth: number; facing: number };
-
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
+const range = (n: number) => Array.from({ length: n }, (_, i) => i);
 
 /**
  * 4DA brand mark — 3D rotating tetrahedron.
@@ -49,162 +29,114 @@ type ProjFace = { points: string; depth: number; facing: number };
  * 4 vertices, 6 edges, 4 faces. Real 3D geometry with compound rotation,
  * perspective projection, depth-sorted face fills, and depth-scaled edges.
  * Signal-responsive: color, glow, and rotation speed.
+ *
+ * Cost discipline (audit 2026-10-07: an idle header mark drove ~2,500 DOM
+ * mutations/s through three setState calls per frame): the loop writes
+ * attributes onto fixed SVG slots through refs — React renders only the
+ * structure and colours. It steps only as often as the slow rotation needs
+ * (8-30 fps), stops while the window is hidden, and never starts under
+ * prefers-reduced-motion (a static frame is drawn instead). The ambient
+ * breath is a CSS animation (App.css `brand-mark-breathe`), not a timer.
  */
 export function BrandMark({ signal, size = 36 }: BrandMarkProps) {
   const filterId = useId().replace(/:/g, "");
   const { isLight } = useTheme();
 
-  // Derive visual state from signal (theme-aware: ink gold on paper)
-  const {
-    glowOpacity,
-    edgeColor,
-    vertexColor,
-    faceColor,
-    stateLabel,
-    rotSpeed,
-  } = useMemo(() => deriveSignalVisuals(signal, isLight), [signal, isLight]);
+  const { glowOpacity, edgeColor, vertexColor, faceColor, stateLabel, rotSpeed } =
+    useMemo(() => deriveSignalVisuals(signal, isLight), [signal, isLight]);
 
-  // ---------------------------------------------------------------------------
-  // 3D animation loop
-  // ---------------------------------------------------------------------------
   const angleYRef = useRef(0);
-  const frameRef = useRef(0); // monotonic frame counter for secondary motion
+  const frameRef = useRef(0); // secondary-motion clock, in 30fps frames
   const speedRef = useRef(rotSpeed);
   speedRef.current = rotSpeed;
-  const rafRef = useRef(0);
+  const sizeRef = useRef(size);
+  sizeRef.current = size;
 
-  const [verts, setVerts] = useState<ProjVert[]>([]);
-  const [edges, setEdges] = useState<ProjEdge[]>([]);
-  const [faces, setFaces] = useState<ProjFace[]>([]);
+  const facesRef = useRef<SVGGElement>(null);
+  const glowRef = useRef<SVGGElement>(null);
+  const edgesRef = useRef<SVGGElement>(null);
+  const vertsRef = useRef<SVGGElement>(null);
 
-  const computeFrame = useCallback(() => {
-    const angleY = angleYRef.current;
-    const frame = frameRef.current;
-    const scale = 37;
-    const camDist = 4.8;
-    const cx = 50;
-    const cy = 50;
-
-    // Compound rotation: primary Y + slow drifting X tilt (organic, not mechanical)
-    // X oscillates between ~15° and ~25° over ~40 seconds at 30fps
-    const tiltX = 0.35 + Math.sin(frame * 0.0026) * 0.09;
-
-    // Project all vertices
-    const projected: ProjVert[] = TETRA_VERTS.map(([vx, vy, vz]) => {
-      const [rx, ry, rz] = rotY(vx, vy, vz, angleY);
-      const [tx, ty, tz] = rotX(rx, ry, rz, tiltX);
-      const [px, py, pz] = project(tx, ty, tz, camDist, scale, cx, cy);
-      return { x: px, y: py, z: pz };
-    });
-
-    // Faces — sorted back-to-front by centroid depth
-    const projFaces: ProjFace[] = TETRA_FACES.map(([a, b, c]) => {
-      // Indices are constants 0-3, always in range — assert for TS
-      const va = projected[a]!;
-      const vb = projected[b]!;
-      const vc = projected[c]!;
-      const points = `${va.x},${va.y} ${vb.x},${vb.y} ${vc.x},${vc.y}`;
-      const depth = (va.z + vb.z + vc.z) / 3;
-      const facing = faceNormalZ(va.x, va.y, vb.x, vb.y, vc.x, vc.y);
-      return { points, depth, facing };
-    });
-    projFaces.sort((a, b) => a.depth - b.depth);
-
-    // Edges — sorted back-to-front
-    const projEdges: ProjEdge[] = TETRA_EDGES.map(([a, b]) => {
-      const pa = projected[a]!;
-      const pb = projected[b]!;
-      return {
-        x1: pa.x,
-        y1: pa.y,
-        x2: pb.x,
-        y2: pb.y,
-        depth: (pa.z + pb.z) / 2,
-      };
-    });
-    projEdges.sort((a, b) => a.depth - b.depth);
-
-    setVerts(projected);
-    setEdges(projEdges);
-    setFaces(projFaces);
-  }, []);
-
-  useEffect(() => {
-    computeFrame();
-
-    let lastTime = 0;
-    const FRAME_MS = 1000 / 30;
-
-    const loop = (time: number) => {
-      rafRef.current = requestAnimationFrame(loop);
-      if (time - lastTime < FRAME_MS) return;
-      lastTime = time;
-
-      angleYRef.current += speedRef.current;
-      frameRef.current += 1;
-      computeFrame();
+  const draw = () => {
+    const slots: BrandMarkSlots = {
+      faces: facesRef.current,
+      glow: glowRef.current,
+      edges: edgesRef.current,
+      verts: vertsRef.current,
     };
-
-    rafRef.current = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(rafRef.current);
-  }, [computeFrame]);
-
-  // ---------------------------------------------------------------------------
-  // Render helpers
-  // ---------------------------------------------------------------------------
-
-  // Depth brightness: 0.25 (far) to 1.0 (near)
-  const depthBright = (z: number) => 0.25 + 0.75 * ((z + 1.2) / 2.4);
-
-  // Edge stroke width scales with depth — near edges thicker
-  const baseStroke = size <= 24 ? 3.5 : size <= 48 ? 2.8 : 2;
-  const edgeStroke = (z: number) => baseStroke * (0.6 + 0.4 * depthBright(z));
-
-  // Vertex radius scales with depth
-  const baseVtx = size <= 24 ? 5.5 : size <= 48 ? 4.5 : 3.5;
-
-  // Face fill opacity: front-facing = brighter, back-facing = dimmer
-  const faceOpacity = (depth: number, facing: number) => {
-    const base = 0.06 + 0.08 * depthBright(depth);
-    return facing > 0 ? base * 1.6 : base * 0.6;
+    drawBrandMark(slots, computeGeometry(angleYRef.current, frameRef.current), sizeRef.current);
   };
+  const drawRef = useRef(draw);
+  drawRef.current = draw;
 
-  // Ambient breathing cycle — keeps the mark alive even in idle state
-  const [breathPhase, setBreathPhase] = useState(0);
+  // Static frame on mount and whenever the size (stroke/vertex scale) changes.
+  useLayoutEffect(() => {
+    drawRef.current();
+  }, [size]);
+
+  // Animation loop — gated on visibility + reduced motion.
   useEffect(() => {
-    let frame = 0;
-    const interval = setInterval(() => {
-      frame += 1;
-      setBreathPhase(frame);
-    }, 100); // 10fps is enough for a slow breath
-    return () => clearInterval(interval);
-  }, []);
+    let raf = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let running = false;
+    let last = 0;
 
-  // Breath oscillates between 0 and 1 on a 4-second cycle
-  const breath = (Math.sin(breathPhase * 0.157) + 1) / 2; // 0.157 ≈ 2π / 40 steps = 4s at 10fps
-  const breathScale = 1 + breath * 0.04; // 1.0 → 1.04
-  const breathGlow = glowOpacity + breath * 0.18; // adds up to 0.18 to base glow
+    const tick = (time: number) => {
+      raf = 0;
+      if (!running) return;
+      // Time-based so the rotation speed is independent of the step rate.
+      const steps = last === 0 ? 1 : Math.min(time - last, 250) / BASE_FRAME_MS;
+      last = time;
+      angleYRef.current += speedRef.current * steps;
+      frameRef.current += steps;
+      drawRef.current();
+      timer = setTimeout(() => {
+        timer = undefined;
+        if (running) raf = requestAnimationFrame(tick);
+      }, frameIntervalMs(sizeRef.current, speedRef.current));
+    };
+    const start = () => {
+      if (running) return;
+      running = true;
+      last = 0;
+      raf = requestAnimationFrame(tick);
+    };
+    const stop = () => {
+      running = false;
+      if (raf) cancelAnimationFrame(raf);
+      if (timer !== undefined) clearTimeout(timer);
+      raf = 0;
+      timer = undefined;
+    };
+    const sync = () => (isMotionAllowed() ? start() : stop());
+
+    sync();
+    const unsubscribe = subscribeMotionGate(sync);
+    return () => {
+      unsubscribe();
+      stop();
+    };
+  }, []);
 
   const showLabel = size >= 100;
-
   const itemCount = signal?.item_count ?? 0;
   const openWindows = signal?.open_windows ?? 0;
 
   const titleParts = [`4DA: ${stateLabel}`];
   if (itemCount > 0) titleParts.push(`${itemCount} items`);
   if (openWindows > 0)
-    titleParts.push(
-      `${openWindows} decision window${openWindows > 1 ? "s" : ""}`,
-    );
+    titleParts.push(`${openWindows} decision window${openWindows > 1 ? "s" : ""}`);
 
   const ariaLabel = `4DA status: ${stateLabel}${itemCount > 0 ? `, ${itemCount} items found` : ""}`;
+
+  const glowStyle = { "--bm-glow": glowOpacity.toFixed(3) } as CSSProperties;
 
   return (
     <div
       className="brand-mark-container"
       role="status"
       aria-live="polite"
-      title={titleParts.join(" \u00b7 ")}
+      title={titleParts.join(" · ")}
       aria-label={ariaLabel}
       style={{
         width: size,
@@ -216,25 +148,16 @@ export function BrandMark({ signal, size = 36 }: BrandMarkProps) {
       }}
     >
       <svg
+        className="brand-mark-svg"
         width={size}
         height={size}
         viewBox="0 0 100 100"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
-        style={{
-          display: "block",
-          transform: `scale(${breathScale})`,
-          transition: "transform 0.3s ease",
-        }}
+        style={{ display: "block" }}
       >
         <defs>
-          <filter
-            id={`glow-${filterId}`}
-            x="-50%"
-            y="-50%"
-            width="200%"
-            height="200%"
-          >
+          <filter id={`glow-${filterId}`} x="-50%" y="-50%" width="200%" height="200%">
             <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur" />
             <feMerge>
               <feMergeNode in="blur" />
@@ -243,70 +166,38 @@ export function BrandMark({ signal, size = 36 }: BrandMarkProps) {
           </filter>
         </defs>
 
-        {/* Face fills — semi-transparent, sorted back-to-front. Gives mass. */}
-        <g>
-          {faces.map((f, i) => (
-            <polygon
-              key={`f${i}`}
-              points={f.points}
-              fill={faceColor}
-              opacity={faceOpacity(f.depth, f.facing)}
-            />
+        {/* Face fills — semi-transparent, painted back-to-front. Gives mass. */}
+        <g ref={facesRef} data-slot="faces">
+          {range(FACE_COUNT).map((i) => (
+            <polygon key={`f${i}`} fill={faceColor} />
           ))}
         </g>
 
-        {/* Edge glow layer — breathes with ambient pulse */}
-        <g opacity={breathGlow} filter={`url(#glow-${filterId})`}>
-          {edges.map((e, i) => (
-            <line
-              key={`g${i}`}
-              x1={e.x1}
-              y1={e.y1}
-              x2={e.x2}
-              y2={e.y2}
-              stroke={vertexColor}
-              strokeWidth={edgeStroke(e.depth) + 1.5}
-              strokeLinecap="round"
-              opacity={depthBright(e.depth)}
-            />
+        {/* Edge glow layer — breathes with the ambient CSS pulse */}
+        <g
+          ref={glowRef}
+          data-slot="glow"
+          className="brand-mark-glow"
+          style={glowStyle}
+          filter={`url(#glow-${filterId})`}
+        >
+          {range(EDGE_COUNT).map((i) => (
+            <line key={`g${i}`} stroke={vertexColor} strokeLinecap="round" />
           ))}
         </g>
 
         {/* Sharp edge layer — depth-sorted, width + brightness by depth */}
-        <g>
-          {edges.map((e, i) => (
-            <line
-              key={`e${i}`}
-              x1={e.x1}
-              y1={e.y1}
-              x2={e.x2}
-              y2={e.y2}
-              stroke={edgeColor}
-              strokeWidth={edgeStroke(e.depth)}
-              strokeLinecap="round"
-              opacity={depthBright(e.depth)}
-            />
+        <g ref={edgesRef} data-slot="edges">
+          {range(EDGE_COUNT).map((i) => (
+            <line key={`e${i}`} stroke={edgeColor} strokeLinecap="round" />
           ))}
         </g>
 
         {/* Vertex dots — near vertices draw on top, sized by depth */}
-        <g>
-          {[...verts]
-            .map((v, i) => ({ ...v, i }))
-            .sort((a, b) => a.z - b.z)
-            .map((v) => {
-              const b = depthBright(v.z);
-              return (
-                <circle
-                  key={`v${v.i}`}
-                  cx={v.x}
-                  cy={v.y}
-                  r={baseVtx * (0.6 + 0.4 * b)}
-                  fill={vertexColor}
-                  opacity={b}
-                />
-              );
-            })}
+        <g ref={vertsRef} data-slot="verts">
+          {range(VERT_COUNT).map((i) => (
+            <circle key={`v${i}`} fill={vertexColor} />
+          ))}
         </g>
       </svg>
 
