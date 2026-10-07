@@ -15,17 +15,27 @@ use super::{
     LICENSE_REVALIDATION_INTERVAL_SECS, TIER_DOWNGRADED,
 };
 
-/// Check if the user activated within the grace period.
+/// Check if the user activated within the grace period (judged against the
+/// anti-rollback clock floor).
 fn is_within_activation_grace(license: &LicenseConfig) -> bool {
-    if let Some(ref activated) = license.activated_at {
-        if let Ok(activated_date) = chrono::DateTime::parse_from_rfc3339(activated) {
-            let elapsed = chrono::Utc::now().signed_duration_since(activated_date);
-            if elapsed.num_days() < ACTIVATION_GRACE_PERIOD_DAYS {
-                return true;
-            }
-        }
-    }
-    false
+    is_within_activation_grace_at(license, super::license_effective_now())
+}
+
+/// [`is_within_activation_grace`] at an explicit instant. A FUTURE
+/// `activated_at` is outside grace: it used to yield a negative elapsed time,
+/// i.e. an unbounded grace period for a hand-edited timestamp.
+fn is_within_activation_grace_at(
+    license: &LicenseConfig,
+    now: chrono::DateTime<chrono::Utc>,
+) -> bool {
+    let Some(activated) = license.activated_at.as_deref() else {
+        return false;
+    };
+    let Ok(activated_date) = chrono::DateTime::parse_from_rfc3339(activated) else {
+        return false;
+    };
+    let elapsed = now.signed_duration_since(activated_date);
+    elapsed.num_seconds() >= 0 && elapsed.num_days() < ACTIVATION_GRACE_PERIOD_DAYS
 }
 
 /// Periodically re-run license integrity checks at runtime.
@@ -249,7 +259,9 @@ pub fn reconcile_license_from_proof(
     data_dir: &std::path::Path,
 ) -> bool {
     use super::gating::is_paid_tier;
-    use super::keygen::{is_cache_valid, load_license_backup_from, load_validation_cache_from};
+    use super::keygen::{
+        cache_vouches_for_key, load_license_backup_from, load_validation_cache_from,
+    };
     use super::verify::verify_license_key;
 
     // 1. In-memory / settings key is the primary proof.
@@ -290,7 +302,7 @@ pub fn reconcile_license_from_proof(
                 // only when the cache matches this key, is unexpired, and is paid;
                 // a fabricated backup file alone can never forge a paid tier.
                 load_validation_cache_from(data_dir).and_then(|cache| {
-                    if is_cache_valid(&cache, &backup.license_key) && is_paid_tier(&cache.tier) {
+                    if cache_vouches_for_key(Some(&cache), &backup.license_key) {
                         Some(normalize_tier(&cache.tier))
                     } else {
                         None
@@ -336,6 +348,20 @@ mod reconcile_tests {
             trial_started_at: None,
             dev_unlock_all: false,
         }
+    }
+
+    #[test]
+    fn future_activated_at_is_outside_grace() {
+        let now = chrono::Utc::now();
+        let mut l = lic("signal", "");
+        l.activated_at = Some((now + chrono::Duration::days(3650)).to_rfc3339());
+        assert!(!is_within_activation_grace_at(&l, now));
+        l.activated_at = Some((now - chrono::Duration::days(5)).to_rfc3339());
+        assert!(is_within_activation_grace_at(&l, now));
+        l.activated_at = Some((now - chrono::Duration::days(45)).to_rfc3339());
+        assert!(!is_within_activation_grace_at(&l, now));
+        l.activated_at = Some("garbage".into());
+        assert!(!is_within_activation_grace_at(&l, now));
     }
 
     #[test]
@@ -395,15 +421,8 @@ mod reconcile_tests {
     /// Write a fresh, key-matching, paid validation cache into `dir` — the proof
     /// a Keygen-format key needs before its backup can restore a paid tier.
     fn write_fresh_paid_cache(dir: &std::path::Path, key: &str, tier: &str) {
-        use super::super::keygen::{hash_key, save_validation_cache_to, KeygenValidationCache};
-        save_validation_cache_to(
-            dir,
-            &KeygenValidationCache {
-                validated_at: chrono::Utc::now().to_rfc3339(),
-                tier: tier.to_string(),
-                key_hash: hash_key(key),
-            },
-        );
+        use super::super::keygen::{save_validation_cache_to, KeygenValidationCache};
+        save_validation_cache_to(dir, &KeygenValidationCache::signed_now(tier, key));
     }
 
     #[test]

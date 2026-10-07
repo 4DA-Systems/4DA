@@ -115,6 +115,11 @@ pub(crate) struct TimeFloor {
     /// counted twice).
     #[serde(default)]
     pub(crate) pending_last_session: u64,
+    /// Machine-scope trial start, unix seconds (0 = none). Carried here so
+    /// license_clock.json holds the trial stamp alongside the floor (see
+    /// trial.rs); never touched by the floor policy below.
+    #[serde(default)]
+    pub(crate) trial_started_unix: i64,
 }
 
 /// What one observation of the wall clock implies. Pure data — [`apply`]
@@ -397,7 +402,16 @@ fn load_floor_record() -> TimeFloor {
         .and_then(|s| serde_json::from_str(&s).ok());
     let from_file = load_floor_from(&data_dir());
 
-    match (from_keychain, from_file) {
+    // The trial stamp merges independently: EARLIEST non-zero wins.
+    let trial = [&from_keychain, &from_file]
+        .into_iter()
+        .flatten()
+        .map(|r| r.trial_started_unix)
+        .filter(|t| *t > 0)
+        .min()
+        .unwrap_or(0);
+
+    let mut rec = match (from_keychain, from_file) {
         (Some(kc), Some(f)) => {
             if kc.floor_unix >= f.floor_unix {
                 kc
@@ -408,6 +422,16 @@ fn load_floor_record() -> TimeFloor {
         (Some(kc), None) => kc,
         (None, Some(f)) => f,
         (None, None) => TimeFloor::default(),
+    };
+    rec.trial_started_unix = trial;
+    rec
+}
+
+/// Keep the in-memory floor record's trial stamp in step with trial.rs, so a
+/// later floor persist never drops it. No-op until the record is loaded.
+pub(crate) fn note_trial_in_cache(trial_unix: i64) {
+    if let Some(rec) = FLOOR_CACHE.lock().as_mut() {
+        rec.trial_started_unix = trial_unix;
     }
 }
 
@@ -627,6 +651,7 @@ mod anti_rollback_tests {
             pending_since_unix: FLOOR + 1,
             pending_sessions: 1,
             pending_last_session: 42,
+            trial_started_unix: 0,
         };
         let json = serde_json::to_string(&rec).expect("serialize");
         let back: TimeFloor = serde_json::from_str(&json).expect("parse");

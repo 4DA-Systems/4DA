@@ -1,11 +1,13 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! License verification, feature gating, and trial management.
 
+mod cache_mac;
 mod clock;
 mod gating;
 mod keygen;
 mod renewal;
 mod revalidation;
+mod trial;
 mod verify;
 
 // ============================================================================
@@ -27,6 +29,7 @@ pub use revalidation::{
     get_last_validated_at, reconcile_license_from_proof, take_downgrade_flag,
     validate_license_on_startup,
 };
+pub use trial::reconcile_trial_stamp;
 pub use verify::{verify_license_key, LicensePayload};
 // The explicit-instant seam is consumed by license_tests.rs (a #[cfg(test)]
 // sibling); production callers go through verify_license_key.
