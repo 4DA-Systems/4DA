@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../../lib/commands';
 import { useAppStore } from '../../store';
+import { facetLabel } from './learned-facet-label';
 
 interface LearnedFacet {
   facet_id: string;
@@ -40,10 +41,13 @@ function Chip({
   const isPinned = facet.user_state === 'pinned';
   const isForgotten = facet.user_state === 'forgotten';
   const cfg = CLASS_CONFIG[facet.class] ?? DEFAULT_CLASS;
+  const { name, qualifier } = facetLabel(facet);
 
   return (
     <button
       onClick={() => onSelect(facet.facet_id)}
+      title={qualifier ? `${name} · ${qualifier}` : name}
+      aria-pressed={selected}
       className={`
         inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-medium
         transition-all cursor-pointer select-none
@@ -53,7 +57,12 @@ function Chip({
       `}
     >
       {isPinned && <span className="text-[10px]">&#x1F4CC;</span>}
-      <span className="truncate max-w-[140px]">{facet.value || facet.key}</span>
+      <span className="truncate max-w-[140px]">{name}</span>
+      {qualifier && (
+        <span className="opacity-70 font-normal truncate max-w-[80px]">
+          {'· '}{qualifier}
+        </span>
+      )}
       {facet.stability >= 5.0 && <span className="w-1.5 h-1.5 rounded-full bg-green-400 flex-shrink-0" title="Strong signal" />}
     </button>
   );
@@ -70,13 +79,15 @@ function ChipActions({
   const isPinned = facet.user_state === 'pinned';
   const isForgotten = facet.user_state === 'forgotten';
   const hasOverride = isPinned || isForgotten;
+  const { name, qualifier } = facetLabel(facet);
 
   return (
     <div className="flex items-center gap-4 px-1 py-2 text-xs animate-in fade-in duration-150">
       <div className="flex-1 min-w-0">
-        <span className="text-text-primary font-medium">{facet.value || facet.key}</span>
+        <span className="text-text-primary font-medium">{name}</span>
         {/* eslint-disable i18next/no-literal-string */}
         <span className="text-text-muted ml-2">
+          {qualifier && `${qualifier} · `}
           {facet.evidence_count} signal{facet.evidence_count !== 1 ? 's' : ''}
           {' · '}
           {facet.state}

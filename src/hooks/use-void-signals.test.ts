@@ -115,7 +115,7 @@ describe('void-signal interpolation helpers', () => {
   });
 
   it('fills missing and non-finite fields so the loop can converge', () => {
-    const s = normalizeVoidSignal({ pulse: Number.NaN, heat: 0.4 } as Partial<VoidSignal>);
+    const s = normalizeVoidSignal({ pulse: Number.NaN, heat: 0.4 });
     expect(s.pulse).toBe(0);
     expect(s.heat).toBe(0.4);
     expect(s.advantage_trend).toBe(0);
