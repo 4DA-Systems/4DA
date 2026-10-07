@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import sunLogo from '../assets/sun-logo.webp';
 import sunLogoLight from '../assets/sun-logo-light.webp';
 import { useTheme } from '../lib/theme';
+import { useAppVersion } from '../hooks/use-app-version';
 import {
   type InitStage,
   stageKeys,
@@ -36,6 +37,7 @@ export function SplashScreen({
 }: SplashScreenProps) {
   const { t } = useTranslation();
   const { isLight } = useTheme();
+  const appVersion = useAppVersion();
   const [fadeOut, setFadeOut] = useState(false);
   const [imageError, setImageError] = useState(false);
   const [minTimeElapsed, setMinTimeElapsed] = useState(false);
@@ -189,7 +191,7 @@ export function SplashScreen({
 
       {/* Version */}
       <p style={versionStyle}>
-        {t('splash.version', { version: __APP_VERSION__ })}
+        {t('splash.version', { version: appVersion })}
       </p>
 
       {/* Subtle refresh button - top right corner */}

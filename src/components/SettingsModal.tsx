@@ -14,6 +14,7 @@ import { SettingsIntelligenceTab } from './settings/SettingsIntelligenceTab';
 import { SettingsTeamTab } from './settings/SettingsTeamTab';
 import { TeamInviteDialog } from './settings/TeamInviteDialog';
 import { useAppStore } from '../store';
+import { useAppVersion } from '../hooks/use-app-version';
 import { translateError } from '../utils/error-messages';
 import { tabbableIn, trapTabKey } from '../lib/focus-trap';
 
@@ -112,6 +113,7 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
 
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
   const [initialized, setInitialized] = useState<Set<SettingsTab>>(new Set(['general']));
+  const appVersion = useAppVersion();
 
   // Data selectors — streamlined (removed ~20 unused selectors)
   const {
@@ -357,7 +359,7 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
         <div className="px-6 pb-6">
           <div className="pt-4 border-t border-border text-center">
             {/* eslint-disable i18next/no-literal-string */}
-            <p className="text-xs text-text-muted">4DA v{__APP_VERSION__} &copy; 2025-2026 4DA Systems. All rights reserved.</p>
+            <p className="text-xs text-text-muted">4DA v{appVersion} &copy; 2025-2026 4DA Systems. All rights reserved.</p>
             <p className="text-xs text-text-muted mt-1">Licensed under FSL-1.1-Apache-2.0</p>
             {/* eslint-enable i18next/no-literal-string */}
           </div>

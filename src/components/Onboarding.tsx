@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../lib/commands';
 import { tabbableIn, trapTabKey } from '../lib/focus-trap';
+import { useAppVersion } from '../hooks/use-app-version';
 
 import { LanguageSwitcher } from './LanguageSwitcher';
 import { ThemeToggle } from './ThemeToggle';
@@ -35,6 +36,7 @@ function getPersistedStep(): Step {
 
 export function Onboarding({ onComplete }: OnboardingProps) {
   const { t } = useTranslation();
+  const appVersion = useAppVersion();
 
   const stepLabels: Record<Step, string> = {
     welcome: t('onboarding.stepLabel.welcome'),
@@ -312,7 +314,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
       </div>
 
       {/* Version */}
-      <p className="shrink-0 mt-8 text-xs text-text-muted">{t('onboarding.version', { version: __APP_VERSION__ })}</p>
+      <p className="shrink-0 mt-8 text-xs text-text-muted">{t('onboarding.version', { version: appVersion })}</p>
       </div>
     </div>
   );

@@ -3,6 +3,7 @@ import { lazy, Suspense, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../store';
 import { cmd } from '../lib/commands';
+import { useAppVersion } from '../hooks/use-app-version';
 import { LogoMarkSVG } from './geometry/LogoMarkSVG';
 
 const GeometryShowcase = lazy(() => import('./geometry/GeometryShowcase').then(m => ({ default: m.GeometryShowcase })));
@@ -10,6 +11,7 @@ const PrivacySection = lazy(() => import('./settings/PrivacySection').then(m => 
 
 export function AboutPanel() {
   const { t } = useTranslation();
+  const appVersion = useAppVersion();
   const setShowSettings = useAppStore(s => s.setShowSettings);
   const [showLicenses, setShowLicenses] = useState(false);
 
@@ -38,7 +40,7 @@ export function AboutPanel() {
       {/* Version + Copyright */}
       <div className="text-center pt-2 border-t border-border/50">
         <p className="text-xs text-text-muted">
-          {t('about.copyright', { version: __APP_VERSION__ })}
+          {t('about.copyright', { version: appVersion })}
         </p>
         <div className="flex items-center justify-center gap-3 mt-1.5">
           <a
