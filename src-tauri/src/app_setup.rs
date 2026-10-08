@@ -2406,6 +2406,8 @@ async fn run_scheduled_analysis(handle: tauri::AppHandle) {
             crate::engine_runs::record(receipt);
             // Warm the knowledge-gap cache for this cycle off every caller's path.
             crate::knowledge_decay::refresh_knowledge_gaps_in_background();
+            // Same for Preemption: new generation + background pre-warm.
+            crate::preemption::refresh_preemption_cache_after_cycle();
 
             // Tier-2 LLM passes (judge + content analysis + LlmReject
             // demotions) — non-blocking, budget- and BYOK-gated inside.
