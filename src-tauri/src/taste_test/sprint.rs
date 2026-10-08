@@ -109,6 +109,10 @@ pub struct CalibrationSprintStatus {
     pub min_fit_samples: u32,
     /// Whether any calibration curve has been fit and persisted.
     pub curve_fitted: bool,
+    /// Days since the latest taste test finished (`None`: never taken).
+    /// The calibration nudge waits for real use instead of firing seconds
+    /// after onboarding's taste test.
+    pub taste_test_age_days: Option<f64>,
 }
 
 /// Parsed sprint response. `Skip` deliberately writes nothing — an
@@ -397,6 +401,7 @@ pub fn sprint_status(conn: &Connection, calibration_dir: &Path) -> Result<Calibr
         labeled_total,
         min_fit_samples: crate::calibration_fitter::MIN_FIT_SAMPLES as u32,
         curve_fitted: any_curve_for_known_models(conn, calibration_dir)?,
+        taste_test_age_days: super::db::taste_test_age_days(conn),
     })
 }
 
@@ -770,6 +775,28 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let status = sprint_status(&conn, dir.path()).unwrap();
         assert_eq!(status.labeled_total, 0);
+        assert_eq!(status.taste_test_age_days, None, "never taken");
+    }
+
+    #[test]
+    fn status_reports_taste_test_age_in_days() {
+        let conn = test_conn();
+        let dir = tempfile::tempdir().unwrap();
+        super::super::db::ensure_taste_test_tables(&conn).unwrap();
+        conn.execute_batch(
+            "INSERT INTO taste_test_results
+                (completed_at, items_shown, confidence, persona_weights, dominant_persona)
+             VALUES (datetime('now', '-5 days'), 8, 0.7, '[]', 0);
+             INSERT INTO taste_test_results
+                (completed_at, items_shown, confidence, persona_weights, dominant_persona)
+             VALUES (datetime('now', '-1 day'), 8, 0.7, '[]', 0);",
+        )
+        .unwrap();
+        let age = sprint_status(&conn, dir.path())
+            .unwrap()
+            .taste_test_age_days
+            .expect("age once taken");
+        assert!((0.9..1.1).contains(&age), "latest test counts: {age}");
     }
 
     #[test]
@@ -789,10 +816,12 @@ mod tests {
             labeled_total: 3,
             min_fit_samples: 50,
             curve_fitted: false,
+            taste_test_age_days: Some(2.5),
         };
         let json = serde_json::to_value(&status).unwrap();
         assert_eq!(json["labeledTotal"], 3);
         assert_eq!(json["minFitSamples"], 50);
         assert_eq!(json["curveFitted"], false);
+        assert_eq!(json["tasteTestAgeDays"], 2.5);
     }
 }

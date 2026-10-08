@@ -22,4 +22,10 @@ minFitSamples: number,
 /**
  * Whether any calibration curve has been fit and persisted.
  */
-curveFitted: boolean, };
+curveFitted: boolean, 
+/**
+ * Days since the latest taste test finished (`None`: never taken).
+ * The calibration nudge waits for real use instead of firing seconds
+ * after onboarding's taste test.
+ */
+tasteTestAgeDays: number | null, };
