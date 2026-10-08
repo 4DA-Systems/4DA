@@ -14,6 +14,11 @@ export default defineConfig({
   testDir: './e2e',
   outputDir: './e2e-results',
 
+  /* Runs after webServer is up: drives one real page load (and every lazy
+     view + the Settings modal) so Vite's dependency pre-bundle and module
+     transforms finish before the first test, not inside its 20 s budget. */
+  globalSetup: './e2e/support/global-setup.ts',
+
   /* Fail fast in CI, allow retries locally */
   retries: process.env.CI ? 0 : 1,
 

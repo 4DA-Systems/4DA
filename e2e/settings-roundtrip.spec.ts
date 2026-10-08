@@ -2,6 +2,11 @@ import { test, expect } from '@playwright/test';
 
 import { gotoMainShell } from './support/app';
 
+// Dialog waits use the suite's expect timeout (playwright.config.ts). The old
+// 3 s overrides measured machine load, not behaviour: SettingsModal is a lazy
+// chunk (AppModals.tsx), every test's fresh browser context re-fetches its
+// unbundled dev-server module graph, and under a parallel cargo build that
+// missed 3 s on a warm server (open via ',' and via the header button alike).
 test.describe('Settings Modal Roundtrip', () => {
   test.beforeEach(async ({ page }) => {
     await gotoMainShell(page);
@@ -16,14 +21,14 @@ test.describe('Settings Modal Roundtrip', () => {
     await settingsButton.first().click();
 
     const modal = page.getByRole('dialog');
-    await expect(modal).toBeVisible({ timeout: 3000 });
+    await expect(modal).toBeVisible();
   });
 
   test('all settings tabs are present and visible', async ({ page }) => {
     // Open settings
     await page.keyboard.press(',');
     const modal = page.getByRole('dialog');
-    await expect(modal).toBeVisible({ timeout: 3000 });
+    await expect(modal).toBeVisible();
 
     // Look for tab elements within the modal
     const tabs = modal.getByRole('tab');
@@ -34,7 +39,7 @@ test.describe('Settings Modal Roundtrip', () => {
   test('settings tabs are navigable via click', async ({ page }) => {
     await page.keyboard.press(',');
     const modal = page.getByRole('dialog');
-    await expect(modal).toBeVisible({ timeout: 3000 });
+    await expect(modal).toBeVisible();
 
     const tabs = modal.getByRole('tab');
     const tabCount = await tabs.count();
@@ -52,7 +57,7 @@ test.describe('Settings Modal Roundtrip', () => {
   test('settings closes via close button', async ({ page }) => {
     await page.keyboard.press(',');
     const modal = page.getByRole('dialog');
-    await expect(modal).toBeVisible({ timeout: 3000 });
+    await expect(modal).toBeVisible();
 
     // Find close button — could be X button or explicit close
     const closeButton = modal.getByRole('button', { name: /close|dismiss/i })
@@ -60,22 +65,22 @@ test.describe('Settings Modal Roundtrip', () => {
       .or(modal.locator('[data-testid="close-button"]'));
     await closeButton.first().click();
 
-    await expect(modal).not.toBeVisible({ timeout: 3000 });
+    await expect(modal).not.toBeVisible();
   });
 
   test('settings closes via Escape key', async ({ page }) => {
     await page.keyboard.press(',');
     const modal = page.getByRole('dialog');
-    await expect(modal).toBeVisible({ timeout: 3000 });
+    await expect(modal).toBeVisible();
 
     await page.keyboard.press('Escape');
-    await expect(modal).not.toBeVisible({ timeout: 3000 });
+    await expect(modal).not.toBeVisible();
   });
 
   test('toggle switches are interactive', async ({ page }) => {
     await page.keyboard.press(',');
     const modal = page.getByRole('dialog');
-    await expect(modal).toBeVisible({ timeout: 3000 });
+    await expect(modal).toBeVisible();
 
     // General has no toggle without a backend (monitoring status never
     // loads); the LLM re-ranking checkbox on Intelligence is pure form state.
@@ -95,7 +100,7 @@ test.describe('Settings Modal Roundtrip', () => {
   test('About tab shows app information', async ({ page }) => {
     await page.keyboard.press(',');
     const modal = page.getByRole('dialog');
-    await expect(modal).toBeVisible({ timeout: 3000 });
+    await expect(modal).toBeVisible();
 
     // Navigate to About tab
     const aboutTab = modal.getByRole('tab', { name: 'About', exact: true });
@@ -112,15 +117,15 @@ test.describe('Settings Modal Roundtrip', () => {
     // First open
     await page.keyboard.press(',');
     const modal = page.getByRole('dialog');
-    await expect(modal).toBeVisible({ timeout: 3000 });
+    await expect(modal).toBeVisible();
 
     // Close
     await page.keyboard.press('Escape');
-    await expect(modal).not.toBeVisible({ timeout: 3000 });
+    await expect(modal).not.toBeVisible();
 
     // Reopen
     await page.keyboard.press(',');
-    await expect(modal).toBeVisible({ timeout: 3000 });
+    await expect(modal).toBeVisible();
 
     // Should still be functional — tabs should render
     const tabs = modal.getByRole('tab');
