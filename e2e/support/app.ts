@@ -71,6 +71,11 @@ export async function installTauriIpcMock(page: Page, options: TauriMockOptions)
     },
     get_ollama_status: { running: false, version: '', models: [] },
     check_ollama_status: { running: false, version: '', models: [] },
+    // Discovery is consent-first: listing folders reads nothing, and no
+    // spec should see a scan it did not ask for.
+    ace_preview_discovery_dirs: [],
+    ace_candidate_dev_roots: [],
+    get_trial_status: { active: false, days_remaining: 0, started_at: null },
     get_model_registry: { providers: {}, fetched_at: 0, version: '0.0.0' },
     list_projects_with_stack_status: [],
     get_standing_queries: [],
@@ -102,6 +107,20 @@ export async function installTauriIpcMock(page: Page, options: TauriMockOptions)
     };
   }, responses);
 }
+
+/**
+ * `check_ollama_status` as the backend returns it for a machine with a chat
+ * model installed (settings_commands_llm/ollama.rs): readiness flags included.
+ */
+export const OLLAMA_READY = {
+  running: true,
+  version: '0.12.0',
+  models: [{ name: 'gemma4:12b', size: 7_300_000_000, modified_at: '2026-10-01T00:00:00Z' }],
+  url: 'http://localhost:11434',
+  has_llm_model: true,
+  has_embedding_model: false,
+  recommended_judge: 'gemma4:12b',
+};
 
 export interface IpcCall {
   cmd: string;

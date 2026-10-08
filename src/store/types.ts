@@ -66,8 +66,12 @@ export interface OllamaStatus {
   models: string[];
   base_url: string;
   error?: string;
+  /** Informational: 4DA ships its own local embedder, so none is required. */
   has_embedding_model?: boolean;
+  /** At least one chat model is installed — local AI is ready. */
   has_llm_model?: boolean;
+  /** Best measured local judge that fits this machine, when one is installed. */
+  recommended_judge?: string | null;
 }
 
 export interface DiscoveredContext {

@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../../lib/commands';
+import { runDiscovery } from '../../lib/discovery';
 import { safeListen } from '../../lib/tauri-events';
 
 import type { OllamaStatus, PullProgress } from './types';
@@ -11,9 +12,10 @@ import type { SectionState } from './onboarding-constants';
 import type { ExperienceLevel } from './setup-experience';
 import type { UseQuickSetupProps, ProviderType, LocalServerChoice } from './quick-setup-utils';
 import {
-  buildInitialPullProgress, refreshOllamaAfterPull,
+  buildInitialPullProgress, refreshOllamaAfterPull, isOllamaReady,
   validateApiKey, saveLlmProvider, probeKeyBeforeSave,
 } from './quick-setup-utils';
+import { useDiscoveryFolders } from './use-discovery-folders';
 
 export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
   const { t } = useTranslation();
@@ -32,7 +34,9 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
 
   // AI Provider state
   const [ollamaStatus, setOllamaStatus] = useState<OllamaStatus | null>(null);
-  const [provider, setProvider] = useState<ProviderType>('ollama');
+  // No provider until the user picks one (or a ready local Ollama is shown
+  // to them as the selection): Enter never saves a provider they did not see.
+  const [provider, setProvider] = useState<ProviderType | null>(null);
   const [apiKey, setApiKey] = useState('');
   const [pullingModels, setPullingModels] = useState(false);
   const [pullProgress, setPullProgress] = useState<Record<string, PullProgress>>({});
@@ -40,7 +44,9 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
   const [localServer, setLocalServer] = useState<LocalServerChoice | null>(null);
 
   // Projects + Interests state
+  const discovery = useDiscoveryFolders();
   const [detectedTech, setDetectedTech] = useState<string[]>([]);
+  const [scanning, setScanning] = useState(false);
   const [discoveryDone, setDiscoveryDone] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [interests, setInterests] = useState<string[]>([]);
@@ -65,7 +71,7 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
 
   // --- AI Provider auto-detect ---
   const pullMissingModels = useCallback(async (status: OllamaStatus) => {
-    if (status.has_embedding_model && status.has_llm_model) return;
+    if (status.has_llm_model) return;
 
     setPullingModels(true);
     cancelRequested.current = false;
@@ -92,7 +98,7 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
       const refreshed = await refreshOllamaAfterPull();
       if (refreshed) {
         setOllamaStatus(refreshed);
-        setAiConfigured(true);
+        setAiConfigured(isOllamaReady(refreshed));
       }
     } catch (e) {
       if (!cancelRequested.current) {
@@ -128,17 +134,14 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
         if (cancelled) return;
         setOllamaStatus(status);
 
-        if (status.running && status.has_embedding_model && status.has_llm_model) {
+        // A running Ollama with a chat model is ready: it is shown selected,
+        // and the user can pick another provider. Without a chat model nothing
+        // is selected and nothing is pulled — the download is the user's call.
+        if (isOllamaReady(status)) {
           setProvider('ollama');
           setAiConfigured(true);
           setAiOpen(false);
           setProjectsOpen(true);
-        } else if (status.running) {
-          // Ollama is running but missing model(s). Do NOT auto-pull — silently
-          // downloading ~GBs of models during an "optional" setup step is a
-          // false-state surprise. Select the provider and let the user trigger
-          // the download explicitly via downloadLocalModels().
-          setProvider('ollama');
         }
       } catch {
         setOllamaStatus({ running: false, version: null, models: [], base_url: 'http://localhost:11434' });
@@ -147,20 +150,21 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
     return () => { cancelled = true; };
   }, []);
 
-  // --- Auto-discover projects ---
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const result = await cmd('ace_auto_discover');
-        if (cancelled) return;
-        setDiscoveryDone(true);
-        const topics = result.scan_result?.combined?.topics || [];
-        if (topics.length > 0) setDetectedTech(topics.slice(0, 12));
-      } catch { setDiscoveryDone(true); }
-    })();
-    return () => { cancelled = true; };
-  }, []);
+  // --- Project scan: only the folders the user ticked, only when they ask ---
+  const scanProjects = useCallback(async () => {
+    if (scanning || discovery.selected.length === 0) return;
+    setScanning(true);
+    try {
+      const result = await runDiscovery(discovery.selected);
+      const topics = result.scan_result?.combined?.topics || [];
+      if (topics.length > 0) setDetectedTech(topics.slice(0, 12));
+      setDiscoveryDone(true);
+    } catch (e) {
+      setError(t('onboarding.projects.scanFailed', { error: String(e) }));
+    } finally {
+      setScanning(false);
+    }
+  }, [scanning, discovery.selected, t]);
 
   // --- Pre-populate from taste test if calibrated ---
   useEffect(() => {
@@ -180,9 +184,8 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
     return () => { cancelled = true; };
   }, []);
 
-  // --- Load suggested interests after discovery ---
+  // --- Load suggested interests (again after a scan) ---
   useEffect(() => {
-    if (!discoveryDone) return;
     let cancelled = false;
     void (async () => {
       try {
@@ -258,7 +261,7 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
   const handleProviderChange = (p: ProviderType) => {
     setProvider(p);
     setLocalServer(null);
-    setAiConfigured(p === 'ollama' && !!ollamaStatus?.running && !!ollamaStatus.has_embedding_model && !!ollamaStatus.has_llm_model);
+    setAiConfigured(p === 'ollama' && isOllamaReady(ollamaStatus));
     if (p !== 'ollama') setProjectsOpen(true);
   };
 
@@ -270,7 +273,7 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
       setProjectsOpen(true);
       return;
     }
-    const valid = validateApiKey(provider, key);
+    const valid = provider !== null && validateApiKey(provider, key);
     setAiConfigured(valid);
     setApiKeyHint(valid ? null : t('onboarding.setup.keyFormatHintSoft'));
   };
@@ -336,7 +339,7 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
     experienceOpen, setExperienceOpen, experienceLevel, setExperienceLevel,
     selectedStacks, setSelectedStacks,
     ollamaStatus, provider, apiKey, pullingModels, pullProgress, aiConfigured, localServer,
-    detectedTech, discoveryDone,
+    discovery, scanning, scanProjects, detectedTech, discoveryDone,
     suggestions, interests, newInterest, setNewInterest, role, setRole,
     error, setError, isSaving, apiKeyHint, skippedDownload, cancellingDownload,
     removeTag, addInterest, toggleInterest,

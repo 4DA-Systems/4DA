@@ -205,6 +205,83 @@ pub(crate) async fn test_ollama_connection_impl(llm: &LLMProvider) -> Result<ser
     }
 }
 
+/// Name prefixes of embedding-model families that do not say "embed" in
+/// their name. An embedder cannot chat, so it never makes Ollama "ready".
+const EMBEDDER_FAMILIES: &[&str] = &[
+    "nomic-embed",
+    "mxbai-embed",
+    "all-minilm",
+    "snowflake-arctic-embed",
+    "bge",
+    "e5",
+];
+
+/// Whether an installed Ollama model is an embedding model (not a chat model).
+/// Matches on the model's own name, after any registry namespace
+/// (`hf.co/org/bge-m3` → `bge-m3`).
+pub(crate) fn is_embedding_model(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    let base = lower.rsplit('/').next().unwrap_or(&lower);
+    base.contains("embed") || EMBEDDER_FAMILIES.iter().any(|f| base.starts_with(f))
+}
+
+/// What onboarding needs to know about the installed models.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct OllamaFlags {
+    /// At least one chat model is installed: local AI works without a download.
+    pub has_llm_model: bool,
+    /// Informational only: 4DA ships its own local embedder, so no Ollama
+    /// embedding model is required.
+    pub has_embedding_model: bool,
+    /// The best measured local judge that fits `budget_mb`, if any.
+    pub recommended_judge: Option<String>,
+}
+
+/// Derive readiness from `(name, size_bytes)` pairs as listed by `/api/tags`.
+/// `budget_mb` is this machine's judge memory budget (`None` = unknown GPU,
+/// then no judge is recommended, matching `local_judge::pick_judge`).
+pub(crate) fn derive_ollama_flags(models: &[(String, u64)], budget_mb: Option<u64>) -> OllamaFlags {
+    let installed: Vec<crate::local_judge::Installed> = models
+        .iter()
+        .filter(|(name, _)| !is_embedding_model(name))
+        .map(|(name, size)| crate::local_judge::Installed {
+            name: name.clone(),
+            size_mb: size / (1024 * 1024),
+        })
+        .collect();
+    OllamaFlags {
+        has_llm_model: !installed.is_empty(),
+        has_embedding_model: models.iter().any(|(name, _)| is_embedding_model(name)),
+        recommended_judge: crate::local_judge::pick_judge(&installed, budget_mb),
+    }
+}
+
+/// `/api/tags` as `(name, size, modified_at)`; empty when Ollama does not answer.
+async fn fetch_model_list(client: &reqwest::Client, url: &str) -> Vec<(String, u64, String)> {
+    let Ok(resp) = client.get(format!("{url}/api/tags")).send().await else {
+        return Vec::new();
+    };
+    if !resp.status().is_success() {
+        return Vec::new();
+    }
+    let data: serde_json::Value = resp.json().await.unwrap_or_default();
+    data["models"]
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .map(|m| {
+                    (
+                        m["name"].as_str().unwrap_or("").to_string(),
+                        m["size"].as_u64().unwrap_or(0),
+                        m["modified_at"].as_str().unwrap_or("").to_string(),
+                    )
+                })
+                .filter(|(name, _, _)| !name.is_empty())
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
 /// Implementation for check_ollama_status command.
 pub(super) async fn check_ollama_status_impl(
     base_url: Option<String>,
@@ -233,34 +310,29 @@ pub(super) async fn check_ollama_status_impl(
         }
     };
 
-    // Get available models
-    let tags_url = format!("{url}/api/tags");
-    let models: Vec<serde_json::Value> = match client.get(&tags_url).send().await {
-        Ok(resp) if resp.status().is_success() => {
-            let data: serde_json::Value = resp.json().await.unwrap_or_default();
-            data["models"]
-                .as_array()
-                .map(|arr| {
-                    arr.iter()
-                        .map(|m| {
-                            serde_json::json!({
-                                "name": m["name"].as_str().unwrap_or(""),
-                                "size": m["size"].as_u64().unwrap_or(0),
-                                "modified_at": m["modified_at"].as_str().unwrap_or("")
-                            })
-                        })
-                        .collect()
-                })
-                .unwrap_or_default()
-        }
-        _ => vec![],
-    };
+    let listed = fetch_model_list(&client, &url).await;
+    let pairs: Vec<(String, u64)> = listed.iter().map(|(n, s, _)| (n.clone(), *s)).collect();
+    // The GPU probe is cached after its first run, but that first run spawns
+    // a process: keep it off the async worker.
+    let budget_mb = tokio::task::spawn_blocking(crate::local_judge::memory_budget_mb)
+        .await
+        .unwrap_or(None);
+    let flags = derive_ollama_flags(&pairs, budget_mb);
+    let models: Vec<serde_json::Value> = listed
+        .iter()
+        .map(|(name, size, modified_at)| {
+            serde_json::json!({ "name": name, "size": size, "modified_at": modified_at })
+        })
+        .collect();
 
     Ok(serde_json::json!({
         "running": true,
         "version": version,
         "models": models,
-        "url": url
+        "url": url,
+        "has_llm_model": flags.has_llm_model,
+        "has_embedding_model": flags.has_embedding_model,
+        "recommended_judge": flags.recommended_judge,
     }))
 }
 
@@ -476,5 +548,80 @@ mod pull_line_tests {
     #[test]
     fn non_json_lines_are_ignored() {
         assert_eq!(parse_pull_line("not json"), None);
+    }
+}
+
+#[cfg(test)]
+mod flag_tests {
+    use super::{derive_ollama_flags, is_embedding_model};
+
+    const GB: u64 = 1024 * 1024 * 1024;
+
+    fn models(list: &[(&str, u64)]) -> Vec<(String, u64)> {
+        list.iter().map(|(n, s)| ((*n).to_string(), *s)).collect()
+    }
+
+    #[test]
+    fn a_chat_model_alone_is_ready_and_recommended_when_it_fits() {
+        let flags = derive_ollama_flags(&models(&[("gemma4:12b", 7 * GB)]), Some(16_000));
+        assert!(flags.has_llm_model);
+        assert!(!flags.has_embedding_model);
+        assert_eq!(flags.recommended_judge.as_deref(), Some("gemma4:12b"));
+    }
+
+    #[test]
+    fn an_embedder_alone_is_not_a_chat_model() {
+        let flags = derive_ollama_flags(
+            &models(&[("nomic-embed-text:latest", GB / 4)]),
+            Some(16_000),
+        );
+        assert!(!flags.has_llm_model);
+        assert!(flags.has_embedding_model);
+        assert_eq!(flags.recommended_judge, None);
+    }
+
+    #[test]
+    fn no_models_means_nothing_is_ready() {
+        let flags = derive_ollama_flags(&[], Some(16_000));
+        assert!(!flags.has_llm_model);
+        assert!(!flags.has_embedding_model);
+        assert_eq!(flags.recommended_judge, None);
+    }
+
+    #[test]
+    fn mixed_install_reports_both_and_picks_the_measured_judge() {
+        let flags = derive_ollama_flags(
+            &models(&[
+                ("llama3.2:latest", 2 * GB),
+                ("mxbai-embed-large", GB / 2),
+                ("qwen3:14b", 9 * GB),
+            ]),
+            Some(16_000),
+        );
+        assert!(flags.has_llm_model);
+        assert!(flags.has_embedding_model);
+        assert_eq!(flags.recommended_judge.as_deref(), Some("qwen3:14b"));
+    }
+
+    #[test]
+    fn unknown_gpu_recommends_no_judge_but_stays_ready() {
+        let flags = derive_ollama_flags(&models(&[("gemma4:12b", 7 * GB)]), None);
+        assert!(flags.has_llm_model);
+        assert_eq!(flags.recommended_judge, None);
+    }
+
+    #[test]
+    fn embedder_families_without_embed_in_the_name_are_recognised() {
+        for name in [
+            "bge-m3",
+            "all-minilm:l6-v2",
+            "e5-large",
+            "hf.co/BAAI/bge-small",
+        ] {
+            assert!(is_embedding_model(name), "{name} is an embedder");
+        }
+        for name in ["gemma4:12b", "qwen3:14b", "llama3.2", "deepseek-r1:8b"] {
+            assert!(!is_embedding_model(name), "{name} is a chat model");
+        }
     }
 }

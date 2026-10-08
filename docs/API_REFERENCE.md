@@ -142,10 +142,28 @@ invoke('ace_get_active_topics'): Promise<Topic[]>
 
 ### `ace_auto_discover`
 
-Run full auto-discovery.
+Scan for projects. `dirs` is the list of folders the user confirmed; omit it to
+scan the default home folders. Concurrent calls share one scan.
 
 ```typescript
-invoke('ace_auto_discover'): Promise<AutoDiscoverResult>
+invoke('ace_auto_discover', { dirs?: string[] }): Promise<AutoDiscoverResult>
+```
+
+### `ace_preview_discovery_dirs`
+
+The home folders discovery would scan. Existence checks only; reads no files.
+
+```typescript
+invoke('ace_preview_discovery_dirs'): Promise<string[]>
+```
+
+### `ace_candidate_dev_roots`
+
+Opt-in: likely project roots on fixed drives (common folder names and top-level
+git repositories), for the user to tick. Adds nothing.
+
+```typescript
+invoke('ace_candidate_dev_roots'): Promise<string[]>
 ```
 
 ### `ace_get_health`

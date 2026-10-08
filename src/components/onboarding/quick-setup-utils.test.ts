@@ -19,6 +19,7 @@ import {
   saveLlmProvider,
   validateApiKey,
   buildInitialPullProgress,
+  isOllamaReady,
   probeKeyBeforeSave,
   localServerChoice,
   IMPORTED_FROM_ENV,
@@ -131,24 +132,47 @@ describe('validateApiKey', () => {
 });
 
 describe('buildInitialPullProgress', () => {
-  it('queues only the models that are missing', () => {
-    const { models, initial } = buildInitialPullProgress(
+  it('never queues an embedder: 4DA ships its own local embedding model', () => {
+    const { models } = buildInitialPullProgress(
       ollama({ has_embedding_model: false, has_llm_model: true }),
     );
-    expect(models).toEqual(['nomic-embed-text']);
-    expect(initial['nomic-embed-text']).toMatchObject({ status: 'waiting', done: false });
+    expect(models).toEqual([]);
   });
 
-  it('queues both models when neither is present', () => {
-    const { models } = buildInitialPullProgress(
+  it('queues only a chat model when none is installed', () => {
+    const { models, initial } = buildInitialPullProgress(
       ollama({ has_embedding_model: false, has_llm_model: false }),
     );
-    expect(models).toEqual(['nomic-embed-text', 'llama3.2']);
+    expect(models).toEqual(['llama3.2']);
+    expect(initial['llama3.2']).toMatchObject({ status: 'waiting', done: false });
   });
 
-  it('queues nothing when both models are present', () => {
+  it('queues nothing when a chat model is present', () => {
     const { models } = buildInitialPullProgress(ollama());
     expect(models).toEqual([]);
+  });
+});
+
+describe('isOllamaReady', () => {
+  it('needs a running Ollama with a chat model, and no embedder', () => {
+    expect(isOllamaReady(ollama({ models: ['gemma4:12b'], has_embedding_model: false }))).toBe(true);
+    expect(isOllamaReady(ollama({ has_llm_model: false }))).toBe(false);
+    expect(isOllamaReady(ollama({ running: false }))).toBe(false);
+    expect(isOllamaReady(null)).toBe(false);
+  });
+});
+
+describe('saveLlmProvider — no choice made', () => {
+  beforeEach(() => cmdMock.mockReset());
+
+  it('saves nothing at all, even with a ready Ollama on the machine', async () => {
+    await saveLlmProvider(null, '', ollama({ models: ['gemma4:12b'] }));
+    expect(cmdMock).not.toHaveBeenCalled();
+  });
+
+  it('uses the backend-recommended judge when Ollama is chosen', async () => {
+    await saveLlmProvider('ollama', '', ollama({ models: ['llama3.2', 'qwen3:14b', 'gemma4:12b'], recommended_judge: 'qwen3:14b' }));
+    expect(persistedProvider()).toMatchObject({ provider: 'ollama', model: 'qwen3:14b' });
   });
 });
 

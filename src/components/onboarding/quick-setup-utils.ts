@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { cmd } from '../../lib/commands';
-import { normalizeOllamaStatus } from '../../utils/normalize-ollama';
+import { isEmbeddingModel, normalizeOllamaStatus } from '../../utils/normalize-ollama';
 import type { OllamaStatus, PullProgress } from './types';
 
 export type ProviderType = 'anthropic' | 'openai' | 'ollama' | 'openai-compatible';
@@ -68,13 +68,23 @@ export function modelDownloadSize(models: readonly string[]): string | null {
   return total >= 1000 ? `${(total / 1000).toFixed(1)} GB` : `${total} MB`;
 }
 
-/** Build the initial pull-progress map for models that need downloading. */
+/**
+ * Local AI is ready when Ollama runs and has at least one chat model. No
+ * Ollama embedder is needed: 4DA ships its own local embedding model.
+ */
+export function isOllamaReady(status: OllamaStatus | null | undefined): boolean {
+  return !!status?.running && !!status.has_llm_model;
+}
+
+/**
+ * Build the initial pull-progress map for models that need downloading: a chat
+ * model, and only when none is installed.
+ */
 export function buildInitialPullProgress(status: OllamaStatus): {
   models: string[];
   initial: Record<string, PullProgress>;
 } {
   const models: string[] = [];
-  if (!status.has_embedding_model) models.push('nomic-embed-text');
   if (!status.has_llm_model) models.push('llama3.2');
 
   const initial: Record<string, PullProgress> = {};
@@ -90,12 +100,14 @@ export function buildInitialPullProgress(status: OllamaStatus): {
 const MEASURED_JUDGE_MODELS = ['gemma4:26b', 'gemma4:12b', 'qwen3:14b'];
 
 /**
- * The installed Ollama model 4DA should use: a measured judge when one is
- * installed (same prefix match as the backend, so `gemma4:12b-it-qat` counts),
- * otherwise the first chat model, otherwise the `llama3.2` default.
+ * The installed Ollama model 4DA should use: the backend's recommended judge
+ * (a measured judge that fits this machine) when given, else a measured judge
+ * when one is installed (same prefix match as the backend, so
+ * `gemma4:12b-it-qat` counts), else the first chat model, else `llama3.2`.
  */
-export function pickOllamaModel(models: readonly string[] | undefined): string {
-  const chat = (models ?? []).filter(m => !m.startsWith('nomic-embed-text'));
+export function pickOllamaModel(models: readonly string[] | undefined, recommended?: string | null): string {
+  const chat = (models ?? []).filter(m => !isEmbeddingModel(m));
+  if (recommended && chat.includes(recommended)) return recommended;
   for (const judge of MEASURED_JUDGE_MODELS) {
     const hit = chat.find(m => m.toLowerCase().startsWith(judge));
     if (hit) return hit;
@@ -137,7 +149,7 @@ export function validateApiKey(provider: ProviderType, key: string): boolean {
  * Skipped entirely for ollama / openai-compatible / empty keys.
  */
 export async function probeKeyBeforeSave(
-  provider: ProviderType,
+  provider: ProviderType | null,
   apiKey: string,
 ): Promise<{ ok: boolean; reason?: string }> {
   // Only the two BYOK cloud providers with a non-empty key are probed.
@@ -171,13 +183,17 @@ export async function probeKeyBeforeSave(
   }
 }
 
-/** Persist the chosen LLM provider + key to the backend. */
+/**
+ * Persist the chosen LLM provider + key to the backend. `null` means the user
+ * made no choice: nothing is saved, so no provider is ever set on their behalf.
+ */
 export async function saveLlmProvider(
-  provider: ProviderType,
+  provider: ProviderType | null,
   apiKey: string,
   ollamaStatus: OllamaStatus | null,
   localServer: LocalServerChoice | null = null,
 ): Promise<void> {
+  if (provider === null) return;
   const noProvider = { provider: 'none', apiKey: '', model: '', baseUrl: null, openaiApiKey: null };
 
   if (provider === 'openai-compatible' && localServer) {
@@ -187,7 +203,7 @@ export async function saveLlmProvider(
     });
   } else if (provider === 'ollama') {
     if (ollamaStatus?.running) {
-      const ollamaModel = pickOllamaModel(ollamaStatus.models);
+      const ollamaModel = pickOllamaModel(ollamaStatus.models, ollamaStatus.recommended_judge);
       await cmd('set_llm_provider', {
         provider: 'ollama', apiKey: '', model: ollamaModel,
         baseUrl: ollamaStatus.base_url || 'http://localhost:11434', openaiApiKey: null,

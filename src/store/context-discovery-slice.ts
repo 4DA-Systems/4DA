@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import type { StateCreator } from 'zustand';
 import { cmd } from '../lib/commands';
+import { runDiscovery } from '../lib/discovery';
 import type { AppStore, ContextDiscoverySlice } from './types';
 
 export const createContextDiscoverySlice: StateCreator<AppStore, [], [], ContextDiscoverySlice> = (set, get) => ({
@@ -44,7 +45,9 @@ export const createContextDiscoverySlice: StateCreator<AppStore, [], [], Context
     setSettingsStatus('Auto-discovering your development context...');
 
     try {
-      const result = await cmd('ace_auto_discover');
+      // Shared with any discovery already in flight; never resolves to
+      // `already_running`, so that is not misread as "nothing found".
+      const result = await runDiscovery();
 
       if (result.success) {
         set({ scanDirectories: result.directories || [] });

@@ -1,6 +1,6 @@
 import { test, expect, type Page, type ConsoleMessage } from '@playwright/test';
 
-import { installTauriIpcMock, mockSettings } from './support/app';
+import { installTauriIpcMock, ipcLog, mockSettings, OLLAMA_READY } from './support/app';
 
 /**
  * First-run flow tests — validate the user journey from app load through navigation.
@@ -216,5 +216,60 @@ test.describe('First-Run Flow', () => {
 
     // Allow zero critical errors
     expect(criticalErrors.length).toBe(0);
+  });
+
+  test.describe('consent-first project scan', () => {
+    const FOLDERS = ['C:\\Users\\dev\\code', 'C:\\Users\\dev\\Documents'];
+
+    async function openWizardAt(page: Page, step: 'choice' | 'setup') {
+      await page.addInitScript((s: string) => {
+        try { localStorage.setItem('4da-onboarding-wizard-step', s); } catch { /* noop */ }
+      }, step);
+      await installTauriIpcMock(page, {
+        settings: { ...mockSettings({ provider: 'none', model: '' }), onboarding_complete: false },
+        responses: {
+          check_ollama_status: OLLAMA_READY,
+          ace_preview_discovery_dirs: FOLDERS,
+          ace_auto_discover: { success: true, directories: [FOLDERS[0]], directories_found: 1, projects_found: 1, directories_added: 1, scan_result: { combined: { total_topics: 1, topics: ['rust'] } } },
+          mark_onboarding_complete: null,
+          taste_test_is_calibrated: false,
+          ace_get_suggested_interests: [],
+        },
+      });
+      await page.goto('/');
+      expect(await waitForApp(page)).toBe('onboarding');
+      return page.getByRole('dialog', { name: /setup wizard/i });
+    }
+
+    test('the choice gate lists folders and scans only the ticked ones, only on click', async ({ page }) => {
+      const dialog = await openWizardAt(page, 'choice');
+      await expect(dialog.getByLabel(FOLDERS[0]!)).toBeChecked();
+      await expect(dialog.getByText(/already learning about your projects/i)).toHaveCount(0);
+
+      await dialog.getByLabel(FOLDERS[1]!).uncheck();
+      expect((await ipcLog(page)).filter(c => c.cmd === 'ace_auto_discover')).toHaveLength(0);
+
+      await dialog.getByRole('button', { name: /scan my projects/i }).click();
+      await expect.poll(async () => (await ipcLog(page)).filter(c => c.cmd === 'ace_auto_discover').map(c => c.args))
+        .toEqual([{ dirs: [FOLDERS[0]] }]);
+    });
+
+    test('quick setup: a ready Ollama is recognised and nothing is scanned on open', async ({ page }) => {
+      const dialog = await openWizardAt(page, 'setup');
+      await expect(dialog.getByRole('button', { name: /AI Provider: Local AI Ready/i })).toBeVisible();
+      await expect(dialog.getByText(/models aren't installed/i)).toHaveCount(0);
+
+      await page.waitForTimeout(1_000);
+      expect((await ipcLog(page)).filter(c => c.cmd === 'ace_auto_discover')).toHaveLength(0);
+
+      // A ready AI provider opens the Projects section on its own.
+      const projects = dialog.getByRole('button', { name: /^Your Projects/ });
+      await expect(projects).toHaveAttribute('aria-expanded', 'true');
+      await expect(dialog.getByLabel(FOLDERS[0]!)).toBeChecked();
+      await dialog.getByRole('button', { name: /scan selected folders/i }).click();
+      await expect(dialog.getByRole('button', { name: 'Remove rust' })).toBeVisible();
+      const scans = (await ipcLog(page)).filter(c => c.cmd === 'ace_auto_discover');
+      expect(scans.map(c => c.args)).toEqual([{ dirs: FOLDERS }]);
+    });
   });
 });

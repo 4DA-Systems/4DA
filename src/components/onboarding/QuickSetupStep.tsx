@@ -33,6 +33,9 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
     pullingModels,
     pullProgress,
     aiConfigured,
+    discovery,
+    scanning,
+    scanProjects,
     detectedTech,
     discoveryDone,
     suggestions,
@@ -172,17 +175,22 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
         <div>
           <SectionHeader
             title={t('onboarding.setup.yourProjects')}
-            subtitle={discoveryDone
-              ? (detectedTech.length > 0 ? t('onboarding.setup.techDetected', { count: detectedTech.length }) : t('onboarding.setup.discoveryComplete'))
-              : t('onboarding.setup.scanning')}
+            subtitle={scanning
+              ? t('onboarding.setup.scanning')
+              : discoveryDone
+                ? (detectedTech.length > 0 ? t('onboarding.setup.techDetected', { count: detectedTech.length }) : t('onboarding.setup.discoveryComplete'))
+                : t('onboarding.setup.chooseFolders')}
             isOpen={projectsOpen}
             onToggle={() => setProjectsOpen(!projectsOpen)}
             done={discoveryDone}
           />
           {projectsOpen && (
             <SetupProjects
+              discovery={discovery}
+              scanning={scanning}
               discoveryDone={discoveryDone}
               detectedTech={detectedTech}
+              onScan={() => { void scanProjects(); }}
               onRemoveTag={removeTag}
             />
           )}
@@ -192,13 +200,17 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
         <div>
           <SectionHeader
             title={t('onboarding.setup.yourStack')}
-            subtitle={selectedStacks.length > 0 ? t('onboarding.setup.profilesSelected', { count: selectedStacks.length }) : t('onboarding.setup.autoDetecting')}
+            subtitle={selectedStacks.length > 0
+              ? t('onboarding.setup.profilesSelected', { count: selectedStacks.length })
+              : scanning ? t('onboarding.setup.autoDetecting') : t('onboarding.setup.pickStack')}
             isOpen={stacksOpen}
             onToggle={() => setStacksOpen(!stacksOpen)}
             done={selectedStacks.length > 0}
           />
           <div style={{ display: stacksOpen ? undefined : 'none' }}>
+            {/* Re-mounted after a scan so stack detection sees what it found */}
             <SetupStack
+              key={discoveryDone ? 'scanned' : 'initial'}
               selectedStacks={selectedStacks}
               onSelectionChange={setSelectedStacks}
             />

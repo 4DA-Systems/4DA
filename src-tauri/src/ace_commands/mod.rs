@@ -7,6 +7,7 @@
 
 mod accuracy;
 mod anomalies;
+mod auto_discover;
 mod context;
 mod dependencies;
 mod embeddings;
@@ -16,6 +17,7 @@ mod watcher;
 
 pub use accuracy::*;
 pub use anomalies::*;
+pub use auto_discover::*;
 pub use context::*;
 pub use embeddings::*;
 pub use interactions::*;

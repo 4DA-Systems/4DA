@@ -128,7 +128,7 @@ fn fits(measured: &str, size_mb: u64, budget_mb: u64) -> bool {
 
 /// This machine's judge memory budget: dedicated VRAM when the GPU reports
 /// it; on Apple Silicon (unified memory, no VRAM figure) half the RAM.
-fn memory_budget_mb() -> Option<u64> {
+pub(crate) fn memory_budget_mb() -> Option<u64> {
     let hw = crate::hardware_detect::detect_hardware();
     match hw.gpu {
         Some(gpu) if gpu.vram_mb.is_some() => gpu.vram_mb,
