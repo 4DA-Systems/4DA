@@ -1,6 +1,6 @@
 # Installing 4DA on Windows
 
-4DA runs on Windows 10 and 11. The app is under 100 MB and installs in seconds.
+4DA runs on Windows 10 and 11. The installer is about 280 MB — most of that is the local embedding model, which ships inside it so semantic search works offline from the first run.
 
 ## Publisher verification
 
