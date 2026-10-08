@@ -5,6 +5,8 @@ use std::collections::HashSet;
 
 use rusqlite::params;
 
+use crate::db::table_exists;
+
 use super::{classify_chain_signal, TopicChainItem, UNGROUNDED_CONFIDENCE_CAP};
 
 /// Pure urgency/confidence policy for a detected chain, separated from DB access so the
@@ -262,16 +264,6 @@ fn append_dependency_hits(
         return;
     };
     hits.extend(rows.filter_map(std::result::Result::ok));
-}
-
-fn table_exists(conn: &rusqlite::Connection, table: &str) -> bool {
-    conn.query_row(
-        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
-        params![table],
-        |row| row.get::<_, i64>(0),
-    )
-    .map(|count| count > 0)
-    .unwrap_or(false)
 }
 
 fn table_has_column(conn: &rusqlite::Connection, table: &str, column: &str) -> bool {

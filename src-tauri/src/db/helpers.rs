@@ -90,6 +90,24 @@ pub(crate) fn blob_to_embedding(blob: &[u8]) -> Vec<f32> {
         .collect()
 }
 
+/// True when `table` exists in the connected database.
+///
+/// Several tables are created lazily — `tech_stack` by the context engine, the
+/// ACE tables (`file_signals`, `active_topics`, `detected_tech`, ...) by the
+/// deferred ACE setup — so on a brand-new install code that runs before them
+/// must skip quietly rather than fail with "no such table". Any query error
+/// reads as "absent". The single shared copy (audit 2026-10-07): four modules
+/// each hand-rolled this.
+pub(crate) fn table_exists(conn: &rusqlite::Connection, table: &str) -> bool {
+    conn.query_row(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+        [table],
+        |row| row.get::<_, i64>(0),
+    )
+    .map(|n| n > 0)
+    .unwrap_or(false)
+}
+
 // ============================================================================
 // Tests
 // ============================================================================
@@ -97,6 +115,15 @@ pub(crate) fn blob_to_embedding(blob: &[u8]) -> Vec<f32> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn table_exists_reports_presence_and_absence() {
+        let conn = rusqlite::Connection::open_in_memory().expect("in-memory db");
+        assert!(!table_exists(&conn, "tech_stack"));
+        conn.execute_batch("CREATE TABLE tech_stack (technology TEXT)")
+            .expect("create");
+        assert!(table_exists(&conn, "tech_stack"));
+    }
 
     #[test]
     fn test_hash_content() {

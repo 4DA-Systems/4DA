@@ -386,6 +386,16 @@ mod tests {
     }
 
     #[test]
+    fn seed_without_tech_stack_table_is_a_quiet_noop() {
+        // Fresh install: the migration seeds before the context engine has
+        // created `tech_stack`. Must be Ok(0), never "no such table".
+        let conn = setup_test_db();
+        conn.execute_batch("DROP TABLE tech_stack").unwrap();
+        assert_eq!(seed_decisions_from_profile(&conn).unwrap(), 0);
+        assert!(list_decisions(&conn, None, None, 50).unwrap().is_empty());
+    }
+
+    #[test]
     fn test_update_decision() {
         let conn = setup_test_db();
         let id = record_decision(

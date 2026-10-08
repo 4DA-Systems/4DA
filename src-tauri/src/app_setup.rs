@@ -1093,10 +1093,7 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                 }
 
                 // Purge file_signals older than 7 days
-                match conn.execute(
-                    "DELETE FROM file_signals WHERE timestamp < datetime('now', '-7 days')",
-                    [],
-                ) {
+                match crate::ace::db::purge_old_file_signals(&conn) {
                     Ok(n) => {
                         total_deleted += n;
                         if n > 0 {

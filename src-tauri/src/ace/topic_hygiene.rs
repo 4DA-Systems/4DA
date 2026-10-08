@@ -98,6 +98,9 @@ fn column_values(conn: &Connection, sql: &str) -> Vec<String> {
 /// install the vocabulary is empty and every topic would be "unknown" — the
 /// scan that follows populates the tables and this runs again after it.
 pub fn purge_non_dependency_topics(conn: &Connection) -> Result<usize> {
+    if !crate::db::table_exists(conn, "active_topics") {
+        return Ok(0);
+    }
     let known = KnownTopicNames::load(conn);
     if !known.has_dependencies() {
         tracing::debug!(
