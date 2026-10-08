@@ -482,8 +482,8 @@ Updates are fetched from GitHub Releases and signed with Minisign. The public ke
 **Verification:**
 ```bash
 # Decode and inspect the public key
-echo "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDE5QUY0MkIxQjY5NzE3MDMKUldRREY1ZTJzVUt2R1lDUHhrYS9LYXpPWTZzLzh3ODV0SzdDOHJENklSQWIxdWNPaFZmZVBSWkYK" | base64 -d
-# Expected: Minisign public key with ID 19AF42B1B6971703
+echo "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDQ2RUNFMUQ2QTk3ODQ5RUYKUldUdlNYaXAxdUhzUnVyTzV2QzBUT1NFVmxpcFVxU3pzSGluT0RudTdEWDVUdzExZ3VEdkhRUVoK" | base64 -d
+# Expected: Minisign public key with ID 46ECE1D6A97849EF
 
 # Confirm only GitHub endpoints
 grep -A 5 "endpoints" src-tauri/tauri.conf.json

@@ -4,39 +4,41 @@
 
 ## Publisher verification
 
-4DA is digitally signed with an **Extended Validation (EV) code signing certificate** issued to **4DA Systems Pty Ltd** (ACN 696 078 841). Windows SmartScreen recognises the publisher immediately — no "unknown publisher" warnings on a clean install.
+The Windows installer is currently **not Authenticode code-signed**. Windows therefore cannot tell you who published it: SmartScreen shows **"Windows protected your PC"** and the publisher appears as **"Unknown publisher"**. That is expected for every download of the current release, and it is a real gap, not a formality.
+
+Until code signing ships (it is planned, but has no date yet), the trust anchor on your side is the published **SHA-256 checksum** and the **minisign signature**. Verify one of them (step 2 below) before you run the installer.
 
 ## Installation steps
 
 ### 1. Download
 
-Download the latest `4DA-Setup-*.exe` from the [Releases page](https://github.com/4DA-Systems/4DA/releases/latest). The download page also lists:
+Download the latest `4DA_<version>_x64-setup.exe` from the [Releases page](https://github.com/4DA-Systems/4DA/releases/latest). The release also lists:
 
 - **`SHASUMS256.txt`** — a single canonical file listing the SHA-256 of every artifact in the release. Download this alongside the installer.
 - **`<installer>.exe.sha256`** — a per-file sidecar with just the hash for your installer, convenient for one-line verification.
-- **`<installer>.exe.sig`** — a minisign signature you can verify against the project's public key for even stronger assurance.
+- **`<installer>.exe.sig`** — a minisign signature from the 4DA release key (see [Verifying the signature](#verifying-the-signature-advanced)).
 
-### 2. Verify the download (recommended)
+### 2. Verify the download (do this before running it)
 
-Download `SHASUMS256.txt` from the Releases page into the same folder as the installer, then run one of these in PowerShell:
+Download `SHASUMS256.txt` from the Releases page into the same folder as the installer, then run one of these:
 
 ```powershell
-# Option A — compute and compare yourself
-Get-FileHash -Algorithm SHA256 .\4DA-Setup-1.0.0.exe
-# Then visually compare the output hash to the line for this file in SHASUMS256.txt.
+# Option A — PowerShell: compute the hash and compare it yourself
+Get-FileHash -Algorithm SHA256 .\4DA_1.0.3_x64-setup.exe
+# Compare the output with the line for this file in SHASUMS256.txt (case does not matter).
 ```
 
 ```bash
-# Option B — if you have Git Bash or WSL, verify every file at once
+# Option B — Git Bash or WSL: verify every downloaded file at once
 sha256sum -c SHASUMS256.txt --ignore-missing
 # Each line prints `<file>: OK` on a match. Any `FAILED` means a corrupt or tampered file.
 ```
 
-If the hash matches byte-for-byte, the file is genuine. If it doesn't match, **do not run it** — re-download from the Releases page.
+If the hash matches, the file is byte-for-byte what was published. If it does not match, **do not run it** — re-download from the Releases page and verify again.
 
 ### 3. Run the installer
 
-Double-click the `.exe`. Windows will show the publisher as **4DA Systems Pty Ltd**. Follow the installer prompts and install to the default location.
+Double-click the `.exe`. SmartScreen will show **"Windows protected your PC"** with **Publisher: Unknown publisher**. Only once you have verified the SHA-256 (or the minisign signature) in step 2, click **More info → Run anyway**. Follow the installer prompts and install to the default location.
 
 ### 4. First launch
 
@@ -44,17 +46,17 @@ Launch **4DA** from the Start menu. On first run, 4DA will scan your local proje
 
 ## Code signing
 
-Every release of 4DA is signed with an EV (Extended Validation) code signing certificate issued by SSL.com to **4DA Systems Pty Ltd**. This means:
+Windows builds are **not yet Authenticode-signed**; code signing is planned. Until it ships:
 
-1. **SmartScreen trusts 4DA immediately** — no reputation-building delay.
-2. **Checksums and minisign signatures are still published** alongside every release for independent verification.
-3. **Auto-updates are double-signed** — the Tauri updater verifies a minisign signature, and the binary itself carries an Authenticode signature.
+1. **SmartScreen will warn** on first run, and the publisher shows as unknown.
+2. **Checksums and minisign signatures are published** alongside every release — verify them before running the installer.
+3. **Auto-updates are minisign-verified** — see below. Updates do not carry an Authenticode signature either.
 
 ## Auto-updates
 
 4DA uses the Tauri updater. Updates are:
 
-- **Signed** with a minisign key that ships with the application. The public key is pinned inside the binary — an attacker who wanted to push a malicious update would need to break the signature, not just host a fake endpoint.
+- **Signed** with the 4DA minisign release key. The public key is pinned inside the binary — an attacker who wanted to push a malicious update would need to break the signature, not just host a fake endpoint.
 - **Delivered from GitHub Releases**, the same channel you downloaded from.
 - **Verified before installation** — a failed signature check aborts the update.
 
@@ -62,25 +64,34 @@ You do not need to do anything to receive updates. When a new version is availab
 
 ## If the installer still won't run
 
-- **"Unknown publisher"** — should not appear on signed releases. If you see this, re-download from the official Releases page and verify the SHA-256.
+- **"Windows protected your PC" / "Unknown publisher"** — expected for the current, unsigned release. Verify the SHA-256 against `SHASUMS256.txt` first; if it matches, click **More info → Run anyway**. If it does not match, do not run it — re-download from the official Releases page.
 - **"This app can't run on your PC"** — you are likely on 32-bit Windows. 4DA requires 64-bit Windows 10 or later.
-- **Antivirus quarantine** — occasionally aggressive antivirus heuristics flag new Rust binaries. If your antivirus quarantines the installer, restore it from quarantine and verify the SHA-256 matches the Releases page before running. If the hash matches, the file is genuine; you can submit it to your antivirus vendor as a false-positive report to improve detection for all users.
+- **Antivirus quarantine** — occasionally aggressive antivirus heuristics flag new Rust binaries, and unsigned ones more often. If your antivirus quarantines the installer, restore it from quarantine and verify the SHA-256 matches the Releases page before running. If the hash matches, the file is genuine; you can submit it to your antivirus vendor as a false-positive report to improve detection for all users.
 - **Nothing happens when you double-click** — right-click the `.exe` → **Properties** → check the **"Unblock"** box at the bottom → **OK**. Then double-click again.
 
 ## Verifying the signature (advanced)
 
-For maximum assurance, verify the minisign signature published alongside each release:
+For stronger assurance than the checksum, verify the minisign signature published alongside each release. The public key is the one pinned in the app's updater config ([`src-tauri/tauri.conf.json`](https://github.com/4DA-Systems/4DA/blob/main/src-tauri/tauri.conf.json), `plugins.updater.pubkey`, base64-encoded):
+
+```
+untrusted comment: minisign public key: 46ECE1D6A97849EF
+RWTvSXip1uHsRurO5vC0TOSEVlipUqSzsHinODnu7DX5Tw11guDvHQQZ
+```
+
+The release `.sig` file is a minisign signature **wrapped in base64** (the format the Tauri updater reads), so decode it first:
 
 ```powershell
 # Install minisign (once)
 scoop install minisign
 
-# Fetch the public key (already in the app; also published at 4da.ai/keys/updater.pub)
+# Decode the base64-wrapped signature into a plain minisign signature file
+[IO.File]::WriteAllBytes("$PWD\installer.minisig", [Convert]::FromBase64String((Get-Content .\4DA_1.0.3_x64-setup.exe.sig -Raw).Trim()))
+
 # Verify
-minisign -Vm 4DA-Setup-1.0.0.exe -p updater.pub
+minisign -Vm .\4DA_1.0.3_x64-setup.exe -x .\installer.minisig -P RWTvSXip1uHsRurO5vC0TOSEVlipUqSzsHinODnu7DX5Tw11guDvHQQZ
 ```
 
-A successful verification confirms the file was signed by 4DA Systems Pty Ltd and has not been modified since.
+A successful verification confirms the file was signed with the 4DA release key and has not been modified since.
 
 ## Privacy note
 

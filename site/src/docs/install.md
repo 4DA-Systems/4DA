@@ -21,7 +21,7 @@ Pre-built binaries — no Rust toolchain required.
 
 Every release publishes `SHASUMS256.txt` and per-file `.sha256` sidecars so you can verify the binary before you run it. The updater checks GitHub Releases once per session and validates signatures with minisign.
 
-> **Windows users:** SmartScreen prompts on first launch — this is a new application still building reputation, not a warning about the binary. Click **More info → Run anyway**.
+> **Windows users:** the Windows installer is not yet code-signed, so SmartScreen shows "Windows protected your PC / Unknown publisher". Check the installer's SHA-256 against `SHASUMS256.txt` first, then click **More info → Run anyway**. Code signing is in progress.
 
 ## Or run the MCP server
 

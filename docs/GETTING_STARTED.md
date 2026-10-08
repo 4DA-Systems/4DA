@@ -8,11 +8,11 @@ This guide will walk you through setting up 4DA for the first time.
 
 Download the latest installer for your platform from the [Releases page](https://github.com/4DA-Systems/4DA/releases/latest).
 
-- **Windows** — `.exe` installer. On first run, Windows SmartScreen will prompt for confirmation because 4DA is a newly released app; click **More info → Run anyway**. See the full [Windows install guide](launch/WINDOWS-INSTALL.md) for SHA-256 verification, signature validation, and auto-update details.
+- **Windows** — `.exe` installer. The installer is not yet code-signed, so Windows SmartScreen shows "Unknown publisher" on first run; verify the SHA-256 against `SHASUMS256.txt`, then click **More info → Run anyway**. See the full [Windows install guide](launch/WINDOWS-INSTALL.md) for SHA-256 verification, signature validation, and auto-update details.
 - **macOS** — `.dmg` disk image. Drag 4DA to Applications. Builds are signed and notarised by Apple.
 - **Linux** — `.AppImage` (portable), `.deb` (Debian/Ubuntu), or `.rpm` (Fedora/RHEL).
 
-Every release publishes SHA-256 checksums and a minisign signature. Verify before running if you want stronger assurance than code signing alone provides.
+Every release publishes SHA-256 checksums and a minisign signature. On Windows, where builds are not yet code-signed, verify before running.
 
 ### From Source
 

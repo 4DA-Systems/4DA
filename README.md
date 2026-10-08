@@ -120,7 +120,7 @@ Don't take our word for it:
 
 Every release publishes `SHASUMS256.txt` and per-file `.sha256` sidecars. [Verification instructions.](docs/VERIFY-DOWNLOADS.md)
 
-> **Windows users:** SmartScreen will prompt on first launch (new application, building reputation). Click **More info → Run anyway**. [Full details.](docs/launch/WINDOWS-INSTALL.md)
+> **Windows users:** the Windows installer is not yet code-signed, so SmartScreen shows "Windows protected your PC / Unknown publisher". Verify the SHA-256 against `SHASUMS256.txt` from the release first, then click **More info → Run anyway**. [Full details.](docs/launch/WINDOWS-INSTALL.md)
 
 Or install the **MCP server** for Claude Code / Cursor / Windsurf:
 ```bash
