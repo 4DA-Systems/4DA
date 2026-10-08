@@ -8,6 +8,7 @@ use super::types::{LocaleConfig, Settings};
 
 /// Parse a BCP 47 culture name ("en-US", "de-DE", "zh-Hans-CN") into a
 /// locale: language = first subtag, country = last 2-letter alphabetic subtag.
+#[cfg(any(target_os = "windows", test))]
 pub(crate) fn locale_from_culture_name(culture: &str) -> Option<LocaleConfig> {
     let mut parts = culture.trim().split(['-', '_']);
     let language = parts.next()?.to_lowercase();
