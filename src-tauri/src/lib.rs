@@ -799,6 +799,10 @@ pub fn run() {
 
     // Pre-Tauri initialization (logging, threshold, DB, context, registry)
     app_setup::initialize_pre_tauri(true);
+    startup_watchdog::mark_pre_tauri_complete();
+    // Spans `Builder::build` (plugins, window + WebView2 creation, then the
+    // `setup` callback); the watchdog attributes its time separately.
+    let build_span = tracing::info_span!(target: "4da::startup", "tauri_build").entered();
 
     #[allow(unused_mut)]
     let mut builder = tauri::Builder::default()
@@ -818,7 +822,7 @@ pub fn run() {
         builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
     }
 
-    builder
+    let app = builder
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             None,
@@ -1309,6 +1313,7 @@ pub fn run() {
         ])
         .setup(app_setup::setup_app)
         .build(app_context())
-        .expect("Failed to build Tauri application. Check tauri.conf.json and system permissions.")
-        .run(app_setup::handle_run_event);
+        .expect("Failed to build Tauri application. Check tauri.conf.json and system permissions.");
+    drop(build_span);
+    app.run(app_setup::handle_run_event);
 }

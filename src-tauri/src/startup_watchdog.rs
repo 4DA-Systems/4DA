@@ -60,8 +60,31 @@ const PHASE0_BUDGET_SECS: u64 = 5;
 #[cfg(debug_assertions)]
 const PHASE0_BUDGET_SECS: u64 = 45;
 
-/// Time budget for Phase 1 (essential services ready).
-const PHASE1_BUDGET_SECS: u64 = 10;
+/// Phase 1 (process start → `setup_app` essential services done) is three
+/// segments with different owners, each budgeted on its own. One 10 s budget
+/// for the sum said nothing about WHICH part regressed: a fresh debug profile
+/// measured 20.9 s = pre-Tauri 7.5 s + Tauri build 9.1 s (first WebView2
+/// profile) + setup_app 2.2 s (audit 2026-10-07). Every segment still warns
+/// when it exceeds its budget, so a real regression is never averaged away.
+///
+/// - `pre_tauri`: logging, crash gates, DB open + migrations, context engine.
+/// - `tauri_build`: `Builder::build` up to the `setup` callback (plugins,
+///   window + WebView2 creation — a first-run profile is created here).
+/// - `setup_app`: tray, monitoring, scheduler (`setup_app` phase 0).
+#[cfg(not(debug_assertions))]
+const PRE_TAURI_BUDGET: Duration = Duration::from_secs(3);
+#[cfg(debug_assertions)]
+const PRE_TAURI_BUDGET: Duration = Duration::from_secs(8);
+#[cfg(not(debug_assertions))]
+const TAURI_BUILD_BUDGET: Duration = Duration::from_secs(5);
+#[cfg(debug_assertions)]
+const TAURI_BUILD_BUDGET: Duration = Duration::from_secs(12);
+const SETUP_APP_BUDGET: Duration = Duration::from_secs(3);
+
+/// When pre-Tauri init finished / when `setup_app` began. Unset in the
+/// headless engine, which never builds a Tauri app.
+static PRE_TAURI_DONE: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
+static SETUP_BEGAN: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
 
 /// How often to write the heartbeat file (steady state).
 const HEARTBEAT_INTERVAL_SECS: u64 = 60;
@@ -186,28 +209,116 @@ pub fn mark_phase0_complete() {
     }
 }
 
-/// Mark Phase 1 (essential services) complete. Informational logging only —
-/// does NOT write a stalled marker because Phase 1 runs entirely in the
-/// background and a slow essential-services setup doesn't affect the
-/// user-visible first paint.
+/// Pre-Tauri init is done; `Builder::build` starts next. GUI only.
+pub fn mark_pre_tauri_complete() {
+    let _ = PRE_TAURI_DONE.set(Instant::now());
+}
+
+/// The Tauri `setup` callback started: `Builder::build` has created the
+/// plugins and the window. GUI only.
+pub fn mark_setup_began() {
+    let _ = SETUP_BEGAN.set(Instant::now());
+}
+
+/// One startup segment: how long it took against its own budget.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Segment {
+    name: &'static str,
+    elapsed: Duration,
+    budget: Duration,
+}
+
+impl Segment {
+    fn over_budget(&self) -> bool {
+        self.elapsed >= self.budget
+    }
+}
+
+/// Split process-start → now at the recorded boundaries. A missing boundary
+/// (headless, or a mark that never ran) drops the segments it would bound
+/// rather than inventing a number.
+fn phase1_segments(
+    began: Instant,
+    pre_tauri_done: Option<Instant>,
+    setup_began: Option<Instant>,
+    now: Instant,
+) -> Vec<Segment> {
+    let (Some(pre), Some(setup)) = (pre_tauri_done, setup_began) else {
+        return Vec::new();
+    };
+    vec![
+        Segment {
+            name: "pre_tauri",
+            elapsed: pre.saturating_duration_since(began),
+            budget: PRE_TAURI_BUDGET,
+        },
+        Segment {
+            name: "tauri_build",
+            elapsed: setup.saturating_duration_since(pre),
+            budget: TAURI_BUILD_BUDGET,
+        },
+        Segment {
+            name: "setup_app",
+            elapsed: now.saturating_duration_since(setup),
+            budget: SETUP_APP_BUDGET,
+        },
+    ]
+}
+
+/// Mark Phase 1 (essential services) complete and attribute its time to
+/// pre-Tauri init, Tauri build and `setup_app`, each against its own budget.
+/// Logging only — no stalled marker: Phase 1 does not gate first paint.
 pub fn mark_phase1_complete() {
     #[allow(unsafe_code)]
-    let elapsed = unsafe { STARTUP_BEGAN.map(|t| t.elapsed()).unwrap_or(Duration::ZERO) };
+    let began = unsafe { STARTUP_BEGAN };
+    let Some(began) = began else {
+        return;
+    };
+    let now = Instant::now();
+    let segments = phase1_segments(
+        began,
+        PRE_TAURI_DONE.get().copied(),
+        SETUP_BEGAN.get().copied(),
+        now,
+    );
+    for seg in &segments {
+        let ms = seg.elapsed.as_millis();
+        let budget_ms = seg.budget.as_millis();
+        if seg.over_budget() {
+            warn!(target: "4da::watchdog", segment = seg.name, elapsed_ms = ms, budget_ms, "Startup segment exceeded budget");
+        } else {
+            info!(target: "4da::watchdog", segment = seg.name, elapsed_ms = ms, budget_ms, "Startup segment within budget");
+        }
+    }
+    info!(
+        target: "4da::watchdog",
+        elapsed_ms = now.saturating_duration_since(began).as_millis(),
+        over_budget = segments.iter().filter(|s| s.over_budget()).count(),
+        "Phase 1 (essential services) complete"
+    );
+}
 
-    let ms = elapsed.as_millis();
-    if elapsed.as_secs() >= PHASE1_BUDGET_SECS {
-        warn!(
-            target: "4da::watchdog",
-            elapsed_ms = ms,
-            budget_s = PHASE1_BUDGET_SECS,
-            "Phase 1 (essential services) exceeded budget"
-        );
-    } else {
-        info!(
-            target: "4da::watchdog",
-            elapsed_ms = ms,
-            "Phase 1 (essential services) complete"
-        );
+/// Times a pre-Tauri init step: enters a tracing span named `step` for its
+/// lifetime and logs `elapsed_ms` when dropped, so the cold-boot log
+/// attributes time that used to be unaccounted for.
+pub struct StepTimer {
+    step: &'static str,
+    began: Instant,
+    _span: tracing::span::EnteredSpan,
+}
+
+/// Start a [`StepTimer`]. Hold the guard for the duration of the step.
+pub fn time_step(step: &'static str) -> StepTimer {
+    StepTimer {
+        step,
+        began: Instant::now(),
+        _span: tracing::info_span!(target: "4da::startup", "startup_step", step).entered(),
+    }
+}
+
+impl Drop for StepTimer {
+    fn drop(&mut self) {
+        info!(target: "4da::startup", step = self.step, elapsed_ms = self.began.elapsed().as_millis(), "Startup step timed");
     }
 }
 
@@ -494,6 +605,45 @@ mod tests {
         mark_phase0_complete();
         mark_phase0_complete();
         assert!(PHASE0_MARKED.load(Ordering::SeqCst));
+    }
+
+    #[test]
+    fn phase1_time_is_attributed_to_each_segment() {
+        let t0 = Instant::now();
+        let pre = t0 + Duration::from_millis(5_600);
+        let setup = pre + Duration::from_millis(9_100);
+        let now = setup + Duration::from_millis(2_200);
+        let segs = phase1_segments(t0, Some(pre), Some(setup), now);
+        let names: Vec<_> = segs.iter().map(|s| s.name).collect();
+        assert_eq!(names, ["pre_tauri", "tauri_build", "setup_app"]);
+        assert_eq!(segs[0].elapsed, Duration::from_millis(5_600));
+        assert_eq!(segs[1].elapsed, Duration::from_millis(9_100));
+        assert_eq!(segs[2].elapsed, Duration::from_millis(2_200));
+        // Segments sum to the whole: nothing is hidden or double-counted.
+        let sum: Duration = segs.iter().map(|s| s.elapsed).sum();
+        assert_eq!(sum, now - t0);
+    }
+
+    #[test]
+    fn a_slow_segment_is_flagged_even_when_others_are_fast() {
+        let t0 = Instant::now();
+        let pre = t0 + Duration::from_millis(100);
+        let setup = pre + Duration::from_millis(100);
+        let now = setup + SETUP_APP_BUDGET + Duration::from_millis(1);
+        let segs = phase1_segments(t0, Some(pre), Some(setup), now);
+        let over: Vec<_> = segs
+            .iter()
+            .filter(|s| s.over_budget())
+            .map(|s| s.name)
+            .collect();
+        assert_eq!(over, ["setup_app"]);
+    }
+
+    #[test]
+    fn missing_boundaries_report_no_invented_segments() {
+        let t0 = Instant::now();
+        assert!(phase1_segments(t0, None, None, t0).is_empty());
+        assert!(phase1_segments(t0, Some(t0), None, t0).is_empty());
     }
 
     // ------------------------------------------------------------------

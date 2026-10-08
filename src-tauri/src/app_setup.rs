@@ -403,7 +403,8 @@ pub(crate) fn initialize_pre_tauri(acquire_single_instance: bool) {
         "Relevance threshold defaulted; ACE storage will hydrate after first-light"
     );
 
-    // Initialize database early
+    // Initialize database early (open + migrations, usage seed, feed-health purge)
+    let db_step = crate::startup_watchdog::time_step("database_init");
     match get_database() {
         Ok(db) => {
             let ctx_count = db.context_count().unwrap_or(0);
@@ -429,8 +430,10 @@ pub(crate) fn initialize_pre_tauri(acquire_single_instance: bool) {
             error!(target: "4da::startup", error = %e, "Database initialization failed");
         }
     }
+    drop(db_step);
 
     // Initialize context engine
+    let context_step = crate::startup_watchdog::time_step("context_engine_init");
     match get_context_engine() {
         Ok(engine) => {
             let interest_count = engine.interest_count().unwrap_or(0);
@@ -455,6 +458,7 @@ pub(crate) fn initialize_pre_tauri(acquire_single_instance: bool) {
             error!(target: "4da::startup", error = %e, "Context Engine initialization failed");
         }
     }
+    drop(context_step);
 
     // Initialize source registry
     let registry = get_source_registry();
@@ -561,6 +565,7 @@ async fn warm_preemption_cache_after_first_light(reason: &'static str) {
 /// marker so the next launch can surface the regression.
 pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let setup_began = std::time::Instant::now();
+    crate::startup_watchdog::mark_setup_began();
     let app_handle = app.handle().clone();
     crate::startup_frontend::start_frontend_readiness_gate(app_handle.clone());
     info!(target: "4da::startup", "setup_app: phase 0 (essential services) begin");
