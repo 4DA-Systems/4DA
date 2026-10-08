@@ -14,13 +14,35 @@ import { CalibrationView } from './CalibrationView';
  * once, at app level.
  *
  * Shown only when: past first-run, not previously dismissed (localStorage),
- * AND the instance actually needs calibrating — taste test never taken OR
- * fewer than 10 explicit labels recorded. Never shown during onboarding.
+ * AND the instance actually needs calibrating — taste test never taken, OR
+ * fewer than 10 explicit labels after the user has had the app for a few
+ * days and there are real scored items to label. A user who has just
+ * finished onboarding's taste test is calibrated and has nothing to label
+ * yet; nudging them seconds later asked for work the app could not offer.
+ * Never shown during onboarding.
  */
 const DISMISS_KEY = '4da-calibration-nudge-dismissed';
 
 /** Below this many explicit labels the nudge still has a real job. */
 const NUDGE_LABEL_FLOOR = 10;
+
+/** A calibrated user is asked for labels only after this much real use. */
+const NUDGE_MIN_AGE_DAYS = 3;
+
+/** ...and only when the sprint can offer at least this many items. */
+const NUDGE_MIN_LABELABLE = 10;
+
+async function needsNudge(): Promise<boolean> {
+  const [calibrated, status] = await Promise.all([
+    cmd('taste_test_is_calibrated'),
+    cmd('get_calibration_sprint_status'),
+  ]);
+  if (!calibrated) return true;
+  if (status.labeledTotal >= NUDGE_LABEL_FLOOR) return false;
+  if ((status.tasteTestAgeDays ?? 0) < NUDGE_MIN_AGE_DAYS) return false;
+  const items = await cmd('get_calibration_sprint_items');
+  return items.length >= NUDGE_MIN_LABELABLE;
+}
 
 export function CalibrationNudgeBanner() {
   const { t } = useTranslation();
@@ -32,10 +54,9 @@ export function CalibrationNudgeBanner() {
     if (isFirstRun) return;
     if (localStorage.getItem(DISMISS_KEY)) return;
     let cancelled = false;
-    Promise.all([cmd('taste_test_is_calibrated'), cmd('get_calibration_sprint_status')])
-      .then(([calibrated, status]) => {
-        if (cancelled) return;
-        if (!calibrated || status.labeledTotal < NUDGE_LABEL_FLOOR) setShow(true);
+    needsNudge()
+      .then((needed) => {
+        if (!cancelled && needed) setShow(true);
       })
       .catch(() => {});
     return () => {

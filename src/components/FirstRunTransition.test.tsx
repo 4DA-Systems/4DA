@@ -68,6 +68,7 @@ const defaultAppState = {
 
 let currentAppState = { ...defaultAppState };
 let currentUserContext: { interests?: Array<{ topic: string }> } | null = null;
+let currentDetectedTech: Array<{ name: string; category: string; confidence: number }> | null = null;
 
 vi.mock('../store', () => ({
   useAppStore: (selector: (s: Record<string, unknown>) => unknown) => {
@@ -75,6 +76,7 @@ vi.mock('../store', () => ({
       appState: currentAppState,
       embeddingMode: null as string | null,
       userContext: currentUserContext,
+      discoveredContext: currentDetectedTech ? { tech: currentDetectedTech } : null,
       startAnalysis: mockStartAnalysis,
     };
     return selector(store);
@@ -116,6 +118,7 @@ describe('FirstRunTransition', () => {
     vi.useFakeTimers();
     currentAppState = { ...defaultAppState };
     currentUserContext = null;
+    currentDetectedTech = null;
     mockStartAnalysis.mockClear();
     mockOnComplete.mockClear();
     vi.mocked(invoke).mockResolvedValue({ has_data: false });
@@ -343,29 +346,65 @@ describe('FirstRunTransition', () => {
   });
 
   // -------------------------------------------------------------------------
-  // 10. Source breakdown pills show in celebration
+  // 10. No per-source item counts and no "sources" stat (doctrine rule 3).
+  // Those counted EVERY analysed item, so they always summed to the total —
+  // the banned "sources producing" vanity metric.
   // -------------------------------------------------------------------------
-  it('shows source breakdown pills in celebration phase', async () => {
+  it('shows no per-source item counts or sources stat in celebration phase', async () => {
     currentAppState = {
       ...defaultAppState,
       analysisComplete: true,
       relevanceResults: [
-        { relevant: true, title: 'HN Story', url: 'https://hn.com', final_score: 0.8, source_type: 'hackernews' },
-        { relevant: true, title: 'Reddit Post', url: 'https://reddit.com', final_score: 0.7, source_type: 'reddit' },
+        { relevant: false, title: 'Story A', url: 'https://a.example', final_score: 0.2, source_type: 'reddit' },
+        { relevant: false, title: 'Post B', url: 'https://b.example', final_score: 0.1, source_type: 'github' },
+        { relevant: true, title: 'Story C', url: 'https://c.example', final_score: 0.8, source_type: 'hackernews' },
       ],
     };
 
     await act(async () => {
       render(<FirstRunTransition onComplete={mockOnComplete} />);
     });
-
     await act(async () => {
       await vi.runAllTimersAsync();
     });
 
-    // Source full names should appear (may match multiple elements)
-    expect(screen.getAllByText((content) => content.includes('Hacker News')).length).toBeGreaterThan(0);
-    expect(screen.getAllByText((content) => content.includes('Reddit')).length).toBeGreaterThan(0);
+    expect(screen.getByText('Story C')).toBeDefined();
+    expect(screen.queryByText('sources')).toBeNull();
+    // Reddit / GitHub items are not the top signal, so their names must not
+    // appear anywhere — previously they rendered as "Reddit 1", "GitHub 1".
+    expect(screen.queryAllByText((content) => content.includes('Reddit'))).toHaveLength(0);
+    expect(screen.queryAllByText((content) => content.includes('GitHub'))).toHaveLength(0);
+  });
+
+  it('shows the Developer DNA header only with confident tech chips', async () => {
+    currentAppState = {
+      ...defaultAppState,
+      analysisComplete: true,
+      relevanceResults: [
+        { relevant: true, title: 'Story C', url: 'https://c.example', final_score: 0.8 },
+      ],
+    };
+    currentDetectedTech = [{ name: 'Cobol', category: 'Language', confidence: 0.3 }];
+
+    const view = render(<FirstRunTransition onComplete={mockOnComplete} />);
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+    expect(screen.queryByText('Your Developer DNA')).toBeNull();
+    expect(screen.queryByText('Cobol')).toBeNull();
+    view.unmount();
+
+    currentDetectedTech = [
+      { name: 'Cobol', category: 'Language', confidence: 0.3 },
+      { name: 'Rust', category: 'Language', confidence: 0.9 },
+    ];
+    render(<FirstRunTransition onComplete={mockOnComplete} />);
+    await act(async () => {
+      await vi.runAllTimersAsync();
+    });
+    expect(screen.getByText('Your Developer DNA')).toBeDefined();
+    expect(screen.getByText('Rust')).toBeDefined();
+    expect(screen.queryByText('Cobol')).toBeNull();
   });
 
   // -------------------------------------------------------------------------

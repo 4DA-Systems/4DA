@@ -151,6 +151,18 @@ pub fn load_latest_taste_result(conn: &Connection) -> Option<TasteProfileSummary
     .ok()
 }
 
+/// Days since the most recent taste test finished; `None` when none has.
+pub fn taste_test_age_days(conn: &Connection) -> Option<f64> {
+    ensure_taste_test_tables(conn).ok()?;
+    conn.query_row(
+        "SELECT julianday('now') - julianday(MAX(completed_at)) FROM taste_test_results",
+        [],
+        |row| row.get::<_, Option<f64>>(0),
+    )
+    .ok()
+    .flatten()
+}
+
 /// Check if any taste test has been completed.
 pub fn is_calibrated(conn: &Connection) -> bool {
     if ensure_taste_test_tables(conn).is_err() {

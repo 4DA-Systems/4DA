@@ -314,9 +314,28 @@ impl SettingsManager {
         self.save()
     }
 
-    /// Mark onboarding as completed
+    /// May startup scan home folders for projects? Only for a user who ran a
+    /// scan themselves (`discovery_consent == Some(true)`), finished onboarding
+    /// and still has nothing configured. Configured folders are their own
+    /// consent and never reach this path (`needs_auto_discovery` is false).
+    pub fn startup_discovery_allowed(&self) -> bool {
+        self.needs_auto_discovery()
+            && self.settings.onboarding_complete
+            && self.settings.discovery_consent == Some(true)
+    }
+
+    /// Record that the user asked for a project scan.
+    pub fn record_discovery_consent(&mut self) {
+        self.settings.discovery_consent = Some(true);
+    }
+
+    /// Mark onboarding as completed. Finishing it without having run a scan
+    /// and without any project folder is the user declining discovery.
     pub fn mark_onboarding_complete(&mut self) -> Result<()> {
         self.settings.onboarding_complete = true;
+        if self.settings.discovery_consent.is_none() && self.settings.context_dirs.is_empty() {
+            self.settings.discovery_consent = Some(false);
+        }
         self.save()
     }
 

@@ -403,7 +403,8 @@ pub(crate) fn initialize_pre_tauri(acquire_single_instance: bool) {
         "Relevance threshold defaulted; ACE storage will hydrate after first-light"
     );
 
-    // Initialize database early
+    // Initialize database early (open + migrations, usage seed, feed-health purge)
+    let db_step = crate::startup_watchdog::time_step("database_init");
     match get_database() {
         Ok(db) => {
             let ctx_count = db.context_count().unwrap_or(0);
@@ -429,8 +430,10 @@ pub(crate) fn initialize_pre_tauri(acquire_single_instance: bool) {
             error!(target: "4da::startup", error = %e, "Database initialization failed");
         }
     }
+    drop(db_step);
 
     // Initialize context engine
+    let context_step = crate::startup_watchdog::time_step("context_engine_init");
     match get_context_engine() {
         Ok(engine) => {
             let interest_count = engine.interest_count().unwrap_or(0);
@@ -455,6 +458,7 @@ pub(crate) fn initialize_pre_tauri(acquire_single_instance: bool) {
             error!(target: "4da::startup", error = %e, "Context Engine initialization failed");
         }
     }
+    drop(context_step);
 
     // Initialize source registry
     let registry = get_source_registry();
@@ -561,6 +565,7 @@ async fn warm_preemption_cache_after_first_light(reason: &'static str) {
 /// marker so the next launch can surface the regression.
 pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     let setup_began = std::time::Instant::now();
+    crate::startup_watchdog::mark_setup_began();
     let app_handle = app.handle().clone();
     crate::startup_frontend::start_frontend_readiness_gate(app_handle.clone());
     info!(target: "4da::startup", "setup_app: phase 0 (essential services) begin");
@@ -2569,20 +2574,20 @@ fn initialize_ace_on_startup(app_handle: tauri::AppHandle) {
         return;
     }
 
-    // Check if auto-discovery is needed (first run with no context dirs)
-    let (needs_discovery, onboarding_done) = {
+    // Check if auto-discovery is needed (no context dirs) and consented to
+    let (needs_discovery, discovery_allowed) = {
         let settings = get_settings_manager().lock();
         (
             settings.needs_auto_discovery(),
-            settings.get().onboarding_complete,
+            settings.startup_discovery_allowed(),
         )
     };
 
-    // Privacy: do NOT auto-scan directories before the user completes onboarding.
-    // The user should explicitly add project directories during onboarding.
-    // Auto-discovery only runs for returning users who have no context dirs configured.
-    if needs_discovery && !onboarding_done {
-        info!(target: "4da::startup", "First run — deferring ACE discovery until onboarding completes");
+    // Privacy: never scan home folders without consent. Before onboarding the
+    // user has not been asked; a user who skipped the scan declined it; a user
+    // who was never asked has not consented. Settings → Projects keeps Scan.
+    if needs_discovery && !discovery_allowed {
+        info!(target: "4da::startup", "No discovery consent — skipping startup ACE discovery");
     } else if needs_discovery {
         info!(target: "4da::startup", "Post-onboarding run with no context dirs — running discovery");
         let _ = app_handle.emit(

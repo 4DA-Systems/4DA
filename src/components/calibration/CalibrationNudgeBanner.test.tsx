@@ -27,13 +27,32 @@ import { CalibrationNudgeBanner } from './CalibrationNudgeBanner';
 const mockInvoke = vi.mocked(invoke);
 const DISMISS_KEY = '4da-calibration-nudge-dismissed';
 
-function wireBackend(calibrated: boolean, labeledTotal: number) {
+function wireBackend(
+  calibrated: boolean,
+  labeledTotal: number,
+  { ageDays = 30, labelable = 24 }: { ageDays?: number | null; labelable?: number } = {},
+) {
   mockInvoke.mockImplementation((c: string) => {
     if (c === 'taste_test_is_calibrated') return Promise.resolve(calibrated);
     if (c === 'get_calibration_sprint_status')
-      return Promise.resolve({ labeledTotal, minFitSamples: 50, curveFitted: false });
+      return Promise.resolve({
+        labeledTotal,
+        minFitSamples: 50,
+        curveFitted: false,
+        tasteTestAgeDays: calibrated ? ageDays : null,
+      });
+    if (c === 'get_calibration_sprint_items')
+      return Promise.resolve(Array.from({ length: labelable }, (_, i) => ({ sourceItemId: i })));
     return Promise.resolve({});
   });
+}
+
+async function settled(container: HTMLElement) {
+  await waitFor(() =>
+    expect(mockInvoke).toHaveBeenCalledWith('get_calibration_sprint_status', expect.anything()),
+  );
+  await new Promise((r) => setTimeout(r, 0));
+  expect(container.innerHTML).toBe('');
 }
 
 beforeEach(() => {
@@ -54,12 +73,28 @@ describe('CalibrationNudgeBanner — gating', () => {
     );
   });
 
-  it('shows for a taste-calibrated install with too few explicit labels', async () => {
-    wireBackend(true, 4);
+  it('shows for a calibrated install with too few labels after days of real use', async () => {
+    wireBackend(true, 4, { ageDays: 3.5, labelable: 12 });
     render(<CalibrationNudgeBanner />);
     await waitFor(() =>
       expect(screen.getByText('calibrationView.nudge.title')).toBeInTheDocument(),
     );
+  });
+
+  // Fresh-profile E2E 2026-10-07: the nudge appeared seconds after the taste
+  // test (calibrated, 0 sprint labels) asking for labels nothing could supply.
+  it('stays hidden right after the onboarding taste test', async () => {
+    wireBackend(true, 0, { ageDays: 0.001 });
+    const { container } = render(<CalibrationNudgeBanner />);
+    await settled(container);
+    expect(mockInvoke).not.toHaveBeenCalledWith('get_calibration_sprint_items', expect.anything());
+  });
+
+  it('stays hidden when there are too few scored items to label', async () => {
+    wireBackend(true, 0, { ageDays: 10, labelable: 3 });
+    const { container } = render(<CalibrationNudgeBanner />);
+    await settled(container);
+    expect(mockInvoke).toHaveBeenCalledWith('get_calibration_sprint_items', expect.anything());
   });
 
   it('stays hidden when calibrated AND labels are at the floor', async () => {
