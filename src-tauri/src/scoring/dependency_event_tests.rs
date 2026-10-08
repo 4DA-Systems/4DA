@@ -302,3 +302,81 @@ fn registry_release_follows_the_grade() {
     inp.strongly_grounded = false;
     assert!(!is_dependency_event(&inp));
 }
+
+/// Live 2026-10-08 (item 113567): the Signal hero "What you would have
+/// missed" was a react dependency event on an essay about building a
+/// changelog reader. The title names no dependency; the only event word next
+/// to react sits beside an enumeration. Real body text, abridged.
+const LLM_CHANGELOG_ESSAY: &str = "I'm building a tool that reads every new release of \
+    React, TypeScript, Vite and friends, and tells you two things: what changed, and \
+    whether you need to touch your code before upgrading. The summarising part is easy. \
+    ## 1. The model only sees the release notes. Do not use what you know about the \
+    project from elsewhere. This matters more than it sounds. A model asked about \
+    \"React 19.2.0\" has opinions about React 19 from training. Those opinions are often \
+    right, which is exactly what makes them dangerous.";
+
+#[test]
+fn a_name_inside_an_enumeration_is_not_the_subject_of_a_release() {
+    let title = "How I keep an LLM from inventing breaking changes";
+    for pkg in ["react", "typescript", "vite"] {
+        assert!(
+            !event(title, LLM_CHANGELOG_ESSAY, pkg),
+            "{pkg} is one member of a list beside generic release vocabulary"
+        );
+    }
+    let deps = [dep("react")];
+    assert!(!is_dependency_event(&editorial(
+        title,
+        LLM_CHANGELOG_ESSAY,
+        &deps
+    )));
+    // Lists in either direction, with Oxford commas, slashes and "or".
+    for body in [
+        "We track every release of Svelte, Vue, and React for the newsletter.",
+        "Release notes for vite/webpack/react are summarised weekly.",
+        "Upgrading Angular or Ember or React is the same chore every year.",
+    ] {
+        assert!(!event("Our weekly digest", body, "react"), "{body}");
+    }
+}
+
+#[test]
+fn body_only_news_about_one_dependency_stays_an_event() {
+    // Guards against over-correcting the enumeration rule: each of these is
+    // something happening TO the named dependency.
+    let cases = [
+        // A yank of the user's version.
+        (
+            "A bad week for HTTP clients",
+            "axios 1.7.4 was yanked after a regression in redirect handling.",
+            "axios",
+        ),
+        // The dependency was deprecated upstream; a user still on it must act.
+        (
+            "Cleaning up our date handling",
+            "We migrated off moment because the maintainers deprecated it.",
+            "moment",
+        ),
+        // An appositive is not a list.
+        (
+            "Frontend roundup",
+            "React, the UI library from Meta, released 19.2 with a new compiler.",
+            "react",
+        ),
+        // Two names joined by "and" are a pair, not an enumeration.
+        (
+            "Frontend roundup",
+            "Vite and React both released majors this week.",
+            "react",
+        ),
+        // Security vocabulary names every package an attack hits, even in a list.
+        (
+            "npm worm spreads",
+            "Malicious versions of axios, chalk and debug were published overnight.",
+            "chalk",
+        ),
+    ];
+    for (title, body, pkg) in cases {
+        assert!(event(title, body, pkg), "must stay an event: {body}");
+    }
+}

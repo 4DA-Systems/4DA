@@ -173,6 +173,14 @@ const SCOPED_EPOCHS: &[(i32, &str)] = &[
         "source_type IN ('npm_registry','npm','crates_io','crates','pypi',\
      'go_modules','go','maven','nuget','packagist','rubygems','cocoapods')",
     ),
+    // v41 — the breaking-change content type. `content_dna::is_breaking_change`
+    // is a pure function of the lowercased TITLE and the change can only alter
+    // its verdict for a title containing "breaking change" or "eol", so this
+    // predicate is a provable superset of the reach. `title` is assigned at
+    // ingest and never re-derived (same reasoning as v18's source_type); LIKE
+    // is ASCII case-insensitive, matching the classifier's lowercasing for
+    // these ASCII terms.
+    (41, "title LIKE '%breaking change%' OR title LIKE '%eol%'"),
 ];
 
 /// Promote stale items that the registered epoch predicates prove unaffected,

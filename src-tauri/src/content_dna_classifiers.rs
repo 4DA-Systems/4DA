@@ -162,12 +162,16 @@ pub(super) fn contains_cve(text: &str) -> bool {
     false
 }
 
+/// `title` is lowercased. A breaking-change NOTICE: something is breaking,
+/// deprecated or ending. "breaking change" is also the name of a concept, so
+/// it counts only when the title is not about that concept
+/// ([`breaking_change_is_the_topic`]); "eol" is matched as a whole word (as a
+/// substring it typed "geology", "neologisms" and "Reolink" titles as breaking
+/// changes — live 2026-10-08).
 pub(super) fn is_breaking_change(title: &str) -> bool {
     let terms = [
-        "breaking change",
         "deprecated",
         "end of life",
-        "eol",
         "migration guide",
         "drops support",
         "removed in",
@@ -176,6 +180,82 @@ pub(super) fn is_breaking_change(title: &str) -> bool {
         "backward incompatible",
     ];
     terms.iter().any(|t| title.contains(t))
+        || crate::utils::has_word_boundary_match(title, "eol")
+        || (title.contains("breaking change") && !breaking_change_is_the_topic(title))
+}
+
+/// Advice and first-person framings: the title is an essay or a how-to.
+const PRACTICE_FRAMINGS: [&str; 7] = [
+    "how i ",
+    "how we ",
+    "how to ",
+    "why i ",
+    "why we ",
+    "i built ",
+    "we built ",
+];
+
+/// Verbs whose object is "breaking changes" as a practice — tooling that
+/// catches them, teams that avoid them — rather than a change that happened.
+const PRACTICE_VERB_STEMS: [&str; 17] = [
+    "catch",
+    "detect",
+    "invent",
+    "avoid",
+    "prevent",
+    "guard",
+    "handl",
+    "manag",
+    "spot",
+    "find",
+    "track",
+    "flag",
+    "review",
+    "surviv",
+    "communicat",
+    "document",
+    "minimi",
+];
+
+/// Words before "breaking change" searched for a practice verb ("a CI check
+/// that catches Claude/OpenAI SDK breaking changes").
+const PRACTICE_VERB_WINDOW_WORDS: usize = 3;
+
+/// Is "breaking change" the TOPIC of the title rather than its news? Live
+/// 2026-10-08 (item 113567): "How I keep an LLM from inventing breaking
+/// changes", an essay about building a changelog reader, was typed
+/// `breaking_change` (×1.25) and carried "Breaking change affects react" to
+/// the Signal hero. A title carrying any version-like token ("Terminaux 8.7
+/// will contain breaking changes", "OpenAI Node SDK v5 breaking changes",
+/// "How we survived the React 19 breaking changes") is about a concrete
+/// release and is never treated as the concept.
+fn breaking_change_is_the_topic(title: &str) -> bool {
+    if has_version_token(title) {
+        return false;
+    }
+    if PRACTICE_FRAMINGS.iter().any(|f| title.contains(f)) {
+        return true;
+    }
+    title.match_indices("breaking change").any(|(pos, _)| {
+        title.get(..pos).is_some_and(|before| {
+            before
+                .split_whitespace()
+                .rev()
+                .take(PRACTICE_VERB_WINDOW_WORDS)
+                .any(|w| PRACTICE_VERB_STEMS.iter().any(|s| w.starts_with(s)))
+        })
+    })
+}
+
+/// A token that starts with a digit or is `v<digit>…` — a version, a major
+/// number or a year.
+fn has_version_token(title: &str) -> bool {
+    title
+        .split(|c: char| !c.is_alphanumeric() && c != '.')
+        .any(|w| {
+            let w = w.strip_prefix('v').unwrap_or(w);
+            w.starts_with(|c: char| c.is_ascii_digit())
+        })
 }
 
 pub(super) fn is_release(title: &str) -> bool {
@@ -488,4 +568,56 @@ pub(super) fn is_hiring(title: &str) -> bool {
     }
 
     false
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_breaking_change;
+
+    /// Real titles from the live corpus (2026-10-08) whose subject is the
+    /// CONCEPT of breaking changes: tooling and essays, not a notice.
+    #[test]
+    fn breaking_changes_as_a_topic_are_not_a_notice() {
+        for title in [
+            "How I keep an LLM from inventing breaking changes",
+            "Claude-API-guard, a CI check that catches Claude/OpenAI SDK breaking changes",
+            "How to avoid breaking changes in a public API",
+            "Detecting breaking changes before your users do",
+        ] {
+            assert!(!is_breaking_change(&title.to_lowercase()), "{title}");
+        }
+    }
+
+    /// Notices keep the type — including the over-correction guards: a title
+    /// tied to a version is about a concrete release even with a practice
+    /// framing.
+    #[test]
+    fn breaking_change_notices_keep_the_type() {
+        for title in [
+            "Terminaux 8.7 will contain breaking changes",
+            "OpenAI Node SDK v5 breaking changes",
+            "Breaking change: npm will require 2FA for every publish",
+            "React Router breaking change: loaders now run in parallel",
+            "How we survived the React 19 breaking changes",
+            "Node.js 24 drops support for CommonJS",
+            "Vagrant is approaching EOL. No more \"Docker for VMs\"",
+            "NetBSD 9.5 released and EOL for netbsd-9",
+            "Kubernetes 1.34 End of Life: What Happens on EKS, GKE, and AKS",
+        ] {
+            assert!(is_breaking_change(&title.to_lowercase()), "{title}");
+        }
+    }
+
+    /// "eol" inside a word typed these live titles as breaking changes.
+    #[test]
+    fn eol_inside_a_word_is_not_end_of_life() {
+        for title in [
+            "China plans to complete new-generation geological map of Mars by 2028",
+            "Lexical laundering: The mainstreaming of antisemitic neologisms from 4chan",
+            "Save up to 43% off Smart Security Cameras During Reolink's Prime Big Deal Days",
+            "Plone Archeology (2003 - 2012)",
+        ] {
+            assert!(!is_breaking_change(&title.to_lowercase()), "{title}");
+        }
+    }
 }
