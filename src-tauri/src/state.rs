@@ -322,10 +322,13 @@ pub(crate) fn get_database() -> Result<&'static Arc<Database>> {
         // `HealthIssue` on the next frontend poll. The fallback `Database::new`
         // primitive recovery below remains as a belt-and-suspenders safety net
         // for the residual case where preemptive recovery itself failed.
-        let recovery = crate::db::migrations::recover_corrupt_db_if_needed(&db_path);
+        // The whole-file scan runs only when due (no/stale marker, an unclean
+        // exit, a replaced file) — see `db::integrity_gate` for the policy.
+        let recovery = crate::db::integrity_gate::preflight(&db_path);
         match &recovery {
             crate::db::migrations::CorruptionRecovery::Healthy
-            | crate::db::migrations::CorruptionRecovery::NoExistingDb => {
+            | crate::db::migrations::CorruptionRecovery::NoExistingDb
+            | crate::db::migrations::CorruptionRecovery::CheckSkipped { .. } => {
                 // Common path — log nothing, no notice.
             }
             crate::db::migrations::CorruptionRecovery::RestoredFromBackup { restored_from } => {
@@ -349,10 +352,17 @@ pub(crate) fn get_database() -> Result<&'static Arc<Database>> {
         // Captured BEFORE `recovery` is moved into the notice. This verdict is the
         // only evidence that the file is actually corrupt, and it is what licenses
         // the last-resort fallback below to quarantine the user's corpus.
-        let file_verified_intact = db_verified_intact(&recovery);
+        let mut file_verified_intact = db_verified_intact(&recovery);
+        let check_skipped = matches!(
+            recovery,
+            crate::db::migrations::CorruptionRecovery::CheckSkipped { .. }
+        );
         crate::db::migrations::set_db_recovery_notice(recovery);
+        // Before the open, so a crash inside migrations still reads as an
+        // unclean exit on the next start.
+        crate::db::integrity_gate::register_session(&db_path);
 
-        let db = match Database::new(&db_path) {
+        let db = 'open: { match Database::new(&db_path) {
             Ok(db) => db,
             Err(e) => {
                 if is_database_lock_contention(&e) {
@@ -398,6 +408,24 @@ pub(crate) fn get_database() -> Result<&'static Arc<Database>> {
                     return Err(format!("{e}"));
                 }
 
+                // A skipped pre-flight is no evidence either way. Take the scan now,
+                // before anything below may move the user's corpus.
+                if check_skipped {
+                    use crate::db::migrations::CorruptionRecovery as R;
+                    let late = crate::db::integrity_gate::verify_after_open_failure(&db_path);
+                    file_verified_intact = db_verified_intact(&late);
+                    let repaired =
+                        matches!(late, R::RestoredFromBackup { .. } | R::QuarantinedNoBackup { .. });
+                    crate::db::migrations::set_db_recovery_notice(late);
+                    if repaired {
+                        // The scan found corruption and already restored or quarantined
+                        // it (never deletes). Open what is at the path now — once.
+                        break 'open Database::new(&db_path).map_err(|e2| {
+                            format!("Failed to open database after recovery: {e2}")
+                        })?;
+                    }
+                }
+
                 // DESTRUCTION REQUIRES EVIDENCE OF CORRUPTION, NOT MERELY AN ERROR.
                 //
                 // Everything above this line is an allowlist of errors that are known
@@ -409,8 +437,8 @@ pub(crate) fn get_database() -> Result<&'static Arc<Database>> {
                 // error class anywhere under `Database::new` inherits that behaviour
                 // until someone remembers to add an arm here — a denylist by omission.
                 //
-                // `PRAGMA quick_check` already ran in the pre-flight above and its
-                // verdict is right here. If it says the file is intact, then whatever
+                // `PRAGMA quick_check` already ran (in the pre-flight, or just above
+                // when the pre-flight skipped it) and its verdict is right here. If it says the file is intact, then whatever
                 // made `Database::new` fail is not corruption, and renaming the user's
                 // only copy would destroy far more than it protects. Refuse to start
                 // instead: an unopenable database with the data intact is a support
@@ -463,6 +491,7 @@ pub(crate) fn get_database() -> Result<&'static Arc<Database>> {
                 if shm.exists() {
                     std::fs::remove_file(&shm).ok();
                 }
+                crate::db::integrity_gate::invalidate(&db_path);
                 tracing::info!(
                     target: "4da::db",
                     corrupt = ?corrupt_path,
@@ -481,7 +510,7 @@ pub(crate) fn get_database() -> Result<&'static Arc<Database>> {
                 Database::new(&db_path)
                     .map_err(|e2| format!("Failed to create fresh database after recovery: {e2}"))?
             }
-        };
+        } };
 
         info!(target: "4da::db", "Database ready");
         // The database opened under THIS binary — any standing engine-block

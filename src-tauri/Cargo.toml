@@ -324,6 +324,22 @@ unreadable_literal = "allow"
 wildcard_imports = "allow"
 enum_glob_use = "allow"
 
+# Optimize the bundled SQLite C code (and the sqlite-vec C extension) even in
+# dev builds. Without this, `rusqlite`'s `bundled` SQLite compiles at -O0 in
+# every debug build — and the debug build is what `pnpm run tauri dev` runs AND
+# what the scheduled background refresh runs (`src-tauri/target/debug`). Every
+# SQL statement in dev paid for it. Measured 2026-10-09 on a 2.0 GB corpus copy
+# (510,616 pages, warm cache): PRAGMA quick_check 5.6-5.8 s at -O0 vs 3.8-4.6 s
+# here. Cold-cache scans are I/O-bound (~70 s either way), which is why the
+# startup scan itself is gated (`db::integrity_gate`). Costs one extra C compile per target dir;
+# Rust code stays at opt-level 0, so debugging and incremental builds are
+# unaffected.
+[profile.dev.package.libsqlite3-sys]
+opt-level = 3
+
+[profile.dev.package.sqlite-vec]
+opt-level = 3
+
 [profile.release]
 strip = true
 lto = "thin"

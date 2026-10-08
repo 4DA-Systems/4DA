@@ -362,6 +362,9 @@ pub fn mark_clean_shutdown() {
     };
     let _ = std::fs::remove_file(dir.join(".running"));
     let _ = std::fs::remove_file(dir.join(".healthy"));
+    // This process's `<db>.session.<pid>`: a clean exit is what lets the next
+    // start skip the whole-file integrity scan (`db::integrity_gate`).
+    crate::db::integrity_gate::release_session();
     // A clean shutdown is the recovery signal for crash-loop detection —
     // clear the history so future boots start from a clean slate.
     clear_crash_history();

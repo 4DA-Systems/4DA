@@ -427,6 +427,15 @@ check_database` still reported the pre-flight verdict — **healthy**. The app r
 itself and the health surface said nothing was wrong. It now records
 `QuarantinedNoBackup` so the reset is visible.
 
+**Update 2026-10-09 (wave 2d): the pre-flight scan is no longer every start.**
+`quick_check` reads every page (O(file size): 70 s cold on a 2.0 GB corpus), so
+`db::integrity_gate` runs it only when due — no/stale (24 h) marker, an opener that
+died without its clean-shutdown path (`<db>.session.<pid>` left behind by a dead PID),
+or a replaced file. A skipped scan reports `CheckSkipped`, which is deliberately NOT
+in `db_verified_intact`: if `Database::new` then fails, `state.rs` runs the scan
+before any recovery decision. The evidence rule above is unchanged — a skip is never
+evidence in either direction.
+
 **Generalisable rule:** when an error path can destroy user data, the destructive
 branch must be the one that requires proof. If your code reads "handle the safe cases,
 else destroy", every future error is a data-loss bug you have not written yet.

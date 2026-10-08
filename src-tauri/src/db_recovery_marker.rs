@@ -45,7 +45,9 @@ pub(crate) struct RecoveryMarker {
 /// which leave no marker.
 fn describe(notice: &CorruptionRecovery) -> Option<(&'static str, String)> {
     match notice {
-        CorruptionRecovery::Healthy | CorruptionRecovery::NoExistingDb => None,
+        CorruptionRecovery::Healthy
+        | CorruptionRecovery::NoExistingDb
+        | CorruptionRecovery::CheckSkipped { .. } => None,
         CorruptionRecovery::RestoredFromBackup { restored_from } => {
             Some(("restored_from_backup", restored_from.display().to_string()))
         }
