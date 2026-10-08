@@ -70,7 +70,7 @@ With your permission, we will acknowledge your contribution in the release notes
 ### Update Mechanism
 
 - **Signed updates.** Application updates are signed with Ed25519 (minisign). The updater verifies signatures before applying any update.
-- **Code signing.** Windows binaries are EV code-signed. macOS binaries are signed and notarized by Apple.
+- **Code signing.** Windows binaries are not yet Authenticode-signed (planned); verify them with the published SHA-256 checksums and minisign signatures ([docs/VERIFY-DOWNLOADS.md](docs/VERIFY-DOWNLOADS.md)). macOS binaries are signed and notarized by Apple.
 
 ### Supply Chain
 

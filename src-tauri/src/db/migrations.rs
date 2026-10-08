@@ -679,12 +679,23 @@ mod recovery_tests {
             )
             .unwrap();
 
+        // What this timing assertion guards is that the probe sets its OWN short busy
+        // timeout instead of inheriting the connection default (rusqlite 0.32: 5000 ms,
+        // `busy.rs`). Without the override, a locked DB holds startup for the full
+        // default wait, so the elapsed time can never come in under it. The bound is
+        // that default, not a tuned wall-clock budget: the old 2 s bound measured
+        // machine load (2.07-2.76 s under a loaded parallel run vs 0.8-1.45 s alone)
+        // rather than the probe's behaviour.
+        const INHERITED_DEFAULT_BUSY_TIMEOUT: std::time::Duration =
+            std::time::Duration::from_millis(5000);
         let started = std::time::Instant::now();
         let result = recover_corrupt_db_if_needed(&path);
+        let elapsed = started.elapsed();
         assert!(
-            started.elapsed() < std::time::Duration::from_secs(2),
-            "locked DB recovery must return quickly, elapsed {:?}",
-            started.elapsed()
+            elapsed < INHERITED_DEFAULT_BUSY_TIMEOUT,
+            "locked DB recovery waited {elapsed:?}, at least the inherited default busy \
+             timeout ({INHERITED_DEFAULT_BUSY_TIMEOUT:?}) -- the probe's own short timeout \
+             is not in effect"
         );
 
         match result {

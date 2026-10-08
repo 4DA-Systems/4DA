@@ -120,7 +120,7 @@ Don't take our word for it:
 
 Every release publishes `SHASUMS256.txt` and per-file `.sha256` sidecars. [Verification instructions.](docs/VERIFY-DOWNLOADS.md)
 
-> **Windows users:** SmartScreen will prompt on first launch (new application, building reputation). Click **More info → Run anyway**. [Full details.](docs/launch/WINDOWS-INSTALL.md)
+> **Windows users:** the Windows installer is not yet code-signed, so SmartScreen shows "Windows protected your PC / Unknown publisher". Verify the SHA-256 against `SHASUMS256.txt` from the release first, then click **More info → Run anyway**. [Full details.](docs/launch/WINDOWS-INSTALL.md)
 
 Or install the **MCP server** for Claude Code / Cursor / Windsurf:
 ```bash
@@ -151,11 +151,12 @@ pnpm tauri dev   # First build: 5-15 min. Dev server: localhost:4444.
 | RAM | 4 GB | 4 GB | 16 GB (8B model); 32 GB for 12–14B |
 | CPU | any 64-bit | any 64-bit | 6–8 cores |
 | GPU | not needed | not needed | optional (recommended for speed) |
-| Disk | ~500 MB | ~500 MB | + 5–9 GB per model |
+| Disk | several GB (grows with use) | several GB (grows with use) | + 5–9 GB per model |
 | Network | install only | install + your AI provider | install + one model download (or none with Ollama) |
 
 - OS: Windows 10 (1803+) / 11, macOS 10.15+, Ubuntu 22.04+ (WebKitGTK 4.1).
-- One installer (~110 MB). The local embedding model ships inside it — no separate download, works fully offline on first run.
+- One installer (~280 MB on Windows, ~300 MB on macOS, ~300–370 MB on Linux). Most of that is the local embedding model (nomic-embed-text v1.5, fp16 ONNX), which ships inside it — no separate download, works fully offline on first run.
+- Disk use grows with your corpus. An active install's database reaches a couple of GB and grows by tens of MB a day; each schema migration keeps up to 2 full database backups; caches and models add about 1 GB more. Plan for several GB. The data-retention setting (default 30 days, adjustable 7–365) bounds how long items are kept.
 - Baseline = private on-device semantic search. Cloud AI adds AI-written briefings + deeper reranking via your own API key. Local AI runs everything offline (Ollama or a downloaded model).
 
 ---
@@ -195,7 +196,7 @@ Your Codebase                    External Sources
 | Frontend | React 19 + TypeScript + Tailwind CSS v4 |
 | Database | SQLite 3.45+ with sqlite-vec (vector search) |
 | Scoring | Custom pipeline → build-time Rust codegen |
-| Embeddings | OpenAI text-embedding-3-small / Ollama |
+| Embeddings | nomic-embed-text v1.5 locally — bundled ONNX model (fastembed), or local Ollama when running; OpenAI only on explicit opt-in |
 | LLM | Anthropic Claude / OpenAI / Ollama (BYOK) |
 
 ---

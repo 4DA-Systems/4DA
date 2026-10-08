@@ -35,7 +35,7 @@ pnpm run validate:sizes    # Check file size limits
 
 ```
 src/                    # React frontend (TypeScript)
-  components/           # UI components (200+ files)
+  components/           # UI components (~180 .tsx, ~220 incl. .ts helpers; excl. tests)
   types/                # Shared TypeScript types
 src-tauri/              # Rust backend
   src/                  # Core logic (300+ modules)

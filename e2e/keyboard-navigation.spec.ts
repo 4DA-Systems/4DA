@@ -10,7 +10,7 @@ test.describe('Keyboard Navigation & Accessibility', () => {
   test('pressing ? opens keyboard shortcuts modal', async ({ page }) => {
     await page.keyboard.press('?');
     const modal = page.getByRole('dialog').or(page.locator('[data-testid="shortcuts-modal"]'));
-    await expect(modal).toBeVisible({ timeout: 3000 });
+    await expect(modal).toBeVisible();
 
     // Should contain references to keyboard shortcuts
     const shortcutText = modal.getByText(/shortcut|keyboard|hotkey/i);
@@ -20,25 +20,25 @@ test.describe('Keyboard Navigation & Accessibility', () => {
   test('pressing , opens settings modal', async ({ page }) => {
     await page.keyboard.press(',');
     const settingsModal = page.getByRole('dialog').or(page.locator('[data-testid="settings-modal"]'));
-    await expect(settingsModal).toBeVisible({ timeout: 3000 });
+    await expect(settingsModal).toBeVisible();
   });
 
   test('Escape dismisses open modal', async ({ page }) => {
     // Open shortcuts modal with ?
     await page.keyboard.press('?');
     const modal = page.getByRole('dialog');
-    await expect(modal).toBeVisible({ timeout: 3000 });
+    await expect(modal).toBeVisible();
 
     // Escape should close it
     await page.keyboard.press('Escape');
-    await expect(modal).not.toBeVisible({ timeout: 3000 });
+    await expect(modal).not.toBeVisible();
   });
 
   test('focus is trapped inside open modal', async ({ page }) => {
     // Open a modal
     await page.keyboard.press('?');
     const modal = page.getByRole('dialog').or(page.locator('[data-testid="shortcuts-modal"]'));
-    await expect(modal).toBeVisible({ timeout: 3000 });
+    await expect(modal).toBeVisible();
 
     // Tab through elements — focus should stay within the modal
     const focusableSelectors = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';

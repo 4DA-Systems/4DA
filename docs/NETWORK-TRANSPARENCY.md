@@ -136,7 +136,7 @@ The Tauri updater checks for new application versions by fetching a JSON manifes
 
 - **Endpoint:** `https://github.com/4DA-Systems/4DA/releases/download/desktop-latest/latest.json`
 - **Data sent:** Standard GET request. No personal data, no device identifiers, no telemetry.
-- **Security:** Updates are signed with Minisign. The public key (ID: `19AF42B1B6971703`) is embedded in `src-tauri/tauri.conf.json` (line 48). The updater rejects any payload that fails signature verification.
+- **Security:** Updates are signed with Minisign. The public key (ID: `46ECE1D6A97849EF`) is embedded in `src-tauri/tauri.conf.json` (`plugins.updater.pubkey`). The updater rejects any payload that fails signature verification.
 - **Configuration:** `src-tauri/tauri.conf.json`, lines 44-49
 
 ### Team Sync (Row 19) -- Enterprise Only

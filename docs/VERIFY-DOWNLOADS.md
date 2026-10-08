@@ -13,8 +13,8 @@ When you download software from the internet, the file could be altered in trans
 | Layer | What It Proves | Tool Required |
 |---|---|---|
 | **SHA-256 checksum** | The file is bit-for-bit identical to what was published | None (built-in) |
-| **Code signing** | The binary was produced by 4DA Systems Pty Ltd | None (built-in) |
-| **Minisign signature** | The auto-updater payload is authentic and untampered | `minisign` |
+| **Code signing** | The binary was produced by 4DA Systems Pty Ltd (macOS; Windows builds are not yet signed) | None (built-in) |
+| **Minisign signature** | The installer / update payload was signed with the 4DA release key | `minisign` |
 
 Any single layer is sufficient to detect tampering. Using more than one raises confidence further.
 
@@ -64,29 +64,11 @@ The hash output must match the corresponding line in the checksum file exactly. 
 
 Code signing uses a cryptographic certificate issued by a trusted certificate authority. It proves two things: the identity of the publisher and that the binary has not been modified after signing.
 
-### Windows (EV Code Signing)
+### Windows (not yet code-signed)
 
-4DA Windows installers are signed with an Extended Validation (EV) code signing certificate issued by SSL.com to **4DA Systems Pty Ltd**. EV certificates require rigorous identity verification by the certificate authority, and they provide immediate Microsoft SmartScreen reputation (no "unknown publisher" warnings).
+4DA Windows installers are currently **not Authenticode-signed**; code signing is planned. `Get-AuthenticodeSignature` on the installer reports `NotSigned`, the file's Properties have no **Digital Signatures** tab, and SmartScreen shows **"Windows protected your PC" / "Unknown publisher"** on first run.
 
-**GUI method:**
-
-1. Right-click the `.exe` installer.
-2. Select **Properties**.
-3. Open the **Digital Signatures** tab.
-4. Select the signature entry and click **Details**.
-5. Confirm the signer is **4DA Systems Pty Ltd** and the certificate chain is valid.
-
-**PowerShell method:**
-
-```powershell
-Get-AuthenticodeSignature ".\4DA_1.0.0_x64-setup.exe"
-```
-
-The output should show:
-
-- **Status:** `Valid`
-- **SignerCertificate Subject:** contains `4DA Systems Pty Ltd`
-- **Issuer:** `SSL.com`
+On Windows, verify the **SHA-256 checksum** (section 1) and/or the **minisign signature** (section 3) before running the installer. Click **More info → Run anyway** only after one of them checks out.
 
 ### macOS (Apple Developer ID + Notarization)
 
@@ -134,12 +116,12 @@ There is no universal OS-level code signing standard for Linux. Verification rel
 ### The public key
 
 ```
-untrusted comment: minisign public key: 19AF42B1B6971703
-RWQDF5e2sUKvGYCPxka/KazOY6s/8w85tK7C8rD6IRAb1ucOhVfePRZF
+untrusted comment: minisign public key: 46ECE1D6A97849EF
+RWTvSXip1uHsRurO5vC0TOSEVlipUqSzsHinODnu7DX5Tw11guDvHQQZ
 ```
 
-- **Key ID:** `19AF42B1B6971703`
-- This key is embedded in the application source code at [`src-tauri/tauri.conf.json` (line 48)](https://github.com/4DA-Systems/4DA/blob/main/src-tauri/tauri.conf.json#L48) as a base64-encoded string. You can decode it yourself to confirm it matches the key above.
+- **Key ID:** `46ECE1D6A97849EF`
+- This key is embedded in the application source code at [`src-tauri/tauri.conf.json`](https://github.com/4DA-Systems/4DA/blob/main/src-tauri/tauri.conf.json) (`plugins.updater.pubkey`) as a base64-encoded string. You can decode it yourself to confirm it matches the key above.
 
 ### Install minisign
 
@@ -159,11 +141,14 @@ scoop install minisign
 
 ### Verify a signature
 
-Each release includes `.sig` files alongside the update artifacts. Download both the artifact and its `.sig` file, then run:
+Each release includes `.sig` files alongside the installers and update artifacts. A `.sig` file is a minisign signature **wrapped in base64** (the format the Tauri updater reads), so decode it first. Download both the artifact and its `.sig` file, then run:
 
 ```bash
-minisign -Vm 4DA_1.0.0_x64-setup.nsis.zip -P RWQDF5e2sUKvGYCPxka/KazOY6s/8w85tK7C8rD6IRAb1ucOhVfePRZF
+base64 -d 4DA_1.0.3_x64-setup.exe.sig > installer.minisig
+minisign -Vm 4DA_1.0.3_x64-setup.exe -x installer.minisig -P RWTvSXip1uHsRurO5vC0TOSEVlipUqSzsHinODnu7DX5Tw11guDvHQQZ
 ```
+
+(On Windows PowerShell, decode with `[IO.File]::WriteAllBytes("$PWD\installer.minisig", [Convert]::FromBase64String((Get-Content .\4DA_1.0.3_x64-setup.exe.sig -Raw).Trim()))`.)
 
 Replace the filename with the actual artifact you downloaded. If the signature is valid, minisign prints:
 
@@ -207,7 +192,7 @@ The `Cargo.lock` and `pnpm-lock.yaml` files are committed to the repository and 
 | Material | Location |
 |---|---|
 | Installers, checksums, and signatures | [GitHub Releases](https://github.com/4DA-Systems/4DA/releases) |
-| Minisign public key (in source) | [`src-tauri/tauri.conf.json`](https://github.com/4DA-Systems/4DA/blob/main/src-tauri/tauri.conf.json) line 48 |
+| Minisign public key (in source) | [`src-tauri/tauri.conf.json`](https://github.com/4DA-Systems/4DA/blob/main/src-tauri/tauri.conf.json) `plugins.updater.pubkey` |
 | This document | [`docs/VERIFY-DOWNLOADS.md`](https://github.com/4DA-Systems/4DA/blob/main/docs/VERIFY-DOWNLOADS.md) |
 | Security policy and vulnerability reporting | [`SECURITY.md`](https://github.com/4DA-Systems/4DA/blob/main/SECURITY.md) |
 | Network transparency audit | [`docs/NETWORK-TRANSPARENCY.md`](NETWORK-TRANSPARENCY.md) |

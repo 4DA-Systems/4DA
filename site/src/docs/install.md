@@ -21,7 +21,7 @@ Pre-built binaries — no Rust toolchain required.
 
 Every release publishes `SHASUMS256.txt` and per-file `.sha256` sidecars so you can verify the binary before you run it. The updater checks GitHub Releases once per session and validates signatures with minisign.
 
-> **Windows users:** SmartScreen prompts on first launch — this is a new application still building reputation, not a warning about the binary. Click **More info → Run anyway**.
+> **Windows users:** the Windows installer is not yet code-signed, so SmartScreen shows "Windows protected your PC / Unknown publisher". Check the installer's SHA-256 against `SHASUMS256.txt` first, then click **More info → Run anyway**. Code signing is in progress.
 
 ## Or run the MCP server
 
@@ -42,7 +42,9 @@ No API keys. No accounts. No desktop app required. See **[MCP server & agents](/
 | RAM | 4 GB | 4 GB | 16 GB (8B model); 32 GB for 12–14B |
 | CPU | any 64-bit | any 64-bit | 6–8 cores |
 | GPU | not needed | not needed | optional (faster) |
-| Disk | ~500 MB | ~500 MB | + 5–9 GB per model |
+| Disk | several GB (grows with use) | several GB (grows with use) | + 5–9 GB per model |
+
+Disk use grows with your corpus: an active install's database reaches a couple of GB, each schema migration keeps up to 2 full database backups, and caches and models add about 1 GB. The data-retention setting (default 30 days, adjustable 7–365) bounds how long items are kept.
 
 Supported: Windows 10 (1803+) / 11, macOS 10.15+, Ubuntu 22.04+ (WebKitGTK 4.1). Installers are about 280–300 MB on Windows and macOS and about 370 MB for the Linux AppImage. Most of that is the local embedding model, which ships inside the installer and works fully offline on first run.
 

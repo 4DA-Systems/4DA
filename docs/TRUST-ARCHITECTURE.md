@@ -46,8 +46,8 @@ The application is a Tauri 2.0 desktop binary. Rust backend, React frontend, SQL
 
 ### Layer 3: Technical Controls
 
-- **Code signing:** Windows binaries are signed with an EV code signing certificate from SSL.com. macOS binaries are signed with an Apple Developer ID certificate and notarized by Apple.
-- **Update verification:** The Tauri updater verifies every update against a Minisign public key (key ID `19AF42B1B6971703`) before applying it. A compromised download server cannot push malicious updates.
+- **Code signing:** Windows binaries are not yet Authenticode-signed (planned); verify them with the published SHA-256 checksums and minisign signatures. macOS binaries are signed with an Apple Developer ID certificate and notarized by Apple.
+- **Update verification:** The Tauri updater verifies every update against a Minisign public key (key ID `46ECE1D6A97849EF`) before applying it. A compromised download server cannot push malicious updates.
 - **Content Security Policy:** The CSP in `tauri.conf.json` restricts all outbound connections to an explicit allowlist. The browser context inside the application cannot contact arbitrary servers.
 
 ### Layer 4: Legal
@@ -129,13 +129,13 @@ No 4DA Systems endpoint appears in this list. The application cannot send data t
 
 ### e) Updates are cryptographically verified
 
-**Mechanism:** The Tauri updater plugin verifies every update against a Minisign public key before applying it. The public key (ID `19AF42B1B6971703`) is embedded in the application binary via `tauri.conf.json`. Update manifests are served from GitHub Releases, not from 4DA-controlled infrastructure.
+**Mechanism:** The Tauri updater plugin verifies every update against a Minisign public key before applying it. The public key (ID `46ECE1D6A97849EF`) is embedded in the application binary via `tauri.conf.json`. Update manifests are served from GitHub Releases, not from 4DA-controlled infrastructure.
 
 Platform-specific signing provides an additional layer:
-- **Windows:** EV code signing certificate from SSL.com
+- **Windows:** not yet Authenticode-signed (planned); SHA-256 checksums and minisign signatures are the verification path
 - **macOS:** Apple Developer ID certificate with Apple notarization
 
-**Verify:** The Minisign public key is visible in `src-tauri/tauri.conf.json` (line 48). Download verification instructions are available in VERIFY-DOWNLOADS.md.
+**Verify:** The Minisign public key is visible in `src-tauri/tauri.conf.json` (`plugins.updater.pubkey`). Download verification instructions are available in VERIFY-DOWNLOADS.md.
 
 ### f) The source code is auditable
 
@@ -203,7 +203,7 @@ When you download a compiled binary, you are trusting that it was built from the
 
 **Mitigations:**
 - Build from source yourself using the published repository and pinned dependencies.
-- Verify the code signature (Windows EV cert, macOS Developer ID + notarization) to confirm the binary was produced by 4DA Systems and not tampered with in transit.
+- Verify the minisign signature (all platforms) and, on macOS, the Developer ID signature + notarization to confirm the binary was produced by 4DA Systems and not tampered with in transit.
 - Compare checksums published with each release.
 
 ### Trust in the dependency supply chain
