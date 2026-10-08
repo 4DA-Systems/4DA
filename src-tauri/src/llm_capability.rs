@@ -477,7 +477,14 @@ pub async fn probe_llm_capability() -> Result<serde_json::Value> {
 /// Hydrates keys first so the `has_llm` check sees the real API key, matching exactly what
 /// the brief itself evaluates.
 #[tauri::command]
-pub fn get_brief_capability() -> Result<BriefCapability> {
+pub async fn get_brief_capability() -> Result<BriefCapability> {
+    crate::ipc_blocking::off_ui_thread("get_brief_capability", move || {
+        get_brief_capability_blocking()
+    })
+    .await
+}
+
+fn get_brief_capability_blocking() -> Result<BriefCapability> {
     let settings = {
         let manager = crate::get_settings_manager();
         let mut guard = manager.lock();

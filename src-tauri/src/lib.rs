@@ -281,6 +281,7 @@ mod integrity;
 mod intelligence_core;
 mod intelligence_history;
 mod intelligence_metrics;
+mod ipc_blocking;
 mod ipc_guard;
 mod ipc_rate_limit;
 mod judge_gate;

@@ -212,7 +212,14 @@ pub(crate) fn find_cross_project_deps(
 // ============================================================================
 
 #[tauri::command]
-pub fn get_tech_convergence() -> crate::error::Result<serde_json::Value> {
+pub async fn get_tech_convergence() -> crate::error::Result<serde_json::Value> {
+    crate::ipc_blocking::off_ui_thread("get_tech_convergence", move || {
+        get_tech_convergence_blocking()
+    })
+    .await
+}
+
+fn get_tech_convergence_blocking() -> crate::error::Result<serde_json::Value> {
     crate::settings::require_signal_feature("get_tech_convergence")?;
     // Build project->tech map from ACE-detected projects (languages + frameworks)
     let ace = crate::state::get_ace_engine()?;
@@ -262,7 +269,14 @@ pub fn get_tech_convergence() -> crate::error::Result<serde_json::Value> {
 }
 
 #[tauri::command]
-pub fn get_project_health_comparison() -> crate::error::Result<serde_json::Value> {
+pub async fn get_project_health_comparison() -> crate::error::Result<serde_json::Value> {
+    crate::ipc_blocking::off_ui_thread("get_project_health_comparison", move || {
+        get_project_health_comparison_blocking()
+    })
+    .await
+}
+
+fn get_project_health_comparison_blocking() -> crate::error::Result<serde_json::Value> {
     crate::settings::require_signal_feature("get_project_health_comparison")?;
     let ace = crate::state::get_ace_engine()?;
     let conn = ace.get_conn().lock();
@@ -302,7 +316,14 @@ pub fn get_project_health_comparison() -> crate::error::Result<serde_json::Value
 }
 
 #[tauri::command]
-pub fn get_cross_project_dependencies() -> crate::error::Result<serde_json::Value> {
+pub async fn get_cross_project_dependencies() -> crate::error::Result<serde_json::Value> {
+    crate::ipc_blocking::off_ui_thread("get_cross_project_dependencies", move || {
+        get_cross_project_dependencies_blocking()
+    })
+    .await
+}
+
+fn get_cross_project_dependencies_blocking() -> crate::error::Result<serde_json::Value> {
     crate::settings::require_signal_feature("get_cross_project_dependencies")?;
     let ace = crate::state::get_ace_engine()?;
     let conn = ace.get_conn().lock();

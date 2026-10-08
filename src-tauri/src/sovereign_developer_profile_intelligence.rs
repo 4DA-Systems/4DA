@@ -630,14 +630,28 @@ fn write_map_section(md: &mut String, label: &str, map: &HashMap<String, String>
 // ============================================================================
 
 #[tauri::command]
-pub fn export_sovereign_profile_markdown() -> crate::error::Result<String> {
+pub async fn export_sovereign_profile_markdown() -> crate::error::Result<String> {
+    crate::ipc_blocking::off_ui_thread("export_sovereign_profile_markdown", move || {
+        export_sovereign_profile_markdown_blocking()
+    })
+    .await
+}
+
+fn export_sovereign_profile_markdown_blocking() -> crate::error::Result<String> {
     let conn = crate::open_db_connection()?;
     let profile = assemble_profile(&conn);
     Ok(export_as_markdown(&profile))
 }
 
 #[tauri::command]
-pub fn export_sovereign_profile_json() -> crate::error::Result<String> {
+pub async fn export_sovereign_profile_json() -> crate::error::Result<String> {
+    crate::ipc_blocking::off_ui_thread("export_sovereign_profile_json", move || {
+        export_sovereign_profile_json_blocking()
+    })
+    .await
+}
+
+fn export_sovereign_profile_json_blocking() -> crate::error::Result<String> {
     let conn = crate::open_db_connection()?;
     let profile = assemble_profile(&conn);
     Ok(serde_json::to_string_pretty(&profile)?)

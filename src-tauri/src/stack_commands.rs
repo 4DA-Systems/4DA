@@ -81,14 +81,28 @@ pub fn get_stack_profiles() -> Vec<StackProfileSummary> {
 
 /// Get the user's currently selected stack profile IDs.
 #[tauri::command]
-pub fn get_selected_stacks() -> Result<Vec<String>> {
+pub async fn get_selected_stacks() -> Result<Vec<String>> {
+    crate::ipc_blocking::off_ui_thread("get_selected_stacks", move || {
+        get_selected_stacks_blocking()
+    })
+    .await
+}
+
+fn get_selected_stacks_blocking() -> Result<Vec<String>> {
     let conn = crate::open_db_connection()?;
     Ok(stacks::load_selected_stacks(&conn))
 }
 
 /// Set the user's selected stack profiles (replaces existing selections).
 #[tauri::command]
-pub fn set_selected_stacks(profile_ids: Vec<String>) -> Result<()> {
+pub async fn set_selected_stacks(profile_ids: Vec<String>) -> Result<()> {
+    crate::ipc_blocking::off_ui_thread("set_selected_stacks", move || {
+        set_selected_stacks_blocking(profile_ids)
+    })
+    .await
+}
+
+fn set_selected_stacks_blocking(profile_ids: Vec<String>) -> Result<()> {
     // Validate all IDs exist
     for id in &profile_ids {
         if stacks::get_profile(id).is_none() {
@@ -102,7 +116,15 @@ pub fn set_selected_stacks(profile_ids: Vec<String>) -> Result<()> {
 
 /// Auto-detect matching stack profiles from ACE context.
 #[tauri::command]
-pub fn detect_stack_profiles() -> Vec<StackDetectionResult> {
+pub async fn detect_stack_profiles() -> std::result::Result<Vec<StackDetectionResult>, String> {
+    crate::ipc_blocking::off_ui_thread_infallible(
+        "detect_stack_profiles",
+        detect_stack_profiles_blocking,
+    )
+    .await
+}
+
+fn detect_stack_profiles_blocking() -> Vec<StackDetectionResult> {
     let ace_ctx = crate::scoring::get_ace_context();
     stacks::detection::detect_matching_profiles(&ace_ctx)
         .into_iter()
@@ -117,7 +139,12 @@ pub fn detect_stack_profiles() -> Vec<StackDetectionResult> {
 
 /// Get the composed (merged) stack summary for debugging/UI display.
 #[tauri::command]
-pub fn get_composed_stack() -> Result<ComposedStackSummary> {
+pub async fn get_composed_stack() -> Result<ComposedStackSummary> {
+    crate::ipc_blocking::off_ui_thread("get_composed_stack", move || get_composed_stack_blocking())
+        .await
+}
+
+fn get_composed_stack_blocking() -> Result<ComposedStackSummary> {
     let conn = crate::open_db_connection()?;
     let composed = stacks::load_composed_stack(&conn);
     Ok(ComposedStackSummary {

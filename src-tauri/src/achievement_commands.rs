@@ -4,14 +4,26 @@ use crate::get_database;
 use tauri::AppHandle;
 
 #[tauri::command]
-pub fn get_achievement_state() -> Result<serde_json::Value> {
+pub async fn get_achievement_state() -> Result<serde_json::Value> {
+    crate::ipc_blocking::off_ui_thread("get_achievement_state", move || {
+        get_achievement_state_blocking()
+    })
+    .await
+}
+
+fn get_achievement_state_blocking() -> Result<serde_json::Value> {
     let db = get_database()?;
     let state = crate::achievement_engine::get_achievement_state(db);
     Ok(serde_json::to_value(state).unwrap_or_default())
 }
 
 #[tauri::command]
-pub fn get_achievements() -> Result<serde_json::Value> {
+pub async fn get_achievements() -> Result<serde_json::Value> {
+    crate::ipc_blocking::off_ui_thread("get_achievements", move || get_achievements_blocking())
+        .await
+}
+
+fn get_achievements_blocking() -> Result<serde_json::Value> {
     let db = get_database()?;
     let achievements = crate::achievement_engine::get_achievements(db);
     Ok(serde_json::to_value(achievements).unwrap_or_default())
@@ -19,7 +31,14 @@ pub fn get_achievements() -> Result<serde_json::Value> {
 
 /// Check daily streak on app startup. Returns any newly unlocked streak achievements.
 #[tauri::command]
-pub fn check_daily_streak(app: AppHandle) -> Result<serde_json::Value> {
+pub async fn check_daily_streak(app: AppHandle) -> Result<serde_json::Value> {
+    crate::ipc_blocking::off_ui_thread("check_daily_streak", move || {
+        check_daily_streak_blocking(app)
+    })
+    .await
+}
+
+fn check_daily_streak_blocking(app: AppHandle) -> Result<serde_json::Value> {
     let db = get_database()?;
     let unlocked = crate::achievement_engine::check_daily_streak(db);
     for a in &unlocked {

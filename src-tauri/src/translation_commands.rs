@@ -26,7 +26,18 @@ const MAX_OVERRIDE_VALUE_LENGTH: usize = 4_096;
 /// Compares the English locale source files against the existing translations
 /// in `data/translations/{lang}/` and returns a percentage-complete report.
 #[tauri::command]
-pub fn get_translation_status(lang: String) -> Result<translation_pipeline::TranslationStatus> {
+pub async fn get_translation_status(
+    lang: String,
+) -> Result<translation_pipeline::TranslationStatus> {
+    crate::ipc_blocking::off_ui_thread("get_translation_status", move || {
+        get_translation_status_blocking(lang)
+    })
+    .await
+}
+
+pub(crate) fn get_translation_status_blocking(
+    lang: String,
+) -> Result<translation_pipeline::TranslationStatus> {
     let lang = validate_locale("lang", &lang)?;
     let english = translation_pipeline::load_english_strings()?;
     let total = english.len();
@@ -80,7 +91,16 @@ pub async fn trigger_translation(lang: String) -> Result<String> {
 /// Returns a map of `"namespace:key"` to `{ english, translated, status }` where
 /// status is one of: `"overridden"`, `"translated"`, `"untranslated"`.
 #[tauri::command]
-pub fn get_all_translations(lang: String) -> Result<HashMap<String, TranslationEntry>> {
+pub async fn get_all_translations(lang: String) -> Result<HashMap<String, TranslationEntry>> {
+    crate::ipc_blocking::off_ui_thread("get_all_translations", move || {
+        get_all_translations_blocking(lang)
+    })
+    .await
+}
+
+pub(crate) fn get_all_translations_blocking(
+    lang: String,
+) -> Result<HashMap<String, TranslationEntry>> {
     let lang = validate_locale("lang", &lang)?;
     let english = translation_pipeline::load_english_strings()?;
     let overrides = load_overrides(&lang)?;
@@ -142,7 +162,19 @@ pub fn get_all_translations(lang: String) -> Result<HashMap<String, TranslationE
 /// the file's key and its value are attacker-chosen, which made the write
 /// fully controlled content at a fully controlled location.
 #[tauri::command]
-pub fn save_translation_override(
+pub async fn save_translation_override(
+    lang: String,
+    namespace: String,
+    key: String,
+    value: String,
+) -> Result<()> {
+    crate::ipc_blocking::off_ui_thread("save_translation_override", move || {
+        save_translation_override_blocking(lang, namespace, key, value)
+    })
+    .await
+}
+
+pub(crate) fn save_translation_override_blocking(
     lang: String,
     namespace: String,
     key: String,
@@ -183,7 +215,14 @@ pub fn save_translation_override(
 ///
 /// Returns a flat map of `"namespace:key"` to override value.
 #[tauri::command]
-pub fn get_translation_overrides(lang: String) -> Result<HashMap<String, String>> {
+pub async fn get_translation_overrides(lang: String) -> Result<HashMap<String, String>> {
+    crate::ipc_blocking::off_ui_thread("get_translation_overrides", move || {
+        get_translation_overrides_blocking(lang)
+    })
+    .await
+}
+
+pub(crate) fn get_translation_overrides_blocking(lang: String) -> Result<HashMap<String, String>> {
     let lang = validate_locale("lang", &lang)?;
     load_overrides(&lang)
 }
@@ -200,7 +239,22 @@ pub fn get_translation_overrides(lang: String) -> Result<HashMap<String, String>
 /// primitive. `read_override_map` now distinguishes "parsed to an empty map"
 /// from "did not parse", and this function refuses to write in the latter case.
 #[tauri::command]
-pub fn delete_translation_override(lang: String, namespace: String, key: String) -> Result<()> {
+pub async fn delete_translation_override(
+    lang: String,
+    namespace: String,
+    key: String,
+) -> Result<()> {
+    crate::ipc_blocking::off_ui_thread("delete_translation_override", move || {
+        delete_translation_override_blocking(lang, namespace, key)
+    })
+    .await
+}
+
+pub(crate) fn delete_translation_override_blocking(
+    lang: String,
+    namespace: String,
+    key: String,
+) -> Result<()> {
     let lang = validate_locale("lang", &lang)?;
     let namespace = validate_namespace("namespace", &namespace)?;
     let key = validate_translation_key("key", &key)?;
