@@ -310,8 +310,11 @@ mod tests {
         let guard = OverrideFileGuard::claim("hi", "ui");
         guard.write(&"x".repeat(1_000_001));
 
-        let result =
-            delete_translation_override("hi".to_string(), "ui".to_string(), "some.key".to_string());
+        let result = delete_translation_override_blocking(
+            "hi".to_string(),
+            "ui".to_string(),
+            "some.key".to_string(),
+        );
 
         assert!(result.is_err(), "Should error on files > 1MB");
         assert!(
@@ -326,7 +329,7 @@ mod tests {
     #[test]
     fn delete_override_nonexistent_file_returns_ok() {
         let _guard = OverrideFileGuard::claim("ru", "signals");
-        let result = delete_translation_override(
+        let result = delete_translation_override_blocking(
             "ru".to_string(),
             "signals".to_string(),
             "some.key".to_string(),
@@ -345,7 +348,7 @@ mod tests {
         map.insert("key.to.keep".to_string(), "Keep Me".to_string());
         guard.write(&serde_json::to_string_pretty(&map).unwrap());
 
-        let result = delete_translation_override(
+        let result = delete_translation_override_blocking(
             "it".to_string(),
             "ui".to_string(),
             "key.to.delete".to_string(),
@@ -372,7 +375,7 @@ mod tests {
         let original = "not valid json {{{";
         guard.write(original);
 
-        let result = delete_translation_override(
+        let result = delete_translation_override_blocking(
             "tr".to_string(),
             "errors".to_string(),
             "some.key".to_string(),
@@ -396,7 +399,7 @@ mod tests {
         let guard = OverrideFileGuard::claim("ko", "errors");
         guard.write("   \n");
 
-        let result = delete_translation_override(
+        let result = delete_translation_override_blocking(
             "ko".to_string(),
             "errors".to_string(),
             "some.key".to_string(),
@@ -413,7 +416,7 @@ mod tests {
     fn save_override_creates_dir_and_file() {
         let guard = OverrideFileGuard::claim("ar", "ui");
 
-        let result = save_translation_override(
+        let result = save_translation_override_blocking(
             "ar".to_string(),
             "ui".to_string(),
             "test.key".to_string(),
@@ -437,7 +440,7 @@ mod tests {
         initial.insert("existing.key".to_string(), "Existing".to_string());
         guard.write(&serde_json::to_string_pretty(&initial).unwrap());
 
-        let result = save_translation_override(
+        let result = save_translation_override_blocking(
             "ja".to_string(),
             "ui".to_string(),
             "new.key".to_string(),
@@ -456,7 +459,7 @@ mod tests {
         let original = r#"["a json array, not a string map"]"#;
         guard.write(original);
 
-        let result = save_translation_override(
+        let result = save_translation_override_blocking(
             "fr".to_string(),
             "signals".to_string(),
             "some.key".to_string(),
@@ -494,7 +497,7 @@ mod tests {
             .to_string_lossy()
             .replace('\\', "/");
 
-        let result = save_translation_override(
+        let result = save_translation_override_blocking(
             "en".to_string(),
             absolute_component,
             "pwned".to_string(),
@@ -528,7 +531,7 @@ mod tests {
             .to_string_lossy()
             .replace('\\', "/");
 
-        let result = delete_translation_override(
+        let result = delete_translation_override_blocking(
             "en".to_string(),
             absolute_component,
             "anything".to_string(),
@@ -546,7 +549,7 @@ mod tests {
     fn override_commands_reject_traversal() {
         for ns in ["../../../etc/passwd", "..", "../ui", "sub/dir"] {
             assert!(
-                save_translation_override(
+                save_translation_override_blocking(
                     "en".to_string(),
                     ns.to_string(),
                     "k".to_string(),
@@ -556,14 +559,18 @@ mod tests {
                 "namespace {ns:?} must be rejected"
             );
             assert!(
-                delete_translation_override("en".to_string(), ns.to_string(), "k".to_string())
-                    .is_err(),
+                delete_translation_override_blocking(
+                    "en".to_string(),
+                    ns.to_string(),
+                    "k".to_string()
+                )
+                .is_err(),
                 "namespace {ns:?} must be rejected on delete"
             );
         }
         for lang in ["../../../etc", "..", "en/../../x"] {
             assert!(
-                save_translation_override(
+                save_translation_override_blocking(
                     lang.to_string(),
                     "ui".to_string(),
                     "k".to_string(),
@@ -578,7 +585,7 @@ mod tests {
     #[test]
     fn override_commands_reject_null_bytes() {
         assert!(
-            save_translation_override(
+            save_translation_override_blocking(
                 "en".to_string(),
                 "ui\0.txt".to_string(),
                 "k".to_string(),
@@ -588,7 +595,7 @@ mod tests {
             "NUL in namespace must be rejected"
         );
         assert!(
-            save_translation_override(
+            save_translation_override_blocking(
                 "en\0".to_string(),
                 "ui".to_string(),
                 "k".to_string(),
@@ -598,7 +605,7 @@ mod tests {
             "NUL in lang must be rejected"
         );
         assert!(
-            save_translation_override(
+            save_translation_override_blocking(
                 "en".to_string(),
                 "ui".to_string(),
                 "k\0ey".to_string(),
@@ -608,7 +615,7 @@ mod tests {
             "NUL in key must be rejected"
         );
         assert!(
-            save_translation_override(
+            save_translation_override_blocking(
                 "en".to_string(),
                 "ui".to_string(),
                 "key".to_string(),
@@ -624,7 +631,7 @@ mod tests {
         let guard = OverrideFileGuard::claim("es", "ui");
 
         assert!(
-            save_translation_override(
+            save_translation_override_blocking(
                 "en".to_string(),
                 "u".repeat(5_000),
                 "k".to_string(),
@@ -634,7 +641,7 @@ mod tests {
             "Over-long namespace must be rejected"
         );
         assert!(
-            save_translation_override(
+            save_translation_override_blocking(
                 "es".to_string(),
                 "ui".to_string(),
                 "k".repeat(5_000),
@@ -644,7 +651,7 @@ mod tests {
             "Over-long key must be rejected"
         );
         assert!(
-            save_translation_override(
+            save_translation_override_blocking(
                 "es".to_string(),
                 "ui".to_string(),
                 "key".to_string(),
@@ -687,7 +694,7 @@ mod tests {
     fn override_commands_reject_unknown_locale() {
         for lang in ["zz", "nl", "pl", "pt", "EN", "en-US", ""] {
             assert!(
-                save_translation_override(
+                save_translation_override_blocking(
                     lang.to_string(),
                     "ui".to_string(),
                     "k".to_string(),
@@ -710,7 +717,7 @@ mod tests {
     fn override_commands_reject_unknown_namespace() {
         for ns in ["ui.json", "settings", "UI", ""] {
             assert!(
-                save_translation_override(
+                save_translation_override_blocking(
                     "en".to_string(),
                     ns.to_string(),
                     "k".to_string(),
@@ -724,9 +731,9 @@ mod tests {
 
     #[test]
     fn read_only_commands_reject_unsupported_locale() {
-        assert!(get_translation_overrides("../../etc".to_string()).is_err());
-        assert!(get_all_translations("zz".to_string()).is_err());
-        assert!(get_translation_status("../secrets".to_string()).is_err());
+        assert!(get_translation_overrides_blocking("../../etc".to_string()).is_err());
+        assert!(get_all_translations_blocking("zz".to_string()).is_err());
+        assert!(get_translation_status_blocking("../secrets".to_string()).is_err());
     }
 
     /// Anti-drift: the compile-time allowlist must keep matching what the repo

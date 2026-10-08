@@ -232,7 +232,18 @@ pub(crate) fn generate_recommendation(usage: &[AiUsageRecord]) -> Option<ModelRe
 // ============================================================================
 
 #[tauri::command]
-pub fn get_ai_usage_summary(period: Option<String>) -> crate::error::Result<serde_json::Value> {
+pub async fn get_ai_usage_summary(
+    period: Option<String>,
+) -> crate::error::Result<serde_json::Value> {
+    crate::ipc_blocking::off_ui_thread("get_ai_usage_summary", move || {
+        get_ai_usage_summary_blocking(period)
+    })
+    .await
+}
+
+fn get_ai_usage_summary_blocking(
+    period: Option<String>,
+) -> crate::error::Result<serde_json::Value> {
     let p = period.unwrap_or_else(|| chrono::Utc::now().format("%Y-%m").to_string());
     let conn = crate::open_db_connection()?;
 
@@ -279,7 +290,14 @@ pub fn get_ai_cost_estimate(
 }
 
 #[tauri::command]
-pub fn get_ai_cost_recommendation() -> crate::error::Result<serde_json::Value> {
+pub async fn get_ai_cost_recommendation() -> crate::error::Result<serde_json::Value> {
+    crate::ipc_blocking::off_ui_thread("get_ai_cost_recommendation", move || {
+        get_ai_cost_recommendation_blocking()
+    })
+    .await
+}
+
+fn get_ai_cost_recommendation_blocking() -> crate::error::Result<serde_json::Value> {
     let conn = crate::open_db_connection()?;
 
     let mut stmt = conn.prepare(

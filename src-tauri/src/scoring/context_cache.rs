@@ -245,9 +245,10 @@ fn compute_batch(
         (*item_id, fresh, false)
     };
 
-    let threads = db
-        .read_pool_len()
-        .min(std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get));
+    let threads = refresh_threads(
+        db.read_pool_len(),
+        std::thread::available_parallelism().map_or(1, std::num::NonZeroUsize::get),
+    );
     if threads <= 1 || batch.len() < 64 {
         return batch.iter().map(one).collect();
     }
@@ -263,6 +264,29 @@ fn compute_batch(
             .flat_map(|h| h.join().unwrap_or_default())
             .collect()
     })
+}
+
+/// Parallel KNN threads for a refresh: one per pooled reader MINUS ONE, so a
+/// reader always stays free for foreground IPC reads. With every reader taken
+/// (audit 2026-10-07, wave 2c) `Database::read_conn` fell through to the
+/// writer mutex for up to the 20 s cycle budget, queueing UI reads behind
+/// every write. Never more threads than cores.
+pub(crate) fn refresh_threads(read_pool_len: usize, cores: usize) -> usize {
+    read_pool_len.saturating_sub(1).min(cores)
+}
+
+/// [`refresh_context_cache`] on the blocking pool, for async callers: the
+/// refresh runs for up to its budget and must not pin an async worker.
+pub(crate) async fn refresh_context_cache_off_thread(
+    db: &'static Database,
+    budget: Duration,
+) -> ContextCacheRefresh {
+    tauri::async_runtime::spawn_blocking(move || refresh_context_cache(db, budget))
+        .await
+        .unwrap_or_else(|e| {
+            warn!(target: "4da::ctxcache", error = %e, "Context-match cache refresh task failed");
+            ContextCacheRefresh::default()
+        })
 }
 
 #[cfg(test)]

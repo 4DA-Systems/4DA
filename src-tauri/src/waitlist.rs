@@ -9,7 +9,21 @@ use tracing::info;
 use crate::error::Result;
 
 #[tauri::command]
-pub fn save_waitlist_signup(
+pub async fn save_waitlist_signup(
+    tier: String,
+    email: String,
+    name: Option<String>,
+    team_size: Option<String>,
+    company: Option<String>,
+    role: Option<String>,
+) -> Result<serde_json::Value> {
+    crate::ipc_blocking::off_ui_thread("save_waitlist_signup", move || {
+        save_waitlist_signup_blocking(tier, email, name, team_size, company, role)
+    })
+    .await
+}
+
+fn save_waitlist_signup_blocking(
     tier: String,
     email: String,
     name: Option<String>,

@@ -194,7 +194,16 @@ pub fn status() -> SchedulerStatus {
 /// Enable background refresh: install a scheduled task running the shipped binary `--engine-once`
 /// every `interval_minutes` (default 30). Returns the resulting status.
 #[tauri::command]
-pub fn install_background_refresh(
+pub async fn install_background_refresh(
+    interval_minutes: Option<u64>,
+) -> Result<SchedulerStatus, String> {
+    crate::ipc_blocking::off_ui_thread("install_background_refresh", move || {
+        install_background_refresh_blocking(interval_minutes)
+    })
+    .await
+}
+
+fn install_background_refresh_blocking(
     interval_minutes: Option<u64>,
 ) -> Result<SchedulerStatus, String> {
     let exe = std::env::current_exe()
@@ -208,13 +217,27 @@ pub fn install_background_refresh(
 
 /// Disable background refresh: remove the scheduled task.
 #[tauri::command]
-pub fn uninstall_background_refresh() -> Result<SchedulerStatus, String> {
+pub async fn uninstall_background_refresh() -> Result<SchedulerStatus, String> {
+    crate::ipc_blocking::off_ui_thread("uninstall_background_refresh", move || {
+        uninstall_background_refresh_blocking()
+    })
+    .await
+}
+
+fn uninstall_background_refresh_blocking() -> Result<SchedulerStatus, String> {
     uninstall()
 }
 
 /// Current background-refresh status (installed? interval? platform support?).
 #[tauri::command]
-pub fn background_refresh_status() -> SchedulerStatus {
+pub async fn background_refresh_status() -> std::result::Result<SchedulerStatus, String> {
+    crate::ipc_blocking::off_ui_thread_infallible("background_refresh_status", move || {
+        background_refresh_status_blocking()
+    })
+    .await
+}
+
+fn background_refresh_status_blocking() -> SchedulerStatus {
     status()
 }
 

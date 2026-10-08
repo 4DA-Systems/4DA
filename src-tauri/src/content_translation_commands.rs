@@ -81,8 +81,16 @@ pub async fn translate_content_batch(
 /// Returns whether translation is enabled, the provider preference,
 /// and the target language derived from user locale.
 #[tauri::command]
-pub fn get_content_translation_settings() -> Result<content_translation::ContentTranslationSettings>
-{
+pub async fn get_content_translation_settings(
+) -> Result<content_translation::ContentTranslationSettings> {
+    crate::ipc_blocking::off_ui_thread("get_content_translation_settings", move || {
+        get_content_translation_settings_blocking()
+    })
+    .await
+}
+
+fn get_content_translation_settings_blocking(
+) -> Result<content_translation::ContentTranslationSettings> {
     let target_lang = i18n::get_user_language();
 
     let manager = crate::get_settings_manager();
@@ -106,7 +114,14 @@ pub fn get_content_translation_settings() -> Result<content_translation::Content
 
 /// Get translation cache statistics for the user's language.
 #[tauri::command]
-pub fn get_translation_cache_stats() -> Result<CacheStats> {
+pub async fn get_translation_cache_stats() -> Result<CacheStats> {
+    crate::ipc_blocking::off_ui_thread("get_translation_cache_stats", move || {
+        get_translation_cache_stats_blocking()
+    })
+    .await
+}
+
+fn get_translation_cache_stats_blocking() -> Result<CacheStats> {
     let target_lang = i18n::get_user_language();
     content_translation::get_cache_stats(&target_lang)
 }
@@ -114,7 +129,14 @@ pub fn get_translation_cache_stats() -> Result<CacheStats> {
 /// Purge expired entries from the translation cache.
 /// Returns the number of entries purged.
 #[tauri::command]
-pub fn purge_translation_cache() -> Result<usize> {
+pub async fn purge_translation_cache() -> Result<usize> {
+    crate::ipc_blocking::off_ui_thread("purge_translation_cache", move || {
+        purge_translation_cache_blocking()
+    })
+    .await
+}
+
+fn purge_translation_cache_blocking() -> Result<usize> {
     content_translation::purge_expired_cache()
 }
 
@@ -131,7 +153,18 @@ pub fn get_translation_config() -> Result<crate::settings::types::TranslationCon
 /// The API key is persisted to the platform keychain (if available) and stripped
 /// from the on-disk JSON. The in-memory config retains the key.
 #[tauri::command]
-pub fn set_translation_config(config: crate::settings::types::TranslationConfig) -> Result<()> {
+pub async fn set_translation_config(
+    config: crate::settings::types::TranslationConfig,
+) -> Result<()> {
+    crate::ipc_blocking::off_ui_thread("set_translation_config", move || {
+        set_translation_config_blocking(config)
+    })
+    .await
+}
+
+fn set_translation_config_blocking(
+    config: crate::settings::types::TranslationConfig,
+) -> Result<()> {
     let manager = crate::get_settings_manager();
     let mut guard = manager.lock();
     if !config.api_key.is_empty() {

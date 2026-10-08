@@ -703,7 +703,14 @@ fn check_keychain_functional() {
 /// `data/`, which can trigger Vite's file watcher and create an infinite
 /// reload loop.
 #[tauri::command]
-pub(crate) fn get_startup_health() -> Vec<HealthIssue> {
+pub(crate) async fn get_startup_health() -> std::result::Result<Vec<HealthIssue>, String> {
+    crate::ipc_blocking::off_ui_thread_infallible("get_startup_health", move || {
+        get_startup_health_blocking()
+    })
+    .await
+}
+
+fn get_startup_health_blocking() -> Vec<HealthIssue> {
     initialize_startup_health_cache()
 }
 

@@ -3991,7 +3991,14 @@ fn teaser_from_report(report: &BlindSpotReport) -> BlindSpotTeaser {
 /// the paywall instead of a blind lock screen. The full report (which deps,
 /// which topics, which signals) stays behind `get_blind_spots`' Signal gate.
 #[tauri::command]
-pub fn get_blind_spot_teaser() -> std::result::Result<BlindSpotTeaser, String> {
+pub async fn get_blind_spot_teaser() -> std::result::Result<BlindSpotTeaser, String> {
+    crate::ipc_blocking::off_ui_thread("get_blind_spot_teaser", move || {
+        get_blind_spot_teaser_blocking()
+    })
+    .await
+}
+
+fn get_blind_spot_teaser_blocking() -> std::result::Result<BlindSpotTeaser, String> {
     let report = generate_blind_spot_report().map_err(|e| e.to_string())?;
     Ok(teaser_from_report(&report))
 }
@@ -4000,7 +4007,18 @@ pub fn get_blind_spot_teaser() -> std::result::Result<BlindSpotTeaser, String> {
 /// This ensures the package appears in the user's dependency list and will be
 /// checked by source adapters on the next fetch cycle.
 #[tauri::command]
-pub fn add_package_watch(
+pub async fn add_package_watch(
+    package_name: String,
+    ecosystem: String,
+    project_path: Option<String>,
+) -> std::result::Result<serde_json::Value, String> {
+    crate::ipc_blocking::off_ui_thread("add_package_watch", move || {
+        add_package_watch_blocking(package_name, ecosystem, project_path)
+    })
+    .await
+}
+
+fn add_package_watch_blocking(
     package_name: String,
     ecosystem: String,
     project_path: Option<String>,
@@ -4054,7 +4072,17 @@ pub fn add_package_watch(
 /// Dismiss a blind spot item — the user has reviewed and decided this isn't relevant.
 /// Persisted to the database so it survives restarts.
 #[tauri::command]
-pub fn dismiss_blind_spot(
+pub async fn dismiss_blind_spot(
+    item_id: String,
+    reason: String,
+) -> std::result::Result<serde_json::Value, String> {
+    crate::ipc_blocking::off_ui_thread("dismiss_blind_spot", move || {
+        dismiss_blind_spot_blocking(item_id, reason)
+    })
+    .await
+}
+
+fn dismiss_blind_spot_blocking(
     item_id: String,
     reason: String,
 ) -> std::result::Result<serde_json::Value, String> {

@@ -185,7 +185,16 @@ pub(crate) fn record_weekly_accuracy(conn: &rusqlite::Connection) -> anyhow::Res
 // ============================================================================
 
 #[tauri::command]
-pub fn get_accuracy_report(period: Option<String>) -> crate::error::Result<serde_json::Value> {
+pub async fn get_accuracy_report(
+    period: Option<String>,
+) -> crate::error::Result<serde_json::Value> {
+    crate::ipc_blocking::off_ui_thread("get_accuracy_report", move || {
+        get_accuracy_report_blocking(period)
+    })
+    .await
+}
+
+fn get_accuracy_report_blocking(period: Option<String>) -> crate::error::Result<serde_json::Value> {
     crate::settings::require_signal_feature("get_accuracy_report")?;
     let p = period.unwrap_or_else(|| chrono::Utc::now().format("%Y-%m").to_string());
     let conn = crate::get_database()?.conn.lock();
@@ -226,7 +235,18 @@ pub fn get_accuracy_report(period: Option<String>) -> crate::error::Result<serde
 }
 
 #[tauri::command]
-pub fn get_intelligence_report(period: Option<String>) -> crate::error::Result<serde_json::Value> {
+pub async fn get_intelligence_report(
+    period: Option<String>,
+) -> crate::error::Result<serde_json::Value> {
+    crate::ipc_blocking::off_ui_thread("get_intelligence_report", move || {
+        get_intelligence_report_blocking(period)
+    })
+    .await
+}
+
+fn get_intelligence_report_blocking(
+    period: Option<String>,
+) -> crate::error::Result<serde_json::Value> {
     crate::settings::require_signal_feature("get_intelligence_report")?;
     let p = period.unwrap_or_else(|| chrono::Utc::now().format("%Y-%m").to_string());
     let conn = crate::get_database()?.conn.lock();

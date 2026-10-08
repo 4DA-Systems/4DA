@@ -293,7 +293,18 @@ pub(crate) fn record_weekly_timeline(conn: &rusqlite::Connection) -> anyhow::Res
 // ============================================================================
 
 #[tauri::command]
-pub fn get_temporal_snapshot(period: Option<String>) -> crate::error::Result<serde_json::Value> {
+pub async fn get_temporal_snapshot(
+    period: Option<String>,
+) -> crate::error::Result<serde_json::Value> {
+    crate::ipc_blocking::off_ui_thread("get_temporal_snapshot", move || {
+        get_temporal_snapshot_blocking(period)
+    })
+    .await
+}
+
+fn get_temporal_snapshot_blocking(
+    period: Option<String>,
+) -> crate::error::Result<serde_json::Value> {
     let p = period.unwrap_or_else(|| {
         let now = chrono::Utc::now();
         format!("{}-W{:02}", now.format("%Y"), now.format("%W"))
@@ -341,7 +352,14 @@ pub fn get_temporal_snapshot(period: Option<String>) -> crate::error::Result<ser
 }
 
 #[tauri::command]
-pub fn get_adoption_curves() -> crate::error::Result<serde_json::Value> {
+pub async fn get_adoption_curves() -> crate::error::Result<serde_json::Value> {
+    crate::ipc_blocking::off_ui_thread("get_adoption_curves", move || {
+        get_adoption_curves_blocking()
+    })
+    .await
+}
+
+fn get_adoption_curves_blocking() -> crate::error::Result<serde_json::Value> {
     let conn = crate::get_database()?.conn.lock();
 
     let mut stmt = conn.prepare(
@@ -370,7 +388,14 @@ pub fn get_adoption_curves() -> crate::error::Result<serde_json::Value> {
 }
 
 #[tauri::command]
-pub fn get_knowledge_decay_report() -> crate::error::Result<serde_json::Value> {
+pub async fn get_knowledge_decay_report() -> crate::error::Result<serde_json::Value> {
+    crate::ipc_blocking::off_ui_thread("get_knowledge_decay_report", move || {
+        get_knowledge_decay_report_blocking()
+    })
+    .await
+}
+
+fn get_knowledge_decay_report_blocking() -> crate::error::Result<serde_json::Value> {
     let conn = crate::get_database()?.conn.lock();
 
     // Get the most recent snapshot

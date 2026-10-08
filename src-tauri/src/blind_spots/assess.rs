@@ -23,8 +23,11 @@
 //! the engagement-derived `risk=critical` it used to receive turned one
 //! routine schemars release into "Critical risk signal, review it now".
 
+use std::collections::HashMap;
 use std::future::Future;
+use std::sync::Arc;
 
+use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -426,13 +429,78 @@ async fn call_assessment_llm(items_text: String) -> std::result::Result<(String,
     Ok((response.content, model))
 }
 
+/// In-flight de-duplication keyed by the stable assessment key (found live
+/// 2026-10-08: two tab opens 2 s apart both paid a ~9 s Sonnet call because
+/// the second started before the first persisted). Concurrent callers with
+/// the same key share ONE computation; the entry is removed once it settles,
+/// by which time a usable verdict is persisted, so a later caller is a
+/// zero-cost cache hit. A cancelled leader hands the work to the next waiter
+/// (`OnceCell::get_or_init` semantics) — never zero, never two runs.
+pub(super) struct SingleFlight<V> {
+    in_flight: parking_lot::Mutex<HashMap<String, Arc<tokio::sync::OnceCell<V>>>>,
+}
+
+impl<V: Clone> SingleFlight<V> {
+    pub(super) fn new() -> Self {
+        Self {
+            in_flight: parking_lot::Mutex::new(HashMap::new()),
+        }
+    }
+
+    pub(super) async fn run<F, Fut>(&self, key: &str, work: F) -> V
+    where
+        F: FnOnce() -> Fut,
+        Fut: Future<Output = V>,
+    {
+        let cell = Arc::clone(self.in_flight.lock().entry(key.to_string()).or_default());
+        let value = cell.get_or_init(work).await.clone();
+        let mut map = self.in_flight.lock();
+        if map.get(key).is_some_and(|c| Arc::ptr_eq(c, &cell)) {
+            map.remove(key);
+        }
+        value
+    }
+}
+
+type AssessResult = std::result::Result<BlindSpotAssessment, String>;
+
+static ASSESS_FLIGHT: Lazy<SingleFlight<AssessResult>> = Lazy::new(SingleFlight::new);
+
+/// Cache-or-model, then persist. `load` runs INSIDE the flight, so only the
+/// leader reads the persisted verdict and a joiner never races a stale read.
+pub(super) async fn assess_and_persist<L, F, Fut, P>(
+    inputs: &[AssessInput],
+    key: &str,
+    load: L,
+    force: bool,
+    call_llm: F,
+    persist: P,
+) -> AssessResult
+where
+    L: FnOnce() -> Option<PersistedAssessment>,
+    F: FnOnce(String) -> Fut,
+    Fut: Future<Output = std::result::Result<(String, String), String>>,
+    P: FnOnce(&PersistedAssessment),
+{
+    let outcome = assess_core(inputs, key, load(), force, call_llm).await?;
+    if let Some(p) = outcome.persist.as_ref() {
+        persist(p);
+    }
+    Ok(outcome.assessment)
+}
+
+fn persist_to_db(p: &PersistedAssessment) {
+    if let Ok(db) = crate::get_database() {
+        store_persisted_in(db, p);
+    }
+}
+
 /// AI triage of the surfaced blind spots. Returns the persisted verdict at
 /// zero model cost while the stable evidence key is unchanged; `force`
-/// (the manual button) always re-assesses.
+/// (the manual button) always re-assesses. Concurrent non-forced calls for
+/// the same key share one model call.
 #[tauri::command]
-pub async fn assess_blind_spots_with_ai(
-    force: Option<bool>,
-) -> std::result::Result<BlindSpotAssessment, String> {
+pub async fn assess_blind_spots_with_ai(force: Option<bool>) -> AssessResult {
     crate::settings::require_signal_feature("assess_blind_spots_with_ai")
         .map_err(|e| e.to_string())?;
     let (inputs, key) = tauri::async_runtime::spawn_blocking(gather_inputs)
@@ -447,19 +515,20 @@ pub async fn assess_blind_spots_with_ai(
             stale: false,
         });
     }
-    let cached = load_persisted();
-    let outcome = assess_core(
-        &inputs,
-        &key,
-        cached,
-        force.unwrap_or(false),
-        call_assessment_llm,
-    )
-    .await?;
-    if let (Some(p), Ok(db)) = (outcome.persist.as_ref(), crate::get_database()) {
-        store_persisted_in(db, p);
+    let run = || {
+        assess_and_persist(
+            &inputs,
+            &key,
+            load_persisted,
+            force.unwrap_or(false),
+            call_assessment_llm,
+            persist_to_db,
+        )
+    };
+    if force.unwrap_or(false) {
+        return run().await;
     }
-    Ok(outcome.assessment)
+    ASSESS_FLIGHT.run(&key, run).await
 }
 
 /// The persisted AI assessment WITHOUT calling the LLM — survives restarts.
