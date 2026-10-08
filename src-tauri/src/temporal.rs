@@ -303,7 +303,33 @@ fn map_project_dependency_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<Proje
 /// stale rows exist in the table. Tier-3 rows deliberately REMAIN in
 /// `project_dependencies` (the Your Stack list reads the table directly so the
 /// user can toggle projects back on).
+///
+/// Since 2026-10-07 the scope is also per PROJECT: a project that does not
+/// count toward the user's stack ([`crate::project_inclusion::counts_toward_stack`]
+/// — dormant >90 days or a scratch tree its repository gitignores) never
+/// grounds relevance, even when its enclosing repository is busy. Readers that
+/// need the user's whole INVENTORY (the `user_dependencies` writer, the OSV
+/// version query, the release/CVE ecosystem probe) call
+/// [`get_inventory_dependencies`] instead — a dormant project's advisories
+/// are still true (AD-043).
 pub fn get_all_dependencies(conn: &rusqlite::Connection) -> Result<Vec<ProjectDependency>> {
+    let inventory = get_inventory_dependencies(conn)?;
+    let membership = crate::project_inclusion::StackMembership::load(conn);
+    let (deps, widened) = crate::project_inclusion::retain_stack_projects(
+        inventory,
+        |d: &ProjectDependency| d.project_path.as_str(),
+        &membership,
+    );
+    if widened {
+        DEP_SCOPE_DEGRADED.store(true, std::sync::atomic::Ordering::Relaxed);
+    }
+    Ok(deps)
+}
+
+/// The dependency inventory: every included project under an active repo
+/// root, with no per-project liveness filter. See [`get_all_dependencies`]
+/// for the grounding set.
+pub fn get_inventory_dependencies(conn: &rusqlite::Connection) -> Result<Vec<ProjectDependency>> {
     let active_roots = active_repo_roots(conn);
 
     // The manifest parsers extract dependency NAMES only — a manifest

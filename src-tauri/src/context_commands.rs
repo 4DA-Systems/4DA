@@ -437,23 +437,57 @@ pub async fn set_context_dirs(dirs: Vec<String>) -> Result<String> {
     ))
 }
 
+/// One configured context directory, as the Settings list shows it.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct ContextDirEntry {
+    pub path: String,
+    /// False when the directory is not on this machine (deleted, an
+    /// unplugged drive, or a path from another OS left in settings.json —
+    /// live 2026-10-07: `/home/antony/projects/4da` on a Windows instance).
+    pub exists: bool,
+}
+
 #[tauri::command]
-pub async fn get_context_dirs() -> Result<Vec<String>> {
+pub async fn get_context_dirs() -> Result<Vec<ContextDirEntry>> {
     // AS CONFIGURED, not existence-filtered: this feeds the settings UI, and
-    // a dead entry must stay visible so the user can see it and remove it.
+    // a dead entry must stay visible so the user can see it and remove it —
+    // flagged `exists: false` so the UI can say "not on this machine".
     // Intelligence consumers go through `crate::get_context_dirs()`, which
     // skips (and warns about) roots that do not exist on this machine.
     // (`crate::state::` path: lib.rs's explicit re-export list is owned by a
     // concurrent worktree right now; the module path is equivalent.)
-    Ok(crate::state::configured_context_dirs()
-        .into_iter()
-        .map(|p| p.to_string_lossy().to_string())
-        .collect())
+    Ok(context_dir_entries(crate::state::configured_context_dirs()))
+}
+
+fn context_dir_entries(dirs: Vec<std::path::PathBuf>) -> Vec<ContextDirEntry> {
+    dirs.into_iter()
+        .map(|p| ContextDirEntry {
+            exists: p.is_dir(),
+            path: p.to_string_lossy().to_string(),
+        })
+        .collect()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A configured root that is not on this machine stays LISTED (so the
+    /// user can remove it) and is flagged `exists: false`.
+    #[test]
+    fn context_dir_entries_flag_dirs_not_on_this_machine() {
+        let here = std::env::temp_dir();
+        let gone = here.join("4da-surely-not-here-7f3a9c").join("projects");
+        let entries = context_dir_entries(vec![here.clone(), gone.clone()]);
+        assert_eq!(entries.len(), 2);
+        assert!(entries[0].exists);
+        assert_eq!(entries[1].path, gone.to_string_lossy());
+        assert!(!entries[1].exists);
+        let foreign = context_dir_entries(vec![PathBuf::from("/home/antony/projects/4da")]);
+        if !Path::new("/home/antony/projects/4da").is_dir() {
+            assert!(!foreign[0].exists);
+        }
+    }
 
     #[test]
     fn test_convert_windows_to_wsl_path() {

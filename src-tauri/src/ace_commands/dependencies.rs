@@ -53,7 +53,10 @@ pub(super) fn store_direct_dependencies(db: &Database) {
     if let Ok(ace) = get_ace_engine() {
         if let Ok(tech) = ace.get_detected_tech() {
             if let Ok(conn) = crate::open_db_connection() {
-                if let Ok(deps) = crate::temporal::get_all_dependencies(&conn) {
+                // The INVENTORY, not the stack-grounding set: a dormant or
+                // scratch project's manifest rows must keep refreshing so its
+                // advisories stay true in Preemption (AD-043).
+                if let Ok(deps) = crate::temporal::get_inventory_dependencies(&conn) {
                     for dep in &deps {
                         let ecosystem = &dep.language;
                         // The manifest scan is authoritative for is_direct in

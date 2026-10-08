@@ -746,7 +746,7 @@ pub(crate) fn load_ace_packages_for_ecosystem(ecosystem: &str) -> Vec<String> {
     }
 
     // A release watch list answers "what are you working on?". The active-root
-    // scope in `get_all_dependencies` admits every project under a repository
+    // scope in `get_inventory_dependencies` admits every project under a repository
     // with a recent commit, so a project nested in a busy monorepo but itself
     // untouched for months (its own `last_activity`) still chose what to
     // watch. Those are dropped here; a package another, live project uses is
@@ -757,7 +757,7 @@ pub(crate) fn load_ace_packages_for_ecosystem(ecosystem: &str) -> Vec<String> {
     // are still true (AD-043), so when ONLY dormant projects use an ecosystem
     // the unfiltered list is returned and that answer cannot change.
     let dormant = crate::ace::dormancy::dormant_project_paths(&conn);
-    let mut packages: Vec<String> = match crate::temporal::get_all_dependencies(&conn) {
+    let mut packages: Vec<String> = match crate::temporal::get_inventory_dependencies(&conn) {
         Ok(deps) => watched_package_names(
             deps.into_iter()
                 .filter(|d| manifest_types.contains(&d.manifest_type.as_str()) && !d.is_dev)
@@ -820,7 +820,7 @@ pub(crate) fn load_ace_packages_with_versions(ecosystem: &str) -> Vec<(String, O
         return Vec::new();
     }
 
-    match crate::temporal::get_all_dependencies(&conn) {
+    match crate::temporal::get_inventory_dependencies(&conn) {
         Ok(deps) => {
             let mut packages: Vec<(String, Option<String>)> = deps
                 .into_iter()

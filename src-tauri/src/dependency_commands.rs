@@ -281,10 +281,21 @@ pub async fn list_projects_with_stack_status() -> Result<serde_json::Value> {
         .filter_map(|r| r.ok())
         .collect();
 
-    let excluded = crate::project_inclusion::user_excluded_paths();
+    drop(stmt);
+    let membership = crate::project_inclusion::StackMembership::load(&conn);
+    Ok(serde_json::json!(stack_status_rows(rows, &membership)))
+}
 
-    let projects: Vec<serde_json::Value> = rows
-        .into_iter()
+/// One Settings row per project, carrying the SAME verdict grounding uses
+/// (`project_inclusion::counts_toward_stack`) and why: `included` is the
+/// user's toggle (not excluded), `counts` is whether the project actually
+/// grounds "Affects You" — a dormant or scratch project can be included and
+/// still not count until the user force-includes it.
+fn stack_status_rows(
+    rows: Vec<(String, i64)>,
+    membership: &crate::project_inclusion::StackMembership,
+) -> Vec<serde_json::Value> {
+    rows.into_iter()
         // Hard-excluded rows (agent infra / fixture scaffolding, tiers 1+2)
         // are purged at startup and blocked at write time; filter defensively
         // so they can never appear as toggleable "projects" even on a
@@ -292,10 +303,7 @@ pub async fn list_projects_with_stack_status() -> Result<serde_json::Value> {
         // the product mechanism for ambiguous dirs.
         .filter(|(path, _)| !crate::project_inclusion::is_hard_excluded(path))
         .map(|(path, dep_count)| {
-            // Tier-3 check via the canonical predicate: slash-normalized,
-            // path-boundary prefix matching (the old lowercase starts_with
-            // missed `D:\...` vs `d:/...` storage variants).
-            let included = !crate::project_inclusion::is_user_excluded(&path, &excluded);
+            let status = membership.status(&path);
             let name = path
                 .rsplit(['/', '\\'])
                 .find(|s| !s.is_empty())
@@ -305,32 +313,39 @@ pub async fn list_projects_with_stack_status() -> Result<serde_json::Value> {
                 "path": path,
                 "name": name,
                 "dependency_count": dep_count,
-                "included": included,
+                "included": !status.excluded,
+                "counts": status.counts,
+                "forced": status.forced,
+                "dormant": status.dormant,
+                "dormant_days": status.dormant_days,
+                "scratch": status.scratch,
             })
         })
-        .collect();
-
-    Ok(serde_json::json!(projects))
+        .collect()
 }
 
 /// Include or exclude a project from the user's stack grounding. Excluding a
 /// project drops its deps from relevance scoring on the next analysis.
+///
+/// `force` (optional, default false) is "Force include": with `included` it
+/// counts a dormant or scratch project anyway; with `!included` it takes that
+/// force back without excluding the project. Stored in the same
+/// `excluded_project_paths` setting as a `!path` entry — no new storage.
 #[tauri::command]
-pub async fn set_project_in_stack(path: String, included: bool) -> Result<()> {
+pub async fn set_project_in_stack(path: String, included: bool, force: Option<bool>) -> Result<()> {
     let path = crate::ipc_guard::validate_path_input("path", &path)?;
     let manager = crate::get_settings_manager();
     let mut guard = manager.lock();
-    let mut excluded = guard.get_excluded_project_paths();
-    // Remove any existing entry for this path first (idempotent). Compare in
-    // the canonical form so a `D:\...` entry and a `d:/...` entry can never
-    // coexist for one project.
-    let canon = crate::project_inclusion::comparison_form(&path);
-    excluded.retain(|e| crate::project_inclusion::comparison_form(e) != canon);
-    if !included {
-        excluded.push(path);
-    }
+    // Idempotent, and canonical-form aware: a `D:\...` entry and a `d:/...`
+    // entry can never coexist for one project.
+    let entries = crate::project_inclusion::apply_stack_choice(
+        guard.get_excluded_project_paths(),
+        &path,
+        included,
+        force.unwrap_or(false),
+    );
     guard
-        .set_excluded_project_paths(excluded)
+        .set_excluded_project_paths(entries)
         .context("Failed to persist stack selection")?;
     Ok(())
 }
@@ -359,6 +374,50 @@ mod tests {
         assert_eq!(check_license_compatibility("AGPL-3.0").0, "warning");
         assert_eq!(check_license_compatibility("MPL-2.0").0, "caution");
         assert_eq!(check_license_compatibility("LGPL-3.0").0, "caution");
+    }
+
+    /// The Settings payload carries the same verdict grounding uses, and why.
+    #[test]
+    fn stack_status_rows_carry_dormant_scratch_and_counts() {
+        let conn = rusqlite::Connection::open_in_memory().expect("db");
+        conn.execute_batch(&format!(
+            "CREATE TABLE detected_projects (path TEXT, name TEXT, last_activity TEXT, scratch INTEGER);
+             INSERT INTO detected_projects VALUES
+               ('D:\\4DA\\src-tauri', 'a', '{now}', 0),
+               ('D:\\4DA\\victauri-gauntlet', 'b', '2026-04-28T19:28:43Z', 1),
+               ('D:\\4DA\\cli', 'c', '{now}', 1);",
+            now = chrono::Utc::now().to_rfc3339()
+        ))
+        .expect("seed");
+        let membership = crate::project_inclusion::StackMembership::load(&conn);
+        let rows = stack_status_rows(
+            vec![
+                ("d:/4da/src-tauri".to_string(), 75),
+                ("d:/4da/victauri-gauntlet".to_string(), 6),
+                ("d:/4da/cli".to_string(), 4),
+                ("d:/4da/.claude/worktrees/agent-x".to_string(), 9),
+            ],
+            &membership,
+        );
+        assert_eq!(rows.len(), 3, "hard-excluded agent infra is never listed");
+        let live = &rows[0];
+        assert_eq!(live["counts"], true);
+        assert_eq!(live["dormant"], false);
+        assert_eq!(live["scratch"], false);
+        let gauntlet = &rows[1];
+        assert_eq!(gauntlet["included"], true, "not excluded by the user");
+        assert_eq!(
+            gauntlet["counts"], false,
+            "but dormant + scratch: not counted"
+        );
+        assert_eq!(gauntlet["dormant"], true);
+        assert_eq!(gauntlet["scratch"], true);
+        assert!(gauntlet["dormant_days"].as_i64().is_some_and(|d| d > 90));
+        assert_eq!(gauntlet["forced"], false);
+        let cli = &rows[2];
+        assert_eq!(cli["scratch"], true);
+        assert_eq!(cli["dormant"], false);
+        assert_eq!(cli["counts"], false);
     }
 
     #[test]

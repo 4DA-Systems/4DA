@@ -483,3 +483,75 @@ fn ecosystem_family_agrees_with_the_canonical_ecosystem_parser() {
         "unknown labels are their own family"
     );
 }
+
+// ── Stack scope is per PROJECT (audit 2026-10-07) ─────────────────────────
+//
+// `D:\4DA\victauri-gauntlet` — gitignored, dormant 161 days — grounded "Affects
+// You" because its enclosing repository root had a commit this week.
+
+fn detected_project(conn: &Connection, path: &str, last_activity: &str, scratch: bool) {
+    conn.execute_batch(
+        "CREATE TABLE IF NOT EXISTS detected_projects (
+            path TEXT NOT NULL UNIQUE, name TEXT NOT NULL DEFAULT 'p',
+            last_activity TEXT, scratch INTEGER NOT NULL DEFAULT 0);",
+    )
+    .unwrap();
+    conn.execute(
+        "INSERT INTO detected_projects (path, last_activity, scratch) VALUES (?1, ?2, ?3)",
+        params![path, last_activity, i64::from(scratch)],
+    )
+    .unwrap();
+}
+
+fn now_rfc3339() -> String {
+    chrono::Utc::now().to_rfc3339()
+}
+
+#[test]
+fn a_dormant_nested_project_under_an_active_root_does_not_ground() {
+    let conn = setup_resolution_db();
+    active_root(&conn, "D:\\4DA");
+    manifest_dep(&conn, "d:/4da/src-tauri", "tokio", "rust");
+    manifest_dep(&conn, "d:/4da/victauri-gauntlet", "anyhow", "rust");
+    manifest_dep(&conn, "d:/4da/fourda-infer-proto", "ort", "rust");
+    detected_project(&conn, "D:\\4DA\\src-tauri", &now_rfc3339(), false);
+    // Scratch: gitignored by the enclosing repo (and dormant).
+    detected_project(
+        &conn,
+        "D:\\4DA\\victauri-gauntlet",
+        "2026-04-28T19:28:43Z",
+        true,
+    );
+    // Dormant only: its own last activity is long past the 90-day threshold,
+    // while the repository root committed today.
+    detected_project(
+        &conn,
+        "D:\\4DA\\fourda-infer-proto",
+        "2020-06-11T01:51:35Z",
+        false,
+    );
+
+    let grounding = get_all_dependencies(&conn).unwrap();
+    let names: Vec<&str> = grounding.iter().map(|d| d.package_name.as_str()).collect();
+    assert_eq!(names, vec!["tokio"], "only the live project grounds");
+
+    // The INVENTORY still holds them: Preemption names dormant projects (AD-043).
+    let inventory = get_inventory_dependencies(&conn).unwrap();
+    assert_eq!(inventory.len(), 3);
+}
+
+#[test]
+fn a_recently_touched_scratch_project_does_not_ground_either() {
+    let conn = setup_resolution_db();
+    active_root(&conn, "D:\\4DA");
+    manifest_dep(&conn, "d:/4da", "vite", "javascript");
+    manifest_dep(&conn, "d:/4da/cli", "clap", "rust");
+    detected_project(&conn, "D:\\4DA\\cli", &now_rfc3339(), true);
+
+    let names: Vec<String> = get_all_dependencies(&conn)
+        .unwrap()
+        .into_iter()
+        .map(|d| d.package_name)
+        .collect();
+    assert_eq!(names, vec!["vite".to_string()]);
+}

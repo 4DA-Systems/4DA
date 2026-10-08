@@ -3881,6 +3881,27 @@ pub(crate) fn score_item(
     } else {
         (None, false)
     };
+    // v40 (audit 2026-10-07): an affected verdict whose EVERY project is
+    // dormant or scratch is `affected_inactive` — still named, never "Affects
+    // You", the hero or a critical banner (`inactive_scope`, AD-043 amended).
+    let inactive_only = super::inactive_scope::only_inactive_projects_affected(
+        db,
+        applicability.as_deref(),
+        &super::inactive_scope::affected_projects(
+            security_confirmed,
+            &security_lane.exposed_projects,
+            &raw.matched_deps,
+        ),
+    );
+    let (applicability, is_critical_alert) = if inactive_only {
+        super::inactive_scope::cap_inactive_priority(&mut sig_priority, &mut sig_action);
+        (
+            Some(super::inactive_scope::AFFECTED_INACTIVE.to_string()),
+            false,
+        )
+    } else {
+        (applicability, is_critical_alert)
+    };
 
     // (advisory_id / fixed_version / affected_versions / dep_path /
     // installed_version / is_version_affected extracted above, before
@@ -3904,7 +3925,7 @@ pub(crate) fn score_item(
             already_installed_release,
             strongly_grounded: grounding.strong,
             deps: &raw.matched_deps,
-        });
+        }) && !inactive_only;
 
     let sec_affected_project_count = if security_confirmed {
         security_lane.exposed_projects.len() as u32
@@ -3988,7 +4009,7 @@ pub(crate) fn score_item(
         confirmation_mult,
         dep_match_score: raw.dep_match_score,
         matched_deps: matched_dep_names,
-        strongly_grounded: grounding.strong || security_confirmed,
+        strongly_grounded: (grounding.strong || security_confirmed) && !inactive_only,
         dependency_event,
         degraded_inputs,
         // Categorical ceiling for post-pipeline writers: a capped item
