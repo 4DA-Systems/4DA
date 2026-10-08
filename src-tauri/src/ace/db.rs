@@ -411,7 +411,14 @@ pub fn record_identity_change(
 /// plus legacy `commit-*` rows whose emitter was removed but which the
 /// upsert-only persistence kept alive. Returns rows deleted. Heals existing
 /// installs; the Wave-7 extraction fixes stop new pollution at the source.
+///
+/// `active_topics` is an ACE table whose setup is deferred until after
+/// first-light, while this cleanup runs at startup — on a fresh install the
+/// table does not exist yet, which means there is nothing to purge (Ok(0)).
 pub fn purge_generic_active_topics(conn: &Connection) -> Result<usize> {
+    if !crate::db::table_exists(conn, "active_topics") {
+        return Ok(0);
+    }
     let mut deleted = conn
         .execute("DELETE FROM active_topics WHERE topic LIKE 'commit-%'", [])
         .context("purge legacy commit-* active_topics")?;
@@ -466,6 +473,20 @@ pub fn purge_generic_active_topics(conn: &Connection) -> Result<usize> {
 // - update_component_health
 // ═══════════════════════════════════════════════════════════════
 
+/// Startup retention: delete `file_signals` older than 7 days. Like
+/// [`purge_generic_active_topics`], a missing table (fresh install, ACE setup
+/// not yet run) is "nothing to purge", not an error.
+pub fn purge_old_file_signals(conn: &Connection) -> Result<usize> {
+    if !crate::db::table_exists(conn, "file_signals") {
+        return Ok(0);
+    }
+    conn.execute(
+        "DELETE FROM file_signals WHERE timestamp < datetime('now', '-7 days')",
+        [],
+    )
+    .context("purge old file_signals")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -492,6 +513,42 @@ mod tests {
         assert!(tables.contains(&"detected_projects".to_string()));
         assert!(tables.contains(&"detected_tech".to_string()));
         assert!(tables.contains(&"active_topics".to_string()));
+    }
+
+    /// Fresh install: the main DB is migrated (and the startup cleanup runs)
+    /// before the deferred ACE setup creates `file_signals`/`active_topics`.
+    /// Every ACE-table purge the cleanup calls must be a quiet Ok(0) there —
+    /// the cleanup logs a WARN for any Err (audit 2026-10-07 fresh-profile run).
+    #[test]
+    fn startup_purges_on_fresh_db_without_ace_tables_are_quiet() {
+        let db = crate::test_utils::test_db();
+        let conn = db.conn.lock();
+        for t in ["file_signals", "active_topics"] {
+            conn.execute_batch(&format!("DROP TABLE IF EXISTS {t}"))
+                .unwrap();
+        }
+        assert_eq!(purge_old_file_signals(&conn).unwrap(), 0);
+        assert_eq!(purge_generic_active_topics(&conn).unwrap(), 0);
+        assert_eq!(
+            crate::ace::topic_hygiene::purge_non_dependency_topics(&conn).unwrap(),
+            0
+        );
+    }
+
+    #[test]
+    fn purge_old_file_signals_keeps_recent_rows() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(
+            "CREATE TABLE file_signals (id INTEGER PRIMARY KEY, timestamp TEXT);
+             INSERT INTO file_signals (timestamp) VALUES (datetime('now', '-30 days'));
+             INSERT INTO file_signals (timestamp) VALUES (datetime('now'));",
+        )
+        .unwrap();
+        assert_eq!(purge_old_file_signals(&conn).unwrap(), 1);
+        let left: i64 = conn
+            .query_row("SELECT COUNT(*) FROM file_signals", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(left, 1);
     }
 
     #[test]

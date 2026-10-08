@@ -2317,7 +2317,7 @@
   "tasteTest.introBody": "We'll show you up to 15 articles — just tell us which ones you'd read. Your responses train 4DA's scoring engine so it surfaces content that matches your interests, and helps AI tools working on your behalf make better decisions.",
   "tasteTest.starting": "Starting...",
   "tasteTest.start": "Start calibration",
-  "tasteTest.confident": "{{percent}}% confident",
+  "tasteTest.answered": "{{count}} answered",
   "tasteTest.keepGoing": "Keep going — more responses improve accuracy",
   "tasteTest.goodStart": "Good start — a few more will help",
   "tasteTest.strongCalibration": "Strong calibration — you can continue or finish now",

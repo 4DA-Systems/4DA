@@ -130,7 +130,9 @@ describe('useTrialEndDate — trial hint follows trial state', () => {
   it('gives an end date while the trial is active', async () => {
     installBackend({ get_trial_status: { active: true, days_remaining: 14, started_at: '2026-10-08T00:00:00Z' } });
     const { result } = renderHook(() => useTrialEndDate('en'));
-    await waitFor(() => expect(result.current).not.toBeNull());
+    // The first toLocaleDateString loads ICU data cold; under a loaded
+    // full-suite run that alone took 1.4 s (> waitFor's 1 s default).
+    await waitFor(() => expect(result.current).not.toBeNull(), { timeout: 5000 });
   });
 
   it('gives nothing when no trial is running', async () => {

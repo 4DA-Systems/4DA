@@ -715,6 +715,12 @@ pub struct Settings {
     /// Locale configuration for regional content
     #[serde(default)]
     pub locale: LocaleConfig,
+    /// First-launch OS locale detection has run. Detection happens ONCE: it
+    /// used to run on every launch for an en-US user (detection could never
+    /// move them off the US defaults it was gated on) and, on Windows, spawned
+    /// PowerShell for ~1.9 s each time (audit 2026-10-07).
+    #[serde(default)]
+    pub locale_detected: bool,
     /// Dedicated translation provider configuration (DeepL, Google, Azure)
     #[serde(default)]
     pub translation: TranslationConfig,
@@ -962,6 +968,7 @@ impl Default for Settings {
             feed_composition: FeedCompositionConfig::default(),
             license: LicenseConfig::default(),
             locale: LocaleConfig::default(),
+            locale_detected: false,
             translation: TranslationConfig::default(),
             team_relay: None,
             network: NetworkConfig::default(),

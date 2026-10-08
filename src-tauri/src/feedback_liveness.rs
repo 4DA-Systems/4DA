@@ -16,6 +16,7 @@ use rusqlite::Connection;
 use serde::Serialize;
 use ts_rs::TS;
 
+use crate::db::table_exists;
 use crate::open_db_connection;
 
 /// The look-back window. Two weeks: long enough that a holiday does not trip
@@ -43,15 +44,6 @@ pub struct FeedbackLiveness {
     pub last_interaction_at: Option<String>,
 }
 
-fn table_exists(conn: &Connection, name: &str) -> rusqlite::Result<bool> {
-    conn.query_row(
-        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
-        [name],
-        |row| row.get::<_, i64>(0),
-    )
-    .map(|n| n > 0)
-}
-
 /// Compute liveness over the last [`LIVENESS_WINDOW_DAYS`].
 ///
 /// `interactions` is created lazily by the ACE layer, not by the core
@@ -75,7 +67,7 @@ pub(crate) fn compute_feedback_liveness(conn: &Connection) -> rusqlite::Result<F
     let last_feedback_at: Option<String> =
         conn.query_row("SELECT MAX(created_at) FROM feedback", [], |row| row.get(0))?;
 
-    let (interactions_14d, last_interaction_at) = if table_exists(conn, "interactions")? {
+    let (interactions_14d, last_interaction_at) = if table_exists(conn, "interactions") {
         let count: i64 = conn.query_row(
             &format!(
                 "SELECT COUNT(*) FROM interactions

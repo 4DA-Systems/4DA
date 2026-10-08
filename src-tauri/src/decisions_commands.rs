@@ -68,7 +68,18 @@ pub async fn update_developer_decision(
 
 /// Auto-seed decisions from tech_stack on first run.
 /// Creates TechChoice decisions with confidence=0.6 for each tech_stack entry.
+///
+/// `tech_stack` is created by the context engine, which runs AFTER the
+/// migration that calls this — so on a brand-new database it does not exist
+/// yet. That is not an error: there is simply nothing to seed (audit
+/// 2026-10-07 — a fresh install logged "no such table: tech_stack").
 pub fn seed_decisions_from_profile(conn: &Connection) -> Result<usize> {
+    if !crate::db::table_exists(conn, "tech_stack")
+        || !crate::db::table_exists(conn, "developer_decisions")
+    {
+        return Ok(0);
+    }
+
     // Only seed if table is empty
     let count: i64 = conn.query_row("SELECT COUNT(*) FROM developer_decisions", [], |row| {
         row.get(0)

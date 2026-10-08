@@ -257,7 +257,7 @@ impl InferenceState {
             .map_or(0, |(i, _)| i);
 
         // Use blending to get interests, tech, exclusions
-        let blended = super::blending::blend_profile(&self.posterior, 0.10);
+        let blended = super::blending::blend_profile(&self.posterior, 0.10, &self.items_shown);
 
         TasteProfile {
             persona_weights: self.posterior,
@@ -279,7 +279,7 @@ impl InferenceState {
             .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
             .map_or(0, |(i, _)| i);
 
-        let blended = super::blending::blend_profile(&self.posterior, 0.10);
+        let blended = super::blending::blend_profile(&self.posterior, 0.10, &self.items_shown);
 
         TasteProfileSummary {
             dominant_persona_name: PERSONA_NAMES[dominant].to_string(),

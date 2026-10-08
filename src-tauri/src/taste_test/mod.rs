@@ -27,6 +27,10 @@ pub struct TasteCard {
     pub snippet: String,
     pub source_hint: String,
     pub category_hint: String,
+    /// What the card is ABOUT — the interests a "like" on it evidences
+    /// (`items::CARD_TOPICS`). Interests written to the profile come from the
+    /// topics of LIKED cards, not from persona templates (audit 2026-10-07).
+    pub topics: Vec<String>,
 }
 
 /// User's response to a taste card.
@@ -127,6 +131,7 @@ mod tests {
                 snippet: "Snippet".into(),
                 source_hint: "HN".into(),
                 category_hint: "Systems".into(),
+                topics: vec!["Rust".into()],
             },
             progress: 0.5,
             confidence: 0.3,

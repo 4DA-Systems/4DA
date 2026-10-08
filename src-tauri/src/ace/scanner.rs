@@ -325,6 +325,9 @@ impl ProjectScanner {
         // repository is skipped below, exactly as the lockfile walk does.
         let scope = crate::ace::repo_identity::scope_at(path);
         self.scan_recursive(path, 0, &scope, &mut signals, &mut visited)?;
+        // Workspace members, private packages and .npmrc-scoped names are the
+        // user's own code: never let them become public-registry lookups.
+        super::npm_local::drop_local_npm_deps(&mut signals);
         Ok(signals)
     }
 

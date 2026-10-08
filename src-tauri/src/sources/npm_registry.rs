@@ -136,7 +136,10 @@ impl NpmRegistrySource {
         // An unpublished/renamed package is a skip, not a failure — check 404 before the
         // shared gate, which would otherwise classify it as a network error.
         if status == reqwest::StatusCode::NOT_FOUND {
-            warn!(package = %package, "npm package not found, skipping");
+            // Almost always a private name the scanner could not prove local.
+            // Remember it so the name leaves the machine at most once.
+            info!(package = %package, "npm package not found on the public registry — not re-queried");
+            super::npm_negative_cache::record_missing(package);
             return Ok(None);
         }
         super::classify_http_response(&response, "npm registry API")?;
@@ -156,6 +159,8 @@ impl NpmRegistrySource {
         max: usize,
     ) -> SourceResult<Vec<SourceItem>> {
         let mut items = Vec::new();
+        // Never re-send a name the public registry already 404'd on.
+        let packages = super::npm_negative_cache::without_known_missing(packages);
 
         for (i, package) in packages.iter().enumerate() {
             if items.len() >= max {
@@ -237,9 +242,10 @@ impl Source for NpmRegistrySource {
         // already stops at `max_items`, but it always stopped at the same FIRST
         // `max_items` names, so a dependency list longer than the cap had a
         // permanently unwatched tail.
+        let candidates = super::npm_negative_cache::without_known_missing(&self.packages);
         let monitored = crate::source_fetching::rotating_window(
             "sources.npm_registry.rotation_cursor",
-            &self.packages,
+            &candidates,
             self.config.max_items,
         );
         let items = self
@@ -279,9 +285,10 @@ impl Source for NpmRegistrySource {
         // are never mixed in: a release of a package the user does not use
         // is ungrounded by construction and can never reach the feed.
         if self.user_declared {
+            let candidates = super::npm_negative_cache::without_known_missing(&self.packages);
             let window = crate::source_fetching::rotating_window(
                 "sources.npm_registry.rotation_cursor",
-                &self.packages,
+                &candidates,
                 self.config.max_items * 2,
             );
             let items = self

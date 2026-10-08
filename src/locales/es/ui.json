@@ -2537,7 +2537,7 @@
   "tasteTest.introBody": "Te mostraremos hasta 15 artículos: solo dinos cuáles leerías. Tus respuestas entrenan el motor de puntuación de 4DA para que muestre contenido acorde a tus intereses y ayudan a las herramientas de IA que trabajan para ti a tomar mejores decisiones.",
   "tasteTest.starting": "Iniciando...",
   "tasteTest.start": "Iniciar calibración",
-  "tasteTest.confident": "{{percent}} % de confianza",
+  "tasteTest.answered": "{{count}} respondidas",
   "tasteTest.keepGoing": "Sigue — más respuestas mejoran la precisión",
   "tasteTest.goodStart": "Buen comienzo — unas cuantas más ayudarán",
   "tasteTest.strongCalibration": "Calibración sólida — puedes continuar o terminar ahora",

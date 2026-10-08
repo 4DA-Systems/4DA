@@ -2,7 +2,7 @@
 //! SettingsManager::new() — constructor with disk loading, backup recovery,
 //! locale detection, token-limit bumping, tier migration, and keychain migration.
 
-use super::super::helpers::detect_system_locale;
+use super::super::helpers::{detect_locale_once, detect_system_locale};
 use super::super::keystore;
 use super::super::secret_storage::{self, PostureMap, SecretPosture};
 use super::super::types::*;
@@ -175,16 +175,10 @@ impl SettingsManager {
             UsageStats::default()
         };
 
-        // Auto-detect system locale if still at defaults (first run for non-US users)
-        if settings.locale.country == "US"
-            && settings.locale.language == "en"
-            && settings.locale.currency == "USD"
-        {
-            let detected = detect_system_locale();
-            if detected.country != "US" || detected.language != "en" {
-                info!(target: "4da::settings", country = %detected.country, language = %detected.language, currency = %detected.currency, "Auto-detected system locale");
-                settings.locale = detected;
-            }
+        // Auto-detect the system locale ONCE per install (see detect_locale_once);
+        // persist the flag so detection never runs on a later launch.
+        if detect_locale_once(&mut settings, detect_system_locale) {
+            persist_with_posture(&settings_path, &settings, &PostureMap::new());
         }
 
         // Bump token limits from old defaults to accommodate translation workload.

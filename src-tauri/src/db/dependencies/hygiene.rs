@@ -20,6 +20,8 @@
 
 use rusqlite::{params, Result as SqliteResult};
 
+use crate::db::table_exists;
+
 /// Counts from a [`purge_agent_infra_dependencies`] self-heal pass.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct AgentInfraPurge {
@@ -251,20 +253,6 @@ impl NonProjectPurge {
             + self.dependency_snapshots
             + self.detected_tech_deleted
     }
-}
-
-/// True when `table` exists in the connected database. The ACE tables
-/// (`detected_projects`, `detected_tech`) are created by the ACE migration,
-/// which may not have run yet on a brand-new install when startup cleanup
-/// fires — skip gracefully instead of erroring.
-fn table_exists(conn: &rusqlite::Connection, table: &str) -> bool {
-    conn.query_row(
-        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
-        params![table],
-        |row| row.get::<_, i64>(0),
-    )
-    .map(|n| n > 0)
-    .unwrap_or(false)
 }
 
 /// Delete all rows of `table` whose `path_col` is hard-excluded (tiers 1+2 of

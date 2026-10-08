@@ -14,6 +14,7 @@ use std::path::PathBuf;
 use tracing::{info, warn};
 use ts_rs::TS;
 
+use crate::db::table_exists;
 use crate::error::{Result, ResultExt};
 
 // ============================================================================
@@ -125,16 +126,6 @@ pub(crate) fn strip_sensitive_fields(value: &mut JsonValue) {
 #[inline]
 fn is_ident_byte(b: u8) -> bool {
     b.is_ascii_alphanumeric() || b == b'_'
-}
-
-fn table_exists(conn: &rusqlite::Connection, table_name: &str) -> bool {
-    conn.query_row(
-        "SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name=?1",
-        params![table_name],
-        |row| row.get::<_, i64>(0),
-    )
-    .map(|count| count > 0)
-    .unwrap_or(false)
 }
 
 /// Allowed table names for export — prevents SQL identifier injection.
