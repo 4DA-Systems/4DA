@@ -194,12 +194,16 @@ fn skip_raw_string(src: &[u8], start: usize) -> usize {
     i
 }
 
-/// Every `#[tauri::command]` fn in one file: name, asyncness, body text.
+/// The command attribute, split so the repo's own command scanners
+/// (`scripts/validate-commands.cjs`) never read this file as a definition.
+const COMMAND_ATTR: &str = concat!("#[tauri", "::command");
+
+/// Every command fn in one file: name, asyncness, body text.
 fn commands_in(rel: &str, src: &str) -> Vec<CommandFn> {
     let bytes = src.as_bytes();
     let mut out = Vec::new();
     let mut from = 0;
-    while let Some(pos) = src[from..].find("#[tauri::command") {
+    while let Some(pos) = src[from..].find(COMMAND_ATTR) {
         let attr = from + pos;
         from = attr + 1;
         let Some(fn_pos) = src[attr..].find("fn ").map(|p| attr + p) else {
@@ -305,9 +309,10 @@ fn every_allowlist_entry_is_a_live_sync_command() {
 
 #[test]
 fn the_scanner_reads_asyncness_and_bodies() {
-    let src = "#[tauri::command]\npub fn a() -> String { format!(\"{x}\") }\n\
-               /// doc\n#[tauri::command]\n#[inline]\npub async fn b() { let c = '{'; get_database(); }\n";
-    let cmds = commands_in("x.rs", src);
+    let src = "@]\npub fn a() -> String { format!(\"{x}\") }\n\
+               /// doc\n@]\n#[inline]\npub async fn b() { let c = '{'; get_database(); }\n"
+        .replace('@', COMMAND_ATTR);
+    let cmds = commands_in("x.rs", &src);
     assert_eq!(cmds.len(), 2);
     assert!(!cmds[0].is_async && cmds[0].name == "a");
     assert!(cmds[0].body.ends_with('}') && !cmds[0].body.contains("pub async"));
