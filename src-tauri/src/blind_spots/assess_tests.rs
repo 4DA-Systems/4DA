@@ -302,3 +302,84 @@ fn hallucinated_signal_count_is_corrected_against_the_evidence_total() {
         out[0].recommendation
     );
 }
+
+// ─── (c) single-flight: never two model calls for one key ────────────────
+
+/// Two tab opens racing (live 2026-10-08: 14:00:49 and 14:00:51, both paid
+/// Sonnet) share ONE model call, both get the verdict, it is persisted once,
+/// and a later open is a zero-cost cache hit.
+#[tokio::test]
+async fn concurrent_assessments_for_one_key_make_exactly_one_llm_call() {
+    let flight: SingleFlight<std::result::Result<BlindSpotAssessment, String>> =
+        SingleFlight::new();
+    let calls = AtomicUsize::new(0);
+    let persists = AtomicUsize::new(0);
+    let store: parking_lot::Mutex<Option<PersistedAssessment>> = parking_lot::Mutex::new(None);
+    let key = "v1;openssl|1|1|00000000000000aa";
+    let inputs = vec![input(
+        "openssl (crates.io)",
+        "1 unreviewed signal",
+        true,
+        true,
+    )];
+    let resp = r#"[{"id":1,"worth_reviewing":true,"recommendation":"Review it."}]"#;
+
+    let one = || {
+        flight.run(key, || {
+            assess_and_persist(
+                &inputs,
+                key,
+                || store.lock().clone(),
+                false,
+                |_| {
+                    calls.fetch_add(1, Ordering::SeqCst);
+                    async move {
+                        // Hold the call open so the second caller arrives
+                        // while the first is still in flight.
+                        for _ in 0..20 {
+                            tokio::task::yield_now().await;
+                        }
+                        Ok((resp.to_string(), "claude-sonnet".to_string()))
+                    }
+                },
+                |p| {
+                    persists.fetch_add(1, Ordering::SeqCst);
+                    *store.lock() = Some(p.clone());
+                },
+            )
+        })
+    };
+    let (a, b) = tokio::join!(one(), one());
+    let (a, b) = (a.expect("first caller"), b.expect("second caller"));
+    assert_eq!(calls.load(Ordering::SeqCst), 1, "one key, one model call");
+    assert_eq!(persists.load(Ordering::SeqCst), 1);
+    assert_eq!(a, b, "both callers get the same verdict");
+    assert_eq!(a.assessments.len(), 1);
+
+    let later = one().await.expect("later caller");
+    assert_eq!(
+        calls.load(Ordering::SeqCst),
+        1,
+        "a later open is a cache hit"
+    );
+    assert!(later.from_cache);
+}
+
+#[tokio::test]
+async fn single_flight_keys_do_not_share_and_settled_entries_are_removed() {
+    let flight: SingleFlight<u32> = SingleFlight::new();
+    let calls = AtomicUsize::new(0);
+    let work = |v: u32| {
+        calls.fetch_add(1, Ordering::SeqCst);
+        async move { v }
+    };
+    let (a, b) = tokio::join!(flight.run("k1", || work(1)), flight.run("k2", || work(2)));
+    assert_eq!((a, b), (1, 2), "different keys never share a result");
+    assert_eq!(calls.load(Ordering::SeqCst), 2);
+    assert!(
+        flight.in_flight.lock().is_empty(),
+        "settled flights are removed"
+    );
+    // A settled key runs again (the persisted cache, not the flight, dedups).
+    assert_eq!(flight.run("k1", || work(3)).await, 3);
+}
