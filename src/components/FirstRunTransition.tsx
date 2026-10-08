@@ -39,19 +39,6 @@ export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
   );
   const totalCount = appState.relevanceResults.length;
 
-  const sourceBreakdown = useMemo(
-    () => appState.analysisComplete
-      ? Array.from(
-          appState.relevanceResults.reduce((map, r) => {
-            const src = r.source_type || 'hackernews';
-            map.set(src, (map.get(src) || 0) + 1);
-            return map;
-          }, new Map<string, number>()),
-        ).sort((a, b) => b[1] - a[1])
-      : [],
-    [appState.analysisComplete, appState.relevanceResults],
-  );
-
   const topSignal = useMemo(
     () => appState.analysisComplete
       ? appState.relevanceResults.find(r => r.relevant && r.score_breakdown?.dep_match_score && r.score_breakdown.dep_match_score > 0)
@@ -214,7 +201,6 @@ export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
         <CelebrationState
           relevantCount={relevantCount}
           totalCount={totalCount}
-          sourceBreakdown={sourceBreakdown}
           topSignal={topSignal ?? null}
           stackInsights={stackInsights}
           embeddingMode={embeddingMode}

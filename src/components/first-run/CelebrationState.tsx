@@ -25,7 +25,6 @@ interface TopSignal {
 interface CelebrationStateProps {
   relevantCount: number;
   totalCount: number;
-  sourceBreakdown: Array<[string, number]>;
   topSignal: TopSignal | null;
   stackInsights: StackInsight[];
   embeddingMode: string | null;
@@ -59,7 +58,6 @@ function buildMatchReason(signal: TopSignal, t: (key: string, opts?: Record<stri
 export function CelebrationState({
   relevantCount,
   totalCount,
-  sourceBreakdown,
   topSignal,
   stackInsights,
   embeddingMode,
@@ -80,8 +78,14 @@ export function CelebrationState({
     onDismiss('results');
   };
 
-  // Count items matching active dependencies
-  const depMatchCount = sourceBreakdown.reduce((sum, [, count]) => sum + count, 0);
+  // Only stack chips the scan is confident about. Filter BEFORE deciding to
+  // render the section, or the "Your Developer DNA" header shows with no chips.
+  // No per-source item counts and no "sources" stat here: they counted every
+  // analysed item, so they summed to `totalCount` and informed no action — the
+  // banned "sources producing" vanity metric (intelligence doctrine rule 3).
+  const confidentTech = (detectedTech ?? [])
+    .filter(tech => tech.confidence >= 0.5)
+    .slice(0, 12);
 
   return (
     <div className="text-center px-8 max-w-lg">
@@ -112,26 +116,16 @@ export function CelebrationState({
             </p>
           </div>
         )}
-        {((profileEmpty && sourceBreakdown.length > 0) || (depMatchCount > 0 && depMatchCount !== totalCount)) && (
-          <div className="text-center">
-            <span className="text-3xl font-bold text-text-primary tabular-nums">{sourceBreakdown.length}</span>
-            <p className="text-[10px] text-text-muted uppercase tracking-wider mt-0.5">
-              {t('firstRun.sourcesScanned', 'sources')}
-            </p>
-          </div>
-        )}
       </div>
 
       {/* Developer DNA Preview — first "it knows me" moment */}
-      {detectedTech && detectedTech.length > 0 && (
+      {confidentTech.length > 0 && (
         <div className="mb-6 max-w-sm mx-auto">
           <p className="text-[10px] text-text-muted uppercase tracking-wider mb-2 text-start">
             {t('firstRun.yourDna', 'Your Developer DNA')}
           </p>
           <div className="flex flex-wrap gap-1.5 justify-center">
-            {detectedTech
-              .filter(tech => tech.confidence >= 0.5)
-              .slice(0, 12)
+            {confidentTech
               .map(tech => (
                 <span
                   key={tech.name}
@@ -205,17 +199,6 @@ export function CelebrationState({
                     : t('firstRun.insightSkillGap', { count: insight.count })}
               </p>
             </div>
-          ))}
-        </div>
-      )}
-
-      {/* Source breakdown */}
-      {sourceBreakdown.length > 0 && (
-        <div className="flex flex-wrap justify-center gap-2 mb-6">
-          {sourceBreakdown.map(([src, count]) => (
-            <span key={src} className="px-2.5 py-1 text-xs bg-bg-secondary text-text-secondary rounded-lg border border-border">
-              {getSourceFullName(src)} <span className="text-text-muted">{count}</span>
-            </span>
           ))}
         </div>
       )}
