@@ -24,7 +24,6 @@ vi.mock('./dismissal-utils', () => ({
   removeDismissal: vi.fn(),
 }));
 vi.mock('../SignalUpgradeCTA', () => ({ SignalUpgradeCTA: () => <div /> }));
-vi.mock('./ScoreBar', () => ({ default: () => <div /> }));
 // DepCoverageRow pulls translated content; it renders no headings of its own.
 vi.mock('../ContentTranslationProvider', () => ({
   useTranslatedContent: () => ({

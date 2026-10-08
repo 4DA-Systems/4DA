@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { memo, useState, useCallback, useEffect } from 'react';
 import { isSafeUrl } from '../../utils/sanitize-html';
+import { formatProjectNames } from '../../utils/project-path';
 import { useTranslation } from 'react-i18next';
 import type { EvidenceItem } from '../../../src-tauri/bindings/bindings/EvidenceItem';
 import { recordTrustEvent } from '../../lib/trust-feedback';
@@ -196,7 +197,7 @@ export const DepCoverageRow = memo(function DepCoverageRow({
         {dep.projects.length > 0 && (
           <span className="text-[10px] text-text-muted shrink-0 truncate max-w-[120px]" title={dep.projects.join(', ')}>
             {dep.projects.length <= 2
-              ? dep.projects.map(p => p.split('/').pop() ?? p).join(', ')
+              ? formatProjectNames(dep.projects).join(', ')
               : t('blindspots.projects.count', { count: dep.projects.length })}
           </span>
         )}

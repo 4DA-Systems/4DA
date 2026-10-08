@@ -8,6 +8,7 @@ import type { EvidenceItem } from '../../../src-tauri/bindings/bindings/Evidence
 import type { Urgency } from '../../../src-tauri/bindings/bindings/Urgency';
 import { cmd } from '../../lib/commands';
 import { recordTrustEvent } from '../../lib/trust-feedback';
+import { formatProjectNames } from '../../utils/project-path';
 import { useTranslatedContent } from '../ContentTranslationProvider';
 import { EvidenceList } from './PreemptionEvidenceList';
 
@@ -80,25 +81,6 @@ function truncateAt(text: string, limit: number): string {
 
 function kindAsSourceType(item: EvidenceItem): string {
   return typeof item.kind === 'string' ? item.kind : String(item.kind);
-}
-
-function shortenProjectPath(fullPath: string): string {
-  const parts = fullPath.replace(/\\/g, '/').split('/').filter(Boolean);
-  if (parts.length <= 2) return parts.join('/');
-  return parts.slice(-2).join('/');
-}
-
-function formatProjectNames(paths: string[]): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const p of paths) {
-    const short = shortenProjectPath(p);
-    if (!seen.has(short)) {
-      seen.add(short);
-      out.push(short);
-    }
-  }
-  return out;
 }
 
 const AffectedChips = memo(function AffectedChips({

@@ -28,21 +28,9 @@ export const URGENCY_COLORS: Record<Urgency, string> = {
   watch: 'text-blue-400',
 };
 
-const SCORE_TIERS = [
-  { max: 10, color: 'text-emerald-400', bg: 'bg-emerald-500', labelKey: 'blindspots.score.excellent' },
-  { max: 25, color: 'text-green-400', bg: 'bg-green-500', labelKey: 'blindspots.score.good' },
-  { max: 50, color: 'text-yellow-400', bg: 'bg-yellow-500', labelKey: 'blindspots.score.moderate' },
-  { max: 75, color: 'text-orange-400', bg: 'bg-orange-500', labelKey: 'blindspots.score.significant' },
-  { max: 100, color: 'text-red-400', bg: 'bg-red-500', labelKey: 'blindspots.score.critical' },
-] as const;
-
 export const URGENCY_ORDER: Record<Urgency, number> = { critical: 0, high: 1, medium: 2, watch: 3 };
 
 export const MAX_SIGNALS_PER_DEP = 2;
-
-export function getScoreTier(score: number) {
-  return SCORE_TIERS.find(t => score <= t.max) ?? SCORE_TIERS[4];
-}
 
 export function extractItemId(evidenceId: string): number | null {
   const match = evidenceId.match(/(?:bs_missed_|llm-bs-)(\d+)/);

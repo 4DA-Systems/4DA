@@ -16,7 +16,6 @@ vi.mock('./dismissal-utils', () => ({
   removeDismissal: vi.fn(),
 }));
 vi.mock('../SignalUpgradeCTA', () => ({ SignalUpgradeCTA: () => <div /> }));
-vi.mock('./ScoreBar', () => ({ default: () => <div /> }));
 
 // Stub the section renderers to expose which deps each received.
 vi.mock('./StackCoverageMap', () => ({
@@ -97,7 +96,7 @@ describe('BlindSpotsView — AI triage (Phase B)', () => {
     expect(worth).not.toContain('ammonia (crates.io)');
     expect(fine).toContain('ammonia (crates.io)');
     expect(fine).not.toContain('react (npm)');
-    expect(cmdMock).toHaveBeenCalledWith('assess_blind_spots_with_ai');
+    expect(cmdMock).toHaveBeenCalledWith('assess_blind_spots_with_ai', { force: true });
   });
 
   it('keeps an unassessed dep visible (defaults to worth-reviewing, never hidden)', async () => {

@@ -17,7 +17,6 @@ vi.mock('./dismissal-utils', () => ({
   removeDismissal: vi.fn(),
 }));
 vi.mock('../SignalUpgradeCTA', () => ({ SignalUpgradeCTA: () => <div /> }));
-vi.mock('./ScoreBar', () => ({ default: () => <div /> }));
 
 // Stub the section renderers so we can assert which deps each section received.
 vi.mock('./StackCoverageMap', () => ({
