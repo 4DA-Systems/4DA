@@ -2491,7 +2491,7 @@
   "tasteTest.introBody": "Size en fazla 15 makale göstereceğiz — hangilerini okuyacağınızı söylemeniz yeterli. Yanıtlarınız 4DA puanlama motorunu eğiterek ilgi alanlarınıza uyan içeriği öne çıkarmasını sağlar ve sizin adınıza çalışan yapay zekâ araçlarının daha iyi kararlar vermesine yardımcı olur.",
   "tasteTest.starting": "Başlatılıyor...",
   "tasteTest.start": "Ayarlamayı başlat",
-  "tasteTest.confident": "%{{percent}} güven",
+  "tasteTest.answered": "{{count}} yanıtlandı",
   "tasteTest.keepGoing": "Devam edin — daha fazla yanıt doğruluğu artırır",
   "tasteTest.goodStart": "İyi başlangıç — birkaç yanıt daha faydalı olur",
   "tasteTest.strongCalibration": "Güçlü ayar — devam edebilir ya da şimdi bitirebilirsiniz",

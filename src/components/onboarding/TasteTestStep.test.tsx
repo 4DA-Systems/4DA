@@ -160,9 +160,9 @@ describe('TasteTestStep', () => {
   });
 
   // -------------------------------------------------------------------------
-  // 4. Shows confidence percentage during cards phase
+  // 4. Shows an answered count (not a confidence percentage) during cards phase
   // -------------------------------------------------------------------------
-  it('shows confidence percentage in cards phase', async () => {
+  it('shows an answered count, not a confidence percentage, in cards phase', async () => {
     vi.mocked(invoke).mockResolvedValueOnce(mockNextCardResult);
 
     render(
@@ -174,7 +174,8 @@ describe('TasteTestStep', () => {
       await vi.runAllTimersAsync();
     });
 
-    expect(screen.getByText('35% confident')).toBeInTheDocument();
+    expect(screen.getByText('0 answered')).toBeInTheDocument();
+    expect(screen.queryByText(/% confident/)).not.toBeInTheDocument();
   });
 
   // -------------------------------------------------------------------------
@@ -219,7 +220,38 @@ describe('TasteTestStep', () => {
     }));
 
     expect(screen.getByTestId('card-title')).toHaveTextContent('React Server Components Deep Dive');
-    expect(screen.getByText('55% confident')).toBeInTheDocument();
+    expect(screen.getByText('1 answered')).toBeInTheDocument();
+  });
+
+  // -------------------------------------------------------------------------
+  // 5b. A confidence drop after a like never moves the stage hint backwards
+  // -------------------------------------------------------------------------
+  it('keeps the stage hint at its best when confidence drops after an answer', async () => {
+    vi.mocked(invoke)
+      .mockResolvedValueOnce({ ...mockNextCardResult, confidence: 0.49 })
+      .mockResolvedValueOnce({
+        type: 'nextCard',
+        card: { ...mockCard, id: 2, slot: 1, title: 'Next' },
+        progress: 0.4,
+        confidence: 0.29,
+      });
+
+    render(
+      <TasteTestStep isAnimating={false} onComplete={mockOnComplete} onSkip={mockOnSkip} />,
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByText('Start calibration'));
+      await vi.runAllTimersAsync();
+    });
+    expect(screen.getByText('Good start — a few more will help')).toBeInTheDocument();
+
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('interested-btn'));
+      await vi.runAllTimersAsync();
+    });
+    expect(screen.getByTestId('card-title')).toHaveTextContent('Next');
+    expect(screen.getByText('Good start — a few more will help')).toBeInTheDocument();
+    expect(screen.queryByText('Keep going — more responses improve accuracy')).not.toBeInTheDocument();
   });
 
   // -------------------------------------------------------------------------

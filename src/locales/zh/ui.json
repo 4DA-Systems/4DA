@@ -2471,7 +2471,7 @@
   "tasteTest.introBody": "我们会展示最多 15 篇文章——告诉我们你会读哪些即可。你的回答会训练 4DA 的评分引擎，让它呈现符合你兴趣的内容，并帮助代表你工作的 AI 工具做出更好的决策。",
   "tasteTest.starting": "正在开始...",
   "tasteTest.start": "开始校准",
-  "tasteTest.confident": "置信度 {{percent}}%",
+  "tasteTest.answered": "已回答 {{count}} 个",
   "tasteTest.keepGoing": "继续——更多回答能提高准确度",
   "tasteTest.goodStart": "开局不错——再多答几个会更好",
   "tasteTest.strongCalibration": "校准充分——你可以继续，也可以现在完成",

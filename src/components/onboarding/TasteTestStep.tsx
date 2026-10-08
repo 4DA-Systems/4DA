@@ -29,7 +29,12 @@ export function TasteTestStep({ isAnimating, onComplete, onSkip }: TasteTestStep
   const [phase, setPhase] = useState<Phase>('intro');
   const [currentCard, setCurrentCard] = useState<CardState | null>(null);
   const [progress, setProgress] = useState(0);
-  const [confidence, setConfidence] = useState(0);
+  // The posterior's confidence can legitimately DROP after an answer (a like
+  // that splits two personas raises entropy), which read as "my answer made it
+  // worse". The percentage is not shown during the test; the stage hint below
+  // follows the best confidence reached, so it never moves backwards.
+  const [peakConfidence, setPeakConfidence] = useState(0);
+  const [answered, setAnswered] = useState(0);
   const [summary, setSummary] = useState<TasteProfileSummary | null>(null);
   const [cardAnimating, setCardAnimating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -57,7 +62,7 @@ export function TasteTestStep({ isAnimating, onComplete, onSkip }: TasteTestStep
       if (result.type === 'nextCard') {
         setCurrentCard(result.card);
         setProgress(result.progress);
-        setConfidence(result.confidence);
+        setPeakConfidence(result.confidence);
         cardShownAt.current = Date.now();
         setPhase('cards');
       } else {
@@ -91,7 +96,8 @@ export function TasteTestStep({ isAnimating, onComplete, onSkip }: TasteTestStep
       if (result.type === 'nextCard') {
         setCurrentCard(result.card);
         setProgress(result.progress);
-        setConfidence(result.confidence);
+        setPeakConfidence(prev => Math.max(prev, result.confidence));
+        setAnswered(prev => prev + 1);
         cardShownAt.current = Date.now();
         setCardAnimating(false);
       } else {
@@ -189,13 +195,13 @@ export function TasteTestStep({ isAnimating, onComplete, onSkip }: TasteTestStep
               />
             </div>
             <span className="text-xs text-text-muted">
-              {t('tasteTest.confident', { percent: Math.round(confidence * 100) })}
+              {t('tasteTest.answered', { count: answered })}
             </span>
           </div>
           <p className="text-[10px] text-text-muted mt-1 text-end">
-            {confidence < 0.3
+            {peakConfidence < 0.3
               ? t('tasteTest.keepGoing')
-              : confidence < 0.7
+              : peakConfidence < 0.7
                 ? t('tasteTest.goodStart')
                 : t('tasteTest.strongCalibration')
             }

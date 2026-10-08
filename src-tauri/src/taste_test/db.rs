@@ -95,7 +95,7 @@ pub fn load_latest_taste_result(conn: &Connection) -> Option<TasteProfileSummary
 
     let mut stmt = conn
         .prepare(
-            "SELECT items_shown, confidence, persona_weights, dominant_persona
+            "SELECT items_shown, confidence, persona_weights, dominant_persona, id
              FROM taste_test_results
              ORDER BY id DESC LIMIT 1",
         )
@@ -106,6 +106,7 @@ pub fn load_latest_taste_result(conn: &Connection) -> Option<TasteProfileSummary
         let confidence: f64 = row.get(1)?;
         let weights_json: String = row.get(2)?;
         let dominant: usize = row.get::<_, i64>(3)? as usize;
+        let test_id: i64 = row.get(4)?;
 
         let weights: Vec<f64> = serde_json::from_str(&weights_json).unwrap_or_default();
 
@@ -125,7 +126,8 @@ pub fn load_latest_taste_result(conn: &Connection) -> Option<TasteProfileSummary
         for (i, &w) in weights.iter().enumerate().take(9) {
             weight_arr[i] = w;
         }
-        let blended = crate::taste_test::blending::blend_profile(&weight_arr, 0.10);
+        let responses = load_responses(conn, test_id);
+        let blended = crate::taste_test::blending::blend_profile(&weight_arr, 0.10, &responses);
         let top_interests: Vec<String> = blended
             .interests
             .into_iter()
@@ -161,6 +163,33 @@ pub fn taste_test_age_days(conn: &Connection) -> Option<f64> {
     )
     .ok()
     .flatten()
+}
+
+/// The `(slot, response)` answers recorded for one taste test. The summary's
+/// interests are rebuilt from the LIKED cards, so the reload must see the
+/// same answers the finalize did. An unreadable row is skipped.
+fn load_responses(conn: &Connection, test_id: i64) -> Vec<(usize, TasteResponse)> {
+    let Ok(mut stmt) = conn.prepare(
+        "SELECT item_slot, response FROM taste_test_responses WHERE test_id = ?1 ORDER BY id",
+    ) else {
+        return Vec::new();
+    };
+    let Ok(rows) = stmt.query_map(params![test_id], |row| {
+        Ok((row.get::<_, i64>(0)?, row.get::<_, String>(1)?))
+    }) else {
+        return Vec::new();
+    };
+    rows.flatten()
+        .filter_map(|(slot, response)| {
+            let parsed = match response.as_str() {
+                "interested" => TasteResponse::Interested,
+                "strong_interest" => TasteResponse::StrongInterest,
+                "not_interested" => TasteResponse::NotInterested,
+                _ => return None,
+            };
+            usize::try_from(slot).ok().map(|s| (s, parsed))
+        })
+        .collect()
 }
 
 /// Check if any taste test has been completed.
@@ -373,6 +402,32 @@ mod tests {
         let summary = loaded.unwrap();
         assert_eq!(summary.items_shown, 10);
         assert!((summary.confidence - 0.75).abs() < 0.01);
+    }
+
+    /// Quick Setup pre-fills from this reload — it must rebuild the interests
+    /// from the stored LIKED cards, not from persona templates.
+    #[test]
+    fn reload_rebuilds_interests_from_liked_cards() {
+        let conn = setup_test_db();
+        let mut profile = make_test_profile();
+        profile.persona_weights = [0.3, 0.05, 0.2, 0.05, 0.2, 0.05, 0.05, 0.05, 0.05];
+        let responses = vec![
+            (4, TasteResponse::StrongInterest),
+            (0, TasteResponse::NotInterested),
+        ];
+        save_taste_result(&conn, &profile, &responses, &[None, None]).unwrap();
+
+        let summary = load_latest_taste_result(&conn).unwrap();
+        assert_eq!(summary.top_interests[0], "React Native");
+        assert!(summary.top_interests.iter().any(|t| t == "React"));
+        assert!(
+            !summary
+                .top_interests
+                .iter()
+                .any(|t| t == "Tauri" || t == "Rust"),
+            "{:?}",
+            summary.top_interests
+        );
     }
 
     #[test]

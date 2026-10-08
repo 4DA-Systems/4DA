@@ -4,7 +4,10 @@
 //! Maps each persona to characteristic interests, tech stack, and exclusions,
 //! then blends them according to the inferred weights.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+
+use super::items::CARD_TOPICS;
+use super::TasteResponse;
 
 // ============================================================================
 // Persona Templates
@@ -169,11 +172,27 @@ pub(crate) static TEMPLATES: [PersonaTemplate; 9] = [
 // Blended Profile
 // ============================================================================
 
+/// A persona's TEMPLATE topics are added to the profile only when its
+/// posterior is at least this high. Below it, a template topic is a guess
+/// about a persona the user may not be — the fresh-profile audit (2026-10-07)
+/// saw "Tauri" and "embedded systems" written as real interests for a user
+/// who liked only React / React Native cards.
+pub(crate) const PERSONA_TOPIC_MIN_POSTERIOR: f64 = 0.5;
+
+/// Ceiling on a template topic's weight. Template topics are inferred, never
+/// stated, so they always rank below the topics of cards the user liked.
+pub(crate) const INFERRED_TOPIC_WEIGHT_CAP: f32 = 0.5;
+
 /// Result of blending persona weights into a production-ready context.
 #[derive(Debug, Clone)]
 pub struct BlendedProfile {
-    /// Interest topics with blended weights, sorted by weight descending.
+    /// Interest topics: the topics of LIKED cards (normalized to [0, 1],
+    /// descending) followed by persona-inferred template topics (weight
+    /// <= [`INFERRED_TOPIC_WEIGHT_CAP`], descending).
     pub interests: Vec<(String, f32)>,
+    /// The entries of `interests` that came from a persona template rather
+    /// than from a liked card — the "inferred" tag.
+    pub inferred_topics: Vec<String>,
     /// Union of tech stack items from contributing personas.
     pub tech_stack: Vec<String>,
     /// Anti-topics from dominant persona only.
@@ -184,76 +203,112 @@ pub struct BlendedProfile {
     pub calibration_deltas: HashMap<String, f32>,
 }
 
-/// Blend persona weights into a unified profile.
-///
-/// # Arguments
-/// - `weights`: Posterior probability for each of the 9 personas
-/// - `threshold`: Minimum weight to contribute (typically 0.10)
-pub fn blend_profile(weights: &[f64; 9], threshold: f64) -> BlendedProfile {
-    let mut interest_weights: HashMap<String, f32> = HashMap::new();
-    let mut tech_set: Vec<String> = Vec::new();
-    let mut stack_set: Vec<String> = Vec::new();
-
-    // Find dominant persona
-    let dominant = weights
+fn dominant_persona(weights: &[f64; 9]) -> usize {
+    weights
         .iter()
         .enumerate()
         .max_by(|(_, a), (_, b)| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
-        .map_or(0, |(i, _)| i);
+        .map_or(0, |(i, _)| i)
+}
 
-    // Blend interests from all above-threshold personas
+fn sorted_desc(map: HashMap<String, f32>) -> Vec<(String, f32)> {
+    let mut v: Vec<(String, f32)> = map.into_iter().collect();
+    v.sort_by(|a, b| {
+        b.1.partial_cmp(&a.1)
+            .unwrap_or(std::cmp::Ordering::Equal)
+            .then_with(|| a.0.cmp(&b.0))
+    });
+    v
+}
+
+fn card_topics(slot: usize) -> &'static [(&'static str, f32)] {
+    CARD_TOPICS.get(slot).copied().unwrap_or(&[])
+}
+
+/// Topics of the cards the user liked, weighted by card-topic weight (a
+/// "love" counts fully, a plain "interested" at 0.8), normalized to [0, 1].
+fn liked_card_topics(responses: &[(usize, TasteResponse)]) -> Vec<(String, f32)> {
+    let mut acc: HashMap<String, f32> = HashMap::new();
+    for (slot, response) in responses {
+        let factor = match response {
+            TasteResponse::StrongInterest => 1.0,
+            TasteResponse::Interested => 0.8,
+            TasteResponse::NotInterested => continue,
+        };
+        for &(topic, w) in card_topics(*slot) {
+            *acc.entry(topic.to_string()).or_insert(0.0) += w * factor;
+        }
+    }
+    let max = acc.values().copied().fold(0.0f32, f32::max);
+    if max > 0.0 {
+        for w in acc.values_mut() {
+            *w /= max;
+        }
+    }
+    sorted_desc(acc)
+}
+
+/// Template topics of every persona whose posterior clears
+/// [`PERSONA_TOPIC_MIN_POSTERIOR`], minus topics already liked and topics the
+/// user explicitly passed on (on a skipped card and no liked one).
+fn persona_template_topics(
+    weights: &[f64; 9],
+    responses: &[(usize, TasteResponse)],
+    liked: &[(String, f32)],
+) -> Vec<(String, f32)> {
+    let liked_set: HashSet<String> = liked.iter().map(|(t, _)| t.to_lowercase()).collect();
+    let passed: HashSet<String> = responses
+        .iter()
+        .filter(|(_, r)| matches!(r, TasteResponse::NotInterested))
+        .flat_map(|(slot, _)| card_topics(*slot))
+        .map(|(t, _)| t.to_lowercase())
+        .filter(|t| !liked_set.contains(t))
+        .collect();
+
+    let mut acc: HashMap<String, f32> = HashMap::new();
+    for (i, &w) in weights.iter().enumerate() {
+        if w < PERSONA_TOPIC_MIN_POSTERIOR {
+            continue;
+        }
+        for &(topic, tw) in TEMPLATES[i].interests {
+            let key = topic.to_lowercase();
+            if liked_set.contains(&key) || passed.contains(&key) {
+                continue;
+            }
+            let weight = INFERRED_TOPIC_WEIGHT_CAP * w as f32 * tw;
+            let entry = acc.entry(topic.to_string()).or_insert(0.0);
+            *entry = entry.max(weight);
+        }
+    }
+    sorted_desc(acc)
+}
+
+/// Union of tech + stack ids over above-threshold personas.
+fn template_union(weights: &[f64; 9], threshold: f64) -> (Vec<String>, Vec<String>) {
+    let mut tech_set: Vec<String> = Vec::new();
+    let mut stack_set: Vec<String> = Vec::new();
     for (i, &w) in weights.iter().enumerate() {
         if w < threshold {
             continue;
         }
-
-        let template = &TEMPLATES[i];
-
-        // Weighted interest contribution
-        for &(topic, topic_weight) in template.interests {
-            let contribution = w as f32 * topic_weight;
-            *interest_weights.entry(topic.to_string()).or_insert(0.0) += contribution;
-        }
-
-        // Tech stack union
-        for &tech in template.tech {
-            let t = tech.to_string();
-            if !tech_set.contains(&t) {
-                tech_set.push(t);
+        for &tech in TEMPLATES[i].tech {
+            if !tech_set.iter().any(|t| t == tech) {
+                tech_set.push(tech.to_string());
             }
         }
-
-        // Stack IDs union
-        for &sid in template.stack_ids {
-            let s = sid.to_string();
-            if !stack_set.contains(&s) {
-                stack_set.push(s);
+        for &sid in TEMPLATES[i].stack_ids {
+            if !stack_set.iter().any(|s| s == sid) {
+                stack_set.push(sid.to_string());
             }
         }
     }
+    (tech_set, stack_set)
+}
 
-    // Normalize interest weights to [0, 1]
-    let max_weight = interest_weights.values().copied().fold(0.0f32, f32::max);
-    if max_weight > 0.0 {
-        for w in interest_weights.values_mut() {
-            *w /= max_weight;
-        }
-    }
-
-    // Sort by weight descending
-    let mut interests: Vec<(String, f32)> = interest_weights.into_iter().collect();
-    interests.sort_by(|a, b| b.1.partial_cmp(&a.1).unwrap_or(std::cmp::Ordering::Equal));
-
-    // Exclusions from dominant persona only
-    let exclusions: Vec<String> = TEMPLATES[dominant]
-        .exclusions
-        .iter()
-        .map(std::string::ToString::to_string)
-        .collect();
-
-    // Calibration deltas: topics from non-dominant personas get a positive delta
-    // (boosting their relevance slightly since the user showed interest)
-    let mut calibration_deltas: HashMap<String, f32> = HashMap::new();
+/// Calibration deltas: topics from non-dominant personas get a positive delta
+/// (boosting their relevance slightly since the user showed interest).
+fn calibration_deltas(weights: &[f64; 9], threshold: f64, dominant: usize) -> HashMap<String, f32> {
+    let mut deltas: HashMap<String, f32> = HashMap::new();
     let dominant_weight = weights[dominant];
     for (i, &w) in weights.iter().enumerate() {
         if i == dominant || w < threshold {
@@ -261,19 +316,51 @@ pub fn blend_profile(weights: &[f64; 9], threshold: f64) -> BlendedProfile {
         }
         for &(topic, _) in TEMPLATES[i].interests {
             let delta = (w / dominant_weight) as f32 * 0.15;
-            calibration_deltas
+            deltas
                 .entry(topic.to_string())
                 .and_modify(|d| *d = d.max(delta))
                 .or_insert(delta);
         }
     }
+    deltas
+}
+
+/// Blend persona weights and the user's actual answers into a unified profile.
+///
+/// # Arguments
+/// - `weights`: Posterior probability for each of the 9 personas
+/// - `threshold`: Minimum weight to contribute tech / stack ids / deltas
+///   (typically 0.10)
+/// - `responses`: The `(slot, response)` answers. Interests come from the
+///   topics of the LIKED cards; persona template topics are appended (tagged
+///   inferred, lower weight) only for personas at or above
+///   [`PERSONA_TOPIC_MIN_POSTERIOR`].
+pub fn blend_profile(
+    weights: &[f64; 9],
+    threshold: f64,
+    responses: &[(usize, TasteResponse)],
+) -> BlendedProfile {
+    let dominant = dominant_persona(weights);
+    let liked = liked_card_topics(responses);
+    let inferred = persona_template_topics(weights, responses, &liked);
+    let inferred_topics = inferred.iter().map(|(t, _)| t.clone()).collect();
+    let mut interests = liked;
+    interests.extend(inferred);
+
+    let (tech_stack, stack_ids) = template_union(weights, threshold);
+    let exclusions: Vec<String> = TEMPLATES[dominant]
+        .exclusions
+        .iter()
+        .map(std::string::ToString::to_string)
+        .collect();
 
     BlendedProfile {
         interests,
-        tech_stack: tech_set,
+        inferred_topics,
+        tech_stack,
         exclusions,
-        stack_ids: stack_set,
-        calibration_deltas,
+        stack_ids,
+        calibration_deltas: calibration_deltas(weights, threshold, dominant),
     }
 }
 
@@ -284,6 +371,7 @@ pub fn blend_profile(weights: &[f64; 9], threshold: f64) -> BlendedProfile {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::taste_test::inference::InferenceState;
 
     fn make_weights(dominant: usize) -> [f64; 9] {
         let mut w = [0.0; 9];
@@ -291,29 +379,30 @@ mod tests {
         w
     }
 
+    fn has(profile: &BlendedProfile, topic: &str) -> bool {
+        profile.interests.iter().any(|(t, _)| t == topic)
+    }
+
+    fn topic_names(interests: &[(String, f32)]) -> Vec<&str> {
+        interests.iter().map(|(t, _)| t.as_str()).collect()
+    }
+
     #[test]
     fn test_pure_rust_persona_blend() {
-        let profile = blend_profile(&make_weights(0), 0.10);
-        assert!(
-            profile.interests.iter().any(|(t, _)| t == "Rust"),
-            "Rust should be in interests"
-        );
+        let profile = blend_profile(&make_weights(0), 0.10, &[]);
+        assert!(has(&profile, "Rust"), "Rust should be in interests");
+        assert!(profile.inferred_topics.iter().any(|t| t == "Rust"));
         assert!(profile.tech_stack.contains(&"rust".to_string()));
     }
 
     #[test]
-    fn test_even_blend_union_interests() {
+    fn even_blend_invents_no_interests() {
+        // No persona clears the posterior cutoff and nothing was liked:
+        // there is no evidence for any interest, so none is written.
         let weights = [1.0 / 9.0; 9];
-        let profile = blend_profile(&weights, 0.10);
-        // Should have interests from multiple personas
-        assert!(
-            profile.interests.len() > 10,
-            "Even blend should have many interests"
-        );
-        assert!(
-            profile.tech_stack.len() > 10,
-            "Even blend should have many tech"
-        );
+        let profile = blend_profile(&weights, 0.10, &[]);
+        assert!(profile.interests.is_empty(), "{:?}", profile.interests);
+        assert!(profile.tech_stack.len() > 10, "tech union still blends");
     }
 
     #[test]
@@ -321,19 +410,16 @@ mod tests {
         let mut weights = [0.0; 9];
         weights[0] = 0.95;
         weights[1] = 0.05; // Below threshold
-        let profile = blend_profile(&weights, 0.10);
-        // Python ML interests should NOT appear (weight 0.05 < threshold 0.10)
+        let profile = blend_profile(&weights, 0.10, &[]);
         assert!(
-            !profile.interests.iter().any(|(t, _)| t == "PyTorch"),
+            !has(&profile, "PyTorch"),
             "Below-threshold personas should not contribute interests"
         );
     }
 
     #[test]
     fn test_exclusions_from_dominant_only() {
-        // All personas currently have empty exclusions, so test the mechanism
-        let profile = blend_profile(&make_weights(0), 0.10);
-        // Just verify it returns without error and exclusions is a valid vec
+        let profile = blend_profile(&make_weights(0), 0.10, &[]);
         assert!(profile.exclusions.len() == TEMPLATES[0].exclusions.len());
     }
 
@@ -343,8 +429,7 @@ mod tests {
         weights[0] = 0.60;
         weights[1] = 0.25;
         weights[2] = 0.15;
-        let profile = blend_profile(&weights, 0.10);
-        // Non-dominant personas should generate calibration deltas
+        let profile = blend_profile(&weights, 0.10, &[]);
         assert!(
             !profile.calibration_deltas.is_empty(),
             "Should have calibration deltas from non-dominant personas"
@@ -352,23 +437,61 @@ mod tests {
     }
 
     #[test]
-    fn test_interests_normalized() {
-        let profile = blend_profile(&make_weights(0), 0.10);
+    fn liked_topics_are_normalized_and_outrank_inferred_ones() {
+        let responses = [(0usize, TasteResponse::StrongInterest)];
+        let profile = blend_profile(&make_weights(0), 0.10, &responses);
+        assert_eq!(profile.interests[0], ("Rust".to_string(), 1.0));
         for (topic, weight) in &profile.interests {
-            assert!(
-                *weight >= 0.0 && *weight <= 1.0,
-                "Interest '{}' weight {} should be in [0, 1]",
-                topic,
-                weight
-            );
+            assert!((0.0..=1.0).contains(weight), "{topic} = {weight}");
         }
-        // At least one should be 1.0 (the max)
+        for (topic, weight) in profile.interests.iter().skip(1) {
+            assert!(profile.inferred_topics.contains(topic));
+            assert!(*weight <= INFERRED_TOPIC_WEIGHT_CAP, "{topic} = {weight}");
+        }
         assert!(
-            profile
-                .interests
-                .iter()
-                .any(|(_, w)| (*w - 1.0).abs() < 1e-6),
-            "At least one interest should have normalized weight of 1.0"
+            !profile.inferred_topics.iter().any(|t| t == "Rust"),
+            "a liked topic is not tagged inferred"
         );
+    }
+
+    #[test]
+    fn passed_card_topics_are_never_inferred() {
+        // Rust persona is certain, but the user skipped the WebAssembly card.
+        let responses = [(8usize, TasteResponse::NotInterested)];
+        let profile = blend_profile(&make_weights(0), 0.10, &responses);
+        assert!(!has(&profile, "WebAssembly"), "{:?}", profile.interests);
+    }
+
+    /// Audit 2026-10-07 repro: a React / React Native user. The profile must
+    /// name what they liked, and nothing from the Rust template.
+    #[test]
+    fn liking_react_native_and_nextjs_yields_react_not_tauri() {
+        let mut state = InferenceState::new();
+        state.update(4, &TasteResponse::Interested); // React Native
+        state.update(3, &TasteResponse::Interested); // Next.js
+        for slot in [0usize, 1, 2, 5, 6, 7] {
+            state.update(slot, &TasteResponse::NotInterested);
+        }
+        let profile = state.finalize();
+        let topics = topic_names(&profile.inferred_interests);
+        assert!(topics.contains(&"React Native"), "{topics:?}");
+        assert!(topics.contains(&"React"), "{topics:?}");
+        assert!(!topics.contains(&"Tauri"), "{topics:?}");
+        assert!(!topics.contains(&"embedded systems"), "{topics:?}");
+        let summary = state.build_summary();
+        assert!(summary.top_interests.iter().any(|t| t == "React Native"));
+        assert!(summary.top_interests.iter().any(|t| t == "React"));
+    }
+
+    #[test]
+    fn one_rust_like_does_not_add_embedded_systems() {
+        let mut state = InferenceState::new();
+        state.update(0, &TasteResponse::Interested);
+        let profile = state.finalize();
+        assert!(
+            profile.persona_weights[0] < PERSONA_TOPIC_MIN_POSTERIOR,
+            "one like must leave the Rust persona below the cutoff"
+        );
+        assert_eq!(topic_names(&profile.inferred_interests), vec!["Rust"]);
     }
 }

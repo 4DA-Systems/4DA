@@ -2493,7 +2493,7 @@
   "tasteTest.introBody": "最大15件の記事を表示します。読みたいものを教えてください。あなたの回答は4DAのスコアリングエンジンを学習させ、興味に合うコンテンツを表示できるようにするとともに、あなたの代わりに動くAIツールがより良い判断をする助けになります。",
   "tasteTest.starting": "開始中...",
   "tasteTest.start": "調整を開始",
-  "tasteTest.confident": "確信度 {{percent}}%",
+  "tasteTest.answered": "{{count}} 件回答済み",
   "tasteTest.keepGoing": "続けてください — 回答が増えるほど精度が上がります",
   "tasteTest.goodStart": "良いスタートです — あと少し回答すると効果的です",
   "tasteTest.strongCalibration": "十分に調整できました — 続けることも、ここで終えることもできます",

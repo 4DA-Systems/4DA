@@ -107,6 +107,8 @@ interface TasteCard {
   snippet: string;
   sourceHint: string;
   categoryHint: string;
+  /** What the card is about; a like evidences exactly these interests. */
+  topics?: string[];
 }
 
 interface PersonaWeight {
