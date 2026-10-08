@@ -689,7 +689,18 @@ pub(crate) use types::{ScoringInput, ScoringOptions};
 // registered: the whole corpus re-scores locally. Judge verdicts are keyed by
 // the judge PROMPT_VERSION, not this constant — no LLM spend beyond the fixed
 // per-cycle envelope.
-pub(crate) const PIPELINE_VERSION: i32 = 40;
+// v41 (2026-10-08, audit: the Signal hero was "How I keep an LLM from
+// inventing breaking changes", typed `breaking_change` (×1.25) with the
+// necessity line "Breaking change affects react"): the content classifier's
+// breaking-change term needs the title to announce one — "breaking change"
+// as the TOPIC (advice / first-person framing, or a practice verb such as
+// "catches" / "inventing" before it, and no version-like token) no longer
+// types the item; "eol" is a whole word (it matched "geology", "Reolink").
+// `is_breaking_change` reads only the title, and only titles containing
+// "breaking change" or "eol" can change, so the bump IS registered in
+// `epochs::SCOPED_EPOCHS` on the title. (The paired dependency-event
+// enumeration rule is a display claim — AD-034, no bump.)
+pub(crate) const PIPELINE_VERSION: i32 = 41;
 
 /// Parse the topic tags carried in the `source_items.tags` column.
 ///

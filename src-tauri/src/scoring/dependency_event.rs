@@ -145,7 +145,9 @@ struct EventEvidence {
 const EVENT_TITLE_WINDOW: usize = 48;
 
 /// Bytes either side of a BODY name occurrence (body hits decide only when the
-/// title does not name the package at all).
+/// title does not name the package at all). Release / change vocabulary in the
+/// window counts only when the name is not one member of an enumeration;
+/// security vocabulary always counts.
 const EVENT_BODY_WINDOW: usize = 60;
 
 /// At most this many other words may share a title with "<name> <version>"
@@ -247,7 +249,8 @@ fn event_words_in(text: &str, start: usize, end: usize, headline: bool) -> bool 
 /// When only the BODY names it, an event word within [`EVENT_BODY_WINDOW`]
 /// bytes of a body occurrence ("…the axios maintainers published a security
 /// advisory…"). A bare body version literal ("we use react 18.2") is not an
-/// event. (Across several grounding dependencies, a title naming any of them
+/// event, and release / change vocabulary does not count for an occurrence
+/// that is one member of an enumeration ([`in_enumeration`]). (Across several grounding dependencies, a title naming any of them
 /// decides for all — see [`is_dependency_event`], which production calls; this
 /// single-dependency view exists for the title-by-title tests.)
 #[cfg(test)]
@@ -289,18 +292,141 @@ fn event_evidence(
             && is_release_headline(&title_lower, normalized_name))
     });
     let body_event = in_body.iter().any(|&(pos, len)| {
-        event_words_in(
-            &text_lower,
-            pos.saturating_sub(EVENT_BODY_WINDOW).max(title_len),
-            pos + len + EVENT_BODY_WINDOW,
-            false,
-        )
+        let start = pos.saturating_sub(EVENT_BODY_WINDOW).max(title_len);
+        let end = pos + len + EVENT_BODY_WINDOW;
+        markers_in_window(&text_lower, start, end, SECURITY_EVENT_MARKERS)
+            || (!in_enumeration(&text_lower, pos, pos + len)
+                && markers_in_window(&text_lower, start, end, DEPENDENCY_EVENT_MARKERS))
     });
     EventEvidence {
         named_in_title: !in_title.is_empty(),
         title_event,
         body_event,
     }
+}
+
+/// Items (the occurrence included) that make a run of names an enumeration.
+const ENUMERATION_MIN_ITEMS: usize = 3;
+
+/// Is the body occurrence `text[start..end]` one member of an enumeration —
+/// "every new release of React, TypeScript, Vite and friends"? A name in a
+/// list is not the subject of the sentence, so release / change vocabulary
+/// beside the list is not news about that dependency. Live 2026-10-08 (item
+/// 113567): an essay about building a changelog reader became the Signal hero
+/// as a react dependency event on exactly that sentence; its title names no
+/// dependency. Security vocabulary is NOT discounted by an enumeration:
+/// "malicious versions of axios, chalk and debug were published" names every
+/// package it hits.
+///
+/// Neighbours are counted up to two either side; each is one or two words
+/// joined by `,` `/` `&` `and` `or`. An appositive ("React, the UI library,
+/// released…") yields at most two items and stays an event.
+fn in_enumeration(text: &str, start: usize, end: usize) -> bool {
+    let before = text.get(..start).unwrap_or("");
+    let after = text.get(end..).unwrap_or("");
+    1 + list_items_before(before) + list_items_after(after) >= ENUMERATION_MIN_ITEMS
+}
+
+fn is_list_word_char(c: char) -> bool {
+    c.is_alphanumeric() || matches!(c, '.' | '-' | '_' | '@' | '+' | '#' | '\'')
+}
+
+/// The text after one leading word, `None` when `s` does not start with one.
+fn after_leading_word(s: &str) -> Option<&str> {
+    let end = s.find(|c: char| !is_list_word_char(c)).unwrap_or(s.len());
+    if end == 0 {
+        return None;
+    }
+    s.get(end..)
+}
+
+/// The text before one trailing word, `None` when `s` does not end with one.
+fn before_trailing_word(s: &str) -> Option<&str> {
+    let start = s
+        .char_indices()
+        .rev()
+        .find(|&(_, c)| !is_list_word_char(c))
+        .map_or(0, |(i, c)| i + c.len_utf8());
+    if start >= s.len() {
+        return None;
+    }
+    s.get(..start)
+}
+
+/// Strip a leading list separator (`, ` `/` `&` `and` `or`, or `, and`).
+fn strip_separator_start(s: &str) -> Option<&str> {
+    let t = s.trim_start();
+    let (t, punct) = match t.strip_prefix([',', '/', '&']) {
+        Some(r) => (r.trim_start(), true),
+        None => (t, false),
+    };
+    match ["and ", "or "].iter().find_map(|c| t.strip_prefix(c)) {
+        Some(r) => Some(r.trim_start()),
+        None => punct.then_some(t),
+    }
+}
+
+/// Strip a trailing list separator (mirror of [`strip_separator_start`]).
+fn strip_separator_end(s: &str) -> Option<&str> {
+    let t = s.trim_end();
+    let (t, conj) = match [" and", " or"].iter().find_map(|c| t.strip_suffix(c)) {
+        Some(r) => (r.trim_end(), true),
+        None => (t, false),
+    };
+    match t.strip_suffix([',', '/', '&']) {
+        Some(r) => Some(r.trim_end()),
+        None => conj.then_some(t),
+    }
+}
+
+/// Consume one list item of one or two words from the start of `s`.
+fn strip_item_start(s: &str) -> Option<&str> {
+    let rest = after_leading_word(s)?;
+    if rest.is_empty() || strip_separator_start(rest).is_some() {
+        return Some(rest);
+    }
+    Some(
+        rest.strip_prefix(' ')
+            .and_then(after_leading_word)
+            .unwrap_or(rest),
+    )
+}
+
+/// Consume one list item of one or two words from the end of `s`.
+fn strip_item_end(s: &str) -> Option<&str> {
+    let rest = before_trailing_word(s)?;
+    if rest.is_empty() || strip_separator_end(rest).is_some() {
+        return Some(rest);
+    }
+    Some(
+        rest.strip_suffix(' ')
+            .and_then(before_trailing_word)
+            .unwrap_or(rest),
+    )
+}
+
+fn list_items_after(mut rest: &str) -> usize {
+    let mut items = 0;
+    while items < ENUMERATION_MIN_ITEMS - 1 {
+        let Some(next) = strip_separator_start(rest).and_then(strip_item_start) else {
+            break;
+        };
+        rest = next;
+        items += 1;
+    }
+    items
+}
+
+fn list_items_before(mut rest: &str) -> usize {
+    let mut items = 0;
+    while items < ENUMERATION_MIN_ITEMS - 1 {
+        let Some(next) = strip_separator_end(rest).and_then(strip_item_end) else {
+            break;
+        };
+        rest = next;
+        items += 1;
+    }
+    items
 }
 
 /// A title that is little more than "<name> <version>": every word other than
