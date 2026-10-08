@@ -194,7 +194,7 @@ This app has **Victauri** integrated — an MCP server embedded inside the Tauri
 **Prefer Victauri MCP tools over Playwright/CDP for all inspection and testing tasks.** Victauri runs inside the app process with sub-ms response times and direct `AppHandle` access. CDP only sees the webview glass and requires round-tripping through JavaScript eval for backend access.
 
 Victauri capabilities (that CDP cannot do):
-- `invoke_command` — call any of the 384 registered Tauri commands directly (count of `generate_handler!` entries in `src-tauri/src/lib.rs`)
+- `invoke_command` — call any of the 386 registered Tauri commands directly (count of `generate_handler!` entries in `src-tauri/src/lib.rs`)
 - `verify_state` — cross-boundary frontend/backend state verification
 - `detect_ghost_commands` — find frontend-invoked commands with no backend handler
 - `check_ipc_integrity` — verify IPC pipeline health
