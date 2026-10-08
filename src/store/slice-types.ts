@@ -345,6 +345,8 @@ export interface BriefingSlice {
 
 export interface ContextDiscoverySlice {
   scanDirectories: string[];
+  /** Configured directories that do not exist on this machine. */
+  missingScanDirectories: string[];
   newScanDir: string;
   isScanning: boolean;
   discoveredContext: DiscoveredContext;

@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { describe, it, expect } from 'vitest';
-import { computeEvidencePool, isGrounded, groundingDeps } from './evidence-pool';
+import { computeEvidencePool, isAffectedInactive, isGrounded, groundingDeps } from './evidence-pool';
 import type { SourceRelevance } from '../../types';
 
 function item(partial: Partial<SourceRelevance>): SourceRelevance {
@@ -148,5 +148,31 @@ describe('computeEvidencePool', () => {
   it('defaults a bare item (no breakdown) to Ambient', () => {
     expect(computeEvidencePool(item({}))).toBe('ambient');
     expect(groundingDeps(item({}))).toEqual([]);
+  });
+});
+
+describe('affected_inactive (audit 2026-10-07)', () => {
+  it('an advisory affecting only inactive projects is never Affects You', () => {
+    // The backend clears the grounding flags; the pool refuses the label even
+    // if a stale flag survived.
+    const r = item({
+      applicability: 'affected_inactive',
+      source_type: 'osv',
+      is_critical_alert: true,
+      score_breakdown: { strongly_grounded: true, dependency_event: true, domain_relevance: 0.85 } as never,
+    });
+    expect(isAffectedInactive(r)).toBe(true);
+    expect(isGrounded(r)).toBe(false);
+    expect(computeEvidencePool(r)).toBe('in_orbit');
+  });
+
+  it('as the backend emits it (flags cleared) it is not grounded either', () => {
+    const r = item({
+      applicability: 'affected_inactive',
+      source_type: 'osv',
+      score_breakdown: { strongly_grounded: false, dependency_event: false, domain_relevance: 0.2 } as never,
+    });
+    expect(isGrounded(r)).toBe(false);
+    expect(computeEvidencePool(r)).toBe('ambient');
   });
 });

@@ -6,6 +6,7 @@ import type { AppStore, ContextDiscoverySlice } from './types';
 
 export const createContextDiscoverySlice: StateCreator<AppStore, [], [], ContextDiscoverySlice> = (set, get) => ({
   scanDirectories: [],
+  missingScanDirectories: [],
   newScanDir: '',
   isScanning: false,
   discoveredContext: { tech: [], topics: [], lastScan: null },
@@ -20,7 +21,12 @@ export const createContextDiscoverySlice: StateCreator<AppStore, [], [], Context
     ]);
 
     if (dirsResult.status === 'fulfilled' && dirsResult.value && dirsResult.value.length > 0) {
-      set({ scanDirectories: dirsResult.value });
+      // Configured roots that are not on this machine stay listed (so they can
+      // be removed) and are flagged "not on this machine".
+      set({
+        scanDirectories: dirsResult.value.map(d => d.path),
+        missingScanDirectories: dirsResult.value.filter(d => !d.exists).map(d => d.path),
+      });
     }
 
     if (techResult.status === 'fulfilled' && techResult.value?.detected_tech?.length > 0) {

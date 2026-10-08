@@ -56,7 +56,10 @@ describe('context-discovery-slice', () => {
   describe('loadDiscoveredContext', () => {
     it('loads directories, tech, and topics', async () => {
       vi.mocked(invoke)
-        .mockResolvedValueOnce(['/home/user/project1', '/home/user/project2']) // get_context_dirs
+        .mockResolvedValueOnce([
+          { path: '/home/user/project1', exists: true },
+          { path: '/home/user/project2', exists: false },
+        ]) // get_context_dirs
         .mockResolvedValueOnce({ detected_tech: [{ name: 'React', category: 'frontend', confidence: 0.95 }] }) // ace_get_detected_tech
         .mockResolvedValueOnce({ topics: [{ topic: 'web-dev', weight: 0.8 }] }); // ace_get_active_topics
 
@@ -66,6 +69,8 @@ describe('context-discovery-slice', () => {
       expect(invoke).toHaveBeenCalledWith('ace_get_detected_tech', {});
       expect(invoke).toHaveBeenCalledWith('ace_get_active_topics', {});
       expect(useAppStore.getState().scanDirectories).toEqual(['/home/user/project1', '/home/user/project2']);
+      // A configured root that is not on this machine stays listed, flagged.
+      expect(useAppStore.getState().missingScanDirectories).toEqual(['/home/user/project2']);
       expect(useAppStore.getState().discoveredContext.tech).toHaveLength(1);
       expect(useAppStore.getState().discoveredContext.topics).toEqual(['web-dev']);
     });

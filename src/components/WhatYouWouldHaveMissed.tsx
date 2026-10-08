@@ -9,6 +9,7 @@ import { useShallow } from 'zustand/react/shallow';
 import type { SourceRelevance } from '../types/analysis';
 import { getRelevancePresentation, isSurfacedSignal } from '../utils/score';
 import { isBriefSuppressed, useActiveBriefFilteredIds } from '../hooks/use-brief-verdicts';
+import { isAffectedInactive } from './signals/evidence-pool';
 
 /**
  * "What You Would Have Missed" — the ONE surfaced item genuinely tied to the
@@ -40,6 +41,10 @@ function hasConfirmedStackLink(r: SourceRelevance): boolean {
   // and, like the Signal tab's Affects You pool (`evidence-pool.ts`), it needs
   // a dependency EVENT: a tutorial that merely uses the package is grounded
   // but nothing is happening to it (`dependency_event === false`).
+  // An advisory that affects ONLY inactive (dormant / scratch) projects is
+  // never the hero, whatever flags it carries (audit 2026-10-07: a gitignored
+  // folder dormant 161 days led this card).
+  if (isAffectedInactive(r)) return false;
   return (
     r.is_critical_alert === true ||
     (r.score_breakdown?.strongly_grounded === true && r.score_breakdown.dependency_event !== false)

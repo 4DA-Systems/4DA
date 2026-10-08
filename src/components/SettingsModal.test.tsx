@@ -32,6 +32,7 @@ const createMockState = (overrides: Record<string, unknown> = {}): Record<string
   updateMonitoringInterval: vi.fn(),
   testNotification: vi.fn(),
   scanDirectories: [],
+  missingScanDirectories: [],
   newScanDir: '',
   setNewScanDir: vi.fn(),
   isScanning: false,

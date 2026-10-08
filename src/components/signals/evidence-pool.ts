@@ -28,6 +28,11 @@ const ORBIT_DOMAIN_THRESHOLD = 0.7;
 /** Registry advisory sources: one row per published advisory. */
 const ADVISORY_SOURCES = new Set(['cve', 'osv']);
 
+/** The advisory affects only projects outside the user's active stack. */
+export function isAffectedInactive(r: SourceRelevance): boolean {
+  return r.applicability === 'affected_inactive';
+}
+
 /**
  * True when the item has a verifiable edge to the user's own machine state —
  * a matched dependency, or a security advisory the backend confirmed affects
@@ -40,6 +45,13 @@ export function isGrounded(r: SourceRelevance): boolean {
   // must never occupy the highest-trust pool, even though the dep-name match
   // is real and strong.
   if (r.applicability === 'not_affected') return false;
+  // Affects ONLY inactive projects (dormant >90 days or a scratch tree its
+  // repository gitignores — audit 2026-10-07, AD-043 amended): the advisory is
+  // true and stays named on the item and under Preemption's "Dormant
+  // projects", but it is not about code the user is working on. Explicit even
+  // though the backend also clears the grounding flags, so a stale flag can
+  // never put it back in the highest-trust pool.
+  if (isAffectedInactive(r)) return false;
   return (
     // Independent advisory routes — a backend-confirmed CVE edge grounds the
     // item regardless of dep-name matching (kept so a real advisory whose title

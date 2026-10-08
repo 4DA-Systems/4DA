@@ -157,6 +157,23 @@ interface BriefingSnapshotResult {
 }
 
 /** Validation result for RSS feed URL. */
+/**
+ * One "Your Stack" row. `included` is the user's toggle; `counts` is the
+ * backend's verdict (`project_inclusion::counts_toward_stack`) — a dormant or
+ * scratch project can be included and still not count until forced in.
+ */
+export interface StackProjectRow {
+  path: string;
+  name: string;
+  dependency_count: number;
+  included: boolean;
+  counts: boolean;
+  forced: boolean;
+  dormant: boolean;
+  dormant_days: number | null;
+  scratch: boolean;
+}
+
 export interface RssFeedValidation {
   valid: boolean;
   feed_title?: string;
@@ -404,7 +421,7 @@ interface CommandMap {
   get_preference_evidence: { params: { facetId: string }; result: { facet_id: string; evidence: Array<{ cue_family: string; evidence_type: string; confidence: number; observed_at: number }>; count: number } };
 
   // -- Context Directories --
-  get_context_dirs: { params: Record<string, never>; result: string[] };
+  get_context_dirs: { params: Record<string, never>; result: Array<{ path: string; exists: boolean }> };
   set_context_dirs: { params: { dirs: string[] }; result: void };
 
   // -- Monitoring --
@@ -785,8 +802,8 @@ interface CommandMap {
 
   // -- Dependency Intelligence --
   get_dependency_overview: { params: Record<string, never>; result: DependencyOverview };
-  list_projects_with_stack_status: { params: Record<string, never>; result: Array<{ path: string; name: string; dependency_count: number; included: boolean }> };
-  set_project_in_stack: { params: { path: string; included: boolean }; result: void };
+  list_projects_with_stack_status: { params: Record<string, never>; result: StackProjectRow[] };
+  set_project_in_stack: { params: { path: string; included: boolean; force?: boolean }; result: void };
   get_project_deps: { params: { projectPath: string }; result: ProjectDepsResult };
   get_dependency_alerts: { params: Record<string, never>; result: DependencyAlertsResult };
   resolve_dependency_alert: { params: { alertId: number }; result: void };
