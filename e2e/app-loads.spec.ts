@@ -62,7 +62,19 @@ test.describe('App Startup', () => {
     // animated BrandMark; it has no visible "4DA" text (the h1 lives in <main>).
     const header = page.getByRole('banner', { name: '4DA' });
     await expect(header).toBeVisible({ timeout: 10000 });
-    await expect(header.locator('.brand-mark-container svg')).toBeVisible();
+    // The mark is a sprite sheet of 72 frames clipped to one cell (BrandMark),
+    // so assert it the way a user sees it: the mark and the clipped viewport
+    // that paints the current frame, both visible and sized. In the header it
+    // is decorative (aria-hidden wrapper; the status text sits beside it), so
+    // it is located by class, not by role.
+    const mark = header.locator('.brand-mark-container');
+    await expect(mark).toBeVisible();
+    const viewport = mark.locator('.brand-mark-viewport');
+    await expect(viewport).toBeVisible();
+    const box = await viewport.boundingBox();
+    expect(box?.width ?? 0).toBeGreaterThan(0);
+    expect(box?.height ?? 0).toBeGreaterThan(0);
+    await expect(mark.locator('.brand-mark-sharp')).toBeAttached();
   });
 
   test('settings button renders in header', async ({ page }) => {

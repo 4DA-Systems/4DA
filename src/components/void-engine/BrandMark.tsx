@@ -1,17 +1,10 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-import { useMemo, useId, useEffect, useLayoutEffect, useRef } from "react";
+import { useMemo, useId, useSyncExternalStore } from "react";
 import type { CSSProperties } from "react";
 import type { VoidSignal } from "../../types";
-import {
-  BASE_FRAME_MS,
-  EDGE_COUNT,
-  FACE_COUNT,
-  VERT_COUNT,
-  computeGeometry,
-  drawBrandMark,
-  frameIntervalMs,
-} from "./brand-mark-geometry";
-import type { BrandMarkSlots } from "./brand-mark-geometry";
+import { loopDurationMs } from "./brand-mark-geometry";
+import { BrandMarkSprite } from "./BrandMarkSprite";
+import { BRAND_MARK_CSS } from "./brand-mark-css";
 import { deriveSignalVisuals } from "./signal-visuals";
 import { useTheme } from "../../lib/theme";
 import { isMotionAllowed, subscribeMotionGate } from "../../lib/motion-gate";
@@ -21,102 +14,34 @@ interface BrandMarkProps {
   size?: number;
 }
 
-const range = (n: number) => Array.from({ length: n }, (_, i) => i);
-
 /**
  * 4DA brand mark — 3D rotating tetrahedron.
  *
- * 4 vertices, 6 edges, 4 faces. Real 3D geometry with compound rotation,
- * perspective projection, depth-sorted face fills, and depth-scaled edges.
- * Signal-responsive: color, glow, and rotation speed.
+ * 4 vertices, 6 edges, 4 faces. Real 3D geometry with perspective projection,
+ * depth-sorted face fills, and depth-scaled edges. Signal-responsive: colour,
+ * glow, and rotation speed.
  *
- * Cost discipline (audit 2026-10-07: an idle header mark drove ~2,500 DOM
- * mutations/s through three setState calls per frame): the loop writes
- * attributes onto fixed SVG slots through refs — React renders only the
- * structure and colours. It steps only as often as the slow rotation needs
- * (8-30 fps), stops while the window is hidden, and never starts under
- * prefers-reduced-motion (a static frame is drawn instead). The ambient
- * breath is a CSS animation (App.css `brand-mark-breathe`), not a timer.
+ * Cost discipline (audit 2026-10-07): the mark used to be redrawn from
+ * JavaScript — first three setState calls per frame, then ~100 SVG attribute
+ * writes per frame through refs, and every frame re-rasterised a blurred SVG.
+ * Now the geometry is projected ONCE into a sprite sheet of one third of a
+ * turn (the tetrahedron's symmetry makes that a full loop) and the rotation
+ * is a CSS steps() animation of the sheet's transform; the breath is a
+ * transform/opacity animation. All of it runs on the compositor: zero
+ * JavaScript per frame, and the glow is rasterised once.
+ *
+ * - Speed: the signal sets the loop duration through `--bm-loop`.
+ * - Hidden window: the motion gate sets `data-motion="paused"` (an event, not
+ *   a loop) and CSS pauses every animation.
+ * - prefers-reduced-motion: CSS drops the animations; the first frame shows.
  */
 export function BrandMark({ signal, size = 36 }: BrandMarkProps) {
-  const filterId = useId().replace(/:/g, "");
+  const filterId = `bm-glow-${useId().replace(/:/g, "")}`;
   const { isLight } = useTheme();
+  const motionAllowed = useSyncExternalStore(subscribeMotionGate, isMotionAllowed, () => false);
 
   const { glowOpacity, edgeColor, vertexColor, faceColor, stateLabel, rotSpeed } =
     useMemo(() => deriveSignalVisuals(signal, isLight), [signal, isLight]);
-
-  const angleYRef = useRef(0);
-  const frameRef = useRef(0); // secondary-motion clock, in 30fps frames
-  const speedRef = useRef(rotSpeed);
-  speedRef.current = rotSpeed;
-  const sizeRef = useRef(size);
-  sizeRef.current = size;
-
-  const facesRef = useRef<SVGGElement>(null);
-  const glowRef = useRef<SVGGElement>(null);
-  const edgesRef = useRef<SVGGElement>(null);
-  const vertsRef = useRef<SVGGElement>(null);
-
-  const draw = () => {
-    const slots: BrandMarkSlots = {
-      faces: facesRef.current,
-      glow: glowRef.current,
-      edges: edgesRef.current,
-      verts: vertsRef.current,
-    };
-    drawBrandMark(slots, computeGeometry(angleYRef.current, frameRef.current), sizeRef.current);
-  };
-  const drawRef = useRef(draw);
-  drawRef.current = draw;
-
-  // Static frame on mount and whenever the size (stroke/vertex scale) changes.
-  useLayoutEffect(() => {
-    drawRef.current();
-  }, [size]);
-
-  // Animation loop — gated on visibility + reduced motion.
-  useEffect(() => {
-    let raf = 0;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    let running = false;
-    let last = 0;
-
-    const tick = (time: number) => {
-      raf = 0;
-      if (!running) return;
-      // Time-based so the rotation speed is independent of the step rate.
-      const steps = last === 0 ? 1 : Math.min(time - last, 250) / BASE_FRAME_MS;
-      last = time;
-      angleYRef.current += speedRef.current * steps;
-      frameRef.current += steps;
-      drawRef.current();
-      timer = setTimeout(() => {
-        timer = undefined;
-        if (running) raf = requestAnimationFrame(tick);
-      }, frameIntervalMs(sizeRef.current, speedRef.current));
-    };
-    const start = () => {
-      if (running) return;
-      running = true;
-      last = 0;
-      raf = requestAnimationFrame(tick);
-    };
-    const stop = () => {
-      running = false;
-      if (raf) cancelAnimationFrame(raf);
-      if (timer !== undefined) clearTimeout(timer);
-      raf = 0;
-      timer = undefined;
-    };
-    const sync = () => (isMotionAllowed() ? start() : stop());
-
-    sync();
-    const unsubscribe = subscribeMotionGate(sync);
-    return () => {
-      unsubscribe();
-      stop();
-    };
-  }, []);
 
   const showLabel = size >= 100;
   const itemCount = signal?.item_count ?? 0;
@@ -129,7 +54,13 @@ export function BrandMark({ signal, size = 36 }: BrandMarkProps) {
 
   const ariaLabel = `4DA status: ${stateLabel}${itemCount > 0 ? `, ${itemCount} items found` : ""}`;
 
-  const glowStyle = { "--bm-glow": glowOpacity.toFixed(3) } as CSSProperties;
+  const markVars = {
+    "--bm-glow": glowOpacity.toFixed(3),
+    "--bm-edge": edgeColor,
+    "--bm-vertex": vertexColor,
+    "--bm-face": faceColor,
+    "--bm-loop": `${loopDurationMs(rotSpeed)}ms`,
+  } as CSSProperties;
 
   return (
     <div
@@ -138,7 +69,9 @@ export function BrandMark({ signal, size = 36 }: BrandMarkProps) {
       aria-live="polite"
       title={titleParts.join(" · ")}
       aria-label={ariaLabel}
+      data-motion={motionAllowed ? "running" : "paused"}
       style={{
+        ...markVars,
         width: size,
         height: size,
         position: "relative",
@@ -147,59 +80,13 @@ export function BrandMark({ signal, size = 36 }: BrandMarkProps) {
         justifyContent: "center",
       }}
     >
-      <svg
-        className="brand-mark-svg"
-        width={size}
-        height={size}
-        viewBox="0 0 100 100"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-        style={{ display: "block" }}
-      >
-        <defs>
-          <filter id={`glow-${filterId}`} x="-50%" y="-50%" width="200%" height="200%">
-            <feGaussianBlur in="SourceGraphic" stdDeviation="3" result="blur" />
-            <feMerge>
-              <feMergeNode in="blur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-        </defs>
-
-        {/* Face fills — semi-transparent, painted back-to-front. Gives mass. */}
-        <g ref={facesRef} data-slot="faces">
-          {range(FACE_COUNT).map((i) => (
-            <polygon key={`f${i}`} fill={faceColor} />
-          ))}
-        </g>
-
-        {/* Edge glow layer — breathes with the ambient CSS pulse */}
-        <g
-          ref={glowRef}
-          data-slot="glow"
-          className="brand-mark-glow"
-          style={glowStyle}
-          filter={`url(#glow-${filterId})`}
-        >
-          {range(EDGE_COUNT).map((i) => (
-            <line key={`g${i}`} stroke={vertexColor} strokeLinecap="round" />
-          ))}
-        </g>
-
-        {/* Sharp edge layer — depth-sorted, width + brightness by depth */}
-        <g ref={edgesRef} data-slot="edges">
-          {range(EDGE_COUNT).map((i) => (
-            <line key={`e${i}`} stroke={edgeColor} strokeLinecap="round" />
-          ))}
-        </g>
-
-        {/* Vertex dots — near vertices draw on top, sized by depth */}
-        <g ref={vertsRef} data-slot="verts">
-          {range(VERT_COUNT).map((i) => (
-            <circle key={`v${i}`} fill={vertexColor} />
-          ))}
-        </g>
-      </svg>
+      {/* React 19 hoists this into <head> once, however many marks render. */}
+      <style href="fourda-brand-mark" precedence="default">
+        {BRAND_MARK_CSS}
+      </style>
+      <div className="brand-mark-viewport" style={{ width: size, height: size }}>
+        <BrandMarkSprite size={size} filterId={filterId} />
+      </div>
 
       {showLabel && (
         <span

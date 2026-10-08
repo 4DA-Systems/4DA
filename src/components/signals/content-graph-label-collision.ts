@@ -8,6 +8,10 @@ export interface LabelOffset {
   dx: number;
   dy: number;
   key: string;
+  /** Node labels only: a slide along the keyed side (content-graph-label-
+   *  fit.ts) that the renderer applies on top of the side's CSS placement. */
+  sx?: number;
+  sy?: number;
 }
 
 /** One label's box at its default placement (top-left + size, flow units). */
@@ -19,7 +23,8 @@ export interface LabelBox {
   h: number;
   /** Higher places first; a lower label never displaces a higher one. */
   priority: number;
-  /** Placements to try, in preference order. The first is the default. */
+  /** Placements to try, in preference order. The first is the default.
+   *  Empty: the label has no acceptable placement and is suppressed. */
   candidates: LabelOffset[];
   /** How much a higher label should avoid covering this one's default spot
    *  while it still waits to be placed (default 1). */
@@ -87,7 +92,7 @@ export function resolveLabelCollisions(
     y: b.y + cands[i]![0]!.dy,
     w: b.w,
     h: b.h,
-    weight: b.weight ?? 1,
+    weight: b.candidates.length > 0 ? (b.weight ?? 1) : 0,
   }));
   // Two labels can only ever touch if the areas their candidates span do:
   // a one-off neighbour list keeps each pass near-linear on sparse maps.
@@ -113,6 +118,10 @@ export function resolveLabelCollisions(
   const placed: Array<Rect | null> = order.map(() => null);
   const out = new Map<string, LabelPlacement>();
   order.forEach((box, idx) => {
+    if (box.candidates.length === 0) {
+      out.set(box.id, { visible: false, offset: DEFAULT_OFFSET });
+      return;
+    }
     const near = neighbours[idx]!;
     let best: { c: LabelOffset; r: Rect; cost: number } | null = null;
     cands[idx]!.forEach((c, ci) => {

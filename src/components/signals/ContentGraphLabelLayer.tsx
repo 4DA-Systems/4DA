@@ -101,6 +101,9 @@ export function applyLabelPlacements(host: ParentNode, placements: Map<string, L
     setAttr(el, 'data-cg-suppressed', p && !p.visible ? 'true' : 'false');
     if (id.startsWith('node:')) {
       setAttr(el, 'data-cg-place', p?.visible ? p.offset.key : 'below');
+      // A slide along that side keeps an edge label on the canvas.
+      setVar(el, '--cg-dx', `${p?.visible ? (p.offset.sx ?? 0) : 0}px`);
+      setVar(el, '--cg-dy', `${p?.visible ? (p.offset.sy ?? 0) : 0}px`);
     } else {
       setVar(el, '--cg-dx', `${p?.visible ? p.offset.dx : 0}px`);
       setVar(el, '--cg-dy', `${p?.visible ? p.offset.dy : 0}px`);
