@@ -31,6 +31,7 @@ pub mod huggingface;
 pub mod lemmy;
 pub mod lobsters;
 pub mod mastodon;
+pub(crate) mod npm_negative_cache;
 pub mod npm_registry;
 pub mod osv;
 mod osv_live;
