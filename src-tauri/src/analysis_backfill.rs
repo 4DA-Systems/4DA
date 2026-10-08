@@ -590,7 +590,7 @@ pub(crate) async fn maintain_scoring_epoch() -> DrainOutcome {
     let Ok(db) = get_database() else {
         return DrainOutcome::default();
     };
-    crate::scoring::context_cache::refresh_context_cache(db, CYCLE_CACHE_BUDGET);
+    crate::scoring::context_cache::refresh_context_cache_off_thread(db, CYCLE_CACHE_BUDGET).await;
 
     let pending = db
         .count_stale_scored_items(scoring::PIPELINE_VERSION)
@@ -611,7 +611,8 @@ pub(crate) async fn maintain_scoring_epoch() -> DrainOutcome {
         // Re-warm periodically: a long drain outlives one cache pass on a cold
         // corpus, and every warmed item makes the rest of the drain cheaper.
         if cycle > 0 && cycle % 10 == 0 {
-            crate::scoring::context_cache::refresh_context_cache(db, CYCLE_CACHE_BUDGET);
+            crate::scoring::context_cache::refresh_context_cache_off_thread(db, CYCLE_CACHE_BUDGET)
+                .await;
         }
         match drain_stale_scores_cycle(BULK_DRAIN_CHUNK).await {
             Ok(p) => {

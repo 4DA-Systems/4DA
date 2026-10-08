@@ -308,10 +308,12 @@ async fn analyze_cached_content_inner(
     // 52 ms KNN per item for work a previous pass already did.
     if drain_backlog {
         if let Ok(db) = get_database() {
-            crate::scoring::context_cache::refresh_context_cache(
+            // Blocking pool: up to the 20 s budget of KNN work (wave 2c).
+            crate::scoring::context_cache::refresh_context_cache_off_thread(
                 db,
                 crate::analysis_backfill::CYCLE_CACHE_BUDGET,
-            );
+            )
+            .await;
         }
     }
     // Judged = this run asked for a rerank AND one actually applied while it

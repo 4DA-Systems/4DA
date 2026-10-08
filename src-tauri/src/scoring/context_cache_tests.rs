@@ -157,3 +157,24 @@ fn empty_delta_is_the_identity() {
         cached
     );
 }
+
+/// A refresh never takes every pooled reader: one stays free for foreground
+/// IPC reads, which otherwise fall through to the writer mutex.
+#[test]
+fn refresh_leaves_a_reader_free() {
+    for pool in 0..=16 {
+        for cores in 1..=32 {
+            let threads = refresh_threads(pool, cores);
+            assert!(threads <= cores, "never more threads than cores");
+            if pool > 0 {
+                assert!(
+                    threads < pool,
+                    "pool {pool}: {threads} threads take every reader"
+                );
+            }
+        }
+    }
+    assert_eq!(refresh_threads(4, 8), 3);
+    assert_eq!(refresh_threads(4, 2), 2);
+    assert_eq!(refresh_threads(1, 8), 0, "a pool of one runs sequentially");
+}
