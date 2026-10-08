@@ -153,6 +153,8 @@ async fn run_discovery(dirs: Option<Vec<String>>) -> Result<serde_json::Value> {
 
     {
         let mut settings = get_settings_manager().lock();
+        // Pressing Scan is the consent; `add_context_dirs` persists it.
+        settings.record_discovery_consent();
         if let Err(e) = settings.add_context_dirs(dirs_to_add.clone()) {
             return Err(format!("Failed to save discovered directories: {e}").into());
         }

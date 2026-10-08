@@ -651,6 +651,11 @@ pub struct Settings {
     /// Whether first-run auto-discovery has been completed
     #[serde(default)]
     pub auto_discovery_completed: bool,
+    /// Consent to scan home folders for projects: `Some(true)` once the user
+    /// ran a scan, `Some(false)` when onboarding finished without one, `None`
+    /// when never asked. Startup discovery runs only on `Some(true)`.
+    #[serde(default)]
+    pub discovery_consent: Option<bool>,
     /// Whether onboarding wizard has been completed
     #[serde(default)]
     pub onboarding_complete: bool,
@@ -741,6 +746,7 @@ impl std::fmt::Debug for Settings {
             .field("embedding_threshold", &self.embedding_threshold)
             .field("monitoring", &self.monitoring)
             .field("auto_discovery_completed", &self.auto_discovery_completed)
+            .field("discovery_consent", &self.discovery_consent)
             .field("onboarding_complete", &self.onboarding_complete)
             .field("auto_assess_blind_spots", &self.auto_assess_blind_spots)
             .field("rss_feeds", &format!("[{} feeds]", self.rss_feeds.len()))
@@ -939,6 +945,7 @@ impl Default for Settings {
             embedding_threshold: 0.50,
             monitoring: MonitoringConfig::default(),
             auto_discovery_completed: false,
+            discovery_consent: None,
             onboarding_complete: false,
             auto_assess_blind_spots: true,
             digest: DigestConfig::default(),

@@ -594,4 +594,80 @@ mod tests {
 
         let _ = std::fs::remove_dir_all(&tmp);
     }
+
+    // ========================================================================
+    // Discovery consent -- startup never scans home folders unasked
+    // ========================================================================
+
+    fn consent_manager(name: &str) -> (SettingsManager, std::path::PathBuf) {
+        let tmp = std::env::temp_dir().join(name);
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).expect("create temp dir");
+        (SettingsManager::new_without_keychain(&tmp), tmp)
+    }
+
+    #[test]
+    fn skipping_the_scan_in_onboarding_declines_startup_discovery() {
+        let (mut manager, tmp) = consent_manager("4da_test_consent_skip");
+        manager.mark_onboarding_complete().expect("complete");
+        assert_eq!(manager.get().discovery_consent, Some(false));
+        assert!(manager.needs_auto_discovery());
+        assert!(!manager.startup_discovery_allowed());
+
+        // The decline survives a restart.
+        let reloaded = SettingsManager::new_without_keychain(&tmp);
+        assert_eq!(reloaded.get().discovery_consent, Some(false));
+        assert!(!reloaded.startup_discovery_allowed());
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn startup_discovery_needs_explicit_consent() {
+        let (mut manager, tmp) = consent_manager("4da_test_consent_never_asked");
+        // Pre-change profile: onboarding done, nothing configured, never asked.
+        manager.get_mut().onboarding_complete = true;
+        assert_eq!(manager.get().discovery_consent, None);
+        assert!(
+            !manager.startup_discovery_allowed(),
+            "never asked is not consent"
+        );
+
+        manager.record_discovery_consent();
+        assert!(manager.startup_discovery_allowed());
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn consent_before_onboarding_finishes_is_kept_and_not_used_early() {
+        let (mut manager, tmp) = consent_manager("4da_test_consent_scan_first");
+        manager.record_discovery_consent();
+        assert!(
+            !manager.startup_discovery_allowed(),
+            "not before onboarding completes"
+        );
+        manager.mark_onboarding_complete().expect("complete");
+        assert_eq!(manager.get().discovery_consent, Some(true));
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn configured_folders_count_as_consent_and_need_no_discovery() {
+        let (mut manager, tmp) = consent_manager("4da_test_consent_existing_dirs");
+        manager
+            .add_context_dirs(vec!["/home/dev/project".into()])
+            .expect("add dirs");
+        manager.mark_onboarding_complete().expect("complete");
+        // Not recorded as a decline: the user has folders, so ACE indexes them.
+        assert_eq!(manager.get().discovery_consent, None);
+        assert!(!manager.needs_auto_discovery());
+        assert!(!manager.startup_discovery_allowed());
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
+
+    #[test]
+    fn legacy_settings_without_the_field_load_as_never_asked() {
+        let settings: Settings =
+            serde_json::from_str(r#"{"onboarding_complete": true}"#).expect("parse");
+        assert_eq!(settings.discovery_consent, None);
+    }
 }

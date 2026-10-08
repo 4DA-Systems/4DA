@@ -2569,20 +2569,20 @@ fn initialize_ace_on_startup(app_handle: tauri::AppHandle) {
         return;
     }
 
-    // Check if auto-discovery is needed (first run with no context dirs)
-    let (needs_discovery, onboarding_done) = {
+    // Check if auto-discovery is needed (no context dirs) and consented to
+    let (needs_discovery, discovery_allowed) = {
         let settings = get_settings_manager().lock();
         (
             settings.needs_auto_discovery(),
-            settings.get().onboarding_complete,
+            settings.startup_discovery_allowed(),
         )
     };
 
-    // Privacy: do NOT auto-scan directories before the user completes onboarding.
-    // The user should explicitly add project directories during onboarding.
-    // Auto-discovery only runs for returning users who have no context dirs configured.
-    if needs_discovery && !onboarding_done {
-        info!(target: "4da::startup", "First run — deferring ACE discovery until onboarding completes");
+    // Privacy: never scan home folders without consent. Before onboarding the
+    // user has not been asked; a user who skipped the scan declined it; a user
+    // who was never asked has not consented. Settings → Projects keeps Scan.
+    if needs_discovery && !discovery_allowed {
+        info!(target: "4da::startup", "No discovery consent — skipping startup ACE discovery");
     } else if needs_discovery {
         info!(target: "4da::startup", "Post-onboarding run with no context dirs — running discovery");
         let _ = app_handle.emit(
