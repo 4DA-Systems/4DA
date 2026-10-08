@@ -30,6 +30,7 @@ pub(crate) mod epochs;
 mod explanation;
 mod explanation_chain;
 mod gate;
+pub(crate) mod inactive_scope;
 #[cfg(test)]
 mod judge_agreement_live;
 #[cfg(test)]
@@ -673,7 +674,22 @@ pub(crate) use types::{ScoringInput, ScoringOptions};
 // type), so the bump is NOT registered: the whole corpus re-scores locally.
 // LLM judge verdicts are keyed by the judge PROMPT_VERSION, not this constant,
 // so the drain spends no LLM calls beyond the fixed per-cycle judge envelope.
-pub(crate) const PIPELINE_VERSION: i32 = 39;
+// v40 (2026-10-07, audit: the Signal hero and "Affects You" led with
+// "[RUSTSEC-2026-0190] anyhow … affects anyhow in 4da/victauri-gauntlet", a
+// gitignored folder dormant 161 days while every live project ran the fix):
+// one stack rule per PROJECT (`project_inclusion::counts_toward_stack` —
+// excluded, dormant >90 d or scratch never counts; AD-043 amended).
+// (1) the dependency grounding set (`temporal::get_all_dependencies`) drops
+// inactive projects even under an active repository root, so `matched_deps`,
+// `dep_match_score` and `strongly_grounded` can change for any item naming a
+// package only an inactive project uses; (2) an advisory whose every affected
+// project is inactive is `applicability = "affected_inactive"`, never a
+// critical alert, a dependency event or strongly grounded, its tier capped at
+// Advisory. (1) reaches any dependency-grounded row, so the bump is NOT
+// registered: the whole corpus re-scores locally. Judge verdicts are keyed by
+// the judge PROMPT_VERSION, not this constant — no LLM spend beyond the fixed
+// per-cycle envelope.
+pub(crate) const PIPELINE_VERSION: i32 = 40;
 
 /// Parse the topic tags carried in the `source_items.tags` column.
 ///

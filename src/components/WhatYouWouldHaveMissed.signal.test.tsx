@@ -210,3 +210,30 @@ describe('heroCandidates — ONE definition of "signal"', () => {
     expect(findMostCriticalSave(heroCandidates([rejectedCve]))).toBeNull();
   });
 });
+
+describe('findMostCriticalSave never picks an advisory about inactive projects', () => {
+  // Live 2026-10-07: "[RUSTSEC-2026-0190] anyhow ... affects anyhow in
+  // 4da/victauri-gauntlet" (a gitignored folder dormant 161 days) led the hero.
+  it('skips affected_inactive even if stale grounding flags survived', () => {
+    const scratchOnly = {
+      ...item({
+        signal_type: 'security_alert',
+        matched_deps: ['anyhow'],
+        strongly_grounded: true,
+        dependency_event: true,
+        is_critical_alert: true,
+      }),
+      applicability: 'affected_inactive',
+    } as SourceRelevance;
+    expect(findMostCriticalSave([scratchOnly])).toBeNull();
+  });
+
+  it('falls through to a live grounded item instead', () => {
+    const scratchOnly = {
+      ...item({ signal_type: 'security_alert', strongly_grounded: false, dependency_event: false }),
+      applicability: 'affected_inactive',
+    } as SourceRelevance;
+    const live = item({ signal_type: 'breaking_change', strongly_grounded: true, matched_deps: ['tauri'] });
+    expect(findMostCriticalSave([scratchOnly, live])).toBe(live);
+  });
+});

@@ -119,7 +119,7 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
   const {
     settings, settingsForm, settingsStatus, ollamaStatus, ollamaModels, modelRegistry,
     monitoring, monitoringInterval,
-    scanDirectories, newScanDir, isScanning, discoveredContext,
+    scanDirectories, missingScanDirectories, newScanDir, isScanning, discoveredContext,
   } = useAppStore(
     useShallow((s) => ({
       settings: s.settings,
@@ -131,6 +131,7 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
       monitoring: s.monitoring,
       monitoringInterval: s.monitoringInterval,
       scanDirectories: s.scanDirectories,
+      missingScanDirectories: s.missingScanDirectories,
       newScanDir: s.newScanDir,
       isScanning: s.isScanning,
       discoveredContext: s.discoveredContext,
@@ -331,7 +332,7 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
             <div id="tabpanel-projects" role="tabpanel" aria-labelledby="tab-projects">
               <div className="space-y-6">
                 <PanelErrorBoundary name="Context Discovery">
-                  <ContextDiscoverySection scanDirectories={scanDirectories} newScanDir={newScanDir} setNewScanDir={setNewScanDir}
+                  <ContextDiscoverySection scanDirectories={scanDirectories} missingScanDirectories={missingScanDirectories} newScanDir={newScanDir} setNewScanDir={setNewScanDir}
                     isScanning={isScanning} discoveredContext={discoveredContext} runAutoDiscovery={() => { void runAutoDiscovery(); }}
                     runFullScan={() => { void runFullScan(); }} addScanDirectory={() => { void addScanDirectory(); }} removeScanDirectory={(dir: string) => { void removeScanDirectory(dir); }} />
                 </PanelErrorBoundary>

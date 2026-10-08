@@ -4,6 +4,8 @@ import { formatLocalDate } from '../../utils/format-date';
 
 interface ContextDiscoverySectionProps {
   scanDirectories: string[];
+  /** Configured directories that do not exist on this machine. */
+  missingScanDirectories?: string[];
   newScanDir: string;
   setNewScanDir: (val: string) => void;
   isScanning: boolean;
@@ -20,6 +22,7 @@ interface ContextDiscoverySectionProps {
 
 export function ContextDiscoverySection({
   scanDirectories,
+  missingScanDirectories = [],
   newScanDir,
   setNewScanDir,
   isScanning,
@@ -85,7 +88,14 @@ export function ContextDiscoverySection({
               <div className="space-y-1.5 max-h-32 overflow-y-auto">
                 {scanDirectories.map((dir) => (
                   <div key={dir} className="flex items-center justify-between px-3 py-2 bg-bg-secondary rounded-lg border border-border group">
-                    <span className="font-mono text-sm text-text-primary truncate">{dir}</span>
+                    <span className="min-w-0 flex items-center gap-2">
+                      <span className={`font-mono text-sm truncate ${missingScanDirectories.includes(dir) ? 'text-text-muted line-through' : 'text-text-primary'}`}>{dir}</span>
+                      {missingScanDirectories.includes(dir) && (
+                        <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] bg-bg-tertiary text-text-muted border border-border">
+                          {t('settings.context.notOnThisMachine')}
+                        </span>
+                      )}
+                    </span>
                     <button
                       onClick={() => removeScanDirectory(dir)}
                       aria-label={t('settings.context.removeDir', { dir })}

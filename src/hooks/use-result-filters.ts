@@ -61,7 +61,8 @@ export function stackAdvisories(items: SourceRelevance[]): SourceRelevance[] {
     const applicabilityRank = (r: SourceRelevance) =>
       r.applicability === 'affected' ? 0
       : r.applicability === 'likely_affected' ? 1
-      : r.applicability === 'not_affected' ? 3
+      : r.applicability === 'affected_inactive' ? 3
+      : r.applicability === 'not_affected' ? 4
       : 2;
     group.sort((a, b) => (applicabilityRank(a) - applicabilityRank(b)) || (b.top_score - a.top_score));
     const rep = { ...group[0]! };
@@ -186,7 +187,7 @@ export const useResultFilters = () => {
       critical: 0, alert: 1, advisory: 2, watch: 3,
     };
     const applicabilityOrder: Record<string, number> = {
-      affected: 0, likely_affected: 1, needs_verification: 2, not_affected: 3,
+      affected: 0, likely_affected: 1, needs_verification: 2, affected_inactive: 3, not_affected: 4,
     };
     const urgencyOrder: Record<string, number> = {
       immediate: 0, this_week: 1, awareness: 2, none: 3,

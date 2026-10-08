@@ -465,3 +465,104 @@ fn confirmed_registry_advisory_keeps_the_affects_banner() {
         "confirmed advisory banner: {action}"
     );
 }
+
+/// Audit 2026-10-07: the version-confirmed matcher's ONLY exposed copy sits in
+/// a scratch tree its repository gitignores (live: `anyhow` in
+/// `4da/victauri-gauntlet`, dormant 161 days, every live project on the fix).
+/// The advisory stays named — `affected_inactive` — but it is not grounded,
+/// not a dependency event, never a critical alert, and capped at Advisory, so
+/// it can reach neither "Affects You" nor the hero.
+#[test]
+fn an_advisory_exposing_only_a_scratch_project_is_affected_inactive() {
+    let db = crate::test_utils::test_db();
+    db.store_dependency(
+        "d:/runyourempire/victauri",
+        "rmcp",
+        Some("3.1.2"),
+        "rust",
+        false,
+        None,
+    )
+    .unwrap();
+    db.store_transitive_dependency(
+        "d:/4da/victauri-gauntlet",
+        "rmcp",
+        Some("1.7.0"),
+        "rust",
+        false,
+    )
+    .unwrap();
+    db.store_dependency_instances(
+        "d:/4da/victauri-gauntlet",
+        "crates.io",
+        &[DependencyInstanceInput {
+            package_name: "rmcp".into(),
+            version: "1.7.0".into(),
+            is_direct: false,
+            is_dev: false,
+            scope: "unknown".into(),
+        }],
+    )
+    .unwrap();
+    db.upsert_osv_advisory_with_meta(
+        "GHSA-9pj6-vhgr-3mwh",
+        "RMCP: Unauthenticated permanent session-table leak",
+        None,
+        "rmcp",
+        "crates.io",
+        Some(r#"[{"type":"SEMVER","events":[{"introduced":"0"},{"fixed":"2.0.0"}]}]"#),
+        Some(r#"["2.0.0"]"#),
+        Some("CVSS_V3"),
+        Some(7.5),
+        None,
+        None,
+        None,
+        None,
+        Some(r#"["CVE-2026-63128"]"#),
+        Some("high"),
+    )
+    .unwrap();
+    {
+        let conn = db.conn.lock();
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS detected_projects (
+                path TEXT NOT NULL UNIQUE, name TEXT NOT NULL,
+                last_activity TEXT, scratch INTEGER NOT NULL DEFAULT 0);",
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO detected_projects (path, name, last_activity, scratch)
+             VALUES ('D:\\4DA\\victauri-gauntlet', 'victauri-gauntlet', '2026-04-28T19:28:43Z', 1)",
+            [],
+        )
+        .unwrap();
+    }
+    let ctx = ctx_with_dep("rmcp", "rust", "3.1.2", "d:/runyourempire/victauri");
+    let zero = vec![0.0_f32; crate::EMBEDDING_DIMS];
+    let classifier = signals::SignalClassifier::new();
+    let result = score_item(
+        &input(RMCP_TITLE, RMCP_URL, RMCP_CONTENT, &zero),
+        &ctx,
+        &db,
+        &signal_options(),
+        Some(&classifier),
+    );
+    let bd = result.score_breakdown.as_ref().expect("breakdown");
+    assert_eq!(
+        bd.is_version_affected,
+        Some(true),
+        "the advisory is still true"
+    );
+    assert_eq!(result.signal_type.as_deref(), Some("security_alert"));
+    assert_eq!(result.applicability.as_deref(), Some("affected_inactive"));
+    assert!(
+        !bd.strongly_grounded,
+        "an inactive-only exposure does not ground"
+    );
+    assert!(
+        !bd.dependency_event,
+        "nor is it an event in the user's stack"
+    );
+    assert_never_interrupts(&result);
+    assert_eq!(result.signal_priority.as_deref(), Some("advisory"));
+}

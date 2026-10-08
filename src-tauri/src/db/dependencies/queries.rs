@@ -489,8 +489,18 @@ impl Database {
             })
             .collect(),
         );
-        // "What are you working on" — strictly active-scoped, unchanged.
-        Ok(scope_to_active_roots(&conn, included, "relevant", false))
+        // "What are you working on" — strictly active-scoped, and per PROJECT
+        // since 2026-10-07: a dormant or scratch project nested under a busy
+        // repository root is not work in progress, so it never feeds this
+        // high-urgency notification path (`project_inclusion::counts_toward_stack`).
+        let scoped = scope_to_active_roots(&conn, included, "relevant", false);
+        let membership = crate::project_inclusion::StackMembership::load(&conn);
+        Ok(crate::project_inclusion::retain_stack_projects(
+            scoped,
+            |d: &StoredDependency| d.project_path.as_str(),
+            &membership,
+        )
+        .0)
     }
 
     /// Delete `user_dependencies` rows of one (project, ecosystem) whose

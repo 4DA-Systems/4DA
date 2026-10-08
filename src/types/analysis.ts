@@ -43,7 +43,8 @@ export interface SourceRelevance {
   created_at?: string;
   /** Whether this item should display in critical alert banner (verified dependency match) */
   is_critical_alert?: boolean;
-  /** Applicability assessment: affected | likely_affected | needs_verification | not_affected */
+  /** Applicability assessment: affected | likely_affected | needs_verification | not_affected |
+   *  affected_inactive (affected, but only in dormant / scratch projects — never "Affects You") */
   applicability?: string;
   /** Advisory ID (e.g. "GHSA-xxxx-yyyy-zzzz" or "CVE-2025-1234") */
   advisory_id?: string;

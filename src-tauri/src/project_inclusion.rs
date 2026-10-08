@@ -207,11 +207,20 @@ pub(crate) fn is_user_excluded(path: &str, excluded: &[String]) -> bool {
 /// not yet initialized (unit tests, very early startup). Deliberately a
 /// non-initializing read: initializing settings here would touch disk and the
 /// platform keychain from library code paths that tests exercise.
+///
+/// Force-include entries (`!path`, see [`stack`]) share the stored setting and
+/// are never returned here — a negation is not an exclusion.
 pub(crate) fn user_excluded_paths() -> Vec<String> {
-    crate::state::try_get_settings_manager()
-        .map(|m| m.lock().get_excluded_project_paths())
-        .unwrap_or_default()
+    stack::split_stack_setting(&stack::raw_stack_setting()).0
 }
+
+// "Does this project count toward the user's stack?" — exclusion tiers plus
+// liveness (dormant / scratch), per project (audit 2026-10-07, AD-043 amended).
+#[path = "project_inclusion_stack.rs"]
+mod stack;
+pub(crate) use stack::{
+    apply_stack_choice, counts_toward_stack, retain_stack_projects, StackMembership,
+};
 
 /// The full policy: all three tiers. `user_excluded` is passed in (fetch once
 /// via [`user_excluded_paths`]) so loops don't re-lock settings per item.

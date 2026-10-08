@@ -684,6 +684,9 @@ pub struct Settings {
     /// Local project paths the user has EXCLUDED from their stack. Deps from
     /// these projects (e.g. test fixtures, scaffolding) do not feed relevance
     /// grounding ("Affects You"). Empty = every detected project counts.
+    /// A `!path` entry is the opposite: FORCE-include a project that would
+    /// otherwise not count because it is dormant or scratch
+    /// (`project_inclusion::StackMembership`, audit 2026-10-07).
     #[serde(default)]
     pub excluded_project_paths: Vec<String>,
     /// YouTube channels from defaults that user has disabled
