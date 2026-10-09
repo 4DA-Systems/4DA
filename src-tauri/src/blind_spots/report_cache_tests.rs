@@ -246,6 +246,90 @@ fn invalidations_during_a_rebuild_queue_exactly_one_more_pass() {
     );
 }
 
+static RESTORE_GATE: parking_lot::Mutex<()> = parking_lot::Mutex::new(());
+
+fn restore_rebuild() -> crate::error::Result<u32> {
+    let _wait = RESTORE_GATE.lock();
+    Ok(42)
+}
+
+#[test]
+fn a_restored_snapshot_serves_at_once_while_the_rebuild_runs() {
+    let cache = leaked();
+    let gate = RESTORE_GATE.lock(); // hold the rebuild mid-flight
+    assert!(cache.serve_restored(5, "restored", restore_rebuild));
+    // The previous run's report answers immediately — no cold build.
+    assert_eq!(
+        cache
+            .get_or_compute(|| panic!("a reader must not build while the rebuild runs"))
+            .unwrap(),
+        5
+    );
+    drop(gate);
+    wait_for("the rebuilt report", || cache.servable() == Some(42));
+    wait_for("the rebuild to finish", || {
+        !cache.refresh_in_flight.load(Ordering::SeqCst)
+    });
+    assert_eq!(cache.get_or_compute(|| Ok(0)).unwrap(), 42);
+}
+
+fn failing_restore_rebuild() -> crate::error::Result<u32> {
+    Err(crate::error::FourDaError::Internal("boom".into()))
+}
+
+#[test]
+fn a_restored_snapshot_is_not_served_once_its_rebuild_fails() {
+    let cache = leaked();
+    assert!(cache.serve_restored(5, "restored", failing_restore_rebuild));
+    wait_for("the failed rebuild", || {
+        !cache.refresh_in_flight.load(Ordering::SeqCst)
+    });
+    assert!(
+        cache.servable().is_none(),
+        "never an old run's report forever"
+    );
+    assert_eq!(cache.get_or_compute(|| Ok(8)).unwrap(), 8);
+}
+
+static JOIN_GATE: parking_lot::Mutex<()> = parking_lot::Mutex::new(());
+static JOIN_BUILDS: AtomicUsize = AtomicUsize::new(0);
+
+fn join_build() -> crate::error::Result<u32> {
+    let _wait = JOIN_GATE.lock();
+    Ok(JOIN_BUILDS.fetch_add(1, Ordering::SeqCst) as u32 + 50)
+}
+
+#[test]
+fn a_restore_during_a_running_refresh_rides_on_it() {
+    let cache = leaked();
+    let gate = JOIN_GATE.lock();
+    // The first post-cycle refresh starts before anyone opened the tab.
+    assert!(cache.invalidate_and_prewarm("post-cycle", true, join_build));
+    wait_for("the refresh to start", || {
+        cache.refresh_in_flight.load(Ordering::SeqCst)
+    });
+    assert!(cache.serve_restored(5, "restored", join_build));
+    assert_eq!(cache.servable(), Some(5), "the seed serves meanwhile");
+    drop(gate);
+    wait_for("the refresh to finish", || {
+        !cache.refresh_in_flight.load(Ordering::SeqCst)
+    });
+    assert_eq!(
+        JOIN_BUILDS.load(Ordering::SeqCst),
+        1,
+        "no second build queued"
+    );
+    assert_eq!(cache.servable(), Some(50));
+}
+
+#[test]
+fn a_restore_never_replaces_a_value_this_run_computed() {
+    let cache = leaked();
+    cache.get_or_compute(|| Ok(7)).unwrap();
+    assert!(!cache.serve_restored(5, "restored", restore_rebuild));
+    assert_eq!(cache.servable(), Some(7));
+}
+
 #[test]
 fn the_engine_cycle_pre_warms_the_blind_spot_cache() {
     let setup = include_str!("../app_setup.rs");
@@ -280,6 +364,63 @@ fn the_phase_clock_records_phases_in_order() {
         vec!["first", "second"]
     );
     assert!(phases[1].1 >= 10, "the second lap measured the sleep");
+}
+
+/// The first Blind Spots open after a restart: what the persisted report
+/// costs to serve, against the cold build it replaces. Writes the snapshot
+/// next to the SNAPSHOT database it builds from.
+#[test]
+#[ignore = "requires FOURDA_DB_PATH pointing at a real database snapshot"]
+fn live_restart_serves_the_persisted_report() {
+    let Ok(path) = std::env::var("FOURDA_DB_PATH") else {
+        return;
+    };
+    let seam = rusqlite::Connection::open(&path).expect("open snapshot");
+    super::super::test_support::install_test_conn(seam);
+    let t = Instant::now();
+    let built = super::super::build_cached_blind_spots().expect("cold build + persist");
+    let cold_ms = t.elapsed().as_millis();
+    let file = super::super::report_snapshot::snapshot_path(super::super::SNAPSHOT_FILE);
+    let bytes = std::fs::metadata(&file).map(|m| m.len()).unwrap_or(0);
+    let t = Instant::now();
+    let restored = super::super::restore_blind_spot_snapshot_once().expect("restores");
+    let restore_ms = t.elapsed().as_millis();
+    println!(
+        "cold build + items {cold_ms} ms; persisted {bytes} bytes; restore {restore_ms} ms \
+         ({} items, computed_at {:?})",
+        restored.items.len(),
+        restored
+            .report
+            .data_freshness
+            .as_ref()
+            .and_then(|f| f.computed_at.clone())
+    );
+    assert_eq!(
+        serde_json::to_value(&restored.report).unwrap(),
+        serde_json::to_value(&built.report).unwrap(),
+        "the restored report is the persisted one"
+    );
+    assert_eq!(restored.items, built.items);
+}
+
+/// One uncached report and its items as JSON, for an old-binary vs
+/// new-binary comparison of the same snapshot (`FOURDA_DUMP_TO=<file>`).
+#[test]
+#[ignore = "requires FOURDA_DB_PATH pointing at a real database snapshot"]
+fn live_dump_blind_spot_report() {
+    let (Ok(path), Ok(out)) = (
+        std::env::var("FOURDA_DB_PATH"),
+        std::env::var("FOURDA_DUMP_TO"),
+    ) else {
+        return;
+    };
+    let seam = rusqlite::Connection::open(&path).expect("open snapshot");
+    super::super::test_support::install_test_conn(seam);
+    let (report, _) =
+        super::super::generate_blind_spot_report_profiled().expect("report on snapshot");
+    let items = super::super::blind_spot_report_items(&report);
+    let dump = serde_json::json!({ "report": report, "items": items });
+    std::fs::write(out, serde_json::to_string_pretty(&dump).expect("json")).expect("write");
 }
 
 /// Where a cold build spends its time, on a SNAPSHOT (the opens migrate it;

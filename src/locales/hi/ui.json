@@ -176,6 +176,7 @@
   "blindspots.signal.showLess": "कम दिखाएँ",
   "blindspots.staleData": "स्रोत फ़ीड 72 घंटों से अधिक समय से अपडेट नहीं हुई हैं। कवरेज डेटा अपडेट करने के लिए फ़ेच चलाएं।",
   "blindspots.staleDataAge": "स्रोत फ़ीड अंतिम बार {{days}} दिन पहले अपडेट हुई। कवरेज डेटा हाल की गतिविधि को प्रतिबिंबित नहीं कर सकता है।",
+  "blindspots.reportAge": "विश्लेषण की गणना {{age}} हुई",
   "blindspots.status.blindSpot": "अंधा स्थान",
   "blindspots.status.covered": "कवर किया गया",
   "blindspots.status.drifting": "विचलित",

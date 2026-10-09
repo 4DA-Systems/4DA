@@ -28,7 +28,7 @@ use super::KnowledgeGap;
 /// 30-day windows and advisory mirror move on.
 const MAX_AGE: Duration = Duration::from_hours(6);
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub(super) struct CacheKey {
     engine_run: i64,
     engagement: i64,
@@ -104,6 +104,22 @@ impl GapsCache {
         }
     }
 
+    /// Fill an EMPTY slot with a result computed `age` ago for `key` (the
+    /// previous run's, from disk). It then expires on the usual schedule.
+    pub(super) fn seed(&self, key: CacheKey, gaps: Vec<KnowledgeGap>, age: Duration) -> bool {
+        let mut slot = self.slot.lock();
+        if slot.is_some() {
+            return false;
+        }
+        let now = Instant::now();
+        *slot = Some(Entry {
+            key,
+            computed_at: now.checked_sub(age).unwrap_or(now),
+            gaps,
+        });
+        true
+    }
+
     fn fresh(&self, key: CacheKey) -> Option<Vec<KnowledgeGap>> {
         let slot = self.slot.lock();
         slot.as_ref()
@@ -138,10 +154,78 @@ impl GapsCache {
 
 static CACHE: GapsCache = GapsCache::new();
 
+/// The persisted last result — see `blind_spots::report_snapshot`.
+const SNAPSHOT_FILE: &str = "knowledge_gaps_snapshot.json";
+
+/// A result on disk with the inputs it was computed for.
+#[derive(serde::Serialize, serde::Deserialize)]
+struct Persisted {
+    key: CacheKey,
+    gaps: Vec<KnowledgeGap>,
+}
+
 /// Knowledge gaps for every caller. Blocking on a cold cache — call it off
 /// the UI thread (the Tauri command runs it in `spawn_blocking`).
+///
+/// After a restart, the previous run's result is reused when it was computed
+/// for EXACTLY the current inputs (same engine run, engagement and dependency
+/// counts, within [`MAX_AGE`]) — the answer a recompute would give, without
+/// the pass. Any other input recomputes, as before.
 pub fn cached_knowledge_gaps(conn: &rusqlite::Connection) -> Result<Vec<KnowledgeGap>> {
-    CACHE.get_or_compute(CacheKey::read(conn), || super::detect_knowledge_gaps(conn))
+    let key = CacheKey::read(conn);
+    if let Some(hit) = CACHE.fresh(key) {
+        return Ok(hit);
+    }
+    if let Some((gaps, age)) = restore_once(conn, key) {
+        if CACHE.seed(key, gaps.clone(), age) {
+            return Ok(gaps);
+        }
+    }
+    CACHE.get_or_compute(key, || {
+        let gaps = super::detect_knowledge_gaps(conn)?;
+        persist(conn, key, &gaps);
+        Ok(gaps)
+    })
+}
+
+/// The previous run's result for `key`, read at most once per process.
+fn restore_once(
+    conn: &rusqlite::Connection,
+    key: CacheKey,
+) -> Option<(Vec<KnowledgeGap>, Duration)> {
+    static ATTEMPTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if ATTEMPTED.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        return None;
+    }
+    use crate::blind_spots::report_snapshot as snapshot;
+    let stamp = snapshot::Stamp::current(conn)?;
+    let restored: snapshot::Restored<Persisted> =
+        snapshot::load(&snapshot::snapshot_path(SNAPSHOT_FILE), &stamp, MAX_AGE)?;
+    (restored.value.key == key).then(|| {
+        info!(
+            target: "4da::knowledge_decay",
+            age_secs = restored.age.as_secs(),
+            "Knowledge gaps restored from the previous run (same inputs)"
+        );
+        (restored.value.gaps, restored.age)
+    })
+}
+
+fn persist(conn: &rusqlite::Connection, key: CacheKey, gaps: &[KnowledgeGap]) {
+    use crate::blind_spots::report_snapshot as snapshot;
+    let Some(stamp) = snapshot::Stamp::current(conn) else {
+        return;
+    };
+    // Same JSON shape as `Persisted`, without copying the gaps.
+    #[derive(serde::Serialize)]
+    struct PersistedRef<'a> {
+        key: CacheKey,
+        gaps: &'a [KnowledgeGap],
+    }
+    let value = PersistedRef { key, gaps };
+    if let Err(e) = snapshot::save(&snapshot::snapshot_path(SNAPSHOT_FILE), &stamp, &value) {
+        warn!(target: "4da::knowledge_decay", error = %e, "could not persist knowledge gaps");
+    }
 }
 
 /// Recompute after an engine cycle is recorded, on a background thread, so
@@ -262,6 +346,55 @@ mod tests {
             compact.contains("spawn_blocking(knowledge_gaps_feed)"),
             "its body must run on the blocking pool"
         );
+    }
+
+    /// A restored result answers its own key until the usual expiry, and
+    /// never displaces a result this run computed.
+    #[test]
+    fn a_seeded_result_serves_its_key_and_ages_like_any_other() {
+        let cache = GapsCache::new();
+        let key = CacheKey::new(7, 1, 3);
+        assert!(cache.seed(key, one_gap(), Duration::from_mins(10)));
+        let runs = AtomicUsize::new(0);
+        let got = cache
+            .get_or_compute(key, || {
+                runs.fetch_add(1, Ordering::SeqCst);
+                Ok(Vec::new())
+            })
+            .unwrap();
+        assert_eq!(runs.load(Ordering::SeqCst), 0, "served without the pass");
+        assert_eq!(got[0].dependency, "chrono");
+        assert!(
+            cache.fresh(CacheKey::new(8, 1, 3)).is_none(),
+            "other inputs recompute"
+        );
+        assert!(
+            !cache.seed(key, Vec::new(), Duration::ZERO),
+            "never displaces"
+        );
+
+        let stale = GapsCache::new();
+        assert!(stale.seed(key, one_gap(), MAX_AGE + Duration::from_secs(1)));
+        assert!(stale.fresh(key).is_none(), "past the expiry it recomputes");
+    }
+
+    /// The persisted shape round-trips through the snapshot store.
+    #[test]
+    fn the_persisted_result_round_trips() {
+        use crate::blind_spots::report_snapshot as snapshot;
+        let dir = std::env::temp_dir().join(format!("4da-gaps-snapshot-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("gaps.json");
+        let stamp = snapshot::Stamp::with_schema(124);
+        let value = Persisted {
+            key: CacheKey::new(4261, 18, 5605),
+            gaps: one_gap(),
+        };
+        snapshot::save(&path, &stamp, &value).unwrap();
+        let back: snapshot::Restored<Persisted> = snapshot::load(&path, &stamp, MAX_AGE).unwrap();
+        assert_eq!(back.value.key, value.key);
+        assert_eq!(back.value.gaps.len(), 1);
+        assert_eq!(back.value.gaps[0].latest_release.as_deref(), Some("0.4.45"));
     }
 
     #[test]

@@ -6,7 +6,8 @@
 // UTF-8 safety gate, as in the parent module.
 #![deny(clippy::string_slice)]
 
-use std::collections::HashSet;
+use std::cell::RefCell;
+use std::collections::{HashMap, HashSet};
 
 use tracing::warn;
 
@@ -37,6 +38,39 @@ pub(super) struct GapScan<'a> {
     domain: HashSet<String>,
     anti_deps: HashSet<String>,
     active_projects: Vec<String>,
+    /// Stored scoring verdicts read so far, by item id (see `stored_verdict`).
+    verdicts: RefCell<HashMap<i64, StoredVerdict>>,
+}
+
+/// A candidate's stored scoring-time version verdict.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum StoredVerdict {
+    /// `Some(affected)`, or `None` when the pipeline recorded no verdict.
+    Read(Option<bool>),
+    /// A value that is neither NULL nor an integer. The eager load this
+    /// replaced failed that ROW and dropped the candidate; the scan drops it
+    /// the same way (reported as "not affected", which both consumers skip).
+    Unreadable,
+}
+
+/// The value the eager candidate load read for `item_id`, via the primary key.
+/// No breakdown row reads as no verdict. A query error (a missing table, a
+/// malformed breakdown) also reads as no verdict here, where the eager load
+/// failed the WHOLE detection — one bad row no longer blanks the panel.
+fn read_stored_verdict(conn: &rusqlite::Connection, item_id: i64) -> StoredVerdict {
+    let read = conn.query_row(
+        "SELECT json_extract(breakdown, '$.breakdown.is_version_affected')
+           FROM scoring_explanations WHERE source_item_id = ?1",
+        [item_id],
+        |row| {
+            Ok(match row.get_ref(0)? {
+                rusqlite::types::ValueRef::Null => StoredVerdict::Read(None),
+                rusqlite::types::ValueRef::Integer(v) => StoredVerdict::Read(Some(v != 0)),
+                _ => StoredVerdict::Unreadable,
+            })
+        },
+    );
+    read.unwrap_or(StoredVerdict::Read(None))
 }
 
 impl<'a> GapScan<'a> {
@@ -61,7 +95,44 @@ impl<'a> GapScan<'a> {
                 .iter()
                 .map(|p| normalize_project_path(p))
                 .collect(),
+            verdicts: RefCell::new(HashMap::new()),
         })
+    }
+
+    /// The stored verdict for `c` — the value `version_affected` would carry
+    /// had the load read it — fetched once per item, on first use.
+    fn stored_verdict(&self, c: &GapCandidate) -> StoredVerdict {
+        if c.version_affected.is_some() {
+            return StoredVerdict::Read(c.version_affected);
+        }
+        let id = c.item.item_id;
+        if let Some(v) = self.verdicts.borrow().get(&id) {
+            return *v;
+        }
+        let v = read_stored_verdict(self.conn, id);
+        self.verdicts.borrow_mut().insert(id, v);
+        v
+    }
+
+    /// The verdict both consumers apply: the advisory mirror's LIVE answer
+    /// for a linked advisory row (AD-045), else the stored one. An unreadable
+    /// stored value excludes the row outright, as its failed load did.
+    fn verdict(
+        &self,
+        c: &GapCandidate,
+        name: &str,
+        dep_lower: &str,
+        installs: &[crate::osv::exposure::Install],
+    ) -> Option<bool> {
+        let StoredVerdict::Read(stored) = self.stored_verdict(c) else {
+            return Some(false);
+        };
+        let live = if is_advisory_row(c) && linked_to(c, dep_lower) {
+            crate::osv::exposure::advisory_row_reaches(self.conn, &c.source_id, name, installs)
+        } else {
+            None
+        };
+        live.or(stored)
     }
 
     /// Gaps for every dependency name, one per name, in first-seen order.
@@ -133,14 +204,7 @@ impl<'a> GapScan<'a> {
     fn misses(&self, name: &str, paths: &[String]) -> Vec<MissedItem> {
         let installs = installs_for(self.conn, name, paths);
         let dep_lower = name.to_lowercase();
-        let conn = self.conn;
-        let live = |c: &GapCandidate| -> Option<bool> {
-            if is_advisory_row(c) && linked_to(c, &dep_lower) {
-                crate::osv::exposure::advisory_row_reaches(conn, &c.source_id, name, &installs)
-            } else {
-                None
-            }
-        };
+        let live = |c: &GapCandidate| self.verdict(c, name, &dep_lower, &installs);
         let hits = self.index.matching(&self.candidates, &dep_lower);
         misses_among(hits.into_iter(), name, &live)
     }
@@ -184,14 +248,7 @@ impl<'a> GapScan<'a> {
         let name = first.package_name.as_str();
         let installs = installs_for(self.conn, name, paths);
         let dep_lower = name.to_lowercase();
-        let conn = self.conn;
-        let live = |c: &GapCandidate| -> Option<bool> {
-            if is_advisory_row(c) && linked_to(c, &dep_lower) {
-                crate::osv::exposure::advisory_row_reaches(conn, &c.source_id, name, &installs)
-            } else {
-                None
-            }
-        };
+        let live = |c: &GapCandidate| self.verdict(c, name, &dep_lower, &installs);
         let vulnerable = still_vulnerable(self.conn, name, first.version.as_deref(), paths)
             && grounded_security_advisory(&self.candidates, name, &live);
         let exposed = if vulnerable {
@@ -282,5 +339,65 @@ fn display_label(projects: &[String]) -> String {
         [] => String::new(),
         [only] => only.clone(),
         [first, rest @ ..] => format!("{first} (+{} more)", rest.len()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// The deferred read returns exactly what the eager candidate load read:
+    /// an integer verdict, NULL (no verdict, or no breakdown row), and — for
+    /// any other value, which failed the eager row read — an exclusion.
+    #[test]
+    fn the_deferred_verdict_reads_what_the_eager_load_read() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        assert_eq!(
+            read_stored_verdict(&conn, 1),
+            StoredVerdict::Read(None),
+            "no table: no verdict"
+        );
+        conn.execute_batch(
+            r#"CREATE TABLE scoring_explanations (source_item_id INTEGER PRIMARY KEY, breakdown TEXT NOT NULL);
+               INSERT INTO scoring_explanations VALUES
+                 (1, '{"breakdown":{"is_version_affected":false}}'),
+                 (2, '{"breakdown":{"is_version_affected":true}}'),
+                 (3, '{"breakdown":{"strongly_grounded":true}}'),
+                 (4, '{"breakdown":{"is_version_affected":"yes"}}'),
+                 (5, '{"breakdown":{"is_version_affected":0.5}}');"#,
+        )
+        .unwrap();
+        assert_eq!(
+            read_stored_verdict(&conn, 1),
+            StoredVerdict::Read(Some(false))
+        );
+        assert_eq!(
+            read_stored_verdict(&conn, 2),
+            StoredVerdict::Read(Some(true))
+        );
+        assert_eq!(read_stored_verdict(&conn, 3), StoredVerdict::Read(None));
+        assert_eq!(read_stored_verdict(&conn, 4), StoredVerdict::Unreadable);
+        assert_eq!(read_stored_verdict(&conn, 5), StoredVerdict::Unreadable);
+        assert_eq!(read_stored_verdict(&conn, 99), StoredVerdict::Read(None));
+        // The eager load's own read of the same rows: a value it could not
+        // read as an integer failed the row (here: `None`, the row dropped).
+        for (id, want) in [
+            (1, Some(Some(false))),
+            (2, Some(Some(true))),
+            (3, Some(None)),
+            (4, None),
+            (5, None),
+        ] {
+            let eager: Option<Option<bool>> = conn
+                .query_row(
+                    "SELECT json_extract(breakdown, '$.breakdown.is_version_affected')
+                       FROM scoring_explanations WHERE source_item_id = ?1",
+                    [id],
+                    |r| r.get::<_, Option<i64>>(0),
+                )
+                .ok()
+                .map(|v| v.map(|v| v != 0));
+            assert_eq!(eager, want, "row {id}");
+        }
     }
 }

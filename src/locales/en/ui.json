@@ -2232,6 +2232,7 @@
   "blindspots.ai.probablyFine_other": "Probably fine — {{count}} stable dependencies",
   "blindspots.staleData": "Source feeds have not refreshed in over 72 hours. Run a fetch to update coverage data.",
   "blindspots.staleDataAge": "Source feeds last refreshed {{days}} days ago. Coverage data may not reflect recent activity.",
+  "blindspots.reportAge": "Analysis computed {{age}}",
   "blindspots.status.blindSpot": "Uncovered",
   "blindspots.status.drifting": "Unreviewed",
   "blindspots.status.noCoverage": "No coverage",

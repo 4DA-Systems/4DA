@@ -17,6 +17,7 @@ import { loadPersistedDismissals, persistDismissal, removeDismissal } from './di
 import { TierSection, EmergingSignals } from './StackCoverageMap';
 import { CoveredSection, NoCoverageSection, OtherBuildTargetsSection, ProbablyFineSection } from './CollapsedSections';
 import { AssessingNotice, ScanProjectsPrompt } from './BlindSpotsFirstDay';
+import { ReportAge } from './ReportAge';
 import type { DepAssessment } from '../../../src-tauri/bindings/bindings/DepAssessment';
 import type { BlindSpotAssessment } from '../../../src-tauri/bindings/bindings/BlindSpotAssessment';
 
@@ -36,6 +37,7 @@ const BlindSpotsView = memo(function BlindSpotsView() {
     })),
   );
   const loadBlindSpots = useAppStore((s) => s.loadBlindSpots);
+  const refreshQuietly = useAppStore((s) => s.refreshBlindSpotsQuietly);
   // Auto-assess: the user's toggle + whether a cloud LLM key is present. Auto
   // runs are gated to cloud-key users so we never auto-spend (or surface a
   // "no model" hint) unprompted; local-only (Ollama) and key-less users keep
@@ -263,6 +265,7 @@ const BlindSpotsView = memo(function BlindSpotsView() {
         <h2 className="text-xl font-semibold text-text-primary tracking-tight">{t('blindspots.title')}</h2>
         <p className="text-sm text-text-muted mt-1">{t('blindspots.subtitle')}</p>
       </header>
+      <ReportAge computedAt={dataFreshness?.computed_at} onReload={refreshQuietly} />
       {/* Day one: nothing scanned → the scan is the action; scanned but not
           yet assessed (score < 0) → what will appear, not a bare count. */}
       {totalTracked === 0 && !hasContent && <ScanProjectsPrompt onScanned={handleRetry} />}

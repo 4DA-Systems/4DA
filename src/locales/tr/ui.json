@@ -176,6 +176,7 @@
   "blindspots.signal.showLess": "Daha az göster",
   "blindspots.staleData": "Kaynak akışları 72 saatten fazla süredir güncellenmedi. Kapsam verilerini güncellemek için bir getirme çalıştırın.",
   "blindspots.staleDataAge": "Kaynak akışları son güncelleme: {{days}} gün önce. Kapsam verileri son etkinliği yansıtmıyor olabilir.",
+  "blindspots.reportAge": "Analiz zamanı: {{age}}",
   "blindspots.status.blindSpot": "Kör nokta",
   "blindspots.status.covered": "Kapsanmış",
   "blindspots.status.drifting": "Sapıyor",

@@ -2080,6 +2080,7 @@
   "blindspots.action.investigate": "調査",
   "blindspots.staleData": "ソースフィードが72時間以上更新されていません。フェッチを実行してカバレッジデータを更新してください。",
   "blindspots.staleDataAge": "ソースフィードの最終更新: {{days}}日前。カバレッジデータが最新の活動を反映していない可能性があります。",
+  "blindspots.reportAge": "分析日時: {{age}}",
   "blindspots.status.blindSpot": "盲点",
   "blindspots.status.drifting": "変動中",
   "blindspots.status.noCoverage": "カバレッジなし",

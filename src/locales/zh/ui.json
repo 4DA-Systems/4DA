@@ -2080,6 +2080,7 @@
   "blindspots.action.investigate": "调查",
   "blindspots.staleData": "源信息流已超过72小时未刷新。请运行抓取以更新覆盖数据。",
   "blindspots.staleDataAge": "源信息流最后更新于{{days}}天前。覆盖数据可能未反映最近的活动。",
+  "blindspots.reportAge": "分析计算于{{age}}",
   "blindspots.status.blindSpot": "盲区",
   "blindspots.status.drifting": "偏移中",
   "blindspots.status.noCoverage": "无覆盖",

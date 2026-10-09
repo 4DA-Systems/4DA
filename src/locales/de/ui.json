@@ -2098,6 +2098,7 @@
   "blindspots.action.investigate": "Untersuchen",
   "blindspots.staleData": "Quellen-Feeds wurden seit über 72 Stunden nicht aktualisiert. Starten Sie einen Abruf, um die Abdeckungsdaten zu aktualisieren.",
   "blindspots.staleDataAge": "Quellen-Feeds zuletzt vor {{days}} Tagen aktualisiert. Abdeckungsdaten spiegeln möglicherweise nicht die jüngsten Aktivitäten wider.",
+  "blindspots.reportAge": "Analyse berechnet {{age}}",
   "blindspots.status.blindSpot": "Blinder Fleck",
   "blindspots.status.drifting": "Abweichend",
   "blindspots.status.noCoverage": "Keine Abdeckung",

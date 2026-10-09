@@ -2080,6 +2080,7 @@
   "blindspots.action.investigate": "Изучить",
   "blindspots.staleData": "Источники не обновлялись более 72 часов. Запустите обновление для актуализации данных покрытия.",
   "blindspots.staleDataAge": "Источники обновлены {{days}} дн. назад. Данные покрытия могут не отражать недавнюю активность.",
+  "blindspots.reportAge": "Анализ выполнен {{age}}",
   "blindspots.status.blindSpot": "Слепая зона",
   "blindspots.status.drifting": "Дрейфует",
   "blindspots.status.noCoverage": "Нет покрытия",
