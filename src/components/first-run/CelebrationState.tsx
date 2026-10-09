@@ -98,25 +98,21 @@ export function CelebrationState({
         {t('firstRun.intelligenceActivated', 'Intelligence Activated')}
       </h2>
 
-      {/* Stats row */}
-      <div className="flex justify-center gap-8 mb-6">
-        <div className="text-center">
-          <span className="text-3xl font-bold text-text-primary tabular-nums">{totalCount}</span>
-          <p className="text-[10px] text-text-muted uppercase tracking-wider mt-0.5">
-            {t('firstRun.itemsAnalyzed', 'analyzed')}
-          </p>
-        </div>
-        {/* "Relevant" is hidden on a profileless first run — showing a giant
-            "0" is a banned vanity zero (doctrine rule 3) and reads as failure. */}
-        {!profileEmpty && (
+      {/* Stats row — the relevant count only. The "N analyzed" counter that
+          stood beside it (and alone, as a giant "375 ANALYZED", on a
+          profileless run) said how much was read, which informs no action
+          (doctrine rule 3). "Relevant" is hidden on a profileless first run —
+          a giant "0" is a banned vanity zero and reads as failure. */}
+      {!profileEmpty && (
+        <div className="flex justify-center gap-8 mb-6">
           <div className="text-center">
             <span className="text-3xl font-bold text-text-primary tabular-nums">{relevantCount}</span>
             <p className="text-[10px] text-text-muted uppercase tracking-wider mt-0.5">
               {t('firstRun.relevantToYou', 'relevant')}
             </p>
           </div>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* Developer DNA Preview — first "it knows me" moment */}
       {confidentTech.length > 0 && (
@@ -149,7 +145,7 @@ export function CelebrationState({
 
       {/* Celebration message */}
       <p className="text-sm text-text-secondary mb-6">
-        {getCelebrationMessage(relevantCount, totalCount, profileEmpty)}
+        {getCelebrationMessage(relevantCount, profileEmpty)}
       </p>
 
       {/* Top signal highlight with match reasoning */}

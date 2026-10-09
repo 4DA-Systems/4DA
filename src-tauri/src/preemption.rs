@@ -1455,21 +1455,23 @@ fn chain_to_alert(
                 }
                 _ => 1,
             };
-            // Honesty: this sentence used to be a hardcoded "No advisory
-            // issued." — a lie whenever a chain link's own title IS a
-            // published advisory (measured live 2026-08-25: two critical
-            // chains titled "[CVE-...] ...").
-            let advisory_sentence = if chain
-                .links
-                .iter()
-                .any(|link| crate::adversarial::contains_advisory_id(&link.title))
-            {
-                "Includes a published advisory."
-            } else {
-                "No advisory issued."
+            // Honesty, both ways. A hardcoded "No advisory issued." lied when a
+            // link IS a published advisory (live 2026-08-25); its replacement,
+            // "any link title contains a CVE id", lied the other way — a
+            // `backend` chain on an empty profile read "Includes a published
+            // advisory." for an unrelated CVE (fresh-profile E2E 2026-10-09).
+            // The claim is now about the chain's verified dependency only,
+            // from item-level advisory proof (`SignalChain::dep_advisory`);
+            // a chain with no verified dependency makes no advisory claim.
+            let advisory_sentence = match chain.verified_dep.as_deref() {
+                Some(dep) if chain.dep_advisory => {
+                    format!(" Includes a published advisory for {dep}.")
+                }
+                Some(_) => " No advisory issued.".to_string(),
+                None => String::new(),
             };
             format!(
-                "{source_count} sources discussing {} over {days_span} day{}. {advisory_sentence}",
+                "{source_count} sources discussing {} over {days_span} day{}.{advisory_sentence}",
                 chain.chain_name,
                 if days_span == 1 { "" } else { "s" }
             )
@@ -2585,6 +2587,14 @@ mod tests {
         verified_dep: Option<&str>,
         link_titles: &[&str],
     ) -> crate::signal_chains::SignalChain {
+        chain_fixture_with_advisory(verified_dep, link_titles, false)
+    }
+
+    fn chain_fixture_with_advisory(
+        verified_dep: Option<&str>,
+        link_titles: &[&str],
+        dep_advisory: bool,
+    ) -> crate::signal_chains::SignalChain {
         crate::signal_chains::SignalChain {
             id: "chain_vm2_2026-08-20".to_string(),
             chain_name: "vm2 signal chain (2 events)".to_string(),
@@ -2606,6 +2616,7 @@ mod tests {
             created_at: "2026-08-20T00:00:00Z".to_string(),
             updated_at: "2026-08-21T00:00:00Z".to_string(),
             verified_dep: verified_dep.map(String::from),
+            dep_advisory,
         }
     }
 
@@ -2649,26 +2660,65 @@ mod tests {
     #[test]
     fn chain_to_alert_explanation_admits_published_advisory() {
         let conn = rusqlite::Connection::open_in_memory().expect("in-memory db");
-        // The live 2026-08-25 shape: the chain's representative link title IS
-        // a published advisory.
-        let chain = chain_fixture(
-            None,
+        // The live 2026-08-25 shape: the chain's representative link IS a
+        // published advisory — and (2026-10-09) it is proven to be one FOR the
+        // chain's verified dependency.
+        let chain = chain_fixture_with_advisory(
+            Some("vm2"),
             &[
                 "[CVE-2026-47698] vm2: Sandbox Breakout via Custom inspect Function",
                 "vm2 sandbox discussion",
             ],
+            true,
         );
         let alert = chain_to_alert(&chain, &chain_prediction_fixture(), &conn);
         assert!(
             alert
                 .explanation
-                .ends_with("Includes a published advisory."),
+                .ends_with("Includes a published advisory for vm2."),
             "explanation must admit the advisory, got: {}",
             alert.explanation
         );
         assert!(
             !alert.explanation.contains("No advisory issued"),
             "the hardcoded lie must be gone, got: {}",
+            alert.explanation
+        );
+    }
+
+    /// Fresh-profile E2E 2026-10-09: an ungrounded `backend` chain read
+    /// "Includes a published advisory." because one linked title carried an
+    /// unrelated CVE id. A CVE id in a title is not an advisory for the chain.
+    #[test]
+    fn chain_to_alert_cve_in_title_is_not_an_advisory_claim() {
+        let conn = rusqlite::Connection::open_in_memory().expect("in-memory db");
+        let ungrounded = chain_fixture(
+            None,
+            &[
+                "[CVE-2026-106114] ImageSharp: ICC CLUT parsing allocates unbounded",
+                "Build anything: backend from code",
+            ],
+        );
+        let alert = chain_to_alert(&ungrounded, &chain_prediction_fixture(), &conn);
+        assert!(
+            !alert.explanation.contains("advisory"),
+            "an ungrounded chain makes no advisory claim either way, got: {}",
+            alert.explanation
+        );
+
+        // Grounded chain whose CVE-titled link is NOT proven to be an advisory
+        // for the dependency: no "Includes a published advisory".
+        let grounded = chain_fixture(
+            Some("tokio"),
+            &[
+                "[CVE-2026-0001] in some other crate mentions tokio",
+                "tokio 1.50 released",
+            ],
+        );
+        let alert = chain_to_alert(&grounded, &chain_prediction_fixture(), &conn);
+        assert!(
+            alert.explanation.ends_with("No advisory issued."),
+            "got: {}",
             alert.explanation
         );
     }

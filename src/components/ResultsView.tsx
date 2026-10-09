@@ -52,12 +52,16 @@ export function ResultsView({
     setExpandedItem(useAppStore.getState().expandedItem === itemId ? null : itemId);
   }, [setExpandedItem]);
 
-  const contextPanelLoadedRef = useRef(false);
+  // The file list is read lazily on first open (it reads every file under the
+  // context dirs). Until then the count is UNKNOWN, not zero — the summary
+  // used to print "(0 files)" for a freshly scanned D:\4DA because nothing had
+  // asked yet (fresh-profile E2E 2026-10-09).
+  const [contextFilesLoaded, setContextFilesLoaded] = useState(false);
   const handleContextPanelToggle = useCallback((event: SyntheticEvent<HTMLDetailsElement>) => {
-    if (!event.currentTarget.open || contextPanelLoadedRef.current) return;
-    contextPanelLoadedRef.current = true;
+    if (!event.currentTarget.open || contextFilesLoaded) return;
+    setContextFilesLoaded(true);
     void loadContextFiles();
-  }, [loadContextFiles]);
+  }, [loadContextFiles, contextFilesLoaded]);
 
   const {
     sourceFilters,
@@ -211,11 +215,11 @@ export function ResultsView({
         className="bg-bg-secondary rounded-lg border border-border"
         onToggle={handleContextPanelToggle}
       >
-        {/* eslint-disable i18next/no-literal-string */}
         <summary className="px-5 py-3 text-xs text-text-muted cursor-pointer hover:text-text-secondary">
-          Context Files ({state.contextFiles.length} files)
+          {(contextFilesLoaded && !state.loading) || state.contextFiles.length > 0
+            ? t('results.contextFilesCount', { count: state.contextFiles.length })
+            : t('results.contextFiles')}
         </summary>
-        {/* eslint-enable i18next/no-literal-string */}
         <ContextPanel
           contextFiles={state.contextFiles}
           discoveredContext={discoveredContext}

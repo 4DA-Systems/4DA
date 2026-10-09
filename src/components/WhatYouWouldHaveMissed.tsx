@@ -9,7 +9,8 @@ import { useShallow } from 'zustand/react/shallow';
 import type { SourceRelevance } from '../types/analysis';
 import { getRelevancePresentation, isSurfacedSignal } from '../utils/score';
 import { isBriefSuppressed, useActiveBriefFilteredIds } from '../hooks/use-brief-verdicts';
-import { isAffectedInactive } from './signals/evidence-pool';
+import { isGrounded } from './signals/evidence-pool';
+import { partitionLanes, stackTier } from './signals/signal-lanes';
 
 /**
  * "What You Would Have Missed" — the ONE surfaced item genuinely tied to the
@@ -33,24 +34,6 @@ import { isAffectedInactive } from './signals/evidence-pool';
  */
 const KIND_PRIORITY_ORDER: SignalKind[] = ['security', 'breaking', 'tool'];
 
-/** Did the backend confirm this item is genuinely tied to the user's stack? */
-function hasConfirmedStackLink(r: SourceRelevance): boolean {
-  // Gate on the backend's canonical grounding verdict, NOT dep_match_score or
-  // matched_deps length. matched_deps names what the card can display, but the
-  // strong-grounding flag is the source of truth for "affects you" placement —
-  // and, like the Signal tab's Affects You pool (`evidence-pool.ts`), it needs
-  // a dependency EVENT: a tutorial that merely uses the package is grounded
-  // but nothing is happening to it (`dependency_event === false`).
-  // An advisory that affects ONLY inactive (dormant / scratch) projects is
-  // never the hero, whatever flags it carries (audit 2026-10-07: a gitignored
-  // folder dormant 161 days led this card).
-  if (isAffectedInactive(r)) return false;
-  return (
-    r.is_critical_alert === true ||
-    (r.score_breakdown?.strongly_grounded === true && r.score_breakdown.dependency_event !== false)
-  );
-}
-
 /**
  * The hero candidates: the surfaced set only, by the ONE definition of signal
  * (`isSurfacedSignal`, same as the header chip). An item the pipeline did not
@@ -61,24 +44,40 @@ export function heroCandidates(results: SourceRelevance[]): SourceRelevance[] {
   return results.filter(isSurfacedSignal);
 }
 
+/**
+ * The hero is drawn from -- and ordered like -- the Signal list's "Your stack"
+ * lane: the same grounding predicate (`isGrounded`, the Affects-You pool) and
+ * the same tiering (`stackTier`: security, then breaking / deprecation). It
+ * used to keep its own rules (`signal_type` / `content_type` only), so a
+ * graded "Breaking upgrade: typescript 6.0.3 -> 7.0.2" -- a breaking change by
+ * `necessity_category`, `release_notes` by content type -- was invisible to it:
+ * the card said "No security, breaking change, or dependency alert" directly
+ * above that very row in the lane (fresh-profile E2E 2026-10-09).
+ */
 export function findMostCriticalSave(results: SourceRelevance[]): SourceRelevance | null {
-  // A "critical save" is the ONE thing you would have missed — so it must be
-  // genuinely tied to the user's stack: a CONCRETE dependency they actually use.
-  // Security first. A tool/advisory with no named stack package is a
-  // nice-to-know that belongs in Key Signals, never the hero.
-  //
-  // Deliberately NO fabrication fallback. The prior logic surfaced the top
-  // tool_discovery with no dep requirement, then ultimately the highest-scoring
-  // item of any kind — which presented a Docker tool with "no confirmed link to
-  // your stack" as the daily "critical save". If nothing is stack-grounded we
-  // return null and the hero renders an honest "you're clear" state instead of
-  // inventing a save. That honesty is the point: the card that sometimes says
-  // "you're good" is the one users believe the day it says "you're not".
+  // A "critical save" is the ONE thing you would have missed, so it must be
+  // genuinely tied to the user's stack. Security first. Deliberately NO
+  // fabrication fallback: if nothing grounded is security / breaking / a tool
+  // release, the card renders an honest state instead of inventing a save.
+  const stackOrdered = partitionLanes(results.filter(isGrounded)).stack;
   for (const kind of KIND_PRIORITY_ORDER) {
-    const match = results.find(r => classifySignal(r) === kind && hasConfirmedStackLink(r));
+    const match = stackOrdered.find(r => heroKind(r) === kind);
     if (match) return match;
   }
   return null;
+}
+
+/** Kind as the "Your stack" lane tiers it, falling back to the raw vocabularies. */
+function heroKind(r: SourceRelevance): SignalKind | null {
+  const tier = stackTier(r);
+  if (tier === 0) return 'security';
+  if (tier === 1) return 'breaking';
+  return classifySignal(r);
+}
+
+/** Does any grounded item carry a security or breaking-change event? */
+export function hasStackAlert(results: SourceRelevance[]): boolean {
+  return results.some(r => isGrounded(r) && stackTier(r) <= 1);
 }
 
 /**
@@ -116,7 +115,7 @@ export function classifySignal(item: SourceRelevance): SignalKind | null {
 }
 
 export function getSignalLabel(item: SourceRelevance): string | null {
-  switch (classifySignal(item)) {
+  switch (heroKind(item)) {
     case 'security': return 'Security advisory';
     case 'breaking': return 'Breaking change';
     case 'tool': return 'Tool discovery';
@@ -135,7 +134,7 @@ export function getSignalLabel(item: SourceRelevance): string | null {
  * drops to `rgba(0, 0, 0, 0)` without warning. Use [`tint`] and [`onTint`].
  */
 export function getSignalColor(item: SourceRelevance): string {
-  switch (classifySignal(item)) {
+  switch (heroKind(item)) {
     case 'security': return 'var(--color-error)';
     case 'breaking': return 'var(--color-accent-action)';
     default: return 'var(--color-accent-gold)';
@@ -184,13 +183,27 @@ export const WhatYouWouldHaveMissed = memo(function WhatYouWouldHaveMissed() {
         `[brief-verdicts] ${relevant.length - heroPool.length} hero candidate(s) demoted by the latest briefing's verdicts`,
       );
     }
-    return { relevantCount: relevant.length, criticalSave: findMostCriticalSave(heroPool) };
+    // The non-hero copy reads the WHOLE surfaced set (brief verdicts
+    // included): the lane below lists those rows, so the card may only claim
+    // "no security / breaking change" when the lane truly has none.
+    return {
+      relevantCount: relevant.length,
+      criticalSave: findMostCriticalSave(heroPool),
+      stackAlert: hasStackAlert(relevant),
+      stackUpdates: relevant.some(isGrounded),
+    };
   }, [results, analysisComplete, briefFilteredIds]);
 
   // Nothing surfaced → nothing to say; the feed's own empty state speaks.
   if (!insight || insight.relevantCount === 0) return null;
 
-  const { relevantCount, criticalSave } = insight;
+  const { relevantCount, criticalSave, stackAlert, stackUpdates } = insight;
+  const clearTitle = stackAlert ? t('missed.stackReviewTitle') : t('missed.clearTitle');
+  const clearBody = stackAlert
+    ? t('missed.stackReviewBody')
+    : stackUpdates
+      ? t('missed.clearBodyUpdates')
+      : t('missed.clearBody', { relevant: relevantCount });
   const signalLabel = criticalSave ? getSignalLabel(criticalSave) : null;
   const signalColor = criticalSave ? getSignalColor(criticalSave) : 'var(--color-accent-gold)';
 
@@ -280,10 +293,8 @@ export const WhatYouWouldHaveMissed = memo(function WhatYouWouldHaveMissed() {
                 style={{ backgroundColor: CLEAR_COLOR }}
               />
               <div className="flex-1 min-w-0">
-                <p className="text-sm text-text-primary font-medium">{t('missed.clearTitle')}</p>
-                <p className="text-xs text-text-muted mt-1">
-                  {t('missed.clearBody', { relevant: relevantCount })}
-                </p>
+                <p className="text-sm text-text-primary font-medium">{clearTitle}</p>
+                <p className="text-xs text-text-muted mt-1">{clearBody}</p>
               </div>
             </div>
           </div>

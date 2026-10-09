@@ -136,6 +136,10 @@ interface LoadingStateProps {
   scanSummary: ScanSummary | null;
   narrationEvents?: NarrationFeedEvent[];
   estimatedSeconds?: number;
+  /** True when there is something to rank against (interests, detected tech
+   *  or a project scan). Without it the copy must not claim to match "your
+   *  interests" or "your stack" — there are none yet. */
+  hasProfile?: boolean;
   onSkipAhead?: () => void;
 }
 
@@ -150,6 +154,7 @@ export function LoadingState({
   scanSummary,
   narrationEvents,
   estimatedSeconds: estimatedSecondsProp,
+  hasProfile = true,
   onSkipAhead,
 }: LoadingStateProps) {
   const { t } = useTranslation();
@@ -205,7 +210,7 @@ export function LoadingState({
             {t('firstRun.scanning')}
           </p>
           <p className="text-xs text-text-secondary leading-relaxed">
-            {t('firstRun.scanningDescription')}
+            {hasProfile ? t('firstRun.scanningDescription') : t('firstRun.scanningDescriptionNoProfile')}
           </p>
         </div>
         <p className="text-xs text-text-muted animate-pulse">
@@ -230,12 +235,12 @@ export function LoadingState({
       <h2 className="text-xl font-medium text-text-primary mb-2">
         {phase === 'preparing' && t('firstRun.preparing')}
         {phase === 'fetching' && t('firstRun.fetching')}
-        {phase === 'analyzing' && t('firstRun.analyzing')}
+        {phase === 'analyzing' && (hasProfile ? t('firstRun.analyzing') : t('firstRun.analyzingNoProfile'))}
       </h2>
 
       {/* Stage narration */}
       <p className="text-sm text-text-secondary mb-6">
-        {getStageNarration(progressStage || 'init')}
+        {getStageNarration(progressStage || 'init', hasProfile)}
       </p>
 
       {/* Estimated time remaining */}

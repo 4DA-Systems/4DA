@@ -6,6 +6,7 @@ import {
   getSignalLabel,
   getSignalColor,
   findMostCriticalSave,
+  hasStackAlert,
   heroCandidates,
 } from './WhatYouWouldHaveMissed';
 import { isSurfacedSignal } from '../utils/score';
@@ -172,6 +173,31 @@ describe('findMostCriticalSave hero selection', () => {
       dependency_event: true,
     });
     expect(findMostCriticalSave([tutorial, release])).toBe(release);
+  });
+});
+
+describe('findMostCriticalSave reads the Your-stack lane predicates', () => {
+  // B19 shape: a graded breaking release — `release_notes` by content type,
+  // `breaking_change` by necessity category — was invisible to the old
+  // signal_type/content_type-only chooser, so the card claimed "clear".
+  it('heroes a breaking change carried only by necessity_category', () => {
+    const release = {
+      ...item({ content_type: 'release_notes', strongly_grounded: true, dependency_event: true, matched_deps: ['typescript'] }),
+    };
+    release.score_breakdown = { ...release.score_breakdown!, necessity_category: 'breaking_change' };
+    expect(findMostCriticalSave([release])).toBe(release);
+    expect(getSignalLabel(release)).toBe('Breaking change');
+    expect(hasStackAlert([release])).toBe(true);
+  });
+
+  it('a security advisory outranks a breaking change, as in the lane', () => {
+    const breaking = item({ signal_type: 'breaking_change', strongly_grounded: true, matched_deps: ['vite'] });
+    const advisory = item({ content_type: 'security_advisory', strongly_grounded: true, matched_deps: ['axios'] });
+    expect(findMostCriticalSave([breaking, advisory])).toBe(advisory);
+  });
+
+  it('hasStackAlert ignores ungrounded security noise', () => {
+    expect(hasStackAlert([item({ content_type: 'security_advisory' })])).toBe(false);
   });
 });
 

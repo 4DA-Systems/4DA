@@ -16,6 +16,7 @@ import { BlindSpotsPaywall } from './BlindSpotsPaywall';
 import { loadPersistedDismissals, persistDismissal, removeDismissal } from './dismissal-utils';
 import { TierSection, EmergingSignals } from './StackCoverageMap';
 import { CoveredSection, NoCoverageSection, OtherBuildTargetsSection, ProbablyFineSection } from './CollapsedSections';
+import { AssessingNotice, ScanProjectsPrompt } from './BlindSpotsFirstDay';
 import type { DepAssessment } from '../../../src-tauri/bindings/bindings/DepAssessment';
 import type { BlindSpotAssessment } from '../../../src-tauri/bindings/bindings/BlindSpotAssessment';
 
@@ -262,36 +263,40 @@ const BlindSpotsView = memo(function BlindSpotsView() {
         <h2 className="text-xl font-semibold text-text-primary tracking-tight">{t('blindspots.title')}</h2>
         <p className="text-sm text-text-muted mt-1">{t('blindspots.subtitle')}</p>
       </header>
-      {totalTracked > 0 && (
+      {/* Day one: nothing scanned → the scan is the action; scanned but not
+          yet assessed (score < 0) → what will appear, not a bare count. */}
+      {totalTracked === 0 && !hasContent && <ScanProjectsPrompt onScanned={handleRetry} />}
+      {totalTracked > 0 && score < 0 && !hasContent && <AssessingNotice />}
+      {/* The tracked-dependency count only frames real findings ("3 need
+          attention · 94 direct dependencies"); alone it informs no action. */}
+      {totalTracked > 0 && hasContent && (
         <div className="flex items-center gap-4 px-4 py-2.5 rounded-lg bg-bg-secondary border border-border -mt-1">
-          {hasContent && (
-            <div className="flex items-center gap-3 text-xs">
-              {stackDeps.length > 0 && (
-                <span className="inline-flex items-center gap-1.5 text-red-400 font-medium">
-                  <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
-                  {stackDeps.length} {t('blindspots.tier.needsAttention').toLowerCase()}
-                </span>
-              )}
-              {ecosystemDeps.length > 0 && (
-                <span className="inline-flex items-center gap-1.5 text-yellow-400 font-medium">
-                  <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
-                  {ecosystemDeps.length} {t('blindspots.tier.drifting').toLowerCase()}
-                </span>
-              )}
-              {noCoverageDeps.length > 0 && (
-                <span className="inline-flex items-center gap-1.5 text-text-muted font-medium">
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#8A8A8A]" />
-                  {noCoverageDeps.length} {t('blindspots.status.noCoverage').toLowerCase()}
-                </span>
-              )}
-              {unmatchedSignals.length > 0 && (
-                <span className="inline-flex items-center gap-1.5 text-blue-400 font-medium">
-                  <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
-                  {unmatchedSignals.length} {t('blindspots.emerging.trending').toLowerCase()}
-                </span>
-              )}
-            </div>
-          )}
+          <div className="flex items-center gap-3 text-xs">
+            {stackDeps.length > 0 && (
+              <span className="inline-flex items-center gap-1.5 text-red-400 font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
+                {stackDeps.length} {t('blindspots.tier.needsAttention').toLowerCase()}
+              </span>
+            )}
+            {ecosystemDeps.length > 0 && (
+              <span className="inline-flex items-center gap-1.5 text-yellow-400 font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
+                {ecosystemDeps.length} {t('blindspots.tier.drifting').toLowerCase()}
+              </span>
+            )}
+            {noCoverageDeps.length > 0 && (
+              <span className="inline-flex items-center gap-1.5 text-text-muted font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#8A8A8A]" />
+                {noCoverageDeps.length} {t('blindspots.status.noCoverage').toLowerCase()}
+              </span>
+            )}
+            {unmatchedSignals.length > 0 && (
+              <span className="inline-flex items-center gap-1.5 text-blue-400 font-medium">
+                <span className="w-1.5 h-1.5 rounded-full bg-blue-400" />
+                {unmatchedSignals.length} {t('blindspots.emerging.trending').toLowerCase()}
+              </span>
+            )}
+          </div>
           <span className="text-xs text-text-muted tabular-nums ms-auto">
             {t('blindspots.stats.tracked', { count: totalTracked })}
             {(report.weak_match_count ?? 0) > 0 && (
@@ -345,7 +350,7 @@ const BlindSpotsView = memo(function BlindSpotsView() {
       {!hasContent ? (
         /* Doctrine rule 6: a cold-start (-1 sentinel) or day-one report renders
            NOTHING here — never a "building / check back soon" panel. */
-        score < 0 || isColdStart ? null : score > 0 && score <= 10 ? (
+        score < 0 || isColdStart || totalTracked === 0 ? null : score > 0 && score <= 10 ? (
           /* Genuinely excellent: the system actively evaluated and found very few issues */
           <div className="bg-bg-secondary rounded-lg border border-emerald-500/20 px-5 py-6">
             <div className="flex items-start gap-4">

@@ -71,3 +71,72 @@ describe('WhatYouWouldHaveMissed — no vanity counters (doctrine rule 3)', () =
     expect(container.firstChild).toBeNull();
   });
 });
+
+// Fresh-profile E2E 2026-10-09 (B19): "No security, breaking change, or
+// dependency alert needs your attention" sat directly above "Breaking upgrade:
+// typescript 6.0.3 -> 7.0.2" in the Your-stack lane. The card must derive from
+// the same list the lane shows.
+describe('WhatYouWouldHaveMissed — agrees with the Your-stack lane below it', () => {
+  beforeEach(() => {
+    mockResults = [];
+  });
+
+  const breakingRelease = (overrides: Partial<SourceRelevance> = {}) => makeItem({
+    id: 7,
+    title: 'npm: typescript v7.0.2',
+    relevant: true,
+    signal_type: null as never,
+    explanation: 'Breaking upgrade: typescript 6.0.3 → 7.0.2',
+    score_breakdown: {
+      content_type: 'release_notes',
+      necessity_category: 'breaking_change',
+      strongly_grounded: true,
+      dependency_event: true,
+      matched_deps: ['typescript'],
+    } as never,
+    ...overrides,
+  });
+
+  it('heroes a graded breaking upgrade instead of claiming the stack is clear', () => {
+    mockResults = [
+      breakingRelease(),
+      makeItem({ id: 8, title: 'unrelated signal', relevant: true, url: 'https://e.com/8' }),
+    ];
+    const { container } = render(<WhatYouWouldHaveMissed />);
+    expect(screen.getByText('npm: typescript v7.0.2')).toBeTruthy();
+    expect(screen.getByText('Breaking change')).toBeTruthy();
+    expect(container.textContent ?? '').not.toContain('missed.clearTitle');
+    expect(container.textContent ?? '').not.toContain('missed.clearBody');
+  });
+
+  it('a minor release in the stack lane is not "no dependency alert"', () => {
+    mockResults = [
+      breakingRelease({
+        title: 'npm: eslint v9.40.0',
+        score_breakdown: {
+          content_type: 'release_notes',
+          necessity_category: 'ecosystem_shift',
+          strongly_grounded: true,
+          dependency_event: true,
+          matched_deps: ['eslint'],
+        } as never,
+      }),
+    ];
+    const { container } = render(<WhatYouWouldHaveMissed />);
+    const text = container.textContent ?? '';
+    expect(text).toContain('missed.clearTitle');
+    expect(text).toContain('missed.clearBodyUpdates');
+    // ...and not the plain "no dependency alert" body.
+    expect(text.replace('missed.clearBodyUpdates', '')).not.toContain('missed.clearBody');
+  });
+
+  it('keeps the plain clear state only when nothing in the stack lane exists', () => {
+    mockResults = [makeItem({ id: 9, title: 'ambient', relevant: true, url: 'https://e.com/9' })];
+    const { container } = render(<WhatYouWouldHaveMissed />);
+    const text = container.textContent ?? '';
+    expect(text).toContain('missed.clearTitle');
+    expect(text).toContain('missed.clearBody');
+    expect(text).not.toContain('missed.clearBodyUpdates');
+    expect(text).not.toContain('missed.stackReview');
+  });
+});
