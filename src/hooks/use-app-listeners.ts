@@ -8,6 +8,7 @@ import type { ToastType } from '../store/types';
 import { cmd } from '../lib/commands';
 import { isVictauriDogfoodMode } from '../lib/startup-runtime';
 import { safeListen } from '../lib/tauri-events';
+import { isSurfacedSignal } from '../utils/score';
 
 interface AppListenersConfig {
   addToast: (type: ToastType, message: string) => void;
@@ -144,7 +145,7 @@ export function useAppListeners({
 
         if (analysisState.results && analysisState.results.length > 0) {
           const results = analysisState.results;
-          const relevantCount = results.filter(r => r.relevant).length;
+          const relevantCount = results.filter(isSurfacedSignal).length;
           setState(s => ({
             ...s,
             relevanceResults: results,
