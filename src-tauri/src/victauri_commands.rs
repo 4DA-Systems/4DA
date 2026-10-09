@@ -22,6 +22,7 @@ pub const REGISTERED_COMMANDS: &[&str] = &[
     "pull_ollama_model",
     "cancel_ollama_pull",
     "prepare_embedding_engine",
+    "get_embedding_engine_status",
     "check_synthesis_capability",
     "list_provider_models",
     "detect_local_servers",

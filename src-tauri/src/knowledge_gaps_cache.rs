@@ -47,20 +47,41 @@ impl CacheKey {
 
     /// Cheap aggregate reads; a missing table counts as zero.
     pub(super) fn read(conn: &rusqlite::Connection) -> Self {
-        let scalar = |sql: &str| -> i64 {
-            conn.query_row(sql, [], |r| r.get::<_, Option<i64>>(0))
-                .ok()
-                .flatten()
-                .unwrap_or(0)
-        };
         Self {
-            engine_run: scalar("SELECT MAX(id) FROM engine_runs"),
-            engagement: scalar("SELECT COUNT(*) FROM feedback")
-                + scalar("SELECT COUNT(*) FROM interactions"),
-            dependencies: scalar("SELECT COUNT(*) FROM user_dependencies")
-                + scalar("SELECT COUNT(*) FROM project_dependencies"),
+            engine_run: scalar(conn, "SELECT MAX(id) FROM engine_runs"),
+            engagement: scalar(conn, "SELECT COUNT(*) FROM feedback")
+                + scalar(conn, "SELECT COUNT(*) FROM interactions"),
+            dependencies: known_dependency_count(conn),
         }
     }
+}
+
+fn scalar(conn: &rusqlite::Connection, sql: &str) -> i64 {
+    conn.query_row(sql, [], |r| r.get::<_, Option<i64>>(0))
+        .ok()
+        .flatten()
+        .unwrap_or(0)
+}
+
+/// Dependency rows a lockfile scan has stored. Zero means 4DA has read no
+/// lockfile yet, so no surface may claim the user's dependencies are clear
+/// or current: there is nothing to have checked. A missing table counts as
+/// zero.
+pub fn known_dependency_count(conn: &rusqlite::Connection) -> i64 {
+    scalar(conn, "SELECT COUNT(*) FROM user_dependencies")
+        + scalar(conn, "SELECT COUNT(*) FROM project_dependencies")
+}
+
+/// The gaps feed with the dependency universe it was computed over, so the
+/// panel can tell "no gaps across N dependencies" from "no dependencies
+/// known" (fresh-profile E2E 2026-10-09: a user who skipped the project scan
+/// was told "No gaps detected — your knowledge is current").
+pub(super) fn with_tracked_dependencies(
+    mut feed: crate::evidence::EvidenceFeed,
+    conn: &rusqlite::Connection,
+) -> crate::evidence::EvidenceFeed {
+    feed.total_tracked = Some(usize::try_from(known_dependency_count(conn)).unwrap_or(0));
+    feed
 }
 
 struct Entry {
@@ -247,5 +268,27 @@ mod tests {
     fn the_key_reads_zero_from_an_empty_database() {
         let conn = rusqlite::Connection::open_in_memory().unwrap();
         assert_eq!(CacheKey::read(&conn), CacheKey::new(0, 0, 0));
+    }
+
+    /// The feed carries the dependency universe, so the panel can tell a
+    /// clean result from "no lockfile read yet".
+    #[test]
+    fn the_feed_reports_how_many_dependencies_it_covered() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        let empty =
+            with_tracked_dependencies(crate::evidence::EvidenceFeed::from_items(vec![]), &conn);
+        assert_eq!(empty.total_tracked, Some(0), "no tables: nothing known");
+
+        conn.execute_batch(
+            "CREATE TABLE user_dependencies (package_name TEXT);
+             CREATE TABLE project_dependencies (package_name TEXT);
+             INSERT INTO user_dependencies VALUES ('serde');
+             INSERT INTO project_dependencies VALUES ('react'), ('vite');",
+        )
+        .unwrap();
+        assert_eq!(known_dependency_count(&conn), 3);
+        let feed =
+            with_tracked_dependencies(crate::evidence::EvidenceFeed::from_items(vec![]), &conn);
+        assert_eq!(feed.total_tracked, Some(3));
     }
 }

@@ -218,6 +218,9 @@ pub(crate) struct BriefFacts {
     /// Identity of the act-now + upgrade set. Changes when the facts that
     /// would change the brief change, not when one more article arrives.
     pub fingerprint: String,
+    /// No lockfile has been read yet: the security and upgrade lanes are
+    /// empty because nothing was checked, not because nothing was found.
+    pub no_dependencies_known: bool,
 }
 
 // ============================================================================

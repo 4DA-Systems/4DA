@@ -171,6 +171,28 @@ describe('parseInline', () => {
     expect(unsafe.some(s => s.kind === 'link')).toBe(false);
   });
 
+  // Fresh-profile E2E 2026-10-09: LWN's "[$] ..." title broke the link and the
+  // Brief showed raw Markdown. The floor now escapes titles; the parser reads
+  // the escapes back.
+  it('reads escaped brackets inside a link label as plain characters', () => {
+    expect(
+      parseInline("[\\[$\\] An update on Rust's project goals](https://fedi.lwn.net/@lwn/1) (mastodon)"),
+    ).toEqual([
+      { kind: 'link', text: "[$] An update on Rust's project goals", url: 'https://fedi.lwn.net/@lwn/1' },
+      { kind: 'text', text: ' (mastodon)' },
+    ]);
+  });
+
+  it('reads escaped emphasis characters as text, not markup', () => {
+    expect(parseInline('Why \\*every\\* \\`\\_\\_init\\_\\_\\` matters (devto)')).toEqual([
+      { kind: 'text', text: 'Why *every* `__init__` matters (devto)' },
+    ]);
+    expect(parseInline('**a \\* b**')).toEqual([{ kind: 'bold', text: 'a * b' }]);
+    expect(parseInline('C:\\Users\\dev stays as written')).toEqual([
+      { kind: 'text', text: 'C:\\Users\\dev stays as written' },
+    ]);
+  });
+
   it('returns plain text unchanged', () => {
     expect(parseInline('Nothing new touches your code today.')).toEqual([
       { kind: 'text', text: 'Nothing new touches your code today.' },

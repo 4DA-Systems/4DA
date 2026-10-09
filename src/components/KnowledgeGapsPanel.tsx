@@ -2,6 +2,7 @@
 import { useState, useEffect, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../lib/commands';
+import { KnowledgeGapsScanPrompt } from './KnowledgeGapsScanPrompt';
 import { ProGate } from './ProGate';
 import { useTranslatedContent } from './ContentTranslationProvider';
 import { useColdStartGate } from '../hooks/use-cold-start-gate';
@@ -31,9 +32,12 @@ function depNameFromItem(item: EvidenceItem): string {
 // and StrictMode's double-mount fired it twice in parallel for identical
 // results (2026-08-30 audit, IPC log ids 322/323). Every concurrent mount
 // awaits ONE call; the slot clears on settle so a later remount refetches.
-let gapsInFlight: Promise<{ items: EvidenceItem[] }> | null = null;
+/** `total_tracked`: the dependencies the gaps were computed over (0 = none known). */
+type GapsFeed = { items: EvidenceItem[]; total_tracked?: number | null };
 
-function fetchKnowledgeGaps(): Promise<{ items: EvidenceItem[] }> {
+let gapsInFlight: Promise<GapsFeed> | null = null;
+
+function fetchKnowledgeGaps(): Promise<GapsFeed> {
   gapsInFlight ??= cmd('get_knowledge_gaps').finally(() => {
     gapsInFlight = null;
   });
@@ -47,12 +51,14 @@ export const KnowledgeGapsPanel = memo(function KnowledgeGapsPanel() {
   const [items, setItems] = useState<EvidenceItem[]>([]);
   const [expanded, setExpanded] = useState(false);
   const [loaded, setLoaded] = useState(false);
+  const [noDependencies, setNoDependencies] = useState(false);
 
   useEffect(() => {
     const load = async () => {
       try {
         const feed = await fetchKnowledgeGaps();
         setItems(feed.items);
+        setNoDependencies(feed.total_tracked === 0);
         setLoaded(true);
       } catch {
         // Knowledge gaps are optional — leave `loaded` false so a FAILED fetch
@@ -69,7 +75,17 @@ export const KnowledgeGapsPanel = memo(function KnowledgeGapsPanel() {
   // Intelligence Doctrine Rule 6: silent until data arrives. Also silent until a
   // SUCCESSFUL load (loaded) — a failed/pending fetch must not render the
   // "no gaps — your knowledge is current" assurance with an empty list.
-  if ((isColdStart || !loaded) && items.length === 0) return null;
+  if (!loaded && items.length === 0) return null;
+  // No dependency known: nothing was checked, so no "you're current" — the
+  // scan that would let it check. Independent of fetch volume (the gate below).
+  if (loaded && noDependencies && items.length === 0) {
+    return (
+      <ProGate feature={t('knowledgeGaps.feature')}>
+        <KnowledgeGapsScanPrompt />
+      </ProGate>
+    );
+  }
+  if (isColdStart && items.length === 0) return null;
 
   return (
     <ProGate feature={t('knowledgeGaps.feature')}>

@@ -7,6 +7,7 @@
 //! Split from a single file into submodules to keep each under the 700-line threshold.
 
 pub mod fastembed;
+pub mod fastembed_setup;
 mod ollama;
 mod openai;
 mod retry;
@@ -16,6 +17,7 @@ pub(super) use super::{truncate_and_normalize, EMBEDDING_CLIENT};
 
 // Re-export public API — wildcard includes tauri::command macro-generated items
 pub use fastembed::*;
+pub use fastembed_setup::*;
 
 #[cfg(feature = "fastembed-local")]
 pub(super) use fastembed::embed_texts_fastembed_sync;

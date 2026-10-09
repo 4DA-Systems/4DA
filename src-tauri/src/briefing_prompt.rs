@@ -185,6 +185,15 @@ fn render_upgrade(n: usize, u: &UpgradeFact) -> String {
 
 /// The FACTS block of the user message: every number the brief may state.
 pub(crate) fn render_facts_for_prompt(facts: &BriefFacts) -> String {
+    if facts.no_dependencies_known {
+        // Nothing was checked: the "none" lines below would read as an
+        // all-clear the narration then repeats.
+        return "FACTS: 4DA has not read any of the user's lockfiles yet, so security advisories \
+                and upgrades were NOT checked against their code. There is no ACT NOW, ALSO OPEN, \
+                UPGRADES or Still open section. Never say nothing touches their code or that they \
+                are unaffected; the software appends the scan instruction itself.\n"
+            .to_string();
+    }
     let mut out = String::from(
         "FACTS (computed by 4DA from the user's lockfiles, OSV advisories and package registries; \
          authoritative and complete for security and upgrades):\n\n",
