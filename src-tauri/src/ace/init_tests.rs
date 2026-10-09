@@ -26,7 +26,7 @@ fn record(sql: &str) {
 
 /// Regression: a `PRAGMA quick_check` here read every page of the whole
 /// corpus (the file ACE shares with the main DB, which `get_database()`
-/// already checks twice per process). Live 2026-09-18..24 it took 45-245s on
+/// already checks when one is due). Live 2026-09-18..24 it took 45-245s on
 /// a busy disk and caused 31 of 33 "Scoring context build timed out after
 /// 45s (caller: differential_scoring)" failures.
 #[test]

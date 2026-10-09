@@ -23,6 +23,7 @@ mod fts_sync_tests;
 mod helpers;
 mod history;
 pub(crate) mod hybrid_search;
+pub(crate) mod integrity_gate;
 mod judge_gate;
 pub(crate) mod llm_judgments;
 pub(crate) mod migrations;
@@ -31,6 +32,8 @@ mod scoring_explanations;
 mod scoring_queries;
 pub mod source_item_deps;
 mod sources;
+#[cfg(test)]
+mod startup_bench_tests;
 #[cfg(test)]
 mod stress_tests;
 mod verdicts;
@@ -331,26 +334,11 @@ impl Database {
 
         db.migrate()?;
 
-        // Quick integrity check — detect corruption early before it compounds.
-        // Uses quick_check (faster than integrity_check, catches most issues).
-        {
-            let conn = db.conn.lock();
-            match conn.query_row("PRAGMA quick_check", [], |row| row.get::<_, String>(0)) {
-                Ok(ref status) if status == "ok" => {
-                    tracing::debug!(target: "4da::db", "Database integrity: ok");
-                }
-                Ok(status) => {
-                    tracing::error!(
-                        target: "4da::db",
-                        status = %status,
-                        "DATABASE CORRUPTION DETECTED — quick_check failed. Consider restoring from backup."
-                    );
-                }
-                Err(e) => {
-                    tracing::warn!(target: "4da::db", error = %e, "Could not run integrity check");
-                }
-            }
-        }
+        // No integrity scan here. `PRAGMA quick_check` reads every page of the
+        // file (2.0 GB on 2026-10-08), and the pre-flight in
+        // `state.rs::get_database()` (`db::integrity_gate::preflight`) already
+        // decides when one is due — this second pass only logged, ran on the
+        // same file moments later, and doubled the cost of every start.
 
         // Restrict database file permissions on Unix (contains user data)
         #[cfg(unix)]

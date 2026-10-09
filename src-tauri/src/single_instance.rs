@@ -241,7 +241,7 @@ fn read_lock_pid(lock_path: &Path) -> Option<u32> {
 ///
 /// On error (e.g. tasklist missing, libc call fails), returns `true` as
 /// a safe default — better to refuse startup than to race two instances.
-fn is_process_alive(pid: u32) -> bool {
+pub(crate) fn is_process_alive(pid: u32) -> bool {
     #[cfg(target_os = "windows")]
     {
         is_process_alive_windows(pid)

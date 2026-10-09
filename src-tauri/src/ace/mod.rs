@@ -156,8 +156,8 @@ impl ACE {
         db::migrate(&conn)?;
 
         // No integrity check here. ACE shares the main database file, which
-        // `get_database()` already quick_checks twice per process (pre-flight
-        // recovery + `Database::new`). A third `PRAGMA quick_check` reads every
+        // `get_database()` already quick_checks when one is due (the
+        // `db::integrity_gate` pre-flight). Another `PRAGMA quick_check` reads every
         // page of the whole corpus (1.4 GB on 2026-09-25) and, because ACE is
         // initialised lazily from inside the scoring-context build, it ran
         // under the 45s `BUILD_TIMEOUT_SECS` budget in every cold headless

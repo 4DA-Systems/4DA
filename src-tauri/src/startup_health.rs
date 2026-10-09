@@ -206,7 +206,8 @@ pub(crate) fn check_database(data_dir: &Path, issues: &mut Vec<HealthIssue>) {
     if let Some(notice) = crate::db::migrations::take_db_recovery_notice() {
         match notice {
             crate::db::migrations::CorruptionRecovery::Healthy
-            | crate::db::migrations::CorruptionRecovery::NoExistingDb => {
+            | crate::db::migrations::CorruptionRecovery::NoExistingDb
+            | crate::db::migrations::CorruptionRecovery::CheckSkipped { .. } => {
                 // Healthy paths produce no banner.
             }
             crate::db::migrations::CorruptionRecovery::RestoredFromBackup { restored_from } => {

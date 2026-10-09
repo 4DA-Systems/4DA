@@ -78,6 +78,11 @@ pub enum CorruptionRecovery {
     NoExistingDb,
     /// DB opened cleanly and `PRAGMA quick_check` returned `ok`.
     Healthy,
+    /// The pre-flight did not scan this start (`db::integrity_gate`): the last
+    /// `ok` is recent and every opener since exited cleanly. NOT evidence that
+    /// the file is intact — `state.rs` scans after all before any destructive
+    /// fallback.
+    CheckSkipped { verified_at_unix: u64 },
     /// DB was corrupt and was successfully restored from a backup.
     /// `restored_from` is the path of the backup file used.
     RestoredFromBackup { restored_from: PathBuf },
@@ -119,8 +124,9 @@ pub enum CorruptionRecovery {
 /// captured into `CorruptionRecovery::RecoveryFailed` so the caller can
 /// log and decide. The function never panics.
 ///
-/// **Wiring:** called from `state.rs::get_database()` immediately before
-/// `Database::new(&db_path)`. The result is stored via
+/// **Wiring:** called via `db::integrity_gate` (its pre-flight, and its
+/// after-open-failure re-check) from `state.rs::get_database()`, immediately
+/// before `Database::new(&db_path)`. The result is stored via
 /// `set_db_recovery_notice()` so `startup_health::check_database()` can
 /// surface a `HealthIssue` to the frontend on the next health-check poll.
 pub fn recover_corrupt_db_if_needed(db_path: &Path) -> CorruptionRecovery {
@@ -130,10 +136,11 @@ pub fn recover_corrupt_db_if_needed(db_path: &Path) -> CorruptionRecovery {
     }
 
     // 2. Try to open the file and run a structural integrity check.
-    //    Use `quick_check` rather than `integrity_check` because the latter
-    //    is O(n) on rows and a 500MB DB would block startup for seconds.
-    //    `quick_check` catches structural corruption (the kind that causes
-    //    crash loops) without scanning every row.
+    //    `quick_check` rather than `integrity_check`: it skips the index-vs-
+    //    table cross-checks, but it still reads EVERY page, so it is O(file
+    //    size) — 8.5 s warm / ~70 s cold on a 2.0 GB corpus (2026-10-09).
+    //    That is why callers go through `db::integrity_gate::preflight`,
+    //    which decides whether this start needs the scan at all.
     let healthy = match Connection::open(db_path) {
         Ok(conn) => {
             if let Err(e) = conn.busy_timeout(std::time::Duration::from_millis(250)) {
