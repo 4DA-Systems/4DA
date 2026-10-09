@@ -338,3 +338,61 @@ async fn a_panicking_body_becomes_an_error_not_a_hang() {
     let ok = off_ui_thread_infallible("t", || 3u8).await;
     assert_eq!(ok, Ok(3));
 }
+
+/// How long a task spawned from a worker waits while that worker's task then
+/// computes synchronously for `block` — with or without `cpu_bound`.
+fn spawned_task_delay(block: std::time::Duration, use_cpu_bound: bool) -> std::time::Duration {
+    use std::time::Instant;
+    let rt = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(4)
+        .enable_all()
+        .build()
+        .expect("runtime");
+    rt.block_on(async move {
+        tokio::spawn(async move {
+            let spawned_at = Instant::now();
+            // Spawned from a worker: lands in this worker's LIFO slot, which
+            // no other worker may steal.
+            let waiter = tokio::spawn(async move { spawned_at.elapsed() });
+            let work = || std::thread::sleep(block);
+            if use_cpu_bound {
+                cpu_bound(work);
+            } else {
+                work();
+            }
+            waiter.await.expect("waiter")
+        })
+        .await
+        .expect("outer")
+    })
+}
+
+/// The analysis' scoring pass is tens of seconds of synchronous work inside
+/// one poll. A task scheduled on its worker just before that stretch waits for
+/// all of it; under `cpu_bound` it runs at once (fresh-profile E2E 2026-10-09:
+/// "Enter 4DA" frozen ~30 s while a scoring pass ran).
+#[test]
+fn cpu_bound_does_not_strand_tasks_queued_on_its_worker() {
+    let block = std::time::Duration::from_millis(1500);
+    let stranded = spawned_task_delay(block, false);
+    assert!(
+        stranded >= std::time::Duration::from_millis(1000),
+        "control: the LIFO-slot task waited only {stranded:?}"
+    );
+    let freed = spawned_task_delay(block, true);
+    assert!(
+        freed < std::time::Duration::from_millis(500),
+        "under cpu_bound the task still waited {freed:?}"
+    );
+}
+
+#[test]
+fn cpu_bound_runs_inline_off_a_multi_thread_runtime() {
+    // Plain thread: no runtime at all.
+    assert_eq!(cpu_bound(|| 1 + 1), 2);
+    // Current-thread runtime: block_in_place would panic here.
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .build()
+        .expect("runtime");
+    assert_eq!(rt.block_on(async { cpu_bound(|| 21 * 2) }), 42);
+}

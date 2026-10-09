@@ -58,6 +58,46 @@ describe('CalibrationSummary', () => {
     expect(screen.queryByText('rust')).not.toBeInTheDocument();
   });
 
+  // Fresh-profile E2E 2026-10-09: five ML guesses under "These came from your
+  // responses" for a user who skipped the ML card, headed "Python ML Engineer".
+  it('shows guesses apart from liked topics, and never names a ruled-out persona as the user', () => {
+    render(
+      <CalibrationSummary
+        summary={{
+          ...summary,
+          dominantPersonaName: 'Python ML Engineer',
+          topInterests: ['SQLite', 'deep learning'],
+          likedInterests: ['SQLite'],
+          guessedInterests: ['deep learning'],
+          personaContradicted: true,
+        }}
+        onContinue={vi.fn()}
+      />,
+    );
+
+    expect(screen.queryByText('Python ML Engineer')).not.toBeInTheDocument();
+    expect(screen.getByText('onboarding.calib.noClearProfile')).toBeInTheDocument();
+    expect(screen.getByText('onboarding.calib.guessesLabel')).toBeInTheDocument();
+    expect(screen.getByText('deep learning').closest('[data-guess]')).not.toBeNull();
+    expect(screen.getByText('SQLite').closest('[data-guess]')).toBeNull();
+  });
+
+  it('a removed guess disappears once the backend confirms', async () => {
+    cmdMock.mockResolvedValue(undefined);
+    render(
+      <CalibrationSummary
+        summary={{ ...summary, likedInterests: ['rust'], guessedInterests: ['tokio'] }}
+        onContinue={vi.fn()}
+      />,
+    );
+    await act(async () => {
+      fireEvent.click(screen.getAllByLabelText('onboarding.calib.removeAria')[1] as HTMLElement);
+    });
+    expect(cmdMock).toHaveBeenCalledWith('remove_interest', { topic: 'tokio' });
+    expect(screen.queryByText('tokio')).not.toBeInTheDocument();
+    expect(screen.queryByText('onboarding.calib.guessesLabel')).not.toBeInTheDocument();
+  });
+
   it('a failed add keeps the draft for a retry and does not show the chip', async () => {
     failWith('disk full');
     renderSummary();

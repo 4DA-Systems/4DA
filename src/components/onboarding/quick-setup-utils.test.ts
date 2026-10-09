@@ -25,6 +25,8 @@ import {
   IMPORTED_FROM_ENV,
   LOCAL_SERVER_TOKEN,
   modelDownloadSize,
+  tasteInterests,
+  planInterestSaves,
 } from './quick-setup-utils';
 import type { OllamaStatus } from './types';
 
@@ -173,6 +175,29 @@ describe('saveLlmProvider — no choice made', () => {
   it('uses the backend-recommended judge when Ollama is chosen', async () => {
     await saveLlmProvider('ollama', '', ollama({ models: ['llama3.2', 'qwen3:14b', 'gemma4:12b'], recommended_judge: 'qwen3:14b' }));
     expect(persistedProvider()).toMatchObject({ provider: 'ollama', model: 'qwen3:14b' });
+  });
+
+  it('"Skip — no AI for now" saves provider none, even with Ollama ready', async () => {
+    await saveLlmProvider('none', '', ollama({ models: ['gemma4:12b'] }));
+    expect(persistedProvider()).toMatchObject({ provider: 'none', model: '' });
+  });
+});
+
+describe('taste-test interests in Quick Setup', () => {
+  it('splits a profile into likes (pre-selected) and guesses (offered)', () => {
+    expect(tasteInterests({
+      topInterests: ['SQLite', 'NLP'], likedInterests: ['SQLite'], guessedInterests: ['NLP'],
+    })).toEqual({ liked: ['SQLite'], guessed: ['NLP'] });
+  });
+
+  it('pre-selects nothing from an older profile that cannot tell them apart', () => {
+    expect(tasteInterests({ topInterests: ['SQLite', 'NLP'] })).toEqual({ liked: [], guessed: ['SQLite', 'NLP'] });
+  });
+
+  it('adds only what is new and removes the likes the user took out', () => {
+    const saved = new Set(['SQLite', 'vector search']);
+    expect(planInterestSaves(['SQLite', 'NLP'], saved)).toEqual({ add: ['NLP'], remove: ['vector search'] });
+    expect(planInterestSaves([], new Set())).toEqual({ add: [], remove: [] });
   });
 });
 

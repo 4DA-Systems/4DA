@@ -90,6 +90,32 @@ pub static CARD_TOPICS: [&[(&str, f32)]; 15] = [
     &[],
 ];
 
+/// The persona(s) each card was chosen to discriminate — its signature
+/// personas (persona order as in [`LIKELIHOOD_MATRIX`]). A skipped signature
+/// card is a direct "no" to that persona: its template guesses ("deep
+/// learning", "NLP" for the PyTorch card's ML persona) must not be written for
+/// a user who passed on the card that stands for them, even when the posterior
+/// still ranks the persona first (fresh-profile E2E, 2026-10-09). Breadth and
+/// noise cards (job post, sqlite-vec, vector DBs, Show HN) stand for no single
+/// persona.
+pub static SIGNATURE_PERSONAS: [&[usize]; 15] = [
+    &[0], // 0: Rust 2024 — rust_systems
+    &[1], // 1: PyTorch — python_ml
+    &[3], // 2: Kubernetes — devops_sre
+    &[2], // 3: Next.js — fullstack_ts
+    &[4], // 4: React Native — mobile_dev
+    &[8], // 5: GHC — niche_specialist
+    &[0], // 6: tokio — rust_systems
+    &[7], // 7: Go generics — context_switcher
+    &[0], // 8: WASM + Rust — rust_systems
+    &[],  // 9: job post — noise
+    &[],  // 10: sqlite-vec — breadth
+    &[3], // 11: eBPF — devops_sre
+    &[7], // 12: gRPC vs REST — context_switcher
+    &[],  // 13: vector databases — breadth
+    &[],  // 14: Show HN — noise
+];
+
 /// Topic names for a card slot (empty for an unknown slot).
 pub fn card_topic_names(slot: usize) -> Vec<String> {
     CARD_TOPICS
@@ -166,6 +192,21 @@ mod tests {
                 card.slot,
                 card.topics
             );
+        }
+    }
+
+    /// A signature persona must be one the card strongly predicts — a card
+    /// cannot stand for a persona that would usually skip it.
+    #[test]
+    fn signature_personas_are_strongly_predicted_by_their_card() {
+        for (slot, personas) in SIGNATURE_PERSONAS.iter().enumerate() {
+            for &p in *personas {
+                assert!(
+                    LIKELIHOOD_MATRIX[slot][p] >= 0.9,
+                    "slot {slot} persona {p} = {}",
+                    LIKELIHOOD_MATRIX[slot][p]
+                );
+            }
         }
     }
 

@@ -308,6 +308,7 @@ mod natural_language_search;
 mod notification_window;
 mod novelty;
 mod ollama;
+mod onboarding_save_commands;
 mod osv;
 mod package_ambiguity;
 mod platform_filter;
@@ -921,6 +922,7 @@ pub fn run() {
             settings_commands::add_tech_stack,
             settings_commands::remove_tech_stack,
             settings_commands::add_interest,
+            onboarding_save_commands::save_onboarding_context,
             settings_commands::remove_interest,
             settings_commands::add_exclusion,
             settings_commands::remove_exclusion,

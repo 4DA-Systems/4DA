@@ -49,7 +49,15 @@ pub struct TasteProfile {
     pub dominant_persona: usize,
     pub confidence: f64,
     pub items_shown: u32,
+    /// Every interest the test produced: liked-card topics, then persona
+    /// guesses. Which is which is `guessed_topics`.
     pub inferred_interests: Vec<(String, f32)>,
+    /// The entries of `inferred_interests` that are persona-template GUESSES
+    /// (weight <= `blending::INFERRED_TOPIC_WEIGHT_CAP`). They are stored as
+    /// `source = 'inferred'`; the rest came from liked cards and are stored as
+    /// user-confirmed (`'explicit'`).
+    #[serde(default)]
+    pub guessed_topics: Vec<String>,
     pub inferred_exclusions: Vec<String>,
     pub calibration_deltas: Vec<(String, f32)>,
 }
@@ -63,7 +71,19 @@ pub struct TasteProfileSummary {
     pub confidence: f64,
     pub items_shown: u32,
     pub persona_weights: Vec<PersonaWeight>,
+    /// Liked-card topics followed by persona guesses (max 10).
     pub top_interests: Vec<String>,
+    /// Topics of the cards the user liked — their own answers.
+    #[serde(default)]
+    pub liked_interests: Vec<String>,
+    /// Persona-template guesses: stored as inferred, weight-capped, and shown
+    /// as suggestions until the user keeps them.
+    #[serde(default)]
+    pub guessed_interests: Vec<String>,
+    /// The closest persona is one the user's own answers rule out (they
+    /// skipped the card that stands for it) — not to be presented as "you".
+    #[serde(default)]
+    pub persona_contradicted: bool,
 }
 
 /// A single persona weight for display.
@@ -162,6 +182,9 @@ mod tests {
                     weight: 0.6,
                 }],
                 top_interests: vec!["Rust".into()],
+                liked_interests: vec!["Rust".into()],
+                guessed_interests: vec![],
+                persona_contradicted: false,
             },
         };
         let json = serde_json::to_value(&step).unwrap();
@@ -175,6 +198,9 @@ mod tests {
         );
         assert_eq!(json["summary"]["itemsShown"], 10);
         assert_eq!(json["summary"]["topInterests"][0], "Rust");
+        assert_eq!(json["summary"]["likedInterests"][0], "Rust");
+        assert!(json["summary"]["guessedInterests"].is_array());
+        assert_eq!(json["summary"]["personaContradicted"], false);
         assert!(json["summary"]["personaWeights"].is_array());
     }
 

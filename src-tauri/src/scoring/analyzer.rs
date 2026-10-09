@@ -133,66 +133,72 @@ pub(crate) async fn score_items_full(
     );
 
     let classifier = crate::analysis::signal_classifier();
-    let mut results: Vec<SourceRelevance> = Vec::new();
     let scoring_loop_started = Instant::now();
 
-    for (idx, &item_idx) in keep_indices.iter().enumerate() {
-        let item = &cached_items[item_idx];
-        if crate::get_analysis_abort().load(Ordering::SeqCst) {
-            info!(target: "4da::analysis", scored = idx, "Cached analysis aborted by user");
-            return Err("Analysis cancelled".into());
-        }
+    // ~33 s of synchronous scoring on the live E2E corpus (852 items) with no
+    // `.await` in it: run it via `cpu_bound` so it does not pin an async
+    // runtime worker (see `ipc_blocking::cpu_bound`).
+    let mut results = crate::ipc_blocking::cpu_bound(|| -> Result<Vec<SourceRelevance>> {
+        let mut results: Vec<SourceRelevance> = Vec::new();
+        for (idx, &item_idx) in keep_indices.iter().enumerate() {
+            let item = &cached_items[item_idx];
+            if crate::get_analysis_abort().load(Ordering::SeqCst) {
+                info!(target: "4da::analysis", scored = idx, "Cached analysis aborted by user");
+                return Err("Analysis cancelled".into());
+            }
 
-        if idx % 200 == 0 {
-            crate::diagnostics::log_rss(&format!("scoring:loop@{idx}/{total_cached}"));
-        }
+            if idx % 200 == 0 {
+                crate::diagnostics::log_rss(&format!("scoring:loop@{idx}/{total_cached}"));
+            }
 
-        if idx % 50 == 0 {
-            let progress = 0.2 + (0.75 * (idx as f32 / total_cached as f32));
-            let truncated_title = crate::utils::truncate_display(&item.title, 30);
-            emit_progress(
-                app,
-                "relevance",
-                progress,
-                &format!("[{}] {}", item.source_type, truncated_title),
-                idx + 1,
-                total_cached,
-            );
+            if idx % 50 == 0 {
+                let progress = 0.2 + (0.75 * (idx as f32 / total_cached as f32));
+                let truncated_title = crate::utils::truncate_display(&item.title, 30);
+                emit_progress(
+                    app,
+                    "relevance",
+                    progress,
+                    &format!("[{}] {}", item.source_type, truncated_title),
+                    idx + 1,
+                    total_cached,
+                );
 
-            // Emit partial results for progressive rendering (foreground only)
-            if !silent && !results.is_empty() {
-                let batch_end = results.len();
-                let batch_start = batch_end.saturating_sub(50);
-                if let Err(e) = app.emit("partial-results", &results[batch_start..batch_end]) {
-                    tracing::warn!("Failed to emit 'partial-results': {e}");
+                // Emit partial results for progressive rendering (foreground only)
+                if !silent && !results.is_empty() {
+                    let batch_end = results.len();
+                    let batch_start = batch_end.saturating_sub(50);
+                    if let Err(e) = app.emit("partial-results", &results[batch_start..batch_end]) {
+                        tracing::warn!("Failed to emit 'partial-results': {e}");
+                    }
                 }
             }
+
+            let parsed_tags: Vec<String> = scoring::parse_tags_topics(item.tags.as_deref());
+
+            results.push(scoring::score_item(
+                &scoring::ScoringInput {
+                    id: item.id as u64,
+                    title: &item.title,
+                    url: item.url.as_deref(),
+                    content: &item.content,
+                    source_type: &item.source_type,
+                    embedding: &item.embedding,
+                    // Effective publication date: honest freshness (falls back to first-seen)
+                    created_at: Some(item.published_at.as_ref().unwrap_or(&item.created_at)),
+                    detected_lang: &item.detected_lang,
+                    source_tags: &parsed_tags,
+                    tags_json: item.tags.as_deref(),
+                    feed_origin: item.feed_origin.as_deref(),
+                    source_id: Some(&item.source_id),
+                },
+                &scoring_ctx,
+                db,
+                &options,
+                Some(classifier),
+            ));
         }
-
-        let parsed_tags: Vec<String> = scoring::parse_tags_topics(item.tags.as_deref());
-
-        results.push(scoring::score_item(
-            &scoring::ScoringInput {
-                id: item.id as u64,
-                title: &item.title,
-                url: item.url.as_deref(),
-                content: &item.content,
-                source_type: &item.source_type,
-                embedding: &item.embedding,
-                // Effective publication date: honest freshness (falls back to first-seen)
-                created_at: Some(item.published_at.as_ref().unwrap_or(&item.created_at)),
-                detected_lang: &item.detected_lang,
-                source_tags: &parsed_tags,
-                tags_json: item.tags.as_deref(),
-                feed_origin: item.feed_origin.as_deref(),
-                source_id: Some(&item.source_id),
-            },
-            &scoring_ctx,
-            db,
-            &options,
-            Some(classifier),
-        ));
-    }
+        Ok(results)
+    })?;
     info!(
         target: "4da::analysis",
         items = results.len(),
@@ -286,55 +292,59 @@ pub(crate) async fn score_items_full(
     // No cross-encoder stage (retired 2026-09-24): the BGE reranker measured
     // AUC 0.68 on the 128 human labels and 0.64 against live judge verdicts,
     // below the pipeline score it was blended over at 0.6 weight (0.72).
-    let mut rank_prov = crate::analysis::RankProvenance::begin(&results);
+    // ~11 s on the live E2E corpus, synchronous: same treatment as the loop.
+    let mut rank_prov = crate::ipc_blocking::cpu_bound(|| {
+        let mut rank_prov = crate::analysis::RankProvenance::begin(&results);
 
-    scoring::sort_results(&mut results);
-    let pre_dedup = results.len();
-    scoring::dedup_results(&mut results);
-    telemetry.dedup_removed = pre_dedup - results.len();
-    let pre_fuzzy = results.len();
-    scoring::fuzzy_dedup_results(&mut results);
-    telemetry.fuzzy_dedup_removed = pre_fuzzy - results.len();
-    telemetry.fuzzy_dedup_removed += scoring::release_story_dedup_results(&mut results);
-    let pre_topic = results.len();
-    scoring::topic_dedup_results(&mut results);
-    telemetry.topic_dedup_removed = pre_topic - results.len();
-    scoring::temporal_cluster_results(&mut results);
-    // Dedup/cluster stages can BOOST a surviving representative
-    // (topic-corroboration) — a batch-relative move worth naming.
-    rank_prov.record(&results, "corroboration");
-    telemetry.domain_diversity_adjusted = scoring::apply_domain_diversity(&mut results);
-    scoring::apply_source_topic_diversity(&mut results);
-    scoring::apply_source_share_diversity(&mut results);
-    rank_prov.record(&results, "diversity");
+        scoring::sort_results(&mut results);
+        let pre_dedup = results.len();
+        scoring::dedup_results(&mut results);
+        telemetry.dedup_removed = pre_dedup - results.len();
+        let pre_fuzzy = results.len();
+        scoring::fuzzy_dedup_results(&mut results);
+        telemetry.fuzzy_dedup_removed = pre_fuzzy - results.len();
+        telemetry.fuzzy_dedup_removed += scoring::release_story_dedup_results(&mut results);
+        let pre_topic = results.len();
+        scoring::topic_dedup_results(&mut results);
+        telemetry.topic_dedup_removed = pre_topic - results.len();
+        scoring::temporal_cluster_results(&mut results);
+        // Dedup/cluster stages can BOOST a surviving representative
+        // (topic-corroboration) — a batch-relative move worth naming.
+        rank_prov.record(&results, "corroboration");
+        telemetry.domain_diversity_adjusted = scoring::apply_domain_diversity(&mut results);
+        scoring::apply_source_topic_diversity(&mut results);
+        scoring::apply_source_share_diversity(&mut results);
+        rank_prov.record(&results, "diversity");
 
-    // Per-source score normalization: blend raw score with source-relative
-    // percentile so high-volume sources don't crowd out niche sources
-    crate::source_tiers::normalize_scores_by_source(&mut results);
-    rank_prov.record(&results, "percentile");
-    scoring::sort_results(&mut results); // Re-sort after normalization
+        // Per-source score normalization: blend raw score with source-relative
+        // percentile so high-volume sources don't crowd out niche sources
+        crate::source_tiers::normalize_scores_by_source(&mut results);
+        rank_prov.record(&results, "percentile");
+        scoring::sort_results(&mut results); // Re-sort after normalization
 
-    // Serendipity Engine: inject anti-bubble items
-    {
-        let settings = crate::get_settings_manager().lock();
-        let serendipity_config = &settings.get().serendipity;
-        if serendipity_config.enabled {
-            // In-place swap: the picks REPLACE the scorer-rejected originals
-            // they were cloned from. The previous `extend` left the originals
-            // behind, so every pick's id persisted twice (once relevant=false
-            // / "score", once relevant=true / "serendipity") with the stored
-            // verdict decided by write order — see the injector's doc.
-            let injected = scoring::dedup::inject_serendipity_candidates(
-                &mut results,
-                serendipity_config.budget_percent,
-            );
-            if injected > 0 {
-                telemetry.serendipity_injected = injected;
-                tracing::info!(target: "4da::analysis", count = injected, "Injecting serendipity items (cached)");
-                scoring::sort_results(&mut results);
+        // Serendipity Engine: inject anti-bubble items
+        {
+            let settings = crate::get_settings_manager().lock();
+            let serendipity_config = &settings.get().serendipity;
+            if serendipity_config.enabled {
+                // In-place swap: the picks REPLACE the scorer-rejected originals
+                // they were cloned from. The previous `extend` left the originals
+                // behind, so every pick's id persisted twice (once relevant=false
+                // / "score", once relevant=true / "serendipity") with the stored
+                // verdict decided by write order — see the injector's doc.
+                let injected = scoring::dedup::inject_serendipity_candidates(
+                    &mut results,
+                    serendipity_config.budget_percent,
+                );
+                if injected > 0 {
+                    telemetry.serendipity_injected = injected;
+                    tracing::info!(target: "4da::analysis", count = injected, "Injecting serendipity items (cached)");
+                    scoring::sort_results(&mut results);
+                }
             }
         }
-    }
+        rank_prov
+    });
 
     telemetry.log_summary();
     info!(

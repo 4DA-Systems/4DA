@@ -103,25 +103,20 @@ pub async fn taste_test_finalize(app: AppHandle) -> Result<TasteProfileSummary> 
     // to 0, every item tops out at the 1-signal ceiling (~0.23), and nothing clears
     // the 0.4 relevance gate (cold-start integrity run, 2026-06-13). The context
     // engine's add_interest upserts the same rows WITH the embedding BLOB, so this
-    // is idempotent and just fills in what the sync path could not.
-    if !profile.inferred_interests.is_empty() {
-        let topics: Vec<String> = profile
-            .inferred_interests
-            .iter()
-            .map(|(t, _)| t.clone())
-            .collect();
+    // is idempotent and just fills in what the sync path could not. Liked-card
+    // topics stay user-confirmed and persona guesses stay inferred + capped
+    // (`stored_interests`) — re-upserting must not change either.
+    let stored = crate::taste_test::db::stored_interests(&profile);
+    if !stored.is_empty() {
+        let topics: Vec<String> = stored.iter().map(|(t, _, _)| t.clone()).collect();
         match crate::embed_texts(&topics).await {
             Ok(embeddings) => {
                 if let Ok(engine) = crate::get_context_engine() {
-                    for ((topic, weight), emb) in
-                        profile.inferred_interests.iter().zip(embeddings.iter())
+                    for ((topic, weight, source), emb) in stored.into_iter().zip(embeddings.iter())
                     {
-                        if let Err(e) = engine.add_interest(
-                            topic,
-                            *weight,
-                            Some(emb.as_slice()),
-                            crate::context_engine::InterestSource::Inferred,
-                        ) {
+                        if let Err(e) =
+                            engine.add_interest(&topic, weight, Some(emb.as_slice()), source)
+                        {
                             tracing::warn!(target: "taste_test", topic = %topic, error = %e, "Failed to store inferred-interest embedding");
                         }
                     }

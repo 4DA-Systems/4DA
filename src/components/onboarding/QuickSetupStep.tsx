@@ -6,6 +6,7 @@ import { SetupInterests } from './setup-interests';
 import { SetupExperience } from './setup-experience';
 import { SetupLocale } from './setup-locale';
 import { useQuickSetup } from './use-quick-setup';
+import { pickOllamaModel } from './quick-setup-utils';
 
 interface QuickSetupStepProps {
   isAnimating: boolean;
@@ -40,10 +41,12 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
     discoveryDone,
     suggestions,
     interests,
+    guessedInterests,
     newInterest,
     role, setRole,
     error, setError,
     isSaving,
+    saveProgress,
     apiKeyHint,
     skippedDownload,
     cancellingDownload,
@@ -67,6 +70,20 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
     : provider === 'openai'
       ? 'OpenAI'
       : localServer?.name ?? t('onboarding.setupAi.otherLabel');
+  const aiSubtitle = !aiConfigured
+    ? (ollamaStatus !== null ? t('onboarding.setup.basicModeAvailable') : t('onboarding.setup.autoDetecting'))
+    : provider === 'none'
+      ? t('onboarding.setup.noAiChosen')
+      : provider === 'ollama'
+        ? t('onboarding.setup.localAiReadyModel', { model: pickOllamaModel(ollamaStatus?.models, ollamaStatus?.recommended_judge) })
+        : `${providerName} ${t('onboarding.setup.configured')}`;
+  // While saving, say how far along it is — a frozen "Saving..." for 30 s
+  // read as a hang (fresh-profile E2E, 2026-10-09).
+  const enterLabel = !isSaving
+    ? t('onboarding.setup.enter4DA')
+    : saveProgress && saveProgress.total > 0
+      ? t('onboarding.setup.savingProgress', { done: saveProgress.done, total: saveProgress.total })
+      : t('onboarding.setup.savingSettings');
 
   // --- Section header component ---
   const SectionHeader = ({
@@ -138,11 +155,7 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
         <div>
           <SectionHeader
             title={t('onboarding.setup.aiProvider')}
-            subtitle={aiConfigured
-              ? (provider === 'ollama' ? t('onboarding.setup.localAiReady') : `${providerName} ${t('onboarding.setup.configured')}`)
-              : ollamaStatus !== null
-                ? t('onboarding.setup.basicModeAvailable')
-                : t('onboarding.setup.autoDetecting')}
+            subtitle={aiSubtitle}
             isOpen={aiOpen}
             onToggle={() => setAiOpen(!aiOpen)}
             done={aiConfigured}
@@ -252,6 +265,7 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
               interests={interests}
               newInterest={newInterest}
               suggestions={suggestions}
+              guesses={guessedInterests}
               onRoleChange={setRole}
               onNewInterestChange={setNewInterest}
               onAddInterest={addInterest}
@@ -293,10 +307,14 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
           <button
             onClick={() => { void handleContinue(); }}
             disabled={isSaving}
+            aria-busy={isSaving}
             aria-label={t('onboarding.setup.completeSetup')}
-            className="px-8 py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+            className="px-8 py-3 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors font-medium disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
           >
-            {isSaving ? t('onboarding.setup.savingSettings') : t('onboarding.setup.enter4DA')}
+            {isSaving && (
+              <span aria-hidden="true" className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            )}
+            <span role={isSaving ? 'status' : undefined}>{enterLabel}</span>
           </button>
           {pullingModels && (
             <button

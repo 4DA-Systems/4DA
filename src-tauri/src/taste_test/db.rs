@@ -4,11 +4,13 @@
 use rusqlite::{params, Connection};
 use serde_json;
 
+use super::blending::INFERRED_TOPIC_WEIGHT_CAP;
 use super::{
     PersonaWeight, TasteProfile, TasteProfileSummary, TasteResponse, PERSONA_DESCRIPTIONS,
     PERSONA_NAMES,
 };
 use crate::autophagy::CalibrationDelta;
+use crate::context_engine::InterestSource;
 use crate::error::{Result, ResultExt};
 
 // ============================================================================
@@ -128,12 +130,7 @@ pub fn load_latest_taste_result(conn: &Connection) -> Option<TasteProfileSummary
         }
         let responses = load_responses(conn, test_id);
         let blended = crate::taste_test::blending::blend_profile(&weight_arr, 0.10, &responses);
-        let top_interests: Vec<String> = blended
-            .interests
-            .into_iter()
-            .take(10)
-            .map(|(t, _)| t)
-            .collect();
+        let (top_interests, liked_interests, guessed_interests) = blended.summary_lists();
 
         Ok(TasteProfileSummary {
             dominant_persona_name: PERSONA_NAMES
@@ -148,6 +145,9 @@ pub fn load_latest_taste_result(conn: &Connection) -> Option<TasteProfileSummary
             items_shown,
             persona_weights,
             top_interests,
+            liked_interests,
+            guessed_interests,
+            persona_contradicted: blended.dominant_contradicted,
         })
     })
     .ok()
@@ -205,6 +205,32 @@ pub fn is_calibrated(conn: &Connection) -> bool {
         > 0
 }
 
+/// How each taste-test interest is stored: `(topic, weight, source)`.
+///
+/// A topic of a card the user LIKED is their own answer — stored as
+/// user-confirmed (`Explicit`). A persona-template topic is a GUESS — stored
+/// as `Inferred` with its weight held at or below
+/// [`INFERRED_TOPIC_WEIGHT_CAP`], so a guess never carries the weight of
+/// something the user chose (fresh-profile E2E, 2026-10-09: every guess
+/// ended up explicit at 1.0).
+pub fn stored_interests(profile: &TasteProfile) -> Vec<(String, f32, InterestSource)> {
+    profile
+        .inferred_interests
+        .iter()
+        .map(|(topic, weight)| {
+            if profile.guessed_topics.contains(topic) {
+                (
+                    topic.clone(),
+                    weight.min(INFERRED_TOPIC_WEIGHT_CAP),
+                    InterestSource::Inferred,
+                )
+            } else {
+                (topic.clone(), *weight, InterestSource::Explicit)
+            }
+        })
+        .collect()
+}
+
 /// Apply taste test results to the existing context tables.
 ///
 /// Writes to the SAME tables that build_scoring_context() reads:
@@ -212,12 +238,15 @@ pub fn is_calibrated(conn: &Connection) -> bool {
 /// - exclusions
 /// - digested_intelligence (via store_calibrations)
 pub fn apply_taste_to_context(conn: &Connection, profile: &TasteProfile) -> Result<()> {
-    // Add inferred interests
-    for (topic, weight) in &profile.inferred_interests {
+    for (topic, weight, source) in stored_interests(profile) {
+        let source = match source {
+            InterestSource::Inferred => "inferred",
+            _ => "explicit",
+        };
         conn.execute(
             "INSERT OR REPLACE INTO explicit_interests (topic, weight, source)
              VALUES (?1, ?2, ?3)",
-            params![topic, weight, "inferred"],
+            params![topic, weight, source],
         )
         .with_context(|| format!("Failed to add interest '{topic}'"))?;
     }
@@ -379,6 +408,7 @@ mod tests {
                 ("Rust".to_string(), 1.0),
                 ("systems programming".to_string(), 0.9),
             ],
+            guessed_topics: vec!["systems programming".to_string()],
             inferred_exclusions: vec![],
             calibration_deltas: vec![("Machine Learning".to_string(), 0.05)],
         }
@@ -444,20 +474,63 @@ mod tests {
         assert!(is_calibrated(&conn));
     }
 
+    fn stored_row(conn: &Connection, topic: &str) -> (f64, String) {
+        conn.query_row(
+            "SELECT weight, source FROM explicit_interests WHERE topic = ?1",
+            params![topic],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .unwrap()
+    }
+
+    /// Liked-card topics are the user's own answers (explicit); persona
+    /// guesses stay inferred, at or below the inferred-weight cap.
     #[test]
-    fn test_apply_taste_writes_interests() {
+    fn apply_taste_stores_likes_as_confirmed_and_guesses_as_capped_inferred() {
         let conn = setup_test_db();
         let profile = make_test_profile();
         apply_taste_to_context(&conn, &profile).unwrap();
 
-        let count: i64 = conn
-            .query_row(
-                "SELECT COUNT(*) FROM explicit_interests WHERE source = 'inferred'",
-                [],
-                |row| row.get(0),
-            )
-            .unwrap();
-        assert!(count > 0, "Should have written inferred interests");
+        assert_eq!(stored_row(&conn, "Rust"), (1.0, "explicit".to_string()));
+        let (weight, source) = stored_row(&conn, "systems programming");
+        assert_eq!(source, "inferred");
+        assert!(
+            weight <= f64::from(INFERRED_TOPIC_WEIGHT_CAP) + 1e-6,
+            "guess weight {weight} exceeds the cap"
+        );
+    }
+
+    /// End to end through the real inference: the fresh-profile E2E tester
+    /// skipped the PyTorch card, so no ML guess may be stored at all.
+    #[test]
+    fn skipping_the_pytorch_card_stores_no_ml_guesses() {
+        use crate::taste_test::inference::InferenceState;
+        let conn = setup_test_db();
+        let mut state = InferenceState::new();
+        state.update(10, &TasteResponse::Interested); // sqlite-vec
+        state.update(13, &TasteResponse::Interested); // vector databases
+        for slot in [0usize, 1, 2, 3, 4, 5, 6, 7, 11] {
+            state.update(slot, &TasteResponse::NotInterested);
+        }
+        apply_taste_to_context(&conn, &state.finalize()).unwrap();
+
+        let topics: Vec<String> = conn
+            .prepare("SELECT topic FROM explicit_interests")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .flatten()
+            .collect();
+        for ml in [
+            "deep learning",
+            "AI/LLM",
+            "NLP",
+            "data science",
+            "computer vision",
+        ] {
+            assert!(!topics.iter().any(|t| t == ml), "{ml} in {topics:?}");
+        }
+        assert_eq!(stored_row(&conn, "SQLite").1, "explicit");
     }
 
     #[test]

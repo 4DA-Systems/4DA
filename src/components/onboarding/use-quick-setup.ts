@@ -14,6 +14,7 @@ import type { UseQuickSetupProps, ProviderType, LocalServerChoice } from './quic
 import {
   buildInitialPullProgress, refreshOllamaAfterPull, isOllamaReady,
   validateApiKey, saveLlmProvider, probeKeyBeforeSave,
+  tasteInterests, planInterestSaves,
 } from './quick-setup-utils';
 import { useDiscoveryFolders } from './use-discovery-folders';
 
@@ -50,6 +51,17 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
   const [discoveryDone, setDiscoveryDone] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>([]);
   const [interests, setInterests] = useState<string[]>([]);
+  // Taste-test persona GUESSES: offered as suggestions, saved as the user's
+  // own interest only if they tap one. Never pre-selected (E2E 2026-10-09).
+  const [guessedInterests, setGuessedInterests] = useState<string[]>([]);
+  // Liked-card topics the taste test already saved as the user's choice —
+  // pre-selected here, not re-saved; removing one here removes it.
+  const tasteSaved = useRef<Set<string>>(new Set());
+  // Whether the AI section has been on screen, and whether the user picked
+  // a provider themselves: a provider is saved only if one of these holds.
+  const aiSeen = useRef(false);
+  const providerChosen = useRef(false);
+  const [saveProgress, setSaveProgress] = useState<{ done: number; total: number } | null>(null);
   const [newInterest, setNewInterest] = useState('');
   const [role, setRole] = useState('Developer');
   const [error, setError] = useState<string | null>(null);
@@ -135,12 +147,13 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
         setOllamaStatus(status);
 
         // A running Ollama with a chat model is ready: it is shown selected,
-        // and the user can pick another provider. Without a chat model nothing
-        // is selected and nothing is pulled — the download is the user's call.
+        // with its model named, in the OPEN AI section — the user can pick
+        // another provider or skip AI. It used to collapse the section, so
+        // Enter saved Ollama + a model the user never saw (#877). Without a
+        // chat model nothing is selected and nothing is pulled.
         if (isOllamaReady(status)) {
           setProvider('ollama');
           setAiConfigured(true);
-          setAiOpen(false);
           setProjectsOpen(true);
         }
       } catch {
@@ -175,10 +188,10 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
         if (cancelled || !calibrated) return;
         const profile = await cmd('taste_test_get_profile');
         if (cancelled || !profile) return;
-        if (profile.topInterests.length > 0) {
-          setInterests(prev => prev.length === 0 ? profile.topInterests : prev);
-          setSuggestions(prev => prev.length === 0 ? profile.topInterests : prev);
-        }
+        const { liked, guessed } = tasteInterests(profile);
+        tasteSaved.current = new Set(liked);
+        if (liked.length > 0) setInterests(prev => prev.length === 0 ? liked : prev);
+        setGuessedInterests(guessed);
       } catch { /* Non-critical — taste test may not have been taken */ }
     })();
     return () => { cancelled = true; };
@@ -250,6 +263,7 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
   // A detected local server (LM Studio, llama.cpp, Jan) is a complete choice on
   // its own: base URL + loaded model, no key needed.
   const handleLocalServerSelect = (choice: LocalServerChoice) => {
+    providerChosen.current = true;
     setProvider('openai-compatible');
     setLocalServer(choice);
     setApiKey('');
@@ -259,11 +273,18 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
   };
 
   const handleProviderChange = (p: ProviderType) => {
+    providerChosen.current = true;
     setProvider(p);
     setLocalServer(null);
-    setAiConfigured(p === 'ollama' && isOllamaReady(ollamaStatus));
+    // "Skip — no AI for now" is a complete, deliberate answer.
+    setAiConfigured(p === 'none' || (p === 'ollama' && isOllamaReady(ollamaStatus)));
     if (p !== 'ollama') setProjectsOpen(true);
   };
+
+  // The AI section counts as seen once it has been open with detection done.
+  useEffect(() => {
+    if (aiOpen && ollamaStatus !== null) aiSeen.current = true;
+  }, [aiOpen, ollamaStatus]);
 
   const handleApiKeyChange = (key: string) => {
     setApiKey(key);
@@ -292,28 +313,42 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
         return;
       }
 
-      await saveLlmProvider(provider, apiKey, ollamaStatus, localServer);
-
-      // Auto-trigger embedding engine preparation (fire-and-forget)
-      // This ensures semantic search is ready by the time the user finishes onboarding
-      cmd('prepare_embedding_engine').catch(() => {
-        // Non-fatal: embedding engine will auto-initialize on first use
-      });
-
-      if (role) await cmd('set_user_role', { role });
-      if (experienceLevel) await cmd('set_experience_level', { level: experienceLevel });
-
       // Save the user's chosen interests, or fall back to REAL detected tech.
       // Never persist the generic fallback list — an empty interest set is the
       // honest thin-profile state the scoring floor is built for (F-6).
-      const interestsToSave = interests.length > 0
-        ? interests
-        : detectedTech.slice(0, 5);
-      await Promise.all([
-        ...interestsToSave.map(interest => cmd('add_interest', { topic: interest })),
-        ...detectedTech.map(tech => cmd('add_tech_stack', { technology: tech })),
-        ...(selectedStacks.length > 0 ? [cmd('set_selected_stacks', { profileIds: selectedStacks })] : []),
-      ]);
+      // Liked-card topics the taste test already saved are not re-saved;
+      // one the user removed here is removed. Unkept guesses stay inferred.
+      const { add, remove } = planInterestSaves(
+        interests.length > 0 ? interests : detectedTech.slice(0, 5),
+        tasteSaved.current,
+      );
+      // Never save a provider the user did not see: an auto-selected Ollama
+      // in a section that was never open is no choice at all.
+      const providerToSave = providerChosen.current || aiSeen.current ? provider : null;
+
+      // Sequential stages, each reported on the button. Interests, tech and
+      // stacks go in ONE call — the old 21-call fan-out froze Enter ~30 s
+      // behind a running analysis (fresh-profile E2E, 2026-10-09).
+      const stages: Array<() => Promise<unknown>> = [
+        () => saveLlmProvider(providerToSave, apiKey, ollamaStatus, localServer),
+        ...(role ? [() => cmd('set_user_role', { role })] : []),
+        ...(experienceLevel ? [() => cmd('set_experience_level', { level: experienceLevel })] : []),
+        () => cmd('save_onboarding_context', {
+          save: {
+            addInterests: add,
+            removeInterests: remove,
+            technologies: detectedTech,
+            stackProfileIds: selectedStacks.length > 0 ? selectedStacks : null,
+          },
+        }),
+      ];
+      for (const [i, stage] of stages.entries()) {
+        setSaveProgress({ done: i + 1, total: stages.length });
+        await stage();
+        // Prepare the embedding engine once the provider is saved
+        // (fire-and-forget; it initializes on first use otherwise).
+        if (i === 0) cmd('prepare_embedding_engine').catch(() => { /* non-fatal */ });
+      }
 
       try { localStorage.removeItem(SECTION_KEY); } catch { /* noop */ }
       onComplete();
@@ -321,6 +356,7 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
       setError(t('onboarding.setup.saveFailed', { error: String(e) }));
     } finally {
       setIsSaving(false);
+      setSaveProgress(null);
     }
   };
 
@@ -340,8 +376,8 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
     selectedStacks, setSelectedStacks,
     ollamaStatus, provider, apiKey, pullingModels, pullProgress, aiConfigured, localServer,
     discovery, scanning, scanProjects, detectedTech, discoveryDone,
-    suggestions, interests, newInterest, setNewInterest, role, setRole,
-    error, setError, isSaving, apiKeyHint, skippedDownload, cancellingDownload,
+    suggestions, interests, guessedInterests, newInterest, setNewInterest, role, setRole,
+    error, setError, isSaving, saveProgress, apiKeyHint, skippedDownload, cancellingDownload,
     removeTag, addInterest, toggleInterest,
     handleProviderChange, handleLocalServerSelect, handleApiKeyChange, handleContinue, handleSkipDownload,
     downloadLocalModels, cancelDownload,

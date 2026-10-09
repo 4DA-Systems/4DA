@@ -3,20 +3,7 @@ import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { cmd } from '../../lib/commands';
-
-interface PersonaWeight {
-  name: string;
-  weight: number;
-}
-
-interface TasteProfileSummary {
-  dominantPersonaName: string;
-  dominantPersonaDescription: string;
-  confidence: number;
-  itemsShown: number;
-  personaWeights: PersonaWeight[];
-  topInterests: string[];
-}
+import type { TasteProfileSummary } from '../../types/calibration';
 
 interface CalibrationSummaryProps {
   summary: TasteProfileSummary;
@@ -27,11 +14,15 @@ export function CalibrationSummary({ summary, onContinue }: CalibrationSummaryPr
   const { t } = useTranslation();
   const confidencePct = Math.round(summary.confidence * 100);
 
-  // Detected interests are editable: the taste test is a guess, and users
-  // should be able to correct what was surfaced before it shapes their feed.
-  // Each change is saved first and shown only once saved, so the list on
-  // screen is always what the feed will actually use.
-  const [interests, setInterests] = useState<string[]>(summary.topInterests);
+  // Two kinds of interest, said honestly: topics of the cards the user LIKED
+  // (their own answers, saved as their choice) and GUESSES from the closest
+  // persona (saved as inferred at reduced weight). Fresh-profile E2E
+  // 2026-10-09: one undivided list headed "These came from your responses"
+  // held five ML guesses for a user who had skipped the ML card.
+  // Each change is saved first and shown only once saved, so the lists on
+  // screen are always what the feed will actually use.
+  const [liked, setLiked] = useState<string[]>(summary.likedInterests ?? summary.topInterests);
+  const [guessed, setGuessed] = useState<string[]>(summary.guessedInterests ?? []);
   const [draft, setDraft] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -43,7 +34,8 @@ export function CalibrationSummary({ summary, onContinue }: CalibrationSummaryPr
     setSaveError(null);
     try {
       await cmd('remove_interest', { topic });
-      setInterests((prev) => prev.filter((i) => i !== topic));
+      setLiked((prev) => prev.filter((i) => i !== topic));
+      setGuessed((prev) => prev.filter((i) => i !== topic));
     } catch (e) {
       setSaveError(t('onboarding.calib.saveFailed', { error: String(e) }));
     } finally {
@@ -54,15 +46,18 @@ export function CalibrationSummary({ summary, onContinue }: CalibrationSummaryPr
   const addInterest = async () => {
     const topic = draft.trim();
     if (saving || !topic) return;
-    if (interests.some((i) => i.toLowerCase() === topic.toLowerCase())) {
+    if (liked.some((i) => i.toLowerCase() === topic.toLowerCase())) {
       setDraft('');
       return;
     }
     setSaving(true);
     setSaveError(null);
     try {
+      // Typed by the user: their own choice, full weight. A guess they type
+      // again is promoted out of the guess list.
       await cmd('add_interest', { topic });
-      setInterests((prev) => [...prev, topic]);
+      setLiked((prev) => [...prev, topic]);
+      setGuessed((prev) => prev.filter((i) => i.toLowerCase() !== topic.toLowerCase()));
       setDraft('');
     } catch (e) {
       // The draft is kept so the user can retry without retyping.
@@ -71,6 +66,28 @@ export function CalibrationSummary({ summary, onContinue }: CalibrationSummaryPr
       setSaving(false);
     }
   };
+
+  const chip = (interest: string, isGuess: boolean) => (
+    <span
+      key={interest}
+      data-guess={isGuess || undefined}
+      className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md ${
+        isGuess
+          ? 'border border-dashed border-border text-text-muted'
+          : 'bg-bg-tertiary text-text-secondary'
+      }`}
+    >
+      {interest}
+      <button
+        onClick={() => { void removeInterest(interest); }}
+        disabled={saving}
+        aria-label={t('onboarding.calib.removeAria', { interest })}
+        className="text-text-muted hover:text-error transition-colors leading-none text-sm"
+      >
+        <span aria-hidden="true">{'✕'}</span>
+      </button>
+    </span>
+  );
 
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
@@ -82,13 +99,22 @@ export function CalibrationSummary({ summary, onContinue }: CalibrationSummaryPr
         </p>
       </div>
 
-      {/* Dominant persona */}
+      {/* Closest persona — never presented as "you" when the answers rule it out */}
       <div className="bg-bg-secondary border border-border rounded-lg p-5">
         <div className="text-xs text-text-muted uppercase tracking-wider mb-2">
           {t('onboarding.calib.developerProfile')}
         </div>
-        <h3 className="text-text-primary font-medium text-lg mb-1">{summary.dominantPersonaName}</h3>
-        <p className="text-text-secondary text-sm">{summary.dominantPersonaDescription}</p>
+        {summary.personaContradicted ? (
+          <>
+            <h3 className="text-text-primary font-medium text-lg mb-1">{t('onboarding.calib.noClearProfile')}</h3>
+            <p className="text-text-secondary text-sm">{t('onboarding.calib.noClearProfileBody')}</p>
+          </>
+        ) : (
+          <>
+            <h3 className="text-text-primary font-medium text-lg mb-1">{summary.dominantPersonaName}</h3>
+            <p className="text-text-secondary text-sm">{summary.dominantPersonaDescription}</p>
+          </>
+        )}
       </div>
 
       {/* Persona blend bar chart */}
@@ -96,7 +122,7 @@ export function CalibrationSummary({ summary, onContinue }: CalibrationSummaryPr
         <div className="bg-bg-secondary border border-border rounded-lg p-5">
           <div className="text-xs text-text-muted uppercase tracking-wider mb-3">{t('onboarding.calib.personaBlend')}</div>
           <div className="space-y-2">
-            {summary.personaWeights
+            {[...summary.personaWeights]
               .sort((a, b) => b.weight - a.weight)
               .map((pw) => (
                 <div key={pw.name} className="flex items-center gap-3">
@@ -116,7 +142,7 @@ export function CalibrationSummary({ summary, onContinue }: CalibrationSummaryPr
         </div>
       )}
 
-      {/* Detected interests — editable (remove what doesn't fit, add your own) */}
+      {/* Interests — editable (remove what doesn't fit, add your own) */}
       <div className="bg-bg-secondary border border-border rounded-lg p-5">
         <div className="flex items-center justify-between mb-1">
           <div className="text-xs text-text-muted uppercase tracking-wider">{t('onboarding.calib.detectedInterests')}</div>
@@ -126,26 +152,20 @@ export function CalibrationSummary({ summary, onContinue }: CalibrationSummaryPr
           {t('onboarding.calib.interestsHint')}
         </p>
         <div className="flex flex-wrap gap-2 mb-3">
-          {interests.length === 0 && (
+          {liked.length === 0 && (
             <span className="text-xs text-text-muted">{t('onboarding.calib.noInterests')}</span>
           )}
-          {interests.map((interest) => (
-            <span
-              key={interest}
-              className="inline-flex items-center gap-1.5 text-xs bg-bg-tertiary text-text-secondary px-2.5 py-1 rounded-md"
-            >
-              {interest}
-              <button
-                onClick={() => { void removeInterest(interest); }}
-                disabled={saving}
-                aria-label={t('onboarding.calib.removeAria', { interest })}
-                className="text-text-muted hover:text-error transition-colors leading-none text-sm"
-              >
-                <span aria-hidden="true">{'✕'}</span>
-              </button>
-            </span>
-          ))}
+          {liked.map((interest) => chip(interest, false))}
         </div>
+        {guessed.length > 0 && (
+          <div className="mb-3">
+            <div className="text-[11px] text-text-secondary">{t('onboarding.calib.guessesLabel')}</div>
+            <p className="text-[11px] text-text-muted mb-2">{t('onboarding.calib.guessesHint')}</p>
+            <div className="flex flex-wrap gap-2">
+              {guessed.map((interest) => chip(interest, true))}
+            </div>
+          </div>
+        )}
         {saveError && (
           <p role="alert" className="text-xs text-red-400 mb-2">{saveError}</p>
         )}

@@ -264,6 +264,7 @@ impl InferenceState {
             dominant_persona: dominant,
             confidence: self.confidence(),
             items_shown: self.items_shown.len() as u32,
+            guessed_topics: blended.inferred_topics,
             inferred_interests: blended.interests,
             inferred_exclusions: blended.exclusions,
             calibration_deltas: blended.calibration_deltas.into_iter().collect(),
@@ -280,6 +281,7 @@ impl InferenceState {
             .map_or(0, |(i, _)| i);
 
         let blended = super::blending::blend_profile(&self.posterior, 0.10, &self.items_shown);
+        let (top_interests, liked_interests, guessed_interests) = blended.summary_lists();
 
         TasteProfileSummary {
             dominant_persona_name: PERSONA_NAMES[dominant].to_string(),
@@ -296,12 +298,10 @@ impl InferenceState {
                     weight: w,
                 })
                 .collect(),
-            top_interests: blended
-                .interests
-                .into_iter()
-                .take(10)
-                .map(|(topic, _)| topic)
-                .collect(),
+            top_interests,
+            liked_interests,
+            guessed_interests,
+            persona_contradicted: blended.dominant_contradicted,
         }
     }
 

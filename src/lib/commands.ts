@@ -378,6 +378,23 @@ interface CommandMap {
   // -- User Context & Interests --
   get_user_context: { params: Record<string, never>; result: UserContext };
   add_interest: { params: { topic: string }; result: void };
+  /** Quick Setup's "Enter 4DA": every interest/tech/stack write in one call. */
+  save_onboarding_context: { params: {
+      save: {
+        addInterests: string[];
+        removeInterests: string[];
+        technologies: string[];
+        stackProfileIds: string[] | null;
+      };
+    };
+    result: {
+      interestsAdded: number;
+      interestsRemoved: number;
+      technologiesAdded: number;
+      embedMs: number;
+      writeMs: number;
+    };
+  };
   remove_interest: { params: { topic: string }; result: void };
   add_exclusion: { params: { topic: string }; result: void };
   remove_exclusion: { params: { topic: string }; result: void };
@@ -1919,6 +1936,8 @@ const LONG_RUNNING_COMMANDS = new Set<string>([
   'ace_auto_discover',
   'pull_ollama_model',
   'prepare_embedding_engine',
+  // Embeds every Quick Setup interest; a cold local embedder can take a while.
+  'save_onboarding_context',
   'natural_language_query',
   'synthesize_search',
   'generate_ai_briefing',

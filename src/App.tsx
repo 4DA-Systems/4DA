@@ -370,8 +370,10 @@ function App() {
         <BackgroundRefreshBanner />
         {/* Trial expiry announcement — final 4 days, dismissible per remaining day */}
         <TrialExpiryBanner />
-        {/* Calibration nudge — one-time, dismissible, only for uncalibrated installs */}
-        <CalibrationNudgeBanner />
+        {/* Calibration nudge — one-time, dismissible, only for uncalibrated installs.
+            Not mounted behind the onboarding wizard: it would judge the install
+            before the wizard's taste test ran. */}
+        {!showSplash && !showOnboarding && <CalibrationNudgeBanner />}
 
         {/* View Tab Bar */}
         <ViewTabBar />

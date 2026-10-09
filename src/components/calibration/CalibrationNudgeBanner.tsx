@@ -50,13 +50,18 @@ export function CalibrationNudgeBanner() {
   const [show, setShow] = useState(false);
   const [viewOpen, setViewOpen] = useState(false);
 
+  // Re-evaluated whenever first-run state changes, and a stale "show" is
+  // cleared first: the banner is mounted while onboarding runs, so its first
+  // verdict ("never took the taste test") predates the test the user then
+  // finished — and was shown right after it (fresh-profile E2E, 2026-10-09).
   useEffect(() => {
+    setShow(false);
     if (isFirstRun) return;
     if (localStorage.getItem(DISMISS_KEY)) return;
     let cancelled = false;
     needsNudge()
       .then((needed) => {
-        if (!cancelled && needed) setShow(true);
+        if (!cancelled) setShow(needed);
       })
       .catch(() => {});
     return () => {

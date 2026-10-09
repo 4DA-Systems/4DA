@@ -58,6 +58,7 @@ pub const REGISTERED_COMMANDS: &[&str] = &[
     "add_tech_stack",
     "remove_tech_stack",
     "add_interest",
+    "save_onboarding_context",
     "remove_interest",
     "add_exclusion",
     "remove_exclusion",

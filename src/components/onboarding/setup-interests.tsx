@@ -8,6 +8,8 @@ interface SetupInterestsProps {
   interests: string[];
   newInterest: string;
   suggestions: string[];
+  /** Taste-test persona guesses — offered, never pre-selected. */
+  guesses?: string[];
   onRoleChange: (role: string) => void;
   onNewInterestChange: (value: string) => void;
   onAddInterest: () => void;
@@ -20,6 +22,7 @@ export function SetupInterests({
   interests,
   newInterest,
   suggestions,
+  guesses = [],
   onRoleChange,
   onNewInterestChange,
   onAddInterest,
@@ -27,6 +30,7 @@ export function SetupInterests({
 }: SetupInterestsProps) {
   const { t } = useTranslation();
   const roleSelectId = useId();
+  const openGuesses = guesses.filter(g => !interests.includes(g));
   return (
     <div className="mt-2 p-4 bg-bg-secondary rounded-lg border border-border space-y-3">
       {/* Role selector */}
@@ -85,12 +89,31 @@ export function SetupInterests({
         </button>
       </div>
 
+      {/* Taste-test guesses — visibly NOT the user's choice until tapped */}
+      {openGuesses.length > 0 && (
+        <div>
+          <p className="text-xs text-text-muted mb-2">{t('onboarding.interests.guessesLabel')}</p>
+          <div className="flex flex-wrap gap-2">
+            {openGuesses.map((guess) => (
+              <button
+                key={guess}
+                onClick={() => onToggleInterest(guess)}
+                aria-label={t('onboarding.interests.keepGuess', { topic: guess })}
+                className="px-3 py-1.5 border border-dashed border-border text-text-muted rounded-full text-sm hover:border-orange-500/50 hover:text-text-primary transition-all"
+              >
+                + {guess}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Suggestions */}
       <div>
         <p className="text-xs text-text-muted mb-2">{t('onboarding.interests.quickAdd')}:</p>
         <div className="flex flex-wrap gap-2">
           {suggestions
-            .filter(s => !interests.includes(s))
+            .filter(s => !interests.includes(s) && !openGuesses.includes(s))
             .slice(0, 10)
             .map((suggestion) => (
               <button

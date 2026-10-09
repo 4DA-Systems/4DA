@@ -42,4 +42,19 @@ describe('StackSelectStep', () => {
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     expect(screen.getByText('Rust Systems')).toBeInTheDocument();
   });
+
+  // Fresh-profile E2E 2026-10-09: a weak match must be shown, not ticked.
+  it('auto-ticks only detections at or above the bar', async () => {
+    cmdMock.mockImplementation((command: string) => {
+      if (command === 'get_stack_profiles') return Promise.resolve([profile]);
+      return Promise.resolve([
+        { profile_id: 'rust_systems', profile_name: 'Rust Systems', confidence: 0.45, matched_tech: [] },
+        { profile_id: 'bootstrap_webdev', profile_name: 'Web', confidence: 0.2, matched_tech: [] },
+      ]);
+    });
+    const onSelectionChange = vi.fn();
+    render(<StackSelectStep selected={[]} onSelectionChange={onSelectionChange} />);
+    await act(async () => {});
+    expect(onSelectionChange).toHaveBeenCalledWith(['rust_systems']);
+  });
 });
