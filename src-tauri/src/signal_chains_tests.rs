@@ -23,17 +23,33 @@ fn chain_detection_db() -> Connection {
             relevance_score REAL,
             embedding_status TEXT DEFAULT 'complete'
         );
+        -- The real column sets: grounding reads the stack through
+        -- temporal::get_all_dependencies, the app's one dependency funnel.
+        -- Rows default to one live project (no git_signals / detected_projects
+        -- = first-run scope, every included project counts).
         CREATE TABLE user_dependencies (
+            id INTEGER PRIMARY KEY,
+            project_path TEXT NOT NULL DEFAULT 'd:/work/app',
             package_name TEXT NOT NULL,
+            version TEXT,
             ecosystem TEXT DEFAULT '',
             is_dev INTEGER DEFAULT 0,
-            is_direct INTEGER DEFAULT 1
+            is_direct INTEGER DEFAULT 1,
+            detected_at TEXT NOT NULL DEFAULT (datetime('now')),
+            last_seen_at TEXT NOT NULL DEFAULT (datetime('now'))
         );
         CREATE TABLE project_dependencies (
+            id INTEGER PRIMARY KEY,
+            project_path TEXT NOT NULL DEFAULT 'd:/work/app',
+            manifest_type TEXT NOT NULL DEFAULT 'package.json',
             package_name TEXT NOT NULL,
-            language TEXT DEFAULT '',
+            version TEXT,
             is_dev INTEGER DEFAULT 0,
-            is_direct INTEGER DEFAULT 1
+            is_direct INTEGER DEFAULT 1,
+            language TEXT NOT NULL DEFAULT '',
+            last_scanned TEXT NOT NULL DEFAULT (datetime('now')),
+            detected_from TEXT NOT NULL DEFAULT 'manifest',
+            project_relevance REAL NOT NULL DEFAULT 1.0
         );
         CREATE TABLE source_item_dependencies (
             source_item_id INTEGER NOT NULL,
@@ -247,7 +263,7 @@ fn fixture_offsets_land_on_stable_calendar_days() {
 fn detect_chains_samples_across_days_not_only_latest_two_hundred_items() {
     let conn = chain_detection_db();
     conn.execute(
-        "INSERT INTO user_dependencies (package_name) VALUES ('tokio')",
+        "INSERT INTO project_dependencies (package_name) VALUES ('tokio')",
         [],
     )
     .expect("insert dependency");
@@ -309,7 +325,7 @@ fn detect_chains_samples_across_days_not_only_latest_two_hundred_items() {
 fn strict_proof_dependency_topic_is_not_verified_without_ecosystem_context() {
     let conn = chain_detection_db();
     conn.execute(
-        "INSERT INTO user_dependencies (package_name, ecosystem) VALUES ('image', 'rust')",
+        "INSERT INTO project_dependencies (package_name, language) VALUES ('image', 'rust')",
         [],
     )
     .expect("insert dependency");
@@ -376,7 +392,7 @@ fn strict_proof_dependency_topic_is_not_verified_without_ecosystem_context() {
 fn strict_proof_dependency_topic_can_be_verified_with_linker_proof() {
     let conn = chain_detection_db();
     conn.execute(
-        "INSERT INTO user_dependencies (package_name, ecosystem) VALUES ('image', 'rust')",
+        "INSERT INTO project_dependencies (package_name, language) VALUES ('image', 'rust')",
         [],
     )
     .expect("insert dependency");
@@ -416,7 +432,7 @@ fn strict_proof_dependency_topic_can_be_verified_with_linker_proof() {
 fn verified_dep_chain_filters_ungrounded_security_link() {
     let conn = chain_detection_db();
     conn.execute(
-        "INSERT INTO user_dependencies (package_name, ecosystem) VALUES ('image', 'rust')",
+        "INSERT INTO project_dependencies (package_name, language) VALUES ('image', 'rust')",
         [],
     )
     .expect("insert dependency");
@@ -472,7 +488,7 @@ fn verified_dep_chain_filters_ungrounded_security_link() {
 fn verified_dep_chain_requires_two_grounded_items_across_days() {
     let conn = chain_detection_db();
     conn.execute(
-        "INSERT INTO user_dependencies (package_name, ecosystem) VALUES ('express', 'javascript')",
+        "INSERT INTO project_dependencies (package_name, language) VALUES ('express', 'javascript')",
         [],
     )
     .expect("insert dependency");
@@ -527,7 +543,7 @@ fn verified_dep_chain_requires_two_grounded_items_across_days() {
 fn verified_dep_chain_displays_only_grounded_links() {
     let conn = chain_detection_db();
     conn.execute(
-        "INSERT INTO user_dependencies (package_name, ecosystem) VALUES ('express', 'javascript')",
+        "INSERT INTO project_dependencies (package_name, language) VALUES ('express', 'javascript')",
         [],
     )
     .expect("insert dependency");
@@ -597,7 +613,7 @@ fn verified_dep_chain_displays_only_grounded_links() {
 fn critical_verified_chain_keeps_security_link_when_truncated() {
     let conn = chain_detection_db();
     conn.execute(
-        "INSERT INTO user_dependencies (package_name, ecosystem) VALUES ('next', 'javascript')",
+        "INSERT INTO project_dependencies (package_name, language) VALUES ('next', 'javascript')",
         [],
     )
     .expect("insert dependency");
@@ -656,7 +672,7 @@ fn critical_verified_chain_keeps_security_link_when_truncated() {
 fn bare_title_words_never_ground_a_dependency_chain() {
     let conn = chain_detection_db();
     conn.execute(
-        "INSERT INTO user_dependencies (package_name, ecosystem) VALUES ('tokio', 'rust')",
+        "INSERT INTO project_dependencies (package_name, language) VALUES ('tokio', 'rust')",
         [],
     )
     .expect("insert dependency");
@@ -728,7 +744,7 @@ fn bare_title_words_never_ground_a_dependency_chain() {
 fn registry_subject_and_affected_line_ground_without_linker_rows() {
     let conn = chain_detection_db();
     conn.execute(
-        "INSERT INTO user_dependencies (package_name, ecosystem) VALUES ('tokio', 'rust')",
+        "INSERT INTO project_dependencies (package_name, language) VALUES ('tokio', 'rust')",
         [],
     )
     .expect("insert dependency");
@@ -780,7 +796,7 @@ fn registry_subject_and_affected_line_ground_without_linker_rows() {
 fn detect_and_record_chains_persists_temporal_signal_chain_rows() {
     let conn = chain_detection_db();
     conn.execute(
-        "INSERT INTO user_dependencies (package_name) VALUES ('tokio')",
+        "INSERT INTO project_dependencies (package_name) VALUES ('tokio')",
         [],
     )
     .expect("insert dependency");
@@ -840,7 +856,7 @@ fn detect_and_record_chains_replaces_stale_signal_chain_snapshot() {
     )
     .expect("insert stale snapshot");
     conn.execute(
-        "INSERT INTO user_dependencies (package_name) VALUES ('tokio')",
+        "INSERT INTO project_dependencies (package_name) VALUES ('tokio')",
         [],
     )
     .expect("insert dependency");
@@ -966,7 +982,10 @@ fn live_snapshot_chain_topics_are_the_users() {
         return;
     };
     let conn = Connection::open(&path).expect("open snapshot");
-    let terms = signal_chains_grounding::user_topic_terms(&conn);
+    let terms = signal_chains_grounding::user_topic_terms(
+        &conn,
+        &signal_chains_grounding::StackDependencies::load(&conn),
+    );
     let chains = detect_chains(&conn).expect("detect chains on snapshot");
     println!("profile terms: {}, chains: {}", terms.len(), chains.len());
     for c in &chains {
@@ -980,10 +999,27 @@ fn live_snapshot_chain_topics_are_the_users() {
             c.chain_name, c.verified_dep, c.dep_advisory, c.overall_priority
         );
         assert!(
-            c.verified_dep.is_some() || signal_chains_grounding::topic_in_user_terms(&terms, topic),
+            c.verified_dep.is_some()
+                || signal_chains_grounding::topic_in_user_terms(&terms, topic)
+                || signal_chains_grounding::topic_in_user_terms(
+                    &terms,
+                    &signal_chains_topics::chain_topic_key(topic)
+                ),
             "chain topic {topic} is not the user's"
         );
         assert!(!c.dep_advisory || c.verified_dep.is_some());
+    }
+    // Audit 2026-10-07: one chain per technology, and no chain from the
+    // dormant-project / transitive names that formed watch chains.
+    assert!(
+        next_family_chains(&chains).len() <= 1,
+        "next / next.js / nextjs split again"
+    );
+    for stale in ["redis", "promise"] {
+        assert!(
+            !chain_topics(&chains).iter().any(|t| t == stale),
+            "{stale} chain is back"
+        );
     }
 
     conn.execute_batch("BEGIN")
@@ -1111,7 +1147,10 @@ fn interest_and_stack_terms_match_across_separators() {
     .expect("insert interest");
     conn.execute("INSERT INTO tech_stack (technology) VALUES ('Node.js')", [])
         .expect("insert stack");
-    let terms = signal_chains_grounding::user_topic_terms(&conn);
+    let terms = signal_chains_grounding::user_topic_terms(
+        &conn,
+        &signal_chains_grounding::StackDependencies::load(&conn),
+    );
     for topic in ["ai", "llm", "node.js", "nodejs"] {
         assert!(
             signal_chains_grounding::topic_in_user_terms(&terms, topic),
@@ -1143,7 +1182,10 @@ fn package_names_never_mint_generic_topic_terms() {
         [],
     )
     .expect("insert detected tech");
-    let terms = signal_chains_grounding::user_topic_terms(&conn);
+    let terms = signal_chains_grounding::user_topic_terms(
+        &conn,
+        &signal_chains_grounding::StackDependencies::load(&conn),
+    );
     for generic in ["api", "google", "http", "plugin-updater", "tauri-apps"] {
         assert!(
             !signal_chains_grounding::topic_in_user_terms(&terms, generic),
@@ -1164,7 +1206,7 @@ fn dep_advisory_requires_an_advisory_for_the_dependency() {
     // Affected: line names the package -> a published advisory FOR tokio.
     let conn = chain_detection_db();
     conn.execute(
-        "INSERT INTO user_dependencies (package_name, ecosystem) VALUES ('tokio', 'rust')",
+        "INSERT INTO project_dependencies (package_name, language) VALUES ('tokio', 'rust')",
         [],
     )
     .expect("insert dependency");
@@ -1197,7 +1239,7 @@ fn dep_advisory_requires_an_advisory_for_the_dependency() {
     // grounded, but no advisory FOR tokio.
     let conn = chain_detection_db();
     conn.execute(
-        "INSERT INTO user_dependencies (package_name, ecosystem) VALUES ('tokio', 'rust')",
+        "INSERT INTO project_dependencies (package_name, language) VALUES ('tokio', 'rust')",
         [],
     )
     .expect("insert dependency");
@@ -1228,4 +1270,254 @@ fn dep_advisory_requires_an_advisory_for_the_dependency() {
         !tokio.dep_advisory,
         "a CVE id in a release title is not a published advisory for the dependency"
     );
+}
+
+// ------------------------------------------------------------------------
+// Stack scope (audit 2026-10-07): `redis` (a project dormant for a year) and
+// `promise` (a transitive lockfile entry) formed watch chains, because chain
+// grounding read every dependency ever scanned instead of the "Your stack" set.
+// ------------------------------------------------------------------------
+
+/// Two projects under one active repository root: `d:/work/live` (touched
+/// today) and `d:/work/old` (last activity 2020 — dormant). `old_is_live`
+/// flips the old project's activity to today: the control.
+fn stack_scope_db(old_is_live: bool) -> Connection {
+    let conn = chain_detection_db();
+    add_profile_tables(&conn);
+    let now = chrono::Utc::now().to_rfc3339();
+    let old_activity = if old_is_live {
+        now.clone()
+    } else {
+        "2020-01-15T00:00:00Z".to_string()
+    };
+    conn.execute_batch(
+        "CREATE TABLE git_signals (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            repo_path TEXT NOT NULL,
+            commit_hash TEXT,
+            timestamp TEXT DEFAULT (datetime('now'))
+         );
+         CREATE TABLE detected_projects (
+            path TEXT NOT NULL UNIQUE, name TEXT NOT NULL DEFAULT 'p',
+            last_activity TEXT, scratch INTEGER NOT NULL DEFAULT 0
+         );
+         INSERT INTO git_signals (repo_path, commit_hash) VALUES ('D:\\work', 'abc123');",
+    )
+    .expect("stack scope tables");
+    conn.execute(
+        "INSERT INTO detected_projects (path, last_activity) VALUES ('D:\\work\\live', ?1), ('D:\\work\\old', ?2)",
+        params![now, old_activity],
+    )
+    .expect("projects");
+    conn.execute_batch(
+        "INSERT INTO project_dependencies (project_path, package_name, language) VALUES
+            ('d:/work/live', 'tokio', 'rust'),
+            ('d:/work/live', 'express', 'javascript'),
+            ('d:/work/old', 'redis', 'javascript');
+         -- lockfile rows: a transitive `promise` in the LIVE project, and the
+         -- dormant project's own copy of redis.
+         INSERT INTO user_dependencies (project_path, package_name, ecosystem, is_direct) VALUES
+            ('d:/work/live', 'express', 'javascript', 1),
+            ('d:/work/live', 'promise', 'javascript', 0),
+            ('d:/work/old', 'redis', 'javascript', 1);",
+    )
+    .expect("dependencies");
+
+    for (id, source, title, offset) in [
+        // redis: registry rows (structured proof) plus editorial, four days.
+        ("redis-r1", "npm", "npm: redis v5.0.1", "-3 days"),
+        ("redis-r2", "npm", "npm: redis v5.0.2", "-1 day"),
+        (
+            "redis-e1",
+            "hackernews",
+            "Redis adds vector sets",
+            "-2 days",
+        ),
+        (
+            "redis-e2",
+            "reddit",
+            "Redis licensing changes again",
+            "-10 minutes",
+        ),
+        // promise: editorial only — it could only ever ground as a name.
+        (
+            "promise-1",
+            "hackernews",
+            "Promise combinators explained",
+            "-3 days",
+        ),
+        (
+            "promise-2",
+            "reddit",
+            "Promise cancellation proposals compared",
+            "-1 day",
+        ),
+        (
+            "promise-3",
+            "lobsters",
+            "Promise pipelines without callbacks",
+            "-10 minutes",
+        ),
+        // tokio: the live project's real chain.
+        (
+            "tokio-r1",
+            "crates_io",
+            "crates.io: tokio v1.47.0",
+            "-2 days",
+        ),
+        (
+            "tokio-r2",
+            "crates_io",
+            "crates.io: tokio v1.47.1",
+            "-10 minutes",
+        ),
+    ] {
+        insert_chain_test_item(&conn, id, source, title, "", offset, 1.0);
+    }
+    conn
+}
+
+fn chain_topics(chains: &[SignalChain]) -> Vec<String> {
+    chains
+        .iter()
+        .map(|c| {
+            c.chain_name
+                .split(" signal chain")
+                .next()
+                .unwrap_or_default()
+                .to_string()
+        })
+        .collect()
+}
+
+#[test]
+fn dormant_project_and_transitive_dependencies_form_no_chains() {
+    let conn = stack_scope_db(false);
+    let chains = detect_chains(&conn).expect("detect chains");
+    let topics = chain_topics(&chains);
+    assert!(
+        !topics.iter().any(|t| t == "redis"),
+        "a dormant project's dependency must not form a chain, even with registry proof: {topics:?}"
+    );
+    assert!(
+        !topics.iter().any(|t| t == "promise"),
+        "a transitive lockfile entry is not a user term: {topics:?}"
+    );
+    let tokio = chains
+        .iter()
+        .find(|c| c.verified_dep.as_deref() == Some("tokio"));
+    assert!(
+        tokio.is_some_and(|c| c.confidence > UNGROUNDED_CONFIDENCE_CAP),
+        "the live project's chain still forms, grounded: {topics:?}"
+    );
+
+    let stack = signal_chains_grounding::StackDependencies::load(&conn);
+    let terms = signal_chains_grounding::user_topic_terms(&conn, &stack);
+    assert!(signal_chains_grounding::topic_in_user_terms(
+        &terms, "express"
+    ));
+    assert!(!signal_chains_grounding::topic_in_user_terms(
+        &terms, "redis"
+    ));
+    assert!(!signal_chains_grounding::topic_in_user_terms(
+        &terms, "promise"
+    ));
+}
+
+/// Control: the same fixture with the old project live — redis grounds again,
+/// so the test above fails for the right reason (dormancy), not by accident.
+#[test]
+fn the_same_dependency_in_a_live_project_does_form_a_chain() {
+    let conn = stack_scope_db(true);
+    let chains = detect_chains(&conn).expect("detect chains");
+    let redis = chains
+        .iter()
+        .find(|c| c.verified_dep.as_deref() == Some("redis"));
+    assert!(
+        redis.is_some_and(|c| c.confidence > UNGROUNDED_CONFIDENCE_CAP),
+        "live redis should verify: {:?}",
+        chain_topics(&chains)
+    );
+    // A transitive lockfile entry stays a non-term even in a live project.
+    assert!(!chain_topics(&chains).iter().any(|t| t == "promise"));
+}
+
+// ------------------------------------------------------------------------
+// One chain per technology (audit 2026-10-07): the live snapshot held `next`,
+// `next.js` and `nextjs` signal chains at once — one subject, three slots.
+// ------------------------------------------------------------------------
+
+fn insert_next_js_spellings(conn: &Connection) {
+    for (id, title, offset) in [
+        ("n1", "Next.js 15 ships partial prerendering", "-3 days"),
+        ("n2", "Migrating a nextjs app to the app router", "-2 days"),
+        ("n3", "Next.js caching changes explained", "-1 day"),
+        ("n4", "Why our nextjs build got slower", "-10 minutes"),
+    ] {
+        insert_chain_test_item(conn, id, "hackernews", title, "", offset, 1.0);
+    }
+}
+
+fn next_family_chains(chains: &[SignalChain]) -> Vec<&SignalChain> {
+    chains
+        .iter()
+        .filter(|c| {
+            let name = c.chain_name.to_lowercase();
+            name.starts_with("next ") || name.starts_with("next.js ") || name.starts_with("nextjs ")
+        })
+        .collect()
+}
+
+#[test]
+fn next_js_spellings_form_one_chain() {
+    let conn = chain_detection_db();
+    add_profile_tables(&conn);
+    conn.execute("INSERT INTO tech_stack (technology) VALUES ('Next.js')", [])
+        .expect("declare next.js");
+    insert_next_js_spellings(&conn);
+
+    let chains = detect_chains(&conn).expect("detect chains");
+    let next = next_family_chains(&chains);
+    assert_eq!(
+        next.len(),
+        1,
+        "next / next.js / nextjs must be ONE chain, got {:?}",
+        chains.iter().map(|c| &c.chain_name).collect::<Vec<_>>()
+    );
+    assert_eq!(
+        next[0].links.len(),
+        4,
+        "every spelling's items, each once: {:?}",
+        next[0].links.iter().map(|l| &l.title).collect::<Vec<_>>()
+    );
+    assert_eq!(
+        next[0].verified_dep, None,
+        "no package declared, nothing verified"
+    );
+}
+
+/// The merged chain is grounded by the real package name: npm's `next`, even
+/// though the chain is shown under the spelling its items use.
+#[test]
+fn merged_next_js_chain_grounds_on_the_next_package() {
+    let conn = chain_detection_db();
+    conn.execute(
+        "INSERT INTO project_dependencies (package_name, language) VALUES ('next', 'javascript')",
+        [],
+    )
+    .expect("insert dependency");
+    insert_next_js_spellings(&conn);
+    insert_chain_test_item(&conn, "r1", "npm", "npm: next v15.0.1", "", "-2 days", 1.0);
+    insert_chain_test_item(&conn, "r2", "npm", "npm: next v15.0.2", "", "-1 day", 1.0);
+
+    let chains = detect_chains(&conn).expect("detect chains");
+    let next = next_family_chains(&chains);
+    assert_eq!(
+        next.len(),
+        1,
+        "one chain, got {:?}",
+        chains.iter().map(|c| &c.chain_name).collect::<Vec<_>>()
+    );
+    assert_eq!(next[0].verified_dep.as_deref(), Some("next"));
+    assert!(next[0].confidence > UNGROUNDED_CONFIDENCE_CAP);
 }

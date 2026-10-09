@@ -63,7 +63,11 @@ scraper = "0.27"
 # Embeddings (local MiniLM model)
 # In-process embedding via ONNX Runtime — zero network, zero config, privacy preserved.
 # ort-load-dynamic: loads onnxruntime shared lib at runtime (avoids MSVC 2022 static link requirement).
-fastembed = { version = "7", optional = true, default-features = false, features = ["ort-load-dynamic", "hf-hub-rustls-tls"] }
+# No hf-hub feature: the model loads from the installer bundle via
+# `TextEmbedding::try_new_from_user_defined`, and the runtime fallback download is
+# our own pinned, checksummed fetch (`embeddings_providers/fastembed_setup.rs`).
+# fastembed's HuggingFace client (hf-hub + ureq) was unused since #887.
+fastembed = { version = "7", optional = true, default-features = false, features = ["ort-load-dynamic"] }
 
 # Thread-safe state
 once_cell = "1"

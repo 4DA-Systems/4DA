@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Dependency grounding and confidence policy for signal chains.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 
 use rusqlite::params;
 
@@ -92,7 +92,10 @@ pub(super) struct DependencyEvidence {
 /// domain profile's AMBIGUOUS / UTILITY lists, or under four characters) do not
 /// ground a topic on name alone; they still form a chain through structured
 /// dependency proof (`verified_dep`).
-pub(super) fn user_topic_terms(conn: &rusqlite::Connection) -> HashSet<String> {
+pub(super) fn user_topic_terms(
+    conn: &rusqlite::Connection,
+    stack: &StackDependencies,
+) -> HashSet<String> {
     let mut terms = HashSet::new();
     for value in string_column(conn, "SELECT topic FROM explicit_interests") {
         for part in value.split(['/', ',', '&', '|']) {
@@ -112,22 +115,103 @@ pub(super) fn user_topic_terms(conn: &rusqlite::Connection) -> HashSet<String> {
             insert_term(&mut terms, &value);
         }
     }
-    for table in ["user_dependencies", "project_dependencies"] {
-        if !table_exists(conn, table) {
-            continue;
-        }
-        let sql = if table_has_column(conn, table, "is_dev") {
-            format!("SELECT package_name FROM {table} WHERE COALESCE(is_dev, 0) = 0")
-        } else {
-            format!("SELECT package_name FROM {table}")
-        };
-        for value in string_column(conn, &sql) {
-            if is_distinctive_dependency_name(&value) {
-                insert_term(&mut terms, &value);
-            }
+    for name in &stack.declared_names {
+        if is_distinctive_dependency_name(name) {
+            insert_term(&mut terms, name);
         }
     }
     terms
+}
+
+/// The user's stack as the rest of the app reads it — the dependencies that
+/// ground "Your stack", Signal relevance and "Affects You".
+///
+/// Audit 2026-10-07: Preemption showed `promise` and `redis` watch chains.
+/// `redis` belonged to a project untouched for a year outside every active
+/// repository; `promise` was a transitive lockfile entry. Chain grounding read
+/// `user_dependencies` and `project_dependencies` RAW, so every package ever
+/// scanned — dormant, scratch, transitive — stood for the user's stack.
+///
+/// Now both readers here go through the one funnel,
+/// [`crate::temporal::get_all_dependencies`] (exclusions, active repository
+/// roots, and per-project dormancy/scratch via
+/// `project_inclusion::counts_toward_stack`):
+/// - `declared_names` — non-dev manifest dependencies of counted projects:
+///   the only package names that ground a chain topic on name alone;
+/// - `hits` — those plus the lockfile rows (`user_dependencies`, transitive
+///   included) of the SAME counted projects, for structured dependency proof.
+#[derive(Default)]
+pub(super) struct StackDependencies {
+    declared_names: Vec<String>,
+    hits: HashMap<String, Vec<DependencyHit>>,
+}
+
+impl StackDependencies {
+    pub(super) fn load(conn: &rusqlite::Connection) -> Self {
+        let funnel = match crate::temporal::get_all_dependencies(conn) {
+            Ok(deps) => deps,
+            Err(e) => {
+                tracing::warn!(target: "4da::signal_chains", error = %e, "stack dependencies unavailable — chains get no dependency grounding");
+                return Self::default();
+            }
+        };
+        let mut stack = Self::default();
+        let mut counted_projects = HashSet::new();
+        for dep in funnel {
+            counted_projects.insert(crate::project_inclusion::comparison_form(&dep.project_path));
+            if !dep.is_dev {
+                stack.declared_names.push(dep.package_name.clone());
+            }
+            stack.push_hit(&dep.package_name, dep.language, dep.is_dev, dep.is_direct);
+        }
+        for (path, name, ecosystem, is_dev, is_direct) in lockfile_rows(conn) {
+            if counted_projects.contains(&crate::project_inclusion::comparison_form(&path)) {
+                stack.push_hit(&name, ecosystem, is_dev, is_direct);
+            }
+        }
+        stack
+    }
+
+    fn push_hit(&mut self, name: &str, language: String, is_dev: bool, is_direct: bool) {
+        self.hits
+            .entry(name.trim().to_lowercase())
+            .or_default()
+            .push(DependencyHit {
+                language,
+                is_dev,
+                is_direct,
+            });
+    }
+
+    fn hits_for(&self, topic_lower: &str) -> &[DependencyHit] {
+        self.hits.get(topic_lower).map_or(&[], Vec::as_slice)
+    }
+}
+
+/// `user_dependencies` rows as (project, package, ecosystem, is_dev, is_direct).
+fn lockfile_rows(conn: &rusqlite::Connection) -> Vec<(String, String, String, bool, bool)> {
+    if !table_exists(conn, "user_dependencies") {
+        return Vec::new();
+    }
+    let Ok(mut stmt) = conn.prepare(
+        "SELECT project_path, package_name, COALESCE(ecosystem, ''),
+                COALESCE(is_dev, 0), COALESCE(is_direct, 1)
+         FROM user_dependencies",
+    ) else {
+        return Vec::new();
+    };
+    let Ok(rows) = stmt.query_map([], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, String>(2)?,
+            row.get::<_, i64>(3)? != 0,
+            row.get::<_, i64>(4)? != 0,
+        ))
+    }) else {
+        return Vec::new();
+    };
+    rows.filter_map(std::result::Result::ok).collect()
 }
 
 fn insert_term(terms: &mut HashSet<String>, raw: &str) {
@@ -136,6 +220,11 @@ fn insert_term(terms: &mut HashSet<String>, raw: &str) {
         return;
     }
     let compact = compact_term(&lower);
+    // The canonical spelling too, so a declared `next` meets a chain grouped
+    // as `nextjs` (`signal_chains_topics`).
+    if let Some(canonical) = crate::scoring::aliases::canonical_spelling(&lower) {
+        terms.insert(canonical.to_string());
+    }
     terms.insert(lower);
     if !compact.is_empty() {
         terms.insert(compact);
@@ -175,13 +264,34 @@ fn string_column(conn: &rusqlite::Connection, sql: &str) -> Vec<String> {
     rows.filter_map(std::result::Result::ok).collect()
 }
 
+/// Ground a topic group on whichever of its spellings is an installed
+/// package: a chain shown as `next.js` is grounded by the `next` package.
+/// Returns the grounding spelling (the real package name) and its evidence;
+/// the strongest spelling wins, ties to the first in sorted order.
+pub(super) fn best_dependency_evidence(
+    conn: &rusqlite::Connection,
+    stack: &StackDependencies,
+    spellings: &[String],
+    topic_items: &[TopicChainItem],
+) -> (Option<String>, DependencyEvidence) {
+    let mut best: (Option<String>, DependencyEvidence) = (None, DependencyEvidence::none());
+    for spelling in spellings {
+        let evidence = dependency_evidence(conn, stack, spelling, topic_items);
+        if evidence.score > best.1.score {
+            best = (Some(spelling.to_lowercase()), evidence);
+        }
+    }
+    best
+}
+
 pub(super) fn dependency_evidence(
     conn: &rusqlite::Connection,
+    stack: &StackDependencies,
     topic: &str,
     topic_items: &[TopicChainItem],
 ) -> DependencyEvidence {
     let topic_lower = topic.to_lowercase();
-    let hits = load_dependency_hits(conn, &topic_lower);
+    let hits = stack.hits_for(&topic_lower);
     if hits.is_empty() {
         return DependencyEvidence::none();
     }
@@ -334,70 +444,6 @@ struct DependencyHit {
     language: String,
     is_dev: bool,
     is_direct: bool,
-}
-
-fn load_dependency_hits(conn: &rusqlite::Connection, topic_lower: &str) -> Vec<DependencyHit> {
-    let mut hits = Vec::new();
-    append_dependency_hits(
-        conn,
-        "user_dependencies",
-        "ecosystem",
-        topic_lower,
-        &mut hits,
-    );
-    append_dependency_hits(
-        conn,
-        "project_dependencies",
-        "language",
-        topic_lower,
-        &mut hits,
-    );
-    hits
-}
-
-fn append_dependency_hits(
-    conn: &rusqlite::Connection,
-    table: &'static str,
-    language_column: &'static str,
-    topic_lower: &str,
-    hits: &mut Vec<DependencyHit>,
-) {
-    if !table_exists(conn, table) {
-        return;
-    }
-    let language_expr = if table_has_column(conn, table, language_column) {
-        format!("COALESCE({language_column}, '')")
-    } else {
-        "''".to_string()
-    };
-    let is_dev_expr = if table_has_column(conn, table, "is_dev") {
-        "COALESCE(is_dev, 0)"
-    } else {
-        "0"
-    };
-    let is_direct_expr = if table_has_column(conn, table, "is_direct") {
-        "COALESCE(is_direct, 1)"
-    } else {
-        "1"
-    };
-    let sql = format!(
-        "SELECT {language_expr}, {is_dev_expr}, {is_direct_expr}
-         FROM {table}
-         WHERE LOWER(package_name) = ?1"
-    );
-    let Ok(mut stmt) = conn.prepare(&sql) else {
-        return;
-    };
-    let Ok(rows) = stmt.query_map(params![topic_lower], |row| {
-        Ok(DependencyHit {
-            language: row.get(0)?,
-            is_dev: row.get::<_, i64>(1).unwrap_or(0) != 0,
-            is_direct: row.get::<_, i64>(2).unwrap_or(1) != 0,
-        })
-    }) else {
-        return;
-    };
-    hits.extend(rows.filter_map(std::result::Result::ok));
 }
 
 fn table_has_column(conn: &rusqlite::Connection, table: &str, column: &str) -> bool {

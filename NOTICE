@@ -15,9 +15,9 @@ build edges, all target platforms). npm packages are the production
 dependency closure reported by `pnpm licenses list --prod`. Dev-only
 dependencies are omitted because they are not distributed.
 
-Totals: 829 Rust crates, 40 npm packages.
+Totals: 817 Rust crates, 40 npm packages.
 
-Rust Crates (829)
+Rust Crates (817)
 -----------------
 
 adler2 2.0.1 - 0BSD OR MIT OR Apache-2.0 - https://github.com/oyvindln/adler2
@@ -112,13 +112,11 @@ color_quant 1.1.0 - MIT - https://github.com/image-rs/color_quant.git
 combine 4.6.8 - MIT - https://github.com/Marwes/combine
 compact_str 0.9.1 - MIT - https://github.com/ParkMyCar/compact_str
 concurrent-queue 2.5.0 - Apache-2.0 OR MIT - https://github.com/smol-rs/concurrent-queue
-console 0.16.6 - MIT - https://github.com/console-rs/console
 const-oid 0.10.2 - Apache-2.0 OR MIT - https://github.com/RustCrypto/formats
 const-random 0.1.18 - MIT OR Apache-2.0 - https://github.com/tkaitchuck/constrandom
 const-random-macro 0.1.16 - MIT OR Apache-2.0 - https://github.com/tkaitchuck/constrandom
 constant_time_eq 0.4.2 - CC0-1.0 OR MIT-0 OR Apache-2.0 - https://github.com/cesarb/constant_time_eq
 cookie 0.18.2 - MIT OR Apache-2.0 - https://github.com/SergioBenitez/cookie-rs
-cookie_store 0.22.1 - MIT OR Apache-2.0 - https://github.com/pfernie/cookie_store
 core-foundation 0.9.4 - MIT OR Apache-2.0 - https://github.com/servo/core-foundation-rs
 core-foundation 0.10.1 - MIT OR Apache-2.0 - https://github.com/servo/core-foundation-rs
 core-foundation-sys 0.8.7 - MIT OR Apache-2.0 - https://github.com/servo/core-foundation-rs
@@ -177,7 +175,6 @@ displaydoc 0.2.7 - MIT OR Apache-2.0 - https://github.com/yaahc/displaydoc
 dlopen2 0.8.2 - MIT - https://github.com/OpenByteDev/dlopen2
 dlopen2_derive 0.4.3 - MIT - https://github.com/OpenByteDev/dlopen2
 dlv-list 0.5.2 - MIT OR Apache-2.0 - https://github.com/sgodwincs/dlv-list-rs
-document-features 0.2.12 - MIT OR Apache-2.0 - https://github.com/slint-ui/document-features
 docx-rs 0.4.22 - MIT - https://github.com/bokuweb/docx-rs
 dom_query 0.28.0 - MIT - https://github.com/niklak/dom_query
 dpi 0.1.2 - Apache-2.0 AND MIT - https://github.com/rust-windowing/winit
@@ -194,7 +191,6 @@ email_address 0.2.9 - MIT - https://github.com/johnstonskj/rust-email_address.gi
 email-encoding 0.4.2 - MIT OR Apache-2.0 - https://github.com/lettre/email-encoding
 embed_plist 1.2.2 - MIT OR Apache-2.0 - https://github.com/nvzqz/embed-plist-rs
 embed-resource 3.0.11 - MIT - https://github.com/nabijaczleweli/rust-embed-resource
-encode_unicode 1.0.0 - Apache-2.0 OR MIT - https://github.com/tormol/encode_unicode
 encoding_rs 0.8.35 - (Apache-2.0 OR MIT) AND BSD-3-Clause - https://github.com/hsivonen/encoding_rs
 endi 1.1.1 - MIT - https://github.com/zeenix/endi
 enumflags2 0.7.12 - MIT OR Apache-2.0 - https://github.com/meithecatte/enumflags2
@@ -274,7 +270,6 @@ heck 0.4.1 - MIT OR Apache-2.0 - https://github.com/withoutboats/heck
 heck 0.5.0 - MIT OR Apache-2.0 - https://github.com/withoutboats/heck
 hermit-abi 0.5.3 - MIT OR Apache-2.0 - https://github.com/hermit-os/hermit-rs
 hex 0.4.3 - MIT OR Apache-2.0 - https://github.com/KokaKiwi/rust-hex
-hf-hub 0.5.0 - Apache-2.0 - https://github.com/huggingface/hf-hub
 hkdf 0.13.0 - MIT OR Apache-2.0 - https://github.com/RustCrypto/KDFs/
 hmac 0.13.0 - MIT OR Apache-2.0 - https://github.com/RustCrypto/MACs
 hostname 0.4.2 - MIT - https://github.com/djc/hostname
@@ -307,7 +302,6 @@ image-webp 0.2.4 - MIT OR Apache-2.0 - https://github.com/image-rs/image-webp
 imgref 1.12.3 - CC0-1.0 OR Apache-2.0 - https://github.com/kornelski/imgref
 indexmap 1.9.3 - Apache-2.0 OR MIT - https://github.com/bluss/indexmap
 indexmap 2.14.2 - Apache-2.0 OR MIT - https://github.com/indexmap-rs/indexmap
-indicatif 0.18.6 - MIT - https://github.com/console-rs/indicatif
 infer 0.22.0 - MIT - https://github.com/bojand/infer
 inotify 0.11.5 - ISC - https://github.com/hannobraun/inotify-rs
 inotify-sys 0.1.8 - ISC - https://github.com/hannobraun/inotify-sys
@@ -358,7 +352,6 @@ libsqlite3-sys 0.30.1 - MIT - https://github.com/rusqlite/rusqlite
 linux-keyutils 0.2.5 - Apache-2.0 OR MIT - https://github.com/landhb/linux-keyutils
 linux-raw-sys 0.12.1 - Apache-2.0 WITH LLVM-exception OR Apache-2.0 OR MIT - https://github.com/sunfishcode/linux-raw-sys
 litemap 0.8.3 - Unicode-3.0 - https://github.com/unicode-org/icu4x
-litrs 1.0.0 - MIT OR Apache-2.0 - https://github.com/LukasKalbertodt/litrs
 lock_api 0.4.14 - MIT OR Apache-2.0 - https://github.com/Amanieu/parking_lot
 log 0.4.34 - MIT OR Apache-2.0 - https://github.com/rust-lang/log
 loop9 0.1.5 - MIT - https://gitlab.com/kornelski/loop9.git
@@ -594,7 +587,6 @@ slab 0.4.12 - MIT - https://github.com/tokio-rs/slab
 smallvec 1.15.1 - MIT OR Apache-2.0 - https://github.com/servo/rust-smallvec
 smappservice-rs 0.1.3 - MIT - https://github.com/gethopp/smappservice-rs
 socket2 0.6.5 - MIT OR Apache-2.0 - https://github.com/rust-lang/socket2
-socks 0.3.4 - MIT/Apache-2.0 - https://github.com/sfackler/rust-socks
 softbuffer 0.4.8 - MIT OR Apache-2.0 - https://github.com/rust-windowing/softbuffer
 soup3 0.5.0 - MIT - https://gitlab.gnome.org/World/Rust/soup3-rs
 soup3-sys 0.5.0 - MIT - https://gitlab.gnome.org/World/Rust/soup3-rs
@@ -701,16 +693,12 @@ unicode-normalization-alignments 0.1.12 - MIT/Apache-2.0 - https://github.com/n1
 unicode-properties 0.1.4 - MIT/Apache-2.0 - https://github.com/unicode-rs/unicode-properties
 unicode-segmentation 1.13.3 - MIT OR Apache-2.0 - https://github.com/unicode-rs/unicode-segmentation
 unicode-width 0.2.2 - MIT OR Apache-2.0 - https://github.com/unicode-rs/unicode-width
-unit-prefix 0.5.2 - MIT - https://codeberg.org/commons-rs/unit-prefix
 universal-hash 0.6.1 - MIT OR Apache-2.0 - https://github.com/RustCrypto/traits
 untrusted 0.9.0 - ISC - https://github.com/briansmith/untrusted
-ureq 3.4.2 - MIT OR Apache-2.0 - https://github.com/algesten/ureq
-ureq-proto 0.6.4 - MIT OR Apache-2.0 - https://github.com/algesten/ureq-proto
 url 2.5.8 - MIT OR Apache-2.0 - https://github.com/servo/rust-url
 urlencoding 2.1.3 - MIT - https://github.com/kornelski/rust_urlencoding
 urlpattern 0.6.0 - MIT - https://github.com/denoland/rust-urlpattern
 utf8_iter 1.0.4 - Apache-2.0 OR MIT - https://github.com/hsivonen/utf8_iter
-utf8-zero 0.8.1 - MIT OR Apache-2.0 - https://github.com/algesten/utf8-zero
 uuid 1.26.1 - Apache-2.0 OR MIT - https://github.com/uuid-rs/uuid
 v_frame 0.3.9 - BSD-2-Clause - https://github.com/rust-av/v_frame
 valuable 0.1.1 - MIT - https://github.com/tokio-rs/valuable
