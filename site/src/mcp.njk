@@ -1,6 +1,6 @@
 ---
 title: "4DA MCP Server — stack awareness for your coding agent in one line"
-description: "One command gives Claude Code, Cursor, or Windsurf nine live tools: vulnerability scans, dependency health, upgrade plans. No account, no API key, privacy-first."
+description: "One command gives Claude Code, Cursor, or Windsurf eleven live tools: vulnerability scans, upgrade impact, pre-install checks, upgrade plans. No account, no API key, privacy-first."
 permalink: "/mcp/"
 ---
 {% extends "base.njk" %}
@@ -8,7 +8,7 @@ permalink: "/mcp/"
 {% block head %}
   <link rel="canonical" href="https://4da.ai/mcp">
   <meta property="og:title" content="Give your coding agent stack awareness in one line">
-  <meta property="og:description" content="One command adds nine live tools to Claude Code, Cursor, or Windsurf — vulnerability scans, dependency health, upgrade plans. No account, no API key.">
+  <meta property="og:description" content="One command adds eleven live tools to Claude Code, Cursor, or Windsurf — vulnerability scans, upgrade impact, pre-install checks, upgrade plans. No account, no API key.">
   <meta property="og:url" content="https://4da.ai/mcp">
   <meta property="og:image" content="https://4da.ai/og-image.png">
   <style>
@@ -124,9 +124,11 @@ permalink: "/mcp/"
 
     <section class="mcp-section">
       <div class="section-label">What your agent can now do</div>
-      <h2>Nine tools work standalone, the moment it&rsquo;s installed</h2>
+      <h2>Eleven tools work standalone, the moment it&rsquo;s installed</h2>
       <div class="tool-grid">
         <div class="tool"><div class="tname">vulnerability_scan</div><p>The full resolvable lockfile tree &mdash; transitives included &mdash; against OSV.dev: severity, fix versions, upgrade commands. Your agent checks <em>before</em> it bumps.</p></div>
+        <div class="tool"><div class="tname">upgrade_impact</div><p>Before a bump: what changed between your installed version and the target, which entries are breaking, and which of your files import the package.</p></div>
+        <div class="tool"><div class="tname">dependency_check</div><p>Before an install: proceed / wait / review / avoid, from advisories, release age, publisher trust and new install scripts.</p></div>
         <div class="tool"><div class="tname">dependency_health</div><p>Freshness, deprecations, known issues across npm, Rust, Python, Go.</p></div>
         <div class="tool"><div class="tname">upgrade_planner</div><p>Ranked upgrade plan: quick wins vs breaking majors.</p></div>
         <div class="tool"><div class="tname">what_should_i_know</div><p>Pre-task briefing: advisories and decisions relevant to the task your agent is about to start.</p></div>
@@ -136,7 +138,7 @@ permalink: "/mcp/"
         <div class="tool"><div class="tname">agent_memory</div><p>What one agent session learns, the next one knows.</p></div>
       </div>
       <div class="mcp-applayer">
-        <strong>Five more light up when the <a href="/download/">4DA desktop app</a> is running</strong> &mdash; the always-on layer: your scored intelligence feed, actionable signals, knowledge gaps, developer DNA, and live feedback learning. The server tells your agent honestly when that data is fresh versus stale (<code>data_freshness</code> on every feed-backed answer &mdash; no silent staleness).
+        <strong>Five more light up when the <a href="/download/">4DA desktop app</a> is running</strong> &mdash; the always-on layer: your scored content feed, actionable signals, knowledge gaps, developer DNA, and feedback on what it showed you. The server tells your agent honestly when that data is fresh versus stale (<code>data_freshness</code> on every feed-backed answer &mdash; no silent staleness).
       </div>
     </section>
 
