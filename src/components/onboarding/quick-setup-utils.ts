@@ -3,7 +3,8 @@ import { cmd } from '../../lib/commands';
 import { isEmbeddingModel, normalizeOllamaStatus } from '../../utils/normalize-ollama';
 import type { OllamaStatus, PullProgress } from './types';
 
-export type ProviderType = 'anthropic' | 'openai' | 'ollama' | 'openai-compatible';
+/** `'none'` is the explicit "Skip — no AI for now" choice. */
+export type ProviderType = 'anthropic' | 'openai' | 'ollama' | 'openai-compatible' | 'none';
 
 /**
  * Shown in the key field after `import_env_key` stored the real key server-side.
@@ -115,6 +116,34 @@ export function pickOllamaModel(models: readonly string[] | undefined, recommend
   return chat[0] || 'llama3.2';
 }
 
+/**
+ * Split a taste-test profile into what the user LIKED (already saved as their
+ * choice by the taste test) and what was GUESSED from their closest persona
+ * (saved as inferred at reduced weight). A profile from an older backend has
+ * only `topInterests`; with nothing to tell them apart, none is pre-selected.
+ */
+export function tasteInterests(profile: {
+  topInterests: string[]; likedInterests?: string[]; guessedInterests?: string[];
+}): { liked: string[]; guessed: string[] } {
+  if (profile.likedInterests === undefined) return { liked: [], guessed: profile.topInterests };
+  return { liked: profile.likedInterests, guessed: profile.guessedInterests ?? [] };
+}
+
+/**
+ * The interest writes Enter performs: add what the user chose that is not
+ * already saved, remove taste-test likes the user took out. Unkept guesses
+ * are left alone — they stay inferred and weight-capped.
+ */
+export function planInterestSaves(
+  chosen: readonly string[],
+  alreadySaved: ReadonlySet<string>,
+): { add: string[]; remove: string[] } {
+  return {
+    add: chosen.filter(topic => !alreadySaved.has(topic)),
+    remove: [...alreadySaved].filter(topic => !chosen.includes(topic)),
+  };
+}
+
 /** Re-check Ollama status after a model pull, retrying up to 5 times. */
 export async function refreshOllamaAfterPull(): Promise<OllamaStatus | null> {
   for (let attempt = 0; attempt < 5; attempt++) {
@@ -196,7 +225,9 @@ export async function saveLlmProvider(
   if (provider === null) return;
   const noProvider = { provider: 'none', apiKey: '', model: '', baseUrl: null, openaiApiKey: null };
 
-  if (provider === 'openai-compatible' && localServer) {
+  if (provider === 'none') {
+    await cmd('set_llm_provider', noProvider);
+  } else if (provider === 'openai-compatible' && localServer) {
     await cmd('set_llm_provider', {
       provider: 'openai-compatible', apiKey: apiKey.trim() || LOCAL_SERVER_TOKEN, model: localServer.model,
       baseUrl: localServer.baseUrl, openaiApiKey: null,

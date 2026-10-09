@@ -103,7 +103,20 @@ fn persistable(item_id: i64, mut r: crate::SourceRelevance) -> Option<crate::db:
 /// absence of data races at compile time. Returns (persistable scores, all
 /// scored ids) — the second is EVERY id (incl. re-scored-to-noise) so the caller
 /// can version-stamp them and the drain converges.
+///
+/// Seconds of synchronous work called from async cycles: it runs through
+/// `ipc_blocking::cpu_bound` so it does not pin an async runtime worker.
 fn score_chunk(
+    items: &[crate::db::StoredSourceItem],
+    ctx: &scoring::ScoringContext,
+    db: &crate::db::Database,
+    options: &ScoringOptions,
+    classifier: Option<&crate::signals::SignalClassifier>,
+) -> (Vec<crate::db::ScorePersistRow>, Vec<i64>) {
+    crate::ipc_blocking::cpu_bound(|| score_chunk_now(items, ctx, db, options, classifier))
+}
+
+fn score_chunk_now(
     items: &[crate::db::StoredSourceItem],
     ctx: &scoring::ScoringContext,
     db: &crate::db::Database,

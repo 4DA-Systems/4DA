@@ -4,11 +4,9 @@ import { useState, useEffect, useId } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { cmd } from '../../lib/commands';
-import { IMPORTED_FROM_ENV, isOllamaReady, localServerChoice, modelDownloadSize } from './quick-setup-utils';
-import type { LocalServerChoice } from './quick-setup-utils';
+import { IMPORTED_FROM_ENV, isOllamaReady, localServerChoice, modelDownloadSize, pickOllamaModel } from './quick-setup-utils';
+import type { LocalServerChoice, ProviderType } from './quick-setup-utils';
 import type { OllamaStatus, PullProgress } from './types';
-
-type ProviderType = 'anthropic' | 'openai' | 'ollama' | 'openai-compatible';
 
 interface EnvDetection {
   has_anthropic_env: boolean;
@@ -153,11 +151,13 @@ export function SetupAIProvider({
         </div>
       )}
 
-      {/* Ollama fully ready */}
+      {/* Ollama fully ready — the recommendation, with the model it will use named */}
       {ollamaReady && provider === 'ollama' && (
-        <div className="p-3 bg-green-900/20 border border-green-500/30 rounded-lg text-sm text-green-300 flex items-center gap-2">
+        <div role="status" className="p-3 bg-green-900/20 border border-green-500/30 rounded-lg text-sm text-green-300 flex items-center gap-2">
           <span className="text-green-500">&#x2713;</span>
-          {t('onboarding.setupAi.localAiReady')}
+          {t('onboarding.setupAi.localAiReadyModel', {
+            model: pickOllamaModel(ollamaStatus?.models, ollamaStatus?.recommended_judge),
+          })}
         </div>
       )}
 
@@ -299,6 +299,20 @@ export function SetupAIProvider({
               })}
             </div>
           </div>
+
+          {/* An explicit way to decline AI — no need to pick a provider with an empty key */}
+          <button
+            onClick={() => onProviderChange('none')}
+            aria-pressed={provider === 'none'}
+            className={`w-full p-3 rounded-lg text-start transition-all ${
+              provider === 'none'
+                ? 'bg-bg-tertiary border-2 border-text-secondary'
+                : 'bg-bg-tertiary border-2 border-transparent hover:border-border'
+            }`}
+          >
+            <div className="text-sm font-medium text-text-primary">{t('onboarding.setupAi.skipNoAi')}</div>
+            <div className="text-[10px] text-text-muted mt-0.5">{t('onboarding.setupAi.skipNoAiDesc')}</div>
+          </button>
 
           {/* API key input for cloud providers */}
           {(provider === 'anthropic' || provider === 'openai') && (

@@ -6,7 +6,7 @@
 
 use std::collections::{HashMap, HashSet};
 
-use super::items::CARD_TOPICS;
+use super::items::{CARD_TOPICS, SIGNATURE_PERSONAS};
 use super::TasteResponse;
 
 // ============================================================================
@@ -201,6 +201,37 @@ pub struct BlendedProfile {
     pub stack_ids: Vec<String>,
     /// Per-topic scoring corrections.
     pub calibration_deltas: HashMap<String, f32>,
+    /// The top-ranked persona is one the answers rule out
+    /// ([`contradicted_personas`]) — it must not be presented as "you".
+    pub dominant_contradicted: bool,
+}
+
+impl BlendedProfile {
+    /// Interests that came from cards the user liked (user-confirmed).
+    pub fn liked(&self) -> impl Iterator<Item = &(String, f32)> {
+        self.interests
+            .iter()
+            .filter(|(t, _)| !self.inferred_topics.contains(t))
+    }
+
+    /// Interests guessed from a persona template (inferred, capped).
+    pub fn guessed(&self) -> impl Iterator<Item = &(String, f32)> {
+        self.interests
+            .iter()
+            .filter(|(t, _)| self.inferred_topics.contains(t))
+    }
+
+    /// The summary's three interest lists: `(top 10, liked, guessed)`.
+    pub fn summary_lists(&self) -> (Vec<String>, Vec<String>, Vec<String>) {
+        let names = |it: &mut dyn Iterator<Item = &(String, f32)>| -> Vec<String> {
+            it.map(|(t, _)| t.clone()).collect()
+        };
+        (
+            names(&mut self.interests.iter().take(10)),
+            names(&mut self.liked()),
+            names(&mut self.guessed()),
+        )
+    }
 }
 
 fn dominant_persona(weights: &[f64; 9]) -> usize {
@@ -248,14 +279,39 @@ fn liked_card_topics(responses: &[(usize, TasteResponse)]) -> Vec<(String, f32)>
     sorted_desc(acc)
 }
 
+/// Personas the user's own answers rule out: more of the persona's signature
+/// cards ([`SIGNATURE_PERSONAS`]) were skipped than liked. The posterior can
+/// still rank such a persona first — skipping nine cards it predicts poorly
+/// outweighs skipping the one that stands for it — but writing its template
+/// topics would put "deep learning" and "NLP" in the profile of a user who
+/// passed on the PyTorch card. Matching is by persona, not by string, so a
+/// skipped "Machine Learning" card also blocks "deep learning".
+pub(crate) fn contradicted_personas(responses: &[(usize, TasteResponse)]) -> [bool; 9] {
+    let mut balance = [0i32; 9];
+    for (slot, response) in responses {
+        let delta = match response {
+            TasteResponse::NotInterested => 1,
+            TasteResponse::Interested | TasteResponse::StrongInterest => -1,
+        };
+        for &p in SIGNATURE_PERSONAS.get(*slot).copied().unwrap_or(&[]) {
+            if let Some(b) = balance.get_mut(p) {
+                *b += delta;
+            }
+        }
+    }
+    balance.map(|b| b > 0)
+}
+
 /// Template topics of every persona whose posterior clears
-/// [`PERSONA_TOPIC_MIN_POSTERIOR`], minus topics already liked and topics the
+/// [`PERSONA_TOPIC_MIN_POSTERIOR`] and that the answers do not contradict
+/// ([`contradicted_personas`]), minus topics already liked and topics the
 /// user explicitly passed on (on a skipped card and no liked one).
 fn persona_template_topics(
     weights: &[f64; 9],
     responses: &[(usize, TasteResponse)],
     liked: &[(String, f32)],
 ) -> Vec<(String, f32)> {
+    let contradicted = contradicted_personas(responses);
     let liked_set: HashSet<String> = liked.iter().map(|(t, _)| t.to_lowercase()).collect();
     let passed: HashSet<String> = responses
         .iter()
@@ -267,7 +323,7 @@ fn persona_template_topics(
 
     let mut acc: HashMap<String, f32> = HashMap::new();
     for (i, &w) in weights.iter().enumerate() {
-        if w < PERSONA_TOPIC_MIN_POSTERIOR {
+        if w < PERSONA_TOPIC_MIN_POSTERIOR || contradicted[i] {
             continue;
         }
         for &(topic, tw) in TEMPLATES[i].interests {
@@ -306,12 +362,18 @@ fn template_union(weights: &[f64; 9], threshold: f64) -> (Vec<String>, Vec<Strin
 }
 
 /// Calibration deltas: topics from non-dominant personas get a positive delta
-/// (boosting their relevance slightly since the user showed interest).
-fn calibration_deltas(weights: &[f64; 9], threshold: f64, dominant: usize) -> HashMap<String, f32> {
+/// (boosting their relevance slightly since the user showed interest). A
+/// persona the answers contradict earns no boost.
+fn calibration_deltas(
+    weights: &[f64; 9],
+    threshold: f64,
+    dominant: usize,
+    contradicted: &[bool; 9],
+) -> HashMap<String, f32> {
     let mut deltas: HashMap<String, f32> = HashMap::new();
     let dominant_weight = weights[dominant];
     for (i, &w) in weights.iter().enumerate() {
-        if i == dominant || w < threshold {
+        if i == dominant || w < threshold || contradicted[i] {
             continue;
         }
         for &(topic, _) in TEMPLATES[i].interests {
@@ -354,13 +416,15 @@ pub fn blend_profile(
         .map(std::string::ToString::to_string)
         .collect();
 
+    let contradicted = contradicted_personas(responses);
     BlendedProfile {
         interests,
         inferred_topics,
         tech_stack,
         exclusions,
         stack_ids,
-        calibration_deltas: calibration_deltas(weights, threshold, dominant),
+        calibration_deltas: calibration_deltas(weights, threshold, dominant, &contradicted),
+        dominant_contradicted: contradicted[dominant],
     }
 }
 
@@ -481,6 +545,89 @@ mod tests {
         let summary = state.build_summary();
         assert!(summary.top_interests.iter().any(|t| t == "React Native"));
         assert!(summary.top_interests.iter().any(|t| t == "React"));
+    }
+
+    /// Fresh-profile E2E 2026-10-09 repro: liked sqlite-vec + vector DBs,
+    /// skipped everything else including the PyTorch card. No ML guess may
+    /// survive — matched by persona, not by string — and the summary must not
+    /// present the ML persona as the user.
+    #[test]
+    fn skipping_the_signature_card_suppresses_the_whole_persona() {
+        let mut state = InferenceState::new();
+        state.update(10, &TasteResponse::Interested);
+        state.update(13, &TasteResponse::Interested);
+        for slot in [0usize, 1, 2, 3, 4, 5, 6, 7, 11] {
+            state.update(slot, &TasteResponse::NotInterested);
+        }
+        let profile = state.finalize();
+        // The precondition the old string-match filter lost to: the ML persona
+        // clears the template cutoff, so its guesses were written.
+        assert!(
+            profile.persona_weights[1] >= PERSONA_TOPIC_MIN_POSTERIOR,
+            "{:?}",
+            profile.persona_weights
+        );
+        let topics = topic_names(&profile.inferred_interests);
+        for ml in [
+            "deep learning",
+            "AI/LLM",
+            "NLP",
+            "data science",
+            "computer vision",
+        ] {
+            assert!(!topics.contains(&ml), "{ml} in {topics:?}");
+        }
+        assert!(topics.contains(&"SQLite"), "{topics:?}");
+        assert!(topics.contains(&"vector databases"), "{topics:?}");
+
+        let summary = state.build_summary();
+        assert!(summary.guessed_interests.is_empty(), "{summary:?}");
+        assert!(summary.liked_interests.iter().any(|t| t == "vector search"));
+        assert_eq!(summary.dominant_persona_name, "Python ML Engineer");
+        assert!(summary.persona_contradicted, "{summary:?}");
+    }
+
+    #[test]
+    fn contradiction_needs_more_skipped_than_liked_signature_cards() {
+        // Rust user who skipped the WASM card but liked two Rust cards.
+        let responses = [
+            (0usize, TasteResponse::Interested),
+            (6, TasteResponse::StrongInterest),
+            (8, TasteResponse::NotInterested),
+        ];
+        assert!(!contradicted_personas(&responses)[0]);
+        let skipped_only = [(1usize, TasteResponse::NotInterested)];
+        assert!(contradicted_personas(&skipped_only)[1]);
+        // A breadth card stands for no persona.
+        let breadth = [(10usize, TasteResponse::NotInterested)];
+        assert!(!contradicted_personas(&breadth).iter().any(|&c| c));
+    }
+
+    #[test]
+    fn guesses_are_capped_and_listed_separately() {
+        let responses = [(0usize, TasteResponse::StrongInterest)];
+        let profile = blend_profile(&make_weights(0), 0.10, &responses);
+        let (top, liked, guessed) = profile.summary_lists();
+        assert_eq!(liked, vec!["Rust".to_string()]);
+        assert!(!guessed.is_empty());
+        assert!(top.len() <= 10);
+        for (topic, weight) in profile.guessed() {
+            assert!(*weight <= INFERRED_TOPIC_WEIGHT_CAP, "{topic} = {weight}");
+        }
+    }
+
+    #[test]
+    fn a_contradicted_persona_earns_no_calibration_boost() {
+        let mut weights = [0.0; 9];
+        weights[0] = 0.6;
+        weights[1] = 0.4;
+        let responses = [(1usize, TasteResponse::NotInterested)];
+        let profile = blend_profile(&weights, 0.10, &responses);
+        assert!(
+            !profile.calibration_deltas.contains_key("deep learning"),
+            "{:?}",
+            profile.calibration_deltas
+        );
     }
 
     #[test]

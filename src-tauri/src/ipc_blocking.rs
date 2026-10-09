@@ -53,6 +53,31 @@ where
     off_ui_thread(command, move || Ok::<T, String>(body())).await
 }
 
+/// Run a long synchronous stretch of an `async` task without holding a
+/// runtime worker hostage while it runs.
+///
+/// Tauri's runtime is a multi-thread tokio runtime. A task that computes for
+/// tens of seconds inside one `poll` keeps its worker — and whatever that
+/// worker had queued in its non-stealable LIFO slot — until it next awaits.
+/// The scoring pass is exactly that: ~33 s of `score_item` plus ~11 s of
+/// dedup/diversity with no `.await` in between (fresh-profile E2E,
+/// 2026-10-09: an `add_interest` whose embedding Ollama answered at 02:04:56
+/// only ran its INSERT at 02:05:25.99, 21 ms after the scoring pass reached
+/// its first await, and "Enter 4DA" sat frozen for the difference).
+///
+/// On a multi-thread runtime the body runs under `block_in_place`, which
+/// hands this worker's queue to a fresh worker first. Anywhere else (a
+/// current-thread test runtime, a plain thread) it simply runs inline —
+/// `block_in_place` would panic there.
+pub(crate) fn cpu_bound<R>(body: impl FnOnce() -> R) -> R {
+    match tokio::runtime::Handle::try_current() {
+        Ok(h) if h.runtime_flavor() == tokio::runtime::RuntimeFlavor::MultiThread => {
+            tokio::task::block_in_place(body)
+        }
+        _ => body(),
+    }
+}
+
 #[cfg(test)]
 #[path = "ipc_blocking_tests.rs"]
 mod tests;

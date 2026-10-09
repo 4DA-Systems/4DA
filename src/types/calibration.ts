@@ -122,7 +122,14 @@ export interface TasteProfileSummary {
   confidence: number;
   itemsShown: number;
   personaWeights: PersonaWeight[];
+  /** Liked-card topics, then persona guesses (max 10). */
   topInterests: string[];
+  /** Topics of the cards the user liked — saved as their own choice. */
+  likedInterests?: string[];
+  /** Persona-template guesses — saved as inferred (weight-capped); shown as suggestions. */
+  guessedInterests?: string[];
+  /** The closest persona is one the user's answers rule out — never present it as "you". */
+  personaContradicted?: boolean;
 }
 
 export type TasteTestStepResult =

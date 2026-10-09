@@ -113,6 +113,28 @@ describe('CalibrationNudgeBanner — gating', () => {
     expect(mockInvoke).not.toHaveBeenCalled();
   });
 
+  // Fresh-profile E2E 2026-10-09: evaluated once while onboarding was still
+  // on screen ("never took the taste test"), then shown right after the user
+  // finished the taste test. A later state change must re-judge, not keep it.
+  it('a verdict from before the taste test is dropped when first-run state changes', async () => {
+    wireBackend(false, 0);
+    const { container, rerender } = render(<CalibrationNudgeBanner />);
+    await waitFor(() =>
+      expect(screen.getByText('calibrationView.nudge.title')).toBeInTheDocument(),
+    );
+
+    // Onboarding completes: first run begins, and the test is now taken.
+    wireBackend(true, 0, { ageDays: 0.001 });
+    mockState = { isFirstRun: true };
+    rerender(<CalibrationNudgeBanner />);
+    await waitFor(() => expect(container.innerHTML).toBe(''));
+
+    // Next launch (not first run): calibrated, nothing to label yet.
+    mockState = { isFirstRun: false };
+    rerender(<CalibrationNudgeBanner />);
+    await settled(container);
+  });
+
   it('respects a previous dismissal without asking the backend', () => {
     localStorage.setItem(DISMISS_KEY, '1');
     wireBackend(false, 0);

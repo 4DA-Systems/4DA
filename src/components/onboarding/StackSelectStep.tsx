@@ -16,6 +16,17 @@ const STACK_META: Record<string, { icon: string; color: string }> = {
   vue_frontend: { icon: 'Vu', color: '#42B883' },
 };
 
+/**
+ * A detection is auto-ticked only at or above this confidence. Confidence is
+ * the share of a profile's defining tech + fingerprint markers that were found
+ * (`stacks/detection.rs`), and the backend reports a profile at all only when
+ * one of its fingerprint markers is present — shared tech like React +
+ * TypeScript no longer "detects" Next.js or React Native (E2E 2026-10-09).
+ * A quarter of the fingerprint is the bar for ticking it on the user's behalf;
+ * anything below stays shown with its percentage for the user to pick.
+ */
+const AUTO_SELECT_MIN_CONFIDENCE = 0.25;
+
 interface StackSelectStepProps {
   selected: string[];
   onSelectionChange: (ids: string[]) => void;
@@ -49,7 +60,7 @@ export function StackSelectStep({ selected, onSelectionChange, compact }: StackS
         // Auto-select detected profiles if nothing selected yet
         if (selected.length === 0 && detected.length > 0) {
           const autoIds = detected
-            .filter(d => d.confidence >= 0.25)
+            .filter(d => d.confidence >= AUTO_SELECT_MIN_CONFIDENCE)
             .map(d => d.profile_id);
           if (autoIds.length > 0) {
             onSelectionChange(autoIds);

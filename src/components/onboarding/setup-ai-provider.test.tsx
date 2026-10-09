@@ -79,6 +79,33 @@ describe('SetupAIProvider', () => {
     expect(screen.queryByText(/onboarding\.setupAi\.cloudDataDisclosure|What gets sent/)).not.toBeInTheDocument();
   });
 
+  // #877 leftovers (E2E 2026-10-09): name the model a ready Ollama will use,
+  // and give "no AI" its own choice instead of an Anthropic box left empty.
+  it('a ready Ollama names the model it will use', async () => {
+    backend();
+    render(
+      <SetupAIProvider
+        {...base}
+        provider="ollama"
+        ollamaStatus={{
+          running: true, version: '0.12', base_url: 'http://localhost:11434',
+          models: ['gemma4:12b', 'nomic-embed-text'], has_llm_model: true, recommended_judge: 'gemma4:12b',
+        }}
+      />,
+    );
+    await act(async () => {});
+    expect(screen.getByRole('status')).toHaveTextContent('onboarding.setupAi.localAiReadyModel');
+  });
+
+  it('offers an explicit "Skip — no AI for now" choice', async () => {
+    backend();
+    const onProviderChange = vi.fn();
+    render(<SetupAIProvider {...base} provider={null} onProviderChange={onProviderChange} />);
+    await act(async () => {});
+    fireEvent.click(screen.getByText('onboarding.setupAi.skipNoAi'));
+    expect(onProviderChange).toHaveBeenCalledWith('none');
+  });
+
   it('shows a failed model pull as failed and disables Cancel while cancelling', async () => {
     backend();
     render(
