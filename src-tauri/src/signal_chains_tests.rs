@@ -980,11 +980,21 @@ fn live_snapshot_chain_topics_are_the_users() {
             c.chain_name, c.verified_dep, c.dep_advisory, c.overall_priority
         );
         assert!(
-            c.verified_dep.is_some() || signal_chains_grounding::topic_in_user_terms(&terms, topic),
+            c.verified_dep.is_some()
+                || signal_chains_grounding::topic_in_user_terms(&terms, topic)
+                || signal_chains_grounding::topic_in_user_terms(
+                    &terms,
+                    &signal_chains_topics::chain_topic_key(topic)
+                ),
             "chain topic {topic} is not the user's"
         );
         assert!(!c.dep_advisory || c.verified_dep.is_some());
     }
+    // Audit 2026-10-07: one chain per technology.
+    assert!(
+        next_family_chains(&chains).len() <= 1,
+        "next / next.js / nextjs split again"
+    );
 
     conn.execute_batch("BEGIN")
         .expect("begin rollback-only transaction");
@@ -1228,4 +1238,84 @@ fn dep_advisory_requires_an_advisory_for_the_dependency() {
         !tokio.dep_advisory,
         "a CVE id in a release title is not a published advisory for the dependency"
     );
+}
+
+// ------------------------------------------------------------------------
+// One chain per technology (audit 2026-10-07): the live snapshot held `next`,
+// `next.js` and `nextjs` signal chains at once — one subject, three slots.
+// ------------------------------------------------------------------------
+
+fn insert_next_js_spellings(conn: &Connection) {
+    for (id, title, offset) in [
+        ("n1", "Next.js 15 ships partial prerendering", "-3 days"),
+        ("n2", "Migrating a nextjs app to the app router", "-2 days"),
+        ("n3", "Next.js caching changes explained", "-1 day"),
+        ("n4", "Why our nextjs build got slower", "-10 minutes"),
+    ] {
+        insert_chain_test_item(conn, id, "hackernews", title, "", offset, 1.0);
+    }
+}
+
+fn next_family_chains(chains: &[SignalChain]) -> Vec<&SignalChain> {
+    chains
+        .iter()
+        .filter(|c| {
+            let name = c.chain_name.to_lowercase();
+            name.starts_with("next ") || name.starts_with("next.js ") || name.starts_with("nextjs ")
+        })
+        .collect()
+}
+
+#[test]
+fn next_js_spellings_form_one_chain() {
+    let conn = chain_detection_db();
+    add_profile_tables(&conn);
+    conn.execute("INSERT INTO tech_stack (technology) VALUES ('Next.js')", [])
+        .expect("declare next.js");
+    insert_next_js_spellings(&conn);
+
+    let chains = detect_chains(&conn).expect("detect chains");
+    let next = next_family_chains(&chains);
+    assert_eq!(
+        next.len(),
+        1,
+        "next / next.js / nextjs must be ONE chain, got {:?}",
+        chains.iter().map(|c| &c.chain_name).collect::<Vec<_>>()
+    );
+    assert_eq!(
+        next[0].links.len(),
+        4,
+        "every spelling's items, each once: {:?}",
+        next[0].links.iter().map(|l| &l.title).collect::<Vec<_>>()
+    );
+    assert_eq!(
+        next[0].verified_dep, None,
+        "no package declared, nothing verified"
+    );
+}
+
+/// The merged chain is grounded by the real package name: npm's `next`, even
+/// though the chain is shown under the spelling its items use.
+#[test]
+fn merged_next_js_chain_grounds_on_the_next_package() {
+    let conn = chain_detection_db();
+    conn.execute(
+        "INSERT INTO project_dependencies (package_name, language) VALUES ('next', 'javascript')",
+        [],
+    )
+    .expect("insert dependency");
+    insert_next_js_spellings(&conn);
+    insert_chain_test_item(&conn, "r1", "npm", "npm: next v15.0.1", "", "-2 days", 1.0);
+    insert_chain_test_item(&conn, "r2", "npm", "npm: next v15.0.2", "", "-1 day", 1.0);
+
+    let chains = detect_chains(&conn).expect("detect chains");
+    let next = next_family_chains(&chains);
+    assert_eq!(
+        next.len(),
+        1,
+        "one chain, got {:?}",
+        chains.iter().map(|c| &c.chain_name).collect::<Vec<_>>()
+    );
+    assert_eq!(next[0].verified_dep.as_deref(), Some("next"));
+    assert!(next[0].confidence > UNGROUNDED_CONFIDENCE_CAP);
 }

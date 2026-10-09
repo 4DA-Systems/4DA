@@ -27,6 +27,40 @@ pub(crate) fn are_aliases(a: &str, b: &str) -> bool {
     }
 }
 
+/// The canonical name (the group's first entry) for a SPELLING of a known
+/// technology: case, dots, hyphens and spaces ignored, so `Next.js`, `nextjs`,
+/// `next`, `node.js`, `vue.js` and `react native` resolve to `nextjs`,
+/// `nodejs`, `vue` and `react-native`.
+///
+/// Only spellings fold, not every alias: a member counts as a spelling when
+/// its separator-free form and the canonical's are prefix-related (`next` ~
+/// `nextjs`, `go` ~ `golang`, `c++` ~ `cpp`, `postgres` ~ `postgresql`). The
+/// groups also hold looser equivalences that are right for widening a keyword
+/// match but wrong for deciding two topics are ONE subject: `container` is not
+/// Docker, `claude` is not Anthropic, `compose` is not Jetpack Compose,
+/// `mariadb` is not MySQL. Those return `None` and stay their own topic.
+pub(crate) fn canonical_spelling(term: &str) -> Option<&'static str> {
+    let lower = term.trim().to_lowercase();
+    let compact = compact_spelling(&lower);
+    let group = ALIAS_INDEX
+        .get(lower.as_str())
+        .or_else(|| COMPACT_INDEX.get(compact.as_str()))?;
+    let canonical = *group.first()?;
+    let canonical_compact = compact_spelling(canonical);
+    let is_spelling = !compact.is_empty()
+        && (canonical_compact.starts_with(&compact) || compact.starts_with(&canonical_compact));
+    is_spelling.then_some(canonical)
+}
+
+/// Lowercase alphanumerics only: `Next.js` -> `nextjs`, `react native` ->
+/// `reactnative`.
+pub(crate) fn compact_spelling(term: &str) -> String {
+    term.chars()
+        .filter(|c| c.is_alphanumeric())
+        .flat_map(char::to_lowercase)
+        .collect()
+}
+
 // ---------------------------------------------------------------------------
 // Alias groups — each array is a group of equivalent terms
 // ---------------------------------------------------------------------------
@@ -230,6 +264,21 @@ static ALIAS_INDEX: LazyLock<HashMap<&'static str, &'static [&'static str]>> =
         map
     });
 
+/// Separator-free spelling -> group, so `react native` and `Node.JS` find
+/// their group. First group wins on a collision (none today).
+static COMPACT_INDEX: LazyLock<HashMap<String, &'static [&'static str]>> = LazyLock::new(|| {
+    let mut map = HashMap::with_capacity(GROUPS.len() * 3);
+    for group in GROUPS {
+        for &term in *group {
+            let compact = compact_spelling(term);
+            if !compact.is_empty() {
+                map.entry(compact).or_insert(*group);
+            }
+        }
+    }
+    map
+});
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -280,6 +329,39 @@ mod tests {
     #[test]
     fn test_unknown_term() {
         assert!(get_aliases("xyzzy_unknown").is_none());
+    }
+
+    #[test]
+    fn canonical_spelling_folds_spellings_of_one_technology() {
+        for (spelling, canonical) in [
+            ("next", "nextjs"),
+            ("Next.js", "nextjs"),
+            ("nextjs", "nextjs"),
+            ("next-js", "nextjs"),
+            ("node", "nodejs"),
+            ("Node.js", "nodejs"),
+            ("vue.js", "vue"),
+            ("VueJS", "vue"),
+            ("react native", "react-native"),
+            ("ReactNative", "react-native"),
+            ("go", "golang"),
+            ("c++", "cpp"),
+            ("postgres", "postgresql"),
+        ] {
+            assert_eq!(
+                canonical_spelling(spelling),
+                Some(canonical),
+                "{spelling:?} should fold to {canonical:?}"
+            );
+        }
+    }
+
+    /// Looser alias-group members are a different subject, not a spelling.
+    #[test]
+    fn canonical_spelling_never_folds_a_different_subject() {
+        for term in ["container", "claude", "compose", "mariadb", "pg", "xyzzy"] {
+            assert_eq!(canonical_spelling(term), None, "{term:?} must not fold");
+        }
     }
 
     #[test]

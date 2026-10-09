@@ -5,7 +5,6 @@
 //! "CVE Monday + your dep uses it Tuesday + patch released today = act now."
 
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use tracing::info;
 
 use crate::error::Result;
@@ -17,12 +16,15 @@ mod signal_chains_grounding;
 mod signal_chains_persistence;
 #[path = "signal_chains_prediction.rs"]
 mod signal_chains_prediction;
+#[path = "signal_chains_topics.rs"]
+mod signal_chains_topics;
 use signal_chains_candidates::{load_recent_chain_candidate_items, ChainCandidateItem};
 use signal_chains_grounding::{
-    chain_policy, dependency_evidence, topic_in_user_terms, user_topic_terms,
+    best_dependency_evidence, chain_policy, topic_in_user_terms, user_topic_terms,
 };
 use signal_chains_persistence::record_signal_chain_events;
 pub use signal_chains_prediction::*;
+use signal_chains_topics::group_topics;
 
 const SIGNAL_CHAIN_WINDOW_DAYS: i64 = 7;
 const SIGNAL_CHAIN_PER_SOURCE_DAY: usize = 25;
@@ -130,25 +132,13 @@ fn detect_chains_from_items(
 
     let sampled_items = items.len();
 
-    // Extract topics from each item and group by topic
-    let mut topic_items: HashMap<String, Vec<TopicChainItem>> = HashMap::new();
-
-    for (id, title, source_type, created_at, content, tags) in &items {
-        let topics = crate::extract_topics(title, content, tags);
-        for topic in topics {
-            topic_items.entry(topic).or_default().push((
-                *id,
-                title.clone(),
-                source_type.clone(),
-                created_at.clone(),
-                content.clone(),
-            ));
-        }
-    }
+    // Group items by technology, folding spellings (next / next.js / nextjs
+    // are one chain — see `signal_chains_topics`).
+    let topic_groups = group_topics(&items);
 
     // Find chains: topics with 2+ items that span multiple days
     let mut chains = Vec::new();
-    let topic_count = topic_items.len();
+    let topic_count = topic_groups.len();
     let mut candidate_topics = 0_usize;
     let mut multi_day_topics = 0_usize;
     let mut rejected_same_day = 0_usize;
@@ -156,7 +146,9 @@ fn detect_chains_from_items(
     let mut rejected_ungrounded_topic = 0_usize;
     let user_terms = user_topic_terms(conn);
 
-    for (topic, topic_items_list) in &topic_items {
+    for group in &topic_groups {
+        let topic = &group.display;
+        let topic_items_list = &group.items;
         if topic_items_list.len() < 2 {
             continue;
         }
@@ -184,7 +176,10 @@ fn detect_chains_from_items(
         // the package, an advisory naming it in `Affected:`, or a linker row of either
         // kind; a bare title word never grounds (2026-09-06: `which`, `openai`,
         // `typescript` chains on Preemption).
-        let dep_evidence = dependency_evidence(conn, topic, topic_items_list);
+        // Every spelling in the group is asked: the package is `next` even
+        // when the chain is shown as `next.js`.
+        let (grounded_spelling, dep_evidence) =
+            best_dependency_evidence(conn, &group.variants, topic_items_list);
         let dep_match = dep_evidence.score;
         let has_dep = dep_match > 0.0;
 
@@ -193,7 +188,10 @@ fn detect_chains_from_items(
         // generic vocabulary word recurring across days ("game", "cloud",
         // "backend") is the internet's topic, not theirs — with an empty
         // profile it filled Preemption with unrelated chains.
-        if !has_dep && !topic_in_user_terms(&user_terms, topic) {
+        let user_owned = std::iter::once(&group.key)
+            .chain(group.variants.iter())
+            .any(|spelling| topic_in_user_terms(&user_terms, spelling));
+        if !has_dep && !user_owned {
             rejected_ungrounded_topic += 1;
             continue;
         }
@@ -284,11 +282,12 @@ fn detect_chains_from_items(
             confidence,
             created_at: chrono::Utc::now().to_rfc3339(),
             updated_at: chrono::Utc::now().to_rfc3339(),
-            // Topic is a real affected dependency only when it exactly matched the user's
-            // installed deps above (dep_match > 0). Otherwise we claim no affected dep
-            // rather than fabricate one from the chain name.
+            // The spelling that exactly matched one of the user's installed deps above
+            // (dep_match > 0) — the package name (`next`), not the display spelling.
+            // Otherwise we claim no affected dep rather than fabricate one from the
+            // chain name.
             verified_dep: if dep_match > 0.0 {
-                Some(topic.to_string())
+                grounded_spelling
             } else {
                 None
             },

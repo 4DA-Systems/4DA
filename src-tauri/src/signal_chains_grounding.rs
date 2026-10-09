@@ -136,6 +136,11 @@ fn insert_term(terms: &mut HashSet<String>, raw: &str) {
         return;
     }
     let compact = compact_term(&lower);
+    // The canonical spelling too, so a declared `next` meets a chain grouped
+    // as `nextjs` (`signal_chains_topics`).
+    if let Some(canonical) = crate::scoring::aliases::canonical_spelling(&lower) {
+        terms.insert(canonical.to_string());
+    }
     terms.insert(lower);
     if !compact.is_empty() {
         terms.insert(compact);
@@ -173,6 +178,25 @@ fn string_column(conn: &rusqlite::Connection, sql: &str) -> Vec<String> {
         return Vec::new();
     };
     rows.filter_map(std::result::Result::ok).collect()
+}
+
+/// Ground a topic group on whichever of its spellings is an installed
+/// package: a chain shown as `next.js` is grounded by the `next` package.
+/// Returns the grounding spelling (the real package name) and its evidence;
+/// the strongest spelling wins, ties to the first in sorted order.
+pub(super) fn best_dependency_evidence(
+    conn: &rusqlite::Connection,
+    spellings: &[String],
+    topic_items: &[TopicChainItem],
+) -> (Option<String>, DependencyEvidence) {
+    let mut best: (Option<String>, DependencyEvidence) = (None, DependencyEvidence::none());
+    for spelling in spellings {
+        let evidence = dependency_evidence(conn, spelling, topic_items);
+        if evidence.score > best.1.score {
+            best = (Some(spelling.to_lowercase()), evidence);
+        }
+    }
+    best
 }
 
 pub(super) fn dependency_evidence(
