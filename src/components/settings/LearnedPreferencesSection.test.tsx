@@ -52,6 +52,33 @@ describe('LearnedPreferencesSection chips', () => {
     expect(screen.queryByRole('button', { name: /^engaged$/ })).toBeNull();
     expect(screen.queryByRole('button', { name: /^producing$/ })).toBeNull();
   });
+
+  // AD-031 amendment (Phase 125): with 4DA's own "surfaced"/"producing"
+  // evidence purged, a new or quiet user can have only single-signal seeds.
+  // The section stays silent then (doctrine rule 6) — no "nothing yet" panel.
+  it('renders nothing while no facet carries real evidence', async () => {
+    cmdMock.mockResolvedValue({
+      facets: [
+        { ...facet('interest:react', 'interest', 'react', 'react'), evidence_count: 1 },
+        { ...facet('interest:tauri', 'interest', 'tauri', 'tauri'), evidence_count: 1 },
+      ],
+    });
+    const { container } = render(<LearnedPreferencesSection />);
+    await vi.waitFor(() => expect(cmdMock).toHaveBeenCalled());
+    await vi.waitFor(() => expect(container).toBeEmptyDOMElement());
+  });
+
+  it('shows the facets left after the purge without a producing qualifier', async () => {
+    cmdMock.mockResolvedValue({
+      facets: [
+        facet('interest:rust', 'interest', 'rust', 'confirmed'),
+        facet('source_pref:rss', 'source_pref', 'rss', 'high'),
+      ],
+    });
+    render(<LearnedPreferencesSection />);
+    expect(await screen.findByRole('button', { name: /rust/ })).toHaveTextContent('confirmed');
+    expect(screen.queryByText(/producing/)).toBeNull();
+  });
 });
 
 describe('facetLabel', () => {

@@ -1488,7 +1488,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 124;
+        const TARGET_VERSION: i64 = 125;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -5823,12 +5823,124 @@ impl Database {
                 )?;
             }
 
+            // Phase 125 (AD-031 amendment, 2026-10-10): learned preferences
+            // carry only the user's own signal. The post-analysis hook
+            // recorded every item 4DA itself surfaced as `topic_affinity`
+            // "surfaced" / `source_pref` "producing" evidence
+            // (`analysis_surface`) — the app's output read back as the
+            // user's taste. Founder snapshot 2026-10-09: 10,170 such rows on
+            // 1,567 facets, 1,555 of them backed by nothing else. Also purged:
+            // the pre-AD-031 implicit `interaction` residue (scroll/ignore
+            // fallback, written only before 2026-08-18), which is what made
+            // java/ruby/aws read as "engaged" interests. Data only, no DDL.
+            if current_version < 125 {
+                Self::run_versioned_migration(
+                    &conn,
+                    124,
+                    125,
+                    "Phase 125: purge self-referential stability evidence",
+                    |c| {
+                        let (evidence, facets) = Self::purge_self_referential_facet_evidence(c)?;
+                        info!(
+                            target: "4da::db",
+                            evidence,
+                            facets,
+                            "Phase 125: self-referential stability evidence purged — learned preferences now carry only the user's own signal"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }
 
         info!(target: "4da::db", "Database schema initialized with sqlite-vec");
         Ok(())
+    }
+
+    /// Phase 125: delete stability evidence whose signal was not the user, the
+    /// auto facets left with no evidence, and repair what the survivors carry.
+    ///
+    /// Purged: `analysis_surface` (4DA's own surfaced items, AD-031 amendment)
+    /// and `interaction`/`recurrence` rows written before 2026-08-18 — the
+    /// scroll/ignore fallback AD-031 deleted; since then that arm is reachable
+    /// only by an explicit snooze, whose rows are kept. Pinned and forgotten
+    /// facets are the user's own decisions and survive even with no evidence.
+    /// A surviving facet's `evidence_count`, `last_seen_at` and `value` (the
+    /// purged writers' `producing` / `surfaced` / `engaged`) are recomputed
+    /// from its remaining evidence, and the stability-rebuild marker is
+    /// cleared so the next post-analysis hook recomputes every lifecycle.
+    /// Idempotent: a second run matches no evidence and touches nothing.
+    /// Returns `(evidence_rows_deleted, facets_deleted)`.
+    pub(crate) fn purge_self_referential_facet_evidence(
+        c: &Connection,
+    ) -> SqliteResult<(usize, usize)> {
+        const PURGE: &str = "(evidence_type = 'analysis_surface'
+             OR (evidence_type = 'interaction' AND cue_family = 'recurrence'
+                 AND observed_at < 1787011200))"; // 2026-08-18T00:00:00Z
+        c.execute_batch(
+            "DROP TABLE IF EXISTS temp.phase125_touched;
+             CREATE TEMP TABLE phase125_touched (facet_id TEXT PRIMARY KEY);",
+        )?;
+        c.execute(
+            &format!(
+                "INSERT OR IGNORE INTO temp.phase125_touched (facet_id)
+                 SELECT DISTINCT facet_id FROM facet_evidence WHERE {PURGE}"
+            ),
+            [],
+        )?;
+        let evidence = c.execute(&format!("DELETE FROM facet_evidence WHERE {PURGE}"), [])?;
+        let facets = c.execute(
+            "DELETE FROM learned_facets
+              WHERE user_state = 'auto'
+                AND facet_id IN (SELECT facet_id FROM temp.phase125_touched)
+                AND NOT EXISTS (SELECT 1 FROM facet_evidence fe
+                                 WHERE fe.facet_id = learned_facets.facet_id)",
+            [],
+        )?;
+        // The facet `value` is whatever the LAST writer said, so a facet whose
+        // latest row was purged still reads "producing". Re-derive it from the
+        // newest surviving evidence, with each writer's own vocabulary.
+        c.execute(
+            "UPDATE learned_facets
+                SET evidence_count = (SELECT COUNT(*) FROM facet_evidence fe
+                                       WHERE fe.facet_id = learned_facets.facet_id),
+                    last_seen_at = COALESCE((SELECT MAX(observed_at) FROM facet_evidence fe
+                                              WHERE fe.facet_id = learned_facets.facet_id),
+                                            last_seen_at),
+                    value = COALESCE((
+                        SELECT CASE
+                            WHEN learned_facets.class = 'source_pref' THEN
+                                CASE fe.evidence_type WHEN 'dismiss' THEN 'low'
+                                     WHEN 'save' THEN 'valued' WHEN 'click' THEN 'engaged'
+                                     ELSE 'high' END
+                            WHEN learned_facets.class = 'topic_affinity' THEN
+                                CASE fe.evidence_type WHEN 'dismiss' THEN 'dismissed'
+                                     WHEN 'save' THEN 'saved' WHEN 'click' THEN 'clicked'
+                                     ELSE 'engaged' END
+                            WHEN learned_facets.class = 'interest' THEN
+                                CASE fe.evidence_type WHEN 'feedback' THEN 'confirmed'
+                                     WHEN 'ace_cold_start' THEN learned_facets.key
+                                     WHEN 'save' THEN 'saved'
+                                     ELSE 'engaged' END
+                            ELSE learned_facets.value END
+                          FROM facet_evidence fe
+                         WHERE fe.facet_id = learned_facets.facet_id
+                         ORDER BY fe.observed_at DESC, fe.id DESC LIMIT 1),
+                        CASE WHEN value IN ('producing', 'surfaced') THEN key ELSE value END)
+              WHERE facet_id IN (SELECT facet_id FROM temp.phase125_touched)",
+            [],
+        )?;
+        if facets > 0 || evidence > 0 {
+            c.execute(
+                "DELETE FROM kv_store WHERE key = 'stability_last_rebuild'",
+                [],
+            )?;
+        }
+        c.execute_batch("DROP TABLE IF EXISTS temp.phase125_touched;")?;
+        Ok((evidence, facets))
     }
 
     /// Rewrite legacy `crate-{name}` keys to `crate-{name}@{version}`, taking
@@ -7579,6 +7691,129 @@ mod tests {
                 "crate-tokio@1.53.1",
                 "hn-1",
             ]
+        );
+    }
+
+    /// Phase 125 (AD-031 amendment): evidence 4DA wrote about its OWN output
+    /// (`analysis_surface`) and the pre-AD-031 implicit `interaction` residue
+    /// are deleted; facets backed by nothing else go, user-decided facets and
+    /// facets with real evidence stay — with their count, last-seen time and
+    /// value re-derived, so a source reads "high", not "producing".
+    #[test]
+    fn test_phase_125_purges_self_referential_stability_evidence() {
+        let db = test_db();
+        let conn = db.conn.lock();
+        let facet = |id: &str, class: &str, key: &str, value: &str, user_state: &str| {
+            conn.execute(
+                "INSERT INTO learned_facets (facet_id, class, key, value, stability, state, user_state, evidence_count, first_seen_at, last_seen_at)
+                 VALUES (?1, ?2, ?3, ?4, 5.0, 'active', ?5, 9, 1, 1790000000)",
+                rusqlite::params![id, class, key, value, user_state],
+            )
+            .unwrap();
+        };
+        let evidence = |id: &str, cue: &str, etype: &str, at: i64| {
+            conn.execute(
+                "INSERT INTO facet_evidence (facet_id, cue_family, evidence_type, confidence, observed_at)
+                 VALUES (?1, ?2, ?3, 0.5, ?4)",
+                rusqlite::params![id, cue, etype, at],
+            )
+            .unwrap();
+        };
+        // Only ever surfaced by 4DA: gone.
+        facet(
+            "topic_affinity:cargo",
+            "topic_affinity",
+            "cargo",
+            "surfaced",
+            "auto",
+        );
+        evidence(
+            "topic_affinity:cargo",
+            "recurrence",
+            "analysis_surface",
+            1790000000,
+        );
+        // Pre-AD-031 scroll residue only: gone.
+        facet("interest:java", "interest", "java", "engaged", "auto");
+        evidence("interest:java", "recurrence", "interaction", 1786000000);
+        // Real engagement + 4DA's own writes: kept, repaired.
+        facet(
+            "source_pref:devto",
+            "source_pref",
+            "devto",
+            "producing",
+            "auto",
+        );
+        evidence("source_pref:devto", "structural", "bookmark", 1789000000);
+        evidence(
+            "source_pref:devto",
+            "recurrence",
+            "analysis_surface",
+            1790000000,
+        );
+        // ACE seed + residue: kept, value back to the seed's.
+        facet("interest:react", "interest", "react", "engaged", "auto");
+        evidence("interest:react", "structural", "ace_cold_start", 1785000000);
+        evidence("interest:react", "recurrence", "interaction", 1786000000);
+        // The user's decision survives with no evidence left.
+        facet(
+            "source_pref:reddit",
+            "source_pref",
+            "reddit",
+            "producing",
+            "forgotten",
+        );
+        evidence(
+            "source_pref:reddit",
+            "recurrence",
+            "analysis_surface",
+            1790000000,
+        );
+        // A post-AD-031 `interaction` row is an explicit snooze: kept.
+        facet("interest:zig", "interest", "zig", "engaged", "auto");
+        evidence("interest:zig", "recurrence", "interaction", 1790000000);
+        conn.execute(
+            "INSERT OR REPLACE INTO kv_store (key, value, updated_at)
+             VALUES ('stability_last_rebuild', '1790000000', datetime('now'))",
+            [],
+        )
+        .unwrap();
+
+        let (ev, facets) =
+            crate::db::Database::purge_self_referential_facet_evidence(&conn).unwrap();
+        assert_eq!((ev, facets), (5, 2));
+        // Idempotent.
+        assert_eq!(
+            crate::db::Database::purge_self_referential_facet_evidence(&conn).unwrap(),
+            (0, 0)
+        );
+
+        let rows: Vec<(String, String, i64, i64)> = conn
+            .prepare("SELECT facet_id, value, evidence_count, last_seen_at FROM learned_facets ORDER BY facet_id")
+            .unwrap()
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect();
+        assert_eq!(
+            rows,
+            [
+                ("interest:react".into(), "react".into(), 1, 1785000000),
+                ("interest:zig".into(), "engaged".into(), 9, 1790000000), // untouched
+                ("source_pref:devto".into(), "high".into(), 1, 1789000000),
+                ("source_pref:reddit".into(), "reddit".into(), 0, 1790000000),
+            ]
+        );
+        let marker: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM kv_store WHERE key = 'stability_last_rebuild'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(
+            marker, 0,
+            "the next post-analysis hook must rebuild lifecycles"
         );
     }
 
