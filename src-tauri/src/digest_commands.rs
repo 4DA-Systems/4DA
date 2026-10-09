@@ -218,6 +218,7 @@ pub(crate) async fn generate_briefing_internal(
             crate::brief_rejections::extract_rejects_trailer(&response.content);
         let content = crate::brief_facts::drop_sections_without_news(&content, &facts);
         let content = crate::briefing_dev_tags::strip_unfounded_dev_tags(&content, &package_facts);
+        let content = crate::briefing_deterministic::honest_without_lockfiles(&content, &facts);
         let violations =
             crate::briefing_groundedness::check_factual_claims(&content, &package_facts);
         if violations.is_empty() {

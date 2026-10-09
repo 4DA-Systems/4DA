@@ -122,9 +122,10 @@ fn ensure_ort_runtime(
         file.write_all(&buf[..n])
             .map_err(|e| FourDaError::from(format!("write chunk: {e}")))?;
         downloaded += n as u64;
-        if let Some(tx) = progress.as_ref() {
-            if downloaded - last_report > 524_288 || n == 0 {
-                last_report = downloaded;
+        if downloaded - last_report > 524_288 {
+            last_report = downloaded;
+            super::fastembed_setup::set_preparing("Downloading ONNX Runtime", downloaded, total);
+            if let Some(tx) = progress.as_ref() {
                 let pct = if total > 0 {
                     ((downloaded as f64 / total as f64) * 50.0) as u32
                 } else {
@@ -239,9 +240,14 @@ const BUNDLED_MODEL_DIR: &str = "nomic-embed-text-v1.5-fp16";
 const BUNDLED_ONNX: &str = "model_fp16.onnx";
 
 /// Caches of retired in-process models (hf-hub layout). Nothing reads them any
-/// more; each is reclaimed on first init.
+/// more; each is reclaimed on first init. The nomic entry is the f32 build
+/// fastembed's own downloader used to fetch (~550 MB); the fallback now
+/// fetches the installer's fp16 files instead (`fastembed_setup::download`).
 #[cfg(feature = "fastembed-local")]
-const LEGACY_CACHE_DIRS: [&str; 1] = ["models--Snowflake--snowflake-arctic-embed-m"];
+const LEGACY_CACHE_DIRS: [&str; 2] = [
+    "models--Snowflake--snowflake-arctic-embed-m",
+    "models--nomic-ai--nomic-embed-text-v1.5",
+];
 
 #[cfg(feature = "fastembed-local")]
 fn remove_legacy_caches(cache_dir: &std::path::Path) {
@@ -290,11 +296,13 @@ fn load_bundled_nomic(
 }
 
 /// The in-process embedding model: the bundled fp16 nomic when present, else
-/// fastembed's own nomic v1.5 build (f32, downloaded once into the cache).
-/// Same weights either way, so the same vector space.
+/// the same pinned fp16 files downloaded once into the cache
+/// (`fastembed_setup::download`, with progress, a stall timeout and a
+/// checksum). Same bytes either way, so the same vector space.
 #[cfg(feature = "fastembed-local")]
 fn load_embedding_model(
     cache_dir: std::path::PathBuf,
+    progress: Option<&std::sync::mpsc::Sender<DownloadProgress>>,
 ) -> std::result::Result<fastembed::TextEmbedding, FourDaError> {
     remove_legacy_caches(&cache_dir);
     let bundled = bundled_model_dir();
@@ -307,24 +315,54 @@ fn load_embedding_model(
             }
         }
     }
-    tracing::info!(target: "4da::embeddings", cache = %cache_dir.display(), "Downloading embedding model (nomic-embed-text v1.5, ~550MB first run)");
-    let options = fastembed::TextInitOptions::new(fastembed::EmbeddingModel::NomicEmbedTextV15)
-        .with_cache_dir(cache_dir)
-        .with_show_download_progress(true);
-    fastembed::TextEmbedding::try_new(options).map_err(|e| {
+    let dir = cache_dir.join(BUNDLED_MODEL_DIR);
+    tracing::info!(target: "4da::embeddings", cache = %dir.display(), "Fetching embedding model (nomic-embed-text v1.5 fp16, ~275MB, once)");
+    let dir = super::fastembed_setup::download::ensure_model(&dir, |done, total, file| {
+        super::fastembed_setup::set_preparing("Downloading the local search model", done, total);
+        if let Some(tx) = progress {
+            let pct = if total > 0 {
+                50 + ((done as f64 / total as f64) * 45.0) as u32
+            } else {
+                50
+            };
+            let _ = tx.send(DownloadProgress {
+                stage: "model-download".into(),
+                percent: pct,
+                bytes_downloaded: done,
+                bytes_total: total,
+                message: format!("Downloading {file}..."),
+                done: false,
+            });
+        }
+    })?;
+    super::fastembed_setup::set_preparing("Loading the local search model", 0, 0);
+    load_bundled_nomic(&dir).map_err(|e| {
         tracing::warn!(target: "4da::embeddings", error = %e, "fastembed init failed");
         FourDaError::from(format!("fastembed init: {e}"))
     })
 }
 
+/// Build the engine once, recording each step in the status the UI reads.
+#[cfg(feature = "fastembed-local")]
+fn init_engine(
+    progress: Option<&std::sync::mpsc::Sender<DownloadProgress>>,
+) -> std::result::Result<parking_lot::Mutex<fastembed::TextEmbedding>, FourDaError> {
+    super::fastembed_setup::set_preparing("Starting the local search model", 0, 0);
+    let cache_dir = crate::runtime_paths::RuntimePaths::get().model_cache_dir();
+    let result = ensure_ort_runtime(&cache_dir, progress)
+        .and_then(|()| load_embedding_model(cache_dir, progress))
+        .map(parking_lot::Mutex::new);
+    match &result {
+        Ok(_) => super::fastembed_setup::set_ready(),
+        Err(e) => super::fastembed_setup::set_failed(&e.to_string()),
+    }
+    result
+}
+
 #[cfg(feature = "fastembed-local")]
 fn get_or_init_fastembed(
 ) -> std::result::Result<&'static parking_lot::Mutex<fastembed::TextEmbedding>, FourDaError> {
-    FASTEMBED_MODEL.get_or_try_init(|| {
-        let cache_dir = crate::runtime_paths::RuntimePaths::get().model_cache_dir();
-        ensure_ort_runtime(&cache_dir, None)?;
-        load_embedding_model(cache_dir).map(parking_lot::Mutex::new)
-    })
+    FASTEMBED_MODEL.get_or_try_init(|| init_engine(None))
 }
 
 /// Embedding chunk size. Same OOM class as the cross-encoder reranker
@@ -359,15 +397,13 @@ pub(in crate::embeddings) fn init_fastembed_with_progress(
     progress: Option<std::sync::mpsc::Sender<DownloadProgress>>,
 ) -> std::result::Result<(), FourDaError> {
     let _ = FASTEMBED_MODEL.get_or_try_init(|| {
-        let cache_dir = crate::runtime_paths::RuntimePaths::get().model_cache_dir();
-        ensure_ort_runtime(&cache_dir, progress.as_ref())?;
         let bundled = bundled_model_dir().join(BUNDLED_ONNX).is_file();
 
         if let Some(tx) = progress.as_ref() {
             let msg = if bundled {
                 "Loading bundled embedding model...".to_string()
             } else {
-                "Downloading embedding model (~550MB first run)...".to_string()
+                "Downloading embedding model (~275MB first run)...".to_string()
             };
             let _ = tx.send(DownloadProgress {
                 stage: "model-init".into(),
@@ -379,7 +415,7 @@ pub(in crate::embeddings) fn init_fastembed_with_progress(
             });
         }
 
-        let result = load_embedding_model(cache_dir).map(parking_lot::Mutex::new);
+        let result = init_engine(progress.as_ref());
 
         if let Some(tx) = progress.as_ref() {
             let _ = tx.send(DownloadProgress {

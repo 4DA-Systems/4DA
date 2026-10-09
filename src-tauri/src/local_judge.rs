@@ -168,24 +168,97 @@ async fn fetch_installed(base_url: &str) -> Option<Vec<Installed>> {
     )
 }
 
-/// Called at the top of each judge lane: re-detect the local judge when the
-/// cached answer is older than [`REFRESH_EVERY`], then make sure it is loaded.
-/// Cheap when fresh and warm.
-pub(crate) async fn refresh_if_stale() {
-    redetect_if_stale().await;
-    warm().await;
+/// Whether the judge lanes may route to a measured local judge for this LLM
+/// configuration. The single rule shared by `llm_judge::route_judge` and the
+/// warm-up below: a user whose MAIN model is local keeps it (their choice), and
+/// a user with NO AI configured (provider "none", or a cloud provider without
+/// a key) gets no judge at all. Detecting a model in Ollama is not consent to
+/// run one.
+pub(crate) fn may_route_local(provider: &str, api_key: &str) -> bool {
+    provider != "ollama" && crate::llm_gate::compute_has_llm(provider, api_key)
 }
 
-/// Load the routed judge before the lane's first timed call, so a cold load
+/// The model the judge lanes will actually call, which is the one worth
+/// loading before a timed pass, or `None` when nothing should be loaded:
+/// - no AI configured: nothing. Fresh-profile E2E 2026-10-09: with provider
+///   `none` the warm-up loaded gemma4:12b (8.4 GB of VRAM, 30-minute
+///   keep-alive) and the next log line was "LLM rerank SKIPPED — disabled".
+/// - main model on Ollama: that model (`route_judge` keeps it for judging).
+/// - cloud provider with a key: the routed local judge, if one is routed.
+pub(crate) fn warm_target(
+    llm: &LLMProvider,
+    routed: Option<(String, String)>,
+) -> Option<(String, String)> {
+    if !crate::llm_gate::compute_has_llm(&llm.provider, &llm.api_key) {
+        return None;
+    }
+    if llm.provider == "ollama" {
+        if llm.model.trim().is_empty() {
+            return None;
+        }
+        let base_url = llm
+            .base_url
+            .clone()
+            .unwrap_or_else(|| DEFAULT_OLLAMA_URL.to_string());
+        return Some((llm.model.clone(), base_url));
+    }
+    routed
+}
+
+/// The configured LLM, with keychain keys hydrated when a cloud provider's
+/// key is still empty in memory (the startup hydration race; see
+/// `SettingsManager::ensure_keys_hydrated`), so a keyed user is not read as
+/// "no AI" and loses the warm-up.
+fn configured_llm() -> LLMProvider {
+    let mut settings = crate::get_settings_manager().lock();
+    let needs_key = {
+        let llm = &settings.get().llm;
+        !matches!(llm.provider.as_str(), "none" | "" | "ollama") && llm.api_key.is_empty()
+    };
+    if needs_key {
+        settings.ensure_keys_hydrated();
+    }
+    settings.get().llm.clone()
+}
+
+/// Called at the top of each judge lane: re-detect the local judge when the
+/// cached answer is older than [`REFRESH_EVERY`], then make sure the model
+/// the lane will call is loaded. Cheap when fresh and warm. Does nothing at
+/// all (no probe, no load) for a user who configured no AI.
+pub(crate) async fn refresh_if_stale() {
+    // Decide from the settings before any await: the provider struct is not
+    // held across the probe and load (it bloated every caller's future past
+    // clippy's large_futures bar).
+    let (route_local, own_model) = {
+        let llm = configured_llm();
+        if !crate::llm_gate::compute_has_llm(&llm.provider, &llm.api_key) {
+            return;
+        }
+        let route_local = may_route_local(&llm.provider, &llm.api_key);
+        (route_local, warm_target(&llm, None))
+    };
+    Box::pin(redetect_if_stale()).await;
+    let target = if route_local {
+        route(&STATE.lock(), Instant::now())
+    } else {
+        own_model
+    };
+    if let Some((model, base_url)) = target {
+        // An Ollama main model is warmed through the same breaker: its judge
+        // calls already run under it (`LLMClient::complete`).
+        if !cooling_off() {
+            Box::pin(warm(model, base_url)).await;
+        }
+    }
+}
+
+/// Load the judge model before the lane's first timed call, so a cold load
 /// never counts as a slow judge call. Ollama answers an empty-prompt
 /// `/api/generate` once the model is in memory, at once if it already is.
 /// It must ask for the judge calls' context size: measured on Ollama 0.34.4,
 /// a load at the default 4,096 made the next 8,192 judge call reload for 36 s.
 /// A load that fails or outlasts [`LOAD_TIMEOUT`] opens the breaker.
-async fn warm() {
-    let Some((model, base_url)) = route(&STATE.lock(), Instant::now()) else {
-        return;
-    };
+async fn warm(model: String, base_url: String) {
     let started = Instant::now();
     let loaded = load_model(&base_url, &model).await;
     let elapsed = started.elapsed();

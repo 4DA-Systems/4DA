@@ -18,33 +18,56 @@ export type InlineSegment =
  * prompt and the deterministic floor emit — `**bold**`, `` `code` `` and
  * `[text](url)` — and nothing else: no HTML ever reaches the DOM, and a link
  * is a link only when its URL is http(s) (anything else renders as text).
+ *
+ * Backslash escapes (`\[`, `\]`, `\*`, `\_`, `` \` ``, `\\`) read as the plain
+ * character: the floor escapes titles it interpolates
+ * (`briefing_deterministic::escape_markdown`), so LWN's "[$] ..." stays a
+ * link label instead of breaking the link into raw Markdown.
  */
 export function parseInline(line: string): InlineSegment[] {
   const out: InlineSegment[] = [];
-  const pattern = /\*\*([^*]+)\*\*|`([^`]+)`|\[([^\]]+)\]\(([^)\s]+)\)/g;
+  let text = '';
+  const flush = () => {
+    if (text) out.push({ kind: 'text', text });
+    text = '';
+  };
+  const pattern = /\\([\\`*_[\]()#])|\*\*((?:\\.|[^*\\])+)\*\*|`([^`]+)`|\[((?:\\.|[^\]\\])+)\]\(([^)\s]+)\)/g;
   let last = 0;
   for (const m of line.matchAll(pattern)) {
     const start = m.index ?? 0;
-    if (start > last) out.push({ kind: 'text', text: line.slice(last, start) });
+    text += line.slice(last, start);
+    last = start + m[0].length;
     if (m[1] !== undefined) {
-      // `**[fastembed 7.1.0](url)**` — the floor bolds its upgrade links.
-      const inner = /^\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)$/i.exec(m[1]);
-      out.push(inner ? { kind: 'link', text: inner[1]!, url: inner[2]! } : { kind: 'bold', text: m[1] });
+      text += m[1];
     } else if (m[2] !== undefined) {
-      out.push({ kind: 'code', text: m[2] });
-    } else if (m[3] !== undefined && m[4] !== undefined) {
-      const url = m[4];
+      flush();
+      // `**[fastembed 7.1.0](url)**` — the floor bolds its upgrade links.
+      const inner = /^\[((?:\\.|[^\]\\])+)\]\((https?:\/\/[^)\s]+)\)$/i.exec(m[2]);
+      out.push(inner
+        ? { kind: 'link', text: unescapeMarkdown(inner[1]!), url: inner[2]! }
+        : { kind: 'bold', text: unescapeMarkdown(m[2]) });
+    } else if (m[3] !== undefined) {
+      flush();
+      out.push({ kind: 'code', text: m[3] });
+    } else if (m[4] !== undefined && m[5] !== undefined) {
+      const url = m[5];
+      // A bold link — [**fastembed 7.1.0**](url) — keeps its label text.
+      const label = unescapeMarkdown(m[4].replace(/\*\*/g, ''));
       if (/^https?:\/\//i.test(url)) {
-        // A bold link — [**fastembed 7.1.0**](url) — keeps its label text.
-        out.push({ kind: 'link', text: m[3].replace(/\*\*/g, ''), url });
+        flush();
+        out.push({ kind: 'link', text: label, url });
       } else {
-        out.push({ kind: 'text', text: m[3] });
+        text += label;
       }
     }
-    last = start + m[0].length;
   }
-  if (last < line.length) out.push({ kind: 'text', text: line.slice(last) });
+  text += line.slice(last);
+  flush();
   return out;
+}
+
+function unescapeMarkdown(s: string): string {
+  return s.replace(/\\([\\`*_[\]()#])/g, '$1');
 }
 
 export function getRelativeTime(date: Date): string {

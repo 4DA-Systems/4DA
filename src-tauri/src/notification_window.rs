@@ -241,6 +241,17 @@ pub fn reanchor_for_briefing<R: Runtime>(app: &AppHandle<R>) {
 /// in quiet hours, or has Do Not Disturb on, the notification is held and
 /// delivered when they are available again. It is never dropped.
 pub fn dispatch<R: Runtime>(app: &AppHandle<R>, dispatch: &Dispatch) {
+    // A user still in onboarding is watching the app; an OS toast about the
+    // feed they are setting up is noise (fresh-profile E2E 2026-10-09). The
+    // items stay in the app; only the toast is dropped.
+    if !crate::get_settings_manager()
+        .lock()
+        .get()
+        .onboarding_complete
+    {
+        tracing::debug!(target: "4da::notify", "Notification dropped: onboarding not finished");
+        return;
+    }
     if let Some(reason) = crate::presence::current().busy_reason() {
         crate::presence::queue::hold_toast(dispatch, reason);
         return;

@@ -59,14 +59,22 @@ pub(crate) fn build_deterministic_brief(facts: &BriefFacts, reason: FloorReason)
     if !facts.worth_knowing.is_empty() {
         out.push_str("## Worth knowing\n");
         for c in facts.worth_knowing.iter().take(FLOOR_ARTICLES) {
+            let title = escape_markdown(&c.title);
             match &c.url {
-                Some(url) => out.push_str(&format!("- [{}]({url}) ({})\n", c.title, c.source_type)),
-                None => out.push_str(&format!("- {} ({})\n", c.title, c.source_type)),
+                Some(url) => out.push_str(&format!("- [{title}]({url}) ({})\n", c.source_type)),
+                None => out.push_str(&format!("- {title} ({})\n", c.source_type)),
             }
         }
         out.push('\n');
     }
-    if new_security.is_empty() && new_upgrades.is_empty() && facts.worth_knowing.is_empty() {
+    if facts.no_dependencies_known {
+        // Fresh-profile E2E 2026-10-09: a user who skipped the project scan
+        // was told "Nothing new touches your code today", computed "from your
+        // lockfiles", when no lockfile had been read. Nothing was checked, so
+        // nothing may be called clear.
+        out.push_str(NO_LOCKFILES_LINE);
+        out.push_str("\n\n");
+    } else if new_security.is_empty() && new_upgrades.is_empty() && facts.worth_knowing.is_empty() {
         out.push_str("Nothing new touches your code today.\n\n");
     }
 
@@ -95,16 +103,69 @@ pub(crate) fn build_deterministic_brief(facts: &BriefFacts, reason: FloorReason)
         out.push('\n');
     }
 
-    out.push_str(match reason {
-        FloorReason::NoCapableModel => {
+    out.push_str(match (reason, facts.no_dependencies_known) {
+        (FloorReason::NoCapableModel, false) => {
             "---\n_Computed from your lockfiles, OSV advisories and package registries, with no AI \
              narration. Add a Sonnet-class model in Settings → AI Provider for a written brief._\n"
         }
-        FloorReason::NarrationRejected => {
+        (FloorReason::NoCapableModel, true) => {
+            "---\n_Computed with no AI narration. Add a Sonnet-class model in Settings → AI \
+             Provider for a written brief._\n"
+        }
+        (FloorReason::NarrationRejected, false) => {
             "---\n_Computed from your lockfiles, OSV advisories and package registries. The written \
              brief stated a version these facts do not hold, so the facts are shown instead._\n"
         }
+        (FloorReason::NarrationRejected, true) => {
+            "---\n_The written brief stated a version these facts do not hold, so the facts are \
+             shown instead._\n"
+        }
     });
+    out
+}
+
+/// What the brief says when no lockfile has been read: the honest state and
+/// the action that fixes it, never an all-clear.
+pub(crate) const NO_LOCKFILES_LINE: &str = "4DA has not read any of your projects' lockfiles yet, \
+     so nothing here was checked against your dependencies. Scan your projects (Settings → \
+     Projects) and the brief will flag advisories and breaking releases that touch your code.";
+
+/// A narrated brief written while no lockfile is known: drop any all-clear
+/// sentence the model wrote anyway and end on [`NO_LOCKFILES_LINE`]. The
+/// prompt already says nothing was checked; this makes it hold regardless of
+/// what the model does with that.
+pub(crate) fn honest_without_lockfiles(content: &str, facts: &BriefFacts) -> String {
+    if !facts.no_dependencies_known {
+        return content.to_string();
+    }
+    let kept: Vec<&str> = content
+        .lines()
+        .filter(|l| !l.contains("Nothing new touches your code"))
+        .collect();
+    let mut out = kept.join("\n").trim_end().to_string();
+    if !out.contains(NO_LOCKFILES_LINE) {
+        if !out.is_empty() {
+            out.push_str("\n\n");
+        }
+        out.push_str(NO_LOCKFILES_LINE);
+    }
+    out.push('\n');
+    out
+}
+
+/// Escape the characters that would change how an interpolated title renders
+/// as Markdown. LWN titles start "[$] ..." (subscriber-only), and inside a
+/// link label the bracket closed the label early, so the brief showed the raw
+/// Markdown (fresh-profile E2E 2026-10-09). The Brief tab's parser
+/// (`briefing-parser.tsx`) reads these escapes back to the plain characters.
+pub(crate) fn escape_markdown(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for ch in text.chars() {
+        if matches!(ch, '\\' | '`' | '*' | '_' | '[' | ']') {
+            out.push('\\');
+        }
+        out.push(ch);
+    }
     out
 }
 
@@ -131,7 +192,7 @@ fn security_line(f: &SecurityFact) -> String {
             line.push_str(&format!("; worst advisory {tier}"));
         }
     }
-    line.push_str(&format!(": {}\n", f.title));
+    line.push_str(&format!(": {}\n", escape_markdown(&f.title)));
     for s in &f.sites {
         let installed = s.installed.as_deref().unwrap_or("version unknown");
         let dev = if s.dev_only { ", dev-only" } else { "" };

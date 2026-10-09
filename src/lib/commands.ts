@@ -312,6 +312,7 @@ interface CommandMap {
   pull_ollama_model: { params: { model: string; baseUrl: string | null }; result: void };
   cancel_ollama_pull: { params: Record<string, never>; result: string };
   prepare_embedding_engine: { params: Record<string, never>; result: { status: string; message?: string } };
+  get_embedding_engine_status: { params: Record<string, never>; result: { state: 'idle' | 'preparing' | 'ready' | 'failed' | 'unavailable'; message: string | null; bytes_downloaded: number; bytes_total: number } };
   list_provider_models: { params: { provider: string; baseUrl: string | null; apiKey: string | null }; result: { models: string[]; error?: string } };
   detect_local_servers: { params: Record<string, never>; result: { servers: Array<{ name: string; base_url: string; model_count: number; models?: string[]; running: boolean }> } };
   get_llm_key_for_mcp: { params: Record<string, never>; result: { provider: string; api_key_masked: string; has_api_key: boolean; model: string; base_url: string | null } };

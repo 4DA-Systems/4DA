@@ -156,3 +156,62 @@ fn a_missed_probe_keeps_the_local_judge() {
         "an answered probe with no judge installed stops local judging"
     );
 }
+
+fn llm(provider: &str, model: &str, key: &str) -> LLMProvider {
+    let mut p = LLMProvider::default();
+    p.provider = provider.to_string();
+    p.model = model.to_string();
+    p.api_key = key.to_string();
+    p
+}
+
+/// Fresh-profile E2E 2026-10-09: a user with provider `none` had gemma4:12b
+/// loaded into Ollama (8.4 GB VRAM, 30-minute keep-alive) by the rerank
+/// warm-up, before the rerank lane said it was disabled.
+#[test]
+fn nothing_is_loaded_for_a_user_who_configured_no_ai() {
+    let routed = Some(("gemma4:12b".to_string(), DEFAULT_OLLAMA_URL.to_string()));
+    assert_eq!(warm_target(&llm("none", "", ""), routed.clone()), None);
+    assert_eq!(warm_target(&llm("", "", ""), routed.clone()), None);
+    assert_eq!(
+        warm_target(&llm("anthropic", "claude-sonnet-5", ""), routed),
+        None,
+        "a cloud provider without a key is not a configured AI"
+    );
+    assert!(!may_route_local("none", ""));
+    assert!(!may_route_local("openai", ""));
+}
+
+/// The warm-up still loads the model the judge lanes will call for users who
+/// chose AI: the routed local judge for a keyed cloud user, and their own
+/// model for an Ollama user (`route_judge` never swaps an Ollama main model).
+#[test]
+fn the_judge_that_will_run_is_loaded_for_users_who_chose_ai() {
+    let routed = Some(("gemma4:12b".to_string(), DEFAULT_OLLAMA_URL.to_string()));
+    assert_eq!(
+        warm_target(&llm("anthropic", "claude-sonnet-5", "k"), routed.clone()),
+        routed,
+        "a keyed cloud user's judge lanes run on the routed local judge"
+    );
+    assert_eq!(
+        warm_target(&llm("anthropic", "claude-sonnet-5", "k"), None),
+        None,
+        "no local judge routed: nothing to load, the cloud sibling judges"
+    );
+    let mut ollama = llm("ollama", "qwen3:8b", "");
+    ollama.base_url = Some("http://127.0.0.1:11500".into());
+    assert_eq!(
+        warm_target(&ollama, routed),
+        Some(("qwen3:8b".to_string(), "http://127.0.0.1:11500".to_string())),
+        "an Ollama user's own model is the one their judge lanes call"
+    );
+    assert_eq!(
+        warm_target(&llm("ollama", "qwen3:8b", ""), None).map(|(_, url)| url),
+        Some(DEFAULT_OLLAMA_URL.to_string())
+    );
+    assert!(
+        !may_route_local("ollama", ""),
+        "an Ollama main model is kept"
+    );
+    assert!(may_route_local("anthropic", "k"));
+}

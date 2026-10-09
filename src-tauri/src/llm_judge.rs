@@ -105,8 +105,9 @@ fn route_judge(
     // a cloud provider without a key) gets no judge at all: detecting a
     // model in Ollama is not consent to run one. Found 2026-09-27, when the
     // receipts ledger's fixture engines, configured `none` on purpose,
-    // began judging on the local GPU.
-    if p.provider != "ollama" && crate::llm_gate::compute_has_llm(&p.provider, &p.api_key) {
+    // began judging on the local GPU. The warm-up applies the same rule
+    // (`local_judge::refresh_if_stale`).
+    if crate::local_judge::may_route_local(&p.provider, &p.api_key) {
         if let Some(local) = local_judge(&p) {
             return local;
         }

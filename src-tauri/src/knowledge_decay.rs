@@ -33,7 +33,9 @@ mod gaps_scan;
 #[path = "knowledge_gaps_truth.rs"]
 mod gaps_truth;
 
-pub use gaps_cache::{cached_knowledge_gaps, refresh_knowledge_gaps_in_background};
+pub use gaps_cache::{
+    cached_knowledge_gaps, known_dependency_count, refresh_knowledge_gaps_in_background,
+};
 pub use gaps_evidence::GapBasis;
 
 // ============================================================================
@@ -1405,7 +1407,10 @@ fn knowledge_gaps_feed() -> Result<EvidenceFeed> {
             }
         })
         .collect();
-    Ok(EvidenceFeed::from_items(items))
+    Ok(gaps_cache::with_tracked_dependencies(
+        EvidenceFeed::from_items(items),
+        &conn,
+    ))
 }
 // ============================================================================
 // Tests

@@ -16,18 +16,75 @@ use super::{Source, SourceConfig, SourceError, SourceItem, SourceResult};
 // Stack Overflow API Types
 // ============================================================================
 
-// Unread JSON keys (`error_id`) carry no binding: serde skips unknown fields,
-// and doctrine rule 8 says unused code is deleted rather than annotated into
-// permanence.
-#[derive(Debug, Deserialize)]
+/// A successful Stack Exchange response, read field by field rather than as one
+/// strict struct. The rate signals must survive anything else in the payload
+/// being off: on 2026-10-08 the API answered `"quota_remaining": -1`, the old
+/// `Option<u32>` field rejected the WHOLE body as a parse error, the response's
+/// rate signals went unread, and a 15-hour `throttle_violation` followed two
+/// seconds later on the next tag.
+#[derive(Debug)]
 struct SoResponse {
-    items: Option<Vec<SoQuestion>>,
-    quota_remaining: Option<u32>,
+    questions: Vec<SoQuestion>,
+    /// Requests left in today's quota. Signed: Stack Exchange reports `-1`
+    /// once the quota is overdrawn.
+    quota_remaining: Option<i64>,
     /// Stack Exchange sets this on a SUCCESSFUL response to demand a pause
     /// before the next call to the same method. Ignoring it is what escalates
     /// into a `throttle_violation`.
     backoff: Option<u64>,
 }
+
+/// Parse a success body. Fails only when the body is not JSON at all; a
+/// question that does not match [`SoQuestion`] is skipped, not fatal.
+fn parse_response(body: &str) -> Result<SoResponse, SourceError> {
+    let value: serde_json::Value =
+        serde_json::from_str(body).map_err(|e| SourceError::Parse(e.to_string()))?;
+    let quota_remaining = value.get("quota_remaining").and_then(|q| {
+        q.as_i64()
+            .or_else(|| q.as_f64().map(|f| f as i64))
+            .or_else(|| q.as_str().and_then(|s| s.trim().parse().ok()))
+    });
+    let backoff = value.get("backoff").and_then(|b| {
+        b.as_u64()
+            .or_else(|| b.as_f64().filter(|f| *f > 0.0).map(|f| f.ceil() as u64))
+            .or_else(|| b.as_str().and_then(|s| s.trim().parse().ok()))
+    });
+    let questions = value
+        .get("items")
+        .and_then(serde_json::Value::as_array)
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|q| serde_json::from_value::<SoQuestion>(q.clone()).ok())
+                .collect()
+        })
+        .unwrap_or_default();
+    Ok(SoResponse {
+        questions,
+        quota_remaining,
+        backoff,
+    })
+}
+
+/// Seconds until the next UTC midnight, when Stack Exchange resets the daily
+/// request quota.
+fn secs_until_utc_midnight(now: u64) -> u64 {
+    86_400 - (now % 86_400)
+}
+
+/// How long to stay away given the quota a response reported, or `None` to
+/// carry on. Below [`MIN_QUOTA`] (including an overdrawn `-1`) the source
+/// pauses until the quota resets. Only stopping the current cycle, as before,
+/// let the next cycle 10 minutes later spend four more requests: measured on
+/// 2026-10-08 the quota ran 9 -> 7 -> 4 -> 1 -> -1 across consecutive cycles,
+/// and the request after -1 drew the 15-hour IP ban.
+fn quota_pause_secs(quota_remaining: Option<i64>, now: u64) -> Option<u64> {
+    (quota_remaining? < i64::from(MIN_QUOTA)).then(|| secs_until_utc_midnight(now))
+}
+
+/// Longest `backoff` honoured by sleeping inside the cycle. A longer demand
+/// arms the breaker instead, so the next cycle cannot call early either.
+const MAX_INLINE_BACKOFF_SECS: u64 = 30;
 
 /// Stack Exchange reports failures as HTTP 400 with a JSON body — NOT as 429.
 /// Live capture, 2026-08-14:
@@ -312,12 +369,11 @@ impl StackOverflowSource {
             return Err(classify_error(status, &body));
         }
 
-        let so_resp: SoResponse =
-            serde_json::from_str(&body).map_err(|e| SourceError::Parse(e.to_string()))?;
+        let so_resp = parse_response(&body)?;
 
         let quota_remaining = so_resp.quota_remaining;
         let backoff = so_resp.backoff;
-        let questions = so_resp.items.unwrap_or_default();
+        let questions = so_resp.questions;
 
         let items: Vec<SourceItem> = questions
             .into_iter()
@@ -372,7 +428,7 @@ impl StackOverflowSource {
 /// source could never learn it was throttled.
 struct SoFetchOutcome {
     items: Vec<SourceItem>,
-    quota_remaining: Option<u32>,
+    quota_remaining: Option<i64>,
     backoff: Option<u64>,
 }
 
@@ -469,21 +525,30 @@ impl Source for StackOverflowSource {
                     // Stack Exchange demands this pause before the next call to
                     // the same method. Ignoring it is what escalates a polite
                     // slowdown into a multi-hour IP ban.
-                    if let Some(backoff) = outcome.backoff {
-                        let wait = backoff.min(30);
+                    // The quota is per IP and per day: below the floor, pause
+                    // until it resets rather than just ending this cycle.
+                    if let Some(pause) = quota_pause_secs(outcome.quota_remaining, now_secs()) {
+                        let armed = arm_throttle(pause);
                         warn!(
-                            backoff,
-                            wait, "Stack Exchange requested backoff — honouring it"
+                            remaining = ?outcome.quota_remaining,
+                            pause_secs = armed,
+                            "Stack Overflow daily quota nearly spent — pausing until it resets"
                         );
-                        tokio::time::sleep(std::time::Duration::from_secs(wait)).await;
+                        break;
                     }
 
-                    // Stop if quota is running low
-                    if let Some(remaining) = outcome.quota_remaining {
-                        if remaining < MIN_QUOTA {
-                            warn!(remaining, "Stack Overflow quota low, stopping early");
+                    if let Some(backoff) = outcome.backoff {
+                        if backoff > MAX_INLINE_BACKOFF_SECS {
+                            let armed = arm_throttle(backoff);
+                            warn!(
+                                backoff,
+                                armed,
+                                "Stack Exchange requested a long backoff — pausing the source"
+                            );
                             break;
                         }
+                        warn!(backoff, "Stack Exchange requested backoff — honouring it");
+                        tokio::time::sleep(std::time::Duration::from_secs(backoff)).await;
                     }
                 }
                 Err(e) => {
@@ -518,197 +583,5 @@ impl Source for StackOverflowSource {
 // ============================================================================
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_stackoverflow_source_creation() {
-        let source = StackOverflowSource::new();
-        assert_eq!(source.source_type(), "stackoverflow");
-        assert_eq!(source.name(), "Stack Overflow");
-        assert!(source.config().enabled);
-        assert_eq!(source.config().max_items, 20);
-        assert_eq!(source.config().fetch_interval_secs, 1800);
-        assert_eq!(source.tags.len(), 8);
-    }
-
-    #[test]
-    fn test_stackoverflow_source_default() {
-        let source = StackOverflowSource::default();
-        assert_eq!(source.source_type(), "stackoverflow");
-    }
-
-    #[test]
-    fn test_stackoverflow_json_parsing() {
-        let json = r#"{
-            "items": [
-                {
-                    "question_id": 12345678,
-                    "title": "How to handle async errors in Rust?",
-                    "link": "https://stackoverflow.com/questions/12345678",
-                    "score": 15,
-                    "answer_count": 3,
-                    "view_count": 1200,
-                    "tags": ["rust", "async-await", "error-handling"],
-                    "creation_date": 1709251200,
-                    "is_answered": true
-                },
-                {
-                    "question_id": 87654321,
-                    "title": "TypeScript generic constraints",
-                    "link": "https://stackoverflow.com/questions/87654321",
-                    "score": 7,
-                    "answer_count": null,
-                    "view_count": null,
-                    "tags": ["typescript", "generics"],
-                    "creation_date": null,
-                    "is_answered": false
-                }
-            ],
-            "has_more": true,
-            "quota_remaining": 295
-        }"#;
-
-        let resp: SoResponse = serde_json::from_str(json).unwrap();
-        let items = resp.items.unwrap();
-        assert_eq!(items.len(), 2);
-        assert_eq!(items[0].question_id, 12345678);
-        assert_eq!(items[0].title, "How to handle async errors in Rust?");
-        assert_eq!(items[0].score, 15);
-        assert_eq!(items[0].answer_count, Some(3));
-        assert_eq!(items[0].view_count, Some(1200));
-        assert!(items[0].is_answered.unwrap());
-        assert_eq!(resp.quota_remaining, Some(295));
-
-        // Second item with null optional fields
-        assert_eq!(items[1].question_id, 87654321);
-        assert!(items[1].answer_count.is_none());
-        assert!(items[1].view_count.is_none());
-    }
-
-    /// `THROTTLED_UNTIL` is process-global, so any test that arms it must hold
-    /// this lock — cargo runs tests in parallel threads inside one process and
-    /// a leaked deadline would make unrelated tests observe a throttle.
-    static THROTTLE_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
-    fn reset_throttle() {
-        THROTTLED_UNTIL.store(0, Ordering::Relaxed);
-    }
-
-    /// The exact message Stack Exchange returned on 2026-08-14.
-    #[test]
-    fn test_parses_retry_after_from_live_throttle_message() {
-        assert_eq!(
-            parse_retry_after_secs(
-                "too many requests from this IP, more requests available in 46472 seconds"
-            ),
-            Some(46_472)
-        );
-    }
-
-    #[test]
-    fn test_retry_after_absent_when_unparseable() {
-        assert_eq!(parse_retry_after_secs("no deadline here"), None);
-        assert_eq!(parse_retry_after_secs("available in zero seconds"), None);
-        assert_eq!(parse_retry_after_secs("available in 0 seconds"), None);
-    }
-
-    /// The live 400 body must classify as RateLimited (NOT a bad request) and
-    /// must arm the breaker. Misclassifying this as `Network`/"HTTP 400" is what
-    /// disguised a 13-hour IP ban as a malformed query.
-    #[test]
-    fn test_throttle_body_classifies_as_ratelimited_and_arms_breaker() {
-        let _guard = THROTTLE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        reset_throttle();
-
-        let body = r#"{"error_id":502,"error_message":"too many requests from this IP, more requests available in 46472 seconds","error_name":"throttle_violation"}"#;
-        let err = classify_error(reqwest::StatusCode::BAD_REQUEST, body);
-
-        assert!(
-            matches!(err, SourceError::RateLimited { .. }),
-            "throttle must not be reported as a generic bad request, got {err:?}"
-        );
-
-        let remaining = throttle_remaining().expect("breaker must be armed");
-        assert!(
-            remaining > 46_000 && remaining <= 46_472,
-            "breaker should hold the upstream deadline, got {remaining}"
-        );
-
-        reset_throttle();
-    }
-
-    /// A real malformed-query 400 must stay a normal error and must NOT arm the
-    /// breaker — otherwise one bad tag would silence the source for an hour.
-    #[test]
-    fn test_genuine_bad_request_does_not_arm_breaker() {
-        let _guard = THROTTLE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        reset_throttle();
-
-        let body =
-            r#"{"error_id":400,"error_message":"site is required","error_name":"bad_parameter"}"#;
-        let err = classify_error(reqwest::StatusCode::BAD_REQUEST, body);
-
-        assert!(
-            matches!(err, SourceError::Network(_)),
-            "a genuine bad request must not be classed as a rate limit, got {err:?}"
-        );
-        assert!(
-            throttle_remaining().is_none(),
-            "breaker must stay disarmed for non-throttle errors"
-        );
-    }
-
-    /// A throttle with no parseable deadline still has to break the loop.
-    #[test]
-    fn test_throttle_without_deadline_uses_default_pause() {
-        let _guard = THROTTLE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        reset_throttle();
-
-        let err = classify_error(
-            reqwest::StatusCode::BAD_REQUEST,
-            r#"{"error_name":"throttle_violation","error_message":"too many requests"}"#,
-        );
-        assert!(matches!(err, SourceError::RateLimited { .. }));
-
-        let remaining = throttle_remaining().expect("breaker must be armed");
-        assert!(
-            remaining > DEFAULT_THROTTLE_SECS - 60 && remaining <= DEFAULT_THROTTLE_SECS,
-            "expected the default pause, got {remaining}"
-        );
-
-        reset_throttle();
-    }
-
-    /// An absurd upstream value must be clamped, never allowed to disable the
-    /// source forever; and a shorter reading must not shorten a longer pause.
-    #[test]
-    fn test_throttle_is_clamped_and_only_extends() {
-        let _guard = THROTTLE_TEST_LOCK.lock().unwrap_or_else(|e| e.into_inner());
-        reset_throttle();
-
-        assert_eq!(arm_throttle(u64::MAX), MAX_THROTTLE_SECS);
-        let long = throttle_remaining().expect("armed");
-
-        // A shorter subsequent throttle must not pull the deadline in.
-        arm_throttle(5);
-        let after = throttle_remaining().expect("still armed");
-        assert!(
-            after >= long - 5,
-            "a shorter reading must not shorten an active pause: {long} -> {after}"
-        );
-
-        reset_throttle();
-        assert!(throttle_remaining().is_none());
-    }
-
-    /// `backoff` is now captured off the success path; it previously had no
-    /// binding at all, so Stack Exchange's own slow-down request was discarded.
-    #[test]
-    fn test_success_response_captures_backoff() {
-        let json = r#"{"items":[],"has_more":false,"quota_remaining":42,"backoff":10}"#;
-        let resp: SoResponse = serde_json::from_str(json).unwrap();
-        assert_eq!(resp.backoff, Some(10));
-        assert_eq!(resp.quota_remaining, Some(42));
-    }
-}
+#[path = "stackoverflow_tests.rs"]
+mod tests;

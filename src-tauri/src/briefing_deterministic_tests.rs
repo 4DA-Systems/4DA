@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Tests for the deterministic brief floor (pure rendering — no feed/DB needed).
 
-use super::{build_deterministic_brief, FloorReason};
+use super::{build_deterministic_brief, escape_markdown, FloorReason, NO_LOCKFILES_LINE};
 use crate::brief_facts::{
     BriefFacts, FactStatus, FixPath, SecurityFact, SecuritySite, UpgradeFact, UpgradeSite,
     WorthKnowingCandidate,
@@ -173,4 +173,110 @@ fn an_empty_day_is_one_honest_line() {
         !out.contains("C:\\") && !out.contains("D:\\"),
         "no absolute paths"
     );
+}
+
+/// Fresh-profile E2E 2026-10-09: with no lockfile read, the floor said
+/// "Nothing new touches your code today" and "Computed from your lockfiles".
+/// Nothing was checked, so it says so and names the action instead.
+#[test]
+fn no_lockfiles_is_never_an_all_clear() {
+    let facts = BriefFacts {
+        no_dependencies_known: true,
+        ..BriefFacts::default()
+    };
+    for reason in [FloorReason::NoCapableModel, FloorReason::NarrationRejected] {
+        let out = build_deterministic_brief(&facts, reason);
+        assert!(!out.contains("Nothing new touches your code"), "{out}");
+        assert!(!out.contains("from your lockfiles"), "{out}");
+        assert!(out.contains(NO_LOCKFILES_LINE), "{out}");
+        assert!(out.contains("Settings → Projects"), "{out}");
+    }
+
+    // Articles still show; the no-lockfiles line still replaces any all-clear.
+    let with_articles = BriefFacts {
+        no_dependencies_known: true,
+        worth_knowing: vec![WorthKnowingCandidate {
+            id: 1,
+            title: "This Week in Rust 672".into(),
+            url: Some("https://this-week-in-rust.org/".into()),
+            source_type: "rss".into(),
+            published: "2026-10-08".into(),
+            excerpt: String::new(),
+        }],
+        ..BriefFacts::default()
+    };
+    let out = build_deterministic_brief(&with_articles, FloorReason::NoCapableModel);
+    assert!(out.contains("## Worth knowing"), "{out}");
+    assert!(out.contains(NO_LOCKFILES_LINE), "{out}");
+}
+
+/// The narrated path holds the same line whatever the model wrote, and the
+/// prompt no longer hands it "none" lines that read as an all-clear.
+#[test]
+fn a_narration_without_lockfiles_ends_on_the_scan_instruction() {
+    let unknown = BriefFacts {
+        no_dependencies_known: true,
+        ..BriefFacts::default()
+    };
+    let draft = "## Worth knowing\n- Tokio 2 is out.\n\nNothing new touches your code today.\n";
+    let out = super::honest_without_lockfiles(draft, &unknown);
+    assert!(!out.contains("Nothing new touches your code"), "{out}");
+    assert!(out.contains("- Tokio 2 is out."), "{out}");
+    assert!(out.trim_end().ends_with(NO_LOCKFILES_LINE), "{out}");
+    assert_eq!(
+        super::honest_without_lockfiles(&out, &unknown)
+            .matches(NO_LOCKFILES_LINE)
+            .count(),
+        1,
+        "idempotent"
+    );
+    assert_eq!(
+        super::honest_without_lockfiles(draft, &BriefFacts::default()),
+        draft,
+        "a user with lockfiles is untouched"
+    );
+
+    let prompt = crate::digest_commands::render_facts_for_prompt(&unknown);
+    assert!(prompt.contains("NOT checked"), "{prompt}");
+    assert!(!prompt.contains("none —"), "{prompt}");
+}
+
+/// LWN's subscriber marker "[$]" closed the link label early and the brief
+/// showed raw Markdown (fresh-profile E2E 2026-10-09).
+#[test]
+fn titles_are_escaped_where_they_enter_markdown() {
+    let facts = BriefFacts {
+        worth_knowing: vec![
+            WorthKnowingCandidate {
+                id: 2,
+                title: "[$] An update on Rust's project goals".into(),
+                url: Some("https://fedi.lwn.net/@lwn/117406357348125355".into()),
+                source_type: "mastodon".into(),
+                published: "2026-10-08".into(),
+                excerpt: String::new(),
+            },
+            WorthKnowingCandidate {
+                id: 3,
+                title: "Why *every* `__init__` matters".into(),
+                url: None,
+                source_type: "devto".into(),
+                published: "2026-10-08".into(),
+                excerpt: String::new(),
+            },
+        ],
+        ..BriefFacts::default()
+    };
+    let out = build_deterministic_brief(&facts, FloorReason::NoCapableModel);
+    assert!(
+        out.contains(
+            "- [\\[$\\] An update on Rust's project goals](https://fedi.lwn.net/@lwn/117406357348125355) (mastodon)"
+        ),
+        "{out}"
+    );
+    assert!(
+        out.contains("- Why \\*every\\* \\`\\_\\_init\\_\\_\\` matters (devto)"),
+        "{out}"
+    );
+    assert_eq!(escape_markdown("a\\b"), "a\\\\b");
+    assert_eq!(escape_markdown("plain title"), "plain title");
 }

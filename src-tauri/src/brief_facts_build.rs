@@ -26,12 +26,18 @@ pub(crate) fn build_brief_facts(db: &Database) -> BriefFacts {
     let upgrades = build_upgrade_facts(db, &novelty, &liveness, &mut labels);
     let worth_knowing = build_worth_knowing(db, &novelty, &today);
     let fingerprint = fingerprint(&security, &also_open, &upgrades);
+    // A failed read keeps the old behaviour (dependencies assumed known)
+    // rather than telling a scanned user to scan.
+    let no_dependencies_known = crate::open_db_connection()
+        .map(|conn| crate::knowledge_decay::known_dependency_count(&conn) == 0)
+        .unwrap_or(false);
     BriefFacts {
         security,
         also_open,
         upgrades,
         worth_knowing,
         fingerprint,
+        no_dependencies_known,
     }
 }
 

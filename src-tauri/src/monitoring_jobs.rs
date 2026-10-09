@@ -76,34 +76,74 @@ pub async fn maybe_auto_briefing<R: Runtime>(app: &AppHandle<R>) {
 // Digest Scheduler (Fix 2)
 // ============================================================================
 
+/// What one digest tick does.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum DigestDecision {
+    Skip,
+    /// No digest was ever sent: record now as the start of the first period.
+    StartClock,
+    Generate,
+}
+
+/// Fresh-profile E2E 2026-10-09: "Sent digest notification" fired at
+/// 02:05:27Z while the user was still in onboarding (marked complete at
+/// 02:07:00Z), because a never-sent digest counted as due at once. Nothing is
+/// sent before setup is finished, and a profile with no digest history gets
+/// its first one a full period later: everything in it so far the user has
+/// just watched arrive.
+pub(crate) fn digest_decision(
+    enabled: bool,
+    onboarding_complete: bool,
+    frequency: &str,
+    last_sent: Option<chrono::DateTime<chrono::Utc>>,
+    now: chrono::DateTime<chrono::Utc>,
+) -> DigestDecision {
+    if !enabled || !onboarding_complete {
+        return DigestDecision::Skip;
+    }
+    let Some(last) = last_sent else {
+        return DigestDecision::StartClock;
+    };
+    let elapsed = now - last;
+    let due = match frequency {
+        "daily" => elapsed.num_hours() >= 24,
+        "weekly" => elapsed.num_days() >= 7,
+        _ => false, // "realtime" handled by direct triggers
+    };
+    if due {
+        DigestDecision::Generate
+    } else {
+        DigestDecision::Skip
+    }
+}
+
 /// Check if a digest is due and generate it if so.
 /// Called from the scheduler on each tick (every minute).
 pub async fn maybe_generate_digest<R: Runtime>(app: &AppHandle<R>) {
-    let (enabled, frequency, last_sent) = {
+    let (enabled, onboarding_complete, frequency, last_sent) = {
         let settings = crate::get_settings_manager().lock();
-        let digest = &settings.get().digest;
-        (digest.enabled, digest.frequency.clone(), digest.last_sent)
+        let s = settings.get();
+        (
+            s.digest.enabled,
+            s.onboarding_complete,
+            s.digest.frequency.clone(),
+            s.digest.last_sent,
+        )
     };
-
-    if !enabled {
-        return;
-    }
 
     let now = chrono::Utc::now();
-    let is_due = match last_sent {
-        None => true, // Never sent -- generate now
-        Some(last) => {
-            let elapsed = now - last;
-            match frequency.as_str() {
-                "daily" => elapsed.num_hours() >= 24,
-                "weekly" => elapsed.num_days() >= 7,
-                _ => false, // "realtime" handled by direct triggers
+    match digest_decision(enabled, onboarding_complete, &frequency, last_sent, now) {
+        DigestDecision::Skip => return,
+        DigestDecision::StartClock => {
+            let mut settings = crate::get_settings_manager().lock();
+            settings.get_mut().digest.last_sent = Some(now);
+            if let Err(e) = settings.save() {
+                tracing::warn!("Failed to save: {e}");
             }
+            info!(target: "4da::jobs", frequency = %frequency, "First digest scheduled one period after setup");
+            return;
         }
-    };
-
-    if !is_due {
-        return;
+        DigestDecision::Generate => {}
     }
 
     info!(target: "4da::jobs", frequency = %frequency, "Digest is due, generating");
@@ -691,6 +731,10 @@ pub async fn run_cve_scan<R: Runtime>(app: &AppHandle<R>) {
         Err(e) => warn!(target: "4da::jobs", error = %e, "Audit alert retirement failed"),
     }
 }
+
+#[cfg(test)]
+#[path = "monitoring_jobs_digest_tests.rs"]
+mod digest_tests;
 
 #[cfg(test)]
 mod chain_notify_dedup_tests {

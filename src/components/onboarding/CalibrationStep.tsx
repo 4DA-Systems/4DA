@@ -5,6 +5,7 @@ import { cmd } from '../../lib/commands';
 import { safeListen } from '../../lib/tauri-events';
 import { useAppStore } from '../../store';
 import type { CalibrationResult, Recommendation } from '../../types/calibration';
+import { SemanticSearchSummaryLine } from './SemanticSearchSummaryLine';
 import { useTrialEndDate } from './use-trial-end-date';
 
 interface CalibrationStepProps {
@@ -290,16 +291,7 @@ export function CalibrationStep({ isAnimating, finishing = false, onComplete, on
             {t('calibration.onboarding.setupComplete')}
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              {/* eslint-disable-next-line i18next/no-literal-string */}
-              <span style={{ color: 'var(--color-success)', fontSize: 12 }}>&#10003;</span>
-              <span style={{ fontSize: 11, color: 'var(--color-text-secondary)' }}>
-                {embeddingMode === 'keyword-only'
-                  ? t('calibration.onboarding.summaryKeyword')
-                  : t('calibration.onboarding.summaryAI')
-                }
-              </span>
-            </div>
+            <SemanticSearchSummaryLine embeddingMode={embeddingMode} />
             <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
               {/* eslint-disable-next-line i18next/no-literal-string */}
               <span style={{ color: 'var(--color-success)', fontSize: 12 }}>&#10003;</span>

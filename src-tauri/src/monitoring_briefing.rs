@@ -1614,7 +1614,8 @@ pub fn is_morning_briefing_due(state: &MonitoringState) -> bool {
             .clone()
             .unwrap_or_else(|| "08:00".to_string());
         let last = monitoring.last_briefing_date.clone();
-        (enabled, time, last)
+        // No morning briefing (window + OS toast) before setup is finished.
+        (enabled && settings.get().onboarding_complete, time, last)
     };
 
     if !enabled {
