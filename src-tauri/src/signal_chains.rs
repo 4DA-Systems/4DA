@@ -21,6 +21,7 @@ mod signal_chains_topics;
 use signal_chains_candidates::{load_recent_chain_candidate_items, ChainCandidateItem};
 use signal_chains_grounding::{
     best_dependency_evidence, chain_policy, topic_in_user_terms, user_topic_terms,
+    StackDependencies,
 };
 use signal_chains_persistence::record_signal_chain_events;
 pub use signal_chains_prediction::*;
@@ -144,7 +145,10 @@ fn detect_chains_from_items(
     let mut rejected_same_day = 0_usize;
     let mut rejected_low_confidence = 0_usize;
     let mut rejected_ungrounded_topic = 0_usize;
-    let user_terms = user_topic_terms(conn);
+    // The user's stack as "Your stack" reads it: counted (active, non-scratch,
+    // non-excluded) projects only — never every dependency ever scanned.
+    let stack = StackDependencies::load(conn);
+    let user_terms = user_topic_terms(conn, &stack);
 
     for group in &topic_groups {
         let topic = &group.display;
@@ -179,7 +183,7 @@ fn detect_chains_from_items(
         // Every spelling in the group is asked: the package is `next` even
         // when the chain is shown as `next.js`.
         let (grounded_spelling, dep_evidence) =
-            best_dependency_evidence(conn, &group.variants, topic_items_list);
+            best_dependency_evidence(conn, &stack, &group.variants, topic_items_list);
         let dep_match = dep_evidence.score;
         let has_dep = dep_match > 0.0;
 
