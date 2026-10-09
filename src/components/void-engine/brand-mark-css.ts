@@ -59,11 +59,20 @@ const STATIC_RULES = `
   will-change: opacity;
   animation: brand-mark-breathe-glow 2s ease-in-out infinite alternate;
 }
-/* Hidden window (tray-resident) — the motion gate flips this attribute. */
+/* Working, but the window is hidden or unfocused: freeze in place so the
+   turn resumes where it stopped on refocus. */
 .brand-mark-container[data-motion="paused"] .brand-mark-viewport,
 .brand-mark-container[data-motion="paused"] .brand-mark-sprite,
 .brand-mark-container[data-motion="paused"] .brand-mark-glow {
   animation-play-state: paused;
+}
+/* Idle: no animation exists at all (getAnimations() is empty) and the
+   layers drop their compositor hints; the sheet rests on frame 0. */
+.brand-mark-container[data-motion="rest"] .brand-mark-viewport,
+.brand-mark-container[data-motion="rest"] .brand-mark-sprite,
+.brand-mark-container[data-motion="rest"] .brand-mark-glow {
+  animation: none;
+  will-change: auto;
 }
 /* Reduced motion: a static first frame, no breath. */
 @media (prefers-reduced-motion: reduce) {
@@ -84,3 +93,15 @@ const STATIC_RULES = `
 `;
 
 export const BRAND_MARK_CSS = `${STATIC_RULES}\n${turnKeyframes()}\n`;
+
+/**
+ * The mark's `data-motion` state, which the rules above consume:
+ * `rest` = not working, no animation exists; `paused` = working but the
+ * window is hidden/unfocused (or reduced motion); `running` otherwise.
+ */
+export type BrandMarkMotion = 'running' | 'paused' | 'rest';
+
+export function brandMarkMotion(active: boolean, motionAllowed: boolean): BrandMarkMotion {
+  if (!active) return 'rest';
+  return motionAllowed ? 'running' : 'paused';
+}

@@ -5,6 +5,7 @@
 import { memo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BrandMark } from '../void-engine/BrandMark';
+import { signalShowsWork } from '../void-engine/signal-visuals';
 import { useVoidSignals } from '../../hooks/use-void-signals';
 import { OllamaStatus } from '../OllamaStatus';
 import { SystemHealthDot } from '../SystemHealthDot';
@@ -91,7 +92,13 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
         {/* Left: VoidEngine + status */}
         <div className="flex items-center gap-3 flex-shrink-0">
           <div className="w-9 h-9 flex items-center justify-center rounded-lg overflow-hidden" aria-hidden="true">
-            <BrandMark signal={voidSignal} size={36} />
+            {/* Moves only while 4DA is working: a foreground analysis, or a
+                background source fetch the heartbeat reports via pulse. */}
+            <BrandMark
+              signal={voidSignal}
+              size={36}
+              active={isLoading || signalShowsWork(voidSignal)}
+            />
           </div>
           <div className="flex items-center gap-2">
             <div className={`w-2 h-2 rounded-full flex-shrink-0 ${statusDotColor}`} aria-hidden="true" />

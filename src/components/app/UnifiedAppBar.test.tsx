@@ -12,8 +12,13 @@ vi.mock('react-i18next', () => ({
       typeof fallback === 'string' ? fallback : key,
   }),
 }));
-vi.mock('../void-engine/BrandMark', () => ({ BrandMark: () => <div data-testid="brand-mark" /> }));
-vi.mock('../../hooks/use-void-signals', () => ({ useVoidSignals: () => 'idle' }));
+vi.mock('../void-engine/BrandMark', () => ({
+  BrandMark: ({ active }: { active?: boolean }) => (
+    <div data-testid="brand-mark" data-active={String(active)} />
+  ),
+}));
+const voidSignal = vi.hoisted((): { current: { pulse: number } } => ({ current: { pulse: 0 } }));
+vi.mock('../../hooks/use-void-signals', () => ({ useVoidSignals: () => voidSignal.current }));
 vi.mock('../OllamaStatus', () => ({ OllamaStatus: () => null }));
 vi.mock('../SystemHealthDot', () => ({ SystemHealthDot: () => null }));
 vi.mock('../ThemeToggle', () => ({ ThemeToggle: () => null }));
@@ -76,5 +81,32 @@ describe('UnifiedAppBar — unjudged badge on the relevant chip', () => {
   it('shows no badge without summary badges even when unjudged', () => {
     renderBar({ judged: false, summaryBadges: null });
     expect(screen.queryByTestId('unjudged-badge')).toBeNull();
+  });
+});
+
+describe('UnifiedAppBar — the brand mark moves only while 4DA is working', () => {
+  it('rests when idle: no analysis running and no background fetch', () => {
+    voidSignal.current = { pulse: 0 };
+    renderBar({ state: { loading: false, analysisComplete: true } });
+    expect(screen.getByTestId('brand-mark')).toHaveAttribute('data-active', 'false');
+  });
+
+  it('rests on the wind-down pulse a finished fetch leaves behind', () => {
+    voidSignal.current = { pulse: 0.3 };
+    renderBar({ state: { loading: false, analysisComplete: true } });
+    expect(screen.getByTestId('brand-mark')).toHaveAttribute('data-active', 'false');
+  });
+
+  it('animates during a foreground analysis', () => {
+    voidSignal.current = { pulse: 0 };
+    renderBar({ state: { loading: true, analysisComplete: false } });
+    expect(screen.getByTestId('brand-mark')).toHaveAttribute('data-active', 'true');
+  });
+
+  it('animates during a background source fetch (heartbeat pulse)', () => {
+    voidSignal.current = { pulse: 0.4 };
+    renderBar({ state: { loading: false, analysisComplete: true } });
+    expect(screen.getByTestId('brand-mark')).toHaveAttribute('data-active', 'true');
+    voidSignal.current = { pulse: 0 };
   });
 });

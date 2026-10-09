@@ -4,14 +4,20 @@ import type { CSSProperties } from "react";
 import type { VoidSignal } from "../../types";
 import { loopDurationMs } from "./brand-mark-geometry";
 import { BrandMarkSprite } from "./BrandMarkSprite";
-import { BRAND_MARK_CSS } from "./brand-mark-css";
+import { BRAND_MARK_CSS, brandMarkMotion } from "./brand-mark-css";
 import { deriveSignalVisuals } from "./signal-visuals";
 import { useTheme } from "../../lib/theme";
-import { isMotionAllowed, subscribeMotionGate } from "../../lib/motion-gate";
+import { isAmbientMotionAllowed, subscribeMotionGate } from "../../lib/motion-gate";
 
 interface BrandMarkProps {
   signal?: VoidSignal;
   size?: number;
+  /**
+   * Is 4DA working right now? When false the mark rests on a static frame
+   * with NO animation registered (`data-motion="rest"`). Defaults to true for
+   * short-lived screens (first-run) whose whole purpose is "working".
+   */
+  active?: boolean;
 }
 
 /**
@@ -30,15 +36,24 @@ interface BrandMarkProps {
  * transform/opacity animation. All of it runs on the compositor: zero
  * JavaScript per frame, and the glow is rasterised once.
  *
+ * - Meaning (audit 2026-10-07, wave 9a): the mark moves only while `active`
+ *   (4DA is working). Idle, `data-motion="rest"` removes the animations
+ *   outright — a running infinite animation in a visible-but-idle window cost
+ *   the GPU process 25-43% of a core.
  * - Speed: the signal sets the loop duration through `--bm-loop`.
- * - Hidden window: the motion gate sets `data-motion="paused"` (an event, not
- *   a loop) and CSS pauses every animation.
+ * - Hidden or unfocused window: the motion gate sets `data-motion="paused"`
+ *   (an event, not a loop) and CSS freezes every animation in place.
  * - prefers-reduced-motion: CSS drops the animations; the first frame shows.
  */
-export function BrandMark({ signal, size = 36 }: BrandMarkProps) {
+export function BrandMark({ signal, size = 36, active = true }: BrandMarkProps) {
   const filterId = `bm-glow-${useId().replace(/:/g, "")}`;
   const { isLight } = useTheme();
-  const motionAllowed = useSyncExternalStore(subscribeMotionGate, isMotionAllowed, () => false);
+  const motionAllowed = useSyncExternalStore(
+    subscribeMotionGate,
+    isAmbientMotionAllowed,
+    () => false,
+  );
+  const motion = brandMarkMotion(active, motionAllowed);
 
   const { glowOpacity, edgeColor, vertexColor, faceColor, stateLabel, rotSpeed } =
     useMemo(() => deriveSignalVisuals(signal, isLight), [signal, isLight]);
@@ -69,7 +84,7 @@ export function BrandMark({ signal, size = 36 }: BrandMarkProps) {
       aria-live="polite"
       title={titleParts.join(" · ")}
       aria-label={ariaLabel}
-      data-motion={motionAllowed ? "running" : "paused"}
+      data-motion={motion}
       style={{
         ...markVars,
         width: size,

@@ -39,6 +39,25 @@ const PALETTE: { dark: ThemePalette; light: ThemePalette } = {
   },
 };
 
+/**
+ * Pulse at or above this means the backend is fetching sources right now.
+ * The heartbeat sets pulse = 1.0 when a fetch starts and 0.4 -> 1.0 as each
+ * source completes (heartbeat.rs `signal_fetching` / `signal_fetch_progress`),
+ * then drops it to 0.3 ("winding down") on cache fill and to 0 when the
+ * cycle's analysis lands. 0.35 sits between the lowest in-flight value and
+ * the wind-down value.
+ */
+export const WORKING_PULSE = 0.35;
+
+/**
+ * True while the void signal says 4DA is doing background work (a scheduled
+ * or manual source fetch). The brand mark moves only while this, or a
+ * foreground analysis, is true — motion that means something.
+ */
+export function signalShowsWork(signal: VoidSignal | undefined): boolean {
+  return (signal?.pulse ?? 0) >= WORKING_PULSE;
+}
+
 /** Derive visual state (colors, glow, label, speed) from the current VoidSignal. */
 export function deriveSignalVisuals(
   signal: VoidSignal | undefined,
