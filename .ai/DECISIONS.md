@@ -809,6 +809,74 @@
 - **Date:** 2026-10-05
 - **Status:** Accepted 2026-10-06 — the operator enabled Managed Payments in the Dashboard. Verified read-only the same day: status "Ready to use"; Include tax in prices = Yes; product 4DA Signal tax code `txcd_10202003` (Downloadable Software – business use), Managed Payments "Eligible".
 
+### AD-054: The Dependency-Truth Engine Is the Product; Reading the Internet Serves It
+
+- **Decision:** 2026-10-10, PENDING-DECISION Decision 10 (option C), approved by the operator ("I agree with all of your suggestions"). Pre-launch, with no marketing yet, so the reframe is cheap now and a retraction later.
+  1. **The product is the engine.** The core of 4DA is the join of every lockfile on the machine against advisories, registry releases and changelogs. It produces version-confirmed findings, the exact fix path ("a lockfile refresh is enough" / "upgrade the direct parent X to Y"), what changed between versions and where the code imports it, and an ordered upgrade plan. Every surface and the MCP server are views of this one engine.
+  2. **Front door and navigation.**
+     - **Brief** (home): "anything I need to do today?" (AD-050).
+     - **Preemption:** the worklist. Blind Spots and Knowledge Gaps fold into it as supporting views.
+     - **Signal:** the stack-change stream. Lane 1 is rebuilt from the same deterministic facts as the Brief, not sliced from the PASIFA-scored feed.
+
+     Main nav becomes three tabs; this amends doctrine rule 2.
+  3. **Social and editorial reading becomes opt-in "interests"** and is off by default. The sources are HN, Lobsters, Mastodon, dev.to, Reddit, Lemmy, Bluesky, YouTube, HuggingFace, arXiv, Papers with Code, Stack Overflow, Product Hunt, X and generic RSS. Registries (crates.io, npm, PyPI, Go) and advisories (OSV, CVE) stay always-on because the engine needs them. The "worth knowing" Brief section and Signal's drawer draw on interests only when the user has turned them on.
+  4. **One truth.** The Rust app engine and the TypeScript MCP engine must produce the same answers. Both are gated on a hermetic conformance corpus (real public repos, vendored lockfiles, pinned OSV records, adjudicated truth) in CI. The target is a single engine (a Rust core consumed by the MCP server); until then, the corpus is the contract.
+  5. **Launch gates.** Launch happens only when all of these pass:
+     - G1 conformance: P ≥ 99.5%, R ≥ 99% on lockfiles read, 0 silent drops, ≥ 30 repos, ≥ 8 formats.
+     - G2 fix-path oracle: ≥ 95% of actions clear the advisory minimally; 0 recommended targets still vulnerable.
+     - G3 upgrade impact: breaking-list precision ≥ 90%.
+     - G4 Brief: 14 clean days; morning delivered ≥ 95%.
+     - G5 Lane 1: Wilson lower bound ≥ 0.80 at n ≥ 80.
+     - G6 resource budgets.
+     - G7 agent evaluation delta.
+     - G8 clean-VM installs, with signed Windows builds.
+     - G9 7-day dogfood.
+  6. **Tiers.**
+     - **Free:** version-confirmed vulnerability findings and fix paths for all local projects (the current Preemption free floor), plus the free and open MCP server. Every competitor gives vulnerability alerts to individuals for free.
+     - **Signal:** sells time saved on upgrades — the Upgrade Plan, upgrade impact (breaking changes matched to importing files), the narrated Brief, the stack-change stream and history. Blind Spots and Knowledge Gaps stay in Signal as supporting views, not as the reason to pay.
+  7. **The bundled embedding model becomes an on-demand download.** The engine needs no embeddings. Only interests and natural-language search use them.
+  8. **One-sentence description (amends AD-030):** *"4DA knows every dependency on your machine and tells you — and your coding agent — what changed and exactly what to run. Privately, locally."* Copy across README, site, installer metadata, locales and CLAUDE.md migrates in one change (Wave 2), enforced by the same retired-claims gate. The AD-030 line is superseded, not banned: it was true, but it led with the weakest capability.
+- **Rationale:** measured 2026-10-09/10. Evidence is in memory `project_effectiveness_assessment_2026_10_09` and the plan in `.claude/plans/trajectory-2026-10-10.md`.
+  - **Engine surfaces on the founder stack:**
+    - Preemption: 27/29 correct, 0 wrong.
+    - Brief facts: 17/17.
+    - Signal Lane 1: 49/50 adjudicated.
+    - MCP scan vs cargo/npm audit: P/R 1.00.
+    - Blind panel by source: crates.io 29/30, npm 16/16.
+  - **Social and editorial content:**
+    - By source: dev.to 5/126, HN 5/72, Mastodon 0/35.
+    - Lane 2: 0/10 twice.
+    - Whole-feed precision: flat at 18–22% across three fix rounds.
+    - Early-warning test on the corpus: 0/45 advisories on the founder's dependencies had a genuine social mention before the advisory; 1–2 of 154 across the whole corpus did.
+    - Cost: social items are 92% of stored items (about 1.4 GB of 2.1 GB) and 97% of judged items (about 22.5k local judge calls in 14 days).
+  - **Market:**
+    - Developer news is not a paid category for individuals: Artifact shut down, ChatGPT Pulse was retired, TLDR is ad-funded.
+    - Dependency security is free for individuals everywhere and paid by teams at $25–30 per developer.
+    - "Dependabot is a noise machine" (F. Valsorda, 2026-02-20).
+    - Coding agents select known-vulnerable versions with net security impact −98 vs +1,316 for humans (arXiv 2601.00205).
+    - Ungrounded models fabricate about 1 in 16 dependency recommendations (Sonatype 2026, 258k recommendations).
+  - **Generalization test (19 public repos, 11 lockfile formats):**
+    - The TS engine reached P 100% / R 99.9%.
+    - The Rust engine reached Cargo 100%, but npm R 76%, PyPI R 54% and Go P 8%.
+    - The founder-stack figures held only because that stack is Cargo + pnpm. That is why "one truth" precedes the refocus.
+- **Considered:**
+  - *A — Signal (news) as the main feature:* Rejected. It is the weakest measured capability, and its precision is bounded by the source mix rather than by bugs; three fix rounds moved it nowhere.
+  - *B — the Preemption tab as the main feature, product otherwise unchanged:* Rejected as incomplete. Framed as a vulnerability list it competes head-on with free Dependabot, OSV-Scanner, Socket and Snyk. The differentiation is the cross-project, local, fix-path-and-upgrade engine as a whole, with the Brief as the answer.
+  - *D — status quo:* Rejected. It ships the weakest capability first and would show Go and Python developers wrong or missing findings.
+  - *Delete social sources entirely:* Rejected. A minority of useful items (MCP and agent tooling tied to the project's domain) lives there. Opt-in keeps them for users who want them, honestly labelled.
+- **Amends:**
+  - AD-030: canonical line.
+  - AD-050: worth knowing draws on opt-in interests.
+  - AD-039: admission now starts at source enablement.
+  - AD-025: tier contents.
+  - Doctrine rule 2: three tabs.
+  - `docs/strategy/INTELLIGENCE-RECONCILIATION.md`: input plane = lockfiles + advisories + registries; interests are optional.
+- **Date:** 2026-10-10
+- **Status:** Accepted. Implementation runs in waves:
+  - Wave 1: engine parity, conformance corpus, fix paths, Phase 0 cleanups, MCP 6.1.0.
+  - Wave 2: refocus — interests opt-in, deterministic Lane 1, Blind Spots/KG fold, on-demand embeddings, copy, tiers.
+  - Wave 3: single engine, agent evaluation.
+
 ---
 
 ## Decision Template
