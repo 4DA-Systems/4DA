@@ -143,6 +143,11 @@ data/.process.lock
 # `--once` engine processes so a ban discovered by one is honoured by all.
 data/.stackoverflow_throttle*
 
+# Startup integrity gate (db::integrity_gate, #884): the last-ok quick_check
+# marker and one session file per process that has the database open.
+data/*.db.quick_check_ok
+data/*.db.session.*
+
 # Environment files (may contain secrets from `vercel env pull`)
 .env*
 !.env.example
