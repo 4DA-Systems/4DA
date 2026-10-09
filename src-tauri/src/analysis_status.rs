@@ -113,8 +113,8 @@ pub(crate) async fn run_cached_analysis(app: AppHandle) -> Result<()> {
 
                 void_signal_analysis_complete(&app, &results);
 
-                // Invalidate blind spot cache so next tab switch recomputes
-                // with fresh analysis data.
+                // New blind-spot generation + background rebuild against the
+                // fresh analysis; the previous report serves until it lands.
                 crate::blind_spots::invalidate_blind_spot_cache();
 
                 // Run post-analysis innovation hooks (non-blocking)

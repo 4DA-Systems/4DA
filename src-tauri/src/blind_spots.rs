@@ -8,9 +8,6 @@
 //! watching based on their actual dependencies, projects, and stack.
 //! "You have 6 active Rust deps but haven't engaged with Rust signals in 21 days."
 
-use std::sync::Mutex;
-use std::time::Instant;
-
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use tracing::{info, warn};
@@ -29,21 +26,90 @@ use crate::scoring_config;
 
 pub mod assess;
 mod coverage_evidence;
+mod report_cache;
 
 // ============================================================================
-// Report-level cache (5-minute TTL)
+// Report-level cache (per engine cycle, pre-warmed) — see `report_cache`
 // ============================================================================
 
-static BLIND_SPOT_CACHE: Lazy<Mutex<Option<(Instant, BlindSpotReport)>>> =
-    Lazy::new(|| Mutex::new(None));
+/// One cycle's report plus its evidence items (built with it, so a cache hit
+/// never re-runs the per-gap consequence breakdowns).
+#[derive(Clone)]
+struct CachedBlindSpots {
+    report: BlindSpotReport,
+    items: Vec<EvidenceItem>,
+}
 
-const CACHE_TTL_SECS: u64 = 300; // 5 minutes
+static BLIND_SPOT_CACHE: report_cache::CycleCache<CachedBlindSpots> =
+    report_cache::CycleCache::new();
 
-/// Invalidate the blind-spot report cache. Call this after analysis completion
-/// or when the user's dependency set changes.
+/// The uncached build the cache stores: the report and its items.
+fn build_cached_blind_spots() -> Result<CachedBlindSpots> {
+    let report = generate_blind_spot_report_uncached()?;
+    let items = blind_spot_report_items(&report);
+    Ok(CachedBlindSpots { report, items })
+}
+
+/// The pre-warm runs only for users the command would serve — the same
+/// decision `get_blind_spots` makes. A free user never pays the build.
+fn blind_spot_prewarm_entitled() -> bool {
+    crate::settings::require_signal_feature("get_blind_spots").is_ok()
+}
+
+/// Engine-cycle hook: new generation + background pre-warm, so the first
+/// Blind Spots open after a cycle is cache-served. Never blocks the caller.
+pub(crate) fn refresh_blind_spot_cache_after_cycle() {
+    BLIND_SPOT_CACHE.invalidate_and_prewarm(
+        "post-cycle",
+        blind_spot_prewarm_entitled(),
+        build_cached_blind_spots,
+    );
+}
+
+/// Mark the report stale after its inputs changed (a foreground analysis, a
+/// watched package, a dismissal) and rebuild it in the background. The
+/// previous report keeps serving until the rebuild lands, so the user never
+/// waits on the cold build for a change that cannot alter what they see
+/// right now (dismissals are filtered per call in `feed_from_report_items`).
 pub fn invalidate_blind_spot_cache() {
-    if let Ok(mut guard) = BLIND_SPOT_CACHE.lock() {
-        *guard = None;
+    BLIND_SPOT_CACHE.invalidate_and_prewarm(
+        "inputs-changed",
+        blind_spot_prewarm_entitled(),
+        build_cached_blind_spots,
+    );
+}
+
+/// Drop the report outright and rebuild — for a change the stale report
+/// would visibly contradict (the sensitivity threshold). A reader that
+/// arrives during the rebuild waits for it rather than seeing the old one.
+pub(crate) fn clear_blind_spot_cache() {
+    BLIND_SPOT_CACHE.clear();
+    invalidate_blind_spot_cache();
+}
+
+/// Build the report once after startup so the first Blind Spots open is
+/// cache-served. Sequenced by the caller after first-light and after the
+/// Preemption warm, so it never contends with boot. Skipped without the
+/// Signal feature, or when an engine cycle already warmed it.
+pub(crate) async fn warm_blind_spot_cache_after_startup() {
+    if !blind_spot_prewarm_entitled() {
+        return;
+    }
+    if BLIND_SPOT_CACHE.servable().is_some() {
+        return;
+    }
+    let result = crate::ipc_blocking::off_ui_thread("blind-spot startup warm", || {
+        BLIND_SPOT_CACHE
+            .get_or_compute(build_cached_blind_spots)
+            .map(drop)
+            .map_err(|e| e.to_string())
+    })
+    .await;
+    match result {
+        Ok(()) => info!(target: "4da::blind_spots", "Blind-spot report cache warmed at startup"),
+        Err(e) => {
+            warn!(target: "4da::blind_spots", error = %e, "Blind-spot startup warm failed (will compute on demand)")
+        }
     }
 }
 
@@ -300,39 +366,37 @@ fn is_actively_developed_tech(
 
 /// Generate a comprehensive blind spot report.
 ///
-/// Results are cached for 5 minutes to avoid redundant computation on
-/// rapid tab switches. Call `invalidate_blind_spot_cache()` to force a
-/// fresh report (e.g. after an analysis run completes).
+/// Served from the per-cycle cache (`report_cache`): one build per engine
+/// cycle, pre-warmed in the background, the previous cycle's report serving
+/// while the next one builds. Blocking on a cold cache — call it off the UI
+/// thread.
 pub fn generate_blind_spot_report() -> Result<BlindSpotReport> {
-    // Check cache first
-    if let Ok(guard) = BLIND_SPOT_CACHE.lock() {
-        if let Some((cached_at, ref report)) = *guard {
-            if cached_at.elapsed().as_secs() < CACHE_TTL_SECS {
-                return Ok(report.clone());
-            }
-        }
-    }
+    cached_blind_spots().map(|c| c.report)
+}
 
-    let report = generate_blind_spot_report_uncached()?;
-
-    // Store in cache
-    if let Ok(mut guard) = BLIND_SPOT_CACHE.lock() {
-        *guard = Some((Instant::now(), report.clone()));
-    }
-
-    Ok(report)
+fn cached_blind_spots() -> Result<CachedBlindSpots> {
+    BLIND_SPOT_CACHE.get_or_compute(build_cached_blind_spots)
 }
 
 /// Inner implementation — always runs fresh queries.
 fn generate_blind_spot_report_uncached() -> Result<BlindSpotReport> {
+    generate_blind_spot_report_profiled().map(|(report, _)| report)
+}
+
+/// The uncached build plus its per-phase wall times (debug-logged; the
+/// live-snapshot profile test prints them).
+fn generate_blind_spot_report_profiled() -> Result<(BlindSpotReport, Vec<(&'static str, u64)>)> {
+    let mut clock = report_cache::PhaseClock::start();
     let conn = crate::open_db_connection()?;
 
     // Cold-start suppression (doctrine rule 6): blind spots require 7+ days
     // of engagement data to be meaningful. Showing blind spots on day 1
     // guarantees false signals — the system hasn't observed enough to know
     // what the user is missing.
-    if is_cold_start(&conn)? {
-        return Ok(BlindSpotReport {
+    let cold_start = is_cold_start(&conn)?;
+    clock.lap("open_and_cold_start");
+    if cold_start {
+        let report = BlindSpotReport {
             // -1.0 sentinel means "not enough data to compute" — the frontend
             // renders a "building" state instead of a misleading "0/100 Good".
             // Previously this was 0.0, which the UI interpreted as "perfect
@@ -345,16 +409,20 @@ fn generate_blind_spot_report_uncached() -> Result<BlindSpotReport> {
             weak_matches: vec![],
             generated_at: chrono::Utc::now().to_rfc3339(),
             data_freshness: crate::monitoring_briefing::compute_data_freshness(),
-        });
+        };
+        clock.lap("cold_start_report");
+        return Ok((report, clock.finish()));
     }
 
     let threshold_days = blind_spot_threshold_days();
 
     // 1. Get attention report (30-day window)
     let attention = crate::attention::generate_report(30)?;
+    clock.lap("attention_report");
 
     // 2. Get knowledge gaps
     let gaps = crate::knowledge_decay::cached_knowledge_gaps(&conn)?;
+    clock.lap("knowledge_gaps");
 
     // 3. Get all user dependencies with project coverage
     let deps = get_dependency_coverage(&conn)?;
@@ -362,9 +430,11 @@ fn generate_blind_spot_report_uncached() -> Result<BlindSpotReport> {
     // 3b. Active project detection — suppress blind spots for tech the user
     // is clearly working with (recent git commits).
     let active_paths = get_recent_project_paths(&conn);
+    clock.lap("dependency_coverage");
 
     // 4. Find uncovered dependencies (deps with no interaction in threshold days)
     let (uncovered, weak_matches) = find_uncovered_deps(&conn, &deps, threshold_days)?;
+    clock.lap("uncovered_deps");
 
     // 5. Find stale topics from attention blind spots.
     // Only include topics with actual missed signals — a topic with
@@ -384,9 +454,11 @@ fn generate_blind_spot_report_uncached() -> Result<BlindSpotReport> {
         })
         .filter(|st| st.missed_signal_count > 0)
         .collect();
+    clock.lap("stale_topics");
 
     // 6. Find missed signals (high-relevance, not seen, older than feed window)
     let missed = find_missed_signals(&conn, threshold_days, &deps)?;
+    clock.lap("missed_signals");
 
     // 6b. Active-project scoping: suppress deps/signals from projects with no
     // recent git activity. Prevents cross-project pollution (e.g. express from
@@ -446,6 +518,7 @@ fn generate_blind_spot_report_uncached() -> Result<BlindSpotReport> {
             .collect();
         (uc, wm, ms)
     };
+    clock.lap("active_project_filter");
 
     // 6c. Drop the deps whose every signal the breakdown already disqualified —
     // BEFORE recommendations, the score and the counts, so no surface claims a
@@ -464,12 +537,14 @@ fn generate_blind_spot_report_uncached() -> Result<BlindSpotReport> {
         after = uncovered.len(),
         "nothing-left-to-review filter: uncovered deps"
     );
+    clock.lap("coverage_gap_filter");
 
     // 7. Generate recommendations
     let recommendations = generate_recommendations(&uncovered, &stale, &gaps);
 
     // 8. Calculate overall score (normalized against direct-dep count)
     let score = calculate_blind_spot_score(&uncovered, &stale, &missed, deps.len());
+    clock.lap("recommendations_and_score");
 
     info!(
         target: "4da::blind_spots",
@@ -482,7 +557,7 @@ fn generate_blind_spot_report_uncached() -> Result<BlindSpotReport> {
         "Blind spot report generated"
     );
 
-    Ok(BlindSpotReport {
+    let report = BlindSpotReport {
         overall_score: score,
         uncovered_dependencies: uncovered,
         stale_topics: stale,
@@ -491,7 +566,9 @@ fn generate_blind_spot_report_uncached() -> Result<BlindSpotReport> {
         weak_matches,
         generated_at: chrono::Utc::now().to_rfc3339(),
         data_freshness: crate::monitoring_briefing::compute_data_freshness(),
-    })
+    };
+    clock.lap("data_freshness");
+    Ok((report, clock.finish()))
 }
 
 /// Normalize a package name for identity comparison.
@@ -3708,7 +3785,18 @@ fn recommendation_to_evidence_item(r: &BlindSpotRecommendation, idx: usize) -> E
 /// Convert a legacy `BlindSpotReport` into the canonical `EvidenceFeed`.
 /// Every item is schema-validated; validation failures drop the offending
 /// item with a structured log rather than breaking the feed.
-pub(crate) fn blind_spot_report_to_feed(report: &BlindSpotReport) -> EvidenceFeed {
+/// Production splits it: items are built with the cached report, the feed per
+/// call (`get_blind_spots`). Tests drive the whole conversion at once.
+#[cfg(test)]
+fn blind_spot_report_to_feed(report: &BlindSpotReport) -> EvidenceFeed {
+    feed_from_report_items(blind_spot_report_items(report), report)
+}
+
+/// The report's evidence items, before the per-call dismissal filter. The
+/// expensive half of the conversion (a consequence breakdown per coverage
+/// gap) — built once per report and cached with it, so a cache hit never
+/// re-runs it after the breakdown memo has expired.
+fn blind_spot_report_items(report: &BlindSpotReport) -> Vec<EvidenceItem> {
     let mut items: Vec<EvidenceItem> = Vec::new();
 
     for d in &report.uncovered_dependencies {
@@ -3723,7 +3811,12 @@ pub(crate) fn blind_spot_report_to_feed(report: &BlindSpotReport) -> EvidenceFee
     for (idx, r) in report.recommendations.iter().enumerate() {
         items.push(recommendation_to_evidence_item(r, idx));
     }
+    items
+}
 
+/// The cheap, per-call half: dismissal filter (dismissals change between
+/// cache refreshes), schema validation, feed assembly.
+fn feed_from_report_items(items: Vec<EvidenceItem>, report: &BlindSpotReport) -> EvidenceFeed {
     // Filter out dismissed items (persisted in blind_spot_dismissals table)
     let dismissed_ids = load_dismissed_ids();
 
@@ -3922,8 +4015,8 @@ fn llm_judged_blind_spot_items() -> Vec<EvidenceItem> {
 pub async fn get_blind_spots() -> std::result::Result<EvidenceFeed, String> {
     crate::settings::require_signal_feature("get_blind_spots").map_err(|e| e.to_string())?;
     tauri::async_runtime::spawn_blocking(|| {
-        let report = generate_blind_spot_report().map_err(|e| e.to_string())?;
-        let mut feed = blind_spot_report_to_feed(&report);
+        let cached = cached_blind_spots().map_err(|e| e.to_string())?;
+        let mut feed = feed_from_report_items(cached.items, &cached.report);
 
         // Attach total tracked dep count so the UI can show accurate denominator
         if let Ok(conn) = crate::open_db_connection() {
@@ -3961,7 +4054,7 @@ pub async fn get_blind_spots() -> std::result::Result<EvidenceFeed, String> {
 
 /// Free-tier teaser for the Blind Spots lens: real aggregate counts only,
 /// zero item detail. Computed from the same cached report path Signal pays
-/// for (5-minute TTL), so the numbers can never diverge from what the full
+/// for (per-cycle cache), so the numbers can never diverge from what the full
 /// lens would show.
 #[derive(Debug, Clone, Serialize, Deserialize, TS)]
 #[ts(export, export_to = "bindings/")]
@@ -4050,10 +4143,10 @@ fn add_package_watch_blocking(
     )
     .map_err(|e| e.to_string())?;
 
-    // Invalidate the blind spots cache so the next refresh picks up the change
-    if let Ok(mut guard) = BLIND_SPOT_CACHE.lock() {
-        *guard = None;
-    }
+    // The report reads the stack: rebuild it in the background. The watch
+    // lands in the report when that rebuild does (seconds), not on a cold
+    // 18 s compute the next time the tab opens.
+    invalidate_blind_spot_cache();
 
     info!(
         target: "4da::blind_spots",
@@ -4110,10 +4203,11 @@ fn dismiss_blind_spot_blocking(
     // Feed stability detector — blind spot dismissal is a strong topic veto signal
     crate::engagement_telemetry::on_blind_spot_dismiss(&conn, &item_id);
 
-    // Invalidate cache
-    if let Ok(mut guard) = BLIND_SPOT_CACHE.lock() {
-        *guard = None;
-    }
+    // The dismissed item disappears immediately — dismissals are filtered per
+    // call in `feed_from_report_items`, outside the cached report — so the
+    // report only needs a background rebuild for the telemetry above, never
+    // a cold recompute on the next open.
+    invalidate_blind_spot_cache();
 
     Ok(serde_json::json!({ "status": "ok", "item_id": item_id }))
 }
