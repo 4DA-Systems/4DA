@@ -79,6 +79,55 @@ describe('BrandMark runs with zero JavaScript per frame', () => {
     expect(raf.pending()).toBe(0);
   });
 
+  it('rests with no animation at all while 4DA is idle (active=false)', () => {
+    const { container } = render(<BrandMark size={36} active={false} />);
+    const status = container.querySelector('.brand-mark-container')!;
+    expect(status.getAttribute('data-motion')).toBe('rest');
+    // Focus/visibility changes never wake an idle mark.
+    act(() => raf.setFocused(false));
+    act(() => raf.setFocused(true));
+    act(() => raf.setHidden(true));
+    act(() => raf.setHidden(false));
+    expect(status.getAttribute('data-motion')).toBe('rest');
+    // `rest` REMOVES the animations (not merely pauses them), for all three layers.
+    const rest = CSS.slice(CSS.indexOf('[data-motion="rest"]'));
+    const block = rest.slice(0, rest.indexOf('}') + 1);
+    for (const layer of ['viewport', 'sprite', 'glow']) {
+      expect(block).toContain(`[data-motion="rest"] .brand-mark-${layer}`);
+    }
+    expect(block).toMatch(/animation: none;/);
+    expect(window.requestAnimationFrame).not.toHaveBeenCalled();
+  });
+
+  it('runs while working, and goes back to rest when the work ends', () => {
+    const { container, rerender } = render(<BrandMark size={36} active />);
+    const status = container.querySelector('.brand-mark-container')!;
+    expect(status.getAttribute('data-motion')).toBe('running');
+    rerender(<BrandMark size={36} active={false} />);
+    expect(status.getAttribute('data-motion')).toBe('rest');
+    rerender(<BrandMark size={36} active />);
+    expect(status.getAttribute('data-motion')).toBe('running');
+  });
+
+  it('pauses while the window is unfocused and resumes on focus (event-driven)', () => {
+    const { container } = render(<BrandMark size={36} active />);
+    const status = container.querySelector('.brand-mark-container')!;
+    expect(status.getAttribute('data-motion')).toBe('running');
+    act(() => raf.setFocused(false));
+    expect(status.getAttribute('data-motion')).toBe('paused');
+    act(() => raf.setFocused(true));
+    expect(status.getAttribute('data-motion')).toBe('running');
+    expect(raf.pending()).toBe(0);
+  });
+
+  it('starts paused when mounted into an unfocused window', () => {
+    raf.setFocused(false);
+    const { container } = render(<BrandMark size={36} active />);
+    expect(container.querySelector('.brand-mark-container')!.getAttribute('data-motion')).toBe(
+      'paused',
+    );
+  });
+
   it('renders a static first frame under prefers-reduced-motion', () => {
     raf.setReducedMotion(true);
     const { container } = render(<BrandMark size={36} />);

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 /**
  * Test harness for animation loops: a manual requestAnimationFrame queue plus
- * switches for document visibility and prefers-reduced-motion.
+ * switches for document visibility, window focus and prefers-reduced-motion.
  */
 import { vi } from 'vitest';
 
@@ -11,6 +11,8 @@ export interface RafHarness {
   /** Run every currently scheduled callback at `time`. */
   flush: (time: number) => void;
   setHidden: (hidden: boolean) => void;
+  /** Window focus (`document.hasFocus()`), announced with a focus/blur event. Starts focused. */
+  setFocused: (focused: boolean) => void;
   setReducedMotion: (reduce: boolean) => void;
   restore: () => void;
 }
@@ -19,6 +21,7 @@ export function installRafHarness(): RafHarness {
   let nextId = 1;
   const queue = new Map<number, FrameRequestCallback>();
   let hidden = false;
+  let focused = true;
   let reduce = false;
   const mqlListeners = new Set<() => void>();
 
@@ -31,6 +34,7 @@ export function installRafHarness(): RafHarness {
     queue.delete(id);
   });
   const hiddenSpy = vi.spyOn(document, 'hidden', 'get').mockImplementation(() => hidden);
+  const focusSpy = vi.spyOn(document, 'hasFocus').mockImplementation(() => focused);
   const originalMatchMedia = window.matchMedia;
   window.matchMedia = ((query: string) => ({
     matches: query.includes('prefers-reduced-motion') ? reduce : false,
@@ -54,6 +58,10 @@ export function installRafHarness(): RafHarness {
       hidden = h;
       document.dispatchEvent(new Event('visibilitychange'));
     },
+    setFocused: (f) => {
+      focused = f;
+      window.dispatchEvent(new Event(f ? 'focus' : 'blur'));
+    },
     setReducedMotion: (r) => {
       reduce = r;
       for (const fn of [...mqlListeners]) fn();
@@ -62,6 +70,7 @@ export function installRafHarness(): RafHarness {
       rafSpy.mockRestore();
       cafSpy.mockRestore();
       hiddenSpy.mockRestore();
+      focusSpy.mockRestore();
       window.matchMedia = originalMatchMedia;
     },
   };

@@ -39,6 +39,17 @@ const PALETTE: { dark: ThemePalette; light: ThemePalette } = {
   },
 };
 
+/**
+ * Pulse at or above this means the backend is fetching sources right now.
+ * The heartbeat sets pulse = 1.0 when a fetch starts and 0.4 -> 1.0 as each
+ * source completes (heartbeat.rs `signal_fetching` / `signal_fetch_progress`),
+ * then drops it to 0.3 ("winding down") on cache fill and to 0 when the
+ * cycle's analysis lands. 0.35 sits between the lowest in-flight value and
+ * the wind-down value. Consumed (with a freshness window) by
+ * hooks/use-background-work.ts, which gates the brand mark's motion.
+ */
+export const WORKING_PULSE = 0.35;
+
 /** Derive visual state (colors, glow, label, speed) from the current VoidSignal. */
 export function deriveSignalVisuals(
   signal: VoidSignal | undefined,

@@ -12,8 +12,14 @@ vi.mock('react-i18next', () => ({
       typeof fallback === 'string' ? fallback : key,
   }),
 }));
-vi.mock('../void-engine/BrandMark', () => ({ BrandMark: () => <div data-testid="brand-mark" /> }));
+vi.mock('../void-engine/BrandMark', () => ({
+  BrandMark: ({ active }: { active?: boolean }) => (
+    <div data-testid="brand-mark" data-active={String(active)} />
+  ),
+}));
 vi.mock('../../hooks/use-void-signals', () => ({ useVoidSignals: () => 'idle' }));
+const backgroundWork = vi.hoisted((): { current: boolean } => ({ current: false }));
+vi.mock('../../hooks/use-background-work', () => ({ useBackgroundWork: () => backgroundWork.current }));
 vi.mock('../OllamaStatus', () => ({ OllamaStatus: () => null }));
 vi.mock('../SystemHealthDot', () => ({ SystemHealthDot: () => null }));
 vi.mock('../ThemeToggle', () => ({ ThemeToggle: () => null }));
@@ -76,5 +82,26 @@ describe('UnifiedAppBar — unjudged badge on the relevant chip', () => {
   it('shows no badge without summary badges even when unjudged', () => {
     renderBar({ judged: false, summaryBadges: null });
     expect(screen.queryByTestId('unjudged-badge')).toBeNull();
+  });
+});
+
+describe('UnifiedAppBar — the brand mark moves only while 4DA is working', () => {
+  it('rests when idle: no analysis running and no background fetch', () => {
+    backgroundWork.current = false;
+    renderBar({ state: { loading: false, analysisComplete: true } });
+    expect(screen.getByTestId('brand-mark')).toHaveAttribute('data-active', 'false');
+  });
+
+  it('animates during a foreground analysis', () => {
+    backgroundWork.current = false;
+    renderBar({ state: { loading: true, analysisComplete: false } });
+    expect(screen.getByTestId('brand-mark')).toHaveAttribute('data-active', 'true');
+  });
+
+  it('animates during a fresh background source fetch', () => {
+    backgroundWork.current = true;
+    renderBar({ state: { loading: false, analysisComplete: true } });
+    expect(screen.getByTestId('brand-mark')).toHaveAttribute('data-active', 'true');
+    backgroundWork.current = false;
   });
 });
