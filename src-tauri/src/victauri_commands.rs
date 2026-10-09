@@ -246,6 +246,7 @@ pub const REGISTERED_COMMANDS: &[&str] = &[
     "preview_channel_sources",
     "delete_channel",
     "natural_language_query",
+    "warm_search",
     "synthesize_search",
     "create_standing_query",
     "list_standing_queries",

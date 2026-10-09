@@ -66,8 +66,30 @@ fn embed_body(base: &str, mut body: serde_json::Value) -> serde_json::Value {
     body
 }
 
-/// Generate embeddings using Ollama API
+/// Texts per `/api/embed` request.
+///
+/// Ollama runs one request at a time per model (`OLLAMA_NUM_PARALLEL=1` on the
+/// operator's machine), so a search's one-line query embed waits for whatever
+/// batch is ahead of it. Measured 2026-10-10 on nomic-embed-text (CPU): 32 texts
+/// cost the same as one request (5,841 ms) or four of eight (5,798 ms), while a
+/// query queued behind two 32-text batches waited 10,250 ms. Eight keeps the
+/// throughput and cuts that wait to a quarter.
+pub(crate) const OLLAMA_EMBED_REQUEST_TEXTS: usize = 8;
+
+/// Generate embeddings using Ollama API, in requests of at most
+/// [`OLLAMA_EMBED_REQUEST_TEXTS`] texts.
 pub(in crate::embeddings) async fn embed_texts_ollama(
+    texts: &[String],
+    base_url: &Option<String>,
+) -> Result<Vec<Vec<f32>>> {
+    let mut all = Vec::with_capacity(texts.len());
+    for chunk in texts.chunks(OLLAMA_EMBED_REQUEST_TEXTS.max(1)) {
+        all.extend(embed_texts_ollama_request(chunk, base_url).await?);
+    }
+    Ok(all)
+}
+
+async fn embed_texts_ollama_request(
     texts: &[String],
     base_url: &Option<String>,
 ) -> Result<Vec<Vec<f32>>> {
@@ -108,6 +130,7 @@ pub(in crate::embeddings) async fn embed_texts_ollama(
                 .json()
                 .await
                 .context("Failed to parse Ollama batch response")?;
+            super::observe::record_load_duration(&json);
 
             let embeddings_array =
                 json["embeddings"]
@@ -256,6 +279,21 @@ mod tests {
             assert_eq!(body["options"]["num_gpu"], 0, "{base}");
             assert_eq!(body["input"][0], "a");
         }
+    }
+
+    /// A query embed queues behind at most one request this size in Ollama's
+    /// single slot; 32 made the first search wait ~10 s under background load.
+    #[test]
+    fn background_batches_leave_room_for_a_query_embed() {
+        assert!((1..=8).contains(&OLLAMA_EMBED_REQUEST_TEXTS));
+    }
+
+    #[tokio::test]
+    async fn no_texts_means_no_request() {
+        let out = embed_texts_ollama(&[], &Some("http://10.0.0.5:1".into())).await;
+        assert!(out
+            .expect("empty input never reaches the network")
+            .is_empty());
     }
 
     #[test]

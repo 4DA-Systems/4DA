@@ -284,6 +284,24 @@ fn guarantee_fts_slots(
     sort_by_rrf(head);
 }
 
+/// Wall-clock per hybrid-search leg, in milliseconds. `conn_wait_ms` is the time
+/// spent getting a connection: near zero on an idle pool, and the whole stall when a
+/// background cycle holds every reader and the search falls back to the writer.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct HybridSearchTimings {
+    pub conn_wait_ms: u64,
+    pub exact_ms: u64,
+    pub fts_ms: u64,
+    pub knn_ms: u64,
+    pub fuse_ms: u64,
+}
+
+fn lap_ms(clock: &mut std::time::Instant) -> u64 {
+    let ms = clock.elapsed().as_millis() as u64;
+    *clock = std::time::Instant::now();
+    ms
+}
+
 impl Database {
     /// Hybrid search: exact-title lane, then BM25 keyword matching + vector KNN fused
     /// via RRF.
@@ -300,15 +318,37 @@ impl Database {
         fts_weight: f64,
         vec_weight: f64,
     ) -> Vec<HybridSearchResult> {
-        let conn = self.read_conn();
+        self.hybrid_search_timed(query_text, query_embedding, limit, fts_weight, vec_weight)
+            .0
+    }
+
+    /// [`Self::hybrid_search`] plus the time each leg took. Runs on the interactive
+    /// reader, so a background cycle that holds the pool and the writer cannot make
+    /// a search wait (see [`Database::interactive_conn`]).
+    pub fn hybrid_search_timed(
+        &self,
+        query_text: &str,
+        query_embedding: &[f32],
+        limit: usize,
+        fts_weight: f64,
+        vec_weight: f64,
+    ) -> (Vec<HybridSearchResult>, HybridSearchTimings) {
+        let mut t = HybridSearchTimings::default();
+        let mut clock = std::time::Instant::now();
+        let conn = self.interactive_conn();
+        t.conn_wait_ms = lap_ms(&mut clock);
         let k = (limit * 3).max(50); // fetch 3x candidates from each method
         let exact = exact_title_lane(&conn, query_text);
+        t.exact_ms = lap_ms(&mut clock);
         let bm25 = bm25_leg(&conn, query_text, k);
+        t.fts_ms = lap_ms(&mut clock);
         let vector = vector_leg(&conn, query_embedding, k);
+        t.knn_ms = lap_ms(&mut clock);
         drop(conn);
 
         let fused = fuse_rrf(&bm25, &vector, fts_weight, vec_weight);
         let results = merge_with_exact_lane(&exact, fused, limit);
+        t.fuse_ms = lap_ms(&mut clock);
 
         debug!(
             target: "4da::hybrid_search",
@@ -318,7 +358,7 @@ impl Database {
             fused_count = results.len(),
             "Hybrid search: exact-title lane + BM25 + vector fused via RRF"
         );
-        results
+        (results, t)
     }
 
     /// Verify that `source_items_fts` still agrees with `source_items`.

@@ -745,7 +745,9 @@ pub(crate) fn score_item(
 ) -> crate::SourceRelevance {
     pipeline_v2::score_item(input, ctx, db, options, classifier)
 }
-pub(crate) use semantic::{compute_semantic_ace_boost, get_topic_embeddings};
+pub(crate) use semantic::{
+    compute_semantic_ace_boost, get_cached_topic_embeddings, get_topic_embeddings,
+};
 pub(crate) use utils::{has_word_boundary_match, topic_grounds};
 
 use std::collections::HashMap;

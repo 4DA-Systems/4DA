@@ -17,6 +17,10 @@ import { frecencyBoost } from '../../lib/frecency';
 const DEBOUNCE_MS = 180;
 const ASYNC_MIN_CHARS = 2;
 const ASYNC_CACHE_MAX = 24;
+/** Delay before re-asking for a provisional (keyword-only) answer. */
+export const REFRESH_DELAY_MS = 1_500;
+/** Re-asks per query before the provisional answer stands. */
+export const MAX_REFRESHES = 6;
 
 function orderResults(all: CommandResult[]): CommandResult[] {
   const byGroup = new Map<CommandGroup, CommandResult[]>();
@@ -109,24 +113,30 @@ export function useCommandSearch(deps: ProviderDeps): UseCommandSearch {
     }
 
     setLoading(true);
-    debounceRef.current = setTimeout(() => {
-      void Promise.allSettled(
-        asyncProviders.map(p => Promise.resolve(p.query({ query: trimmed, signal: controller.signal }))),
-      ).then(settled => {
+    const runAsync = (attempt: number) => {
+      let refreshRequested = false;
+      const ctx = { query: trimmed, signal: controller.signal, requestRefresh: () => { refreshRequested = true; } };
+      void Promise.allSettled(asyncProviders.map(p => Promise.resolve(p.query(ctx)))).then(settled => {
         // Drop the response if a newer keystroke superseded it.
         if (reqId !== reqIdRef.current || controller.signal.aborted) return;
         const out: CommandResult[] = [];
         for (const s of settled) if (s.status === 'fulfilled') out.push(...s.value);
+        setAsyncResults(out);
+        setLoading(false);
+        // A provisional answer is shown but never cached; ask again shortly.
+        if (refreshRequested && attempt < MAX_REFRESHES) {
+          debounceRef.current = setTimeout(() => runAsync(attempt + 1), REFRESH_DELAY_MS);
+          return;
+        }
         // Store in the LRU, evicting the oldest entry past capacity.
         cache.set(trimmed, out);
         if (cache.size > ASYNC_CACHE_MAX) {
           const oldest = cache.keys().next().value;
           if (oldest !== undefined) cache.delete(oldest);
         }
-        setAsyncResults(out);
-        setLoading(false);
       });
-    }, DEBOUNCE_MS);
+    };
+    debounceRef.current = setTimeout(() => runAsync(0), DEBOUNCE_MS);
   }, [providers]);
 
   const setQuery = useCallback((q: string) => {

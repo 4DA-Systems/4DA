@@ -10,6 +10,7 @@ import { isModK, modShortcutLabel } from '../../lib/platform';
 import { recordPick } from '../../lib/frecency';
 import { useCommandSearch } from './use-command-search';
 import { CommandSearchResults } from './CommandSearchResults';
+import { warmSearchBackend } from './search-warm';
 import { type CommandResult } from './command-search-types';
 
 interface CommandSearchProps {
@@ -74,6 +75,11 @@ export const CommandSearch = memo(function CommandSearch({ onAnalyze, onOpenSett
   useEffect(() => {
     if (open && compact) inputRef.current?.focus();
   }, [open, compact]);
+
+  // Load the query embedder while the user types, not inside their first search.
+  useEffect(() => {
+    if (open) warmSearchBackend();
+  }, [open]);
 
   // Global Cmd/Ctrl+K — platform-correct (⌘ on macOS, Ctrl on Windows/Linux).
   // The `/` focus shortcut is handled by the app's keyboard layer via the

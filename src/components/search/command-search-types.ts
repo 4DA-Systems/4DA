@@ -38,6 +38,12 @@ export interface ProviderContext {
   query: string;
   /** Aborts when a newer keystroke supersedes this run. Async providers MUST honor it. */
   signal: AbortSignal;
+  /**
+   * An async provider calls this when its answer is provisional (the backend
+   * answered before its slower half was ready). The search re-runs the same
+   * query shortly and does not cache the provisional answer.
+   */
+  requestRefresh?: () => void;
 }
 
 export interface SearchProvider {

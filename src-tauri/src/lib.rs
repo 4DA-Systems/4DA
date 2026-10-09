@@ -1165,6 +1165,7 @@ pub fn run() {
             channel_commands::delete_channel,
             // Natural Language Search (Signal)
             natural_language_search::natural_language_query,
+            natural_language_search::warm_search,
             // Search Synthesis — LLM briefings (Signal)
             search_synthesis::synthesize_search,
             // Standing Queries (Signal)

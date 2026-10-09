@@ -1742,6 +1742,22 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
         }
     }
 
+    // Pre-warm the search path once after first-light: the first search then
+    // finds the query embedder loaded and the ACE weighting inputs built.
+    if !crate::startup_frontend::victauri_e2e_active() {
+        tauri::async_runtime::spawn(async {
+            let _ = crate::startup_frontend::wait_until_frontend_ready(
+                std::time::Duration::from_secs(90),
+            )
+            .await;
+            tokio::time::sleep(
+                crate::startup_frontend::heavy_startup_work_grace_after_first_light(),
+            )
+            .await;
+            crate::natural_language_search::prewarm_search("startup").await;
+        });
+    }
+
     // Validate license key against Keygen API (fire-and-forget, non-blocking)
     if crate::startup_frontend::victauri_e2e_active() {
         info!(target: "4da::license", "Victauri E2E active - skipping startup online license revalidation");

@@ -13,6 +13,20 @@ use crate::{ace, embed_texts, get_ace_engine};
 /// Uses database-persisted embeddings with in-memory cache fallback
 /// Returns topic -> embedding map
 pub(crate) async fn get_topic_embeddings(ace_ctx: &ACEContext) -> HashMap<String, Vec<f32>> {
+    topic_embeddings(ace_ctx, true).await
+}
+
+/// The persisted / cached topic vectors only — never an embed call.
+///
+/// For the search box: a missing topic would otherwise send a second request
+/// through Ollama's single slot (`OLLAMA_NUM_PARALLEL=1`) on the request path,
+/// where it queues behind background batches. Scoring cycles and the search
+/// pre-warm embed missing topics; a search uses what is already there.
+pub(crate) async fn get_cached_topic_embeddings(ace_ctx: &ACEContext) -> HashMap<String, Vec<f32>> {
+    topic_embeddings(ace_ctx, false).await
+}
+
+async fn topic_embeddings(ace_ctx: &ACEContext, embed_missing: bool) -> HashMap<String, Vec<f32>> {
     // Lazy static cache for topic embeddings
     use parking_lot::Mutex;
     static TOPIC_EMBEDDING_CACHE: OnceCell<Mutex<HashMap<String, Vec<f32>>>> = OnceCell::new();
@@ -76,7 +90,7 @@ pub(crate) async fn get_topic_embeddings(ace_ctx: &ACEContext) -> HashMap<String
 
     // Phase 2 (async): Generate embeddings for missing topics
     // Enrich bare names with descriptive text for higher-quality embeddings
-    if !topics_to_embed.is_empty() {
+    if embed_missing && !topics_to_embed.is_empty() {
         let batch: Vec<String> = topics_to_embed.into_iter().take(50).collect();
         let batch_len = batch.len();
         let enriched: Vec<String> = batch

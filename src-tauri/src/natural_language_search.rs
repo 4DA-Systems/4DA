@@ -15,6 +15,15 @@ use crate::error::Result;
 mod natural_language_search_engine;
 pub(crate) use natural_language_search_engine::*;
 
+#[path = "natural_language_search_timing.rs"]
+mod natural_language_search_timing;
+use natural_language_search_timing::{EmbedSource, SearchTimings, StageClock};
+
+#[path = "natural_language_search_warm.rs"]
+pub(crate) mod natural_language_search_warm;
+// Glob so `#[tauri::command]`'s companion `__cmd__warm_search` comes along.
+pub(crate) use natural_language_search_warm::*;
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -96,6 +105,11 @@ pub struct QueryResult {
     pub knowledge_gaps: Vec<QueryGap>,
     pub ghost_preview: Option<GhostPreview>,
     pub is_pro: bool,
+    /// The query embedder was not ready, so these results come from the keyword
+    /// legs only. The embed finishes in the background; asking again shortly
+    /// returns the full hybrid ranking.
+    #[serde(default)]
+    pub semantic_pending: bool,
 }
 
 // ============================================================================
@@ -420,7 +434,6 @@ fn build_ghost_preview(
 /// All SQLite work runs on the blocking pool, never on a tokio worker.
 #[tauri::command]
 pub async fn natural_language_query(query_text: String) -> Result<QueryResult> {
-    let start = std::time::Instant::now();
     let query_text = query_text.trim().to_string();
     if query_text.is_empty() {
         return Err("Query cannot be empty".into());
@@ -431,7 +444,20 @@ pub async fn natural_language_query(query_text: String) -> Result<QueryResult> {
 
     crate::settings::require_signal_feature("natural_language_query")?;
     let is_pro = crate::settings::is_signal();
+    run_search(query_text, is_pro)
+        .await
+        .map(|(result, _)| result)
+}
 
+/// The search itself, after validation and the entitlement gate, with the time
+/// each stage took. Logged on the "Search completed" line.
+pub(crate) async fn run_search(
+    query_text: String,
+    is_pro: bool,
+) -> Result<(QueryResult, SearchTimings)> {
+    let start = std::time::Instant::now();
+    let mut timings = SearchTimings::default();
+    let mut clock = StageClock::start();
     let query_lang = crate::language_detect::detect_language(&query_text);
     let parsed = parse_query_local(&query_text);
     let intent = classify_intent(&query_text).to_string();
@@ -441,6 +467,7 @@ pub async fn natural_language_query(query_text: String) -> Result<QueryResult> {
         keywords = ?parsed.keywords,
         "Processing natural language query"
     );
+    timings.parse_ms = clock.lap();
 
     let keywords = parsed.keywords.clone();
     let (stack_context, related) = run_blocking(move || {
@@ -452,13 +479,17 @@ pub async fn natural_language_query(query_text: String) -> Result<QueryResult> {
         ))
     })
     .await?;
+    timings.context_ms = clock.lap();
 
     let search_text = keyword_search_text(&query_text, &query_lang).await;
-    let mut all_items = execute_hybrid_search(&search_text, &parsed, 30)
+    timings.translate_ms = clock.lap();
+    let mut all_items = execute_hybrid_search(&search_text, &parsed, 30, &mut timings)
         .await
         .unwrap_or_default();
+    clock.lap();
     boost_for_stack(&mut all_items, &stack_context);
     sort_items(&mut all_items);
+    timings.rank_ms = clock.lap();
 
     let total_count = all_items.len();
     let ghost_preview = build_ghost_preview(is_pro, total_count, related.len());
@@ -468,13 +499,21 @@ pub async fn natural_language_query(query_text: String) -> Result<QueryResult> {
     }
 
     let execution_ms = start.elapsed().as_millis() as u64;
+    let h = &timings.hybrid;
     info!(
         target: "4da::search",
         query_lang = %query_lang, results = all_items.len(), total = total_count,
-        ms = execution_ms, "Search completed"
+        ms = execution_ms,
+        parse_ms = timings.parse_ms, context_ms = timings.context_ms,
+        translate_ms = timings.translate_ms, embed_ms = timings.embed_ms,
+        embed_load_ms = ?timings.embed_load_ms, embed = timings.embed_source.as_str(),
+        ace_ms = timings.ace_ms, conn_wait_ms = h.conn_wait_ms, exact_ms = h.exact_ms,
+        fts_ms = h.fts_ms, knn_ms = h.knn_ms, fuse_ms = h.fuse_ms, rank_ms = timings.rank_ms,
+        "Search completed"
     );
 
-    Ok(QueryResult {
+    let semantic_pending = timings.embed_source == EmbedSource::TimedOut;
+    let result = QueryResult {
         query: query_text,
         intent,
         items: all_items,
@@ -487,7 +526,9 @@ pub async fn natural_language_query(query_text: String) -> Result<QueryResult> {
         knowledge_gaps: Vec::new(),
         ghost_preview,
         is_pro,
-    })
+        semantic_pending,
+    };
+    Ok((result, timings))
 }
 
 #[cfg(test)]

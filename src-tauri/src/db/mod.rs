@@ -176,6 +176,39 @@ pub struct Database {
     /// Pool of read-only connections for parallel query execution.
     /// These bypass the writer lock, allowing concurrent reads during writes.
     read_pool: Vec<Mutex<Connection>>,
+    /// One more read-only connection that only user-facing queries take.
+    interactive_reader: Option<Mutex<Connection>>,
+}
+
+/// Open one read-only connection configured like every pooled reader.
+fn open_reader(
+    db_path: &Path,
+    key: Option<&str>,
+    cache_kib: usize,
+    i: usize,
+) -> Option<Connection> {
+    let flags = rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY
+        | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX
+        | rusqlite::OpenFlags::SQLITE_OPEN_URI;
+    let reader = match Connection::open_with_flags(db_path, flags) {
+        Ok(reader) => reader,
+        Err(e) => {
+            tracing::warn!(target: "4da::db", index = i, error = %e, "Failed to create read pool connection");
+            return None;
+        }
+    };
+    if let Err(e) = encryption::apply_key_to_connection(&reader, key) {
+        tracing::warn!(target: "4da::db", pool = i, error = %e, "Failed to apply encryption key to reader");
+    }
+    reader
+        .execute_batch(&format!(
+            "PRAGMA busy_timeout = 5000;
+             PRAGMA cache_size = -{cache_kib};
+             PRAGMA mmap_size = 134217728;
+             PRAGMA query_only = ON;"
+        ))
+        .ok();
+    Some(reader)
 }
 
 /// Upper bound on the read-only pool (WAL allows concurrent readers).
@@ -287,36 +320,17 @@ impl Database {
         // Per-reader page cache, so the TOTAL budget is independent of pool size.
         let reader_cache_kib = READ_POOL_CACHE_KIB / pool_target.max(1);
         let mut read_pool = Vec::with_capacity(pool_target);
+        let mut interactive_reader = None;
         if is_file_db {
             for i in 0..pool_target {
-                match Connection::open_with_flags(
-                    db_path,
-                    rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY
-                        | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX
-                        | rusqlite::OpenFlags::SQLITE_OPEN_URI,
-                ) {
-                    Ok(reader) => {
-                        // Apply encryption key to read connections too
-                        if let Err(e) =
-                            encryption::apply_key_to_connection(&reader, db_key.as_deref())
-                        {
-                            tracing::warn!(target: "4da::db", pool = i, error = %e, "Failed to apply encryption key to reader");
-                        }
-                        reader
-                            .execute_batch(&format!(
-                                "PRAGMA busy_timeout = 5000;
-                                 PRAGMA cache_size = -{reader_cache_kib};
-                                 PRAGMA mmap_size = 134217728;
-                                 PRAGMA query_only = ON;"
-                            ))
-                            .ok();
-                        read_pool.push(Mutex::new(reader));
-                    }
-                    Err(e) => {
-                        tracing::warn!(target: "4da::db", index = i, error = %e, "Failed to create read pool connection");
-                    }
+                if let Some(reader) = open_reader(db_path, db_key.as_deref(), reader_cache_kib, i) {
+                    read_pool.push(Mutex::new(reader));
                 }
             }
+            // Outside the pool on purpose: see `interactive_conn`.
+            interactive_reader =
+                open_reader(db_path, db_key.as_deref(), reader_cache_kib, pool_target)
+                    .map(Mutex::new);
             tracing::info!(
                 target: "4da::db",
                 pool_size = read_pool.len(),
@@ -330,6 +344,7 @@ impl Database {
             conn: Arc::new(Mutex::new(conn)),
             db_path: db_path.to_path_buf(),
             read_pool,
+            interactive_reader,
         };
 
         db.migrate()?;
@@ -362,6 +377,19 @@ impl Database {
         }
         // All readers busy — fall back to writer (contention, but correct)
         self.conn.lock()
+    }
+
+    /// A read-only connection for a query a person is waiting on (the search box).
+    ///
+    /// A scoring drain borrows every pooled reader, one per thread, so `read_conn`
+    /// then falls through to the writer lock and the search waits behind the cycle's
+    /// writes. This reader is never handed to the pool, so only interactive queries
+    /// ever wait for it. Falls back to `read_conn` where it does not exist (tests).
+    pub(crate) fn interactive_conn(&self) -> parking_lot::MutexGuard<'_, Connection> {
+        match &self.interactive_reader {
+            Some(reader) => reader.lock(),
+            None => self.read_conn(),
+        }
     }
 
     /// How many read-only connections this database actually opened.
