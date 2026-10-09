@@ -38,7 +38,7 @@
  *
  *   5. MERGED != RUNNING. The checks above run on the LIVE cohort — whatever
  *      prompt_version has the newest judged_at in the last 24h (plus the
- *      `drain_v1` drain cohort) — NOT on the version the Rust SOURCE declares.
+ *      drain cohort, `DRAIN_PROMPT_VERSION`) — NOT on the version the Rust SOURCE declares.
  *      Until 2026-09-04 "live" meant "equals the source constant", so for the
  *      three days the built binary lagged the source (source said v6, every
  *      live row was v5) the running cohort was filed as "retired", every spike
@@ -71,8 +71,7 @@ const DEFAULT_BIN_DIR = path.join(repoRoot, 'src-tauri', 'target', 'debug');
 const STALE_BINARY_HOURS = 6;
 /** The window that defines the live cohort (SQLite modifier). */
 const LIVE_WINDOW = '-1 day';
-/** The always-live drain cohort (stale-score drain judgments carry this label). */
-const DRAIN_COHORT = 'drain_v1';
+const DRAIN_SRC = path.join(repoRoot, 'src-tauri', 'src', 'llm_judge_drain.rs');
 
 // ── Read the shipped constants ────────────────────────────────────────────
 class ConstantMissing extends Error {}
@@ -83,12 +82,32 @@ function constFromRust(source, name, pattern) {
   return m[1];
 }
 
+/** The drain cohort label (`DRAIN_PROMPT_VERSION`) parsed out of llm_judge_drain.rs source text. */
+function parseDrainCohort(src) {
+  return constFromRust(src, 'DRAIN_PROMPT_VERSION', /const DRAIN_PROMPT_VERSION: &str = "([^"]+)"/);
+}
+
+/**
+ * The always-live drain cohort, READ FROM THE RUST SOURCE like every other
+ * constant here. It was a copied 'drain_v1' until 2026-10-10 — while the drain
+ * had been writing 'drain_v2' — so the real drain cohort was filed as
+ * "retired" and could even be picked as the live ingest cohort. `null` when
+ * unreadable; `main()` then refuses to run (exit 2).
+ */
+const DRAIN_COHORT = (() => {
+  try {
+    return parseDrainCohort(fs.readFileSync(DRAIN_SRC, 'utf8'));
+  } catch {
+    return null;
+  }
+})();
+
 /** Parse the shipped judge constants out of llm_judgments.rs source text. */
 function parseShippedConstants(src) {
   return {
     promptVersion: constFromRust(src, 'PROMPT_VERSION', /const PROMPT_VERSION: &str = "([^"]+)"/),
-    relevanceBelow: Number(
-      constFromRust(src, 'DEMOTION_RELEVANCE_BELOW', /DEMOTION_RELEVANCE_BELOW: f64 = ([0-9.]+)/),
+    relevanceAtMost: Number(
+      constFromRust(src, 'DEMOTION_RELEVANCE_AT_MOST', /DEMOTION_RELEVANCE_AT_MOST: f64 = ([0-9.]+)/),
     ),
     confidenceMin: Number(
       constFromRust(src, 'DEMOTION_CONFIDENCE_MIN', /DEMOTION_CONFIDENCE_MIN: f64 = ([0-9.]+)/),
@@ -123,14 +142,14 @@ function newestBinary(binDir) {
  * Everything the monitor reads, as named queries.
  *
  * @typedef {object} CohortReader
- * @property {(relevanceBelow: number) => Array<{prompt_version:string, model:string, n:number, avg_rel:number, avg_conf:number, omitted:number, rejects:number, first:string, last:string}>} cohorts
+ * @property {(relevanceAtMost: number) => Array<{prompt_version:string, model:string, n:number, avg_rel:number, avg_conf:number, omitted:number, rejects:number, first:string, last:string}>} cohorts
  *   one row per (prompt_version, model), ordered by first judgment
  * @property {() => string|null} liveVersion
  *   the non-drain prompt_version with the newest judged_at inside LIVE_WINDOW
  * @property {(version: string, model: string) => {v:number, n:number}|undefined} topConfidence
  *   the single most frequent confidence value (2dp) in that cohort
  * @property {(version: string) => number} rowsAt  judgments carrying `version`
- * @property {(relevanceBelow: number, confidenceMin: number, version: string) => {at_gate:number|null, at_probe:number|null, curated_judged:number}} gateReach
+ * @property {(relevanceAtMost: number, confidenceMin: number, version: string) => {at_gate:number|null, at_probe:number|null, curated_judged:number}} gateReach
  * @property {() => Array<{d:string, n:number}>} demotions  llm_reject stamps per day, last 7 days
  */
 
@@ -140,18 +159,18 @@ function newestBinary(binDir) {
  */
 function sqliteReader(db) {
   return {
-    cohorts: (relevanceBelow) =>
+    cohorts: (relevanceAtMost) =>
       db
         .prepare(
           `SELECT prompt_version, model, COUNT(*) n,
                   ROUND(AVG(relevance_score),3) avg_rel,
                   ROUND(AVG(confidence),3) avg_conf,
                   SUM(CASE WHEN confidence = 0.0 THEN 1 ELSE 0 END) omitted,
-                  SUM(CASE WHEN relevance_score < ? THEN 1 ELSE 0 END) rejects,
+                  SUM(CASE WHEN relevance_score <= ? THEN 1 ELSE 0 END) rejects,
                   MIN(judged_at) first, MAX(judged_at) last
            FROM llm_judgments GROUP BY 1,2 ORDER BY MIN(judged_at)`,
         )
-        .all(relevanceBelow),
+        .all(relevanceAtMost),
     liveVersion: () =>
       db
         .prepare(
@@ -169,18 +188,18 @@ function sqliteReader(db) {
         .get(version, model),
     rowsAt: (version) =>
       db.prepare('SELECT COUNT(*) n FROM llm_judgments WHERE prompt_version = ?').get(version).n,
-    gateReach: (relevanceBelow, confidenceMin, version) =>
+    gateReach: (relevanceAtMost, confidenceMin, version) =>
       db
         .prepare(
           `SELECT
-             SUM(CASE WHEN lj.relevance_score < ? AND lj.confidence >= ? THEN 1 ELSE 0 END) at_gate,
+             SUM(CASE WHEN lj.relevance_score <= ? AND lj.confidence >= ? THEN 1 ELSE 0 END) at_gate,
              SUM(CASE WHEN lj.relevance_score < 0.40 AND lj.confidence >= 0.60 THEN 1 ELSE 0 END) at_probe,
              COUNT(*) curated_judged
            FROM source_items si
            JOIN llm_judgments lj ON lj.source_item_id = si.id AND lj.prompt_version = ?
            WHERE si.feed_relevant = 1 AND COALESCE(si.feed_verdict_source,'score') = 'score'`,
         )
-        .get(relevanceBelow, confidenceMin, version),
+        .get(relevanceAtMost, confidenceMin, version),
     demotions: () =>
       db
         .prepare(
@@ -261,14 +280,14 @@ function deployDrift({ promptVersion, sourceRows, liveVersion, binary, now = Dat
  *
  * @param {object} opts
  * @param {CohortReader} opts.reader
- * @param {{promptVersion: string, relevanceBelow: number, confidenceMin: number}} opts.constants
+ * @param {{promptVersion: string, relevanceAtMost: number, confidenceMin: number}} opts.constants
  * @param {{path: string, mtimeMs: number}|null} opts.binary newest built binary
  * @param {number} [opts.now]
  * @param {(line: string) => void} [opts.log]
  * @returns {{ exitCode: number, findings: string[], live: Set<string>, drift: object }}
  */
 function run({ reader, constants, binary, now = Date.now(), log = console.log }) {
-  const { promptVersion: PROMPT_VERSION, relevanceBelow: RELEVANCE_BELOW, confidenceMin: CONFIDENCE_MIN } =
+  const { promptVersion: PROMPT_VERSION, relevanceAtMost: RELEVANCE_AT_MOST, confidenceMin: CONFIDENCE_MIN } =
     constants;
   const findings = [];
   const pct = (n, d) => (d === 0 ? 0 : (100 * n) / d);
@@ -278,10 +297,10 @@ function run({ reader, constants, binary, now = Date.now(), log = console.log })
 
   log(`  current prompt : ${PROMPT_VERSION}  (source)`);
   log(`  live cohort    : ${liveVersion ?? 'none in 24h'} + ${DRAIN_COHORT}  (newest judged_at, last 24h)`);
-  log(`  shipped gate   : relevance < ${RELEVANCE_BELOW} AND confidence >= ${CONFIDENCE_MIN}\n`);
+  log(`  shipped gate   : relevance <= ${RELEVANCE_AT_MOST} AND confidence >= ${CONFIDENCE_MIN}\n`);
 
   // ── Cohorts ─────────────────────────────────────────────────────────────
-  const cohorts = reader.cohorts(RELEVANCE_BELOW);
+  const cohorts = reader.cohorts(RELEVANCE_AT_MOST);
 
   log('cohort            model                  n   avg_rel  avg_conf  omit%  reject%');
   for (const c of cohorts) {
@@ -343,7 +362,7 @@ function run({ reader, constants, binary, now = Date.now(), log = console.log })
   }
 
   // ── 4: can the gate still reach anything? ──────────────────────────────
-  const reach = reader.gateReach(RELEVANCE_BELOW, CONFIDENCE_MIN, PROMPT_VERSION);
+  const reach = reader.gateReach(RELEVANCE_AT_MOST, CONFIDENCE_MIN, PROMPT_VERSION);
 
   log('\ngate reach on the CURATED feed (current cohort)');
   log(`  curated + judged      : ${reach.curated_judged ?? 0}`);
@@ -389,6 +408,10 @@ function main() {
     console.error('fall back to a copy and report on a gate the product no longer runs.');
     process.exit(2);
   }
+  if (!DRAIN_COHORT) {
+    console.error('Could not read DRAIN_PROMPT_VERSION from llm_judge_drain.rs.');
+    process.exit(2);
+  }
 
   if (!fs.existsSync(DEFAULT_DB_PATH)) {
     console.error(`No database at ${DEFAULT_DB_PATH}. Set FOURDA_DB_PATH to point at one.`);
@@ -415,6 +438,7 @@ if (require.main === module) {
 
 module.exports = {
   parseShippedConstants,
+  parseDrainCohort,
   newestBinary,
   sqliteReader,
   liveCohortVersions,

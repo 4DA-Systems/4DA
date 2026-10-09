@@ -119,10 +119,16 @@ fn mid_band_escalates() {
 /// signature not having the parameter is the regression-proof form.
 #[test]
 fn drain_reuses_the_main_lane_relevance_bar() {
-    let just_below = crate::llm_judgments::DEMOTION_RELEVANCE_BELOW - 0.01;
-    let at_line = crate::llm_judgments::DEMOTION_RELEVANCE_BELOW;
-    assert_eq!(resolve_action(Some(true), just_below), DrainAction::Demote);
-    assert_eq!(resolve_action(Some(true), at_line), DrainAction::Escalate);
+    let at_line = crate::llm_judgments::DEMOTION_RELEVANCE_AT_MOST;
+    let just_above = at_line + 0.01;
+    // INCLUSIVE: the local judge emits exactly 0.30 for "not relevant", so a
+    // reading AT the line is a rejection (the strict "<" escalated it forever).
+    assert_eq!(resolve_action(Some(true), at_line), DrainAction::Demote);
+    assert_eq!(resolve_action(Some(false), at_line), DrainAction::Demote);
+    assert_eq!(
+        resolve_action(Some(true), just_above),
+        DrainAction::Escalate
+    );
 }
 
 // ---------------------------------------------------------------------------

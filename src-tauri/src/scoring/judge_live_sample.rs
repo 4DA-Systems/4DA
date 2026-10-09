@@ -23,7 +23,7 @@
 //!   * prints one line per item and, per `source_type` and per stratum
 //!     (`devto` against everything else), the confusion matrix of the
 //!     PIPELINE's verdict (`feed_relevant`) scored against the judge's
-//!     (`relevance >= DEMOTION_RELEVANCE_BELOW`): precision, recall, MCC and
+//!     (`!judged_irrelevant(relevance)`): precision, recall, MCC and
 //!     the raw counts.
 //!
 //! The caller chooses the slice — a stratified, seeded sample drawn from a
@@ -43,8 +43,8 @@ use std::collections::BTreeMap;
 use super::judge_benchmark::{Matrix, NEUTRAL_PIPELINE_SCORE};
 use crate::llm::{LLMClient, Message};
 use crate::llm_judgments::{
-    format_items_block, judge_system_prompt, load_items_for_judgment, parse_batch_response,
-    BATCH_SIZE, DEMOTION_RELEVANCE_BELOW, PROMPT_VERSION,
+    format_items_block, judge_system_prompt, judged_irrelevant, load_items_for_judgment,
+    parse_batch_response, BATCH_SIZE, PROMPT_VERSION,
 };
 
 /// One sampled row as the corpus holds it, plus the judge's answer.
@@ -257,7 +257,7 @@ async fn judge_live_sample() {
             missing += 1;
             continue;
         };
-        let judge_relevant = rel >= DEMOTION_RELEVANCE_BELOW;
+        let judge_relevant = !judged_irrelevant(rel);
         let source = by_source.entry(r.source_type.clone()).or_default();
         let strat = by_stratum.entry(stratum(&r.source_type)).or_default();
         for m in [source, strat] {

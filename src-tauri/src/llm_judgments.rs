@@ -18,6 +18,7 @@
 //! exhausted → silent no-op with a debug log — Accurate-first doctrine: never
 //! fake intelligence the system can't stand behind.
 
+use crate::db::llm_judgments::RelevanceBar;
 use crate::db::{Database, VerdictReason, VerdictSource};
 use crate::error::Result;
 use crate::llm::{LLMClient, Message};
@@ -132,26 +133,25 @@ pub(crate) fn judge_items_per_call(provider: &LLMProvider) -> Option<usize> {
     Some(if local { 1 } else { BATCH_SIZE })
 }
 
-/// Demote-only verdict feedback: judged relevance strictly below this…
+/// Demote-only verdict feedback: judged relevance AT OR BELOW this…
 ///
-/// Was 0.25, and demoted NOTHING — ever. The bound is a strict "<" and the
-/// judge's rejection scores cluster on exact quarter values, so "< 0.25" sat
-/// immediately BELOW the largest low cluster and caught none of it. Measured
-/// histogram of judged feed items scoring under 0.5 (2026-08-27):
-///
-/// ```text
-/// 0.25 -> 33 items        0.35 -> 40 items
-/// 0.30 -> 22 items        0.45 -> 44 items
-/// ```
-///
-/// 0.30 admits the 0.25 cluster and nothing above it. The CONFIDENCE bar below
-/// is deliberately unchanged: lowering both at once would have swept in
-/// borderline calls the judge itself was unsure about ("Turbovec — vector
-/// search in Rust" at confidence 0.65, for an operator who ships sqlite-vec).
-/// At 0.30/0.7 the demotion set is 16 items and uniformly defensible — kernel
-/// release chatter, a YouTube coding challenge, Astro/Next.js posts for a
-/// Tauri/Rust developer. This is one notch, measured, not a recalibration.
-pub(crate) const DEMOTION_RELEVANCE_BELOW: f64 = 0.30;
+/// INCLUSIVE on purpose — the same defect bit twice. "< 0.25" demoted NOTHING,
+/// ever: the judge's rejections cluster on exact values (2026-08-27, judged
+/// feed items under 0.5: 0.25 -> 33, 0.30 -> 22, 0.35 -> 40, 0.45 -> 44) and a
+/// strict bound sat just below the cluster. "< 0.30" repeated it one notch up:
+/// the local gemma judge emits EXACTLY 0.30 for "not relevant" (snapshot
+/// 2026-10-09: 0 curated rows matched "< 0.30"; 42 sat at exactly 0.30 with
+/// confidence >= 0.7 inside the window — 40 of the 296 surfaced items). A bar
+/// the judge emits as a value must include that value: read it through
+/// [`judged_irrelevant`], never a bare comparison. The value 0.30 and the
+/// CONFIDENCE bar below are unchanged (lowering both at once would sweep in
+/// calls the judge itself was unsure about — "Turbovec" at confidence 0.65).
+pub(crate) const DEMOTION_RELEVANCE_AT_MOST: f64 = 0.30;
+/// The judge rejected the item. The ONE predicate every lane reads (demotion
+/// gate, verdict drain, benchmarks), so the bar's direction cannot drift.
+pub(crate) fn judged_irrelevant(relevance: f64) -> bool {
+    relevance <= DEMOTION_RELEVANCE_AT_MOST
+}
 /// …with judge confidence at or above this…
 ///
 /// The VALUE is unchanged by the v4 prompt fix on purpose: the 0.7 bar was
@@ -614,7 +614,7 @@ fn to_scale_1_5(v: Option<f64>) -> Option<u8> {
 fn apply_judgment_demotions(db: &Database, cap: usize) -> Result<usize> {
     let candidates = db.get_llm_reject_candidates(
         PROMPT_VERSION,
-        DEMOTION_RELEVANCE_BELOW,
+        RelevanceBar::AtMost(DEMOTION_RELEVANCE_AT_MOST),
         DEMOTION_CONFIDENCE_MIN,
         DEMOTION_JUDGMENT_WINDOW_DAYS,
         cap,
@@ -628,7 +628,7 @@ fn apply_judgment_demotions(db: &Database, cap: usize) -> Result<usize> {
         let probe = db
             .get_llm_reject_candidates(
                 PROMPT_VERSION,
-                DEMOTION_PROBE_RELEVANCE_BELOW,
+                RelevanceBar::Below(DEMOTION_PROBE_RELEVANCE_BELOW),
                 DEMOTION_PROBE_CONFIDENCE_MIN,
                 DEMOTION_JUDGMENT_WINDOW_DAYS,
                 cap,
@@ -637,7 +637,7 @@ fn apply_judgment_demotions(db: &Database, cap: usize) -> Result<usize> {
         if !probe.is_empty() {
             warn!(
                 target: "4da::llm_judgments",
-                gate_relevance_below = DEMOTION_RELEVANCE_BELOW,
+                gate_relevance_at_most = DEMOTION_RELEVANCE_AT_MOST,
                 gate_confidence_min = DEMOTION_CONFIDENCE_MIN,
                 probe_relevance_below = DEMOTION_PROBE_RELEVANCE_BELOW,
                 probe_confidence_min = DEMOTION_PROBE_CONFIDENCE_MIN,
