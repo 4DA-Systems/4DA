@@ -541,6 +541,8 @@ async fn warm_preemption_cache_after_first_light(reason: &'static str) {
 
     tokio::time::sleep(crate::startup_frontend::heavy_startup_work_grace_after_first_light()).await;
     crate::preemption::warm_preemption_cache().await;
+    // Sequenced after the Preemption warm so the two builds never overlap.
+    crate::blind_spots::warm_blind_spot_cache_after_startup().await;
 }
 
 /// Tauri `setup()` callback body.
@@ -2410,6 +2412,8 @@ async fn run_scheduled_analysis(handle: tauri::AppHandle) {
             crate::knowledge_decay::refresh_knowledge_gaps_in_background();
             // Same for Preemption: new generation + background pre-warm.
             crate::preemption::refresh_preemption_cache_after_cycle();
+            // And Blind Spots (Signal-gated inside; the build is LLM-free).
+            crate::blind_spots::refresh_blind_spot_cache_after_cycle();
 
             // Tier-2 LLM passes (judge + content analysis + LlmReject
             // demotions) — non-blocking, budget- and BYOK-gated inside.

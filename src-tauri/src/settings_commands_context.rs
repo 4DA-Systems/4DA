@@ -493,6 +493,9 @@ pub async fn set_blind_spot_sensitivity(sensitivity: String) -> Result<serde_jso
     let mut guard = manager.lock();
     guard.get_mut().blind_spot_sensitivity = sensitivity.clone();
     guard.save()?;
+    drop(guard);
+    // The threshold changes the report: never serve one built at the old one.
+    crate::blind_spots::clear_blind_spot_cache();
     Ok(serde_json::json!({ "success": true, "sensitivity": sensitivity }))
 }
 

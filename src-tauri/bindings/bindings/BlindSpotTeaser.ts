@@ -3,7 +3,7 @@
 /**
  * Free-tier teaser for the Blind Spots lens: real aggregate counts only,
  * zero item detail. Computed from the same cached report path Signal pays
- * for (5-minute TTL), so the numbers can never diverge from what the full
+ * for (per-cycle cache), so the numbers can never diverge from what the full
  * lens would show.
  */
 export type BlindSpotTeaser = { uncovered_count: number, stale_topic_count: number, missed_signal_count: number, 
