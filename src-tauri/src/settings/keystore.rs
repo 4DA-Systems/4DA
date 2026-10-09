@@ -17,7 +17,11 @@
 //! - **Machine scope** — [`MACHINE_SCOPE_KEYS`]: the receipt signing key, the
 //!   licence time floor, the database encryption key, the trial stamp and the
 //!   licence-cache MAC key. These describe the machine/install, not a data
-//!   profile, and always use the global service `com.4da.app`.
+//!   profile, and in release builds always use the global service
+//!   `com.4da.app` — that is what stops a trial reset by switching data dirs.
+//!   Debug builds under a non-default profile scope the licence state (trial
+//!   stamp, time floor, cache MAC key) to the profile, so a dev/test profile
+//!   can never stamp the real install's trial (audit 2026-10-07 follow-up).
 //! - **Profile scope** — everything else (BYOK keys, licence key, translation
 //!   key, webhook secrets, team keys). In the default profile they use
 //!   `com.4da.app` too (unchanged, no migration). When `FOURDA_DATA_DIR`
@@ -60,9 +64,28 @@ const MACHINE_SCOPE_KEYS: &[&str] = &[
 // Service resolution
 // ============================================================================
 
+/// The install-wide licence state: what decides how much trial is left.
+const LICENSE_STATE_KEYS: &[&str] = &["license_time_floor", TRIAL_STAMP_KEY, LICENSE_CACHE_MAC_KEY];
+
 /// Is this secret machine-scoped (always the global service)?
 pub(crate) fn is_machine_scope(key_name: &str) -> bool {
     MACHINE_SCOPE_KEYS.contains(&key_name)
+}
+
+/// Does a machine-scope secret follow a non-default profile in this build?
+///
+/// Release: never. Install-wide licence state is the point — switching data
+/// dirs must not reset the trial — so a release build keeps every machine key
+/// on `com.4da.app` whatever profile it runs.
+///
+/// Debug: the licence state does. A fresh-profile GUI test (2026-10-09:
+/// identifier `com.4da.app.freshqa`, its own `FOURDA_DATA_DIR`) created
+/// `license_trial_started_at` and rewrote `license_time_floor` on the REAL
+/// service, and the earliest trial stamp wins — a test run could shorten the
+/// operator's future trial. Dev builds are never what a user runs, so scoping
+/// them to the profile costs no protection.
+fn machine_key_follows_profile(key_name: &str, debug_build: bool) -> bool {
+    debug_build && LICENSE_STATE_KEYS.contains(&key_name)
 }
 
 /// First 12 hex chars of sha256 of the canonicalised profile directory.
@@ -73,11 +96,29 @@ pub(crate) fn profile_tag(data_dir: &Path) -> String {
     hex::encode(digest)[..12].to_string()
 }
 
-/// Pure service-name resolution: `base` for machine-scope secrets or the
-/// default profile, `base.p.<tag>` for a profile secret in a non-default profile.
+/// Pure service-name resolution for THIS build: `base` for machine-scope
+/// secrets or the default profile, `base.p.<tag>` for a profile secret in a
+/// non-default profile (and, in debug builds only, the licence state too —
+/// [`machine_key_follows_profile`]).
 pub(crate) fn service_for_with(base: &str, key_name: &str, profile_dir: Option<&Path>) -> String {
+    service_for_build(base, key_name, profile_dir, cfg!(debug_assertions))
+}
+
+/// [`service_for_with`] with the build kind explicit, so tests can pin the
+/// release resolution from a debug test binary.
+fn service_for_build(
+    base: &str,
+    key_name: &str,
+    profile_dir: Option<&Path>,
+    debug_build: bool,
+) -> String {
     match profile_dir {
-        Some(dir) if !is_machine_scope(key_name) => format!("{base}.p.{}", profile_tag(dir)),
+        Some(dir)
+            if !is_machine_scope(key_name)
+                || machine_key_follows_profile(key_name, debug_build) =>
+        {
+            format!("{base}.p.{}", profile_tag(dir))
+        }
         _ => base.to_string(),
     }
 }
@@ -413,11 +454,102 @@ mod tests {
         }
         for key in MACHINE_SCOPE_KEYS {
             assert_eq!(
-                service_for_with(SERVICE_NAME, key, Some(&dir)),
+                service_for_build(SERVICE_NAME, key, Some(&dir), false),
                 SERVICE_NAME,
-                "{key} must stay machine-scoped"
+                "{key} must stay machine-scoped in release"
             );
         }
+    }
+
+    /// Release resolution, byte for byte, for every machine-scope key in every
+    /// profile: the real install-wide service. Switching data dirs must never
+    /// reset the trial in a shipped build.
+    #[test]
+    fn release_builds_keep_licence_state_install_wide() {
+        let profile = std::env::temp_dir().join("4da_release_licence_probe");
+        for key in [
+            "license_trial_started_at",
+            "license_time_floor",
+            "license_cache_mac_key",
+            "engine_receipt_signing_key",
+            "4da_db_encryption_key",
+        ] {
+            for dir in [None, Some(profile.as_path())] {
+                assert_eq!(
+                    service_for_build("com.4da.app", key, dir, false),
+                    "com.4da.app",
+                    "release {key} under {dir:?}"
+                );
+            }
+        }
+        // Profile secrets in release: unchanged #874 scoping.
+        assert_eq!(
+            service_for_build("com.4da.app", "llm_api_key", None, false),
+            "com.4da.app"
+        );
+        assert_eq!(
+            service_for_build("com.4da.app", "llm_api_key", Some(&profile), false),
+            format!("com.4da.app.p.{}", profile_tag(&profile))
+        );
+    }
+
+    /// Debug builds under a non-default profile: the licence state follows the
+    /// profile, so a fresh-profile test run cannot stamp the real
+    /// `com.4da.app` trial (2026-10-09 freshqa run). Other machine secrets and
+    /// the default profile are untouched.
+    #[test]
+    fn debug_builds_scope_licence_state_to_a_non_default_profile() {
+        let profile = std::env::temp_dir().join("4da_debug_licence_probe");
+        let scoped = format!("com.4da.app.p.{}", profile_tag(&profile));
+        for key in [
+            "license_trial_started_at",
+            "license_time_floor",
+            "license_cache_mac_key",
+        ] {
+            assert_eq!(
+                service_for_build("com.4da.app", key, Some(&profile), true),
+                scoped,
+                "debug {key} under a profile"
+            );
+            assert_eq!(
+                service_for_build("com.4da.app", key, None, true),
+                "com.4da.app",
+                "debug {key} in the default profile stays global"
+            );
+        }
+        for key in ["engine_receipt_signing_key", "4da_db_encryption_key"] {
+            assert_eq!(
+                service_for_build("com.4da.app", key, Some(&profile), true),
+                "com.4da.app",
+                "{key} is not licence state"
+            );
+        }
+        // This test binary is a debug build: the public resolver agrees.
+        assert_eq!(
+            service_for_with(SERVICE_NAME, TRIAL_STAMP_KEY, Some(&profile)),
+            scoped
+        );
+    }
+
+    /// End to end through the store API, on the isolated TEST service: under
+    /// a profile, a trial stamp lands on the profile service and the global
+    /// (test) service stays empty.
+    #[test]
+    fn a_profile_trial_stamp_never_reaches_the_global_service() {
+        let iso = IsolatedService::new("licence-scope");
+        let global = iso.base.clone();
+        let profile = std::env::temp_dir().join("4da_licence_scope_e2e");
+        let scoped = service_for_with(&global, TRIAL_STAMP_KEY, Some(&profile));
+        assert_ne!(scoped, global);
+        assert!(scoped.starts_with(TEST_SERVICE_NAME), "{scoped}");
+        let stored = store_secret_with_service(&scoped, TRIAL_STAMP_KEY, "2026-10-09T00:00:00Z")
+            .unwrap_or(false);
+        if !stored {
+            return; // no usable credential store on this host
+        }
+        let on_global = get_secret_with_service(&global, TRIAL_STAMP_KEY).unwrap_or(None);
+        assert!(on_global.is_none(), "the global service must not see it");
+        let _ = delete_secret_with_service(&scoped, TRIAL_STAMP_KEY);
     }
 
     #[test]
