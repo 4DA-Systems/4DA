@@ -39,34 +39,35 @@ vi.mock('./void-engine/BrandMark', () => ({
 }));
 
 // ---------------------------------------------------------------------------
-// GAME components mock — custom elements use ResizeObserver (unsupported in jsdom)
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// Store mock
+// Store mock — reads the module-level state on every render, so a test moves
+// the "store" forward by reassigning `currentAppState` and re-rendering.
 // ---------------------------------------------------------------------------
 const mockStartAnalysis = vi.fn();
+type TestResult = {
+  relevant: boolean;
+  excluded?: boolean;
+  title: string;
+  url: string;
+  source_type?: string;
+  final_score: number;
+  score_breakdown?: {
+    dep_match_score?: number;
+    matched_deps?: string[];
+    skill_gap_boost?: number;
+  };
+};
 const defaultAppState = {
   loading: false,
   progress: 0,
   progressStage: 'init' as string,
   status: '',
   analysisComplete: false,
-  relevanceResults: [] as Array<{
-    relevant: boolean;
-    title: string;
-    url: string;
-    source_type?: string;
-    final_score: number;
-    score_breakdown?: {
-      dep_match_score?: number;
-      matched_deps?: string[];
-      skill_gap_boost?: number;
-    };
-  }>,
+  lastAnalyzedAt: null as Date | null,
+  relevanceResults: [] as TestResult[],
 };
+type TestAppState = typeof defaultAppState;
 
-let currentAppState = { ...defaultAppState };
+let currentAppState: TestAppState = { ...defaultAppState };
 let currentUserContext: { interests?: Array<{ topic: string }> } | null = null;
 let currentDetectedTech: Array<{ name: string; category: string; confidence: number }> | null = null;
 
@@ -111,9 +112,38 @@ vi.mock('../config/sources', () => ({
 // ---------------------------------------------------------------------------
 import { FirstRunTransition } from './FirstRunTransition';
 
-describe('FirstRunTransition', () => {
-  const mockOnComplete = vi.fn();
+const mockOnComplete = vi.fn();
+const overlay = () => <FirstRunTransition onComplete={mockOnComplete} />;
 
+/** Move the mocked store and re-render so the component reads the new state. */
+async function setStore(view: ReturnType<typeof render>, next: Partial<TestAppState>) {
+  currentAppState = { ...defaultAppState, ...next };
+  await act(async () => { view.rerender(overlay()); });
+}
+
+/**
+ * Drive the overlay through ITS OWN pass: mount, let the intelligence hold
+ * request the pass, observe it running, then complete it after the request.
+ * Celebration only ever belongs to this pass (fresh-profile E2E 2026-10-09).
+ */
+async function renderThroughOwnPass(final: Partial<TestAppState>) {
+  const view = render(overlay());
+  await act(async () => { await vi.advanceTimersByTimeAsync(2500); });
+  expect(mockStartAnalysis).toHaveBeenCalledTimes(1);
+  await setStore(view, { loading: true, progressStage: 'relevance', progress: 0.5 });
+  await act(async () => { await vi.advanceTimersByTimeAsync(10); });
+  await setStore(view, {
+    ...final,
+    analysisComplete: true,
+    loading: false,
+    progressStage: 'complete',
+    progress: 1,
+    lastAnalyzedAt: new Date(),
+  });
+  return view;
+}
+
+describe('FirstRunTransition', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     currentAppState = { ...defaultAppState };
@@ -128,12 +158,9 @@ describe('FirstRunTransition', () => {
     vi.useRealTimers();
   });
 
-  // -------------------------------------------------------------------------
-  // 1. Always transitions to intelligence phase on mount
-  // -------------------------------------------------------------------------
   it('renders with intelligence aria-label after init', async () => {
     await act(async () => {
-      render(<FirstRunTransition onComplete={mockOnComplete} />);
+      render(overlay());
     });
 
     const status = screen.getByRole('status');
@@ -141,407 +168,214 @@ describe('FirstRunTransition', () => {
     expect(status).toHaveAttribute('aria-busy', 'true');
   });
 
-  // -------------------------------------------------------------------------
-  // 2. Shows error state when progressStage is 'error'
-  // -------------------------------------------------------------------------
   it('renders error state with retry and continue buttons', async () => {
-    currentAppState = {
-      ...defaultAppState,
-      progressStage: 'error',
-      status: 'Error: something failed',
-    };
+    currentAppState = { ...defaultAppState, progressStage: 'error', status: 'Error: something failed' };
+    await act(async () => { render(overlay()); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(2500); });
 
-    await act(async () => {
-      render(<FirstRunTransition onComplete={mockOnComplete} />);
-    });
-
-    // Wait for the phase transition effect to fire
-    await act(async () => {
-      await vi.runAllTimersAsync();
-    });
-
-    const status = screen.getByRole('status');
-    expect(status).toHaveAttribute('aria-label', 'Analysis error');
-
-    // Retry button exists
-    const retryBtn = screen.getByLabelText('firstRun.retryAnalysisAria');
-    expect(retryBtn).toBeDefined();
-
-    // Continue anyway button exists
+    expect(screen.getByRole('status')).toHaveAttribute('aria-label', 'Analysis error');
+    expect(screen.getByLabelText('firstRun.retryAnalysisAria')).toBeDefined();
     expect(screen.getByText('firstRun.continueAnyway')).toBeDefined();
   });
 
-  // -------------------------------------------------------------------------
-  // 3. Retry button clears error and restarts analysis
-  // -------------------------------------------------------------------------
-  it('calls startAnalysis when retry is clicked', async () => {
-    currentAppState = {
-      ...defaultAppState,
-      progressStage: 'error',
-      status: 'Error: fetch failed',
-    };
+  it('retry requests a fresh pass', async () => {
+    currentAppState = { ...defaultAppState, progressStage: 'error', status: 'Error: fetch failed' };
+    await act(async () => { render(overlay()); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(2500); });
+    mockStartAnalysis.mockClear();
 
     await act(async () => {
-      render(<FirstRunTransition onComplete={mockOnComplete} />);
+      fireEvent.click(screen.getByLabelText('firstRun.retryAnalysisAria'));
+      await vi.advanceTimersByTimeAsync(10);
     });
 
-    await act(async () => {
-      await vi.runAllTimersAsync();
-    });
-
-    const retryBtn = screen.getByLabelText('firstRun.retryAnalysisAria');
-    await act(async () => {
-      fireEvent.click(retryBtn);
-    });
-
-    expect(mockStartAnalysis).toHaveBeenCalled();
+    expect(mockStartAnalysis).toHaveBeenCalledTimes(1);
   });
 
-  // -------------------------------------------------------------------------
-  // 4. Continue anyway triggers onComplete after fade
-  // -------------------------------------------------------------------------
   it('calls onComplete with results when continue anyway is clicked', async () => {
-    currentAppState = {
-      ...defaultAppState,
-      progressStage: 'error',
-      status: 'Error: something broke',
-    };
+    currentAppState = { ...defaultAppState, progressStage: 'error', status: 'Error: something broke' };
+    await act(async () => { render(overlay()); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(2500); });
 
-    await act(async () => {
-      render(<FirstRunTransition onComplete={mockOnComplete} />);
-    });
-
-    await act(async () => {
-      await vi.runAllTimersAsync();
-    });
-
-    const continueBtn = screen.getByText('firstRun.continueAnyway');
-    await act(async () => {
-      fireEvent.click(continueBtn);
-    });
-
-    // Fade timer (300ms)
-    await act(async () => {
-      vi.advanceTimersByTime(300);
-    });
+    await act(async () => { fireEvent.click(screen.getByText('firstRun.continueAnyway')); });
+    await act(async () => { vi.advanceTimersByTime(300); });
 
     expect(mockOnComplete).toHaveBeenCalledWith('results');
   });
 
-  // -------------------------------------------------------------------------
-  // 5. Celebration phase renders relevant count and CTA buttons
-  // -------------------------------------------------------------------------
   it('shows celebration with relevant count and CTA buttons', async () => {
-    currentAppState = {
-      ...defaultAppState,
-      analysisComplete: true,
+    await renderThroughOwnPass({
       relevanceResults: [
         { relevant: true, title: 'Rust async patterns', url: 'https://example.com/1', final_score: 0.8 },
         { relevant: true, title: 'React hooks guide', url: 'https://example.com/2', final_score: 0.7 },
         { relevant: false, title: 'Cooking recipes', url: 'https://example.com/3', final_score: 0.1 },
       ],
-    };
-
-    await act(async () => {
-      render(<FirstRunTransition onComplete={mockOnComplete} />);
     });
 
-    await act(async () => {
-      await vi.runAllTimersAsync();
-    });
-
-    // Should show "2" as the big relevant count
     expect(screen.getByText('2')).toBeDefined();
-
-    // Briefing CTA
     expect(screen.getByText('firstRun.seeBriefing')).toBeDefined();
-
-    // Results CTA
     expect(screen.getByText('firstRun.browseResults')).toBeDefined();
 
-    // aria-label should reflect celebrating phase
     const status = screen.getByRole('status');
     expect(status).toHaveAttribute('aria-label', 'Analysis complete: 2 relevant items found');
     expect(status).toHaveAttribute('aria-busy', 'false');
   });
 
-  // -------------------------------------------------------------------------
-  // 6. Briefing CTA triggers onComplete('briefing') after fade
-  // -------------------------------------------------------------------------
-  it('calls onComplete with briefing when briefing CTA is clicked', async () => {
-    currentAppState = {
-      ...defaultAppState,
-      analysisComplete: true,
+  // Doctrine rule 3: how much was read informs no action. The overlay led with
+  // a big "375 ANALYZED" (and "552 ANALYZED" next to the relevant count).
+  it('shows no "analyzed" counter, only the relevant count', async () => {
+    await renderThroughOwnPass({
       relevanceResults: [
-        { relevant: true, title: 'Test article', url: 'https://test.com', final_score: 0.9 },
+        { relevant: true, title: 'A', url: 'https://a.example', final_score: 0.8 },
+        { relevant: false, title: 'B', url: 'https://b.example', final_score: 0.1 },
+        { relevant: false, title: 'C', url: 'https://c.example', final_score: 0.1 },
       ],
-    };
-
-    await act(async () => {
-      render(<FirstRunTransition onComplete={mockOnComplete} />);
     });
 
-    await act(async () => {
-      await vi.runAllTimersAsync();
+    expect(screen.queryByText('analyzed')).toBeNull();
+    expect(screen.queryByText('3')).toBeNull();
+    expect(screen.getByText('1')).toBeDefined();
+  });
+
+  // Same predicate as the header chip: an exclusion-demoted row is not
+  // "relevant" (the overlay said 21 where the app then said 20).
+  it('counts relevant items with the header chip predicate (excluded rows are not relevant)', async () => {
+    await renderThroughOwnPass({
+      relevanceResults: [
+        { relevant: true, title: 'Kept', url: 'https://k.example', final_score: 0.8 },
+        { relevant: true, excluded: true, title: 'Demoted', url: 'https://d.example', final_score: 0.8 },
+      ],
     });
 
-    const briefingBtn = screen.getByText('firstRun.seeBriefing');
-    await act(async () => {
-      fireEvent.click(briefingBtn);
+    expect(screen.getByRole('status')).toHaveAttribute('aria-label', 'Analysis complete: 1 relevant items found');
+  });
+
+  it('calls onComplete with briefing when briefing CTA is clicked', async () => {
+    await renderThroughOwnPass({
+      relevanceResults: [{ relevant: true, title: 'Test article', url: 'https://test.com', final_score: 0.9 }],
     });
 
-    await act(async () => {
-      vi.advanceTimersByTime(300);
-    });
+    await act(async () => { fireEvent.click(screen.getByText('firstRun.seeBriefing')); });
+    await act(async () => { vi.advanceTimersByTime(300); });
 
     expect(mockOnComplete).toHaveBeenCalledWith('briefing');
   });
 
-  // -------------------------------------------------------------------------
-  // 7. Outer container has correct structure (role, classes)
-  // -------------------------------------------------------------------------
   it('renders the outer container with correct role and opacity classes', async () => {
-    await act(async () => {
-      render(<FirstRunTransition onComplete={mockOnComplete} />);
-    });
+    await act(async () => { render(overlay()); });
 
     const status = screen.getByRole('status');
     expect(status.className).toContain('fixed');
     expect(status.className).toContain('opacity-100');
   });
 
-  // -------------------------------------------------------------------------
-  // 8. BrandMark renders in loading states
-  // -------------------------------------------------------------------------
   it('renders BrandMark in loading phase', async () => {
-    await act(async () => {
-      render(<FirstRunTransition onComplete={mockOnComplete} />);
-    });
-
+    await act(async () => { render(overlay()); });
     expect(screen.getByTestId('brand-mark')).toBeDefined();
   });
 
-  // -------------------------------------------------------------------------
-  // 9. Top signal is displayed in celebration phase
-  // -------------------------------------------------------------------------
   it('shows top signal title in celebration phase', async () => {
-    currentAppState = {
-      ...defaultAppState,
-      analysisComplete: true,
+    await renderThroughOwnPass({
       relevanceResults: [
         { relevant: true, title: 'Amazing Rust Article', url: 'https://example.com/rust', final_score: 0.95 },
       ],
-    };
-
-    await act(async () => {
-      render(<FirstRunTransition onComplete={mockOnComplete} />);
-    });
-
-    await act(async () => {
-      await vi.runAllTimersAsync();
     });
 
     expect(screen.getByText('Amazing Rust Article')).toBeDefined();
     expect(screen.getByText('https://example.com/rust')).toBeDefined();
   });
 
-  // -------------------------------------------------------------------------
-  // 10. No per-source item counts and no "sources" stat (doctrine rule 3).
-  // Those counted EVERY analysed item, so they always summed to the total —
-  // the banned "sources producing" vanity metric.
-  // -------------------------------------------------------------------------
+  // No per-source item counts and no "sources" stat (doctrine rule 3).
   it('shows no per-source item counts or sources stat in celebration phase', async () => {
-    currentAppState = {
-      ...defaultAppState,
-      analysisComplete: true,
+    await renderThroughOwnPass({
       relevanceResults: [
         { relevant: false, title: 'Story A', url: 'https://a.example', final_score: 0.2, source_type: 'reddit' },
         { relevant: false, title: 'Post B', url: 'https://b.example', final_score: 0.1, source_type: 'github' },
         { relevant: true, title: 'Story C', url: 'https://c.example', final_score: 0.8, source_type: 'hackernews' },
       ],
-    };
-
-    await act(async () => {
-      render(<FirstRunTransition onComplete={mockOnComplete} />);
-    });
-    await act(async () => {
-      await vi.runAllTimersAsync();
     });
 
     expect(screen.getByText('Story C')).toBeDefined();
     expect(screen.queryByText('sources')).toBeNull();
-    // Reddit / GitHub items are not the top signal, so their names must not
-    // appear anywhere — previously they rendered as "Reddit 1", "GitHub 1".
     expect(screen.queryAllByText((content) => content.includes('Reddit'))).toHaveLength(0);
     expect(screen.queryAllByText((content) => content.includes('GitHub'))).toHaveLength(0);
   });
 
-  it('shows the Developer DNA header only with confident tech chips', async () => {
-    currentAppState = {
-      ...defaultAppState,
-      analysisComplete: true,
-      relevanceResults: [
-        { relevant: true, title: 'Story C', url: 'https://c.example', final_score: 0.8 },
-      ],
-    };
+  it('hides the Developer DNA header when no tech chip is confident', async () => {
     currentDetectedTech = [{ name: 'Cobol', category: 'Language', confidence: 0.3 }];
-
-    const view = render(<FirstRunTransition onComplete={mockOnComplete} />);
-    await act(async () => {
-      await vi.runAllTimersAsync();
+    await renderThroughOwnPass({
+      relevanceResults: [{ relevant: true, title: 'Story C', url: 'https://c.example', final_score: 0.8 }],
     });
     expect(screen.queryByText('Your Developer DNA')).toBeNull();
     expect(screen.queryByText('Cobol')).toBeNull();
-    view.unmount();
+  });
 
+  it('shows the Developer DNA header with confident tech chips only', async () => {
     currentDetectedTech = [
       { name: 'Cobol', category: 'Language', confidence: 0.3 },
       { name: 'Rust', category: 'Language', confidence: 0.9 },
     ];
-    render(<FirstRunTransition onComplete={mockOnComplete} />);
-    await act(async () => {
-      await vi.runAllTimersAsync();
+    await renderThroughOwnPass({
+      relevanceResults: [{ relevant: true, title: 'Story C', url: 'https://c.example', final_score: 0.8 }],
     });
     expect(screen.getByText('Your Developer DNA')).toBeDefined();
     expect(screen.getByText('Rust')).toBeDefined();
     expect(screen.queryByText('Cobol')).toBeNull();
   });
 
-  // -------------------------------------------------------------------------
-  // 11. Starts analysis on mount (after 2s intelligence hold when no scan data)
-  // -------------------------------------------------------------------------
   it('starts analysis after intelligence hold when no scan data', async () => {
-    await act(async () => {
-      render(<FirstRunTransition onComplete={mockOnComplete} />);
-    });
+    await act(async () => { render(overlay()); });
 
-    // Analysis should not be called immediately
     expect(mockStartAnalysis).not.toHaveBeenCalled();
-
-    // Not yet after 1s
-    await act(async () => {
-      vi.advanceTimersByTime(1000);
-    });
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
     expect(mockStartAnalysis).not.toHaveBeenCalled();
-
-    // After 2s intelligence hold
-    await act(async () => {
-      vi.advanceTimersByTime(1000);
-    });
+    await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
 
     expect(mockStartAnalysis).toHaveBeenCalledTimes(1);
   });
 
-  // -------------------------------------------------------------------------
-  // 12. Error state shows embedding-specific messaging
-  // -------------------------------------------------------------------------
   it('shows embedding-specific error message for embedding errors', async () => {
-    currentAppState = {
-      ...defaultAppState,
-      progressStage: 'error',
-      status: 'Error: Embedding service unavailable',
-    };
+    currentAppState = { ...defaultAppState, progressStage: 'error', status: 'Error: Embedding service unavailable' };
+    await act(async () => { render(overlay()); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(2500); });
 
-    await act(async () => {
-      render(<FirstRunTransition onComplete={mockOnComplete} />);
-    });
-
-    await act(async () => {
-      await vi.runAllTimersAsync();
-    });
-
-    // Should show embedding-specific error text
     expect(screen.getByText('firstRun.errorEmbedding')).toBeDefined();
-    // Should show basic mode explainer
     expect(screen.getByText('firstRun.basicModeExplainer')).toBeDefined();
   });
 
-  // -------------------------------------------------------------------------
-  // 13. Fading phase applies opacity-0
-  // -------------------------------------------------------------------------
   it('applies opacity-0 class during fading phase', async () => {
-    currentAppState = {
-      ...defaultAppState,
-      analysisComplete: true,
-      relevanceResults: [
-        { relevant: true, title: 'Test', url: 'https://test.com', final_score: 0.9 },
-      ],
-    };
-
-    await act(async () => {
-      render(<FirstRunTransition onComplete={mockOnComplete} />);
+    await renderThroughOwnPass({
+      relevanceResults: [{ relevant: true, title: 'Test', url: 'https://test.com', final_score: 0.9 }],
     });
 
-    await act(async () => {
-      await vi.runAllTimersAsync();
-    });
-
-    // Click briefing to trigger fading
-    const briefingBtn = screen.getByText('firstRun.seeBriefing');
-    await act(async () => {
-      fireEvent.click(briefingBtn);
-    });
-
-    const status = screen.getByRole('status');
-    expect(status.className).toContain('opacity-0');
+    await act(async () => { fireEvent.click(screen.getByText('firstRun.seeBriefing')); });
+    expect(screen.getByRole('status').className).toContain('opacity-0');
   });
 
-  // -------------------------------------------------------------------------
-  // 14. Stack insights render in celebration when dep matches exist
-  // -------------------------------------------------------------------------
   it('shows stack insights when dependency matches exist', async () => {
-    currentAppState = {
-      ...defaultAppState,
-      analysisComplete: true,
+    await renderThroughOwnPass({
       relevanceResults: [
         {
           relevant: true,
           title: 'Tokio 2.0 release',
           url: 'https://example.com',
           final_score: 0.9,
-          score_breakdown: {
-            dep_match_score: 0.5,
-            matched_deps: ['tokio', 'serde'],
-          },
+          score_breakdown: { dep_match_score: 0.5, matched_deps: ['tokio', 'serde'] },
         },
       ],
-    };
-
-    await act(async () => {
-      render(<FirstRunTransition onComplete={mockOnComplete} />);
     });
 
-    await act(async () => {
-      await vi.runAllTimersAsync();
-    });
-
-    // Stack insight about dependencies should appear
     expect(screen.getByText('firstRun.insightDependencies')).toBeDefined();
   });
 
-  // -------------------------------------------------------------------------
-  // 15. buildStackInsights utility works correctly
-  // -------------------------------------------------------------------------
   it('buildStackInsights returns correct insights', async () => {
     const { buildStackInsights } = await import('./first-run/utils');
 
     const results = [
-      {
-        relevant: true,
-        title: 'Rust async runtime',
-        score_breakdown: { dep_match_score: 0.5, matched_deps: ['tokio'] },
-      },
-      {
-        relevant: true,
-        title: 'Python ML guide',
-        score_breakdown: { skill_gap_boost: 0.3 },
-      },
-      {
-        relevant: false,
-        title: 'Irrelevant article',
-      },
+      { relevant: true, title: 'Rust async runtime', score_breakdown: { dep_match_score: 0.5, matched_deps: ['tokio'] } },
+      { relevant: true, title: 'Python ML guide', score_breakdown: { skill_gap_boost: 0.3 } },
+      { relevant: false, title: 'Irrelevant article' },
     ];
-
     const scanSummary = {
       projects_scanned: 3,
       total_dependencies: 50,
@@ -554,113 +388,178 @@ describe('FirstRunTransition', () => {
     };
 
     const insights = buildStackInsights(results, scanSummary);
-
     expect(insights[0]).toEqual({ kind: 'dependencies', count: 1, deps: 'tokio' });
     expect(insights).toContainEqual({ kind: 'skillGap', count: 1 });
   });
 
-  // -------------------------------------------------------------------------
-  // 16. Fetching phase shows stage narration
-  // -------------------------------------------------------------------------
   it('shows stage narration text in fetching phase', async () => {
-    currentAppState = {
-      ...defaultAppState,
-      loading: true,
-      progressStage: 'fetch',
-      progress: 0.3,
-    };
+    currentUserContext = { interests: [{ topic: 'rust' }] };
+    currentAppState = { ...defaultAppState, loading: true, progressStage: 'fetch', progress: 0.3 };
+    await act(async () => { render(overlay()); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(2500); });
 
-    await act(async () => {
-      render(<FirstRunTransition onComplete={mockOnComplete} />);
-    });
-
-    await act(async () => {
-      await vi.runAllTimersAsync();
-    });
-
-    // Should show narration for fetch stage
     expect(screen.getByText('Reading the developer internet — pulling from your intelligence sources...')).toBeDefined();
-
-    // Should show progress percentage
     expect(screen.getByText('30%')).toBeDefined();
   });
 
-  // -------------------------------------------------------------------------
-  // 17. Analyzing phase uses correct aria-label
-  // -------------------------------------------------------------------------
   it('uses analyzing aria-label when in embed stage', async () => {
-    currentAppState = {
-      ...defaultAppState,
-      loading: true,
-      progressStage: 'embed',
-      progress: 0.5,
-    };
+    currentAppState = { ...defaultAppState, loading: true, progressStage: 'embed', progress: 0.5 };
+    await act(async () => { render(overlay()); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(2500); });
 
-    await act(async () => {
-      render(<FirstRunTransition onComplete={mockOnComplete} />);
-    });
-
-    await act(async () => {
-      await vi.runAllTimersAsync();
-    });
-
-    const status = screen.getByRole('status');
-    expect(status).toHaveAttribute('aria-label', 'Analyzing results');
+    expect(screen.getByRole('status')).toHaveAttribute('aria-label', 'Analyzing results');
   });
 
-  // -------------------------------------------------------------------------
-  // 18. Zero relevant items shows appropriate celebration message
-  // -------------------------------------------------------------------------
-  it('shows honest fresh-picks message (no vanity 0) when profile is empty', async () => {
-    // No detected tech, no interests, 0 relevant -> profileEmpty: the celebration
-    // must NOT show a "0 relevant" vanity stat and must frame it honestly.
-    currentUserContext = null;
-    currentAppState = {
-      ...defaultAppState,
-      analysisComplete: true,
+  // A user with no interests, no detected tech and no scan has nothing to be
+  // "matched against" — the copy must not claim "your interests / your stack".
+  it('does not claim to match "your interests" or "your stack" for an empty profile', async () => {
+    currentAppState = { ...defaultAppState, loading: true, progressStage: 'relevance', progress: 0.5 };
+    await act(async () => { render(overlay()); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(10); });
+
+    expect(screen.getByText('firstRun.analyzingNoProfile')).toBeDefined();
+    expect(screen.queryByText('firstRun.analyzing')).toBeNull();
+    expect(screen.getByText('Scoring and ranking by freshness and quality...')).toBeDefined();
+    expect(screen.queryAllByText((c) => c.includes('your stack'))).toHaveLength(0);
+  });
+
+  it('keeps the profile copy when the user has interests', async () => {
+    currentUserContext = { interests: [{ topic: 'rust' }] };
+    currentAppState = { ...defaultAppState, loading: true, progressStage: 'relevance', progress: 0.5 };
+    await act(async () => { render(overlay()); });
+    await act(async () => { await vi.advanceTimersByTimeAsync(10); });
+
+    expect(screen.getByText('firstRun.analyzing')).toBeDefined();
+    expect(screen.getByText('Scoring and ranking for relevance to your stack...')).toBeDefined();
+  });
+
+  it('shows honest fresh-picks message (no vanity 0, no analyzed count) when profile is empty', async () => {
+    await renderThroughOwnPass({
       relevanceResults: [
         { relevant: false, title: 'Item 1', url: 'https://test.com/1', final_score: 0.1 },
         { relevant: false, title: 'Item 2', url: 'https://test.com/2', final_score: 0.05 },
       ],
-    };
-
-    await act(async () => {
-      render(<FirstRunTransition onComplete={mockOnComplete} />);
     });
 
-    await act(async () => {
-      await vi.runAllTimersAsync();
-    });
-
-    // Honest message + the "add a signal" nudge instead of "profile is learning"
     expect(screen.getByText((content) => content.includes('ranks by what matters to you'))).toBeDefined();
     expect(screen.getByText('Add your stack to start ranking')).toBeDefined();
-    // The vanity "relevant" stat label must be gone for a profileless run
     expect(screen.queryByText('relevant')).toBeNull();
+    expect(screen.queryByText('analyzed')).toBeNull();
+    expect(screen.queryByText('2')).toBeNull();
+    expect(screen.getByRole('status')).toHaveAttribute('aria-label', 'Scan complete');
   });
 
   it('shows profile-learning message when a profile exists but 0 relevant', async () => {
-    // Has an interest (profile not empty) yet 0 relevant -> the "learning"
-    // message is still correct (this path is NOT the cold-start fresh-picks one).
     currentUserContext = { interests: [{ topic: 'rust' }] };
-    currentAppState = {
-      ...defaultAppState,
-      analysisComplete: true,
+    await renderThroughOwnPass({
       relevanceResults: [
         { relevant: false, title: 'Item 1', url: 'https://test.com/1', final_score: 0.1 },
         { relevant: false, title: 'Item 2', url: 'https://test.com/2', final_score: 0.05 },
       ],
-    };
-
-    await act(async () => {
-      render(<FirstRunTransition onComplete={mockOnComplete} />);
-    });
-
-    await act(async () => {
-      await vi.runAllTimersAsync();
     });
 
     expect(screen.getByText('0')).toBeDefined();
     expect(screen.getByText((content) => content.includes('Your profile is learning'))).toBeDefined();
+  });
+
+  // -------------------------------------------------------------------------
+  // Fresh-profile E2E 2026-10-09: the overlay celebrated the background pass
+  // that ran during onboarding (552 / 21) seconds after Finish, fell back to
+  // "Matching…" when its own pass started, then celebrated again (812 / 20).
+  // -------------------------------------------------------------------------
+  describe('celebrates only its own pass, once', () => {
+    const stale = [{ relevant: true, title: 'Stale pass item', url: 'https://stale.example', final_score: 0.9 }];
+
+    it('does not celebrate a pass that completed before it asked for one', async () => {
+      currentAppState = {
+        ...defaultAppState,
+        analysisComplete: true,
+        lastAnalyzedAt: new Date(Date.now() - 60_000),
+        relevanceResults: stale,
+      };
+      await act(async () => { render(overlay()); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(2500); });
+
+      expect(screen.queryByText('Stale pass item')).toBeNull();
+      expect(screen.queryByText('firstRun.seeBriefing')).toBeNull();
+      expect(screen.getByRole('status')).toHaveAttribute('aria-busy', 'true');
+      expect(mockStartAnalysis).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not celebrate a mid-run background merge that sets analysisComplete while loading', async () => {
+      const view = render(overlay());
+      await act(async () => { await vi.advanceTimersByTimeAsync(2500); });
+      await setStore(view, {
+        loading: true,
+        analysisComplete: true,
+        lastAnalyzedAt: new Date(),
+        progressStage: 'relevance',
+        relevanceResults: stale,
+      });
+
+      expect(screen.queryByText('firstRun.seeBriefing')).toBeNull();
+    });
+
+    it('never regresses from celebration back to progress', async () => {
+      const view = await renderThroughOwnPass({
+        relevanceResults: [{ relevant: true, title: 'Own pass item', url: 'https://own.example', final_score: 0.9 }],
+      });
+      expect(screen.getByText('Own pass item')).toBeDefined();
+
+      // A later pass (scheduled run, background refresh) starts…
+      await setStore(view, { loading: true, analysisComplete: false, progressStage: 'fetch', progress: 0.1 });
+
+      expect(screen.getByText('Own pass item')).toBeDefined();
+      expect(screen.getByText('firstRun.seeBriefing')).toBeDefined();
+      expect(screen.queryByText('firstRun.fetching')).toBeNull();
+      expect(screen.getByRole('status')).toHaveAttribute('aria-busy', 'false');
+    });
+
+    it('waits for a pass already running at Finish, then starts and celebrates its own', async () => {
+      // The pre-Finish background pass is still running when the hold ends.
+      currentAppState = { ...defaultAppState, loading: true, progressStage: 'relevance', progress: 0.6 };
+      const view = render(overlay());
+      await act(async () => { await vi.advanceTimersByTimeAsync(2500); });
+      expect(mockStartAnalysis).not.toHaveBeenCalled();
+
+      // That pass finishes — its numbers must not be celebrated.
+      await setStore(view, {
+        analysisComplete: true,
+        lastAnalyzedAt: new Date(),
+        relevanceResults: stale,
+        progressStage: 'complete',
+      });
+      expect(screen.queryByText('Stale pass item')).toBeNull();
+
+      // Next poll sees it idle and requests our own pass.
+      await act(async () => { await vi.advanceTimersByTimeAsync(3100); });
+      expect(mockStartAnalysis).toHaveBeenCalledTimes(1);
+
+      await setStore(view, { loading: true, progressStage: 'relevance', progress: 0.4 });
+      await act(async () => { await vi.advanceTimersByTimeAsync(10); });
+      await setStore(view, {
+        analysisComplete: true,
+        lastAnalyzedAt: new Date(),
+        progressStage: 'complete',
+        relevanceResults: [{ relevant: true, title: 'Fresh pass item', url: 'https://fresh.example', final_score: 0.9 }],
+      });
+
+      expect(screen.getByText('Fresh pass item')).toBeDefined();
+      expect(screen.queryByText('Stale pass item')).toBeNull();
+    });
+
+    it('waits for a pass the backend reports running even when the UI does not know of it', async () => {
+      let running = true;
+      vi.mocked(invoke).mockImplementation(((command: string) =>
+        Promise.resolve(command === 'get_analysis_status' ? { running } : { has_data: false })));
+
+      await act(async () => { render(overlay()); });
+      await act(async () => { await vi.advanceTimersByTimeAsync(2500); });
+      expect(mockStartAnalysis).not.toHaveBeenCalled();
+
+      running = false;
+      await act(async () => { await vi.advanceTimersByTimeAsync(3100); });
+      expect(mockStartAnalysis).toHaveBeenCalledTimes(1);
+    });
   });
 });

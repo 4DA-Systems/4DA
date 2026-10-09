@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import BlindSpotsView from './BlindSpotsView';
 import type { DepRow } from './types';
 
@@ -93,6 +93,64 @@ describe('BlindSpotsView — cold start renders no banned empty state', () => {
     await new Promise(r => setTimeout(r, 20));
     expect(container.textContent ?? '').not.toMatch(/27\s*\/100/);
     expect(cmdMock).not.toHaveBeenCalledWith('get_source_health');
-    expect(screen.getByText('blindspots.stats.tracked')).toBeInTheDocument();
+    // With no findings the tracked count frames nothing and informs no action.
+    expect(screen.queryByText('blindspots.stats.tracked')).toBeNull();
+  });
+});
+
+// Fresh-profile E2E 2026-10-09: day one gave the user nothing to act on — a
+// heading over a blank page with nothing scanned, then a lone "94 direct
+// dependencies" bar (score -1) after a scan.
+describe('BlindSpotsView — day-one states are actionable', () => {
+  it('with nothing scanned, offers the project scan', () => {
+    mockState = stateWith({ items: [], score: -1, total_tracked: 0, weak_match_count: 0, data_freshness: null });
+    render(<BlindSpotsView />);
+    expect(screen.getByTestId('blindspots-scan-prompt')).toBeInTheDocument();
+    expect(screen.getByText('onboarding.choice.scanProjects')).toBeInTheDocument();
+    expect(screen.queryByText('blindspots.empty')).toBeNull();
+  });
+
+  it('runs the local discovery scan and reloads the report when clicked', async () => {
+    const runAutoDiscovery = vi.fn(() => Promise.resolve());
+    const loadUserContext = vi.fn(() => Promise.resolve());
+    const loadBlindSpots = vi.fn();
+    mockState = {
+      ...stateWith({ items: [], score: -1, total_tracked: 0, weak_match_count: 0, data_freshness: null }),
+      runAutoDiscovery, loadUserContext, loadBlindSpots, isScanning: false,
+    };
+    render(<BlindSpotsView />);
+    loadBlindSpots.mockClear();
+    fireEvent.click(screen.getByText('onboarding.choice.scanProjects'));
+    await waitFor(() => expect(loadBlindSpots).toHaveBeenCalled());
+    expect(runAutoDiscovery).toHaveBeenCalled();
+    expect(loadUserContext).toHaveBeenCalled();
+  });
+
+  it('offers the Settings > Projects route for choosing folders', () => {
+    const setShowSettings = vi.fn();
+    const setSettingsInitialTab = vi.fn();
+    mockState = {
+      ...stateWith({ items: [], score: -1, total_tracked: 0, weak_match_count: 0, data_freshness: null }),
+      setShowSettings, setSettingsInitialTab,
+    };
+    render(<BlindSpotsView />);
+    fireEvent.click(screen.getByText('blindspots.firstDay.chooseFolders'));
+    expect(setSettingsInitialTab).toHaveBeenCalledWith('projects');
+    expect(setShowSettings).toHaveBeenCalledWith(true);
+  });
+
+  it('scanned but not yet assessed (score -1): says what will appear, no bare count', () => {
+    const setActiveView = vi.fn();
+    mockState = {
+      ...stateWith({ items: [], score: -1, total_tracked: 94, weak_match_count: 0, data_freshness: null }),
+      setActiveView,
+    };
+    const { container } = render(<BlindSpotsView />);
+    expect(screen.getByTestId('blindspots-assessing')).toBeInTheDocument();
+    expect(screen.queryByText('blindspots.stats.tracked')).toBeNull();
+    expect(container.textContent ?? '').not.toContain('94');
+    expect(screen.queryByTestId('blindspots-scan-prompt')).toBeNull();
+    fireEvent.click(screen.getByText('blindspots.firstDay.openPreemption'));
+    expect(setActiveView).toHaveBeenCalledWith('preemption');
   });
 });

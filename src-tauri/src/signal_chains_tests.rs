@@ -954,3 +954,278 @@ fn grounded_chains_retain_dependency_weighted_confidence() {
     let many = chain_policy(false, false, 0.9, 3).confidence;
     assert!(many > one);
 }
+
+/// Live-corpus check: every chain on a real database is the user's topic, and
+/// the same corpus with the profile emptied (inside a rolled-back transaction)
+/// forms none. Run against an online snapshot, never the live file:
+/// `FOURDA_VERIFY_DB=<snapshot> cargo test --lib live_snapshot_chain -- --ignored --nocapture`
+#[test]
+#[ignore = "requires FOURDA_VERIFY_DB pointing at a real database snapshot"]
+fn live_snapshot_chain_topics_are_the_users() {
+    let Ok(path) = std::env::var("FOURDA_VERIFY_DB") else {
+        return;
+    };
+    let conn = Connection::open(&path).expect("open snapshot");
+    let terms = signal_chains_grounding::user_topic_terms(&conn);
+    let chains = detect_chains(&conn).expect("detect chains on snapshot");
+    println!("profile terms: {}, chains: {}", terms.len(), chains.len());
+    for c in &chains {
+        let topic = c
+            .chain_name
+            .split(" signal chain")
+            .next()
+            .unwrap_or_default();
+        println!(
+            "  {} | verified_dep={:?} | dep_advisory={} | priority={}",
+            c.chain_name, c.verified_dep, c.dep_advisory, c.overall_priority
+        );
+        assert!(
+            c.verified_dep.is_some() || signal_chains_grounding::topic_in_user_terms(&terms, topic),
+            "chain topic {topic} is not the user's"
+        );
+        assert!(!c.dep_advisory || c.verified_dep.is_some());
+    }
+
+    conn.execute_batch("BEGIN")
+        .expect("begin rollback-only transaction");
+    for table in [
+        "explicit_interests",
+        "tech_stack",
+        "detected_tech",
+        "user_dependencies",
+        "project_dependencies",
+        "source_item_dependencies",
+    ] {
+        let _ = conn.execute(&format!("DELETE FROM {table}"), []);
+    }
+    let empty = detect_chains(&conn).expect("detect chains, empty profile");
+    conn.execute_batch("ROLLBACK").expect("rollback");
+    println!("empty-profile chains: {}", empty.len());
+    assert!(
+        empty.is_empty(),
+        "empty profile formed chains: {:?}",
+        empty.iter().map(|c| &c.chain_name).collect::<Vec<_>>()
+    );
+}
+
+// ------------------------------------------------------------------------
+// Topic grounding (fresh-profile E2E 2026-10-09): with an EMPTY profile
+// Preemption showed chains on "game", "cloud", "code", "backend", "aws".
+// ------------------------------------------------------------------------
+
+fn add_profile_tables(conn: &Connection) {
+    conn.execute_batch(
+        "CREATE TABLE explicit_interests (topic TEXT NOT NULL);
+         CREATE TABLE tech_stack (technology TEXT NOT NULL);
+         CREATE TABLE detected_tech (name TEXT NOT NULL, confidence REAL DEFAULT 1.0);",
+    )
+    .expect("create profile tables");
+}
+
+/// Generic cloud/backend/game chatter across four days — corroborated and
+/// multi-day, exactly the shape that used to form chains.
+fn insert_generic_cross_day_items(conn: &Connection) {
+    for (id, title, offset) in [
+        (
+            "g1",
+            "AWS cloud backend costs explained for game studios",
+            "-3 days",
+        ),
+        ("g2", "Deploy a cloud backend on AWS in your VPC", "-2 days"),
+        (
+            "g3",
+            "God of War on PSP: a game backend retrospective in the cloud",
+            "-1 day",
+        ),
+        (
+            "g4",
+            "AWS outage takes down cloud backend for a game launch",
+            "-10 minutes",
+        ),
+    ] {
+        insert_chain_test_item(
+            conn,
+            id,
+            "hackernews",
+            title,
+            "aws cloud backend game",
+            offset,
+            1.0,
+        );
+    }
+}
+
+#[test]
+fn empty_profile_forms_no_chains_from_generic_topics() {
+    let conn = chain_detection_db();
+    add_profile_tables(&conn);
+    insert_generic_cross_day_items(&conn);
+
+    let chains = detect_chains(&conn).expect("detect chains");
+    assert!(
+        chains.is_empty(),
+        "no stack, no interests, no dependencies => no chain is the user's; got {:?}",
+        chains.iter().map(|c| &c.chain_name).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn a_declared_interest_grounds_only_its_own_topic() {
+    let conn = chain_detection_db();
+    add_profile_tables(&conn);
+    conn.execute("INSERT INTO explicit_interests (topic) VALUES ('AWS')", [])
+        .expect("insert interest");
+    insert_generic_cross_day_items(&conn);
+
+    let chains = detect_chains(&conn).expect("detect chains");
+    let names: Vec<&str> = chains.iter().map(|c| c.chain_name.as_str()).collect();
+    assert!(
+        names.iter().any(|n| n.starts_with("aws signal chain")),
+        "the user's own interest forms a chain: {names:?}"
+    );
+    assert!(
+        names.iter().all(|n| !n.starts_with("cloud ")
+            && !n.starts_with("backend ")
+            && !n.starts_with("game ")),
+        "generic co-occurring topics stay out: {names:?}"
+    );
+    let aws = chains
+        .iter()
+        .find(|c| c.chain_name.starts_with("aws"))
+        .expect("aws chain");
+    assert_eq!(aws.verified_dep, None);
+    assert!(
+        !aws.dep_advisory,
+        "no verified dependency => no advisory claim"
+    );
+}
+
+#[test]
+fn interest_and_stack_terms_match_across_separators() {
+    let conn = chain_detection_db();
+    add_profile_tables(&conn);
+    conn.execute(
+        "INSERT INTO explicit_interests (topic) VALUES ('AI/LLM')",
+        [],
+    )
+    .expect("insert interest");
+    conn.execute("INSERT INTO tech_stack (technology) VALUES ('Node.js')", [])
+        .expect("insert stack");
+    let terms = signal_chains_grounding::user_topic_terms(&conn);
+    for topic in ["ai", "llm", "node.js", "nodejs"] {
+        assert!(
+            signal_chains_grounding::topic_in_user_terms(&terms, topic),
+            "{topic} should match the user's terms"
+        );
+    }
+    assert!(!signal_chains_grounding::topic_in_user_terms(
+        &terms, "cloud"
+    ));
+}
+
+/// Live corpus 2026-10-09: `api`, `google` and `http` chains survived on the
+/// founder's profile — `@tauri-apps/api` and `@google/genai` split on `/`, and
+/// the Rust `http` crate is a generic word. Package names are never split, and
+/// a generic dependency name does not ground a topic on its own.
+#[test]
+fn package_names_never_mint_generic_topic_terms() {
+    let conn = chain_detection_db();
+    add_profile_tables(&conn);
+    for name in ["@tauri-apps/api", "@google/genai", "http", "tokio"] {
+        conn.execute(
+            "INSERT INTO project_dependencies (package_name) VALUES (?1)",
+            params![name],
+        )
+        .expect("insert dependency");
+    }
+    conn.execute(
+        "INSERT INTO detected_tech (name, confidence) VALUES ('@tauri-apps/plugin-updater', 0.9)",
+        [],
+    )
+    .expect("insert detected tech");
+    let terms = signal_chains_grounding::user_topic_terms(&conn);
+    for generic in ["api", "google", "http", "plugin-updater", "tauri-apps"] {
+        assert!(
+            !signal_chains_grounding::topic_in_user_terms(&terms, generic),
+            "{generic} must not be a user term"
+        );
+    }
+    assert!(signal_chains_grounding::topic_in_user_terms(
+        &terms, "tokio"
+    ));
+    assert!(signal_chains_grounding::topic_in_user_terms(
+        &terms,
+        "@tauri-apps/api"
+    ));
+}
+
+#[test]
+fn dep_advisory_requires_an_advisory_for_the_dependency() {
+    // Affected: line names the package -> a published advisory FOR tokio.
+    let conn = chain_detection_db();
+    conn.execute(
+        "INSERT INTO user_dependencies (package_name, ecosystem) VALUES ('tokio', 'rust')",
+        [],
+    )
+    .expect("insert dependency");
+    insert_chain_test_item(
+        &conn,
+        "tokio-release",
+        "crates_io",
+        "crates.io: tokio v1.40.1",
+        "tokio 1.40.1 published to crates.io",
+        "-2 days",
+        1.0,
+    );
+    insert_chain_test_item(
+        &conn,
+        "tokio-advisory",
+        "cve",
+        "RUSTSEC-2026-0007 vulnerability in tokio broadcast channel",
+        "Severity: HIGH\nAffected: tokio (crates.io)\nFixed in: 1.40.2",
+        "-10 minutes",
+        1.0,
+    );
+    let chains = detect_chains(&conn).expect("detect chains");
+    let tokio = chains
+        .iter()
+        .find(|c| c.verified_dep.as_deref() == Some("tokio"))
+        .expect("tokio chain");
+    assert!(tokio.dep_advisory, "the Affected: advisory is proof");
+
+    // Two registry releases, one of which merely has a CVE id in its title:
+    // grounded, but no advisory FOR tokio.
+    let conn = chain_detection_db();
+    conn.execute(
+        "INSERT INTO user_dependencies (package_name, ecosystem) VALUES ('tokio', 'rust')",
+        [],
+    )
+    .expect("insert dependency");
+    insert_chain_test_item(
+        &conn,
+        "tokio-release-a",
+        "crates_io",
+        "crates.io: tokio v1.40.1",
+        "tokio 1.40.1 published",
+        "-2 days",
+        1.0,
+    );
+    insert_chain_test_item(
+        &conn,
+        "tokio-release-b",
+        "crates_io",
+        "crates.io: tokio v1.40.2 (fixes CVE-2026-0007 in a sibling crate)",
+        "tokio 1.40.2 published",
+        "-10 minutes",
+        1.0,
+    );
+    let chains = detect_chains(&conn).expect("detect chains");
+    let tokio = chains
+        .iter()
+        .find(|c| c.verified_dep.as_deref() == Some("tokio"))
+        .expect("tokio chain");
+    assert!(
+        !tokio.dep_advisory,
+        "a CVE id in a release title is not a published advisory for the dependency"
+    );
+}

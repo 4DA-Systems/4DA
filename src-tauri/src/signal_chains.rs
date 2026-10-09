@@ -18,7 +18,9 @@ mod signal_chains_persistence;
 #[path = "signal_chains_prediction.rs"]
 mod signal_chains_prediction;
 use signal_chains_candidates::{load_recent_chain_candidate_items, ChainCandidateItem};
-use signal_chains_grounding::{chain_policy, dependency_evidence};
+use signal_chains_grounding::{
+    chain_policy, dependency_evidence, topic_in_user_terms, user_topic_terms,
+};
 use signal_chains_persistence::record_signal_chain_events;
 pub use signal_chains_prediction::*;
 
@@ -56,6 +58,13 @@ pub struct SignalChain {
     /// words as fake affected dependencies. `None` when the topic isn't a real dep.
     #[serde(default)]
     pub verified_dep: Option<String>,
+    /// True IFF a displayed link is a published advisory FOR `verified_dep` —
+    /// item-level structured proof (an `advisory` linker row, or an osv/cve
+    /// row whose `Affected:` line names the package). Replaces "any link title
+    /// contains a CVE id", which labelled a `backend` chain "Includes a
+    /// published advisory" for an unrelated CVE (fresh-profile E2E 2026-10-09).
+    #[serde(default)]
+    pub dep_advisory: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -144,6 +153,8 @@ fn detect_chains_from_items(
     let mut multi_day_topics = 0_usize;
     let mut rejected_same_day = 0_usize;
     let mut rejected_low_confidence = 0_usize;
+    let mut rejected_ungrounded_topic = 0_usize;
+    let user_terms = user_topic_terms(conn);
 
     for (topic, topic_items_list) in &topic_items {
         if topic_items_list.len() < 2 {
@@ -176,6 +187,16 @@ fn detect_chains_from_items(
         let dep_evidence = dependency_evidence(conn, topic, topic_items_list);
         let dep_match = dep_evidence.score;
         let has_dep = dep_match > 0.0;
+
+        // A chain's topic must be the USER's: a verified dependency, or one of
+        // their declared/detected tech, interests or dependency names. A
+        // generic vocabulary word recurring across days ("game", "cloud",
+        // "backend") is the internet's topic, not theirs — with an empty
+        // profile it filled Preemption with unrelated chains.
+        if !has_dep && !topic_in_user_terms(&user_terms, topic) {
+            rejected_ungrounded_topic += 1;
+            continue;
+        }
 
         // Classify signal types based on keywords. For a verified dependency chain,
         // display only item-level grounded links; otherwise one real package hit plus
@@ -213,6 +234,10 @@ fn detect_chains_from_items(
 
         let has_security = links.iter().any(|l| l.signal_type == "security_alert");
         let has_breaking = links.iter().any(|l| l.signal_type == "breaking_change");
+        let dep_advisory = has_dep
+            && links
+                .iter()
+                .any(|l| dep_evidence.advisory_item_ids.contains(&l.source_item_id));
 
         let policy = chain_policy(
             dep_evidence.security_signal,
@@ -267,6 +292,7 @@ fn detect_chains_from_items(
             } else {
                 None
             },
+            dep_advisory,
         });
     }
 
@@ -291,6 +317,7 @@ fn detect_chains_from_items(
         multi_day_topics,
         rejected_same_day,
         rejected_low_confidence,
+        rejected_ungrounded_topic,
         chains = chains.len(),
         "Signal chain detection complete"
     );

@@ -126,6 +126,59 @@ describe('useResultFilters', () => {
       expect(result.current.filteredResults).toHaveLength(2);
     });
 
+    // One definition of "relevant" everywhere (header chip, first-run overlay,
+    // this list): an exclusion-demoted row is not a relevant item.
+    it('relevance filter drops exclusion-demoted rows (isSurfacedSignal)', () => {
+      setMockStoreState({
+        appState: {
+          relevanceResults: [
+            makeItem(1, { relevant: true }),
+            makeItem(2, { relevant: true, excluded: true }),
+          ],
+        },
+        showOnlyRelevant: true,
+      });
+      const { result } = renderHook(() => useResultFilters());
+      expect(result.current.filteredResults.map((r: { id: number }) => r.id)).toEqual([1]);
+    });
+
+    // Fresh-profile E2E 2026-10-09: the "Fresh picks — not yet personalized"
+    // list for an empty profile was mostly unrelated Java/.NET CVEs.
+    it('fresh picks (empty profile) exclude security advisories', () => {
+      setMockStoreState({
+        appState: {
+          relevanceResults: [
+            makeItem(1, { relevant: false, source_type: 'hackernews' }),
+            makeItem(2, { relevant: false, source_type: 'cve', title: '[CVE-2026-106114] ImageSharp: ICC CLUT parsing' }),
+            makeItem(3, { relevant: false, source_type: 'osv' }),
+            makeItem(4, { relevant: false, source_type: 'github', signal_type: 'security_alert' }),
+            makeItem(5, { relevant: false, source_type: 'reddit', score_breakdown: { content_type: 'security_advisory' } }),
+          ],
+        },
+        sourceFilters: new Set(),
+        showOnlyRelevant: true,
+      });
+      const { result } = renderHook(() => useResultFilters());
+      expect(result.current.profileEmpty).toBe(true);
+      expect(result.current.filteredResults.map((r: { id: number }) => r.id)).toEqual([1]);
+    });
+
+    it('keeps advisories once there is a profile to assess them against', () => {
+      setMockStoreState({
+        appState: {
+          relevanceResults: [
+            makeItem(1, { relevant: false, source_type: 'hackernews' }),
+            makeItem(2, { relevant: true, source_type: 'cve' }),
+          ],
+        },
+        sourceFilters: new Set(),
+        userContext: { interests: [{ topic: 'rust' }] },
+      });
+      const { result } = renderHook(() => useResultFilters());
+      expect(result.current.profileEmpty).toBe(false);
+      expect(result.current.filteredResults.map((r: { id: number }) => r.id)).toContain(2);
+    });
+
     it('filters by saved only when showSavedOnly is true', () => {
       setMockStoreState({
         appState: {

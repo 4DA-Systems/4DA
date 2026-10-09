@@ -68,6 +68,111 @@ pub(super) struct DependencyEvidence {
     pub(super) security_signal: bool,
     pub(super) breaking_signal: bool,
     pub(super) grounded_item_ids: HashSet<i64>,
+    /// Grounded items that ARE a published advisory for the package: a linker
+    /// row of kind `advisory`, or an osv/cve row whose `Affected:` line names
+    /// it. A title that merely contains a CVE id is not one.
+    pub(super) advisory_item_ids: HashSet<i64>,
+}
+
+/// The user's own vocabulary a chain topic may be grounded in: declared tech
+/// stack, ACE-detected tech, declared interests, and the names of notable
+/// non-dev dependencies. Lowercased, each also stored in a separator-free form
+/// so `node.js` / `nodejs` and `vector-search` / `vector search` meet.
+///
+/// Fresh-profile E2E 2026-10-09: with an EMPTY profile Preemption showed
+/// chains on `game`, `cloud`, `code`, `backend`, `aws` ("God of War on PSP", a
+/// hypoglycemia article). `extract_topics` is a generic vocabulary; a topic
+/// recurring across days says the internet talks about it, not that the user
+/// does. Empty set (no profile) => no chains.
+///
+/// Only interests are split on `/ , & |` ("AI/LLM" is two interests). A
+/// package name is one term: splitting `@tauri-apps/api` or `@google/genai`
+/// minted the bare words `api` and `google` (measured on the live corpus).
+/// Dependency names that are generic words (`http`, `api`, `core` — the
+/// domain profile's AMBIGUOUS / UTILITY lists, or under four characters) do not
+/// ground a topic on name alone; they still form a chain through structured
+/// dependency proof (`verified_dep`).
+pub(super) fn user_topic_terms(conn: &rusqlite::Connection) -> HashSet<String> {
+    let mut terms = HashSet::new();
+    for value in string_column(conn, "SELECT topic FROM explicit_interests") {
+        for part in value.split(['/', ',', '&', '|']) {
+            insert_term(&mut terms, part);
+        }
+    }
+    for value in string_column(conn, "SELECT technology FROM tech_stack") {
+        insert_term(&mut terms, &value);
+    }
+    if table_exists(conn, "detected_tech") {
+        let sql = if table_has_column(conn, "detected_tech", "confidence") {
+            "SELECT name FROM detected_tech WHERE confidence >= 0.5"
+        } else {
+            "SELECT name FROM detected_tech"
+        };
+        for value in string_column(conn, sql) {
+            insert_term(&mut terms, &value);
+        }
+    }
+    for table in ["user_dependencies", "project_dependencies"] {
+        if !table_exists(conn, table) {
+            continue;
+        }
+        let sql = if table_has_column(conn, table, "is_dev") {
+            format!("SELECT package_name FROM {table} WHERE COALESCE(is_dev, 0) = 0")
+        } else {
+            format!("SELECT package_name FROM {table}")
+        };
+        for value in string_column(conn, &sql) {
+            if is_distinctive_dependency_name(&value) {
+                insert_term(&mut terms, &value);
+            }
+        }
+    }
+    terms
+}
+
+fn insert_term(terms: &mut HashSet<String>, raw: &str) {
+    let lower = raw.trim().to_lowercase();
+    if lower.is_empty() {
+        return;
+    }
+    let compact = compact_term(&lower);
+    terms.insert(lower);
+    if !compact.is_empty() {
+        terms.insert(compact);
+    }
+}
+
+/// A dependency name specific enough to stand for the user's stack on its own:
+/// not a short or generic word (`http`, `api`, `log`), not a utility crate.
+fn is_distinctive_dependency_name(name: &str) -> bool {
+    use crate::domain_profile_data::{AMBIGUOUS_DEPS, UTILITY_DEPS};
+    let lower = name.trim().to_lowercase();
+    lower.len() >= 4
+        && !AMBIGUOUS_DEPS.contains(&lower.as_str())
+        && !UTILITY_DEPS.contains(&lower.as_str())
+}
+
+/// Is this chain topic one of the user's own terms?
+pub(super) fn topic_in_user_terms(terms: &HashSet<String>, topic: &str) -> bool {
+    let lower = topic.trim().to_lowercase();
+    terms.contains(&lower) || {
+        let compact = compact_term(&lower);
+        !compact.is_empty() && terms.contains(&compact)
+    }
+}
+
+fn compact_term(lower: &str) -> String {
+    lower.chars().filter(|c| c.is_alphanumeric()).collect()
+}
+
+fn string_column(conn: &rusqlite::Connection, sql: &str) -> Vec<String> {
+    let Ok(mut stmt) = conn.prepare(sql) else {
+        return Vec::new();
+    };
+    let Ok(rows) = stmt.query_map([], |row| row.get::<_, String>(0)) else {
+        return Vec::new();
+    };
+    rows.filter_map(std::result::Result::ok).collect()
 }
 
 pub(super) fn dependency_evidence(
@@ -80,10 +185,12 @@ pub(super) fn dependency_evidence(
     if hits.is_empty() {
         return DependencyEvidence::none();
     }
-    let linked = load_linked_item_ids(conn, &topic_lower);
+    let linked = load_linked_item_ids(conn, &topic_lower, &["exact_registry", "advisory"]);
+    let linked_advisories = load_linked_item_ids(conn, &topic_lower, &["advisory"]);
 
     let mut qualifying_hits: HashSet<(String, bool)> = HashSet::new();
     let mut grounded_item_ids = HashSet::new();
+    let mut advisory_item_ids = HashSet::new();
     let mut grounded_dates = HashSet::new();
     let mut security_signal = false;
     let mut breaking_signal = false;
@@ -106,6 +213,11 @@ pub(super) fn dependency_evidence(
 
             hit_qualifies = true;
             grounded_item_ids.insert(*id);
+            if linked_advisories.contains(id)
+                || item_is_advisory_for_package(source_type, content, &topic_lower)
+            {
+                advisory_item_ids.insert(*id);
+            }
             grounded_dates.insert(timestamp.chars().take(10).collect::<String>());
             match classify_chain_signal(title).as_str() {
                 "security_alert" => security_signal = true,
@@ -132,30 +244,51 @@ pub(super) fn dependency_evidence(
         security_signal,
         breaking_signal,
         grounded_item_ids,
+        advisory_item_ids,
     }
 }
 
 /// Items the dependency linker has already bound to the package with
-/// STRUCTURED proof — a registry row whose subject is the package
-/// (`exact_registry`) or an advisory naming it in `Affected:` (`advisory`).
-/// Title-heuristic links are deliberately excluded: they are the bare title
-/// words this policy exists to reject. Empty when the table does not exist
-/// (older schemas, hermetic tests).
-fn load_linked_item_ids(conn: &rusqlite::Connection, topic_lower: &str) -> HashSet<i64> {
-    if !table_exists(conn, "source_item_dependencies") {
+/// STRUCTURED proof of the given kinds — a registry row whose subject is the
+/// package (`exact_registry`) or an advisory naming it in `Affected:`
+/// (`advisory`). Title-heuristic links are deliberately never asked for: they
+/// are the bare title words this policy exists to reject. Empty when the table
+/// does not exist (older schemas, hermetic tests).
+fn load_linked_item_ids(
+    conn: &rusqlite::Connection,
+    topic_lower: &str,
+    match_types: &[&str],
+) -> HashSet<i64> {
+    if match_types.is_empty() || !table_exists(conn, "source_item_dependencies") {
         return HashSet::new();
     }
-    let Ok(mut stmt) = conn.prepare(
+    let placeholders = (0..match_types.len())
+        .map(|i| format!("?{}", i + 2))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let sql = format!(
         "SELECT source_item_id FROM source_item_dependencies
          WHERE LOWER(package_name) = ?1
-           AND match_type IN ('exact_registry', 'advisory')",
-    ) else {
+           AND match_type IN ({placeholders})"
+    );
+    let Ok(mut stmt) = conn.prepare(&sql) else {
         return HashSet::new();
     };
-    let Ok(rows) = stmt.query_map(params![topic_lower], |row| row.get::<_, i64>(0)) else {
+    let mut bound: Vec<&dyn rusqlite::ToSql> = vec![&topic_lower];
+    for match_type in match_types {
+        bound.push(match_type);
+    }
+    let Ok(rows) = stmt.query_map(bound.as_slice(), |row| row.get::<_, i64>(0)) else {
         return HashSet::new();
     };
     rows.filter_map(std::result::Result::ok).collect()
+}
+
+/// An osv/cve registry row whose `Affected:` line names the package — a
+/// published advisory FOR it, read off the item itself.
+fn item_is_advisory_for_package(source_type: &str, content: &str, topic_lower: &str) -> bool {
+    matches!(source_type.to_lowercase().as_str(), "osv" | "cve")
+        && crate::dep_linker::advisory_affected_package_match(content, topic_lower)
 }
 
 /// The same proof computed from the item itself, for rows the linker has not
@@ -192,6 +325,7 @@ impl DependencyEvidence {
             security_signal: false,
             breaking_signal: false,
             grounded_item_ids: HashSet::new(),
+            advisory_item_ids: HashSet::new(),
         }
     }
 }

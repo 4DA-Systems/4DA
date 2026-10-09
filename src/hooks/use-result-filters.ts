@@ -3,6 +3,7 @@ import { useMemo, useCallback, useEffect } from 'react';
 import { useAppStore } from '../store';
 import { isProfileEmpty } from '../utils/profile-empty';
 import { normalizeUrlForDedup } from '../utils/normalize-url';
+import { isSurfacedSignal } from '../utils/score';
 import type { SourceRelevance } from '../types';
 
 /** Run promise-returning tasks with bounded concurrency (prevents IPC queue saturation) */
@@ -24,6 +25,21 @@ async function pLimit<T>(tasks: (() => Promise<T>)[], concurrency: number): Prom
   const workers = Array.from({ length: Math.min(concurrency, tasks.length) }, () => runNext());
   await Promise.all(workers);
   return results;
+}
+
+/** Registry advisory sources: one row per published advisory. */
+const ADVISORY_SOURCES = new Set(['cve', 'osv']);
+
+/**
+ * A security advisory row. Only meaningful against a stack: without one,
+ * nothing it names can be known to affect the user. Exported for tests.
+ */
+export function isStacklessAdvisory(item: SourceRelevance): boolean {
+  return (
+    ADVISORY_SOURCES.has(item.source_type ?? '') ||
+    item.signal_type === 'security_alert' ||
+    item.score_breakdown?.content_type === 'security_advisory'
+  );
 }
 
 /** Cap on sibling titles carried by an advisory stack's representative. */
@@ -129,7 +145,16 @@ export const useResultFilters = () => {
       // sourceFilters can be an empty Set. Treating that as "exclude every
       // source" black-holed valid analysis results under an empty Sources bar.
       if (sourceFilteringActive && !sourceFilters.has(source)) return false;
-      if (showOnlyRelevant && !profileEmpty && !item.relevant) return false;
+      // Fresh picks (no profile) never include registry advisories: with no
+      // stack there is nothing an advisory can affect, and ranked by the
+      // quality x freshness prior a burst of unrelated Java/.NET CVEs led the
+      // "not yet personalized" list (fresh-profile E2E 2026-10-09). They come
+      // back the moment a stack makes them assessable.
+      if (profileEmpty && isStacklessAdvisory(item)) return false;
+      // `isSurfacedSignal`, not `item.relevant`: an exclusion-demoted row is not
+      // a relevant item, and the header chip and first-run overlay count with
+      // the same predicate — "N relevant" must be one number everywhere.
+      if (showOnlyRelevant && !profileEmpty && !isSurfacedSignal(item)) return false;
       if (showSavedOnly && feedbackGiven[item.id] !== 'save') return false;
       // Search filter: match against title, explanation, source type
       if (query) {

@@ -68,28 +68,50 @@ describe('getSourceNarration', () => {
   });
 });
 
+describe('getStageNarration without a profile', () => {
+  // Fresh-profile E2E 2026-10-09: "your stack" copy shown to a user with none.
+  it('does not claim "your stack" or "your project context" with no profile', () => {
+    for (const stage of ['context', 'relevance']) {
+      const msg = getStageNarration(stage, false);
+      expect(msg).not.toMatch(/your (stack|project)/i);
+    }
+    expect(getStageNarration('relevance', false)).toContain('freshness and quality');
+  });
+
+  it('keeps the profile copy by default', () => {
+    expect(getStageNarration('relevance')).toContain('your stack');
+  });
+});
+
 describe('getCelebrationMessage', () => {
   it('returns learning message when 0 relevant', () => {
-    const msg = getCelebrationMessage(0, 50);
+    const msg = getCelebrationMessage(0);
     expect(msg).toContain('learning');
-    expect(msg).toContain('50');
   });
 
   it('returns tailored message for 1-3 items', () => {
-    const msg = getCelebrationMessage(2, 30);
+    const msg = getCelebrationMessage(2);
     expect(msg).toContain('2');
     expect(msg).toContain('tailored');
   });
 
   it('returns profile match message for 4-10 items', () => {
-    const msg = getCelebrationMessage(7, 50);
+    const msg = getCelebrationMessage(7);
     expect(msg).toContain('7');
     expect(msg).toContain('profile');
   });
 
   it('returns discovery message for 11+ items', () => {
-    const msg = getCelebrationMessage(15, 100);
+    const msg = getCelebrationMessage(15);
     expect(msg).toContain('15');
     expect(msg).toContain('relevant');
+  });
+
+  // Doctrine rule 3: the count of items READ informs no action.
+  it('never quotes a scanned/analyzed total', () => {
+    for (const n of [0, 2, 7, 15]) {
+      expect(getCelebrationMessage(n)).not.toMatch(/scanned|stories|analy[sz]ed/i);
+    }
+    expect(getCelebrationMessage(0, true).replace('4DA', '')).not.toMatch(/\d/);
   });
 });
