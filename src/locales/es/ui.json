@@ -2098,6 +2098,7 @@
   "blindspots.action.investigate": "Investigar",
   "blindspots.staleData": "Las fuentes no se han actualizado en más de 72 horas. Ejecute una búsqueda para actualizar los datos de cobertura.",
   "blindspots.staleDataAge": "Fuentes actualizadas por última vez hace {{days}} días. Los datos de cobertura pueden no reflejar la actividad reciente.",
+  "blindspots.reportAge": "Análisis calculado {{age}}",
   "blindspots.status.blindSpot": "Punto ciego",
   "blindspots.status.drifting": "Desviándose",
   "blindspots.status.noCoverage": "Sin cobertura",

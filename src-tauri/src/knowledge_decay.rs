@@ -512,6 +512,8 @@ struct GapCandidate {
     /// The scoring pipeline's stored version verdict for this item:
     /// `Some(false)` = the installed version is CONFIRMED not affected, so the
     /// advisory is not a gap at all (`lettre` sat HIGH at its fixed version).
+    /// [`load_gap_candidates`] leaves it `None`: the scan reads it on first
+    /// use (`GapScan::stored_verdict`), for the few rows a dependency matches.
     version_affected: Option<bool>,
 }
 
@@ -567,18 +569,17 @@ type LiveVerdict<'a> = &'a dyn Fn(&GapCandidate) -> Option<bool>;
 /// computed at ingestion by `content_dna` already lives; rows with a NULL
 /// `content_type` (legacy) pass through to the title-based fallback below.
 fn load_gap_candidates(conn: &rusqlite::Connection) -> Result<Vec<GapCandidate>> {
-    // Two scalar subqueries ride along: the linker's structured package links
-    // (registry subject / advisory `Affected:` only) and the scoring
-    // pipeline's stored version verdict for the row.
+    // The linker's structured package links (registry subject / advisory
+    // `Affected:` only) ride along. The stored version verdict does not: it
+    // lives in each row's scoring breakdown (~1.6 KB of JSON), and reading it
+    // for every candidate (73k live, 2026-10-10) cost a pass over ~117 MB to
+    // use a handful of values — the scan reads it per matched row instead.
     let mut stmt = conn.prepare(
         "SELECT si.id, si.title, si.url, si.source_type, si.created_at, si.content_type,
                 (SELECT GROUP_CONCAT(LOWER(sid.package_name), ',')
                    FROM source_item_dependencies sid
                   WHERE sid.source_item_id = si.id
                     AND sid.match_type IN ('exact_registry', 'advisory')),
-                (SELECT json_extract(se.breakdown, '$.breakdown.is_version_affected')
-                   FROM scoring_explanations se
-                  WHERE se.source_item_id = si.id),
                 si.source_id
              FROM source_items si
              LEFT JOIN feedback f ON f.source_item_id = si.id
@@ -594,7 +595,6 @@ fn load_gap_candidates(conn: &rusqlite::Connection) -> Result<Vec<GapCandidate>>
         .query_map([], |row| {
             let title: String = row.get(1)?;
             let linked: Option<String> = row.get(6)?;
-            let version_affected: Option<i64> = row.get(7)?;
             Ok(GapCandidate {
                 title_lower: title.to_lowercase(),
                 item: MissedItem {
@@ -604,12 +604,12 @@ fn load_gap_candidates(conn: &rusqlite::Connection) -> Result<Vec<GapCandidate>>
                     source_type: row.get(3)?,
                     created_at: row.get(4)?,
                 },
-                source_id: row.get::<_, Option<String>>(8)?.unwrap_or_default(),
+                source_id: row.get::<_, Option<String>>(7)?.unwrap_or_default(),
                 content_type: row.get::<_, Option<String>>(5)?,
                 linked_packages: linked
                     .map(|s| s.split(',').map(str::to_string).collect())
                     .unwrap_or_default(),
-                version_affected: version_affected.map(|v| v != 0),
+                version_affected: None,
             })
         })?
         .filter_map(|r| match r {

@@ -26,7 +26,10 @@ use crate::scoring_config;
 
 pub mod assess;
 mod coverage_evidence;
+mod dep_breakdowns;
+use dep_breakdowns::count_signal_types_for_dep_conn;
 mod report_cache;
+pub(crate) mod report_snapshot;
 
 // ============================================================================
 // Report-level cache (per engine cycle, pre-warmed) — see `report_cache`
@@ -34,7 +37,7 @@ mod report_cache;
 
 /// One cycle's report plus its evidence items (built with it, so a cache hit
 /// never re-runs the per-gap consequence breakdowns).
-#[derive(Clone)]
+#[derive(Clone, Serialize, Deserialize)]
 struct CachedBlindSpots {
     report: BlindSpotReport,
     items: Vec<EvidenceItem>,
@@ -43,11 +46,54 @@ struct CachedBlindSpots {
 static BLIND_SPOT_CACHE: report_cache::CycleCache<CachedBlindSpots> =
     report_cache::CycleCache::new();
 
-/// The uncached build the cache stores: the report and its items.
+/// The persisted last good report — see `report_snapshot`.
+const SNAPSHOT_FILE: &str = "blind_spots_snapshot.json";
+
+/// How old a persisted report may be and still answer the first open after a
+/// launch. A week covers a weekend away; anything older is rebuilt cold.
+const SNAPSHOT_MAX_AGE: std::time::Duration = std::time::Duration::from_hours(24 * 7);
+
+/// The uncached build the cache stores: the report and its items. Every
+/// successful build is persisted, so the next launch starts warm.
 fn build_cached_blind_spots() -> Result<CachedBlindSpots> {
     let report = generate_blind_spot_report_uncached()?;
     let items = blind_spot_report_items(&report);
-    Ok(CachedBlindSpots { report, items })
+    let built = CachedBlindSpots { report, items };
+    persist_blind_spot_snapshot(&built);
+    Ok(built)
+}
+
+fn persist_blind_spot_snapshot(built: &CachedBlindSpots) {
+    let Some(stamp) = crate::open_db_connection()
+        .ok()
+        .and_then(|conn| report_snapshot::Stamp::current(&conn))
+    else {
+        return;
+    };
+    let path = report_snapshot::snapshot_path(SNAPSHOT_FILE);
+    if let Err(e) = report_snapshot::save(&path, &stamp, built) {
+        warn!(target: "4da::blind_spots", error = %e, "could not persist the blind-spot report");
+    }
+}
+
+/// The previous run's report, read once per process: after its first use
+/// (or a miss) the cache has a value of this run's own, or a failed rebuild
+/// that must not be papered over with an old report.
+fn restore_blind_spot_snapshot_once() -> Option<CachedBlindSpots> {
+    static ATTEMPTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if ATTEMPTED.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        return None;
+    }
+    let conn = crate::open_db_connection().ok()?;
+    let stamp = report_snapshot::Stamp::current(&conn)?;
+    let path = report_snapshot::snapshot_path(SNAPSHOT_FILE);
+    let restored = report_snapshot::load(&path, &stamp, SNAPSHOT_MAX_AGE)?;
+    info!(
+        target: "4da::blind_spots",
+        age_secs = restored.age.as_secs(),
+        "Serving the persisted blind-spot report while it rebuilds"
+    );
+    Some(restored.value)
 }
 
 /// The pre-warm runs only for users the command would serve — the same
@@ -375,6 +421,21 @@ pub fn generate_blind_spot_report() -> Result<BlindSpotReport> {
 }
 
 fn cached_blind_spots() -> Result<CachedBlindSpots> {
+    if let Some(hit) = BLIND_SPOT_CACHE.servable() {
+        return Ok(hit);
+    }
+    // First read of this run, before any build finished: answer with the
+    // last run's report (it carries when it was computed) while this run's
+    // replacement builds in the background — never a cold build on open.
+    if let Some(restored) = restore_blind_spot_snapshot_once() {
+        if BLIND_SPOT_CACHE.serve_restored(
+            restored.clone(),
+            "restored-snapshot",
+            build_cached_blind_spots,
+        ) {
+            return Ok(restored);
+        }
+    }
     BLIND_SPOT_CACHE.get_or_compute(build_cached_blind_spots)
 }
 
@@ -524,6 +585,10 @@ fn generate_blind_spot_report_profiled() -> Result<(BlindSpotReport, Vec<(&'stat
     // BEFORE recommendations, the score and the counts, so no surface claims a
     // gap the item builder would render as "N updates to review" with nothing
     // behind it. Runs on both scoping branches. See `is_still_a_coverage_gap`.
+    // Every consumer below (the filter, the recommendations, the items) reads
+    // the gap rows' consequence breakdowns: compute them all in one pass.
+    prime_gap_breakdowns(&conn, &uncovered, &stale);
+    clock.lap("breakdown_prepass");
     let reviewable_pre = uncovered.len();
     let uncovered: Vec<UncoveredDep> = coverage_evidence::cap_risk_to_evidence(
         uncovered
@@ -1408,6 +1473,17 @@ fn find_uncovered_deps(
     // DBs (graceful no-op). Loaded once; membership keyed on lowercased bare name.
     let platform_inactive_pkgs = crate::platform_filter::load_platform_inactive_packages(conn);
     let registry_linked = coverage_evidence::registry_linked_deps(conn);
+    // Adapter health depends only on the ecosystem, and each status reads a
+    // `MAX(last_seen)` over every row of its source type: once per ecosystem
+    // per pass, not once per dependency (was 4-9 s of this phase).
+    let mut adapter_memo: std::collections::HashMap<String, Vec<AdapterStatus>> =
+        std::collections::HashMap::new();
+    let mut adapter_statuses = |ecosystem: &str| -> Vec<AdapterStatus> {
+        adapter_memo
+            .entry(ecosystem.to_string())
+            .or_insert_with(|| adapter_statuses_for_ecosystem(conn, ecosystem))
+            .clone()
+    };
 
     let mut uncovered = Vec::new();
     let mut weak_match_deps: Vec<UncoveredDep> = Vec::new();
@@ -1444,7 +1520,7 @@ fn find_uncovered_deps(
                 risk_level: "low".to_string(),
                 match_type: "title_heuristic".to_string(),
                 coverage_reason: Some("weak_matches_only".to_string()),
-                adapters_searched: adapter_statuses_for_ecosystem(conn, &dep_info.ecosystem),
+                adapters_searched: adapter_statuses(&dep_info.ecosystem),
                 platform_active: !platform_inactive_pkgs
                     .contains(&dep_info.package_name.to_lowercase()),
             });
@@ -1519,7 +1595,7 @@ fn find_uncovered_deps(
                 risk_level,
                 match_type: "none".to_string(),
                 coverage_reason: Some(reason),
-                adapters_searched: adapter_statuses_for_ecosystem(conn, &dep_info.ecosystem),
+                adapters_searched: adapter_statuses(&dep_info.ecosystem),
                 platform_active: !platform_inactive_pkgs
                     .contains(&dep_info.package_name.to_lowercase()),
             });
@@ -1556,7 +1632,7 @@ fn find_uncovered_deps(
             risk_level,
             match_type: best_mt.to_string(),
             coverage_reason: None, // has signals, coverage isn't the issue
-            adapters_searched: adapter_statuses_for_ecosystem(conn, &dep_info.ecosystem),
+            adapters_searched: adapter_statuses(&dep_info.ecosystem),
             platform_active: !platform_inactive_pkgs
                 .contains(&dep_info.package_name.to_lowercase()),
         });
@@ -3026,7 +3102,7 @@ fn installed_note(installed: &[String]) -> String {
 /// Returns (release_count, analysis_count, other_count).
 /// Breakdown of a dependency's unseen signals by CONSEQUENCE, so Blind Spots can
 /// rank and frame by what changed rather than by unread volume. The tuple is Copy.
-#[derive(Clone, Copy, Default)]
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
 struct DepSignalBreakdown {
     /// New versions shipped (release_notes / platform_update).
     releases: u32,
@@ -3060,6 +3136,14 @@ fn count_signal_types_for_dep(
     ecosystem: Option<&str>,
     installed: &[String],
 ) -> DepSignalBreakdown {
+    // The breakdown drives the gap filter, the item AND the recommendations
+    // for the same report. The report build primes every gap row's breakdown
+    // in ONE shared pass (`dep_breakdowns::prime`); a lookup the pass did not
+    // cover runs its own query and is memoised for the report's lifetime.
+    let key = dep_breakdowns::memo_key(dep_name, ecosystem, installed);
+    if let Some(hit) = dep_breakdowns::memo_get(&key) {
+        return hit;
+    }
     #[cfg(test)]
     {
         test_support::with_test_conn(|conn| {
@@ -3069,24 +3153,6 @@ fn count_signal_types_for_dep(
     }
     #[cfg(not(test))]
     {
-        // The breakdown drives the item AND the recommendations for the same
-        // report; memoise per (dep, installed) for the report's lifetime so
-        // the second consumer costs nothing (get_blind_spots measured 15 s).
-        static MEMO: std::sync::Mutex<
-            Option<std::collections::HashMap<String, (std::time::Instant, DepSignalBreakdown)>>,
-        > = std::sync::Mutex::new(None);
-        let key = format!(
-            "{dep_name}\u{0}{}\u{0}{}",
-            ecosystem.unwrap_or_default(),
-            installed.join(",")
-        );
-        if let Ok(guard) = MEMO.lock() {
-            if let Some((at, cached)) = guard.as_ref().and_then(|m| m.get(&key)) {
-                if at.elapsed() < std::time::Duration::from_mins(2) {
-                    return *cached;
-                }
-            }
-        }
         let db = match crate::get_database() {
             Ok(db) => db,
             Err(_) => return DepSignalBreakdown::default(),
@@ -3095,11 +3161,7 @@ fn count_signal_types_for_dep(
             let conn = db.conn.lock();
             count_signal_types_for_dep_conn(&conn, dep_name, ecosystem, installed)
         };
-        if let Ok(mut guard) = MEMO.lock() {
-            guard
-                .get_or_insert_with(Default::default)
-                .insert(key, (std::time::Instant::now(), computed));
-        }
+        dep_breakdowns::memo_put(key, computed);
         computed
     }
 }
@@ -3118,134 +3180,6 @@ fn release_is_newer_than_installed(announced: Option<&str>, installed: Option<&s
         (Ok(a), Ok(i)) => a > i,
         _ => true,
     }
-}
-
-fn count_signal_types_for_dep_conn(
-    conn: &rusqlite::Connection,
-    dep_name: &str,
-    ecosystem: Option<&str>,
-    installed: &[String],
-) -> DepSignalBreakdown {
-    let mut b = DepSignalBreakdown::default();
-    let dep_lower = dep_name.to_lowercase();
-    let ambiguous = is_ambiguous_package_name(dep_name);
-    // A security signal counts only while SOME install is exposed to a
-    // stored advisory. Live 2026-09-07: hono 4.13.3 (every advisory fixed
-    // ≤ 4.12.34), lettre 0.11.22 (= the fix) and react 19.2.7 (OSV-clean)
-    // all read "N security signals unreviewed" at HIGH, and the AI assessment
-    // then told the user to review before upgrading. Conservative: no known
-    // installed version stays exposed. `installed` is lowest-first (see
-    // `installed_versions`), so a release is NEW when the lowest install is
-    // below it — one project behind keeps it new.
-    // Installs carry this row's ecosystem (AD-045): an npm `jsonwebtoken` is
-    // never exposed by the crates.io advisory of the same name.
-    let wanted_ecosystem = ecosystem.and_then(crate::osv::exposure::canonical);
-    let installs: Vec<crate::osv::exposure::Install> = installed
-        .iter()
-        .map(|v| crate::osv::exposure::Install {
-            ecosystem: wanted_ecosystem,
-            version: v.clone(),
-        })
-        .collect();
-    let exposed = installs.is_empty()
-        || crate::knowledge_decay::installs_still_vulnerable(conn, dep_name, &installs);
-    let lowest_installed = installed.first().map(String::as_str);
-    // Candidates: everything the linker bound to this package with
-    // registry/advisory proof, plus title substring hits — re-checked below.
-    // The bare `title LIKE '%name%'` this replaced counted five Next.js
-    // advisories, "how Google reacted" and a post about neoliberalism as
-    // ten react security signals, Electron's "honors" as a hono advisory and
-    // four silverstripe CVEs as stripe's (2026-09-06).
-    let sql = "SELECT si.title, si.content_type, si.source_type,
-                      EXISTS(SELECT 1 FROM source_item_dependencies sid
-                              WHERE sid.source_item_id = si.id
-                                AND LOWER(sid.package_name) = LOWER(?1)
-                                AND sid.match_type IN ('exact_registry', 'advisory')) AS linked,
-                      si.source_id, si.id
-               FROM source_items si
-               WHERE si.created_at >= datetime('now', '-30 days')
-                 AND (si.title LIKE '%' || ?1 || '%'
-                      OR EXISTS(SELECT 1 FROM source_item_dependencies sid2
-                                 WHERE sid2.source_item_id = si.id
-                                   AND LOWER(sid2.package_name) = LOWER(?1)
-                                   AND sid2.match_type IN ('exact_registry', 'advisory')))";
-    let Ok(mut stmt) = conn.prepare(sql) else {
-        return b;
-    };
-    let Ok(rows) = stmt.query_map(params![dep_name], |row| {
-        Ok((
-            row.get::<_, String>(0)?,
-            row.get::<_, Option<String>>(1)?,
-            row.get::<_, String>(2)?,
-            row.get::<_, i64>(3)? != 0,
-            row.get::<_, Option<String>>(4)?.unwrap_or_default(),
-            row.get::<_, i64>(5)?,
-        ))
-    }) else {
-        return b;
-    };
-    for (title, content_type, source_type, linked, source_id, item_id) in rows.flatten() {
-        // A REGISTRY row is a release of its SUBJECT crate, nothing else: the
-        // subject must be this dependency (axum-stack, axum-serde-boundary
-        // and tauri-plugin-* are not releases of axum or tauri — live
-        // 2026-09-07 "axum — 32 new releases in 30 days" for a crate that
-        // shipped once, in April), and a version the user already runs is
-        // not a NEW release ("sha2 — 2 new releases" for the installed 0.11.0).
-        if crate::dep_linker::is_registry_source(&source_type) {
-            // A registry row speaks for ITS registry's package: a crates.io
-            // `jsonwebtoken` release is no news about the npm one (AD-045).
-            if let (Some(want), Some(row_ecosystem)) = (
-                wanted_ecosystem,
-                crate::osv::exposure::registry_source_ecosystem(&source_type),
-            ) {
-                if want != row_ecosystem {
-                    continue;
-                }
-            }
-            let Some((subject, version)) = crate::dep_linker::registry_title_subject(&title) else {
-                continue;
-            };
-            if !crate::dep_linker::registry_names_equal(&subject, dep_name) {
-                continue;
-            }
-            if release_is_newer_than_installed(version.as_deref(), lowest_installed) {
-                b.releases += 1;
-            }
-            continue;
-        }
-        // An ADVISORY row counts only through the linker's `Affected:` proof
-        // and only while the install is exposed; its title is never the link.
-        if matches!(source_type.as_str(), "osv" | "cve") {
-            // Judged per ADVISORY where the mirror can resolve the row — its
-            // own ecosystem, its own range, against these installs (AD-045) —
-            // else by whether any install is exposed to anything at all.
-            if linked
-                && crate::osv::exposure::advisory_row_reaches(conn, &source_id, dep_name, &installs)
-                    .unwrap_or(exposed)
-            {
-                b.add_security(item_id, true);
-            }
-            continue;
-        }
-        // Editorial rows: a linker row is proof; otherwise an ambiguous name
-        // never counts on its title and anything else needs the dependency
-        // name as a WHOLE word — "silverstripe" is not stripe, "honors" is
-        // not hono, "reacted" is not react. An editorial security story is a
-        // citation about the package, never proof of exposure — it is
-        // discussion here (the Shai-Hulud codegen story is not a react bug).
-        let qualifies =
-            linked || (!ambiguous && has_word_boundary_match(&title.to_lowercase(), &dep_lower));
-        if !qualifies {
-            continue;
-        }
-        match content_type.as_deref() {
-            Some("release_notes") | Some("platform_update") => b.releases += 1,
-            Some("expert_analysis") | Some("deep_dive") => b.analyses += 1,
-            Some("breaking_change") => b.add_security(item_id, false),
-            _ => b.other += 1,
-        }
-    }
-    b
 }
 
 /// Lower a risk-derived urgency to at most Medium. Used for deps whose only
@@ -3329,6 +3263,43 @@ fn gap_row_breakdown(d: &UncoveredDep) -> (Vec<String>, Option<DepSignalBreakdow
     let breakdown = (d.available_signal_count > 0)
         .then(|| count_signal_types_for_dep(bare, Some(d.dep_type.as_str()), &installed));
     (installed, breakdown)
+}
+
+/// Compute, in ONE pass over the recent corpus, the breakdown every gap row
+/// and stale topic of this report will ask for — the same (name, ecosystem,
+/// installs) keys [`gap_row_breakdown`] and the stale-topic items look up.
+/// Tests prime only through the corpus stand-in the lookups read.
+fn prime_gap_breakdowns(
+    conn: &rusqlite::Connection,
+    uncovered: &[UncoveredDep],
+    stale: &[StaleTopic],
+) {
+    let mut requests: Vec<dep_breakdowns::BreakdownRequest> = uncovered
+        .iter()
+        .filter(|d| d.available_signal_count > 0)
+        .map(|d| {
+            let bare = bare_package_name(&d.name);
+            dep_breakdowns::BreakdownRequest {
+                dep_name: bare.to_string(),
+                ecosystem: Some(d.dep_type.clone()),
+                installed: installed_versions(bare, Some(d.dep_type.as_str()), &d.projects_using),
+            }
+        })
+        .collect();
+    requests.extend(stale.iter().filter(|t| t.missed_signal_count > 0).map(|t| {
+        dep_breakdowns::BreakdownRequest {
+            dep_name: t.topic.clone(),
+            ecosystem: None,
+            installed: Vec::new(),
+        }
+    }));
+    #[cfg(test)]
+    {
+        let _ = conn;
+        test_support::with_test_conn(|seam| dep_breakdowns::prime(seam, &requests));
+    }
+    #[cfg(not(test))]
+    dep_breakdowns::prime(conn, &requests);
 }
 
 /// The urgency a coverage gap will display, computed the way

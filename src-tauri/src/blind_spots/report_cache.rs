@@ -143,6 +143,34 @@ impl<T: Clone + Send + 'static> CycleCache<T> {
         Ok(value)
     }
 
+    /// Seed an EMPTY cache with a previous run's value (the persisted
+    /// snapshot) and start its replacement in the background. The seed sits
+    /// one generation behind, so — like any previous-cycle report — it is
+    /// served only while that rebuild is in flight; if the rebuild fails the
+    /// next reader computes. Returns whether the seed is being served (false
+    /// when the slot already holds a value or no rebuild could start).
+    pub(super) fn serve_restored(
+        &'static self,
+        value: T,
+        reason: &'static str,
+        compute: fn() -> Result<T>,
+    ) -> bool {
+        {
+            let mut slot = self.slot.lock();
+            if slot.is_some() {
+                return false;
+            }
+            *slot = Some(Entry {
+                computed_at: Instant::now(),
+                generation: self.generation().wrapping_sub(1),
+                value,
+            });
+        }
+        // A refresh already running (the first post-cycle one) replaces the
+        // seed when it lands; queueing another pass would only rebuild twice.
+        self.refresh_in_flight.load(Ordering::SeqCst) || self.refresh_in_background(reason, compute)
+    }
+
     /// Mark the cached value stale (bump the generation). It keeps serving
     /// only while a refresh is in flight.
     pub(super) fn invalidate(&self) {

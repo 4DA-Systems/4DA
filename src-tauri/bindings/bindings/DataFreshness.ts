@@ -71,4 +71,10 @@ last_run_sources_failed: number | null,
 /**
  * Minutes since the most recent recorded cycle completed. None with no receipt.
  */
-last_run_age_minutes: number | null, };
+last_run_age_minutes: number | null, 
+/**
+ * When this summary was computed (RFC 3339, UTC). Every age above is
+ * measured from this moment — a cached or persisted surface that serves
+ * the summary later can say how old its picture is.
+ */
+computed_at: string | null, };

@@ -25,6 +25,13 @@ export interface BlindSpotsSlice {
    */
   blindSpotsPaywalled: boolean;
   loadBlindSpots: () => Promise<void>;
+  /**
+   * Re-fetch without the loading state, keeping the shown report on failure.
+   * For a report served while its replacement builds in the background (a
+   * persisted snapshot after a restart): the view swaps in the rebuilt one
+   * without blanking the page.
+   */
+  refreshBlindSpotsQuietly: () => Promise<void>;
 }
 
 export const createBlindSpotsSlice: StateCreator<AppStore, [], [], BlindSpotsSlice> = (set, get) => ({
@@ -48,6 +55,16 @@ export const createBlindSpotsSlice: StateCreator<AppStore, [], [], BlindSpotsSli
       } else {
         set({ blindSpotsError: translateError(error), blindSpotsLoading: false });
       }
+    }
+  },
+
+  refreshBlindSpotsQuietly: async () => {
+    if (get().blindSpotsLoading) return;
+    try {
+      const report = await cmd('get_blind_spots');
+      if (!get().blindSpotsLoading) set({ blindSpotReport: report });
+    } catch {
+      // Keep what is shown; the next open or reload reports any real error.
     }
   },
 });

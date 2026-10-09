@@ -12,6 +12,24 @@ fn open_copy() -> Option<rusqlite::Connection> {
     rusqlite::Connection::open_with_flags(&path, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY).ok()
 }
 
+/// The detection result as JSON, for an old-binary vs new-binary comparison
+/// of the same snapshot (`FOURDA_DUMP_TO=<file>`).
+#[test]
+#[ignore = "requires FOURDA_GAPS_DB pointing at a COPY of a real database"]
+fn live_dump_knowledge_gaps() {
+    let (Some(conn), Ok(out)) = (open_copy(), std::env::var("FOURDA_DUMP_TO")) else {
+        return;
+    };
+    let start = std::time::Instant::now();
+    let gaps = detect_knowledge_gaps(&conn).expect("detection runs");
+    println!(
+        "detect_knowledge_gaps = {} ms, {} gaps",
+        start.elapsed().as_millis(),
+        gaps.len()
+    );
+    std::fs::write(out, serde_json::to_string_pretty(&gaps).expect("json")).expect("write");
+}
+
 /// Wall-clock of one full detection pass, twice (cold then warm page cache),
 /// plus what each gap names — the audit's chrono / notify shapes are the
 /// ones to read.

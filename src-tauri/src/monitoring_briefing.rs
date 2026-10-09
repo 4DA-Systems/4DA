@@ -70,6 +70,11 @@ pub struct DataFreshness {
     /// Minutes since the most recent recorded cycle completed. None with no receipt.
     #[serde(default)]
     pub last_run_age_minutes: Option<f64>,
+    /// When this summary was computed (RFC 3339, UTC). Every age above is
+    /// measured from this moment — a cached or persisted surface that serves
+    /// the summary later can say how old its picture is.
+    #[serde(default)]
+    pub computed_at: Option<String>,
 }
 
 /// Query source_items to compute a DataFreshness snapshot.
@@ -195,6 +200,7 @@ pub(crate) fn compute_data_freshness_from_conn(conn: &rusqlite::Connection) -> D
         last_run_sources_succeeded,
         last_run_sources_failed,
         last_run_age_minutes,
+        computed_at: Some(chrono::Utc::now().to_rfc3339()),
     }
 }
 
