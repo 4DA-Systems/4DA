@@ -1,7 +1,7 @@
 -- 4DA app-schema contract. GENERATED, do not edit by hand.
 -- Regenerate: UPDATE_APP_SCHEMA_CONTRACT=1 cargo test --lib app_schema_contract
 -- Consumer: github.com/4DA-Systems/4da-mcp-server (pnpm run contract)
--- schema_version: 124
+-- schema_version: 125
 
 CREATE TABLE accuracy_history (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1916,4 +1916,4 @@ CREATE VIEW current_dependencies AS
                                 AND ds.ecosystem = latest.ecosystem
                                 AND ds.scanned_at = latest.latest;
 
-INSERT INTO schema_version (version) VALUES (124);
+INSERT INTO schema_version (version) VALUES (125);

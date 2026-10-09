@@ -540,30 +540,13 @@ pub(crate) fn run_post_analysis_hooks(results: &[SourceRelevance]) {
             );
         }
 
-        // 3. Feed stability detector from high-scoring results (recurrence signal)
-        for item in results.iter().filter(|r| r.relevant && r.top_score >= 0.6) {
-            let topics = crate::extract_topics(&item.title, "", &[]);
-            for topic in &topics {
-                crate::stability_detector::record_evidence(
-                    &conn,
-                    crate::stability_detector::FacetClass::TopicAffinity,
-                    topic,
-                    "surfaced",
-                    crate::stability_detector::CueFamily::Recurrence,
-                    "analysis_surface",
-                    (item.top_score as f64).min(1.0) * 0.5,
-                );
-            }
-            crate::stability_detector::record_evidence(
-                &conn,
-                crate::stability_detector::FacetClass::SourcePref,
-                &item.source_type,
-                "producing",
-                crate::stability_detector::CueFamily::Recurrence,
-                "analysis_surface",
-                0.3,
-            );
-        }
+        // 3. No stability evidence is recorded from what 4DA itself SURFACED.
+        //    This hook used to write every surfaced item's title words as
+        //    `topic_affinity` "surfaced" and its source as `source_pref`
+        //    "producing" (`analysis_surface`) — the app's own output read
+        //    back as the user's preference, the implicit-capture class AD-031
+        //    removed (amended 2026-10-10; Phase 125 purged the rows). Learned
+        //    preferences come only from the user's own gestures and ACE.
 
         // 4. Rebuild stability scores if enough new evidence accumulated
         crate::engagement_telemetry::rebuild_if_needed(&conn);
