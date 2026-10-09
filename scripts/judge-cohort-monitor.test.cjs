@@ -22,6 +22,7 @@ const assert = require('node:assert/strict');
 
 const {
   parseShippedConstants,
+  parseDrainCohort,
   liveCohortVersions,
   deployDrift,
   run,
@@ -34,7 +35,7 @@ const NOW = Date.parse('2026-09-04T12:00:00Z');
 
 const RUST_SRC = `
 pub(crate) const PROMPT_VERSION: &str = "v6";
-pub(crate) const DEMOTION_RELEVANCE_BELOW: f64 = 0.35;
+pub(crate) const DEMOTION_RELEVANCE_AT_MOST: f64 = 0.35;
 pub(crate) const DEMOTION_CONFIDENCE_MIN: f64 = 0.7;
 `;
 
@@ -52,7 +53,7 @@ const stamp = (ms) => new Date(ms).toISOString().replace('T', ' ').slice(0, 19);
 function fixtureReader(rows, { reach = { at_gate: 0, at_probe: 0, curated_judged: 0 }, demotions = [] } = {}) {
   const round = (x, dp) => Math.round(x * 10 ** dp) / 10 ** dp;
   return {
-    cohorts(relevanceBelow) {
+    cohorts(relevanceAtMost) {
       const groups = new Map();
       for (const r of rows) {
         const key = `${r.prompt_version} ${r.model}`;
@@ -70,7 +71,7 @@ function fixtureReader(rows, { reach = { at_gate: 0, at_probe: 0, curated_judged
             avg_rel: round(g.reduce((a, r) => a + r.relevance_score, 0) / n, 3),
             avg_conf: round(g.reduce((a, r) => a + r.confidence, 0) / n, 3),
             omitted: g.filter((r) => r.confidence === 0).length,
-            rejects: g.filter((r) => r.relevance_score < relevanceBelow).length,
+            rejects: g.filter((r) => r.relevance_score <= relevanceAtMost).length,
             first: stamp(first),
             last: stamp(Math.max(...g.map((r) => r.judged_at))),
             _first: first,
@@ -132,7 +133,39 @@ const go = (rows, binary, extra) =>
 // ---------------------------------------------------------------------------
 
 test('reads the shipped constants from Rust source', () => {
-  assert.deepEqual(constants, { promptVersion: 'v6', relevanceBelow: 0.35, confidenceMin: 0.7 });
+  assert.deepEqual(constants, { promptVersion: 'v6', relevanceAtMost: 0.35, confidenceMin: 0.7 });
+});
+
+test('reads the constants from the REAL Rust source (a rename there must break here)', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src-tauri', 'src', 'llm_judgments.rs'), 'utf8');
+  const real = parseShippedConstants(src);
+  assert.equal(real.relevanceAtMost, 0.3);
+  assert.equal(real.confidenceMin, 0.7);
+  assert.match(real.promptVersion, /^v\d+$/);
+});
+
+test('the drain cohort is the one the Rust drain actually writes', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const src = fs.readFileSync(path.join(__dirname, '..', 'src-tauri', 'src', 'llm_judge_drain.rs'), 'utf8');
+  assert.equal(DRAIN_COHORT, parseDrainCohort(src));
+  assert.match(DRAIN_COHORT, /^drain_v\d+$/);
+});
+
+test('a judge whose rejections sit EXACTLY on the bar is not read as a 0% reject rate', () => {
+  // The 2026-10-10 defect: gemma emits exactly the bar value for "not
+  // relevant". Counted with a strict "<", this cohort read as "rejects
+  // nothing" — a one-sided-judge finding for a judge that was rejecting.
+  const rows = cohort([], 'v6', {
+    n: 60,
+    ageHours: 1,
+    confidence: (i) => 0.55 + (i % 10) / 25,
+    relevance: (i) => (i % 3 ? 0.8 : constants.relevanceAtMost),
+  });
+  const r = go(rows, { path: 'x', mtimeMs: NOW });
+  assert.equal(r.exitCode, 0, r.findings.join(' | '));
 });
 
 test('refuses to run on source it cannot read a constant from', () => {
@@ -150,7 +183,7 @@ test('loading this test never loads the native SQLite module', () => {
 // Live cohort = newest judged_at, not the source constant
 // ---------------------------------------------------------------------------
 
-test('the live cohort is whatever was judged most recently in 24h, plus drain_v1', () => {
+test('the live cohort is whatever was judged most recently in 24h, plus the drain cohort', () => {
   const rows = [];
   cohort(rows, 'v5', { n: 30, ageHours: 2 });
   cohort(rows, 'v4', { n: 30, ageHours: 72 });

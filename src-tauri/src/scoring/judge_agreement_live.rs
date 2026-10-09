@@ -74,9 +74,9 @@ fn judge_agreement_live() {
              JOIN llm_judgments lj ON lj.source_item_id = si.id AND lj.prompt_version = 'v2'
              WHERE si.feed_relevant = 1
                AND COALESCE(si.feed_verdict_source,'score') = 'score'
-               AND lj.relevance_score < ?1 AND lj.confidence >= ?2",
+               AND lj.relevance_score <= ?1 AND lj.confidence >= ?2",
             rusqlite::params![
-                crate::llm_judgments::DEMOTION_RELEVANCE_BELOW,
+                crate::llm_judgments::DEMOTION_RELEVANCE_AT_MOST,
                 crate::llm_judgments::DEMOTION_CONFIDENCE_MIN
             ],
             |r| r.get(0),

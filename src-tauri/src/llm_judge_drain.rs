@@ -536,8 +536,9 @@ fn parse_stored_utc(raw: &str) -> Option<chrono::DateTime<chrono::Utc>> {
 /// prompt-semantics fix (making the judge report confidence in its
 /// ASSESSMENT, not in the item) is a judge-lane follow-up, not this lane's.
 ///
-/// - `relevance < DEMOTION_RELEVANCE_BELOW` → a real demote verdict,
-///   whichever direction was pending.
+/// - `judged_irrelevant(relevance)` (at or below the main lane's
+///   `DEMOTION_RELEVANCE_AT_MOST`, inclusive — the judge emits that value
+///   exactly) → a real demote verdict, whichever direction was pending.
 /// - `relevance >= CONFIRM_RELEVANCE_MIN` AND the pending flip was a DEMOTE →
 ///   the flip is disputed; the standing curated verdict survives and the
 ///   marker dies.
@@ -553,7 +554,7 @@ fn parse_stored_utc(raw: &str) -> Option<chrono::DateTime<chrono::Utc>> {
 /// - The mid-band shrug → escalate. A corrupt marker (direction unknown)
 ///   never resolves upward.
 fn resolve_action(pending_direction: Option<bool>, relevance: f64) -> DrainAction {
-    if relevance < crate::llm_judgments::DEMOTION_RELEVANCE_BELOW {
+    if crate::llm_judgments::judged_irrelevant(relevance) {
         return DrainAction::Demote;
     }
     if relevance >= CONFIRM_RELEVANCE_MIN {

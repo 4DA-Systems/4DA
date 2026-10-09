@@ -51,12 +51,12 @@
 //!
 //! Two verdicts are scored per scenario:
 //!
-//!   1. **Relevance call** — `relevance >= DEMOTION_RELEVANCE_BELOW` against
+//!   1. **Relevance call** — `!judged_irrelevant(relevance)` against
 //!      the scenario's `should_be_relevant` label, reported as a confusion
 //!      matrix plus MCC. MCC, unlike raw agreement, does not inflate when one
 //!      class dominates — the exact trap that makes the live judge look "93%
 //!      consistent" when its chance-corrected agreement is about 0.2.
-//!   2. **The shipped demotion gate** — `relevance < 0.30 AND confidence >=
+//!   2. **The shipped demotion gate** — `relevance <= 0.30 AND confidence >=
 //!      0.7`. `false_demotions` is the number a user would feel: items the
 //!      labels call relevant that the live gate would delete from the feed.
 //!
@@ -93,8 +93,8 @@ use serde::Deserialize;
 use super::benchmark_scenarios::{load_scenarios, profile_ctx};
 use crate::llm::{LLMClient, Message};
 use crate::llm_judgments::{
-    format_items_block, judge_system_prompt, parse_batch_response, ItemForJudgment,
-    DEMOTION_CONFIDENCE_MIN, DEMOTION_RELEVANCE_BELOW, PROMPT_VERSION,
+    format_items_block, judge_system_prompt, judged_irrelevant, parse_batch_response,
+    ItemForJudgment, DEMOTION_CONFIDENCE_MIN, DEMOTION_RELEVANCE_AT_MOST, PROMPT_VERSION,
 };
 
 /// The pipeline score every scenario is presented at. See the module docs: a
@@ -424,7 +424,7 @@ async fn judge_accuracy_benchmark() {
     println!("items per call : {per_call}");
     println!("scenarios      : {}", scenarios.len());
     println!(
-        "gate           : relevance < {DEMOTION_RELEVANCE_BELOW} AND confidence >= {DEMOTION_CONFIDENCE_MIN}\n"
+        "gate           : relevance <= {DEMOTION_RELEVANCE_AT_MOST} AND confidence >= {DEMOTION_CONFIDENCE_MIN}\n"
     );
 
     let mut all: Vec<Outcome> = Vec::new();
@@ -454,7 +454,7 @@ async fn judge_accuracy_benchmark() {
         if confidence.is_none() {
             conf_omitted += 1;
         }
-        let judge_says_relevant = relevance >= DEMOTION_RELEVANCE_BELOW;
+        let judge_says_relevant = !judged_irrelevant(relevance);
         let cat = by_cat.entry(o.category.clone()).or_default();
         match (o.truth_relevant, judge_says_relevant) {
             (true, true) => {
@@ -477,8 +477,8 @@ async fn judge_accuracy_benchmark() {
         }
 
         // The SHIPPED gate, exactly as `apply_judgment_demotions` applies it.
-        let would_demote = relevance < DEMOTION_RELEVANCE_BELOW
-            && confidence.unwrap_or(0.0) >= DEMOTION_CONFIDENCE_MIN;
+        let would_demote =
+            judged_irrelevant(relevance) && confidence.unwrap_or(0.0) >= DEMOTION_CONFIDENCE_MIN;
         if would_demote {
             if o.truth_relevant {
                 false_demotions.push(o);
@@ -588,7 +588,7 @@ fn append_result_row(
         "model": model,
         "prompt_version": PROMPT_VERSION,
         "gate": {
-            "relevance_below": DEMOTION_RELEVANCE_BELOW,
+            "relevance_at_most": DEMOTION_RELEVANCE_AT_MOST,
             "confidence_min": DEMOTION_CONFIDENCE_MIN,
         },
         "tp": m.tp, "fp": m.fp, "tn": m.tn, "fn": m.fn_,

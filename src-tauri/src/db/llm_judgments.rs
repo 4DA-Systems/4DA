@@ -28,6 +28,28 @@ pub struct StoredJudgment {
     pub judged_at: String,
 }
 
+/// Which side of a relevance bar a reject-candidate query admits. The shipped
+/// demotion gate is INCLUSIVE (`AtMost`): the judge emits its rejection score
+/// as an exact value, and a strict bound at that value matched nothing twice
+/// (see `llm_judgments::DEMOTION_RELEVANCE_AT_MOST`). The diagnostic probe
+/// keeps its strict `Below` bound unchanged.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum RelevanceBar {
+    AtMost(f64),
+    Below(f64),
+}
+
+impl RelevanceBar {
+    /// The SQL comparison operator and its bound. The operator is one of two
+    /// static strings, never caller text.
+    fn sql(self) -> (&'static str, f64) {
+        match self {
+            RelevanceBar::AtMost(v) => ("<=", v),
+            RelevanceBar::Below(v) => ("<", v),
+        }
+    }
+}
+
 /// SQL predicate over a `source_items` alias: the row is a REGISTRY release of
 /// a package the user's dependency graph matched (`{a}` = the alias).
 ///
@@ -204,9 +226,9 @@ impl Database {
     }
 
     /// Curated (`feed_relevant = 1`), score-sourced items whose judgment under
-    /// `prompt_version` is BOTH clearly irrelevant (`relevance_score <
-    /// relevance_below`) AND confident (`confidence >= confidence_min`) AND
-    /// fresh (judged within `window_days`).
+    /// `prompt_version` is BOTH clearly irrelevant (`relevance_score` on the
+    /// rejecting side of `relevance`) AND confident (`confidence >=
+    /// confidence_min`) AND fresh (judged within `window_days`).
     ///
     /// Serendipity-sourced verdicts are deliberately excluded: anti-bubble
     /// picks are SUPPOSED to look irrelevant to a relevance judge, and this
@@ -219,11 +241,12 @@ impl Database {
     pub fn get_llm_reject_candidates(
         &self,
         prompt_version: &str,
-        relevance_below: f64,
+        relevance: RelevanceBar,
         confidence_min: f64,
         window_days: u32,
         limit: usize,
     ) -> SqliteResult<Vec<LlmRejectCandidate>> {
+        let (op, relevance_bound) = relevance.sql();
         let conn = self.conn.lock();
         // Dependency releases are excluded IN the query, not filtered after
         // it: a post-filter would let immune rows occupy the LIMIT slots on
@@ -236,7 +259,7 @@ impl Database {
               AND lj.prompt_version = ?1
              WHERE si.feed_relevant = 1
                AND COALESCE(si.feed_verdict_source, 'score') = 'score'
-               AND lj.relevance_score < ?2
+               AND lj.relevance_score {op} ?2
                AND lj.confidence >= ?3
                AND lj.judged_at >= datetime('now', '-' || ?4 || ' days')
                AND NOT {}
@@ -248,7 +271,7 @@ impl Database {
         let rows = stmt.query_map(
             params![
                 prompt_version,
-                relevance_below,
+                relevance_bound,
                 confidence_min,
                 window_days,
                 limit as i64
@@ -693,7 +716,7 @@ mod tests {
         );
 
         let ids: Vec<i64> = db
-            .get_llm_reject_candidates("v6", 0.3, 0.7, 7, 100)
+            .get_llm_reject_candidates("v6", RelevanceBar::Below(0.3), 0.7, 7, 100)
             .unwrap()
             .into_iter()
             .map(|c| c.item_id)

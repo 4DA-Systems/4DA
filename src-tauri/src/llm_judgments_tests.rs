@@ -525,6 +525,50 @@ fn demotion_ignores_stale_judgments() {
     assert_eq!(feed_relevant_of(&db, id), 1);
 }
 
+/// THE regression (2026-10-10): the local gemma judge emits EXACTLY the bar
+/// value (0.30) for "not relevant", and the strict `< 0.30` gate let every
+/// one of them stay in the feed — 42 confident, in-window rows on the
+/// founder snapshot, 0 matched. A reading AT the bar is a rejection; one a
+/// hair above it is not.
+#[test]
+fn demotion_bar_is_inclusive_at_the_value_the_judge_emits() {
+    let db = test_db();
+    let at_bar = seed_feed_item(&db, "eq1", "Judged exactly at the bar");
+    db.upsert_llm_judgment(
+        at_bar,
+        0.30,
+        "not relevant",
+        None,
+        0.87,
+        "gemma4:12b",
+        PROMPT_VERSION,
+    )
+    .unwrap();
+    let above = seed_feed_item(&db, "eq2", "Judged just above the bar");
+    db.upsert_llm_judgment(above, 0.31, "borderline", None, 0.9, "m", PROMPT_VERSION)
+        .unwrap();
+
+    assert_eq!(
+        apply_judgment_demotions(&db, DEMOTION_CAP_PER_RUN).unwrap(),
+        1
+    );
+    assert_eq!(feed_relevant_of(&db, at_bar), 0, "0.30 is a rejection");
+    assert_eq!(feed_relevant_of(&db, above), 1, "0.31 is not");
+}
+
+/// The shared predicate pins the direction for every lane that reads it,
+/// and the bar's VALUE did not move with its direction.
+#[test]
+fn judged_irrelevant_includes_the_bar_and_nothing_above() {
+    assert!((DEMOTION_RELEVANCE_AT_MOST - 0.30).abs() < f64::EPSILON);
+    // The parser's path: a quoted "0.30" and a bare 0.3 are the same reading.
+    assert!(judged_irrelevant("0.30".parse::<f64>().unwrap()));
+    assert!(judged_irrelevant(0.3));
+    assert!(judged_irrelevant(0.0));
+    assert!(!judged_irrelevant(0.30 + 1e-9));
+    assert!(!judged_irrelevant(0.35));
+}
+
 #[test]
 fn demotion_respects_per_run_cap_and_converges() {
     let db = test_db();
