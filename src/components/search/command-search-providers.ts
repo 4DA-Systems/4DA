@@ -164,7 +164,7 @@ function intelligenceProvider(deps: ProviderDeps): SearchProvider {
     id: 'intelligence',
     group: 'intelligence',
     kind: 'async',
-    async query({ query, signal }: ProviderContext): Promise<CommandResult[]> {
+    async query({ query, signal, requestRefresh }: ProviderContext): Promise<CommandResult[]> {
       if (query.length < INTELLIGENCE_MIN_CHARS) return [];
 
       let res: NLQResult;
@@ -176,6 +176,8 @@ function intelligenceProvider(deps: ProviderDeps): SearchProvider {
         return [];
       }
       if (signal.aborted) return [];
+      // Keyword matches now; the semantic half lands when the embedder answers.
+      if (res.semantic_pending) requestRefresh?.();
 
       const items = (res.items ?? []).slice(0, INTELLIGENCE_MAX_ROWS);
       const results: CommandResult[] = items.map(item => ({

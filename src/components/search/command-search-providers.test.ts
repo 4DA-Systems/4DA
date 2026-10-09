@@ -134,6 +134,21 @@ describe('intelligence provider', () => {
     expect(setSearchFocusItemId).not.toHaveBeenCalled();
   });
 
+  it('asks for a refresh when the semantic half is still pending', async () => {
+    const item = { id: 3, file_path: null, file_name: 'rusqlite', preview: '', relevance: 1, source_type: 'crates', timestamp: null, match_reason: '', exact_match: true };
+    const intel = buildProviders(deps()).find(p => p.id === 'intelligence')!;
+    const requestRefresh = vi.fn();
+    cmdImpl = () => Promise.resolve({ items: [item], ghost_preview: null, is_pro: true, total_count: 1, semantic_pending: true });
+    const out = await intel.query({ query: 'rusqlite', signal: new AbortController().signal, requestRefresh });
+    expect(out[0]!.title).toBe('rusqlite');
+    expect(requestRefresh).toHaveBeenCalledTimes(1);
+
+    requestRefresh.mockClear();
+    cmdImpl = () => Promise.resolve({ items: [item], ghost_preview: null, is_pro: true, total_count: 1, semantic_pending: false });
+    await intel.query({ query: 'rusqlite', signal: new AbortController().signal, requestRefresh });
+    expect(requestRefresh).not.toHaveBeenCalled();
+  });
+
   it('degrades to empty (never throws) when the backend errors', async () => {
     cmdImpl = () => {
       const p = Promise.reject(new Error('requires Signal'));

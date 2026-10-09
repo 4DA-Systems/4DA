@@ -8,9 +8,12 @@
 
 pub mod fastembed;
 pub mod fastembed_setup;
+mod observe;
 mod ollama;
 mod openai;
 mod retry;
+
+pub(crate) use observe::observe_embed_load;
 
 // Re-export parent items so submodules can reference them via `super::`
 pub(super) use super::{truncate_and_normalize, EMBEDDING_CLIENT};

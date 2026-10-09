@@ -8,6 +8,8 @@
 use crate::db::hybrid_search::HybridSearchResult;
 use crate::error::{FourDaError, Result};
 
+use super::natural_language_search_timing::{EmbedSource, SearchTimings, StageClock};
+use super::natural_language_search_warm as warm;
 use super::{ParsedQuery, QueryResultItem};
 
 /// Run synchronous SQLite / CPU work off the async runtime's worker threads.
@@ -27,26 +29,40 @@ where
 // Hybrid search (exact-title lane + BM25 + vector KNN fused via RRF)
 // ============================================================================
 
+/// The text the query is embedded from — the keywords, preprocessed exactly as
+/// stored items are.
+pub(crate) fn query_embed_text(parsed: &ParsedQuery) -> String {
+    crate::utils::preprocess_content(&parsed.keywords.join(" "))
+}
+
 /// Embed the query and nudge it toward the user's tech domain (ACE weighting).
 /// Returns an empty vector when embeddings are unavailable (keyword-only search).
-async fn embed_query(parsed: &ParsedQuery) -> Vec<f32> {
-    let search_text = crate::utils::preprocess_content(&parsed.keywords.join(" "));
+async fn embed_query(parsed: &ParsedQuery, timings: &mut SearchTimings) -> Vec<f32> {
+    let mut clock = StageClock::start();
+    let search_text = query_embed_text(parsed);
     if search_text.is_empty() {
+        timings.embed_source = EmbedSource::Unavailable;
         return Vec::new();
     }
-    let mut embedding = match crate::embeddings::embed_texts(&[search_text]).await {
-        Ok(embs) if !embs.is_empty() && embs[0].iter().any(|&v| v != 0.0) => embs[0].clone(),
-        _ => return Vec::new(),
+    let embedded = warm::embed_query_text(&search_text).await;
+    timings.embed_ms = clock.lap();
+    timings.embed_load_ms = embedded.load_ms;
+    timings.embed_source = embedded.source;
+    let Some(mut embedding) = embedded.vector else {
+        return Vec::new();
     };
 
     let ace_ctx = run_blocking(|| Ok(crate::scoring::get_ace_context()))
         .await
         .unwrap_or_default();
-    let topic_embeddings = crate::scoring::get_topic_embeddings(&ace_ctx).await;
+    // Cached vectors only: embedding a missing topic here would queue a second
+    // request behind background batches in Ollama's single slot.
+    let topic_embeddings = crate::scoring::get_cached_topic_embeddings(&ace_ctx).await;
     if !topic_embeddings.is_empty() {
         let tech_embs: Vec<Vec<f32>> = topic_embeddings.into_values().collect();
         crate::scoring::query_weighting::apply_ace_weighting(&mut embedding, &tech_embs, 0.2);
     }
+    timings.ace_ms = clock.lap();
     embedding
 }
 
@@ -54,15 +70,17 @@ pub(crate) async fn execute_hybrid_search(
     query_text: &str,
     parsed: &ParsedQuery,
     limit: usize,
+    timings: &mut SearchTimings,
 ) -> Result<Vec<QueryResultItem>> {
-    let weighted_embedding = embed_query(parsed).await;
+    let weighted_embedding = embed_query(parsed, timings).await;
 
     let query_owned = query_text.to_string();
-    let results = run_blocking(move || {
+    let (results, hybrid) = run_blocking(move || {
         let db = crate::get_database().map_err(|e| FourDaError::Internal(format!("DB: {e}")))?;
-        Ok(db.hybrid_search(&query_owned, &weighted_embedding, limit, 0.4, 0.6))
+        Ok(db.hybrid_search_timed(&query_owned, &weighted_embedding, limit, 0.4, 0.6))
     })
     .await?;
+    timings.hybrid = hybrid;
 
     let mut items: Vec<QueryResultItem> = results
         .into_iter()

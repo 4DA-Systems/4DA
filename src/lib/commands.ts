@@ -517,6 +517,8 @@ interface CommandMap {
 
   // -- Natural Language Query --
   natural_language_query: { params: { queryText: string }; result: NLQResult };
+  /** Fire-and-forget: loads the query embedder while the user types. */
+  warm_search: { params: Record<string, never>; result: null };
 
   // -- Indexed Documents --
   get_indexed_documents: { params: { limit: number; offset: number; fileType: string | null }; result: IndexedDocumentsResponse };
@@ -1368,6 +1370,8 @@ interface NLQResult {
   knowledge_gaps: Array<{ technology: string; days_stale: number; severity: string }>;
   ghost_preview: NlqGhostPreview | null;
   is_pro: boolean;
+  /** The embedder was not ready: keyword results only; ask again for the full ranking. */
+  semantic_pending?: boolean;
 }
 
 interface ScoreAutopsyResult {
