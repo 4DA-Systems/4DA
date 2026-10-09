@@ -7,6 +7,7 @@ import { getSourceLabel } from '../config/sources';
 import { cmd } from '../lib/commands';
 import { useAppStore } from '../store';
 import { normalizeUrlForDedup } from '../utils/normalize-url';
+import { isSurfacedSignal } from '../utils/score';
 import { extractNearMisses, scrollToAndHighlightItem } from './analysis-utils';
 import type { NarrationEvent } from './analysis-utils';
 
@@ -65,7 +66,10 @@ export function handleAnalysisJudged(event: Event<boolean>): void {
 
 export function handleAnalysisComplete(event: Event<SourceRelevance[]>): void {
   const results = event.payload;
-  const relevantCount = results.filter((r) => r.relevant).length;
+  // `isSurfacedSignal`, not `r.relevant`: the header chip and the results
+  // header count it that way, and exclusion-demoted rows are never shown —
+  // a toast counting them said 303 above a header that said 280.
+  const relevantCount = results.filter(isSurfacedSignal).length;
   const nearMisses = extractNearMisses(results, relevantCount);
   clearStaleAnalysisFailureToasts();
 
@@ -199,7 +203,7 @@ export function createBackgroundResultsHandler(
     const newItems = event.payload;
     if (newItems.length === 0) return;
     clearStaleAnalysisFailureToasts();
-    const relevantNew = newItems.filter((r) => r.relevant).length;
+    const relevantNew = newItems.filter(isSurfacedSignal).length;
     useAppStore.getState().setAppStateFull((s) => {
       const existingIds = new Set(newItems.map((n) => n.id));
       // Cross-cycle URL dedup (live audit 2026-08-31): the same story
