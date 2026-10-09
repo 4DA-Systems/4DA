@@ -5,7 +5,7 @@
 import { memo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BrandMark } from '../void-engine/BrandMark';
-import { signalShowsWork } from '../void-engine/signal-visuals';
+import { useBackgroundWork } from '../../hooks/use-background-work';
 import { useVoidSignals } from '../../hooks/use-void-signals';
 import { OllamaStatus } from '../OllamaStatus';
 import { SystemHealthDot } from '../SystemHealthDot';
@@ -62,6 +62,7 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
 }: UnifiedAppBarProps) {
   const { t } = useTranslation();
   const voidSignal = useVoidSignals();
+  const backgroundWork = useBackgroundWork();
   const progress = useAppStore(s => s.appState.progress);
 
   const isLoading = state.loading;
@@ -93,11 +94,11 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
         <div className="flex items-center gap-3 flex-shrink-0">
           <div className="w-9 h-9 flex items-center justify-center rounded-lg overflow-hidden" aria-hidden="true">
             {/* Moves only while 4DA is working: a foreground analysis, or a
-                background source fetch the heartbeat reports via pulse. */}
+                background source fetch the heartbeat reports via a FRESH pulse. */}
             <BrandMark
               signal={voidSignal}
               size={36}
-              active={isLoading || signalShowsWork(voidSignal)}
+              active={isLoading || backgroundWork}
             />
           </div>
           <div className="flex items-center gap-2">
