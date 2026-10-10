@@ -69,10 +69,67 @@ fn has_agent_infra_segment(path: &str) -> bool {
 /// both slash styles (paths reach here in raw `D:\...` and canonicalized
 /// `d:/...` forms), absolute or relative (exact-segment matching).
 pub(crate) fn is_agent_infra_path(path: &str) -> bool {
+    has_agent_infra_segment(path) || is_temp_path(path)
+}
+
+/// Temp-directory patterns (`/tmp/`, `AppData\Local\Temp`). Judged on
+/// whatever the caller passes — callers that know a project root pass only
+/// the part BELOW it (see [`relative_to_root`]).
+fn is_temp_path(path: &str) -> bool {
     let p = comparison_form(path);
-    has_agent_infra_segment(path)
-        || p.contains("/tmp/")
-        || (p.contains("appdata") && p.contains("local") && p.contains("temp"))
+    p.contains("/tmp/") || (p.contains("appdata") && p.contains("local") && p.contains("temp"))
+}
+
+/// The part of `path` below `root`, in comparison form with a leading `/`
+/// (`""` for the root itself), or `None` when `path` is not inside `root`.
+///
+/// Exclusion patterns describe what a directory IS inside a project
+/// (`fixtures/`, `testdata/`, a temp clone), never where the user chose to
+/// keep their projects. Judged on the absolute path they excluded a real
+/// project root wholesale: `C:\Users\me\AppData\Local\Temp\checkout\app`,
+/// `D:\fixtures\my-service` and `~/work/testdata/api` all vanished, and a
+/// 19-repository conformance run cloned under the session's temp directory
+/// had its whole gated walk return zero directories (2026-10-10).
+pub(crate) fn relative_to_root(path: &str, root: &str) -> Option<String> {
+    let p = comparison_form(path);
+    let r = comparison_form(root);
+    let r = r.trim_end_matches('/');
+    if r.is_empty() {
+        return None;
+    }
+    if p.trim_end_matches('/') == r {
+        return Some(String::new());
+    }
+    p.strip_prefix(r)
+        .filter(|rest| rest.starts_with('/'))
+        .map(str::to_string)
+}
+
+/// The deepest configured root containing `path` decides what part of it is
+/// judged; a path under no root is judged whole (the conservative default).
+fn judged_part(path: &str, roots: &[String]) -> String {
+    roots
+        .iter()
+        .filter_map(|root| relative_to_root(path, root))
+        .min_by_key(String::len)
+        .unwrap_or_else(|| comparison_form(path))
+}
+
+/// `path` in comparison form, cut to the part below the deepest configured
+/// context directory containing it (whole when none does). For pattern
+/// checks that describe what a directory IS inside a project.
+pub(crate) fn judged_below_configured_roots(path: &str) -> String {
+    judged_part(path, &configured_project_roots())
+}
+
+/// The user's configured context directories, or `[]` when settings are not
+/// initialized or are busy. Non-blocking (`try_lock`): this runs inside DB
+/// write guards that may be reached while a caller holds the settings lock,
+/// and a busy lock falls back to judging the whole path — today's behavior.
+fn configured_project_roots() -> Vec<String> {
+    crate::state::try_get_settings_manager()
+        .and_then(|m| m.try_lock().map(|s| s.get().context_dirs.clone()))
+        .unwrap_or_default()
 }
 
 /// Path segments that mark a directory tree as test-fixture scaffolding.
@@ -131,13 +188,25 @@ pub(crate) fn tier2_waiver_from(strict_manifest_mode: bool, isolated_data_dir: b
 /// isolated `FOURDA_DATA_DIR` — the receipts ledger scans fixture stacks on
 /// purpose; neither is ever set for desktop users).
 pub(crate) fn is_hard_excluded(path: &str) -> bool {
-    is_hard_excluded_with(path, tier2_waiver_active())
+    is_hard_excluded_under(path, tier2_waiver_active(), &configured_project_roots())
 }
 
 /// Pure variant of [`is_hard_excluded`] for tests (the waiver flag is
 /// env-backed and process-cached, which tests cannot toggle).
+#[cfg(test)]
 pub(crate) fn is_hard_excluded_with(path: &str, tier2_waived: bool) -> bool {
-    is_agent_infra_path(path) || (!tier2_waived && is_non_project_path(path))
+    is_hard_excluded_under(path, tier2_waived, &[])
+}
+
+/// [`is_hard_excluded`] with explicit roots: agent-infrastructure segments
+/// anywhere in the path exclude it; temp and scaffolding patterns are judged
+/// only on the part below the deepest root that contains it.
+pub(crate) fn is_hard_excluded_under(path: &str, tier2_waived: bool, roots: &[String]) -> bool {
+    if has_agent_infra_segment(path) {
+        return true;
+    }
+    let judged = judged_part(path, roots);
+    is_temp_path(&judged) || (!tier2_waived && is_non_project_path(&judged))
 }
 
 /// Scan-time exclusion for filesystem WALKS (ACE scanner, lockfile walk,
@@ -145,11 +214,25 @@ pub(crate) fn is_hard_excluded_with(path: &str, tier2_waived: bool) -> bool {
 /// temp-dir patterns, because unit tests and legitimate user scans can be
 /// rooted in a temp directory — ephemeral temp paths are still blocked at the
 /// DB write guards before anything persists.
+#[cfg(test)]
 pub(crate) fn is_scan_excluded_dir(path: &str) -> bool {
+    is_scan_excluded_rel(path, &comparison_form(path))
+}
+
+/// [`is_scan_excluded_dir`] for a directory a walk reached from `root`:
+/// scaffolding segments count only BELOW the root the user configured.
+pub(crate) fn is_scan_excluded_below(root: &std::path::Path, dir: &std::path::Path) -> bool {
+    let dir = dir.to_string_lossy();
+    let judged =
+        relative_to_root(&dir, &root.to_string_lossy()).unwrap_or_else(|| comparison_form(&dir));
+    is_scan_excluded_rel(&dir, &judged)
+}
+
+fn is_scan_excluded_rel(path: &str, judged: &str) -> bool {
     if has_agent_infra_segment(path) {
         return true;
     }
-    if !tier2_waiver_active() && is_non_project_path(path) {
+    if !tier2_waiver_active() && is_non_project_path(judged) {
         log_tier2_exclusion(path, "scan");
         return true;
     }
@@ -375,6 +458,74 @@ mod tests {
             r"C:\Users\x\AppData\Local\Temp\scan-root\proj"
         ));
         assert!(!is_scan_excluded_dir("/tmp/scan-root/proj"));
+    }
+
+    // ── Judged below the project root ───────────────────────────────────
+
+    #[test]
+    fn a_root_under_temp_or_fixtures_is_not_excluded_by_its_own_location() {
+        let roots = vec![
+            r"C:\Users\me\AppData\Local\Temp\checkout".to_string(),
+            "/home/me/fixtures".to_string(),
+        ];
+        for p in [
+            r"C:\Users\me\AppData\Local\Temp\checkout\app",
+            "c:/users/me/appdata/local/temp/checkout",
+            "/home/me/fixtures/my-service",
+        ] {
+            assert!(!is_hard_excluded_under(p, false, &roots), "{p}");
+        }
+        // Below the root the same patterns still exclude.
+        assert!(is_hard_excluded_under(
+            r"C:\Users\me\AppData\Local\Temp\checkout\app\testdata\mod",
+            false,
+            &roots
+        ));
+        assert!(is_hard_excluded_under(
+            "/home/me/fixtures/svc/tmp/clone/x",
+            false,
+            &roots
+        ));
+        // Agent infrastructure is excluded wherever it sits.
+        assert!(is_hard_excluded_under(
+            r"C:\Users\me\AppData\Local\Temp\checkout\.claude\worktrees\a",
+            false,
+            &roots
+        ));
+        // Outside every root: judged whole, as before.
+        assert!(is_hard_excluded_under(
+            r"C:\Users\me\AppData\Local\Temp\other",
+            false,
+            &roots
+        ));
+    }
+
+    #[test]
+    fn relative_to_root_needs_a_path_boundary() {
+        assert_eq!(
+            relative_to_root("d:/a/b/c", "D:\\A\\B").as_deref(),
+            Some("/c")
+        );
+        assert_eq!(relative_to_root("d:/a/b", "d:/a/b/").as_deref(), Some(""));
+        assert_eq!(relative_to_root("d:/a/bc", "d:/a/b"), None);
+        assert_eq!(relative_to_root("d:/a", ""), None);
+    }
+
+    #[test]
+    fn a_walk_judges_scaffolding_below_its_root() {
+        let root = std::path::Path::new("/home/me/fixtures/repos");
+        assert!(!is_scan_excluded_below(
+            root,
+            std::path::Path::new("/home/me/fixtures/repos/app")
+        ));
+        assert!(is_scan_excluded_below(
+            root,
+            std::path::Path::new("/home/me/fixtures/repos/app/testdata/x")
+        ));
+        assert!(is_scan_excluded_below(
+            root,
+            std::path::Path::new("/home/me/fixtures/repos/app/.claude/plans")
+        ));
     }
 
     // ── Tier 3 ──────────────────────────────────────────────────────────

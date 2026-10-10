@@ -107,12 +107,21 @@ fn confirmed_instance_drives_version_and_project_scope() {
 #[test]
 fn unparseable_bound_is_unknown_not_confirmed_safe() {
     let ranges = Some(
-        r#"[{"type":"ECOSYSTEM","events":[{"introduced":"0"},{"fixed":"1.0.post1"}]}]"#.to_string(),
+        r#"[{"type":"ECOSYSTEM","events":[{"introduced":"0"},{"fixed":"r1.0~weird"}]}]"#
+            .to_string(),
     );
     assert_eq!(
         check_version_affected(Some("2.0.0"), &ranges),
         (true, false),
         "an undecided window must not read as confirmed-not-affected"
+    );
+    // `1.0.post1` is a PEP 440 bound now (`osv::version_order`): it decides.
+    let pep440 = Some(
+        r#"[{"type":"ECOSYSTEM","events":[{"introduced":"0"},{"fixed":"1.0.post1"}]}]"#.to_string(),
+    );
+    assert_eq!(
+        check_version_affected(Some("2.0.0"), &pep440),
+        (false, true)
     );
     let ranges = Some(
         r#"[{"type":"ECOSYSTEM","events":[{"introduced":"weird"},{"fixed":"3.0.0"}]}]"#.to_string(),
@@ -124,7 +133,7 @@ fn unparseable_bound_is_unknown_not_confirmed_safe() {
 
     // A parseable window that DOES contain the version still confirms it.
     let mixed = Some(
-        r#"[{"type":"ECOSYSTEM","events":[{"introduced":"0"},{"fixed":"1.0.post1"}]},{"type":"SEMVER","events":[{"introduced":"2.0.0"},{"fixed":"2.1.0"}]}]"#
+        r#"[{"type":"ECOSYSTEM","events":[{"introduced":"0"},{"fixed":"r1.0~weird"}]},{"type":"SEMVER","events":[{"introduced":"2.0.0"},{"fixed":"2.1.0"}]}]"#
             .to_string(),
     );
     assert_eq!(check_version_affected(Some("2.0.5"), &mixed), (true, true));

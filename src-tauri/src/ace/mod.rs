@@ -22,6 +22,7 @@ pub(crate) mod dep_scope;
 pub mod dormancy;
 pub mod embedding;
 pub mod git;
+pub(crate) mod lockfile;
 pub(crate) mod npm_local;
 pub(crate) mod platform_cfg;
 pub(crate) mod readme_indexing;

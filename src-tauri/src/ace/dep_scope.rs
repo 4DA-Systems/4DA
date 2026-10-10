@@ -36,7 +36,7 @@ use crate::ace::scanner::{
 };
 
 /// A package instance: lowercased name + version without any peer suffix —
-/// the identity `parse_pnpm_lock_yaml` / `parse_package_lock_json` give the
+/// the identity `parse_pnpm_lock_yaml` / `ace::lockfile` give the
 /// rows `dependency_instances` stores.
 type Node = (String, String);
 
@@ -97,6 +97,7 @@ impl DevScope {
     }
 
     /// Reached from a dev root and from no runtime root.
+    #[cfg(test)]
     pub(crate) fn is_dev_only(&self, name: &str, version: &str) -> bool {
         let n = node(name, version);
         self.dev.contains(&n) && !self.runtime.contains(&n)

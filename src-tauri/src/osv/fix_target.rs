@@ -17,6 +17,7 @@ use semver::Version;
 
 use super::matching::{check_version_affected, is_unknown_bound, parse_version};
 use super::types::{MatchedAdvisory, Range};
+use super::version_order::{in_window, Lower, OrderedVersion, Upper};
 
 /// The fix for the release line a version is on: the `fixed` bound of the
 /// affected window that contains `user_version`. `None` when the version is
@@ -32,19 +33,15 @@ pub(crate) fn fix_for_version(
     affected_ranges_json: &Option<String>,
 ) -> Option<String> {
     let ranges: Vec<Range> = serde_json::from_str(affected_ranges_json.as_deref()?).ok()?;
-    let user = parse_version(user_version)?;
+    let user = OrderedVersion::parse(user_version)?;
     for range in &ranges {
         if range.range_type != "SEMVER" && range.range_type != "ECOSYSTEM" {
             continue;
         }
-        let mut introduced: Option<Version> = None;
+        let mut introduced: Option<Lower> = None;
         for obj in range.events.iter().flatten().filter_map(|e| e.as_object()) {
             if let Some(intro) = obj.get("introduced").and_then(|v| v.as_str()) {
-                introduced = if intro == "0" {
-                    Some(Version::new(0, 0, 0))
-                } else {
-                    parse_version(intro)
-                };
+                introduced = Lower::parse(intro);
             }
             let bound = obj
                 .get("fixed")
@@ -52,9 +49,15 @@ pub(crate) fn fix_for_version(
                 .and_then(|v| v.as_str());
             if let Some(bound) = bound {
                 let is_fix = obj.contains_key("fixed");
-                if let (Some(intro), Some(end)) = (introduced.as_ref(), parse_version(bound)) {
-                    let inside = if is_fix { user < end } else { user <= end };
-                    if !is_unknown_bound(bound) && user >= *intro && inside {
+                if let (Some(intro), Some(end)) =
+                    (introduced.as_ref(), OrderedVersion::parse(bound))
+                {
+                    let upper = Upper {
+                        version: &end,
+                        inclusive: !is_fix,
+                    };
+                    let inside = in_window(&user, intro, Some(upper)) == Some(true);
+                    if !is_unknown_bound(bound) && inside {
                         return is_fix.then(|| bound.trim().to_string());
                     }
                 }
@@ -86,7 +89,7 @@ const MAX_HOPS: usize = 16;
 pub(crate) fn clean_version(installed: &str, ranges: &[&Option<String>]) -> Option<String> {
     let mut current = installed.trim().to_string();
     for _ in 0..MAX_HOPS {
-        let mut next: Option<(Version, String)> = None;
+        let mut next: Option<(OrderedVersion, String)> = None;
         for r in ranges {
             match check_version_affected(Some(&current), r) {
                 (false, _) => continue,
@@ -94,8 +97,12 @@ pub(crate) fn clean_version(installed: &str, ranges: &[&Option<String>]) -> Opti
                 (true, true) => {}
             }
             let fix = fix_for_version(&current, r)
-                .and_then(|f| parse_version(&f).map(|parsed| (parsed, f)))?;
-            if next.as_ref().is_none_or(|(best, _)| fix.0 > *best) {
+                .and_then(|f| OrderedVersion::parse(&f).map(|parsed| (parsed, f)))?;
+            let higher = match next.as_ref() {
+                None => true,
+                Some((best, _)) => fix.0.compare(best)? == std::cmp::Ordering::Greater,
+            };
+            if higher {
                 next = Some(fix);
             }
         }
