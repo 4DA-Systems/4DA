@@ -112,9 +112,20 @@ fn now_rfc3339() -> String {
 
 struct Entry {
     key: CacheKey,
-    computed_at: Instant,
+    /// When this process stored the entry. A restored result's earlier age
+    /// rides in `age_at_store`: `Instant` counts from boot on Windows, so
+    /// "now minus a 6 h old result" is not representable on a machine up
+    /// for less than that, and must not collapse to "just computed".
+    stored_at: Instant,
+    age_at_store: Duration,
     computed_wall: String,
     gaps: Vec<KnowledgeGap>,
+}
+
+impl Entry {
+    fn age(&self) -> Duration {
+        self.age_at_store.saturating_add(self.stored_at.elapsed())
+    }
 }
 
 pub(super) struct GapsCache {
@@ -160,10 +171,10 @@ impl GapsCache {
         if slot.is_some() {
             return false;
         }
-        let now = Instant::now();
         *slot = Some(Entry {
             key,
-            computed_at: now.checked_sub(age).unwrap_or(now),
+            stored_at: Instant::now(),
+            age_at_store: age,
             computed_wall,
             gaps,
         });
@@ -187,7 +198,7 @@ impl GapsCache {
     fn fresh_timed(&self, key: CacheKey) -> Option<Timed> {
         let slot = self.slot.lock();
         slot.as_ref()
-            .filter(|e| e.key == key && e.computed_at.elapsed() < MAX_AGE)
+            .filter(|e| e.key == key && e.age() < MAX_AGE)
             .map(|e| Timed {
                 gaps: e.gaps.clone(),
                 computed_at: e.computed_wall.clone(),
@@ -228,7 +239,8 @@ impl GapsCache {
         let computed_wall = now_rfc3339();
         *self.slot.lock() = Some(Entry {
             key,
-            computed_at: Instant::now(),
+            stored_at: Instant::now(),
+            age_at_store: Duration::ZERO,
             computed_wall: computed_wall.clone(),
             gaps: gaps.clone(),
         });
