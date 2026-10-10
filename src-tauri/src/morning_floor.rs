@@ -217,6 +217,93 @@ pub(crate) fn window_folds(prose: &str) -> bool {
     lower.starts_with("low signal") || lower.contains("no noteworthy")
 }
 
+/// What the backend hands the window for any summary it did not accept. It
+/// opens "Low signal", so `isAbstention` in `public/briefing.js` folds it:
+/// the backend decides, the window obeys.
+pub(crate) const QUIET_LINE: &str = "Low signal -- no noteworthy intelligence overnight.";
+
+/// Lowercased tokens of `text`: runs of letters, digits and the characters
+/// package names and versions carry (`. _ - @ / +`), trimmed of edge dots
+/// and dashes ("sharp." -> "sharp").
+fn tokens(text: &str) -> Vec<String> {
+    text.to_lowercase()
+        .split(|c: char| !(c.is_alphanumeric() || "._-@/+".contains(c)))
+        .map(|t| t.trim_matches(|c| c == '.' || c == '-').to_string())
+        .filter(|t| !t.is_empty())
+        .collect()
+}
+
+/// A token specific enough to identify its title on its own: it carries a
+/// digit or an identifier character and is at least four long
+/// ("invoice.payment_intent", "cve-2026-96889", "19.3").
+fn is_technical_token(t: &str) -> bool {
+    t.chars().count() >= 4
+        && (t.chars().any(|c| c.is_ascii_digit()) || t.contains(['.', '_', '/', '@']))
+}
+
+/// Does the summary name at least one concrete fact from its own input: a
+/// package, a version, an advisory id, or an item / alert title (three
+/// consecutive title words, or one of its technical tokens)?
+///
+/// A structural test, not a phrase list. Live 2026-10-10 the cold-boot brief
+/// shipped as "narrated": "No concrete signal items were provided overnight
+/// beyond vague escalating chain labels for next, ai, and javascript." It
+/// names no package, version, advisory or title it was given (chain labels
+/// are not facts), so it is an abstention and the floor goes out. Package
+/// names shorter than three characters ("ai") are ignored: as words they
+/// match ordinary prose.
+pub(crate) fn names_an_input_fact(prose: &str, b: &BriefingNotification) -> bool {
+    let words = tokens(prose);
+    if words.is_empty() {
+        return false;
+    }
+    let has = |t: &str| words.iter().any(|w| w == t);
+    let lower = prose.to_lowercase();
+
+    let mut packages: Vec<String> = Vec::new();
+    let mut versions: Vec<String> = Vec::new();
+    let mut ids: Vec<String> = Vec::new();
+    let mut titles: Vec<&str> = b.items.iter().map(|i| i.title.as_str()).collect();
+    for i in &b.items {
+        packages.extend(i.matched_deps.iter().cloned());
+    }
+    for a in &b.preemption_alerts {
+        titles.push(a.title.as_str());
+        if let Some(p) = &a.package_name {
+            packages.extend(p.split(", ").map(str::to_string));
+        }
+        versions.extend(a.installed_version.iter().cloned());
+        versions.extend(a.fixed_version.iter().cloned());
+        for m in &a.merged_package_versions {
+            packages.push(m.package_name.clone());
+            versions.extend(m.installed_version.iter().cloned());
+            versions.extend(m.fixed_version.iter().cloned());
+        }
+        ids.extend(a.advisory_ids.iter().cloned());
+    }
+
+    let package_named = packages
+        .iter()
+        .map(|p| p.trim().to_lowercase())
+        .any(|p| p.chars().count() >= 3 && has(&p));
+    let version_named = versions
+        .iter()
+        .map(|v| v.trim().trim_start_matches('v').to_lowercase())
+        .any(|v| v.contains('.') && has(&v));
+    let id_named = ids
+        .iter()
+        .any(|id| !id.trim().is_empty() && lower.contains(&id.trim().to_lowercase()));
+    let title_named = titles.iter().any(|title| {
+        let t = tokens(title);
+        t.iter().any(|w| is_technical_token(w) && has(w))
+            // A run of short words ("in the app") is not a reference.
+            || t.windows(3)
+                .filter(|run| run.iter().any(|w| w.chars().count() >= 5))
+                .any(|run| words.windows(3).any(|p| p == run))
+    });
+    package_named || version_named || id_named || title_named
+}
+
 /// A finished synthesis, read.
 pub(crate) enum SynthesisVerdict {
     Narrated(SynthesisResult),
@@ -294,6 +381,15 @@ where
 {
     let finished = tokio::time::timeout(budget, synthesis).await.ok();
     let (why, abstention, error) = match classify_synthesis(finished) {
+        // Fluent prose that names nothing from its input is not a summary.
+        SynthesisVerdict::Narrated(result) if !names_an_input_fact(&result.prose, briefing) => {
+            warn!(
+                target: "4da::briefing",
+                prose = %result.prose.chars().take(200).collect::<String>(),
+                "Morning summary named no fact from its input — treated as an abstention"
+            );
+            (MorningWhy::ContentFree, Some(result), None)
+        }
         SynthesisVerdict::Narrated(result) => {
             briefing.synthesis = Some(result.prose.clone());
             briefing.facts_brief = None;
@@ -327,8 +423,10 @@ where
             MorningOutcome::Facts(why)
         }
         Ok((None, no_lockfiles)) => {
-            if let Some(r) = abstention {
-                briefing.synthesis = Some(r.prose);
+            if abstention.is_some() {
+                // The canonical quiet line: the window folds it by the same
+                // contract, whatever the model actually wrote.
+                briefing.synthesis = Some(QUIET_LINE.to_string());
             }
             if has_feed_content(briefing) {
                 MorningOutcome::ItemsOnly(why)
@@ -338,8 +436,8 @@ where
         }
         Err(e) => {
             warn!(target: "4da::briefing", error = %e, "morning facts floor unavailable");
-            if let Some(r) = abstention {
-                briefing.synthesis = Some(r.prose);
+            if abstention.is_some() {
+                briefing.synthesis = Some(QUIET_LINE.to_string());
             }
             if has_feed_content(briefing) {
                 MorningOutcome::ItemsOnly(why)

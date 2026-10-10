@@ -37,6 +37,9 @@ pub(crate) enum FloorReason {
 pub(crate) enum MorningWhy {
     /// The synthesis abstained ("low signal") on every attempt.
     Abstained,
+    /// The synthesis named no fact from its input (no package, version,
+    /// advisory id or item title): content-free prose is an abstention.
+    ContentFree,
     /// The synthesis call failed (provider error, every provider down).
     Failed,
     /// The synthesis did not finish inside the morning budget.
@@ -52,6 +55,7 @@ impl MorningWhy {
     pub(crate) fn as_str(self) -> &'static str {
         match self {
             Self::Abstained => "abstained",
+            Self::ContentFree => "content_free",
             Self::Failed => "failed",
             Self::TimedOut => "timed_out",
             Self::Unconfigured => "unconfigured",
@@ -63,6 +67,9 @@ impl MorningWhy {
         match self {
             Self::Abstained => {
                 "This morning's written summary found nothing it could stand behind, so the facts are shown instead."
+            }
+            Self::ContentFree => {
+                "This morning's written summary named nothing from your stack or the overnight items, so the facts are shown instead."
             }
             Self::Failed => "This morning's written summary failed, so the facts are shown instead.",
             Self::TimedOut => {

@@ -16,6 +16,7 @@ fn briefing(items: usize) -> BriefingNotification {
                 "source_type": "hackernews",
                 "score": 0.7,
                 "signal_type": null,
+                "matched_deps": if i == 0 { vec!["sharp"] } else { vec![] },
             })
         })
         .collect();
@@ -297,6 +298,191 @@ async fn a_floor_attached_before_synthesis_is_kept_not_rebuilt() {
     assert!(should_deliver(&b));
 }
 
+// ---- Content-free summaries (the structural rule) ----
+
+/// A briefing carrying the real inputs of a morning: item titles and alert
+/// packages.
+fn morning(titles: &[&str], alerts: &[(&str, &str)]) -> BriefingNotification {
+    let mut b = briefing(0);
+    b.items = titles
+        .iter()
+        .map(|t| {
+            serde_json::from_value(serde_json::json!({
+                "title": t, "source_type": "devto", "score": 0.6, "signal_type": null,
+            }))
+            .expect("item")
+        })
+        .collect();
+    b.preemption_alerts = alerts
+        .iter()
+        .map(
+            |(pkg, title)| crate::monitoring_briefing::BriefingPreemptionAlert {
+                title: (*title).to_string(),
+                urgency: "high".into(),
+                package_name: Some((*pkg).to_string()),
+                installed_version: Some("3.2.4".into()),
+                persistent_unchanged: true,
+                ..Default::default()
+            },
+        )
+        .collect();
+    b
+}
+
+const VITEST: (&str, &str) = ("vitest", "vitest@3.2.4: 2 known vulnerabilities");
+
+/// 2026-10-04: the model's own quiet verdict, naming nothing from its input.
+#[tokio::test]
+async fn the_10_04_low_signal_text_is_an_abstention() {
+    let prose = "Low signal overnight -- nothing here rises above routine ecosystem chatter.";
+    let mut b = morning(
+        &[
+            "tsrs: Rust port of the TypeScript 7 type checker",
+            "React 19.3 ViewTransition: Animate State Without Losing It",
+            "OpenAI Releases Sign in with ChatGPT DevKit",
+        ],
+        &[VITEST],
+    );
+    assert!(!names_an_input_fact(prose, &b), "names no fact");
+    let r = resolve_morning(
+        &mut b,
+        async { Ok(synthesis(prose)) },
+        Duration::from_secs(5),
+        with_facts,
+    )
+    .await;
+    assert_eq!(r.outcome, MorningOutcome::Facts(MorningWhy::Abstained));
+}
+
+/// 2026-10-05: it does mention an item ("Next.js App Router"), but its own
+/// verdict is "low signal": still an abstention, and the floor goes out.
+#[tokio::test]
+async fn the_10_05_low_signal_text_is_an_abstention() {
+    let prose = "Low signal overnight -- the only concrete item is a dev.to article on \
+                 Next.js App Router focus management.";
+    let mut b = morning(
+        &["Focus Management in the Next.js App Router: Field Notes on the Route Change That Loses Focus, inert, and Native dialog"],
+        &[VITEST],
+    );
+    assert!(
+        names_an_input_fact(prose, &b),
+        "it does reference the article"
+    );
+    let r = resolve_morning(
+        &mut b,
+        async { Ok(synthesis(prose)) },
+        Duration::from_secs(5),
+        with_facts,
+    )
+    .await;
+    assert_eq!(r.outcome, MorningOutcome::Facts(MorningWhy::Abstained));
+}
+
+/// 2026-10-10 cold boot: fluent filler, shown as "narrated". It names no
+/// package, version, advisory or title (chain labels are not facts).
+#[tokio::test]
+async fn the_10_10_filler_is_content_free_and_the_floor_goes_out() {
+    let prose = "No concrete signal items were provided overnight beyond vague escalating \
+                 chain labels for next, ai, and javascript.\n\n(0 items from 0 sources)";
+    let alerts = [
+        ("sharp", "sharp : Vulnerability in librsvg dependency CVE-2026-96889"),
+        ("source-map-js", "source-map-js allows event-loop denial of service through indexed source-map section offsets"),
+        VITEST,
+    ];
+    let mut b = morning(&[], &alerts);
+    assert!(!names_an_input_fact(prose, &b));
+    let r = resolve_morning(
+        &mut b,
+        async { Ok(synthesis(prose)) },
+        Duration::from_secs(5),
+        with_facts,
+    )
+    .await;
+    assert_eq!(r.outcome, MorningOutcome::Facts(MorningWhy::ContentFree));
+    let facts = b.facts_brief.as_deref().expect("floor");
+    assert!(facts.contains("named nothing from your stack"), "{facts}");
+
+    // No facts either: the window is handed the canonical quiet line, which
+    // it folds by its own contract, never the filler.
+    let mut b = morning(&[], &alerts);
+    let r = resolve_morning(
+        &mut b,
+        async { Ok(synthesis(prose)) },
+        Duration::from_secs(5),
+        no_facts,
+    )
+    .await;
+    assert_eq!(
+        r.outcome,
+        MorningOutcome::ItemsOnly(MorningWhy::ContentFree)
+    );
+    assert_eq!(b.synthesis.as_deref(), Some(QUIET_LINE));
+    assert!(window_folds(QUIET_LINE) && is_abstention_synthesis(QUIET_LINE));
+}
+
+/// 2026-10-09: a genuine summary. It quotes the Stripe article and names a
+/// package, so it is shown.
+#[tokio::test]
+async fn a_genuine_summary_still_passes() {
+    let prose = "A developer report notes Stripe removed invoice.payment_intent in the basil API, \
+                 silently breaking a failed-payment workflow -- check navcal's invoice reads.";
+    let mut b = morning(
+        &[
+            "Stripe removed invoice.payment_intent in the basil API and it quietly broke my failed-payment workflow",
+            "React 19 useActionState: Preventing SSR State Pollution and Event Listener Memory Leaks",
+        ],
+        &[VITEST],
+    );
+    assert!(names_an_input_fact(prose, &b));
+    let r = resolve_morning(
+        &mut b,
+        async { Ok(synthesis(prose)) },
+        Duration::from_secs(5),
+        with_facts,
+    )
+    .await;
+    assert_eq!(r.outcome, MorningOutcome::Narrated);
+    assert!(b.facts_brief.is_none());
+}
+
+#[test]
+fn each_kind_of_fact_counts_and_near_misses_do_not() {
+    let b = morning(
+        &["Announcing Tauri 2.12 with a faster IPC bridge"],
+        &[VITEST],
+    );
+    let mut with_id = b.clone();
+    with_id.preemption_alerts[0].advisory_ids = vec!["GHSA-5xrq-8xgx-v8h2".into()];
+    assert!(
+        names_an_input_fact("vitest still needs its patch.", &b),
+        "package"
+    );
+    assert!(
+        names_an_input_fact("3.2.4 is still installed.", &b),
+        "version"
+    );
+    assert!(
+        names_an_input_fact("Patch ghsa-5xrq-8xgx-v8h2 first.", &with_id),
+        "advisory id"
+    );
+    assert!(
+        names_an_input_fact("Tauri 2.12 lands a faster IPC bridge.", &b),
+        "title token"
+    );
+    assert!(
+        names_an_input_fact("It brings a faster IPC bridge.", &b),
+        "three title words"
+    );
+    assert!(!names_an_input_fact(
+        "Nothing new in the app today, keep going.",
+        &b
+    ));
+    assert!(!names_an_input_fact("", &b));
+    // A two-letter package name is ordinary prose, not a reference.
+    let ai = morning(&[], &[("ai", "ai@5.0.86: 1 known vulnerability")]);
+    assert!(!names_an_input_fact("Interest in AI keeps growing.", &ai));
+}
+
 // ---- Caps on every path ----
 
 /// The floor lists at most FLOOR_ARTICLES articles however many candidates
@@ -327,7 +513,7 @@ async fn the_floor_holds_the_article_cap_and_never_merges_with_a_summary() {
     let mut b = briefing(1);
     attach_floor(&mut b, &floor);
     b.facts_brief = None; // a fresh resolution starts from the enriched brief
-    let synth = async { Ok(synthesis("A concrete thread worth reading.")) };
+    let synth = async { Ok(synthesis("sharp ships the librsvg fix in navcal today.")) };
     let r = resolve_morning(&mut b, synth, Duration::from_secs(5), with_facts).await;
     assert_eq!(r.outcome, MorningOutcome::Narrated);
     assert!(b.facts_brief.is_none() && b.synthesis.is_some());
@@ -561,7 +747,26 @@ async fn live_snapshot_morning_replay() {
         let day = d["day"].as_str().unwrap_or("?").to_string();
         let kind = d["synthesis"].as_str().unwrap_or("abstained").to_string();
         let prose = d["prose"].as_str().unwrap_or("").to_string();
-        let mut b = briefing(d["items"].as_u64().unwrap_or(0) as usize);
+        // The morning's real input when the days file carries it (titles and
+        // alert packages), so the content-free rule judges real prose
+        // against what the model was actually given.
+        let strs = |k: &str| -> Vec<String> {
+            d[k].as_array()
+                .map(|a| {
+                    a.iter()
+                        .filter_map(|v| v.as_str().map(str::to_string))
+                        .collect()
+                })
+                .unwrap_or_default()
+        };
+        let (titles, packages) = (strs("titles"), strs("packages"));
+        let mut b = if titles.is_empty() && packages.is_empty() {
+            briefing(d["items"].as_u64().unwrap_or(0) as usize)
+        } else {
+            let t: Vec<&str> = titles.iter().map(String::as_str).collect();
+            let a: Vec<(&str, &str)> = packages.iter().map(|p| (p.as_str(), p.as_str())).collect();
+            morning(&t, &a)
+        };
         let synth = async move {
             match kind.as_str() {
                 "narrated" | "abstained" => Ok(synthesis(if prose.is_empty() {
