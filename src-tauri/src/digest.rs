@@ -250,12 +250,25 @@ impl DigestManager {
 
     /// Save digest to local file
     pub fn save_local(&self, digest: &Digest) -> Result<PathBuf> {
-        let output_dir = self.config.output_dir.clone().unwrap_or_else(|| {
-            dirs::data_dir()
-                .unwrap_or_else(|| PathBuf::from("."))
-                .join("4da")
-                .join("digests")
-        });
+        let paths = crate::runtime_paths::RuntimePaths::get();
+        let output_dir = resolve_output_dir(self.config.output_dir.as_deref(), &paths.data_dir);
+        if self.config.output_dir.is_none() && is_default_profile() {
+            if let Some(legacy) = legacy_digest_dir() {
+                static MIGRATED: std::sync::Once = std::sync::Once::new();
+                MIGRATED.call_once(|| {
+                    let copied = copy_legacy_digests(&legacy, &output_dir);
+                    if copied > 0 {
+                        tracing::info!(
+                            target: "4da::digest",
+                            copied,
+                            from = %legacy.display(),
+                            to = %output_dir.display(),
+                            "Copied legacy digests into the profile's data dir (originals kept)"
+                        );
+                    }
+                });
+            }
+        }
 
         std::fs::create_dir_all(&output_dir).context("Failed to create digest directory")?;
 
@@ -271,10 +284,108 @@ impl DigestManager {
     }
 }
 
+/// Where a digest is written. An explicit `output_dir` wins; otherwise the
+/// ACTIVE profile's data dir (`<data_dir>/digests`, shared with the
+/// mini-digest). The old default was the global `dirs::data_dir()/4da/digests`,
+/// which ignored `FOURDA_DATA_DIR`: a fresh-profile test run on 2026-10-10
+/// wrote `digest_20261010_055025.{md,html}` into the operator's real folder.
+fn resolve_output_dir(configured: Option<&std::path::Path>, data_dir: &std::path::Path) -> PathBuf {
+    configured.map_or_else(|| data_dir.join("digests"), std::path::Path::to_path_buf)
+}
+
+/// The default profile is the one with no `FOURDA_DATA_DIR` override — the
+/// only profile whose digests ever went to the legacy global folder.
+fn is_default_profile() -> bool {
+    std::env::var("FOURDA_DATA_DIR").map_or(true, |v| v.trim().is_empty())
+}
+
+/// The pre-2026-10-10 global digest folder (`%APPDATA%\4da\digests` on Windows).
+fn legacy_digest_dir() -> Option<PathBuf> {
+    dirs::data_dir().map(|d| d.join("4da").join("digests"))
+}
+
+/// Copy legacy `digest_*.md` / `digest_*.html` files that the new folder does
+/// not already hold. Copy, never move: the originals are the user's only copy
+/// until this succeeds, and an older binary may still write there. Returns the
+/// number of files copied. Best-effort — a failure leaves the legacy file in place.
+fn copy_legacy_digests(legacy: &std::path::Path, target: &std::path::Path) -> usize {
+    if legacy == target {
+        return 0;
+    }
+    let Ok(entries) = std::fs::read_dir(legacy) else {
+        return 0;
+    };
+    if std::fs::create_dir_all(target).is_err() {
+        return 0;
+    }
+    let mut copied = 0;
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let name_str = name.to_string_lossy();
+        let is_digest = name_str.starts_with("digest_")
+            && (name_str.ends_with(".md") || name_str.ends_with(".html"));
+        if !is_digest || !entry.path().is_file() {
+            continue;
+        }
+        let dest = target.join(&name);
+        if dest.exists() {
+            continue;
+        }
+        if std::fs::copy(entry.path(), &dest).is_ok() {
+            copied += 1;
+        }
+    }
+    copied
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use chrono::Duration;
+
+    #[test]
+    fn default_digest_dir_lives_under_the_active_profile() {
+        let profile = std::path::Path::new("F:/freshqa2-data");
+        assert_eq!(
+            resolve_output_dir(None, profile),
+            profile.join("digests"),
+            "a profile's digests must never default to the global %APPDATA%\\4da folder"
+        );
+        let explicit = std::path::Path::new("E:/my-digests");
+        assert_eq!(resolve_output_dir(Some(explicit), profile), explicit);
+    }
+
+    #[test]
+    fn legacy_digests_are_copied_not_moved_and_never_overwritten() {
+        let legacy = tempfile::tempdir().expect("legacy dir");
+        let target = tempfile::tempdir().expect("target dir");
+        std::fs::write(legacy.path().join("digest_20260101_000000.md"), "old md").unwrap();
+        std::fs::write(
+            legacy.path().join("digest_20260101_000000.html"),
+            "old html",
+        )
+        .unwrap();
+        std::fs::write(legacy.path().join("notes.txt"), "not a digest").unwrap();
+        std::fs::write(target.path().join("digest_20260101_000000.html"), "newer").unwrap();
+
+        assert_eq!(copy_legacy_digests(legacy.path(), target.path()), 1);
+        assert_eq!(
+            std::fs::read_to_string(target.path().join("digest_20260101_000000.md")).unwrap(),
+            "old md"
+        );
+        assert_eq!(
+            std::fs::read_to_string(target.path().join("digest_20260101_000000.html")).unwrap(),
+            "newer",
+            "an existing file in the new folder is never overwritten"
+        );
+        assert!(!target.path().join("notes.txt").exists());
+        assert!(
+            legacy.path().join("digest_20260101_000000.md").exists(),
+            "originals stay in the legacy folder"
+        );
+        // Idempotent: a second pass copies nothing.
+        assert_eq!(copy_legacy_digests(legacy.path(), target.path()), 0);
+    }
 
     #[test]
     fn test_digest_creation() {

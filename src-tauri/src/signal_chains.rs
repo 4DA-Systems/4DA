@@ -68,6 +68,56 @@ pub struct SignalChain {
     /// published advisory" for an unrelated CVE (fresh-profile E2E 2026-10-09).
     #[serde(default)]
     pub dep_advisory: bool,
+    /// The topic the chain tracks (`rust`, `sqlite`, ...). Empty on a chain
+    /// deserialized from before this field existed; see [`SignalChain::topic_label`].
+    #[serde(default)]
+    pub topic: String,
+}
+
+impl SignalChain {
+    /// The chain's topic; for a pre-field chain, recovered from
+    /// `"<topic> signal chain (N events)"`.
+    pub fn topic_label(&self) -> &str {
+        if !self.topic.is_empty() {
+            return &self.topic;
+        }
+        self.chain_name
+            .split_once(" signal chain")
+            .map_or(self.chain_name.as_str(), |(topic, _)| topic)
+    }
+
+    /// The headline a Preemption card shows: specific to THIS chain's topic.
+    ///
+    /// It used to be the first link's title verbatim. One article can feed
+    /// several chains (#894 keeps one chain per tech, but a post about Rust
+    /// and SQLite still links into both), so the `rust` and `sqlite` cards read
+    /// the same headline (fresh-profile E2E 2026-10-10). Now: prefer a link
+    /// whose title names the topic, and lead with the topic unless the title
+    /// already does — two chains with different topics never share a headline.
+    pub fn headline(&self) -> String {
+        let topic = self.topic_label().trim();
+        let topic_lower = topic.to_lowercase();
+        let names_topic = |title: &str| {
+            title
+                .to_lowercase()
+                .split(|c: char| !c.is_alphanumeric() && c != '.' && c != '-' && c != '_')
+                .any(|word| word.trim_matches('.') == topic_lower)
+        };
+        let Some(link) = self
+            .links
+            .iter()
+            .find(|l| names_topic(&l.title))
+            .or_else(|| self.links.first())
+        else {
+            return self.chain_name.clone();
+        };
+        let title = link.title.trim();
+        if topic.is_empty() || title.to_lowercase().starts_with(&topic_lower) {
+            title.to_string()
+        } else {
+            format!("{topic}: {title}")
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -296,6 +346,7 @@ fn detect_chains_from_items(
                 None
             },
             dep_advisory,
+            topic: topic.to_string(),
         });
     }
 

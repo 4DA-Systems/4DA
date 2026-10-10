@@ -169,17 +169,45 @@ fn install_console_ctrl_handler() {
     // Unix: Tauri's signal handlers are sufficient.
 }
 
+/// The WebView2 service-worker cache of the app with this `identifier`:
+/// `<local data>/<identifier>/EBWebView/Default/Service Worker` — Tauri's
+/// `app_local_data_dir()` plus the WebView2 profile. `None` for an identifier
+/// that could escape that folder (empty, a path separator, or `..`).
+pub(crate) fn webview_service_worker_dir(
+    local_data_dir: &std::path::Path,
+    identifier: &str,
+) -> Option<std::path::PathBuf> {
+    let unsafe_id = identifier.trim().is_empty()
+        || identifier.contains(['/', '\\'])
+        || identifier
+            .split('.')
+            .any(|seg| seg.is_empty() || seg == "..");
+    if unsafe_id {
+        return None;
+    }
+    Some(
+        local_data_dir
+            .join(identifier)
+            .join("EBWebView")
+            .join("Default")
+            .join("Service Worker"),
+    )
+}
+
+/// Debug builds clear the WebView2 service-worker cache of THIS app (the
+/// identifier compiled into its Tauri context) before the webview opens. It
+/// used to hard-code `com.4da.app`, so a test profile running under another
+/// identifier — or the headless engine — wiped the operator's real app cache.
+/// Call only from the GUI entry point, after the single-instance lock.
 #[cfg(debug_assertions)]
-fn purge_dev_webview_service_worker_cache() {
-    let Ok(local_app_data) = std::env::var("LOCALAPPDATA") else {
+pub(crate) fn purge_dev_webview_service_worker_cache(identifier: &str) {
+    let Some(local_data_dir) = dirs::data_local_dir() else {
         return;
     };
-
-    let service_worker_dir = std::path::PathBuf::from(local_app_data)
-        .join("com.4da.app")
-        .join("EBWebView")
-        .join("Default")
-        .join("Service Worker");
+    let Some(service_worker_dir) = webview_service_worker_dir(&local_data_dir, identifier) else {
+        warn!(target: "4da::startup", identifier, "Refusing WebView2 cache purge for an unsafe identifier");
+        return;
+    };
 
     if !service_worker_dir.exists() {
         return;
@@ -201,7 +229,7 @@ fn purge_dev_webview_service_worker_cache() {
 }
 
 #[cfg(not(debug_assertions))]
-fn purge_dev_webview_service_worker_cache() {}
+pub(crate) fn purge_dev_webview_service_worker_cache(_identifier: &str) {}
 
 /// Pre-Tauri initialization: logging, database, context engine, source registry.
 ///
@@ -301,8 +329,6 @@ pub(crate) fn initialize_pre_tauri(acquire_single_instance: bool) {
     if acquire_single_instance {
         acquire_instance_and_detect_crash_loop();
     }
-
-    purge_dev_webview_service_worker_cache();
 
     // Verify binary integrity (code signature, size sanity, permissions).
     // Runs after crash guard so any panics are handled. Logs only — never blocks.

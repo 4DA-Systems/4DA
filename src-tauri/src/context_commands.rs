@@ -10,6 +10,7 @@ use std::path::{Path, PathBuf};
 use tracing::{debug, info, warn};
 
 use crate::error::{FourDaError, Result, ResultExt};
+use crate::types::{ContextFileMeta, ContextFilesPage};
 use crate::utils::sanitize_path;
 use crate::{
     ace_commands, chunk_text, embed_texts, get_context_dir, get_database, get_settings_manager,
@@ -76,8 +77,10 @@ fn is_meta_doc(name: &str) -> bool {
     false
 }
 
-/// Recursively collect context files from a directory (max depth 3)
-fn collect_context_files(dir: &Path, files: &mut Vec<ContextFile>, depth: usize) {
+/// Recursively collect context file PATHS from a directory (max depth 3).
+/// Admission rules: skip dirs, meta-docs, test files, unsupported extensions.
+/// Reading contents is the caller's choice.
+fn collect_context_paths(dir: &Path, paths: &mut Vec<PathBuf>, depth: usize) {
     if depth > 3 {
         return;
     }
@@ -90,7 +93,7 @@ fn collect_context_files(dir: &Path, files: &mut Vec<ContextFile>, depth: usize)
 
         if path.is_dir() {
             if !SKIP_DIRS.contains(&name) && !name.starts_with('.') {
-                collect_context_files(&path, files, depth + 1);
+                collect_context_paths(&path, paths, depth + 1);
             }
             continue;
         }
@@ -112,50 +115,133 @@ fn collect_context_files(dir: &Path, files: &mut Vec<ContextFile>, depth: usize)
         if !SUPPORTED_EXTENSIONS.contains(&ext) {
             continue;
         }
-
-        match fs::read_to_string(&path) {
-            Ok(content) => {
-                let lines = content.lines().count();
-                let path_str = path.to_string_lossy().to_string();
-                debug!(target: "4da::context", path = %path_str, lines = lines, "Loaded context file");
-                files.push(ContextFile {
-                    path: path_str,
-                    content,
-                    lines,
-                });
-            }
-            Err(e) => {
-                warn!(target: "4da::context", path = ?path, error = %e, "Failed to read context file");
-            }
-        }
+        paths.push(path);
     }
 }
 
-#[tauri::command]
-pub async fn get_context_files() -> Result<Vec<ContextFile>> {
-    let context_dir = if let Some(dir) = get_context_dir() {
-        dir
-    } else {
+/// Every admitted context path under the configured context dir, sorted so
+/// pagination is stable. Empty when no dir is configured or it is missing.
+async fn context_paths() -> Result<Vec<PathBuf>> {
+    let Some(context_dir) = get_context_dir() else {
         debug!(target: "4da::context", "No context directory configured");
         return Ok(vec![]);
     };
-    debug!(target: "4da::context", path = ?context_dir, "Reading context files (recursive, depth 3)");
-
     if !context_dir.exists() {
         debug!(target: "4da::context", path = ?context_dir, "Context directory does not exist");
         return Ok(vec![]);
     }
-
-    let files = tauri::async_runtime::spawn_blocking(move || {
-        let mut files = Vec::new();
-        collect_context_files(&context_dir, &mut files, 0);
-        files
+    debug!(target: "4da::context", path = ?context_dir, "Scanning context files (recursive, depth 3)");
+    let paths = tauri::async_runtime::spawn_blocking(move || {
+        let mut paths = Vec::new();
+        collect_context_paths(&context_dir, &mut paths, 0);
+        paths.sort();
+        paths
     })
     .await
     .map_err(|e| format!("Context file scan worker failed: {e}"))?;
+    Ok(paths)
+}
 
-    info!(target: "4da::context", count = files.len(), "Total context files loaded (recursive)");
+/// Read every context file's contents. For indexing only — contents never
+/// cross IPC.
+async fn load_context_files() -> Result<Vec<ContextFile>> {
+    let paths = context_paths().await?;
+    let files = tauri::async_runtime::spawn_blocking(move || {
+        paths
+            .into_iter()
+            .filter_map(|path| match fs::read_to_string(&path) {
+                Ok(content) => Some(ContextFile {
+                    lines: content.lines().count(),
+                    path: path.to_string_lossy().to_string(),
+                    content,
+                }),
+                Err(e) => {
+                    warn!(target: "4da::context", path = ?path, error = %e, "Failed to read context file");
+                    None
+                }
+            })
+            .collect::<Vec<_>>()
+    })
+    .await
+    .map_err(|e| format!("Context file read worker failed: {e}"))?;
+    info!(target: "4da::context", count = files.len(), "Context files loaded for indexing");
     Ok(files)
+}
+
+/// Default and maximum page sizes for [`get_context_files`]. The panel renders
+/// the page as a plain list; a few hundred rows is already more than anyone scrolls.
+const CONTEXT_PAGE_DEFAULT: usize = 500;
+const CONTEXT_PAGE_MAX: usize = 2000;
+
+/// Count lines the way `str::lines` does, without decoding: one per newline,
+/// plus a final unterminated line.
+fn count_lines(bytes: &[u8]) -> usize {
+    let newlines = bytes
+        .iter()
+        .fold(0usize, |n, &b| n + usize::from(b == b'\n'));
+    match bytes.last() {
+        Some(b'\n') | None => newlines,
+        Some(_) => newlines + 1,
+    }
+}
+
+/// Metadata for one context file. Reads the file to count lines; the bytes are
+/// dropped here and never leave the backend.
+fn context_file_meta(path: &Path) -> ContextFileMeta {
+    let metadata = fs::metadata(path).ok();
+    ContextFileMeta {
+        path: path.to_string_lossy().to_string(),
+        lines: fs::read(path).map_or(0, |bytes| count_lines(&bytes)),
+        size_bytes: metadata.as_ref().map_or(0, |m| m.len() as usize),
+        kind: path
+            .extension()
+            .and_then(|e| e.to_str())
+            .unwrap_or("")
+            .to_ascii_lowercase(),
+        modified_at: metadata
+            .and_then(|m| m.modified().ok())
+            .map(|t| chrono::DateTime::<chrono::Utc>::from(t).to_rfc3339()),
+    }
+}
+
+/// Clamp the requested window to `[0, total]` and the page size to
+/// `1..=CONTEXT_PAGE_MAX` (default `CONTEXT_PAGE_DEFAULT`). Returns
+/// `(start, end, limit)`.
+fn page_window(total: usize, offset: Option<usize>, limit: Option<usize>) -> (usize, usize, usize) {
+    let limit = limit
+        .unwrap_or(CONTEXT_PAGE_DEFAULT)
+        .clamp(1, CONTEXT_PAGE_MAX);
+    let start = offset.unwrap_or(0).min(total);
+    let end = start.saturating_add(limit).min(total);
+    (start, end, limit)
+}
+
+/// List context files: metadata only, one page at a time, sorted by path.
+/// It used to return every file's full contents — ~26.6 MB in one IPC call for
+/// 1913 files (fresh-profile E2E 2026-10-10) to render names and line counts.
+#[tauri::command]
+pub async fn get_context_files(
+    offset: Option<usize>,
+    limit: Option<usize>,
+) -> Result<ContextFilesPage> {
+    let paths = context_paths().await?;
+    let total = paths.len();
+    let (start, end, limit) = page_window(total, offset, limit);
+    let page: Vec<PathBuf> = paths[start..end].to_vec();
+    let files = tauri::async_runtime::spawn_blocking(move || {
+        page.iter()
+            .map(|p| context_file_meta(p))
+            .collect::<Vec<_>>()
+    })
+    .await
+    .map_err(|e| format!("Context file metadata worker failed: {e}"))?;
+    info!(target: "4da::context", total, returned = files.len(), "Context file metadata listed");
+    Ok(ContextFilesPage {
+        files,
+        total,
+        offset: start,
+        limit,
+    })
 }
 
 /// Clear all indexed context chunks from the database
@@ -191,7 +277,7 @@ pub async fn index_context() -> Result<String> {
     let db = get_database()?;
 
     // Read context files from configured directories
-    let context_files = get_context_files().await?;
+    let context_files = load_context_files().await?;
     if context_files.is_empty() {
         return Err("No context files found. Add files to your context directory.".into());
     }
@@ -467,6 +553,10 @@ fn context_dir_entries(dirs: Vec<std::path::PathBuf>) -> Vec<ContextDirEntry> {
         })
         .collect()
 }
+
+#[cfg(test)]
+#[path = "context_commands_meta_tests.rs"]
+mod meta_tests;
 
 #[cfg(test)]
 mod tests {

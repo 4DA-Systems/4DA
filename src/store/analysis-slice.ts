@@ -104,12 +104,13 @@ export const createAnalysisSlice: StateCreator<AppStore, [], [], AnalysisSlice> 
       appState: { ...state.appState, loading: true, status: 'Loading context files...' },
     }));
     try {
-      const files = await cmd('get_context_files');
+      const page = await cmd('get_context_files');
       set(state => ({
         appState: {
           ...state.appState,
-          contextFiles: files,
-          status: `Loaded ${files.length} context files. Click "Analyze" to compute relevance.`,
+          contextFiles: page.files,
+          contextFilesTotal: page.total,
+          status: `Loaded ${page.total} context files. Click "Analyze" to compute relevance.`,
           loading: false,
         },
         isBrowserMode: false,
@@ -136,13 +137,14 @@ export const createAnalysisSlice: StateCreator<AppStore, [], [], AnalysisSlice> 
   clearContext: async () => {
     try {
       const result = await cmd('clear_context');
-      const files = await cmd('get_context_files');
+      const page = await cmd('get_context_files');
       set(state => ({
         appState: {
           ...state.appState,
-          contextFiles: files || [],
+          contextFiles: page?.files ?? [],
+          contextFilesTotal: page?.total ?? 0,
           relevanceResults: [],
-          status: `${result}. ${files?.length || 0} files ready to index.`,
+          status: `${result}. ${page?.total ?? 0} files ready to index.`,
         },
       }));
     } catch (error) {
@@ -165,11 +167,12 @@ export const createAnalysisSlice: StateCreator<AppStore, [], [], AnalysisSlice> 
 
       const result = await cmd('index_context');
 
-      const files = await cmd('get_context_files');
+      const page = await cmd('get_context_files');
       set(state => ({
         appState: {
           ...state.appState,
-          contextFiles: files,
+          contextFiles: page.files,
+          contextFilesTotal: page.total,
           status: `${readmeResult}. ${result}`,
           loading: false,
         },

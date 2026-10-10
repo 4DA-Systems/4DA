@@ -1621,7 +1621,11 @@ pub fn is_morning_briefing_due(state: &MonitoringState) -> bool {
             .unwrap_or_else(|| "08:00".to_string());
         let last = monitoring.last_briefing_date.clone();
         // No morning briefing (window + OS toast) before setup is finished.
-        (enabled && settings.get().onboarding_complete, time, last)
+        (
+            morning_briefing_allowed(enabled, settings.get().onboarding_complete),
+            time,
+            last,
+        )
     };
 
     if !enabled {
@@ -1662,6 +1666,20 @@ pub(crate) fn morning_window_open(now_mins: u32, target_mins: u32) -> bool {
     now_mins >= target_mins
 }
 
+/// No morning briefing (window, OS toast, or held entry) before setup is
+/// finished, whichever path asks.
+pub(crate) fn morning_briefing_allowed(enabled: bool, onboarding_complete: bool) -> bool {
+    enabled && onboarding_complete
+}
+
+/// A zero-item "sources went quiet" brief is worth sending only when there is
+/// a corpus to have gone quiet. A database that has never held an item is
+/// `is_stale` by construction; telling a first-run user their data is stale
+/// is noise, not a warning.
+pub(crate) fn stale_warning_warranted(freshness: &DataFreshness) -> bool {
+    freshness.is_stale && freshness.newest_item_age_hours.is_some()
+}
+
 /// Check if morning briefing should fire and generate notification content.
 /// Returns None if disabled, outside the briefing window, or already fired today.
 /// The last briefing date is persisted to settings.json so a restart doesn't
@@ -1677,7 +1695,17 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
             .clone()
             .unwrap_or_else(|| "08:00".to_string());
         let last = monitoring.last_briefing_date.clone();
-        (enabled, time, last)
+        // Same onboarding gate as `is_morning_briefing_due` (#887). This
+        // function is ALSO called directly — by the cold-boot catch-up in
+        // `app_setup` 3 s after launch and by the scheduler tick even when
+        // `is_morning_briefing_due` said no — so the gate must live here too:
+        // a fresh-profile E2E (2026-10-10) got a 0-item brief mid-onboarding,
+        // held by the presence gate and shown in Settings as "1 waiting".
+        (
+            morning_briefing_allowed(enabled, settings.get().onboarding_complete),
+            time,
+            last,
+        )
     };
 
     if !enabled {
@@ -1825,7 +1853,10 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
     if !briefing.has_meaningful_content() {
         // If data is stale, surface that explicitly instead of returning None.
         // The frontend can show "No fresh data — sources may need attention."
-        if freshness.as_ref().map_or(false, |f| f.is_stale) {
+        // Only for a corpus that has held items: an empty database also reads
+        // `is_stale`, and on a first run that turned "nothing fetched yet"
+        // into a zero-item brief (fresh-profile E2E 2026-10-10).
+        if freshness.as_ref().map_or(false, stale_warning_warranted) {
             let now = chrono::Local::now();
             let stale_briefing = BriefingNotification {
                 title: format!("4DA Intelligence Briefing — {}", now.format("%d %b %Y")),
@@ -3915,6 +3946,29 @@ mod tests {
         assert_eq!(freshness.source_checks_last_72h, 0);
         assert_eq!(freshness.stale_sources, 0);
         assert!(freshness.is_stale);
+        assert!(
+            stale_warning_warranted(&freshness),
+            "a corpus that went quiet still earns the stale-data brief"
+        );
+    }
+
+    /// Fresh-profile E2E 2026-10-10: an empty database reads `is_stale`, and
+    /// the cold-boot catch-up turned that into a 0-item brief 3 s after the
+    /// first launch. Nothing has gone stale when nothing was ever fetched.
+    #[test]
+    fn empty_corpus_is_stale_but_earns_no_zero_item_brief() {
+        let conn = freshness_test_db();
+        let freshness = compute_data_freshness_from_conn(&conn);
+        assert!(freshness.is_stale);
+        assert!(freshness.newest_item_age_hours.is_none());
+        assert!(!stale_warning_warranted(&freshness));
+    }
+
+    #[test]
+    fn no_morning_briefing_before_onboarding_completes() {
+        assert!(!morning_briefing_allowed(true, false));
+        assert!(!morning_briefing_allowed(false, true));
+        assert!(morning_briefing_allowed(true, true));
     }
 
     #[test]

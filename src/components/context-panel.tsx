@@ -19,6 +19,8 @@ interface DiscoveredContext {
 
 interface ContextPanelProps {
   contextFiles: ContextFile[];
+  /** Every context file; `contextFiles` may be only the first page. */
+  totalCount?: number;
   discoveredContext: DiscoveredContext;
   loading: boolean;
   onReload: () => void;
@@ -28,6 +30,7 @@ interface ContextPanelProps {
 
 export function ContextPanel({
   contextFiles,
+  totalCount,
   discoveredContext,
   loading,
   onReload,
@@ -44,7 +47,7 @@ export function ContextPanel({
           </div>
           <div>
             <h2 className="font-medium text-text-primary">{t('context.title')}</h2>
-            <p className="text-xs text-text-muted">{t('context.filesIndexed', { count: contextFiles.length })}</p>
+            <p className="text-xs text-text-muted">{t('context.filesIndexed', { count: totalCount ?? contextFiles.length })}</p>
           </div>
         </div>
         <div className="flex gap-2">
