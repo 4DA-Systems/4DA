@@ -343,6 +343,59 @@ async fn the_floor_holds_the_article_cap_and_never_merges_with_a_summary() {
     assert!(b.facts_brief.is_some() && b.synthesis.is_none());
 }
 
+/// An uncapped Preemption feed (the full ranked list) must not flood the
+/// window: at most MORNING_ACT_NOW_SHOWN new act-now facts are named, the
+/// rest counted, and only the named ones are recorded as reported.
+#[test]
+fn the_floor_caps_act_now_itself_whatever_the_feed_holds() {
+    use crate::brief_facts::{FixPath, SecurityFact, SecuritySite};
+    let fact = |i: usize| SecurityFact {
+        key: format!("npm:pkg{i}:navcal"),
+        package: format!("pkg{i}"),
+        ecosystem: "npm".into(),
+        urgency: crate::preemption::AlertUrgency::High,
+        worst_tier: Some("high".into()),
+        advisory_count: 1,
+        advisory_ids: vec![format!("GHSA-{i}")],
+        title: "A bug".into(),
+        sites: vec![SecuritySite {
+            label: "navcal".into(),
+            installed: Some("1.0.0".into()),
+            dev_only: false,
+            scratch: false,
+            dormant_days: None,
+            fix_path: FixPath::Bump { to: "1.0.1".into() },
+        }],
+        not_compiled: vec![],
+        first_seen: None,
+        status: FactStatus::New,
+    };
+    let facts = BriefFacts {
+        security: (0..40).map(fact).collect(),
+        ..BriefFacts::default()
+    };
+    let floor = floor_from_facts(facts, MorningWhy::Abstained).expect("facts");
+    let named = floor
+        .markdown
+        .lines()
+        .filter(|l| l.starts_with("- **pkg"))
+        .count();
+    assert_eq!(named, MORNING_ACT_NOW_SHOWN);
+    assert!(
+        floor
+            .markdown
+            .contains("- 34 more High or Critical advisories on the Preemption tab."),
+        "{}",
+        floor.markdown
+    );
+    let act = floor.markdown.split("## ").nth(1).unwrap_or("");
+    assert!(act.contains("34 more"), "the count closes Act now: {act}");
+    let db = crate::test_utils::test_db();
+    record_floor_shown(&db, &floor);
+    let novelty = crate::brief_facts::Novelty::load(&db);
+    assert_eq!(novelty.facts.len(), MORNING_ACT_NOW_SHOWN);
+}
+
 /// The morning floor never writes a `briefings` row, so it cannot count
 /// toward (or past) the tab's DAILY_AUTO_BRIEF_CAP; recording it touches the
 /// novelty record only.

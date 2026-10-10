@@ -112,13 +112,50 @@ pub(crate) fn has_any_fact(f: &BriefFacts) -> bool {
         || !f.worth_knowing.is_empty()
 }
 
+/// Act-now advisories the morning window lists by name; the rest are counted
+/// and left to the Preemption tab. The cap lives here, not upstream: the
+/// Preemption feed is not to be relied on as pre-capped (it is moving to the
+/// full ranked list with true totals).
+pub(crate) const MORNING_ACT_NOW_SHOWN: usize = 6;
+
 /// Render the facts view, or `None` when there is nothing to report.
-pub(crate) fn floor_from_facts(facts: BriefFacts, why: MorningWhy) -> Option<FactsFloor> {
+///
+/// At most [`MORNING_ACT_NOW_SHOWN`] new act-now facts are listed (the facts
+/// are ordered Critical first); the overflow is named as a count, and only
+/// what was listed is later recorded as reported, so an unlisted advisory is
+/// still NEW tomorrow.
+pub(crate) fn floor_from_facts(mut facts: BriefFacts, why: MorningWhy) -> Option<FactsFloor> {
     if !has_any_fact(&facts) {
         return None;
     }
-    let markdown =
+    let mut shown_new = 0;
+    let mut hidden = 0;
+    facts.security.retain(|f| {
+        if !f.status.is_new() {
+            return true;
+        }
+        shown_new += 1;
+        let keep = shown_new <= MORNING_ACT_NOW_SHOWN;
+        if !keep {
+            hidden += 1;
+        }
+        keep
+    });
+    let mut markdown =
         crate::briefing_deterministic::build_deterministic_brief(&facts, FloorReason::Morning(why));
+    if hidden > 0 {
+        let line = format!(
+            "- {hidden} more High or Critical advisor{} on the Preemption tab.\n",
+            if hidden == 1 { "y" } else { "ies" }
+        );
+        // Close the Act now section with the count.
+        if let Some(start) = markdown.find("## Act now\n") {
+            let end = markdown[start..]
+                .find("\n\n")
+                .map_or(markdown.len(), |i| start + i + 1);
+            markdown.insert_str(end, &line);
+        }
+    }
     Some(FactsFloor { markdown, facts })
 }
 
