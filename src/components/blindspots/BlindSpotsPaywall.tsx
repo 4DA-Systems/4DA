@@ -45,12 +45,9 @@ export const BlindSpotsPaywall = memo(function BlindSpotsPaywall() {
     (teaser.uncovered_count > 0 || teaser.stale_topic_count > 0 || teaser.missed_signal_count > 0);
 
   return (
-    <div className="space-y-4" role="tabpanel" id="view-panel-blindspots" aria-labelledby="tab-blindspots">
-      <header className="mb-2">
-        {/* h2, not h1: App.tsx owns the document's only h1 ("4DA", sr-only). */}
-        <h2 className="text-xl font-semibold text-text-primary tracking-tight">{t('blindspots.title')}</h2>
-        <p className="text-sm text-text-muted mt-1">{t('blindspots.subtitle')}</p>
-      </header>
+    <div className="space-y-4">
+      {/* The Preemption shell owns the h2; the sub-tab names this view. */}
+      <p className="text-xs text-text-muted">{t('blindspots.subtitle')}</p>
       <div className="flex flex-col items-center justify-center py-20 text-center gap-3">
         <div className="w-12 h-12 rounded-full bg-accent-gold/10 border border-accent-gold/20 flex items-center justify-center mb-1">
           <span className="text-accent-gold text-lg" aria-hidden="true">&#x1F512;</span>

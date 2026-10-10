@@ -9,8 +9,9 @@ import type { DepRow } from './types';
 // title rendered as a SECOND <h1> ("Coverage Gaps") next to App.tsx's sr-only
 // document <h1> ("4DA"), while every section header underneath was an <h3>.
 //
-// The panel title is now an <h2>, so the tree steps h1 -> h2 -> h3 with no
-// skipped level, and the view no longer competes for the document h1.
+// The fix made the panel title an <h2>. Since AD-054 Blind Spots is a
+// Preemption sub-view: the Preemption shell owns that <h2>, this view renders
+// none, and its sections stay <h3> — still h1 -> h2 -> h3, no skipped level.
 //
 // These tests render the REAL TierSection / EmergingSignals / CollapsedSections
 // components (not stubs) — the point is the heading tags they actually emit.
@@ -72,16 +73,23 @@ function headingLevels(container: HTMLElement): number[] {
 }
 
 /**
- * Mirrors axe-core's `heading-order` rule. App.tsx renders the document's only
- * <h1> ("4DA", sr-only) outside this subtree, so the walk starts at level 1 and
- * each heading may descend by at most one level from the previous one.
+ * Mirrors axe-core's `heading-order` rule. Since AD-054 this view is a
+ * Preemption sub-view: App.tsx renders the document's only <h1> and the
+ * Preemption shell the <h2> above it, so the walk starts at level 2 and each
+ * heading may descend by at most one level from the previous one.
  */
 function expectNoSkippedHeadingLevel(container: HTMLElement) {
-  let previous = 1; // App.tsx's sr-only document <h1>
+  let previous = 2; // PreemptionView's <h2>
   for (const level of headingLevels(container)) {
     expect(level).toBeLessThanOrEqual(previous + 1);
     previous = level;
   }
+}
+
+/** The sub-view never competes for the document h1 or the shell's h2. */
+function expectNoTopLevelHeadings(container: HTMLElement) {
+  expect(container.querySelectorAll('h1')).toHaveLength(0);
+  expect(container.querySelectorAll('h2')).toHaveLength(0);
 }
 
 beforeEach(() => {
@@ -95,18 +103,15 @@ beforeEach(() => {
   };
 });
 
-describe('BlindSpotsView — heading hierarchy (2026-08-31 a11y audit)', () => {
-  it('titles the panel with an h2, never a second document h1', () => {
+describe('BlindSpotsView — heading hierarchy (2026-08-31 a11y audit, AD-054 sub-view)', () => {
+  it('leaves the h1 and h2 to the app and the Preemption shell', () => {
     mockDepRows = [depRow('react (npm)', 'blind_spot')];
     const { container } = render(<BlindSpotsView />);
-
-    expect(container.querySelectorAll('h1')).toHaveLength(0);
-    const title = container.querySelector('h2');
-    expect(title).not.toBeNull();
-    expect(title!.textContent).toBe('blindspots.title');
+    expectNoTopLevelHeadings(container);
+    expect(container.querySelector('h3')).not.toBeNull();
   });
 
-  it('renders every section header one level below the panel title', () => {
+  it('renders every section header one level below the shell title', () => {
     mockDepRows = [
       depRow('react (npm)', 'blind_spot'),
       depRow('vue (npm)', 'falling_behind'),
@@ -116,8 +121,7 @@ describe('BlindSpotsView — heading hierarchy (2026-08-31 a11y audit)', () => {
     ];
     const { container } = render(<BlindSpotsView />);
 
-    // The panel title is the only h2; all five sections are h3 siblings.
-    expect(container.querySelectorAll('h2')).toHaveLength(1);
+    expectNoTopLevelHeadings(container);
     const sectionHeadings = Array.from(container.querySelectorAll('h3'));
     expect(sectionHeadings.length).toBeGreaterThanOrEqual(4);
     expectNoSkippedHeadingLevel(container);
@@ -126,9 +130,7 @@ describe('BlindSpotsView — heading hierarchy (2026-08-31 a11y audit)', () => {
   it('keeps the hierarchy intact in the error state', () => {
     mockState = { ...mockState, blindSpotsError: 'boom' };
     const { container } = render(<BlindSpotsView />);
-
-    expect(container.querySelectorAll('h1')).toHaveLength(0);
-    expect(container.querySelector('h2')!.textContent).toBe('blindspots.title');
+    expectNoTopLevelHeadings(container);
     expectNoSkippedHeadingLevel(container);
   });
 
@@ -138,17 +140,14 @@ describe('BlindSpotsView — heading hierarchy (2026-08-31 a11y audit)', () => {
       blindSpotReport: { items: [], score: 5, total_tracked: 0, weak_match_count: 0, data_freshness: null },
     };
     const { container } = render(<BlindSpotsView />);
-
-    expect(container.querySelectorAll('h1')).toHaveLength(0);
+    expectNoTopLevelHeadings(container);
     expectNoSkippedHeadingLevel(container);
   });
 
   it('keeps the hierarchy intact behind the paywall', () => {
     mockState = { ...mockState, blindSpotsPaywalled: true };
     const { container } = render(<BlindSpotsView />);
-
-    expect(container.querySelectorAll('h1')).toHaveLength(0);
-    expect(container.querySelector('h2')!.textContent).toBe('blindspots.title');
+    expectNoTopLevelHeadings(container);
     expectNoSkippedHeadingLevel(container);
   });
 });

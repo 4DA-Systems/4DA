@@ -75,21 +75,23 @@ export const ScanProjectsPrompt = memo(function ScanProjectsPrompt({ onScanned }
  * Dependencies are tracked but the report is not computed yet (`score < 0`:
  * under a week of reading, or too few direct dependencies). Say what will
  * appear and where the actionable part lives today — advisories that affect
- * the user reach Preemption immediately — instead of a bare dependency count.
+ * the user reach Preemption's worklist immediately — instead of a bare
+ * dependency count.
  */
 export const AssessingNotice = memo(function AssessingNotice() {
   const { t } = useTranslation();
-  const setActiveView = useAppStore(s => s.setActiveView);
+  const openPreemption = useAppStore(s => s.openPreemption);
 
   return (
     <div className="bg-bg-secondary rounded-lg border border-border px-5 py-5" data-testid="blindspots-assessing">
       <h3 className="text-sm font-medium text-text-primary">{t('blindspots.firstDay.assessingTitle')}</h3>
       <p className="text-xs text-text-muted mt-1 mb-3">{t('blindspots.firstDay.assessingBody')}</p>
       <button
-        onClick={() => setActiveView('preemption')}
+        type="button"
+        onClick={() => openPreemption('worklist')}
         className="px-3 py-1.5 text-xs bg-bg-tertiary text-text-secondary border border-border rounded-lg hover:text-text-primary transition-colors"
       >
-        {t('blindspots.firstDay.openPreemption')}
+        {t('blindspots.firstDay.openWorklist')}
       </button>
     </div>
   );

@@ -160,6 +160,23 @@ async fn latest_ipc_error_for(client: &mut VictauriClient, command: &str) -> Opt
         .map(|call| ipc_call_error_text(&call))
 }
 
+/// Select the main Preemption tab. Since AD-054 Blind Spots and Knowledge
+/// Gaps are Preemption sub-views, so their sub-tabs exist only once it is open.
+async fn open_preemption_tab(client: &mut VictauriClient) {
+    let elements = client
+        .find_elements(serde_json::json!({"role": "tab"}))
+        .await
+        .unwrap();
+    let tabs = elements.as_array().expect("tabs array");
+    let preemption = tabs
+        .iter()
+        .find(|e| e.get("text").and_then(|t| t.as_str()) == Some("Preemption"))
+        .expect("Preemption tab must exist");
+    let ref_id = preemption["ref_id"].as_str().unwrap();
+    let _ = client.click(ref_id).await;
+    tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+}
+
 // ── Phase 1: Smoke Tests ─────────────────────────────────────────────────────
 
 #[tokio::test]
@@ -269,7 +286,8 @@ async fn main_navigation_tabs_exist() {
 
     let mut client = connect_victauri().await.unwrap();
 
-    let expected_tabs = ["Brief", "Preemption", "Blind Spots", "Signal"];
+    // Main nav is three tabs (AD-054); Blind Spots is a Preemption sub-view.
+    let expected_tabs = ["Brief", "Preemption", "Signal"];
     let snapshot = client.dom_snapshot().await.unwrap();
     let snapshot_str = serde_json::to_string(&snapshot).unwrap();
 
@@ -285,8 +303,8 @@ async fn main_navigation_tabs_exist() {
     }
 
     assert!(
-        missing.len() <= 1,
-        "At least 4 of 5 main tabs should be in DOM. Found: {found:?}, missing: {missing:?}"
+        missing.is_empty(),
+        "All three main tabs should be in the DOM. Found: {found:?}, missing: {missing:?}"
     );
 }
 
@@ -652,7 +670,7 @@ async fn navigate_all_five_views() {
     let mut client = connect_victauri().await.unwrap();
 
     // Skip Brief first (it's already selected), navigate the others, then back to Brief
-    let tabs = ["Preemption", "Blind Spots", "Signal", "Brief"];
+    let tabs = ["Preemption", "Signal", "Brief"];
     for tab_name in &tabs {
         let elements = client
             .find_elements(serde_json::json!({"role": "tab"}))
@@ -1741,7 +1759,8 @@ async fn blind_spots_tab_renders_without_errors() {
 
     let mut client = connect_victauri().await.unwrap();
 
-    // Navigate to Blind Spots tab
+    open_preemption_tab(&mut client).await;
+    // Navigate to the Blind Spots sub-view tab
     let elements = client
         .find_elements(serde_json::json!({"role": "tab"}))
         .await
@@ -1796,7 +1815,8 @@ async fn blind_spots_tab_has_score_bar() {
 
     let mut client = connect_victauri().await.unwrap();
 
-    // Navigate to Blind Spots tab
+    open_preemption_tab(&mut client).await;
+    // Navigate to the Blind Spots sub-view tab
     let elements = client
         .find_elements(serde_json::json!({"role": "tab"}))
         .await
@@ -1836,7 +1856,8 @@ async fn blind_spots_tab_has_tier_sections() {
 
     let mut client = connect_victauri().await.unwrap();
 
-    // Navigate to Blind Spots
+    open_preemption_tab(&mut client).await;
+    // Navigate to the Blind Spots sub-view
     let elements = client
         .find_elements(serde_json::json!({"role": "tab"}))
         .await
@@ -1902,7 +1923,8 @@ async fn blind_spots_accessibility_audit() {
 
     let mut client = connect_victauri().await.unwrap();
 
-    // Navigate to Blind Spots
+    open_preemption_tab(&mut client).await;
+    // Navigate to the Blind Spots sub-view
     let elements = client
         .find_elements(serde_json::json!({"role": "tab"}))
         .await
@@ -1957,7 +1979,8 @@ async fn blind_spots_clean_state_shows_positive_ux() {
         return;
     }
 
-    // Navigate to Blind Spots
+    open_preemption_tab(&mut client).await;
+    // Navigate to the Blind Spots sub-view
     let elements = client
         .find_elements(serde_json::json!({"role": "tab"}))
         .await
@@ -2001,7 +2024,8 @@ async fn blind_spots_no_vanity_metrics() {
 
     let mut client = connect_victauri().await.unwrap();
 
-    // Navigate to Blind Spots
+    open_preemption_tab(&mut client).await;
+    // Navigate to the Blind Spots sub-view
     let elements = client
         .find_elements(serde_json::json!({"role": "tab"}))
         .await
@@ -2063,6 +2087,7 @@ async fn blind_spots_score_shows_coverage_not_problems() {
 
     let expected_coverage = (100.0 - raw_score).round() as u64;
 
+    open_preemption_tab(&mut client).await;
     let elements = client
         .find_elements(serde_json::json!({"role": "tab"}))
         .await
@@ -3353,7 +3378,8 @@ async fn cold_start_no_blank_screens() {
 
     let mut client = connect_victauri().await.unwrap();
 
-    // Visit each of the four tabs — none should render blank
+    // Visit each main tab, plus the Blind Spots sub-view right after
+    // Preemption opens it (AD-054) — none should render blank
     let tab_names = ["Brief", "Preemption", "Blind Spots", "Signal"];
 
     for tab_name in &tab_names {

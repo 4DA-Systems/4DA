@@ -26,6 +26,7 @@ vi.mock('../../lib/frecency', () => ({ frecencyBoost: () => 0 }));
 const deps = {
   t: (key: string, fallback?: string) => fallback ?? key,
   setActiveView: () => {},
+  openPreemption: () => {},
   onAnalyze: () => {},
   onOpenSettings: () => {},
   setSearchFocusItemId: () => {},

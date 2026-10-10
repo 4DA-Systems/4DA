@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-import { appBar, gotoMainShell, mainTablist } from './support/app';
+import { MAIN_TABS, appBar, gotoMainShell, mainTablist } from './support/app';
 
 /**
  * The analysis controls live in the app bar (UnifiedAppBar, a banner
@@ -39,7 +39,7 @@ test.describe('Analysis Flow & Action Bar', () => {
 
   test('tabs have correct selection state', async ({ page }) => {
     const tabs = mainTablist(page).getByRole('tab');
-    await expect(tabs).toHaveCount(4);
+    await expect(tabs).toHaveCount(MAIN_TABS.length);
     await expect(mainTablist(page).getByRole('tab', { selected: true })).toHaveCount(1);
   });
 

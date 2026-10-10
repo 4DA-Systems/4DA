@@ -140,17 +140,18 @@ describe('BlindSpotsView — day-one states are actionable', () => {
   });
 
   it('scanned but not yet assessed (score -1): says what will appear, no bare count', () => {
-    const setActiveView = vi.fn();
+    const openPreemption = vi.fn();
     mockState = {
       ...stateWith({ items: [], score: -1, total_tracked: 94, weak_match_count: 0, data_freshness: null }),
-      setActiveView,
+      openPreemption,
     };
     const { container } = render(<BlindSpotsView />);
     expect(screen.getByTestId('blindspots-assessing')).toBeInTheDocument();
     expect(screen.queryByText('blindspots.stats.tracked')).toBeNull();
     expect(container.textContent ?? '').not.toContain('94');
     expect(screen.queryByTestId('blindspots-scan-prompt')).toBeNull();
-    fireEvent.click(screen.getByText('blindspots.firstDay.openPreemption'));
-    expect(setActiveView).toHaveBeenCalledWith('preemption');
+    // AD-054: Blind Spots sits inside Preemption — the link selects the worklist sub-view.
+    fireEvent.click(screen.getByText('blindspots.firstDay.openWorklist'));
+    expect(openPreemption).toHaveBeenCalledWith('worklist');
   });
 });

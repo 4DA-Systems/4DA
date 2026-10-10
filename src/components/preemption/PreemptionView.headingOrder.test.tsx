@@ -47,6 +47,8 @@ function setState(overrides: Record<string, unknown>) {
     undoPreemptionDismissal: vi.fn(),
     clearPreemptionUndo: vi.fn(),
     expandPreemptionPlan: vi.fn(),
+    preemptionSubView: 'worklist',
+    setPreemptionSubView: vi.fn(),
     ...overrides,
   };
 }

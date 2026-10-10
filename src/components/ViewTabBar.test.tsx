@@ -30,11 +30,11 @@ vi.mock('../hooks/use-telemetry', () => ({
 import { ViewTabBar } from './ViewTabBar';
 
 describe('ViewTabBar', () => {
-  it('renders exactly 4 tabs', () => {
+  it('renders exactly 3 tabs (AD-054)', () => {
     setMockState({});
     render(<ViewTabBar />);
     const tabs = screen.getAllByRole('tab');
-    expect(tabs.length).toBe(4);
+    expect(tabs.length).toBe(3);
   });
 
   it('marks the active view tab as selected', () => {
@@ -82,23 +82,23 @@ describe('ViewTabBar roving tabindex (WAI-ARIA tabs)', () => {
   const tabIndexes = () => screen.getAllByRole('tab').map((t) => t.getAttribute('tabindex'));
 
   it('puts only the selected tab in the Tab order', () => {
-    setMockState({ activeView: 'blindspots' });
+    setMockState({ activeView: 'preemption' });
     render(<ViewTabBar />);
-    expect(tabIndexes()).toEqual(['-1', '-1', '0', '-1']);
+    expect(tabIndexes()).toEqual(['-1', '0', '-1']);
   });
 
   it('falls back to the first tab when no tab is selected', () => {
     setMockState({ activeView: 'settings' });
     render(<ViewTabBar />);
-    expect(tabIndexes()).toEqual(['0', '-1', '-1', '-1']);
+    expect(tabIndexes()).toEqual(['0', '-1', '-1']);
   });
 
   it.each([
     ['ArrowRight', 'briefing', 'preemption', 1],
-    ['ArrowLeft', 'briefing', 'results', 3],
+    ['ArrowLeft', 'briefing', 'results', 2],
     ['ArrowRight', 'results', 'briefing', 0],
     ['Home', 'results', 'briefing', 0],
-    ['End', 'briefing', 'results', 3],
+    ['End', 'briefing', 'results', 2],
   ] as const)('%s from %s moves focus to and activates %s', (key, from, to, index) => {
     setActiveViewMock.mockClear();
     setMockState({ activeView: from });

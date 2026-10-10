@@ -30,14 +30,15 @@ You own the compute. 4DA never pays for it, never stores your keys remotely, and
 
 Trigger a run from the top bar. 4DA fetches from your configured [sources](/docs/sources/), scores everything against your context, and keeps only what passes the confirmation gate. Background monitoring can keep it fresh on an interval you set.
 
-## 4. Read the four tabs
+## 4. Read the three tabs
 
 | Tab | What it answers |
 |---|---|
 | **Brief** | What are today's top picks, scored against my stack? |
-| **Preemption** | What's coming that I'll have to act on — CVEs, breaking changes, dependency risk? |
-| **Blind Spots** | What high-relevance items did I never see, and where's my coverage thin? |
+| **Preemption** | What do I have to act on — CVEs, breaking changes, dependency risk — and what exactly do I run? |
 | **Signal** | Which items earned their place through 2+ independent axes? |
+
+Preemption opens on the **Worklist**: version-confirmed findings with their fix paths, and the Upgrade Plan. Two supporting views sit beside it: **Blind Spots** (dependencies whose coverage is thin) and **Learning Opportunities** (dependency news you haven't read yet).
 
 ## 5. Teach it
 

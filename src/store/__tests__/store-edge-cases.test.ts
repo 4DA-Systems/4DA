@@ -155,7 +155,7 @@ describe('store edge cases', () => {
     it('multiple rapid view changes settle on the last one', () => {
       useAppStore.getState().setActiveView('results');
       useAppStore.getState().setActiveView('preemption');
-      useAppStore.getState().setActiveView('blindspots');
+      useAppStore.getState().setActiveView('results');
       useAppStore.getState().setActiveView('briefing');
 
       expect(useAppStore.getState().activeView).toBe('briefing');

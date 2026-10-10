@@ -29,6 +29,7 @@ function deps(overrides: Partial<ProviderDeps> = {}): ProviderDeps {
   return {
     t,
     setActiveView: vi.fn(),
+    openPreemption: vi.fn(),
     onAnalyze: vi.fn(),
     onOpenSettings: vi.fn(),
     setSearchFocusItemId: vi.fn(),
@@ -71,11 +72,44 @@ describe('navigation provider', () => {
     expect(setActiveView).toHaveBeenCalledWith('results');
   });
 
-  it('returns every view in launcher mode (empty query)', () => {
+  it('returns every destination in launcher mode (empty query)', () => {
     const nav = buildProviders(deps()).find(p => p.id === 'nav')!;
     const out = run(nav, '') as CommandResult[];
-    // 4 views + settings
-    expect(out.length).toBeGreaterThanOrEqual(5);
+    // 3 main views + 2 Preemption sub-views + settings
+    expect(out.map(r => r.id).sort()).toEqual([
+      'goto-blindspots', 'goto-briefing', 'goto-knowledge', 'goto-preemption', 'goto-results', 'goto-settings',
+    ]);
+  });
+
+  // AD-054: Blind Spots and Knowledge Gaps are Preemption sub-views. The
+  // result ids are unchanged, so frecency picks remembered under
+  // `goto-blindspots` keep ranking the same destination.
+  it('opens Blind Spots as a Preemption sub-view, keeping its result id', () => {
+    const openPreemption = vi.fn();
+    const setActiveView = vi.fn();
+    const nav = buildProviders(deps({ openPreemption, setActiveView })).find(p => p.id === 'nav')!;
+    const row = (run(nav, 'blind spots') as CommandResult[]).find(r => r.id === 'goto-blindspots');
+    expect(row).toBeDefined();
+    row!.run();
+    expect(openPreemption).toHaveBeenCalledWith('blindspots');
+    expect(setActiveView).not.toHaveBeenCalled();
+  });
+
+  it('opens Knowledge Gaps as a Preemption sub-view', () => {
+    const openPreemption = vi.fn();
+    const nav = buildProviders(deps({ openPreemption })).find(p => p.id === 'nav')!;
+    const row = (run(nav, 'knowledge gaps') as CommandResult[]).find(r => r.id === 'goto-knowledge');
+    expect(row).toBeDefined();
+    row!.run();
+    expect(openPreemption).toHaveBeenCalledWith('knowledge');
+  });
+
+  it('opens Preemption on its worklist', () => {
+    const openPreemption = vi.fn();
+    const nav = buildProviders(deps({ openPreemption })).find(p => p.id === 'nav')!;
+    const row = (run(nav, 'preemption') as CommandResult[]).find(r => r.id === 'goto-preemption');
+    row!.run();
+    expect(openPreemption).toHaveBeenCalledWith('worklist');
   });
 });
 

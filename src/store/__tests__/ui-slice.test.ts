@@ -72,9 +72,11 @@ describe('ui-slice', () => {
       expect(useAppStore.getState().activeView).toBe('preemption');
     });
 
-    it('changes active view to blindspots', () => {
+    // AD-054: Blind Spots is a Preemption sub-view; the old id migrates.
+    it('routes the retired blindspots view to Preemption > Blind Spots', () => {
       useAppStore.getState().setActiveView('blindspots');
-      expect(useAppStore.getState().activeView).toBe('blindspots');
+      expect(useAppStore.getState().activeView).toBe('preemption');
+      expect(useAppStore.getState().preemptionSubView).toBe('blindspots');
     });
 
     it('can switch back to briefing', () => {

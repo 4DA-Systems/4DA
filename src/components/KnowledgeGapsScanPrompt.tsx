@@ -24,8 +24,8 @@ export const KnowledgeGapsScanPrompt = memo(function KnowledgeGapsScanPrompt() {
   }, [runAutoDiscovery, loadUserContext, startAnalysis]);
 
   return (
-    <div className="mb-6 bg-bg-secondary rounded-lg border border-border px-5 py-4" data-testid="knowledge-gaps-scan-prompt">
-      <h2 className="font-medium text-text-primary text-sm">{t('knowledgeGaps.title')}</h2>
+    <div className="bg-bg-secondary rounded-lg border border-border px-5 py-4" data-testid="knowledge-gaps-scan-prompt">
+      <h3 className="font-medium text-text-primary text-sm">{t('knowledgeGaps.title')}</h3>
       <p className="text-xs text-text-muted mt-0.5 mb-3">{t('knowledgeGaps.noDependencies')}</p>
       <button
         type="button"

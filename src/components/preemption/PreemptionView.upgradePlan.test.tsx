@@ -104,6 +104,8 @@ function setFeed(
     undoPreemptionDismissal: vi.fn(),
     clearPreemptionUndo: vi.fn(),
     expandPreemptionPlan: vi.fn(),
+    preemptionSubView: 'worklist',
+    setPreemptionSubView: vi.fn(),
   };
 }
 

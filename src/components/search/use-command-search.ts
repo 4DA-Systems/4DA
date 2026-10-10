@@ -50,10 +50,10 @@ interface UseCommandSearch {
 }
 
 export function useCommandSearch(deps: ProviderDeps): UseCommandSearch {
-  const { t, setActiveView, onAnalyze, onOpenSettings, setSearchFocusItemId, isItemInFeed } = deps;
+  const { t, setActiveView, openPreemption, onAnalyze, onOpenSettings, setSearchFocusItemId, isItemInFeed } = deps;
   const providers = useMemo(
-    () => buildProviders({ t, setActiveView, onAnalyze, onOpenSettings, setSearchFocusItemId, isItemInFeed }),
-    [t, setActiveView, onAnalyze, onOpenSettings, setSearchFocusItemId, isItemInFeed],
+    () => buildProviders({ t, setActiveView, openPreemption, onAnalyze, onOpenSettings, setSearchFocusItemId, isItemInFeed }),
+    [t, setActiveView, openPreemption, onAnalyze, onOpenSettings, setSearchFocusItemId, isItemInFeed],
   );
 
   const [query, setQueryState] = useState('');
