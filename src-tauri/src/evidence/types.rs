@@ -259,6 +259,10 @@ pub const ACTION_IDS: &[&str] = &[
     "accept_decision",
     "reject_decision",
     "set_refutation",
+    // The action IS a shell command: `label` is the exact command, the
+    // description says where to run it. The lens copies it; nothing in 4DA
+    // executes it. Emitted by Signal's stack-change stream (AD-054/AD-055).
+    "run_command",
 ];
 
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]

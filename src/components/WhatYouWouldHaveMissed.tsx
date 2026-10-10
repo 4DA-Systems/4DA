@@ -10,7 +10,7 @@ import type { SourceRelevance } from '../types/analysis';
 import { getRelevancePresentation, isSurfacedSignal } from '../utils/score';
 import { isBriefSuppressed, useActiveBriefFilteredIds } from '../hooks/use-brief-verdicts';
 import { isGrounded } from './signals/evidence-pool';
-import { partitionLanes, stackTier } from './signals/signal-lanes';
+import { orderByStackTier, stackTier } from './signals/signal-lanes';
 
 /**
  * "What You Would Have Missed" — the ONE surfaced item genuinely tied to the
@@ -45,9 +45,9 @@ export function heroCandidates(results: SourceRelevance[]): SourceRelevance[] {
 }
 
 /**
- * The hero is drawn from -- and ordered like -- the Signal list's "Your stack"
- * lane: the same grounding predicate (`isGrounded`, the Affects-You pool) and
- * the same tiering (`stackTier`: security, then breaking / deprecation). It
+ * The hero is drawn from grounded feed rows (`isGrounded`, the Affects-You
+ * pool) ordered by the feed's stack tiering (`orderByStackTier`: security,
+ * then breaking / deprecation). It
  * used to keep its own rules (`signal_type` / `content_type` only), so a
  * graded "Breaking upgrade: typescript 6.0.3 -> 7.0.2" -- a breaking change by
  * `necessity_category`, `release_notes` by content type -- was invisible to it:
@@ -59,7 +59,7 @@ export function findMostCriticalSave(results: SourceRelevance[]): SourceRelevanc
   // genuinely tied to the user's stack. Security first. Deliberately NO
   // fabrication fallback: if nothing grounded is security / breaking / a tool
   // release, the card renders an honest state instead of inventing a save.
-  const stackOrdered = partitionLanes(results.filter(isGrounded)).stack;
+  const stackOrdered = orderByStackTier(results.filter(isGrounded));
   for (const kind of KIND_PRIORITY_ORDER) {
     const match = stackOrdered.find(r => heroKind(r) === kind);
     if (match) return match;

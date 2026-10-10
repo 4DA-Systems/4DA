@@ -8,6 +8,7 @@ import { useAppStore } from '../store';
 import { useShallow } from 'zustand/react/shallow';
 import { ViewErrorBoundary } from './ViewErrorBoundary';
 import { ResultsView } from './ResultsView';
+import { StackChangeLane } from './signals/StackChangeLane';
 
 const BriefingView = lazy(() => import('./BriefingView').then(m => ({ default: m.BriefingView })));
 const SignalsPanel = lazy(() => import('./SignalsPanel').then(m => ({ default: m.SignalsPanel })));
@@ -17,9 +18,11 @@ const PreemptionView = lazy(() => import('./preemption/PreemptionView'));
 const ContentGraphView = lazy(() => import('./signals/ContentGraphView'));
 const ThemeMapView = lazy(() => import('./signals/ThemeMapView'));
 
-/** Signal's sub-views: List (ranked lanes), Themes (the reading map) and
- *  Graph (how items and themes relate). One table, so the toggle buttons can
- *  never drift from the views they switch. */
+/** Signal's sub-views: List (the stack-change stream, then the reading feed's
+ *  lanes), Themes (the reading map) and Graph (how items and themes relate).
+ *  One table, so the toggle buttons can never drift from the views they
+ *  switch. Themes and Graph map the reading feed only: a stack change is one
+ *  package's fact, with nothing to cluster, and they say so. */
 const SIGNAL_VIEWS = [
   { mode: 'list', labelKey: 'signals.viewList' },
   { mode: 'themes', labelKey: 'signals.viewThemes' },
@@ -100,11 +103,15 @@ export function ViewRouter({ newItemIds, focusedIndex }: ViewRouterProps) {
               error so a crash in one view never blocks the others. */}
           <ViewErrorBoundary viewName="Signal" resetKey={signalViewMode}>
             {signalViewMode !== 'list' ? (
-              <Suspense fallback={<div className="flex items-center justify-center py-20 text-text-secondary text-sm">{t('action.loading')}</div>}>
-                {signalViewMode === 'themes' ? <ThemeMapView /> : <ContentGraphView />}
-              </Suspense>
+              <>
+                <p className="px-4 pt-1 text-[11px] text-text-muted" data-testid="signal-mode-note">{t('signals.stack.modeNote')}</p>
+                <Suspense fallback={<div className="flex items-center justify-center py-20 text-text-secondary text-sm">{t('action.loading')}</div>}>
+                  {signalViewMode === 'themes' ? <ThemeMapView /> : <ContentGraphView />}
+                </Suspense>
+              </>
             ) : (
               <>
+                <StackChangeLane />
                 {analysisComplete && (
                   <Suspense fallback={null}>
                     <FeedbackLivenessBanner />

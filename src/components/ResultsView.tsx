@@ -11,9 +11,7 @@ import { ResultLaneList } from './ResultLaneList';
 import { SignalLanes } from './SignalLanes';
 import { useAppStore } from '../store';
 import { useResultFilters } from '../hooks';
-import {
-  STACK_LANE_CAP, flattenVisible, locateInLanes, partitionLanes, visibleLaneItems,
-} from './signals/signal-lanes';
+import { flattenVisible, locateInLanes, partitionLanes, visibleLaneItems } from './signals/signal-lanes';
 import { useSignalDisplayOrder } from './signals/signal-display-order';
 import type { FeedbackAction, SourceRelevance } from '../types';
 
@@ -81,22 +79,21 @@ export function ResultsView({
     saveAllAbove,
   } = useResultFilters();
 
-  // Split the feed into lanes by evidence pool (grounding), not score band, when
-  // ranking by relevance: score can't separate signal from noise — a stack item
-  // and pure noise both score ~0.9; grounding can (see signals/signal-lanes.ts).
-  // Cold-start (profileEmpty) and the non-score sorts keep the flat list.
+  // Split the reading feed into its collapsed lanes when ranking by relevance
+  // (see signals/signal-lanes.ts). Lane 1, the stack-change stream, is its own
+  // section above this panel (StackChangeLane), so registry and advisory rows
+  // are left out of these lanes. Cold-start (profileEmpty) and the non-score
+  // sorts keep the flat list.
   const lanesActive = sortBy === 'score' && !profileEmpty;
-  const stackExpanded = useSignalDisplayOrder(s => s.stackExpanded);
   const worthExpanded = useSignalDisplayOrder(s => s.worthExpanded);
   const moreExpanded = useSignalDisplayOrder(s => s.moreExpanded);
-  const setStackExpanded = useSignalDisplayOrder(s => s.setStackExpanded);
   const setWorthExpanded = useSignalDisplayOrder(s => s.setWorthExpanded);
   const setMoreExpanded = useSignalDisplayOrder(s => s.setMoreExpanded);
   const setVisible = useSignalDisplayOrder(s => s.setVisible);
   const lanes = useMemo(() => (lanesActive ? partitionLanes(filteredResults) : null), [lanesActive, filteredResults]);
   const visibleLanes = useMemo(
-    () => (lanes ? visibleLaneItems(lanes, { stackExpanded, worthExpanded, moreExpanded }) : null),
-    [lanes, stackExpanded, worthExpanded, moreExpanded],
+    () => (lanes ? visibleLaneItems(lanes, { worthExpanded, moreExpanded }) : null),
+    [lanes, worthExpanded, moreExpanded],
   );
   const displayResults = useMemo(
     () => (visibleLanes ? flattenVisible(visibleLanes) : filteredResults),
@@ -144,7 +141,6 @@ export function ResultsView({
     if (searchFocusItemId == null) return;
     // In a collapsed part of a lane — open it first; this effect re-runs.
     const loc = lanes ? locateInLanes(lanes, searchFocusItemId) : null;
-    if (loc?.lane === 'stack' && loc.index >= STACK_LANE_CAP && !stackExpanded) { setStackExpanded(true); return; }
     if (loc?.lane === 'worth' && !worthExpanded) { setWorthExpanded(true); return; }
     if (loc?.lane === 'more' && !moreExpanded) { setMoreExpanded(true); return; }
     if (displayResults.some(r => r.id === searchFocusItemId)) {
@@ -161,7 +157,7 @@ export function ResultsView({
     }
     // Off-feed corpus item not in this list — clear; the user is already on Signal.
     setSearchFocusItemId(null);
-  }, [searchFocusItemId, lanes, stackExpanded, worthExpanded, moreExpanded, setStackExpanded, setWorthExpanded, setMoreExpanded, displayResults, setExpandedItem, setSearchFocusItemId, showOnlyRelevant, setShowOnlyRelevant, state.relevanceResults]);
+  }, [searchFocusItemId, lanes, worthExpanded, moreExpanded, setWorthExpanded, setMoreExpanded, displayResults, setExpandedItem, setSearchFocusItemId, showOnlyRelevant, setShowOnlyRelevant, state.relevanceResults]);
 
   useEffect(() => {
     const items = [
@@ -310,10 +306,8 @@ export function ResultsView({
             <SignalLanes
               lanes={lanes}
               visible={visibleLanes}
-              stackExpanded={stackExpanded}
               worthExpanded={worthExpanded}
               moreExpanded={moreExpanded}
-              onToggleStack={() => setStackExpanded(!stackExpanded)}
               onToggleWorth={() => setWorthExpanded(!worthExpanded)}
               onToggleMore={() => setMoreExpanded(!moreExpanded)}
               {...listProps}
