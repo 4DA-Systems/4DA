@@ -448,7 +448,7 @@ fn lane1_on_a_snapshot() {
     };
     crate::register_sqlite_vec_extension();
     let db = Database::new(std::path::Path::new(&path)).expect("open snapshot");
-    let items = collect(&db, true, MAX_ITEMS);
+    let items = collect(&db, true, ALL_ITEMS);
     let mut by_change = std::collections::BTreeMap::<&str, usize>::new();
     for item in &items {
         validate_item(item).unwrap_or_else(|e| panic!("invalid item {}: {e:?}", item.id));
