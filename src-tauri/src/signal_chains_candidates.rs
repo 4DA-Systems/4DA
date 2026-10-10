@@ -17,6 +17,7 @@ pub(super) fn load_recent_chain_candidate_items(
     let tags_expr = columns.tags_expr();
     let relevance_expr = columns.relevance_expr();
     let embedding_filter = columns.embedding_filter();
+    let enabled_filter = columns.enabled_filter();
     let window = format!("-{SIGNAL_CHAIN_WINDOW_DAYS} days");
 
     // Balance by source and day. The old newest-200 slice frequently contained
@@ -33,6 +34,7 @@ pub(super) fn load_recent_chain_candidate_items(
              FROM source_items si
              WHERE {signal_at_expr} >= datetime('now', ?1)
              {embedding_filter}
+             {enabled_filter}
          ),
          ranked AS (
              SELECT *,
@@ -91,6 +93,8 @@ struct SourceItemColumns {
     tags: bool,
     relevance_score: bool,
     embedding_status: bool,
+    /// Whether the `sources` registry exists (test fixtures may omit it).
+    sources_table: bool,
 }
 
 impl SourceItemColumns {
@@ -100,6 +104,14 @@ impl SourceItemColumns {
             tags: source_items_has_column(conn, "tags"),
             relevance_score: source_items_has_column(conn, "relevance_score"),
             embedding_status: source_items_has_column(conn, "embedding_status"),
+            sources_table: conn
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'sources'",
+                    [],
+                    |row| row.get::<_, i64>(0),
+                )
+                .map(|n| n > 0)
+                .unwrap_or(false),
         }
     }
 
@@ -124,6 +136,15 @@ impl SourceItemColumns {
             "COALESCE(si.relevance_score, 0.0)"
         } else {
             "0.0"
+        }
+    }
+
+    /// A source the user turned off feeds no chain (AD-054).
+    fn enabled_filter(&self) -> &'static str {
+        if self.sources_table {
+            "AND si.source_type NOT IN (SELECT source_type FROM sources WHERE enabled = 0)"
+        } else {
+            ""
         }
     }
 

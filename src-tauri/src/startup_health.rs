@@ -625,22 +625,30 @@ pub(crate) fn check_embedding_coverage_with_conn(
     issues: &mut Vec<HealthIssue>,
 ) {
     const MIN_SAMPLE: i64 = 20;
-    let row = conn.query_row(
-        "SELECT COUNT(*),
-                COALESCE(SUM(CASE WHEN embedding = zeroblob(length(embedding)) THEN 1 ELSE 0 END), 0)
-         FROM (
-             SELECT embedding, created_at FROM source_items
-             WHERE embedding IS NOT NULL AND length(embedding) > 0
-             ORDER BY id DESC LIMIT 300
-         )
-         WHERE created_at > datetime('now', '-24 hours')",
-        [],
-        |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?)),
-    );
-    let (total, zeros) = match row {
-        Ok(v) => v,
+    // The vectors live in `source_vec` (Phase 126); an item with none yet
+    // (pending) is not in the sample, as its empty BLOB was not before.
+    let ids: Vec<i64> = match conn
+        .prepare(
+            "SELECT id FROM (
+                 SELECT id, created_at FROM source_items ORDER BY id DESC LIMIT 300
+             )
+             WHERE created_at > datetime('now', '-24 hours')",
+        )
+        .and_then(|mut stmt| {
+            stmt.query_map([], |r| r.get::<_, i64>(0))?
+                .collect::<rusqlite::Result<Vec<i64>>>()
+        }) {
+        Ok(ids) => ids,
         Err(_) => return, // Table missing or unreadable - other checks report that.
     };
+    let Ok(blobs) = crate::db::item_embeddings::load_item_vector_blobs(conn, &ids) else {
+        return;
+    };
+    let total = blobs.len() as i64;
+    let zeros = blobs
+        .values()
+        .filter(|b| !b.is_empty() && b.iter().all(|&byte| byte == 0))
+        .count() as i64;
     if total >= MIN_SAMPLE && zeros * 2 > total {
         let pct = zeros.saturating_mul(100) / total.max(1);
         issues.push(HealthIssue {

@@ -50,10 +50,7 @@ use rusqlite::params;
 use tracing::{info, warn};
 
 use crate::analysis::analysis_cycle::{CycleResults, ScoredBatch};
-use crate::db::{
-    blob_to_embedding, parse_datetime, parse_datetime_opt, Database, StoredSourceItem,
-    FREE_HISTORY_LIMIT_HOURS,
-};
+use crate::db::{item_embeddings, Database, StoredSourceItem, FREE_HISTORY_LIMIT_HOURS};
 use crate::sources::feed_admission::{admits_to_feed, aged_out_of_feed, news_display_window_days};
 
 /// Window and size of the full-analysis selection (unchanged by this module).
@@ -203,8 +200,10 @@ fn curated_carry_ids(db: &Database, signal: bool, cap: usize) -> rusqlite::Resul
                 julianday('now') - julianday(COALESCE(published_at, created_at)),
                 (cve_ids IS NOT NULL OR content_type = 'security_advisory')
          FROM source_items
-         WHERE feed_relevant = 1{tier_clause}
-         ORDER BY COALESCE(published_at, created_at) DESC, id DESC"
+         WHERE feed_relevant = 1{tier_clause} AND {enabled}
+         ORDER BY COALESCE(published_at, created_at) DESC, id DESC",
+        // A source the user turned off carries nothing (AD-054).
+        enabled = crate::sources::source_class::enabled_source_sql("source_type"),
     );
     let rows: Vec<CarryRow> = {
         let conn = db.read_conn();
@@ -229,41 +228,19 @@ fn curated_carry_ids(db: &Database, signal: bool, cap: usize) -> rusqlite::Resul
 /// skipped).
 fn load_items(db: &Database, ids: &[i64]) -> rusqlite::Result<Vec<StoredSourceItem>> {
     let conn = db.read_conn();
-    let mut stmt = conn.prepare_cached(
-        "SELECT id, source_type, source_id, url, title, content, content_hash,
-                embedding, created_at, last_seen, COALESCE(detected_lang, 'en'),
-                feed_origin, tags, published_at
-         FROM source_items WHERE id = ?1",
-    )?;
+    let mut stmt = conn.prepare_cached(&format!(
+        "SELECT {} FROM source_items WHERE id = ?1",
+        item_embeddings::stored_item_columns("")
+    ))?;
     let mut out = Vec::with_capacity(ids.len());
     for id in ids {
-        let row = stmt.query_row(params![id], |row| {
-            let embedding_blob: Vec<u8> = row.get(7)?;
-            Ok(StoredSourceItem {
-                id: row.get(0)?,
-                source_type: row.get(1)?,
-                source_id: row.get(2)?,
-                url: row.get(3)?,
-                title: row.get(4)?,
-                content: row.get(5)?,
-                content_hash: row.get(6)?,
-                embedding: blob_to_embedding(&embedding_blob),
-                created_at: parse_datetime(row.get::<_, String>(8)?),
-                last_seen: parse_datetime(row.get::<_, String>(9)?),
-                detected_lang: row
-                    .get::<_, String>(10)
-                    .unwrap_or_else(|_| "en".to_string()),
-                feed_origin: row.get(11).ok().flatten(),
-                tags: row.get(12).ok().flatten(),
-                published_at: parse_datetime_opt(row.get::<_, Option<String>>(13).ok().flatten()),
-            })
-        });
-        match row {
+        match stmt.query_row(params![id], item_embeddings::stored_item_from_row) {
             Ok(item) => out.push(item),
             Err(rusqlite::Error::QueryReturnedNoRows) => {}
             Err(e) => return Err(e),
         }
     }
+    item_embeddings::attach_embeddings(&conn, &mut out)?;
     Ok(out)
 }
 

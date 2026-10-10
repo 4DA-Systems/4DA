@@ -7,7 +7,6 @@
 use rusqlite::params;
 use tracing::debug;
 
-use crate::db::blob_to_embedding;
 use crate::error::Result;
 
 use super::types::RawItem;
@@ -29,7 +28,8 @@ const SELECTION_WHERE: &str = "si.relevance_score IS NOT NULL
                 OR (si.feed_relevant IS NULL
                     AND si.created_at >= datetime('now', '-2 days')))
            AND si.id NOT IN (SELECT source_item_id FROM snoozed_items
-                             WHERE snooze_until > datetime('now'))";
+                             WHERE snooze_until > datetime('now'))
+           AND si.source_type NOT IN (SELECT source_type FROM sources WHERE enabled = 0)";
 
 /// Reserved slots for security items (osv/cve sources or a persisted
 /// security_alert signal) among the loaded set. The load and every downstream
@@ -142,6 +142,7 @@ pub(super) fn load_scored_items(
             "SELECT COUNT(*) FROM source_items
              WHERE feed_relevant IS 1
                AND embedding_status = 'complete'
+               AND source_type NOT IN (SELECT source_type FROM sources WHERE enabled = 0)
                AND created_at < datetime('now', '-7 days')
                AND created_at >= datetime('now', '-30 days')",
             [],
@@ -151,7 +152,7 @@ pub(super) fn load_scored_items(
 
     let select_columns = format!(
         "SELECT si.id, si.title, si.url, si.source_type, si.relevance_score,
-                si.created_at, si.embedding, si.signal_type, si.signal_priority,
+                si.created_at, si.signal_type, si.signal_priority,
                 (SELECT sid.package_name FROM source_item_dependencies sid
                  WHERE sid.source_item_id = si.id
                  ORDER BY sid.confidence DESC, sid.id LIMIT 1) AS matched_package,
@@ -165,23 +166,30 @@ pub(super) fn load_scored_items(
 
     let mut run_query = |sql: &str, limit: usize, items: &mut Vec<RawItem>| -> Result<()> {
         let mut stmt = conn.prepare(sql)?;
-        let rows = stmt.query_map(params![days_param, limit as i64], |row| {
-            let embedding_blob: Vec<u8> = row.get(6)?;
-            Ok((
-                row.get::<_, i64>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, Option<String>>(2)?,
-                row.get::<_, String>(3)?,
-                row.get::<_, f64>(4)? as f32,
-                row.get::<_, String>(5)?,
-                embedding_blob,
-                row.get::<_, Option<String>>(7)?,
-                row.get::<_, Option<String>>(8)?,
-                row.get::<_, Option<String>>(9)?,
-                row.get::<_, bool>(10)?,
-                row.get::<_, Option<bool>>(11)?.unwrap_or(false),
-            ))
-        })?;
+        let rows = stmt
+            .query_map(params![days_param, limit as i64], |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, Option<String>>(2)?,
+                    row.get::<_, String>(3)?,
+                    row.get::<_, f64>(4)? as f32,
+                    row.get::<_, String>(5)?,
+                    row.get::<_, Option<String>>(6)?,
+                    row.get::<_, Option<String>>(7)?,
+                    row.get::<_, Option<String>>(8)?,
+                    row.get::<_, bool>(9)?,
+                    row.get::<_, Option<bool>>(10)?.unwrap_or(false),
+                ))
+            })?
+            .collect::<rusqlite::Result<Vec<_>>>()?;
+        // Vectors come from `source_vec` (Phase 126), one batched read.
+        let ids: Vec<i64> = rows
+            .iter()
+            .map(|r| r.0)
+            .filter(|id| !seen.contains(id))
+            .collect();
+        let mut vectors = crate::db::item_embeddings::load_item_vectors(conn, &ids)?;
         for row in rows {
             let (
                 id,
@@ -190,17 +198,16 @@ pub(super) fn load_scored_items(
                 source_type,
                 score,
                 created_at,
-                embedding_blob,
                 signal_type,
                 signal_priority,
                 matched_package,
                 curated,
                 grounded,
-            ) = row?;
+            ) = row;
             if !seen.insert(id) {
                 continue;
             }
-            let embedding = blob_to_embedding(&embedding_blob);
+            let embedding = vectors.remove(&id).unwrap_or_default();
             if embedding.is_empty() || embedding.iter().all(|&v| v == 0.0) {
                 continue;
             }

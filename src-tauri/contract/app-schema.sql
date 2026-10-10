@@ -1,7 +1,7 @@
 -- 4DA app-schema contract. GENERATED, do not edit by hand.
 -- Regenerate: UPDATE_APP_SCHEMA_CONTRACT=1 cargo test --lib app_schema_contract
 -- Consumer: github.com/4DA-Systems/4da-mcp-server (pnpm run contract)
--- schema_version: 125
+-- schema_version: 126
 
 CREATE TABLE accuracy_history (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1839,14 +1839,6 @@ CREATE TRIGGER item_context_cache_gone
                                  DELETE FROM item_context_match WHERE item_id = old.id;
                              END;
 
-CREATE TRIGGER item_context_cache_reembed
-                                 AFTER UPDATE OF embedding ON source_items
-                                 WHEN old.embedding IS NOT new.embedding
-                             BEGIN
-                                 DELETE FROM item_context_cache WHERE item_id = new.id;
-                                 DELETE FROM item_context_match WHERE item_id = new.id;
-                             END;
-
 CREATE TRIGGER trg_channel_renders_cascade_delete
                              AFTER DELETE ON channel_renders
                              BEGIN
@@ -1916,4 +1908,4 @@ CREATE VIEW current_dependencies AS
                                 AND ds.ecosystem = latest.ecosystem
                                 AND ds.scanned_at = latest.latest;
 
-INSERT INTO schema_version (version) VALUES (125);
+INSERT INTO schema_version (version) VALUES (126);

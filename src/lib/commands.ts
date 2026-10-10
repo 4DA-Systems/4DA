@@ -626,9 +626,11 @@ interface CommandMap {
   get_suggested_curated_feeds: { params: Record<string, never>; result: { feeds: CuratedFeedInfo[]; count: number; matched_domains: string[]; detected_languages: string[] } };
   toggle_curated_feed: { params: { url: string; enabled: boolean }; result: { success: boolean; url: string; enabled: boolean } };
   get_sources: { params: Record<string, never>; result: SourceInfo[] };
+  get_source_settings: { params: Record<string, never>; result: SourceSetting[] };
+  set_source_enabled: { params: { sourceType: string; enabled: boolean }; result: SourceSetting };
   validate_rss_feed: { params: { url: string }; result: RssFeedValidation };
   validate_youtube_channel: { params: { channelId: string }; result: YouTubeChannelValidation };
-  fetch_single_feed: { params: { url: string }; result: { success: boolean; items_added: number } };
+  fetch_single_feed: { params: { url: string }; result: { success: boolean; items_added: number; source_disabled?: boolean } };
   fetch_single_youtube_channel: { params: { channelId: string }; result: { success: boolean; items_added: number } };
   reset_feed_health: { params: { feedOrigin: string; sourceType: string }; result: { success: boolean; feed_origin: string; source_type: string } };
   get_feed_health_status: { params: { sourceType: string }; result: FeedHealth[] };
@@ -920,13 +922,28 @@ interface PersonalizationContextSummary {
 interface SourceInfo {
   type: string;
   name: string;
+  /** The user's choice in `sources.enabled` (AD-054: interests are opt-in). */
   enabled: boolean;
+  /** `stack` = registries/advisories, always on; `interest` = opt-in reading. */
+  class: SourceClass;
   max_items: number;
   fetch_interval_secs: number;
   category: string;
   label: string;
   color_hint: string;
   default_content_type: string;
+}
+
+/** AD-054: what the engine needs vs. opt-in social/editorial reading. */
+export type SourceClass = 'stack' | 'interest';
+
+/** One row of the Settings source list (mirrors Rust `SourceSetting`). */
+export interface SourceSetting {
+  source_type: string;
+  name: string;
+  class: SourceClass;
+  enabled: boolean;
+  last_fetch: string | null;
 }
 
 /** Context engine statistics (mirrors Rust get_context_stats JSON) */

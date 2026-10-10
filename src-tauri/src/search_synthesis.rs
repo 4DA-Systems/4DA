@@ -93,9 +93,11 @@ fn gather_result_context(
     let sql = format!(
         "SELECT s.id, s.title, s.content, s.source_type, s.url
          FROM source_items s
-         WHERE ({where_clause})
+         WHERE ({where_clause}) AND {enabled}
          ORDER BY s.last_seen DESC
-         LIMIT {limit}"
+         LIMIT {limit}",
+        // A source the user turned off is not read (AD-054).
+        enabled = crate::sources::source_class::enabled_source_sql("s.source_type"),
     );
 
     let mut stmt = match conn.prepare(&sql) {

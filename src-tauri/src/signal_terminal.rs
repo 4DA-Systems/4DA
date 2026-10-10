@@ -899,6 +899,9 @@ async fn api_sources(
 ) -> Result<Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
     check_auth(&headers, &state)?;
 
+    let disabled = crate::get_database()
+        .and_then(|db| Ok(db.disabled_source_types()?))
+        .unwrap_or_default();
     let registry = crate::get_source_registry();
     let reg = registry.lock();
     let sources: Vec<serde_json::Value> = reg
@@ -908,7 +911,7 @@ async fn api_sources(
             serde_json::json!({
                 "name": s.name(),
                 "source_type": s.source_type(),
-                "enabled": true,
+                "enabled": !disabled.contains(s.source_type()),
             })
         })
         .collect();

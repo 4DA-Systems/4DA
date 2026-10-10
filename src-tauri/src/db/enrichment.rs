@@ -79,6 +79,7 @@ impl Database {
              LEFT JOIN enrichment_attempts a ON a.item_id = s.id
              WHERE s.created_at > datetime('now', ?1)
                AND s.url LIKE 'http%'
+               AND s.source_type NOT IN (SELECT source_type FROM sources WHERE enabled = 0)
                AND (a.item_id IS NULL
                     OR (a.outcome = 'failed'
                         AND a.attempts < ?2

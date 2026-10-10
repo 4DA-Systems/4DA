@@ -558,6 +558,7 @@ fn test_build_graph_is_deterministic_end_to_end() {
                 ],
             )
             .expect("insert item");
+            crate::db::item_embeddings::put_test_vector(&conn, id, &emb);
         }
     }
 
@@ -624,6 +625,7 @@ fn test_graph_corpus_selects_verdicts_first() {
             ],
         )
         .expect("insert");
+        crate::db::item_embeddings::put_test_vector(&conn, id, &v);
     };
 
     insert(1, "curated but old", "-5 days", Some(1), 0.6);
@@ -681,6 +683,7 @@ fn insert_singleton(
         ],
     )
     .expect("insert");
+    crate::db::item_embeddings::put_test_vector(conn, id, &v);
 }
 
 /// Phase 96: an active snooze removes the item from the map; an expired
@@ -857,6 +860,7 @@ fn test_security_quota_reserves_map_slots() {
             ],
         )
         .expect("insert cve");
+        crate::db::item_embeddings::put_test_vector(&conn, id, &v);
     }
 
     // Budget of 30 nodes: relevance-first would fill every slot with
@@ -907,6 +911,7 @@ fn test_windows_differ_tracks_verdict_age() {
 #[test]
 fn test_build_graph_deterministic_across_processes() {
     // ---- child: build against the given DB and print a signature ----
+    crate::state::register_sqlite_vec_extension();
     if let Ok(db_path) = std::env::var("FOURDA_GRAPH_DETERMINISM_DB") {
         let conn = rusqlite::Connection::open(&db_path).expect("child open");
         let graph = build_graph(&conn, 7, 150).expect("child build");
@@ -954,9 +959,20 @@ fn test_build_graph_deterministic_across_processes() {
              );
              CREATE TABLE project_dependencies (
                  id INTEGER PRIMARY KEY, package_name TEXT NOT NULL
-             );",
+             );
+             CREATE TABLE sources (
+                 id INTEGER PRIMARY KEY, source_type TEXT NOT NULL UNIQUE,
+                 name TEXT NOT NULL, enabled INTEGER NOT NULL DEFAULT 1
+             );
+             CREATE TABLE item_context_cache (item_id INTEGER PRIMARY KEY);
+             CREATE TABLE item_context_match (item_id INTEGER);",
         )
         .expect("schema");
+        conn.execute_batch(&format!(
+            "CREATE VIRTUAL TABLE source_vec USING vec0(embedding float[{}]);",
+            crate::EMBEDDING_DIMS
+        ))
+        .expect("vector index");
 
         // Four 6-member cone groups: every within-group pair at exactly
         // cos 0.80 — massive float ties, the ordering-leak trigger.
@@ -984,6 +1000,7 @@ fn test_build_graph_deterministic_across_processes() {
                     ],
                 )
                 .expect("insert item");
+                crate::db::item_embeddings::put_test_vector(&conn, id, &emb);
             }
         }
     }
@@ -1139,6 +1156,7 @@ fn insert_singleton_src(
         ],
     )
     .expect("insert");
+    crate::db::item_embeddings::put_test_vector(conn, id, &v);
 }
 
 #[test]

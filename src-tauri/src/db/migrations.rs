@@ -1488,7 +1488,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 125;
+        const TARGET_VERSION: i64 = 126;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -5852,12 +5852,102 @@ impl Database {
                 )?;
             }
 
+            // Phase 126 (AD-054, 2026-10-10): two data-plane changes.
+            // (a) Interests are opt-in. Every source that is not a registry
+            //     or advisory feed (`sources::source_class`) is turned off on
+            //     an existing install, exactly as a new install seeds it; the
+            //     user turns interests back on in Settings. Rows are kept, so
+            //     turning one on restores its items and verdicts unchanged.
+            // (b) An item's embedding is stored once. Every vector was
+            //     written to BOTH `source_items.embedding` and `source_vec`
+            //     (founder snapshot: 163,816 x 3 KB = ~503 MB twice).
+            //     `source_vec` is canonical (`db::item_embeddings`); the BLOB
+            //     column is emptied. Deliberately NO VACUUM here: the daily
+            //     maintenance compacts once the freelist passes its bound
+            //     (`history_vacuum`).
+            if current_version < 126 {
+                Self::run_versioned_migration(
+                    &conn,
+                    125,
+                    126,
+                    "Phase 126: interests opt-in; embeddings stored once",
+                    |c| {
+                        let interests_off = Self::turn_interests_off(c)?;
+                        let (moved, parked, cleared) = Self::store_embeddings_once(c)?;
+                        info!(
+                            target: "4da::db",
+                            interests_off,
+                            moved,
+                            parked,
+                            cleared,
+                            "Phase 126: interests turned off; source_vec is the one vector store"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }
 
         info!(target: "4da::db", "Database schema initialized with sqlite-vec");
         Ok(())
+    }
+
+    /// Phase 126 (a): turn every interest off (AD-054). Returns rows changed.
+    pub(crate) fn turn_interests_off(c: &Connection) -> SqliteResult<usize> {
+        let stack = crate::sources::source_class::STACK_SOURCES
+            .iter()
+            .map(|s| format!("'{s}'"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        c.execute(
+            &format!("UPDATE sources SET enabled = 0 WHERE enabled <> 0 AND source_type NOT IN ({stack})"),
+            [],
+        )
+    }
+
+    /// Phase 126 (b): make `source_vec` the only vector store.
+    ///
+    /// 1. A BLOB with no `source_vec` row (the full re-embed wrote the BLOB
+    ///    and only UPDATEd `source_vec`, so an item that had none never got
+    ///    one) is moved into `source_vec` when it has the live dimensionality;
+    /// 2. a BLOB of any other length with no `source_vec` row cannot be
+    ///    indexed, so its row goes back to `pending` and is re-embedded;
+    /// 3. the trigger that invalidated the context-match cache on a BLOB
+    ///    change is dropped first (every vector write now does that itself,
+    ///    `item_embeddings::write_item_vector`) — left in place, step 4
+    ///    would have wiped the whole cache;
+    /// 4. every BLOB is emptied.
+    ///
+    /// Idempotent: on a second run no BLOB is non-empty. Returns
+    /// `(moved, parked, cleared)`.
+    pub(crate) fn store_embeddings_once(c: &Connection) -> SqliteResult<(usize, usize, usize)> {
+        let dim_bytes = (crate::EMBEDDING_DIMS * 4) as i64;
+        let orphaned = "length(si.embedding) > 0
+             AND si.id NOT IN (SELECT rowid FROM source_vec)";
+        let moved = c.execute(
+            &format!(
+                "INSERT INTO source_vec (rowid, embedding)
+                 SELECT si.id, si.embedding FROM source_items si
+                 WHERE {orphaned} AND length(si.embedding) = ?1"
+            ),
+            [dim_bytes],
+        )?;
+        let parked = c.execute(
+            &format!(
+                "UPDATE source_items SET embedding_status = 'pending'
+                 WHERE id IN (SELECT si.id FROM source_items si WHERE {orphaned})"
+            ),
+            [],
+        )?;
+        c.execute_batch("DROP TRIGGER IF EXISTS item_context_cache_reembed;")?;
+        let cleared = c.execute(
+            "UPDATE source_items SET embedding = X'' WHERE length(embedding) > 0",
+            [],
+        )?;
+        Ok((moved, parked, cleared))
     }
 
     /// Phase 125: delete stability evidence whose signal was not the user, the

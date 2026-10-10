@@ -134,16 +134,19 @@ impl Database {
         // Ranked read: ORDER BY the shared rank-then-evidence expression
         // (audit items 12+26). The membership FILTER stays on
         // relevance_score — evidence decides membership, rank decides order.
+        // A source the user turned off is not in any digest (AD-054).
         let sql = format!(
             "SELECT id, title, url, source_type, created_at, content, relevance_score, content_type
              FROM source_items
              WHERE created_at >= ?1
                AND COALESCE(detected_lang, 'en') = ?3
                AND COALESCE(relevance_score, 0.0) >= ?4
+               AND {enabled}
              ORDER BY CASE WHEN COALESCE(rank_score, relevance_score) IS NULL THEN 1 ELSE 0 END,
                       {ranked}, created_at DESC
              LIMIT ?2",
-            ranked = super::RANKED_ORDER_EXPR
+            ranked = super::RANKED_ORDER_EXPR,
+            enabled = crate::sources::source_class::enabled_source_sql("source_type"),
         );
         let mut stmt = conn.prepare(&sql)?;
 
@@ -357,27 +360,36 @@ impl Database {
         limit: usize,
     ) -> SqliteResult<Vec<(i64, String, String, Option<String>, Vec<f32>, f32)>> {
         let conn = self.conn.lock();
-        let mut stmt = conn.prepare(
-            "SELECT id, source_type, title, url, embedding,
+        let mut stmt = conn.prepare(&format!(
+            "SELECT id, source_type, title, url,
                     (julianday('now') - julianday(last_seen)) * 24.0 as age_hours
              FROM source_items
+             WHERE {}
              ORDER BY last_seen DESC
              LIMIT ?1",
-        )?;
+            crate::sources::source_class::enabled_source_sql("source_type")
+        ))?;
 
-        let rows = stmt.query_map(params![limit as i64], |row| {
-            let embedding_blob: Vec<u8> = row.get(4)?;
-            Ok((
-                row.get::<_, i64>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-                row.get::<_, Option<String>>(3)?,
-                blob_to_embedding(&embedding_blob),
-                row.get::<_, f64>(5).unwrap_or(0.0) as f32,
-            ))
-        })?;
-
-        rows.collect()
+        let rows = stmt
+            .query_map(params![limit as i64], |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                    row.get::<_, f64>(4).unwrap_or(0.0) as f32,
+                ))
+            })?
+            .collect::<SqliteResult<Vec<_>>>()?;
+        let ids: Vec<i64> = rows.iter().map(|r| r.0).collect();
+        let mut vectors = super::item_embeddings::load_item_vectors(&conn, &ids)?;
+        Ok(rows
+            .into_iter()
+            .map(|(id, source_type, title, url, age)| {
+                let embedding = vectors.remove(&id).unwrap_or_default();
+                (id, source_type, title, url, embedding, age)
+            })
+            .collect())
     }
 
     /// Get context chunks with embeddings for projection (lightweight).
@@ -410,29 +422,23 @@ impl Database {
     /// Get a single source item by ID (full detail for particle selection)
     pub fn get_source_item_by_id(&self, id: i64) -> SqliteResult<Option<StoredSourceItem>> {
         let conn = self.conn.lock();
-        conn.query_row(
-            "SELECT id, source_type, source_id, url, title, content, content_hash, embedding, created_at, last_seen, COALESCE(detected_lang, 'en'), feed_origin, tags, published_at
-             FROM source_items WHERE id = ?1",
-            params![id],
-            |row| {
-                let embedding_blob: Vec<u8> = row.get(7)?;
-                Ok(StoredSourceItem {
-                    id: row.get(0)?,
-                    source_type: row.get(1)?,
-                    source_id: row.get(2)?,
-                    url: row.get(3)?,
-                    title: row.get(4)?,
-                    content: row.get(5)?,
-                    content_hash: row.get(6)?,
-                    embedding: blob_to_embedding(&embedding_blob),
-                    created_at: parse_datetime(row.get::<_, String>(8)?),
-                    last_seen: parse_datetime(row.get::<_, String>(9)?),
-                    detected_lang: row.get::<_, String>(10).unwrap_or_else(|_| "en".to_string()),
-                    feed_origin: row.get(11).ok().flatten(),
-                    tags: row.get(12).ok().flatten(),
-                published_at: crate::db::parse_datetime_opt(row.get::<_, Option<String>>(13).ok().flatten()),})
-            },
-        ).optional()
+        let item = conn
+            .query_row(
+                &format!(
+                    "SELECT {} FROM source_items WHERE id = ?1",
+                    super::item_embeddings::stored_item_columns("")
+                ),
+                params![id],
+                super::item_embeddings::stored_item_from_row,
+            )
+            .optional()?;
+        let Some(mut item) = item else {
+            return Ok(None);
+        };
+        if let Some(blob) = super::item_embeddings::load_item_vector_blob(&conn, id)? {
+            item.embedding = blob_to_embedding(&blob);
+        }
+        Ok(Some(item))
     }
 
     /// Get created_at timestamps for multiple source items in a single query.

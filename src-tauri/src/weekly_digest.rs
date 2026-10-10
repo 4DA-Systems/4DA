@@ -131,11 +131,13 @@ fn collect_stats(conn: &rusqlite::Connection, days: i64) -> DigestStats {
         )
         .unwrap_or(0);
 
-    // Count items with embeddings (proxy for "analyzed" items)
+    // Count items with embeddings (proxy for "analyzed" items). The vector
+    // lives in `source_vec` (Phase 126); `complete` is the row's own record
+    // of having one.
     let analyzed: u32 = conn
         .query_row(
             "SELECT COUNT(*) FROM source_items
-             WHERE created_at >= ?1 AND LENGTH(embedding) > 0",
+             WHERE created_at >= ?1 AND embedding_status = 'complete'",
             rusqlite::params![cutoff],
             |row| row.get(0),
         )

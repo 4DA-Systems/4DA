@@ -585,6 +585,7 @@ fn load_gap_candidates(conn: &rusqlite::Connection) -> Result<Vec<GapCandidate>>
              LEFT JOIN feedback f ON f.source_item_id = si.id
              WHERE si.created_at >= datetime('now', '-30 days')
                AND f.id IS NULL
+               AND si.source_type NOT IN (SELECT source_type FROM sources WHERE enabled = 0)
                AND (si.content_type IS NULL
                     OR si.content_type NOT IN ('show_and_tell','tutorial','question',
                                                'help_request','hiring','clickbait'))

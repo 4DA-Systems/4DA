@@ -348,6 +348,7 @@ mod signal_terminal_events;
 mod signal_terminal_pages;
 mod signals;
 mod source_config;
+mod source_enable_commands;
 mod source_fetch_commands;
 mod source_fetching;
 mod source_health_diagnostics;
@@ -1041,6 +1042,8 @@ pub fn run() {
             free_briefing::generate_free_briefing,
             // Content
             commands::get_sources,
+            source_enable_commands::get_source_settings,
+            source_enable_commands::set_source_enabled,
             commands::mcp_score_autopsy,
             commands::score_tuning_snapshot,
             // Void Engine

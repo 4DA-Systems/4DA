@@ -256,9 +256,24 @@ pub(crate) async fn reembed_all_items() {
 
     let items: Vec<(i64, String, String, String)> = {
         let conn = db.conn.lock();
-        conn.prepare(
-            "SELECT id, title, COALESCE(content, ''), source_type FROM source_items ORDER BY id",
-        )
+        // A source the user turned off is not embedded (AD-054). Its vectors
+        // are in the superseded space, so they are dropped and the rows go
+        // back to `pending`: the pending retry embeds them if the interest is
+        // turned on again, and until then nothing reads a wrong-space vector.
+        let disabled_pending = conn.execute_batch(
+            "DELETE FROM source_vec WHERE rowid IN (
+                 SELECT id FROM source_items
+                 WHERE source_type IN (SELECT source_type FROM sources WHERE enabled = 0));
+             UPDATE source_items SET embedding_status = 'pending'
+             WHERE source_type IN (SELECT source_type FROM sources WHERE enabled = 0);",
+        );
+        if let Err(e) = disabled_pending {
+            tracing::warn!(target: "4da::embeddings", error = %e, "Could not park turned-off sources' vectors");
+        }
+        conn.prepare(&format!(
+            "SELECT id, title, COALESCE(content, ''), source_type FROM source_items WHERE {} ORDER BY id",
+            crate::sources::source_class::enabled_source_sql("source_type")
+        ))
         .and_then(|mut stmt| {
             stmt.query_map([], |row| {
                 Ok((
@@ -306,20 +321,11 @@ pub(crate) async fn reembed_all_items() {
                 for (i, (id, _, _, _)) in chunk.iter().enumerate() {
                     if let Some(embedding) = embeddings.get(i) {
                         let blob = crate::reembed_space::vec_to_blob(embedding);
-                        // BOTH copies: scoring reads source_items.embedding
-                        // (context KNN, calibration); search reads source_vec.
-                        // Writing only source_vec left scoring on the old model.
-                        let result = conn
-                            .execute(
-                                "UPDATE source_items SET embedding = ?1 WHERE id = ?2",
-                                rusqlite::params![blob, id],
-                            )
-                            .and_then(|_| {
-                                conn.execute(
-                                    "UPDATE source_vec SET embedding = ?1 WHERE rowid = ?2",
-                                    rusqlite::params![blob, id],
-                                )
-                            });
+                        // One store (Phase 126): scoring and search both read
+                        // `source_vec`. `write_item_vector` inserts the row a
+                        // pending item never had, which a bare UPDATE missed.
+                        let result =
+                            crate::db::item_embeddings::write_item_vector(&conn, *id, &blob);
                         match result {
                             Ok(_) => success_count += 1,
                             Err(e) => {

@@ -194,6 +194,7 @@ impl Database {
         let sql = format!(
             "SELECT si.id FROM source_items si
              WHERE si.source_type NOT IN ({feed_excluded})
+               AND {enabled}
                AND ((si.relevance_score >= ?1
                     AND si.created_at >= datetime('now', '-7 days')
                     AND NOT EXISTS (SELECT 1 FROM llm_judgments lj WHERE lj.source_item_id = si.id))
@@ -208,6 +209,7 @@ impl Database {
              ORDER BY {ranked}
              LIMIT ?2",
             feed_excluded = crate::sources::feed_admission::feed_excluded_sources_sql(),
+            enabled = crate::sources::source_class::enabled_source_sql("si.source_type"),
             gated = crate::judge_gate::gated_sources_sql(),
             ranked = super::ranked_order_expr("si")
         );
@@ -263,9 +265,11 @@ impl Database {
                AND lj.confidence >= ?3
                AND lj.judged_at >= datetime('now', '-' || ?4 || ' days')
                AND NOT {}
+               AND {}
              ORDER BY lj.judged_at DESC, lj.id DESC
              LIMIT ?5",
-            dependency_release_sql("si")
+            dependency_release_sql("si"),
+            crate::sources::source_class::enabled_source_sql("si.source_type")
         );
         let mut stmt = conn.prepare(&sql)?;
         let rows = stmt.query_map(

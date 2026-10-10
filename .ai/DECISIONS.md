@@ -877,6 +877,7 @@
   - Wave 1: engine parity, conformance corpus, fix paths, Phase 0 cleanups, MCP 6.1.0.
   - Wave 2: refocus — interests opt-in, deterministic Lane 1, Blind Spots/KG fold, on-demand embeddings, copy, tiers.
   - Wave 3: single engine, agent evaluation.
+- **Status note (2026-10-11, Wave 2b data plane, schema 126):** decision 3 is live. `sources::source_class` names the stack sources (crates.io, npm, PyPI, Go, OSV, CVE), and every other source is an interest. That includes GitHub trending, which decision 3 does not list. Decision 3 says "off by default" without naming existing installs, so Phase 126 also turns every interest off on existing installs (the operator approved "social sources default-off"). Settings → Sources turns them back on. A source that is off is not fetched, embedded, scored, judged, admitted to the feed, or used as Blind Spots / Knowledge Gaps / worth-knowing evidence. Its rows and verdicts are kept. The same phase makes `source_vec` the only store for item embeddings.
 
 ### AD-055: One Fix-Path Rule for a Transitive Copy, Read Before Inferred, With the Command Named
 

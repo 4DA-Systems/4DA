@@ -22,6 +22,9 @@ pub async fn fetch_single_feed(url: String, app: tauri::AppHandle) -> Result<ser
 
     validate_input_length(&url, "Feed URL", 2000)?;
     crate::url_validation::validate_not_internal(&url)?;
+    if let Some(off) = turned_off("rss") {
+        return Ok(off);
+    }
 
     let source = crate::sources::rss::RssSource::with_feeds(vec![url.clone()]);
     let items = source
@@ -64,6 +67,9 @@ pub async fn fetch_single_youtube_channel(
     use tauri::Emitter;
 
     validate_input_length(&channel_id, "Channel ID", 100)?;
+    if let Some(off) = turned_off("youtube") {
+        return Ok(off);
+    }
 
     let source = crate::sources::youtube::YouTubeSource::with_channels(vec![channel_id.clone()]);
     let items = source
@@ -91,6 +97,15 @@ pub async fn fetch_single_youtube_channel(
         "success": true,
         "items_added": added,
     }))
+}
+
+/// The response for an on-demand fetch of a source the user has turned off
+/// (AD-054: an interest that is off is not fetched, whichever path asks).
+/// `None` when the source is on.
+fn turned_off(source_type: &str) -> Option<serde_json::Value> {
+    let db = crate::get_database().ok()?;
+    (!db.is_source_enabled(source_type))
+        .then(|| serde_json::json!({ "success": true, "items_added": 0, "source_disabled": true }))
 }
 
 // ============================================================================

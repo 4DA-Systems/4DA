@@ -628,6 +628,11 @@ fn build_autopsy_narrative(
 /// Get registered sources
 #[tauri::command]
 pub(crate) async fn get_sources() -> Result<Vec<serde_json::Value>> {
+    // `enabled` is the user's choice in `sources.enabled` (AD-054: interests
+    // are opt-in), not the adapter's in-memory default, which is always on.
+    let disabled = crate::get_database()
+        .and_then(|db| Ok(db.disabled_source_types()?))
+        .unwrap_or_default();
     let registry = get_source_registry();
     let guard = registry.lock();
 
@@ -639,7 +644,8 @@ pub(crate) async fn get_sources() -> Result<Vec<serde_json::Value>> {
             serde_json::json!({
                 "type": s.source_type(),
                 "name": s.name(),
-                "enabled": s.config().enabled,
+                "enabled": s.config().enabled && !disabled.contains(s.source_type()),
+                "class": crate::sources::source_class::class_name(s.source_type()),
                 "max_items": s.config().max_items,
                 "fetch_interval_secs": s.config().fetch_interval_secs,
                 "category": m.category,

@@ -197,6 +197,7 @@ pub(super) fn count_signal_types_for_dep_conn(
                       si.source_id, si.id
                FROM source_items si
                WHERE si.created_at >= datetime('now', '-30 days')
+                 AND si.source_type NOT IN (SELECT source_type FROM sources WHERE enabled = 0)
                  AND (si.title LIKE '%' || ?1 || '%'
                       OR EXISTS(SELECT 1 FROM source_item_dependencies sid2
                                  WHERE sid2.source_item_id = si.id
@@ -263,15 +264,19 @@ pub(super) struct RecentCorpus {
     linked: HashMap<String, HashSet<i64>>,
 }
 
-/// The window and link kinds the per-dependency query uses, verbatim.
+/// The window and link kinds the per-dependency query uses, verbatim —
+/// including the AD-054 rule that a source the user turned off is not
+/// evidence.
 const RECENT_ROWS_SQL: &str =
     "SELECT si.id, si.title, si.content_type, si.source_type, si.source_id
      FROM source_items si
-     WHERE si.created_at >= datetime('now', '-30 days')";
+     WHERE si.created_at >= datetime('now', '-30 days')
+       AND si.source_type NOT IN (SELECT source_type FROM sources WHERE enabled = 0)";
 const RECENT_LINKS_SQL: &str = "SELECT sid.source_item_id, sid.package_name
      FROM source_item_dependencies sid
      JOIN source_items si ON si.id = sid.source_item_id
      WHERE si.created_at >= datetime('now', '-30 days')
+       AND si.source_type NOT IN (SELECT source_type FROM sources WHERE enabled = 0)
        AND sid.match_type IN ('exact_registry', 'advisory')";
 
 impl RecentCorpus {

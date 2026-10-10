@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { PanelErrorBoundary } from './PanelErrorBoundary';
 import { SourceConfigPanel } from './SourceConfigPanel';
+import { SourceToggles } from './settings/SourceToggles';
 import { ContextDiscoverySection } from './settings/ContextDiscoverySection';
 import { PersonalizationSection } from './settings/PersonalizationSection';
 import { LearnedPreferencesSection } from './settings/LearnedPreferencesSection';
@@ -322,6 +323,9 @@ export const SettingsModal = memo(function SettingsModal({ onClose }: SettingsMo
 
           {activeTab === 'sources' && (
             <div id="tabpanel-sources" role="tabpanel" aria-labelledby="tab-sources">
+              <PanelErrorBoundary name="Source Toggles">
+                <SourceToggles onStatusChange={setSettingsStatus} />
+              </PanelErrorBoundary>
               <PanelErrorBoundary name="Source Configuration">
                 <SourceConfigPanel onStatusChange={setSettingsStatus} />
               </PanelErrorBoundary>
