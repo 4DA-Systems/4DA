@@ -35,6 +35,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::brief_cadence::{same_state, upgrade_signature};
 use crate::db::Database;
+use crate::osv::fix_path::{refresh_verdict, Basis, Refresh, Requirement};
 use crate::preemption::AlertUrgency;
 use crate::scoring::release_version::lenient_semver;
 
@@ -73,9 +74,15 @@ const NOVELTY_RETENTION_DAYS: i64 = 45;
 pub(crate) enum FixPath {
     /// The project declares the package: bump it.
     Bump { to: String },
-    /// Transitive, and every parent's requirement admits the fix (or the
-    /// jump is semver-compatible): refreshing the lockfile reaches it.
-    Refresh { to: String },
+    /// Transitive, and every requirement read for the parent admits the fix
+    /// (`inferred: false`), or none could be read and the jump is
+    /// semver-compatible (`inferred: true`): refreshing the lockfile reaches
+    /// it. `command` is the project tool's refresh command, when it has one.
+    Refresh {
+        to: String,
+        inferred: bool,
+        command: Option<String>,
+    },
     /// Transitive, and the parent that pulls it in pins an older line:
     /// that DIRECT dependency has to move. `by_requirement` is true when the
     /// lockfile recorded the requirement and it excludes the fix (npm
@@ -227,98 +234,13 @@ pub(crate) struct BriefFacts {
 // Pure rules (unit-tested in brief_facts_tests.rs)
 // ============================================================================
 
-/// Is `target` reachable from `installed` without crossing a semver
-/// compatibility boundary? Caret rule shared by Cargo and npm: same major at
-/// 1.x and above, same minor below 1.0. `None` when either is unparseable.
-pub(crate) fn semver_compatible(installed: &str, target: &str) -> Option<bool> {
-    let i = lenient_semver(installed, None)?;
-    let t = lenient_semver(target, None)?;
-    Some(if i.major == 0 {
-        t.major == 0 && t.minor == i.minor
-    } else {
-        t.major == i.major
-    })
-}
-
-/// Does an npm-style requirement admit `version`? `None` when the
-/// requirement cannot be read (then the caller falls back to
-/// [`semver_compatible`]). npm spells an exact pin as a bare version
-/// (`5.28.4`), unions with `||`, ANDs comparators with spaces, allows a space
-/// after an operator (`>= 4.21.0`) and writes hyphen ranges (`1 - 3`);
-/// Cargo's parser wants `=`, one requirement per branch, and commas.
-pub(crate) fn requirement_admits(requirement: &str, version: &str) -> Option<bool> {
-    let v = lenient_semver(version, None)?;
-    let req = requirement.trim();
-    if req.is_empty() || req == "*" || req == "latest" || req == "x" {
-        return Some(true);
-    }
-    let mut any_parsed = false;
-    for branch in req.split("||") {
-        let Some(normalized) = normalize_npm_branch(branch.trim()) else {
-            continue;
-        };
-        if let Ok(parsed) = semver::VersionReq::parse(&normalized) {
-            any_parsed = true;
-            if parsed.matches(&v) {
-                return Some(true);
-            }
-        }
-    }
-    any_parsed.then_some(false)
-}
-
-/// One npm range branch in Cargo's requirement syntax, or `None` when the
-/// branch is a shape this cannot translate faithfully.
-fn normalize_npm_branch(branch: &str) -> Option<String> {
-    // Hyphen range: "1.2.3 - 2.3.4" means >=1.2.3 <=2.3.4 (partials widen
-    // the upper bound; only full versions are translated).
-    if let Some((lo, hi)) = branch.split_once(" - ") {
-        let full = |s: &str| s.trim().split('.').count() == 3;
-        return (full(lo) && full(hi)).then(|| format!(">={}, <={}", lo.trim(), hi.trim()));
-    }
-    // Join a bare operator to the version after it: ">= 4.21.0" -> ">=4.21.0".
-    let mut tokens: Vec<String> = Vec::new();
-    let mut pending: Option<String> = None;
-    for raw in branch.split_whitespace() {
-        let is_op = raw
-            .chars()
-            .all(|c| matches!(c, '<' | '>' | '=' | '~' | '^'));
-        if is_op {
-            pending = Some(raw.to_string());
-            continue;
-        }
-        tokens.push(match pending.take() {
-            Some(op) => format!("{op}{raw}"),
-            None => raw.to_string(),
-        });
-    }
-    if pending.is_some() {
-        return None;
-    }
-    let parts: Vec<String> = tokens
-        .into_iter()
-        .map(|p| {
-            let p = p.replace(".x", ".*").replace(".X", ".*");
-            if !p.starts_with(|c: char| c.is_ascii_digit()) || p.contains('*') {
-                return p;
-            }
-            // npm: a full bare version is exact; "1.2" is 1.2.x; "1" is 1.x
-            // (which Cargo's caret already means).
-            let core = p.split(['-', '+']).next().unwrap_or(&p);
-            match core.split('.').count() {
-                3 => format!("={p}"),
-                2 => format!("~{p}"),
-                _ => p,
-            }
-        })
-        .collect();
-    Some(parts.join(", "))
-}
-
-/// Work out how the fix reaches one installed copy.
+/// Work out how the fix reaches one installed copy — by THE fix-path rule
+/// the Upgrade Plan and Preemption apply too (`osv::fix_path::refresh_verdict`).
 ///
-/// `parent` is the DIRECT dependency the copy is reached through, with the
-/// requirement the lockfile recorded, if any (npm package-lock only).
+/// `parent` is the DIRECT dependency the copy is reached through, with every
+/// requirement read for the immediate parent (the package-lock edge, or the
+/// parent's installed manifest). Nothing read: semver compatibility decides,
+/// and the path says it was inferred.
 pub(crate) fn fix_path(
     installed: Option<&str>,
     fix: Option<&str>,
@@ -332,37 +254,26 @@ pub(crate) fn fix_path(
         Some(true) => FixPath::Bump { to },
         None => FixPath::Update { to },
         Some(false) => {
-            // The parent's own requirement is the strongest evidence.
-            if let Some(link) = parent {
-                if let Some(req) = link.requirement.as_deref() {
-                    match requirement_admits(req, &to) {
-                        Some(true) => return FixPath::Refresh { to },
-                        Some(false) => {
-                            return FixPath::Parent {
-                                parent: link.direct.clone(),
-                                parent_version: link.direct_version.clone(),
-                                to,
-                                by_requirement: true,
-                                proven: None,
-                            }
-                        }
-                        None => {}
-                    }
-                }
-            }
-            match installed.and_then(|i| semver_compatible(i, &to)) {
-                Some(true) => FixPath::Refresh { to },
-                Some(false) => match parent {
+            let requirements = parent.map_or(&[][..], |l| l.requirements.as_slice());
+            match refresh_verdict(installed.unwrap_or_default(), &to, requirements) {
+                Refresh::Enough(basis) => FixPath::Refresh {
+                    to,
+                    inferred: basis == Basis::Semver,
+                    command: None,
+                },
+                Refresh::ParentMustMove(basis) => match parent {
                     Some(link) => FixPath::Parent {
                         parent: link.direct.clone(),
                         parent_version: link.direct_version.clone(),
                         to,
-                        by_requirement: false,
+                        by_requirement: basis == Basis::Requirement,
                         proven: None,
                     },
                     None => FixPath::ParentUnknown { to },
                 },
-                None => FixPath::Refresh { to },
+                // Neither the requirement nor the versions could be read:
+                // name the target, claim no route.
+                Refresh::Unknown => FixPath::Update { to },
             }
         }
     }
@@ -374,9 +285,9 @@ pub(crate) struct ParentLink {
     /// The direct dependency at the top of the chain.
     pub direct: String,
     pub direct_version: String,
-    /// The requirement the IMMEDIATE parent places on the vulnerable
-    /// package, when the lockfile records one (npm package-lock only).
-    pub requirement: Option<String>,
+    /// What the IMMEDIATE parent requires of the vulnerable package, where it
+    /// could be read (`osv::fix_path`). Empty: not recorded, not on disk.
+    pub requirements: Vec<Requirement>,
 }
 
 /// One line of fix advice, worded for both the prompt and the floor. Every
@@ -388,8 +299,24 @@ pub(crate) struct ParentLink {
 pub(crate) fn fix_clause(package: &str, path: &FixPath) -> String {
     match path {
         FixPath::Bump { to } => format!("bump {package} to >= {to}"),
-        FixPath::Refresh { to } => {
-            format!("transitive; refreshing the lockfile reaches {package} >= {to} (no manifest change)")
+        FixPath::Refresh {
+            to,
+            inferred,
+            command,
+        } => {
+            let run = command
+                .as_deref()
+                .map(|c| format!(": run `{c}`"))
+                .unwrap_or_default();
+            if *inferred {
+                format!(
+                    "transitive; {package} >= {to} is semver-compatible with the installed copy, so \
+                     refreshing the lockfile should reach it (no manifest change; the parent's \
+                     requirement is not on disk){run}"
+                )
+            } else {
+                format!("transitive; refreshing the lockfile reaches {package} >= {to} (no manifest change){run}")
+            }
         }
         FixPath::Parent {
             parent,
@@ -764,7 +691,7 @@ pub(crate) fn package_facts(facts: &BriefFacts) -> Vec<crate::briefing_groundedn
             add(&f.package, s.installed.as_deref());
             match &s.fix_path {
                 FixPath::Bump { to }
-                | FixPath::Refresh { to }
+                | FixPath::Refresh { to, .. }
                 | FixPath::ParentUnknown { to }
                 | FixPath::Reinstall { to }
                 | FixPath::Update { to } => add(&f.package, Some(to)),

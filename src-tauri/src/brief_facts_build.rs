@@ -7,6 +7,7 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use crate::db::Database;
+use crate::osv::fix_path::{installed_parent_requirements, Manager, Requirement};
 use crate::preemption::{AlertUrgency, PreemptionAlert};
 use crate::scoring::release_grade::{self, ReleaseClass};
 
@@ -264,11 +265,15 @@ fn security_fact(
             }
         } else {
             let parent = if is_direct == Some(false) {
-                conn.and_then(|c| direct_parent(c, project, &ecosystem, &package))
+                conn.and_then(|c| {
+                    direct_parent(c, project, &ecosystem, &package, installed.as_deref(), fix)
+                })
             } else {
                 None
             };
             let path = fix_path(installed.as_deref(), fix, is_direct, parent.as_ref());
+            let path =
+                with_refresh_command(path, project, &ecosystem, &package, installed.as_deref());
             with_proven_parent(path, &parent_links, &pnorm, labels)
         };
         sites.push(SecuritySite {
@@ -313,6 +318,33 @@ fn security_fact(
     };
     fact.status = novelty.status(&fact.key, &security_signature(&fact), &local_today());
     Some(fact)
+}
+
+/// Name the project tool's refresh command on a refresh path (`osv::fix_path`).
+fn with_refresh_command(
+    path: FixPath,
+    project: &str,
+    ecosystem: &str,
+    package: &str,
+    installed: Option<&str>,
+) -> FixPath {
+    let FixPath::Refresh {
+        to,
+        inferred,
+        command: None,
+    } = path
+    else {
+        return path;
+    };
+    let command = crate::osv::exposure::canonical(ecosystem)
+        .and_then(|eco| Manager::detect(std::path::Path::new(project), eco))
+        .zip(installed)
+        .and_then(|(m, installed)| m.refresh_command(package, installed, &to));
+    FixPath::Refresh {
+        to,
+        inferred,
+        command,
+    }
 }
 
 /// Attach the lockfile proof of a parent release that clears the package, if
@@ -389,6 +421,8 @@ fn direct_parent(
     project: &str,
     ecosystem: &str,
     package: &str,
+    installed_version: Option<&str>,
+    target: Option<&str>,
 ) -> Option<ParentLink> {
     let edge_eco = match ecosystem.to_lowercase().as_str() {
         "crates.io" | "rust" => "rust",
@@ -445,19 +479,20 @@ fn direct_parent(
     // Only npm's package-lock records the parent's REQUIREMENT on the child.
     // Cargo.lock and pnpm-lock record the resolved version, which read as a
     // requirement would be an exact pin and send every patch fix to the
-    // parent (2026-10-02 review: 2,153 Cargo rows, 1,765 of 1,767 pnpm rows).
-    let requirement_recorded = edge_eco == "javascript" && {
-        let dir = std::path::Path::new(project);
-        dir.join("package-lock.json").is_file() && !dir.join("pnpm-lock.yaml").is_file()
-    };
+    // parent (2026-10-02 review: 2,153 Cargo rows, 1,765 of 1,767 pnpm rows);
+    // for those the parent's installed manifest is read instead
+    // (`osv::fix_path`, the rule the plan applies too).
+    let manager = Manager::detect(std::path::Path::new(project), inst_eco);
+    let requirement_recorded = manager.is_some_and(Manager::records_requirements);
 
-    // Each frontier entry carries the requirement of the depth-0 edge it
+    // Each frontier entry carries the requirements of the depth-0 edge it
     // descends from, so the reported requirement is the one on THIS chain.
-    let mut frontier: Vec<(String, Option<String>)> = vec![(package.to_string(), None)];
+    let mut frontier: Vec<(String, Vec<Requirement>)> = vec![(package.to_string(), Vec::new())];
     let mut seen: HashSet<String> = HashSet::new();
     for depth in 0..MAX_PARENT_DEPTH {
         let mut next = Vec::new();
         for (child, chain_req) in &frontier {
+            let mut hops: Vec<(String, String, bool, Vec<Requirement>)> = Vec::new();
             for (parent, parent_version, child_req) in edges_of(child) {
                 if parent == "__root__" || seen.contains(&parent) {
                     continue;
@@ -466,26 +501,59 @@ fn direct_parent(
                 // seen-mark comes AFTER this filter: marking first let a stale
                 // row hide the current one (rmcp in 4da/src-tauri resolved to
                 // no parent because the 0.8.5 row came before the 0.9.0 one).
-                let Some(copies) = installed.get(&parent) else {
+                let Some((current, direct)) = installed.get(&parent).and_then(|copies| {
+                    copies
+                        .iter()
+                        .find(|(v, _)| parent_version.as_deref().is_none_or(|pv| pv == v))
+                }) else {
                     continue;
                 };
-                let Some((current, direct)) = copies
-                    .iter()
-                    .find(|(v, _)| parent_version.as_deref().is_none_or(|pv| pv == v))
-                else {
-                    continue;
-                };
-                seen.insert(parent.clone());
-                let req = if depth == 0 {
-                    child_req.filter(|r| requirement_recorded && !r.trim().is_empty())
-                } else {
+                let req = if depth > 0 {
                     chain_req.clone()
+                } else if requirement_recorded {
+                    let req: Vec<Requirement> = child_req
+                        .filter(|r| !r.trim().is_empty())
+                        .map(|r| vec![Requirement::npm(&r)])
+                        .unwrap_or_default();
+                    // A recorded requirement that excludes the installed copy
+                    // belongs to ANOTHER copy of the package.
+                    let other_copy = installed_version
+                        .is_some_and(|v| req.iter().any(|r| r.admits(v) == Some(false)));
+                    if other_copy {
+                        continue;
+                    }
+                    req
+                } else {
+                    manager.map_or_else(Vec::new, |m| {
+                        installed_parent_requirements(
+                            m,
+                            std::path::Path::new(project),
+                            &parent,
+                            current,
+                            package,
+                        )
+                    })
                 };
-                if *direct {
+                hops.push((parent, current.clone(), *direct, req));
+            }
+            // A copy any of whose parents excludes the fix is not fixed by a
+            // refresh (traefik/webui's js-yaml 3.13.1: three parents take
+            // ^3.13, mocha pins 3.13.1) — that parent's chain is the one to
+            // report, so it is walked first.
+            if depth == 0 {
+                hops.sort_by_key(|(.., req)| {
+                    !target.is_some_and(|t| req.iter().any(|r| r.admits(t) == Some(false)))
+                });
+            }
+            for (parent, current, direct, req) in hops {
+                if !seen.insert(parent.clone()) {
+                    continue;
+                }
+                if direct {
                     return Some(ParentLink {
                         direct: parent,
-                        direct_version: current.clone(),
-                        requirement: req,
+                        direct_version: current,
+                        requirements: req,
                     });
                 }
                 next.push((parent, req));

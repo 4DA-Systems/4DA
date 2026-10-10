@@ -829,6 +829,23 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
             };
 
             let (best_fix, fix_str) = alert_fix_target(&group, &all_projects);
+            // A copy no project declares is not fixed by "update to >= X":
+            // the plan's route sentence says whether a lockfile refresh is
+            // enough (and the command) or which parent must move.
+            let route = crate::osv::exposure::canonical(&first.ecosystem)
+                .and_then(|eco| {
+                    let lines = crate::osv::fix_target::line_targets(&group, &all_projects);
+                    crate::evidence::transitive_route_note(
+                        db,
+                        eco,
+                        &first.package_name,
+                        &lines,
+                        all_projects.len() > 1,
+                    )
+                })
+                .map(|note| format!(" {note}."))
+                .unwrap_or_default();
+            let fix_str = format!("{fix_str}{route}");
 
             let project_display = if all_projects.is_empty() {
                 "your projects".to_string()

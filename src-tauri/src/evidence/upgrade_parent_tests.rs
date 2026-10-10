@@ -158,8 +158,10 @@ fn a_transitive_step_names_its_parent_and_the_newer_parent_seen_here() {
     );
 }
 
+/// No recorded parent: the route rests on semver alone, and says so. rmcp
+/// 1.7.0 -> 2.1.0 crosses a semver boundary, so a refresh cannot reach it.
 #[test]
-fn without_a_recorded_parent_the_generic_text_stays() {
+fn without_a_recorded_parent_the_route_is_the_semver_inference() {
     let db = test_db();
     db.store_transitive_dependency(BRIDGE, "rmcp", Some("1.7.0"), "rust", false)
         .unwrap();
@@ -174,8 +176,11 @@ fn without_a_recorded_parent_the_generic_text_stays() {
     let plan = plan(&db);
     let rmcp = row(&plan, "rmcp");
     assert!(
-        rmcp.explanation
-            .contains("Fixed only upstream — awaits a parent-package update or lockfile refresh"),
+        rmcp.explanation.contains(
+            "Fixed only upstream: rmcp 1.7.0 is transitive (the lockfile names no parent 4DA can \
+             read); 2.1.0 is a semver-incompatible jump, so the dependency that pulls it in must \
+             be updated"
+        ),
         "{}",
         rmcp.explanation
     );
@@ -264,7 +269,8 @@ fn a_patched_hono_is_not_listed_and_the_affected_copy_keeps_advisory_severity() 
 /// is enough, no newer parent is offered.
 #[test]
 fn a_refresh_is_enough_so_no_newer_parent_is_offered() {
-    use crate::osv::parent_hint::{ParentLink, Resolution};
+    use crate::osv::fix_path::{Basis, Refresh};
+    use crate::osv::parent_hint::{ParentLink, Resolution, TransitiveRoutes};
     let link = ParentLink {
         project: WEB.to_string(),
         child_version: "1.1.15".to_string(),
@@ -273,7 +279,8 @@ fn a_refresh_is_enough_so_no_newer_parent_is_offered() {
         parent_version: "3.1.5".to_string(),
         parent_is_direct: false,
         requirement: Some("^1.1.7".to_string()),
-        admits_target: Some(true),
+        refresh: Refresh::Enough(Basis::Requirement),
+        command: Some("npm update brace-expansion".to_string()),
         resolutions: vec![Resolution {
             parent_version: "10.2.6".to_string(),
             child_version: "5.0.12".to_string(),
@@ -281,10 +288,15 @@ fn a_refresh_is_enough_so_no_newer_parent_is_offered() {
         }],
     };
     let links = std::slice::from_ref(&link);
+    let routes = TransitiveRoutes {
+        links: vec![link.clone()],
+        unlinked: Vec::new(),
+    };
     assert_eq!(
-        super::upstream_note("brace-expansion", links, false),
-        "Fixed only upstream: brace-expansion 1.1.15 comes in through minimatch 3.1.5, \
-         whose requirement ^1.1.7 already admits 1.1.21 — a lockfile refresh is enough"
+        super::upstream_note("brace-expansion", &routes, false),
+        "No manifest change needed: brace-expansion 1.1.15 comes in through minimatch 3.1.5, \
+         whose requirement ^1.1.7 already admits 1.1.21 — a lockfile refresh is enough. \
+         Run: `npm update brace-expansion`"
     );
     let cites = super::path_citations("brace-expansion", links);
     assert_eq!(cites.len(), 1, "{cites:?}");

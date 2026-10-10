@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-//! Which parent package brings a transitive vulnerable copy in, and what the
-//! user's own lockfiles show about a newer parent.
+//! Which parent package brings a transitive vulnerable copy in, what the
+//! user's own files say about its requirement, and what a newer parent did.
 //!
 //! An upgrade step for a transitive copy used to read "Fixed only upstream —
 //! awaits a parent-package update or lockfile refresh" and stop there. Live
@@ -10,27 +10,31 @@
 //! were in `dependency_edges` and `dependency_instances`; the step named
 //! neither.
 //!
-//! Everything here is read from the user's own lockfiles (accuracy first —
+//! Everything here is read from the user's own machine (accuracy first —
 //! the brief once invented fix versions, 2026-09-10):
 //! - a parent is named only when its edge is backed by an installed instance
 //!   of that parent in the same project (edges are upserted and never pruned
 //!   per rescan, so stale versions linger) and the edge provably leads to the
 //!   vulnerable copy;
-//! - "a lockfile refresh is enough" is said only when the edge records a real
-//!   requirement RANGE (npm `package-lock.json`) that admits the target;
-//!   Cargo.lock and pnpm record resolutions, not requirements, so no claim;
+//! - whether a lockfile refresh is enough is decided by the ONE rule in
+//!   `osv::fix_path`: the parent's requirement where it can be read (the
+//!   `package-lock.json` edge, else the parent's installed manifest), else
+//!   semver compatibility — and the text says which;
 //! - a newer parent is cited only where a project actually resolved it, and
 //!   only when that resolved child version is outside every advisory 4DA
-//!   holds for the package. No registry metadata is consulted: 4DA does not
-//!   store a release's dependency list, so a parent release nobody here has
-//!   installed is never claimed to fix anything.
+//!   holds for the package. No registry metadata is consulted.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
+use std::path::Path;
 
-use semver::{Version, VersionReq};
+use semver::Version;
 
 use crate::db::Database;
 
+use super::fix_path::{
+    installed_parent_requirements, refresh_verdict, requirement_admits, strip_spec, Dialect,
+    Manager, Refresh, Requirement,
+};
 use super::fix_target::LineTarget;
 use super::matching::{check_version_affected, parse_version};
 
@@ -79,15 +83,54 @@ pub struct ParentLink {
     pub parent: String,
     pub parent_version: String,
     pub parent_is_direct: bool,
-    /// The parent's requirement on the child, when the lockfile records one
-    /// as a range. `None` for a resolution or an unrecorded requirement.
+    /// The parent's requirement on the child as read (lockfile edge or the
+    /// parent's installed manifest), for display. `None` when none was read.
     pub requirement: Option<String>,
-    /// `requirement` admits `target`: `Some(true)` = a lockfile refresh is
-    /// enough, `Some(false)` = the parent itself must move. `None` = unknown.
-    pub admits_target: Option<bool>,
+    /// Whether a lockfile refresh reaches `target` (`osv::fix_path`).
+    pub refresh: Refresh,
+    /// The refresh command for this project's tool, when `refresh` says a
+    /// refresh is enough and the tool has one.
+    pub command: Option<String>,
     /// Newer releases of `parent` resolved elsewhere on this machine to a
     /// child version no advisory 4DA holds affects, lowest parent first.
     pub resolutions: Vec<Resolution>,
+}
+
+/// A transitive copy for which no installed parent could be read (yarn
+/// lockfiles carry no edges; a parent may not be installed). Its route rests
+/// on semver compatibility alone.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnlinkedSite {
+    pub project: String,
+    pub installed: String,
+    pub target: String,
+    pub refresh: Refresh,
+    pub command: Option<String>,
+}
+
+/// Every transitive copy of one plan row: the ones with a readable parent,
+/// and the ones without.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct TransitiveRoutes {
+    pub links: Vec<ParentLink>,
+    pub unlinked: Vec<UnlinkedSite>,
+}
+
+/// What the pure core may read from disk: the tool owning a project's
+/// lockfile, and an installed parent's own requirements on a child.
+pub struct Readers<'a> {
+    pub manager: &'a dyn Fn(&str) -> Option<Manager>,
+    /// `(project, manager, parent, parent_version, child)`.
+    pub requirements: &'a dyn Fn(&str, Manager, &str, &str, &str) -> Vec<Requirement>,
+}
+
+#[cfg(test)]
+impl Readers<'_> {
+    /// Nothing on disk: only what the edges themselves record.
+    pub const NONE: Readers<'static> = Readers {
+        manager: &|_| None,
+        requirements: &|_, _, _, _, _| Vec::new(),
+    };
 }
 
 /// The parent links for every TRANSITIVE site of `lines`, read from the DB.
@@ -99,41 +142,71 @@ pub fn load_parent_links(
     package: &str,
     lines: &[LineTarget],
 ) -> Vec<ParentLink> {
+    load_routes(db, ecosystem_norm, package, lines).links
+}
+
+/// [`load_parent_links`] plus the transitive sites no parent was read for.
+pub fn load_routes(
+    db: &Database,
+    ecosystem_norm: &str,
+    package: &str,
+    lines: &[LineTarget],
+) -> TransitiveRoutes {
     let any_transitive = lines.iter().any(|l| l.sites.iter().any(|s| !s.is_direct));
     if !any_transitive {
-        return Vec::new();
+        return TransitiveRoutes::default();
     }
-    let Some(edges) = read_edges(db, ecosystem_norm, package) else {
-        return Vec::new();
-    };
-    if edges.is_empty() {
-        return Vec::new();
-    }
+    let edges = read_edges(db, ecosystem_norm, package).unwrap_or_default();
     let mut names: Vec<String> = edges.iter().map(|e| e.parent.clone()).collect();
     names.push(package.to_string());
     names.sort();
     names.dedup();
     let mut installed = Vec::new();
+    // Normalized project path -> the path as stored (the matcher lowercases
+    // it; a case-sensitive filesystem needs the original to find a lockfile).
+    let mut raw_paths: HashMap<String, String> = HashMap::new();
     for name in &names {
         let Ok(rows) = db.get_package_instances(ecosystem_norm, name) else {
-            return Vec::new();
+            return TransitiveRoutes::default();
         };
-        installed.extend(rows.into_iter().map(|r| InstalledObs {
-            project: normalize_path(&r.project_path),
-            package: r.package_name.to_lowercase(),
-            version: r.version,
-            is_direct: r.is_direct,
-        }));
+        for r in rows {
+            let project = normalize_path(&r.project_path);
+            raw_paths
+                .entry(project.clone())
+                .or_insert_with(|| r.project_path.clone());
+            installed.push(InstalledObs {
+                project,
+                package: r.package_name.to_lowercase(),
+                version: r.version,
+                is_direct: r.is_direct,
+            });
+        }
     }
     let Ok(advisories) = db.get_osv_advisories_for_package(package, ecosystem_norm) else {
-        return Vec::new();
+        return TransitiveRoutes::default();
     };
     let is_clear = |version: &str| {
         advisories
             .iter()
             .all(|a| !check_version_affected(Some(version), &a.affected_ranges).0)
     };
-    parent_links(package, lines, &edges, &installed, &is_clear)
+    let raw = |project: &str| {
+        raw_paths
+            .get(project)
+            .cloned()
+            .unwrap_or_else(|| project.to_string())
+    };
+    let manager = |project: &str| Manager::detect(Path::new(&raw(project)), ecosystem_norm);
+    let requirements = |project: &str, m: Manager, parent: &str, version: &str, child: &str| {
+        installed_parent_requirements(m, Path::new(&raw(project)), parent, version, child)
+    };
+    let readers = Readers {
+        manager: &manager,
+        requirements: &requirements,
+    };
+    let links = parent_links_with(package, lines, &edges, &installed, &is_clear, &readers);
+    let unlinked = unlinked_sites(package, lines, &links, &manager);
+    TransitiveRoutes { links, unlinked }
 }
 
 fn read_edges(db: &Database, ecosystem_norm: &str, package: &str) -> Option<Vec<EdgeObs>> {
@@ -173,7 +246,8 @@ fn read_edges(db: &Database, ecosystem_norm: &str, package: &str) -> Option<Vec<
     )
 }
 
-/// The pure core of [`load_parent_links`].
+/// The pure core of [`load_parent_links`], with nothing read from disk.
+#[cfg(test)]
 pub fn parent_links(
     package: &str,
     lines: &[LineTarget],
@@ -181,11 +255,24 @@ pub fn parent_links(
     installed: &[InstalledObs],
     is_clear: &dyn Fn(&str) -> bool,
 ) -> Vec<ParentLink> {
+    parent_links_with(package, lines, edges, installed, is_clear, &Readers::NONE)
+}
+
+/// The pure core of [`load_parent_links`].
+pub fn parent_links_with(
+    package: &str,
+    lines: &[LineTarget],
+    edges: &[EdgeObs],
+    installed: &[InstalledObs],
+    is_clear: &dyn Fn(&str) -> bool,
+    readers: &Readers<'_>,
+) -> Vec<ParentLink> {
     let child = package.to_lowercase();
     let mut out: Vec<ParentLink> = Vec::new();
     for line in lines {
         for site in line.sites.iter().filter(|s| !s.is_direct) {
             let child_copies = versions_in(installed, &site.project_path, &child);
+            let manager = (readers.manager)(&site.project_path);
             for edge in edges.iter().filter(|e| e.project == site.project_path) {
                 if edge.parent == ROOT_PARENT || edge.parent.eq_ignore_ascii_case(package) {
                     continue;
@@ -200,15 +287,12 @@ pub fn parent_links(
                 let Some(parent) = installed_parent(installed, edge) else {
                     continue;
                 };
-                let requirement = edge
-                    .child_spec
-                    .as_deref()
-                    .filter(|s| is_range(s))
-                    .map(str::to_string);
-                let admits_target = match (&requirement, &line.target_version) {
-                    (Some(req), Some(target)) => requirement_admits(req, target),
-                    _ => None,
-                };
+                let requirements =
+                    edge_requirements(edge, &parent.version, &child, manager, readers);
+                let target = line.target_version.as_deref();
+                let refresh = target.map_or(Refresh::Unknown, |t| {
+                    refresh_verdict(&line.installed_version, t, &requirements)
+                });
                 let link = ParentLink {
                     project: site.project_path.clone(),
                     child_version: line.installed_version.clone(),
@@ -216,8 +300,15 @@ pub fn parent_links(
                     parent: edge.parent.clone(),
                     parent_version: parent.version.clone(),
                     parent_is_direct: parent.is_direct,
-                    requirement,
-                    admits_target,
+                    requirement: display_requirements(&requirements),
+                    refresh,
+                    command: refresh_command(
+                        manager,
+                        refresh,
+                        package,
+                        &line.installed_version,
+                        target,
+                    ),
                     resolutions: resolutions(
                         &child,
                         edge,
@@ -231,6 +322,94 @@ pub fn parent_links(
                     out.push(link);
                 }
             }
+        }
+    }
+    out
+}
+
+/// The requirements an edge's parent places on the child: the lockfile's own
+/// record when the tool writes requirements (npm `package-lock.json`, or any
+/// range-shaped spec when the tool is unknown), else the parent's installed
+/// manifest. A resolution (Cargo.lock, pnpm) is never read as a pin.
+fn edge_requirements(
+    edge: &EdgeObs,
+    parent_version: &str,
+    child: &str,
+    manager: Option<Manager>,
+    readers: &Readers<'_>,
+) -> Vec<Requirement> {
+    let spec = edge.child_spec.as_deref().filter(|s| !s.trim().is_empty());
+    match (spec, manager) {
+        (Some(spec), Some(m)) if m.records_requirements() => vec![Requirement::npm(spec)],
+        (Some(spec), None) if is_range(spec) => vec![Requirement::npm(spec)],
+        (_, Some(m)) => {
+            (readers.requirements)(&edge.project, m, &edge.parent, parent_version, child)
+        }
+        _ => Vec::new(),
+    }
+}
+
+/// "^1.2.5", or Cargo's `0.8.1` shown as the caret it means (`^0.8.1`).
+fn display_requirements(requirements: &[Requirement]) -> Option<String> {
+    let shown: Vec<String> = requirements
+        .iter()
+        .map(|r| match r.dialect {
+            Dialect::Cargo if r.text.starts_with(|c: char| c.is_ascii_digit()) => {
+                format!("^{}", r.text)
+            }
+            _ => r.text.clone(),
+        })
+        .collect();
+    (!shown.is_empty()).then(|| shown.join(" and "))
+}
+
+fn refresh_command(
+    manager: Option<Manager>,
+    refresh: Refresh,
+    package: &str,
+    installed: &str,
+    target: Option<&str>,
+) -> Option<String> {
+    if !refresh.is_enough() {
+        return None;
+    }
+    manager?.refresh_command(package, installed, target?)
+}
+
+/// The transitive sites with a target that no link covers, judged by semver
+/// compatibility alone (no requirement could be read).
+pub fn unlinked_sites(
+    package: &str,
+    lines: &[LineTarget],
+    links: &[ParentLink],
+    manager: &dyn Fn(&str) -> Option<Manager>,
+) -> Vec<UnlinkedSite> {
+    let mut out = Vec::new();
+    for line in lines {
+        let Some(target) = line.target_version.as_deref() else {
+            continue;
+        };
+        for site in line.sites.iter().filter(|s| !s.is_direct) {
+            let covered = links.iter().any(|l| {
+                l.project == site.project_path && l.child_version == line.installed_version
+            });
+            if covered {
+                continue;
+            }
+            let refresh = refresh_verdict(&line.installed_version, target, &[]);
+            out.push(UnlinkedSite {
+                project: site.project_path.clone(),
+                installed: line.installed_version.clone(),
+                target: target.to_string(),
+                refresh,
+                command: refresh_command(
+                    manager(&site.project_path),
+                    refresh,
+                    package,
+                    &line.installed_version,
+                    Some(target),
+                ),
+            });
         }
     }
     out
@@ -335,95 +514,9 @@ fn normalize_path(path: &str) -> String {
         .to_string()
 }
 
-/// The spec without a pnpm peer suffix (`4.28.1(postcss@8.4.0)`), a leading
-/// `=`/`v`, and surrounding whitespace.
-fn strip_spec(spec: &str) -> &str {
-    let spec = spec.split('(').next().unwrap_or(spec).trim();
-    spec.trim_start_matches('=').trim().trim_start_matches('v')
-}
-
 /// A requirement range, as opposed to one exact version (a resolution or a pin).
 fn is_range(spec: &str) -> bool {
     Version::parse(strip_spec(spec)).is_err()
-}
-
-/// Whether an npm/Cargo requirement admits `version`. `None` when either side
-/// cannot be read (dist-tags, `file:`/`git` specs, aliases to another name are
-/// read by their range). Never guesses: an unreadable alternative in an `||`
-/// set makes a non-match unknown rather than false.
-pub(crate) fn requirement_admits(spec: &str, version: &str) -> Option<bool> {
-    let version = parse_version(version)?;
-    let mut spec = spec.split('(').next().unwrap_or(spec).trim();
-    if let Some(alias) = spec.strip_prefix("npm:") {
-        spec = alias.rsplit_once('@').map(|(_, range)| range)?;
-    }
-    if spec.contains(':') || spec.contains('/') {
-        return None;
-    }
-    let mut unknown = false;
-    for alternative in spec.split("||") {
-        match comparator_set(alternative.trim()) {
-            Some(req) if req.matches(&version) => return Some(true),
-            Some(_) => {}
-            None => unknown = true,
-        }
-    }
-    (!unknown).then_some(false)
-}
-
-/// One npm comparator set (space-separated, AND) as a semver `VersionReq`.
-fn comparator_set(set: &str) -> Option<VersionReq> {
-    if set.is_empty() || set == "*" || set.eq_ignore_ascii_case("x") {
-        return Some(VersionReq::STAR);
-    }
-    if let Some((lo, hi)) = set.split_once(" - ") {
-        let (lo, hi) = (strip_spec(lo), strip_spec(hi));
-        Version::parse(lo).ok()?;
-        Version::parse(hi).ok()?;
-        return VersionReq::parse(&format!(">={lo}, <={hi}")).ok();
-    }
-    let mut comparators: Vec<String> = Vec::new();
-    let mut pending_op = String::new();
-    for token in set.split_whitespace() {
-        if token
-            .chars()
-            .all(|c| matches!(c, '<' | '>' | '=' | '^' | '~'))
-        {
-            pending_op.push_str(token);
-            continue;
-        }
-        let token = format!("{}{token}", std::mem::take(&mut pending_op));
-        comparators.push(npm_comparator(&token)?);
-    }
-    if !pending_op.is_empty() || comparators.is_empty() {
-        return None;
-    }
-    VersionReq::parse(&comparators.join(", ")).ok()
-}
-
-/// npm comparator -> Cargo comparator. A bare version is EXACT in npm (Cargo
-/// would read it as a caret); a partial or x-range bare version is its X-range.
-fn npm_comparator(token: &str) -> Option<String> {
-    let op_len = token
-        .find(|c: char| !matches!(c, '<' | '>' | '=' | '^' | '~'))
-        .unwrap_or(token.len());
-    let (op, rest) = token.split_at(op_len);
-    let rest = rest.trim_start_matches('v');
-    let parts: Vec<&str> = rest
-        .split('.')
-        .take_while(|p| !matches!(*p, "x" | "X" | "*"))
-        .collect();
-    if parts.is_empty() {
-        return match op {
-            "" | "=" | "^" | "~" | ">=" | "<=" => Some("*".to_string()),
-            _ => None,
-        };
-    }
-    let version = parts.join(".");
-    Some(match op {
-        "" => format!("={version}"),
-        _ => format!("{op}{version}"),
-    })
 }
 
 #[cfg(test)]

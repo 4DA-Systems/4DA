@@ -54,6 +54,10 @@ pub use dormant_notice::collapse_dormant_alerts;
 // work order (AD-049) and the validation-drop canary the snapshot records.
 pub use upgrade_plan::{build_upgrade_plan, BuiltPlan};
 
+// The ONE transitive-route sentence (`osv::fix_path`): the plan step prints
+// it, and so does the Preemption alert for an all-transitive package.
+pub(crate) use upgrade_parent::transitive_route_note;
+
 // Preemption LIST transport (AD-036): the single visibility filter (returned
 // counts == rendered cards) plus the list-payload trim, applied only in
 // `get_preemption_alerts`' response mapping.

@@ -2,6 +2,7 @@
 //! Tests for `osv::parent_hint` — real values from the live 2026-10-02 DB.
 
 use super::*;
+use crate::osv::fix_path::Basis;
 use crate::osv::fix_target::{InstallSite, LineTarget, UpgradeType};
 
 const BRIDGE: &str = "d:/runyourempire/bridge/src-tauri";
@@ -84,9 +85,11 @@ fn names_the_installed_parent_and_the_newer_releases_seen_here() {
     assert_eq!(l.parent_version, "0.8.4");
     assert!(l.parent_is_direct);
     assert_eq!(l.child_version, "1.7.0");
-    // Cargo.lock records no requirement: no refresh claim either way.
+    // Cargo.lock records no requirement and none is on disk here: the
+    // verdict is inferred — 1.7.0 -> 2.1.0 crosses a semver boundary.
     assert_eq!(l.requirement, None);
-    assert_eq!(l.admits_target, None);
+    assert_eq!(l.refresh, Refresh::ParentMustMove(Basis::Semver));
+    assert_eq!(l.command, None);
     // Stale 0.8.5 edges are ignored (not installed); 0.8.8 and 0.9.0 are
     // real installs that resolved a clear rmcp.
     let seen: Vec<(&str, &str, &str)> = l
@@ -166,7 +169,7 @@ fn an_npm_range_that_admits_the_target_says_refresh() {
     let links = parent_links("brace-expansion", &lines, &edges, &installed, &|_| true);
     assert_eq!(links.len(), 1, "the root edge is not a parent: {links:?}");
     assert_eq!(links[0].requirement.as_deref(), Some("^1.1.7"));
-    assert_eq!(links[0].admits_target, Some(true));
+    assert_eq!(links[0].refresh, Refresh::Enough(Basis::Requirement));
     assert!(!links[0].parent_is_direct);
 }
 
@@ -180,7 +183,10 @@ fn an_npm_range_that_excludes_the_target_says_the_parent_must_move() {
     ];
     let lines = [line("7.4.3", "7.5.21", p, false)];
     let links = parent_links("tar", &lines, &edges, &installed, &|_| true);
-    assert_eq!(links[0].admits_target, Some(false));
+    assert_eq!(
+        links[0].refresh,
+        Refresh::ParentMustMove(Basis::Requirement)
+    );
 }
 
 #[test]
@@ -228,4 +234,103 @@ fn requirement_admits_reads_npm_and_cargo_specs() {
             "{spec} admits {version}"
         );
     }
+}
+
+/// braces 3.0.2 in a pnpm project (taxonomy, 2026-10-10 oracle): pnpm-lock
+/// records the resolution `3.0.2`, never a requirement. With micromatch's
+/// installed manifest on disk (`^3.0.2`) the refresh is a read fact and the
+/// step names pnpm's command; it used to say "update micromatch, or refresh
+/// the lockfile if its requirement admits braces 3.0.3".
+#[test]
+fn a_pnpm_resolution_reads_the_installed_parent_and_names_the_command() {
+    let p = "d:/work/taxonomy";
+    let edges = vec![edge(p, "micromatch", Some("4.0.5"), Some("3.0.2"))];
+    let installed = vec![
+        inst(p, "braces", "3.0.2", false),
+        inst(p, "micromatch", "4.0.5", false),
+    ];
+    let lines = [line("3.0.2", "3.0.3", p, false)];
+    let manager = |_: &str| Some(Manager::Pnpm);
+    let requirements = |_: &str, _: Manager, parent: &str, version: &str, child: &str| {
+        assert_eq!((parent, version, child), ("micromatch", "4.0.5", "braces"));
+        vec![Requirement::npm("^3.0.2")]
+    };
+    let readers = Readers {
+        manager: &manager,
+        requirements: &requirements,
+    };
+    let links = parent_links_with("braces", &lines, &edges, &installed, &|_| true, &readers);
+    assert_eq!(links.len(), 1, "{links:?}");
+    assert_eq!(links[0].refresh, Refresh::Enough(Basis::Requirement));
+    assert_eq!(links[0].requirement.as_deref(), Some("^3.0.2"));
+    assert_eq!(
+        links[0].command.as_deref(),
+        Some("pnpm update braces --depth Infinity")
+    );
+    // Without the manifest on disk: the same answer, inferred, still named.
+    let none = |_: &str, _: Manager, _: &str, _: &str, _: &str| Vec::new();
+    let readers = Readers {
+        manager: &manager,
+        requirements: &none,
+    };
+    let links = parent_links_with("braces", &lines, &edges, &installed, &|_| true, &readers);
+    assert_eq!(links[0].refresh, Refresh::Enough(Basis::Semver));
+    assert!(links[0].command.is_some());
+}
+
+/// mio 0.8.0 in nushell (Cargo): tokio 1.17.0's registry manifest requires
+/// `0.8.1`, a Cargo caret that admits 0.8.11 — the command is cargo's precise
+/// update; the stale "waiting on upstream" is gone.
+#[test]
+fn a_cargo_parent_requirement_is_read_with_cargo_semantics() {
+    let p = "d:/work/nushell";
+    let edges = vec![edge(p, "tokio", Some("1.17.0"), Some("0.8.0"))];
+    let installed = vec![
+        inst(p, "mio", "0.8.0", false),
+        inst(p, "tokio", "1.17.0", false),
+    ];
+    let lines = [line("0.8.0", "0.8.11", p, false)];
+    let manager = |_: &str| Some(Manager::Cargo);
+    let requirements =
+        |_: &str, _: Manager, _: &str, _: &str, _: &str| vec![Requirement::cargo("0.8.1")];
+    let readers = Readers {
+        manager: &manager,
+        requirements: &requirements,
+    };
+    let links = parent_links_with("mio", &lines, &edges, &installed, &|_| true, &readers);
+    assert_eq!(links[0].refresh, Refresh::Enough(Basis::Requirement));
+    assert_eq!(links[0].requirement.as_deref(), Some("^0.8.1"));
+    assert_eq!(
+        links[0].command.as_deref(),
+        Some("cargo update -p mio@0.8.0 --precise 0.8.11")
+    );
+    // An `=` pin from the parent sends the fix to the parent, with no command.
+    let pinned =
+        |_: &str, _: Manager, _: &str, _: &str, _: &str| vec![Requirement::cargo("=0.8.0")];
+    let readers = Readers {
+        manager: &manager,
+        requirements: &pinned,
+    };
+    let links = parent_links_with("mio", &lines, &edges, &installed, &|_| true, &readers);
+    assert_eq!(
+        links[0].refresh,
+        Refresh::ParentMustMove(Basis::Requirement)
+    );
+    assert_eq!(links[0].command, None);
+}
+
+/// A yarn 1 project stores no edges: the copy is unlinked, its route is the
+/// semver inference, and yarn 1 has no command to name.
+#[test]
+fn a_copy_with_no_readable_parent_gets_a_semver_route() {
+    let p = "d:/work/express";
+    let lines = [line("1.2.5", "1.2.6", p, false)];
+    let yarn = |_: &str| Some(Manager::YarnClassic);
+    let unlinked = unlinked_sites("minimist", &lines, &[], &yarn);
+    assert_eq!(unlinked.len(), 1);
+    assert_eq!(unlinked[0].refresh, Refresh::Enough(Basis::Semver));
+    assert_eq!(unlinked[0].command, None);
+    let npm = |_: &str| Some(Manager::Npm);
+    let unlinked = unlinked_sites("minimist", &lines, &[], &npm);
+    assert_eq!(unlinked[0].command.as_deref(), Some("npm update minimist"));
 }
