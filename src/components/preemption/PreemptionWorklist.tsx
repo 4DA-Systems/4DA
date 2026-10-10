@@ -23,6 +23,12 @@ import { ScanProjectsPrompt } from '../blindspots/BlindSpotsFirstDay';
 // MCP handoff read).
 const UPGRADE_PLAN_VISIBLE_CAP = 25;
 
+// Findings per tier section before "Show N more". The backend ships EVERY
+// finding (AD-054: the engine no longer truncates at 30); this cap is only
+// how many cards paint before the user asks for the rest — the section
+// subtitle and the header bar always count all of them.
+const FINDINGS_VISIBLE_CAP = 20;
+
 /**
  * Preemption's default sub-view — the worklist: version-confirmed findings
  * with their fix paths (the free floor) and, on Signal, the Upgrade Plan.
@@ -271,6 +277,8 @@ export const PreemptionWorklist = memo(function PreemptionWorklist() {
               surfacedRef={surfacedRef}
               onDismiss={handleDismiss}
               emptyText={t('preemption.tier.verifiedEmpty')}
+              maxVisible={FINDINGS_VISIBLE_CAP}
+              showMoreLabel={hidden => t('preemption.evidence.showMore', { count: hidden })}
             />
           )}
 
@@ -284,6 +292,8 @@ export const PreemptionWorklist = memo(function PreemptionWorklist() {
               surfacedRef={surfacedRef}
               onDismiss={handleDismiss}
               emptyText={t('preemption.tier.assessedEmpty')}
+              maxVisible={FINDINGS_VISIBLE_CAP}
+              showMoreLabel={hidden => t('preemption.evidence.showMore', { count: hidden })}
             />
           )}
 
@@ -297,6 +307,8 @@ export const PreemptionWorklist = memo(function PreemptionWorklist() {
               surfacedRef={surfacedRef}
               onDismiss={handleDismiss}
               emptyText={t('preemption.tier.developingEmpty')}
+              maxVisible={FINDINGS_VISIBLE_CAP}
+              showMoreLabel={hidden => t('preemption.evidence.showMore', { count: hidden })}
             />
           )}
 
