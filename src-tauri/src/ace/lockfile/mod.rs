@@ -28,6 +28,7 @@ mod go;
 mod npm;
 mod python;
 pub(crate) mod report;
+mod ruby;
 mod yarn;
 
 pub(crate) use python::requirements_files;
@@ -277,10 +278,7 @@ pub(crate) fn read_text(path: &Path, format: LockFormat, content: &str) -> Lockf
         LockFormat::Pipfile => python::read_pipfile_lock(content),
         LockFormat::Requirements => Ok(python::read_requirements(path, content)),
         LockFormat::GoMod => Ok(go::read_go_module(path, content)),
-        LockFormat::Gemfile => Ok(plain(
-            format,
-            crate::ace::scanner::ProjectScanner::parse_gemfile_lock(content),
-        )),
+        LockFormat::Gemfile => Ok(ruby::read_gemfile_lock(content)),
         LockFormat::Composer => serde_json::from_str::<serde_json::Value>(content)
             .map(|_| {
                 plain(

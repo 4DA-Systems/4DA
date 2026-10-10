@@ -41,8 +41,10 @@ struct TomlPackage {
     name: Option<String>,
     version: Option<String>,
     category: Option<String>,
-    /// The project itself or local code (uv `editable`/`virtual`/`directory`/
-    /// `path`, poetry `[package.source] type = "directory" | "file"`).
+    /// Not an index release: the project itself, local code, a git checkout
+    /// or a direct-URL archive (uv `editable`/`virtual`/`directory`/`path`/
+    /// `git`/`url`, poetry `[package.source] type = "directory" | "file" |
+    /// "git" | "url"`).
     local: bool,
 }
 
@@ -95,15 +97,27 @@ pub(super) fn read_toml_package_lock(content: &str, format: LockFormat) -> Lockf
             } else if let Some(v) = toml_string(line, "category") {
                 pkg.category = Some(v);
             } else if let Some(source) = line.strip_prefix("source") {
-                // uv: `source = { editable = "." }`, `{ virtual = "." }`, ...
+                // uv: `source = { editable = "." }`, `{ virtual = "." }`,
+                // `{ git = "https://…#<sha>" }`, `{ url = "…" }`, ... Only
+                // `{ registry = … }` is an index release; a git checkout or
+                // direct-URL archive at the same version number is not one.
                 let s = source.replace(' ', "");
-                pkg.local |= ["{editable=", "{virtual=", "{directory=", "{path="]
-                    .iter()
-                    .any(|k| s.starts_with(&format!("={k}")));
+                pkg.local |= [
+                    "{editable=",
+                    "{virtual=",
+                    "{directory=",
+                    "{path=",
+                    "{git=",
+                    "{url=",
+                ]
+                .iter()
+                .any(|k| s.starts_with(&format!("={k}")));
             }
         } else if table == "[package.source]" {
             if let Some(kind) = toml_string(line, "type") {
-                pkg.local |= kind == "directory" || kind == "file";
+                // poetry: `legacy` (a private index) is a registry; `git`,
+                // `url`, `directory` and `file` are not.
+                pkg.local |= matches!(kind.as_str(), "directory" | "file" | "git" | "url");
             }
         }
     }
