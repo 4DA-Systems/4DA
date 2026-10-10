@@ -114,14 +114,11 @@ pub fn build_upgrade_plan(db: &Database) -> BuiltPlan {
     let mut candidates: Vec<(EvidenceItem, Vec<UpgradeStep>)> = steps
         .into_iter()
         .map(|mut g| {
-            // Which installed parent brings each transitive copy in (read
-            // from the user's lockfiles only; empty for a direct-only row).
-            g.parents = crate::osv::parent_hint::load_parent_links(
-                db,
-                &g.ecosystem_norm,
-                &g.package,
-                &g.lines,
-            );
+            // How the fix reaches each transitive copy: its installed parent,
+            // whether a lockfile refresh is enough and the command that does
+            // it (`osv::fix_path`; empty for a direct-only row).
+            g.routes =
+                crate::osv::parent_hint::load_routes(db, &g.ecosystem_norm, &g.package, &g.lines);
             g.into_evidence_item(now)
         })
         .collect();
@@ -189,9 +186,9 @@ struct PackageGroup<'a> {
     /// ids distinct: the alphabetically-first advisory id of this row's set.
     /// `None` — the overwhelmingly common case — leaves the id untouched.
     cohort_key: Option<String>,
-    /// The installed parent of each transitive copy (`osv::parent_hint`).
-    /// Filled after ranking; it never changes the rank.
-    parents: Vec<crate::osv::parent_hint::ParentLink>,
+    /// The route of each transitive copy (`osv::parent_hint`,
+    /// `osv::fix_path`). Filled after ranking; it never changes the rank.
+    routes: crate::osv::parent_hint::TransitiveRoutes,
 }
 
 fn aggregate_by_package(matches: &[MatchedAdvisory]) -> Vec<PackageGroup<'_>> {
@@ -292,7 +289,7 @@ fn package_group<'a>(
         has_fix,
         informational,
         cohort_key,
-        parents: Vec::new(),
+        routes: crate::osv::parent_hint::TransitiveRoutes::default(),
     }
 }
 
@@ -370,7 +367,7 @@ impl PackageGroup<'_> {
         let via = if self.fixable_now {
             String::new()
         } else {
-            super::upgrade_parent::single_parent(&self.parents)
+            super::upgrade_parent::single_parent(&self.routes.links)
                 .map(|p| format!(" via {p}"))
                 .unwrap_or_default()
         };
@@ -399,9 +396,24 @@ impl PackageGroup<'_> {
             "No fix has been published — pin, patch, or replace; there is nothing to upgrade to yet"
                 .to_string()
         } else if self.fixable_now {
-            "Fixable now via a direct dependency bump".to_string()
+            // A row can hold direct and transitive copies: a bump only fixes
+            // the declared ones (bumping where it is not declared would add a
+            // second, direct copy and leave the vulnerable one in place).
+            let transitive = self
+                .lines
+                .iter()
+                .any(|l| l.target_version.is_some() && l.sites.iter().any(|s| !s.is_direct));
+            if transitive {
+                format!(
+                    "Fixable now via a direct dependency bump where it is declared. Elsewhere it is \
+                     transitive — {}",
+                    super::upgrade_parent::upstream_note(&self.package, &self.routes, m > 1)
+                )
+            } else {
+                "Fixable now via a direct dependency bump".to_string()
+            }
         } else {
-            super::upgrade_parent::upstream_note(&self.package, &self.parents, m > 1)
+            super::upgrade_parent::upstream_note(&self.package, &self.routes, m > 1)
         };
         let dev_note = if self.all_dev {
             " All affected instances are dev-only."
@@ -473,7 +485,7 @@ impl PackageGroup<'_> {
         evidence.extend(line_citations(&self.lines));
         evidence.extend(super::upgrade_parent::path_citations(
             &self.package,
-            &self.parents,
+            &self.routes.links,
         ));
 
         // Confidence: heuristic ranking; a shade higher when the fix is a direct

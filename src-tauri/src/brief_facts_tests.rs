@@ -8,58 +8,8 @@ fn link(direct: &str, version: &str, req: Option<&str>) -> ParentLink {
     ParentLink {
         direct: direct.to_string(),
         direct_version: version.to_string(),
-        requirement: req.map(str::to_string),
+        requirements: req.map(|r| vec![Requirement::npm(r)]).unwrap_or_default(),
     }
-}
-
-#[test]
-fn semver_compatibility_follows_the_caret_rule() {
-    assert_eq!(
-        semver_compatible("1.7.0", "2.1.0"),
-        Some(false),
-        "rmcp 1 -> 2"
-    );
-    assert_eq!(semver_compatible("1.7.0", "1.9.3"), Some(true));
-    assert_eq!(
-        semver_compatible("0.23.39", "0.23.45"),
-        Some(true),
-        "rustls patch"
-    );
-    assert_eq!(
-        semver_compatible("0.8.4", "0.9.0"),
-        Some(false),
-        "0.x minor is breaking"
-    );
-    assert_eq!(semver_compatible("v3.2.4", "3.2.6"), Some(true));
-    assert_eq!(semver_compatible("garbage", "1.0.0"), None);
-}
-
-#[test]
-fn npm_requirements_are_read_with_npm_semantics() {
-    // A bare npm version is an EXACT pin (Cargo would read it as ^).
-    assert_eq!(requirement_admits("5.28.4", "5.28.5"), Some(false));
-    assert_eq!(requirement_admits("5.28.4", "5.28.4"), Some(true));
-    assert_eq!(requirement_admits("^1.1.7", "1.1.12"), Some(true));
-    assert_eq!(requirement_admits("^1.1.7", "5.0.12"), Some(false));
-    assert_eq!(requirement_admits("~7.4.0", "7.4.9"), Some(true));
-    assert_eq!(requirement_admits(">=1.0.0 <2.0.0", "1.9.0"), Some(true));
-    assert_eq!(requirement_admits(">=1.0.0 <2.0.0", "2.0.0"), Some(false));
-    assert_eq!(requirement_admits("^2.0.0 || ^3.0.0", "3.4.1"), Some(true));
-    assert_eq!(requirement_admits("1.x", "1.4.0"), Some(true));
-    assert_eq!(requirement_admits("*", "9.9.9"), Some(true));
-    assert_eq!(
-        requirement_admits("workspace:*", "1.0.0"),
-        None,
-        "unreadable"
-    );
-    // A space after the operator is npm syntax (6 live rows, 2026-10-02).
-    assert_eq!(requirement_admits(">= 4.21.0", "5.0.0"), Some(true));
-    assert_eq!(requirement_admits(">= 1.0.0 < 2.0.0", "2.1.0"), Some(false));
-    // Hyphen ranges: full bounds translate, partial ones are unreadable.
-    assert_eq!(requirement_admits("1.2.3 - 2.3.4", "2.3.4"), Some(true));
-    assert_eq!(requirement_admits("1.2.3 - 2.3.4", "2.3.5"), Some(false));
-    assert_eq!(requirement_admits("1 - 3", "2.0.0"), None);
-    assert_eq!(requirement_admits(">=", "1.0.0"), None, "dangling operator");
 }
 
 /// THE rmcp case: 10 of 10 briefs said "a lockfile refresh should resolve
@@ -91,7 +41,9 @@ fn a_compatible_transitive_fix_is_a_lockfile_refresh() {
     assert_eq!(
         fix_path(Some("0.23.39"), Some("0.23.45"), Some(false), Some(&parent)),
         FixPath::Refresh {
-            to: "0.23.45".into()
+            to: "0.23.45".into(),
+            inferred: true,
+            command: None,
         }
     );
 }
@@ -116,7 +68,11 @@ fn an_exact_npm_pin_sends_the_fix_to_the_parent() {
     let odd = link("x", "1.0.0", Some("1 - 3"));
     assert_eq!(
         fix_path(Some("2.0.0"), Some("2.0.1"), Some(false), Some(&odd)),
-        FixPath::Refresh { to: "2.0.1".into() }
+        FixPath::Refresh {
+            to: "2.0.1".into(),
+            inferred: true,
+            command: None,
+        }
     );
     // A caret requirement that admits the fix is a refresh, even across what
     // the installed copy alone would call incompatible.
@@ -124,7 +80,9 @@ fn an_exact_npm_pin_sends_the_fix_to_the_parent() {
     assert_eq!(
         fix_path(Some("1.1.11"), Some("5.0.12"), Some(false), Some(&wide)),
         FixPath::Refresh {
-            to: "5.0.12".into()
+            to: "5.0.12".into(),
+            inferred: false,
+            command: None,
         }
     );
 }
@@ -426,7 +384,11 @@ fn a_proven_parent_release_is_named_with_its_evidence() {
 fn every_fix_clause_quoted_verbatim_passes_the_version_check() {
     let paths = [
         FixPath::Bump { to: "2.1.0".into() },
-        FixPath::Refresh { to: "2.1.0".into() },
+        FixPath::Refresh {
+            to: "2.1.0".into(),
+            inferred: false,
+            command: None,
+        },
         FixPath::Parent {
             parent: "victauri-plugin".into(),
             parent_version: "0.8.4".into(),
@@ -625,7 +587,7 @@ fn live_snapshot_brief_facts() {
 fn fix_target(path: &FixPath) -> Option<&str> {
     match path {
         FixPath::Bump { to }
-        | FixPath::Refresh { to }
+        | FixPath::Refresh { to, .. }
         | FixPath::Parent { to, .. }
         | FixPath::ParentUnknown { to }
         | FixPath::Reinstall { to }
@@ -650,7 +612,11 @@ fn security(key: &str, urgency: AlertUrgency, installed: &str, to: &str) -> Secu
             dev_only: false,
             scratch: false,
             dormant_days: None,
-            fix_path: FixPath::Refresh { to: to.into() },
+            fix_path: FixPath::Refresh {
+                to: to.into(),
+                inferred: false,
+                command: None,
+            },
         }],
         not_compiled: vec![],
         first_seen: None,

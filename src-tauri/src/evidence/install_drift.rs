@@ -63,42 +63,10 @@ const MAX_NOTE_BYTES: usize = 200;
 /// `validate_item` caps a title at 120 BYTES.
 const MAX_TITLE_BYTES: usize = 120;
 
-/// The lockfile whose pins `dependency_instances` holds for a project.
-///
-/// The walk runs the package-lock, then the pnpm, then the yarn processor, and
-/// each REPLACES the project's npm instance set — so the last one present
-/// wrote the pins, and the install command names that lockfile's tool.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Lockfile {
-    Npm,
-    Pnpm,
-    Yarn,
-}
-
-impl Lockfile {
-    fn detect(dir: &Path) -> Option<Self> {
-        [Self::Yarn, Self::Pnpm, Self::Npm]
-            .into_iter()
-            .find(|kind| dir.join(kind.file_name()).is_file())
-    }
-
-    pub fn file_name(self) -> &'static str {
-        match self {
-            Self::Npm => "package-lock.json",
-            Self::Pnpm => "pnpm-lock.yaml",
-            Self::Yarn => "yarn.lock",
-        }
-    }
-
-    /// The command that makes `node_modules` match this lockfile again.
-    pub fn install_command(self) -> &'static str {
-        match self {
-            Self::Npm => "npm ci",
-            Self::Pnpm => "pnpm install",
-            Self::Yarn => "yarn install",
-        }
-    }
-}
+/// The lockfile whose pins `dependency_instances` holds for a project — the
+/// same detection the fix-path rule names its refresh command from
+/// (`osv::fix_path`), so the two never disagree about a project's tool.
+pub use crate::osv::fix_path::NpmLockfile as Lockfile;
 
 /// An npm advisory the running copy is exposed to.
 #[derive(Debug, Clone, PartialEq)]
