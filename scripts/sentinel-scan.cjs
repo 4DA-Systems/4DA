@@ -787,8 +787,26 @@ function checkGitHygiene() {
 /// means UNKNOWN (gh missing, offline, no completed run); unknown is never a
 /// finding, same rule as classifyTscResult: a detector must not report what it
 /// did not observe.
-function classifyMergeGateHealth({ blockingExpired = [], dueSoon = [], scheduledValidate = null, nightlyAudit = null, stalePrs = null }) {
+function classifyMergeGateHealth({
+  blockingExpired = [],
+  dueSoon = [],
+  scheduledValidate = null,
+  nightlyAudit = null,
+  hermeticMain = null,
+  stalePrs = null,
+}) {
   const out = [];
+  // 2026-10-09 → 10-10: the Windows fresh clone failed on 16 consecutive main
+  // commits (#897..#913) while this scan said "all clear". The workflow kept its
+  // `hermetic-main` issue updated, but no session reads issues; every session
+  // reads this hook. Post-merge, so it blocks nothing — which is why it went unseen.
+  if (hermeticMain === "failure") {
+    out.push({
+      severity: "critical",
+      message: "main fails on a fresh clone (Hermetic, latest main run) — fix main before merging more on top of it",
+      detail: "gh run list --workflow hermetic.yml --branch main -L 3 · open issue: gh issue list --label hermetic-main",
+    });
+  }
   if (blockingExpired.length > 0) {
     out.push({
       severity: "critical",
@@ -888,6 +906,7 @@ function checkMergeGateHealth() {
     dueSoon,
     scheduledValidate: latestConclusion("validate.yml", "--event schedule --branch main"),
     nightlyAudit: latestConclusion("nightly-audit.yml", "--branch main"),
+    hermeticMain: latestConclusion("hermetic.yml", "--branch main"),
     stalePrs: stalePullRequests(),
   });
   if (findings.length === 0) {

@@ -81,6 +81,21 @@ test("merge gate: a cancelled scheduled run is not 'main is red'", () => {
   assert.deepStrictEqual(classifyMergeGateHealth({ scheduledValidate: "cancelled" }), []);
 });
 
+// ── Hermetic fresh clone on main (2026-10-10: 16 red main commits, scan said "all clear") ──
+test("merge gate: a red Hermetic run on main is CRITICAL and names the issue label", () => {
+  const out = classifyMergeGateHealth({ hermeticMain: "failure" });
+  assert.strictEqual(out.length, 1);
+  assert.strictEqual(out[0].severity, "critical");
+  assert.match(out[0].message, /fresh clone/);
+  assert.match(out[0].detail, /hermetic-main/);
+});
+
+test("merge gate: green, cancelled or unknown Hermetic is not a finding", () => {
+  for (const hermeticMain of ["success", "cancelled", null]) {
+    assert.deepStrictEqual(classifyMergeGateHealth({ hermeticMain }), [], String(hermeticMain));
+  }
+});
+
 test("merge gate: due-soon deadlines warn and name the EARLIEST date", () => {
   const out = classifyMergeGateHealth({
     dueSoon: [marker("b.rs", "2026-10-05"), marker("a.rs", "2026-10-01")],
