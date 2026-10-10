@@ -73,8 +73,18 @@ function discoverLockfiles() {
     .split('\n')
     .map((l) => l.trim())
     .filter((l) => KNOWN.has(path.posix.basename(l)))
+    .filter((l) => !NOT_INSTALLED_PREFIXES.some((p) => l.startsWith(p)))
     .sort();
 }
+
+/**
+ * Tracked lockfiles that are TEST DATA, never installed: the dependency-engine
+ * conformance corpus vendors third-party lockfiles at old, deliberately
+ * vulnerable versions (src-tauri/tests/conformance/README.md). Auditing them
+ * would fail every PR on advisories nobody ships. Prefix-scoped, so a real
+ * lockfile anywhere else is still discovered.
+ */
+const NOT_INSTALLED_PREFIXES = ['src-tauri/tests/conformance/cases/'];
 
 /** The audit command for one discovered lockfile. */
 function commandFor(lockfile) {
@@ -215,4 +225,4 @@ function main() {
 
 if (require.main === module) main();
 
-module.exports = { discoverLockfiles, commandFor, annotationBody, looksLikeHarnessError, KNOWN };
+module.exports = { discoverLockfiles, commandFor, annotationBody, looksLikeHarnessError, KNOWN, NOT_INSTALLED_PREFIXES };
