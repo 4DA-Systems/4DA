@@ -1435,50 +1435,49 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                     // On local models this takes 1-3 minutes — acceptable for a
                     // scheduled background task.  The user sees a complete briefing
                     // with synthesis already populated.
-                    let synthesis_meta =
-                        match crate::monitoring_briefing::synthesize_morning_briefing(&briefing)
-                            .await
-                        {
-                            Ok(result) => {
-                                info!(
-                                    target: "4da::briefing",
-                                    provider = %result.provider_used,
-                                    tier = %result.synthesis_tier,
-                                    "Scheduled synthesis ready"
-                                );
-                                briefing.synthesis = Some(result.prose.clone());
-                                // Emit the enriched synthesis to the main app
-                                let mut payload = serde_json::json!({ "synthesis": &result.prose });
-                                if let Some(ref clusters) = result.clusters {
-                                    payload["clusters"] = serde_json::json!(clusters);
-                                }
-                                payload["provider"] = serde_json::json!(&result.provider_used);
-                                payload["tier"] = serde_json::json!(&result.synthesis_tier);
-                                let _ = app.emit("morning-briefing-synthesis", payload);
-                                Some(serde_json::json!({
-                                    "provider": &result.provider_used,
-                                    "tier": &result.synthesis_tier,
-                                }))
+                    //
+                    // When the summary abstains, fails, times out or has no
+                    // model, the facts view goes out in its place
+                    // (`morning_floor`, AD-054 G4), and the outcome is recorded.
+                    let resolution =
+                        crate::morning_floor::resolve_live(&mut briefing, "scheduled").await;
+                    let synthesis_meta = match resolution.narrated {
+                        Some(result) => {
+                            info!(
+                                target: "4da::briefing",
+                                provider = %result.provider_used,
+                                tier = %result.synthesis_tier,
+                                "Scheduled synthesis ready"
+                            );
+                            // Emit the enriched synthesis to the main app
+                            let mut payload = serde_json::json!({ "synthesis": &result.prose });
+                            if let Some(ref clusters) = result.clusters {
+                                payload["clusters"] = serde_json::json!(clusters);
                             }
-                            Err(e) => {
-                                info!(target: "4da::briefing", reason = %e, "Scheduled synthesis skipped");
-                                None
-                            }
-                        };
+                            payload["provider"] = serde_json::json!(&result.provider_used);
+                            payload["tier"] = serde_json::json!(&result.synthesis_tier);
+                            let _ = app.emit("morning-briefing-synthesis", payload);
+                            Some(serde_json::json!({
+                                "provider": &result.provider_used,
+                                "tier": &result.synthesis_tier,
+                            }))
+                        }
+                        None => {
+                            info!(
+                                target: "4da::briefing",
+                                outcome = resolution.outcome.as_str(),
+                                reason = resolution.error.as_deref().unwrap_or(""),
+                                "Scheduled synthesis not shown"
+                            );
+                            None
+                        }
+                    };
 
-                    // Persist briefing (now includes synthesis if it succeeded)
+                    // Persist briefing (summary or facts view, whichever went out)
                     crate::briefing_snapshot::save_snapshot(&briefing);
 
-                    // Suppress the briefing window when synthesis says "nothing
-                    // noteworthy" and there are no items/alerts to display.
-                    let is_abstention = briefing.synthesis.as_ref().map_or(false, |s| {
-                        crate::monitoring_briefing::is_abstention_synthesis(s)
-                    });
-                    if is_abstention
-                        && briefing.items.is_empty()
-                        && briefing.preemption_alerts.is_empty()
-                        && briefing.escalating_chains.is_empty()
-                    {
+                    // Nothing to show: no summary, no facts, no feed content.
+                    if !crate::morning_floor::should_deliver(&briefing) {
                         info!(
                             target: "4da::briefing",
                             "Suppressing abstention-only briefing — nothing actionable"
@@ -1508,7 +1507,7 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                         // Emit provenance meta if synthesis succeeded
                         if let Some(meta) = synthesis_meta {
                             let _ = app.emit_to("briefing", "briefing-synthesis-meta", &meta);
-                        } else {
+                        } else if briefing.facts_brief.is_none() {
                             let _ = app.emit_to(
                                 "briefing",
                                 "briefing-synthesis-hint",

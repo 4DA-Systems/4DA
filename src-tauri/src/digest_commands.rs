@@ -107,6 +107,9 @@ pub(crate) async fn generate_briefing_internal(
         info!(target: "4da::briefing", count = anomalies.len(), "Unresolved anomalies left out of the brief prompt");
     }
 
+    // Serialize generations so the reuse/cap decision always sees the last
+    // brief written (see `BRIEF_GENERATION_GATE`).
+    let _gate = briefing_reuse::BRIEF_GENERATION_GATE.lock().await;
     let db = get_database()?;
     // Facts read the DB, the preemption feed and the lockfile graph: keep
     // that blocking work off the async runtime.

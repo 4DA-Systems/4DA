@@ -71,6 +71,7 @@ pub(crate) fn build_briefing_from_fixture(
         corroboration_available: false,
         coverage_building: false,
         synthesis_hint: None,
+        facts_brief: None,
     }
 }
 

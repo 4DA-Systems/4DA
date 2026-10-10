@@ -460,7 +460,22 @@ pub async fn trigger_morning_briefing(app: AppHandle) -> crate::error::Result<St
     // Run full enrichment pipeline even when raw_items is empty — preemption
     // alerts, knowledge gaps, and escalating chains are added during enrichment,
     // so a preemption-only briefing (0 scored items, N alerts) must still fire.
-    let briefing = crate::monitoring_briefing::build_enriched_briefing(raw_items, &user_lang, true);
+    let mut briefing =
+        crate::monitoring_briefing::build_enriched_briefing(raw_items, &user_lang, true);
+
+    // A quiet feed still shows the facts view, as the scheduled morning does.
+    // A test trigger records nothing as reported.
+    if !briefing.has_meaningful_content() {
+        if let Ok(db) = crate::get_database() {
+            let (floor, _) = crate::morning_floor::build_floor(
+                db,
+                crate::briefing_deterministic::MorningWhy::Skipped,
+            );
+            if let Some(f) = floor {
+                crate::morning_floor::attach_floor(&mut briefing, &f);
+            }
+        }
+    }
 
     if !briefing.has_meaningful_content() {
         return Ok("No items available for briefing — run an analysis first".into());
@@ -481,12 +496,10 @@ pub async fn trigger_morning_briefing(app: AppHandle) -> crate::error::Result<St
         let app_synth = app.clone();
         let briefing_synth = briefing.clone();
         tauri::async_runtime::spawn(async move {
-            let synthesis = match crate::monitoring_briefing::synthesize_morning_briefing(
-                &briefing_synth,
-            )
-            .await
-            {
-                Ok(result) => {
+            let mut enriched = briefing_synth;
+            let resolution = crate::morning_floor::resolve_live(&mut enriched, "manual").await;
+            match resolution.narrated {
+                Some(result) => {
                     info!(
                         target: "4da::briefing",
                         provider = %result.provider_used,
@@ -499,22 +512,30 @@ pub async fn trigger_morning_briefing(app: AppHandle) -> crate::error::Result<St
                         "tier": &result.synthesis_tier,
                     });
                     let _ = app_synth.emit_to("briefing", "briefing-synthesis-meta", &meta);
-                    Some(result.prose)
                 }
-                Err(e) => {
-                    info!(target: "4da::briefing", reason = %e, "Manual synthesis skipped");
-                    let _ = app_synth.emit_to("briefing", "briefing-synthesis-hint", &e);
-                    None
+                None => {
+                    let reason = resolution.error.unwrap_or_default();
+                    info!(
+                        target: "4da::briefing",
+                        outcome = resolution.outcome.as_str(),
+                        reason = %reason,
+                        "Manual synthesis not shown"
+                    );
+                    if let Some(facts) = enriched.facts_brief.as_deref() {
+                        let _ = app_synth.emit_to("briefing", "briefing-facts", facts);
+                    } else if let Some(quiet) = enriched.synthesis.as_deref() {
+                        let _ = app_synth.emit_to("briefing", "briefing-synthesis", quiet);
+                    } else {
+                        let _ = app_synth.emit_to("briefing", "briefing-synthesis-hint", &reason);
+                    }
                 }
-            };
+            }
             // Persist the freshly-generated brief so a cold boot / app restart
             // shows THIS brief — with its standing-conditions collapse — instead
             // of reverting to the last scheduled (08:00) snapshot. Without this a
             // manual trigger updated only the live window; the on-disk snapshot
             // stayed stale until the next scheduled run. Mirrors the scheduler's
             // save-after-synthesis; save_snapshot self-guards empty/abstention.
-            let mut enriched = briefing_synth;
-            enriched.synthesis = synthesis;
             crate::briefing_snapshot::save_snapshot(&enriched);
         });
     }
