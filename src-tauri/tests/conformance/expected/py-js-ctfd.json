@@ -4,6 +4,7 @@
  "lockfiles": [
   {
    "path": "requirements.txt",
+   "dir": ".",
    "format": "requirements",
    "ecosystem": "PyPI",
    "status": "supported",
@@ -11,6 +12,7 @@
   },
   {
    "path": "yarn.lock",
+   "dir": ".",
    "format": "yarn-v1",
    "ecosystem": "npm",
    "status": "supported",

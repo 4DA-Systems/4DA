@@ -105,9 +105,10 @@ lockfile (0 packages, must not count as a drop).
   "schema": 1,
   "case": "js-taxonomy-pnpm6",
   "lockfiles": [            // EVERY lockfile-like file in the case dir
-    { "path": "pnpm-lock.yaml", "format": "pnpm-v6.0", "ecosystem": "npm",
+    { "path": "pnpm-lock.yaml", "dir": ".", "format": "pnpm-v6.0", "ecosystem": "npm",
       "status": "supported", "truth_packages": 937 },
-    { "path": "benchmarks/query-param/bun.lockb", "format": "bun-binary", "ecosystem": "npm",
+    { "path": "benchmarks/query-param/bun.lockb", "dir": "benchmarks/query-param",
+      "format": "bun-binary", "ecosystem": "npm",
       "status": "unsupported", "reason": "binary bun lockfile ..." }
   ],
   "inventory": { "count": 937, "packages": ["npm|.|@babel/code-frame|7.21.4", "..."] },
@@ -124,8 +125,10 @@ lockfile (0 packages, must not count as a drop).
   `gradle.lockfile`, any `requirements*.txt`, and any `.txt` under a
   `requirements/` directory. Every one must be declared `supported` or
   `unsupported` (with a reason) — an undeclared lockfile fails the shape test.
-- **Grain** = (ecosystem, directory relative to the case root, package, installed
-  version). Ecosystems use OSV names: `npm`, `crates.io`, `PyPI`, `Go`,
+- **Grain** = (ecosystem, project directory relative to the case root, package,
+  installed version). A lockfile's project directory (`dir`) is the
+  directory that holds it, except that a `.txt` inside a `requirements/`
+  directory (pip-compile layout) belongs to the project directory above it. Ecosystems use OSV names: `npm`, `crates.io`, `PyPI`, `Go`,
   `RubyGems`, `Packagist`.
 - **Key normalisation** (inventory keys are stored normalised; both consumers
   apply the same rules to their own output): PyPI names PEP 503
@@ -160,9 +163,10 @@ lockfile (0 packages, must not count as a drop).
    across regeneration.
 5. **Engine disagreements** (`engine_disagreements`): every inventory and
    finding difference between the Rust engine and the truth at generation
-   time, grouped by verdict — e.g. `engine-gap` (lockfile not read),
-   `go.sum universe`, `local/workspace package read as a registry install`,
-   `version disagreement`. Verdicts are mechanical (raw lockfile text, the
+   time, grouped by verdict, e.g. `engine-gap` (lockfile not read),
+   `graph-only module` (go.sum holds only its go.mod hash),
+   `local/workspace package read as a registry install`,
+   `gem platform suffix kept in the version`. Verdicts are mechanical (raw lockfile text, the
    lockfile's own local-source markers, OSV's evaluator); none may stay
    `UNRESOLVED`. This section is a snapshot: regenerate it with the engine dump
    when the engine changes.
@@ -190,11 +194,12 @@ FOURDA_CONFORMANCE_DUMP=/tmp/dump cargo test --lib osv::conformance_tests
 Under nextest (CI) the test runs in its own process (~10 s); under plain `cargo test` it shares the CPU with the rest of the suite and takes longer.
 The secret scanners skip `osv/` (pre-commit `STAGED_EXCLUDE`, pre-push pathspec): the unmodified advisory texts quote example credentials from the vulnerable projects.
 
-The Rust harness reads the lockfiles through the app's readers. Gap: the
-lockfile walk's `process_lockfile_dir` is private to
-`ace_commands::dependencies`, so the harness mirrors it (same parsers, same
-order); exposing it `pub(crate)` lets the harness call it directly — see the
-`GAP` note in `conformance_tests.rs`.
+The Rust harness reads each case through the lockfile walk's own API:
+`ace::lockfile::walk_dirs` (directory selection: skip list + depth, without
+the user-scope gates) and `ace::lockfile::read_dir` (every reader). It then
+stores the reads merged per ecosystem, as `process_lockfile_dir` does. It
+leaves out the parts that cannot change a match: direct/dev labels, edges, the
+`cargo tree` probe and prunes.
 
 ## Regenerating
 

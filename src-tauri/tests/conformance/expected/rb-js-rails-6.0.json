@@ -4,6 +4,7 @@
  "lockfiles": [
   {
    "path": "Gemfile.lock",
+   "dir": ".",
    "format": "Gemfile.lock",
    "ecosystem": "RubyGems",
    "status": "supported",
@@ -11,6 +12,7 @@
   },
   {
    "path": "yarn.lock",
+   "dir": ".",
    "format": "yarn-v1",
    "ecosystem": "npm",
    "status": "supported",

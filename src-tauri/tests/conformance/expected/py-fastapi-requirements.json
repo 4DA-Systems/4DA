@@ -4,6 +4,7 @@
  "lockfiles": [
   {
    "path": "requirements-docs.txt",
+   "dir": ".",
    "format": "requirements",
    "ecosystem": "PyPI",
    "status": "supported",
@@ -11,6 +12,7 @@
   },
   {
    "path": "requirements-tests.txt",
+   "dir": ".",
    "format": "requirements",
    "ecosystem": "PyPI",
    "status": "supported",
@@ -18,6 +20,7 @@
   },
   {
    "path": "requirements.txt",
+   "dir": ".",
    "format": "requirements",
    "ecosystem": "PyPI",
    "status": "supported",

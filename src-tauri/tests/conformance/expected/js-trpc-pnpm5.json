@@ -4,6 +4,7 @@
  "lockfiles": [
   {
    "path": "pnpm-lock.yaml",
+   "dir": ".",
    "format": "pnpm-v5.4",
    "ecosystem": "npm",
    "status": "supported",

@@ -4,6 +4,7 @@
  "lockfiles": [
   {
    "path": "Cargo.lock",
+   "dir": ".",
    "format": "Cargo.lock",
    "ecosystem": "crates.io",
    "status": "supported",

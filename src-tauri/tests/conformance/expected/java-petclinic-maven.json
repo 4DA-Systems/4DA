@@ -4,6 +4,7 @@
  "lockfiles": [
   {
    "path": "pom.xml",
+   "dir": ".",
    "format": "pom.xml",
    "ecosystem": "Maven",
    "status": "unsupported",

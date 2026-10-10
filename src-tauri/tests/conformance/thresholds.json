@@ -1,13 +1,13 @@
 {
   "schema": 1,
-  "about": "Ratchet for src-tauri/src/osv/conformance_tests.rs: the values the Rust engine measured when the corpus landed (2026-10-10, truncated to 4 decimals). The test fails if any falls; raise them in the PR that improves them. G1 target: findings precision >= 0.995 and recall >= 0.99 per ecosystem, max_silent_drops 0.",
+  "about": "Ratchet for src-tauri/src/osv/conformance_tests.rs: the values the Rust engine measured when the corpus landed (2026-10-10, engine at #902 / W1-A, truncated to 4 decimals). The test fails if any falls; raise them in the PR that improves them. G1 target: findings precision >= 0.995 and recall >= 0.99 per ecosystem, max_silent_drops 0.",
   "ecosystems": {
-    "Go": { "findings_precision": 0.1019, "findings_recall": 0.4, "inventory_precision": 0.1565, "inventory_recall": 1 },
+    "Go": { "findings_precision": 0.7229, "findings_recall": 1, "inventory_precision": 0.5197, "inventory_recall": 1 },
     "Packagist": { "findings_precision": 1, "findings_recall": 1, "inventory_precision": 1, "inventory_recall": 1 },
-    "PyPI": { "findings_precision": 1, "findings_recall": 0.482, "inventory_precision": 1, "inventory_recall": 0.5359 },
-    "RubyGems": { "findings_precision": 0.4817, "findings_recall": 0.923, "inventory_precision": 0.8078, "inventory_recall": 0.9788 },
+    "PyPI": { "findings_precision": 1, "findings_recall": 1, "inventory_precision": 0.9985, "inventory_recall": 1 },
+    "RubyGems": { "findings_precision": 0.4294, "findings_recall": 1, "inventory_precision": 0.8078, "inventory_recall": 0.9788 },
     "crates.io": { "findings_precision": 1, "findings_recall": 1, "inventory_precision": 1, "inventory_recall": 1 },
-    "npm": { "findings_precision": 1, "findings_recall": 0.77, "inventory_precision": 0.9995, "inventory_recall": 0.761 }
+    "npm": { "findings_precision": 1, "findings_recall": 1, "inventory_precision": 0.9997, "inventory_recall": 0.9999 }
   },
-  "max_silent_drops": 14
+  "max_silent_drops": 0
 }

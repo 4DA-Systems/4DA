@@ -4,6 +4,7 @@
  "lockfiles": [
   {
    "path": "poetry.lock",
+   "dir": ".",
    "format": "poetry.lock",
    "ecosystem": "PyPI",
    "status": "supported",

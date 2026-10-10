@@ -4,6 +4,7 @@
  "lockfiles": [
   {
    "path": "Cargo.lock",
+   "dir": ".",
    "format": "Cargo.lock",
    "ecosystem": "crates.io",
    "status": "supported",
@@ -11,6 +12,7 @@
   },
   {
    "path": "pnpm-lock.yaml",
+   "dir": ".",
    "format": "pnpm-v9.0",
    "ecosystem": "npm",
    "status": "supported",

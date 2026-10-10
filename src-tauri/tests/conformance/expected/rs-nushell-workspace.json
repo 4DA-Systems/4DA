@@ -4,6 +4,7 @@
  "lockfiles": [
   {
    "path": "Cargo.lock",
+   "dir": ".",
    "format": "Cargo.lock",
    "ecosystem": "crates.io",
    "status": "supported",
@@ -11,6 +12,7 @@
   },
   {
    "path": "crates/nu-pretty-hex/Cargo.lock",
+   "dir": "crates/nu-pretty-hex",
    "format": "Cargo.lock",
    "ecosystem": "crates.io",
    "status": "supported",
@@ -18,6 +20,7 @@
   },
   {
    "path": "crates/nu-system/Cargo.lock",
+   "dir": "crates/nu-system",
    "format": "Cargo.lock",
    "ecosystem": "crates.io",
    "status": "supported",
@@ -25,6 +28,7 @@
   },
   {
    "path": "samples/wasm/package-lock.json",
+   "dir": "samples/wasm",
    "format": "npm-v1",
    "ecosystem": "npm",
    "status": "supported",

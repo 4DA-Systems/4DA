@@ -83,6 +83,15 @@ export function normVersion(eco, version) {
   }
   return v;
 }
+/**
+ * The project directory a lockfile belongs to. A requirements file inside a
+ * `requirements/` directory (pip-compile layout) belongs to the project above it.
+ */
+export function ownerDir(rel) {
+  const dir = posix.dirname(rel);
+  if (posix.basename(dir).toLowerCase() === "requirements" && rel.endsWith(".txt")) return posix.dirname(dir);
+  return dir;
+}
 const invKey = (eco, dir, name, version) => `${eco}|${dir}|${normName(eco, name)}|${normVersion(eco, version)}`;
 
 function formatOf(abs, relPath) {
@@ -404,7 +413,7 @@ function truthInventory(c, adjud) {
   for (const [lock, pkgs] of scannerInventory(c)) {
     const isGolist = lock.endsWith("#golist");
     const rel = lock.replace(/#golist$/, "");
-    const dir = posix.dirname(rel);
+    const dir = ownerDir(rel);
     if (unsupported.has(rel)) continue; // declared unsupported: outside the scored inventory
     if (posix.basename(rel) === "go.mod" && !isGolist) continue; // superseded by the build list
     if (posix.basename(rel) === "go.sum") continue; // go.sum is a checksum DB, not an install set
@@ -588,9 +597,9 @@ function lockfileTable(c, inv) {
   const unsupported = new Map((c.unsupported ?? []).map((u) => [u.path, u.reason]));
   return walkFiles(caseDir).filter(isLockfileLike).sort().map((rel) => {
     const eco = ecosystemOf(rel);
-    const dir = posix.dirname(rel);
+    const dir = ownerDir(rel);
     const truthPackages = [...inv.values()].filter((p) => p.eco === eco && p.dir === dir).length;
-    const row = { path: rel, format: formatOf(join(caseDir, rel), rel), ecosystem: eco };
+    const row = { path: rel, dir, format: formatOf(join(caseDir, rel), rel), ecosystem: eco };
     return unsupported.has(rel) ? { ...row, status: "unsupported", reason: unsupported.get(rel) } : { ...row, status: "supported", truth_packages: truthPackages };
   });
 }
@@ -668,16 +677,17 @@ function classifyDisagreements(c, expected, find) {
   const engNames = new Set([...eng].map(nameKey));
   const engDirs = new Set([...eng].map((k) => k.split("|").slice(0, 2).join("|")));
   const sharedNames = new Set([...eng].filter((e) => truth.has(e)).map(nameKey)); // a version both sides hold
-  const lockText = (eco, dir) => expected.lockfiles.filter((l) => posix.dirname(l.path) === dir && l.ecosystem === eco).map((l) => readFileSync(join(caseDir, l.path), "utf8")).join("\n");
+  const lockText = (eco, dir) => expected.lockfiles.filter((l) => l.dir === dir && l.ecosystem === eco).map((l) => readFileSync(join(caseDir, l.path), "utf8")).join("\n");
   const verdicts = [];
   const push = (kind, side, verdict, key) => verdicts.push({ kind, side, verdict, key });
   for (const k of [...eng].filter((x) => !truth.has(x))) {
     const [eco, dir, name, version] = k.split("|");
-    const locals = expected.lockfiles.filter((l) => posix.dirname(l.path) === dir).map((l) => localPackages(join(caseDir, l.path)));
+    const locals = expected.lockfiles.filter((l) => l.dir === dir).map((l) => localPackages(join(caseDir, l.path)));
     const text = lockText(eco, dir);
     if (locals.some((m) => m.has(`${name}@${version}`))) push("inventory", "engine-only", "engine-error: local/workspace package read as a registry install", k);
     else if (/\.tgz|registry\.|https?:/.test(name)) push("inventory", "engine-only", "engine-error: a tarball/URL lockfile key read as a package name", k);
     else if (eco === "RubyGems" && /-(java|x86|x64|universal|mingw|mswin|darwin|linux|arm)/.test(version)) push("inventory", "engine-only", "engine-error: gem platform suffix kept in the version", k);
+    else if (eco === "Go" && goModOnly(text, name, version)) push("inventory", "engine-only", "engine-error: graph-only module — go.sum holds only its go.mod hash, so its source is never downloaded or built", k);
     else if (eco === "Go" && new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} v${version.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[ /]`, "m").test(text)) push("inventory", "engine-only", "engine-error: go.sum universe — module listed in go.sum but not installed by the build", k);
     else if (truthNames.has(nameKey(k))) push("inventory", "engine-only", "version disagreement: truth holds this package at another version", k);
     else if (!rawPresent(text, eco, name, version)) push("inventory", "engine-only", "engine-error: package@version does not occur in the lockfile text", k);
@@ -705,6 +715,11 @@ function classifyDisagreements(c, expected, find) {
     case: c.id, kind: xs[0].kind, side: xs[0].side, verdict: xs[0].verdict, count: xs.length,
     keys: xs.map((x) => x.key).sort().slice(0, 40), ...(xs.length > 40 ? { keys_truncated: xs.length - 40 } : {}),
   }));
+}
+
+function goModOnly(text, name, version) {
+  const lines = text.split("\n").filter((l) => l.startsWith(`${name} v${version} `) || l.startsWith(`${name} v${version}/`));
+  return lines.length > 0 && lines.every((l) => l.split(/\s+/)[1].endsWith("/go.mod"));
 }
 
 function rawPresent(text, eco, name, version) {

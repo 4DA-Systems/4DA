@@ -4,6 +4,7 @@
  "lockfiles": [
   {
    "path": "src-tauri/Cargo.lock",
+   "dir": "src-tauri",
    "format": "Cargo.lock",
    "ecosystem": "crates.io",
    "status": "supported",

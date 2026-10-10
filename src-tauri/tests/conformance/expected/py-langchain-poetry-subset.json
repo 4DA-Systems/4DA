@@ -4,6 +4,7 @@
  "lockfiles": [
   {
    "path": "docs/api_reference/requirements.txt",
+   "dir": "docs/api_reference",
    "format": "requirements",
    "ecosystem": "PyPI",
    "status": "supported",
@@ -11,6 +12,7 @@
   },
   {
    "path": "libs/core/poetry.lock",
+   "dir": "libs/core",
    "format": "poetry.lock",
    "ecosystem": "PyPI",
    "status": "supported",

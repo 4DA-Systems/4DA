@@ -4,6 +4,7 @@
  "lockfiles": [
   {
    "path": "benchmarks/handle-event/yarn.lock",
+   "dir": "benchmarks/handle-event",
    "format": "yarn-v1",
    "ecosystem": "npm",
    "status": "supported",
@@ -11,6 +12,7 @@
   },
   {
    "path": "benchmarks/jsx/yarn.lock",
+   "dir": "benchmarks/jsx",
    "format": "yarn-v1",
    "ecosystem": "npm",
    "status": "supported",
@@ -18,6 +20,7 @@
   },
   {
    "path": "benchmarks/query-param/bun.lockb",
+   "dir": "benchmarks/query-param",
    "format": "bun-binary",
    "ecosystem": "npm",
    "status": "unsupported",
@@ -25,6 +28,7 @@
   },
   {
    "path": "benchmarks/query-param/package-lock.json",
+   "dir": "benchmarks/query-param",
    "format": "npm-v3",
    "ecosystem": "npm",
    "status": "supported",
@@ -32,6 +36,7 @@
   },
   {
    "path": "benchmarks/routers/yarn.lock",
+   "dir": "benchmarks/routers",
    "format": "yarn-berry",
    "ecosystem": "npm",
    "status": "supported",
@@ -39,6 +44,7 @@
   },
   {
    "path": "bun.lock",
+   "dir": ".",
    "format": "bun-text",
    "ecosystem": "npm",
    "status": "supported",

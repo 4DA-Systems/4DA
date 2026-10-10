@@ -4,6 +4,7 @@
  "lockfiles": [
   {
    "path": "docs/requirements.txt",
+   "dir": "docs",
    "format": "requirements",
    "ecosystem": "PyPI",
    "status": "supported",
@@ -11,6 +12,7 @@
   },
   {
    "path": "go.mod",
+   "dir": ".",
    "format": "go.mod-go1.16",
    "ecosystem": "Go",
    "status": "supported",
@@ -18,6 +20,7 @@
   },
   {
    "path": "go.sum",
+   "dir": ".",
    "format": "go.sum",
    "ecosystem": "Go",
    "status": "supported",
@@ -25,6 +28,7 @@
   },
   {
    "path": "webui/package-lock.json",
+   "dir": "webui",
    "format": "npm-v1",
    "ecosystem": "npm",
    "status": "supported",

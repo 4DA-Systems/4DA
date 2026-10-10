@@ -4,6 +4,7 @@
  "lockfiles": [
   {
    "path": "package-lock.json",
+   "dir": ".",
    "format": "npm-v3",
    "ecosystem": "npm",
    "status": "supported",

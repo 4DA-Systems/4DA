@@ -4,6 +4,7 @@
  "lockfiles": [
   {
    "path": "requirements/dev.txt",
+   "dir": ".",
    "format": "requirements",
    "ecosystem": "PyPI",
    "status": "supported",
@@ -11,6 +12,7 @@
   },
   {
    "path": "requirements/docs.txt",
+   "dir": ".",
    "format": "requirements",
    "ecosystem": "PyPI",
    "status": "supported",
@@ -18,6 +20,7 @@
   },
   {
    "path": "requirements/tests.txt",
+   "dir": ".",
    "format": "requirements",
    "ecosystem": "PyPI",
    "status": "supported",
@@ -25,6 +28,7 @@
   },
   {
    "path": "requirements/typing.txt",
+   "dir": ".",
    "format": "requirements",
    "ecosystem": "PyPI",
    "status": "supported",
@@ -34,67 +38,67 @@
  "inventory": {
   "count": 55,
   "packages": [
-   "PyPI|requirements|alabaster|0.7.12",
-   "PyPI|requirements|appdirs|1.4.4",
-   "PyPI|requirements|asgiref|3.3.4",
-   "PyPI|requirements|attrs|21.2",
-   "PyPI|requirements|babel|2.9.1",
-   "PyPI|requirements|blinker|1.4",
-   "PyPI|requirements|certifi|2020.12.5",
-   "PyPI|requirements|cfgv|3.2",
-   "PyPI|requirements|chardet|4",
-   "PyPI|requirements|click|8",
-   "PyPI|requirements|distlib|0.3.1",
-   "PyPI|requirements|docutils|0.16",
-   "PyPI|requirements|filelock|3.0.12",
-   "PyPI|requirements|greenlet|1.1",
-   "PyPI|requirements|identify|2.2.4",
-   "PyPI|requirements|idna|2.10",
-   "PyPI|requirements|imagesize|1.2",
-   "PyPI|requirements|iniconfig|1.1.1",
-   "PyPI|requirements|jinja2|2.11.3",
-   "PyPI|requirements|markupsafe|1.1.1",
-   "PyPI|requirements|mypy-extensions|0.4.3",
-   "PyPI|requirements|mypy|0.812",
-   "PyPI|requirements|nodeenv|1.6",
-   "PyPI|requirements|packaging|20.9",
-   "PyPI|requirements|pallets-sphinx-themes|2",
-   "PyPI|requirements|pep517|0.10",
-   "PyPI|requirements|pip-tools|6.1",
-   "PyPI|requirements|pluggy|0.13.1",
-   "PyPI|requirements|pre-commit|2.12.1",
-   "PyPI|requirements|py|1.10",
-   "PyPI|requirements|pygments|2.9",
-   "PyPI|requirements|pyparsing|2.4.7",
-   "PyPI|requirements|pytest|6.2.4",
-   "PyPI|requirements|python-dotenv|0.17.1",
-   "PyPI|requirements|pytz|2021.1",
-   "PyPI|requirements|pyyaml|5.4.1",
-   "PyPI|requirements|requests|2.25.1",
-   "PyPI|requirements|six|1.16",
-   "PyPI|requirements|snowballstemmer|2.1",
-   "PyPI|requirements|sphinx-issues|1.2",
-   "PyPI|requirements|sphinx-tabs|3",
-   "PyPI|requirements|sphinx|4.0.1",
-   "PyPI|requirements|sphinxcontrib-applehelp|1.0.2",
-   "PyPI|requirements|sphinxcontrib-devhelp|1.0.2",
-   "PyPI|requirements|sphinxcontrib-htmlhelp|1.0.3",
-   "PyPI|requirements|sphinxcontrib-jsmath|1.0.1",
-   "PyPI|requirements|sphinxcontrib-log-cabinet|1.0.1",
-   "PyPI|requirements|sphinxcontrib-qthelp|1.0.3",
-   "PyPI|requirements|sphinxcontrib-serializinghtml|1.1.4",
-   "PyPI|requirements|toml|0.10.2",
-   "PyPI|requirements|tox|3.23.1",
-   "PyPI|requirements|typed-ast|1.4.3",
-   "PyPI|requirements|typing-extensions|3.10",
-   "PyPI|requirements|urllib3|1.26.4",
-   "PyPI|requirements|virtualenv|20.4.6"
+   "PyPI|.|alabaster|0.7.12",
+   "PyPI|.|appdirs|1.4.4",
+   "PyPI|.|asgiref|3.3.4",
+   "PyPI|.|attrs|21.2",
+   "PyPI|.|babel|2.9.1",
+   "PyPI|.|blinker|1.4",
+   "PyPI|.|certifi|2020.12.5",
+   "PyPI|.|cfgv|3.2",
+   "PyPI|.|chardet|4",
+   "PyPI|.|click|8",
+   "PyPI|.|distlib|0.3.1",
+   "PyPI|.|docutils|0.16",
+   "PyPI|.|filelock|3.0.12",
+   "PyPI|.|greenlet|1.1",
+   "PyPI|.|identify|2.2.4",
+   "PyPI|.|idna|2.10",
+   "PyPI|.|imagesize|1.2",
+   "PyPI|.|iniconfig|1.1.1",
+   "PyPI|.|jinja2|2.11.3",
+   "PyPI|.|markupsafe|1.1.1",
+   "PyPI|.|mypy-extensions|0.4.3",
+   "PyPI|.|mypy|0.812",
+   "PyPI|.|nodeenv|1.6",
+   "PyPI|.|packaging|20.9",
+   "PyPI|.|pallets-sphinx-themes|2",
+   "PyPI|.|pep517|0.10",
+   "PyPI|.|pip-tools|6.1",
+   "PyPI|.|pluggy|0.13.1",
+   "PyPI|.|pre-commit|2.12.1",
+   "PyPI|.|py|1.10",
+   "PyPI|.|pygments|2.9",
+   "PyPI|.|pyparsing|2.4.7",
+   "PyPI|.|pytest|6.2.4",
+   "PyPI|.|python-dotenv|0.17.1",
+   "PyPI|.|pytz|2021.1",
+   "PyPI|.|pyyaml|5.4.1",
+   "PyPI|.|requests|2.25.1",
+   "PyPI|.|six|1.16",
+   "PyPI|.|snowballstemmer|2.1",
+   "PyPI|.|sphinx-issues|1.2",
+   "PyPI|.|sphinx-tabs|3",
+   "PyPI|.|sphinx|4.0.1",
+   "PyPI|.|sphinxcontrib-applehelp|1.0.2",
+   "PyPI|.|sphinxcontrib-devhelp|1.0.2",
+   "PyPI|.|sphinxcontrib-htmlhelp|1.0.3",
+   "PyPI|.|sphinxcontrib-jsmath|1.0.1",
+   "PyPI|.|sphinxcontrib-log-cabinet|1.0.1",
+   "PyPI|.|sphinxcontrib-qthelp|1.0.3",
+   "PyPI|.|sphinxcontrib-serializinghtml|1.1.4",
+   "PyPI|.|toml|0.10.2",
+   "PyPI|.|tox|3.23.1",
+   "PyPI|.|typed-ast|1.4.3",
+   "PyPI|.|typing-extensions|3.10",
+   "PyPI|.|urllib3|1.26.4",
+   "PyPI|.|virtualenv|20.4.6"
   ]
  },
  "findings": [
   {
    "ecosystem": "PyPI",
-   "dir": "requirements",
+   "dir": ".",
    "package": "certifi",
    "version": "2020.12.5",
    "ids": [
@@ -104,7 +108,7 @@
   },
   {
    "ecosystem": "PyPI",
-   "dir": "requirements",
+   "dir": ".",
    "package": "certifi",
    "version": "2020.12.5",
    "ids": [
@@ -114,7 +118,7 @@
   },
   {
    "ecosystem": "PyPI",
-   "dir": "requirements",
+   "dir": ".",
    "package": "certifi",
    "version": "2020.12.5",
    "ids": [
@@ -123,7 +127,7 @@
   },
   {
    "ecosystem": "PyPI",
-   "dir": "requirements",
+   "dir": ".",
    "package": "filelock",
    "version": "3.0.12",
    "ids": [
@@ -133,7 +137,7 @@
   },
   {
    "ecosystem": "PyPI",
-   "dir": "requirements",
+   "dir": ".",
    "package": "filelock",
    "version": "3.0.12",
    "ids": [
@@ -143,7 +147,7 @@
   },
   {
    "ecosystem": "PyPI",
-   "dir": "requirements",
+   "dir": ".",
    "package": "idna",
    "version": "2.10",
    "ids": [
@@ -153,7 +157,7 @@
   },
   {
    "ecosystem": "PyPI",
-   "dir": "requirements",
+   "dir": ".",
    "package": "idna",
    "version": "2.10",
    "ids": [
@@ -163,7 +167,7 @@
   },
   {
    "ecosystem": "PyPI",
-   "dir": "requirements",
+   "dir": ".",
    "package": "jinja2",
    "version": "2.11.3",
    "ids": [
@@ -173,7 +177,7 @@
   },
   {
    "ecosystem": "PyPI",
-   "dir": "requirements",
+   "dir": ".",
    "package": "jinja2",
    "version": "2.11.3",
    "ids": [
@@ -183,7 +187,7 @@
   },
   {
    "ecosystem": "PyPI",
-   "dir": "requirements",
+   "dir": ".",
    "package": "jinja2",
    "version": "2.11.3",
    "ids": [
@@ -193,7 +197,7 @@
   },
   {
    "ecosystem": "PyPI",
-   "dir": "requirements",
+   "dir": ".",
    "package": "jinja2",
    "version": "2.11.3",
    "ids": [
@@ -203,7 +207,7 @@
   },
   {
    "ecosystem": "PyPI",
-   "dir": "requirements",
+   "dir": ".",
    "package": "pygments",
    "version": "2.9.0",
    "ids": [
@@ -213,7 +217,7 @@
   },
   {
    "ecosystem": "PyPI",
-   "dir": "requirements",
+   "dir": ".",
    "package": "pygments",
    "version": "2.9.0",
    "ids": [
@@ -223,7 +227,7 @@
   },
   {
    "ecosystem": "PyPI",
-   "dir": "requirements",
+   "dir": ".",
    "package": "pytest",
    "version": "6.2.4",
    "ids": [
@@ -233,7 +237,7 @@
   },
   {
    "ecosystem": "PyPI",
-   "dir": "requirements",
+   "dir": ".",
    "package": "python-dotenv",
    "version": "0.17.1",
    "ids": [
@@ -243,7 +247,7 @@
   },
   {
    "ecosystem": "PyPI",
-   "dir": "requirements",
+   "dir": ".",
    "package": "requests",
    "version": "2.25.1",
    "ids": [
@@ -253,7 +257,7 @@
   },
   {
    "ecosystem": "PyPI",
-   "dir": "requirements",
+   "dir": ".",
    "package": "requests",
    "version": "2.25.1",
    "ids": [
@@ -263,7 +267,7 @@
   },
   {
    "ecosystem": "PyPI",
-   "dir": "requirements",
+   "dir": ".",
    "package": "requests",
    "version": "2.25.1",
    "ids": [
@@ -273,7 +277,7 @@
   },
   {
    "ecosystem": "PyPI",
-   "dir": "requirements",
+   "dir": ".",
    "package": "requests",
    "version": "2.25.1",
    "ids": [
@@ -283,7 +287,7 @@
   },
   {
    "ecosystem": "PyPI",
-   "dir": "requirements",
+   "dir": ".",
    "package": "urllib3",
    "version": "1.26.4",
    "ids": [
@@ -293,7 +297,7 @@
   },
   {
    "ecosystem": "PyPI",
-   "dir": "requirements",
+   "dir": ".",
    "package": "urllib3",
    "version": "1.26.4",
    "ids": [
@@ -303,7 +307,7 @@
   },
   {
    "ecosystem": "PyPI",
-   "dir": "requirements",
+   "dir": ".",
    "package": "urllib3",
    "version": "1.26.4",
    "ids": [
@@ -313,7 +317,7 @@
   },
   {
    "ecosystem": "PyPI",
-   "dir": "requirements",
+   "dir": ".",
    "package": "urllib3",
    "version": "1.26.4",
    "ids": [
@@ -323,7 +327,7 @@
   },
   {
    "ecosystem": "PyPI",
-   "dir": "requirements",
+   "dir": ".",
    "package": "urllib3",
    "version": "1.26.4",
    "ids": [
@@ -333,7 +337,7 @@
   },
   {
    "ecosystem": "PyPI",
-   "dir": "requirements",
+   "dir": ".",
    "package": "urllib3",
    "version": "1.26.4",
    "ids": [
@@ -343,7 +347,7 @@
   },
   {
    "ecosystem": "PyPI",
-   "dir": "requirements",
+   "dir": ".",
    "package": "urllib3",
    "version": "1.26.4",
    "ids": [
@@ -353,7 +357,7 @@
   },
   {
    "ecosystem": "PyPI",
-   "dir": "requirements",
+   "dir": ".",
    "package": "urllib3",
    "version": "1.26.4",
    "ids": [
@@ -363,7 +367,7 @@
   },
   {
    "ecosystem": "PyPI",
-   "dir": "requirements",
+   "dir": ".",
    "package": "urllib3",
    "version": "1.26.4",
    "ids": [
@@ -373,7 +377,7 @@
   },
   {
    "ecosystem": "PyPI",
-   "dir": "requirements",
+   "dir": ".",
    "package": "urllib3",
    "version": "1.26.4",
    "ids": [
@@ -383,7 +387,7 @@
   },
   {
    "ecosystem": "PyPI",
-   "dir": "requirements",
+   "dir": ".",
    "package": "urllib3",
    "version": "1.26.4",
    "ids": [
@@ -393,7 +397,7 @@
   },
   {
    "ecosystem": "PyPI",
-   "dir": "requirements",
+   "dir": ".",
    "package": "virtualenv",
    "version": "20.4.6",
    "ids": [
@@ -403,7 +407,7 @@
   },
   {
    "ecosystem": "PyPI",
-   "dir": "requirements",
+   "dir": ".",
    "package": "virtualenv",
    "version": "20.4.6",
    "ids": [
@@ -413,7 +417,7 @@
   },
   {
    "ecosystem": "PyPI",
-   "dir": "requirements",
+   "dir": ".",
    "package": "virtualenv",
    "version": "20.4.6",
    "ids": [
@@ -423,7 +427,7 @@
   },
   {
    "ecosystem": "PyPI",
-   "dir": "requirements",
+   "dir": ".",
    "package": "virtualenv",
    "version": "20.4.6",
    "ids": [
@@ -433,7 +437,7 @@
   },
   {
    "ecosystem": "PyPI",
-   "dir": "requirements",
+   "dir": ".",
    "package": "virtualenv",
    "version": "20.4.6",
    "ids": [
@@ -443,7 +447,7 @@
   },
   {
    "ecosystem": "PyPI",
-   "dir": "requirements",
+   "dir": ".",
    "package": "virtualenv",
    "version": "20.4.6",
    "ids": [

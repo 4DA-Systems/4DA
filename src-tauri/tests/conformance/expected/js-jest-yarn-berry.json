@@ -4,6 +4,7 @@
  "lockfiles": [
   {
    "path": "yarn.lock",
+   "dir": ".",
    "format": "yarn-berry",
    "ecosystem": "npm",
    "status": "supported",

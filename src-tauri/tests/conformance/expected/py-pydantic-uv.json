@@ -4,6 +4,7 @@
  "lockfiles": [
   {
    "path": "uv.lock",
+   "dir": ".",
    "format": "uv.lock",
    "ecosystem": "PyPI",
    "status": "supported",

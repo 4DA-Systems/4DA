@@ -21,7 +21,6 @@ use std::path::{Path, PathBuf};
 
 use serde::Deserialize;
 
-use crate::ace::scanner::ProjectScanner;
 use crate::db::{Database, DependencyInstanceInput};
 
 fn corpus_dir() -> PathBuf {
@@ -58,6 +57,9 @@ struct Expected {
 #[derive(Debug, Deserialize)]
 struct LockfileRow {
     path: String,
+    /// The project directory the lockfile belongs to (a `requirements/*.txt`
+    /// file belongs to the directory above it).
+    dir: String,
     format: String,
     ecosystem: String,
     status: String,
@@ -267,33 +269,6 @@ fn osv_ecosystem(language_or_eco: &str) -> String {
 // Reading the corpus through the app's lockfile readers
 // ============================================================================
 
-/// The lockfile walk's file list and skip list
-/// (`ace_commands::dependencies::{LOCKFILE_NAMES, SKIPPED_DIR_NAMES}`).
-const ENGINE_LOCKFILES: &[&str] = &[
-    "Cargo.lock",
-    "package-lock.json",
-    "pnpm-lock.yaml",
-    "yarn.lock",
-    "poetry.lock",
-    "requirements.txt",
-    "go.sum",
-    "go.mod",
-    "Gemfile.lock",
-    "composer.lock",
-];
-const SKIPPED_DIRS: &[&str] = &[
-    "node_modules",
-    "target",
-    ".git",
-    "dist",
-    "build",
-    ".next",
-    "__pycache__",
-    ".venv",
-    "venv",
-    "vendor",
-];
-
 /// Project path the corpus stores a case directory under. Synthetic, so it
 /// never collides with a real project and passes the agent-infra guards.
 fn project_path(case: &str, rel_dir: &str) -> String {
@@ -304,74 +279,39 @@ fn project_path(case: &str, rel_dir: &str) -> String {
     }
 }
 
-/// Feed every lockfile directory of one case to the readers.
+/// Feed every lockfile directory of one case to the readers: the lockfile
+/// walk's own directory selection (`ace::lockfile::walk_dirs` — skip list and
+/// depth, without the user-scope gates, which are policy, not parsing).
 fn ingest_case(db: &Database, case: &Case) {
-    let mut stack = vec![case.dir.clone()];
-    while let Some(dir) = stack.pop() {
-        if ENGINE_LOCKFILES.iter().any(|f| dir.join(f).exists()) {
-            let rel = dir
-                .strip_prefix(&case.dir)
-                .map(|r| r.to_string_lossy().replace('\\', "/"))
-                .unwrap_or_default();
-            let rel = if rel.is_empty() { ".".to_string() } else { rel };
-            read_lockfile_dir(db, &dir, &project_path(&case.meta.id, &rel));
-        }
-        for entry in std::fs::read_dir(&dir).into_iter().flatten().flatten() {
-            let p = entry.path();
-            let name = entry.file_name().to_string_lossy().to_string();
-            if p.is_dir() && !SKIPPED_DIRS.contains(&name.as_str()) {
-                stack.push(p);
-            }
-        }
+    for dir in crate::ace::lockfile::walk_dirs(&case.dir) {
+        let rel = dir
+            .strip_prefix(&case.dir)
+            .map(|r| r.to_string_lossy().replace('\\', "/"))
+            .unwrap_or_default();
+        let rel = if rel.is_empty() { ".".to_string() } else { rel };
+        read_lockfile_dir(db, &dir, &project_path(&case.meta.id, &rel));
     }
 }
 
-/// MIRROR of `ace_commands::dependencies::process_lockfile_dir` — same
-/// processors, same order, same parsers, minus what cannot affect matching
-/// (direct/dev labels, dependency edges, the `cargo tree` host probe, prunes).
-///
-/// GAP (W1-B, 2026-10-10): `process_lockfile_dir` is private to
-/// `ace_commands::dependencies` and that file was claimed by the parallel
-/// parity wave, so the harness cannot call it yet. Once it is exposed as
-/// `pub(crate)` (plus a `pub(crate) use` in `ace_commands/mod.rs`), replace
-/// this body with that single call so new processors (bun.lock, uv.lock,
-/// Pipfile.lock) are measured the moment they land.
+/// What `ace_commands::dependencies::process_lockfile_dir` stores for one
+/// directory: every lockfile read by `ace::lockfile::read_dir` (the same
+/// readers, Cargo workspace crates already removed), merged per ecosystem and
+/// written once — minus what cannot affect matching (direct/dev labels,
+/// dependency edges, the `cargo tree` host probe, prunes). Failed and
+/// unsupported outcomes store nothing; the silent-drop score sees them.
 fn read_lockfile_dir(db: &Database, dir: &Path, project: &str) {
-    let read = |name: &str| std::fs::read_to_string(dir.join(name)).ok();
-    if let Some(content) = read("Cargo.lock") {
-        let local = crate::ace::cargo_lock_facts::local_packages(&content);
-        let packages: Vec<(String, String)> = ProjectScanner::parse_cargo_lock(&content)
-            .into_iter()
-            .filter(|key| !local.contains(key))
-            .collect();
-        store_packages(db, project, "rust", &packages);
-    }
-    let readers: [(&str, &str, fn(&str) -> Vec<(String, String)>); 8] = [
-        (
-            "package-lock.json",
-            "javascript",
-            ProjectScanner::parse_package_lock_json,
-        ),
-        (
-            "pnpm-lock.yaml",
-            "javascript",
-            ProjectScanner::parse_pnpm_lock_yaml,
-        ),
-        ("yarn.lock", "javascript", ProjectScanner::parse_yarn_lock),
-        ("poetry.lock", "python", ProjectScanner::parse_poetry_lock),
-        (
-            "requirements.txt",
-            "python",
-            ProjectScanner::parse_requirements_txt_pins,
-        ),
-        ("go.sum", "go", ProjectScanner::parse_go_sum),
-        ("Gemfile.lock", "ruby", ProjectScanner::parse_gemfile_lock),
-        ("composer.lock", "php", ProjectScanner::parse_composer_lock),
-    ];
-    for (file, language, parse) in readers {
-        if let Some(content) = read(file) {
-            store_packages(db, project, language, &parse(&content));
+    use crate::ace::lockfile::{read_dir, LockfileOutcome};
+    let mut by_ecosystem: BTreeMap<&'static str, Vec<(String, String)>> = BTreeMap::new();
+    for outcome in read_dir(dir) {
+        if let LockfileOutcome::Read(read) = outcome {
+            let rows = by_ecosystem.entry(read.format.ecosystem()).or_default();
+            rows.extend(read.packages.into_iter().map(|p| (p.name, p.version)));
         }
+    }
+    for (language, mut packages) in by_ecosystem {
+        packages.sort();
+        packages.dedup();
+        store_packages(db, project, language, &packages);
     }
 }
 
@@ -693,7 +633,7 @@ fn score(cases: &[Case], run: &EngineRun, canon: &HashMap<String, String>) -> Sc
             .iter()
             .filter(|l| l.status == "supported")
         {
-            let dir = lf.path.rsplit_once('/').map_or(".", |(d, _)| d);
+            let dir = lf.dir.as_str();
             let prefix = format!("{}|{dir}|", lf.ecosystem);
             if lf.truth_packages > 0 && !engine_inv.iter().any(|k| k.starts_with(&prefix)) {
                 s.silent_drops

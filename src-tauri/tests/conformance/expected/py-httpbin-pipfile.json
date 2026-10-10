@@ -4,6 +4,7 @@
  "lockfiles": [
   {
    "path": "Pipfile.lock",
+   "dir": ".",
    "format": "Pipfile.lock",
    "ecosystem": "PyPI",
    "status": "supported",

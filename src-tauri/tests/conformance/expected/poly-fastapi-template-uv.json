@@ -4,6 +4,7 @@
  "lockfiles": [
   {
    "path": "backend/uv.lock",
+   "dir": "backend",
    "format": "uv.lock",
    "ecosystem": "PyPI",
    "status": "supported",
@@ -11,6 +12,7 @@
   },
   {
    "path": "frontend/package-lock.json",
+   "dir": "frontend",
    "format": "npm-v2",
    "ecosystem": "npm",
    "status": "supported",

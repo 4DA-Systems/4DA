@@ -4,6 +4,7 @@
  "lockfiles": [
   {
    "path": "go.mod",
+   "dir": ".",
    "format": "go.mod-go1.18",
    "ecosystem": "Go",
    "status": "supported",
@@ -11,6 +12,7 @@
   },
   {
    "path": "go.sum",
+   "dir": ".",
    "format": "go.sum",
    "ecosystem": "Go",
    "status": "supported",

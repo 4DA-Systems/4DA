@@ -4,6 +4,7 @@
  "lockfiles": [
   {
    "path": "RELEASING/requirements.txt",
+   "dir": "RELEASING",
    "format": "requirements",
    "ecosystem": "PyPI",
    "status": "supported",
@@ -11,6 +12,7 @@
   },
   {
    "path": "superset-websocket/package-lock.json",
+   "dir": "superset-websocket",
    "format": "npm-v2",
    "ecosystem": "npm",
    "status": "supported",
@@ -18,6 +20,7 @@
   },
   {
    "path": "superset-websocket/utils/client-ws-app/package-lock.json",
+   "dir": "superset-websocket/utils/client-ws-app",
    "format": "npm-v2",
    "ecosystem": "npm",
    "status": "supported",
@@ -25,6 +28,7 @@
   },
   {
    "path": "superset/translations/requirements.txt",
+   "dir": "superset/translations",
    "format": "requirements",
    "ecosystem": "PyPI",
    "status": "supported",

@@ -1,6 +1,6 @@
 {
- "fetched_at": "2026-10-09",
+ "fetched_at": "2026-10-10",
  "source": "https://api.osv.dev/v1/vulns/<id>",
- "package_names": 7285,
- "records": 3926
+ "package_names": 7242,
+ "records": 3923
 }
