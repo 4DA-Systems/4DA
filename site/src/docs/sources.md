@@ -33,4 +33,4 @@ Because the scoring signal comes from *your* filesystem, adding more sources doe
 
 Point 4DA at any RSS/Atom feed to fold a newsletter, a changelog, or a personal blog into the same scoring pipeline. It's treated like every other source — no special-casing, same confirmation gate.
 
-Next: **[The 5 axes](/docs/scoring/)** or **[Privacy & BYOK](/docs/privacy/)**.
+Next: **[The scoring axes](/docs/scoring/)** or **[Privacy & BYOK](/docs/privacy/)**.

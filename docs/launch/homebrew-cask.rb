@@ -19,7 +19,7 @@ cask "4da" do
   url "https://github.com/4DA-Systems/4DA/releases/download/v#{version}/4DA-Home_#{version}_#{arch}.dmg",
       verified: "github.com/4DA-Systems/4DA/"
   name "4DA"
-  desc "Privacy-first developer intelligence — scores content against your codebase"
+  desc "Knows every dependency on your machine: what changed and exactly what to run"
   homepage "https://4da.ai"
 
   livecheck do

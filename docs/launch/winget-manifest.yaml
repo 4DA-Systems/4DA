@@ -22,14 +22,16 @@ PackageUrl: https://4da.ai
 License: FSL-1.1-Apache-2.0
 LicenseUrl: https://github.com/4DA-Systems/4DA/blob/main/LICENSE
 Copyright: Copyright (c) 2025-2026 4DA Systems Pty Ltd
-ShortDescription: Privacy-first developer intelligence — scores content against your codebase
+ShortDescription: 4DA knows every dependency on your machine and tells you — and your coding agent — what changed and exactly what to run. Privately, locally.
 Description: >-
-  4DA scores developer content from 20+ sources (Hacker News, GitHub, Reddit,
-  arXiv, CVE databases, package registries, and more) against your actual
-  codebase using 5-axis relevance scoring. Zero telemetry. Zero tracking.
-  No 4DA server — runs on your machine. BYOK for cloud AI (a cloud model sees
-  only what you send it) or use Ollama for fully offline operation. Free tier
-  includes full scoring engine and all sources.
+  4DA knows every dependency on your machine and tells you — and your coding
+  agent — what changed and exactly what to run. Privately, locally. It reads
+  npm, pnpm, Yarn, Cargo, Python and Go lockfiles today, with early support for
+  Ruby and PHP, checks the exact installed versions against OSV advisories and
+  registry releases, and names the fix. Zero telemetry. No account and no 4DA
+  server — runs on your machine. BYOK for cloud AI (a cloud model sees only
+  what you send it) or use Ollama for fully offline operation. Every
+  version-confirmed vulnerability finding and its fix is free.
 Tags:
   - developer-tools
   - productivity

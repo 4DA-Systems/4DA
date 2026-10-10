@@ -2,14 +2,20 @@
 
 ## What Is 4DA
 
-**4DA reads the internet for developers — privately, locally. Your codebase decides what's relevant.**
+**4DA knows every dependency on your machine and tells you — and your coding agent — what changed and exactly what to run. Privately, locally.**
 
-That's the one-sentence description (AD-030). Use it verbatim in marketing, onboarding, about dialogs,
-and any surface where someone asks "what is 4DA?". The follow-up beat (held in reserve, used when asked
-"how does it stay relevant?") is: *Every item is scored against your actual stack, and everything else
-is rejected. When the engine improves, it re-judges everything it already holds — yesterday's noise
-becomes tomorrow's signal.* Never revive the retired promise family — `scripts/check-retired-claims.cjs`
-enumerates the banned phrases and fails the build on any of them.
+That's the one-sentence description (AD-054, superseding the AD-030 line). Use it verbatim in marketing,
+onboarding, about dialogs, installer metadata and any surface where someone asks "what is 4DA?". Where
+there is room for a second sentence, add the coverage qualifier so "every dependency" is never read as a
+claim about stacks 4DA does not read: *It reads npm, pnpm, Yarn, Cargo, Python and Go lockfiles today,
+with early support for Ruby and PHP; Maven, Gradle and .NET projects are not covered yet.* The follow-up
+beat (used when asked "how does it work?") is: *It reads the lockfiles across your projects, checks the
+exact installed versions against OSV advisories and registry releases, and names the fix: the version
+that clears each advisory and, where the lockfile shows it, whether a lockfile refresh is enough or which
+parent package to upgrade. No account, and your source code never leaves the machine.* Reading developer
+news (Hacker News, Reddit, RSS and the rest) is a supporting extra that serves the engine (becoming opt-in "interests", AD-054); never headline
+it. Never revive the retired promise family — `scripts/check-retired-claims.cjs` enumerates the banned
+phrases and fails the build on any of them.
 
 4DA (4 Dimensional Autonomy) is the Tauri 2.0 desktop app that delivers on that description.
 

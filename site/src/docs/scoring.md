@@ -1,15 +1,15 @@
 ---
 layout: docs.njk
 eyebrow: "How it works"
-title: "The 5 axes — 4DA Docs"
-description: "The five independent signals 4DA scores every item against, and the gate that rejects single-axis matches."
+title: "The scoring axes — 4DA Docs"
+description: "The four independent signals 4DA scores every news item against (a fifth is reserved), and the gate that rejects single-axis matches."
 permalink: "/docs/scoring/"
 templateEngineOverride: md
 ---
 
-# The 5 axes
+# The scoring axes
 
-Every item is scored on five independent axes. This is the core of what 4DA calls PASIFA scoring — the reason a keyword match alone can't buy its way into your feed.
+Every news item is scored on four independent axes; a fifth, Learned, is reserved and held out of scoring. Dependency findings do not go through this scoring: they come straight from your lockfiles and the advisory databases. This is the core of what 4DA calls PASIFA scoring — the reason a keyword match alone can't buy its way into your feed.
 
 | Axis | What it measures |
 |---|---|
@@ -19,7 +19,7 @@ Every item is scored on five independent axes. This is the core of what 4DA call
 | **Dependency** | Direct matches against your installed packages |
 | **Learned** | Reserved — held out of scoring until it can be validated against your explicit feedback |
 
-## The 2-of-5 gate
+## The two-signal gate
 
 An item must pass **2 or more** axes to surface. Single-axis matches are hard-capped at **28%** — one strong signal, no matter how strong, cannot pass alone.
 

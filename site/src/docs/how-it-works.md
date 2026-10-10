@@ -9,7 +9,7 @@ templateEngineOverride: md
 
 # The scoring engine
 
-4DA's job is subtraction. It reads a lot and shows you a little — only the items that clear a gate built from your own code. Here's the pipeline, end to end.
+This page covers how 4DA scores the developer news it reads. Dependency findings (Preemption, the Brief's action items, the MCP server's answers) do not go through it: they come from your lockfiles matched against OSV advisories. For news, 4DA's job is subtraction. It reads a lot and shows you a little — only the items that clear a gate built from your own code. Here's the pipeline, end to end.
 
 ## The pipeline
 
@@ -19,8 +19,8 @@ Your codebase                     20+ sources
         \                             /
          v                           v
         +-------------------------------+
-        |   5-axis scoring + gate       |
-        |   pass 2+ of 5 to survive     |
+        |   4-axis scoring + gate       |
+        |   2+ signals to survive       |
         +---------------+---------------+
                         |
                         v
@@ -41,11 +41,11 @@ Your codebase                     20+ sources
 
 ## The confirmation gate
 
-Every item is scored on **five independent axes** — semantic context, your interests, real-time signals from your Git activity, direct dependency matches, and a learned axis that is currently reserved (held out of scoring). An item must pass **2 or more** to surface.
+Every item is scored on **four independent axes** — semantic context, your interests, real-time signals from your Git activity, and direct dependency matches. A fifth, learned axis is reserved (held out of scoring). An item must pass **2 or more** to surface.
 
 Single-axis matches are hard-capped at **28%**. No matter how strong one signal is, it cannot pass alone. This is what makes the feed hard to game: keyword-stuffing hits one axis, and without matching your codebase, your installed packages, *and* your recent work, the gate rejects it. Your `Cargo.lock` doesn't lie.
 
-Full breakdown: **[The 5 axes](/docs/scoring/)**.
+Full breakdown: **[The scoring axes](/docs/scoring/)**.
 
 ## Quality multipliers
 
@@ -65,4 +65,4 @@ This is where the gold surfaces: articles the keyword pipeline misses because th
 
 Content built to score still can't win. Titles must deliver on what they promise (claim "React + Rust + Tauri" but only cover React → penalty). Repeating a keyword concentrates and *hurts* the score. Gamed articles get dismissed; sources that produce dismissed content lose reputation. Gaming becomes self-defeating.
 
-Next: **[The 5 axes](/docs/scoring/)** or **[Sources](/docs/sources/)**.
+Next: **[The scoring axes](/docs/scoring/)** or **[Sources](/docs/sources/)**.

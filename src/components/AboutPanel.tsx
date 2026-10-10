@@ -23,6 +23,7 @@ export function AboutPanel() {
         <h3 className="text-xl font-semibold text-text-primary">{t('app.title')}</h3>
         <p className="text-sm text-text-secondary mt-1">{t('about.fullName')}</p>
         <p className="text-xs text-text-muted mt-0.5">{t('app.tagline')}</p>
+        <p className="text-sm text-text-secondary mt-3 max-w-md leading-relaxed">{t('about.description')}</p>
       </div>
 
       {/* Platonic Architecture */}

@@ -1,17 +1,17 @@
 ---
-title: "4DA -- Reads the internet for developers. Privately, locally. Your codebase decides what's relevant."
-description: "4DA reads the internet for developers -- privately, locally. Your codebase decides what's relevant. When the engine improves it re-judges everything it already holds: yesterday's noise becomes tomorrow's signal."
+title: "4DA -- Knows every dependency on your machine. Privately, locally."
+description: "4DA knows every dependency on your machine and tells you -- and your coding agent -- what changed and exactly what to run. Privately, locally."
 permalink: "/index.html"
 ---
 {% extends "base.njk" %}
 
 {% block head %}
-  <meta name="keywords" content="developer tools, content curation, relevance scoring, privacy-first, local-first, Rust, Tauri, MCP, Claude Code, Cursor, developer intelligence">
+  <meta name="keywords" content="dependency security, vulnerability scanning, lockfile, OSV, upgrade planning, privacy-first, local-first, Rust, Tauri, MCP, Claude Code, Cursor, developer intelligence">
   <link rel="canonical" href="https://4da.ai">
 
   <!-- Open Graph -->
   <meta property="og:title" content="4DA -- All signal. No feed.">
-  <meta property="og:description" content="4DA reads the internet for developers -- privately, locally. Your codebase decides what's relevant. When the engine improves it re-judges everything it already holds: yesterday's noise becomes tomorrow's signal.">
+  <meta property="og:description" content="4DA knows every dependency on your machine and tells you -- and your coding agent -- what changed and exactly what to run. Privately, locally.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://4da.ai">
   <meta property="og:image" content="https://4da.ai/og-image.png">
@@ -20,7 +20,7 @@ permalink: "/index.html"
   <!-- Twitter Card -->
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="4DA -- All signal. No feed.">
-  <meta name="twitter:description" content="Reads the internet for developers -- privately, locally. Your codebase decides what's relevant.">
+  <meta name="twitter:description" content="4DA knows every dependency on your machine and tells you -- and your coding agent -- what changed and exactly what to run. Privately, locally.">
   <meta name="twitter:image" content="https://4da.ai/og-image.png">
 
   <!-- Structured Data -->
@@ -31,10 +31,10 @@ permalink: "/index.html"
     "name": "4DA",
     "applicationCategory": "DeveloperApplication",
     "operatingSystem": "Windows, macOS, Linux",
-    "description": "4DA reads the internet for developers -- privately, locally. Your codebase decides what's relevant. When the engine improves it re-judges everything it already holds: yesterday's noise becomes tomorrow's signal.",
+    "description": "4DA knows every dependency on your machine and tells you -- and your coding agent -- what changed and exactly what to run. Privately, locally. It reads npm, pnpm, Yarn, Cargo, Python and Go lockfiles today, with early support for Ruby and PHP.",
     "offers": [
-      { "@type": "Offer", "price": "0", "priceCurrency": "AUD", "description": "Free -- all 20+ sources, full scoring engine, AI briefings (BYOK), MCP server (16 tools)" },
-      { "@type": "Offer", "price": "12", "priceCurrency": "AUD", "description": "Signal -- the analysis layer: Blind Spots with AI assessment, Knowledge Gaps" }
+      { "@type": "Offer", "price": "0", "priceCurrency": "AUD", "description": "Free -- version-confirmed vulnerability findings and fix versions for every local project, the daily Brief, the open MCP server (16 tools)" },
+      { "@type": "Offer", "price": "12", "priceCurrency": "AUD", "description": "Signal -- time saved on upgrades: the Upgrade Plan, the full Preemption worklist, full history, Blind Spots and Knowledge Gaps" }
     ]
   }
   </script>
@@ -1040,11 +1040,11 @@ permalink: "/index.html"
   <header class="hero">
     <div class="container">
       <img src="hero-sun.jpg" alt="4DA" class="hero-logo" width="72" height="72">
-      <div class="hero-label">Developer Intelligence</div>
+      <div class="hero-label">Dependency Intelligence</div>
       <h1>All signal.<br><span>No feed.</span></h1>
-      <p>4DA reads the internet for developers &mdash; privately, locally. Your codebase decides what's relevant.</p>
-      <p style="font-size:15px; color:var(--text-muted); max-width:560px; margin:8px auto 16px;">It scores every item against your actual stack &mdash; your manifests, your dependencies, your recent commits &mdash; and rejects everything else. When the engine improves it re-judges everything it already holds: yesterday's noise becomes tomorrow's signal.</p>
-      <p style="font-size:14px; color:var(--text-muted); max-width:520px; margin:0 auto 48px;">Hacker News, GitHub, Reddit, YouTube, arXiv, Stack Overflow, Lobsters, Bluesky, and 12+ more &mdash; scored on 5 axes against your actual stack. 2+ signals required to pass.</p>
+      <p>4DA knows every dependency on your machine and tells you &mdash; and your coding agent &mdash; what changed and exactly what to run. Privately, locally.</p>
+      <p style="font-size:15px; color:var(--text-muted); max-width:560px; margin:8px auto 16px;">It reads the lockfiles across all your projects, checks the exact installed versions against OSV advisories and registry releases, and names the fix: the version that clears each advisory, and whether a lockfile refresh is enough or which parent package to upgrade. No account, and your source code never leaves the machine.</p>
+      <p style="font-size:14px; color:var(--text-muted); max-width:520px; margin:0 auto 48px;">npm, pnpm, Yarn, Cargo, Python and Go lockfiles today, with early Ruby and PHP support. Maven, Gradle and .NET are not covered yet.</p>
       <div class="hero-start">
         <div class="start-card">
           <div class="start-card-label">In Claude Code, Cursor, or Windsurf?</div>
@@ -1084,14 +1084,14 @@ permalink: "/index.html"
         <div class="step-card">
           <div class="step-num">02</div>
           <h4>Point it at your code</h4>
-          <p>4DA scans your manifests and Git history locally to learn your stack. Nothing leaves your machine.</p>
+          <p>4DA finds the lockfiles in your projects and builds the inventory locally. Your source code stays on your machine; package names go to OSV.dev and the package registries.</p>
           <a href="/docs/quickstart/">Quickstart &rarr;</a>
         </div>
         <div class="step-card">
           <div class="step-num">03</div>
           <h4>Read your Brief</h4>
-          <p>Run an analysis and open the Brief tab &mdash; today&rsquo;s top picks, scored against your stack. Save what&rsquo;s useful; it sharpens.</p>
-          <a href="/docs/how-it-works/">How scoring works &rarr;</a>
+          <p>Open the Brief tab &mdash; anything you need to do today, with the version that fixes it. Preemption holds the full worklist.</p>
+          <a href="/docs/how-it-works/">How it works &rarr;</a>
         </div>
       </div>
     </div>
@@ -1112,19 +1112,19 @@ permalink: "/index.html"
     <div class="container">
       <div class="traction-badges">
         <span class="traction-badge"><strong>Rust</strong> + Tauri 2.0</span>
-        <span class="traction-badge"><strong>20+</strong> Sources</span>
-        <span class="traction-badge"><strong>5-Axis</strong> Scoring</span>
-        <span class="traction-badge"><strong>14</strong> MCP Tools</span>
-        <span class="traction-badge"><strong>Offline</strong> AI model included</span>
+        <span class="traction-badge"><strong>Lockfile</strong>-grounded</span>
+        <span class="traction-badge"><strong>OSV</strong> version-confirmed</span>
+        <span class="traction-badge"><strong>16</strong> MCP Tools</span>
+        <span class="traction-badge"><strong>No</strong> account</span>
       </div>
       <div class="traction-principles">
         <div class="traction-principle">
-          <h4>Automatic Context Discovery</h4>
-          <p>Scans your Cargo.toml, package.json, go.mod, and pyproject.toml. Builds a graduated domain profile from your actual stack — no manual configuration.</p>
+          <h4>Every lockfile, every project</h4>
+          <p>Finds Cargo.lock, package-lock.json, pnpm-lock.yaml, yarn.lock, poetry.lock, requirements.txt and go.mod across your projects. No manual configuration, no repository to connect.</p>
         </div>
         <div class="traction-principle">
-          <h4>Multi-Signal Confirmation Gate</h4>
-          <p>Every item is scored across 5 independent axes. An item needs 2+ confirming signals to pass the gate. Measured across 9 developer personas: 93% of incoming content is filtered as noise.</p>
+          <h4>Version-confirmed, then fixed</h4>
+          <p>An advisory counts only when your installed version falls in its affected range. Each finding names the version that clears it, and the Upgrade Plan says when a parent package has to move instead.</p>
         </div>
         <div class="traction-principle">
           <h4>Privacy by Architecture</h4>
@@ -1218,30 +1218,27 @@ permalink: "/index.html"
           <div class="pricing-price">$0 <span>forever</span></div>
           <div class="pricing-note">No credit card. No account. No expiration.</div>
           <ul class="pricing-features">
-            <li>All 20+ content sources</li>
-            <li>Full 5-axis scoring engine</li>
-            <li>AI daily briefings + weekly digest</li>
-            <li>Multi-signal confirmation gate</li>
-            <li>Auto context discovery (ACE)</li>
-            <li>Score Autopsy (5-axis breakdown)</li>
-            <li>Developer DNA profiling</li>
-            <li>Signal chain analysis</li>
-            <li>Learned Preferences</li>
-            <li>MCP server (16 tools)</li>
+            <li>Version-confirmed vulnerability findings for every local project</li>
+            <li>The version that fixes each one</li>
+            <li>The daily Brief (AI-written with your own key, or without one)</li>
+            <li>Open MCP server (16 tools): upgrade impact, upgrade planning, vulnerability scans</li>
             <li>CLI binary</li>
-            <li>Unlimited use</li>
+            <li>Developer news, scored against your stack</li>
+            <li>30 days of history</li>
+            <li>Unlimited projects, unlimited use</li>
           </ul>
           <a href="/download/" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:24px;" id="pricing-download-free">Download Free</a>
         </div>
         <div class="pricing-card recommended">
           <h3>Signal</h3>
           <div class="pricing-price">$12 <span>/month</span></div>
-          <div class="pricing-note">Or $99/year. BYOK -- you bring your own API key.</div>
+          <div class="pricing-note">Or $99/year. Time saved on upgrades.</div>
           <ul class="pricing-features">
             <li>Everything in Free, plus:</li>
-            <li>Signal tab intelligence (Key Signals + analytics)</li>
-            <li>Blind spot detection + AI assessment</li>
-            <li>Knowledge gap detection</li>
+            <li>The in-app Upgrade Plan: every fix across your projects, in order</li>
+            <li>The full Preemption worklist (AI-assessed findings, early-warning chains)</li>
+            <li>Full history, watches and standing queries</li>
+            <li>Blind Spots + AI assessment, Knowledge Gaps</li>
             <li>Priority support</li>
           </ul>
           <a href="/signal#pricing" class="btn btn-secondary" style="width:100%; justify-content:center; margin-top:24px; border-color:var(--accent); color:var(--accent);">Subscribe to Signal</a>
@@ -1290,41 +1287,38 @@ permalink: "/index.html"
   <section id="how-it-works" class="reveal">
     <div class="container">
       <div class="section-label">How It Works</div>
-      <h2>From noise to signal in four stages</h2>
+      <h2>From lockfile to fix in four stages</h2>
       <div class="pipeline">
         <div class="pipeline-step">
-          <div class="step-title">Your Codebase</div>
-          <div class="step-desc">Cargo.toml, package.json, go.mod + 9 more</div>
+          <div class="step-title">Your Lockfiles</div>
+          <div class="step-desc">Cargo.lock, package-lock.json, pnpm-lock.yaml + more</div>
         </div>
         <div class="pipeline-arrow">&rarr;</div>
         <div class="pipeline-step">
-          <div class="step-title">ACE Scanner</div>
-          <div class="step-desc">Builds domain profile</div>
+          <div class="step-title">Inventory</div>
+          <div class="step-desc">Exact installed versions, every project</div>
         </div>
         <div class="pipeline-arrow">&rarr;</div>
         <div class="pipeline-step">
-          <div class="step-title">5-Axis Scoring</div>
-          <div class="step-desc">Context, Interest, ACE, Dep, Learned (reserved)</div>
+          <div class="step-title">Advisories + Registries</div>
+          <div class="step-desc">OSV ranges, new releases</div>
         </div>
         <div class="pipeline-arrow">&rarr;</div>
         <div class="pipeline-step">
-          <div class="step-title">Signal</div>
-          <div class="step-desc">Only what matters</div>
+          <div class="step-title">The Fix</div>
+          <div class="step-desc">In the Brief, Preemption and your agent</div>
         </div>
       </div>
       <div class="pipeline-result">
-        An item needs <strong>2+ independent signals</strong> to pass the confirmation gate. Everything else is rejected.
-      </div>
-      <div style="text-align:center; margin-top:18px;">
-        <a class="doc-inline-link" href="/docs/scoring/">See exactly how the 5 axes score &rarr;</a>
+        A finding means <strong>your installed version</strong> is inside the advisory's affected range. Where a fix exists, it comes with the version that clears it.
       </div>
 
       <!-- Feature cards -->
       <div class="features-grid" style="margin-top: 48px;">
         <div class="feature-card">
-          <div class="feature-tag">scoring</div>
-          <h3>5-Axis Scoring</h3>
-          <p>Context, Interest, ACE, and Dependency axes independently evaluate every item. The fifth, Learned, is reserved &mdash; held out of scoring until it can be validated against your explicit feedback. The multi-signal confirmation gate filters 93% of incoming content as noise, measured across 9 developer personas.</p>
+          <div class="feature-tag">news</div>
+          <h3>Developer news, scored against your stack</h3>
+          <p>4DA also reads Hacker News, Reddit, RSS and 20+ other sources and scores each item on four axes (Context, Interest, ACE, Dependency; a fifth, Learned, is reserved). An item needs two confirming signals to pass. Across 9 simulated developer personas, that gate rejected 93% of incoming content. <a href="/docs/scoring/">How the scoring works &rarr;</a></p>
         </div>
         <div class="feature-card">
           <div class="feature-tag">privacy</div>
@@ -1332,9 +1326,9 @@ permalink: "/index.html"
           <p>Your indexed data stays on your machine; with BYOK, a cloud model sees only the snippets you send it. BYOK for Anthropic, OpenAI, or fully local with Ollama. Zero telemetry. Transparent cost tracking.</p>
         </div>
         <div class="feature-card">
-          <div class="feature-tag">context</div>
-          <h3>Auto Context Discovery</h3>
-          <p>Scans your Cargo.toml, package.json, go.mod, and Git activity to build a graduated domain profile of your technology identity.</p>
+          <div class="feature-tag">fix paths</div>
+          <h3>What to run, not just what's wrong</h3>
+          <p>Each finding names the version that clears it on each release line. The Upgrade Plan orders the work across projects, says when a transitive copy needs its parent upgraded, and says when a lockfile refresh is enough (where the lockfile records the requirement). When <code>node_modules</code> disagrees with the lockfile, 4DA names the install command to run.</p>
         </div>
         <div class="feature-card">
           <div class="feature-tag">learning</div>
@@ -1351,18 +1345,18 @@ permalink: "/index.html"
   <section id="mcp-trust" class="reveal">
     <div class="container">
       <div class="section-label">MCP Integration</div>
-      <h2>Your AI assistant gets signal too</h2>
+      <h2>Your coding agent gets the same answers</h2>
       <div class="mcp-grid">
         <div class="mcp-text">
-          <p>4DA ships an MCP server with 14 intelligence tools. Install it with one command and your AI assistant draws from your scored, filtered intelligence feed -- not generic internet search results.</p>
+          <p>4DA ships an MCP server with 16 tools, 11 of which work without the desktop app. Install it with one command and, before your agent bumps a dependency, it learns what changes between the version you run and the one you want, which of your files import it, and which vulnerabilities the move fixes &mdash; from your own lockfiles, not a guess.</p>
           <p style="font-size: 14px; color: var(--text-muted);">Works with Claude Code, Cursor, and any MCP-compatible host. Apache-2.0 licensed. Always free.</p>
           <a class="doc-inline-link" href="/docs/mcp/">Full MCP setup &amp; the 16 tools &rarr;</a>
           <a class="doc-inline-link" href="/mcp/" style="display:block; margin-top:4px;">One-click Claude Desktop extension &rarr;</a>
           <ul class="mcp-queries">
+            <li>"What breaks if I upgrade axum to 0.8?"</li>
             <li>"Scan my dependencies for vulnerabilities"</li>
+            <li>"What should I upgrade first, and to which version?"</li>
             <li>"What should I know before I start this task?"</li>
-            <li>"What knowledge gaps does my project have?"</li>
-            <li>"Is this library aligned with our tech decisions?"</li>
           </ul>
         </div>
         <div class="mcp-code">
@@ -1391,7 +1385,7 @@ npx <span class="string">@4da/mcp-server</span>
         <div class="trust-grid">
           <div class="trust-card">
             <h3>Free means free</h3>
-            <p>No credit card. No account. No expiration. The full scoring engine with all 20+ sources and AI briefings via your own API key, forever. Signal features include a 14-day trial.</p>
+            <p>No credit card. No account. No expiration. Every version-confirmed vulnerability and its fix, the daily Brief and the MCP server, forever. Signal features include a 14-day trial.</p>
           </div>
           <div class="trust-card">
             <h3>Source available</h3>
@@ -1420,31 +1414,31 @@ npx <span class="string">@4da/mcp-server</span>
       <div class="faq-list">
         <details>
           <summary>What is 4DA in one sentence?</summary>
-          <div class="faq-answer"><strong>4DA reads the internet for developers &mdash; privately, locally. Your codebase decides what's relevant.</strong> It's a Tauri 2.0 desktop app that scans 20+ sources, scores everything against your actual codebase, and rejects what isn't for you &mdash; 93% of incoming content, measured across 9 developer personas.</div>
+          <div class="faq-answer"><strong>4DA knows every dependency on your machine and tells you &mdash; and your coding agent &mdash; what changed and exactly what to run. Privately, locally.</strong> It reads npm, pnpm, Yarn, Cargo, Python and Go lockfiles today, with early support for Ruby and PHP; Maven, Gradle and .NET projects are not covered yet. It's a Tauri 2.0 desktop app plus a free MCP server for your coding agent.</div>
         </details>
         <details>
-          <summary>How does it stay relevant?</summary>
-          <div class="faq-answer">It scores every item against your actual stack &mdash; your manifests, your dependencies, your recent commits. Saves and dismissals build a transparent preference profile you can inspect and override &mdash; relevance scoring itself stays anchored to your detected stack, with no invisible score nudges. And when the engine improves, it re-judges the corpus it already holds: yesterday's noise becomes tomorrow's signal. All of it happens locally on your machine &mdash; nothing leaves your computer.</div>
+          <summary>How does it work?</summary>
+          <div class="faq-answer">It reads the lockfiles across all your projects, checks the exact installed versions against OSV advisories and registry releases, and names the fix: the version that clears each advisory and, where the lockfile shows it, whether a lockfile refresh is enough or which parent package to upgrade. No account, and your source code never leaves the machine &mdash; only package names go out, to OSV.dev and the package registries.</div>
         </details>
         <details>
-          <summary>How is this different from daily.dev or Feedly?</summary>
-          <div class="faq-answer">daily.dev personalizes by engagement (what you click). Feedly aggregates by subscription (what feeds you add). 4DA scores by relevance to your actual codebase -- your Cargo.toml, package.json, and Git activity define the filter. It's categorically different: project-aware scoring instead of behavioral or topical filtering.</div>
+          <summary>How is this different from Dependabot or npm audit?</summary>
+          <div class="faq-answer">Dependabot works per repository on GitHub, and <code>npm audit</code> covers one project in one ecosystem. 4DA runs on your machine and reads every project you have locally, across ecosystems, into one worklist. Each finding names the version that fixes it, and the same answers reach your coding agent through the MCP server before it touches a dependency.</div>
         </details>
         <details>
           <summary>Does 4DA read my source code?</summary>
-          <div class="faq-answer">4DA reads manifest files (Cargo.toml, package.json, go.mod, etc.) and Git metadata to build your technology profile. It does not read your actual source code files. The profile is built and stored locally -- nothing leaves your machine.</div>
+          <div class="faq-answer">The app reads lockfiles, manifests and Git metadata. The MCP server's upgrade impact tool also searches your project's files, locally, for imports of the package you are upgrading. Everything stays in local databases on your machine; no source code is uploaded anywhere.</div>
         </details>
         <details>
           <summary>Can I use it without any API keys?</summary>
-          <div class="faq-answer">Yes. The free tier works entirely without API keys for scoring and content surfacing. AI-powered features like daily briefings are also free -- just add an LLM provider. Use Ollama for fully local inference or provide your own API key (BYOK) for Anthropic or OpenAI.</div>
+          <div class="faq-answer">Yes. Vulnerability findings, fix versions, the Brief and the MCP server all work without an API key. An AI-written Brief and natural language search are also free &mdash; just add an LLM provider: Ollama for fully local inference, or your own Anthropic or OpenAI key (BYOK).</div>
         </details>
         <details>
           <summary>What happens if I never pay?</summary>
-          <div class="faq-answer">Nothing changes. The free tier includes all 20+ sources, the full 5-axis scoring engine, AI daily briefings (BYOK), Learned Preferences, the MCP server with 16 tools, and the CLI. The free tier never expires. Signal features include a 14-day trial so you can evaluate before subscribing. Most individual developers will never need Signal.</div>
+          <div class="faq-answer">Nothing changes. Every version-confirmed vulnerability finding and its fix version, the daily Brief, the MCP server with 16 tools and the CLI stay free, and the free tier never expires. Signal adds the in-app Upgrade Plan, the full worklist and full history, with a 14-day trial so you can evaluate before subscribing.</div>
         </details>
         <details>
-          <summary>What's the confirmation gate?</summary>
-          <div class="faq-answer">The confirmation gate requires 2+ independent scoring axes to agree before an item enters your feed. A single keyword match isn't enough. A single interest match isn't enough. Independent confirmation from multiple relevance dimensions is required. This is what makes the high rejection rate possible.</div>
+          <summary>Does 4DA still read developer news?</summary>
+          <div class="faq-answer">Yes, as a supporting extra rather than the product. It reads Hacker News, Reddit, RSS and 20+ other sources and scores each item against your stack; an item needs two independent signals to pass. When the engine improves, it re-judges everything it already holds: yesterday's noise becomes tomorrow's signal.</div>
         </details>
         <details>
           <summary>How big is the download?</summary>
@@ -1463,8 +1457,8 @@ npx <span class="string">@4da/mcp-server</span>
   <!-- 7. Final CTA -->
   <section class="final-cta reveal">
     <div class="container">
-      <h2>Stop reading everything.<br>Start knowing what matters.</h2>
-      <p>Your codebase already knows what's relevant. Let it decide.</p>
+      <h2>Stop guessing what changed.<br>Start knowing what to run.</h2>
+      <p>Your lockfiles already know what you depend on. 4DA reads them.</p>
       <a href="/download/" class="btn btn-primary" id="final-download">Download 4DA -- Free</a>
       <div class="trust-line">No account &middot; No credit card &middot; No telemetry &middot; ~300 MB download</div>
 

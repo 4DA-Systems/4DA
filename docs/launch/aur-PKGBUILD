@@ -12,7 +12,7 @@
 pkgname=4da-bin
 pkgver=1.0.0
 pkgrel=1
-pkgdesc='Privacy-first developer intelligence — scores content against your codebase'
+pkgdesc='Knows every dependency on your machine: what changed and exactly what to run'
 arch=('x86_64')
 url='https://4da.ai'
 license=('custom:FSL-1.1-Apache-2.0')
