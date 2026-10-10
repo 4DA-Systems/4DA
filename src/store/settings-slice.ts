@@ -72,8 +72,12 @@ export const createSettingsSlice: StateCreator<AppStore, [], [], SettingsSlice> 
         settings: s,
         settingsForm: {
           ...state.settingsForm,
-          provider: s.llm.provider !== 'none' ? s.llm.provider : 'anthropic',
-          model: s.llm.model || 'claude-sonnet-5',
+          // "Skip — no AI for now" saves provider `none`. It used to load as
+          // anthropic / claude-sonnet-5, so Settings showed an AI the user
+          // never chose, and a plain Save would have written it (fresh-profile
+          // E2E 2026-10-10). `none` stays `none`, with no model.
+          provider: s.llm.provider && s.llm.provider !== 'none' ? s.llm.provider : 'none',
+          model: s.llm.provider && s.llm.provider !== 'none' ? (s.llm.model || 'claude-sonnet-5') : '',
           baseUrl: s.llm.base_url || '',
           rerankEnabled: s.rerank.enabled,
           maxItems: s.rerank.max_items_per_batch,

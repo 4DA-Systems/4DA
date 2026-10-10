@@ -50,10 +50,21 @@ const PALETTE: { dark: ThemePalette; light: ThemePalette } = {
  */
 export const WORKING_PULSE = 0.35;
 
-/** Derive visual state (colors, glow, label, speed) from the current VoidSignal. */
+/**
+ * Derive visual state (colors, glow, label, speed) from the current VoidSignal.
+ *
+ * `active` is the same "4DA is working right now" signal that gates the mark's
+ * motion (#891: a foreground analysis, or a FRESH background-fetch pulse via
+ * hooks/use-background-work.ts). The raw `pulse` is not: the heartbeat's
+ * staleness tick only decays it (x0.98 a minute), so a fetch whose final
+ * pulse=0 never arrived kept the header labelled "Scanning" for ~35 minutes
+ * while the mark rested (fresh-profile E2E 2026-10-10). "Scanning" is said
+ * only while active.
+ */
 export function deriveSignalVisuals(
   signal: VoidSignal | undefined,
   isLight = false,
+  active = true,
 ): SignalVisualState {
   const p = isLight ? PALETTE.light : PALETTE.dark;
   // Glow is additive light: it carries the dark theme; on paper it reads as
@@ -105,7 +116,7 @@ export function deriveSignalVisuals(
     label = "Error";
   } else if (signal.staleness > 0.8) {
     label = "Stale";
-  } else if (signal.pulse > 0.5) {
+  } else if (active && signal.pulse > 0.5) {
     label = "Scanning";
   } else if (signal.heat > 0.5) {
     label = "Discoveries";

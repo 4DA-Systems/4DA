@@ -17,11 +17,6 @@ use super::*;
 const SYNC_ALLOWLIST: &[(&str, &str, &str)] = &[
     (
         "capabilities.rs",
-        "get_capability_states",
-        "clones the in-memory capability RwLock registry",
-    ),
-    (
-        "capabilities.rs",
         "get_capability_summary",
         "counts the in-memory capability RwLock registry",
     ),

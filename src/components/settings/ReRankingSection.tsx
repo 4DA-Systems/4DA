@@ -10,6 +10,7 @@ interface ReRankingSectionProps {
 
 export function ReRankingSection({ settingsForm, setSettingsForm }: ReRankingSectionProps) {
   const { t } = useTranslation();
+  const noProvider = settingsForm.provider === 'none';
 
   return (
     <div className="bg-bg-tertiary rounded-lg p-4 border border-border">
@@ -24,17 +25,22 @@ export function ReRankingSection({ settingsForm, setSettingsForm }: ReRankingSec
       </div>
 
       <div className="space-y-3">
-        <label htmlFor="rerank-enabled" aria-label={t('settings.ai.enableRerank')} className="flex items-center gap-3 cursor-pointer p-3 bg-bg-secondary rounded-lg border border-border hover:border-orange-500/30 transition-all">
+        {/* Re-ranking needs a model. With no AI provider the saved flag is
+            inert, so the box shows what actually runs: off, and why. */}
+        <label htmlFor="rerank-enabled" aria-label={t('settings.ai.enableRerank')} className={`flex items-center gap-3 p-3 bg-bg-secondary rounded-lg border border-border transition-all ${noProvider ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer hover:border-orange-500/30'}`}>
           <input
             id="rerank-enabled"
             type="checkbox"
-            checked={settingsForm.rerankEnabled}
+            checked={settingsForm.rerankEnabled && !noProvider}
+            disabled={noProvider}
             onChange={(e) => setSettingsForm((f) => ({ ...f, rerankEnabled: e.target.checked }))}
             className="w-5 h-5 accent-orange-500 rounded"
           />
           <div>
             <span className="text-sm text-text-primary">{t('settings.ai.enableRerank')}</span>
-            <p className="text-xs text-text-muted mt-0.5">{t('settings.ai.rerankNote')}</p>
+            <p className="text-xs text-text-muted mt-0.5">
+              {noProvider ? t('settings.ai.rerankNeedsProvider') : t('settings.ai.rerankNote')}
+            </p>
           </div>
         </label>
 

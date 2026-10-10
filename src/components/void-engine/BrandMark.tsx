@@ -56,7 +56,7 @@ export function BrandMark({ signal, size = 36, active = true }: BrandMarkProps) 
   const motion = brandMarkMotion(active, motionAllowed);
 
   const { glowOpacity, edgeColor, vertexColor, faceColor, stateLabel, rotSpeed } =
-    useMemo(() => deriveSignalVisuals(signal, isLight), [signal, isLight]);
+    useMemo(() => deriveSignalVisuals(signal, isLight, active), [signal, isLight, active]);
 
   const showLabel = size >= 100;
   const itemCount = signal?.item_count ?? 0;

@@ -23,7 +23,18 @@ import { useAppStore } from '../../store';
  * nudge (`runAutoDiscovery`, INV-004), with Settings > Projects as the manual
  * route.
  */
-export const ScanProjectsPrompt = memo(function ScanProjectsPrompt({ onScanned }: { onScanned: () => void }) {
+export const ScanProjectsPrompt = memo(function ScanProjectsPrompt({
+  onScanned,
+  titleKey = 'blindspots.firstDay.scanTitle',
+  bodyKey = 'blindspots.firstDay.scanBody',
+  testId = 'blindspots-scan-prompt',
+}: {
+  onScanned: () => void;
+  /** Copy for the surface asking (Blind Spots by default; Preemption's worklist reuses the flow). */
+  titleKey?: string;
+  bodyKey?: string;
+  testId?: string;
+}) {
   const { t } = useTranslation();
   const runAutoDiscovery = useAppStore(s => s.runAutoDiscovery);
   const loadUserContext = useAppStore(s => s.loadUserContext);
@@ -43,9 +54,9 @@ export const ScanProjectsPrompt = memo(function ScanProjectsPrompt({ onScanned }
   }, [setSettingsInitialTab, setShowSettings]);
 
   return (
-    <div className="bg-bg-secondary rounded-lg border border-border px-5 py-5" data-testid="blindspots-scan-prompt">
-      <h3 className="text-sm font-medium text-text-primary">{t('blindspots.firstDay.scanTitle')}</h3>
-      <p className="text-xs text-text-muted mt-1 mb-3">{t('blindspots.firstDay.scanBody')}</p>
+    <div className="bg-bg-secondary rounded-lg border border-border px-5 py-5" data-testid={testId}>
+      <h3 className="text-sm font-medium text-text-primary">{t(titleKey)}</h3>
+      <p className="text-xs text-text-muted mt-1 mb-3">{t(bodyKey)}</p>
       {isScanning ? (
         <div className="flex items-center gap-2 text-xs text-text-secondary" role="status" aria-live="polite">
           <span className="w-4 h-4 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" aria-hidden="true" />

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-import { memo, useState, useCallback } from 'react';
+import { memo, useState, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { cmd } from '../../lib/commands';
 import { PanelErrorBoundary } from '../PanelErrorBoundary';
 import { AIProviderSection } from './AIProviderSection';
 import { BlindSpotsAssessSection } from './BlindSpotsAssessSection';
@@ -46,6 +47,14 @@ export const SettingsIntelligenceTab = memo(function SettingsIntelligenceTab({
   const [saveState, setSaveState] = useState<ButtonState>('idle');
   const [testState, setTestState] = useState<ButtonState>('idle');
   const [inlineStatus, setInlineStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [embeddingEngine, setEmbeddingEngine] = useState<string | null>(null);
+  useEffect(() => {
+    let alive = true;
+    cmd('get_embedding_model_info')
+      .then(info => { if (alive) setEmbeddingEngine(info.engine); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
   const handleSave = useCallback(async () => {
     setSaveState('loading');
     setInlineStatus(null);
@@ -106,7 +115,8 @@ export const SettingsIntelligenceTab = memo(function SettingsIntelligenceTab({
           <div className="space-y-2">
             <div className="flex items-center justify-between px-3 py-2 bg-bg-secondary rounded-lg">
               <span className="text-xs text-text-muted">{t('settings.ai.engineEmbedding')}</span>
-              <span className="text-xs text-purple-300 font-mono">{t('settings.ai.engineEmbeddingValue')}</span>
+              {/* The backend names the model actually producing the vectors. */}
+              <span className="text-xs text-purple-300 font-mono" data-testid="engine-embedding-model">{embeddingEngine ?? ''}</span>
             </div>
             <div className="flex items-center justify-between px-3 py-2 bg-bg-secondary rounded-lg">
               <span className="text-xs text-text-muted">{t('settings.ai.engineTopics')}</span>

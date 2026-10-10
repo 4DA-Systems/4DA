@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { BrandMark } from '../void-engine/BrandMark';
@@ -21,6 +22,9 @@ interface TopSignal {
     domain_relevance?: number;
   };
 }
+
+/** How long the mark turns as the celebration arrives before it rests. */
+export const CELEBRATION_MOTION_MS = 2_400;
 
 interface CelebrationStateProps {
   relevantCount: number;
@@ -66,6 +70,15 @@ export function CelebrationState({
   onDismiss,
 }: CelebrationStateProps) {
   const { t } = useTranslation();
+  // The celebration is a resting state: the mark turns as the screen arrives,
+  // then rests. It used BrandMark's default `active`, so it spun for as long
+  // as the user read the screen (fresh-profile E2E 2026-10-10, after #891
+  // made motion mean "working").
+  const [arriving, setArriving] = useState(true);
+  useEffect(() => {
+    const id = setTimeout(() => setArriving(false), CELEBRATION_MOTION_MS);
+    return () => clearTimeout(id);
+  }, []);
   const setShowSettings = useAppStore(s => s.setShowSettings);
   const setSettingsInitialTab = useAppStore(s => s.setSettingsInitialTab);
   const matchReason = topSignal ? buildMatchReason(topSignal, t) : null;
@@ -90,7 +103,7 @@ export function CelebrationState({
   return (
     <div className="text-center px-8 max-w-lg">
       <div className="mb-6">
-        <BrandMark size={80} />
+        <BrandMark size={80} active={arriving} />
       </div>
 
       {/* Intelligence Activated header */}

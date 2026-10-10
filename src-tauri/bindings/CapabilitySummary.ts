@@ -3,4 +3,8 @@
 /**
  * Aggregate counts of capability states — used by the frontend status bar.
  */
-export type CapabilitySummary = { full: number, degraded: number, unavailable: number, total: number, };
+export type CapabilitySummary = { full: number, degraded: number, unavailable: number, 
+/**
+ * Off by the user's choice ([`CapabilityState::Off`]) — not a fault.
+ */
+off: number, total: number, };

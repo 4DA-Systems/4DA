@@ -66,6 +66,7 @@ fn count_states(reg: &HashMap<Capability, CapabilityState>) -> (u32, u32, u32) {
             CapabilityState::Full => f += 1,
             CapabilityState::Degraded { .. } => d += 1,
             CapabilityState::Unavailable { .. } => u += 1,
+            CapabilityState::Off { .. } => {}
         }
     }
     (f, d, u)
@@ -492,11 +493,102 @@ fn serialization_summary() {
         full: 7,
         degraded: 1,
         unavailable: 1,
+        off: 0,
         total: 9,
     };
     let json = serde_json::to_string(&summary).expect("serialize CapabilitySummary");
     assert!(json.contains(r#""full":7"#));
     assert!(json.contains(r#""degraded":1"#));
     assert!(json.contains(r#""unavailable":1"#));
+    assert!(json.contains(r#""off":0"#));
     assert!(json.contains(r#""total":9"#));
+}
+
+/// Fresh-profile E2E 2026-10-10: with "Skip — no AI for now" the registry
+/// still said AI Re-ranking was "full". It is "off" (a choice, not a fault)
+/// until a provider exists and re-ranking is on.
+#[test]
+fn llm_reranking_is_off_without_a_provider() {
+    let _serial = serial_guard();
+    reset(&mut CAPABILITY_REGISTRY.write());
+
+    reconcile_llm_reranking(false, true);
+    let state = CAPABILITY_REGISTRY
+        .read()
+        .get(&Capability::LlmReranking)
+        .cloned();
+    assert!(
+        matches!(&state, Some(CapabilityState::Off { reason }) if reason.contains("No AI provider")),
+        "{state:?}"
+    );
+    let json = serde_json::to_string(&state.expect("state")).expect("serialize");
+    assert!(json.contains(r#""state":"off""#), "{json}");
+    assert_eq!(get_summary().off, 1);
+
+    reconcile_llm_reranking(true, false);
+    assert!(matches!(
+        CAPABILITY_REGISTRY.read().get(&Capability::LlmReranking),
+        Some(CapabilityState::Off { reason }) if reason.contains("turned off")
+    ));
+
+    reconcile_llm_reranking(true, true);
+    assert!(
+        is_full(Capability::LlmReranking),
+        "a provider + rerank on restores it"
+    );
+
+    // A runtime fault with a provider configured is not papered over.
+    report_unavailable(Capability::LlmReranking, "HTTP 401", "Check the key");
+    reconcile_llm_reranking(true, true);
+    assert!(!is_available(Capability::LlmReranking));
+
+    reset(&mut CAPABILITY_REGISTRY.write());
+}
+
+/// Fresh-profile E2E 2026-10-10: the "No project directories" warning was set
+/// at startup and never cleared after onboarding added projects. Reconciling
+/// on read must clear it once folders exist, and set it again if they go.
+#[test]
+fn ace_context_follows_the_configured_folders() {
+    let _serial = serial_guard();
+    reset(&mut CAPABILITY_REGISTRY.write());
+
+    reconcile_ace_context(false);
+    assert!(matches!(
+        CAPABILITY_REGISTRY.read().get(&Capability::AceContext),
+        Some(CapabilityState::Degraded { reason, .. }) if reason == ACE_CONTEXT_MISSING_REASON
+    ));
+
+    reconcile_ace_context(true);
+    assert!(
+        is_full(Capability::AceContext),
+        "adding a folder clears the warning"
+    );
+
+    reconcile_ace_context(false);
+    assert!(
+        !is_full(Capability::AceContext),
+        "removing every folder brings it back"
+    );
+
+    reset(&mut CAPABILITY_REGISTRY.write());
+}
+
+/// Folders present and the capability never reported: reconciling does not
+/// invent a state transition (nothing to restore).
+#[test]
+fn ace_context_reconcile_leaves_an_unreported_capability_alone() {
+    let _serial = serial_guard();
+    let mut registry = CAPABILITY_REGISTRY.write();
+    reset(&mut registry);
+    registry.remove(&Capability::AceContext);
+    drop(registry);
+
+    reconcile_ace_context(true);
+    assert!(CAPABILITY_REGISTRY
+        .read()
+        .get(&Capability::AceContext)
+        .is_none());
+
+    reset(&mut CAPABILITY_REGISTRY.write());
 }

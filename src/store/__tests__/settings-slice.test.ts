@@ -242,5 +242,25 @@ describe('settings-slice', () => {
         vi.useRealTimers();
       }
     });
+
+    // Fresh-profile E2E 2026-10-10: "Skip — no AI for now" saved provider
+    // `none`, and Settings showed anthropic / claude-sonnet-5 — an AI the user
+    // never chose, one Save away from being written.
+    it('keeps a saved provider of none as none, with no model', async () => {
+      mockInvoke.mockImplementation((command) => {
+        if (command === 'get_settings') {
+          return Promise.resolve({
+            ...loadedSettings,
+            llm: { provider: 'none', model: '', has_api_key: false, base_url: null },
+          });
+        }
+        return Promise.resolve({ providers: [] });
+      });
+
+      await useAppStore.getState().loadSettings();
+
+      expect(useAppStore.getState().settingsForm.provider).toBe('none');
+      expect(useAppStore.getState().settingsForm.model).toBe('');
+    });
   });
 });
