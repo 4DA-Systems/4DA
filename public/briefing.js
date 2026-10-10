@@ -83,6 +83,11 @@ function friendlyHint(raw) {
   return 'Intelligence synthesis unavailable — check cloud AI settings.';
 }
 
+// The backend decides what is a summary (morning_floor.rs: the model's own
+// "low signal" verdict, or prose that names no package, version, advisory or
+// item title from its input). Anything it rejects reaches this window as the
+// canonical QUIET_LINE ("Low signal -- ..."), which this check folds; only an
+// accepted summary is ever sent as text to show.
 function isAbstention(text) {
   if (!text) return true;
   var lower = text.toLowerCase();
