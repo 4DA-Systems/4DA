@@ -13,13 +13,11 @@ import type { SourceRelevance } from '../../types';
 interface SignalDisplayOrderState {
   /** Visible rows in display order; null when the Signal list is not mounted. */
   visible: SourceRelevance[] | null;
-  stackExpanded: boolean;
   worthExpanded: boolean;
   moreExpanded: boolean;
   /** Key Signals: non-Affects-You pools (In Your Orbit, Ambient) revealed. */
   orbitExpanded: boolean;
   setVisible: (visible: SourceRelevance[] | null) => void;
-  setStackExpanded: (v: boolean) => void;
   setWorthExpanded: (v: boolean) => void;
   setMoreExpanded: (v: boolean) => void;
   setOrbitExpanded: (v: boolean) => void;
@@ -27,12 +25,10 @@ interface SignalDisplayOrderState {
 
 export const useSignalDisplayOrder = create<SignalDisplayOrderState>((set) => ({
   visible: null,
-  stackExpanded: false,
   worthExpanded: false,
   moreExpanded: false,
   orbitExpanded: false,
   setVisible: (visible) => set({ visible }),
-  setStackExpanded: (stackExpanded) => set({ stackExpanded }),
   setWorthExpanded: (worthExpanded) => set({ worthExpanded }),
   setMoreExpanded: (moreExpanded) => set({ moreExpanded }),
   setOrbitExpanded: (orbitExpanded) => set({ orbitExpanded }),

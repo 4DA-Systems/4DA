@@ -553,6 +553,10 @@ interface CommandMap {
   // complete evidence/notes/tooltips for the card's lazy expansion.
   get_preemption_alerts: { params: { dismissedIds: string[]; fullPlan: boolean }; result: EvidenceFeed };
   get_preemption_item_detail: { params: { itemId: string }; result: EvidenceItem };
+  // Signal Lane 1, the stack-change stream (AD-054): advisories (free floor)
+  // plus graded registry releases (Signal). total_tracked === 0 = no lockfile
+  // read yet. Served from a 10-minute cache unless force.
+  get_stack_changes: { params: { force: boolean }; result: EvidenceFeed };
   get_blind_spots: { params: Record<string, never>; result: EvidenceFeed };
   get_blind_spot_teaser: { params: Record<string, never>; result: BlindSpotTeaser };
   assess_blind_spots_with_ai: { params: { force?: boolean }; result: BlindSpotAssessment };
@@ -1947,6 +1951,8 @@ const LONG_RUNNING_COMMANDS = new Set<string>([
   'generate_ai_briefing',
   'get_blind_spots',
   'get_preemption_alerts',
+  // First compute builds the Brief's facts (the Preemption feed) plus the release pass.
+  'get_stack_changes',
   'build_content_graph',
   'translate_content',
   'translate_content_batch',

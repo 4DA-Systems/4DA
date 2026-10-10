@@ -28,6 +28,9 @@ mod list_transport;
 mod liveness;
 mod materializer;
 mod plan_snapshot;
+// Signal Lane 1 (AD-054): the stack-change stream, written from the Brief's
+// facts and the release grades. `pub` for the command path in lib.rs.
+pub mod stack_change;
 mod types;
 mod upgrade_parent;
 mod upgrade_plan;

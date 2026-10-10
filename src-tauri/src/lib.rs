@@ -1054,6 +1054,8 @@ pub fn run() {
             knowledge_decay::get_knowledge_gaps,
             preemption::get_preemption_alerts,
             preemption::get_preemption_item_detail,
+            // Signal Lane 1: the stack-change stream (AD-054)
+            evidence::stack_change::get_stack_changes,
             // Content Graph
             content_graph::build_content_graph,
             content_graph::get_graph_node_details,

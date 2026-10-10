@@ -211,7 +211,10 @@ pub struct Action {
     /// Canonical id. Frontend dispatches by this id.
     /// Allowed: "dismiss", "acknowledge", "snooze_7d", "brief_this",
     ///          "view_source", "investigate", "accept_decision",
-    ///          "reject_decision", "set_refutation".
+    ///          "reject_decision", "set_refutation", "review_security",
+    ///          "check_breaking", "review_updates", "run_command".
+    /// `run_command`: `label` IS the exact shell command and `description`
+    /// says where to run it. The lens copies it; 4DA never executes it.
     pub action_id: String,
 
     /// Display label. Keep short.
@@ -318,6 +321,21 @@ pub struct LensHints {
 > coverage" group with its own count. Same shape as the Phase 2c precedent:
 > a rendering dimension riding on `LensHints` with a `#[serde(default)]`
 > back-compat default — no new intelligence type, no validator change.
+
+> **ADR — 2026-10-10 (AD-054 Wave 2): Signal's stack-change stream is plain
+> `EvidenceItem`s, plus one action id.** Lane 1 is rebuilt from the Brief's
+> facts (version-confirmed advisories with the AD-055 fix path) and graded
+> registry releases (`scoring::release_grade`), by
+> `evidence::stack_change::StackChangeMaterializer`, served by the
+> `get_stack_changes` command as an `EvidenceFeed` (`total_tracked` = known
+> dependencies, 0 = nothing scanned; `tier_scope` = whether releases are in).
+> No new field and no new struct: what changed rides in the id
+> (`stack-change:<security|yanked|major|breaking|minor>:…`), the versions in
+> the `version_context` citation, the projects and package in `affected_*`.
+> The one extension is the canonical action id `run_command`, because "what
+> exactly to run" (AD-055 rule 4) had no honest home: a command in a
+> `description` tooltip cannot be copied, and a parallel work-order envelope
+> (AD-049) would be a bespoke blob on a lens path (doctrine rule 4).
 
 ---
 
