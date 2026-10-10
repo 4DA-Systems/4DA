@@ -163,6 +163,22 @@ fn a_seeded_result_serves_its_key_and_ages_like_any_other() {
     assert!(stale.fresh(key).is_none(), "past the expiry it recomputes");
 }
 
+/// A restored result older than the machine's uptime is still old. On
+/// Windows `Instant` counts from boot, so `now - age` underflows; that once
+/// fell back to "now" and served an expired result as fresh after a reboot
+/// (and failed the test above on fresh CI runners).
+#[test]
+fn a_restored_result_older_than_uptime_is_expired() {
+    let key = CacheKey::new(7, 1, 3);
+    let cache = GapsCache::new();
+    let ten_years = Duration::from_secs(10 * 365 * 24 * 60 * 60);
+    assert!(cache.seed(key, one_gap(), ten_years, String::new()));
+    assert!(
+        cache.fresh(key).is_none(),
+        "an age the clock cannot represent is expired"
+    );
+}
+
 /// The persisted shape round-trips through the snapshot store.
 #[test]
 fn the_persisted_result_round_trips() {
