@@ -111,7 +111,7 @@ docx-rs = "0.4.22"           # Word document parsing (>=0.4.21 for quick-xml 0.4
 calamine = "0.36"            # Excel spreadsheet parsing (>=0.36 for quick-xml 0.41: RUSTSEC-2026-0194/0195)
 image = "0.25"                                    # Image analysis (OCR + file extraction)
 ocrs = { version = "0.12", optional = true }     # Pure Rust OCR engine
-rten = { version = "0.24", optional = true }     # Model loading for ocrs (text-detection.rten, text-recognition.rten)
+rten = { version = "0.27", optional = true }     # Model loading for ocrs (text-detection.rten, text-recognition.rten)
 # whisper-rs = "0.14"       # DISABLED: Requires vcpkg/system deps - audio.rs stubbed
 zip = "8.6"                                        # ZIP archive extraction (OSV cache + extractors)
 tar = { version = "0.4.45", optional = true }        # TAR archive extraction
