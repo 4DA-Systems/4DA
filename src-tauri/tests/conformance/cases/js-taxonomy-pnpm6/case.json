@@ -1,0 +1,16 @@
+{
+  "id": "js-taxonomy-pnpm6",
+  "source": "repository",
+  "repo": "https://github.com/shadcn-ui/taxonomy",
+  "ref": "651f984e52edd65d40ccd55e299c1baeea3ff017",
+  "commit": "651f984e52edd65d40ccd55e299c1baeea3ff017",
+  "licence": "MIT",
+  "include": [
+    "pnpm-lock.yaml",
+    "package.json"
+  ],
+  "formats": [
+    "pnpm-lock.yaml v6.0"
+  ],
+  "notes": "pnpm v6 lock: peer-dependency suffixes `1.0.2(react-dom@18.2.0)(react@18.2.0)` must be stripped to the installed version."
+}

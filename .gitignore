@@ -464,3 +464,7 @@ data/*.db-wal.bak*
 
 # Transient commit-message scratch files
 .git-msg-*.txt
+
+# Conformance corpus (src-tauri/tests/conformance): vendored third-party lockfiles keep
+# their upstream relative paths, which can collide with the root-level ignores above.
+!src-tauri/tests/conformance/cases/**/cli/

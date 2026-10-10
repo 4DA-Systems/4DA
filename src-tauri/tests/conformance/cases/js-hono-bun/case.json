@@ -1,0 +1,34 @@
+{
+  "id": "js-hono-bun",
+  "source": "repository",
+  "repo": "https://github.com/honojs/hono",
+  "ref": "v4.7.0",
+  "commit": "42039738802133f6d28e2e2ab30bb7a5c13d560b",
+  "licence": "MIT",
+  "include": [
+    "bun.lock",
+    "package.json",
+    "benchmarks/handle-event/yarn.lock",
+    "benchmarks/handle-event/package.json",
+    "benchmarks/jsx/yarn.lock",
+    "benchmarks/jsx/package.json",
+    "benchmarks/routers/yarn.lock",
+    "benchmarks/routers/package.json",
+    "benchmarks/query-param/package-lock.json",
+    "benchmarks/query-param/package.json",
+    "benchmarks/query-param/bun.lockb"
+  ],
+  "formats": [
+    "bun.lock (text)",
+    "yarn.lock v1",
+    "package-lock.json v3",
+    "bun.lockb (binary)"
+  ],
+  "notes": "Text bun.lock at the root, nested benchmark projects with their own locks, and a binary bun.lockb that no engine can read (declared unsupported).",
+  "unsupported": [
+    {
+      "path": "benchmarks/query-param/bun.lockb",
+      "reason": "binary bun lockfile (pre-1.2 format); neither engine nor osv-scanner decodes it"
+    }
+  ]
+}

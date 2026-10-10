@@ -1,0 +1,17 @@
+{
+  "id": "go-node-exporter-legacy",
+  "source": "repository",
+  "repo": "https://github.com/prometheus/node_exporter",
+  "ref": "v1.0.1",
+  "commit": "3715be6ae899f2a9b9dbfd9c39f3e09a7bd4559f",
+  "licence": "Apache-2.0",
+  "include": [
+    "go.mod",
+    "go.sum"
+  ],
+  "formats": [
+    "go.mod (go < 1.17)",
+    "go.sum"
+  ],
+  "notes": "Go 1.14 module: indirect modules are only in the MVS build list."
+}

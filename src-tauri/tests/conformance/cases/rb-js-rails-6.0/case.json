@@ -1,0 +1,20 @@
+{
+  "id": "rb-js-rails-6.0",
+  "source": "repository",
+  "repo": "https://github.com/rails/rails",
+  "ref": "v6.0.0",
+  "commit": "66cabeda2c46c582d19738e1318be8d59584cc5b",
+  "licence": "MIT",
+  "include": [
+    "Gemfile.lock",
+    "Gemfile",
+    "yarn.lock",
+    "package.json",
+    "@workspaces"
+  ],
+  "formats": [
+    "Gemfile.lock",
+    "yarn.lock v1 (workspaces)"
+  ],
+  "notes": "RubyGems lock with platform-specific gems plus a yarn v1 workspace whose members are local. Trimmed: the dummy-app yarn locks under */test/dummy are omitted."
+}

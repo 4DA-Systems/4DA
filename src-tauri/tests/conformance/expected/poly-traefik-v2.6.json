@@ -1,0 +1,6028 @@
+{
+ "schema": 1,
+ "case": "poly-traefik-v2.6",
+ "lockfiles": [
+  {
+   "path": "docs/requirements.txt",
+   "format": "requirements",
+   "ecosystem": "PyPI",
+   "status": "supported",
+   "truth_packages": 5
+  },
+  {
+   "path": "go.mod",
+   "format": "go.mod-go1.16",
+   "ecosystem": "Go",
+   "status": "supported",
+   "truth_packages": 391
+  },
+  {
+   "path": "go.sum",
+   "format": "go.sum",
+   "ecosystem": "Go",
+   "status": "supported",
+   "truth_packages": 391
+  },
+  {
+   "path": "webui/package-lock.json",
+   "format": "npm-v1",
+   "ecosystem": "npm",
+   "status": "supported",
+   "truth_packages": 1280
+  }
+ ],
+ "inventory": {
+  "count": 1676,
+  "packages": [
+   "Go|.|cloud.google.com/go|0.81.0",
+   "Go|.|github.com/agl/ed25519|0.0.0-20170116200512-5312a6153412",
+   "Go|.|github.com/akamai/AkamaiOPEN-edgegrid-golang|1.1.1",
+   "Go|.|github.com/AlecAivazis/survey/v2|2.2.3",
+   "Go|.|github.com/aliyun/alibaba-cloud-sdk-go|1.61.1183",
+   "Go|.|github.com/armon/go-metrics|0.3.8",
+   "Go|.|github.com/armon/go-radix|1.0.0",
+   "Go|.|github.com/aws/aws-sdk-go|1.39.0",
+   "Go|.|github.com/Azure/azure-sdk-for-go|40.3.0+incompatible",
+   "Go|.|github.com/Azure/go-ansiterm|0.0.0-20210617225240-d185dfc1b5a1",
+   "Go|.|github.com/Azure/go-autorest/autorest/adal|0.9.13",
+   "Go|.|github.com/Azure/go-autorest/autorest/azure/auth|0.5.8",
+   "Go|.|github.com/Azure/go-autorest/autorest/azure/cli|0.4.2",
+   "Go|.|github.com/Azure/go-autorest/autorest/date|0.3.0",
+   "Go|.|github.com/Azure/go-autorest/autorest/mocks|0.4.1",
+   "Go|.|github.com/Azure/go-autorest/autorest/to|0.4.0",
+   "Go|.|github.com/Azure/go-autorest/autorest/validation|0.3.1",
+   "Go|.|github.com/Azure/go-autorest/autorest|0.11.19",
+   "Go|.|github.com/Azure/go-autorest/logger|0.2.1",
+   "Go|.|github.com/Azure/go-autorest/tracing|0.6.0",
+   "Go|.|github.com/Azure/go-autorest|14.2.0+incompatible",
+   "Go|.|github.com/benbjohnson/clock|1.1.0",
+   "Go|.|github.com/beorn7/perks|1.0.1",
+   "Go|.|github.com/bits-and-blooms/bitset|1.2.0",
+   "Go|.|github.com/boombuler/barcode|1.0.1-0.20190219062509-6c824513bacc",
+   "Go|.|github.com/buger/goterm|1.0.0",
+   "Go|.|github.com/bugsnag/bugsnag-go|1.5.0",
+   "Go|.|github.com/bugsnag/panicwrap|1.2.0",
+   "Go|.|github.com/BurntSushi/toml|0.3.1",
+   "Go|.|github.com/cenkalti/backoff/v4|4.1.1",
+   "Go|.|github.com/cenkalti/backoff|2.2.1+incompatible",
+   "Go|.|github.com/cespare/xxhash/v2|2.1.1",
+   "Go|.|github.com/cespare/xxhash|1.1.0",
+   "Go|.|github.com/cheekybits/genny|1.0.0",
+   "Go|.|github.com/circonus-labs/circonus-gometrics|2.3.1+incompatible",
+   "Go|.|github.com/circonus-labs/circonusllhist|0.1.3",
+   "Go|.|github.com/cloudflare/cfssl|1.4.1",
+   "Go|.|github.com/cloudflare/cloudflare-go|0.20.0",
+   "Go|.|github.com/codahale/hdrhistogram|0.0.0-20161010025455-3a0bb77429bd",
+   "Go|.|github.com/compose-spec/compose-go|1.0.3",
+   "Go|.|github.com/compose-spec/godotenv|1.0.0",
+   "Go|.|github.com/containerd/cgroups|1.0.1",
+   "Go|.|github.com/containerd/console|1.0.2",
+   "Go|.|github.com/containerd/containerd|1.5.8",
+   "Go|.|github.com/containerd/continuity|0.1.0",
+   "Go|.|github.com/containerd/fifo|1.0.0",
+   "Go|.|github.com/containerd/ttrpc|1.1.0",
+   "Go|.|github.com/containerd/typeurl|1.0.2",
+   "Go|.|github.com/containous/alice|0.0.0-20181107144136-d83ebdd94cbd",
+   "Go|.|github.com/containous/check|0.0.0-20170915194414-ca0bf163426a",
+   "Go|.|github.com/containous/go-http-auth|0.4.1-0.20200324110947-a37a7636d23e",
+   "Go|.|github.com/containous/minheap|0.0.0-20190809180810-6e71eb837595",
+   "Go|.|github.com/containous/multibuf|0.0.0-20190809014333-8b6c9a7e6bba",
+   "Go|.|github.com/containous/mux|0.0.0-20220113180107-8ffa4f6d063c",
+   "Go|.|github.com/coreos/go-semver|0.3.0",
+   "Go|.|github.com/coreos/go-systemd/v22|22.3.2",
+   "Go|.|github.com/coreos/go-systemd|0.0.0-20191104093116-d3cd4ed1dbcf",
+   "Go|.|github.com/cpu/goacmedns|0.1.1",
+   "Go|.|github.com/creack/pty|1.1.11",
+   "Go|.|github.com/DataDog/datadog-go|3.2.0+incompatible",
+   "Go|.|github.com/DataDog/zstd|1.3.6-0.20190409195224-796139022798",
+   "Go|.|github.com/davecgh/go-spew|1.1.1",
+   "Go|.|github.com/deepmap/oapi-codegen|1.6.1",
+   "Go|.|github.com/dimchansky/utfbom|1.1.1",
+   "Go|.|github.com/distribution/distribution/v3|3.0.0-20210316161203-a01c71e2477e",
+   "Go|.|github.com/dnsimple/dnsimple-go|0.70.1",
+   "Go|.|github.com/docker/buildx|0.5.2-0.20210422185057-908a856079fc",
+   "Go|.|github.com/docker/cli|20.10.11+incompatible",
+   "Go|.|github.com/docker/compose/v2|2.0.1",
+   "Go|.|github.com/docker/distribution|2.7.1+incompatible",
+   "Go|.|github.com/docker/docker-credential-helpers|0.6.4-0.20210125172408-38bea2ce277a",
+   "Go|.|github.com/docker/docker|20.10.7+incompatible",
+   "Go|.|github.com/docker/go-connections|0.4.0",
+   "Go|.|github.com/docker/go-events|0.0.0-20190806004212-e31b211e4f1c",
+   "Go|.|github.com/docker/go-metrics|0.0.1",
+   "Go|.|github.com/docker/go-units|0.4.0",
+   "Go|.|github.com/docker/go|1.5.1-1.0.20160303222718-d30aec9fd63c",
+   "Go|.|github.com/docker/libnetwork|0.8.0-dev.2.0.20201215162534-fa125a3512ee",
+   "Go|.|github.com/docker/libtrust|0.0.0-20160708172513-aabc10ec26b7",
+   "Go|.|github.com/donovanhide/eventsource|0.0.0-20170630084216-b8f31a59085e",
+   "Go|.|github.com/eapache/channels|1.1.0",
+   "Go|.|github.com/eapache/go-resiliency|1.1.0",
+   "Go|.|github.com/eapache/go-xerial-snappy|0.0.0-20180814174437-776d5712da21",
+   "Go|.|github.com/eapache/queue|1.1.0",
+   "Go|.|github.com/eknkc/amber|0.0.0-20171010120322-cdade1c07385",
+   "Go|.|github.com/elastic/go-licenser|0.3.1",
+   "Go|.|github.com/elastic/go-sysinfo|1.1.1",
+   "Go|.|github.com/elastic/go-windows|1.0.0",
+   "Go|.|github.com/evanphx/json-patch|4.11.0+incompatible",
+   "Go|.|github.com/exoscale/egoscale|0.67.0",
+   "Go|.|github.com/ExpediaDotCom/haystack-client-go|0.0.0-20190315171017-e7edbdf53a61",
+   "Go|.|github.com/fatih/color|1.12.0",
+   "Go|.|github.com/fatih/structs|1.1.0",
+   "Go|.|github.com/form3tech-oss/jwt-go|3.2.3+incompatible",
+   "Go|.|github.com/fsnotify/fsnotify|1.4.9",
+   "Go|.|github.com/fvbommel/sortorder|1.0.1",
+   "Go|.|github.com/gambol99/go-marathon|0.0.0-20180614232016-99a156b96fb2",
+   "Go|.|github.com/go-acme/lego/v4|4.6.0",
+   "Go|.|github.com/go-errors/errors|1.0.1",
+   "Go|.|github.com/go-kit/kit|0.10.1-0.20200915143503-439c4d2ed3ea",
+   "Go|.|github.com/go-logfmt/logfmt|0.5.0",
+   "Go|.|github.com/go-logr/logr|0.4.0",
+   "Go|.|github.com/go-resty/resty/v2|2.1.1-0.20191201195748-d7b97669fe48",
+   "Go|.|github.com/go-sql-driver/mysql|1.5.0",
+   "Go|.|github.com/go-stack/stack|1.8.0",
+   "Go|.|github.com/go-task/slim-sprig|0.0.0-20210107165309-348f09dbbbc0",
+   "Go|.|github.com/go-zookeeper/zk|1.0.2",
+   "Go|.|github.com/gobs/pretty|0.0.0-20180724170744-09732c25a95b",
+   "Go|.|github.com/gofrs/flock|0.8.0",
+   "Go|.|github.com/gofrs/uuid|3.3.0+incompatible",
+   "Go|.|github.com/gogo/googleapis|1.4.0",
+   "Go|.|github.com/gogo/protobuf|1.3.2",
+   "Go|.|github.com/golang/groupcache|0.0.0-20210331224755-41bb18bfe9da",
+   "Go|.|github.com/golang/mock|1.6.0",
+   "Go|.|github.com/golang/protobuf|1.5.2",
+   "Go|.|github.com/golang/snappy|0.0.3",
+   "Go|.|github.com/google/btree|1.0.1",
+   "Go|.|github.com/google/certificate-transparency-go|1.0.21",
+   "Go|.|github.com/google/go-cmp|0.5.6",
+   "Go|.|github.com/google/go-github/v28|28.1.1",
+   "Go|.|github.com/google/go-github|17.0.0+incompatible",
+   "Go|.|github.com/google/go-querystring|1.1.0",
+   "Go|.|github.com/google/gofuzz|1.2.0",
+   "Go|.|github.com/google/shlex|0.0.0-20191202100458-e7afc7fbc510",
+   "Go|.|github.com/google/uuid|1.2.0",
+   "Go|.|github.com/googleapis/gax-go/v2|2.0.5",
+   "Go|.|github.com/googleapis/gax-go|2.0.0+incompatible",
+   "Go|.|github.com/googleapis/gnostic|0.5.5",
+   "Go|.|github.com/gophercloud/gophercloud|0.16.0",
+   "Go|.|github.com/gophercloud/utils|0.0.0-20210216074907-f6de111f2eae",
+   "Go|.|github.com/gopherjs/gopherjs|0.0.0-20181017120253-0766667cb4d1",
+   "Go|.|github.com/gorilla/context|1.1.1",
+   "Go|.|github.com/gorilla/websocket|1.4.2",
+   "Go|.|github.com/gravitational/trace|0.0.0-20190726142706-a535a178675f",
+   "Go|.|github.com/grpc-ecosystem/go-grpc-middleware|1.2.0",
+   "Go|.|github.com/grpc-ecosystem/grpc-opentracing|0.0.0-20180507213350-8e809c8a8645",
+   "Go|.|github.com/h2non/parth|0.0.0-20190131123155-b4df798d6542",
+   "Go|.|github.com/hailocab/go-hostpool|0.0.0-20160125115350-e80d13ce29ed",
+   "Go|.|github.com/hashicorp/consul/api|1.12.0",
+   "Go|.|github.com/hashicorp/consul/sdk|0.8.0",
+   "Go|.|github.com/hashicorp/consul|1.10.3",
+   "Go|.|github.com/hashicorp/errwrap|1.0.0",
+   "Go|.|github.com/hashicorp/go-bexpr|0.1.2",
+   "Go|.|github.com/hashicorp/go-cleanhttp|0.5.1",
+   "Go|.|github.com/hashicorp/go-hclog|0.16.1",
+   "Go|.|github.com/hashicorp/go-immutable-radix|1.3.0",
+   "Go|.|github.com/hashicorp/go-msgpack|0.5.5",
+   "Go|.|github.com/hashicorp/go-multierror|1.1.1",
+   "Go|.|github.com/hashicorp/go-retryablehttp|0.7.0",
+   "Go|.|github.com/hashicorp/go-rootcerts|1.0.2",
+   "Go|.|github.com/hashicorp/go-sockaddr|1.0.2",
+   "Go|.|github.com/hashicorp/go-uuid|1.0.2",
+   "Go|.|github.com/hashicorp/go-version|1.3.0",
+   "Go|.|github.com/hashicorp/golang-lru|0.5.4",
+   "Go|.|github.com/hashicorp/hcl|1.0.0",
+   "Go|.|github.com/hashicorp/memberlist|0.3.0",
+   "Go|.|github.com/hashicorp/raft-autopilot|0.1.5",
+   "Go|.|github.com/hashicorp/raft|1.3.1",
+   "Go|.|github.com/hashicorp/serf|0.9.6",
+   "Go|.|github.com/hashicorp/yamux|0.0.0-20210826001029-26ff87cf9493",
+   "Go|.|github.com/hinshun/vt10x|0.0.0-20180616224451-1954e6464174",
+   "Go|.|github.com/huandu/xstrings|1.3.1",
+   "Go|.|github.com/iij/doapi|0.0.0-20190504054126-0bbf12d6d7df",
+   "Go|.|github.com/imdario/mergo|0.3.12",
+   "Go|.|github.com/inconshreveable/mousetrap|1.0.0",
+   "Go|.|github.com/influxdata/influxdb1-client|0.0.0-20191209144304-8bf82d3c094d",
+   "Go|.|github.com/infobloxopen/infoblox-go-client|1.1.1",
+   "Go|.|github.com/instana/go-sensor|1.38.3",
+   "Go|.|github.com/instana/testify|1.6.2-0.20200721153833-94b1851f4d65",
+   "Go|.|github.com/jarcoal/httpmock|1.0.6",
+   "Go|.|github.com/jcchavezs/porto|0.1.0",
+   "Go|.|github.com/jcmturner/gofork|0.0.0-20190328161633-dc7c13fece03",
+   "Go|.|github.com/jinzhu/gorm|1.9.11",
+   "Go|.|github.com/jinzhu/inflection|1.0.0",
+   "Go|.|github.com/jmespath/go-jmespath/internal/testify|1.5.1",
+   "Go|.|github.com/jmespath/go-jmespath|0.4.0",
+   "Go|.|github.com/joeshaw/multierror|0.0.0-20140124173710-69b34d4ec901",
+   "Go|.|github.com/jonboulle/clockwork|0.1.0",
+   "Go|.|github.com/json-iterator/go|1.1.11",
+   "Go|.|github.com/jtolds/gls|4.20.0+incompatible",
+   "Go|.|github.com/k0kubun/go-ansi|0.0.0-20180517002512-3bf9e2903213",
+   "Go|.|github.com/kardianos/osext|0.0.0-20190222173326-2bc1f35cddc0",
+   "Go|.|github.com/kballard/go-shellquote|0.0.0-20180428030007-95032a82bc51",
+   "Go|.|github.com/klauspost/compress|1.13.0",
+   "Go|.|github.com/kolo/xmlrpc|0.0.0-20200310150728-e0350524596b",
+   "Go|.|github.com/kr/pty|1.1.8",
+   "Go|.|github.com/kr/text|0.2.0",
+   "Go|.|github.com/kvtools/valkeyrie|0.4.0",
+   "Go|.|github.com/labbsr0x/bindman-dns-webhook|1.0.2",
+   "Go|.|github.com/labbsr0x/goh|1.0.1",
+   "Go|.|github.com/linode/linodego|0.31.1",
+   "Go|.|github.com/liquidweb/go-lwApi|0.0.5",
+   "Go|.|github.com/liquidweb/liquidweb-cli|0.6.9",
+   "Go|.|github.com/liquidweb/liquidweb-go|1.6.3",
+   "Go|.|github.com/looplab/fsm|0.1.0",
+   "Go|.|github.com/lucas-clemente/quic-go|0.23.0",
+   "Go|.|github.com/magiconair/properties|1.8.5",
+   "Go|.|github.com/mailgun/timetools|0.0.0-20141028012446-7e6055773c51",
+   "Go|.|github.com/mailgun/ttlmap|0.0.0-20170619185759-c1c17f74874f",
+   "Go|.|github.com/marten-seemann/qpack|0.2.1",
+   "Go|.|github.com/marten-seemann/qtls-go1-16|0.1.4",
+   "Go|.|github.com/marten-seemann/qtls-go1-17|0.1.0",
+   "Go|.|github.com/Masterminds/goutils|1.1.1",
+   "Go|.|github.com/Masterminds/semver/v3|3.1.1",
+   "Go|.|github.com/Masterminds/semver|1.5.0",
+   "Go|.|github.com/Masterminds/sprig/v3|3.2.2",
+   "Go|.|github.com/mattn/go-colorable|0.1.8",
+   "Go|.|github.com/mattn/go-isatty|0.0.12",
+   "Go|.|github.com/mattn/go-shellwords|1.0.12",
+   "Go|.|github.com/matttproud/golang_protobuf_extensions|1.0.2-0.20181231171920-c182affec369",
+   "Go|.|github.com/mgutz/ansi|0.0.0-20170206155736-9520e82c474b",
+   "Go|.|github.com/Microsoft/go-winio|0.4.17",
+   "Go|.|github.com/Microsoft/hcsshim|0.8.23",
+   "Go|.|github.com/miekg/dns|1.1.45",
+   "Go|.|github.com/miekg/pkcs11|1.0.3",
+   "Go|.|github.com/mitchellh/copystructure|1.0.0",
+   "Go|.|github.com/mitchellh/go-homedir|1.1.0",
+   "Go|.|github.com/mitchellh/go-testing-interface|1.14.0",
+   "Go|.|github.com/mitchellh/hashstructure|1.0.0",
+   "Go|.|github.com/mitchellh/mapstructure|1.4.2",
+   "Go|.|github.com/mitchellh/pointerstructure|1.0.0",
+   "Go|.|github.com/mitchellh/reflectwalk|1.0.1",
+   "Go|.|github.com/moby/buildkit|0.8.2-0.20210401015549-df49b648c8bf",
+   "Go|.|github.com/moby/locker|1.0.1",
+   "Go|.|github.com/moby/sys/mount|0.2.0",
+   "Go|.|github.com/moby/sys/mountinfo|0.4.1",
+   "Go|.|github.com/moby/term|0.0.0-20210619224110-3f7ff695adc6",
+   "Go|.|github.com/modern-go/concurrent|0.0.0-20180306012644-bacd9c7ef1dd",
+   "Go|.|github.com/modern-go/reflect2|1.0.1",
+   "Go|.|github.com/morikuni/aec|1.0.0",
+   "Go|.|github.com/namedotcom/go|0.0.0-20180403034216-08470befbe04",
+   "Go|.|github.com/Netflix/go-expect|0.0.0-20180615182759-c93bf25de8e8",
+   "Go|.|github.com/niemeyer/pretty|0.0.0-20200227124842-a10e7caefd8e",
+   "Go|.|github.com/nrdcg/auroradns|1.0.1",
+   "Go|.|github.com/nrdcg/desec|0.6.0",
+   "Go|.|github.com/nrdcg/dnspod-go|0.4.0",
+   "Go|.|github.com/nrdcg/freemyip|0.2.0",
+   "Go|.|github.com/nrdcg/goinwx|0.8.1",
+   "Go|.|github.com/nrdcg/namesilo|0.2.1",
+   "Go|.|github.com/nrdcg/porkbun|0.1.1",
+   "Go|.|github.com/nxadm/tail|1.4.8",
+   "Go|.|github.com/onsi/ginkgo|1.16.4",
+   "Go|.|github.com/onsi/gomega|1.14.0",
+   "Go|.|github.com/opencontainers/go-digest|1.0.0",
+   "Go|.|github.com/opencontainers/image-spec|1.0.1",
+   "Go|.|github.com/opencontainers/runc|1.0.2",
+   "Go|.|github.com/opencontainers/runtime-spec|1.0.3-0.20210326190908-1c3f411f0417",
+   "Go|.|github.com/opencontainers/selinux|1.8.2",
+   "Go|.|github.com/OpenDNS/vegadns2client|0.0.0-20180418235048-a3fa4a771d87",
+   "Go|.|github.com/opentracing-contrib/go-observer|0.0.0-20170622124052-a52f23424492",
+   "Go|.|github.com/opentracing/opentracing-go|1.2.0",
+   "Go|.|github.com/openzipkin-contrib/zipkin-go-opentracing|0.4.5",
+   "Go|.|github.com/openzipkin/zipkin-go|0.2.2",
+   "Go|.|github.com/oracle/oci-go-sdk|24.3.0+incompatible",
+   "Go|.|github.com/ovh/go-ovh|1.1.0",
+   "Go|.|github.com/pascaldekloe/goe|0.1.0",
+   "Go|.|github.com/patrickmn/go-cache|2.1.0+incompatible",
+   "Go|.|github.com/pelletier/go-toml|1.9.3",
+   "Go|.|github.com/philhofer/fwd|1.0.0",
+   "Go|.|github.com/pierrec/lz4|2.5.2+incompatible",
+   "Go|.|github.com/pires/go-proxyproto|0.6.1",
+   "Go|.|github.com/pkg/errors|0.9.1",
+   "Go|.|github.com/pmezard/go-difflib|1.0.0",
+   "Go|.|github.com/pquerna/otp|1.3.0",
+   "Go|.|github.com/prometheus/client_golang|1.11.0",
+   "Go|.|github.com/prometheus/client_model|0.2.0",
+   "Go|.|github.com/prometheus/common|0.26.0",
+   "Go|.|github.com/prometheus/procfs|0.6.0",
+   "Go|.|github.com/rancher/go-rancher-metadata|0.0.0-20200311180630-7f4c936a06ac",
+   "Go|.|github.com/rcrowley/go-metrics|0.0.0-20181016184325-3113b8401b8a",
+   "Go|.|github.com/sacloud/libsacloud|1.36.2",
+   "Go|.|github.com/sanathkr/go-yaml|0.0.0-20170819195128-ed9d249f429b",
+   "Go|.|github.com/santhosh-tekuri/jsonschema|1.2.4",
+   "Go|.|github.com/scaleway/scaleway-sdk-go|1.0.0-beta.7.0.20210127161313-bd30bebeac4f",
+   "Go|.|github.com/sean-/seed|0.0.0-20170313163322-e2103e2c3529",
+   "Go|.|github.com/segmentio/fasthash|1.0.3",
+   "Go|.|github.com/Shopify/logrus-bugsnag|0.0.0-20171204204709-577dee27f20d",
+   "Go|.|github.com/Shopify/sarama|1.23.1",
+   "Go|.|github.com/shopspring/decimal|1.2.0",
+   "Go|.|github.com/sirupsen/logrus|1.8.1",
+   "Go|.|github.com/smartystreets/assertions|1.0.1",
+   "Go|.|github.com/smartystreets/go-aws-auth|0.0.0-20180515143844-0c1422d1fdb9",
+   "Go|.|github.com/smartystreets/goconvey|1.6.4",
+   "Go|.|github.com/smartystreets/gunit|1.0.4",
+   "Go|.|github.com/softlayer/softlayer-go|1.0.3",
+   "Go|.|github.com/softlayer/xmlrpc|0.0.0-20200409220501-5f089df7cb7e",
+   "Go|.|github.com/spf13/afero|1.6.0",
+   "Go|.|github.com/spf13/cast|1.3.1",
+   "Go|.|github.com/spf13/cobra|1.2.1",
+   "Go|.|github.com/spf13/jwalterweatherman|1.1.0",
+   "Go|.|github.com/spf13/pflag|1.0.5",
+   "Go|.|github.com/spf13/viper|1.8.1",
+   "Go|.|github.com/stretchr/objx|0.3.0",
+   "Go|.|github.com/stretchr/testify|1.7.0",
+   "Go|.|github.com/stvp/go-udp-testing|0.0.0-20191102171040-06b61409b154",
+   "Go|.|github.com/subosito/gotenv|1.2.0",
+   "Go|.|github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/common|1.0.287",
+   "Go|.|github.com/tencentcloud/tencentcloud-sdk-go/tencentcloud/dnspod|1.0.287",
+   "Go|.|github.com/theupdateframework/notary|0.6.1",
+   "Go|.|github.com/tinylib/msgp|1.0.2",
+   "Go|.|github.com/tonistiigi/fsutil|0.0.0-20201103201449-0834f99b7b85",
+   "Go|.|github.com/tonistiigi/units|0.0.0-20180711220420-6950e57a87ea",
+   "Go|.|github.com/tonistiigi/vt100|0.0.0-20190402012908-ad4c4a574305",
+   "Go|.|github.com/traefik/paerser|0.1.4",
+   "Go|.|github.com/traefik/yaegi|0.11.2",
+   "Go|.|github.com/transip/gotransip/v6|6.6.1",
+   "Go|.|github.com/tv42/httpunix|0.0.0-20150427012821-b75d8614f926",
+   "Go|.|github.com/uber-go/atomic|1.3.2",
+   "Go|.|github.com/uber/jaeger-client-go|2.29.1+incompatible",
+   "Go|.|github.com/uber/jaeger-lib|2.2.0+incompatible",
+   "Go|.|github.com/unrolled/render|1.0.2",
+   "Go|.|github.com/unrolled/secure|1.0.9",
+   "Go|.|github.com/urfave/negroni|1.0.0",
+   "Go|.|github.com/vdemeester/shakers|0.1.0",
+   "Go|.|github.com/vinyldns/go-vinyldns|0.9.16",
+   "Go|.|github.com/VividCortex/gohistogram|1.0.0",
+   "Go|.|github.com/vulcand/oxy|1.3.0",
+   "Go|.|github.com/vulcand/predicate|1.1.0",
+   "Go|.|github.com/vultr/govultr/v2|2.7.1",
+   "Go|.|github.com/weppos/publicsuffix-go|0.5.0",
+   "Go|.|github.com/xeipuuv/gojsonpointer|0.0.0-20190905194746-02993c407bfb",
+   "Go|.|github.com/xeipuuv/gojsonreference|0.0.0-20180127040603-bd5ef7bd5415",
+   "Go|.|github.com/xeipuuv/gojsonschema|1.2.0",
+   "Go|.|github.com/zmap/zcrypto|0.0.0-20190729165852-9051775e6a2e",
+   "Go|.|github.com/zmap/zlint|0.0.0-20190806154020-fd021b4cfbeb",
+   "Go|.|go.elastic.co/apm/module/apmhttp|1.13.1",
+   "Go|.|go.elastic.co/apm/module/apmot|1.13.1",
+   "Go|.|go.elastic.co/apm|1.13.1",
+   "Go|.|go.elastic.co/fastjson|1.1.0",
+   "Go|.|go.etcd.io/etcd/api/v3|3.5.0",
+   "Go|.|go.etcd.io/etcd/client/pkg/v3|3.5.0",
+   "Go|.|go.etcd.io/etcd/client/v3|3.5.0",
+   "Go|.|go.etcd.io/etcd|0.5.0-alpha.5.0.20200910180754-dd1b699fc489",
+   "Go|.|go.opencensus.io|0.23.0",
+   "Go|.|go.uber.org/atomic|1.7.0",
+   "Go|.|go.uber.org/goleak|1.1.10",
+   "Go|.|go.uber.org/multierr|1.6.0",
+   "Go|.|go.uber.org/ratelimit|0.0.0-20180316092928-c15da0234277",
+   "Go|.|go.uber.org/zap|1.18.1",
+   "Go|.|golang.org/x/crypto|0.0.0-20210616213533-5ff15b29337e",
+   "Go|.|golang.org/x/lint|0.0.0-20210508222113-6edffad5e616",
+   "Go|.|golang.org/x/mod|0.4.2",
+   "Go|.|golang.org/x/net|0.0.0-20211209124913-491a49abca63",
+   "Go|.|golang.org/x/oauth2|0.0.0-20210402161424-2e8d93401602",
+   "Go|.|golang.org/x/sync|0.0.0-20210220032951-036812b2e83c",
+   "Go|.|golang.org/x/sys|0.0.0-20210817190340-bfb29a6856f2",
+   "Go|.|golang.org/x/term|0.0.0-20210220032956-6a3ed077a48d",
+   "Go|.|golang.org/x/text|0.3.6",
+   "Go|.|golang.org/x/time|0.0.0-20210723032227-1f47c861a9ac",
+   "Go|.|golang.org/x/tools|0.1.6-0.20210726203631-07bc1bf47fb2",
+   "Go|.|golang.org/x/xerrors|0.0.0-20200804184101-5ec99f83aff1",
+   "Go|.|google.golang.org/api|0.44.0",
+   "Go|.|google.golang.org/appengine|1.6.7",
+   "Go|.|google.golang.org/genproto|0.0.0-20210602131652-f16073e35f0c",
+   "Go|.|google.golang.org/grpc|1.38.0",
+   "Go|.|google.golang.org/protobuf|1.27.1",
+   "Go|.|gopkg.in/check.v1|1.0.0-20200227125254-8fa46927fb4f",
+   "Go|.|gopkg.in/dancannon/gorethink.v3|3.0.5",
+   "Go|.|gopkg.in/DataDog/dd-trace-go.v1|1.19.0",
+   "Go|.|gopkg.in/fatih/pool.v2|2.0.0",
+   "Go|.|gopkg.in/fsnotify.v1|1.4.7",
+   "Go|.|gopkg.in/gorethink/gorethink.v3|3.0.5",
+   "Go|.|gopkg.in/h2non/gock.v1|1.0.15",
+   "Go|.|gopkg.in/inf.v0|0.9.1",
+   "Go|.|gopkg.in/ini.v1|1.62.0",
+   "Go|.|gopkg.in/jcmturner/aescts.v1|1.0.1",
+   "Go|.|gopkg.in/jcmturner/dnsutils.v1|1.0.1",
+   "Go|.|gopkg.in/jcmturner/gokrb5.v7|7.2.3",
+   "Go|.|gopkg.in/jcmturner/rpc.v1|1.1.0",
+   "Go|.|gopkg.in/ns1/ns1-go.v2|2.6.2",
+   "Go|.|gopkg.in/redis.v5|5.2.9",
+   "Go|.|gopkg.in/square/go-jose.v2|2.6.0",
+   "Go|.|gopkg.in/tomb.v1|1.0.0-20141024135613-dd632973f1e7",
+   "Go|.|gopkg.in/yaml.v2|2.4.0",
+   "Go|.|gopkg.in/yaml.v3|3.0.0-20210107192922-496545a6307b",
+   "Go|.|gotest.tools/v3|3.0.3",
+   "Go|.|gotest.tools|2.2.0+incompatible",
+   "Go|.|howett.net/plist|0.0.0-20181124034731-591f970eefbb",
+   "Go|.|k8s.io/api|0.22.1",
+   "Go|.|k8s.io/apiextensions-apiserver|0.21.3",
+   "Go|.|k8s.io/apimachinery|0.22.1",
+   "Go|.|k8s.io/client-go|0.22.1",
+   "Go|.|k8s.io/klog/v2|2.10.0",
+   "Go|.|k8s.io/klog|1.0.0",
+   "Go|.|k8s.io/kube-openapi|0.0.0-20210421082810-95288971da7e",
+   "Go|.|k8s.io/utils|0.0.0-20210820185131-d34e5cb4466e",
+   "Go|.|mvdan.cc/xurls/v2|2.1.0",
+   "Go|.|sigs.k8s.io/gateway-api|0.4.0",
+   "Go|.|sigs.k8s.io/structured-merge-diff/v4|4.1.2",
+   "Go|.|sigs.k8s.io/structured-merge-diff|0.0.0-20190525122527-15d366b2352e",
+   "Go|.|sigs.k8s.io/yaml|1.2.0",
+   "npm|webui|@babel/code-frame|7.5.5",
+   "npm|webui|@babel/core|7.7.2",
+   "npm|webui|@babel/generator|7.5.5",
+   "npm|webui|@babel/generator|7.7.2",
+   "npm|webui|@babel/helper-annotate-as-pure|7.7.0",
+   "npm|webui|@babel/helper-builder-binary-assignment-operator-visitor|7.7.0",
+   "npm|webui|@babel/helper-call-delegate|7.7.0",
+   "npm|webui|@babel/helper-create-class-features-plugin|7.7.0",
+   "npm|webui|@babel/helper-create-regexp-features-plugin|7.7.2",
+   "npm|webui|@babel/helper-define-map|7.7.0",
+   "npm|webui|@babel/helper-explode-assignable-expression|7.7.0",
+   "npm|webui|@babel/helper-function-name|7.1.0",
+   "npm|webui|@babel/helper-function-name|7.7.0",
+   "npm|webui|@babel/helper-get-function-arity|7.0.0",
+   "npm|webui|@babel/helper-get-function-arity|7.7.0",
+   "npm|webui|@babel/helper-hoist-variables|7.7.0",
+   "npm|webui|@babel/helper-member-expression-to-functions|7.7.0",
+   "npm|webui|@babel/helper-module-imports|7.7.0",
+   "npm|webui|@babel/helper-module-transforms|7.7.0",
+   "npm|webui|@babel/helper-optimise-call-expression|7.7.0",
+   "npm|webui|@babel/helper-plugin-utils|7.0.0",
+   "npm|webui|@babel/helper-regex|7.5.5",
+   "npm|webui|@babel/helper-remap-async-to-generator|7.7.0",
+   "npm|webui|@babel/helper-replace-supers|7.7.0",
+   "npm|webui|@babel/helper-simple-access|7.7.0",
+   "npm|webui|@babel/helper-split-export-declaration|7.4.4",
+   "npm|webui|@babel/helper-split-export-declaration|7.7.0",
+   "npm|webui|@babel/helper-wrap-function|7.7.0",
+   "npm|webui|@babel/helpers|7.7.0",
+   "npm|webui|@babel/highlight|7.5.0",
+   "npm|webui|@babel/parser|7.5.5",
+   "npm|webui|@babel/parser|7.7.3",
+   "npm|webui|@babel/plugin-proposal-async-generator-functions|7.7.0",
+   "npm|webui|@babel/plugin-proposal-class-properties|7.7.0",
+   "npm|webui|@babel/plugin-proposal-decorators|7.7.0",
+   "npm|webui|@babel/plugin-proposal-dynamic-import|7.7.0",
+   "npm|webui|@babel/plugin-proposal-export-namespace-from|7.5.2",
+   "npm|webui|@babel/plugin-proposal-function-sent|7.7.0",
+   "npm|webui|@babel/plugin-proposal-json-strings|7.2.0",
+   "npm|webui|@babel/plugin-proposal-numeric-separator|7.2.0",
+   "npm|webui|@babel/plugin-proposal-object-rest-spread|7.6.2",
+   "npm|webui|@babel/plugin-proposal-optional-catch-binding|7.2.0",
+   "npm|webui|@babel/plugin-proposal-throw-expressions|7.2.0",
+   "npm|webui|@babel/plugin-proposal-unicode-property-regex|7.7.0",
+   "npm|webui|@babel/plugin-syntax-async-generators|7.2.0",
+   "npm|webui|@babel/plugin-syntax-decorators|7.2.0",
+   "npm|webui|@babel/plugin-syntax-dynamic-import|7.2.0",
+   "npm|webui|@babel/plugin-syntax-export-namespace-from|7.2.0",
+   "npm|webui|@babel/plugin-syntax-function-sent|7.2.0",
+   "npm|webui|@babel/plugin-syntax-import-meta|7.2.0",
+   "npm|webui|@babel/plugin-syntax-json-strings|7.2.0",
+   "npm|webui|@babel/plugin-syntax-numeric-separator|7.2.0",
+   "npm|webui|@babel/plugin-syntax-object-rest-spread|7.2.0",
+   "npm|webui|@babel/plugin-syntax-optional-catch-binding|7.2.0",
+   "npm|webui|@babel/plugin-syntax-throw-expressions|7.2.0",
+   "npm|webui|@babel/plugin-syntax-top-level-await|7.7.0",
+   "npm|webui|@babel/plugin-transform-arrow-functions|7.2.0",
+   "npm|webui|@babel/plugin-transform-async-to-generator|7.7.0",
+   "npm|webui|@babel/plugin-transform-block-scoped-functions|7.2.0",
+   "npm|webui|@babel/plugin-transform-block-scoping|7.6.3",
+   "npm|webui|@babel/plugin-transform-classes|7.7.0",
+   "npm|webui|@babel/plugin-transform-computed-properties|7.2.0",
+   "npm|webui|@babel/plugin-transform-destructuring|7.6.0",
+   "npm|webui|@babel/plugin-transform-dotall-regex|7.7.0",
+   "npm|webui|@babel/plugin-transform-duplicate-keys|7.5.0",
+   "npm|webui|@babel/plugin-transform-exponentiation-operator|7.2.0",
+   "npm|webui|@babel/plugin-transform-for-of|7.4.4",
+   "npm|webui|@babel/plugin-transform-function-name|7.7.0",
+   "npm|webui|@babel/plugin-transform-literals|7.2.0",
+   "npm|webui|@babel/plugin-transform-member-expression-literals|7.2.0",
+   "npm|webui|@babel/plugin-transform-modules-amd|7.5.0",
+   "npm|webui|@babel/plugin-transform-modules-commonjs|7.7.0",
+   "npm|webui|@babel/plugin-transform-modules-systemjs|7.7.0",
+   "npm|webui|@babel/plugin-transform-modules-umd|7.7.0",
+   "npm|webui|@babel/plugin-transform-named-capturing-groups-regex|7.7.0",
+   "npm|webui|@babel/plugin-transform-new-target|7.4.4",
+   "npm|webui|@babel/plugin-transform-object-super|7.5.5",
+   "npm|webui|@babel/plugin-transform-parameters|7.4.4",
+   "npm|webui|@babel/plugin-transform-property-literals|7.2.0",
+   "npm|webui|@babel/plugin-transform-regenerator|7.7.0",
+   "npm|webui|@babel/plugin-transform-reserved-words|7.2.0",
+   "npm|webui|@babel/plugin-transform-runtime|7.6.2",
+   "npm|webui|@babel/plugin-transform-shorthand-properties|7.2.0",
+   "npm|webui|@babel/plugin-transform-spread|7.6.2",
+   "npm|webui|@babel/plugin-transform-sticky-regex|7.2.0",
+   "npm|webui|@babel/plugin-transform-template-literals|7.4.4",
+   "npm|webui|@babel/plugin-transform-typeof-symbol|7.2.0",
+   "npm|webui|@babel/plugin-transform-unicode-regex|7.7.0",
+   "npm|webui|@babel/preset-env|7.7.1",
+   "npm|webui|@babel/runtime-corejs2|7.7.2",
+   "npm|webui|@babel/runtime-corejs3|7.7.2",
+   "npm|webui|@babel/runtime|7.7.2",
+   "npm|webui|@babel/template|7.4.4",
+   "npm|webui|@babel/template|7.7.0",
+   "npm|webui|@babel/traverse|7.5.5",
+   "npm|webui|@babel/traverse|7.7.2",
+   "npm|webui|@babel/types|7.5.5",
+   "npm|webui|@babel/types|7.7.2",
+   "npm|webui|@hapi/address|2.1.4",
+   "npm|webui|@hapi/bourne|1.3.2",
+   "npm|webui|@hapi/hoek|8.5.0",
+   "npm|webui|@hapi/joi|15.1.1",
+   "npm|webui|@hapi/topo|3.1.6",
+   "npm|webui|@nodelib/fs.scandir|2.1.3",
+   "npm|webui|@nodelib/fs.stat|2.0.3",
+   "npm|webui|@nodelib/fs.walk|1.2.4",
+   "npm|webui|@positron/stack-trace|1.0.0",
+   "npm|webui|@quasar/app|1.2.4",
+   "npm|webui|@quasar/babel-preset-app|1.1.6",
+   "npm|webui|@quasar/extras|1.2.0",
+   "npm|webui|@quasar/fastclick|1.1.4",
+   "npm|webui|@types/events|3.0.0",
+   "npm|webui|@types/glob|7.1.1",
+   "npm|webui|@types/minimatch|3.0.3",
+   "npm|webui|@types/node|12.12.9",
+   "npm|webui|@types/q|1.5.2",
+   "npm|webui|@vue/component-compiler-utils|3.0.2",
+   "npm|webui|@vue/eslint-config-standard|4.0.0",
+   "npm|webui|@vue/preload-webpack-plugin|1.1.1",
+   "npm|webui|@vue/test-utils|1.0.0-beta.29",
+   "npm|webui|@webassemblyjs/ast|1.8.5",
+   "npm|webui|@webassemblyjs/floating-point-hex-parser|1.8.5",
+   "npm|webui|@webassemblyjs/helper-api-error|1.8.5",
+   "npm|webui|@webassemblyjs/helper-buffer|1.8.5",
+   "npm|webui|@webassemblyjs/helper-code-frame|1.8.5",
+   "npm|webui|@webassemblyjs/helper-fsm|1.8.5",
+   "npm|webui|@webassemblyjs/helper-module-context|1.8.5",
+   "npm|webui|@webassemblyjs/helper-wasm-bytecode|1.8.5",
+   "npm|webui|@webassemblyjs/helper-wasm-section|1.8.5",
+   "npm|webui|@webassemblyjs/ieee754|1.8.5",
+   "npm|webui|@webassemblyjs/leb128|1.8.5",
+   "npm|webui|@webassemblyjs/utf8|1.8.5",
+   "npm|webui|@webassemblyjs/wasm-edit|1.8.5",
+   "npm|webui|@webassemblyjs/wasm-gen|1.8.5",
+   "npm|webui|@webassemblyjs/wasm-opt|1.8.5",
+   "npm|webui|@webassemblyjs/wasm-parser|1.8.5",
+   "npm|webui|@webassemblyjs/wast-parser|1.8.5",
+   "npm|webui|@webassemblyjs/wast-printer|1.8.5",
+   "npm|webui|@xtuc/ieee754|1.2.0",
+   "npm|webui|@xtuc/long|4.2.2",
+   "npm|webui|abbrev|1.1.1",
+   "npm|webui|accepts|1.3.7",
+   "npm|webui|acorn-jsx|5.0.1",
+   "npm|webui|acorn-walk|6.2.0",
+   "npm|webui|acorn|6.2.1",
+   "npm|webui|aggregate-error|3.0.1",
+   "npm|webui|ajv-errors|1.0.1",
+   "npm|webui|ajv-keywords|3.4.1",
+   "npm|webui|ajv|6.10.2",
+   "npm|webui|alphanum-sort|1.0.2",
+   "npm|webui|amdefine|1.0.1",
+   "npm|webui|ansi-colors|3.2.3",
+   "npm|webui|ansi-colors|3.2.4",
+   "npm|webui|ansi-escapes|3.2.0",
+   "npm|webui|ansi-escapes|4.3.0",
+   "npm|webui|ansi-html|0.0.7",
+   "npm|webui|ansi-regex|2.1.1",
+   "npm|webui|ansi-regex|3.0.0",
+   "npm|webui|ansi-regex|4.1.0",
+   "npm|webui|ansi-regex|5.0.0",
+   "npm|webui|ansi-styles|2.2.1",
+   "npm|webui|ansi-styles|3.2.1",
+   "npm|webui|anymatch|2.0.0",
+   "npm|webui|anymatch|3.1.1",
+   "npm|webui|aproba|1.2.0",
+   "npm|webui|are-we-there-yet|1.1.5",
+   "npm|webui|argparse|1.0.10",
+   "npm|webui|arr-diff|4.0.0",
+   "npm|webui|arr-flatten|1.1.0",
+   "npm|webui|arr-union|3.1.0",
+   "npm|webui|array-find-index|1.0.2",
+   "npm|webui|array-flatten|1.1.1",
+   "npm|webui|array-flatten|2.1.2",
+   "npm|webui|array-includes|3.0.3",
+   "npm|webui|array-union|1.0.2",
+   "npm|webui|array-uniq|1.0.3",
+   "npm|webui|array-unique|0.3.2",
+   "npm|webui|asn1.js|4.10.1",
+   "npm|webui|asn1|0.2.4",
+   "npm|webui|assert-plus|1.0.0",
+   "npm|webui|assert|1.5.0",
+   "npm|webui|assertion-error|1.1.0",
+   "npm|webui|assign-symbols|1.0.0",
+   "npm|webui|astral-regex|1.0.0",
+   "npm|webui|async-each|1.0.3",
+   "npm|webui|async-foreach|0.1.3",
+   "npm|webui|async-limiter|1.0.1",
+   "npm|webui|async|2.6.3",
+   "npm|webui|asynckit|0.4.0",
+   "npm|webui|atob|2.1.2",
+   "npm|webui|autoprefixer|9.7.1",
+   "npm|webui|aws-sign2|0.7.0",
+   "npm|webui|aws4|1.8.0",
+   "npm|webui|axios|0.19.0",
+   "npm|webui|babel-eslint|10.0.2",
+   "npm|webui|babel-extract-comments|1.0.0",
+   "npm|webui|babel-loader|8.0.6",
+   "npm|webui|babel-plugin-dynamic-import-node|2.3.0",
+   "npm|webui|babel-plugin-module-resolver|3.2.0",
+   "npm|webui|babel-plugin-syntax-object-rest-spread|6.13.0",
+   "npm|webui|babel-plugin-transform-imports|1.5.1",
+   "npm|webui|babel-plugin-transform-object-rest-spread|6.26.0",
+   "npm|webui|babel-runtime|6.26.0",
+   "npm|webui|babel-types|6.26.0",
+   "npm|webui|babylon|6.18.0",
+   "npm|webui|balanced-match|1.0.0",
+   "npm|webui|base|0.11.2",
+   "npm|webui|base64-js|1.3.1",
+   "npm|webui|batch|0.6.1",
+   "npm|webui|bcrypt-pbkdf|1.0.2",
+   "npm|webui|bfj|6.1.2",
+   "npm|webui|big.js|3.2.0",
+   "npm|webui|big.js|5.2.2",
+   "npm|webui|binary-extensions|1.13.1",
+   "npm|webui|binary-extensions|2.0.0",
+   "npm|webui|block-stream|0.0.9",
+   "npm|webui|bluebird|3.7.1",
+   "npm|webui|bn.js|4.11.8",
+   "npm|webui|body-parser|1.19.0",
+   "npm|webui|bonjour|3.5.0",
+   "npm|webui|boolbase|1.0.0",
+   "npm|webui|bowser|2.5.2",
+   "npm|webui|brace-expansion|1.1.11",
+   "npm|webui|braces|2.3.2",
+   "npm|webui|braces|3.0.2",
+   "npm|webui|brorand|1.1.0",
+   "npm|webui|browser-stdout|1.3.1",
+   "npm|webui|browserify-aes|1.2.0",
+   "npm|webui|browserify-cipher|1.0.1",
+   "npm|webui|browserify-des|1.0.2",
+   "npm|webui|browserify-rsa|4.0.1",
+   "npm|webui|browserify-sign|4.0.4",
+   "npm|webui|browserify-zlib|0.2.0",
+   "npm|webui|browserslist|4.7.3",
+   "npm|webui|buffer-from|1.1.1",
+   "npm|webui|buffer-indexof|1.1.1",
+   "npm|webui|buffer-xor|1.0.3",
+   "npm|webui|buffer|4.9.2",
+   "npm|webui|builtin-status-codes|3.0.0",
+   "npm|webui|bytes|3.0.0",
+   "npm|webui|bytes|3.1.0",
+   "npm|webui|cacache|11.3.3",
+   "npm|webui|cacache|12.0.3",
+   "npm|webui|cacache|13.0.1",
+   "npm|webui|cache-base|1.0.1",
+   "npm|webui|caller-callsite|2.0.0",
+   "npm|webui|caller-path|2.0.0",
+   "npm|webui|callsites|2.0.0",
+   "npm|webui|callsites|3.1.0",
+   "npm|webui|camel-case|3.0.0",
+   "npm|webui|camelcase-keys|2.1.0",
+   "npm|webui|camelcase|2.1.1",
+   "npm|webui|camelcase|3.0.0",
+   "npm|webui|camelcase|4.1.0",
+   "npm|webui|camelcase|5.3.1",
+   "npm|webui|caniuse-api|3.0.0",
+   "npm|webui|caniuse-lite|1.0.30001010",
+   "npm|webui|caseless|0.12.0",
+   "npm|webui|chai|4.2.0",
+   "npm|webui|chalk|1.1.3",
+   "npm|webui|chalk|2.4.2",
+   "npm|webui|chardet|0.7.0",
+   "npm|webui|chart.js|2.8.0",
+   "npm|webui|chartjs-color-string|0.6.0",
+   "npm|webui|chartjs-color|2.3.0",
+   "npm|webui|check-error|1.0.2",
+   "npm|webui|check-types|8.0.3",
+   "npm|webui|chokidar|2.1.8",
+   "npm|webui|chokidar|3.2.1",
+   "npm|webui|chownr|1.1.1",
+   "npm|webui|chownr|1.1.3",
+   "npm|webui|chrome-trace-event|1.0.2",
+   "npm|webui|ci-info|2.0.0",
+   "npm|webui|cipher-base|1.0.4",
+   "npm|webui|class-utils|0.3.6",
+   "npm|webui|clean-css|4.2.1",
+   "npm|webui|clean-stack|2.2.0",
+   "npm|webui|cli-cursor|2.1.0",
+   "npm|webui|cli-cursor|3.1.0",
+   "npm|webui|cli-width|2.2.0",
+   "npm|webui|cliui|3.2.0",
+   "npm|webui|cliui|4.1.0",
+   "npm|webui|cliui|5.0.0",
+   "npm|webui|clone-deep|2.0.2",
+   "npm|webui|clone-deep|4.0.1",
+   "npm|webui|coa|2.0.2",
+   "npm|webui|code-point-at|1.1.0",
+   "npm|webui|collection-visit|1.0.0",
+   "npm|webui|color-convert|0.5.3",
+   "npm|webui|color-convert|1.9.3",
+   "npm|webui|color-name|1.1.3",
+   "npm|webui|color-string|1.5.3",
+   "npm|webui|color|3.1.2",
+   "npm|webui|colors|0.6.2",
+   "npm|webui|combined-stream|1.0.8",
+   "npm|webui|commander|2.1.0",
+   "npm|webui|commander|2.17.1",
+   "npm|webui|commander|2.19.0",
+   "npm|webui|commander|2.20.3",
+   "npm|webui|common-tags|1.8.0",
+   "npm|webui|commondir|1.0.1",
+   "npm|webui|component-emitter|1.3.0",
+   "npm|webui|compressible|2.0.17",
+   "npm|webui|compression-webpack-plugin|3.0.0",
+   "npm|webui|compression|1.7.4",
+   "npm|webui|concat-map|0.0.1",
+   "npm|webui|concat-stream|1.6.2",
+   "npm|webui|connect-history-api-fallback|1.6.0",
+   "npm|webui|console-browserify|1.2.0",
+   "npm|webui|console-control-strings|1.1.0",
+   "npm|webui|consolidate|0.15.1",
+   "npm|webui|constants-browserify|1.0.0",
+   "npm|webui|contains-path|0.1.0",
+   "npm|webui|content-disposition|0.5.3",
+   "npm|webui|content-type|1.0.4",
+   "npm|webui|convert-source-map|1.7.0",
+   "npm|webui|cookie-signature|1.0.6",
+   "npm|webui|cookie|0.4.0",
+   "npm|webui|copy-concurrently|1.0.5",
+   "npm|webui|copy-descriptor|0.1.1",
+   "npm|webui|copy-webpack-plugin|5.0.4",
+   "npm|webui|core-js-compat|3.4.1",
+   "npm|webui|core-js-pure|3.4.1",
+   "npm|webui|core-js|2.6.10",
+   "npm|webui|core-util-is|1.0.2",
+   "npm|webui|cosmiconfig|5.2.1",
+   "npm|webui|create-ecdh|4.0.3",
+   "npm|webui|create-hash|1.2.0",
+   "npm|webui|create-hmac|1.1.7",
+   "npm|webui|cross-spawn|3.0.1",
+   "npm|webui|cross-spawn|6.0.5",
+   "npm|webui|cross-spawn|7.0.1",
+   "npm|webui|crypto-browserify|3.12.0",
+   "npm|webui|css-color-names|0.0.4",
+   "npm|webui|css-declaration-sorter|4.0.1",
+   "npm|webui|css-loader|3.2.0",
+   "npm|webui|css-parse|2.0.0",
+   "npm|webui|css-select-base-adapter|0.1.1",
+   "npm|webui|css-select|1.2.0",
+   "npm|webui|css-select|2.1.0",
+   "npm|webui|css-tree|1.0.0-alpha.37",
+   "npm|webui|css-unit-converter|1.1.1",
+   "npm|webui|css-what|2.1.3",
+   "npm|webui|css-what|3.2.1",
+   "npm|webui|css|2.2.4",
+   "npm|webui|cssesc|2.0.0",
+   "npm|webui|cssesc|3.0.0",
+   "npm|webui|cssnano-preset-default|4.0.7",
+   "npm|webui|cssnano-util-get-arguments|4.0.0",
+   "npm|webui|cssnano-util-get-match|4.0.0",
+   "npm|webui|cssnano-util-raw-cache|4.0.1",
+   "npm|webui|cssnano-util-same-parent|4.0.1",
+   "npm|webui|cssnano|4.1.10",
+   "npm|webui|csso|4.0.2",
+   "npm|webui|currently-unhandled|0.4.1",
+   "npm|webui|cyclist|1.0.1",
+   "npm|webui|dashdash|1.14.1",
+   "npm|webui|de-indent|1.0.2",
+   "npm|webui|debug|2.6.9",
+   "npm|webui|debug|3.1.0",
+   "npm|webui|debug|3.2.6",
+   "npm|webui|debug|4.1.1",
+   "npm|webui|decamelize|1.2.0",
+   "npm|webui|decode-uri-component|0.2.0",
+   "npm|webui|deep-eql|3.0.1",
+   "npm|webui|deep-equal|1.1.1",
+   "npm|webui|deep-extend|0.6.0",
+   "npm|webui|deep-is|0.1.3",
+   "npm|webui|deepmerge|1.5.2",
+   "npm|webui|default-gateway|4.2.0",
+   "npm|webui|define-properties|1.1.3",
+   "npm|webui|define-property|0.2.5",
+   "npm|webui|define-property|1.0.0",
+   "npm|webui|define-property|2.0.2",
+   "npm|webui|del|4.1.1",
+   "npm|webui|delayed-stream|1.0.0",
+   "npm|webui|delegates|1.0.0",
+   "npm|webui|depd|1.1.2",
+   "npm|webui|des.js|1.0.1",
+   "npm|webui|destroy|1.0.4",
+   "npm|webui|detect-libc|1.0.3",
+   "npm|webui|detect-node|2.0.4",
+   "npm|webui|diff|3.5.0",
+   "npm|webui|diffie-hellman|5.0.3",
+   "npm|webui|dir-glob|2.2.2",
+   "npm|webui|dns-equal|1.0.0",
+   "npm|webui|dns-packet|1.3.1",
+   "npm|webui|dns-txt|2.0.2",
+   "npm|webui|doctrine|1.5.0",
+   "npm|webui|doctrine|3.0.0",
+   "npm|webui|dom-converter|0.2.0",
+   "npm|webui|dom-event-types|1.0.0",
+   "npm|webui|dom-serializer|0.2.2",
+   "npm|webui|domain-browser|1.2.0",
+   "npm|webui|domelementtype|1.3.1",
+   "npm|webui|domelementtype|2.0.1",
+   "npm|webui|domhandler|2.4.2",
+   "npm|webui|domutils|1.5.1",
+   "npm|webui|domutils|1.7.0",
+   "npm|webui|dot-prop|4.2.0",
+   "npm|webui|dot-prop|5.1.1",
+   "npm|webui|dot-prop|5.2.0",
+   "npm|webui|duplexer|0.1.1",
+   "npm|webui|duplexify|3.7.1",
+   "npm|webui|ecc-jsbn|0.1.2",
+   "npm|webui|ee-first|1.1.1",
+   "npm|webui|ejs|2.7.3",
+   "npm|webui|electron-to-chromium|1.3.306",
+   "npm|webui|elementtree|0.1.7",
+   "npm|webui|elliptic|6.5.1",
+   "npm|webui|emoji-regex|7.0.3",
+   "npm|webui|emoji-regex|8.0.0",
+   "npm|webui|emojis-list|2.1.0",
+   "npm|webui|encodeurl|1.0.2",
+   "npm|webui|end-of-stream|1.4.4",
+   "npm|webui|enhanced-resolve|4.1.1",
+   "npm|webui|entities|1.1.2",
+   "npm|webui|entities|2.0.0",
+   "npm|webui|errno|0.1.7",
+   "npm|webui|error-ex|1.3.2",
+   "npm|webui|error-stack-parser|2.0.4",
+   "npm|webui|es-abstract|1.13.0",
+   "npm|webui|es-to-primitive|1.2.0",
+   "npm|webui|escape-html|1.0.3",
+   "npm|webui|escape-string-regexp|1.0.5",
+   "npm|webui|eslint-config-standard|12.0.0",
+   "npm|webui|eslint-import-resolver-node|0.3.2",
+   "npm|webui|eslint-loader|2.2.1",
+   "npm|webui|eslint-module-utils|2.4.1",
+   "npm|webui|eslint-plugin-es|1.4.0",
+   "npm|webui|eslint-plugin-import|2.18.2",
+   "npm|webui|eslint-plugin-mocha|6.2.1",
+   "npm|webui|eslint-plugin-node|8.0.1",
+   "npm|webui|eslint-plugin-prettier|3.1.1",
+   "npm|webui|eslint-plugin-promise|4.2.1",
+   "npm|webui|eslint-plugin-standard|4.0.0",
+   "npm|webui|eslint-plugin-vue|5.2.3",
+   "npm|webui|eslint-scope|3.7.1",
+   "npm|webui|eslint-scope|4.0.3",
+   "npm|webui|eslint-utils|1.4.2",
+   "npm|webui|eslint-visitor-keys|1.0.0",
+   "npm|webui|eslint|5.16.0",
+   "npm|webui|espree|4.1.0",
+   "npm|webui|espree|5.0.1",
+   "npm|webui|esprima|4.0.1",
+   "npm|webui|esquery|1.0.1",
+   "npm|webui|esrecurse|4.2.1",
+   "npm|webui|estraverse|4.2.0",
+   "npm|webui|esutils|2.0.2",
+   "npm|webui|etag|1.8.1",
+   "npm|webui|eventemitter3|4.0.0",
+   "npm|webui|events|3.0.0",
+   "npm|webui|eventsource|1.0.7",
+   "npm|webui|evp_bytestokey|1.0.3",
+   "npm|webui|execa|1.0.0",
+   "npm|webui|expand-brackets|2.1.4",
+   "npm|webui|express|4.17.1",
+   "npm|webui|extend-shallow|2.0.1",
+   "npm|webui|extend-shallow|3.0.2",
+   "npm|webui|extend|3.0.2",
+   "npm|webui|external-editor|3.1.0",
+   "npm|webui|extglob|2.0.4",
+   "npm|webui|extsprintf|1.3.0",
+   "npm|webui|fast-deep-equal|2.0.1",
+   "npm|webui|fast-diff|1.2.0",
+   "npm|webui|fast-glob|3.1.0",
+   "npm|webui|fast-json-stable-stringify|2.0.0",
+   "npm|webui|fast-levenshtein|2.0.6",
+   "npm|webui|fastq|1.6.0",
+   "npm|webui|faye-websocket|0.10.0",
+   "npm|webui|faye-websocket|0.11.3",
+   "npm|webui|figgy-pudding|3.5.1",
+   "npm|webui|figures|2.0.0",
+   "npm|webui|figures|3.1.0",
+   "npm|webui|file-entry-cache|5.0.1",
+   "npm|webui|file-loader|4.2.0",
+   "npm|webui|filesize|3.6.1",
+   "npm|webui|fill-range|4.0.0",
+   "npm|webui|fill-range|7.0.1",
+   "npm|webui|finalhandler|1.1.2",
+   "npm|webui|find-babel-config|1.2.0",
+   "npm|webui|find-cache-dir|0.1.1",
+   "npm|webui|find-cache-dir|2.1.0",
+   "npm|webui|find-cache-dir|3.1.0",
+   "npm|webui|find-up|1.1.2",
+   "npm|webui|find-up|2.1.0",
+   "npm|webui|find-up|3.0.0",
+   "npm|webui|find-up|4.1.0",
+   "npm|webui|findup|0.1.5",
+   "npm|webui|flat-cache|2.0.1",
+   "npm|webui|flat|4.1.0",
+   "npm|webui|flatted|2.0.1",
+   "npm|webui|flush-write-stream|1.1.1",
+   "npm|webui|follow-redirects|1.5.10",
+   "npm|webui|follow-redirects|1.9.0",
+   "npm|webui|for-in|0.1.8",
+   "npm|webui|for-in|1.0.2",
+   "npm|webui|for-own|1.0.0",
+   "npm|webui|forever-agent|0.6.1",
+   "npm|webui|form-data|2.3.3",
+   "npm|webui|forwarded|0.1.2",
+   "npm|webui|fragment-cache|0.2.1",
+   "npm|webui|fresh|0.5.2",
+   "npm|webui|friendly-errors-webpack-plugin|1.7.0",
+   "npm|webui|from2|2.3.0",
+   "npm|webui|fs-extra|4.0.3",
+   "npm|webui|fs-extra|8.1.0",
+   "npm|webui|fs-minipass|1.2.5",
+   "npm|webui|fs-minipass|2.0.0",
+   "npm|webui|fs-write-stream-atomic|1.0.10",
+   "npm|webui|fs.realpath|1.0.0",
+   "npm|webui|fsevents|1.2.9",
+   "npm|webui|fsevents|2.1.2",
+   "npm|webui|fstream|1.0.12",
+   "npm|webui|function-bind|1.1.1",
+   "npm|webui|functional-red-black-tree|1.0.1",
+   "npm|webui|gauge|2.7.4",
+   "npm|webui|gaze|1.1.3",
+   "npm|webui|get-caller-file|1.0.3",
+   "npm|webui|get-caller-file|2.0.5",
+   "npm|webui|get-func-name|2.0.0",
+   "npm|webui|get-own-enumerable-property-symbols|3.0.1",
+   "npm|webui|get-stdin|4.0.1",
+   "npm|webui|get-stream|4.1.0",
+   "npm|webui|get-value|2.0.6",
+   "npm|webui|getpass|0.1.7",
+   "npm|webui|glob-parent|3.1.0",
+   "npm|webui|glob-parent|5.1.0",
+   "npm|webui|glob|7.1.3",
+   "npm|webui|glob|7.1.4",
+   "npm|webui|globals|11.12.0",
+   "npm|webui|globby|6.1.0",
+   "npm|webui|globby|7.1.1",
+   "npm|webui|globule|1.2.1",
+   "npm|webui|graceful-fs|4.2.0",
+   "npm|webui|graceful-fs|4.2.3",
+   "npm|webui|growl|1.10.5",
+   "npm|webui|gzip-size|5.1.1",
+   "npm|webui|handle-thing|2.0.0",
+   "npm|webui|har-schema|2.0.0",
+   "npm|webui|har-validator|5.1.3",
+   "npm|webui|has-ansi|2.0.0",
+   "npm|webui|has-flag|3.0.0",
+   "npm|webui|has-symbols|1.0.0",
+   "npm|webui|has-unicode|2.0.1",
+   "npm|webui|has-value|0.3.1",
+   "npm|webui|has-value|1.0.0",
+   "npm|webui|has-values|0.1.4",
+   "npm|webui|has-values|1.0.0",
+   "npm|webui|has|1.0.3",
+   "npm|webui|hash-base|3.0.4",
+   "npm|webui|hash-sum|1.0.2",
+   "npm|webui|hash-sum|2.0.0",
+   "npm|webui|hash.js|1.1.7",
+   "npm|webui|he|1.2.0",
+   "npm|webui|hex-color-regex|1.1.0",
+   "npm|webui|hmac-drbg|1.0.1",
+   "npm|webui|hoopy|0.1.4",
+   "npm|webui|hosted-git-info|2.7.1",
+   "npm|webui|hpack.js|2.1.6",
+   "npm|webui|hsl-regex|1.0.0",
+   "npm|webui|hsla-regex|1.0.0",
+   "npm|webui|html-comment-regex|1.1.2",
+   "npm|webui|html-entities|1.2.1",
+   "npm|webui|html-minifier|3.5.21",
+   "npm|webui|html-minifier|4.0.0",
+   "npm|webui|html-webpack-plugin|3.2.0",
+   "npm|webui|htmlparser2|3.10.1",
+   "npm|webui|http-deceiver|1.2.7",
+   "npm|webui|http-errors|1.6.3",
+   "npm|webui|http-errors|1.7.2",
+   "npm|webui|http-parser-js|0.4.10",
+   "npm|webui|http-proxy-middleware|0.19.1",
+   "npm|webui|http-proxy|1.18.0",
+   "npm|webui|http-signature|1.2.0",
+   "npm|webui|https-browserify|1.0.0",
+   "npm|webui|iconv-lite|0.4.24",
+   "npm|webui|icss-utils|4.1.1",
+   "npm|webui|ieee754|1.1.13",
+   "npm|webui|iferr|0.1.5",
+   "npm|webui|iframe-resizer|4.2.11",
+   "npm|webui|ignore-walk|3.0.1",
+   "npm|webui|ignore|3.3.10",
+   "npm|webui|ignore|4.0.6",
+   "npm|webui|ignore|5.1.2",
+   "npm|webui|import-cwd|2.1.0",
+   "npm|webui|import-fresh|2.0.0",
+   "npm|webui|import-fresh|3.1.0",
+   "npm|webui|import-from|2.1.0",
+   "npm|webui|import-local|2.0.0",
+   "npm|webui|imurmurhash|0.1.4",
+   "npm|webui|in-publish|2.0.0",
+   "npm|webui|indent-string|2.1.0",
+   "npm|webui|indent-string|4.0.0",
+   "npm|webui|indexes-of|1.0.1",
+   "npm|webui|infer-owner|1.0.4",
+   "npm|webui|inflight|1.0.6",
+   "npm|webui|inherits|2.0.1",
+   "npm|webui|inherits|2.0.3",
+   "npm|webui|inherits|2.0.4",
+   "npm|webui|ini|1.3.5",
+   "npm|webui|inquirer|6.5.0",
+   "npm|webui|inquirer|7.0.0",
+   "npm|webui|internal-ip|4.3.0",
+   "npm|webui|interpret|1.2.0",
+   "npm|webui|invariant|2.2.4",
+   "npm|webui|invert-kv|1.0.0",
+   "npm|webui|invert-kv|2.0.0",
+   "npm|webui|ip-regex|2.1.0",
+   "npm|webui|ip|1.1.5",
+   "npm|webui|ipaddr.js|1.9.0",
+   "npm|webui|is-absolute-url|2.1.0",
+   "npm|webui|is-absolute-url|3.0.3",
+   "npm|webui|is-accessor-descriptor|0.1.6",
+   "npm|webui|is-accessor-descriptor|1.0.0",
+   "npm|webui|is-arguments|1.0.4",
+   "npm|webui|is-arrayish|0.2.1",
+   "npm|webui|is-arrayish|0.3.2",
+   "npm|webui|is-binary-path|1.0.1",
+   "npm|webui|is-binary-path|2.1.0",
+   "npm|webui|is-buffer|1.1.6",
+   "npm|webui|is-buffer|2.0.3",
+   "npm|webui|is-buffer|2.0.4",
+   "npm|webui|is-callable|1.1.4",
+   "npm|webui|is-color-stop|1.1.0",
+   "npm|webui|is-data-descriptor|0.1.4",
+   "npm|webui|is-data-descriptor|1.0.0",
+   "npm|webui|is-date-object|1.0.1",
+   "npm|webui|is-descriptor|0.1.6",
+   "npm|webui|is-descriptor|1.0.2",
+   "npm|webui|is-directory|0.3.1",
+   "npm|webui|is-extendable|0.1.1",
+   "npm|webui|is-extendable|1.0.1",
+   "npm|webui|is-extglob|1.0.0",
+   "npm|webui|is-extglob|2.1.1",
+   "npm|webui|is-finite|1.0.2",
+   "npm|webui|is-fullwidth-code-point|1.0.0",
+   "npm|webui|is-fullwidth-code-point|2.0.0",
+   "npm|webui|is-fullwidth-code-point|3.0.0",
+   "npm|webui|is-glob|2.0.1",
+   "npm|webui|is-glob|3.1.0",
+   "npm|webui|is-glob|4.0.1",
+   "npm|webui|is-invalid-path|0.1.0",
+   "npm|webui|is-number|3.0.0",
+   "npm|webui|is-number|7.0.0",
+   "npm|webui|is-obj|1.0.1",
+   "npm|webui|is-obj|2.0.0",
+   "npm|webui|is-path-cwd|2.2.0",
+   "npm|webui|is-path-in-cwd|2.1.0",
+   "npm|webui|is-path-inside|2.1.0",
+   "npm|webui|is-plain-obj|1.1.0",
+   "npm|webui|is-plain-object|2.0.4",
+   "npm|webui|is-promise|2.1.0",
+   "npm|webui|is-regex|1.0.4",
+   "npm|webui|is-regexp|1.0.0",
+   "npm|webui|is-resolvable|1.1.0",
+   "npm|webui|is-stream|1.1.0",
+   "npm|webui|is-svg|3.0.0",
+   "npm|webui|is-symbol|1.0.2",
+   "npm|webui|is-typedarray|1.0.0",
+   "npm|webui|is-utf8|0.2.1",
+   "npm|webui|is-valid-path|0.1.1",
+   "npm|webui|is-windows|1.0.2",
+   "npm|webui|is-wsl|1.1.0",
+   "npm|webui|is-wsl|2.1.1",
+   "npm|webui|isarray|1.0.0",
+   "npm|webui|isbinaryfile|4.0.2",
+   "npm|webui|isexe|2.0.0",
+   "npm|webui|isobject|2.1.0",
+   "npm|webui|isobject|3.0.1",
+   "npm|webui|isstream|0.1.2",
+   "npm|webui|javascript-stringify|2.0.1",
+   "npm|webui|jest-worker|24.9.0",
+   "npm|webui|js-base64|2.5.1",
+   "npm|webui|js-levenshtein|1.1.6",
+   "npm|webui|js-tokens|4.0.0",
+   "npm|webui|js-yaml|3.13.1",
+   "npm|webui|jsbn|0.1.1",
+   "npm|webui|jsesc|0.5.0",
+   "npm|webui|jsesc|2.5.2",
+   "npm|webui|json-parse-better-errors|1.0.2",
+   "npm|webui|json-schema-traverse|0.4.1",
+   "npm|webui|json-schema|0.2.3",
+   "npm|webui|json-stable-stringify-without-jsonify|1.0.1",
+   "npm|webui|json-stable-stringify|1.0.1",
+   "npm|webui|json-stringify-safe|5.0.1",
+   "npm|webui|json3|3.3.3",
+   "npm|webui|json5|0.5.1",
+   "npm|webui|json5|1.0.1",
+   "npm|webui|json5|2.1.1",
+   "npm|webui|jsonfile|4.0.0",
+   "npm|webui|jsonify|0.0.0",
+   "npm|webui|jsprim|1.4.1",
+   "npm|webui|killable|1.0.1",
+   "npm|webui|kind-of|3.2.2",
+   "npm|webui|kind-of|4.0.0",
+   "npm|webui|kind-of|5.1.0",
+   "npm|webui|kind-of|6.0.2",
+   "npm|webui|last-call-webpack-plugin|3.0.0",
+   "npm|webui|lcid|1.0.0",
+   "npm|webui|lcid|2.0.0",
+   "npm|webui|levn|0.3.0",
+   "npm|webui|load-json-file|1.1.0",
+   "npm|webui|load-json-file|2.0.0",
+   "npm|webui|loader-fs-cache|1.0.2",
+   "npm|webui|loader-runner|2.4.0",
+   "npm|webui|loader-utils|0.2.17",
+   "npm|webui|loader-utils|1.2.3",
+   "npm|webui|locate-path|2.0.0",
+   "npm|webui|locate-path|3.0.0",
+   "npm|webui|locate-path|5.0.0",
+   "npm|webui|lodash._reinterpolate|3.0.0",
+   "npm|webui|lodash.camelcase|4.3.0",
+   "npm|webui|lodash.clonedeep|4.5.0",
+   "npm|webui|lodash.debounce|4.0.8",
+   "npm|webui|lodash.findkey|4.6.0",
+   "npm|webui|lodash.isequal|4.5.0",
+   "npm|webui|lodash.kebabcase|4.1.1",
+   "npm|webui|lodash.memoize|4.1.2",
+   "npm|webui|lodash.snakecase|4.1.1",
+   "npm|webui|lodash.tail|4.1.1",
+   "npm|webui|lodash.template|4.5.0",
+   "npm|webui|lodash.templatesettings|4.2.0",
+   "npm|webui|lodash.throttle|4.1.1",
+   "npm|webui|lodash.uniq|4.5.0",
+   "npm|webui|lodash|4.17.15",
+   "npm|webui|log-symbols|2.2.0",
+   "npm|webui|log-update|3.3.0",
+   "npm|webui|loglevel|1.6.6",
+   "npm|webui|loose-envify|1.4.0",
+   "npm|webui|loud-rejection|1.6.0",
+   "npm|webui|lower-case|1.1.4",
+   "npm|webui|lru-cache|4.1.5",
+   "npm|webui|lru-cache|5.1.1",
+   "npm|webui|make-dir|2.1.0",
+   "npm|webui|make-dir|3.0.0",
+   "npm|webui|mamacro|0.0.3",
+   "npm|webui|map-age-cleaner|0.1.3",
+   "npm|webui|map-cache|0.2.2",
+   "npm|webui|map-obj|1.0.1",
+   "npm|webui|map-visit|1.0.0",
+   "npm|webui|md5.js|1.3.5",
+   "npm|webui|mdn-data|2.0.4",
+   "npm|webui|media-typer|0.3.0",
+   "npm|webui|mem|4.3.0",
+   "npm|webui|memory-fs|0.4.1",
+   "npm|webui|memory-fs|0.5.0",
+   "npm|webui|meow|3.7.0",
+   "npm|webui|merge-descriptors|1.0.1",
+   "npm|webui|merge-source-map|1.1.0",
+   "npm|webui|merge-stream|2.0.0",
+   "npm|webui|merge2|1.3.0",
+   "npm|webui|methods|1.1.2",
+   "npm|webui|micromatch|3.1.10",
+   "npm|webui|micromatch|4.0.2",
+   "npm|webui|miller-rabin|4.0.1",
+   "npm|webui|mime-db|1.40.0",
+   "npm|webui|mime-types|2.1.24",
+   "npm|webui|mime|1.6.0",
+   "npm|webui|mime|2.4.4",
+   "npm|webui|mimic-fn|1.2.0",
+   "npm|webui|mimic-fn|2.1.0",
+   "npm|webui|mini-css-extract-plugin|0.8.0",
+   "npm|webui|minimalistic-assert|1.0.1",
+   "npm|webui|minimalistic-crypto-utils|1.0.1",
+   "npm|webui|minimatch|3.0.4",
+   "npm|webui|minimist|0.0.8",
+   "npm|webui|minimist|1.2.0",
+   "npm|webui|minipass-collect|1.0.2",
+   "npm|webui|minipass-flush|1.0.5",
+   "npm|webui|minipass-pipeline|1.2.2",
+   "npm|webui|minipass|2.3.5",
+   "npm|webui|minipass|3.1.1",
+   "npm|webui|minizlib|1.2.1",
+   "npm|webui|mississippi|3.0.0",
+   "npm|webui|mixin-deep|1.3.2",
+   "npm|webui|mixin-object|2.0.1",
+   "npm|webui|mkdirp|0.5.1",
+   "npm|webui|mocha-webpack|2.0.0-beta.0",
+   "npm|webui|mocha|6.2.2",
+   "npm|webui|moment|2.24.0",
+   "npm|webui|move-concurrently|1.0.1",
+   "npm|webui|ms|2.0.0",
+   "npm|webui|ms|2.1.1",
+   "npm|webui|ms|2.1.2",
+   "npm|webui|multicast-dns-service-types|1.1.0",
+   "npm|webui|multicast-dns|6.2.3",
+   "npm|webui|mute-stream|0.0.7",
+   "npm|webui|mute-stream|0.0.8",
+   "npm|webui|nan|2.14.0",
+   "npm|webui|nanomatch|1.2.13",
+   "npm|webui|natural-compare|1.4.0",
+   "npm|webui|needle|2.3.0",
+   "npm|webui|negotiator|0.6.2",
+   "npm|webui|neo-async|2.6.1",
+   "npm|webui|nice-try|1.0.5",
+   "npm|webui|no-case|2.3.2",
+   "npm|webui|node-environment-flags|1.0.5",
+   "npm|webui|node-forge|0.9.0",
+   "npm|webui|node-gyp|3.8.0",
+   "npm|webui|node-libs-browser|2.2.1",
+   "npm|webui|node-loader|0.6.0",
+   "npm|webui|node-pre-gyp|0.12.0",
+   "npm|webui|node-releases|1.1.40",
+   "npm|webui|node-sass|4.12.0",
+   "npm|webui|node-sass|4.13.0",
+   "npm|webui|nodent-runtime|3.2.1",
+   "npm|webui|nopt|3.0.6",
+   "npm|webui|nopt|4.0.1",
+   "npm|webui|normalize-package-data|2.5.0",
+   "npm|webui|normalize-path|2.1.1",
+   "npm|webui|normalize-path|3.0.0",
+   "npm|webui|normalize-range|0.1.2",
+   "npm|webui|normalize-url|1.9.1",
+   "npm|webui|normalize-url|3.3.0",
+   "npm|webui|npm-bundled|1.0.6",
+   "npm|webui|npm-packlist|1.4.1",
+   "npm|webui|npm-run-path|2.0.2",
+   "npm|webui|npmlog|4.1.2",
+   "npm|webui|nth-check|1.0.2",
+   "npm|webui|num2fraction|1.2.2",
+   "npm|webui|number-is-nan|1.0.1",
+   "npm|webui|oauth-sign|0.9.0",
+   "npm|webui|object-assign|4.1.1",
+   "npm|webui|object-copy|0.1.0",
+   "npm|webui|object-hash|1.3.1",
+   "npm|webui|object-is|1.0.1",
+   "npm|webui|object-keys|1.1.1",
+   "npm|webui|object-visit|1.0.1",
+   "npm|webui|object.assign|4.1.0",
+   "npm|webui|object.getownpropertydescriptors|2.0.3",
+   "npm|webui|object.pick|1.3.0",
+   "npm|webui|object.values|1.1.0",
+   "npm|webui|obuf|1.1.2",
+   "npm|webui|on-finished|2.3.0",
+   "npm|webui|on-headers|1.0.2",
+   "npm|webui|once|1.4.0",
+   "npm|webui|onetime|2.0.1",
+   "npm|webui|onetime|5.1.0",
+   "npm|webui|open|7.0.0",
+   "npm|webui|opener|1.5.1",
+   "npm|webui|opn|5.5.0",
+   "npm|webui|optimize-css-assets-webpack-plugin|5.0.3",
+   "npm|webui|optionator|0.8.2",
+   "npm|webui|original|1.0.2",
+   "npm|webui|os-browserify|0.3.0",
+   "npm|webui|os-homedir|1.0.2",
+   "npm|webui|os-locale|1.4.0",
+   "npm|webui|os-locale|3.1.0",
+   "npm|webui|os-tmpdir|1.0.2",
+   "npm|webui|osenv|0.1.5",
+   "npm|webui|ouch|2.0.0",
+   "npm|webui|p-defer|1.0.0",
+   "npm|webui|p-finally|1.0.0",
+   "npm|webui|p-is-promise|2.1.0",
+   "npm|webui|p-limit|1.3.0",
+   "npm|webui|p-limit|2.2.1",
+   "npm|webui|p-locate|2.0.0",
+   "npm|webui|p-locate|3.0.0",
+   "npm|webui|p-locate|4.1.0",
+   "npm|webui|p-map|2.1.0",
+   "npm|webui|p-map|3.0.0",
+   "npm|webui|p-retry|3.0.1",
+   "npm|webui|p-try|1.0.0",
+   "npm|webui|p-try|2.2.0",
+   "npm|webui|pako|1.0.10",
+   "npm|webui|parallel-transform|1.2.0",
+   "npm|webui|param-case|2.1.1",
+   "npm|webui|parent-module|1.0.1",
+   "npm|webui|parse-asn1|5.1.5",
+   "npm|webui|parse-json|2.2.0",
+   "npm|webui|parse-json|4.0.0",
+   "npm|webui|parseurl|1.3.3",
+   "npm|webui|pascalcase|0.1.1",
+   "npm|webui|path-browserify|0.0.1",
+   "npm|webui|path-dirname|1.0.2",
+   "npm|webui|path-exists|2.1.0",
+   "npm|webui|path-exists|3.0.0",
+   "npm|webui|path-exists|4.0.0",
+   "npm|webui|path-is-absolute|1.0.1",
+   "npm|webui|path-is-inside|1.0.2",
+   "npm|webui|path-key|2.0.1",
+   "npm|webui|path-key|3.1.0",
+   "npm|webui|path-parse|1.0.6",
+   "npm|webui|path-to-regexp|0.1.7",
+   "npm|webui|path-type|1.1.0",
+   "npm|webui|path-type|2.0.0",
+   "npm|webui|path-type|3.0.0",
+   "npm|webui|pathval|1.1.0",
+   "npm|webui|pbkdf2|3.0.17",
+   "npm|webui|performance-now|2.1.0",
+   "npm|webui|picomatch|2.1.1",
+   "npm|webui|pify|2.3.0",
+   "npm|webui|pify|3.0.0",
+   "npm|webui|pify|4.0.1",
+   "npm|webui|pinkie-promise|2.0.1",
+   "npm|webui|pinkie|2.0.4",
+   "npm|webui|pkg-dir|1.0.0",
+   "npm|webui|pkg-dir|2.0.0",
+   "npm|webui|pkg-dir|3.0.0",
+   "npm|webui|pkg-dir|4.2.0",
+   "npm|webui|pkg-up|2.0.0",
+   "npm|webui|portfinder|1.0.25",
+   "npm|webui|posix-character-classes|0.1.1",
+   "npm|webui|postcss-calc|7.0.1",
+   "npm|webui|postcss-colormin|4.0.3",
+   "npm|webui|postcss-convert-values|4.0.1",
+   "npm|webui|postcss-discard-comments|4.0.2",
+   "npm|webui|postcss-discard-duplicates|4.0.2",
+   "npm|webui|postcss-discard-empty|4.0.1",
+   "npm|webui|postcss-discard-overridden|4.0.1",
+   "npm|webui|postcss-load-config|2.1.0",
+   "npm|webui|postcss-loader|3.0.0",
+   "npm|webui|postcss-merge-longhand|4.0.11",
+   "npm|webui|postcss-merge-rules|4.0.3",
+   "npm|webui|postcss-minify-font-values|4.0.2",
+   "npm|webui|postcss-minify-gradients|4.0.2",
+   "npm|webui|postcss-minify-params|4.0.2",
+   "npm|webui|postcss-minify-selectors|4.0.2",
+   "npm|webui|postcss-modules-extract-imports|2.0.0",
+   "npm|webui|postcss-modules-local-by-default|3.0.2",
+   "npm|webui|postcss-modules-scope|2.1.0",
+   "npm|webui|postcss-modules-values|3.0.0",
+   "npm|webui|postcss-normalize-charset|4.0.1",
+   "npm|webui|postcss-normalize-display-values|4.0.2",
+   "npm|webui|postcss-normalize-positions|4.0.2",
+   "npm|webui|postcss-normalize-repeat-style|4.0.2",
+   "npm|webui|postcss-normalize-string|4.0.2",
+   "npm|webui|postcss-normalize-timing-functions|4.0.2",
+   "npm|webui|postcss-normalize-unicode|4.0.1",
+   "npm|webui|postcss-normalize-url|4.0.1",
+   "npm|webui|postcss-normalize-whitespace|4.0.2",
+   "npm|webui|postcss-ordered-values|4.1.2",
+   "npm|webui|postcss-reduce-initial|4.0.3",
+   "npm|webui|postcss-reduce-transforms|4.0.2",
+   "npm|webui|postcss-rtl|1.5.0",
+   "npm|webui|postcss-safe-parser|4.0.1",
+   "npm|webui|postcss-selector-parser|3.1.1",
+   "npm|webui|postcss-selector-parser|5.0.0",
+   "npm|webui|postcss-selector-parser|6.0.2",
+   "npm|webui|postcss-svgo|4.0.2",
+   "npm|webui|postcss-unique-selectors|4.0.1",
+   "npm|webui|postcss-value-parser|3.3.1",
+   "npm|webui|postcss-value-parser|4.0.2",
+   "npm|webui|postcss|6.0.23",
+   "npm|webui|postcss|7.0.23",
+   "npm|webui|prelude-ls|1.1.2",
+   "npm|webui|prepend-http|1.0.4",
+   "npm|webui|prettier-linter-helpers|1.0.0",
+   "npm|webui|prettier|1.19.1",
+   "npm|webui|pretty-bytes|5.3.0",
+   "npm|webui|pretty-error|2.1.1",
+   "npm|webui|private|0.1.8",
+   "npm|webui|process-nextick-args|2.0.0",
+   "npm|webui|process-nextick-args|2.0.1",
+   "npm|webui|process|0.11.10",
+   "npm|webui|progress|2.0.3",
+   "npm|webui|promise-inflight|1.0.1",
+   "npm|webui|proxy-addr|2.0.5",
+   "npm|webui|prr|1.0.1",
+   "npm|webui|pseudomap|1.0.2",
+   "npm|webui|psl|1.2.0",
+   "npm|webui|public-encrypt|4.0.3",
+   "npm|webui|pump|2.0.1",
+   "npm|webui|pump|3.0.0",
+   "npm|webui|pumpify|1.5.1",
+   "npm|webui|punycode|1.3.2",
+   "npm|webui|punycode|1.4.1",
+   "npm|webui|punycode|2.1.1",
+   "npm|webui|q|1.5.1",
+   "npm|webui|qs|6.5.2",
+   "npm|webui|qs|6.7.0",
+   "npm|webui|quasar|1.4.4",
+   "npm|webui|query-string|4.3.4",
+   "npm|webui|query-string|6.13.1",
+   "npm|webui|querystring-es3|0.2.1",
+   "npm|webui|querystring|0.2.0",
+   "npm|webui|querystringify|2.1.1",
+   "npm|webui|ramda|0.26.1",
+   "npm|webui|randombytes|2.1.0",
+   "npm|webui|randomfill|1.0.4",
+   "npm|webui|range-parser|1.2.1",
+   "npm|webui|raw-body|2.4.0",
+   "npm|webui|rc|1.2.8",
+   "npm|webui|read-pkg-up|1.0.1",
+   "npm|webui|read-pkg-up|2.0.0",
+   "npm|webui|read-pkg|1.1.0",
+   "npm|webui|read-pkg|2.0.0",
+   "npm|webui|readable-stream|2.3.6",
+   "npm|webui|readable-stream|3.4.0",
+   "npm|webui|readdirp|2.2.1",
+   "npm|webui|readdirp|3.1.3",
+   "npm|webui|redent|1.0.0",
+   "npm|webui|regenerate-unicode-properties|8.1.0",
+   "npm|webui|regenerate|1.4.0",
+   "npm|webui|regenerator-runtime|0.11.1",
+   "npm|webui|regenerator-runtime|0.13.3",
+   "npm|webui|regenerator-transform|0.14.1",
+   "npm|webui|regex-not|1.0.2",
+   "npm|webui|regexp.prototype.flags|1.2.0",
+   "npm|webui|regexpp|2.0.1",
+   "npm|webui|regexpu-core|4.6.0",
+   "npm|webui|register-service-worker|1.6.2",
+   "npm|webui|regjsgen|0.5.1",
+   "npm|webui|regjsparser|0.6.0",
+   "npm|webui|relateurl|0.2.7",
+   "npm|webui|remove-trailing-separator|1.1.0",
+   "npm|webui|renderkid|2.0.3",
+   "npm|webui|repeat-element|1.1.3",
+   "npm|webui|repeat-string|1.6.1",
+   "npm|webui|repeating|2.0.1",
+   "npm|webui|request|2.88.0",
+   "npm|webui|require-directory|2.1.1",
+   "npm|webui|require-main-filename|1.0.1",
+   "npm|webui|require-main-filename|2.0.0",
+   "npm|webui|requires-port|1.0.0",
+   "npm|webui|reselect|3.0.1",
+   "npm|webui|resolve-cwd|2.0.0",
+   "npm|webui|resolve-from|3.0.0",
+   "npm|webui|resolve-from|4.0.0",
+   "npm|webui|resolve-url|0.2.1",
+   "npm|webui|resolve|1.11.1",
+   "npm|webui|restore-cursor|2.0.0",
+   "npm|webui|restore-cursor|3.1.0",
+   "npm|webui|ret|0.1.15",
+   "npm|webui|retry|0.12.0",
+   "npm|webui|reusify|1.0.4",
+   "npm|webui|rgb-regex|1.0.1",
+   "npm|webui|rgba-regex|1.0.0",
+   "npm|webui|rimraf|2.6.3",
+   "npm|webui|rimraf|2.7.1",
+   "npm|webui|ripemd160|2.0.2",
+   "npm|webui|rtlcss|2.4.0",
+   "npm|webui|run-async|2.3.0",
+   "npm|webui|run-parallel|1.1.9",
+   "npm|webui|run-queue|1.0.3",
+   "npm|webui|rxjs|6.5.2",
+   "npm|webui|safe-buffer|5.1.2",
+   "npm|webui|safe-regex|1.1.0",
+   "npm|webui|safer-buffer|2.1.2",
+   "npm|webui|sass-graph|2.2.4",
+   "npm|webui|sass-loader|7.1.0",
+   "npm|webui|sass-loader|8.0.0",
+   "npm|webui|sax|1.1.4",
+   "npm|webui|sax|1.2.4",
+   "npm|webui|schema-utils|1.0.0",
+   "npm|webui|schema-utils|2.5.0",
+   "npm|webui|scss-tokenizer|0.2.3",
+   "npm|webui|select-hose|2.0.0",
+   "npm|webui|selfsigned|1.10.7",
+   "npm|webui|semver|5.3.0",
+   "npm|webui|semver|5.7.0",
+   "npm|webui|semver|5.7.1",
+   "npm|webui|semver|6.3.0",
+   "npm|webui|send|0.17.1",
+   "npm|webui|serialize-javascript|1.9.1",
+   "npm|webui|serialize-javascript|2.1.0",
+   "npm|webui|serve-index|1.9.1",
+   "npm|webui|serve-static|1.14.1",
+   "npm|webui|set-blocking|2.0.0",
+   "npm|webui|set-value|2.0.1",
+   "npm|webui|setimmediate|1.0.5",
+   "npm|webui|setprototypeof|1.1.0",
+   "npm|webui|setprototypeof|1.1.1",
+   "npm|webui|sha.js|2.4.11",
+   "npm|webui|shallow-clone|1.0.0",
+   "npm|webui|shallow-clone|3.0.1",
+   "npm|webui|shebang-command|1.2.0",
+   "npm|webui|shebang-command|2.0.0",
+   "npm|webui|shebang-regex|1.0.0",
+   "npm|webui|shebang-regex|3.0.0",
+   "npm|webui|signal-exit|3.0.2",
+   "npm|webui|simple-swizzle|0.2.2",
+   "npm|webui|slash|1.0.0",
+   "npm|webui|slice-ansi|2.1.0",
+   "npm|webui|snapdragon-node|2.1.1",
+   "npm|webui|snapdragon-util|3.0.1",
+   "npm|webui|snapdragon|0.8.2",
+   "npm|webui|sockjs-client|1.4.0",
+   "npm|webui|sockjs|0.3.19",
+   "npm|webui|sort-keys|1.1.2",
+   "npm|webui|source-list-map|2.0.1",
+   "npm|webui|source-map-resolve|0.5.2",
+   "npm|webui|source-map-support|0.5.16",
+   "npm|webui|source-map-url|0.4.0",
+   "npm|webui|source-map|0.4.4",
+   "npm|webui|source-map|0.5.6",
+   "npm|webui|source-map|0.5.7",
+   "npm|webui|source-map|0.6.1",
+   "npm|webui|source-map|0.7.3",
+   "npm|webui|spdx-correct|3.1.0",
+   "npm|webui|spdx-exceptions|2.2.0",
+   "npm|webui|spdx-expression-parse|3.0.0",
+   "npm|webui|spdx-license-ids|3.0.5",
+   "npm|webui|spdy-transport|3.0.0",
+   "npm|webui|spdy|4.0.1",
+   "npm|webui|split-on-first|1.1.0",
+   "npm|webui|split-string|3.1.0",
+   "npm|webui|sprintf-js|1.0.3",
+   "npm|webui|sshpk|1.16.1",
+   "npm|webui|ssri|6.0.1",
+   "npm|webui|ssri|7.1.0",
+   "npm|webui|stable|0.1.8",
+   "npm|webui|stackframe|1.1.0",
+   "npm|webui|static-extend|0.1.2",
+   "npm|webui|statuses|1.5.0",
+   "npm|webui|stdout-stream|1.4.1",
+   "npm|webui|stream-browserify|2.0.2",
+   "npm|webui|stream-each|1.2.3",
+   "npm|webui|stream-http|2.8.3",
+   "npm|webui|stream-shift|1.0.0",
+   "npm|webui|strict-uri-encode|1.1.0",
+   "npm|webui|strict-uri-encode|2.0.0",
+   "npm|webui|string_decoder|1.1.1",
+   "npm|webui|string-width|1.0.2",
+   "npm|webui|string-width|2.1.1",
+   "npm|webui|string-width|3.1.0",
+   "npm|webui|string-width|4.2.0",
+   "npm|webui|stringify-object|3.3.0",
+   "npm|webui|strip-ansi|3.0.1",
+   "npm|webui|strip-ansi|4.0.0",
+   "npm|webui|strip-ansi|5.2.0",
+   "npm|webui|strip-ansi|6.0.0",
+   "npm|webui|strip-bom|2.0.0",
+   "npm|webui|strip-bom|3.0.0",
+   "npm|webui|strip-comments|1.0.2",
+   "npm|webui|strip-eof|1.0.0",
+   "npm|webui|strip-indent|1.0.1",
+   "npm|webui|strip-json-comments|2.0.1",
+   "npm|webui|stylehacks|4.0.3",
+   "npm|webui|stylus-loader|3.0.2",
+   "npm|webui|stylus|0.54.7",
+   "npm|webui|supports-color|2.0.0",
+   "npm|webui|supports-color|5.5.0",
+   "npm|webui|supports-color|6.0.0",
+   "npm|webui|supports-color|6.1.0",
+   "npm|webui|svgo|1.3.2",
+   "npm|webui|table|5.4.4",
+   "npm|webui|tapable|1.1.3",
+   "npm|webui|tar|2.2.2",
+   "npm|webui|tar|4.4.8",
+   "npm|webui|terser-webpack-plugin|1.4.1",
+   "npm|webui|terser-webpack-plugin|2.2.1",
+   "npm|webui|terser|4.4.0",
+   "npm|webui|text-table|0.2.0",
+   "npm|webui|through|2.3.8",
+   "npm|webui|through2|2.0.5",
+   "npm|webui|thunky|1.1.0",
+   "npm|webui|timers-browserify|2.0.11",
+   "npm|webui|timsort|0.3.0",
+   "npm|webui|tmp|0.0.33",
+   "npm|webui|to-arraybuffer|1.0.1",
+   "npm|webui|to-fast-properties|1.0.3",
+   "npm|webui|to-fast-properties|2.0.0",
+   "npm|webui|to-object-path|0.3.0",
+   "npm|webui|to-regex-range|2.1.1",
+   "npm|webui|to-regex-range|5.0.1",
+   "npm|webui|to-regex|3.0.2",
+   "npm|webui|toidentifier|1.0.0",
+   "npm|webui|toposort|1.0.7",
+   "npm|webui|tough-cookie|2.4.3",
+   "npm|webui|trim-newlines|1.0.0",
+   "npm|webui|trim-right|1.0.1",
+   "npm|webui|true-case-path|1.0.3",
+   "npm|webui|tryer|1.0.1",
+   "npm|webui|tslib|1.10.0",
+   "npm|webui|tty-browserify|0.0.0",
+   "npm|webui|tunnel-agent|0.6.0",
+   "npm|webui|tweetnacl|0.14.5",
+   "npm|webui|type-check|0.3.2",
+   "npm|webui|type-detect|4.0.8",
+   "npm|webui|type-fest|0.8.1",
+   "npm|webui|type-is|1.6.18",
+   "npm|webui|typedarray|0.0.6",
+   "npm|webui|uglify-js|3.4.10",
+   "npm|webui|uglify-js|3.6.9",
+   "npm|webui|unicode-canonical-property-names-ecmascript|1.0.4",
+   "npm|webui|unicode-match-property-ecmascript|1.0.4",
+   "npm|webui|unicode-match-property-value-ecmascript|1.1.0",
+   "npm|webui|unicode-property-aliases-ecmascript|1.0.5",
+   "npm|webui|union-value|1.0.1",
+   "npm|webui|uniq|1.0.1",
+   "npm|webui|uniqs|2.0.0",
+   "npm|webui|unique-filename|1.1.1",
+   "npm|webui|unique-slug|2.0.2",
+   "npm|webui|universalify|0.1.2",
+   "npm|webui|unpipe|1.0.0",
+   "npm|webui|unquote|1.1.1",
+   "npm|webui|unset-value|1.0.0",
+   "npm|webui|upath|1.2.0",
+   "npm|webui|upper-case|1.1.3",
+   "npm|webui|uri-js|4.2.2",
+   "npm|webui|urix|0.1.0",
+   "npm|webui|url-loader|2.2.0",
+   "npm|webui|url-parse|1.4.7",
+   "npm|webui|url|0.11.0",
+   "npm|webui|use|3.1.1",
+   "npm|webui|util-deprecate|1.0.2",
+   "npm|webui|util.promisify|1.0.0",
+   "npm|webui|util|0.10.3",
+   "npm|webui|util|0.11.1",
+   "npm|webui|utila|0.4.0",
+   "npm|webui|utils-merge|1.0.1",
+   "npm|webui|uuid|3.3.2",
+   "npm|webui|validate-npm-package-license|3.0.4",
+   "npm|webui|vary|1.1.2",
+   "npm|webui|vendors|1.0.3",
+   "npm|webui|verror|1.10.0",
+   "npm|webui|vh-check|2.0.5",
+   "npm|webui|vm-browserify|1.1.2",
+   "npm|webui|vue-chartjs|3.4.2",
+   "npm|webui|vue-eslint-parser|5.0.0",
+   "npm|webui|vue-hot-reload-api|2.3.4",
+   "npm|webui|vue-loader|15.7.1",
+   "npm|webui|vue-router|3.1.3",
+   "npm|webui|vue-server-renderer|2.6.10",
+   "npm|webui|vue-style-loader|4.1.2",
+   "npm|webui|vue-template-compiler|2.6.10",
+   "npm|webui|vue-template-es2015-compiler|1.9.1",
+   "npm|webui|vue|2.6.10",
+   "npm|webui|vuex-map-fields|1.3.4",
+   "npm|webui|vuex|3.1.1",
+   "npm|webui|watchpack|1.6.0",
+   "npm|webui|wbuf|1.7.3",
+   "npm|webui|webpack-bundle-analyzer|3.6.0",
+   "npm|webui|webpack-chain|6.0.0",
+   "npm|webui|webpack-dev-middleware|3.7.2",
+   "npm|webui|webpack-dev-server|3.9.0",
+   "npm|webui|webpack-log|2.0.0",
+   "npm|webui|webpack-merge|4.2.2",
+   "npm|webui|webpack-node-externals|1.7.2",
+   "npm|webui|webpack-sources|1.4.3",
+   "npm|webui|webpack|4.41.2",
+   "npm|webui|websocket-driver|0.7.3",
+   "npm|webui|websocket-extensions|0.1.3",
+   "npm|webui|when|3.6.4",
+   "npm|webui|which-module|1.0.0",
+   "npm|webui|which-module|2.0.0",
+   "npm|webui|which|1.3.1",
+   "npm|webui|which|2.0.2",
+   "npm|webui|wide-align|1.1.3",
+   "npm|webui|wordwrap|1.0.0",
+   "npm|webui|workbox-background-sync|4.3.1",
+   "npm|webui|workbox-broadcast-update|4.3.1",
+   "npm|webui|workbox-build|4.3.1",
+   "npm|webui|workbox-cacheable-response|4.3.1",
+   "npm|webui|workbox-core|4.3.1",
+   "npm|webui|workbox-expiration|4.3.1",
+   "npm|webui|workbox-google-analytics|4.3.1",
+   "npm|webui|workbox-navigation-preload|4.3.1",
+   "npm|webui|workbox-precaching|4.3.1",
+   "npm|webui|workbox-range-requests|4.3.1",
+   "npm|webui|workbox-routing|4.3.1",
+   "npm|webui|workbox-strategies|4.3.1",
+   "npm|webui|workbox-streams|4.3.1",
+   "npm|webui|workbox-sw|4.3.1",
+   "npm|webui|workbox-webpack-plugin|4.3.1",
+   "npm|webui|workbox-window|4.3.1",
+   "npm|webui|worker-farm|1.7.0",
+   "npm|webui|wrap-ansi|2.1.0",
+   "npm|webui|wrap-ansi|5.1.0",
+   "npm|webui|wrappy|1.0.2",
+   "npm|webui|write|1.0.3",
+   "npm|webui|ws|6.2.1",
+   "npm|webui|xtend|4.0.2",
+   "npm|webui|y18n|3.2.1",
+   "npm|webui|y18n|4.0.0",
+   "npm|webui|yallist|2.1.2",
+   "npm|webui|yallist|3.0.3",
+   "npm|webui|yallist|3.1.1",
+   "npm|webui|yallist|4.0.0",
+   "npm|webui|yargs-parser|11.1.1",
+   "npm|webui|yargs-parser|13.1.1",
+   "npm|webui|yargs-parser|5.0.0",
+   "npm|webui|yargs-parser|9.0.2",
+   "npm|webui|yargs-unparser|1.6.0",
+   "npm|webui|yargs|11.1.1",
+   "npm|webui|yargs|12.0.5",
+   "npm|webui|yargs|13.3.0",
+   "npm|webui|yargs|7.1.0",
+   "PyPI|docs|markdown-include|0.5.1",
+   "PyPI|docs|mkdocs-bootswatch|1",
+   "PyPI|docs|mkdocs-exclude|1.0.2",
+   "PyPI|docs|mkdocs|1.2.2",
+   "PyPI|docs|pymdown-extensions|7"
+  ]
+ },
+ "findings": [
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/aws/aws-sdk-go",
+   "version": "1.39.0",
+   "ids": [
+    "GO-2022-0635"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/aws/aws-sdk-go",
+   "version": "1.39.0",
+   "ids": [
+    "GO-2022-0646"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/containerd/containerd",
+   "version": "1.5.8",
+   "ids": [
+    "GHSA-259w-8hf6-59c2",
+    "GO-2023-1573"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/containerd/containerd",
+   "version": "1.5.8",
+   "ids": [
+    "GHSA-265r-hfxg-fhmg",
+    "GO-2025-3528"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/containerd/containerd",
+   "version": "1.5.8",
+   "ids": [
+    "GHSA-2qjp-425j-52j9",
+    "GO-2022-1147"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/containerd/containerd",
+   "version": "1.5.8",
+   "ids": [
+    "GHSA-5ffw-gxpp-mxpf",
+    "GO-2022-0482"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/containerd/containerd",
+   "version": "1.5.8",
+   "ids": [
+    "GHSA-7jxh-36q5-gcqv",
+    "GO-2026-6444"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/containerd/containerd",
+   "version": "1.5.8",
+   "ids": [
+    "GHSA-7ww5-4wqc-m92c",
+    "GO-2023-2412"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/containerd/containerd",
+   "version": "1.5.8",
+   "ids": [
+    "GHSA-c9cp-9c75-9v8c",
+    "GO-2024-2846"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/containerd/containerd",
+   "version": "1.5.8",
+   "ids": [
+    "GHSA-crp2-qrr5-8pq7",
+    "GO-2022-0344"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/containerd/containerd",
+   "version": "1.5.8",
+   "ids": [
+    "GHSA-hmfx-3pcx-653p",
+    "GO-2023-1574"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/containerd/containerd",
+   "version": "1.5.8",
+   "ids": [
+    "GHSA-m6hq-p25p-ffr2",
+    "GO-2025-4108"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/containerd/containerd",
+   "version": "1.5.8",
+   "ids": [
+    "GHSA-mvff-h3cj-wj9c",
+    "GO-2022-0278"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/containerd/containerd",
+   "version": "1.5.8",
+   "ids": [
+    "GHSA-pg57-6jwg-q645",
+    "GO-2026-6597"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/containerd/containerd",
+   "version": "1.5.8",
+   "ids": [
+    "GHSA-pwhc-rpq9-4c8w",
+    "GO-2025-4100"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/containerd/containerd",
+   "version": "1.5.8",
+   "ids": [
+    "GO-2026-5064"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/containerd/containerd",
+   "version": "1.5.8",
+   "ids": [
+    "GO-2026-5338"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/containerd/containerd",
+   "version": "1.5.8",
+   "ids": [
+    "GO-2026-5622"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/distribution/distribution/v3",
+   "version": "3.0.0-20210316161203-a01c71e2477e",
+   "ids": [
+    "GHSA-3p65-76g6-3w7r",
+    "GO-2026-5094"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/distribution/distribution/v3",
+   "version": "3.0.0-20210316161203-a01c71e2477e",
+   "ids": [
+    "GHSA-6pjf-3r9x-m592",
+    "GO-2026-5185"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/distribution/distribution/v3",
+   "version": "3.0.0-20210316161203-a01c71e2477e",
+   "ids": [
+    "GHSA-f2g3-hh2r-cwgc",
+    "GO-2026-4942"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/docker/buildx",
+   "version": "0.5.2-0.20210422185057-908a856079fc",
+   "ids": [
+    "GHSA-m4gq-fm9h-8q75",
+    "GO-2025-3527"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/docker/cli",
+   "version": "20.10.11+incompatible",
+   "ids": [
+    "GHSA-p436-gjf2-799p",
+    "GO-2026-4610"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/docker/compose/v2",
+   "version": "2.0.1",
+   "ids": [
+    "GO-2025-4077"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/docker/distribution",
+   "version": "2.7.1+incompatible",
+   "ids": [
+    "GHSA-hqxw-f8mx-cpmw"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/docker/distribution",
+   "version": "2.7.1+incompatible",
+   "ids": [
+    "GHSA-qq97-vm5h-rrhg",
+    "GO-2022-0379"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/docker/docker",
+   "version": "20.10.7+incompatible",
+   "ids": [
+    "GHSA-232p-vwff-86mp",
+    "GO-2023-1699"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/docker/docker",
+   "version": "20.10.7+incompatible",
+   "ids": [
+    "GHSA-2mm7-x5h6-5pvq",
+    "GO-2022-0390"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/docker/docker",
+   "version": "20.10.7+incompatible",
+   "ids": [
+    "GHSA-33pg-m6jh-5237",
+    "GO-2023-1700"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/docker/docker",
+   "version": "20.10.7+incompatible",
+   "ids": [
+    "GHSA-3fwx-pjgw-3558",
+    "GO-2024-2500"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/docker/docker",
+   "version": "20.10.7+incompatible",
+   "ids": [
+    "GHSA-4vq8-7jfc-9cvp",
+    "GO-2025-3829"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/docker/docker",
+   "version": "20.10.7+incompatible",
+   "ids": [
+    "GHSA-6wrf-mxfj-pf5p",
+    "GO-2023-1701"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/docker/docker",
+   "version": "20.10.7+incompatible",
+   "ids": [
+    "GHSA-jq35-85cj-fj4p"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/docker/docker",
+   "version": "20.10.7+incompatible",
+   "ids": [
+    "GHSA-mq39-4gv4-mvpx"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/docker/docker",
+   "version": "20.10.7+incompatible",
+   "ids": [
+    "GHSA-pxq6-2prw-chj9",
+    "GO-2026-4883"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/docker/docker",
+   "version": "20.10.7+incompatible",
+   "ids": [
+    "GHSA-rc4r-wh2q-q6c4",
+    "GO-2022-0985"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/docker/docker",
+   "version": "20.10.7+incompatible",
+   "ids": [
+    "GHSA-rg2x-37c3-w2rh",
+    "GO-2026-5617"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/docker/docker",
+   "version": "20.10.7+incompatible",
+   "ids": [
+    "GHSA-v23v-6jw2-98fq",
+    "GO-2024-3005"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/docker/docker",
+   "version": "20.10.7+incompatible",
+   "ids": [
+    "GHSA-v994-f8vw-g7j4",
+    "GO-2024-2913"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/docker/docker",
+   "version": "20.10.7+incompatible",
+   "ids": [
+    "GHSA-vp35-85q5-9f25",
+    "GO-2022-1107"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/docker/docker",
+   "version": "20.10.7+incompatible",
+   "ids": [
+    "GHSA-vp62-88p7-qqf5",
+    "GO-2026-5668"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/docker/docker",
+   "version": "20.10.7+incompatible",
+   "ids": [
+    "GHSA-x86f-5xw2-fm2r",
+    "GO-2026-5746"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/docker/docker",
+   "version": "20.10.7+incompatible",
+   "ids": [
+    "GHSA-xmmx-7jpf-fx42",
+    "GO-2024-2914"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/docker/docker",
+   "version": "20.10.7+incompatible",
+   "ids": [
+    "GHSA-xw73-rw38-6vjc",
+    "GO-2024-2512"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/docker/docker",
+   "version": "20.10.7+incompatible",
+   "ids": [
+    "GO-2026-4887"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/go-acme/lego/v4",
+   "version": "4.6.0",
+   "ids": [
+    "GHSA-q82r-2j7m-9rv4",
+    "GO-2025-3847"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/go-acme/lego/v4",
+   "version": "4.6.0",
+   "ids": [
+    "GHSA-qqx8-2xmm-jrv8",
+    "GO-2026-5593"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/gorilla/websocket",
+   "version": "1.4.2",
+   "ids": [
+    "GHSA-w67g-5rqw-f597",
+    "GO-2026-6278"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/hashicorp/consul",
+   "version": "1.10.3",
+   "ids": [
+    "GHSA-5c4w-8hhh-3c3h",
+    "GO-2024-3241"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/hashicorp/consul",
+   "version": "1.10.3",
+   "ids": [
+    "GHSA-7g3r-8c6v-hfmr",
+    "GO-2025-4081"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/hashicorp/consul",
+   "version": "1.10.3",
+   "ids": [
+    "GHSA-99wr-c2px-grmh",
+    "GO-2024-3242"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/hashicorp/consul",
+   "version": "1.10.3",
+   "ids": [
+    "GHSA-c57c-7hrj-6q6v",
+    "GO-2023-1827"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/hashicorp/consul",
+   "version": "1.10.3",
+   "ids": [
+    "GHSA-chgm-7r52-whjj",
+    "GO-2024-3243"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/hashicorp/consul",
+   "version": "1.10.3",
+   "ids": [
+    "GHSA-cpfq-66p2-336j",
+    "GO-2026-4690"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/hashicorp/consul",
+   "version": "1.10.3",
+   "ids": [
+    "GHSA-hj93-5fg3-3chr",
+    "GO-2022-0953"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/hashicorp/consul",
+   "version": "1.10.3",
+   "ids": [
+    "GHSA-hr3v-8cp3-68rf",
+    "GO-2024-2683"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/hashicorp/consul",
+   "version": "1.10.3",
+   "ids": [
+    "GHSA-m69r-9g56-7mv8",
+    "GO-2022-1029"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/hashicorp/consul",
+   "version": "1.10.3",
+   "ids": [
+    "GHSA-q6h7-4qgw-2j9p",
+    "GO-2022-0615"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/hashicorp/consul",
+   "version": "1.10.3",
+   "ids": [
+    "GHSA-qh7p-pfq3-677h",
+    "GO-2025-4082"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/hashicorp/go-retryablehttp",
+   "version": "0.7.0",
+   "ids": [
+    "GHSA-v6v8-xj6m-xwqh",
+    "GO-2024-2947"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/moby/buildkit",
+   "version": "0.8.2-0.20210401015549-df49b648c8bf",
+   "ids": [
+    "GHSA-4c29-8rgm-jvjj",
+    "GO-2026-4858"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/moby/buildkit",
+   "version": "0.8.2-0.20210401015549-df49b648c8bf",
+   "ids": [
+    "GHSA-4v98-7qmw-rqr8",
+    "GO-2024-2494"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/moby/buildkit",
+   "version": "0.8.2-0.20210401015549-df49b648c8bf",
+   "ids": [
+    "GHSA-4vrq-3vrq-g6gg",
+    "GO-2026-4859"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/moby/buildkit",
+   "version": "0.8.2-0.20210401015549-df49b648c8bf",
+   "ids": [
+    "GHSA-7236-3392-c5c6",
+    "GO-2026-6255"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/moby/buildkit",
+   "version": "0.8.2-0.20210401015549-df49b648c8bf",
+   "ids": [
+    "GHSA-72x6-4j93-7w86",
+    "GO-2026-6256"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/moby/buildkit",
+   "version": "0.8.2-0.20210401015549-df49b648c8bf",
+   "ids": [
+    "GHSA-9p26-698r-w4hx",
+    "GO-2024-2492"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/moby/buildkit",
+   "version": "0.8.2-0.20210401015549-df49b648c8bf",
+   "ids": [
+    "GHSA-m3r6-h7wv-7xxv",
+    "GO-2024-2493"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/moby/buildkit",
+   "version": "0.8.2-0.20210401015549-df49b648c8bf",
+   "ids": [
+    "GHSA-wr6v-9f75-vh2g",
+    "GO-2024-2497"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/opencontainers/image-spec",
+   "version": "1.0.1",
+   "ids": [
+    "GHSA-77vh-xpmg-72qh"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/opencontainers/runc",
+   "version": "1.0.2",
+   "ids": [
+    "GHSA-9493-h29p-rfm2",
+    "GO-2025-4096"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/opencontainers/runc",
+   "version": "1.0.2",
+   "ids": [
+    "GHSA-cgrx-mc8f-2prm",
+    "GO-2025-4098"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/opencontainers/runc",
+   "version": "1.0.2",
+   "ids": [
+    "GHSA-f3fp-gc8g-vw66",
+    "GO-2022-0452"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/opencontainers/runc",
+   "version": "1.0.2",
+   "ids": [
+    "GHSA-g2j6-57v7-gm8c",
+    "GO-2023-1683"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/opencontainers/runc",
+   "version": "1.0.2",
+   "ids": [
+    "GHSA-jfvp-7x6p-h2pv",
+    "GO-2024-3110"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/opencontainers/runc",
+   "version": "1.0.2",
+   "ids": [
+    "GHSA-m8cg-xc2p-r3fc",
+    "GO-2023-1682"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/opencontainers/runc",
+   "version": "1.0.2",
+   "ids": [
+    "GHSA-qw9x-cqr3-wc7r",
+    "GO-2025-4097"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/opencontainers/runc",
+   "version": "1.0.2",
+   "ids": [
+    "GHSA-v95c-p5hm-xq8f",
+    "GO-2022-0274"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/opencontainers/runc",
+   "version": "1.0.2",
+   "ids": [
+    "GHSA-vpvm-3wq2-2wvm",
+    "GO-2023-1627"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/opencontainers/runc",
+   "version": "1.0.2",
+   "ids": [
+    "GHSA-xjvp-4fhw-gc47",
+    "GO-2026-5761"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/opencontainers/runc",
+   "version": "1.0.2",
+   "ids": [
+    "GHSA-xr7r-f8xq-vfvv",
+    "GO-2024-2491"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/opencontainers/selinux",
+   "version": "1.8.2",
+   "ids": [
+    "GHSA-cgrx-mc8f-2prm",
+    "GO-2025-4098"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/prometheus/client_golang",
+   "version": "1.11.0",
+   "ids": [
+    "GHSA-cg3q-j54f-5p7p",
+    "GO-2022-0322"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/sirupsen/logrus",
+   "version": "1.8.1",
+   "ids": [
+    "GHSA-4f99-4q7p-p3gh",
+    "GO-2025-4188"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "go.etcd.io/etcd/client/pkg/v3",
+   "version": "3.5.0",
+   "ids": [
+    "GO-2026-6107"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "go.etcd.io/etcd",
+   "version": "0.5.0-alpha.5.0.20200910180754-dd1b699fc489",
+   "ids": [
+    "GHSA-2xhq-gv6c-p224"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "go.etcd.io/etcd",
+   "version": "0.5.0-alpha.5.0.20200910180754-dd1b699fc489",
+   "ids": [
+    "GHSA-q8m4-xhhv-38mg",
+    "GO-2026-4806"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "go.etcd.io/etcd",
+   "version": "0.5.0-alpha.5.0.20200910180754-dd1b699fc489",
+   "ids": [
+    "GHSA-rfx7-8w68-q57q",
+    "GO-2026-4808"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "go.etcd.io/etcd",
+   "version": "0.5.0-alpha.5.0.20200910180754-dd1b699fc489",
+   "ids": [
+    "GHSA-wf43-55jj-vwq8"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "go.etcd.io/etcd",
+   "version": "0.5.0-alpha.5.0.20200910180754-dd1b699fc489",
+   "ids": [
+    "GHSA-wr2v-9rpq-c35q"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "go.etcd.io/etcd",
+   "version": "0.5.0-alpha.5.0.20200910180754-dd1b699fc489",
+   "ids": [
+    "GHSA-x35m-3gp4-4fh5"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "go.etcd.io/etcd",
+   "version": "0.5.0-alpha.5.0.20200910180754-dd1b699fc489",
+   "ids": [
+    "GO-2024-2527"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "go.etcd.io/etcd",
+   "version": "0.5.0-alpha.5.0.20200910180754-dd1b699fc489",
+   "ids": [
+    "GO-2024-2528"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "go.etcd.io/etcd",
+   "version": "0.5.0-alpha.5.0.20200910180754-dd1b699fc489",
+   "ids": [
+    "GO-2024-2529"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "go.etcd.io/etcd",
+   "version": "0.5.0-alpha.5.0.20200910180754-dd1b699fc489",
+   "ids": [
+    "GO-2024-2530"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/crypto",
+   "version": "0.0.0-20210616213533-5ff15b29337e",
+   "ids": [
+    "GHSA-45gg-vh54-h5m9",
+    "GO-2026-5014"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/crypto",
+   "version": "0.0.0-20210616213533-5ff15b29337e",
+   "ids": [
+    "GHSA-45x7-px36-x8w8",
+    "GO-2023-2402"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/crypto",
+   "version": "0.0.0-20210616213533-5ff15b29337e",
+   "ids": [
+    "GHSA-5cgq-3rg8-m6cv",
+    "GO-2026-5021"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/crypto",
+   "version": "0.0.0-20210616213533-5ff15b29337e",
+   "ids": [
+    "GHSA-78mq-xcr3-xm33",
+    "GO-2026-5015"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/crypto",
+   "version": "0.0.0-20210616213533-5ff15b29337e",
+   "ids": [
+    "GHSA-89gr-r52h-f8rx",
+    "GO-2026-5019"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/crypto",
+   "version": "0.0.0-20210616213533-5ff15b29337e",
+   "ids": [
+    "GHSA-8c26-wmh5-6g9v",
+    "GO-2021-0356"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/crypto",
+   "version": "0.0.0-20210616213533-5ff15b29337e",
+   "ids": [
+    "GHSA-9m57-25v3-79x9",
+    "GO-2026-5033"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/crypto",
+   "version": "0.0.0-20210616213533-5ff15b29337e",
+   "ids": [
+    "GHSA-f5wc-c3c7-36mc",
+    "GO-2026-5006"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/crypto",
+   "version": "0.0.0-20210616213533-5ff15b29337e",
+   "ids": [
+    "GHSA-f6x5-jh6r-wrfv",
+    "GO-2025-4135"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/crypto",
+   "version": "0.0.0-20210616213533-5ff15b29337e",
+   "ids": [
+    "GHSA-gwc9-m7rh-j2ww",
+    "GO-2022-0968"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/crypto",
+   "version": "0.0.0-20210616213533-5ff15b29337e",
+   "ids": [
+    "GHSA-hcg3-q754-cr77",
+    "GO-2025-3487"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/crypto",
+   "version": "0.0.0-20210616213533-5ff15b29337e",
+   "ids": [
+    "GHSA-j5w8-q4qc-rx2x",
+    "GO-2025-4134"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/crypto",
+   "version": "0.0.0-20210616213533-5ff15b29337e",
+   "ids": [
+    "GHSA-jppx-rxg9-jmrx",
+    "GO-2026-5005"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/crypto",
+   "version": "0.0.0-20210616213533-5ff15b29337e",
+   "ids": [
+    "GHSA-q4h4-gmj2-qvw2",
+    "GO-2026-5013"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/crypto",
+   "version": "0.0.0-20210616213533-5ff15b29337e",
+   "ids": [
+    "GHSA-qpw4-5x99-6vjp",
+    "GO-2026-5016"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/crypto",
+   "version": "0.0.0-20210616213533-5ff15b29337e",
+   "ids": [
+    "GHSA-rm3j-f69w-wqmq",
+    "GO-2026-5020"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/crypto",
+   "version": "0.0.0-20210616213533-5ff15b29337e",
+   "ids": [
+    "GHSA-v778-237x-gjrc",
+    "GO-2024-3321"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/crypto",
+   "version": "0.0.0-20210616213533-5ff15b29337e",
+   "ids": [
+    "GHSA-vgwf-h737-ff37",
+    "GO-2026-5017"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/crypto",
+   "version": "0.0.0-20210616213533-5ff15b29337e",
+   "ids": [
+    "GHSA-w879-237q-wc7r",
+    "GO-2026-5018"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/crypto",
+   "version": "0.0.0-20210616213533-5ff15b29337e",
+   "ids": [
+    "GHSA-x527-x647-q7gg",
+    "GO-2026-5023"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/crypto",
+   "version": "0.0.0-20210616213533-5ff15b29337e",
+   "ids": [
+    "GO-2024-2961"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/crypto",
+   "version": "0.0.0-20210616213533-5ff15b29337e",
+   "ids": [
+    "GO-2025-4116"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/crypto",
+   "version": "0.0.0-20210616213533-5ff15b29337e",
+   "ids": [
+    "GO-2026-5932"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/crypto",
+   "version": "0.0.0-20210616213533-5ff15b29337e",
+   "ids": [
+    "GO-2026-6303"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/crypto",
+   "version": "0.0.0-20210616213533-5ff15b29337e",
+   "ids": [
+    "GO-2026-6354"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/crypto",
+   "version": "0.0.0-20210616213533-5ff15b29337e",
+   "ids": [
+    "GO-2026-6355"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/mod",
+   "version": "0.4.2",
+   "ids": [
+    "GO-2026-6179"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/mod",
+   "version": "0.4.2",
+   "ids": [
+    "GO-2026-6180"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/net",
+   "version": "0.0.0-20211209124913-491a49abca63",
+   "ids": [
+    "GHSA-2wrh-6pvc-2jm9",
+    "GO-2023-1988"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/net",
+   "version": "0.0.0-20211209124913-491a49abca63",
+   "ids": [
+    "GHSA-4374-p667-p6c8",
+    "GO-2023-2102"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/net",
+   "version": "0.0.0-20211209124913-491a49abca63",
+   "ids": [
+    "GHSA-4v7x-pqxf-cx7m",
+    "GO-2024-2687"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/net",
+   "version": "0.0.0-20211209124913-491a49abca63",
+   "ids": [
+    "GHSA-5cv4-jp36-h3mw",
+    "GO-2026-5028"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/net",
+   "version": "0.0.0-20211209124913-491a49abca63",
+   "ids": [
+    "GHSA-69cg-p879-7622",
+    "GO-2022-0969"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/net",
+   "version": "0.0.0-20211209124913-491a49abca63",
+   "ids": [
+    "GHSA-qppj-fm5r-hxr3"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/net",
+   "version": "0.0.0-20211209124913-491a49abca63",
+   "ids": [
+    "GHSA-qxp5-gwg8-xv66",
+    "GO-2025-3503"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/net",
+   "version": "0.0.0-20211209124913-491a49abca63",
+   "ids": [
+    "GHSA-vvgc-356p-c3xw",
+    "GO-2025-3595"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/net",
+   "version": "0.0.0-20211209124913-491a49abca63",
+   "ids": [
+    "GHSA-vvpx-j8f3-3w6h",
+    "GO-2023-1571"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/net",
+   "version": "0.0.0-20211209124913-491a49abca63",
+   "ids": [
+    "GHSA-xrjj-mj9h-534m",
+    "GO-2022-1144"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/net",
+   "version": "0.0.0-20211209124913-491a49abca63",
+   "ids": [
+    "GO-2024-3333"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/net",
+   "version": "0.0.0-20211209124913-491a49abca63",
+   "ids": [
+    "GO-2026-4440"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/net",
+   "version": "0.0.0-20211209124913-491a49abca63",
+   "ids": [
+    "GO-2026-4441"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/net",
+   "version": "0.0.0-20211209124913-491a49abca63",
+   "ids": [
+    "GO-2026-4918"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/net",
+   "version": "0.0.0-20211209124913-491a49abca63",
+   "ids": [
+    "GO-2026-5025"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/net",
+   "version": "0.0.0-20211209124913-491a49abca63",
+   "ids": [
+    "GO-2026-5026"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/net",
+   "version": "0.0.0-20211209124913-491a49abca63",
+   "ids": [
+    "GO-2026-5027"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/net",
+   "version": "0.0.0-20211209124913-491a49abca63",
+   "ids": [
+    "GO-2026-5029"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/net",
+   "version": "0.0.0-20211209124913-491a49abca63",
+   "ids": [
+    "GO-2026-5030"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/net",
+   "version": "0.0.0-20211209124913-491a49abca63",
+   "ids": [
+    "GO-2026-5942"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/net",
+   "version": "0.0.0-20211209124913-491a49abca63",
+   "ids": [
+    "GO-2026-6603"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/net",
+   "version": "0.0.0-20211209124913-491a49abca63",
+   "ids": [
+    "GO-2026-6610"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/net",
+   "version": "0.0.0-20211209124913-491a49abca63",
+   "ids": [
+    "GO-2026-6611"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/net",
+   "version": "0.0.0-20211209124913-491a49abca63",
+   "ids": [
+    "GO-2026-6612"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/net",
+   "version": "0.0.0-20211209124913-491a49abca63",
+   "ids": [
+    "GO-2026-6617"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/oauth2",
+   "version": "0.0.0-20210402161424-2e8d93401602",
+   "ids": [
+    "GHSA-6v2p-p543-phr9",
+    "GO-2025-3488"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/sys",
+   "version": "0.0.0-20210817190340-bfb29a6856f2",
+   "ids": [
+    "GHSA-p782-xgp4-8hr8",
+    "GO-2022-0493"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/sys",
+   "version": "0.0.0-20210817190340-bfb29a6856f2",
+   "ids": [
+    "GO-2026-5024"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/text",
+   "version": "0.3.6",
+   "ids": [
+    "GHSA-69ch-w2m2-3vjp",
+    "GO-2022-1059"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/text",
+   "version": "0.3.6",
+   "ids": [
+    "GHSA-ppp9-7jff-5vj2",
+    "GO-2021-0113"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/text",
+   "version": "0.3.6",
+   "ids": [
+    "GO-2026-5970"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/text",
+   "version": "0.3.6",
+   "ids": [
+    "GO-2026-6629"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "google.golang.org/grpc",
+   "version": "1.38.0",
+   "ids": [
+    "GHSA-2v4p-qf9q-27wj",
+    "GO-2026-6443"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "google.golang.org/grpc",
+   "version": "1.38.0",
+   "ids": [
+    "GHSA-hrxh-6v49-42gf",
+    "GO-2026-6061"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "google.golang.org/grpc",
+   "version": "1.38.0",
+   "ids": [
+    "GHSA-m425-mq94-257g",
+    "GO-2023-2153"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "google.golang.org/grpc",
+   "version": "1.38.0",
+   "ids": [
+    "GHSA-p77j-4mvh-x3m3",
+    "GO-2026-4762"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "google.golang.org/grpc",
+   "version": "1.38.0",
+   "ids": [
+    "GHSA-qc2q-p7wx-3px3",
+    "GO-2026-6441"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "google.golang.org/grpc",
+   "version": "1.38.0",
+   "ids": [
+    "GHSA-vp52-pcj8-j9qc",
+    "GO-2026-6348"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "google.golang.org/protobuf",
+   "version": "1.27.1",
+   "ids": [
+    "GHSA-8r3f-844c-mc37",
+    "GO-2024-2611"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "gopkg.in/square/go-jose.v2",
+   "version": "2.6.0",
+   "ids": [
+    "GHSA-c5q2-7r4c-mv6g",
+    "GO-2024-2631"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "gopkg.in/yaml.v3",
+   "version": "3.0.0-20210107192922-496545a6307b",
+   "ids": [
+    "GHSA-hp87-p4gw-j4gq",
+    "GO-2022-0603"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "@babel/core",
+   "version": "7.7.2",
+   "ids": [
+    "GHSA-4x5r-pxfx-6jf8"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "@babel/helpers",
+   "version": "7.7.0",
+   "ids": [
+    "GHSA-968p-4wvh-cqc8"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "@babel/runtime-corejs2",
+   "version": "7.7.2",
+   "ids": [
+    "GHSA-968p-4wvh-cqc8"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "@babel/runtime-corejs3",
+   "version": "7.7.2",
+   "ids": [
+    "GHSA-968p-4wvh-cqc8"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "@babel/runtime",
+   "version": "7.7.2",
+   "ids": [
+    "GHSA-968p-4wvh-cqc8"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "@babel/traverse",
+   "version": "7.5.5",
+   "ids": [
+    "GHSA-67hx-6x53-jw92"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "@babel/traverse",
+   "version": "7.7.2",
+   "ids": [
+    "GHSA-67hx-6x53-jw92"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "@hapi/hoek",
+   "version": "8.5.0",
+   "ids": [
+    "GHSA-22h7-7wwg-qmgg"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "@hapi/hoek",
+   "version": "8.5.0",
+   "ids": [
+    "GHSA-c429-5p7v-vgjp"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "acorn",
+   "version": "6.2.1",
+   "ids": [
+    "GHSA-6chw-6frg-f759"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "ajv",
+   "version": "6.10.2",
+   "ids": [
+    "GHSA-2g4f-4pwh-qvx6"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "ajv",
+   "version": "6.10.2",
+   "ids": [
+    "GHSA-v88g-cgmw-v5xw"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "ansi-html",
+   "version": "0.0.7",
+   "ids": [
+    "GHSA-whgm-jr23-g3j9"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "ansi-regex",
+   "version": "3.0.0",
+   "ids": [
+    "GHSA-93q8-gq69-wqmw"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "ansi-regex",
+   "version": "4.1.0",
+   "ids": [
+    "GHSA-93q8-gq69-wqmw"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "ansi-regex",
+   "version": "5.0.0",
+   "ids": [
+    "GHSA-93q8-gq69-wqmw"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "async",
+   "version": "2.6.3",
+   "ids": [
+    "GHSA-fwr7-v2mv-hh25"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "axios",
+   "version": "0.19.0",
+   "ids": [
+    "GHSA-3g43-6gmg-66jw"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "axios",
+   "version": "0.19.0",
+   "ids": [
+    "GHSA-3p68-rc4w-qgx5"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "axios",
+   "version": "0.19.0",
+   "ids": [
+    "GHSA-43fc-jf86-j433"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "axios",
+   "version": "0.19.0",
+   "ids": [
+    "GHSA-4w2v-q235-vp99"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "axios",
+   "version": "0.19.0",
+   "ids": [
+    "GHSA-5c9x-8gcm-mpgx"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "axios",
+   "version": "0.19.0",
+   "ids": [
+    "GHSA-62hf-57xw-28j9"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "axios",
+   "version": "0.19.0",
+   "ids": [
+    "GHSA-6chq-wfr3-2hj9"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "axios",
+   "version": "0.19.0",
+   "ids": [
+    "GHSA-7q8q-rj6j-mhjq"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "axios",
+   "version": "0.19.0",
+   "ids": [
+    "GHSA-898c-q2cr-xwhg"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "axios",
+   "version": "0.19.0",
+   "ids": [
+    "GHSA-cph5-m8f7-6c5x"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "axios",
+   "version": "0.19.0",
+   "ids": [
+    "GHSA-fvcv-3m26-pcqx"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "axios",
+   "version": "0.19.0",
+   "ids": [
+    "GHSA-hfxv-24rg-xrqf"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "axios",
+   "version": "0.19.0",
+   "ids": [
+    "GHSA-j5f8-grm9-p9fc"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "axios",
+   "version": "0.19.0",
+   "ids": [
+    "GHSA-jr5f-v2jv-69x6"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "axios",
+   "version": "0.19.0",
+   "ids": [
+    "GHSA-m7pr-hjqh-92cm"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "axios",
+   "version": "0.19.0",
+   "ids": [
+    "GHSA-mmx7-hfxf-jppx"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "axios",
+   "version": "0.19.0",
+   "ids": [
+    "GHSA-p92q-9vqr-4j8v"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "axios",
+   "version": "0.19.0",
+   "ids": [
+    "GHSA-pf86-5x62-jrwf"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "axios",
+   "version": "0.19.0",
+   "ids": [
+    "GHSA-pjwm-pj3p-43mv"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "axios",
+   "version": "0.19.0",
+   "ids": [
+    "GHSA-pmwg-cvhr-8vh7"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "axios",
+   "version": "0.19.0",
+   "ids": [
+    "GHSA-vf2m-468p-8v99"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "axios",
+   "version": "0.19.0",
+   "ids": [
+    "GHSA-w9j2-pvgh-6h63"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "axios",
+   "version": "0.19.0",
+   "ids": [
+    "GHSA-wf5p-g6vw-rhxx"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "axios",
+   "version": "0.19.0",
+   "ids": [
+    "GHSA-xhjh-pmcv-23jw"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "axios",
+   "version": "0.19.0",
+   "ids": [
+    "GHSA-xx6v-rp6x-q39c"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "bn.js",
+   "version": "4.11.8",
+   "ids": [
+    "GHSA-378v-28hj-76wf"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "body-parser",
+   "version": "1.19.0",
+   "ids": [
+    "GHSA-qwcr-r2fm-qrc7"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "body-parser",
+   "version": "1.19.0",
+   "ids": [
+    "GHSA-v422-hmwv-36x6"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "brace-expansion",
+   "version": "1.1.11",
+   "ids": [
+    "GHSA-3jxr-9vmj-r5cp"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "brace-expansion",
+   "version": "1.1.11",
+   "ids": [
+    "GHSA-6j4f-fj2g-mc7p"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "brace-expansion",
+   "version": "1.1.11",
+   "ids": [
+    "GHSA-f886-m6hf-6m8v"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "brace-expansion",
+   "version": "1.1.11",
+   "ids": [
+    "GHSA-mh99-v99m-4gvg"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "brace-expansion",
+   "version": "1.1.11",
+   "ids": [
+    "GHSA-q2hr-2g5m-vwhr"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "brace-expansion",
+   "version": "1.1.11",
+   "ids": [
+    "GHSA-qhr7-859c-m2p7"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "brace-expansion",
+   "version": "1.1.11",
+   "ids": [
+    "GHSA-rgw5-rvv9-x895"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "brace-expansion",
+   "version": "1.1.11",
+   "ids": [
+    "GHSA-v6h2-p8h4-qcjw"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "braces",
+   "version": "2.3.2",
+   "ids": [
+    "GHSA-grv7-fg5c-xmjg"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "braces",
+   "version": "2.3.2",
+   "ids": [
+    "GHSA-vfj7-8cjw-p6xm"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "braces",
+   "version": "3.0.2",
+   "ids": [
+    "GHSA-grv7-fg5c-xmjg"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "braces",
+   "version": "3.0.2",
+   "ids": [
+    "GHSA-vfj7-8cjw-p6xm"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "browserify-sign",
+   "version": "4.0.4",
+   "ids": [
+    "GHSA-x9w5-v3q2-3rhw"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "browserslist",
+   "version": "4.7.3",
+   "ids": [
+    "GHSA-73wf-gq98-2v4g"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "browserslist",
+   "version": "4.7.3",
+   "ids": [
+    "GHSA-c83g-rgw3-j3cx"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "browserslist",
+   "version": "4.7.3",
+   "ids": [
+    "GHSA-w8qv-6jwh-64r5"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "chart.js",
+   "version": "2.8.0",
+   "ids": [
+    "GHSA-h68q-55jf-x68w"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "cipher-base",
+   "version": "1.0.4",
+   "ids": [
+    "GHSA-cpq7-6gpm-g9rc"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "color-string",
+   "version": "1.5.3",
+   "ids": [
+    "GHSA-257v-vj4p-3w2h"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "compression",
+   "version": "1.7.4",
+   "ids": [
+    "GHSA-vc2v-76pw-4v95"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "cookie",
+   "version": "0.4.0",
+   "ids": [
+    "GHSA-pxg6-pf52-xh8x"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "cross-spawn",
+   "version": "3.0.1",
+   "ids": [
+    "GHSA-3xgq-45jj-v275"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "cross-spawn",
+   "version": "6.0.5",
+   "ids": [
+    "GHSA-3xgq-45jj-v275"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "cross-spawn",
+   "version": "7.0.1",
+   "ids": [
+    "GHSA-3xgq-45jj-v275"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "debug",
+   "version": "3.2.6",
+   "ids": [
+    "GHSA-gxpj-cx7g-858c"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "debug",
+   "version": "4.1.1",
+   "ids": [
+    "GHSA-gxpj-cx7g-858c"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "decode-uri-component",
+   "version": "0.2.0",
+   "ids": [
+    "GHSA-vcc3-ghjq-m6fr"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "decode-uri-component",
+   "version": "0.2.0",
+   "ids": [
+    "GHSA-w573-4hg7-7wgq"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "diff",
+   "version": "3.5.0",
+   "ids": [
+    "GHSA-73rr-hh4g-fpgx"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "dns-packet",
+   "version": "1.3.1",
+   "ids": [
+    "GHSA-3wcq-x3mq-6r9p"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "dot-prop",
+   "version": "4.2.0",
+   "ids": [
+    "GHSA-ff7x-qrg7-qggm"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "ejs",
+   "version": "2.7.3",
+   "ids": [
+    "GHSA-ghr5-ch3p-vcr6"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "ejs",
+   "version": "2.7.3",
+   "ids": [
+    "GHSA-phwq-j96m-2c2q"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "elliptic",
+   "version": "6.5.1",
+   "ids": [
+    "GHSA-434g-2637-qmqr"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "elliptic",
+   "version": "6.5.1",
+   "ids": [
+    "GHSA-49q7-c7j4-3p7m"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "elliptic",
+   "version": "6.5.1",
+   "ids": [
+    "GHSA-848j-6mx2-7j84"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "elliptic",
+   "version": "6.5.1",
+   "ids": [
+    "GHSA-977x-g7h5-7qgw"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "elliptic",
+   "version": "6.5.1",
+   "ids": [
+    "GHSA-f7q4-pwc6-w24p"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "elliptic",
+   "version": "6.5.1",
+   "ids": [
+    "GHSA-fc9h-whq2-v747"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "elliptic",
+   "version": "6.5.1",
+   "ids": [
+    "GHSA-r9p9-mrjm-926w"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "elliptic",
+   "version": "6.5.1",
+   "ids": [
+    "GHSA-vh7m-p724-62c2"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "elliptic",
+   "version": "6.5.1",
+   "ids": [
+    "GHSA-vjh7-7g9h-fjfh"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "eventsource",
+   "version": "1.0.7",
+   "ids": [
+    "GHSA-6h5x-7c5m-7cr7"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "express",
+   "version": "4.17.1",
+   "ids": [
+    "GHSA-qw6h-vgh9-j6wx"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "express",
+   "version": "4.17.1",
+   "ids": [
+    "GHSA-rv95-896h-c2vc"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "flatted",
+   "version": "2.0.1",
+   "ids": [
+    "GHSA-25h7-pfq9-p65f"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "flatted",
+   "version": "2.0.1",
+   "ids": [
+    "GHSA-rf6f-7fwh-wjgh"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "follow-redirects",
+   "version": "1.5.10",
+   "ids": [
+    "GHSA-74fj-2j2h-c42q"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "follow-redirects",
+   "version": "1.5.10",
+   "ids": [
+    "GHSA-cxjh-pqwp-8mfp"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "follow-redirects",
+   "version": "1.5.10",
+   "ids": [
+    "GHSA-jchw-25xp-jwwc"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "follow-redirects",
+   "version": "1.5.10",
+   "ids": [
+    "GHSA-pw2r-vq6v-hr8c"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "follow-redirects",
+   "version": "1.5.10",
+   "ids": [
+    "GHSA-r4q5-vmmm-2653"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "follow-redirects",
+   "version": "1.9.0",
+   "ids": [
+    "GHSA-74fj-2j2h-c42q"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "follow-redirects",
+   "version": "1.9.0",
+   "ids": [
+    "GHSA-cxjh-pqwp-8mfp"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "follow-redirects",
+   "version": "1.9.0",
+   "ids": [
+    "GHSA-jchw-25xp-jwwc"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "follow-redirects",
+   "version": "1.9.0",
+   "ids": [
+    "GHSA-pw2r-vq6v-hr8c"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "follow-redirects",
+   "version": "1.9.0",
+   "ids": [
+    "GHSA-r4q5-vmmm-2653"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "form-data",
+   "version": "2.3.3",
+   "ids": [
+    "GHSA-fjxv-7rqg-78g4"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "form-data",
+   "version": "2.3.3",
+   "ids": [
+    "GHSA-hmw2-7cc7-3qxx"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "fsevents",
+   "version": "1.2.9",
+   "ids": [
+    "GHSA-8r6j-v8pm-fqw3"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "fsevents",
+   "version": "1.2.9",
+   "ids": [
+    "MAL-2023-462"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "get-func-name",
+   "version": "2.0.0",
+   "ids": [
+    "GHSA-4q6p-r6v2-jvc5"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "glob-parent",
+   "version": "5.1.0",
+   "ids": [
+    "GHSA-ww39-953v-wcq6"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "hosted-git-info",
+   "version": "2.7.1",
+   "ids": [
+    "GHSA-43f8-2h32-f4cj"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "html-minifier",
+   "version": "3.5.21",
+   "ids": [
+    "GHSA-pfq8-rq6v-vf5m"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "html-minifier",
+   "version": "4.0.0",
+   "ids": [
+    "GHSA-pfq8-rq6v-vf5m"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "http-proxy-middleware",
+   "version": "0.19.1",
+   "ids": [
+    "GHSA-64mm-vxmg-q3vj"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "http-proxy-middleware",
+   "version": "0.19.1",
+   "ids": [
+    "GHSA-c7qv-q95q-8v27"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "http-proxy",
+   "version": "1.18.0",
+   "ids": [
+    "GHSA-6x33-pw7p-hmpq"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "ini",
+   "version": "1.3.5",
+   "ids": [
+    "GHSA-qqgx-2p2h-9c37"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "ip",
+   "version": "1.1.5",
+   "ids": [
+    "GHSA-2p57-rm9w-gvfp"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "ip",
+   "version": "1.1.5",
+   "ids": [
+    "GHSA-78xj-cgh5-2h22"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "is-svg",
+   "version": "3.0.0",
+   "ids": [
+    "GHSA-7r28-3m3f-r2pr"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "is-svg",
+   "version": "3.0.0",
+   "ids": [
+    "GHSA-r8j5-h5cx-65gg"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "js-yaml",
+   "version": "3.13.1",
+   "ids": [
+    "GHSA-2883-xcg3-v3hh"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "js-yaml",
+   "version": "3.13.1",
+   "ids": [
+    "GHSA-52cp-r559-cp3m"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "js-yaml",
+   "version": "3.13.1",
+   "ids": [
+    "GHSA-5p4m-2wfm-xmqj"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "js-yaml",
+   "version": "3.13.1",
+   "ids": [
+    "GHSA-h67p-54hq-rp68"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "js-yaml",
+   "version": "3.13.1",
+   "ids": [
+    "GHSA-mh29-5h37-fv8m"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "json-schema",
+   "version": "0.2.3",
+   "ids": [
+    "GHSA-896r-f27r-55mw"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "json5",
+   "version": "0.5.1",
+   "ids": [
+    "GHSA-9c47-m6qq-7p4h"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "json5",
+   "version": "1.0.1",
+   "ids": [
+    "GHSA-9c47-m6qq-7p4h"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "json5",
+   "version": "2.1.1",
+   "ids": [
+    "GHSA-9c47-m6qq-7p4h"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "kind-of",
+   "version": "6.0.2",
+   "ids": [
+    "GHSA-6c8f-qphg-qjgp"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "loader-utils",
+   "version": "0.2.17",
+   "ids": [
+    "GHSA-76p3-8jx3-jpfq"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "loader-utils",
+   "version": "1.2.3",
+   "ids": [
+    "GHSA-3rfm-jhwj-7488"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "loader-utils",
+   "version": "1.2.3",
+   "ids": [
+    "GHSA-76p3-8jx3-jpfq"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "loader-utils",
+   "version": "1.2.3",
+   "ids": [
+    "GHSA-hhq3-ff78-jv3g"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "lodash.template",
+   "version": "4.5.0",
+   "ids": [
+    "GHSA-35jh-r3h4-6jhm",
+    "GHSA-r5fr-rjxr-66jc"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "lodash",
+   "version": "4.17.15",
+   "ids": [
+    "GHSA-29mw-wpgm-hmr9"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "lodash",
+   "version": "4.17.15",
+   "ids": [
+    "GHSA-35jh-r3h4-6jhm",
+    "GHSA-r5fr-rjxr-66jc"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "lodash",
+   "version": "4.17.15",
+   "ids": [
+    "GHSA-f23m-r3pf-42rh",
+    "GHSA-xxjr-mmjv-4gpg"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "lodash",
+   "version": "4.17.15",
+   "ids": [
+    "GHSA-p6mc-m468-83gw"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "micromatch",
+   "version": "3.1.10",
+   "ids": [
+    "GHSA-952p-6rrq-rcjv"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "micromatch",
+   "version": "4.0.2",
+   "ids": [
+    "GHSA-952p-6rrq-rcjv"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "minimatch",
+   "version": "3.0.4",
+   "ids": [
+    "GHSA-23c5-xmqv-rm74"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "minimatch",
+   "version": "3.0.4",
+   "ids": [
+    "GHSA-3ppc-4f35-3m26"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "minimatch",
+   "version": "3.0.4",
+   "ids": [
+    "GHSA-7r86-cg39-jmmj"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "minimatch",
+   "version": "3.0.4",
+   "ids": [
+    "GHSA-f8q6-p94x-37v3"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "minimist",
+   "version": "0.0.8",
+   "ids": [
+    "GHSA-vh95-rmgr-6w4m"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "minimist",
+   "version": "0.0.8",
+   "ids": [
+    "GHSA-xvch-5gv4-984h"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "minimist",
+   "version": "1.2.0",
+   "ids": [
+    "GHSA-vh95-rmgr-6w4m"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "minimist",
+   "version": "1.2.0",
+   "ids": [
+    "GHSA-xvch-5gv4-984h"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "moment",
+   "version": "2.24.0",
+   "ids": [
+    "GHSA-8hfj-j24r-96c4"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "moment",
+   "version": "2.24.0",
+   "ids": [
+    "GHSA-wc69-rhjr-hc9g"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "node-forge",
+   "version": "0.9.0",
+   "ids": [
+    "GHSA-2328-f5f3-gj25"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "node-forge",
+   "version": "0.9.0",
+   "ids": [
+    "GHSA-2r2c-g63r-vccr"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "node-forge",
+   "version": "0.9.0",
+   "ids": [
+    "GHSA-554w-wpv2-vw27"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "node-forge",
+   "version": "0.9.0",
+   "ids": [
+    "GHSA-5gfm-wpxj-wjgq"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "node-forge",
+   "version": "0.9.0",
+   "ids": [
+    "GHSA-5m6q-g25r-mvwx"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "node-forge",
+   "version": "0.9.0",
+   "ids": [
+    "GHSA-5rrq-pxf6-6jx5"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "node-forge",
+   "version": "0.9.0",
+   "ids": [
+    "GHSA-65ch-62r8-g69g"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "node-forge",
+   "version": "0.9.0",
+   "ids": [
+    "GHSA-86w9-cpqp-85rv",
+    "GHSA-ppp5-5v6c-4jwp"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "node-forge",
+   "version": "0.9.0",
+   "ids": [
+    "GHSA-8fr3-hfg3-gpgp"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "node-forge",
+   "version": "0.9.0",
+   "ids": [
+    "GHSA-92xj-mqp7-vmcj"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "node-forge",
+   "version": "0.9.0",
+   "ids": [
+    "GHSA-cfm4-qjh2-4765"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "node-forge",
+   "version": "0.9.0",
+   "ids": [
+    "GHSA-gf8q-jrpm-jvxq"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "node-forge",
+   "version": "0.9.0",
+   "ids": [
+    "GHSA-q67f-28xg-22rw"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "node-forge",
+   "version": "0.9.0",
+   "ids": [
+    "GHSA-wxgw-qj99-44c2"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "node-forge",
+   "version": "0.9.0",
+   "ids": [
+    "GHSA-x4jg-mjrx-434g"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "node-sass",
+   "version": "4.12.0",
+   "ids": [
+    "GHSA-9v62-24cr-58cx"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "node-sass",
+   "version": "4.12.0",
+   "ids": [
+    "GHSA-r8f7-9pfq-mjmv"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "node-sass",
+   "version": "4.13.0",
+   "ids": [
+    "GHSA-9v62-24cr-58cx"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "node-sass",
+   "version": "4.13.0",
+   "ids": [
+    "GHSA-r8f7-9pfq-mjmv"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "nth-check",
+   "version": "1.0.2",
+   "ids": [
+    "GHSA-rp65-9cf3-cjxr"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "on-headers",
+   "version": "1.0.2",
+   "ids": [
+    "GHSA-76c9-3jph-rj3q"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "path-parse",
+   "version": "1.0.6",
+   "ids": [
+    "GHSA-hj48-42vr-x3v9"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "path-to-regexp",
+   "version": "0.1.7",
+   "ids": [
+    "GHSA-37ch-88jc-xwx2",
+    "GHSA-9wv6-86v2-598j"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "path-to-regexp",
+   "version": "0.1.7",
+   "ids": [
+    "GHSA-rhx6-c78j-4q9w"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "pathval",
+   "version": "1.1.0",
+   "ids": [
+    "GHSA-g6ww-v8xp-vmwg"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "pbkdf2",
+   "version": "3.0.17",
+   "ids": [
+    "GHSA-477h-4r7f-fvrx"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "pbkdf2",
+   "version": "3.0.17",
+   "ids": [
+    "GHSA-h7cp-r72f-jxh6"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "pbkdf2",
+   "version": "3.0.17",
+   "ids": [
+    "GHSA-v62p-rq8g-8h59"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "picomatch",
+   "version": "2.1.1",
+   "ids": [
+    "GHSA-3v7f-55p6-f55p"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "picomatch",
+   "version": "2.1.1",
+   "ids": [
+    "GHSA-c2c7-rcm5-vvqj"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "postcss-selector-parser",
+   "version": "3.1.1",
+   "ids": [
+    "GHSA-rj75-hqrm-r3gf"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "postcss-selector-parser",
+   "version": "5.0.0",
+   "ids": [
+    "GHSA-rj75-hqrm-r3gf"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "postcss-selector-parser",
+   "version": "6.0.2",
+   "ids": [
+    "GHSA-rj75-hqrm-r3gf"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "postcss",
+   "version": "6.0.23",
+   "ids": [
+    "GHSA-566m-qj78-rww5"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "postcss",
+   "version": "6.0.23",
+   "ids": [
+    "GHSA-6g55-p6wh-862q"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "postcss",
+   "version": "6.0.23",
+   "ids": [
+    "GHSA-7fh5-64p2-3v2j"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "postcss",
+   "version": "6.0.23",
+   "ids": [
+    "GHSA-fxqj-rqcc-2cmp"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "postcss",
+   "version": "6.0.23",
+   "ids": [
+    "GHSA-qx2v-qp2m-jg93"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "postcss",
+   "version": "6.0.23",
+   "ids": [
+    "GHSA-r28c-9q8g-f849"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "postcss",
+   "version": "7.0.23",
+   "ids": [
+    "GHSA-566m-qj78-rww5"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "postcss",
+   "version": "7.0.23",
+   "ids": [
+    "GHSA-6g55-p6wh-862q"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "postcss",
+   "version": "7.0.23",
+   "ids": [
+    "GHSA-7fh5-64p2-3v2j"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "postcss",
+   "version": "7.0.23",
+   "ids": [
+    "GHSA-fxqj-rqcc-2cmp"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "postcss",
+   "version": "7.0.23",
+   "ids": [
+    "GHSA-hwj9-h5mp-3pm3"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "postcss",
+   "version": "7.0.23",
+   "ids": [
+    "GHSA-qx2v-qp2m-jg93"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "postcss",
+   "version": "7.0.23",
+   "ids": [
+    "GHSA-r28c-9q8g-f849"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "proxy-addr",
+   "version": "2.0.5",
+   "ids": [
+    "GHSA-jqcg-44mw-7w3h"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "qs",
+   "version": "6.5.2",
+   "ids": [
+    "GHSA-4mjr-xmp4-gh2g"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "qs",
+   "version": "6.5.2",
+   "ids": [
+    "GHSA-6rw7-vpxm-498p"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "qs",
+   "version": "6.5.2",
+   "ids": [
+    "GHSA-hrpp-h998-j3pp"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "qs",
+   "version": "6.7.0",
+   "ids": [
+    "GHSA-4mjr-xmp4-gh2g"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "qs",
+   "version": "6.7.0",
+   "ids": [
+    "GHSA-6rw7-vpxm-498p"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "qs",
+   "version": "6.7.0",
+   "ids": [
+    "GHSA-hrpp-h998-j3pp"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "qs",
+   "version": "6.7.0",
+   "ids": [
+    "GHSA-w7fw-mjwx-w883"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "quasar",
+   "version": "1.4.4",
+   "ids": [
+    "GHSA-3r53-75j5-3g7j"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "quasar",
+   "version": "1.4.4",
+   "ids": [
+    "GHSA-68jq-fhch-4xq4"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "quasar",
+   "version": "1.4.4",
+   "ids": [
+    "GHSA-89vp-x45c-52cq"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "quasar",
+   "version": "1.4.4",
+   "ids": [
+    "GHSA-pq96-jpmf-w254"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "request",
+   "version": "2.88.0",
+   "ids": [
+    "GHSA-p8p7-x288-28g6"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "scss-tokenizer",
+   "version": "0.2.3",
+   "ids": [
+    "GHSA-7mwh-4pqv-wmr8"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "semver",
+   "version": "5.3.0",
+   "ids": [
+    "GHSA-c2qf-rxjj-qqgw"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "semver",
+   "version": "5.7.0",
+   "ids": [
+    "GHSA-c2qf-rxjj-qqgw"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "semver",
+   "version": "5.7.1",
+   "ids": [
+    "GHSA-c2qf-rxjj-qqgw"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "semver",
+   "version": "6.3.0",
+   "ids": [
+    "GHSA-c2qf-rxjj-qqgw"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "send",
+   "version": "0.17.1",
+   "ids": [
+    "GHSA-m6fv-jmcg-4jfg"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "serialize-javascript",
+   "version": "1.9.1",
+   "ids": [
+    "GHSA-5c6j-r48x-rmvq"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "serialize-javascript",
+   "version": "1.9.1",
+   "ids": [
+    "GHSA-h9rv-jmmf-4pgx"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "serialize-javascript",
+   "version": "1.9.1",
+   "ids": [
+    "GHSA-hxcc-f52p-wc94"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "serialize-javascript",
+   "version": "2.1.0",
+   "ids": [
+    "GHSA-5c6j-r48x-rmvq"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "serialize-javascript",
+   "version": "2.1.0",
+   "ids": [
+    "GHSA-h9rv-jmmf-4pgx"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "serialize-javascript",
+   "version": "2.1.0",
+   "ids": [
+    "GHSA-hxcc-f52p-wc94"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "serve-static",
+   "version": "1.14.1",
+   "ids": [
+    "GHSA-cm22-4g7w-348p"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "sha.js",
+   "version": "2.4.11",
+   "ids": [
+    "GHSA-95m3-7q98-8xr5"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "sockjs",
+   "version": "0.3.19",
+   "ids": [
+    "GHSA-c9g6-9335-x697"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "sprintf-js",
+   "version": "1.0.3",
+   "ids": [
+    "GHSA-hp3w-g68c-fv3c"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "ssri",
+   "version": "6.0.1",
+   "ids": [
+    "GHSA-vx3p-948g-6vhq"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "ssri",
+   "version": "7.1.0",
+   "ids": [
+    "GHSA-vx3p-948g-6vhq"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "svgo",
+   "version": "1.3.2",
+   "ids": [
+    "GHSA-2p49-hgcm-8545"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "svgo",
+   "version": "1.3.2",
+   "ids": [
+    "GHSA-4vpr-x523-8j87"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "svgo",
+   "version": "1.3.2",
+   "ids": [
+    "GHSA-w27v-7q3p-w38r"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "tar",
+   "version": "2.2.2",
+   "ids": [
+    "GHSA-23hp-3jrh-7fpw"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "tar",
+   "version": "2.2.2",
+   "ids": [
+    "GHSA-34x7-hfp2-rc4v"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "tar",
+   "version": "2.2.2",
+   "ids": [
+    "GHSA-3jfq-g458-7qm9"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "tar",
+   "version": "2.2.2",
+   "ids": [
+    "GHSA-5955-9wpr-37jh"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "tar",
+   "version": "2.2.2",
+   "ids": [
+    "GHSA-83g3-92jg-28cx"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "tar",
+   "version": "2.2.2",
+   "ids": [
+    "GHSA-8qq5-rm4j-mr97"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "tar",
+   "version": "2.2.2",
+   "ids": [
+    "GHSA-8x88-c5mf-7j5w"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "tar",
+   "version": "2.2.2",
+   "ids": [
+    "GHSA-9ppj-qmqm-q256"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "tar",
+   "version": "2.2.2",
+   "ids": [
+    "GHSA-f5x3-32g6-xq36"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "tar",
+   "version": "2.2.2",
+   "ids": [
+    "GHSA-gvwx-54wh-qm9j"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "tar",
+   "version": "2.2.2",
+   "ids": [
+    "GHSA-qffp-2rhf-9h96"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "tar",
+   "version": "2.2.2",
+   "ids": [
+    "GHSA-r292-9mhp-454m"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "tar",
+   "version": "2.2.2",
+   "ids": [
+    "GHSA-r6q2-hw4h-h46w"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "tar",
+   "version": "2.2.2",
+   "ids": [
+    "GHSA-vmf3-w455-68vh"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "tar",
+   "version": "2.2.2",
+   "ids": [
+    "GHSA-w8wr-v893-vjvp"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "tar",
+   "version": "4.4.8",
+   "ids": [
+    "GHSA-23hp-3jrh-7fpw"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "tar",
+   "version": "4.4.8",
+   "ids": [
+    "GHSA-34x7-hfp2-rc4v"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "tar",
+   "version": "4.4.8",
+   "ids": [
+    "GHSA-3jfq-g458-7qm9"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "tar",
+   "version": "4.4.8",
+   "ids": [
+    "GHSA-5955-9wpr-37jh"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "tar",
+   "version": "4.4.8",
+   "ids": [
+    "GHSA-83g3-92jg-28cx"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "tar",
+   "version": "4.4.8",
+   "ids": [
+    "GHSA-8qq5-rm4j-mr97"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "tar",
+   "version": "4.4.8",
+   "ids": [
+    "GHSA-8x88-c5mf-7j5w"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "tar",
+   "version": "4.4.8",
+   "ids": [
+    "GHSA-9ppj-qmqm-q256"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "tar",
+   "version": "4.4.8",
+   "ids": [
+    "GHSA-9r2w-394v-53qc"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "tar",
+   "version": "4.4.8",
+   "ids": [
+    "GHSA-f5x3-32g6-xq36"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "tar",
+   "version": "4.4.8",
+   "ids": [
+    "GHSA-gvwx-54wh-qm9j"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "tar",
+   "version": "4.4.8",
+   "ids": [
+    "GHSA-qffp-2rhf-9h96"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "tar",
+   "version": "4.4.8",
+   "ids": [
+    "GHSA-qq89-hq3f-393p"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "tar",
+   "version": "4.4.8",
+   "ids": [
+    "GHSA-r292-9mhp-454m"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "tar",
+   "version": "4.4.8",
+   "ids": [
+    "GHSA-r628-mhmh-qjhw"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "tar",
+   "version": "4.4.8",
+   "ids": [
+    "GHSA-r6q2-hw4h-h46w"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "tar",
+   "version": "4.4.8",
+   "ids": [
+    "GHSA-vmf3-w455-68vh"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "tar",
+   "version": "4.4.8",
+   "ids": [
+    "GHSA-w8wr-v893-vjvp"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "terser",
+   "version": "4.4.0",
+   "ids": [
+    "GHSA-4wf5-vphf-c2xc"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "tmp",
+   "version": "0.0.33",
+   "ids": [
+    "GHSA-52f5-9888-hmc6"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "tmp",
+   "version": "0.0.33",
+   "ids": [
+    "GHSA-ph9p-34f9-6g65"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "tough-cookie",
+   "version": "2.4.3",
+   "ids": [
+    "GHSA-72xf-g2v4-qvf3"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "trim-newlines",
+   "version": "1.0.0",
+   "ids": [
+    "GHSA-7p7h-4mm5-852v"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "url-parse",
+   "version": "1.4.7",
+   "ids": [
+    "GHSA-8v38-pw62-9cw2"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "url-parse",
+   "version": "1.4.7",
+   "ids": [
+    "GHSA-9m6j-fcg5-2442"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "url-parse",
+   "version": "1.4.7",
+   "ids": [
+    "GHSA-hgjh-723h-mx2j"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "url-parse",
+   "version": "1.4.7",
+   "ids": [
+    "GHSA-hh27-ffr2-f2jc"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "url-parse",
+   "version": "1.4.7",
+   "ids": [
+    "GHSA-jf5r-8hm2-f872"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "url-parse",
+   "version": "1.4.7",
+   "ids": [
+    "GHSA-rqff-837h-mm52"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "uuid",
+   "version": "3.3.2",
+   "ids": [
+    "GHSA-w5hq-g745-h8pq"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "vue-template-compiler",
+   "version": "2.6.10",
+   "ids": [
+    "GHSA-g3ch-rx76-35fx"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "vue",
+   "version": "2.6.10",
+   "ids": [
+    "GHSA-5j4c-8p2g-v4jx"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "webpack-dev-middleware",
+   "version": "3.7.2",
+   "ids": [
+    "GHSA-g84c-rxfj-3j2c"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "webpack-dev-middleware",
+   "version": "3.7.2",
+   "ids": [
+    "GHSA-wr3j-pwj9-hqq6"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "webpack-dev-server",
+   "version": "3.9.0",
+   "ids": [
+    "GHSA-4v9v-hfq4-rm2v"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "webpack-dev-server",
+   "version": "3.9.0",
+   "ids": [
+    "GHSA-79cf-xcqc-c78w"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "webpack-dev-server",
+   "version": "3.9.0",
+   "ids": [
+    "GHSA-9jgg-88mc-972h"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "webpack-dev-server",
+   "version": "3.9.0",
+   "ids": [
+    "GHSA-f5vj-f2hx-8m93"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "webpack-dev-server",
+   "version": "3.9.0",
+   "ids": [
+    "GHSA-m28w-2pqf-7qgj"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "webpack-dev-server",
+   "version": "3.9.0",
+   "ids": [
+    "GHSA-mx8g-39q3-5c79"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "websocket-driver",
+   "version": "0.7.3",
+   "ids": [
+    "GHSA-mp7j-qc5w-4988"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "websocket-driver",
+   "version": "0.7.3",
+   "ids": [
+    "GHSA-xv26-6w52-cph6"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "websocket-extensions",
+   "version": "0.1.3",
+   "ids": [
+    "GHSA-g78m-2chm-r7qv"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "ws",
+   "version": "6.2.1",
+   "ids": [
+    "GHSA-3h5v-q93c-6h6q"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "ws",
+   "version": "6.2.1",
+   "ids": [
+    "GHSA-6fc8-4gx4-v693"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "ws",
+   "version": "6.2.1",
+   "ids": [
+    "GHSA-96hv-2xvq-fx4p"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "y18n",
+   "version": "3.2.1",
+   "ids": [
+    "GHSA-c4w7-xm78-47vh"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "y18n",
+   "version": "4.0.0",
+   "ids": [
+    "GHSA-c4w7-xm78-47vh"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "yargs-parser",
+   "version": "11.1.1",
+   "ids": [
+    "GHSA-p9pc-299p-vxgp"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "yargs-parser",
+   "version": "13.1.1",
+   "ids": [
+    "GHSA-p9pc-299p-vxgp"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "yargs-parser",
+   "version": "5.0.0",
+   "ids": [
+    "GHSA-p9pc-299p-vxgp"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "webui",
+   "package": "yargs-parser",
+   "version": "9.0.2",
+   "ids": [
+    "GHSA-p9pc-299p-vxgp"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "docs",
+   "package": "mkdocs",
+   "version": "1.2.2",
+   "ids": [
+    "GHSA-qh9q-34h6-hcv9",
+    "PYSEC-2021-878"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "docs",
+   "package": "pymdown-extensions",
+   "version": "7.0",
+   "ids": [
+    "GHSA-9xwg-3r6f-jcx2",
+    "PYSEC-2026-3609"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "docs",
+   "package": "pymdown-extensions",
+   "version": "7.0",
+   "ids": [
+    "GHSA-gm37-52c6-37mw",
+    "PYSEC-2026-3654"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "docs",
+   "package": "pymdown-extensions",
+   "version": "7.0",
+   "ids": [
+    "GHSA-jh85-wwv9-24hv",
+    "PYSEC-2026-1824"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "docs",
+   "package": "pymdown-extensions",
+   "version": "7.0",
+   "ids": [
+    "GHSA-r6h4-mm7h-8pmq",
+    "PYSEC-2026-1825"
+   ]
+  }
+ ]
+}

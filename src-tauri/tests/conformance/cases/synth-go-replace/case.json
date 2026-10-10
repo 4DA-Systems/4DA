@@ -1,0 +1,10 @@
+{
+  "id": "synth-go-replace",
+  "source": "synthetic",
+  "licence": "CC0-1.0 (authored for this corpus; package names/versions are public registry facts)",
+  "formats": [
+    "go.mod (go >= 1.17, replace, pseudo-versions)",
+    "go.sum"
+  ],
+  "notes": "Deliberate Go edge cases: `replace golang.org/x/text => golang.org/x/text v0.3.8` (the build installs 0.3.8, not the required 0.3.7), `replace github.com/gin-gonic/gin => ./third_party/gin` (a local directory: no registry install at all), pseudo-versions, and a go.sum carrying hashes for modules outside the go.mod set."
+}

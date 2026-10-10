@@ -1,0 +1,17 @@
+{
+  "id": "js-jest-yarn-berry",
+  "source": "repository",
+  "repo": "https://github.com/jestjs/jest",
+  "ref": "v29.0.0",
+  "commit": "75006e46c76f6fda14bbc0548f86edb2ba087cd2",
+  "licence": "MIT",
+  "include": [
+    "yarn.lock",
+    "package.json",
+    "@workspaces"
+  ],
+  "formats": [
+    "yarn.lock berry (v6 metadata)"
+  ],
+  "notes": "Yarn berry lock of a 50-package workspace: every `@workspace:` entry resolves to `0.0.0-use.local` and must NOT be matched to the registry package of the same name. Trimmed: the 25 e2e fixture locks are omitted."
+}

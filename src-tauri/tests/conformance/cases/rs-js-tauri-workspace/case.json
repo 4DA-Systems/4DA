@@ -1,0 +1,20 @@
+{
+  "id": "rs-js-tauri-workspace",
+  "source": "repository",
+  "repo": "https://github.com/tauri-apps/tauri",
+  "ref": "tauri-v2.0.0",
+  "commit": "c7b9a5352532a8ea52bbdb18d81c99ba2842ec71",
+  "licence": "Apache-2.0 OR MIT",
+  "include": [
+    "Cargo.lock",
+    "@cargo-manifests",
+    "pnpm-lock.yaml",
+    "package.json",
+    "@workspaces"
+  ],
+  "formats": [
+    "Cargo.lock (workspace, platform-specific)",
+    "pnpm-lock.yaml v9"
+  ],
+  "notes": "Tauri's own workspace: Windows/macOS/Linux-only crates (windows-sys, objc2, webkit2gtk) in one lock, local workspace crates, and a pnpm v9 workspace lock."
+}

@@ -1,0 +1,19 @@
+{
+  "id": "php-js-symfony-demo",
+  "source": "repository",
+  "repo": "https://github.com/symfony/demo",
+  "ref": "v1.6.0",
+  "commit": "18c0ef86107afd6c85f81d9727879d489b4aa85f",
+  "licence": "MIT",
+  "include": [
+    "composer.lock",
+    "composer.json",
+    "yarn.lock",
+    "package.json"
+  ],
+  "formats": [
+    "composer.lock (packages + packages-dev)",
+    "yarn.lock v1"
+  ],
+  "notes": "Composer lock with a packages-dev section plus a yarn v1 asset lock."
+}

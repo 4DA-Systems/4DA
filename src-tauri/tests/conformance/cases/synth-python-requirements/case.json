@@ -1,0 +1,9 @@
+{
+  "id": "synth-python-requirements",
+  "source": "synthetic",
+  "licence": "CC0-1.0 (authored for this corpus; package names/versions are public registry facts)",
+  "formats": [
+    "requirements.txt (hashes, extras, markers, -r, ===, VCS)"
+  ],
+  "notes": "Deliberate requirements.txt edge cases: `-r` include, multi-line `--hash` continuation, extras `requests[security,socks]`, an environment marker, spaces around `==`, `===`, trailing comments, an unpinned range (no installed version), and VCS/local installs (not registry packages)."
+}

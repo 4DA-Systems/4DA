@@ -1,0 +1,1190 @@
+{
+ "schema": 1,
+ "case": "py-langchain-poetry-subset",
+ "lockfiles": [
+  {
+   "path": "docs/api_reference/requirements.txt",
+   "format": "requirements",
+   "ecosystem": "PyPI",
+   "status": "supported",
+   "truth_packages": 7
+  },
+  {
+   "path": "libs/core/poetry.lock",
+   "format": "poetry.lock",
+   "ecosystem": "PyPI",
+   "status": "supported",
+   "truth_packages": 132
+  }
+ ],
+ "inventory": {
+  "count": 139,
+  "packages": [
+   "PyPI|docs/api_reference|autodoc-pydantic|1.8",
+   "PyPI|docs/api_reference|nbsphinx|0.8.9",
+   "PyPI|docs/api_reference|pydata-sphinx-theme|0.13.1",
+   "PyPI|docs/api_reference|sphinx-autobuild|2021.3.14",
+   "PyPI|docs/api_reference|sphinx-rtd-theme|1",
+   "PyPI|docs/api_reference|sphinx-typlog-theme|0.8",
+   "PyPI|docs/api_reference|sphinx|4.5",
+   "PyPI|libs/core|annotated-types|0.6",
+   "PyPI|libs/core|anyio|4",
+   "PyPI|libs/core|appnope|0.1.3",
+   "PyPI|libs/core|argon2-cffi-bindings|21.2",
+   "PyPI|libs/core|argon2-cffi|23.1",
+   "PyPI|libs/core|arrow|1.3",
+   "PyPI|libs/core|asttokens|2.4.1",
+   "PyPI|libs/core|async-lru|2.0.4",
+   "PyPI|libs/core|attrs|23.1",
+   "PyPI|libs/core|babel|2.13.1",
+   "PyPI|libs/core|backcall|0.2",
+   "PyPI|libs/core|beautifulsoup4|4.12.2",
+   "PyPI|libs/core|bleach|6.1",
+   "PyPI|libs/core|certifi|2023.11.17",
+   "PyPI|libs/core|cffi|1.16",
+   "PyPI|libs/core|charset-normalizer|3.3.2",
+   "PyPI|libs/core|colorama|0.4.6",
+   "PyPI|libs/core|comm|0.2",
+   "PyPI|libs/core|debugpy|1.8",
+   "PyPI|libs/core|decorator|5.1.1",
+   "PyPI|libs/core|defusedxml|0.7.1",
+   "PyPI|libs/core|exceptiongroup|1.1.3",
+   "PyPI|libs/core|executing|2.0.1",
+   "PyPI|libs/core|fastjsonschema|2.19",
+   "PyPI|libs/core|fqdn|1.5.1",
+   "PyPI|libs/core|freezegun|1.2.2",
+   "PyPI|libs/core|grandalf|0.8",
+   "PyPI|libs/core|idna|3.4",
+   "PyPI|libs/core|importlib-metadata|6.8",
+   "PyPI|libs/core|importlib-resources|6.1.1",
+   "PyPI|libs/core|iniconfig|2",
+   "PyPI|libs/core|ipykernel|6.26",
+   "PyPI|libs/core|ipython|8.12.3",
+   "PyPI|libs/core|ipywidgets|8.1.1",
+   "PyPI|libs/core|isoduration|20.11",
+   "PyPI|libs/core|jedi|0.19.1",
+   "PyPI|libs/core|jinja2|3.1.2",
+   "PyPI|libs/core|json5|0.9.14",
+   "PyPI|libs/core|jsonpatch|1.33",
+   "PyPI|libs/core|jsonpointer|2.4",
+   "PyPI|libs/core|jsonschema-specifications|2023.11.1",
+   "PyPI|libs/core|jsonschema|4.20",
+   "PyPI|libs/core|jupyter-client|8.6",
+   "PyPI|libs/core|jupyter-console|6.6.3",
+   "PyPI|libs/core|jupyter-core|5.5",
+   "PyPI|libs/core|jupyter-events|0.9",
+   "PyPI|libs/core|jupyter-lsp|2.2",
+   "PyPI|libs/core|jupyter-server-terminals|0.4.4",
+   "PyPI|libs/core|jupyter-server|2.10.1",
+   "PyPI|libs/core|jupyter|1",
+   "PyPI|libs/core|jupyterlab-pygments|0.2.2",
+   "PyPI|libs/core|jupyterlab-server|2.25.2",
+   "PyPI|libs/core|jupyterlab-widgets|3.0.9",
+   "PyPI|libs/core|jupyterlab|4.0.8",
+   "PyPI|libs/core|langsmith|0.0.65",
+   "PyPI|libs/core|markupsafe|2.1.3",
+   "PyPI|libs/core|matplotlib-inline|0.1.6",
+   "PyPI|libs/core|mistune|3.0.2",
+   "PyPI|libs/core|mypy-extensions|1",
+   "PyPI|libs/core|mypy|0.991",
+   "PyPI|libs/core|nbclient|0.9",
+   "PyPI|libs/core|nbconvert|7.11",
+   "PyPI|libs/core|nbformat|5.9.2",
+   "PyPI|libs/core|nest-asyncio|1.5.8",
+   "PyPI|libs/core|notebook-shim|0.2.3",
+   "PyPI|libs/core|notebook|7.0.6",
+   "PyPI|libs/core|overrides|7.4",
+   "PyPI|libs/core|packaging|23.2",
+   "PyPI|libs/core|pandocfilters|1.5",
+   "PyPI|libs/core|parso|0.8.3",
+   "PyPI|libs/core|pexpect|4.8",
+   "PyPI|libs/core|pickleshare|0.7.5",
+   "PyPI|libs/core|pkgutil-resolve-name|1.3.10",
+   "PyPI|libs/core|platformdirs|4",
+   "PyPI|libs/core|pluggy|1.3",
+   "PyPI|libs/core|prometheus-client|0.18",
+   "PyPI|libs/core|prompt-toolkit|3.0.41",
+   "PyPI|libs/core|psutil|5.9.6",
+   "PyPI|libs/core|ptyprocess|0.7",
+   "PyPI|libs/core|pure-eval|0.2.2",
+   "PyPI|libs/core|pycparser|2.21",
+   "PyPI|libs/core|pydantic-core|2.14.3",
+   "PyPI|libs/core|pydantic|2.5.1",
+   "PyPI|libs/core|pygments|2.17",
+   "PyPI|libs/core|pyparsing|3.1.1",
+   "PyPI|libs/core|pytest-asyncio|0.21.1",
+   "PyPI|libs/core|pytest-mock|3.12",
+   "PyPI|libs/core|pytest-watcher|0.3.4",
+   "PyPI|libs/core|pytest|7.4.3",
+   "PyPI|libs/core|python-dateutil|2.8.2",
+   "PyPI|libs/core|python-json-logger|2.0.7",
+   "PyPI|libs/core|pytz|2023.3.post1",
+   "PyPI|libs/core|pywin32|306",
+   "PyPI|libs/core|pywinpty|2.0.12",
+   "PyPI|libs/core|pyyaml|6.0.1",
+   "PyPI|libs/core|pyzmq|25.1.1",
+   "PyPI|libs/core|qtconsole|5.5.1",
+   "PyPI|libs/core|qtpy|2.4.1",
+   "PyPI|libs/core|referencing|0.31",
+   "PyPI|libs/core|requests|2.31",
+   "PyPI|libs/core|rfc3339-validator|0.1.4",
+   "PyPI|libs/core|rfc3986-validator|0.1.1",
+   "PyPI|libs/core|rpds-py|0.13",
+   "PyPI|libs/core|ruff|0.1.6",
+   "PyPI|libs/core|send2trash|1.8.2",
+   "PyPI|libs/core|setuptools|67.8",
+   "PyPI|libs/core|six|1.16",
+   "PyPI|libs/core|sniffio|1.3",
+   "PyPI|libs/core|soupsieve|2.5",
+   "PyPI|libs/core|stack-data|0.6.3",
+   "PyPI|libs/core|syrupy|4.6",
+   "PyPI|libs/core|tenacity|8.2.3",
+   "PyPI|libs/core|terminado|0.18",
+   "PyPI|libs/core|tinycss2|1.2.1",
+   "PyPI|libs/core|tomli|2.0.1",
+   "PyPI|libs/core|tornado|6.3.3",
+   "PyPI|libs/core|traitlets|5.13",
+   "PyPI|libs/core|types-jinja2|2.11.9",
+   "PyPI|libs/core|types-markupsafe|1.1.10",
+   "PyPI|libs/core|types-python-dateutil|2.8.19.14",
+   "PyPI|libs/core|types-pyyaml|6.0.12.12",
+   "PyPI|libs/core|types-requests|2.31.0.10",
+   "PyPI|libs/core|typing-extensions|4.8",
+   "PyPI|libs/core|uri-template|1.3",
+   "PyPI|libs/core|urllib3|2.1",
+   "PyPI|libs/core|watchdog|3",
+   "PyPI|libs/core|wcwidth|0.2.10",
+   "PyPI|libs/core|webcolors|1.13",
+   "PyPI|libs/core|webencodings|0.5.1",
+   "PyPI|libs/core|websocket-client|1.6.4",
+   "PyPI|libs/core|widgetsnbextension|4.0.9",
+   "PyPI|libs/core|zipp|3.17"
+  ]
+ },
+ "findings": [
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "anyio",
+   "version": "4.0.0",
+   "ids": [
+    "GHSA-5p39-cfhj-2xmp",
+    "PYSEC-2026-4024"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "anyio",
+   "version": "4.0.0",
+   "ids": [
+    "GHSA-82r6-8w77-94w6",
+    "PYSEC-2026-4025"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "bleach",
+   "version": "6.1.0",
+   "ids": [
+    "GHSA-8rfp-98v4-mmr6"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "bleach",
+   "version": "6.1.0",
+   "ids": [
+    "GHSA-gj48-438w-jh9v"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "certifi",
+   "version": "2023.11.17",
+   "ids": [
+    "GHSA-248v-346w-9cwc",
+    "PYSEC-2024-230"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "idna",
+   "version": "3.4",
+   "ids": [
+    "GHSA-65pc-fj4g-8rjx",
+    "PYSEC-2026-215"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "idna",
+   "version": "3.4",
+   "ids": [
+    "GHSA-jjg7-2v4v-x38h",
+    "PYSEC-2024-60"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "jinja2",
+   "version": "3.1.2",
+   "ids": [
+    "GHSA-cpwx-vrp4-4pq7",
+    "PYSEC-2026-1471"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "jinja2",
+   "version": "3.1.2",
+   "ids": [
+    "GHSA-gmj6-6f8f-6699",
+    "PYSEC-2026-1472"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "jinja2",
+   "version": "3.1.2",
+   "ids": [
+    "GHSA-h5c8-rqwp-cp95",
+    "PYSEC-2026-1473"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "jinja2",
+   "version": "3.1.2",
+   "ids": [
+    "GHSA-h75v-3vvj-5mfj",
+    "PYSEC-2026-1474"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "jinja2",
+   "version": "3.1.2",
+   "ids": [
+    "GHSA-q2x7-8rv6-6q7h",
+    "PYSEC-2026-1475"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "jupyter-core",
+   "version": "5.5.0",
+   "ids": [
+    "GHSA-33p9-3p43-82vq",
+    "PYSEC-2026-1477"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "jupyter-lsp",
+   "version": "2.2.0",
+   "ids": [
+    "GHSA-4qhp-652w-c22x",
+    "PYSEC-2026-1478"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "jupyter-server",
+   "version": "2.10.1",
+   "ids": [
+    "GHSA-24qx-w28j-9m6p",
+    "PYSEC-2026-2187"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "jupyter-server",
+   "version": "2.10.1",
+   "ids": [
+    "GHSA-5789-5fc7-67v3",
+    "PYSEC-2026-68"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "jupyter-server",
+   "version": "2.10.1",
+   "ids": [
+    "GHSA-5mrq-x3x5-8v8f",
+    "PYSEC-2026-69"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "jupyter-server",
+   "version": "2.10.1",
+   "ids": [
+    "GHSA-c3mw-737p-c7g2",
+    "PYSEC-2026-4054"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "jupyter-server",
+   "version": "2.10.1",
+   "ids": [
+    "GHSA-fcw5-x6j4-ccmp",
+    "PYSEC-2026-366"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "jupyter-server",
+   "version": "2.10.1",
+   "ids": [
+    "GHSA-h56g-gq9v-vc8r",
+    "PYSEC-2023-272"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "jupyter-server",
+   "version": "2.10.1",
+   "ids": [
+    "GHSA-hrw6-wg82-cm62",
+    "PYSEC-2024-165"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "jupyter-server",
+   "version": "2.10.1",
+   "ids": [
+    "GHSA-qh7q-6qm3-653w",
+    "PYSEC-2026-67"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "jupyter-server",
+   "version": "2.10.1",
+   "ids": [
+    "PYSEC-2026-2532"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "jupyter-server",
+   "version": "2.10.1",
+   "ids": [
+    "PYSEC-2026-3472"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "jupyterlab",
+   "version": "4.0.8",
+   "ids": [
+    "GHSA-3325-v43h-43rv",
+    "PYSEC-2026-4055"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "jupyterlab",
+   "version": "4.0.8",
+   "ids": [
+    "GHSA-37w4-hwhx-4rc4",
+    "PYSEC-2026-164"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "jupyterlab",
+   "version": "4.0.8",
+   "ids": [
+    "GHSA-3jqq-pw4j-pqcj",
+    "PYSEC-2026-4056"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "jupyterlab",
+   "version": "4.0.8",
+   "ids": [
+    "GHSA-44cc-43rp-5947",
+    "PYSEC-2026-2534"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "jupyterlab",
+   "version": "4.0.8",
+   "ids": [
+    "GHSA-4m77-cmpx-vjc4",
+    "PYSEC-2026-2535"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "jupyterlab",
+   "version": "4.0.8",
+   "ids": [
+    "GHSA-9q39-rmj3-p4r2",
+    "PYSEC-2026-2536"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "jupyterlab",
+   "version": "4.0.8",
+   "ids": [
+    "GHSA-gx64-gj6p-pc4c",
+    "PYSEC-2026-3671"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "jupyterlab",
+   "version": "4.0.8",
+   "ids": [
+    "GHSA-mqcg-5x36-vfcg",
+    "PYSEC-2026-2537"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "jupyterlab",
+   "version": "4.0.8",
+   "ids": [
+    "GHSA-pppj-hq3g-57pj",
+    "PYSEC-2026-3672"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "jupyterlab",
+   "version": "4.0.8",
+   "ids": [
+    "GHSA-rch3-82jr-f9w9",
+    "PYSEC-2026-2538"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "jupyterlab",
+   "version": "4.0.8",
+   "ids": [
+    "GHSA-vmhf-c436-hxj4"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "jupyterlab",
+   "version": "4.0.8",
+   "ids": [
+    "GHSA-vvfj-2jqx-52jm",
+    "PYSEC-2026-1482"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "jupyterlab",
+   "version": "4.0.8",
+   "ids": [
+    "GHSA-whvh-wf3x-g77j"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "jupyterlab",
+   "version": "4.0.8",
+   "ids": [
+    "PYSEC-2024-322"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "langsmith",
+   "version": "0.0.65",
+   "ids": [
+    "GHSA-3644-q5cj-c5c7",
+    "PYSEC-2026-2582"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "langsmith",
+   "version": "0.0.65",
+   "ids": [
+    "GHSA-f4xh-w4cj-qxq8"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "langsmith",
+   "version": "0.0.65",
+   "ids": [
+    "GHSA-rr7j-v2q5-chgv",
+    "PYSEC-2026-2583"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "mistune",
+   "version": "3.0.2",
+   "ids": [
+    "GHSA-2hm2-hc3v-44h9",
+    "PYSEC-2026-2218"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "mistune",
+   "version": "3.0.2",
+   "ids": [
+    "GHSA-4j32-57v6-6g45",
+    "PYSEC-2026-2213"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "mistune",
+   "version": "3.0.2",
+   "ids": [
+    "GHSA-58cw-g322-p94v",
+    "PYSEC-2026-168"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "mistune",
+   "version": "3.0.2",
+   "ids": [
+    "GHSA-8c25-4j27-2rv3",
+    "PYSEC-2026-2211"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "mistune",
+   "version": "3.0.2",
+   "ids": [
+    "GHSA-8g87-j6q8-g93x",
+    "PYSEC-2026-2206"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "mistune",
+   "version": "3.0.2",
+   "ids": [
+    "GHSA-8mp2-v27r-99xp",
+    "PYSEC-2026-2651"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "mistune",
+   "version": "3.0.2",
+   "ids": [
+    "GHSA-8mpj-m6qm-5qr8",
+    "PYSEC-2026-2215"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "mistune",
+   "version": "3.0.2",
+   "ids": [
+    "GHSA-c8j7-8cv4-2xmq",
+    "PYSEC-2026-2210"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "mistune",
+   "version": "3.0.2",
+   "ids": [
+    "GHSA-ffq3-xpv3-j92q",
+    "PYSEC-2026-2216"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "mistune",
+   "version": "3.0.2",
+   "ids": [
+    "GHSA-g97x-gvcm-x72h",
+    "PYSEC-2026-2214"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "mistune",
+   "version": "3.0.2",
+   "ids": [
+    "GHSA-qcq2-496w-v96p",
+    "PYSEC-2026-2652"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "mistune",
+   "version": "3.0.2",
+   "ids": [
+    "GHSA-qfrw-5rxm-mhh2",
+    "PYSEC-2026-2217"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "mistune",
+   "version": "3.0.2",
+   "ids": [
+    "GHSA-r4rv-85jg-w4mf",
+    "PYSEC-2026-2212"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "mistune",
+   "version": "3.0.2",
+   "ids": [
+    "GHSA-v87v-83h2-53w7",
+    "PYSEC-2026-2207"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "mistune",
+   "version": "3.0.2",
+   "ids": [
+    "PYSEC-2026-2208"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "mistune",
+   "version": "3.0.2",
+   "ids": [
+    "PYSEC-2026-2209"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "nbconvert",
+   "version": "7.11.0",
+   "ids": [
+    "GHSA-4c99-qj7h-p3vg",
+    "PYSEC-2026-2229"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "nbconvert",
+   "version": "7.11.0",
+   "ids": [
+    "GHSA-7jqv-fw35-gmx9",
+    "PYSEC-2026-2230"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "nbconvert",
+   "version": "7.11.0",
+   "ids": [
+    "GHSA-xm59-rqc7-hhvf",
+    "PYSEC-2026-1691"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "notebook",
+   "version": "7.0.6",
+   "ids": [
+    "GHSA-44cc-43rp-5947",
+    "PYSEC-2026-1706"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "notebook",
+   "version": "7.0.6",
+   "ids": [
+    "GHSA-4m77-cmpx-vjc4",
+    "PYSEC-2026-1707"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "notebook",
+   "version": "7.0.6",
+   "ids": [
+    "GHSA-9q39-rmj3-p4r2",
+    "PYSEC-2026-1481"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "notebook",
+   "version": "7.0.6",
+   "ids": [
+    "GHSA-mqcg-5x36-vfcg",
+    "PYSEC-2026-2681"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "notebook",
+   "version": "7.0.6",
+   "ids": [
+    "GHSA-rch3-82jr-f9w9",
+    "PYSEC-2026-2682"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "pygments",
+   "version": "2.17.0",
+   "ids": [
+    "GHSA-5239-wwwm-4pmq",
+    "PYSEC-2026-2987"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "pytest",
+   "version": "7.4.3",
+   "ids": [
+    "GHSA-6w46-j5rx-g56g",
+    "PYSEC-2026-1845"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "requests",
+   "version": "2.31.0",
+   "ids": [
+    "GHSA-9hjg-9r4m-mvj7",
+    "PYSEC-2026-1872"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "requests",
+   "version": "2.31.0",
+   "ids": [
+    "GHSA-9wx4-h78v-vm56",
+    "PYSEC-2026-1873"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "requests",
+   "version": "2.31.0",
+   "ids": [
+    "GHSA-gc5v-m9x4-r6x2",
+    "PYSEC-2026-2275"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "setuptools",
+   "version": "67.8.0",
+   "ids": [
+    "GHSA-5rjg-fvgr-3xxf",
+    "PYSEC-2025-49"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "setuptools",
+   "version": "67.8.0",
+   "ids": [
+    "GHSA-cx63-2mw6-8hw5",
+    "PYSEC-2026-1918"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "setuptools",
+   "version": "67.8.0",
+   "ids": [
+    "GHSA-h35f-9h28-mq5c",
+    "PYSEC-2026-3447"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "soupsieve",
+   "version": "2.5",
+   "ids": [
+    "GHSA-2wc2-fm75-p42x",
+    "PYSEC-2026-3071"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "soupsieve",
+   "version": "2.5",
+   "ids": [
+    "GHSA-836r-79rf-4m37",
+    "PYSEC-2026-3072"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "soupsieve",
+   "version": "2.5",
+   "ids": [
+    "GHSA-gjv8-xp57-g29c",
+    "PYSEC-2026-4170"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "soupsieve",
+   "version": "2.5",
+   "ids": [
+    "GHSA-j934-xhv5-fg8f",
+    "PYSEC-2026-4171"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "tornado",
+   "version": "6.3.3",
+   "ids": [
+    "GHSA-3hv7-mjh2-fv65"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "tornado",
+   "version": "6.3.3",
+   "ids": [
+    "GHSA-3x9g-8vmp-wqvf",
+    "PYSEC-2026-3387"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "tornado",
+   "version": "6.3.3",
+   "ids": [
+    "GHSA-753j-mpmx-qq6g"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "tornado",
+   "version": "6.3.3",
+   "ids": [
+    "GHSA-78cv-mqj4-43f7",
+    "GHSA-fqwm-6jpj-5wxc",
+    "PYSEC-2026-2287"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "tornado",
+   "version": "6.3.3",
+   "ids": [
+    "GHSA-7cx3-6m66-7c5m",
+    "PYSEC-2026-1974"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "tornado",
+   "version": "6.3.3",
+   "ids": [
+    "GHSA-8423-8fgw-73vq"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "tornado",
+   "version": "6.3.3",
+   "ids": [
+    "GHSA-8w49-h785-mj3c",
+    "PYSEC-2026-1975"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "tornado",
+   "version": "6.3.3",
+   "ids": [
+    "GHSA-c2m8-h5v5-343r"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "tornado",
+   "version": "6.3.3",
+   "ids": [
+    "GHSA-c98p-7wgm-6p64",
+    "PYSEC-2025-266"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "tornado",
+   "version": "6.3.3",
+   "ids": [
+    "GHSA-chx6-46f5-w4vp"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "tornado",
+   "version": "6.3.3",
+   "ids": [
+    "GHSA-cx3h-4qpv-8hc9",
+    "PYSEC-2026-3388"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "tornado",
+   "version": "6.3.3",
+   "ids": [
+    "GHSA-jhmp-mqwm-3gq8",
+    "PYSEC-2025-267"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "tornado",
+   "version": "6.3.3",
+   "ids": [
+    "GHSA-mgf9-4vpg-hj56",
+    "PYSEC-2026-3389"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "tornado",
+   "version": "6.3.3",
+   "ids": [
+    "GHSA-mpf4-983q-p7j4",
+    "PYSEC-2026-3928"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "tornado",
+   "version": "6.3.3",
+   "ids": [
+    "GHSA-pr2v-jx2c-wg9f",
+    "PYSEC-2025-265"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "tornado",
+   "version": "6.3.3",
+   "ids": [
+    "GHSA-pw6j-qg29-8w7f"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "tornado",
+   "version": "6.3.3",
+   "ids": [
+    "GHSA-qjxf-f2mg-c6mc",
+    "PYSEC-2026-140"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "tornado",
+   "version": "6.3.3",
+   "ids": [
+    "GHSA-w235-7p84-xx57"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "urllib3",
+   "version": "2.1.0",
+   "ids": [
+    "GHSA-2xpw-w6gg-jr37",
+    "PYSEC-2026-1994"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "urllib3",
+   "version": "2.1.0",
+   "ids": [
+    "GHSA-34jh-p97f-mpxf",
+    "PYSEC-2026-1995"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "urllib3",
+   "version": "2.1.0",
+   "ids": [
+    "GHSA-38jv-5279-wg99",
+    "PYSEC-2026-1996"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "urllib3",
+   "version": "2.1.0",
+   "ids": [
+    "GHSA-8988-9cw3-xx77",
+    "PYSEC-2026-4175"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "urllib3",
+   "version": "2.1.0",
+   "ids": [
+    "GHSA-gm62-xv2j-4w53",
+    "PYSEC-2026-1998"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "urllib3",
+   "version": "2.1.0",
+   "ids": [
+    "GHSA-pq67-6m6q-mj2v",
+    "PYSEC-2026-1999"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "urllib3",
+   "version": "2.1.0",
+   "ids": [
+    "GHSA-qccp-gfcp-xxvc",
+    "PYSEC-2026-141"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "urllib3",
+   "version": "2.1.0",
+   "ids": [
+    "GHSA-vxq7-64xx-v4gw",
+    "PYSEC-2026-4177"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "libs/core",
+   "package": "zipp",
+   "version": "3.17.0",
+   "ids": [
+    "GHSA-jfmj-5v4g-7637",
+    "PYSEC-2026-2074"
+   ]
+  }
+ ]
+}

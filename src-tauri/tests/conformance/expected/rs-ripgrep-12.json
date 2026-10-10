@@ -1,0 +1,143 @@
+{
+ "schema": 1,
+ "case": "rs-ripgrep-12",
+ "lockfiles": [
+  {
+   "path": "Cargo.lock",
+   "format": "Cargo.lock",
+   "ecosystem": "crates.io",
+   "status": "supported",
+   "truth_packages": 55
+  }
+ ],
+ "inventory": {
+  "count": 55,
+  "packages": [
+   "crates.io|.|aho-corasick|0.7.10",
+   "crates.io|.|atty|0.2.14",
+   "crates.io|.|autocfg|1.0.0",
+   "crates.io|.|base64|0.11.0",
+   "crates.io|.|bitflags|1.2.1",
+   "crates.io|.|bstr|0.2.12",
+   "crates.io|.|bytecount|0.6.0",
+   "crates.io|.|byteorder|1.3.4",
+   "crates.io|.|cc|1.0.50",
+   "crates.io|.|cfg-if|0.1.10",
+   "crates.io|.|clap|2.33.0",
+   "crates.io|.|crossbeam-channel|0.4.2",
+   "crates.io|.|crossbeam-utils|0.7.2",
+   "crates.io|.|encoding_rs_io|0.1.7",
+   "crates.io|.|encoding_rs|0.8.22",
+   "crates.io|.|fnv|1.0.6",
+   "crates.io|.|fs_extra|1.1.0",
+   "crates.io|.|glob|0.3.0",
+   "crates.io|.|hermit-abi|0.1.8",
+   "crates.io|.|itoa|0.4.5",
+   "crates.io|.|jemalloc-sys|0.3.2",
+   "crates.io|.|jemallocator|0.3.2",
+   "crates.io|.|lazy_static|1.4.0",
+   "crates.io|.|libc|0.2.67",
+   "crates.io|.|log|0.4.8",
+   "crates.io|.|maybe-uninit|2.0.0",
+   "crates.io|.|memchr|2.3.3",
+   "crates.io|.|memmap|0.7.0",
+   "crates.io|.|num_cpus|1.12.0",
+   "crates.io|.|packed_simd|0.3.3",
+   "crates.io|.|pcre2-sys|0.2.2",
+   "crates.io|.|pcre2|0.2.3",
+   "crates.io|.|pkg-config|0.3.17",
+   "crates.io|.|proc-macro2|1.0.9",
+   "crates.io|.|quote|1.0.3",
+   "crates.io|.|regex-automata|0.1.9",
+   "crates.io|.|regex-syntax|0.6.17",
+   "crates.io|.|regex|1.3.5",
+   "crates.io|.|ryu|1.0.3",
+   "crates.io|.|same-file|1.0.6",
+   "crates.io|.|serde_derive|1.0.104",
+   "crates.io|.|serde_json|1.0.48",
+   "crates.io|.|serde|1.0.104",
+   "crates.io|.|strsim|0.8.0",
+   "crates.io|.|syn|1.0.16",
+   "crates.io|.|termcolor|1.1.0",
+   "crates.io|.|textwrap|0.11.0",
+   "crates.io|.|thread_local|1.0.1",
+   "crates.io|.|unicode-width|0.1.7",
+   "crates.io|.|unicode-xid|0.2.0",
+   "crates.io|.|walkdir|2.3.1",
+   "crates.io|.|winapi-i686-pc-windows-gnu|0.4.0",
+   "crates.io|.|winapi-util|0.1.3",
+   "crates.io|.|winapi-x86_64-pc-windows-gnu|0.4.0",
+   "crates.io|.|winapi|0.3.8"
+  ]
+ },
+ "findings": [
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "atty",
+   "version": "0.2.14",
+   "ids": [
+    "GHSA-g98v-hv3f-hcfr",
+    "RUSTSEC-2021-0145"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "atty",
+   "version": "0.2.14",
+   "ids": [
+    "RUSTSEC-2024-0375"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "crossbeam-channel",
+   "version": "0.4.2",
+   "ids": [
+    "GHSA-9g55-pg62-m8hh",
+    "RUSTSEC-2022-0019"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "crossbeam-utils",
+   "version": "0.7.2",
+   "ids": [
+    "GHSA-qc84-gqf4-9926",
+    "RUSTSEC-2022-0041"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "memmap",
+   "version": "0.7.0",
+   "ids": [
+    "RUSTSEC-2020-0077"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "regex",
+   "version": "1.3.5",
+   "ids": [
+    "GHSA-m5pq-gvj9-9vr8",
+    "RUSTSEC-2022-0013"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "thread_local",
+   "version": "1.0.1",
+   "ids": [
+    "GHSA-9hpw-r23r-xgm5",
+    "RUSTSEC-2022-0006"
+   ]
+  }
+ ]
+}

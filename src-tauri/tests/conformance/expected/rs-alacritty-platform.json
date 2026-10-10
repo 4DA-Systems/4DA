@@ -1,0 +1,383 @@
+{
+ "schema": 1,
+ "case": "rs-alacritty-platform",
+ "lockfiles": [
+  {
+   "path": "Cargo.lock",
+   "format": "Cargo.lock",
+   "ecosystem": "crates.io",
+   "status": "supported",
+   "truth_packages": 201
+  }
+ ],
+ "inventory": {
+  "count": 201,
+  "packages": [
+   "crates.io|.|adler32|1.2.0",
+   "crates.io|.|android_glue|0.2.3",
+   "crates.io|.|ansi_term|0.12.1",
+   "crates.io|.|atty|0.2.14",
+   "crates.io|.|autocfg|1.0.1",
+   "crates.io|.|base64|0.13.0",
+   "crates.io|.|bitflags|1.2.1",
+   "crates.io|.|block|0.1.6",
+   "crates.io|.|bumpalo|3.9.1",
+   "crates.io|.|calloop|0.9.3",
+   "crates.io|.|cc|1.0.72",
+   "crates.io|.|cfg-if|0.1.10",
+   "crates.io|.|cfg-if|1.0.0",
+   "crates.io|.|cgl|0.3.2",
+   "crates.io|.|clap|2.34.0",
+   "crates.io|.|clipboard-win|3.1.1",
+   "crates.io|.|cmake|0.1.48",
+   "crates.io|.|cocoa-foundation|0.1.0",
+   "crates.io|.|cocoa|0.24.0",
+   "crates.io|.|copypasta|0.7.1",
+   "crates.io|.|core-foundation-sys|0.7.0",
+   "crates.io|.|core-foundation-sys|0.8.3",
+   "crates.io|.|core-foundation|0.7.0",
+   "crates.io|.|core-foundation|0.9.2",
+   "crates.io|.|core-graphics-types|0.1.1",
+   "crates.io|.|core-graphics|0.19.2",
+   "crates.io|.|core-graphics|0.22.3",
+   "crates.io|.|core-text|19.2.0",
+   "crates.io|.|core-video-sys|0.1.4",
+   "crates.io|.|crc32fast|1.3.0",
+   "crates.io|.|crossfont|0.3.2",
+   "crates.io|.|cty|0.2.2",
+   "crates.io|.|darling_core|0.13.1",
+   "crates.io|.|darling_macro|0.13.1",
+   "crates.io|.|darling|0.13.1",
+   "crates.io|.|dirs-sys|0.3.6",
+   "crates.io|.|dirs|3.0.2",
+   "crates.io|.|dispatch|0.2.0",
+   "crates.io|.|dlib|0.5.0",
+   "crates.io|.|downcast-rs|1.2.0",
+   "crates.io|.|dwrote|0.11.0",
+   "crates.io|.|embed-resource|1.6.5",
+   "crates.io|.|expat-sys|2.1.6",
+   "crates.io|.|filetime|0.2.15",
+   "crates.io|.|fnv|1.0.7",
+   "crates.io|.|foreign-types-macros|0.2.1",
+   "crates.io|.|foreign-types-shared|0.1.1",
+   "crates.io|.|foreign-types-shared|0.3.0",
+   "crates.io|.|foreign-types|0.3.2",
+   "crates.io|.|foreign-types|0.5.0",
+   "crates.io|.|freetype-rs|0.26.0",
+   "crates.io|.|freetype-sys|0.13.1",
+   "crates.io|.|fsevent-sys|2.0.1",
+   "crates.io|.|fsevent|0.4.0",
+   "crates.io|.|fuchsia-zircon-sys|0.3.3",
+   "crates.io|.|fuchsia-zircon|0.3.3",
+   "crates.io|.|getrandom|0.2.3",
+   "crates.io|.|gl_generator|0.14.0",
+   "crates.io|.|glutin_egl_sys|0.1.5",
+   "crates.io|.|glutin_emscripten_sys|0.1.1",
+   "crates.io|.|glutin_gles2_sys|0.1.5",
+   "crates.io|.|glutin_glx_sys|0.1.7",
+   "crates.io|.|glutin_wgl_sys|0.1.5",
+   "crates.io|.|glutin|0.28.0",
+   "crates.io|.|hashbrown|0.11.2",
+   "crates.io|.|heck|0.3.3",
+   "crates.io|.|hermit-abi|0.1.19",
+   "crates.io|.|ident_case|1.0.1",
+   "crates.io|.|indexmap|1.8.0",
+   "crates.io|.|inotify-sys|0.1.5",
+   "crates.io|.|inotify|0.7.1",
+   "crates.io|.|instant|0.1.12",
+   "crates.io|.|iovec|0.1.4",
+   "crates.io|.|itoa|1.0.1",
+   "crates.io|.|jni-sys|0.3.0",
+   "crates.io|.|js-sys|0.3.55",
+   "crates.io|.|kernel32-sys|0.2.2",
+   "crates.io|.|khronos_api|3.1.0",
+   "crates.io|.|lazy_static|1.4.0",
+   "crates.io|.|lazy-bytes-cast|5.0.1",
+   "crates.io|.|lazycell|1.3.0",
+   "crates.io|.|libc|0.2.112",
+   "crates.io|.|libloading|0.7.2",
+   "crates.io|.|linked-hash-map|0.5.4",
+   "crates.io|.|lock_api|0.4.5",
+   "crates.io|.|log|0.4.14",
+   "crates.io|.|malloc_buf|0.0.6",
+   "crates.io|.|memchr|2.4.1",
+   "crates.io|.|memmap2|0.3.1",
+   "crates.io|.|memoffset|0.6.5",
+   "crates.io|.|minimal-lexical|0.2.1",
+   "crates.io|.|miniz_oxide|0.3.7",
+   "crates.io|.|mio-anonymous-pipes|0.2.0",
+   "crates.io|.|mio-extras|2.0.6",
+   "crates.io|.|mio-uds|0.6.8",
+   "crates.io|.|mio|0.6.23",
+   "crates.io|.|mio|0.8.0",
+   "crates.io|.|miow|0.2.2",
+   "crates.io|.|miow|0.3.7",
+   "crates.io|.|ndk-glue|0.5.0",
+   "crates.io|.|ndk-macro|0.3.0",
+   "crates.io|.|ndk-sys|0.2.2",
+   "crates.io|.|ndk|0.5.0",
+   "crates.io|.|net2|0.2.37",
+   "crates.io|.|nix|0.22.2",
+   "crates.io|.|nom|7.1.0",
+   "crates.io|.|notify|4.0.17",
+   "crates.io|.|ntapi|0.3.6",
+   "crates.io|.|num_enum_derive|0.5.6",
+   "crates.io|.|num_enum|0.5.6",
+   "crates.io|.|objc_id|0.1.1",
+   "crates.io|.|objc-foundation|0.1.1",
+   "crates.io|.|objc|0.2.7",
+   "crates.io|.|once_cell|1.9.0",
+   "crates.io|.|osmesa-sys|0.1.2",
+   "crates.io|.|parking_lot_core|0.8.5",
+   "crates.io|.|parking_lot|0.11.2",
+   "crates.io|.|percent-encoding|2.1.0",
+   "crates.io|.|pkg-config|0.3.24",
+   "crates.io|.|png|0.16.8",
+   "crates.io|.|proc-macro-crate|1.1.0",
+   "crates.io|.|proc-macro-error-attr|1.0.4",
+   "crates.io|.|proc-macro-error|1.0.4",
+   "crates.io|.|proc-macro2|1.0.36",
+   "crates.io|.|quick-xml|0.22.0",
+   "crates.io|.|quote|1.0.14",
+   "crates.io|.|raw-window-handle|0.4.2",
+   "crates.io|.|redox_syscall|0.2.10",
+   "crates.io|.|redox_users|0.4.0",
+   "crates.io|.|regex-automata|0.1.10",
+   "crates.io|.|regex-syntax|0.6.25",
+   "crates.io|.|ryu|1.0.9",
+   "crates.io|.|same-file|1.0.6",
+   "crates.io|.|scoped-tls|1.0.0",
+   "crates.io|.|scopeguard|1.1.0",
+   "crates.io|.|serde_derive|1.0.133",
+   "crates.io|.|serde_json|1.0.74",
+   "crates.io|.|serde_yaml|0.8.23",
+   "crates.io|.|serde|1.0.133",
+   "crates.io|.|servo-fontconfig-sys|5.1.0",
+   "crates.io|.|servo-fontconfig|0.5.1",
+   "crates.io|.|shared_library|0.1.9",
+   "crates.io|.|signal-hook-mio|0.2.1",
+   "crates.io|.|signal-hook-registry|1.4.0",
+   "crates.io|.|signal-hook|0.3.13",
+   "crates.io|.|slab|0.4.5",
+   "crates.io|.|smallvec|1.7.0",
+   "crates.io|.|smithay-client-toolkit|0.15.3",
+   "crates.io|.|smithay-clipboard|0.6.5",
+   "crates.io|.|spsc-buffer|0.1.1",
+   "crates.io|.|strsim|0.10.0",
+   "crates.io|.|strsim|0.8.0",
+   "crates.io|.|structopt-derive|0.4.18",
+   "crates.io|.|structopt|0.3.25",
+   "crates.io|.|syn|1.0.85",
+   "crates.io|.|textwrap|0.11.0",
+   "crates.io|.|thiserror-impl|1.0.30",
+   "crates.io|.|thiserror|1.0.30",
+   "crates.io|.|toml|0.5.8",
+   "crates.io|.|unicode-segmentation|1.8.0",
+   "crates.io|.|unicode-width|0.1.9",
+   "crates.io|.|unicode-xid|0.2.2",
+   "crates.io|.|utf8parse|0.2.0",
+   "crates.io|.|vec_map|0.8.2",
+   "crates.io|.|version_check|0.9.4",
+   "crates.io|.|vswhom-sys|0.1.0",
+   "crates.io|.|vswhom|0.1.0",
+   "crates.io|.|vte_generate_state_changes|0.1.1",
+   "crates.io|.|vte|0.10.1",
+   "crates.io|.|walkdir|2.3.2",
+   "crates.io|.|wasi|0.10.2+wasi-snapshot-preview1",
+   "crates.io|.|wasm-bindgen-backend|0.2.78",
+   "crates.io|.|wasm-bindgen-macro-support|0.2.78",
+   "crates.io|.|wasm-bindgen-macro|0.2.78",
+   "crates.io|.|wasm-bindgen-shared|0.2.78",
+   "crates.io|.|wasm-bindgen|0.2.78",
+   "crates.io|.|wayland-client|0.29.4",
+   "crates.io|.|wayland-commons|0.29.4",
+   "crates.io|.|wayland-cursor|0.29.4",
+   "crates.io|.|wayland-egl|0.29.4",
+   "crates.io|.|wayland-protocols|0.29.4",
+   "crates.io|.|wayland-scanner|0.29.4",
+   "crates.io|.|wayland-sys|0.29.4",
+   "crates.io|.|web-sys|0.3.55",
+   "crates.io|.|winapi-build|0.1.1",
+   "crates.io|.|winapi-i686-pc-windows-gnu|0.4.0",
+   "crates.io|.|winapi-util|0.1.5",
+   "crates.io|.|winapi-x86_64-pc-windows-gnu|0.4.0",
+   "crates.io|.|winapi|0.2.8",
+   "crates.io|.|winapi|0.3.9",
+   "crates.io|.|winit|0.26.1",
+   "crates.io|.|winreg|0.10.1",
+   "crates.io|.|wio|0.2.2",
+   "crates.io|.|ws2_32-sys|0.2.1",
+   "crates.io|.|x11-clipboard|0.5.3",
+   "crates.io|.|x11-dl|2.19.1",
+   "crates.io|.|xcb|0.10.1",
+   "crates.io|.|xcursor|0.3.4",
+   "crates.io|.|xdg|2.4.0",
+   "crates.io|.|xml-rs|0.8.4",
+   "crates.io|.|yaml-rust|0.4.5"
+  ]
+ },
+ "findings": [
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "ansi_term",
+   "version": "0.12.1",
+   "ids": [
+    "RUSTSEC-2021-0139"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "atty",
+   "version": "0.2.14",
+   "ids": [
+    "GHSA-g98v-hv3f-hcfr",
+    "RUSTSEC-2021-0145"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "atty",
+   "version": "0.2.14",
+   "ids": [
+    "RUSTSEC-2024-0375"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "bumpalo",
+   "version": "3.9.1",
+   "ids": [
+    "GHSA-f85w-wvc7-crwc",
+    "RUSTSEC-2022-0078"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "instant",
+   "version": "0.1.12",
+   "ids": [
+    "RUSTSEC-2024-0384"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "memmap2",
+   "version": "0.3.1",
+   "ids": [
+    "RUSTSEC-2026-0186"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "mio",
+   "version": "0.8.0",
+   "ids": [
+    "GHSA-r8w9-5wcg-vfj7",
+    "RUSTSEC-2024-0019"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "net2",
+   "version": "0.2.37",
+   "ids": [
+    "RUSTSEC-2020-0016"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "proc-macro-error",
+   "version": "1.0.4",
+   "ids": [
+    "RUSTSEC-2024-0370"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "quick-xml",
+   "version": "0.22.0",
+   "ids": [
+    "RUSTSEC-2026-0194"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "quick-xml",
+   "version": "0.22.0",
+   "ids": [
+    "RUSTSEC-2026-0195"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "servo-fontconfig",
+   "version": "0.5.1",
+   "ids": [
+    "RUSTSEC-2025-0059"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "structopt",
+   "version": "0.3.25",
+   "ids": [
+    "RUSTSEC-2022-0104"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "xcb",
+   "version": "0.10.1",
+   "ids": [
+    "GHSA-2xpg-3hx4-fm9r",
+    "GHSA-3288-cwgw-ch86",
+    "GHSA-3cj3-jrrp-9rxf",
+    "GHSA-mp6r-fgw2-rxfx",
+    "RUSTSEC-2021-0019"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "xcb",
+   "version": "0.10.1",
+   "ids": [
+    "GHSA-655h-hg88-5qmf",
+    "RUSTSEC-2025-0051"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "xcb",
+   "version": "0.10.1",
+   "ids": [
+    "GHSA-c8hq-x4mm-p6q6",
+    "RUSTSEC-2020-0097"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "yaml-rust",
+   "version": "0.4.5",
+   "ids": [
+    "RUSTSEC-2024-0320"
+   ]
+  }
+ ]
+}

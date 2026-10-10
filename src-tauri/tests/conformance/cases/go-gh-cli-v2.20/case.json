@@ -1,0 +1,17 @@
+{
+  "id": "go-gh-cli-v2.20",
+  "source": "repository",
+  "repo": "https://github.com/cli/cli",
+  "ref": "v2.20.0",
+  "commit": "f2febbc46e993b56253c3ec2cd64b363af26fccb",
+  "licence": "MIT",
+  "include": [
+    "go.mod",
+    "go.sum"
+  ],
+  "formats": [
+    "go.mod (go >= 1.17, replace, pseudo-versions)",
+    "go.sum"
+  ],
+  "notes": "Go 1.18 module with a `replace` of golang.org/x/crypto by a fork and pseudo-versions."
+}

@@ -1,0 +1,16 @@
+{
+  "id": "rs-alacritty-platform",
+  "source": "repository",
+  "repo": "https://github.com/alacritty/alacritty",
+  "ref": "v0.10.0",
+  "commit": "8a26dee0a9167777709935789b95758e36885617",
+  "licence": "Apache-2.0",
+  "include": [
+    "Cargo.lock",
+    "@cargo-manifests"
+  ],
+  "formats": [
+    "Cargo.lock (platform-specific)"
+  ],
+  "notes": "Terminal emulator with X11/Wayland/macOS/Windows-only dependency trees in one lock."
+}

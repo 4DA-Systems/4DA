@@ -1,0 +1,18 @@
+{
+  "id": "py-flask-pip-compile",
+  "source": "repository",
+  "repo": "https://github.com/pallets/flask",
+  "ref": "2.0.0",
+  "commit": "2f0c62f5e6e290843f03c1fa70817c7a3c7fd661",
+  "licence": "BSD-3-Clause",
+  "include": [
+    "requirements/dev.txt",
+    "requirements/docs.txt",
+    "requirements/tests.txt",
+    "requirements/typing.txt"
+  ],
+  "formats": [
+    "pip-compile output (requirements/*.txt)"
+  ],
+  "notes": "pip-compile output with `# via` comments in a requirements/ directory (files are not named requirements.txt)."
+}

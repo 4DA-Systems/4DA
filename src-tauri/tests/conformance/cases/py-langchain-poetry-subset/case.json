@@ -1,0 +1,18 @@
+{
+  "id": "py-langchain-poetry-subset",
+  "source": "repository",
+  "repo": "https://github.com/langchain-ai/langchain",
+  "ref": "v0.1.0",
+  "commit": "4ac61670b283897dca3ff9aaba0a5eed80389b3d",
+  "licence": "MIT",
+  "include": [
+    "libs/core/poetry.lock",
+    "libs/core/pyproject.toml",
+    "docs/api_reference/requirements.txt"
+  ],
+  "formats": [
+    "poetry.lock",
+    "requirements.txt (with -e and unpinned lines)"
+  ],
+  "notes": "Trimmed from 104 lockfiles (22 MB) to libs/core (poetry, markers/extras throughout) and a docs requirements.txt mixing -e paths, unpinned and pinned lines."
+}

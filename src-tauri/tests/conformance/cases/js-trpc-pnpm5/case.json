@@ -1,0 +1,17 @@
+{
+  "id": "js-trpc-pnpm5",
+  "source": "repository",
+  "repo": "https://github.com/trpc/trpc",
+  "ref": "v10.9.0",
+  "commit": "3efac6213e5a488c9636b8b884fb755d38f12381",
+  "licence": "MIT",
+  "include": [
+    "pnpm-lock.yaml",
+    "package.json",
+    "@workspaces"
+  ],
+  "formats": [
+    "pnpm-lock.yaml v5.4"
+  ],
+  "notes": "pnpm 5.4 workspace lock: `/pkg/1.0.0_react@18.2.0` peer-suffixed keys and `link:` workspace importers."
+}

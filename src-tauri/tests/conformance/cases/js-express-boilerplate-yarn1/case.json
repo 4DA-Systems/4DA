@@ -1,0 +1,16 @@
+{
+  "id": "js-express-boilerplate-yarn1",
+  "source": "repository",
+  "repo": "https://github.com/hagopj13/node-express-boilerplate",
+  "ref": "v1.7.0",
+  "commit": "457b76f189b1321b9c38a10fc1da713b834bf1a6",
+  "licence": "MIT",
+  "include": [
+    "yarn.lock",
+    "package.json"
+  ],
+  "formats": [
+    "yarn.lock v1"
+  ],
+  "notes": "Classic yarn v1 lock with dev-only tooling."
+}

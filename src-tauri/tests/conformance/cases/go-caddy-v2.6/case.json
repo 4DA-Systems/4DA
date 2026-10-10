@@ -1,0 +1,17 @@
+{
+  "id": "go-caddy-v2.6",
+  "source": "repository",
+  "repo": "https://github.com/caddyserver/caddy",
+  "ref": "v2.6.0",
+  "commit": "821a08a6e39ed0e7c43b0271ccf126c194eb6339",
+  "licence": "Apache-2.0",
+  "include": [
+    "go.mod",
+    "go.sum"
+  ],
+  "formats": [
+    "go.mod (go >= 1.17)",
+    "go.sum"
+  ],
+  "notes": "Go 1.18 module: go.mod lists the full pruned module graph, so go.mod requires ARE the build list; go.sum also lists modules outside it."
+}

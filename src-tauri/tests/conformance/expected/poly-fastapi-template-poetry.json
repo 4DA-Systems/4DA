@@ -1,0 +1,2169 @@
+{
+ "schema": 1,
+ "case": "poly-fastapi-template-poetry",
+ "lockfiles": [
+  {
+   "path": "backend/poetry.lock",
+   "format": "poetry.lock",
+   "ecosystem": "PyPI",
+   "status": "supported",
+   "truth_packages": 84
+  },
+  {
+   "path": "frontend/package-lock.json",
+   "format": "npm-v2",
+   "ecosystem": "npm",
+   "status": "supported",
+   "truth_packages": 423
+  }
+ ],
+ "inventory": {
+  "count": 507,
+  "packages": [
+   "npm|frontend|@aashutoshrathi/word-wrap|1.2.6",
+   "npm|frontend|@apidevtools/json-schema-ref-parser|9.0.9",
+   "npm|frontend|@babel/code-frame|7.23.5",
+   "npm|frontend|@babel/helper-module-imports|7.22.15",
+   "npm|frontend|@babel/helper-string-parser|7.23.4",
+   "npm|frontend|@babel/helper-validator-identifier|7.22.20",
+   "npm|frontend|@babel/highlight|7.23.4",
+   "npm|frontend|@babel/runtime|7.23.9",
+   "npm|frontend|@babel/types|7.23.9",
+   "npm|frontend|@chakra-ui/accordion|2.3.1",
+   "npm|frontend|@chakra-ui/alert|2.2.2",
+   "npm|frontend|@chakra-ui/anatomy|2.2.2",
+   "npm|frontend|@chakra-ui/avatar|2.3.0",
+   "npm|frontend|@chakra-ui/breadcrumb|2.2.0",
+   "npm|frontend|@chakra-ui/breakpoint-utils|2.0.8",
+   "npm|frontend|@chakra-ui/button|2.1.0",
+   "npm|frontend|@chakra-ui/card|2.2.0",
+   "npm|frontend|@chakra-ui/checkbox|2.3.2",
+   "npm|frontend|@chakra-ui/clickable|2.1.0",
+   "npm|frontend|@chakra-ui/close-button|2.1.1",
+   "npm|frontend|@chakra-ui/color-mode|2.2.0",
+   "npm|frontend|@chakra-ui/control-box|2.1.0",
+   "npm|frontend|@chakra-ui/counter|2.1.0",
+   "npm|frontend|@chakra-ui/css-reset|2.3.0",
+   "npm|frontend|@chakra-ui/descendant|3.1.0",
+   "npm|frontend|@chakra-ui/dom-utils|2.1.0",
+   "npm|frontend|@chakra-ui/editable|3.1.0",
+   "npm|frontend|@chakra-ui/event-utils|2.0.8",
+   "npm|frontend|@chakra-ui/focus-lock|2.1.0",
+   "npm|frontend|@chakra-ui/form-control|2.2.0",
+   "npm|frontend|@chakra-ui/hooks|2.2.1",
+   "npm|frontend|@chakra-ui/icon|3.2.0",
+   "npm|frontend|@chakra-ui/icons|2.1.1",
+   "npm|frontend|@chakra-ui/image|2.1.0",
+   "npm|frontend|@chakra-ui/input|2.1.2",
+   "npm|frontend|@chakra-ui/layout|2.3.1",
+   "npm|frontend|@chakra-ui/lazy-utils|2.0.5",
+   "npm|frontend|@chakra-ui/live-region|2.1.0",
+   "npm|frontend|@chakra-ui/media-query|3.3.0",
+   "npm|frontend|@chakra-ui/menu|2.2.1",
+   "npm|frontend|@chakra-ui/modal|2.3.1",
+   "npm|frontend|@chakra-ui/number-input|2.1.2",
+   "npm|frontend|@chakra-ui/number-utils|2.0.7",
+   "npm|frontend|@chakra-ui/object-utils|2.1.0",
+   "npm|frontend|@chakra-ui/pin-input|2.1.0",
+   "npm|frontend|@chakra-ui/popover|2.2.1",
+   "npm|frontend|@chakra-ui/popper|3.1.0",
+   "npm|frontend|@chakra-ui/portal|2.1.0",
+   "npm|frontend|@chakra-ui/progress|2.2.0",
+   "npm|frontend|@chakra-ui/provider|2.4.2",
+   "npm|frontend|@chakra-ui/radio|2.1.2",
+   "npm|frontend|@chakra-ui/react-children-utils|2.0.6",
+   "npm|frontend|@chakra-ui/react-context|2.1.0",
+   "npm|frontend|@chakra-ui/react-env|3.1.0",
+   "npm|frontend|@chakra-ui/react-types|2.0.7",
+   "npm|frontend|@chakra-ui/react-use-animation-state|2.1.0",
+   "npm|frontend|@chakra-ui/react-use-callback-ref|2.1.0",
+   "npm|frontend|@chakra-ui/react-use-controllable-state|2.1.0",
+   "npm|frontend|@chakra-ui/react-use-disclosure|2.1.0",
+   "npm|frontend|@chakra-ui/react-use-event-listener|2.1.0",
+   "npm|frontend|@chakra-ui/react-use-focus-effect|2.1.0",
+   "npm|frontend|@chakra-ui/react-use-focus-on-pointer-down|2.1.0",
+   "npm|frontend|@chakra-ui/react-use-interval|2.1.0",
+   "npm|frontend|@chakra-ui/react-use-latest-ref|2.1.0",
+   "npm|frontend|@chakra-ui/react-use-merge-refs|2.1.0",
+   "npm|frontend|@chakra-ui/react-use-outside-click|2.2.0",
+   "npm|frontend|@chakra-ui/react-use-pan-event|2.1.0",
+   "npm|frontend|@chakra-ui/react-use-previous|2.1.0",
+   "npm|frontend|@chakra-ui/react-use-safe-layout-effect|2.1.0",
+   "npm|frontend|@chakra-ui/react-use-size|2.1.0",
+   "npm|frontend|@chakra-ui/react-use-timeout|2.1.0",
+   "npm|frontend|@chakra-ui/react-use-update-effect|2.1.0",
+   "npm|frontend|@chakra-ui/react-utils|2.0.12",
+   "npm|frontend|@chakra-ui/react|2.8.2",
+   "npm|frontend|@chakra-ui/select|2.1.2",
+   "npm|frontend|@chakra-ui/shared-utils|2.0.5",
+   "npm|frontend|@chakra-ui/skeleton|2.1.0",
+   "npm|frontend|@chakra-ui/skip-nav|2.1.0",
+   "npm|frontend|@chakra-ui/slider|2.1.0",
+   "npm|frontend|@chakra-ui/spinner|2.1.0",
+   "npm|frontend|@chakra-ui/stat|2.1.1",
+   "npm|frontend|@chakra-ui/stepper|2.3.1",
+   "npm|frontend|@chakra-ui/styled-system|2.9.2",
+   "npm|frontend|@chakra-ui/switch|2.1.2",
+   "npm|frontend|@chakra-ui/system|2.6.2",
+   "npm|frontend|@chakra-ui/table|2.1.0",
+   "npm|frontend|@chakra-ui/tabs|3.0.0",
+   "npm|frontend|@chakra-ui/tag|3.1.1",
+   "npm|frontend|@chakra-ui/textarea|2.1.2",
+   "npm|frontend|@chakra-ui/theme-tools|2.1.2",
+   "npm|frontend|@chakra-ui/theme-utils|2.0.21",
+   "npm|frontend|@chakra-ui/theme|3.3.1",
+   "npm|frontend|@chakra-ui/toast|7.0.2",
+   "npm|frontend|@chakra-ui/tooltip|2.3.1",
+   "npm|frontend|@chakra-ui/transition|2.1.0",
+   "npm|frontend|@chakra-ui/utils|2.0.15",
+   "npm|frontend|@chakra-ui/visually-hidden|2.2.0",
+   "npm|frontend|@emotion/babel-plugin|11.11.0",
+   "npm|frontend|@emotion/cache|11.11.0",
+   "npm|frontend|@emotion/hash|0.9.1",
+   "npm|frontend|@emotion/is-prop-valid|0.8.8",
+   "npm|frontend|@emotion/is-prop-valid|1.2.1",
+   "npm|frontend|@emotion/memoize|0.7.4",
+   "npm|frontend|@emotion/memoize|0.8.1",
+   "npm|frontend|@emotion/react|11.11.3",
+   "npm|frontend|@emotion/serialize|1.1.3",
+   "npm|frontend|@emotion/sheet|1.2.2",
+   "npm|frontend|@emotion/styled|11.11.0",
+   "npm|frontend|@emotion/unitless|0.8.1",
+   "npm|frontend|@emotion/use-insertion-effect-with-fallbacks|1.0.1",
+   "npm|frontend|@emotion/utils|1.2.1",
+   "npm|frontend|@emotion/weak-memoize|0.3.1",
+   "npm|frontend|@esbuild/android-arm|0.19.8",
+   "npm|frontend|@esbuild/android-arm64|0.19.8",
+   "npm|frontend|@esbuild/android-x64|0.19.8",
+   "npm|frontend|@esbuild/darwin-arm64|0.19.8",
+   "npm|frontend|@esbuild/darwin-x64|0.19.8",
+   "npm|frontend|@esbuild/freebsd-arm64|0.19.8",
+   "npm|frontend|@esbuild/freebsd-x64|0.19.8",
+   "npm|frontend|@esbuild/linux-arm|0.19.8",
+   "npm|frontend|@esbuild/linux-arm64|0.19.8",
+   "npm|frontend|@esbuild/linux-ia32|0.19.8",
+   "npm|frontend|@esbuild/linux-loong64|0.19.8",
+   "npm|frontend|@esbuild/linux-mips64el|0.19.8",
+   "npm|frontend|@esbuild/linux-ppc64|0.19.8",
+   "npm|frontend|@esbuild/linux-riscv64|0.19.8",
+   "npm|frontend|@esbuild/linux-s390x|0.19.8",
+   "npm|frontend|@esbuild/linux-x64|0.19.8",
+   "npm|frontend|@esbuild/netbsd-x64|0.19.8",
+   "npm|frontend|@esbuild/openbsd-x64|0.19.8",
+   "npm|frontend|@esbuild/sunos-x64|0.19.8",
+   "npm|frontend|@esbuild/win32-arm64|0.19.8",
+   "npm|frontend|@esbuild/win32-ia32|0.19.8",
+   "npm|frontend|@esbuild/win32-x64|0.19.8",
+   "npm|frontend|@eslint-community/eslint-utils|4.4.0",
+   "npm|frontend|@eslint-community/regexpp|4.10.0",
+   "npm|frontend|@eslint/eslintrc|2.1.3",
+   "npm|frontend|@eslint/js|8.54.0",
+   "npm|frontend|@humanwhocodes/config-array|0.11.13",
+   "npm|frontend|@humanwhocodes/module-importer|1.0.1",
+   "npm|frontend|@humanwhocodes/object-schema|2.0.1",
+   "npm|frontend|@jsdevtools/ono|7.1.3",
+   "npm|frontend|@nodelib/fs.scandir|2.1.5",
+   "npm|frontend|@nodelib/fs.stat|2.0.5",
+   "npm|frontend|@nodelib/fs.walk|1.2.8",
+   "npm|frontend|@popperjs/core|2.11.8",
+   "npm|frontend|@rollup/rollup-android-arm-eabi|4.6.1",
+   "npm|frontend|@rollup/rollup-android-arm64|4.6.1",
+   "npm|frontend|@rollup/rollup-darwin-arm64|4.6.1",
+   "npm|frontend|@rollup/rollup-darwin-x64|4.6.1",
+   "npm|frontend|@rollup/rollup-linux-arm-gnueabihf|4.6.1",
+   "npm|frontend|@rollup/rollup-linux-arm64-gnu|4.6.1",
+   "npm|frontend|@rollup/rollup-linux-arm64-musl|4.6.1",
+   "npm|frontend|@rollup/rollup-linux-x64-gnu|4.6.1",
+   "npm|frontend|@rollup/rollup-linux-x64-musl|4.6.1",
+   "npm|frontend|@rollup/rollup-win32-arm64-msvc|4.6.1",
+   "npm|frontend|@rollup/rollup-win32-ia32-msvc|4.6.1",
+   "npm|frontend|@rollup/rollup-win32-x64-msvc|4.6.1",
+   "npm|frontend|@swc/core-darwin-arm64|1.3.100",
+   "npm|frontend|@swc/core-darwin-x64|1.3.100",
+   "npm|frontend|@swc/core-linux-arm64-gnu|1.3.100",
+   "npm|frontend|@swc/core-linux-arm64-musl|1.3.100",
+   "npm|frontend|@swc/core-linux-x64-gnu|1.3.100",
+   "npm|frontend|@swc/core-linux-x64-musl|1.3.100",
+   "npm|frontend|@swc/core-win32-arm64-msvc|1.3.100",
+   "npm|frontend|@swc/core-win32-ia32-msvc|1.3.100",
+   "npm|frontend|@swc/core-win32-x64-msvc|1.3.100",
+   "npm|frontend|@swc/core|1.3.100",
+   "npm|frontend|@swc/counter|0.1.2",
+   "npm|frontend|@swc/types|0.1.5",
+   "npm|frontend|@tanstack/history|1.15.13",
+   "npm|frontend|@tanstack/react-router|1.19.1",
+   "npm|frontend|@tanstack/react-store|0.2.1",
+   "npm|frontend|@tanstack/router-devtools|1.19.1",
+   "npm|frontend|@tanstack/router-generator|1.19.0",
+   "npm|frontend|@tanstack/router-vite-plugin|1.19.0",
+   "npm|frontend|@tanstack/store|0.1.3",
+   "npm|frontend|@types/json-schema|7.0.15",
+   "npm|frontend|@types/lodash.mergewith|4.6.7",
+   "npm|frontend|@types/lodash|4.14.202",
+   "npm|frontend|@types/node|20.10.5",
+   "npm|frontend|@types/parse-json|4.0.2",
+   "npm|frontend|@types/prop-types|15.7.11",
+   "npm|frontend|@types/react-dom|18.2.17",
+   "npm|frontend|@types/react|18.2.39",
+   "npm|frontend|@types/scheduler|0.16.8",
+   "npm|frontend|@types/semver|7.5.6",
+   "npm|frontend|@typescript-eslint/eslint-plugin|6.13.1",
+   "npm|frontend|@typescript-eslint/parser|6.13.1",
+   "npm|frontend|@typescript-eslint/scope-manager|6.13.1",
+   "npm|frontend|@typescript-eslint/type-utils|6.13.1",
+   "npm|frontend|@typescript-eslint/types|6.13.1",
+   "npm|frontend|@typescript-eslint/typescript-estree|6.13.1",
+   "npm|frontend|@typescript-eslint/utils|6.13.1",
+   "npm|frontend|@typescript-eslint/visitor-keys|6.13.1",
+   "npm|frontend|@ungap/structured-clone|1.2.0",
+   "npm|frontend|@vitejs/plugin-react-swc|3.5.0",
+   "npm|frontend|@zag-js/dom-query|0.16.0",
+   "npm|frontend|@zag-js/element-size|0.10.5",
+   "npm|frontend|@zag-js/focus-visible|0.16.0",
+   "npm|frontend|acorn-jsx|5.3.2",
+   "npm|frontend|acorn|8.11.2",
+   "npm|frontend|ajv|6.12.6",
+   "npm|frontend|ansi-regex|5.0.1",
+   "npm|frontend|ansi-styles|3.2.1",
+   "npm|frontend|ansi-styles|4.3.0",
+   "npm|frontend|argparse|2.0.1",
+   "npm|frontend|aria-hidden|1.2.3",
+   "npm|frontend|array-union|2.1.0",
+   "npm|frontend|asynckit|0.4.0",
+   "npm|frontend|axios|1.6.2",
+   "npm|frontend|babel-plugin-macros|3.1.0",
+   "npm|frontend|balanced-match|1.0.2",
+   "npm|frontend|big-integer|1.6.52",
+   "npm|frontend|brace-expansion|1.1.11",
+   "npm|frontend|braces|3.0.2",
+   "npm|frontend|broadcast-channel|3.7.0",
+   "npm|frontend|call-me-maybe|1.0.2",
+   "npm|frontend|callsites|3.1.0",
+   "npm|frontend|camelcase|6.3.0",
+   "npm|frontend|chalk|2.4.2",
+   "npm|frontend|chalk|4.1.2",
+   "npm|frontend|clsx|2.1.0",
+   "npm|frontend|color-convert|1.9.3",
+   "npm|frontend|color-convert|2.0.1",
+   "npm|frontend|color-name|1.1.3",
+   "npm|frontend|color-name|1.1.4",
+   "npm|frontend|color2k|2.0.3",
+   "npm|frontend|combined-stream|1.0.8",
+   "npm|frontend|commander|11.1.0",
+   "npm|frontend|compute-scroll-into-view|3.0.3",
+   "npm|frontend|concat-map|0.0.1",
+   "npm|frontend|convert-source-map|1.9.0",
+   "npm|frontend|copy-to-clipboard|3.3.3",
+   "npm|frontend|cosmiconfig|7.1.0",
+   "npm|frontend|cross-spawn|7.0.3",
+   "npm|frontend|css-box-model|1.2.1",
+   "npm|frontend|csstype|3.1.2",
+   "npm|frontend|date-fns|2.30.0",
+   "npm|frontend|debug|4.3.4",
+   "npm|frontend|deep-is|0.1.4",
+   "npm|frontend|delayed-stream|1.0.0",
+   "npm|frontend|detect-node-es|1.1.0",
+   "npm|frontend|detect-node|2.1.0",
+   "npm|frontend|dir-glob|3.0.1",
+   "npm|frontend|doctrine|3.0.0",
+   "npm|frontend|error-ex|1.3.2",
+   "npm|frontend|esbuild|0.19.8",
+   "npm|frontend|escape-string-regexp|1.0.5",
+   "npm|frontend|escape-string-regexp|4.0.0",
+   "npm|frontend|eslint-plugin-react-hooks|4.6.0",
+   "npm|frontend|eslint-plugin-react-refresh|0.4.4",
+   "npm|frontend|eslint-scope|7.2.2",
+   "npm|frontend|eslint-visitor-keys|3.4.3",
+   "npm|frontend|eslint|8.54.0",
+   "npm|frontend|espree|9.6.1",
+   "npm|frontend|esquery|1.5.0",
+   "npm|frontend|esrecurse|4.3.0",
+   "npm|frontend|estraverse|5.3.0",
+   "npm|frontend|esutils|2.0.3",
+   "npm|frontend|fast-deep-equal|3.1.3",
+   "npm|frontend|fast-glob|3.3.2",
+   "npm|frontend|fast-json-stable-stringify|2.1.0",
+   "npm|frontend|fast-levenshtein|2.0.6",
+   "npm|frontend|fastq|1.15.0",
+   "npm|frontend|file-entry-cache|6.0.1",
+   "npm|frontend|fill-range|7.0.1",
+   "npm|frontend|find-root|1.1.0",
+   "npm|frontend|find-up|5.0.0",
+   "npm|frontend|flat-cache|3.2.0",
+   "npm|frontend|flatted|3.2.9",
+   "npm|frontend|focus-lock|1.3.3",
+   "npm|frontend|follow-redirects|1.15.5",
+   "npm|frontend|form-data|4.0.0",
+   "npm|frontend|framer-motion|10.16.16",
+   "npm|frontend|framesync|6.1.2",
+   "npm|frontend|fs-extra|11.2.0",
+   "npm|frontend|fs.realpath|1.0.0",
+   "npm|frontend|fsevents|2.3.3",
+   "npm|frontend|function-bind|1.1.2",
+   "npm|frontend|get-nonce|1.0.1",
+   "npm|frontend|glob-parent|5.1.2",
+   "npm|frontend|glob-parent|6.0.2",
+   "npm|frontend|glob|7.2.3",
+   "npm|frontend|globals|13.23.0",
+   "npm|frontend|globby|11.1.0",
+   "npm|frontend|goober|2.1.14",
+   "npm|frontend|graceful-fs|4.2.11",
+   "npm|frontend|graphemer|1.4.0",
+   "npm|frontend|handlebars|4.7.8",
+   "npm|frontend|has-flag|3.0.0",
+   "npm|frontend|has-flag|4.0.0",
+   "npm|frontend|hasown|2.0.1",
+   "npm|frontend|hoist-non-react-statics|3.3.2",
+   "npm|frontend|ignore|5.3.0",
+   "npm|frontend|import-fresh|3.3.0",
+   "npm|frontend|imurmurhash|0.1.4",
+   "npm|frontend|inflight|1.0.6",
+   "npm|frontend|inherits|2.0.4",
+   "npm|frontend|invariant|2.2.4",
+   "npm|frontend|is-arrayish|0.2.1",
+   "npm|frontend|is-core-module|2.13.1",
+   "npm|frontend|is-extglob|2.1.1",
+   "npm|frontend|is-glob|4.0.3",
+   "npm|frontend|is-number|7.0.0",
+   "npm|frontend|is-path-inside|3.0.3",
+   "npm|frontend|isexe|2.0.0",
+   "npm|frontend|js-sha3|0.8.0",
+   "npm|frontend|js-tokens|4.0.0",
+   "npm|frontend|js-yaml|4.1.0",
+   "npm|frontend|json-buffer|3.0.1",
+   "npm|frontend|json-parse-even-better-errors|2.3.1",
+   "npm|frontend|json-schema-ref-parser|9.0.9",
+   "npm|frontend|json-schema-traverse|0.4.1",
+   "npm|frontend|json-stable-stringify-without-jsonify|1.0.1",
+   "npm|frontend|jsonfile|6.1.0",
+   "npm|frontend|keyv|4.5.4",
+   "npm|frontend|levn|0.4.1",
+   "npm|frontend|lines-and-columns|1.2.4",
+   "npm|frontend|locate-path|6.0.0",
+   "npm|frontend|lodash.merge|4.6.2",
+   "npm|frontend|lodash.mergewith|4.6.2",
+   "npm|frontend|loose-envify|1.4.0",
+   "npm|frontend|lru-cache|6.0.0",
+   "npm|frontend|match-sorter|6.3.4",
+   "npm|frontend|merge2|1.4.1",
+   "npm|frontend|micromatch|4.0.5",
+   "npm|frontend|microseconds|0.2.0",
+   "npm|frontend|mime-db|1.52.0",
+   "npm|frontend|mime-types|2.1.35",
+   "npm|frontend|minimatch|3.1.2",
+   "npm|frontend|minimist|1.2.8",
+   "npm|frontend|ms|2.1.2",
+   "npm|frontend|nano-time|1.0.0",
+   "npm|frontend|nanoid|3.3.7",
+   "npm|frontend|natural-compare|1.4.0",
+   "npm|frontend|neo-async|2.6.2",
+   "npm|frontend|object-assign|4.1.1",
+   "npm|frontend|oblivious-set|1.0.0",
+   "npm|frontend|once|1.4.0",
+   "npm|frontend|openapi-typescript-codegen|0.25.0",
+   "npm|frontend|optionator|0.9.3",
+   "npm|frontend|p-limit|3.1.0",
+   "npm|frontend|p-locate|5.0.0",
+   "npm|frontend|parent-module|1.0.1",
+   "npm|frontend|parse-json|5.2.0",
+   "npm|frontend|path-exists|4.0.0",
+   "npm|frontend|path-is-absolute|1.0.1",
+   "npm|frontend|path-key|3.1.1",
+   "npm|frontend|path-parse|1.0.7",
+   "npm|frontend|path-type|4.0.0",
+   "npm|frontend|picocolors|1.0.0",
+   "npm|frontend|picomatch|2.3.1",
+   "npm|frontend|postcss|8.4.35",
+   "npm|frontend|prelude-ls|1.2.1",
+   "npm|frontend|prettier|3.2.5",
+   "npm|frontend|prop-types|15.8.1",
+   "npm|frontend|proxy-from-env|1.1.0",
+   "npm|frontend|punycode|2.3.1",
+   "npm|frontend|queue-microtask|1.2.3",
+   "npm|frontend|react-clientside-effect|1.2.6",
+   "npm|frontend|react-dom|18.2.0",
+   "npm|frontend|react-fast-compare|3.2.2",
+   "npm|frontend|react-focus-lock|2.11.1",
+   "npm|frontend|react-hook-form|7.49.3",
+   "npm|frontend|react-icons|5.0.1",
+   "npm|frontend|react-is|16.13.1",
+   "npm|frontend|react-query|3.39.3",
+   "npm|frontend|react-remove-scroll-bar|2.3.5",
+   "npm|frontend|react-remove-scroll|2.5.7",
+   "npm|frontend|react-style-singleton|2.2.1",
+   "npm|frontend|react|18.2.0",
+   "npm|frontend|regenerator-runtime|0.14.1",
+   "npm|frontend|remove-accents|0.5.0",
+   "npm|frontend|resolve-from|4.0.0",
+   "npm|frontend|resolve|1.22.8",
+   "npm|frontend|reusify|1.0.4",
+   "npm|frontend|rimraf|3.0.2",
+   "npm|frontend|rollup|4.6.1",
+   "npm|frontend|run-parallel|1.2.0",
+   "npm|frontend|scheduler|0.23.0",
+   "npm|frontend|semver|7.5.4",
+   "npm|frontend|shebang-command|2.0.0",
+   "npm|frontend|shebang-regex|3.0.0",
+   "npm|frontend|slash|3.0.0",
+   "npm|frontend|source-map-js|1.0.2",
+   "npm|frontend|source-map|0.5.7",
+   "npm|frontend|source-map|0.6.1",
+   "npm|frontend|strip-ansi|6.0.1",
+   "npm|frontend|strip-json-comments|3.1.1",
+   "npm|frontend|stylis|4.2.0",
+   "npm|frontend|supports-color|5.5.0",
+   "npm|frontend|supports-color|7.2.0",
+   "npm|frontend|supports-preserve-symlinks-flag|1.0.0",
+   "npm|frontend|text-table|0.2.0",
+   "npm|frontend|tiny-invariant|1.3.3",
+   "npm|frontend|tiny-warning|1.0.3",
+   "npm|frontend|to-fast-properties|2.0.0",
+   "npm|frontend|to-regex-range|5.0.1",
+   "npm|frontend|toggle-selection|1.0.6",
+   "npm|frontend|ts-api-utils|1.0.3",
+   "npm|frontend|tslib|2.4.0",
+   "npm|frontend|tslib|2.6.2",
+   "npm|frontend|type-check|0.4.0",
+   "npm|frontend|type-fest|0.20.2",
+   "npm|frontend|typescript|5.3.2",
+   "npm|frontend|uglify-js|3.17.4",
+   "npm|frontend|undici-types|5.26.5",
+   "npm|frontend|universalify|2.0.1",
+   "npm|frontend|unload|2.2.0",
+   "npm|frontend|uri-js|4.4.1",
+   "npm|frontend|use-callback-ref|1.3.1",
+   "npm|frontend|use-sidecar|1.1.2",
+   "npm|frontend|use-sync-external-store|1.2.0",
+   "npm|frontend|vite|5.0.12",
+   "npm|frontend|which|2.0.2",
+   "npm|frontend|wordwrap|1.0.0",
+   "npm|frontend|wrappy|1.0.2",
+   "npm|frontend|yallist|4.0.0",
+   "npm|frontend|yaml|1.10.2",
+   "npm|frontend|yocto-queue|0.1.0",
+   "npm|frontend|zod|3.22.4",
+   "npm|frontend|zustand|4.5.0",
+   "PyPI|backend|alembic|1.13.1",
+   "PyPI|backend|annotated-types|0.6",
+   "PyPI|backend|anyio|4.3",
+   "PyPI|backend|bcrypt|4.0.1",
+   "PyPI|backend|cachetools|5.3.3",
+   "PyPI|backend|certifi|2024.2.2",
+   "PyPI|backend|cffi|1.16",
+   "PyPI|backend|cfgv|3.4",
+   "PyPI|backend|chardet|5.2",
+   "PyPI|backend|charset-normalizer|3.3.2",
+   "PyPI|backend|click|8.1.7",
+   "PyPI|backend|colorama|0.4.6",
+   "PyPI|backend|coverage|7.4.3",
+   "PyPI|backend|cryptography|42.0.5",
+   "PyPI|backend|cssselect|1.2",
+   "PyPI|backend|cssutils|2.9",
+   "PyPI|backend|distlib|0.3.8",
+   "PyPI|backend|dnspython|2.6.1",
+   "PyPI|backend|ecdsa|0.18",
+   "PyPI|backend|email-validator|2.1.1",
+   "PyPI|backend|emails|0.6",
+   "PyPI|backend|exceptiongroup|1.2",
+   "PyPI|backend|fastapi|0.109.2",
+   "PyPI|backend|filelock|3.13.1",
+   "PyPI|backend|greenlet|3.0.3",
+   "PyPI|backend|gunicorn|21.2",
+   "PyPI|backend|h11|0.14",
+   "PyPI|backend|httpcore|1.0.4",
+   "PyPI|backend|httptools|0.6.1",
+   "PyPI|backend|httpx|0.25.2",
+   "PyPI|backend|identify|2.5.35",
+   "PyPI|backend|idna|3.6",
+   "PyPI|backend|iniconfig|2",
+   "PyPI|backend|jinja2|3.1.3",
+   "PyPI|backend|lxml|5.1",
+   "PyPI|backend|mako|1.3.2",
+   "PyPI|backend|markupsafe|2.1.5",
+   "PyPI|backend|mypy-extensions|1",
+   "PyPI|backend|mypy|1.9",
+   "PyPI|backend|nodeenv|1.8",
+   "PyPI|backend|packaging|24",
+   "PyPI|backend|passlib|1.7.4",
+   "PyPI|backend|platformdirs|4.2",
+   "PyPI|backend|pluggy|1.4",
+   "PyPI|backend|pre-commit|3.6.2",
+   "PyPI|backend|premailer|3.10",
+   "PyPI|backend|psycopg-binary|3.1.18",
+   "PyPI|backend|psycopg|3.1.18",
+   "PyPI|backend|pyasn1|0.5.1",
+   "PyPI|backend|pycparser|2.21",
+   "PyPI|backend|pydantic-core|2.16.3",
+   "PyPI|backend|pydantic-settings|2.2.1",
+   "PyPI|backend|pydantic|2.6.4",
+   "PyPI|backend|pytest-cov|4.1",
+   "PyPI|backend|pytest-mock|3.12",
+   "PyPI|backend|pytest|7.4.4",
+   "PyPI|backend|python-dateutil|2.9.post0",
+   "PyPI|backend|python-dotenv|1.0.1",
+   "PyPI|backend|python-jose|3.3",
+   "PyPI|backend|python-multipart|0.0.7",
+   "PyPI|backend|pyyaml|6.0.1",
+   "PyPI|backend|requests|2.31",
+   "PyPI|backend|rsa|4.9",
+   "PyPI|backend|ruff|0.2.2",
+   "PyPI|backend|sentry-sdk|1.41",
+   "PyPI|backend|setuptools|69.1.1",
+   "PyPI|backend|six|1.16",
+   "PyPI|backend|sniffio|1.3.1",
+   "PyPI|backend|sqlalchemy|2.0.28",
+   "PyPI|backend|sqlmodel|0.0.16",
+   "PyPI|backend|starlette|0.36.3",
+   "PyPI|backend|tenacity|8.2.3",
+   "PyPI|backend|tomli|2.0.1",
+   "PyPI|backend|types-passlib|1.7.7.20240311",
+   "PyPI|backend|types-pyasn1|0.5.0.20240301",
+   "PyPI|backend|types-python-jose|3.3.4.20240106",
+   "PyPI|backend|typing-extensions|4.10",
+   "PyPI|backend|tzdata|2024.1",
+   "PyPI|backend|urllib3|2.2.1",
+   "PyPI|backend|uvicorn|0.24.post1",
+   "PyPI|backend|uvloop|0.19",
+   "PyPI|backend|virtualenv|20.25.1",
+   "PyPI|backend|watchfiles|0.21",
+   "PyPI|backend|websockets|12"
+  ]
+ },
+ "findings": [
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "@babel/runtime",
+   "version": "7.23.9",
+   "ids": [
+    "GHSA-968p-4wvh-cqc8"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "ajv",
+   "version": "6.12.6",
+   "ids": [
+    "GHSA-2g4f-4pwh-qvx6"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "axios",
+   "version": "1.6.2",
+   "ids": [
+    "GHSA-35jp-ww65-95wh"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "axios",
+   "version": "1.6.2",
+   "ids": [
+    "GHSA-3g43-6gmg-66jw"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "axios",
+   "version": "1.6.2",
+   "ids": [
+    "GHSA-3p68-rc4w-qgx5"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "axios",
+   "version": "1.6.2",
+   "ids": [
+    "GHSA-3w6x-2g7m-8v23"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "axios",
+   "version": "1.6.2",
+   "ids": [
+    "GHSA-42h9-826w-cgv3"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "axios",
+   "version": "1.6.2",
+   "ids": [
+    "GHSA-43fc-jf86-j433"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "axios",
+   "version": "1.6.2",
+   "ids": [
+    "GHSA-445q-vr5w-6q77"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "axios",
+   "version": "1.6.2",
+   "ids": [
+    "GHSA-4hjh-wcwx-xvwj"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "axios",
+   "version": "1.6.2",
+   "ids": [
+    "GHSA-5c9x-8gcm-mpgx"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "axios",
+   "version": "1.6.2",
+   "ids": [
+    "GHSA-62hf-57xw-28j9"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "axios",
+   "version": "1.6.2",
+   "ids": [
+    "GHSA-6chq-wfr3-2hj9"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "axios",
+   "version": "1.6.2",
+   "ids": [
+    "GHSA-7q8q-rj6j-mhjq"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "axios",
+   "version": "1.6.2",
+   "ids": [
+    "GHSA-898c-q2cr-xwhg"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "axios",
+   "version": "1.6.2",
+   "ids": [
+    "GHSA-8hc4-vh64-cxmj"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "axios",
+   "version": "1.6.2",
+   "ids": [
+    "GHSA-9fr6-4gfg-395g"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "axios",
+   "version": "1.6.2",
+   "ids": [
+    "GHSA-fvcv-3m26-pcqx"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "axios",
+   "version": "1.6.2",
+   "ids": [
+    "GHSA-hfxv-24rg-xrqf"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "axios",
+   "version": "1.6.2",
+   "ids": [
+    "GHSA-j5f8-grm9-p9fc"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "axios",
+   "version": "1.6.2",
+   "ids": [
+    "GHSA-j8rh-479h-cp32"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "axios",
+   "version": "1.6.2",
+   "ids": [
+    "GHSA-jr5f-v2jv-69x6"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "axios",
+   "version": "1.6.2",
+   "ids": [
+    "GHSA-m7pr-hjqh-92cm"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "axios",
+   "version": "1.6.2",
+   "ids": [
+    "GHSA-mmx7-hfxf-jppx"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "axios",
+   "version": "1.6.2",
+   "ids": [
+    "GHSA-p92q-9vqr-4j8v"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "axios",
+   "version": "1.6.2",
+   "ids": [
+    "GHSA-pf86-5x62-jrwf"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "axios",
+   "version": "1.6.2",
+   "ids": [
+    "GHSA-pmv8-rq9r-6j72"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "axios",
+   "version": "1.6.2",
+   "ids": [
+    "GHSA-pmwg-cvhr-8vh7"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "axios",
+   "version": "1.6.2",
+   "ids": [
+    "GHSA-q8qp-cvcw-x6jj"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "axios",
+   "version": "1.6.2",
+   "ids": [
+    "GHSA-vf2m-468p-8v99"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "axios",
+   "version": "1.6.2",
+   "ids": [
+    "GHSA-w9j2-pvgh-6h63"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "axios",
+   "version": "1.6.2",
+   "ids": [
+    "GHSA-xhjh-pmcv-23jw"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "axios",
+   "version": "1.6.2",
+   "ids": [
+    "GHSA-xx6v-rp6x-q39c"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "brace-expansion",
+   "version": "1.1.11",
+   "ids": [
+    "GHSA-3jxr-9vmj-r5cp"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "brace-expansion",
+   "version": "1.1.11",
+   "ids": [
+    "GHSA-6j4f-fj2g-mc7p"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "brace-expansion",
+   "version": "1.1.11",
+   "ids": [
+    "GHSA-f886-m6hf-6m8v"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "brace-expansion",
+   "version": "1.1.11",
+   "ids": [
+    "GHSA-mh99-v99m-4gvg"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "brace-expansion",
+   "version": "1.1.11",
+   "ids": [
+    "GHSA-q2hr-2g5m-vwhr"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "brace-expansion",
+   "version": "1.1.11",
+   "ids": [
+    "GHSA-qhr7-859c-m2p7"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "brace-expansion",
+   "version": "1.1.11",
+   "ids": [
+    "GHSA-rgw5-rvv9-x895"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "brace-expansion",
+   "version": "1.1.11",
+   "ids": [
+    "GHSA-v6h2-p8h4-qcjw"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "braces",
+   "version": "3.0.2",
+   "ids": [
+    "GHSA-grv7-fg5c-xmjg"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "braces",
+   "version": "3.0.2",
+   "ids": [
+    "GHSA-vfj7-8cjw-p6xm"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "cross-spawn",
+   "version": "7.0.3",
+   "ids": [
+    "GHSA-3xgq-45jj-v275"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "esbuild",
+   "version": "0.19.8",
+   "ids": [
+    "GHSA-67mh-4wv8-2f99"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "flatted",
+   "version": "3.2.9",
+   "ids": [
+    "GHSA-25h7-pfq9-p65f"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "flatted",
+   "version": "3.2.9",
+   "ids": [
+    "GHSA-rf6f-7fwh-wjgh"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "follow-redirects",
+   "version": "1.15.5",
+   "ids": [
+    "GHSA-cxjh-pqwp-8mfp"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "follow-redirects",
+   "version": "1.15.5",
+   "ids": [
+    "GHSA-r4q5-vmmm-2653"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "form-data",
+   "version": "4.0.0",
+   "ids": [
+    "GHSA-fjxv-7rqg-78g4"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "form-data",
+   "version": "4.0.0",
+   "ids": [
+    "GHSA-hmw2-7cc7-3qxx"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "handlebars",
+   "version": "4.7.8",
+   "ids": [
+    "GHSA-2qvq-rjwj-gvw9"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "handlebars",
+   "version": "4.7.8",
+   "ids": [
+    "GHSA-2w6w-674q-4c4q"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "handlebars",
+   "version": "4.7.8",
+   "ids": [
+    "GHSA-3mfm-83xf-c92r"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "handlebars",
+   "version": "4.7.8",
+   "ids": [
+    "GHSA-442j-39wm-28r2"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "handlebars",
+   "version": "4.7.8",
+   "ids": [
+    "GHSA-7rx3-28cr-v5wh"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "handlebars",
+   "version": "4.7.8",
+   "ids": [
+    "GHSA-8r5x-fm3f-whwj"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "handlebars",
+   "version": "4.7.8",
+   "ids": [
+    "GHSA-9cx6-37pm-9jff"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "handlebars",
+   "version": "4.7.8",
+   "ids": [
+    "GHSA-p8wg-vrv2-v86f"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "handlebars",
+   "version": "4.7.8",
+   "ids": [
+    "GHSA-xhpv-hc6g-r9c6"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "handlebars",
+   "version": "4.7.8",
+   "ids": [
+    "GHSA-xjpj-3mr7-gcpf"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "handlebars",
+   "version": "4.7.8",
+   "ids": [
+    "GHSA-xw65-4hp5-5hc7"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "js-yaml",
+   "version": "4.1.0",
+   "ids": [
+    "GHSA-2883-xcg3-v3hh"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "js-yaml",
+   "version": "4.1.0",
+   "ids": [
+    "GHSA-52cp-r559-cp3m"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "js-yaml",
+   "version": "4.1.0",
+   "ids": [
+    "GHSA-5p4m-2wfm-xmqj"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "js-yaml",
+   "version": "4.1.0",
+   "ids": [
+    "GHSA-h67p-54hq-rp68"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "js-yaml",
+   "version": "4.1.0",
+   "ids": [
+    "GHSA-mh29-5h37-fv8m"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "micromatch",
+   "version": "4.0.5",
+   "ids": [
+    "GHSA-952p-6rrq-rcjv"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "minimatch",
+   "version": "3.1.2",
+   "ids": [
+    "GHSA-23c5-xmqv-rm74"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "minimatch",
+   "version": "3.1.2",
+   "ids": [
+    "GHSA-3ppc-4f35-3m26"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "minimatch",
+   "version": "3.1.2",
+   "ids": [
+    "GHSA-7r86-cg39-jmmj"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "nanoid",
+   "version": "3.3.7",
+   "ids": [
+    "GHSA-28wg-ghj8-5hjv"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "nanoid",
+   "version": "3.3.7",
+   "ids": [
+    "GHSA-2v37-7h3g-55p8"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "nanoid",
+   "version": "3.3.7",
+   "ids": [
+    "GHSA-mwcw-c2x4-8c55"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "nanoid",
+   "version": "3.3.7",
+   "ids": [
+    "GHSA-xwg4-73v4-xw9w"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "picomatch",
+   "version": "2.3.1",
+   "ids": [
+    "GHSA-3v7f-55p6-f55p"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "picomatch",
+   "version": "2.3.1",
+   "ids": [
+    "GHSA-c2c7-rcm5-vvqj"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "postcss",
+   "version": "8.4.35",
+   "ids": [
+    "GHSA-6g55-p6wh-862q"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "postcss",
+   "version": "8.4.35",
+   "ids": [
+    "GHSA-fxqj-rqcc-2cmp"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "postcss",
+   "version": "8.4.35",
+   "ids": [
+    "GHSA-qx2v-qp2m-jg93"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "postcss",
+   "version": "8.4.35",
+   "ids": [
+    "GHSA-r28c-9q8g-f849"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "rollup",
+   "version": "4.6.1",
+   "ids": [
+    "GHSA-gcx4-mw62-g8wm"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "rollup",
+   "version": "4.6.1",
+   "ids": [
+    "GHSA-mw96-cpmx-2vgc"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "source-map-js",
+   "version": "1.0.2",
+   "ids": [
+    "GHSA-68fv-2mgg-jv7q"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "vite",
+   "version": "5.0.12",
+   "ids": [
+    "GHSA-356w-63v5-8wf4"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "vite",
+   "version": "5.0.12",
+   "ids": [
+    "GHSA-4r4m-qw57-chr8"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "vite",
+   "version": "5.0.12",
+   "ids": [
+    "GHSA-4w7w-66w2-5vf9"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "vite",
+   "version": "5.0.12",
+   "ids": [
+    "GHSA-64vr-g452-qvp3"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "vite",
+   "version": "5.0.12",
+   "ids": [
+    "GHSA-859w-5945-r5v3"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "vite",
+   "version": "5.0.12",
+   "ids": [
+    "GHSA-8jhw-289h-jh2g"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "vite",
+   "version": "5.0.12",
+   "ids": [
+    "GHSA-93m4-6634-74q7"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "vite",
+   "version": "5.0.12",
+   "ids": [
+    "GHSA-9cwx-2883-4wfx"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "vite",
+   "version": "5.0.12",
+   "ids": [
+    "GHSA-c27g-q93r-2cwf"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "vite",
+   "version": "5.0.12",
+   "ids": [
+    "GHSA-fx2h-pf6j-xcff"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "vite",
+   "version": "5.0.12",
+   "ids": [
+    "GHSA-g4jq-h2w9-997c"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "vite",
+   "version": "5.0.12",
+   "ids": [
+    "GHSA-jqfw-vq24-v9c3"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "vite",
+   "version": "5.0.12",
+   "ids": [
+    "GHSA-v6wh-96g9-6wx3"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "vite",
+   "version": "5.0.12",
+   "ids": [
+    "GHSA-vg6x-rcgg-rjx6"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "vite",
+   "version": "5.0.12",
+   "ids": [
+    "GHSA-x574-m823-4x7w"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "vite",
+   "version": "5.0.12",
+   "ids": [
+    "GHSA-xcj6-pq6g-qj4x"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "frontend",
+   "package": "yaml",
+   "version": "1.10.2",
+   "ids": [
+    "GHSA-48c2-rrv3-qjmp"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "anyio",
+   "version": "4.3.0",
+   "ids": [
+    "GHSA-5p39-cfhj-2xmp",
+    "PYSEC-2026-4024"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "anyio",
+   "version": "4.3.0",
+   "ids": [
+    "GHSA-82r6-8w77-94w6",
+    "PYSEC-2026-4025"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "certifi",
+   "version": "2024.2.2",
+   "ids": [
+    "GHSA-248v-346w-9cwc",
+    "PYSEC-2024-230"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "cryptography",
+   "version": "42.0.5",
+   "ids": [
+    "GHSA-537c-gmf6-5ccf"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "cryptography",
+   "version": "42.0.5",
+   "ids": [
+    "GHSA-79v4-65xg-pq4g",
+    "PYSEC-2026-1284"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "cryptography",
+   "version": "42.0.5",
+   "ids": [
+    "GHSA-h4gh-qq45-vh27"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "cryptography",
+   "version": "42.0.5",
+   "ids": [
+    "GHSA-jwv3-5hgf-82ww",
+    "PYSEC-2026-3553"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "cryptography",
+   "version": "42.0.5",
+   "ids": [
+    "GHSA-m959-cc7f-wv43",
+    "PYSEC-2026-35"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "cryptography",
+   "version": "42.0.5",
+   "ids": [
+    "GHSA-r6ph-v2qm-q3c2",
+    "PYSEC-2026-2141"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "cryptography",
+   "version": "42.0.5",
+   "ids": [
+    "PYSEC-2026-3554"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "ecdsa",
+   "version": "0.18.0",
+   "ids": [
+    "GHSA-9f5j-8jwj-x28g",
+    "PYSEC-2026-2467"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "ecdsa",
+   "version": "0.18.0",
+   "ids": [
+    "GHSA-wj6h-64fc-37mp",
+    "PYSEC-2026-1325"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "filelock",
+   "version": "3.13.1",
+   "ids": [
+    "GHSA-qmgc-5h2g-mvrw",
+    "PYSEC-2026-1374"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "filelock",
+   "version": "3.13.1",
+   "ids": [
+    "GHSA-w853-jp5j-5j7f",
+    "PYSEC-2026-1375"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "gunicorn",
+   "version": "21.2.0",
+   "ids": [
+    "GHSA-hc5x-x2vx-497g",
+    "PYSEC-2026-1433"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "gunicorn",
+   "version": "21.2.0",
+   "ids": [
+    "GHSA-w3h3-4rj7-4ph4",
+    "PYSEC-2026-1434"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "h11",
+   "version": "0.14.0",
+   "ids": [
+    "GHSA-vqfr-h8mv-ghfj",
+    "PYSEC-2026-348"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "idna",
+   "version": "3.6",
+   "ids": [
+    "GHSA-65pc-fj4g-8rjx",
+    "PYSEC-2026-215"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "idna",
+   "version": "3.6",
+   "ids": [
+    "GHSA-jjg7-2v4v-x38h",
+    "PYSEC-2024-60"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "jinja2",
+   "version": "3.1.3",
+   "ids": [
+    "GHSA-cpwx-vrp4-4pq7",
+    "PYSEC-2026-1471"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "jinja2",
+   "version": "3.1.3",
+   "ids": [
+    "GHSA-gmj6-6f8f-6699",
+    "PYSEC-2026-1472"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "jinja2",
+   "version": "3.1.3",
+   "ids": [
+    "GHSA-h75v-3vvj-5mfj",
+    "PYSEC-2026-1474"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "jinja2",
+   "version": "3.1.3",
+   "ids": [
+    "GHSA-q2x7-8rv6-6q7h",
+    "PYSEC-2026-1475"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "lxml",
+   "version": "5.1.0",
+   "ids": [
+    "GHSA-vfmq-68hx-4jfw",
+    "PYSEC-2026-87"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "mako",
+   "version": "1.3.2",
+   "ids": [
+    "GHSA-2h4p-vjrc-8xpq",
+    "PYSEC-2026-2617"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "mako",
+   "version": "1.3.2",
+   "ids": [
+    "GHSA-5639-2j2p-m4mx"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "mako",
+   "version": "1.3.2",
+   "ids": [
+    "GHSA-v92g-xgxw-vvmm",
+    "PYSEC-2026-88"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "pyasn1",
+   "version": "0.5.1",
+   "ids": [
+    "GHSA-8ppf-4f7h-5ppj",
+    "PYSEC-2026-3456"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "pyasn1",
+   "version": "0.5.1",
+   "ids": [
+    "GHSA-hm4w-wwcw-mr6r",
+    "PYSEC-2026-3457"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "pyasn1",
+   "version": "0.5.1",
+   "ids": [
+    "GHSA-jr27-m4p2-rc6r",
+    "PYSEC-2026-2263"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "pyasn1",
+   "version": "0.5.1",
+   "ids": [
+    "GHSA-m4p7-r5rc-7g4j",
+    "PYSEC-2026-3455"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "pytest",
+   "version": "7.4.4",
+   "ids": [
+    "GHSA-6w46-j5rx-g56g",
+    "PYSEC-2026-1845"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "python-dotenv",
+   "version": "1.0.1",
+   "ids": [
+    "GHSA-mf9w-mj56-hr94",
+    "PYSEC-2026-2270"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "python-jose",
+   "version": "3.3.0",
+   "ids": [
+    "GHSA-3qf3-8w2g-rqmx",
+    "GHSA-6c5p-j8vq-pqhj",
+    "PYSEC-2024-232"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "python-jose",
+   "version": "3.3.0",
+   "ids": [
+    "GHSA-cjwg-qfpm-7377",
+    "PYSEC-2024-233"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "python-jose",
+   "version": "3.3.0",
+   "ids": [
+    "PYSEC-2025-185"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "python-multipart",
+   "version": "0.0.7",
+   "ids": [
+    "GHSA-59g5-xgcq-4qw3",
+    "PYSEC-2026-1851"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "python-multipart",
+   "version": "0.0.7",
+   "ids": [
+    "GHSA-5rvq-cxj2-64vf",
+    "PYSEC-2026-3036"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "python-multipart",
+   "version": "0.0.7",
+   "ids": [
+    "GHSA-6jv3-5f52-599m",
+    "PYSEC-2026-3037"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "python-multipart",
+   "version": "0.0.7",
+   "ids": [
+    "GHSA-mj87-hwqh-73pj",
+    "PYSEC-2026-3038"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "python-multipart",
+   "version": "0.0.7",
+   "ids": [
+    "GHSA-pp6c-gr5w-3c5g",
+    "PYSEC-2026-3039"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "python-multipart",
+   "version": "0.0.7",
+   "ids": [
+    "GHSA-v9pg-7xvm-68hf",
+    "PYSEC-2026-3040"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "python-multipart",
+   "version": "0.0.7",
+   "ids": [
+    "GHSA-vffw-93wf-4j4q",
+    "PYSEC-2026-3041"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "python-multipart",
+   "version": "0.0.7",
+   "ids": [
+    "GHSA-wp53-j4wj-2cfg",
+    "PYSEC-2026-1852"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "requests",
+   "version": "2.31.0",
+   "ids": [
+    "GHSA-9hjg-9r4m-mvj7",
+    "PYSEC-2026-1872"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "requests",
+   "version": "2.31.0",
+   "ids": [
+    "GHSA-9wx4-h78v-vm56",
+    "PYSEC-2026-1873"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "requests",
+   "version": "2.31.0",
+   "ids": [
+    "GHSA-gc5v-m9x4-r6x2",
+    "PYSEC-2026-2275"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "sentry-sdk",
+   "version": "1.41.0",
+   "ids": [
+    "GHSA-g92j-qhmh-64v2",
+    "PYSEC-2026-1917"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "setuptools",
+   "version": "69.1.1",
+   "ids": [
+    "GHSA-5rjg-fvgr-3xxf",
+    "PYSEC-2025-49"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "setuptools",
+   "version": "69.1.1",
+   "ids": [
+    "GHSA-cx63-2mw6-8hw5",
+    "PYSEC-2026-1918"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "setuptools",
+   "version": "69.1.1",
+   "ids": [
+    "GHSA-h35f-9h28-mq5c",
+    "PYSEC-2026-3447"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "starlette",
+   "version": "0.36.3",
+   "ids": [
+    "GHSA-2c2j-9gv5-cj73",
+    "PYSEC-2026-1941"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "starlette",
+   "version": "0.36.3",
+   "ids": [
+    "GHSA-82w8-qh3p-5jfq",
+    "PYSEC-2026-249"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "starlette",
+   "version": "0.36.3",
+   "ids": [
+    "GHSA-86qp-5c8j-p5mr",
+    "PYSEC-2026-161"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "starlette",
+   "version": "0.36.3",
+   "ids": [
+    "GHSA-f96h-pmfr-66vw",
+    "PYSEC-2026-1943"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "starlette",
+   "version": "0.36.3",
+   "ids": [
+    "GHSA-jp82-jpqv-5vv3",
+    "PYSEC-2026-248"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "starlette",
+   "version": "0.36.3",
+   "ids": [
+    "GHSA-wqp7-x3pw-xc5r",
+    "PYSEC-2026-2281"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "starlette",
+   "version": "0.36.3",
+   "ids": [
+    "GHSA-x746-7m8f-x49c",
+    "PYSEC-2026-2280"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "urllib3",
+   "version": "2.2.1",
+   "ids": [
+    "GHSA-2xpw-w6gg-jr37",
+    "PYSEC-2026-1994"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "urllib3",
+   "version": "2.2.1",
+   "ids": [
+    "GHSA-34jh-p97f-mpxf",
+    "PYSEC-2026-1995"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "urllib3",
+   "version": "2.2.1",
+   "ids": [
+    "GHSA-38jv-5279-wg99",
+    "PYSEC-2026-1996"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "urllib3",
+   "version": "2.2.1",
+   "ids": [
+    "GHSA-48p4-8xcf-vxj5",
+    "PYSEC-2026-1997"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "urllib3",
+   "version": "2.2.1",
+   "ids": [
+    "GHSA-8988-9cw3-xx77",
+    "PYSEC-2026-4175"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "urllib3",
+   "version": "2.2.1",
+   "ids": [
+    "GHSA-gm62-xv2j-4w53",
+    "PYSEC-2026-1998"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "urllib3",
+   "version": "2.2.1",
+   "ids": [
+    "GHSA-pq67-6m6q-mj2v",
+    "PYSEC-2026-1999"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "urllib3",
+   "version": "2.2.1",
+   "ids": [
+    "GHSA-qccp-gfcp-xxvc",
+    "PYSEC-2026-141"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "urllib3",
+   "version": "2.2.1",
+   "ids": [
+    "GHSA-vxq7-64xx-v4gw",
+    "PYSEC-2026-4177"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "virtualenv",
+   "version": "20.25.1",
+   "ids": [
+    "GHSA-597g-3phw-6986",
+    "PYSEC-2026-2009"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "virtualenv",
+   "version": "20.25.1",
+   "ids": [
+    "GHSA-94p9-xgh2-xp45",
+    "PYSEC-2026-4011"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "virtualenv",
+   "version": "20.25.1",
+   "ids": [
+    "GHSA-9h9j-4vrj-gf7g",
+    "PYSEC-2026-4012"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "virtualenv",
+   "version": "20.25.1",
+   "ids": [
+    "GHSA-p58f-9548-mpm2",
+    "PYSEC-2026-4013"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "virtualenv",
+   "version": "20.25.1",
+   "ids": [
+    "GHSA-rqc4-2hc7-8c8v",
+    "PYSEC-2024-187"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": "backend",
+   "package": "virtualenv",
+   "version": "20.25.1",
+   "ids": [
+    "GHSA-x78j-v8h9-3j2q",
+    "PYSEC-2026-4014"
+   ]
+  }
+ ]
+}

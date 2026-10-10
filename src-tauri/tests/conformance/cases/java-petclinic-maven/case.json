@@ -1,0 +1,21 @@
+{
+  "id": "java-petclinic-maven",
+  "source": "repository",
+  "repo": "https://github.com/spring-projects/spring-petclinic",
+  "ref": "02babdd8cb0d494d043fdf35a24dd2127c5d5167",
+  "commit": "02babdd8cb0d494d043fdf35a24dd2127c5d5167",
+  "licence": "Apache-2.0",
+  "include": [
+    "pom.xml"
+  ],
+  "formats": [
+    "pom.xml (Maven, unsupported)"
+  ],
+  "notes": "Maven manifest with no lockfile: declared unsupported so its absence from the inventory is an explicit, counted skip rather than a silent drop.",
+  "unsupported": [
+    {
+      "path": "pom.xml",
+      "reason": "Maven is not a supported lockfile ecosystem; a pom.xml is a manifest whose transitive set needs a network resolver"
+    }
+  ]
+}

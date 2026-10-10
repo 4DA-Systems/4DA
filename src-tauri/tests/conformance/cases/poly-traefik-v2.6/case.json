@@ -1,0 +1,22 @@
+{
+  "id": "poly-traefik-v2.6",
+  "source": "repository",
+  "repo": "https://github.com/traefik/traefik",
+  "ref": "v2.6.0",
+  "commit": "5a1c936ede0c4ef1d7adb82052f8240f64791aa6",
+  "licence": "MIT",
+  "include": [
+    "go.mod",
+    "go.sum",
+    "webui/package-lock.json",
+    "webui/package.json",
+    "docs/requirements.txt"
+  ],
+  "formats": [
+    "go.mod (go < 1.17, replace)",
+    "go.sum",
+    "package-lock.json v1",
+    "requirements.txt"
+  ],
+  "notes": "Go 1.16 module with 8 `replace` directives and pseudo-versions; npm v1 web UI; docs requirements."
+}

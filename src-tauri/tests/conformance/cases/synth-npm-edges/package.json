@@ -1,0 +1,19 @@
+{
+  "name": "synth-npm-edges",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "dependencies": {
+    "optimist": "0.6.1",
+    "minimist": "^1.2.8",
+    "express": "*"
+  },
+  "devDependencies": {
+    "minimatch": "3.0.4"
+  },
+  "optionalDependencies": {
+    "is-number": "7.0.0"
+  }
+}

@@ -170,7 +170,7 @@ while read LOCAL_REF LOCAL_SHA REMOTE_REF REMOTE_SHA; do
         # catches a secret that was added and later removed in the same push,
         # which a net diff misses entirely.
         # shellcheck disable=SC2086 # RANGE/EXCLUDE_PUBLISHED must word-split into git args
-        if ! git log -p -n 2000 --no-color $RANGE $EXCLUDE_PUBLISHED -- ':!site/src/contact.njk' ':!site/src/privacy.njk' ':!site/src/terms.njk' 2>/dev/null \
+        if ! git log -p -n 2000 --no-color $RANGE $EXCLUDE_PUBLISHED -- ':!site/src/contact.njk' ':!site/src/privacy.njk' ':!site/src/terms.njk' ':!src-tauri/tests/conformance/osv/' 2>/dev/null \
             | node scripts/scan-secrets.cjs --diff-added; then
             echo ""
             echo "============================================================"

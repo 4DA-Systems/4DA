@@ -1,0 +1,3324 @@
+{
+ "schema": 1,
+ "case": "rs-js-tauri-workspace",
+ "lockfiles": [
+  {
+   "path": "Cargo.lock",
+   "format": "Cargo.lock",
+   "ecosystem": "crates.io",
+   "status": "supported",
+   "truth_packages": 994
+  },
+  {
+   "path": "pnpm-lock.yaml",
+   "format": "pnpm-v9.0",
+   "ecosystem": "npm",
+   "status": "supported",
+   "truth_packages": 480
+  }
+ ],
+ "inventory": {
+  "count": 1474,
+  "packages": [
+   "crates.io|.|addr2line|0.24.1",
+   "crates.io|.|adler|1.0.2",
+   "crates.io|.|adler2|2.0.0",
+   "crates.io|.|aead|0.5.2",
+   "crates.io|.|aes-gcm|0.10.3",
+   "crates.io|.|aes|0.8.4",
+   "crates.io|.|ahash|0.7.8",
+   "crates.io|.|ahash|0.8.11",
+   "crates.io|.|aho-corasick|1.1.3",
+   "crates.io|.|aligned-vec|0.5.0",
+   "crates.io|.|alloc-no-stdlib|2.0.4",
+   "crates.io|.|alloc-stdlib|0.2.2",
+   "crates.io|.|allocator-api2|0.2.18",
+   "crates.io|.|android_log-sys|0.3.1",
+   "crates.io|.|android_logger|0.14.1",
+   "crates.io|.|android_system_properties|0.1.5",
+   "crates.io|.|android-tzdata|0.1.1",
+   "crates.io|.|anstream|0.6.15",
+   "crates.io|.|anstyle-parse|0.2.5",
+   "crates.io|.|anstyle-query|1.1.1",
+   "crates.io|.|anstyle-wincon|3.0.4",
+   "crates.io|.|anstyle|1.0.8",
+   "crates.io|.|anyhow|1.0.89",
+   "crates.io|.|app-store-connect|0.5.0",
+   "crates.io|.|apple-bundles|0.19.0",
+   "crates.io|.|apple-codesign|0.27.0",
+   "crates.io|.|apple-flat-package|0.18.0",
+   "crates.io|.|apple-xar|0.18.0",
+   "crates.io|.|ar|0.9.0",
+   "crates.io|.|arbitrary|1.3.2",
+   "crates.io|.|arg_enum_proc_macro|0.3.4",
+   "crates.io|.|argon2|0.5.3",
+   "crates.io|.|arrayref|0.3.9",
+   "crates.io|.|arrayvec|0.7.6",
+   "crates.io|.|ascii|1.1.0",
+   "crates.io|.|asn1-rs-derive|0.4.0",
+   "crates.io|.|asn1-rs-impl|0.1.0",
+   "crates.io|.|asn1-rs|0.5.2",
+   "crates.io|.|assert-unchecked|0.1.2",
+   "crates.io|.|async-trait|0.1.83",
+   "crates.io|.|atk-sys|0.18.0",
+   "crates.io|.|atk|0.18.0",
+   "crates.io|.|atomic-waker|1.1.2",
+   "crates.io|.|atomic|0.6.0",
+   "crates.io|.|autocfg|1.4.0",
+   "crates.io|.|av1-grain|0.2.3",
+   "crates.io|.|avif-serialize|0.8.1",
+   "crates.io|.|aws-config|1.5.7",
+   "crates.io|.|aws-credential-types|1.2.1",
+   "crates.io|.|aws-runtime|1.4.3",
+   "crates.io|.|aws-sdk-s3|1.52.0",
+   "crates.io|.|aws-sdk-sso|1.44.0",
+   "crates.io|.|aws-sdk-ssooidc|1.45.0",
+   "crates.io|.|aws-sdk-sts|1.44.0",
+   "crates.io|.|aws-sigv4|1.2.4",
+   "crates.io|.|aws-smithy-async|1.2.1",
+   "crates.io|.|aws-smithy-checksums|0.60.12",
+   "crates.io|.|aws-smithy-eventstream|0.60.5",
+   "crates.io|.|aws-smithy-http|0.60.11",
+   "crates.io|.|aws-smithy-json|0.60.7",
+   "crates.io|.|aws-smithy-query|0.60.7",
+   "crates.io|.|aws-smithy-runtime-api|1.7.2",
+   "crates.io|.|aws-smithy-runtime|1.7.1",
+   "crates.io|.|aws-smithy-types|1.2.7",
+   "crates.io|.|aws-smithy-xml|0.60.9",
+   "crates.io|.|aws-types|1.3.3",
+   "crates.io|.|axum-core|0.4.5",
+   "crates.io|.|axum|0.7.7",
+   "crates.io|.|backtrace|0.3.74",
+   "crates.io|.|base16ct|0.1.1",
+   "crates.io|.|base16ct|0.2.0",
+   "crates.io|.|base64-simd|0.8.0",
+   "crates.io|.|base64|0.13.1",
+   "crates.io|.|base64|0.21.7",
+   "crates.io|.|base64|0.22.1",
+   "crates.io|.|base64ct|1.6.0",
+   "crates.io|.|bcder|0.7.4",
+   "crates.io|.|bit_field|0.10.2",
+   "crates.io|.|bit-set|0.5.3",
+   "crates.io|.|bit-vec|0.6.3",
+   "crates.io|.|bitfield|0.14.0",
+   "crates.io|.|bitflags|1.3.2",
+   "crates.io|.|bitflags|2.6.0",
+   "crates.io|.|bitness|0.4.0",
+   "crates.io|.|bitstream-io|2.5.3",
+   "crates.io|.|bitvec-nom2|0.2.1",
+   "crates.io|.|bitvec|1.0.1",
+   "crates.io|.|blake2|0.10.6",
+   "crates.io|.|block-buffer|0.10.4",
+   "crates.io|.|block-padding|0.3.3",
+   "crates.io|.|block|0.1.6",
+   "crates.io|.|block2|0.5.1",
+   "crates.io|.|blowfish|0.9.1",
+   "crates.io|.|borsh-derive|1.5.1",
+   "crates.io|.|borsh|1.5.1",
+   "crates.io|.|brotli-decompressor|4.0.1",
+   "crates.io|.|brotli|6.0.0",
+   "crates.io|.|bstr|1.10.0",
+   "crates.io|.|buffer-redux|1.0.2",
+   "crates.io|.|built|0.7.4",
+   "crates.io|.|bumpalo|3.16.0",
+   "crates.io|.|byte-unit|5.1.4",
+   "crates.io|.|bytecheck_derive|0.6.12",
+   "crates.io|.|bytecheck|0.6.12",
+   "crates.io|.|bytecount|0.6.8",
+   "crates.io|.|bytemuck|1.18.0",
+   "crates.io|.|byteorder-lite|0.1.0",
+   "crates.io|.|byteorder|1.5.0",
+   "crates.io|.|bytes-utils|0.1.4",
+   "crates.io|.|bytes|1.7.2",
+   "crates.io|.|bytesize|1.3.0",
+   "crates.io|.|bzip2-sys|0.1.11+1.0.8",
+   "crates.io|.|bzip2|0.4.4",
+   "crates.io|.|cairo-rs|0.18.5",
+   "crates.io|.|cairo-sys-rs|0.18.2",
+   "crates.io|.|camellia|0.1.0",
+   "crates.io|.|camino|1.1.9",
+   "crates.io|.|cargo_metadata|0.18.1",
+   "crates.io|.|cargo_toml|0.17.2",
+   "crates.io|.|cargo-mobile2|0.17.2",
+   "crates.io|.|cargo-platform|0.1.8",
+   "crates.io|.|cast5|0.11.1",
+   "crates.io|.|castaway|0.2.3",
+   "crates.io|.|cbc|0.1.2",
+   "crates.io|.|cc|1.1.24",
+   "crates.io|.|cesu8|1.1.0",
+   "crates.io|.|cfb-mode|0.8.2",
+   "crates.io|.|cfb|0.7.3",
+   "crates.io|.|cfg_aliases|0.2.1",
+   "crates.io|.|cfg-expr|0.15.8",
+   "crates.io|.|cfg-if|1.0.0",
+   "crates.io|.|chrono|0.4.38",
+   "crates.io|.|chunked_transfer|1.5.0",
+   "crates.io|.|cipher|0.4.4",
+   "crates.io|.|clap_builder|4.5.19",
+   "crates.io|.|clap_complete|4.5.29",
+   "crates.io|.|clap_derive|4.5.18",
+   "crates.io|.|clap_lex|0.7.2",
+   "crates.io|.|clap|4.5.19",
+   "crates.io|.|cmac|0.7.2",
+   "crates.io|.|cocoa-foundation|0.1.2",
+   "crates.io|.|cocoa-foundation|0.2.0",
+   "crates.io|.|cocoa|0.25.0",
+   "crates.io|.|cocoa|0.26.0",
+   "crates.io|.|color_quant|1.1.0",
+   "crates.io|.|colorchoice|1.0.2",
+   "crates.io|.|colored|2.1.0",
+   "crates.io|.|combine|4.6.7",
+   "crates.io|.|common-path|1.0.0",
+   "crates.io|.|compact_str|0.8.0",
+   "crates.io|.|console_error_panic_hook|0.1.7",
+   "crates.io|.|console|0.15.8",
+   "crates.io|.|const_panic|0.2.10",
+   "crates.io|.|const-oid|0.9.6",
+   "crates.io|.|convert_case|0.4.0",
+   "crates.io|.|convert_case|0.6.0",
+   "crates.io|.|cookie-factory|0.3.3",
+   "crates.io|.|core_maths|0.1.0",
+   "crates.io|.|core-foundation-sys|0.8.7",
+   "crates.io|.|core-foundation|0.10.0",
+   "crates.io|.|core-foundation|0.9.4",
+   "crates.io|.|core-graphics-types|0.1.3",
+   "crates.io|.|core-graphics-types|0.2.0",
+   "crates.io|.|core-graphics|0.23.2",
+   "crates.io|.|core-graphics|0.24.0",
+   "crates.io|.|cpio-archive|0.9.0",
+   "crates.io|.|cpio|0.4.0",
+   "crates.io|.|cpufeatures|0.2.14",
+   "crates.io|.|crc24|0.1.6",
+   "crates.io|.|crc32c|0.6.8",
+   "crates.io|.|crc32fast|1.4.2",
+   "crates.io|.|crossbeam-channel|0.5.13",
+   "crates.io|.|crossbeam-deque|0.8.5",
+   "crates.io|.|crossbeam-epoch|0.9.18",
+   "crates.io|.|crossbeam-utils|0.8.20",
+   "crates.io|.|crunchy|0.2.2",
+   "crates.io|.|crypto-bigint|0.4.9",
+   "crates.io|.|crypto-bigint|0.5.5",
+   "crates.io|.|crypto-common|0.1.6",
+   "crates.io|.|cryptographic-message-syntax|0.26.0",
+   "crates.io|.|css-color|0.2.8",
+   "crates.io|.|cssparser-macros|0.6.1",
+   "crates.io|.|cssparser|0.27.2",
+   "crates.io|.|ctor|0.2.8",
+   "crates.io|.|ctr|0.9.2",
+   "crates.io|.|ctrlc|3.4.5",
+   "crates.io|.|curve25519-dalek-derive|0.1.1",
+   "crates.io|.|curve25519-dalek|4.1.3",
+   "crates.io|.|darling_core|0.20.10",
+   "crates.io|.|darling_macro|0.20.10",
+   "crates.io|.|darling|0.20.10",
+   "crates.io|.|dashmap|6.1.0",
+   "crates.io|.|data-encoding|2.6.0",
+   "crates.io|.|data-url|0.3.1",
+   "crates.io|.|dbl|0.3.2",
+   "crates.io|.|der|0.6.1",
+   "crates.io|.|der|0.7.9",
+   "crates.io|.|deranged|0.3.11",
+   "crates.io|.|derive_arbitrary|1.3.2",
+   "crates.io|.|derive_builder_core|0.20.1",
+   "crates.io|.|derive_builder_macro|0.20.1",
+   "crates.io|.|derive_builder|0.20.1",
+   "crates.io|.|derive_more|0.99.18",
+   "crates.io|.|des|0.8.1",
+   "crates.io|.|deunicode|1.6.0",
+   "crates.io|.|dialoguer|0.11.0",
+   "crates.io|.|diff|0.1.13",
+   "crates.io|.|difference|2.0.0",
+   "crates.io|.|digest|0.10.7",
+   "crates.io|.|dirs-next|2.0.0",
+   "crates.io|.|dirs-sys-next|0.1.2",
+   "crates.io|.|dirs-sys|0.4.1",
+   "crates.io|.|dirs|5.0.1",
+   "crates.io|.|dispatch|0.2.0",
+   "crates.io|.|displaydoc|0.2.5",
+   "crates.io|.|dlopen2_derive|0.4.0",
+   "crates.io|.|dlopen2|0.7.0",
+   "crates.io|.|doc-comment|0.3.3",
+   "crates.io|.|dpi|0.1.1",
+   "crates.io|.|dsa|0.6.3",
+   "crates.io|.|dtoa-short|0.3.5",
+   "crates.io|.|dtoa|1.0.9",
+   "crates.io|.|duct|0.13.7",
+   "crates.io|.|dunce|1.0.5",
+   "crates.io|.|dyn-clone|1.0.17",
+   "crates.io|.|eax|0.5.0",
+   "crates.io|.|ecdsa|0.14.8",
+   "crates.io|.|ecdsa|0.16.9",
+   "crates.io|.|ed25519-dalek|2.1.1",
+   "crates.io|.|ed25519|2.2.3",
+   "crates.io|.|either|1.13.0",
+   "crates.io|.|elf|0.7.4",
+   "crates.io|.|elliptic-curve|0.12.3",
+   "crates.io|.|elliptic-curve|0.13.8",
+   "crates.io|.|embed_plist|1.2.2",
+   "crates.io|.|embed-resource|2.5.0",
+   "crates.io|.|encode_unicode|0.3.6",
+   "crates.io|.|encoding_rs|0.8.34",
+   "crates.io|.|english-numbers|0.3.3",
+   "crates.io|.|enum-display-derive|0.1.1",
+   "crates.io|.|enum-primitive-derive|0.3.0",
+   "crates.io|.|env_filter|0.1.2",
+   "crates.io|.|env_logger|0.10.2",
+   "crates.io|.|env_logger|0.11.5",
+   "crates.io|.|env_logger|0.8.4",
+   "crates.io|.|equivalent|1.0.1",
+   "crates.io|.|erased-serde|0.4.5",
+   "crates.io|.|errno|0.3.9",
+   "crates.io|.|exr|1.72.0",
+   "crates.io|.|fancy-regex|0.13.0",
+   "crates.io|.|fastrand|2.1.1",
+   "crates.io|.|fdeflate|0.3.5",
+   "crates.io|.|fern|0.6.2",
+   "crates.io|.|ff|0.12.1",
+   "crates.io|.|ff|0.13.0",
+   "crates.io|.|fiat-crypto|0.2.9",
+   "crates.io|.|field-offset|0.3.6",
+   "crates.io|.|figment|0.10.19",
+   "crates.io|.|filetime|0.2.25",
+   "crates.io|.|flate2|1.0.34",
+   "crates.io|.|float-cmp|0.9.0",
+   "crates.io|.|fluent-uri|0.1.4",
+   "crates.io|.|flume|0.11.0",
+   "crates.io|.|fnv|1.0.7",
+   "crates.io|.|fontconfig-parser|0.5.7",
+   "crates.io|.|fontdb|0.21.0",
+   "crates.io|.|foreign-types-macros|0.2.3",
+   "crates.io|.|foreign-types-shared|0.1.1",
+   "crates.io|.|foreign-types-shared|0.3.1",
+   "crates.io|.|foreign-types|0.3.2",
+   "crates.io|.|foreign-types|0.5.0",
+   "crates.io|.|form_urlencoded|1.2.1",
+   "crates.io|.|fraction|0.15.3",
+   "crates.io|.|freedesktop_entry_parser|1.3.0",
+   "crates.io|.|fsevent-sys|4.1.0",
+   "crates.io|.|funty|2.0.0",
+   "crates.io|.|futf|0.1.5",
+   "crates.io|.|futures-channel|0.3.30",
+   "crates.io|.|futures-core|0.3.30",
+   "crates.io|.|futures-executor|0.3.30",
+   "crates.io|.|futures-io|0.3.30",
+   "crates.io|.|futures-macro|0.3.30",
+   "crates.io|.|futures-sink|0.3.30",
+   "crates.io|.|futures-task|0.3.30",
+   "crates.io|.|futures-timer|3.0.3",
+   "crates.io|.|futures-util|0.3.30",
+   "crates.io|.|futures|0.3.30",
+   "crates.io|.|fxhash|0.2.1",
+   "crates.io|.|gdk-pixbuf-sys|0.18.0",
+   "crates.io|.|gdk-pixbuf|0.18.5",
+   "crates.io|.|gdk-sys|0.18.0",
+   "crates.io|.|gdk|0.18.0",
+   "crates.io|.|gdkwayland-sys|0.18.0",
+   "crates.io|.|gdkx11-sys|0.18.0",
+   "crates.io|.|gdkx11|0.18.0",
+   "crates.io|.|generic-array|0.14.7",
+   "crates.io|.|getrandom|0.1.16",
+   "crates.io|.|getrandom|0.2.15",
+   "crates.io|.|ghash|0.5.1",
+   "crates.io|.|gif|0.13.1",
+   "crates.io|.|gimli|0.31.0",
+   "crates.io|.|gio-sys|0.18.1",
+   "crates.io|.|gio|0.18.4",
+   "crates.io|.|glib-macros|0.18.5",
+   "crates.io|.|glib-sys|0.18.1",
+   "crates.io|.|glib|0.18.5",
+   "crates.io|.|glob|0.3.1",
+   "crates.io|.|globset|0.4.15",
+   "crates.io|.|gobject-sys|0.18.0",
+   "crates.io|.|goblin|0.8.2",
+   "crates.io|.|group|0.12.1",
+   "crates.io|.|group|0.13.0",
+   "crates.io|.|gtk-sys|0.18.0",
+   "crates.io|.|gtk|0.18.1",
+   "crates.io|.|gtk3-macros|0.18.0",
+   "crates.io|.|h2|0.3.26",
+   "crates.io|.|h2|0.4.6",
+   "crates.io|.|half|2.4.1",
+   "crates.io|.|handlebars|6.1.0",
+   "crates.io|.|hashbrown|0.12.3",
+   "crates.io|.|hashbrown|0.14.5",
+   "crates.io|.|hashbrown|0.15.0",
+   "crates.io|.|heck|0.4.1",
+   "crates.io|.|heck|0.5.0",
+   "crates.io|.|hermit-abi|0.3.9",
+   "crates.io|.|hermit-abi|0.4.0",
+   "crates.io|.|hex|0.4.3",
+   "crates.io|.|hkdf|0.12.4",
+   "crates.io|.|hmac|0.12.1",
+   "crates.io|.|home|0.5.9",
+   "crates.io|.|html5ever|0.26.0",
+   "crates.io|.|http-body-util|0.1.2",
+   "crates.io|.|http-body|0.4.6",
+   "crates.io|.|http-body|1.0.1",
+   "crates.io|.|http-range|0.1.5",
+   "crates.io|.|http|0.2.12",
+   "crates.io|.|http|1.1.0",
+   "crates.io|.|httparse|1.9.5",
+   "crates.io|.|httpdate|1.0.3",
+   "crates.io|.|humantime|2.1.0",
+   "crates.io|.|hyper-rustls|0.24.2",
+   "crates.io|.|hyper-rustls|0.27.3",
+   "crates.io|.|hyper-tls|0.6.0",
+   "crates.io|.|hyper-util|0.1.9",
+   "crates.io|.|hyper|0.14.30",
+   "crates.io|.|hyper|1.4.1",
+   "crates.io|.|iana-time-zone-haiku|0.1.2",
+   "crates.io|.|iana-time-zone|0.1.61",
+   "crates.io|.|ico|0.3.0",
+   "crates.io|.|idea|0.5.1",
+   "crates.io|.|ident_case|1.0.1",
+   "crates.io|.|idna|0.5.0",
+   "crates.io|.|ignore|0.4.23",
+   "crates.io|.|image-webp|0.1.3",
+   "crates.io|.|image|0.25.2",
+   "crates.io|.|imagesize|0.13.0",
+   "crates.io|.|imgref|1.10.1",
+   "crates.io|.|include_dir_macros|0.7.4",
+   "crates.io|.|include_dir|0.7.4",
+   "crates.io|.|indexmap|1.9.3",
+   "crates.io|.|indexmap|2.6.0",
+   "crates.io|.|infer|0.13.0",
+   "crates.io|.|infer|0.16.0",
+   "crates.io|.|inflector|0.11.4",
+   "crates.io|.|inlinable_string|0.1.15",
+   "crates.io|.|inotify-sys|0.1.5",
+   "crates.io|.|inotify|0.9.6",
+   "crates.io|.|inout|0.1.3",
+   "crates.io|.|insta|1.40.0",
+   "crates.io|.|instant|0.1.13",
+   "crates.io|.|interpolate_name|0.2.4",
+   "crates.io|.|io-lifetimes|1.0.11",
+   "crates.io|.|ipnet|2.10.0",
+   "crates.io|.|is_executable|1.0.3",
+   "crates.io|.|is_terminal_polyfill|1.70.1",
+   "crates.io|.|is-terminal|0.4.13",
+   "crates.io|.|iso8601|0.6.1",
+   "crates.io|.|iter-read|1.1.0",
+   "crates.io|.|itertools|0.10.5",
+   "crates.io|.|itertools|0.12.1",
+   "crates.io|.|itertools|0.13.0",
+   "crates.io|.|itoa|0.4.8",
+   "crates.io|.|itoa|1.0.11",
+   "crates.io|.|java-properties|2.0.0",
+   "crates.io|.|javascriptcore-rs-sys|1.1.1",
+   "crates.io|.|javascriptcore-rs|1.1.2",
+   "crates.io|.|jni-sys|0.3.0",
+   "crates.io|.|jni|0.21.1",
+   "crates.io|.|jobserver|0.1.32",
+   "crates.io|.|jpeg-decoder|0.3.1",
+   "crates.io|.|js-sys|0.3.70",
+   "crates.io|.|json-patch|1.4.0",
+   "crates.io|.|json-patch|2.0.0",
+   "crates.io|.|json5|0.4.1",
+   "crates.io|.|jsonptr|0.4.7",
+   "crates.io|.|jsonrpsee-client-transport|0.24.5",
+   "crates.io|.|jsonrpsee-core|0.24.5",
+   "crates.io|.|jsonrpsee-server|0.24.5",
+   "crates.io|.|jsonrpsee-types|0.24.5",
+   "crates.io|.|jsonrpsee-ws-client|0.24.5",
+   "crates.io|.|jsonrpsee|0.24.5",
+   "crates.io|.|jsonschema|0.18.3",
+   "crates.io|.|jsonwebtoken|9.3.0",
+   "crates.io|.|jzon|0.12.5",
+   "crates.io|.|k256|0.13.4",
+   "crates.io|.|keccak|0.1.5",
+   "crates.io|.|keyboard-types|0.7.0",
+   "crates.io|.|konst_kernel|0.3.9",
+   "crates.io|.|konst|0.3.9",
+   "crates.io|.|kqueue-sys|1.0.4",
+   "crates.io|.|kqueue|1.0.8",
+   "crates.io|.|kuchikiki|0.8.2",
+   "crates.io|.|kurbo|0.11.1",
+   "crates.io|.|lazy_static|1.5.0",
+   "crates.io|.|lebe|0.5.2",
+   "crates.io|.|libappindicator-sys|0.9.0",
+   "crates.io|.|libappindicator|0.9.0",
+   "crates.io|.|libc|0.2.159",
+   "crates.io|.|libfuzzer-sys|0.4.7",
+   "crates.io|.|libloading|0.7.4",
+   "crates.io|.|libloading|0.8.5",
+   "crates.io|.|libm|0.2.8",
+   "crates.io|.|libredox|0.1.3",
+   "crates.io|.|libxdo-sys|0.11.0",
+   "crates.io|.|libxdo|0.6.0",
+   "crates.io|.|linked-hash-map|0.5.6",
+   "crates.io|.|linux-raw-sys|0.3.8",
+   "crates.io|.|linux-raw-sys|0.4.14",
+   "crates.io|.|local-ip-address|0.6.3",
+   "crates.io|.|lock_api|0.4.12",
+   "crates.io|.|lockfree-object-pool|0.1.6",
+   "crates.io|.|log|0.4.22",
+   "crates.io|.|loop9|0.1.5",
+   "crates.io|.|lru|0.12.4",
+   "crates.io|.|lzma-sys|0.1.20",
+   "crates.io|.|mac|0.1.1",
+   "crates.io|.|magic_string|0.3.4",
+   "crates.io|.|malloc_buf|0.0.6",
+   "crates.io|.|markup5ever|0.11.0",
+   "crates.io|.|matches|0.1.10",
+   "crates.io|.|matchit|0.7.3",
+   "crates.io|.|maybe-rayon|0.1.1",
+   "crates.io|.|md-5|0.10.6",
+   "crates.io|.|md5|0.7.0",
+   "crates.io|.|memchr|2.7.4",
+   "crates.io|.|memmap2|0.9.5",
+   "crates.io|.|memoffset|0.9.1",
+   "crates.io|.|miette-derive|7.2.0",
+   "crates.io|.|miette|7.2.0",
+   "crates.io|.|mime|0.3.17",
+   "crates.io|.|minicbor-derive|0.13.0",
+   "crates.io|.|minicbor|0.20.0",
+   "crates.io|.|minimal-lexical|0.2.1",
+   "crates.io|.|minisign|0.7.3",
+   "crates.io|.|miniz_oxide|0.7.4",
+   "crates.io|.|miniz_oxide|0.8.0",
+   "crates.io|.|mio|0.8.11",
+   "crates.io|.|mio|1.0.2",
+   "crates.io|.|muda|0.15.1",
+   "crates.io|.|napi-build|2.1.3",
+   "crates.io|.|napi-derive-backend|1.0.74",
+   "crates.io|.|napi-derive|2.16.12",
+   "crates.io|.|napi-sys|2.4.0",
+   "crates.io|.|napi|2.16.11",
+   "crates.io|.|native-tls|0.2.12",
+   "crates.io|.|ndk-context|0.1.1",
+   "crates.io|.|ndk-sys|0.6.0+11769913",
+   "crates.io|.|ndk|0.9.0",
+   "crates.io|.|neli-proc-macros|0.1.3",
+   "crates.io|.|neli|0.6.4",
+   "crates.io|.|new_debug_unreachable|1.0.6",
+   "crates.io|.|nix|0.29.0",
+   "crates.io|.|nodrop|0.1.14",
+   "crates.io|.|nom|7.1.3",
+   "crates.io|.|nonmax|0.5.5",
+   "crates.io|.|noop_proc_macro|0.3.0",
+   "crates.io|.|notify-debouncer-mini|0.4.1",
+   "crates.io|.|notify|6.1.1",
+   "crates.io|.|num_enum_derive|0.7.3",
+   "crates.io|.|num_enum|0.7.3",
+   "crates.io|.|num_threads|0.1.7",
+   "crates.io|.|num-bigint-dig|0.8.4",
+   "crates.io|.|num-bigint|0.4.6",
+   "crates.io|.|num-cmp|0.1.0",
+   "crates.io|.|num-complex|0.4.6",
+   "crates.io|.|num-conv|0.1.0",
+   "crates.io|.|num-derive|0.4.2",
+   "crates.io|.|num-integer|0.1.46",
+   "crates.io|.|num-iter|0.1.45",
+   "crates.io|.|num-rational|0.4.2",
+   "crates.io|.|num-traits|0.2.19",
+   "crates.io|.|num|0.4.3",
+   "crates.io|.|objc_exception|0.1.2",
+   "crates.io|.|objc_id|0.1.1",
+   "crates.io|.|objc-sys|0.3.5",
+   "crates.io|.|objc|0.2.7",
+   "crates.io|.|objc2-app-kit|0.2.2",
+   "crates.io|.|objc2-core-data|0.2.2",
+   "crates.io|.|objc2-core-image|0.2.2",
+   "crates.io|.|objc2-encode|4.0.3",
+   "crates.io|.|objc2-foundation|0.2.2",
+   "crates.io|.|objc2-metal|0.2.2",
+   "crates.io|.|objc2-quartz-core|0.2.2",
+   "crates.io|.|objc2-web-kit|0.2.2",
+   "crates.io|.|objc2|0.5.2",
+   "crates.io|.|object|0.32.2",
+   "crates.io|.|object|0.36.4",
+   "crates.io|.|ocb3|0.1.0",
+   "crates.io|.|oid-registry|0.6.1",
+   "crates.io|.|once_cell|1.20.1",
+   "crates.io|.|once-cell-regex|0.2.1",
+   "crates.io|.|opaque-debug|0.3.1",
+   "crates.io|.|openssl-macros|0.1.1",
+   "crates.io|.|openssl-probe|0.1.5",
+   "crates.io|.|openssl-src|300.3.2+3.3.2",
+   "crates.io|.|openssl-sys|0.9.103",
+   "crates.io|.|openssl|0.10.66",
+   "crates.io|.|option-ext|0.2.0",
+   "crates.io|.|ordered-float|2.10.1",
+   "crates.io|.|os_info|3.8.2",
+   "crates.io|.|os_pipe|1.2.1",
+   "crates.io|.|outref|0.5.1",
+   "crates.io|.|owo-colors|4.1.0",
+   "crates.io|.|oxc_allocator|0.24.3",
+   "crates.io|.|oxc_ast_macros|0.24.3",
+   "crates.io|.|oxc_ast|0.24.3",
+   "crates.io|.|oxc_diagnostics|0.24.3",
+   "crates.io|.|oxc_index|0.24.3",
+   "crates.io|.|oxc_parser|0.24.3",
+   "crates.io|.|oxc_span|0.24.3",
+   "crates.io|.|oxc_syntax|0.24.3",
+   "crates.io|.|p12|0.6.3",
+   "crates.io|.|p256|0.11.1",
+   "crates.io|.|p256|0.13.2",
+   "crates.io|.|p384|0.13.0",
+   "crates.io|.|p521|0.13.3",
+   "crates.io|.|pango-sys|0.18.0",
+   "crates.io|.|pango|0.18.3",
+   "crates.io|.|parking_lot_core|0.9.10",
+   "crates.io|.|parking_lot|0.12.3",
+   "crates.io|.|password-hash|0.5.0",
+   "crates.io|.|paste|1.0.15",
+   "crates.io|.|path_abs|0.5.1",
+   "crates.io|.|pbkdf2|0.12.2",
+   "crates.io|.|pear_codegen|0.2.9",
+   "crates.io|.|pear|0.2.9",
+   "crates.io|.|pem-rfc7468|0.7.0",
+   "crates.io|.|pem|3.0.4",
+   "crates.io|.|percent-encoding|2.3.1",
+   "crates.io|.|pest_derive|2.7.13",
+   "crates.io|.|pest_generator|2.7.13",
+   "crates.io|.|pest_meta|2.7.13",
+   "crates.io|.|pest|2.7.13",
+   "crates.io|.|pgp|0.13.2",
+   "crates.io|.|phf_codegen|0.10.0",
+   "crates.io|.|phf_codegen|0.8.0",
+   "crates.io|.|phf_generator|0.10.0",
+   "crates.io|.|phf_generator|0.11.2",
+   "crates.io|.|phf_generator|0.8.0",
+   "crates.io|.|phf_macros|0.11.2",
+   "crates.io|.|phf_macros|0.8.0",
+   "crates.io|.|phf_shared|0.10.0",
+   "crates.io|.|phf_shared|0.11.2",
+   "crates.io|.|phf_shared|0.8.0",
+   "crates.io|.|phf|0.10.1",
+   "crates.io|.|phf|0.11.2",
+   "crates.io|.|phf|0.8.0",
+   "crates.io|.|pico-args|0.4.2",
+   "crates.io|.|pico-args|0.5.0",
+   "crates.io|.|pin-project-internal|1.1.5",
+   "crates.io|.|pin-project-lite|0.2.14",
+   "crates.io|.|pin-project|1.1.5",
+   "crates.io|.|pin-utils|0.1.0",
+   "crates.io|.|pkcs1|0.7.5",
+   "crates.io|.|pkcs8|0.10.2",
+   "crates.io|.|pkcs8|0.9.0",
+   "crates.io|.|pkg-config|0.3.31",
+   "crates.io|.|plain|0.2.3",
+   "crates.io|.|plist|1.7.0",
+   "crates.io|.|png|0.17.14",
+   "crates.io|.|polyval|0.6.2",
+   "crates.io|.|portable-atomic|1.9.0",
+   "crates.io|.|powerfmt|0.2.0",
+   "crates.io|.|ppv-lite86|0.2.20",
+   "crates.io|.|precomputed-hash|0.1.1",
+   "crates.io|.|pretty_assertions|1.4.1",
+   "crates.io|.|primeorder|0.13.6",
+   "crates.io|.|proc-macro-crate|1.3.1",
+   "crates.io|.|proc-macro-crate|2.0.0",
+   "crates.io|.|proc-macro-crate|3.2.0",
+   "crates.io|.|proc-macro-error-attr|1.0.4",
+   "crates.io|.|proc-macro-error|1.0.4",
+   "crates.io|.|proc-macro-hack|0.5.20+deprecated",
+   "crates.io|.|proc-macro2-diagnostics|0.10.1",
+   "crates.io|.|proc-macro2|1.0.86",
+   "crates.io|.|profiling-procmacros|1.0.15",
+   "crates.io|.|profiling|1.0.15",
+   "crates.io|.|proptest|1.5.0",
+   "crates.io|.|ptr_meta_derive|0.1.4",
+   "crates.io|.|ptr_meta|0.1.4",
+   "crates.io|.|qoi|0.4.1",
+   "crates.io|.|quick-error|1.2.3",
+   "crates.io|.|quick-error|2.0.1",
+   "crates.io|.|quick-xml|0.32.0",
+   "crates.io|.|quickcheck_macros|1.0.0",
+   "crates.io|.|quickcheck|1.0.3",
+   "crates.io|.|quinn-proto|0.11.8",
+   "crates.io|.|quinn-udp|0.5.5",
+   "crates.io|.|quinn|0.11.5",
+   "crates.io|.|quote|1.0.37",
+   "crates.io|.|radium|0.7.0",
+   "crates.io|.|rand_chacha|0.2.2",
+   "crates.io|.|rand_chacha|0.3.1",
+   "crates.io|.|rand_core|0.5.1",
+   "crates.io|.|rand_core|0.6.4",
+   "crates.io|.|rand_hc|0.2.0",
+   "crates.io|.|rand_pcg|0.2.1",
+   "crates.io|.|rand_xorshift|0.3.0",
+   "crates.io|.|rand|0.7.3",
+   "crates.io|.|rand|0.8.5",
+   "crates.io|.|rasn-derive|0.12.5",
+   "crates.io|.|rasn|0.12.5",
+   "crates.io|.|rav1e|0.7.1",
+   "crates.io|.|ravif|0.11.10",
+   "crates.io|.|raw-window-handle|0.6.2",
+   "crates.io|.|rayon-core|1.12.1",
+   "crates.io|.|rayon|1.10.0",
+   "crates.io|.|rc2|0.8.1",
+   "crates.io|.|redox_syscall|0.5.7",
+   "crates.io|.|redox_users|0.4.6",
+   "crates.io|.|regex-automata|0.4.8",
+   "crates.io|.|regex-lite|0.1.6",
+   "crates.io|.|regex-syntax|0.8.5",
+   "crates.io|.|regex|1.11.0",
+   "crates.io|.|rend|0.4.2",
+   "crates.io|.|reqwest|0.11.27",
+   "crates.io|.|reqwest|0.12.8",
+   "crates.io|.|resvg|0.43.0",
+   "crates.io|.|rfc6979|0.3.1",
+   "crates.io|.|rfc6979|0.4.0",
+   "crates.io|.|rgb|0.8.50",
+   "crates.io|.|ring|0.17.8",
+   "crates.io|.|ripemd|0.1.3",
+   "crates.io|.|rkyv_derive|0.7.45",
+   "crates.io|.|rkyv|0.7.45",
+   "crates.io|.|route-recognizer|0.3.1",
+   "crates.io|.|roxmltree|0.20.0",
+   "crates.io|.|rpassword|7.3.1",
+   "crates.io|.|rpm|0.15.1",
+   "crates.io|.|rsa|0.9.6",
+   "crates.io|.|rtoolbox|0.0.2",
+   "crates.io|.|rust_decimal|1.36.0",
+   "crates.io|.|rustc_version|0.4.1",
+   "crates.io|.|rustc-demangle|0.1.24",
+   "crates.io|.|rustc-hash|2.0.0",
+   "crates.io|.|rusticata-macros|4.1.0",
+   "crates.io|.|rustix|0.37.27",
+   "crates.io|.|rustix|0.38.37",
+   "crates.io|.|rustls-native-certs|0.6.3",
+   "crates.io|.|rustls-native-certs|0.7.3",
+   "crates.io|.|rustls-pemfile|1.0.4",
+   "crates.io|.|rustls-pemfile|2.2.0",
+   "crates.io|.|rustls-pki-types|1.9.0",
+   "crates.io|.|rustls-webpki|0.101.7",
+   "crates.io|.|rustls-webpki|0.102.8",
+   "crates.io|.|rustls|0.21.12",
+   "crates.io|.|rustls|0.22.4",
+   "crates.io|.|rustls|0.23.13",
+   "crates.io|.|rustversion|1.0.17",
+   "crates.io|.|rusty-fork|0.3.0",
+   "crates.io|.|rustybuzz|0.18.0",
+   "crates.io|.|ruzstd|0.5.0",
+   "crates.io|.|ryu|1.0.18",
+   "crates.io|.|salsa20|0.10.2",
+   "crates.io|.|same-file|1.0.6",
+   "crates.io|.|scc|2.2.0",
+   "crates.io|.|schannel|0.1.24",
+   "crates.io|.|schemars_derive|0.8.21",
+   "crates.io|.|schemars|0.8.21",
+   "crates.io|.|scopeguard|1.2.0",
+   "crates.io|.|scroll_derive|0.12.0",
+   "crates.io|.|scroll|0.12.0",
+   "crates.io|.|scrypt|0.11.0",
+   "crates.io|.|sct|0.7.1",
+   "crates.io|.|sdd|3.0.3",
+   "crates.io|.|seahash|4.1.0",
+   "crates.io|.|sec1|0.3.0",
+   "crates.io|.|sec1|0.7.3",
+   "crates.io|.|security-framework-sys|2.12.0",
+   "crates.io|.|security-framework|2.11.1",
+   "crates.io|.|selectors|0.22.0",
+   "crates.io|.|semver|1.0.23",
+   "crates.io|.|seq-macro|0.3.5",
+   "crates.io|.|serde_derive_internals|0.29.1",
+   "crates.io|.|serde_derive|1.0.210",
+   "crates.io|.|serde_fmt|1.0.3",
+   "crates.io|.|serde_json|1.0.128",
+   "crates.io|.|serde_path_to_error|0.1.16",
+   "crates.io|.|serde_repr|0.1.19",
+   "crates.io|.|serde_spanned|0.6.8",
+   "crates.io|.|serde_urlencoded|0.7.1",
+   "crates.io|.|serde_with_macros|3.10.0",
+   "crates.io|.|serde_with|3.10.0",
+   "crates.io|.|serde_yaml|0.9.34+deprecated",
+   "crates.io|.|serde-untagged|0.1.6",
+   "crates.io|.|serde-value|0.7.0",
+   "crates.io|.|serde-wasm-bindgen|0.5.0",
+   "crates.io|.|serde-wasm-bindgen|0.6.5",
+   "crates.io|.|serde-xml-rs|0.6.0",
+   "crates.io|.|serde|1.0.210",
+   "crates.io|.|serial_test_derive|3.1.1",
+   "crates.io|.|serial_test|3.1.1",
+   "crates.io|.|serialize-to-javascript-impl|0.1.1",
+   "crates.io|.|serialize-to-javascript|0.1.1",
+   "crates.io|.|servo_arc|0.1.1",
+   "crates.io|.|sha1_smol|1.0.1",
+   "crates.io|.|sha1-checked|0.10.0",
+   "crates.io|.|sha1|0.10.6",
+   "crates.io|.|sha2|0.10.8",
+   "crates.io|.|sha3|0.10.8",
+   "crates.io|.|shared_child|1.0.1",
+   "crates.io|.|shell-words|1.1.0",
+   "crates.io|.|shlex|1.3.0",
+   "crates.io|.|signal-hook-registry|1.4.2",
+   "crates.io|.|signal-hook-tokio|0.3.1",
+   "crates.io|.|signal-hook|0.3.17",
+   "crates.io|.|signature|1.6.4",
+   "crates.io|.|signature|2.2.0",
+   "crates.io|.|simd_helpers|0.1.0",
+   "crates.io|.|simd-adler32|0.3.7",
+   "crates.io|.|simdutf8|0.1.5",
+   "crates.io|.|similar|2.6.0",
+   "crates.io|.|simple_asn1|0.6.2",
+   "crates.io|.|simple-file-manifest|0.11.0",
+   "crates.io|.|simplecss|0.2.1",
+   "crates.io|.|siphasher|0.3.11",
+   "crates.io|.|siphasher|1.0.1",
+   "crates.io|.|slab|0.4.9",
+   "crates.io|.|slotmap|1.0.7",
+   "crates.io|.|smallvec|1.13.2",
+   "crates.io|.|smawk|0.3.2",
+   "crates.io|.|snafu-derive|0.7.5",
+   "crates.io|.|snafu|0.7.5",
+   "crates.io|.|socket2|0.5.7",
+   "crates.io|.|socks|0.3.4",
+   "crates.io|.|softbuffer|0.4.6",
+   "crates.io|.|soketto|0.8.0",
+   "crates.io|.|soup3-sys|0.5.0",
+   "crates.io|.|soup3|0.5.0",
+   "crates.io|.|spake2|0.4.0",
+   "crates.io|.|specta-macros|2.0.0-rc.17",
+   "crates.io|.|specta|2.0.0-rc.20",
+   "crates.io|.|spin|0.9.8",
+   "crates.io|.|spki|0.6.0",
+   "crates.io|.|spki|0.7.3",
+   "crates.io|.|stable_deref_trait|1.2.0",
+   "crates.io|.|static_assertions|1.1.0",
+   "crates.io|.|std_prelude|0.2.12",
+   "crates.io|.|stfu8|0.2.7",
+   "crates.io|.|strict-num|0.1.1",
+   "crates.io|.|string_cache_codegen|0.5.2",
+   "crates.io|.|string_cache|0.8.7",
+   "crates.io|.|strsim|0.11.1",
+   "crates.io|.|sublime_fuzzy|0.7.0",
+   "crates.io|.|subtle|2.6.1",
+   "crates.io|.|sval_buffer|2.13.1",
+   "crates.io|.|sval_dynamic|2.13.1",
+   "crates.io|.|sval_fmt|2.13.1",
+   "crates.io|.|sval_json|2.13.1",
+   "crates.io|.|sval_nested|2.13.1",
+   "crates.io|.|sval_ref|2.13.1",
+   "crates.io|.|sval_serde|2.13.1",
+   "crates.io|.|sval|2.13.1",
+   "crates.io|.|svgtypes|0.15.2",
+   "crates.io|.|swift-rs|1.0.7",
+   "crates.io|.|syn_derive|0.1.8",
+   "crates.io|.|syn|1.0.109",
+   "crates.io|.|syn|2.0.79",
+   "crates.io|.|sync_wrapper|0.1.2",
+   "crates.io|.|sync_wrapper|1.0.1",
+   "crates.io|.|synstructure|0.12.6",
+   "crates.io|.|sysctl|0.4.6",
+   "crates.io|.|system-configuration-sys|0.5.0",
+   "crates.io|.|system-configuration|0.5.1",
+   "crates.io|.|system-deps|6.2.2",
+   "crates.io|.|tao-macros|0.1.3",
+   "crates.io|.|tao|0.30.2",
+   "crates.io|.|tap|1.0.1",
+   "crates.io|.|tar|0.4.42",
+   "crates.io|.|target-lexicon|0.12.16",
+   "crates.io|.|tauri-icns|0.1.0",
+   "crates.io|.|tauri-plugin-log|2.0.0-rc.2",
+   "crates.io|.|tauri-plugin|2.0.0-rc.13",
+   "crates.io|.|tauri-utils|1.6.0",
+   "crates.io|.|tauri-utils|2.0.0-rc.13",
+   "crates.io|.|tauri-winres|0.1.1",
+   "crates.io|.|tempfile|3.13.0",
+   "crates.io|.|tendril|0.4.3",
+   "crates.io|.|termcolor|1.4.1",
+   "crates.io|.|terminal_size|0.2.6",
+   "crates.io|.|textwrap|0.16.1",
+   "crates.io|.|thin-slice|0.1.1",
+   "crates.io|.|thiserror-impl|1.0.64",
+   "crates.io|.|thiserror|1.0.64",
+   "crates.io|.|tiff|0.9.1",
+   "crates.io|.|time-core|0.1.2",
+   "crates.io|.|time-macros|0.2.18",
+   "crates.io|.|time|0.3.36",
+   "crates.io|.|tiny_http|0.11.0",
+   "crates.io|.|tiny-skia-path|0.11.4",
+   "crates.io|.|tiny-skia|0.11.4",
+   "crates.io|.|tinyvec_macros|0.1.1",
+   "crates.io|.|tinyvec|1.8.0",
+   "crates.io|.|tokio-macros|2.4.0",
+   "crates.io|.|tokio-native-tls|0.3.1",
+   "crates.io|.|tokio-rustls|0.24.1",
+   "crates.io|.|tokio-rustls|0.26.0",
+   "crates.io|.|tokio-stream|0.1.16",
+   "crates.io|.|tokio-tungstenite|0.24.0",
+   "crates.io|.|tokio-util|0.7.12",
+   "crates.io|.|tokio|1.40.0",
+   "crates.io|.|toml_datetime|0.6.8",
+   "crates.io|.|toml_edit|0.19.15",
+   "crates.io|.|toml_edit|0.20.7",
+   "crates.io|.|toml_edit|0.22.22",
+   "crates.io|.|toml|0.7.8",
+   "crates.io|.|toml|0.8.19",
+   "crates.io|.|tower-layer|0.3.3",
+   "crates.io|.|tower-service|0.3.3",
+   "crates.io|.|tower|0.4.13",
+   "crates.io|.|tower|0.5.1",
+   "crates.io|.|tracing-attributes|0.1.27",
+   "crates.io|.|tracing-core|0.1.32",
+   "crates.io|.|tracing|0.1.40",
+   "crates.io|.|tray-icon|0.19.0",
+   "crates.io|.|try-lock|0.2.5",
+   "crates.io|.|ttf-parser|0.24.1",
+   "crates.io|.|tungstenite|0.21.0",
+   "crates.io|.|tungstenite|0.24.0",
+   "crates.io|.|twofish|0.7.1",
+   "crates.io|.|twox-hash|1.6.3",
+   "crates.io|.|typeid|1.0.2",
+   "crates.io|.|typenum|1.17.0",
+   "crates.io|.|typewit_proc_macros|1.8.1",
+   "crates.io|.|typewit|1.9.0",
+   "crates.io|.|ucd-trie|0.1.7",
+   "crates.io|.|uname|0.1.1",
+   "crates.io|.|unarray|0.1.4",
+   "crates.io|.|uncased|0.9.10",
+   "crates.io|.|unic-char-property|0.9.0",
+   "crates.io|.|unic-char-range|0.9.0",
+   "crates.io|.|unic-common|0.9.0",
+   "crates.io|.|unic-ucd-ident|0.9.0",
+   "crates.io|.|unic-ucd-version|0.9.0",
+   "crates.io|.|unicode-bidi-mirroring|0.3.0",
+   "crates.io|.|unicode-bidi|0.3.15",
+   "crates.io|.|unicode-ccc|0.3.0",
+   "crates.io|.|unicode-id-start|1.3.0",
+   "crates.io|.|unicode-ident|1.0.13",
+   "crates.io|.|unicode-linebreak|0.1.5",
+   "crates.io|.|unicode-normalization|0.1.24",
+   "crates.io|.|unicode-properties|0.1.3",
+   "crates.io|.|unicode-script|0.5.7",
+   "crates.io|.|unicode-segmentation|1.12.0",
+   "crates.io|.|unicode-vo|0.1.0",
+   "crates.io|.|unicode-width|0.1.14",
+   "crates.io|.|unicode-xid|0.2.6",
+   "crates.io|.|universal-hash|0.5.1",
+   "crates.io|.|unsafe-libyaml|0.2.11",
+   "crates.io|.|untrusted|0.9.0",
+   "crates.io|.|ureq|2.10.1",
+   "crates.io|.|url|2.5.2",
+   "crates.io|.|urlencoding|2.1.3",
+   "crates.io|.|urlpattern|0.3.0",
+   "crates.io|.|usvg|0.43.0",
+   "crates.io|.|utf-8|0.7.6",
+   "crates.io|.|utf8-width|0.1.7",
+   "crates.io|.|utf8parse|0.2.2",
+   "crates.io|.|uuid|1.10.0",
+   "crates.io|.|v_frame|0.3.8",
+   "crates.io|.|value-bag-serde1|1.9.0",
+   "crates.io|.|value-bag-sval2|1.9.0",
+   "crates.io|.|value-bag|1.9.0",
+   "crates.io|.|vcpkg|0.2.15",
+   "crates.io|.|version_check|0.9.5",
+   "crates.io|.|version-compare|0.2.0",
+   "crates.io|.|vlq|0.5.1",
+   "crates.io|.|vsimd|0.8.0",
+   "crates.io|.|vswhom-sys|0.1.2",
+   "crates.io|.|vswhom|0.1.0",
+   "crates.io|.|wait-timeout|0.2.0",
+   "crates.io|.|walkdir|2.5.0",
+   "crates.io|.|want|0.3.1",
+   "crates.io|.|wasi|0.11.0+wasi-snapshot-preview1",
+   "crates.io|.|wasi|0.9.0+wasi-snapshot-preview1",
+   "crates.io|.|wasm-bindgen-backend|0.2.93",
+   "crates.io|.|wasm-bindgen-futures|0.4.43",
+   "crates.io|.|wasm-bindgen-macro-support|0.2.93",
+   "crates.io|.|wasm-bindgen-macro|0.2.93",
+   "crates.io|.|wasm-bindgen-shared|0.2.93",
+   "crates.io|.|wasm-bindgen|0.2.93",
+   "crates.io|.|wasm-streams|0.4.1",
+   "crates.io|.|web-sys|0.3.70",
+   "crates.io|.|webkit2gtk-sys|2.0.1",
+   "crates.io|.|webkit2gtk|2.0.1",
+   "crates.io|.|webpki-roots|0.25.4",
+   "crates.io|.|webpki-roots|0.26.6",
+   "crates.io|.|webview2-com-macros|0.8.0",
+   "crates.io|.|webview2-com-sys|0.33.0",
+   "crates.io|.|webview2-com|0.33.0",
+   "crates.io|.|weezl|0.1.8",
+   "crates.io|.|which|4.4.2",
+   "crates.io|.|which|6.0.3",
+   "crates.io|.|widestring|1.1.0",
+   "crates.io|.|winapi-i686-pc-windows-gnu|0.4.0",
+   "crates.io|.|winapi-util|0.1.9",
+   "crates.io|.|winapi-x86_64-pc-windows-gnu|0.4.0",
+   "crates.io|.|winapi|0.3.9",
+   "crates.io|.|window-vibrancy|0.5.2",
+   "crates.io|.|windows_aarch64_gnullvm|0.42.2",
+   "crates.io|.|windows_aarch64_gnullvm|0.48.5",
+   "crates.io|.|windows_aarch64_gnullvm|0.52.6",
+   "crates.io|.|windows_aarch64_msvc|0.42.2",
+   "crates.io|.|windows_aarch64_msvc|0.48.5",
+   "crates.io|.|windows_aarch64_msvc|0.52.6",
+   "crates.io|.|windows_i686_gnu|0.42.2",
+   "crates.io|.|windows_i686_gnu|0.48.5",
+   "crates.io|.|windows_i686_gnu|0.52.6",
+   "crates.io|.|windows_i686_gnullvm|0.52.6",
+   "crates.io|.|windows_i686_msvc|0.42.2",
+   "crates.io|.|windows_i686_msvc|0.48.5",
+   "crates.io|.|windows_i686_msvc|0.52.6",
+   "crates.io|.|windows_x86_64_gnu|0.42.2",
+   "crates.io|.|windows_x86_64_gnu|0.48.5",
+   "crates.io|.|windows_x86_64_gnu|0.52.6",
+   "crates.io|.|windows_x86_64_gnullvm|0.42.2",
+   "crates.io|.|windows_x86_64_gnullvm|0.48.5",
+   "crates.io|.|windows_x86_64_gnullvm|0.52.6",
+   "crates.io|.|windows_x86_64_msvc|0.42.2",
+   "crates.io|.|windows_x86_64_msvc|0.48.5",
+   "crates.io|.|windows_x86_64_msvc|0.52.6",
+   "crates.io|.|windows-core|0.52.0",
+   "crates.io|.|windows-core|0.58.0",
+   "crates.io|.|windows-implement|0.58.0",
+   "crates.io|.|windows-interface|0.58.0",
+   "crates.io|.|windows-registry|0.2.0",
+   "crates.io|.|windows-result|0.2.0",
+   "crates.io|.|windows-strings|0.1.0",
+   "crates.io|.|windows-sys|0.45.0",
+   "crates.io|.|windows-sys|0.48.0",
+   "crates.io|.|windows-sys|0.52.0",
+   "crates.io|.|windows-sys|0.59.0",
+   "crates.io|.|windows-targets|0.42.2",
+   "crates.io|.|windows-targets|0.48.5",
+   "crates.io|.|windows-targets|0.52.6",
+   "crates.io|.|windows-version|0.1.1",
+   "crates.io|.|windows|0.58.0",
+   "crates.io|.|winnow|0.5.40",
+   "crates.io|.|winnow|0.6.20",
+   "crates.io|.|winreg|0.50.0",
+   "crates.io|.|winreg|0.52.0",
+   "crates.io|.|winsafe|0.0.19",
+   "crates.io|.|worker-kv|0.7.0",
+   "crates.io|.|worker-macros|0.3.4",
+   "crates.io|.|worker-sys|0.3.4",
+   "crates.io|.|worker|0.3.4",
+   "crates.io|.|wry|0.44.1",
+   "crates.io|.|wyz|0.5.1",
+   "crates.io|.|x11-dl|2.21.0",
+   "crates.io|.|x11|2.21.0",
+   "crates.io|.|x25519-dalek|2.0.1",
+   "crates.io|.|x509-certificate|0.23.1",
+   "crates.io|.|x509|0.2.0",
+   "crates.io|.|xattr|1.3.1",
+   "crates.io|.|xml-rs|0.8.22",
+   "crates.io|.|xmlparser|0.13.6",
+   "crates.io|.|xmlwriter|0.1.0",
+   "crates.io|.|xz2|0.1.7",
+   "crates.io|.|yansi|1.0.1",
+   "crates.io|.|yasna|0.5.2",
+   "crates.io|.|zerocopy-derive|0.7.35",
+   "crates.io|.|zerocopy|0.7.35",
+   "crates.io|.|zeroize_derive|1.4.2",
+   "crates.io|.|zeroize|1.8.1",
+   "crates.io|.|zip_structs|0.2.1",
+   "crates.io|.|zip|0.6.6",
+   "crates.io|.|zip|2.2.0",
+   "crates.io|.|zopfli|0.8.1",
+   "crates.io|.|zstd-safe|7.2.1",
+   "crates.io|.|zstd-sys|2.0.13+zstd.1.5.6",
+   "crates.io|.|zstd|0.13.2",
+   "crates.io|.|zune-core|0.4.12",
+   "crates.io|.|zune-inflate|0.2.54",
+   "crates.io|.|zune-jpeg|0.4.13",
+   "npm|.|@ampproject/remapping|2.3.0",
+   "npm|.|@antfu/install-pkg|0.1.1",
+   "npm|.|@antfu/utils|0.7.10",
+   "npm|.|@babel/code-frame|7.24.7",
+   "npm|.|@babel/compat-data|7.25.2",
+   "npm|.|@babel/core|7.25.2",
+   "npm|.|@babel/generator|7.25.0",
+   "npm|.|@babel/helper-annotate-as-pure|7.24.7",
+   "npm|.|@babel/helper-compilation-targets|7.25.2",
+   "npm|.|@babel/helper-create-class-features-plugin|7.25.0",
+   "npm|.|@babel/helper-member-expression-to-functions|7.24.8",
+   "npm|.|@babel/helper-module-imports|7.24.7",
+   "npm|.|@babel/helper-module-transforms|7.25.2",
+   "npm|.|@babel/helper-optimise-call-expression|7.24.7",
+   "npm|.|@babel/helper-plugin-utils|7.24.8",
+   "npm|.|@babel/helper-replace-supers|7.25.0",
+   "npm|.|@babel/helper-simple-access|7.24.7",
+   "npm|.|@babel/helper-skip-transparent-expression-wrappers|7.24.7",
+   "npm|.|@babel/helper-string-parser|7.24.8",
+   "npm|.|@babel/helper-validator-identifier|7.24.7",
+   "npm|.|@babel/helper-validator-option|7.24.8",
+   "npm|.|@babel/helpers|7.25.0",
+   "npm|.|@babel/highlight|7.24.7",
+   "npm|.|@babel/parser|7.25.3",
+   "npm|.|@babel/plugin-syntax-jsx|7.24.7",
+   "npm|.|@babel/plugin-syntax-typescript|7.24.7",
+   "npm|.|@babel/plugin-transform-modules-commonjs|7.24.8",
+   "npm|.|@babel/plugin-transform-typescript|7.25.2",
+   "npm|.|@babel/preset-typescript|7.24.7",
+   "npm|.|@babel/template|7.25.0",
+   "npm|.|@babel/traverse|7.25.3",
+   "npm|.|@babel/types|7.25.2",
+   "npm|.|@cloudflare/kv-asset-handler|0.3.4",
+   "npm|.|@cloudflare/workerd-darwin-64|1.20240909.0",
+   "npm|.|@cloudflare/workerd-darwin-arm64|1.20240909.0",
+   "npm|.|@cloudflare/workerd-linux-64|1.20240909.0",
+   "npm|.|@cloudflare/workerd-linux-arm64|1.20240909.0",
+   "npm|.|@cloudflare/workerd-windows-64|1.20240909.0",
+   "npm|.|@cloudflare/workers-shared|0.5.3",
+   "npm|.|@cspotcode/source-map-support|0.8.1",
+   "npm|.|@esbuild-plugins/node-globals-polyfill|0.2.3",
+   "npm|.|@esbuild-plugins/node-modules-polyfill|0.2.2",
+   "npm|.|@esbuild/aix-ppc64|0.21.5",
+   "npm|.|@esbuild/aix-ppc64|0.23.0",
+   "npm|.|@esbuild/android-arm|0.17.19",
+   "npm|.|@esbuild/android-arm|0.21.5",
+   "npm|.|@esbuild/android-arm|0.23.0",
+   "npm|.|@esbuild/android-arm64|0.17.19",
+   "npm|.|@esbuild/android-arm64|0.21.5",
+   "npm|.|@esbuild/android-arm64|0.23.0",
+   "npm|.|@esbuild/android-x64|0.17.19",
+   "npm|.|@esbuild/android-x64|0.21.5",
+   "npm|.|@esbuild/android-x64|0.23.0",
+   "npm|.|@esbuild/darwin-arm64|0.17.19",
+   "npm|.|@esbuild/darwin-arm64|0.21.5",
+   "npm|.|@esbuild/darwin-arm64|0.23.0",
+   "npm|.|@esbuild/darwin-x64|0.17.19",
+   "npm|.|@esbuild/darwin-x64|0.21.5",
+   "npm|.|@esbuild/darwin-x64|0.23.0",
+   "npm|.|@esbuild/freebsd-arm64|0.17.19",
+   "npm|.|@esbuild/freebsd-arm64|0.21.5",
+   "npm|.|@esbuild/freebsd-arm64|0.23.0",
+   "npm|.|@esbuild/freebsd-x64|0.17.19",
+   "npm|.|@esbuild/freebsd-x64|0.21.5",
+   "npm|.|@esbuild/freebsd-x64|0.23.0",
+   "npm|.|@esbuild/linux-arm|0.17.19",
+   "npm|.|@esbuild/linux-arm|0.21.5",
+   "npm|.|@esbuild/linux-arm|0.23.0",
+   "npm|.|@esbuild/linux-arm64|0.17.19",
+   "npm|.|@esbuild/linux-arm64|0.21.5",
+   "npm|.|@esbuild/linux-arm64|0.23.0",
+   "npm|.|@esbuild/linux-ia32|0.17.19",
+   "npm|.|@esbuild/linux-ia32|0.21.5",
+   "npm|.|@esbuild/linux-ia32|0.23.0",
+   "npm|.|@esbuild/linux-loong64|0.17.19",
+   "npm|.|@esbuild/linux-loong64|0.21.5",
+   "npm|.|@esbuild/linux-loong64|0.23.0",
+   "npm|.|@esbuild/linux-mips64el|0.17.19",
+   "npm|.|@esbuild/linux-mips64el|0.21.5",
+   "npm|.|@esbuild/linux-mips64el|0.23.0",
+   "npm|.|@esbuild/linux-ppc64|0.17.19",
+   "npm|.|@esbuild/linux-ppc64|0.21.5",
+   "npm|.|@esbuild/linux-ppc64|0.23.0",
+   "npm|.|@esbuild/linux-riscv64|0.17.19",
+   "npm|.|@esbuild/linux-riscv64|0.21.5",
+   "npm|.|@esbuild/linux-riscv64|0.23.0",
+   "npm|.|@esbuild/linux-s390x|0.17.19",
+   "npm|.|@esbuild/linux-s390x|0.21.5",
+   "npm|.|@esbuild/linux-s390x|0.23.0",
+   "npm|.|@esbuild/linux-x64|0.17.19",
+   "npm|.|@esbuild/linux-x64|0.21.5",
+   "npm|.|@esbuild/linux-x64|0.23.0",
+   "npm|.|@esbuild/netbsd-x64|0.17.19",
+   "npm|.|@esbuild/netbsd-x64|0.21.5",
+   "npm|.|@esbuild/netbsd-x64|0.23.0",
+   "npm|.|@esbuild/openbsd-arm64|0.23.0",
+   "npm|.|@esbuild/openbsd-x64|0.17.19",
+   "npm|.|@esbuild/openbsd-x64|0.21.5",
+   "npm|.|@esbuild/openbsd-x64|0.23.0",
+   "npm|.|@esbuild/sunos-x64|0.17.19",
+   "npm|.|@esbuild/sunos-x64|0.21.5",
+   "npm|.|@esbuild/sunos-x64|0.23.0",
+   "npm|.|@esbuild/win32-arm64|0.17.19",
+   "npm|.|@esbuild/win32-arm64|0.21.5",
+   "npm|.|@esbuild/win32-arm64|0.23.0",
+   "npm|.|@esbuild/win32-ia32|0.17.19",
+   "npm|.|@esbuild/win32-ia32|0.21.5",
+   "npm|.|@esbuild/win32-ia32|0.23.0",
+   "npm|.|@esbuild/win32-x64|0.17.19",
+   "npm|.|@esbuild/win32-x64|0.21.5",
+   "npm|.|@esbuild/win32-x64|0.23.0",
+   "npm|.|@eslint-community/eslint-utils|4.4.0",
+   "npm|.|@eslint-community/regexpp|4.11.0",
+   "npm|.|@eslint/config-array|0.17.1",
+   "npm|.|@eslint/eslintrc|3.1.0",
+   "npm|.|@eslint/js|9.9.0",
+   "npm|.|@eslint/object-schema|2.1.4",
+   "npm|.|@fastify/busboy|2.1.1",
+   "npm|.|@humanwhocodes/module-importer|1.0.1",
+   "npm|.|@humanwhocodes/retry|0.3.0",
+   "npm|.|@iconify-json/codicon|1.1.51",
+   "npm|.|@iconify-json/ph|1.1.14",
+   "npm|.|@iconify/types|2.0.0",
+   "npm|.|@iconify/utils|2.1.30",
+   "npm|.|@jridgewell/gen-mapping|0.3.5",
+   "npm|.|@jridgewell/resolve-uri|3.1.2",
+   "npm|.|@jridgewell/set-array|1.2.1",
+   "npm|.|@jridgewell/source-map|0.3.6",
+   "npm|.|@jridgewell/sourcemap-codec|1.5.0",
+   "npm|.|@jridgewell/trace-mapping|0.3.25",
+   "npm|.|@jridgewell/trace-mapping|0.3.9",
+   "npm|.|@napi-rs/cli|2.18.3",
+   "npm|.|@nodelib/fs.scandir|2.1.5",
+   "npm|.|@nodelib/fs.stat|2.0.5",
+   "npm|.|@nodelib/fs.walk|1.2.8",
+   "npm|.|@polka/url|1.0.0-next.25",
+   "npm|.|@rollup/plugin-terser|0.4.4",
+   "npm|.|@rollup/plugin-typescript|12.1.0",
+   "npm|.|@rollup/pluginutils|5.1.0",
+   "npm|.|@rollup/rollup-android-arm-eabi|4.22.4",
+   "npm|.|@rollup/rollup-android-arm64|4.22.4",
+   "npm|.|@rollup/rollup-darwin-arm64|4.22.4",
+   "npm|.|@rollup/rollup-darwin-x64|4.22.4",
+   "npm|.|@rollup/rollup-linux-arm-gnueabihf|4.22.4",
+   "npm|.|@rollup/rollup-linux-arm-musleabihf|4.22.4",
+   "npm|.|@rollup/rollup-linux-arm64-gnu|4.22.4",
+   "npm|.|@rollup/rollup-linux-arm64-musl|4.22.4",
+   "npm|.|@rollup/rollup-linux-powerpc64le-gnu|4.22.4",
+   "npm|.|@rollup/rollup-linux-riscv64-gnu|4.22.4",
+   "npm|.|@rollup/rollup-linux-s390x-gnu|4.22.4",
+   "npm|.|@rollup/rollup-linux-x64-gnu|4.22.4",
+   "npm|.|@rollup/rollup-linux-x64-musl|4.22.4",
+   "npm|.|@rollup/rollup-win32-arm64-msvc|4.22.4",
+   "npm|.|@rollup/rollup-win32-ia32-msvc|4.22.4",
+   "npm|.|@rollup/rollup-win32-x64-msvc|4.22.4",
+   "npm|.|@sveltejs/vite-plugin-svelte-inspector|2.1.0",
+   "npm|.|@sveltejs/vite-plugin-svelte|3.1.2",
+   "npm|.|@types/eslint|9.6.0",
+   "npm|.|@types/estree|1.0.5",
+   "npm|.|@types/json-schema|7.0.15",
+   "npm|.|@types/node-forge|1.3.11",
+   "npm|.|@types/node|20.16.1",
+   "npm|.|@typescript-eslint/eslint-plugin|8.2.0",
+   "npm|.|@typescript-eslint/parser|8.2.0",
+   "npm|.|@typescript-eslint/scope-manager|8.2.0",
+   "npm|.|@typescript-eslint/type-utils|8.2.0",
+   "npm|.|@typescript-eslint/types|8.2.0",
+   "npm|.|@typescript-eslint/typescript-estree|8.2.0",
+   "npm|.|@typescript-eslint/utils|8.2.0",
+   "npm|.|@typescript-eslint/visitor-keys|8.2.0",
+   "npm|.|@unocss/astro|0.61.9",
+   "npm|.|@unocss/cli|0.61.9",
+   "npm|.|@unocss/config|0.61.9",
+   "npm|.|@unocss/core|0.61.9",
+   "npm|.|@unocss/extractor-arbitrary-variants|0.61.9",
+   "npm|.|@unocss/extractor-svelte|0.61.9",
+   "npm|.|@unocss/inspector|0.61.9",
+   "npm|.|@unocss/postcss|0.61.9",
+   "npm|.|@unocss/preset-attributify|0.61.9",
+   "npm|.|@unocss/preset-icons|0.61.9",
+   "npm|.|@unocss/preset-mini|0.61.9",
+   "npm|.|@unocss/preset-tagify|0.61.9",
+   "npm|.|@unocss/preset-typography|0.61.9",
+   "npm|.|@unocss/preset-uno|0.61.9",
+   "npm|.|@unocss/preset-web-fonts|0.61.9",
+   "npm|.|@unocss/preset-wind|0.61.9",
+   "npm|.|@unocss/reset|0.61.9",
+   "npm|.|@unocss/rule-utils|0.61.9",
+   "npm|.|@unocss/scope|0.61.9",
+   "npm|.|@unocss/transformer-attributify-jsx-babel|0.61.9",
+   "npm|.|@unocss/transformer-attributify-jsx|0.61.9",
+   "npm|.|@unocss/transformer-compile-class|0.61.9",
+   "npm|.|@unocss/transformer-directives|0.61.9",
+   "npm|.|@unocss/transformer-variant-group|0.61.9",
+   "npm|.|@unocss/vite|0.61.9",
+   "npm|.|@vitest/expect|2.1.1",
+   "npm|.|@vitest/mocker|2.1.1",
+   "npm|.|@vitest/pretty-format|2.1.1",
+   "npm|.|@vitest/runner|2.1.1",
+   "npm|.|@vitest/snapshot|2.1.1",
+   "npm|.|@vitest/spy|2.1.1",
+   "npm|.|@vitest/utils|2.1.1",
+   "npm|.|@zerodevx/svelte-json-view|1.0.9",
+   "npm|.|acorn-jsx|5.3.2",
+   "npm|.|acorn-walk|8.3.3",
+   "npm|.|acorn|8.12.1",
+   "npm|.|ajv|6.12.6",
+   "npm|.|ansi-regex|5.0.1",
+   "npm|.|ansi-styles|3.2.1",
+   "npm|.|ansi-styles|4.3.0",
+   "npm|.|anymatch|3.1.3",
+   "npm|.|argparse|2.0.1",
+   "npm|.|aria-query|5.3.0",
+   "npm|.|array-union|2.1.0",
+   "npm|.|as-table|1.0.55",
+   "npm|.|assertion-error|2.0.1",
+   "npm|.|axobject-query|4.1.0",
+   "npm|.|balanced-match|1.0.2",
+   "npm|.|binary-extensions|2.3.0",
+   "npm|.|blake3-wasm|2.1.5",
+   "npm|.|brace-expansion|1.1.11",
+   "npm|.|brace-expansion|2.0.1",
+   "npm|.|braces|3.0.3",
+   "npm|.|browserslist|4.23.3",
+   "npm|.|buffer-from|1.1.2",
+   "npm|.|bundle-require|5.0.0",
+   "npm|.|cac|6.7.14",
+   "npm|.|callsites|3.1.0",
+   "npm|.|caniuse-lite|1.0.30001651",
+   "npm|.|capnp-ts|0.7.0",
+   "npm|.|chai|5.1.1",
+   "npm|.|chalk|2.4.2",
+   "npm|.|chalk|4.1.2",
+   "npm|.|check-error|2.1.1",
+   "npm|.|chokidar|3.6.0",
+   "npm|.|code-red|1.0.4",
+   "npm|.|color-convert|1.9.3",
+   "npm|.|color-convert|2.0.1",
+   "npm|.|color-name|1.1.3",
+   "npm|.|color-name|1.1.4",
+   "npm|.|colorette|2.0.20",
+   "npm|.|commander|2.20.3",
+   "npm|.|concat-map|0.0.1",
+   "npm|.|confbox|0.1.7",
+   "npm|.|consola|3.2.3",
+   "npm|.|convert-source-map|2.0.0",
+   "npm|.|cookie|0.5.0",
+   "npm|.|cross-env|7.0.3",
+   "npm|.|cross-spawn|7.0.3",
+   "npm|.|css-tree|2.3.1",
+   "npm|.|data-uri-to-buffer|2.0.2",
+   "npm|.|date-fns|3.6.0",
+   "npm|.|debug|4.3.6",
+   "npm|.|deep-eql|5.0.2",
+   "npm|.|deep-is|0.1.4",
+   "npm|.|deepmerge|4.3.1",
+   "npm|.|defu|6.1.4",
+   "npm|.|dequal|2.0.3",
+   "npm|.|destr|2.0.3",
+   "npm|.|dir-glob|3.0.1",
+   "npm|.|duplexer|0.1.2",
+   "npm|.|electron-to-chromium|1.5.6",
+   "npm|.|esbuild|0.17.19",
+   "npm|.|esbuild|0.21.5",
+   "npm|.|esbuild|0.23.0",
+   "npm|.|escalade|3.1.2",
+   "npm|.|escape-string-regexp|1.0.5",
+   "npm|.|escape-string-regexp|4.0.0",
+   "npm|.|eslint-config-prettier|9.1.0",
+   "npm|.|eslint-plugin-security|3.0.1",
+   "npm|.|eslint-scope|8.0.2",
+   "npm|.|eslint-visitor-keys|3.4.3",
+   "npm|.|eslint-visitor-keys|4.0.0",
+   "npm|.|eslint|9.9.0",
+   "npm|.|espree|10.1.0",
+   "npm|.|esquery|1.6.0",
+   "npm|.|esrecurse|4.3.0",
+   "npm|.|estraverse|5.3.0",
+   "npm|.|estree-walker|0.6.1",
+   "npm|.|estree-walker|2.0.2",
+   "npm|.|estree-walker|3.0.3",
+   "npm|.|esutils|2.0.3",
+   "npm|.|execa|5.1.1",
+   "npm|.|exit-hook|2.2.1",
+   "npm|.|fast-deep-equal|3.1.3",
+   "npm|.|fast-glob|3.3.2",
+   "npm|.|fast-json-stable-stringify|2.1.0",
+   "npm|.|fast-levenshtein|2.0.6",
+   "npm|.|fastq|1.17.1",
+   "npm|.|file-entry-cache|8.0.0",
+   "npm|.|fill-range|7.1.1",
+   "npm|.|find-up|5.0.0",
+   "npm|.|flat-cache|4.0.1",
+   "npm|.|flatted|3.3.1",
+   "npm|.|fsevents|2.3.3",
+   "npm|.|function-bind|1.1.2",
+   "npm|.|gensync|1.0.0-beta.2",
+   "npm|.|get-func-name|2.0.2",
+   "npm|.|get-source|2.0.12",
+   "npm|.|get-stream|6.0.1",
+   "npm|.|get-tsconfig|4.7.6",
+   "npm|.|glob-parent|5.1.2",
+   "npm|.|glob-parent|6.0.2",
+   "npm|.|glob-to-regexp|0.4.1",
+   "npm|.|globals|11.12.0",
+   "npm|.|globals|14.0.0",
+   "npm|.|globals|15.9.0",
+   "npm|.|globby|11.1.0",
+   "npm|.|graphemer|1.4.0",
+   "npm|.|gzip-size|6.0.0",
+   "npm|.|has-flag|3.0.0",
+   "npm|.|has-flag|4.0.0",
+   "npm|.|hasown|2.0.2",
+   "npm|.|human-signals|2.1.0",
+   "npm|.|ignore|5.3.2",
+   "npm|.|immutable|4.3.7",
+   "npm|.|import-fresh|3.3.0",
+   "npm|.|importx|0.4.3",
+   "npm|.|imurmurhash|0.1.4",
+   "npm|.|is-binary-path|2.1.0",
+   "npm|.|is-core-module|2.15.0",
+   "npm|.|is-extglob|2.1.1",
+   "npm|.|is-glob|4.0.3",
+   "npm|.|is-number|7.0.0",
+   "npm|.|is-path-inside|3.0.3",
+   "npm|.|is-reference|3.0.2",
+   "npm|.|is-stream|2.0.1",
+   "npm|.|isexe|2.0.0",
+   "npm|.|jiti|1.21.6",
+   "npm|.|jiti|2.0.0-beta.2",
+   "npm|.|js-tokens|4.0.0",
+   "npm|.|js-yaml|4.1.0",
+   "npm|.|jsesc|2.5.2",
+   "npm|.|json-buffer|3.0.1",
+   "npm|.|json-schema-traverse|0.4.1",
+   "npm|.|json-stable-stringify-without-jsonify|1.0.1",
+   "npm|.|json5|2.2.3",
+   "npm|.|keyv|4.5.4",
+   "npm|.|kleur|4.1.5",
+   "npm|.|kolorist|1.8.0",
+   "npm|.|levn|0.4.1",
+   "npm|.|load-tsconfig|0.2.5",
+   "npm|.|local-pkg|0.5.0",
+   "npm|.|locate-character|3.0.0",
+   "npm|.|locate-path|6.0.0",
+   "npm|.|lodash.merge|4.6.2",
+   "npm|.|loupe|3.1.1",
+   "npm|.|lru-cache|5.1.1",
+   "npm|.|magic-string|0.25.9",
+   "npm|.|magic-string|0.30.11",
+   "npm|.|mdn-data|2.0.30",
+   "npm|.|merge-stream|2.0.0",
+   "npm|.|merge2|1.4.1",
+   "npm|.|micromatch|4.0.8",
+   "npm|.|mime|3.0.0",
+   "npm|.|mimic-fn|2.1.0",
+   "npm|.|miniflare|3.20240909.2",
+   "npm|.|minimatch|3.1.2",
+   "npm|.|minimatch|9.0.5",
+   "npm|.|mlly|1.7.1",
+   "npm|.|mrmime|2.0.0",
+   "npm|.|ms|2.1.2",
+   "npm|.|mustache|4.2.0",
+   "npm|.|nanoid|3.3.7",
+   "npm|.|natural-compare|1.4.0",
+   "npm|.|node-fetch-native|1.6.4",
+   "npm|.|node-forge|1.3.1",
+   "npm|.|node-releases|2.0.18",
+   "npm|.|normalize-path|3.0.0",
+   "npm|.|npm-run-path|4.0.1",
+   "npm|.|ofetch|1.3.4",
+   "npm|.|ohash|1.1.3",
+   "npm|.|onetime|5.1.2",
+   "npm|.|optionator|0.9.4",
+   "npm|.|p-limit|3.1.0",
+   "npm|.|p-locate|5.0.0",
+   "npm|.|parent-module|1.0.1",
+   "npm|.|path-exists|4.0.0",
+   "npm|.|path-key|3.1.1",
+   "npm|.|path-parse|1.0.7",
+   "npm|.|path-to-regexp|6.3.0",
+   "npm|.|path-type|4.0.0",
+   "npm|.|pathe|1.1.2",
+   "npm|.|pathval|2.0.0",
+   "npm|.|perfect-debounce|1.0.0",
+   "npm|.|periscopic|3.1.0",
+   "npm|.|picocolors|1.0.1",
+   "npm|.|picocolors|1.1.0",
+   "npm|.|picomatch|2.3.1",
+   "npm|.|pkg-types|1.1.3",
+   "npm|.|postcss|8.4.47",
+   "npm|.|prelude-ls|1.2.1",
+   "npm|.|prettier|3.3.3",
+   "npm|.|printable-characters|1.0.42",
+   "npm|.|punycode|2.3.1",
+   "npm|.|queue-microtask|1.2.3",
+   "npm|.|randombytes|2.1.0",
+   "npm|.|readdirp|3.6.0",
+   "npm|.|regexp-tree|0.1.27",
+   "npm|.|resolve-from|4.0.0",
+   "npm|.|resolve-pkg-maps|1.0.0",
+   "npm|.|resolve.exports|2.0.2",
+   "npm|.|resolve|1.22.8",
+   "npm|.|reusify|1.0.4",
+   "npm|.|rollup-plugin-inject|3.0.2",
+   "npm|.|rollup-plugin-node-polyfills|0.2.1",
+   "npm|.|rollup-pluginutils|2.8.2",
+   "npm|.|rollup|4.22.4",
+   "npm|.|run-parallel|1.2.0",
+   "npm|.|safe-buffer|5.2.1",
+   "npm|.|safe-regex|2.1.1",
+   "npm|.|sass|1.77.8",
+   "npm|.|selfsigned|2.4.1",
+   "npm|.|semver|6.3.1",
+   "npm|.|semver|7.6.3",
+   "npm|.|serialize-javascript|6.0.2",
+   "npm|.|shebang-command|2.0.0",
+   "npm|.|shebang-regex|3.0.0",
+   "npm|.|siginfo|2.0.0",
+   "npm|.|signal-exit|3.0.7",
+   "npm|.|sirv|2.0.4",
+   "npm|.|slash|3.0.0",
+   "npm|.|smob|1.5.0",
+   "npm|.|source-map-js|1.2.0",
+   "npm|.|source-map-js|1.2.1",
+   "npm|.|source-map-support|0.5.21",
+   "npm|.|source-map|0.6.1",
+   "npm|.|sourcemap-codec|1.4.8",
+   "npm|.|stackback|0.0.2",
+   "npm|.|stacktracey|2.1.8",
+   "npm|.|std-env|3.7.0",
+   "npm|.|stoppable|1.1.0",
+   "npm|.|strip-ansi|6.0.1",
+   "npm|.|strip-final-newline|2.0.0",
+   "npm|.|strip-json-comments|3.1.1",
+   "npm|.|supports-color|5.5.0",
+   "npm|.|supports-color|7.2.0",
+   "npm|.|supports-preserve-symlinks-flag|1.0.0",
+   "npm|.|svelte-hmr|0.16.0",
+   "npm|.|svelte|4.2.19",
+   "npm|.|terser|5.31.6",
+   "npm|.|text-table|0.2.0",
+   "npm|.|tinybench|2.9.0",
+   "npm|.|tinyexec|0.3.0",
+   "npm|.|tinypool|1.0.1",
+   "npm|.|tinyrainbow|1.2.0",
+   "npm|.|tinyspy|3.0.2",
+   "npm|.|to-fast-properties|2.0.0",
+   "npm|.|to-regex-range|5.0.1",
+   "npm|.|totalist|3.0.1",
+   "npm|.|ts-api-utils|1.3.0",
+   "npm|.|tslib|2.6.3",
+   "npm|.|tsx|4.17.0",
+   "npm|.|type-check|0.4.0",
+   "npm|.|typescript-eslint|8.2.0",
+   "npm|.|typescript|5.5.4",
+   "npm|.|ufo|1.5.4",
+   "npm|.|unconfig|0.5.5",
+   "npm|.|undici-types|6.19.8",
+   "npm|.|undici|5.28.4",
+   "npm|.|unenv-nightly|2.0.0-1724863496.70db6f1",
+   "npm|.|unocss|0.61.9",
+   "npm|.|update-browserslist-db|1.1.0",
+   "npm|.|uri-js|4.4.1",
+   "npm|.|vite-node|2.1.1",
+   "npm|.|vite|5.4.6",
+   "npm|.|vite|5.4.7",
+   "npm|.|vitefu|0.2.5",
+   "npm|.|vitest|2.1.1",
+   "npm|.|which|2.0.2",
+   "npm|.|why-is-node-running|2.3.0",
+   "npm|.|word-wrap|1.2.5",
+   "npm|.|workerd|1.20240909.0",
+   "npm|.|wrangler|3.78.3",
+   "npm|.|ws|8.18.0",
+   "npm|.|xxhash-wasm|1.0.2",
+   "npm|.|yallist|3.1.1",
+   "npm|.|yocto-queue|0.1.0",
+   "npm|.|youch|3.3.3",
+   "npm|.|zod|3.23.8"
+  ]
+ },
+ "findings": [
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "adler",
+   "version": "1.0.2",
+   "ids": [
+    "RUSTSEC-2025-0056"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "anyhow",
+   "version": "1.0.89",
+   "ids": [
+    "RUSTSEC-2026-0190"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "aws-sdk-s3",
+   "version": "1.52.0",
+   "ids": [
+    "GHSA-g59m-gf8j-gjf5"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "aws-sdk-sso",
+   "version": "1.44.0",
+   "ids": [
+    "GHSA-g59m-gf8j-gjf5"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "aws-sdk-ssooidc",
+   "version": "1.45.0",
+   "ids": [
+    "GHSA-g59m-gf8j-gjf5"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "aws-sdk-sts",
+   "version": "1.44.0",
+   "ids": [
+    "GHSA-g59m-gf8j-gjf5"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "aws-smithy-json",
+   "version": "0.60.7",
+   "ids": [
+    "GHSA-8ffr-xgwf-xj56"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "bytes",
+   "version": "1.7.2",
+   "ids": [
+    "GHSA-434x-w66g-qw3r",
+    "RUSTSEC-2026-0007"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "crossbeam-channel",
+   "version": "0.5.13",
+   "ids": [
+    "GHSA-pg9f-39pc-qf8g",
+    "RUSTSEC-2025-0024"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "crossbeam-epoch",
+   "version": "0.9.18",
+   "ids": [
+    "RUSTSEC-2026-0204"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "difference",
+   "version": "2.0.0",
+   "ids": [
+    "RUSTSEC-2020-0095"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "fxhash",
+   "version": "0.2.1",
+   "ids": [
+    "RUSTSEC-2025-0057"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "glib",
+   "version": "0.18.5",
+   "ids": [
+    "GHSA-wrw7-89jp-8q8g",
+    "RUSTSEC-2024-0429"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "h2",
+   "version": "0.3.26",
+   "ids": [
+    "RUSTSEC-2026-0258"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "h2",
+   "version": "0.4.6",
+   "ids": [
+    "RUSTSEC-2026-0258"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "hashbrown",
+   "version": "0.15.0",
+   "ids": [
+    "GHSA-wwq9-3cpr-mm53",
+    "RUSTSEC-2024-0402"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "idna",
+   "version": "0.5.0",
+   "ids": [
+    "GHSA-h97m-ww89-6jmq",
+    "RUSTSEC-2024-0421"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "instant",
+   "version": "0.1.13",
+   "ids": [
+    "RUSTSEC-2024-0384"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "jsonwebtoken",
+   "version": "9.3.0",
+   "ids": [
+    "GHSA-h395-gr6q-cpjc"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "keccak",
+   "version": "0.1.5",
+   "ids": [
+    "GHSA-3288-p39f-rqpv",
+    "RUSTSEC-2026-0012"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "lru",
+   "version": "0.12.4",
+   "ids": [
+    "GHSA-rhfx-m35p-ff5j",
+    "RUSTSEC-2026-0002"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "lru",
+   "version": "0.12.4",
+   "ids": [
+    "RUSTSEC-2026-0253"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "memmap2",
+   "version": "0.9.5",
+   "ids": [
+    "RUSTSEC-2026-0186"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "openssl",
+   "version": "0.10.66",
+   "ids": [
+    "GHSA-4fcv-w3qc-ppgg",
+    "RUSTSEC-2025-0022"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "openssl",
+   "version": "0.10.66",
+   "ids": [
+    "GHSA-8c75-8mhr-p7r9"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "openssl",
+   "version": "0.10.66",
+   "ids": [
+    "GHSA-ghm9-cr32-g9qj"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "openssl",
+   "version": "0.10.66",
+   "ids": [
+    "GHSA-hppc-g8h3-xhp3"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "openssl",
+   "version": "0.10.66",
+   "ids": [
+    "GHSA-phqj-4mhp-q6mq"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "openssl",
+   "version": "0.10.66",
+   "ids": [
+    "GHSA-pqf5-4pqq-29f5"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "openssl",
+   "version": "0.10.66",
+   "ids": [
+    "GHSA-rpmj-rpgj-qmpm",
+    "RUSTSEC-2025-0004"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "openssl",
+   "version": "0.10.66",
+   "ids": [
+    "GHSA-xmgf-hq76-4vx2"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "openssl",
+   "version": "0.10.66",
+   "ids": [
+    "GHSA-xp3w-r5p5-63rr"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "openssl",
+   "version": "0.10.66",
+   "ids": [
+    "GHSA-xv59-967r-8726"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "paste",
+   "version": "1.0.15",
+   "ids": [
+    "RUSTSEC-2024-0436"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "pgp",
+   "version": "0.13.2",
+   "ids": [
+    "GHSA-4grw-m28r-q285"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "pgp",
+   "version": "0.13.2",
+   "ids": [
+    "GHSA-9rmp-2568-59rv",
+    "RUSTSEC-2024-0447"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "proc-macro-error",
+   "version": "1.0.4",
+   "ids": [
+    "RUSTSEC-2024-0370"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "quick-xml",
+   "version": "0.32.0",
+   "ids": [
+    "RUSTSEC-2026-0194"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "quick-xml",
+   "version": "0.32.0",
+   "ids": [
+    "RUSTSEC-2026-0195"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "quinn-proto",
+   "version": "0.11.8",
+   "ids": [
+    "GHSA-4w2j-m93h-cj5j",
+    "RUSTSEC-2026-0185"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "quinn-proto",
+   "version": "0.11.8",
+   "ids": [
+    "GHSA-6xvm-j4wr-6v98",
+    "RUSTSEC-2026-0037"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "rand",
+   "version": "0.7.3",
+   "ids": [
+    "GHSA-cq8v-f236-94qc",
+    "RUSTSEC-2026-0097"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "rand",
+   "version": "0.8.5",
+   "ids": [
+    "GHSA-cq8v-f236-94qc",
+    "RUSTSEC-2026-0097"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "ring",
+   "version": "0.17.8",
+   "ids": [
+    "GHSA-4p46-pwfr-66x6",
+    "RUSTSEC-2025-0009"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "rkyv",
+   "version": "0.7.45",
+   "ids": [
+    "RUSTSEC-2026-0001"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "rkyv",
+   "version": "0.7.45",
+   "ids": [
+    "RUSTSEC-2026-0235"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "rpassword",
+   "version": "7.3.1",
+   "ids": [
+    "GHSA-2p6r-x3vv-xqm2"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "rsa",
+   "version": "0.9.6",
+   "ids": [
+    "GHSA-4grx-2x9w-596c",
+    "GHSA-c38w-74pg-36hr",
+    "RUSTSEC-2023-0071"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "rsa",
+   "version": "0.9.6",
+   "ids": [
+    "GHSA-9c48-w39g-hm26"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "rustls-pemfile",
+   "version": "1.0.4",
+   "ids": [
+    "RUSTSEC-2025-0134"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "rustls-pemfile",
+   "version": "2.2.0",
+   "ids": [
+    "RUSTSEC-2025-0134"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "rustls-webpki",
+   "version": "0.101.7",
+   "ids": [
+    "GHSA-82j2-j2ch-gfr8",
+    "RUSTSEC-2026-0104"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "rustls-webpki",
+   "version": "0.101.7",
+   "ids": [
+    "GHSA-965h-392x-2mh5",
+    "RUSTSEC-2026-0098"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "rustls-webpki",
+   "version": "0.101.7",
+   "ids": [
+    "GHSA-xgp8-3hg3-c2mh",
+    "RUSTSEC-2026-0099"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "rustls-webpki",
+   "version": "0.102.8",
+   "ids": [
+    "GHSA-82j2-j2ch-gfr8",
+    "RUSTSEC-2026-0104"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "rustls-webpki",
+   "version": "0.102.8",
+   "ids": [
+    "GHSA-965h-392x-2mh5",
+    "RUSTSEC-2026-0098"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "rustls-webpki",
+   "version": "0.102.8",
+   "ids": [
+    "GHSA-pwjx-qhcg-rvj4",
+    "RUSTSEC-2026-0049"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "rustls-webpki",
+   "version": "0.102.8",
+   "ids": [
+    "GHSA-xgp8-3hg3-c2mh",
+    "RUSTSEC-2026-0099"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "rustls",
+   "version": "0.23.13",
+   "ids": [
+    "GHSA-2mjx-qc3c-rqvc",
+    "RUSTSEC-2026-0285"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "rustls",
+   "version": "0.23.13",
+   "ids": [
+    "GHSA-qg5g-gv98-5ffh",
+    "RUSTSEC-2024-0399"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "rustybuzz",
+   "version": "0.18.0",
+   "ids": [
+    "RUSTSEC-2026-0206"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "scc",
+   "version": "2.2.0",
+   "ids": [
+    "RUSTSEC-2026-0205"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "serde_with",
+   "version": "3.10.0",
+   "ids": [
+    "GHSA-7gcf-g7xr-8hxj"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "tar",
+   "version": "0.4.42",
+   "ids": [
+    "GHSA-3pv8-6f4r-ffg2"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "tar",
+   "version": "0.4.42",
+   "ids": [
+    "GHSA-gchp-q4r4-x4ff",
+    "RUSTSEC-2026-0068"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "tar",
+   "version": "0.4.42",
+   "ids": [
+    "GHSA-j4xf-2g29-59ph",
+    "RUSTSEC-2026-0067"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "time",
+   "version": "0.3.36",
+   "ids": [
+    "GHSA-r6v5-fh4h-64xc",
+    "RUSTSEC-2026-0009"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "tokio",
+   "version": "1.40.0",
+   "ids": [
+    "GHSA-rr8g-9fpq-6wmg",
+    "RUSTSEC-2025-0023"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "ttf-parser",
+   "version": "0.24.1",
+   "ids": [
+    "RUSTSEC-2026-0192"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "unic-char-property",
+   "version": "0.9.0",
+   "ids": [
+    "RUSTSEC-2025-0081"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "unic-char-range",
+   "version": "0.9.0",
+   "ids": [
+    "RUSTSEC-2025-0075"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "unic-common",
+   "version": "0.9.0",
+   "ids": [
+    "RUSTSEC-2025-0080"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "unic-ucd-ident",
+   "version": "0.9.0",
+   "ids": [
+    "RUSTSEC-2025-0100"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "unic-ucd-version",
+   "version": "0.9.0",
+   "ids": [
+    "RUSTSEC-2025-0098"
+   ]
+  },
+  {
+   "ecosystem": "crates.io",
+   "dir": ".",
+   "package": "zip",
+   "version": "2.2.0",
+   "ids": [
+    "GHSA-94vh-gphv-8pm8",
+    "RUSTSEC-2025-0168"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "@babel/core",
+   "version": "7.25.2",
+   "ids": [
+    "GHSA-4x5r-pxfx-6jf8"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "@babel/helpers",
+   "version": "7.25.0",
+   "ids": [
+    "GHSA-968p-4wvh-cqc8"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "@fastify/busboy",
+   "version": "2.1.1",
+   "ids": [
+    "GHSA-gxm5-99cw-xjw9"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "@fastify/busboy",
+   "version": "2.1.1",
+   "ids": [
+    "GHSA-x8mw-p69m-v3mx"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "@vitest/mocker",
+   "version": "2.1.1",
+   "ids": [
+    "GHSA-82fw-gwwq-j7x9"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "ajv",
+   "version": "6.12.6",
+   "ids": [
+    "GHSA-2g4f-4pwh-qvx6"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "brace-expansion",
+   "version": "1.1.11",
+   "ids": [
+    "GHSA-3jxr-9vmj-r5cp"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "brace-expansion",
+   "version": "1.1.11",
+   "ids": [
+    "GHSA-6j4f-fj2g-mc7p"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "brace-expansion",
+   "version": "1.1.11",
+   "ids": [
+    "GHSA-f886-m6hf-6m8v"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "brace-expansion",
+   "version": "1.1.11",
+   "ids": [
+    "GHSA-mh99-v99m-4gvg"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "brace-expansion",
+   "version": "1.1.11",
+   "ids": [
+    "GHSA-q2hr-2g5m-vwhr"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "brace-expansion",
+   "version": "1.1.11",
+   "ids": [
+    "GHSA-qhr7-859c-m2p7"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "brace-expansion",
+   "version": "1.1.11",
+   "ids": [
+    "GHSA-rgw5-rvv9-x895"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "brace-expansion",
+   "version": "1.1.11",
+   "ids": [
+    "GHSA-v6h2-p8h4-qcjw"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "brace-expansion",
+   "version": "2.0.1",
+   "ids": [
+    "GHSA-3jxr-9vmj-r5cp"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "brace-expansion",
+   "version": "2.0.1",
+   "ids": [
+    "GHSA-6j4f-fj2g-mc7p"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "brace-expansion",
+   "version": "2.0.1",
+   "ids": [
+    "GHSA-f886-m6hf-6m8v"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "brace-expansion",
+   "version": "2.0.1",
+   "ids": [
+    "GHSA-mh99-v99m-4gvg"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "brace-expansion",
+   "version": "2.0.1",
+   "ids": [
+    "GHSA-q2hr-2g5m-vwhr"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "brace-expansion",
+   "version": "2.0.1",
+   "ids": [
+    "GHSA-qhr7-859c-m2p7"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "brace-expansion",
+   "version": "2.0.1",
+   "ids": [
+    "GHSA-rgw5-rvv9-x895"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "brace-expansion",
+   "version": "2.0.1",
+   "ids": [
+    "GHSA-v6h2-p8h4-qcjw"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "braces",
+   "version": "3.0.3",
+   "ids": [
+    "GHSA-vfj7-8cjw-p6xm"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "browserslist",
+   "version": "4.23.3",
+   "ids": [
+    "GHSA-73wf-gq98-2v4g"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "browserslist",
+   "version": "4.23.3",
+   "ids": [
+    "GHSA-c83g-rgw3-j3cx"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "cookie",
+   "version": "0.5.0",
+   "ids": [
+    "GHSA-pxg6-pf52-xh8x"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "cross-spawn",
+   "version": "7.0.3",
+   "ids": [
+    "GHSA-3xgq-45jj-v275"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "defu",
+   "version": "6.1.4",
+   "ids": [
+    "GHSA-737v-mqg7-c878"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "esbuild",
+   "version": "0.17.19",
+   "ids": [
+    "GHSA-67mh-4wv8-2f99"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "esbuild",
+   "version": "0.21.5",
+   "ids": [
+    "GHSA-67mh-4wv8-2f99"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "esbuild",
+   "version": "0.23.0",
+   "ids": [
+    "GHSA-67mh-4wv8-2f99"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "flatted",
+   "version": "3.3.1",
+   "ids": [
+    "GHSA-25h7-pfq9-p65f"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "flatted",
+   "version": "3.3.1",
+   "ids": [
+    "GHSA-rf6f-7fwh-wjgh"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "immutable",
+   "version": "4.3.7",
+   "ids": [
+    "GHSA-v56q-mh7h-f735"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "immutable",
+   "version": "4.3.7",
+   "ids": [
+    "GHSA-wf6x-7x77-mvgw"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "immutable",
+   "version": "4.3.7",
+   "ids": [
+    "GHSA-xvcm-6775-5m9r"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "js-yaml",
+   "version": "4.1.0",
+   "ids": [
+    "GHSA-2883-xcg3-v3hh"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "js-yaml",
+   "version": "4.1.0",
+   "ids": [
+    "GHSA-52cp-r559-cp3m"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "js-yaml",
+   "version": "4.1.0",
+   "ids": [
+    "GHSA-5p4m-2wfm-xmqj"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "js-yaml",
+   "version": "4.1.0",
+   "ids": [
+    "GHSA-h67p-54hq-rp68"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "js-yaml",
+   "version": "4.1.0",
+   "ids": [
+    "GHSA-mh29-5h37-fv8m"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "minimatch",
+   "version": "3.1.2",
+   "ids": [
+    "GHSA-23c5-xmqv-rm74"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "minimatch",
+   "version": "3.1.2",
+   "ids": [
+    "GHSA-3ppc-4f35-3m26"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "minimatch",
+   "version": "3.1.2",
+   "ids": [
+    "GHSA-7r86-cg39-jmmj"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "minimatch",
+   "version": "9.0.5",
+   "ids": [
+    "GHSA-23c5-xmqv-rm74"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "minimatch",
+   "version": "9.0.5",
+   "ids": [
+    "GHSA-3ppc-4f35-3m26"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "minimatch",
+   "version": "9.0.5",
+   "ids": [
+    "GHSA-7r86-cg39-jmmj"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "nanoid",
+   "version": "3.3.7",
+   "ids": [
+    "GHSA-28wg-ghj8-5hjv"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "nanoid",
+   "version": "3.3.7",
+   "ids": [
+    "GHSA-2v37-7h3g-55p8"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "nanoid",
+   "version": "3.3.7",
+   "ids": [
+    "GHSA-mwcw-c2x4-8c55"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "nanoid",
+   "version": "3.3.7",
+   "ids": [
+    "GHSA-xwg4-73v4-xw9w"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "node-forge",
+   "version": "1.3.1",
+   "ids": [
+    "GHSA-2328-f5f3-gj25"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "node-forge",
+   "version": "1.3.1",
+   "ids": [
+    "GHSA-554w-wpv2-vw27"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "node-forge",
+   "version": "1.3.1",
+   "ids": [
+    "GHSA-5gfm-wpxj-wjgq"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "node-forge",
+   "version": "1.3.1",
+   "ids": [
+    "GHSA-5m6q-g25r-mvwx"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "node-forge",
+   "version": "1.3.1",
+   "ids": [
+    "GHSA-65ch-62r8-g69g"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "node-forge",
+   "version": "1.3.1",
+   "ids": [
+    "GHSA-86w9-cpqp-85rv",
+    "GHSA-ppp5-5v6c-4jwp"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "node-forge",
+   "version": "1.3.1",
+   "ids": [
+    "GHSA-q67f-28xg-22rw"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "picomatch",
+   "version": "2.3.1",
+   "ids": [
+    "GHSA-3v7f-55p6-f55p"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "picomatch",
+   "version": "2.3.1",
+   "ids": [
+    "GHSA-c2c7-rcm5-vvqj"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "postcss",
+   "version": "8.4.47",
+   "ids": [
+    "GHSA-6g55-p6wh-862q"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "postcss",
+   "version": "8.4.47",
+   "ids": [
+    "GHSA-fxqj-rqcc-2cmp"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "postcss",
+   "version": "8.4.47",
+   "ids": [
+    "GHSA-qx2v-qp2m-jg93"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "postcss",
+   "version": "8.4.47",
+   "ids": [
+    "GHSA-r28c-9q8g-f849"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "rollup",
+   "version": "4.22.4",
+   "ids": [
+    "GHSA-mw96-cpmx-2vgc"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "serialize-javascript",
+   "version": "6.0.2",
+   "ids": [
+    "GHSA-5c6j-r48x-rmvq"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "serialize-javascript",
+   "version": "6.0.2",
+   "ids": [
+    "GHSA-qj8w-gfj5-8c6v"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "source-map-js",
+   "version": "1.2.0",
+   "ids": [
+    "GHSA-68fv-2mgg-jv7q"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "source-map-js",
+   "version": "1.2.1",
+   "ids": [
+    "GHSA-68fv-2mgg-jv7q"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "svelte",
+   "version": "4.2.19",
+   "ids": [
+    "GHSA-crpf-4hrx-3jrp"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "svelte",
+   "version": "4.2.19",
+   "ids": [
+    "GHSA-f7gr-6p89-r883"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "svelte",
+   "version": "4.2.19",
+   "ids": [
+    "GHSA-m56q-vw4c-c2cp"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "svelte",
+   "version": "4.2.19",
+   "ids": [
+    "GHSA-phwv-c562-gvmh"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "svelte",
+   "version": "4.2.19",
+   "ids": [
+    "GHSA-pr6f-5x2q-rwfp"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "svelte",
+   "version": "4.2.19",
+   "ids": [
+    "GHSA-rcqx-6q8c-2c42"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "tinypool",
+   "version": "1.0.1",
+   "ids": [
+    "GHSA-5gmw-xhrv-c9v3"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "tinypool",
+   "version": "1.0.1",
+   "ids": [
+    "GHSA-85c8-ppgw-ccpr"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "undici",
+   "version": "5.28.4",
+   "ids": [
+    "GHSA-2mjp-6q6p-2qxm"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "undici",
+   "version": "5.28.4",
+   "ids": [
+    "GHSA-35p6-xmwp-9g52"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "undici",
+   "version": "5.28.4",
+   "ids": [
+    "GHSA-4992-7rv2-5pvq"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "undici",
+   "version": "5.28.4",
+   "ids": [
+    "GHSA-8xcm-r25x-g524"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "undici",
+   "version": "5.28.4",
+   "ids": [
+    "GHSA-c76h-2ccp-4975"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "undici",
+   "version": "5.28.4",
+   "ids": [
+    "GHSA-cxrh-j4jr-qwg3"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "undici",
+   "version": "5.28.4",
+   "ids": [
+    "GHSA-g8m3-5g58-fq7m"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "undici",
+   "version": "5.28.4",
+   "ids": [
+    "GHSA-g9mf-h72j-4rw9"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "undici",
+   "version": "5.28.4",
+   "ids": [
+    "GHSA-m8rv-5g2x-5cg5"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "undici",
+   "version": "5.28.4",
+   "ids": [
+    "GHSA-p88m-4jfj-68fv"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "undici",
+   "version": "5.28.4",
+   "ids": [
+    "GHSA-r53p-7pc4-xj5r"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "undici",
+   "version": "5.28.4",
+   "ids": [
+    "GHSA-v3r7-h72x-cjcm"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "undici",
+   "version": "5.28.4",
+   "ids": [
+    "GHSA-v9p9-hfj2-hcw8"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "undici",
+   "version": "5.28.4",
+   "ids": [
+    "GHSA-vrm6-8vpv-qv8q"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "undici",
+   "version": "5.28.4",
+   "ids": [
+    "GHSA-vxpw-j846-p89q"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "vite",
+   "version": "5.4.6",
+   "ids": [
+    "GHSA-356w-63v5-8wf4"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "vite",
+   "version": "5.4.6",
+   "ids": [
+    "GHSA-4r4m-qw57-chr8"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "vite",
+   "version": "5.4.6",
+   "ids": [
+    "GHSA-4w7w-66w2-5vf9"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "vite",
+   "version": "5.4.6",
+   "ids": [
+    "GHSA-859w-5945-r5v3"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "vite",
+   "version": "5.4.6",
+   "ids": [
+    "GHSA-93m4-6634-74q7"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "vite",
+   "version": "5.4.6",
+   "ids": [
+    "GHSA-c27g-q93r-2cwf"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "vite",
+   "version": "5.4.6",
+   "ids": [
+    "GHSA-fx2h-pf6j-xcff"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "vite",
+   "version": "5.4.6",
+   "ids": [
+    "GHSA-g4jq-h2w9-997c"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "vite",
+   "version": "5.4.6",
+   "ids": [
+    "GHSA-jqfw-vq24-v9c3"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "vite",
+   "version": "5.4.6",
+   "ids": [
+    "GHSA-v6wh-96g9-6wx3"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "vite",
+   "version": "5.4.6",
+   "ids": [
+    "GHSA-vg6x-rcgg-rjx6"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "vite",
+   "version": "5.4.6",
+   "ids": [
+    "GHSA-x574-m823-4x7w"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "vite",
+   "version": "5.4.6",
+   "ids": [
+    "GHSA-xcj6-pq6g-qj4x"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "vite",
+   "version": "5.4.7",
+   "ids": [
+    "GHSA-356w-63v5-8wf4"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "vite",
+   "version": "5.4.7",
+   "ids": [
+    "GHSA-4r4m-qw57-chr8"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "vite",
+   "version": "5.4.7",
+   "ids": [
+    "GHSA-4w7w-66w2-5vf9"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "vite",
+   "version": "5.4.7",
+   "ids": [
+    "GHSA-859w-5945-r5v3"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "vite",
+   "version": "5.4.7",
+   "ids": [
+    "GHSA-93m4-6634-74q7"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "vite",
+   "version": "5.4.7",
+   "ids": [
+    "GHSA-c27g-q93r-2cwf"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "vite",
+   "version": "5.4.7",
+   "ids": [
+    "GHSA-fx2h-pf6j-xcff"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "vite",
+   "version": "5.4.7",
+   "ids": [
+    "GHSA-g4jq-h2w9-997c"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "vite",
+   "version": "5.4.7",
+   "ids": [
+    "GHSA-jqfw-vq24-v9c3"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "vite",
+   "version": "5.4.7",
+   "ids": [
+    "GHSA-v6wh-96g9-6wx3"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "vite",
+   "version": "5.4.7",
+   "ids": [
+    "GHSA-vg6x-rcgg-rjx6"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "vite",
+   "version": "5.4.7",
+   "ids": [
+    "GHSA-x574-m823-4x7w"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "vite",
+   "version": "5.4.7",
+   "ids": [
+    "GHSA-xcj6-pq6g-qj4x"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "vitest",
+   "version": "2.1.1",
+   "ids": [
+    "GHSA-5xrq-8626-4rwp"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "vitest",
+   "version": "2.1.1",
+   "ids": [
+    "GHSA-82fw-gwwq-j7x9"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "vitest",
+   "version": "2.1.1",
+   "ids": [
+    "GHSA-9crc-q9x8-hgqq"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "wrangler",
+   "version": "3.78.3",
+   "ids": [
+    "GHSA-36p8-mvp6-cv38"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "ws",
+   "version": "8.18.0",
+   "ids": [
+    "GHSA-58qx-3vcg-4xpx"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "ws",
+   "version": "8.18.0",
+   "ids": [
+    "GHSA-96hv-2xvq-fx4p"
+   ]
+  }
+ ]
+}

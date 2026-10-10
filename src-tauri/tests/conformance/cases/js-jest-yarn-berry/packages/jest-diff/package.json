@@ -1,0 +1,35 @@
+{
+  "name": "jest-diff",
+  "version": "29.0.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/facebook/jest.git",
+    "directory": "packages/jest-diff"
+  },
+  "license": "MIT",
+  "main": "./build/index.js",
+  "types": "./build/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./build/index.d.ts",
+      "default": "./build/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "dependencies": {
+    "chalk": "^4.0.0",
+    "diff-sequences": "workspace:^",
+    "jest-get-type": "workspace:^",
+    "pretty-format": "workspace:^"
+  },
+  "devDependencies": {
+    "@jest/test-utils": "workspace:^",
+    "strip-ansi": "^6.0.0"
+  },
+  "engines": {
+    "node": "^14.15.0 || ^16.10.0 || >=18.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
