@@ -26,6 +26,56 @@ pub(crate) enum FloorReason {
     NoCapableModel,
     /// A narration stated a version the facts do not hold, twice.
     NarrationRejected,
+    /// The morning notification's written summary was not available
+    /// (`morning_floor`); the facts go out in its place.
+    Morning(MorningWhy),
+}
+
+/// Why the morning notification carries the facts view instead of a written
+/// summary. Recorded with the day's outcome, and said in the footer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum MorningWhy {
+    /// The synthesis abstained ("low signal") on every attempt.
+    Abstained,
+    /// The synthesis call failed (provider error, every provider down).
+    Failed,
+    /// The synthesis did not finish inside the morning budget.
+    TimedOut,
+    /// No synthesis-capable provider is configured.
+    Unconfigured,
+    /// No overnight item or alert to write from, so no synthesis ran.
+    Skipped,
+}
+
+impl MorningWhy {
+    /// Stable machine word for the outcome record and the log.
+    pub(crate) fn as_str(self) -> &'static str {
+        match self {
+            Self::Abstained => "abstained",
+            Self::Failed => "failed",
+            Self::TimedOut => "timed_out",
+            Self::Unconfigured => "unconfigured",
+            Self::Skipped => "skipped",
+        }
+    }
+
+    fn sentence(self) -> &'static str {
+        match self {
+            Self::Abstained => {
+                "This morning's written summary found nothing it could stand behind, so the facts are shown instead."
+            }
+            Self::Failed => "This morning's written summary failed, so the facts are shown instead.",
+            Self::TimedOut => {
+                "This morning's written summary did not finish in time, so the facts are shown instead."
+            }
+            Self::Unconfigured => {
+                "Add a Sonnet-class model in Settings → AI Provider for a written summary."
+            }
+            Self::Skipped => {
+                "Nothing came in overnight for a written summary to work from, so the facts stand on their own."
+            }
+        }
+    }
 }
 
 /// The facts brief as Markdown. Pure: performs no synthesis and no I/O.
@@ -103,6 +153,17 @@ pub(crate) fn build_deterministic_brief(facts: &BriefFacts, reason: FloorReason)
         out.push('\n');
     }
 
+    if let FloorReason::Morning(why) = reason {
+        // Labelled as the facts view, never as a synthesis.
+        let source = if facts.no_dependencies_known {
+            "Facts view, with no AI narration."
+        } else {
+            "Facts view: computed from your lockfiles, OSV advisories and package registries, \
+             with no AI narration."
+        };
+        out.push_str(&format!("---\n_{source} {}_\n", why.sentence()));
+        return out;
+    }
     out.push_str(match (reason, facts.no_dependencies_known) {
         (FloorReason::NoCapableModel, false) => {
             "---\n_Computed from your lockfiles, OSV advisories and package registries, with no AI \
@@ -120,6 +181,8 @@ pub(crate) fn build_deterministic_brief(facts: &BriefFacts, reason: FloorReason)
             "---\n_The written brief stated a version these facts do not hold, so the facts are \
              shown instead._\n"
         }
+        // Rendered above with its reason.
+        (FloorReason::Morning(_), _) => "",
     });
     out
 }

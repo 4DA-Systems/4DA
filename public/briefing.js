@@ -93,7 +93,63 @@ function isAbstention(text) {
 function hasRenderableContent(data) {
   return !!((data.items && data.items.length > 0)
     || (data.preemption_alerts && data.preemption_alerts.length > 0)
-    || (data.escalating_chains && data.escalating_chains.length > 0));
+    || (data.escalating_chains && data.escalating_chains.length > 0)
+    || data.facts_brief);
+}
+
+/** Read the floor's Markdown escapes (`\[`, `\*`) back to the plain characters. */
+function unescapeMd(s) {
+  return s.replace(/\\([\\`*_\[\]])/g, '$1');
+}
+
+/** Inline Markdown to plain text: `[title](url)` -> title, `**x**` -> x. */
+function plainInline(s) {
+  return unescapeMd(s
+    .replace(/\[((?:\\.|[^\]\\])*)\]\([^)]*\)/g, '$1')
+    .replace(/\*\*/g, ''));
+}
+
+/**
+ * The facts view (the morning floor, AD-054 G4): the deterministic brief's
+ * Markdown rendered as sections and lines. Built from text nodes only, so no
+ * title can inject markup. Labelled as the facts view, never as a summary.
+ */
+function renderFacts(markdown) {
+  if (!synthesisSection || !synthesisText) return;
+  synthesisSection.style.display = '';
+  synthesisSection.classList.remove('abstention', 'synthesizing');
+  synthesisSection.classList.add('facts-view');
+  synthesisText.textContent = '';
+
+  var label = document.createElement('div');
+  label.className = 'facts-label';
+  label.textContent = 'FACTS VIEW';
+  synthesisText.appendChild(label);
+
+  var lines = String(markdown).split('\n');
+  for (var i = 0; i < lines.length; i++) {
+    var raw = lines[i];
+    if (!raw.trim() || raw.trim() === '---') continue;
+    var el = document.createElement('div');
+    if (raw.indexOf('## ') === 0) {
+      el.className = 'facts-heading';
+      el.textContent = raw.slice(3).trim();
+    } else if (raw.indexOf('  - ') === 0) {
+      el.className = 'facts-line facts-sub';
+      el.textContent = plainInline(raw.slice(4));
+    } else if (raw.indexOf('- ') === 0) {
+      el.className = 'facts-line';
+      el.textContent = plainInline(raw.slice(2));
+    } else if (/^_.*_$/.test(raw.trim())) {
+      el.className = 'facts-footer';
+      el.textContent = plainInline(raw.trim().slice(1, -1));
+    } else {
+      el.className = 'facts-line facts-plain';
+      el.textContent = plainInline(raw);
+    }
+    synthesisText.appendChild(el);
+  }
+  if (synthesisHintSection) synthesisHintSection.style.display = 'none';
 }
 
 /** Extract date string from title like "4DA Intelligence Briefing — 02 Apr 2026" */
@@ -443,7 +499,11 @@ function renderBriefing(data) {
   // LLM Synthesis — the hero section. Gets the most real estate.
   // Abstention messages ("Low signal — no new intelligence overnight") are shown
   // as a muted single-line message so the user knows the system ran but had nothing new.
-  if (data.synthesis && !isAbstention(data.synthesis)) {
+  synthesisSection.classList.remove('facts-view');
+  if (data.facts_brief) {
+    // The written summary was not available: the facts go out instead.
+    renderFacts(data.facts_brief);
+  } else if (data.synthesis && !isAbstention(data.synthesis)) {
     synthesisSection.style.display = '';
     synthesisSection.classList.remove('abstention', 'synthesizing');
     synthesisText.textContent = cleanSynthesis(data.synthesis);
@@ -544,7 +604,7 @@ function showBriefing(data) {
   var hasItems = data.items && data.items.length > 0;
   var hasPreemption = data.preemption_alerts && data.preemption_alerts.length > 0;
   var hasChains = data.escalating_chains && data.escalating_chains.length > 0;
-  if (!hasItems && !hasPreemption && !hasChains && isAbstention(data.synthesis)) {
+  if (!hasItems && !hasPreemption && !hasChains && !data.facts_brief && isAbstention(data.synthesis)) {
     return;
   }
   renderBriefing(data);
@@ -657,6 +717,12 @@ async function init() {
     await listen('briefing-synthesis', function (event) {
       if (!event.payload || !synthesisSection || !synthesisText) return;
       synthesisSection.classList.remove('synthesizing');
+      var showingFacts = synthesisSection.classList.contains('facts-view');
+      if (isAbstention(event.payload) && showingFacts) {
+        // The facts already stand in for the summary; a quiet line adds nothing.
+        return;
+      }
+      synthesisSection.classList.remove('facts-view');
       if (isAbstention(event.payload)) {
         // Quiet day. The initial briefing-data already rendered any signals; a
         // late "nothing noteworthy" line would only contradict them — so hide it
@@ -672,11 +738,18 @@ async function init() {
       if (synthesisHintSection) synthesisHintSection.style.display = 'none';
     });
 
+    // The facts view, when the async summary abstained/failed/timed out.
+    await listen('briefing-facts', function (event) {
+      if (!event.payload) return;
+      renderFacts(event.payload);
+    });
+
     // Synthesis provenance metadata — consumed for logging only, never shown
     await listen('briefing-synthesis-meta', function () {});
 
     // Synthesis unavailable hint
     await listen('briefing-synthesis-hint', function (event) {
+      if (synthesisSection && synthesisSection.classList.contains('facts-view')) return;
       if (synthesisSection) {
         synthesisSection.classList.remove('synthesizing');
         synthesisSection.style.display = 'none';

@@ -1944,12 +1944,13 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                     let app_synth = briefing_handle.clone();
                     let briefing_synth = briefing.clone();
                     tauri::async_runtime::spawn(async move {
-                        match crate::monitoring_briefing::synthesize_morning_briefing(
-                            &briefing_synth,
-                        )
-                        .await
-                        {
-                            Ok(result) => {
+                        // Summary, or the facts view when it abstains, fails,
+                        // times out or has no model (`morning_floor`, AD-054 G4).
+                        let mut resolved = briefing_synth.clone();
+                        let resolution =
+                            crate::morning_floor::resolve_live(&mut resolved, "cold_boot").await;
+                        match resolution.narrated {
+                            Some(result) => {
                                 info!(
                                     target: "4da::briefing",
                                     provider = %result.provider_used,
@@ -1979,10 +1980,28 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                                 enriched.synthesis = Some(result.prose);
                                 crate::briefing_snapshot::save_snapshot(&enriched);
                             }
-                            Err(e) => {
-                                info!(target: "4da::briefing", reason = %e, "Synthesis skipped");
-                                let _ =
-                                    app_synth.emit_to("briefing", "briefing-synthesis-hint", &e);
+                            None => {
+                                let reason = resolution.error.unwrap_or_default();
+                                info!(
+                                    target: "4da::briefing",
+                                    outcome = resolution.outcome.as_str(),
+                                    reason = %reason,
+                                    "Synthesis not shown"
+                                );
+                                if let Some(facts) = resolved.facts_brief.as_deref() {
+                                    let _ = app_synth.emit_to("briefing", "briefing-facts", facts);
+                                    crate::briefing_snapshot::save_snapshot(&resolved);
+                                } else if let Some(quiet) = resolved.synthesis.as_deref() {
+                                    // The abstention line: the window folds it.
+                                    let _ =
+                                        app_synth.emit_to("briefing", "briefing-synthesis", quiet);
+                                } else {
+                                    let _ = app_synth.emit_to(
+                                        "briefing",
+                                        "briefing-synthesis-hint",
+                                        &reason,
+                                    );
+                                }
                             }
                         }
                     });
@@ -2310,6 +2329,7 @@ pub(crate) fn handle_run_event(app_handle: &tauri::AppHandle, event: tauri::RunE
                         corroboration_available: false,
                         coverage_building: false,
                         synthesis_hint: None,
+                        facts_brief: None,
                     };
                     drop(analysis_state); // release lock before disk I/O
                     crate::briefing_snapshot::save_snapshot(&briefing);

@@ -756,12 +756,15 @@ fn build_worth_knowing(
     let Ok(conn) = crate::open_db_connection() else {
         return Vec::new();
     };
-    let excluded = crate::dep_linker::REGISTRY_SOURCE_TYPES
-        .iter()
-        .chain(["osv", "cve"].iter())
-        .map(|s| format!("'{s}'"))
-        .collect::<Vec<_>>()
-        .join(",");
+    // AD-054 rule 3: worth knowing reads enabled interests only (social and
+    // editorial reading is opt-in; registries and advisories feed the stack
+    // sections, not this one). None enabled: the section is empty.
+    let interests = crate::brief_interests::sql_in_list(
+        &crate::brief_interests::enabled_interest_source_types(&conn),
+    );
+    if interests.is_empty() {
+        return Vec::new();
+    }
     let user_lang = crate::i18n::get_user_language();
     // Order by the judge's latest verdict, then the feed rank. Live
     // 2026-10-02 the feed rank put a generic "52 utilities" post first and
@@ -778,7 +781,7 @@ fn build_worth_knowing(
                       ORDER BY j.judged_at DESC, j.id DESC LIMIT 1) AS judge
              FROM source_items s
              WHERE s.feed_relevant = 1
-               AND s.source_type NOT IN ({excluded})
+               AND s.source_type IN ({interests})
                AND TRIM(s.title) <> ''
                AND COALESCE(s.detected_lang, 'en') = ?1
                AND COALESCE(s.published_at, s.created_at) >= datetime('now', ?2)

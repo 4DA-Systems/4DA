@@ -702,6 +702,12 @@ pub struct BriefingNotification {
     /// what to configure so the briefing can include intelligence narrative.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub synthesis_hint: Option<String>,
+    /// The facts view (Markdown, `briefing_deterministic` with a morning
+    /// reason): set when the written summary abstained, failed, timed out or
+    /// has no model, so the morning still delivers what is known. Labelled as
+    /// facts in its own footer; never presented as a synthesis.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub facts_brief: Option<String>,
 }
 
 const KNOWLEDGE_GAP_HIGH_URGENCY_DAYS: i64 = 7;
@@ -716,7 +722,7 @@ impl BriefingNotification {
         if !self.preemption_alerts.is_empty() {
             return true;
         }
-        if !self.escalating_chains.is_empty() {
+        if !self.escalating_chains.is_empty() || self.facts_brief.is_some() {
             return true;
         }
         self.knowledge_gaps
@@ -964,6 +970,7 @@ pub(crate) fn build_enriched_briefing(
             corroboration_available: false,
             coverage_building: false,
             synthesis_hint: None,
+            facts_brief: None,
         };
     }
 
@@ -1082,6 +1089,7 @@ pub(crate) fn build_enriched_briefing(
             corroboration_available: false,
             coverage_building: false,
             synthesis_hint: None,
+            facts_brief: None,
         };
     }
 
@@ -1181,6 +1189,7 @@ pub(crate) fn build_enriched_briefing(
                 None
             }
         },
+        facts_brief: None,
     }
 }
 
@@ -1874,6 +1883,7 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
                 corroboration_available: false,
                 coverage_building: false,
                 synthesis_hint: None,
+                facts_brief: None,
             };
             // Still mark as fired so we don't re-trigger the stale warning all day
             {
@@ -1889,7 +1899,25 @@ pub fn check_morning_briefing(state: &MonitoringState) -> Option<BriefingNotific
             }
             return Some(stale_briefing);
         }
-        return None;
+        // A quiet feed is not a quiet stack (AD-054 G4): open advisories and
+        // breaking releases still go out as the facts view. Only a morning
+        // with no facts either stays silent, and that is recorded.
+        let mut briefing = briefing;
+        if !crate::morning_floor::attach_floor_for_quiet_morning(&mut briefing, &today) {
+            return None;
+        }
+        {
+            let mut last_date = state.last_morning_briefing_date.lock();
+            *last_date = Some(today.clone());
+        }
+        {
+            let mut settings = crate::get_settings_manager().lock();
+            settings.get_mut().monitoring.last_briefing_date = Some(today);
+            if let Err(e) = settings.save() {
+                warn!(target: "4da::notify", error = %e, "Failed to persist last_briefing_date to settings");
+            }
+        }
+        return Some(briefing);
     }
 
     // 5. Mark as fired today — persist to settings AND in-memory state
@@ -4153,6 +4181,7 @@ mod tests {
             corroboration_available: false,
             coverage_building: false,
             synthesis_hint: None,
+            facts_brief: None,
         };
         assert_eq!(briefing.items.len(), 2);
         assert_eq!(briefing.total_relevant, 2);
@@ -4186,6 +4215,7 @@ mod tests {
             corroboration_available: false,
             coverage_building: false,
             synthesis_hint: None,
+            facts_brief: None,
         };
         let err = match synthesize_morning_briefing(&briefing).await {
             Ok(_) => panic!("an evidence-free brief must not synthesize"),
@@ -4440,6 +4470,7 @@ mod tests {
             corroboration_available: false,
             coverage_building: false,
             synthesis_hint: None,
+            facts_brief: None,
         }
     }
 

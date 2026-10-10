@@ -233,6 +233,62 @@ html, body {
   word-wrap: break-word;
 }
 
+/* Facts view: the morning floor (no written summary). */
+.synthesis-section.facts-view .synthesis-text {
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.facts-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.facts-heading {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent-gold);
+  margin: 10px 0 4px;
+}
+
+.facts-line {
+  padding-left: 12px;
+  text-indent: -12px;
+  margin: 2px 0;
+}
+
+.facts-line::before {
+  content: '\2022\00a0\00a0';
+  color: var(--text-muted);
+}
+
+.facts-line.facts-plain::before {
+  content: none;
+}
+
+.facts-line.facts-plain {
+  padding-left: 0;
+  text-indent: 0;
+}
+
+.facts-sub {
+  margin-left: 14px;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.facts-footer {
+  margin-top: 10px;
+  font-size: 11px;
+  font-style: italic;
+  color: var(--text-muted);
+}
+
 .synthesis-section.abstention {
   background: rgba(255, 255, 255, 0.02);
   border-color: rgba(255, 255, 255, 0.06);

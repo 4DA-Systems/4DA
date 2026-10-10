@@ -24,6 +24,16 @@ use crate::brief_cadence::{has_new_act_now, DAILY_AUTO_BRIEF_CAP};
 /// display surfaces (AD-035, `brief_verdict_display`). Independent of reuse.
 pub(super) const BRIEFING_REUSE_WINDOW_HOURS: f64 = 4.0;
 
+/// One brief generation at a time. The reuse/cap decision reads the latest
+/// brief and today's count, and the write lands up to ~30 s later (facts
+/// build + model call); two triggers in that window both saw "regenerate"
+/// and both wrote. Live 2026-10-03T19:50:10Z/19:50:13Z two auto triggers
+/// overlapped (both reused that time, because the facts held). Held from
+/// before the decision until the brief is persisted, the second trigger sees
+/// the first one's brief and reuses it, so the daily cap holds under
+/// concurrency too.
+pub(super) static BRIEF_GENERATION_GATE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 /// `kv_store` key: the fingerprint the latest briefing was written from.
 const FINGERPRINT_KV_KEY: &str = "brief_fingerprint_v1";
 
@@ -368,6 +378,39 @@ mod tests {
             try_reuse_at(&db, "fp-1", &a, now, plus_ten()).is_some(),
             "today's brief, same facts"
         );
+    }
+
+    /// Two auto triggers in flight at once (live 2026-10-03T19:50:10Z and
+    /// :13Z) with changed facts: under the generation gate the second sees
+    /// the first one's brief and reuses it. Without the gate both pass the
+    /// decision before either writes, and the day gets two briefs for one
+    /// change (and, at two briefs, a fourth past the cap).
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    #[allow(clippy::await_holding_lock)] // the guard serializes LATEST_BRIEFING writers
+    async fn concurrent_triggers_write_one_brief_not_two() {
+        let _guard = REUSE_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let db = std::sync::Arc::new(crate::test_utils::test_db());
+        save(&db, "## Fresh brief", "fp-a");
+        save(&db, "## Fresh brief", "fp-a");
+        let run = |db: std::sync::Arc<crate::db::Database>| async move {
+            let _gate = BRIEF_GENERATION_GATE.lock().await;
+            if try_reuse_recent_briefing(&db, "fp-b", &[]).is_none() {
+                // The facts build + model call the gate spans.
+                tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+                save(&db, "## Fresh brief", "fp-b");
+            }
+        };
+        let (a, b) = tokio::join!(tokio::spawn(run(db.clone())), tokio::spawn(run(db.clone())));
+        a.expect("first trigger");
+        b.expect("second trigger");
+        let count: i64 = db
+            .conn
+            .lock()
+            .query_row("SELECT COUNT(*) FROM briefings", [], |r| r.get(0))
+            .expect("count");
+        assert_eq!(count, 3, "one regeneration for one change of facts");
     }
 
     /// A record written before the cap existed has no act-now list: it cannot
