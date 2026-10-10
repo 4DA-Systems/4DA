@@ -10,7 +10,10 @@
 
 use rusqlite::{params, Result as SqliteResult};
 
-use super::{blob_to_embedding, parse_datetime, Database, StoredSourceItem};
+use crate::sources::source_class::enabled_source_sql;
+
+use super::item_embeddings::{attach_embeddings, stored_item_columns, stored_item_from_row};
+use super::{Database, StoredSourceItem};
 
 /// Persist-boundary score hysteresis (2026-08-23 audit, item 10): a same-item
 /// re-score moving less than this keeps the OLD durable score (the version
@@ -114,35 +117,46 @@ impl Database {
         limit: usize,
     ) -> SqliteResult<Vec<TriageAuditRow>> {
         let conn = self.conn.lock();
+        // Embedded items only; the vector lives in `source_vec` (Phase 126).
         let sql = if min_relevance.is_some() {
-            "SELECT id, title, content, embedding, content_type, cve_ids, relevance_score
+            "SELECT id, title, content, content_type, cve_ids, relevance_score
              FROM source_items
-             WHERE embedding IS NOT NULL AND relevance_score >= ?1
+             WHERE embedding_status = 'complete' AND relevance_score >= ?1
              ORDER BY relevance_score DESC
              LIMIT ?2"
         } else {
-            "SELECT id, title, content, embedding, content_type, cve_ids, relevance_score
+            "SELECT id, title, content, content_type, cve_ids, relevance_score
              FROM source_items
-             WHERE embedding IS NOT NULL
+             WHERE embedding_status = 'complete'
              ORDER BY RANDOM()
              LIMIT ?2"
         };
         let mut stmt = conn.prepare(sql)?;
         // Bind ?1 even in the random branch (ignored) so the param set is uniform.
         let min = min_relevance.unwrap_or(0.0);
-        let rows = stmt.query_map(params![min, limit as i64], |row| {
-            let embedding_blob: Vec<u8> = row.get(3)?;
-            Ok(TriageAuditRow {
-                id: row.get(0)?,
-                title: row.get(1)?,
-                content: row.get(2)?,
-                embedding: blob_to_embedding(&embedding_blob),
-                content_type: row.get(4).ok().flatten(),
-                cve_ids: row.get(5).ok().flatten(),
-                relevance_score: row.get(6).ok().flatten(),
-            })
-        })?;
-        rows.collect()
+        let mut rows = stmt
+            .query_map(params![min, limit as i64], |row| {
+                Ok(TriageAuditRow {
+                    id: row.get(0)?,
+                    title: row.get(1)?,
+                    content: row.get(2)?,
+                    embedding: Vec::new(),
+                    content_type: row.get(3).ok().flatten(),
+                    cve_ids: row.get(4).ok().flatten(),
+                    relevance_score: row.get(5).ok().flatten(),
+                })
+            })?
+            .collect::<SqliteResult<Vec<_>>>()?;
+        let ids: Vec<i64> = rows.iter().map(|r| r.id).collect();
+        let mut vectors = super::item_embeddings::load_item_vectors(&conn, &ids)?;
+        rows.retain_mut(|r| match vectors.remove(&r.id) {
+            Some(v) => {
+                r.embedding = v;
+                true
+            }
+            None => false,
+        });
+        Ok(rows)
     }
 
     /// Count items that have NEVER been through a scoring run, respecting the tier
@@ -166,8 +180,10 @@ impl Database {
                 super::sources::FREE_HISTORY_LIMIT_HOURS
             )
         };
+        // A source the user turned off is not backlog (AD-054).
         let sql = format!(
-            "SELECT COUNT(*) FROM source_items WHERE scored_pipeline_version = 0{time_clause}"
+            "SELECT COUNT(*) FROM source_items WHERE scored_pipeline_version = 0{time_clause} AND {}",
+            enabled_source_sql("source_type")
         );
         conn.query_row(&sql, [], |r| r.get(0))
     }
@@ -193,11 +209,9 @@ impl Database {
             )
         };
         let sql = format!(
-            "SELECT id, source_type, source_id, url, title, content, content_hash,
-                    embedding, created_at, last_seen, COALESCE(detected_lang, 'en'),
-                    feed_origin, tags, published_at
+            "SELECT {cols}
              FROM source_items
-             WHERE scored_pipeline_version = 0{time_clause}
+             WHERE scored_pipeline_version = 0{time_clause} AND {enabled}
              ORDER BY
                  CASE
                      WHEN cve_ids IS NOT NULL
@@ -206,33 +220,16 @@ impl Database {
                      ELSE 2
                  END,
                  created_at DESC
-             LIMIT ?1"
+             LIMIT ?1",
+            cols = stored_item_columns(""),
+            enabled = enabled_source_sql("source_type"),
         );
         let mut stmt = conn.prepare_cached(&sql)?;
-        let rows = stmt.query_map(params![limit as i64], |row| {
-            let embedding_blob: Vec<u8> = row.get(7)?;
-            Ok(StoredSourceItem {
-                id: row.get(0)?,
-                source_type: row.get(1)?,
-                source_id: row.get(2)?,
-                url: row.get(3)?,
-                title: row.get(4)?,
-                content: row.get(5)?,
-                content_hash: row.get(6)?,
-                embedding: blob_to_embedding(&embedding_blob),
-                created_at: parse_datetime(row.get::<_, String>(8)?),
-                last_seen: parse_datetime(row.get::<_, String>(9)?),
-                detected_lang: row
-                    .get::<_, String>(10)
-                    .unwrap_or_else(|_| "en".to_string()),
-                feed_origin: row.get(11).ok().flatten(),
-                tags: row.get(12).ok().flatten(),
-                published_at: crate::db::parse_datetime_opt(
-                    row.get::<_, Option<String>>(13).ok().flatten(),
-                ),
-            })
-        })?;
-        rows.collect()
+        let mut items = stmt
+            .query_map(params![limit as i64], stored_item_from_row)?
+            .collect::<SqliteResult<Vec<_>>>()?;
+        attach_embeddings(&conn, &mut items)?;
+        Ok(items)
     }
 
     /// Candidates for dependency-change re-examination (Phase 3): items scored as noise
@@ -246,7 +243,7 @@ impl Database {
         limit: usize,
     ) -> SqliteResult<Vec<(i64, String, String)>> {
         let conn = self.conn.lock();
-        let mut stmt = conn.prepare_cached(
+        let mut stmt = conn.prepare_cached(&format!(
             "SELECT id, title, content
              FROM source_items
              WHERE relevance_score IS NOT NULL
@@ -254,9 +251,11 @@ impl Database {
                AND scored_pipeline_version >= 1
                AND content_type IN
                    ('release_notes', 'platform_update', 'security_advisory', 'breaking_change')
+               AND {}
              ORDER BY created_at DESC
              LIMIT ?2",
-        )?;
+            enabled_source_sql("source_type")
+        ))?;
         let rows = stmt.query_map(params![threshold as f64, limit as i64], |row| {
             Ok((row.get(0)?, row.get(1)?, row.get(2)?))
         })?;
@@ -674,20 +673,27 @@ impl Database {
     /// A random sample of stored item embeddings with the live dimensionality —
     /// the corpus the semantic ACE boost is calibrated against (v29,
     /// `scoring::corpus_calibration`). Zero/degenerate blobs are excluded by
-    /// byte length here and by norm at the caller.
+    /// dimensionality here and by norm at the caller. Drawn from the sources
+    /// the user has on — the corpus that is actually scored (AD-054); the
+    /// vectors come from `source_vec` (Phase 126).
     pub(crate) fn random_item_embeddings(&self, limit: usize) -> SqliteResult<Vec<Vec<f32>>> {
         let conn = self.conn.lock();
-        let mut stmt = conn.prepare(
-            "SELECT embedding FROM source_items
-             WHERE embedding IS NOT NULL AND length(embedding) = ?1
-             ORDER BY RANDOM() LIMIT ?2",
-        )?;
-        let blob_len = (crate::EMBEDDING_DIMS * 4) as i64;
-        let rows = stmt.query_map(params![blob_len, limit as i64], |row| {
-            let blob: Vec<u8> = row.get(0)?;
-            Ok(blob_to_embedding(&blob))
-        })?;
-        rows.collect()
+        let mut stmt = conn.prepare(&format!(
+            "SELECT id FROM source_items
+             WHERE embedding_status = 'complete' AND {}
+             ORDER BY RANDOM() LIMIT ?1",
+            enabled_source_sql("source_type")
+        ))?;
+        let ids = stmt
+            .query_map(params![limit as i64], |row| row.get::<_, i64>(0))?
+            .collect::<SqliteResult<Vec<i64>>>()?;
+        let vectors = super::item_embeddings::load_item_vectors(&conn, &ids)?;
+        Ok(ids
+            .iter()
+            .filter_map(|id| vectors.get(id))
+            .filter(|v| v.len() == crate::EMBEDDING_DIMS)
+            .cloned()
+            .collect())
     }
 
     /// Persist the batch-relative RANK layer for the set the analysis cycle's
@@ -745,7 +751,9 @@ impl Database {
         let sql = format!(
             "SELECT COUNT(*) FROM source_items
              WHERE scored_pipeline_version < ?1
-               AND relevance_score IS NOT NULL{time_clause}"
+               AND relevance_score IS NOT NULL{time_clause}
+               AND {}",
+            enabled_source_sql("source_type")
         );
         conn.query_row(&sql, params![current_version], |r| r.get(0))
     }
@@ -872,44 +880,27 @@ impl Database {
                 super::sources::FREE_HISTORY_LIMIT_HOURS
             )
         };
+        // A source the user turned off is not re-scored (AD-054).
         let sql = format!(
-            "SELECT id, source_type, source_id, url, title, content, content_hash,
-                    embedding, created_at, last_seen, COALESCE(detected_lang, 'en'),
-                    feed_origin, tags, published_at
+            "SELECT {cols}
              FROM source_items
              WHERE scored_pipeline_version < ?1
                AND relevance_score IS NOT NULL{time_clause}
+               AND {enabled}
              ORDER BY
                  CASE WHEN created_at >= datetime('now', '-30 days') THEN 0 ELSE 1 END,
                  CASE WHEN content_type IN ('release_notes', 'platform_update') THEN 0 ELSE 1 END,
                  relevance_score DESC
-             LIMIT ?2"
+             LIMIT ?2",
+            cols = stored_item_columns(""),
+            enabled = enabled_source_sql("source_type"),
         );
         let mut stmt = conn.prepare_cached(&sql)?;
-        let rows = stmt.query_map(params![current_version, limit as i64], |row| {
-            let embedding_blob: Vec<u8> = row.get(7)?;
-            Ok(StoredSourceItem {
-                id: row.get(0)?,
-                source_type: row.get(1)?,
-                source_id: row.get(2)?,
-                url: row.get(3)?,
-                title: row.get(4)?,
-                content: row.get(5)?,
-                content_hash: row.get(6)?,
-                embedding: blob_to_embedding(&embedding_blob),
-                created_at: parse_datetime(row.get::<_, String>(8)?),
-                last_seen: parse_datetime(row.get::<_, String>(9)?),
-                detected_lang: row
-                    .get::<_, String>(10)
-                    .unwrap_or_else(|_| "en".to_string()),
-                feed_origin: row.get(11).ok().flatten(),
-                tags: row.get(12).ok().flatten(),
-                published_at: crate::db::parse_datetime_opt(
-                    row.get::<_, Option<String>>(13).ok().flatten(),
-                ),
-            })
-        })?;
-        rows.collect()
+        let mut items = stmt
+            .query_map(params![current_version, limit as i64], stored_item_from_row)?
+            .collect::<SqliteResult<Vec<_>>>()?;
+        attach_embeddings(&conn, &mut items)?;
+        Ok(items)
     }
 }
 

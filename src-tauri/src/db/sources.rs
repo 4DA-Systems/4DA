@@ -6,11 +6,11 @@ use std::collections::HashMap;
 use std::sync::{LazyLock, Mutex};
 use tracing::info;
 
+use crate::sources::source_class::enabled_source_sql;
+
+use super::item_embeddings::{attach_embeddings, stored_item_columns, stored_item_from_row};
 use super::StoredSourceItem;
-use super::{
-    blob_to_embedding, embedding_to_blob, hash_content_parts, parse_datetime, Database,
-    ScoringStatsAggregate,
-};
+use super::{embedding_to_blob, hash_content_parts, Database, ScoringStatsAggregate};
 
 /// Maximum history depth for free-tier users (30 days in hours).
 /// Signal and trial users have unlimited history access.
@@ -64,6 +64,17 @@ pub(crate) fn circuit_cooldown_secs(reopen_count: i64, retry_after_secs: Option<
     let base = CIRCUIT_COOLDOWN_TIERS_SECS[tier];
     let announced = retry_after_secs.unwrap_or(0).max(0);
     base.max(announced)
+}
+
+/// Source types the user has turned off (`sources.enabled = 0`), on an
+/// already-locked connection — for paths that filter rows in Rust rather
+/// than with [`crate::sources::source_class::enabled_source_sql`].
+pub(crate) fn disabled_source_types_on(
+    conn: &rusqlite::Connection,
+) -> SqliteResult<std::collections::HashSet<String>> {
+    let mut stmt = conn.prepare_cached("SELECT source_type FROM sources WHERE enabled = 0")?;
+    let rows = stmt.query_map([], |row| row.get::<_, String>(0))?;
+    rows.collect()
 }
 
 // ============================================================================
@@ -177,31 +188,27 @@ impl Database {
             )
             .ok();
 
+        // The vector is stored once, in `source_vec` (Phase 126,
+        // `db::item_embeddings`); `source_items.embedding` stays empty.
         let tx = conn.unchecked_transaction()?;
         if let Some(id) = existing_id {
             tx.execute(
-                "UPDATE source_items SET url = ?1, title = ?2, content = ?3, content_hash = ?4, embedding = ?5, detected_lang = ?6, last_seen = datetime('now') WHERE id = ?7",
-                params![url, title, content, content_hash, embedding_blob, detected_lang, id],
+                "UPDATE source_items SET url = ?1, title = ?2, content = ?3, content_hash = ?4, detected_lang = ?5, last_seen = datetime('now') WHERE id = ?6",
+                params![url, title, content, content_hash, detected_lang, id],
             )?;
-            tx.execute(
-                "UPDATE source_vec SET embedding = ?1 WHERE rowid = ?2",
-                params![embedding_blob, id],
-            )?;
+            super::item_embeddings::write_item_vector(&tx, id, &embedding_blob)?;
             tx.commit()?;
             Ok(id)
         } else {
             tx.execute(
                 "INSERT INTO source_items (source_type, source_id, url, title, content, content_hash, embedding, detected_lang, last_seen)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, datetime('now'))",
-                params![source_type, source_id, url, title, content, content_hash, embedding_blob, detected_lang],
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, X'', ?7, datetime('now'))",
+                params![source_type, source_id, url, title, content, content_hash, detected_lang],
             )?;
             // Safe under the FTS insert trigger: SQLite restores last_insert_rowid()
             // to the outer statement's value once a trigger program ends.
             let id = tx.last_insert_rowid();
-            tx.execute(
-                "INSERT INTO source_vec (rowid, embedding) VALUES (?1, ?2)",
-                params![id, embedding_blob],
-            )?;
+            super::item_embeddings::write_item_vector(&tx, id, &embedding_blob)?;
             tx.commit()?;
             Ok(id)
         }
@@ -252,23 +259,20 @@ impl Database {
                                            THEN datetime('now') \
                                            ELSE content_updated_at END, \
                  content_hash = ?4, \
-                 embedding = ?5, detected_lang = ?6, \
-                 content_type = COALESCE(?7, source_items.content_type), \
-                 cve_ids = COALESCE(?8, source_items.cve_ids), \
-                 feed_origin = COALESCE(?9, source_items.feed_origin), \
-                 tags = COALESCE(?10, source_items.tags), \
-                 published_at = COALESCE(source_items.published_at, ?11), \
-                 last_seen = datetime('now') WHERE id = ?12",
+                 detected_lang = ?5, \
+                 content_type = COALESCE(?6, source_items.content_type), \
+                 cve_ids = COALESCE(?7, source_items.cve_ids), \
+                 feed_origin = COALESCE(?8, source_items.feed_origin), \
+                 tags = COALESCE(?9, source_items.tags), \
+                 published_at = COALESCE(source_items.published_at, ?10), \
+                 last_seen = datetime('now') WHERE id = ?11",
             )?;
-            let mut update_vec_stmt =
-                tx.prepare_cached("UPDATE source_vec SET embedding = ?1 WHERE rowid = ?2")?;
+            // The vector goes to `source_vec` only (Phase 126).
             let mut insert_stmt = tx.prepare_cached(
                 "INSERT INTO source_items (source_type, source_id, url, title, content, content_hash, \
                  embedding, detected_lang, content_type, cve_ids, feed_origin, tags, published_at, last_seen)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, datetime('now'))",
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, X'', ?7, ?8, ?9, ?10, ?11, ?12, datetime('now'))",
             )?;
-            let mut insert_vec_stmt =
-                tx.prepare_cached("INSERT INTO source_vec (rowid, embedding) VALUES (?1, ?2)")?;
 
             for (
                 source_type,
@@ -298,7 +302,6 @@ impl Database {
                         title,
                         content,
                         content_hash,
-                        embedding_blob,
                         detected_lang,
                         content_type,
                         cve_ids,
@@ -307,7 +310,7 @@ impl Database {
                         published_at,
                         id
                     ])?;
-                    update_vec_stmt.execute(params![embedding_blob, id])?;
+                    super::item_embeddings::write_item_vector(&tx, id, &embedding_blob)?;
                 } else {
                     insert_stmt.execute(params![
                         source_type,
@@ -316,7 +319,6 @@ impl Database {
                         title,
                         content,
                         content_hash,
-                        embedding_blob,
                         detected_lang,
                         content_type,
                         cve_ids,
@@ -325,7 +327,7 @@ impl Database {
                         published_at
                     ])?;
                     let id = tx.last_insert_rowid();
-                    insert_vec_stmt.execute(params![id, embedding_blob])?;
+                    super::item_embeddings::write_item_vector(&tx, id, &embedding_blob)?;
                 }
                 count += 1;
             }
@@ -394,19 +396,21 @@ impl Database {
         Ok(count)
     }
 
-    /// Get items with pending embeddings for retry
+    /// Get items with pending embeddings for retry. A source the user turned
+    /// off is not embedded (AD-054).
     pub fn get_pending_embedding_items(
         &self,
         limit: usize,
     ) -> SqliteResult<Vec<(i64, String, String, String)>> {
         let conn = self.conn.lock();
-        let mut stmt = conn.prepare(
+        let mut stmt = conn.prepare(&format!(
             "SELECT id, source_type, source_id, COALESCE(embed_text, title || ' ' || content)
              FROM source_items
-             WHERE embedding_status = 'pending'
+             WHERE embedding_status = 'pending' AND {enabled}
              ORDER BY created_at DESC
              LIMIT ?1",
-        )?;
+            enabled = crate::sources::source_class::enabled_source_sql("source_type"),
+        ))?;
 
         let rows = stmt.query_map(params![limit as i64], |row| {
             Ok((
@@ -431,28 +435,17 @@ impl Database {
 
         let tx = conn.unchecked_transaction()?;
         tx.execute(
-            "UPDATE source_items SET embedding = ?1, embedding_status = 'complete', embed_text = NULL, \
-             content_updated_at = datetime('now') WHERE id = ?2",
-            params![embedding_blob, id],
+            "UPDATE source_items SET embedding_status = 'complete', embed_text = NULL, \
+             content_updated_at = datetime('now') WHERE id = ?1",
+            params![id],
         )?;
         // `source_vec` is a sqlite-vec `vec0` VIRTUAL table, which does NOT honour
         // `OR REPLACE` conflict resolution — it raises "UNIQUE constraint failed on
-        // source_vec primary key" instead. Every item already has a source_vec row
-        // (created by `upsert_source_item`), so an `INSERT OR REPLACE` here failed
-        // on EVERY re-embed. The caller discards the result via `.is_ok()`, so the
-        // failure was completely silent: 624 retry cycles logged, 0 upgrades, 887
-        // items stranded `pending` since 2026-04-26 holding vectors of superseded
-        // content. Use the same UPDATE-then-INSERT idiom `upsert_source_item` uses.
-        let updated = tx.execute(
-            "UPDATE source_vec SET embedding = ?1 WHERE rowid = ?2",
-            params![embedding_blob, id],
-        )?;
-        if updated == 0 {
-            tx.execute(
-                "INSERT INTO source_vec (rowid, embedding) VALUES (?1, ?2)",
-                params![id, embedding_blob],
-            )?;
-        }
+        // source_vec primary key" instead (an `INSERT OR REPLACE` here once
+        // failed silently on every re-embed, stranding 887 items `pending`).
+        // `write_item_vector` does UPDATE-then-INSERT and invalidates the
+        // item's context match when the vector changed.
+        super::item_embeddings::write_item_vector(&tx, id, &embedding_blob)?;
         tx.commit()?;
 
         Ok(())
@@ -513,42 +506,25 @@ impl Database {
         source_id: &str,
     ) -> SqliteResult<Option<StoredSourceItem>> {
         let conn = self.conn.lock();
-        let mut stmt = conn.prepare(
-            "SELECT id, source_type, source_id, url, title, content, content_hash, embedding, created_at, last_seen, COALESCE(detected_lang, 'en'), feed_origin, tags, published_at
-             FROM source_items
-             WHERE source_type = ?1 AND source_id = ?2
-             AND (embedding_status IS NULL OR embedding_status = 'complete')"
-        )?;
-
-        let mut rows = stmt.query_map(params![source_type, source_id], |row| {
-            let embedding_blob: Vec<u8> = row.get(7)?;
-            Ok(StoredSourceItem {
-                id: row.get(0)?,
-                source_type: row.get(1)?,
-                source_id: row.get(2)?,
-                url: row.get(3)?,
-                title: row.get(4)?,
-                content: row.get(5)?,
-                content_hash: row.get(6)?,
-                embedding: blob_to_embedding(&embedding_blob),
-                created_at: parse_datetime(row.get::<_, String>(8)?),
-                last_seen: parse_datetime(row.get::<_, String>(9)?),
-                detected_lang: row
-                    .get::<_, String>(10)
-                    .unwrap_or_else(|_| "en".to_string()),
-                feed_origin: row.get(11).ok().flatten(),
-                tags: row.get(12).ok().flatten(),
-                published_at: crate::db::parse_datetime_opt(
-                    row.get::<_, Option<String>>(13).ok().flatten(),
+        let item = conn
+            .query_row(
+                &format!(
+                    "SELECT {} FROM source_items
+                     WHERE source_type = ?1 AND source_id = ?2
+                     AND (embedding_status IS NULL OR embedding_status = 'complete')",
+                    stored_item_columns("")
                 ),
-            })
-        })?;
-
-        match rows.next() {
-            Some(Ok(item)) => Ok(Some(item)),
-            Some(Err(e)) => Err(e),
-            None => Ok(None),
-        }
+                params![source_type, source_id],
+                stored_item_from_row,
+            )
+            .optional()?;
+        let Some(item) = item else {
+            return Ok(None);
+        };
+        let mut items = [item];
+        attach_embeddings(&conn, &mut items)?;
+        let [item] = items;
+        Ok(Some(item))
     }
 
     /// The `source_items.id` for each `(source_type, source_id)` key, in input
@@ -576,23 +552,12 @@ impl Database {
         }
 
         let conn = self.conn.lock();
-        let placeholders: String = ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
-        let sql = format!("SELECT id, embedding FROM source_items WHERE id IN ({placeholders})");
-        let mut stmt = conn.prepare(&sql)?;
-
-        let params: Vec<Box<dyn rusqlite::types::ToSql>> = ids
+        let mut vectors = super::item_embeddings::load_item_vectors(&conn, ids)?;
+        // Input order; an id with no vector (pending, or gone) is omitted.
+        Ok(ids
             .iter()
-            .map(|id| Box::new(*id) as Box<dyn rusqlite::types::ToSql>)
-            .collect();
-        let param_refs: Vec<&dyn rusqlite::types::ToSql> =
-            params.iter().map(|p| p.as_ref()).collect();
-
-        let rows = stmt.query_map(param_refs.as_slice(), |row| {
-            let embedding_blob: Vec<u8> = row.get(1)?;
-            Ok((row.get::<_, i64>(0)?, blob_to_embedding(&embedding_blob)))
-        })?;
-
-        rows.collect()
+            .filter_map(|id| vectors.remove(id).map(|v| (*id, v)))
+            .collect())
     }
 
     /// Update last_seen timestamp for an existing item.
@@ -677,39 +642,18 @@ impl Database {
         limit: usize,
     ) -> SqliteResult<Vec<StoredSourceItem>> {
         let conn = self.conn.lock();
-        let mut stmt = conn.prepare(
-            "SELECT id, source_type, source_id, url, title, content, content_hash, embedding, created_at, last_seen, COALESCE(detected_lang, 'en'), feed_origin, tags, published_at
-             FROM source_items
+        let mut stmt = conn.prepare(&format!(
+            "SELECT {} FROM source_items
              WHERE source_type = ?1
              ORDER BY last_seen DESC
-             LIMIT ?2"
-        )?;
-
-        let rows = stmt.query_map(params![source_type, limit as i64], |row| {
-            let embedding_blob: Vec<u8> = row.get(7)?;
-            Ok(StoredSourceItem {
-                id: row.get(0)?,
-                source_type: row.get(1)?,
-                source_id: row.get(2)?,
-                url: row.get(3)?,
-                title: row.get(4)?,
-                content: row.get(5)?,
-                content_hash: row.get(6)?,
-                embedding: blob_to_embedding(&embedding_blob),
-                created_at: parse_datetime(row.get::<_, String>(8)?),
-                last_seen: parse_datetime(row.get::<_, String>(9)?),
-                detected_lang: row
-                    .get::<_, String>(10)
-                    .unwrap_or_else(|_| "en".to_string()),
-                feed_origin: row.get(11).ok().flatten(),
-                tags: row.get(12).ok().flatten(),
-                published_at: crate::db::parse_datetime_opt(
-                    row.get::<_, Option<String>>(13).ok().flatten(),
-                ),
-            })
-        })?;
-
-        rows.collect()
+             LIMIT ?2",
+            stored_item_columns("")
+        ))?;
+        let mut items = stmt
+            .query_map(params![source_type, limit as i64], stored_item_from_row)?
+            .collect::<SqliteResult<Vec<_>>>()?;
+        attach_embeddings(&conn, &mut items)?;
+        Ok(items)
     }
 
     /// Get recent source items respecting the free-tier history gate.
@@ -749,7 +693,8 @@ impl Database {
     /// without this, `ORDER BY last_seen DESC LIMIT 1000` lets Reddit/Lobsters
     /// monopolize the budget and leaves Security/Research/Dependencies chapters
     /// empty. The balanced query uses a window function partitioned by
-    /// `source_type` so each source gets a fair slice.
+    /// `source_type` so each source gets a fair slice. A source the user
+    /// turned off contributes nothing (AD-054).
     pub(crate) fn get_items_balanced_by_source(
         &self,
         hours: i64,
@@ -759,55 +704,32 @@ impl Database {
         let conn = self.read_conn();
         let cutoff = chrono::Utc::now() - chrono::Duration::hours(hours);
         let cutoff_str = cutoff.format("%Y-%m-%d %H:%M:%S").to_string();
-        let mut stmt = conn.prepare(
+        let mut stmt = conn.prepare(&format!(
             "WITH ranked AS (
-                SELECT id, source_type, source_id, url, title, content, content_hash,
-                       embedding, created_at, last_seen,
-                       COALESCE(detected_lang, 'en') AS detected_lang,
-                       feed_origin, tags, published_at,
+                SELECT id,
                        ROW_NUMBER() OVER (
                          PARTITION BY source_type
                          ORDER BY COALESCE(published_at, created_at) DESC
                        ) AS rn
                 FROM source_items
-                WHERE COALESCE(published_at, created_at) >= ?1
+                WHERE COALESCE(published_at, created_at) >= ?1 AND {enabled}
              )
-             SELECT id, source_type, source_id, url, title, content, content_hash,
-                    embedding, created_at, last_seen, detected_lang, feed_origin, tags, published_at
-             FROM ranked
-             WHERE rn <= ?2
-             ORDER BY COALESCE(published_at, created_at) DESC
+             SELECT {cols}
+             FROM ranked r JOIN source_items si ON si.id = r.id
+             WHERE r.rn <= ?2
+             ORDER BY COALESCE(si.published_at, si.created_at) DESC
              LIMIT ?3",
-        )?;
-
-        let rows = stmt.query_map(
-            params![cutoff_str, per_source_cap as i64, overall_limit as i64],
-            |row| {
-                let embedding_blob: Vec<u8> = row.get(7)?;
-                Ok(StoredSourceItem {
-                    id: row.get(0)?,
-                    source_type: row.get(1)?,
-                    source_id: row.get(2)?,
-                    url: row.get(3)?,
-                    title: row.get(4)?,
-                    content: row.get(5)?,
-                    content_hash: row.get(6)?,
-                    embedding: blob_to_embedding(&embedding_blob),
-                    created_at: parse_datetime(row.get::<_, String>(8)?),
-                    last_seen: parse_datetime(row.get::<_, String>(9)?),
-                    detected_lang: row
-                        .get::<_, String>(10)
-                        .unwrap_or_else(|_| "en".to_string()),
-                    feed_origin: row.get(11).ok().flatten(),
-                    tags: row.get(12).ok().flatten(),
-                    published_at: crate::db::parse_datetime_opt(
-                        row.get::<_, Option<String>>(13).ok().flatten(),
-                    ),
-                })
-            },
-        )?;
-
-        rows.collect()
+            cols = stored_item_columns("si."),
+            enabled = enabled_source_sql("source_type"),
+        ))?;
+        let mut items = stmt
+            .query_map(
+                params![cutoff_str, per_source_cap as i64, overall_limit as i64],
+                stored_item_from_row,
+            )?
+            .collect::<SqliteResult<Vec<_>>>()?;
+        attach_embeddings(&conn, &mut items)?;
+        Ok(items)
     }
 
     /// Get recent source items within a time window (hours)
@@ -820,39 +742,18 @@ impl Database {
         let conn = self.read_conn();
         let cutoff = chrono::Utc::now() - chrono::Duration::hours(hours);
         let cutoff_str = cutoff.format("%Y-%m-%d %H:%M:%S").to_string();
-        let mut stmt = conn.prepare(
-            "SELECT id, source_type, source_id, url, title, content, content_hash, embedding, created_at, last_seen, COALESCE(detected_lang, 'en'), feed_origin, tags, published_at
-             FROM source_items
+        let mut stmt = conn.prepare(&format!(
+            "SELECT {} FROM source_items
              WHERE last_seen >= ?1
              ORDER BY last_seen DESC
-             LIMIT ?2"
-        )?;
-
-        let rows = stmt.query_map(params![cutoff_str, limit as i64], |row| {
-            let embedding_blob: Vec<u8> = row.get(7)?;
-            Ok(StoredSourceItem {
-                id: row.get(0)?,
-                source_type: row.get(1)?,
-                source_id: row.get(2)?,
-                url: row.get(3)?,
-                title: row.get(4)?,
-                content: row.get(5)?,
-                content_hash: row.get(6)?,
-                embedding: blob_to_embedding(&embedding_blob),
-                created_at: parse_datetime(row.get::<_, String>(8)?),
-                last_seen: parse_datetime(row.get::<_, String>(9)?),
-                detected_lang: row
-                    .get::<_, String>(10)
-                    .unwrap_or_else(|_| "en".to_string()),
-                feed_origin: row.get(11).ok().flatten(),
-                tags: row.get(12).ok().flatten(),
-                published_at: crate::db::parse_datetime_opt(
-                    row.get::<_, Option<String>>(13).ok().flatten(),
-                ),
-            })
-        })?;
-
-        rows.collect()
+             LIMIT ?2",
+            stored_item_columns("")
+        ))?;
+        let mut items = stmt
+            .query_map(params![cutoff_str, limit as i64], stored_item_from_row)?
+            .collect::<SqliteResult<Vec<_>>>()?;
+        attach_embeddings(&conn, &mut items)?;
+        Ok(items)
     }
 
     /// Get items added since a specific ISO timestamp (for differential analysis).
@@ -893,45 +794,26 @@ impl Database {
     /// legacy rows are selected only when newly created. Freshness decay for
     /// unchanged items is the rolling refresh's job
     /// ([`Database::get_freshness_refresh_batch`]), not this selection's.
+    /// A source the user turned off is not selected (AD-054).
     pub(crate) fn get_items_since_timestamp(
         &self,
         since: &str,
         limit: usize,
     ) -> SqliteResult<Vec<StoredSourceItem>> {
         let conn = self.conn.lock();
-        let mut stmt = conn.prepare(
-            "SELECT id, source_type, source_id, url, title, content, content_hash, embedding, created_at, last_seen, COALESCE(detected_lang, 'en'), feed_origin, tags, published_at
-             FROM source_items
-             WHERE created_at > ?1 OR content_updated_at > ?1
+        let mut stmt = conn.prepare(&format!(
+            "SELECT {} FROM source_items
+             WHERE (created_at > ?1 OR content_updated_at > ?1) AND {}
              ORDER BY COALESCE(content_updated_at, created_at) DESC
-             LIMIT ?2"
-        )?;
-
-        let rows = stmt.query_map(params![since, limit as i64], |row| {
-            let embedding_blob: Vec<u8> = row.get(7)?;
-            Ok(StoredSourceItem {
-                id: row.get(0)?,
-                source_type: row.get(1)?,
-                source_id: row.get(2)?,
-                url: row.get(3)?,
-                title: row.get(4)?,
-                content: row.get(5)?,
-                content_hash: row.get(6)?,
-                embedding: blob_to_embedding(&embedding_blob),
-                created_at: parse_datetime(row.get::<_, String>(8)?),
-                last_seen: parse_datetime(row.get::<_, String>(9)?),
-                detected_lang: row
-                    .get::<_, String>(10)
-                    .unwrap_or_else(|_| "en".to_string()),
-                feed_origin: row.get(11).ok().flatten(),
-                tags: row.get(12).ok().flatten(),
-                published_at: crate::db::parse_datetime_opt(
-                    row.get::<_, Option<String>>(13).ok().flatten(),
-                ),
-            })
-        })?;
-
-        rows.collect()
+             LIMIT ?2",
+            stored_item_columns(""),
+            enabled_source_sql("source_type"),
+        ))?;
+        let mut items = stmt
+            .query_map(params![since, limit as i64], stored_item_from_row)?
+            .collect::<SqliteResult<Vec<_>>>()?;
+        attach_embeddings(&conn, &mut items)?;
+        Ok(items)
     }
 
     /// The stalest-scored slice of the recent window, for the rolling
@@ -964,47 +846,27 @@ impl Database {
     /// just evaluated to the back of this ordering.
     ///
     /// No tier clamp: callers pass a window (7 days) well inside the 30-day
-    /// free-history gate.
+    /// free-history gate. A source the user turned off is not refreshed.
     pub fn get_freshness_refresh_batch(
         &self,
         window_hours: i64,
         limit: usize,
     ) -> SqliteResult<Vec<StoredSourceItem>> {
         let conn = self.conn.lock();
-        let mut stmt = conn.prepare(
-            "SELECT id, source_type, source_id, url, title, content, content_hash, embedding, created_at, last_seen, COALESCE(detected_lang, 'en'), feed_origin, tags, published_at
-             FROM source_items
-             WHERE last_seen > datetime('now', ?1)
+        let mut stmt = conn.prepare(&format!(
+            "SELECT {} FROM source_items
+             WHERE last_seen > datetime('now', ?1) AND {}
              ORDER BY feed_relevant DESC, COALESCE(scored_at, '1970-01-01') ASC
-             LIMIT ?2"
-        )?;
-
+             LIMIT ?2",
+            stored_item_columns(""),
+            enabled_source_sql("source_type"),
+        ))?;
         let modifier = format!("-{window_hours} hours");
-        let rows = stmt.query_map(params![modifier, limit as i64], |row| {
-            let embedding_blob: Vec<u8> = row.get(7)?;
-            Ok(StoredSourceItem {
-                id: row.get(0)?,
-                source_type: row.get(1)?,
-                source_id: row.get(2)?,
-                url: row.get(3)?,
-                title: row.get(4)?,
-                content: row.get(5)?,
-                content_hash: row.get(6)?,
-                embedding: blob_to_embedding(&embedding_blob),
-                created_at: parse_datetime(row.get::<_, String>(8)?),
-                last_seen: parse_datetime(row.get::<_, String>(9)?),
-                detected_lang: row
-                    .get::<_, String>(10)
-                    .unwrap_or_else(|_| "en".to_string()),
-                feed_origin: row.get(11).ok().flatten(),
-                tags: row.get(12).ok().flatten(),
-                published_at: crate::db::parse_datetime_opt(
-                    row.get::<_, Option<String>>(13).ok().flatten(),
-                ),
-            })
-        })?;
-
-        rows.collect()
+        let mut items = stmt
+            .query_map(params![modifier, limit as i64], stored_item_from_row)?
+            .collect::<SqliteResult<Vec<_>>>()?;
+        attach_embeddings(&conn, &mut items)?;
+        Ok(items)
     }
 
     /// Count items by source type
@@ -1043,14 +905,49 @@ impl Database {
     // Source Registry
     // ========================================================================
 
-    /// Register a source
+    /// Register a source. The first registration seeds `enabled` from the
+    /// source's class (AD-054: stack sources on, interests off); a row that
+    /// already exists keeps whatever the user chose.
     pub fn register_source(&self, source_type: &str, name: &str) -> SqliteResult<()> {
         let conn = self.conn.lock();
         conn.execute(
-            "INSERT OR IGNORE INTO sources (source_type, name) VALUES (?1, ?2)",
-            params![source_type, name],
+            "INSERT OR IGNORE INTO sources (source_type, name, enabled) VALUES (?1, ?2, ?3)",
+            params![
+                source_type,
+                name,
+                crate::sources::source_class::default_enabled(source_type)
+            ],
         )?;
         Ok(())
+    }
+
+    /// Turn an interest on or off. Stack sources are always on (AD-054), so
+    /// turning one off is refused with `Ok(false)` and nothing is written.
+    /// Returns `Ok(true)` when the stored value now matches `enabled`.
+    /// Creates the row when the source was never registered, so a toggle is
+    /// never silently lost.
+    pub fn set_source_enabled(
+        &self,
+        source_type: &str,
+        name: &str,
+        enabled: bool,
+    ) -> SqliteResult<bool> {
+        if !enabled && crate::sources::source_class::is_stack_source(source_type) {
+            return Ok(false);
+        }
+        let conn = self.conn.lock();
+        conn.execute(
+            "INSERT INTO sources (source_type, name, enabled) VALUES (?1, ?2, ?3)
+             ON CONFLICT(source_type) DO UPDATE SET enabled = excluded.enabled",
+            params![source_type, name, enabled],
+        )?;
+        Ok(true)
+    }
+
+    /// Source types the user has turned off.
+    pub fn disabled_source_types(&self) -> SqliteResult<std::collections::HashSet<String>> {
+        let conn = self.read_conn();
+        disabled_source_types_on(&conn)
     }
 
     /// Update last fetch time for a source
@@ -1063,7 +960,8 @@ impl Database {
         Ok(())
     }
 
-    /// Check if a specific source is enabled (defaults to true if not in DB)
+    /// Check if a specific source is enabled. A source with no row yet takes
+    /// its class default (stack on, interest off — AD-054).
     pub fn is_source_enabled(&self, source_type: &str) -> bool {
         let conn = self.conn.lock();
         conn.query_row(
@@ -1072,7 +970,7 @@ impl Database {
             |row| row.get::<_, i64>(0),
         )
         .map(|v| v != 0)
-        .unwrap_or(true)
+        .unwrap_or_else(|_| crate::sources::source_class::default_enabled(source_type))
     }
 
     /// Get all sources with their enabled status

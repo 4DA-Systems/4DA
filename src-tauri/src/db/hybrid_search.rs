@@ -138,6 +138,7 @@ fn exact_title_lane(conn: &Connection, query_text: &str) -> Vec<Candidate> {
              FROM source_items_fts fts
              JOIN source_items si ON si.id = fts.rowid
              WHERE source_items_fts MATCH ?1
+               AND si.source_type NOT IN (SELECT source_type FROM sources WHERE enabled = 0)
              ORDER BY bm25(source_items_fts, 10.0, 1.0)
              LIMIT ?2",
             params![fts_query, EXACT_LANE_CANDIDATES],
@@ -169,6 +170,7 @@ fn bm25_leg(conn: &Connection, query_text: &str, k: usize) -> Vec<Candidate> {
          FROM source_items_fts fts
          JOIN source_items si ON si.id = fts.rowid
          WHERE source_items_fts MATCH ?1
+           AND si.source_type NOT IN (SELECT source_type FROM sources WHERE enabled = 0)
          ORDER BY rank
          LIMIT ?2",
         params![fts_query, k as i64],
@@ -182,17 +184,27 @@ fn vector_leg(conn: &Connection, query_embedding: &[f32], k: usize) -> Vec<Candi
         return Vec::new();
     }
     let embedding_blob = embedding_to_blob(query_embedding);
-    run_leg(
+    // A source the user turned off is not searched (AD-054). The KNN runs
+    // before that filter, so it over-fetches and the leg keeps the best `k`
+    // that survive — otherwise a corpus that is mostly turned-off interests
+    // would leave this leg nearly empty.
+    let mut rows = run_leg(
         conn,
         "SELECT sv.rowid, si.title, si.content, si.source_type, si.url, si.created_at, sv.distance
          FROM source_vec sv
          JOIN source_items si ON si.id = sv.rowid
          WHERE sv.embedding MATCH ?1 AND k = ?2
+           AND si.source_type NOT IN (SELECT source_type FROM sources WHERE enabled = 0)
          ORDER BY sv.distance",
-        params![embedding_blob, k as i64],
+        params![embedding_blob, (k * VECTOR_OVERFETCH) as i64],
         true,
-    )
+    );
+    rows.truncate(k);
+    rows
 }
+
+/// How many KNN neighbours the vector leg reads per result it keeps.
+const VECTOR_OVERFETCH: usize = 4;
 
 /// Reciprocal Rank Fusion of the two legs, sorted by descending fused score.
 pub(crate) fn fuse_rrf(

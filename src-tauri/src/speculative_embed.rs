@@ -34,21 +34,25 @@ pub(crate) async fn on_engagement(item_id: i64) {
 async fn run_speculative_batch(trigger_item_id: i64) -> crate::error::Result<()> {
     let db = crate::get_database()?;
 
-    // Find items from the same source type that lack embeddings (all-zero vectors)
+    // Items from the same source type that have no vector yet (`pending`; the
+    // vector lives in `source_vec`, Phase 126), from a source the user has on
+    // (AD-054).
     let candidates: Vec<(i64, String, String)> = {
         let conn = db.read_conn();
         let mut stmt = conn
-            .prepare(
+            .prepare(&format!(
                 "SELECT si.id, si.title, COALESCE(si.content, '')
              FROM source_items si
              JOIN source_items trigger_item ON trigger_item.id = ?1
              WHERE si.source_type = trigger_item.source_type
                AND si.id != ?1
-               AND (si.embedding IS NULL OR LENGTH(si.embedding) = 0
-                    OR si.embedding = ZEROBLOB(1536))
+               AND si.embedding_status = 'pending'
+               AND NOT EXISTS (SELECT 1 FROM source_vec v WHERE v.rowid = si.id)
+               AND {}
              ORDER BY si.created_at DESC
              LIMIT 16",
-            )
+                crate::sources::source_class::enabled_source_sql("si.source_type")
+            ))
             .map_err(|e| crate::error::FourDaError::Internal(format!("speculative query: {e}")))?;
 
         let rows = stmt
@@ -99,37 +103,10 @@ async fn run_speculative_batch(trigger_item_id: i64) -> crate::error::Result<()>
 
     for ((id, _, _), embedding) in candidates.iter().zip(embeddings.iter()) {
         let blob = crate::db::embedding_to_blob(embedding);
-        if let Err(e) = tx.execute(
-            "UPDATE source_items SET embedding = ?1 WHERE id = ?2",
-            rusqlite::params![blob, id],
-        ) {
-            warn!(target: "4da::speculative", item_id = id, error = %e, "Speculative embed: source_items update failed");
-            continue;
-        }
-        // `source_vec` is a `vec0` VIRTUAL table and does NOT honour `OR REPLACE`
-        // — it raises "UNIQUE constraint failed on source_vec primary key" for an
-        // existing rowid (proven by the sources.rs regression test). Every item
-        // already has a source_vec row, so the previous `INSERT OR REPLACE` here
-        // always failed; combined with `let _ =` and a commit that ran anyway,
-        // that silently DIVERGED the KNN index from `source_items.embedding`.
-        // Use the same UPDATE-then-INSERT idiom as `upsert_source_item`.
-        let vec_result = tx
-            .execute(
-                "UPDATE source_vec SET embedding = ?1 WHERE rowid = ?2",
-                rusqlite::params![blob, id],
-            )
-            .and_then(|updated| {
-                if updated == 0 {
-                    tx.execute(
-                        "INSERT INTO source_vec (rowid, embedding) VALUES (?1, ?2)",
-                        rusqlite::params![id, blob],
-                    )
-                } else {
-                    Ok(updated)
-                }
-            });
-        if let Err(e) = vec_result {
-            warn!(target: "4da::speculative", item_id = id, error = %e, "Speculative embed: source_vec write failed — KNN index would diverge");
+        // The one vector store (Phase 126). `vec0` does not honour
+        // `OR REPLACE`; `write_item_vector` does UPDATE-then-INSERT.
+        if let Err(e) = crate::db::item_embeddings::write_item_vector(&tx, *id, &blob) {
+            warn!(target: "4da::speculative", item_id = id, error = %e, "Speculative embed: source_vec write failed");
         }
     }
     tx.commit()

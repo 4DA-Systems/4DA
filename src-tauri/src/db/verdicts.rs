@@ -50,7 +50,9 @@
 
 use rusqlite::{params, OptionalExtension, Result as SqliteResult};
 
-use super::{blob_to_embedding, parse_datetime, Database, StoredSourceItem};
+use crate::sources::source_class::enabled_source_sql;
+
+use super::{Database, StoredSourceItem};
 
 /// Parse the direction of a `feed_verdict_pending` marker (`"1@<rfc3339>"` /
 /// `"0@<rfc3339>"`, Phase 109; the drain lane appends `@<attempts>` — the
@@ -409,6 +411,7 @@ impl Database {
         let mut confirmed_flips = 0usize;
         let mut gated = 0usize;
         let mut stale = 0usize;
+        let disabled = super::sources::disabled_source_types_on(&tx)?;
         {
             let mut read_stmt = tx.prepare_cached(&format!(
                 "SELECT feed_relevant, feed_verdict_pending, source_type, {} FROM source_items WHERE id = ?1",
@@ -443,6 +446,12 @@ impl Database {
                     })
                     .optional()?
                     .unwrap_or((None, None, None, None));
+                // A source the user turned off is not judged at all (AD-054):
+                // its standing verdict is left exactly as it was, so turning
+                // the interest back on restores it without a re-judgement.
+                if source_type.as_ref().is_some_and(|s| disabled.contains(s)) {
+                    continue;
+                }
                 // Source admission, then stale news: facts about the row
                 // outrank every judgment, serendipity picks included — a
                 // source cut from the feed, or an archive page, stays out
@@ -642,7 +651,10 @@ impl Database {
     pub fn count_stale_verdicts(&self, current_version: i32) -> SqliteResult<i64> {
         let conn = self.conn.lock();
         conn.query_row(
-            &format!("SELECT COUNT(*) FROM source_items WHERE {STALE_VERDICT_WHERE}"),
+            &format!(
+                "SELECT COUNT(*) FROM source_items WHERE {STALE_VERDICT_WHERE} AND {}",
+                enabled_source_sql("source_type")
+            ),
             params![current_version],
             |r| r.get(0),
         )
@@ -666,40 +678,25 @@ impl Database {
         limit: usize,
     ) -> SqliteResult<Vec<StoredSourceItem>> {
         let conn = self.conn.lock();
+        // A source the user turned off is not re-judged (AD-054).
         let sql = format!(
-            "SELECT id, source_type, source_id, url, title, content, content_hash,
-                    embedding, created_at, last_seen, COALESCE(detected_lang, 'en'),
-                    feed_origin, tags, published_at
+            "SELECT {cols}
              FROM source_items
-             WHERE {STALE_VERDICT_WHERE}
+             WHERE {STALE_VERDICT_WHERE} AND {enabled}
              ORDER BY COALESCE(published_at, created_at) DESC
-             LIMIT ?2"
+             LIMIT ?2",
+            cols = super::item_embeddings::stored_item_columns(""),
+            enabled = enabled_source_sql("source_type"),
         );
         let mut stmt = conn.prepare_cached(&sql)?;
-        let rows = stmt.query_map(params![current_version, limit as i64], |row| {
-            let embedding_blob: Vec<u8> = row.get(7)?;
-            Ok(StoredSourceItem {
-                id: row.get(0)?,
-                source_type: row.get(1)?,
-                source_id: row.get(2)?,
-                url: row.get(3)?,
-                title: row.get(4)?,
-                content: row.get(5)?,
-                content_hash: row.get(6)?,
-                embedding: blob_to_embedding(&embedding_blob),
-                created_at: parse_datetime(row.get::<_, String>(8)?),
-                last_seen: parse_datetime(row.get::<_, String>(9)?),
-                detected_lang: row
-                    .get::<_, String>(10)
-                    .unwrap_or_else(|_| "en".to_string()),
-                feed_origin: row.get(11).ok().flatten(),
-                tags: row.get(12).ok().flatten(),
-                published_at: crate::db::parse_datetime_opt(
-                    row.get::<_, Option<String>>(13).ok().flatten(),
-                ),
-            })
-        })?;
-        rows.collect()
+        let mut items = stmt
+            .query_map(
+                params![current_version, limit as i64],
+                super::item_embeddings::stored_item_from_row,
+            )?
+            .collect::<SqliteResult<Vec<_>>>()?;
+        super::item_embeddings::attach_embeddings(&conn, &mut items)?;
+        Ok(items)
     }
 
     /// Apply one reconciliation batch: `demote` loses its curated flag, `confirm`
@@ -836,12 +833,15 @@ impl Database {
         limit: usize,
     ) -> SqliteResult<Vec<PendingVerdictRow>> {
         let conn = self.conn.lock();
-        let mut stmt = conn.prepare_cached(
+        // A source the user turned off is not drained (AD-054); its markers
+        // wait until the interest is back on.
+        let mut stmt = conn.prepare_cached(&format!(
             "SELECT id, feed_verdict_pending FROM source_items
-             WHERE feed_verdict_pending IS NOT NULL
+             WHERE feed_verdict_pending IS NOT NULL AND {}
              ORDER BY created_at ASC, id ASC
              LIMIT ?1",
-        )?;
+            enabled_source_sql("source_type")
+        ))?;
         let rows = stmt.query_map(params![limit as i64], |row| {
             let id: i64 = row.get(0)?;
             let raw: String = row.get(1)?;
@@ -915,7 +915,10 @@ impl Database {
     pub fn count_pending_verdicts(&self) -> SqliteResult<i64> {
         let conn = self.conn.lock();
         conn.query_row(
-            "SELECT COUNT(*) FROM source_items WHERE feed_verdict_pending IS NOT NULL",
+            &format!(
+                "SELECT COUNT(*) FROM source_items WHERE feed_verdict_pending IS NOT NULL AND {}",
+                enabled_source_sql("source_type")
+            ),
             [],
             |r| r.get(0),
         )

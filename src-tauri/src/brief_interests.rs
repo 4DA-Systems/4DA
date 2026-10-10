@@ -6,37 +6,14 @@
 //! advisories (OSV, CVE) are always on and feed the stack facts sections,
 //! never this one.
 //!
-//! Interim, private classification: AD-054 Wave 2-1 owns the writer for
-//! `sources.enabled` and the shared interests classification. Until that
-//! lands this list mirrors AD-054's own enumeration; unify the two when it
-//! does. A source in neither list (today: `github`) is not an interest, so it
-//! is not "worth knowing" material either.
-
-/// AD-054 rule 3's interests, by `source_items.source_type`.
-const INTEREST_SOURCE_TYPES: &[&str] = &[
-    "hackernews",
-    "lobsters",
-    "mastodon",
-    "devto",
-    "dev_to",
-    "reddit",
-    "lemmy",
-    "bluesky",
-    "youtube",
-    "huggingface",
-    "arxiv",
-    "papers_with_code",
-    "stackoverflow",
-    "producthunt",
-    "twitter",
-    "x",
-    "rss",
-];
+//! The classification is the shared one (`sources::source_class`, schema
+//! 126): the named interest adapters, GitHub trending included. A string that
+//! names no interest adapter is never one here, so no user text reaches SQL.
 
 /// Is `source_type` a social/editorial interest (as opposed to a registry,
-/// an advisory feed, or an unclassified source)?
+/// an advisory feed, or an unknown string)?
 pub(crate) fn is_interest_source(source_type: &str) -> bool {
-    INTEREST_SOURCE_TYPES.contains(&source_type)
+    crate::sources::source_class::INTEREST_SOURCES.contains(&source_type)
 }
 
 /// The interest sources the user has enabled. A source with no `sources`
@@ -104,8 +81,12 @@ mod tests {
             assert!(is_interest_source(t), "{t}");
         }
         assert!(
-            !is_interest_source("github"),
-            "unclassified is not an interest"
+            is_interest_source("github"),
+            "GitHub trending is an interest"
+        );
+        assert!(
+            !is_interest_source("x"),
+            "an unknown string is not an interest"
         );
     }
 

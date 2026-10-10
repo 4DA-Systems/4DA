@@ -281,13 +281,17 @@ impl Database {
         limit: usize,
     ) -> SqliteResult<Vec<(i64, Option<i64>)>> {
         let conn = self.read_conn();
-        let mut stmt = conn.prepare_cached(
+        // A source the user turned off is not scored, so its matches are not
+        // computed either (AD-054).
+        let mut stmt = conn.prepare_cached(&format!(
             "SELECT si.id, k.generation
              FROM source_items si
              LEFT JOIN item_context_cache k ON k.item_id = si.id
-             WHERE k.item_id IS NULL OR k.generation <> ?1 OR k.builder <> ?2
+             WHERE (k.item_id IS NULL OR k.generation <> ?1 OR k.builder <> ?2)
+               AND {}
              LIMIT ?3",
-        )?;
+            crate::sources::source_class::enabled_source_sql("si.source_type")
+        ))?;
         let rows = stmt.query_map(
             params![generation, CONTEXT_CACHE_BUILDER, limit as i64],
             |r| Ok((r.get(0)?, r.get(1)?)),
@@ -306,13 +310,11 @@ impl Database {
             return Ok(out);
         }
         let conn = self.read_conn();
-        let mut stmt = conn.prepare_cached("SELECT embedding FROM source_items WHERE id = ?1")?;
+        // The vectors live in `source_vec` (Phase 126). An id with none (a
+        // pending row) maps to an empty vector, as its empty BLOB used to.
+        let mut vectors = super::item_embeddings::load_item_vectors(&conn, item_ids)?;
         for id in item_ids {
-            let blob: Option<Vec<u8>> = stmt.query_row(params![id], |r| r.get(0)).ok();
-            let emb = blob
-                .map(|b| super::blob_to_embedding(&b))
-                .unwrap_or_default();
-            out.insert(*id, emb);
+            out.insert(*id, vectors.remove(id).unwrap_or_default());
         }
         Ok(out)
     }
@@ -322,11 +324,22 @@ impl Database {
     pub(crate) fn context_cache_coverage(&self, generation: i64) -> SqliteResult<(i64, i64)> {
         let conn = self.read_conn();
         let cached: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM item_context_cache WHERE generation = ?1 AND builder = ?2",
+            &format!(
+                "SELECT COUNT(*) FROM item_context_cache k JOIN source_items si ON si.id = k.item_id
+                 WHERE k.generation = ?1 AND k.builder = ?2 AND {}",
+                crate::sources::source_class::enabled_source_sql("si.source_type")
+            ),
             params![generation, CONTEXT_CACHE_BUILDER],
             |r| r.get(0),
         )?;
-        let total: i64 = conn.query_row("SELECT COUNT(*) FROM source_items", [], |r| r.get(0))?;
+        let total: i64 = conn.query_row(
+            &format!(
+                "SELECT COUNT(*) FROM source_items WHERE {}",
+                crate::sources::source_class::enabled_source_sql("source_type")
+            ),
+            [],
+            |r| r.get(0),
+        )?;
         Ok((cached, total))
     }
 

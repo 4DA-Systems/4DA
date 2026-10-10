@@ -394,35 +394,50 @@ fn test_health_severity_warning_serialize() {
 // Zero-embedding coverage check
 // ============================================================================
 
-/// Minimal in-memory source_items table + N recent rows with the given
-/// embedding blobs.
+/// Minimal in-memory source_items table + `source_vec` index (the vector
+/// store since Phase 126) + N recent rows with the given vectors.
 fn embedding_test_conn(blobs: &[Vec<u8>]) -> rusqlite::Connection {
+    crate::state::register_sqlite_vec_extension();
     let conn = rusqlite::Connection::open_in_memory().expect("in-memory db");
-    conn.execute_batch(
+    conn.execute_batch(&format!(
         "CREATE TABLE source_items (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            embedding BLOB,
             created_at TEXT DEFAULT (datetime('now'))
-        );",
-    )
-    .expect("create table");
+        );
+        CREATE VIRTUAL TABLE source_vec USING vec0(embedding float[{}]);",
+        crate::EMBEDDING_DIMS
+    ))
+    .expect("create tables");
     for blob in blobs {
-        conn.execute(
-            "INSERT INTO source_items (embedding) VALUES (?1)",
-            rusqlite::params![blob],
-        )
-        .expect("insert row");
+        insert_embedded_row(&conn, blob, None);
     }
     conn
 }
 
+fn insert_embedded_row(conn: &rusqlite::Connection, blob: &[u8], created_at: Option<&str>) {
+    match created_at {
+        Some(modifier) => conn.execute(
+            "INSERT INTO source_items (created_at) VALUES (datetime('now', ?1))",
+            rusqlite::params![modifier],
+        ),
+        None => conn.execute("INSERT INTO source_items DEFAULT VALUES", []),
+    }
+    .expect("insert row");
+    let id = conn.last_insert_rowid();
+    conn.execute(
+        "INSERT INTO source_vec (rowid, embedding) VALUES (?1, ?2)",
+        rusqlite::params![id, blob],
+    )
+    .expect("insert vector");
+}
+
 fn zero_blob() -> Vec<u8> {
-    vec![0u8; 32]
+    vec![0u8; crate::EMBEDDING_DIMS * 4]
 }
 
 fn real_blob() -> Vec<u8> {
-    let mut b = vec![0u8; 32];
-    b[0] = 0x3f; // non-zero byte -> not a zero vector
+    let mut b = zero_blob();
+    b[3] = 0x3f; // 0.5f32 in the first lane -> not a zero vector
     b
 }
 
@@ -478,12 +493,7 @@ fn test_embedding_coverage_ignores_old_items() {
     // 30 zero-vector items, but all older than 24h -> silent.
     let conn = embedding_test_conn(&[]);
     for _ in 0..30 {
-        conn.execute(
-            "INSERT INTO source_items (embedding, created_at)
-             VALUES (?1, datetime('now', '-3 days'))",
-            rusqlite::params![zero_blob()],
-        )
-        .expect("insert old row");
+        insert_embedded_row(&conn, &zero_blob(), Some("-3 days"));
     }
 
     let mut issues = Vec::new();

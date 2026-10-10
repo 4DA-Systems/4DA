@@ -24,10 +24,13 @@ mod helpers;
 mod history;
 pub(crate) mod hybrid_search;
 pub(crate) mod integrity_gate;
+pub(crate) mod item_embeddings;
 mod judge_gate;
 pub(crate) mod llm_judgments;
 pub(crate) mod migrations;
 mod osv_advisories;
+#[cfg(test)]
+mod phase126_tests;
 mod scoring_explanations;
 mod scoring_queries;
 pub mod source_item_deps;

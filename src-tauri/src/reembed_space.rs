@@ -160,19 +160,32 @@ pub(crate) async fn ensure_embedding_space() {
         if space_marker(&conn) == expected_space_marker() {
             return;
         }
-        conn.prepare(
-            "SELECT source_type, title, COALESCE(content, ''), embedding FROM source_items
-             WHERE embedding IS NOT NULL AND LENGTH(embedding) = ?1
-             ORDER BY id DESC LIMIT ?2",
-        )
-        .and_then(|mut stmt| {
-            stmt.query_map(
-                rusqlite::params![(crate::EMBEDDING_DIMS * 4) as i64, PROBE_SAMPLE],
-                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+        // The newest embedded items; their vectors live in `source_vec`
+        // (Phase 126).
+        let rows: Vec<(i64, String, String, String)> = conn
+            .prepare(
+                "SELECT id, source_type, title, COALESCE(content, '') FROM source_items
+                 WHERE embedding_status = 'complete'
+                 ORDER BY id DESC LIMIT ?1",
             )
-            .and_then(|rows| rows.collect::<std::result::Result<Vec<_>, _>>())
-        })
-        .unwrap_or_default()
+            .and_then(|mut stmt| {
+                stmt.query_map(rusqlite::params![PROBE_SAMPLE], |row| {
+                    Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?))
+                })
+                .and_then(|rows| rows.collect::<std::result::Result<Vec<_>, _>>())
+            })
+            .unwrap_or_default();
+        let ids: Vec<i64> = rows.iter().map(|r| r.0).collect();
+        let mut blobs =
+            crate::db::item_embeddings::load_item_vector_blobs(&conn, &ids).unwrap_or_default();
+        rows.into_iter()
+            .filter_map(|(id, st, title, content)| {
+                blobs
+                    .remove(&id)
+                    .filter(|b| b.len() == crate::EMBEDDING_DIMS * 4)
+                    .map(|b| (st, title, content, b))
+            })
+            .collect()
     };
 
     if sample.is_empty() {

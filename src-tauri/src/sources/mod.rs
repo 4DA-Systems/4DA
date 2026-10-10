@@ -42,6 +42,7 @@ pub mod pypi;
 pub mod rate_limiter;
 pub mod reddit;
 pub mod rss;
+pub(crate) mod source_class;
 pub mod stack_signals;
 pub mod stackoverflow;
 pub mod twitter;

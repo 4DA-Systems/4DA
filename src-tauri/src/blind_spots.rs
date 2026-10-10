@@ -1139,6 +1139,7 @@ fn find_uncovered_deps(
         JOIN source_items si ON si.id = sid.source_item_id
         WHERE si.created_at >= datetime('now', ?1)
           AND LOWER(si.source_type) != 'stackoverflow'
+          AND si.source_type NOT IN (SELECT source_type FROM sources WHERE enabled = 0)
           AND (si.content_type IS NULL
                OR si.content_type NOT IN ('show_and_tell','tutorial','question',
                                           'help_request','hiring','clickbait'))
@@ -1166,6 +1167,7 @@ fn find_uncovered_deps(
                                  OR si.title LIKE '%' || REPLACE(bd.name, '_', '-') || '%')
         WHERE si.created_at >= datetime('now', ?1)
           AND LOWER(si.source_type) != 'stackoverflow'
+          AND si.source_type NOT IN (SELECT source_type FROM sources WHERE enabled = 0)
           AND (si.content_type IS NULL
                OR si.content_type NOT IN ('show_and_tell','tutorial','question',
                                           'help_request','hiring','clickbait'))
@@ -1191,6 +1193,7 @@ fn find_uncovered_deps(
         JOIN source_items si ON si.id = sid.source_item_id
         JOIN interactions i ON i.item_id = si.id OR i.source_item_id = si.id
         WHERE LOWER(si.source_type) != 'stackoverflow'
+          AND si.source_type NOT IN (SELECT source_type FROM sources WHERE enabled = 0)
         GROUP BY bd.name, si.id, si.title, si.source_type, si.content_type, sid.match_type
 
         UNION ALL
@@ -1209,6 +1212,7 @@ fn find_uncovered_deps(
                                  OR si.title LIKE '%' || REPLACE(bd.name, '_', '-') || '%')
         JOIN interactions i ON i.item_id = si.id OR i.source_item_id = si.id
         WHERE LOWER(si.source_type) != 'stackoverflow'
+          AND si.source_type NOT IN (SELECT source_type FROM sources WHERE enabled = 0)
           AND NOT EXISTS (
               SELECT 1 FROM source_item_dependencies sid2
               WHERE sid2.source_item_id = si.id
@@ -1928,6 +1932,7 @@ fn find_missed_signals(
            AND si.created_at >= datetime('now', '-{days} days')
            AND si.created_at < datetime('now', '-{feed_window} days')
            AND i.item_id IS NULL
+           AND {enabled}
            AND NOT EXISTS (
                SELECT 1 FROM user_events ue
                WHERE ue.event_type = 'impression'
@@ -1941,7 +1946,8 @@ fn find_missed_signals(
          LIMIT 40",
         days = days,
         feed_window = feed_window_days,
-        ranked = crate::db::ranked_order_expr("si")
+        ranked = crate::db::ranked_order_expr("si"),
+        enabled = crate::sources::source_class::enabled_source_sql("si.source_type"),
     );
 
     let mut stmt = match conn.prepare(&sql) {
@@ -3864,10 +3870,12 @@ fn llm_judged_blind_spot_items() -> Vec<EvidenceItem> {
     let mut seen_stories: std::collections::HashSet<String> = std::collections::HashSet::new();
 
     for judgment in &judgments {
-        // Load the source item to get title/url/source_type
+        // Load the source item to get title/url/source_type. A source the
+        // user turned off is not evidence (AD-054): it reads as missing.
         let row: Option<(String, Option<String>, String)> = conn
             .query_row(
-                "SELECT title, url, source_type FROM source_items WHERE id = ?1",
+                "SELECT title, url, source_type FROM source_items WHERE id = ?1
+                   AND source_type NOT IN (SELECT source_type FROM sources WHERE enabled = 0)",
                 rusqlite::params![judgment.source_item_id],
                 |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
             )
@@ -4631,6 +4639,18 @@ mod tests {
                 -- the shared ranked-read expression COALESCE(rank_score,
                 -- relevance_score). NULL = never batch-ranked (evidence order).
                 rank_score REAL DEFAULT NULL
+            );
+
+            -- Mirrors the real registry: a source the user turned off
+            -- (`enabled = 0`) is not evidence (AD-054).
+            CREATE TABLE sources (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                source_type TEXT NOT NULL UNIQUE,
+                name TEXT NOT NULL,
+                enabled INTEGER NOT NULL DEFAULT 1,
+                config TEXT,
+                last_fetch TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
             );
 
             CREATE TABLE project_dependencies (
