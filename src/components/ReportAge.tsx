@@ -5,11 +5,11 @@
 import { memo, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 
-import { formatRelativeDate } from '../../utils/format-date';
+import { formatRelativeDate } from '../utils/format-date';
 
 /**
- * A report older than one engine cycle (30 min) would normally have been
- * replaced — so it is a previous run's persisted report, or one still waiting
+ * A result older than one engine cycle (30 min) would normally have been
+ * replaced — so it is a previous run's persisted result, or one still waiting
  * on its background rebuild. Only then is its age worth a line.
  */
 export const REPORT_AGE_LABEL_AFTER_MS = 30 * 60 * 1000;
@@ -25,15 +25,22 @@ export function reportAgeMs(computedAt: string | null | undefined, now: number =
 }
 
 /**
- * "Analysis computed 3 hours ago" under a report that is older than a cycle,
- * and a quiet re-fetch so the rebuilt report replaces it without a reload.
+ * "Analysis computed 3 hours ago" under a result that is older than a cycle,
+ * and a quiet re-fetch so the rebuilt result replaces it without a reload.
+ * Shared by every surface that may serve a restart snapshot (Blind Spots,
+ * Preemption, Knowledge Gaps); each passes its own translation key, whose
+ * string takes `{{age}}`.
  */
 export const ReportAge = memo(function ReportAge({
   computedAt,
   onReload,
+  i18nKey = 'blindspots.reportAge',
+  testId = 'blindspots-report-age',
 }: {
   computedAt: string | null | undefined;
   onReload: () => Promise<void> | void;
+  i18nKey?: string;
+  testId?: string;
 }) {
   const { t } = useTranslation();
   const age = reportAgeMs(computedAt);
@@ -47,8 +54,8 @@ export const ReportAge = memo(function ReportAge({
 
   if (!stale || !computedAt) return null;
   return (
-    <p className="text-[11px] text-text-muted -mt-1" data-testid="blindspots-report-age">
-      {t('blindspots.reportAge', { age: formatRelativeDate(computedAt) })}
+    <p className="text-[11px] text-text-muted -mt-1" data-testid={testId}>
+      {t(i18nKey, { age: formatRelativeDate(computedAt) })}
     </p>
   );
 });

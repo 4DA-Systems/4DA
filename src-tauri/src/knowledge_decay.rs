@@ -1386,7 +1386,8 @@ pub async fn get_knowledge_gaps() -> Result<EvidenceFeed> {
 
 fn knowledge_gaps_feed() -> Result<EvidenceFeed> {
     let conn = crate::open_db_connection()?;
-    let gaps = cached_knowledge_gaps(&conn)?;
+    // After a restart: the previous run's gaps while this run's compute.
+    let gaps_cache::Timed { gaps, computed_at } = gaps_cache::knowledge_gaps_for_display(&conn)?;
     let items: Vec<EvidenceItem> = gaps
         .iter()
         .filter(|g| !g.missed_items.is_empty())
@@ -1407,10 +1408,9 @@ fn knowledge_gaps_feed() -> Result<EvidenceFeed> {
             }
         })
         .collect();
-    Ok(gaps_cache::with_tracked_dependencies(
-        EvidenceFeed::from_items(items),
-        &conn,
-    ))
+    let mut feed = gaps_cache::with_tracked_dependencies(EvidenceFeed::from_items(items), &conn);
+    feed.computed_at = Some(computed_at);
+    Ok(feed)
 }
 // ============================================================================
 // Tests

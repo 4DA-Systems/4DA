@@ -115,3 +115,54 @@ fn snapshots_live_beside_the_database() {
         "next to the database, never the operator's data dir from a test"
     );
 }
+
+fn stamped_conn(schema: i64) -> rusqlite::Connection {
+    let conn = rusqlite::Connection::open_in_memory().unwrap();
+    conn.execute_batch(&format!(
+        "CREATE TABLE schema_version (version INTEGER); INSERT INTO schema_version VALUES ({schema});"
+    ))
+    .unwrap();
+    conn
+}
+
+/// After its first read the in-memory cache owns the answer, so a snapshot
+/// is restored at most once per process — and only under its own stamp.
+#[test]
+fn a_snapshot_file_restores_once_and_only_under_its_stamp() {
+    static FILE: SnapshotFile = SnapshotFile::new("restart_snapshot_latch_test.json", DAY);
+    let path = FILE.path();
+    std::fs::create_dir_all(path.parent().expect("db dir")).unwrap();
+    let _ = std::fs::remove_file(&path);
+
+    let conn = stamped_conn(124);
+    FILE.persist(&conn, &vec!["serde".to_string()]);
+    assert!(
+        FILE.restore::<Vec<String>>(&stamped_conn(125)).is_none(),
+        "a migrated database discards it"
+    );
+    let first: Restored<Vec<String>> = FILE.restore_once(&conn).expect("first read restores");
+    assert_eq!(first.value, vec!["serde".to_string()]);
+    assert!(
+        chrono::DateTime::parse_from_rfc3339(&first.computed_at()).is_ok(),
+        "carries when it was computed"
+    );
+    assert!(
+        FILE.restore_once::<Vec<String>>(&conn).is_none(),
+        "never a second time"
+    );
+    assert!(
+        FILE.restore::<Vec<String>>(&conn).is_some(),
+        "the file itself is untouched"
+    );
+    let _ = std::fs::remove_file(&path);
+}
+
+#[test]
+fn a_database_without_a_schema_version_persists_nothing() {
+    static FILE: SnapshotFile = SnapshotFile::new("restart_snapshot_unstamped_test.json", DAY);
+    let path = FILE.path();
+    let _ = std::fs::remove_file(&path);
+    let conn = rusqlite::Connection::open_in_memory().unwrap();
+    FILE.persist(&conn, &1u8);
+    assert!(!path.exists());
+}

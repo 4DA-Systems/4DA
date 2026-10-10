@@ -16,11 +16,6 @@
 // the `utils::text` helpers) or an `#[allow]` that states why it is safe.
 #![deny(clippy::string_slice)]
 
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
-use std::time::{Duration, Instant};
-
-use once_cell::sync::Lazy;
-use parking_lot::Mutex;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info, warn};
 use ts_rs::TS;
@@ -38,183 +33,12 @@ use crate::signal_chains::ChainResolution;
 #[path = "preemption_drift.rs"]
 mod drift;
 
-// ============================================================================
-// Feed cache (first-paint latency fix)
-// ============================================================================
-//
-// `get_preemption_alerts` recomputes live OSV matching AND runs an adversarial
-// LLM deliberation (one call per Medium/Watch item) on every invocation, so the
-// first call after boot takes 30-40s — the Preemption tab, our strongest surface,
-// paints blank exactly when a returning user opens it. The underlying data is
-// already present at boot (matches are computed from persisted advisories +
-// dependencies), so the cost is pure recompute, not missing data.
-//
-// Fix: cache the fully-deliberated `EvidenceFeed` in-process (stale-while-
-// revalidate). The tab serves the cached feed instantly; `warm_preemption_cache`
-// populates it in the background at boot so even the first paint is cache-served.
-//
-// Invalidation is PER ENGINE CYCLE, not by TTL (audit 2026-10-07, wave 2c).
-// The old 10-minute TTL was shorter than the ~11-minute analysis cycle and the
-// cache only refreshed after a miss, so nearly every tab open after a cycle
-// paid a cold 23 s compute. Now each recorded cycle bumps
-// `PREEMPTION_CYCLE_GENERATION` and pre-warms the next feed in the background
-// (`refresh_preemption_cache_after_cycle`); the previous cycle's feed keeps
-// serving while that refresh runs. `PREEMPTION_CACHE_MAX_AGE` is only a
-// backstop for a session where no cycle runs at all.
-
-struct CachedPreemptionFeed {
-    computed_at: Instant,
-    /// The engine-cycle generation the feed was computed for.
-    generation: u64,
-    feed: EvidenceFeed,
-}
-
-static PREEMPTION_FEED_CACHE: Lazy<Mutex<Option<CachedPreemptionFeed>>> =
-    Lazy::new(|| Mutex::new(None));
-static PREEMPTION_REFRESH_IN_FLIGHT: AtomicBool = AtomicBool::new(false);
-/// A refresh was requested while one was already running — run once more
-/// when it finishes, so a cycle's request is never silently dropped.
-static PREEMPTION_REFRESH_AGAIN: AtomicBool = AtomicBool::new(false);
-/// Bumped once per recorded engine cycle; a cached feed from an older
-/// generation is stale.
-static PREEMPTION_CYCLE_GENERATION: AtomicU64 = AtomicU64::new(0);
-
-/// Backstop staleness bound when no engine cycle runs (monitoring off).
-const PREEMPTION_CACHE_MAX_AGE: Duration = Duration::from_hours(1);
-
-fn current_cache_generation() -> u64 {
-    PREEMPTION_CYCLE_GENERATION.load(Ordering::SeqCst)
-}
-
-/// Whether a cached feed may be served. Current-generation feeds are fresh;
-/// a previous-generation feed keeps serving only while its replacement is
-/// being computed (stale-while-revalidate) — if that refresh failed, the next
-/// reader recomputes rather than serving an old cycle forever.
-fn cache_entry_servable(
-    entry_generation: u64,
-    current_generation: u64,
-    age: Duration,
-    refresh_in_flight: bool,
-) -> bool {
-    age < PREEMPTION_CACHE_MAX_AGE && (entry_generation == current_generation || refresh_in_flight)
-}
-
-/// Return the cached feed if it is servable. Clones under the lock and drops
-/// the guard before returning — never held across an await point.
-fn cached_preemption_feed() -> Option<EvidenceFeed> {
-    let guard = PREEMPTION_FEED_CACHE.lock();
-    guard.as_ref().and_then(|c| {
-        let age = c.computed_at.elapsed();
-        let servable = cache_entry_servable(
-            c.generation,
-            current_cache_generation(),
-            age,
-            PREEMPTION_REFRESH_IN_FLIGHT.load(Ordering::SeqCst),
-        );
-        if !servable {
-            return None;
-        }
-        info!(
-            target: "4da::preemption",
-            age_secs = age.as_secs(),
-            generation = c.generation,
-            "preemption feed served from cache"
-        );
-        Some(c.feed.clone())
-    })
-}
-
-/// Store a feed computed for `generation`, stamping it with the current instant.
-fn store_preemption_feed(feed: &EvidenceFeed, generation: u64) {
-    *PREEMPTION_FEED_CACHE.lock() = Some(CachedPreemptionFeed {
-        computed_at: Instant::now(),
-        generation,
-        feed: feed.clone(),
-    });
-}
-
-/// The tier-correct feed to cache: Signal/trial gets the full deliberated
-/// feed, free tier the deterministic OSV floor. Blocking parts run on the
-/// blocking pool so a background warm never stalls an async worker.
-async fn compute_feed_for_cache() -> std::result::Result<EvidenceFeed, String> {
-    if crate::settings::is_signal() {
-        compute_preemption_evidence_feed().await
-    } else {
-        crate::ipc_blocking::off_ui_thread(
-            "preemption free-floor feed",
-            compute_preemption_free_floor_feed,
-        )
-        .await
-    }
-}
-
-/// Engine-cycle hook: invalidate the cached feed's generation and pre-warm
-/// the next one in the background, so the first tab open after a cycle is
-/// cache-served. Never blocks the caller.
-pub(crate) fn refresh_preemption_cache_after_cycle() {
-    PREEMPTION_CYCLE_GENERATION.fetch_add(1, Ordering::SeqCst);
-    refresh_preemption_cache_in_background("post-cycle");
-}
-
-fn refresh_preemption_cache_in_background(reason: &'static str) {
-    if PREEMPTION_REFRESH_IN_FLIGHT.swap(true, Ordering::SeqCst) {
-        PREEMPTION_REFRESH_AGAIN.store(true, Ordering::SeqCst);
-        debug!(
-            target: "4da::preemption",
-            reason,
-            "preemption refresh already in flight — queued one more pass"
-        );
-        return;
-    }
-
-    tauri::async_runtime::spawn(async move {
-        loop {
-            let generation = current_cache_generation();
-            match compute_feed_for_cache().await {
-                Ok(feed) => {
-                    store_preemption_feed(&feed, generation);
-                    info!(
-                        target: "4da::preemption",
-                        reason, generation, items = feed.items.len(), scope = ?feed.tier_scope,
-                        "Preemption feed cache refreshed"
-                    );
-                }
-                Err(e) => warn!(
-                    target: "4da::preemption",
-                    reason, error = %e,
-                    "Preemption cache refresh failed"
-                ),
-            }
-            if !PREEMPTION_REFRESH_AGAIN.swap(false, Ordering::SeqCst) {
-                break;
-            }
-        }
-        PREEMPTION_REFRESH_IN_FLIGHT.store(false, Ordering::SeqCst);
-    });
-}
-
-/// Pre-compute and cache the Preemption feed off the boot path so the first
-/// tab-open is served from cache rather than paying the 30-40s recompute.
-/// Best-effort: compute errors are logged, never propagated.
-///
-/// Tier-aware: Signal/trial warms the full deliberated feed; free tier warms
-/// only the deterministic OSV floor — never spend LLM deliberating items a
-/// free user won't be served. (Chosen over warm-full-then-filter precisely
-/// because the full compute is the LLM-dependent, expensive path.)
-pub async fn warm_preemption_cache() {
-    let generation = current_cache_generation();
-    match compute_feed_for_cache().await {
-        Ok(feed) => {
-            let n = feed.items.len();
-            let scope = feed.tier_scope;
-            store_preemption_feed(&feed, generation);
-            info!(target: "4da::preemption", items = n, ?scope, "Preemption feed cache warmed");
-        }
-        Err(e) => {
-            warn!(target: "4da::preemption", error = %e, "Preemption cache warm failed (will compute on demand)");
-        }
-    }
-}
+// Feed cache (first-paint latency, restart snapshot) — split out: this file is
+// past the size ceiling.
+#[path = "preemption_feed_cache.rs"]
+mod feed_cache;
+pub(crate) use feed_cache::refresh_preemption_cache_after_cycle;
+pub use feed_cache::{warm_preemption_cache, warm_preemption_cache_since};
 
 // ============================================================================
 // Types
@@ -2029,52 +1853,13 @@ pub async fn get_preemption_alerts(
     dismissed_ids: Option<Vec<String>>,
     full_plan: Option<bool>,
 ) -> std::result::Result<EvidenceFeed, String> {
-    let feed = current_tier_feed_off_thread().await?;
+    let feed = feed_cache::current_tier_feed_off_thread().await?;
     let dismissed = dismissed_ids.unwrap_or_default();
     Ok(crate::evidence::present_preemption_list(
         feed,
         &dismissed,
         full_plan.unwrap_or(false),
     ))
-}
-
-/// The tier-correct FULL feed backing both the list response and the item
-/// detail path: cache-served when fresh (the tab paints instantly instead of
-/// paying the 30-40s recompute), tier-narrowed for free users, computed and
-/// stored on a miss. Extracted from `get_preemption_alerts` unchanged when
-/// the LIST transport mapping landed (AD-035).
-///
-/// Blocking on a miss (corpus-scale OSV matching, 23 s cold measured
-/// 2026-10-07) — the commands reach it through
-/// `current_tier_feed_off_thread` so it runs on the blocking pool.
-fn current_tier_feed() -> std::result::Result<EvidenceFeed, String> {
-    let generation = current_cache_generation();
-    let entitled = crate::settings::is_signal();
-    if let Some(feed) = cached_preemption_feed() {
-        if !entitled {
-            // A full cached feed narrows losslessly to the floor; a floor
-            // cached feed passes through unchanged.
-            return Ok(free_floor_view(feed));
-        }
-        if feed.tier_scope == Some(TierScope::Full) {
-            return Ok(feed);
-        }
-        // Entitled but the cache only holds the free floor (e.g. trial
-        // started this session) — fall through and compute the full feed.
-    }
-    let feed = if entitled {
-        let feed = compute_preemption_fast_full_feed()?;
-        refresh_preemption_cache_in_background("entitled-cache-miss");
-        feed
-    } else {
-        compute_preemption_free_floor_feed()?
-    };
-    store_preemption_feed(&feed, generation);
-    Ok(feed)
-}
-
-async fn current_tier_feed_off_thread() -> std::result::Result<EvidenceFeed, String> {
-    crate::ipc_blocking::off_ui_thread("preemption feed", current_tier_feed).await
 }
 
 /// Detail path for ONE preemption card (AD-035): returns the item with its
@@ -2087,7 +1872,7 @@ async fn current_tier_feed_off_thread() -> std::result::Result<EvidenceFeed, Str
 pub async fn get_preemption_item_detail(
     item_id: String,
 ) -> std::result::Result<EvidenceItem, String> {
-    let feed = current_tier_feed_off_thread().await?;
+    let feed = feed_cache::current_tier_feed_off_thread().await?;
     feed.items
         .into_iter()
         .find(|i| i.id == item_id)
@@ -2101,6 +1886,7 @@ fn free_floor_view(feed: EvidenceFeed) -> EvidenceFeed {
     if feed.tier_scope == Some(TierScope::FreeFloor) {
         return feed;
     }
+    let computed_at = feed.computed_at.clone();
     let tier1: Vec<EvidenceItem> = feed
         .items
         .into_iter()
@@ -2108,6 +1894,7 @@ fn free_floor_view(feed: EvidenceFeed) -> EvidenceFeed {
         .collect();
     let mut floor = EvidenceFeed::from_items(tier1);
     floor.tier_scope = Some(TierScope::FreeFloor);
+    floor.computed_at = computed_at;
     floor
 }
 
@@ -2277,6 +2064,9 @@ fn assemble_feed(mut items: Vec<EvidenceItem>, scope: TierScope) -> EvidenceFeed
     }
     let mut feed = EvidenceFeed::from_items(items);
     feed.tier_scope = Some(scope);
+    // What the tab shows as "computed <age>" when the feed is served later
+    // (the per-cycle cache, or a restart snapshot).
+    feed.computed_at = Some(chrono::Utc::now().to_rfc3339());
     feed
 }
 
@@ -2364,91 +2154,6 @@ fn validated_preemption_items() -> std::result::Result<Vec<EvidenceItem>, String
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // ─── Feed cache (first-paint latency fix) ────────────────────────
-
-    fn sentinel_feed(total: usize) -> EvidenceFeed {
-        EvidenceFeed {
-            items: vec![],
-            total,
-            critical_count: 1,
-            high_count: 2,
-            score: None,
-            total_tracked: None,
-            weak_match_count: None,
-            data_freshness: None,
-            tier_scope: None,
-        }
-    }
-
-    /// One test owns every mutation of the cache statics, so parallel tests
-    /// never race on them.
-    #[test]
-    fn feed_cache_is_invalidated_and_rewarmed_per_engine_cycle() {
-        // Sentinel feed with distinctive counts so a cache HIT is unmistakable
-        // from a recompute (which would return the empty default here).
-        let before = current_cache_generation();
-        store_preemption_feed(&sentinel_feed(7), before);
-        let got = cached_preemption_feed().expect("a freshly stored feed must be served");
-        assert_eq!(got.total, 7, "cache must return the exact stored feed");
-        assert_eq!(got.high_count, 2);
-
-        // A cycle is recorded: the old feed is stale. While its replacement
-        // is being computed it still serves (no cold 23 s compute)...
-        PREEMPTION_CYCLE_GENERATION.fetch_add(1, Ordering::SeqCst);
-        PREEMPTION_REFRESH_IN_FLIGHT.store(true, Ordering::SeqCst);
-        assert_eq!(
-            cached_preemption_feed().map(|f| f.total),
-            Some(7),
-            "stale-while-revalidate: the previous cycle's feed serves during the refresh"
-        );
-        // ...the post-cycle refresh lands at the new generation and is served.
-        store_preemption_feed(&sentinel_feed(9), current_cache_generation());
-        PREEMPTION_REFRESH_IN_FLIGHT.store(false, Ordering::SeqCst);
-        assert_eq!(
-            cached_preemption_feed().map(|f| f.total),
-            Some(9),
-            "the pre-warmed feed for the new cycle is cache-served"
-        );
-
-        // A refresh that failed leaves an old-generation feed and nothing in
-        // flight: the next reader must recompute, not serve it forever.
-        PREEMPTION_CYCLE_GENERATION.fetch_add(1, Ordering::SeqCst);
-        assert!(cached_preemption_feed().is_none());
-
-        // Don't leak sentinel state into other code paths sharing the static.
-        *PREEMPTION_FEED_CACHE.lock() = None;
-        assert!(
-            cached_preemption_feed().is_none(),
-            "cleared cache must report a miss"
-        );
-    }
-
-    #[test]
-    fn a_feed_outlives_the_analysis_cycle_interval() {
-        // The bug: a 10-minute TTL under an ~11-minute cycle meant almost
-        // every post-cycle open paid the cold compute. Freshness is now the
-        // cycle generation; age only matters past the backstop.
-        let eleven_min = Duration::from_mins(11);
-        assert!(cache_entry_servable(3, 3, eleven_min, false));
-        assert!(!cache_entry_servable(2, 3, eleven_min, false));
-        assert!(cache_entry_servable(2, 3, eleven_min, true));
-        assert!(!cache_entry_servable(3, 3, PREEMPTION_CACHE_MAX_AGE, false));
-    }
-
-    #[test]
-    fn the_engine_cycle_pre_warms_the_preemption_cache() {
-        let setup = include_str!("app_setup.rs");
-        let record = setup
-            .find("crate::engine_runs::record(receipt);")
-            .expect("the successful-cycle receipt site");
-        // `find` returns a char boundary, so split_at cannot panic here.
-        let next: String = setup.split_at(record).1.chars().take(600).collect();
-        assert!(
-            next.contains("crate::preemption::refresh_preemption_cache_after_cycle();"),
-            "the cycle-record site must pre-warm the preemption cache"
-        );
-    }
 
     // ─── Free security floor (tier rebalance) ────────────────────────
     // Free tier gets Tier 1 (OSV-verified) only; the narrow must be lossless

@@ -343,7 +343,7 @@ fn the_engine_cycle_pre_warms_the_blind_spot_cache() {
         "each recorded engine cycle must bump the blind-spot generation and pre-warm"
     );
     let warm = setup
-        .find("crate::preemption::warm_preemption_cache().await;")
+        .find("crate::preemption::warm_preemption_cache_since(data_ready_at).await;")
         .expect("the startup Preemption warm");
     let after: String = setup.split_at(warm).1.chars().take(300).collect();
     assert!(
@@ -380,7 +380,7 @@ fn live_restart_serves_the_persisted_report() {
     let t = Instant::now();
     let built = super::super::build_cached_blind_spots().expect("cold build + persist");
     let cold_ms = t.elapsed().as_millis();
-    let file = super::super::report_snapshot::snapshot_path(super::super::SNAPSHOT_FILE);
+    let file = super::super::SNAPSHOT.path();
     let bytes = std::fs::metadata(&file).map(|m| m.len()).unwrap_or(0);
     let t = Instant::now();
     let restored = super::super::restore_blind_spot_snapshot_once().expect("restores");

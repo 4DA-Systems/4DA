@@ -28,6 +28,18 @@ describe('ReportAge', () => {
     expect(screen.getByTestId('blindspots-report-age').textContent).toBe('blindspots.reportAge');
   });
 
+  it('takes each surface its own label and test id (Preemption, Knowledge Gaps)', () => {
+    render(
+      <ReportAge
+        computedAt={ago(5 * 60 * 60 * 1000)}
+        onReload={vi.fn()}
+        i18nKey="preemption.reportAge"
+        testId="preemption-report-age"
+      />,
+    );
+    expect(screen.getByTestId('preemption-report-age').textContent).toBe('preemption.reportAge');
+  });
+
   it('re-asks twice for the rebuilt report, then stops', () => {
     const onReload = vi.fn();
     render(<ReportAge computedAt={ago(REPORT_AGE_LABEL_AFTER_MS + 1000)} onReload={onReload} />);

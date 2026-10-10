@@ -6,6 +6,7 @@ import { isSignalGateError } from '../utils/error-messages';
 import { KnowledgeGapsScanPrompt } from './KnowledgeGapsScanPrompt';
 import { KnowledgeGapCard } from './KnowledgeGapCard';
 import { ProGate } from './ProGate';
+import { ReportAge } from './ReportAge';
 import { useColdStartGate } from '../hooks/use-cold-start-gate';
 import type { EvidenceItem } from '../../src-tauri/bindings/bindings/EvidenceItem';
 
@@ -13,8 +14,10 @@ import type { EvidenceItem } from '../../src-tauri/bindings/bindings/EvidenceIte
 // and StrictMode's double-mount fired it twice in parallel for identical
 // results (2026-08-30 audit, IPC log ids 322/323). Every concurrent mount
 // awaits ONE call; the slot clears on settle so a later remount refetches.
-/** `total_tracked`: the dependencies the gaps were computed over (0 = none known). */
-type GapsFeed = { items: EvidenceItem[]; total_tracked?: number | null };
+/** `total_tracked`: the dependencies the gaps were computed over (0 = none known).
+ *  `computed_at`: when they were computed — after a restart, the previous run's
+ *  gaps serve while this run's compute. */
+type GapsFeed = { items: EvidenceItem[]; total_tracked?: number | null; computed_at?: string | null };
 
 let gapsInFlight: Promise<GapsFeed> | null = null;
 
@@ -38,20 +41,36 @@ export const KnowledgeGapsPanel = memo(function KnowledgeGapsPanel() {
   const [items, setItems] = useState<EvidenceItem[]>([]);
   const [state, setState] = useState<LoadState>('pending');
   const [noDependencies, setNoDependencies] = useState(false);
+  const [computedAt, setComputedAt] = useState<string | null>(null);
+
+  const apply = useCallback((feed: GapsFeed) => {
+    setItems(feed.items);
+    setNoDependencies(feed.total_tracked === 0);
+    setComputedAt(feed.computed_at ?? null);
+    setState('loaded');
+  }, []);
 
   const load = useCallback(async () => {
     setState('pending');
     try {
-      const feed = await fetchKnowledgeGaps();
-      setItems(feed.items);
-      setNoDependencies(feed.total_tracked === 0);
-      setState('loaded');
+      apply(await fetchKnowledgeGaps());
     } catch (e) {
       // A FAILED fetch must never masquerade as the "no gaps — you're current"
       // success state: a tier gate gets the upgrade path, anything else Retry.
       setState(isSignalGateError(e) ? 'gated' : 'failed');
     }
-  }, []);
+  }, [apply]);
+
+  // After a restart the previous run's gaps serve while this run's compute:
+  // swap the recomputed ones in without the loading state, keeping what is
+  // shown if the re-fetch fails.
+  const reloadQuietly = useCallback(async () => {
+    try {
+      apply(await fetchKnowledgeGaps());
+    } catch {
+      // Keep what is shown; a reopen reports any real error.
+    }
+  }, [apply]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -120,6 +139,7 @@ export const KnowledgeGapsPanel = memo(function KnowledgeGapsPanel() {
   return (
     <div className="space-y-4">
       {intro}
+      <ReportAge computedAt={computedAt} onReload={reloadQuietly} i18nKey="knowledgeGaps.reportAge" testId="knowledge-gaps-report-age" />
       <ProGate feature={t('knowledgeGaps.feature')}>
         {items.length === 0 ? (
           <div className="bg-bg-secondary rounded-lg border border-border px-5 py-4 flex items-center gap-3">

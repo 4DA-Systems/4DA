@@ -17,7 +17,7 @@ import { loadPersistedDismissals, persistDismissal, removeDismissal } from './di
 import { TierSection, EmergingSignals } from './StackCoverageMap';
 import { CoveredSection, NoCoverageSection, OtherBuildTargetsSection, ProbablyFineSection } from './CollapsedSections';
 import { AssessingNotice, ScanProjectsPrompt } from './BlindSpotsFirstDay';
-import { ReportAge } from './ReportAge';
+import { ReportAge } from '../ReportAge';
 import type { DepAssessment } from '../../../src-tauri/bindings/bindings/DepAssessment';
 import type { BlindSpotAssessment } from '../../../src-tauri/bindings/bindings/BlindSpotAssessment';
 

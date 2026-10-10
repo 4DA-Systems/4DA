@@ -465,6 +465,13 @@ pub struct EvidenceFeed {
     /// can render the free OSV floor honestly.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub tier_scope: Option<TierScope>,
+
+    /// When this feed's analysis was computed (RFC 3339, UTC). Set by lenses
+    /// whose result may be served from a cache or a restart snapshot
+    /// (Preemption, Knowledge Gaps) so the UI can say how old its picture
+    /// is. `None` when the lens does not track it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub computed_at: Option<String>,
 }
 
 impl EvidenceFeed {
@@ -486,6 +493,7 @@ impl EvidenceFeed {
             weak_match_count: None,
             data_freshness: None,
             tier_scope: None,
+            computed_at: None,
         }
     }
 
