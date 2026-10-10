@@ -4,7 +4,7 @@
 
 **4DA knows every dependency on your machine and tells you — and your coding agent — what changed and exactly what to run. Privately, locally.**
 
-4DA (4 Dimensional Autonomy) is the Tauri 2.0 desktop app that delivers on that description (AD-054). It reads the lockfiles across your projects (npm, pnpm, Yarn, Cargo, Python and Go today, with early Ruby and PHP support), checks the exact installed versions against OSV advisories and registry releases, and names the fix. It is **not** a content tool or a news reader: reading developer news is a supporting extra that serves the engine.
+4DA (4 Dimensional Autonomy) is the Tauri 2.0 desktop app that delivers on that description (AD-054). It reads the lockfiles across your projects (npm, pnpm, Yarn, Bun, Cargo, Python and Go today, with early Ruby and PHP support), checks the exact installed versions against OSV advisories and registry releases, and names the fix. It is **not** a content tool or a news reader: reading developer news is a supporting extra that serves the engine.
 
 <!-- retired-ok: this notice quotes the banned phrases in order to ban them -->
 **Retired (AD-030):** "gets sharper every day" and "it learns from how you engage with what it shows you." Do not reintroduce these claims on any surface — enforced by `scripts/check-retired-claims.cjs`. Improvement is attributed to engine updates and the user's codebase, never to engagement.

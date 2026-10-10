@@ -7,7 +7,7 @@
 That's the one-sentence description (AD-054, superseding the AD-030 line). Use it verbatim in marketing,
 onboarding, about dialogs, installer metadata and any surface where someone asks "what is 4DA?". Where
 there is room for a second sentence, add the coverage qualifier so "every dependency" is never read as a
-claim about stacks 4DA does not read: *It reads npm, pnpm, Yarn, Cargo, Python and Go lockfiles today,
+claim about stacks 4DA does not read: *It reads npm, pnpm, Yarn, Bun, Cargo, Python and Go lockfiles today,
 with early support for Ruby and PHP; Maven, Gradle and .NET projects are not covered yet.* The follow-up
 beat (used when asked "how does it work?") is: *It reads the lockfiles across your projects, checks the
 exact installed versions against OSV advisories and registry releases, and names the fix: the version

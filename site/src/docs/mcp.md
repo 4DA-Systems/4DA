@@ -17,6 +17,8 @@ npx @4da/mcp-server
 
 This scans your project, detects your stack, and gives your assistant live vulnerability scanning, dependency health, upgrade planning, and ecosystem intelligence. No API keys. No accounts. Works standalone — no desktop app required.
 
+Requires **Node.js 22.13 or newer** (it uses Node's built-in SQLite, so nothing native is compiled on install). On Node 22.0–22.12 the server only works fully if the optional `better-sqlite3` module can build on your machine.
+
 ## Connect your client
 
 Point any MCP-compatible client — Claude Code, Cursor, Windsurf, VS Code (Copilot) — at the server. A typical config:

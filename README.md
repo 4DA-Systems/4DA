@@ -17,7 +17,7 @@
 
 **4DA knows every dependency on your machine and tells you — and your coding agent — what changed and exactly what to run. Privately, locally.**
 
-It reads npm, pnpm, Yarn, Cargo, Python and Go lockfiles today, with early support for Ruby and PHP; Maven, Gradle and .NET projects are not covered yet.
+It reads npm, pnpm, Yarn, Bun, Cargo, Python and Go lockfiles today, with early support for Ruby and PHP; Maven, Gradle and .NET projects are not covered yet.
 
 It reads the lockfiles across all your projects, checks the exact installed versions against OSV advisories and registry releases, and names the fix: the version that clears each advisory and, where the lockfile shows it, whether a lockfile refresh is enough or which parent package to upgrade. No account, and your source code never leaves the machine.
 

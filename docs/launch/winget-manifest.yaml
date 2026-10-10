@@ -26,7 +26,7 @@ ShortDescription: 4DA knows every dependency on your machine and tells you — a
 Description: >-
   4DA knows every dependency on your machine and tells you — and your coding
   agent — what changed and exactly what to run. Privately, locally. It reads
-  npm, pnpm, Yarn, Cargo, Python and Go lockfiles today, with early support for
+  npm, pnpm, Yarn, Bun, Cargo, Python and Go lockfiles today, with early support for
   Ruby and PHP, checks the exact installed versions against OSV advisories and
   registry releases, and names the fix. Zero telemetry. No account and no 4DA
   server — runs on your machine. BYOK for cloud AI (a cloud model sees only
