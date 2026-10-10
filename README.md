@@ -15,13 +15,18 @@
 
 ---
 
-**4DA reads the internet for developers — privately, locally. Your codebase decides what's relevant.**
+**4DA knows every dependency on your machine and tells you — and your coding agent — what changed and exactly what to run. Privately, locally.**
 
-It scans your codebase — `Cargo.toml`, `package.json`, `go.mod`, Git history — and scores every article, advisory, and release from 20+ sources against what you actually build. An item needs 2+ independent signals to survive. Everything else is rejected.
+It reads npm, pnpm, Yarn, Cargo, Python and Go lockfiles today, with early support for Ruby and PHP; Maven, Gradle and .NET projects are not covered yet.
 
-Benchmarked across 9 developer personas against a 245-item labeled corpus — 1,997 scored evaluations: **93% of content is rejected, and 98.9% of labeled noise is correctly rejected.** Those are measured numbers, and you can [reproduce them in one command](#benchmarks). Your real rejection rate — computed from your own data, not ours — is shown in the Signal tab.
+It reads the lockfiles across all your projects, checks the exact installed versions against OSV advisories and registry releases, and names the fix: the version that clears each advisory and, where the lockfile shows it, whether a lockfile refresh is enough or which parent package to upgrade. No account, and your source code never leaves the machine.
 
-Saves and dismissals build a preference profile you can inspect, pin, or forget — and teach the Brief what to stop showing you. Relevance scoring itself stays grounded in your actual stack. And when the engine improves, it re-judges everything it already holds: yesterday's noise becomes tomorrow's signal.
+- **Version-confirmed findings.** An advisory counts only when the version in your lockfile falls inside its affected range. Dev-only and transitive copies are labelled as such, and a crate your build never compiles on this host is marked as unreachable rather than raised as urgent.
+- **The fix, not just the alert.** Each finding carries the version that clears it (per release line, where a fix exists). The Upgrade Plan orders the work across projects and says when a transitive copy needs its parent upgraded instead.
+- **The Brief.** One answer to "anything I need to do today?", grounded in those same facts.
+- **Your coding agent sees it too.** The free, Apache-2.0 [MCP server](https://github.com/4DA-Systems/4da-mcp-server) gives Claude Code, Cursor and other MCP hosts the same lockfile-grounded answers: what an upgrade changes, which of your files import the package, which vulnerabilities a bump fixes.
+
+4DA also reads developer news (Hacker News, Reddit, RSS and 20+ other sources) and score it against your stack. That reading is a supporting extra that serves the engine, not the product; the [scoring section](#scoring) below explains how it works.
 
 ### The fastest way to try it
 
@@ -43,7 +48,11 @@ This scans your project, detects your stack, and gives your AI assistant live vu
 
 ### Scoring
 
-5 independent signal axes. An item must pass **2 or more** to surface. Single-axis matches are hard-capped at 28% — no matter how strong one signal is, it cannot pass alone.
+This section covers the news reading: articles, releases and discussions from 20+ sources, scored against what you actually build. Dependency findings above do not go through it; they come from your lockfiles and the advisory databases.
+
+Benchmarked across 9 developer personas against a 245-item labeled corpus (1,997 scored evaluations): 93% of content is rejected, and 98.9% of labeled noise is correctly rejected. You can [reproduce these figures in one command](#benchmarks). When the engine improves, it re-judges everything it already holds: yesterday's noise becomes tomorrow's signal.
+
+Four axes score each item today, with a fifth reserved. An item must pass **2 or more** to surface. Single-axis matches are hard-capped at 28% — no matter how strong one signal is, it cannot pass alone.
 
 | Axis | What it measures |
 |------|-----------------|
@@ -175,10 +184,10 @@ Your Codebase                    External Sources
       |                            |
       v                            v
 +------------------------------------------+
-|         5-Axis Scoring Engine            |
+|  News scoring: 4 axes (+1 reserved)      |
 |                                          |
 |  context --+                             |
-|  interest --+- confirmation gate (2+/5)  |
+|  interest --+- confirmation gate (2+)    |
 |  ace -------+                            |
 |  dependency-+  x quality x novelty       |
 |  learned ---+  x domain  x intent        |
@@ -204,12 +213,18 @@ Your Codebase                    External Sources
 ## Pricing
 
 **Free** — $0 forever. No credit card. No account. No expiration.
-- All 20+ sources, full 5-axis scoring engine, AI daily briefings (BYOK), natural language search (BYOK), Developer DNA profiling, Score Autopsy (5-axis breakdown), signal chain analysis, channels, the OSV security floor, Learned Preferences, MCP server (16 tools), CLI
+- Version-confirmed vulnerability findings for every project on your machine, each with the version that fixes it
+- The daily Brief (AI-written with your own key or a local model, or built without one)
+- The free, open MCP server (16 tools, including upgrade impact and upgrade planning) and the CLI
+- News reading with the full scoring engine, natural language search (BYOK), Developer DNA, 30 days of history
 
-**Signal** — $12 AUD/month, $99 AUD/year, or $299 AUD once for a Lifetime license (14-day free trial).
-- Everything in Free, plus: blind spot detection with AI assessment, and knowledge gap detection — the analysis layer computed from your dependency graph and reading history
+**Signal** — $12 AUD/month, $99 AUD/year, or $299 AUD once for a Lifetime license (14-day free trial). Signal sells time saved on upgrades.
+- The in-app Upgrade Plan: every fix across your projects in one ordered list, including which parent package to upgrade when a vulnerable copy is transitive
+- The full Preemption worklist: AI-assessed findings and early-warning chains on top of the version-confirmed floor
+- Full history instead of the last 30 days, plus watches (standing queries and package watches)
+- Blind Spots with AI assessment and Knowledge Gaps, as supporting coverage views
 
-Free is not a demo. It's the full scoring engine, all sources, Learned Preferences, and MCP integration.
+Free is not a demo: every version-confirmed vulnerability and its fix is free, in the app and through the MCP server.
 
 The [STREETS Playbook](https://4da.ai/streets) — 7 modules on turning developer skills into independent income — is free on the open web. No download, no email.
 
@@ -218,9 +233,19 @@ The [STREETS Playbook](https://4da.ai/streets) — 7 modules on turning develope
 ## Features
 
 <details>
-<summary><strong>Intelligence</strong></summary>
+<summary><strong>Dependency engine</strong></summary>
 
-- 5-axis scoring with multi-signal confirmation gate (93% rejection, 98.9% noise accuracy across 9 test personas — [reproducible](#benchmarks))
+- Lockfile inventory across every project: `Cargo.lock`, `package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, `poetry.lock`, `requirements.txt`, `go.mod`/`go.sum`, plus early `Gemfile.lock` and `composer.lock` support
+- Version-confirmed OSV matching, scoped by dev-only, transitive and per-platform reachability
+- Fix targets per release line; the Upgrade Plan names a lockfile refresh or a parent upgrade where the lockfile proves it
+- Install drift: flags a `node_modules` that disagrees with its lockfile, with the install command to run
+
+</details>
+
+<details>
+<summary><strong>News scoring</strong></summary>
+
+- Four scoring axes (a fifth reserved) with a multi-signal confirmation gate (93% rejection, 98.9% noise accuracy across 9 test personas — [reproducible](#benchmarks))
 - Domain profile: graduated tech identity (primary stack → dependencies → detected → interests)
 - Content DNA: classifies content type (security advisory, release, tutorial, hiring, etc.)
 - Novelty detection: demotes introductory content, boosts new releases and security advisories

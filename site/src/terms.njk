@@ -196,7 +196,7 @@ permalink: "/terms.html"
 
   <div class="legal-container">
     <h1>Terms of Service</h1>
-    <p class="effective-date"><strong>4DA Systems Pty Ltd</strong> &middot; Effective Date: 15 March 2026 &middot; Last Updated: 5 October 2026</p>
+    <p class="effective-date"><strong>4DA Systems Pty Ltd</strong> &middot; Effective Date: 15 March 2026 &middot; Last Updated: 10 October 2026</p>
 
     <div class="preamble">
       <p style="margin-bottom:12px;">4DA Systems is an independent software company based in Queensland, Australia. We build tools for developers who value their privacy and their time.</p>
@@ -218,6 +218,7 @@ permalink: "/terms.html"
     <p>The App:</p>
     <ul>
       <li>Runs locally on your machine (Windows, macOS, Linux)</li>
+      <li>Reads the dependency lockfiles in your local projects and matches the installed versions against public vulnerability advisories (OSV.dev) and package registries</li>
       <li>Scores and surfaces content from public sources (e.g., Hacker News, Reddit, RSS feeds, GitHub) based on algorithmic relevance to your development context</li>
       <li>Uses keyword matching, semantic embeddings, and (optionally) LLM-powered re-ranking to filter and prioritise content</li>
       <li>Stores all data locally in a SQLite database on your device</li>
@@ -239,7 +240,7 @@ permalink: "/terms.html"
       <li>Full PASIFA scoring engine (algorithmic content scoring and filtering)</li>
       <li>All content sources (Hacker News, Reddit, RSS, GitHub, and others as added)</li>
       <li>Keyword matching and local embedding-based semantic matching</li>
-      <li>Feedback-driven score personalisation</li>
+      <li>Version-confirmed vulnerability findings for your local projects, with the version that fixes each one</li>
       <li>Local Ollama integration for embeddings</li>
       <li>Natural language search across all content (requires BYOK API key or Ollama)</li>
       <li>AI-powered daily briefings and intelligence summaries (requires BYOK API key or Ollama)</li>
@@ -250,6 +251,9 @@ permalink: "/terms.html"
     <h3>3.2 Signal Tier</h3>
     <p>The Signal tier includes everything in the Free tier, plus:</p>
     <ul>
+      <li>The Upgrade Plan (an ordered list of dependency upgrades across your projects)</li>
+      <li>The full Preemption worklist beyond the version-confirmed findings</li>
+      <li>Full content history beyond the most recent 30 days, standing queries and package watches</li>
       <li>Blind spot detection, including AI-powered assessment</li>
       <li>Knowledge gap detection</li>
       <li>Additional Signal features as released</li>

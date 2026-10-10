@@ -1,20 +1,20 @@
 ---
-title: "Signal -- The Intelligence Layer | 4DA"
-description: "Signal adds the analysis layer to 4DA: Blind Spots and Knowledge Gaps, computed from your codebase and your local corpus. $12/mo or $99/yr."
+title: "Signal -- Time Saved on Upgrades | 4DA"
+description: "Free 4DA finds every version-confirmed vulnerability on your machine and names the fix. Signal adds the Upgrade Plan, the full worklist and full history. $12/mo or $99/yr."
 permalink: "/signal.html"
 ---
 {% extends "base.njk" %}
 
 {% block head %}
   <link rel="canonical" href="https://4da.ai/signal">
-  <meta property="og:title" content="Signal -- The Intelligence Layer">
-  <meta property="og:description" content="Blind Spots and Knowledge Gaps. The analysis layer on top of 4DA's local scoring engine. $12/mo.">
+  <meta property="og:title" content="Signal -- Time Saved on Upgrades">
+  <meta property="og:description" content="The Upgrade Plan, the full Preemption worklist and full history, on top of free version-confirmed findings and fixes. $12/mo.">
   <meta property="og:type" content="website">
   <meta property="og:url" content="https://4da.ai/signal">
   <meta property="og:image" content="https://4da.ai/og-image.png">
   <meta name="twitter:card" content="summary_large_image">
-  <meta name="twitter:title" content="Signal -- The Intelligence Layer">
-  <meta name="twitter:description" content="Blind Spots and Knowledge Gaps. The analysis layer on top of 4DA's scoring engine.">
+  <meta name="twitter:title" content="Signal -- Time Saved on Upgrades">
+  <meta name="twitter:description" content="The Upgrade Plan, the full Preemption worklist and full history, on top of free version-confirmed findings and fixes.">
   <meta name="twitter:image" content="https://4da.ai/og-image.png">
 
   <style>
@@ -175,13 +175,13 @@ permalink: "/signal.html"
   <header class="hero">
     <div class="container">
       <div class="hero-label">4DA Signal</div>
-      <h1>The intelligence layer<br>your tools <span>can't replicate</span></h1>
-      <p class="hero-sub">4DA already scores content against your codebase across 20+ sources. Signal adds the analysis layer that names your blind spots and quantifies your knowledge gaps &mdash; computed from your dependency graph and your reading history.</p>
+      <h1>Free tells you what's wrong.<br>Signal <span>saves you the upgrade work</span></h1>
+      <p class="hero-sub">Free 4DA finds every version-confirmed vulnerability across the projects on your machine and names the version that fixes it. Signal turns those findings into an ordered Upgrade Plan, adds the full Preemption worklist, and keeps your full history.</p>
       <div class="hero-technical">
         <div><span class="comment">// what signal does in a sentence</span></div>
-        <div><span class="key">input</span>:&nbsp; <span class="val">20+ sources &times; your codebase context &times; time</span></div>
-        <div><span class="key">output</span>: <span class="val">blind-spot detection, knowledge-gap analysis</span></div>
-        <div><span class="key">delta</span>:&nbsp; <span class="val">the analysis layer the free engine doesn't compute</span></div>
+        <div><span class="key">input</span>:&nbsp; <span class="val">every lockfile on your machine &times; OSV advisories &times; registry releases</span></div>
+        <div><span class="key">output</span>: <span class="val">one ordered upgrade plan, the full worklist, full history</span></div>
+        <div><span class="key">delta</span>:&nbsp; <span class="val">the planning on top of free findings and fixes</span></div>
       </div>
     </div>
   </header>
@@ -192,21 +192,21 @@ permalink: "/signal.html"
   <section class="already-free">
     <div class="container">
       <div class="section-label">Already included free</div>
-      <div class="section-title">Most developers never need more than this.</div>
-      <p class="section-sub">The free tier is a complete product. AI briefings, scoring, and context discovery are included forever. No trial. No account. No expiration.</p>
+      <div class="section-title">Every vulnerability and its fix is free.</div>
+      <p class="section-sub">Dependabot, OSV-Scanner and npm audit give individual developers vulnerability alerts for free, and so does 4DA. No trial. No account. No expiration.</p>
       <div class="free-grid">
-        <div class="free-item free-highlight">AI daily briefings</div>
-        <div class="free-item free-highlight">AI weekly digest</div>
-        <div class="free-item">20+ content sources</div>
-        <div class="free-item">PASIFA scoring engine</div>
-        <div class="free-item">ACE context scanner</div>
-        <div class="free-item free-highlight">Natural language search</div>
-        <div class="free-item">Learned Preferences</div>
-        <div class="free-item">MCP server (16 tools)</div>
-        <div class="free-item">Feed UI + saved items</div>
+        <div class="free-item free-highlight">Version-confirmed findings, every local project</div>
+        <div class="free-item free-highlight">The fix version for each finding</div>
+        <div class="free-item free-highlight">The daily Brief</div>
+        <div class="free-item free-highlight">Open MCP server (16 tools)</div>
+        <div class="free-item">Upgrade impact for your agent</div>
+        <div class="free-item">Upgrade planning for your agent</div>
+        <div class="free-item">Install-drift checks</div>
         <div class="free-item">CLI binary</div>
+        <div class="free-item">Developer news, scored</div>
+        <div class="free-item">Natural language search (BYOK)</div>
+        <div class="free-item">30 days of history</div>
         <div class="free-item">Local-first (BYOK for cloud AI)</div>
-        <div class="free-item">Unlimited use</div>
       </div>
     </div>
   </section>
@@ -217,75 +217,36 @@ permalink: "/signal.html"
   <section class="signal-section">
     <div class="container">
       <div class="section-label">What Signal adds</div>
-      <div class="section-title">The analysis engine that turns data into decisions.</div>
-      <p class="section-sub">Every feature below works locally, uses your own API keys, and produces intelligence that is impossible to get any other way &mdash; because it requires your codebase context and your interaction history to exist.</p>
+      <div class="section-title">Time saved on upgrades.</div>
+      <p class="section-sub">Everything below runs on your machine, reads the same lockfiles as the free tier, and uses your own API key wherever an AI model is involved.</p>
 
       <!-- Primary Features (full-width) -->
       <div class="signal-grid">
         <div class="feature-card">
-          <span class="tag">Blind Spots</span>
-          <h3>The risk you never read about</h3>
-          <p class="scenario">You ship against 47 crates. You read about four of them. Blind Spots compares what your manifests actually depend on against what you have engaged with, and names the gap: a maintainer stepping back, a license moving to BUSL, a deprecation buried in release notes. No CVE exists for any of it, so no scanner will tell you.</p>
-          <div class="technical"><span>blind spots</span> = dependency graph &times; engagement history &times; upstream signal monitoring</div>
+          <span class="tag">Upgrade Plan</span>
+          <h3>Every fix across your projects, in one order</h3>
+          <p class="scenario">Twelve findings across five repositories are twelve tabs of advisories. The Upgrade Plan collapses them into steps, one per package, most actionable first: the version that clears every advisory on it, per release line, with major-version jumps flagged. When the vulnerable copy is transitive, it names the parent package that brings it in and, where one of your own projects already resolved a newer parent, which version of it clears the advisory. Where the lockfile records the requirement, it says when a lockfile refresh is enough.</p>
+          <div class="technical"><span>plan</span> = version-confirmed matches &times; your dependency edges &times; installed versions in every project</div>
         </div>
 
         <div class="feature-card">
-          <span class="tag">Knowledge Gaps</span>
-          <h3>What you don't know &mdash; quantified</h3>
-          <p class="scenario">Your package.json says you use Next.js 14. You've shipped App Router pages. But Knowledge Gaps notices you've never engaged with any content about Server Actions, Partial Prerendering, or the new caching semantics. Those aren't random omissions &mdash; they're gaps in features you're actively shipping against. Knowledge Gaps surfaces them before they become production incidents.</p>
-          <div class="technical"><span>gaps</span> = dependency graph analysis &times; content engagement history &times; topic coverage scoring</div>
+          <span class="tag">Full worklist</span>
+          <h3>More than the version-confirmed floor</h3>
+          <p class="scenario">The free tier shows the findings OSV confirms against your installed versions. Signal adds the rest of the Preemption worklist: findings an AI model has assessed against your stack, and early-warning chains assembled from releases and discussions about the packages you depend on. Each one says how confident it is and why.</p>
+          <div class="technical"><span>worklist</span> = version-confirmed floor + AI-assessed findings + early-warning chains</div>
         </div>
-
       </div>
-    </div>
-  </section>
 
-  <hr class="divider">
-
-  <!-- ==================== WHAT BUILDS OVER TIME ==================== -->
-  <section class="compound">
-    <div class="container">
-      <div class="section-label">What builds over time</div>
-      <div class="section-title">Signal analyzes what the feed only collects.</div>
-      <div class="compound-content">
-        <p class="section-sub" style="text-align:left;margin-bottom:24px;">Signal's analysis runs on your local corpus &mdash; and the corpus grows every day. More items means a sharper picture of what you rely on but never read about, and which gaps you have actually closed. Here's what that looks like over time:</p>
-
-        <div class="compound-phases">
-          <div class="phase">
-            <div class="phase-header">
-              <span class="phase-label">Day 1</span>
-              <span class="phase-title">Codebase scan</span>
-            </div>
-            <p class="phase-desc">ACE reads your manifests. Signal knows your stack, your dependencies, your language distribution. Scoring begins immediately. You see relevant content within 60 seconds.</p>
-          </div>
-          <div class="phase">
-            <div class="phase-header">
-              <span class="phase-label">Week 1</span>
-              <span class="phase-title">The corpus takes shape</span>
-            </div>
-            <p class="phase-desc">Your saves and dismissals start building a preference profile &mdash; visible, inspectable, yours to override. Knowledge Gaps start identifying areas where your dependency graph exceeds your reading history.</p>
-          </div>
-          <div class="phase">
-            <div class="phase-header">
-              <span class="phase-label">Month 1</span>
-              <span class="phase-title">Patterns emerge</span>
-            </div>
-            <p class="phase-desc">Blind Spots name the dependencies you rely on but never read about. Knowledge Gaps quantify the features you ship against but have never engaged with &mdash; and rank them by how central they are to your stack.</p>
-          </div>
-          <div class="phase">
-            <div class="phase-header">
-              <span class="phase-label">Month 3</span>
-              <span class="phase-title">Coverage pays off</span>
-            </div>
-            <p class="phase-desc">90 days of scored corpus. Blind Spots have surfaced risks no CVE scanner would name &mdash; a maintainer stepping back, a license change, a deprecation buried in release notes. Knowledge Gaps show which gaps you've closed, and which keep widening while you ship against them.</p>
-          </div>
-          <div class="phase">
-            <div class="phase-header">
-              <span class="phase-label">Year 1</span>
-              <span class="phase-title">A second technical brain</span>
-            </div>
-            <p class="phase-desc">365 days of codebase-aware, privacy-preserving coverage. Blind Spots have closed on dependencies you never would have read about. That archive was scored locally, against your codebase, and it never left your machine &mdash; which is why nothing else has it.</p>
-          </div>
+      <div class="signal-grid-2col">
+        <div class="feature-card">
+          <span class="tag">History</span>
+          <h3>Full history, and watches</h3>
+          <p class="scenario">The free tier keeps the last 30 days. Signal keeps everything, and adds standing queries and package watches that check new items against what you asked to follow.</p>
+        </div>
+        <div class="feature-card">
+          <span class="tag">Coverage</span>
+          <h3>Blind Spots and Knowledge Gaps</h3>
+          <p class="scenario">Supporting views over the same inventory: the dependencies you rely on but have no coverage of (with an optional AI assessment), and the dependencies with upstream changes you have not engaged with.</p>
         </div>
       </div>
     </div>
@@ -297,10 +258,10 @@ permalink: "/signal.html"
   <section class="sovereignty">
     <div class="container">
       <div class="sovereignty-box">
-        <h3>Your intelligence stays yours. Always.</h3>
-        <p>Signal runs 100% locally. Your codebase, your interaction history, your Developer DNA, your Knowledge Gaps &mdash; none of it touches our servers. <span class="highlight">The license key is the only network call Signal makes to us.</span></p>
+        <h3>Your data stays yours. Always.</h3>
+        <p>Signal runs 100% locally. Your lockfiles, your history, your Developer DNA, your Knowledge Gaps &mdash; none of it touches our servers. <span class="highlight">The license key is the only network call Signal makes to us.</span></p>
         <p>AI features use your own API keys (BYOK). Anthropic, OpenAI, or Ollama for fully local inference. We never see your prompts. We never see the responses. We are <span class="highlight">architecturally unable</span> to access your data.</p>
-        <p>Cancel your subscription and your data stays. Your interaction history, your Developer DNA, your entire intelligence graph &mdash; all of it remains on your machine. We unlock the analysis engine. The data is always yours.</p>
+        <p>Cancel your subscription and your data stays. Your history, your Developer DNA, everything 4DA has gathered &mdash; all of it remains on your machine. We unlock the planning and analysis views. The data is always yours.</p>
       </div>
     </div>
   </section>
@@ -314,19 +275,19 @@ permalink: "/signal.html"
       <div class="section-title">For developers who want to know how.</div>
       <div class="how-grid">
         <div class="how-card">
-          <div class="step">01 / Ingestion</div>
-          <h4>20+ sources, unified pipeline</h4>
-          <p>Hacker News, Reddit, GitHub, RSS, Lobsters, DevTo, and more. Each source adapter normalizes content into a common schema. Fetched on your machine, stored in SQLite locally.</p>
+          <div class="step">01 / Inventory</div>
+          <h4>Every lockfile, every project</h4>
+          <p>Cargo.lock, package-lock.json, pnpm-lock.yaml, yarn.lock, poetry.lock, requirements.txt and go.mod, with early Gemfile.lock and composer.lock support. Exact installed versions, direct and transitive, stored in SQLite on your machine.</p>
         </div>
         <div class="how-card">
-          <div class="step">02 / Scoring</div>
-          <h4>PASIFA 5-axis engine</h4>
-          <p>Every item scored on independent axes: Context, Interest, ACE, and Dependency, with a fifth &mdash; Learned &mdash; reserved until it can be validated against your explicit feedback. Grounded in your actual stack, not your interaction history. Multi-signal confirmation gate rejects noise: 93% of incoming content is filtered out, measured across 9 developer personas.</p>
+          <div class="step">02 / Matching</div>
+          <h4>Version-confirmed against OSV</h4>
+          <p>Advisories come from OSV.dev; package names go out, your code never does. A finding is raised only when your installed version is inside the affected range, and it is scoped by dev-only, transitive and per-platform reachability.</p>
         </div>
         <div class="how-card">
-          <div class="step">03 / Intelligence</div>
-          <h4>Signal analysis layer</h4>
-          <p>Dependency graph diffing crossed with your reading history surfaces Knowledge Gaps and Blind Spots, with AI assessment running on your own key. All computed locally using sqlite-vec for vector operations.</p>
+          <div class="step">03 / Planning</div>
+          <h4>The Upgrade Plan (Signal)</h4>
+          <p>Findings grouped per package, ranked, and joined with your dependency edges to name the parent upgrade or lockfile refresh. Deterministic: no AI model decides a plan step.</p>
         </div>
       </div>
     </div>
@@ -339,7 +300,7 @@ permalink: "/signal.html"
     <div class="container">
       <div class="section-label">Pricing</div>
       <div class="pricing-title">One tier. No gotchas.</div>
-      <p class="pricing-sub">The free tier is a complete product. Signal is for developers who want the analysis layer.</p>
+      <p class="pricing-sub">Every vulnerability and its fix stays free. Signal is for developers who want the upgrade work planned for them.</p>
 
       <div class="toggle">
         <button id="toggle-monthly" onclick="setPlan('monthly')">Monthly</button>
@@ -359,8 +320,10 @@ permalink: "/signal.html"
         <div class="price-trial">14-day free trial included in the app. No credit card required to try.</div>
         <ul class="price-features">
           <li>Everything in the free tier</li>
-          <li>Blind spot detection + AI assessment</li>
-          <li>Knowledge gap detection</li>
+          <li>The in-app Upgrade Plan</li>
+          <li>The full Preemption worklist</li>
+          <li>Full history, standing queries and package watches</li>
+          <li>Blind Spots + AI assessment, Knowledge Gaps</li>
           <li>Priority support</li>
         </ul>
       </div>
@@ -378,11 +341,11 @@ permalink: "/signal.html"
 
       <div class="faq-item">
         <div class="faq-q">What's the difference between free and Signal?</div>
-        <div class="faq-a">Free gives you the full scoring engine, AI briefings, all 20+ sources, natural language search, Developer DNA, signal chains and Score Autopsy. Signal adds the analysis layer that reads across your whole dependency graph: Blind Spots with AI assessment, and Knowledge Gaps. Free surfaces relevant content. Signal tells you what you're missing.</div>
+        <div class="faq-a">Free gives you every version-confirmed vulnerability finding across the projects on your machine, the version that fixes each one, the daily Brief, the open MCP server (including upgrade impact and upgrade planning for your coding agent), the CLI, developer news scored against your stack, and 30 days of history. Signal adds the in-app Upgrade Plan, the full Preemption worklist beyond the version-confirmed floor, full history with standing queries and package watches, and Blind Spots and Knowledge Gaps as supporting views. Free tells you what is wrong and what fixes it. Signal plans the upgrade work.</div>
       </div>
       <div class="faq-item">
-        <div class="faq-q">Wait, AI briefings are free?</div>
-        <div class="faq-a">Yes. Daily and weekly AI-generated briefings are included in the free tier. They use your own API key (BYOK) or local Ollama. We believe every developer deserves an AI-generated summary of what matters to their stack. Signal adds blind-spot and knowledge-gap context on top of what the free engine surfaces.</div>
+        <div class="faq-q">Wait, the Brief is free?</div>
+        <div class="faq-a">Yes. The daily Brief is in the free tier: a template Brief that needs no AI model, or an AI-written one with your own API key (BYOK) or local Ollama. Vulnerability alerts are free for individual developers from Dependabot, OSV-Scanner and npm audit too; we see no reason to charge for knowing your own stack is exposed.</div>
       </div>
       <div class="faq-item">
         <div class="faq-q">What happens to my data?</div>
@@ -390,23 +353,23 @@ permalink: "/signal.html"
       </div>
       <div class="faq-item">
         <div class="faq-q">Do I need an API key?</div>
-        <div class="faq-a">The scoring engine and content surfacing work without any API key. AI-powered features (briefings, natural language search, Score Autopsy) need an LLM provider: OpenAI, Anthropic, or Ollama for fully local inference. You provide your own key in settings. We never see or store it.</div>
+        <div class="faq-a">No. Vulnerability findings, fix versions, the Upgrade Plan and the template Brief work without any API key. AI-powered features (the AI-written Brief, AI assessment of findings and blind spots, natural language search) need an LLM provider: OpenAI, Anthropic, or Ollama for fully local inference. You provide your own key in settings. We never see or store it.</div>
       </div>
       <div class="faq-item">
         <div class="faq-q">Why does Signal cost money if it uses my API key?</div>
-        <div class="faq-a">Your API key powers the models. Signal provides the analysis built on top &mdash; the dependency-graph analysis, the crossing against your reading history, the AI assessment pipeline. Think of it as: you bring the engine, Signal is the dashboard, the instruments, and the navigation system.</div>
+        <div class="faq-a">Your API key powers the models. Signal is the planning built on top &mdash; the Upgrade Plan that joins findings with your dependency edges, the fuller worklist, the history. The Upgrade Plan itself is deterministic and needs no API key at all.</div>
       </div>
       <div class="faq-item">
         <div class="faq-q">Can I try before subscribing?</div>
-        <div class="faq-a">Yes. 4DA includes a 14-day free trial of all Signal features. No credit card required. Install the app, enable Signal features, and evaluate with your real codebase and real content.</div>
+        <div class="faq-a">Yes. 4DA includes a 14-day free trial of all Signal features. No credit card required. Install the app, enable Signal features, and evaluate against your real projects.</div>
       </div>
       <div class="faq-item">
         <div class="faq-q">What if I cancel?</div>
-        <div class="faq-a">Cancel anytime yourself from the <a href="{{ billing.portalUrl }}" rel="noopener">customer portal</a> &mdash; sign in with your purchase email; the same place updates your card and has your invoices. Your license remains valid until the end of the billing period. After that, you revert to the free tier. No data is lost &mdash; your interaction history, your Developer DNA, your entire intelligence graph stays on your machine. You just lose access to the analysis tools that query it.</div>
+        <div class="faq-a">Cancel anytime yourself from the <a href="{{ billing.portalUrl }}" rel="noopener">customer portal</a> &mdash; sign in with your purchase email; the same place updates your card and has your invoices. Your license remains valid until the end of the billing period. After that, you revert to the free tier. No data is lost &mdash; your history, your Developer DNA and everything 4DA has gathered stay on your machine. Free findings and fixes keep working; you lose access to the Signal views.</div>
       </div>
       <div class="faq-item">
         <div class="faq-q">How is this different from GitHub Copilot / Cursor / etc?</div>
-        <div class="faq-a">Those tools help you write code. 4DA helps you know what to build and why. It operates on the information layer: what's happening in your ecosystem, what you're missing, how your domain is evolving. They're complementary. 4DA even ships an MCP server with 16 tools so your AI coding assistant can draw from your scored intelligence feed.</div>
+        <div class="faq-a">Those tools write code. 4DA tells them, and you, what your dependencies are doing: which installed versions are vulnerable, what an upgrade changes, which of your files it touches. The free MCP server (16 tools) puts those answers in front of your coding agent before it bumps a package.</div>
       </div>
       <div class="faq-item">
         <div class="faq-q">Is there a team plan?</div>

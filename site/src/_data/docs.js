@@ -16,7 +16,7 @@ export default {
       items: [
         { url: "/docs/how-it-works/", label: "The scoring engine" },
         { url: "/docs/sources/", label: "Sources" },
-        { url: "/docs/scoring/", label: "The 5 axes" },
+        { url: "/docs/scoring/", label: "The scoring axes" },
         { url: "/docs/privacy/", label: "Privacy & BYOK" },
       ],
     },
