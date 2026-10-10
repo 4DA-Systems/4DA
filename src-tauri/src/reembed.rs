@@ -181,15 +181,40 @@ pub struct EmbeddingModelInfo {
     pub reembed_in_progress: bool,
     /// Recommended multilingual model
     pub multilingual_model: String,
+    /// The embedding model that actually produces the vectors, for display
+    /// (Settings > Intelligence Engine). Replaces a hard-coded "Arctic Embed
+    /// M" string that outlived the 2026-09-25 switch to nomic (fresh-profile
+    /// E2E 2026-10-10).
+    pub engine: String,
+}
+
+/// OpenAI's embedding model, used only on the opted-in cloud route.
+const OPENAI_EMBEDDING_MODEL: &str = "text-embedding-3-small";
+
+/// Display name of the embedding engine in use. Locally, the default model is
+/// nomic-embed-text v1.5 on both routes — Ollama's `nomic-embed-text` tag and
+/// the pinned in-process download ([`FASTEMBED_MODEL_NAME`]); a model the user
+/// configured for Ollama is shown as configured.
+pub(crate) fn embedding_engine_display(model: &str, cloud: bool) -> String {
+    if cloud {
+        format!("{OPENAI_EMBEDDING_MODEL} (OpenAI)")
+    } else if model == DEFAULT_EMBEDDING_MODEL || model == FASTEMBED_MODEL_NAME {
+        "nomic-embed-text-v1.5".to_string()
+    } else {
+        model.to_string()
+    }
 }
 
 /// Tauri command: get embedding model info for the frontend.
 #[tauri::command]
 pub fn get_embedding_model_info() -> EmbeddingModelInfo {
+    let model = get_embedding_model();
+    let engine = embedding_engine_display(&model, embeddings_route_is_cloud());
     EmbeddingModelInfo {
-        model: get_embedding_model(),
+        model,
         reembed_in_progress: REEMBED_IN_PROGRESS.load(Ordering::Relaxed),
         multilingual_model: "nomic-embed-text-v2-moe".to_string(),
+        engine,
     }
 }
 
@@ -359,6 +384,25 @@ pub(crate) async fn reembed_all_items() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Settings > Intelligence Engine named "Arctic Embed M" while the engine
+    /// was nomic (fresh-profile E2E 2026-10-10). The display follows the route.
+    #[test]
+    fn embedding_engine_display_names_the_model_in_use() {
+        assert_eq!(
+            embedding_engine_display(DEFAULT_EMBEDDING_MODEL, false),
+            "nomic-embed-text-v1.5"
+        );
+        assert_eq!(
+            embedding_engine_display("mxbai-embed-large", false),
+            "mxbai-embed-large"
+        );
+        assert_eq!(
+            embedding_engine_display(DEFAULT_EMBEDDING_MODEL, true),
+            "text-embedding-3-small (OpenAI)"
+        );
+        assert!(!embedding_engine_display(DEFAULT_EMBEDDING_MODEL, false).contains("Arctic"));
+    }
 
     // ========================================================================
     // Test 1: get_embedding_model returns default when settings empty

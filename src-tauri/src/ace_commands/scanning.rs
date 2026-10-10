@@ -402,12 +402,41 @@ pub async fn ace_full_scan(paths: Vec<String>) -> Result<serde_json::Value> {
     }))
 }
 
+/// Distinct stored dependencies, split the way the first-run interstitial
+/// shows them. A package used by two projects is one dependency.
+#[derive(Debug, Default, PartialEq, Eq)]
+pub(crate) struct DependencyBreakdown {
+    pub total: u32,
+    pub rust: u32,
+    pub npm: u32,
+    pub python: u32,
+    pub other: u32,
+}
+
+pub(crate) fn dependency_breakdown(rows: &[crate::db::StoredDependency]) -> DependencyBreakdown {
+    let mut seen = std::collections::HashSet::new();
+    let mut out = DependencyBreakdown::default();
+    for dep in rows {
+        let ecosystem = dep.ecosystem.to_lowercase();
+        if !seen.insert((ecosystem.clone(), dep.package_name.to_lowercase())) {
+            continue;
+        }
+        out.total += 1;
+        match ecosystem.as_str() {
+            "rust" | "cargo" => out.rust += 1,
+            "javascript" | "typescript" | "npm" => out.npm += 1,
+            "python" | "pypi" => out.python += 1,
+            _ => out.other += 1,
+        }
+    }
+    out
+}
+
 /// Get a structured summary of what ACE knows -- powers the first-run interstitial.
 #[tauri::command]
 pub async fn ace_get_scan_summary() -> Result<serde_json::Value> {
     let ace = get_ace_engine()?;
     let tech = ace.get_detected_tech()?;
-    let (mut rust_deps, mut npm_deps, mut python_deps, mut other_deps) = (0u32, 0, 0, 0);
     let mut languages: Vec<String> = Vec::new();
     let mut frameworks: Vec<String> = Vec::new();
     let mut key_packages: Vec<String> = Vec::new();
@@ -419,20 +448,8 @@ pub async fn ace_get_scan_summary() -> Result<serde_json::Value> {
             ace::TechCategory::Framework if !frameworks.contains(&t.name) => {
                 frameworks.push(t.name.clone());
             }
-            ace::TechCategory::Library => {
-                let ev_str = t.evidence.join(" ").to_lowercase();
-                if ev_str.contains("cargo.toml") || ace::is_rust_package(&t.name) {
-                    rust_deps += 1;
-                } else if ev_str.contains("package.json") {
-                    npm_deps += 1;
-                } else if ev_str.contains("pyproject") || ev_str.contains("requirements") {
-                    python_deps += 1;
-                } else {
-                    other_deps += 1;
-                }
-                if t.confidence >= 0.5 {
-                    key_packages.push(t.name.clone());
-                }
+            ace::TechCategory::Library if t.confidence >= 0.5 => {
+                key_packages.push(t.name.clone());
             }
             _ => {}
         }
@@ -462,23 +479,31 @@ pub async fn ace_get_scan_summary() -> Result<serde_json::Value> {
         paths.len() as u32
     };
     key_packages.truncate(10);
-    let total_deps = rust_deps + npm_deps + python_deps + other_deps;
+    let db = crate::get_database().ok();
+    // The scan's stored dependencies, not the detected *library technologies*
+    // this used to count: fresh-profile E2E 2026-10-10 showed "8 DEPENDENCIES"
+    // (eight notable libraries) for a scan that stored 166.
+    let deps = db
+        .as_ref()
+        .and_then(|db| db.get_all_user_dependencies().ok())
+        .map(|rows| dependency_breakdown(&rows))
+        .unwrap_or_default();
     // The last lockfile walk's account of itself (read / failed /
     // unsupported / skipped), saved by `store_lockfile_dependencies`.
-    let lockfiles = crate::get_database()
-        .ok()
+    let lockfiles = db
         .and_then(|db| {
             db.get_kv(crate::ace::lockfile::report::REPORT_KV_KEY)
                 .ok()
                 .flatten()
         })
         .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok());
+    let total_deps = deps.total;
     Ok(serde_json::json!({
         "lockfiles": lockfiles,
         "projects_scanned": projects_scanned,
         "total_dependencies": total_deps,
         "dependencies_by_ecosystem": {
-            "rust": rust_deps, "npm": npm_deps, "python": python_deps, "other": other_deps
+            "rust": deps.rust, "npm": deps.npm, "python": deps.python, "other": deps.other
         },
         "languages": languages,
         "frameworks": frameworks,
@@ -492,6 +517,48 @@ pub async fn ace_get_scan_summary() -> Result<serde_json::Value> {
 mod tests {
     #[allow(unused_imports)]
     use super::*;
+
+    fn dep(ecosystem: &str, name: &str, project: &str) -> crate::db::StoredDependency {
+        crate::db::StoredDependency {
+            id: 0,
+            project_path: project.to_string(),
+            package_name: name.to_string(),
+            version: None,
+            ecosystem: ecosystem.to_string(),
+            is_dev: false,
+            is_direct: true,
+            detected_at: String::new(),
+            last_seen_at: String::new(),
+            license: None,
+        }
+    }
+
+    /// Fresh-profile E2E 2026-10-10: the first-run overlay said "8
+    /// DEPENDENCIES" (library technologies) after a scan stored 166. The count
+    /// is now the stored dependencies — distinct packages, so one used by two
+    /// projects counts once — split by the ecosystem labels the scanners write.
+    #[test]
+    fn dependency_breakdown_counts_stored_packages_once() {
+        let rows = vec![
+            dep("rust", "tokio", "/a"),
+            dep("rust", "tokio", "/b"),
+            dep("rust", "serde", "/a"),
+            dep("javascript", "react", "/a"),
+            dep("python", "numpy", "/c"),
+            dep("go", "golang.org/x/net", "/d"),
+        ];
+        assert_eq!(
+            super::dependency_breakdown(&rows),
+            super::DependencyBreakdown {
+                total: 5,
+                rust: 2,
+                npm: 1,
+                python: 1,
+                other: 1
+            }
+        );
+        assert_eq!(super::dependency_breakdown(&[]).total, 0);
+    }
 
     #[test]
     fn test_default_scan_paths_returns_vec() {

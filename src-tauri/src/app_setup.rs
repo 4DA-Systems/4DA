@@ -2700,11 +2700,9 @@ fn initialize_ace_on_startup(app_handle: tauri::AppHandle) {
 
     if context_dirs.is_empty() {
         warn!(target: "4da::startup", "No context directories available, ACE will wait for configuration");
-        crate::capabilities::report_degraded(
-            crate::capabilities::Capability::AceContext,
-            "No project directories configured",
-            "Add project directories in Settings for personalized scoring",
-        );
+        // Cleared by `capabilities::get_capability_states` once a folder is
+        // added (it reconciles on every read).
+        crate::capabilities::reconcile_ace_context(false);
         return;
     }
 

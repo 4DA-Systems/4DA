@@ -135,7 +135,7 @@ export function AIProviderSection({
               onChange={(e) => {
                 const newProvider = e.target.value;
                 const registryModels = getProviderModels(newProvider, modelRegistry);
-                const defaultModel = newProvider === 'openai-compatible'
+                const defaultModel = newProvider === 'openai-compatible' || newProvider === 'none'
                   ? ''
                   : newProvider === 'ollama' && ollamaModels.length > 0
                     ? ollamaModels[0] ?? ''
@@ -155,6 +155,7 @@ export function AIProviderSection({
               }}
               className="w-full px-4 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary focus:border-orange-500 focus:outline-none"
             >
+              <option value="none">{t('settings.ai.providerNone')}</option>
               <option value="anthropic">{t('settings.ai.providerAnthropic')} ({t('settings.ai.recommended')})</option>
               <option value="openai">{t('settings.ai.providerOpenAI')}</option>
               <option value="openai-compatible">{t('settings.ai.providerOpenAICompatible')}</option>
@@ -187,7 +188,15 @@ export function AIProviderSection({
             </div>
           )}
 
-          {settingsForm.provider !== 'ollama' && (
+          {/* "Skip — no AI for now" is a real, saved choice: say so, and show
+              no key or model for a provider that does not exist. */}
+          {settingsForm.provider === 'none' && (
+            <p className="text-xs text-text-muted leading-relaxed" data-testid="ai-provider-none-hint">
+              {t('settings.ai.providerNoneHint')}
+            </p>
+          )}
+
+          {settingsForm.provider !== 'ollama' && settingsForm.provider !== 'none' && (
             <APIKeyInput
               settings={settings}
               settingsForm={settingsForm}
@@ -198,7 +207,7 @@ export function AIProviderSection({
           )}
 
           {/* Cloud data disclosure — informed consent, mirrors the onboarding BYOK step */}
-          {settingsForm.provider !== 'ollama' && (
+          {settingsForm.provider !== 'ollama' && settingsForm.provider !== 'none' && (
             <p className="text-[10px] text-text-muted leading-relaxed border-l-2 border-border/60 pl-2">
               {t(
                 'onboarding.setupAi.cloudDataDisclosure',
@@ -207,7 +216,7 @@ export function AIProviderSection({
             </p>
           )}
 
-          {settingsForm.provider !== 'openai-compatible' && (
+          {settingsForm.provider !== 'openai-compatible' && settingsForm.provider !== 'none' && (
             <div>
               <label htmlFor="ai-model-select" className="text-xs text-text-muted block mb-1.5">{t('settings.ai.model')}</label>
               <select

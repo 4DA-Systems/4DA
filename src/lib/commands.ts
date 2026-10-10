@@ -650,7 +650,7 @@ interface CommandMap {
   set_translation_config: { params: { config: TranslationConfig }; result: null };
 
   // -- Embedding Model --
-  get_embedding_model_info: { params: Record<string, never>; result: { model: string; reembed_in_progress: boolean; multilingual_model: string } };
+  get_embedding_model_info: { params: Record<string, never>; result: { model: string; reembed_in_progress: boolean; multilingual_model: string; engine: string } };
 
   // -- LLM Capability Tier --
   get_llm_capability_tier: { params: Record<string, never>; result: { tier: string; supports_reranking: boolean; supports_adversarial: boolean; supports_llm_explanations: boolean; supports_briefing_synthesis: boolean; provider: string; model: string } };
@@ -704,7 +704,7 @@ interface CommandMap {
 
   // -- Capabilities --
   get_capability_states: { params: Record<string, never>; result: Record<string, { state: string; reason?: string; since?: string; fallback?: string; remediation?: string }> };
-  get_capability_summary: { params: Record<string, never>; result: { full: number; degraded: number; unavailable: number; total: number } };
+  get_capability_summary: { params: Record<string, never>; result: { full: number; degraded: number; unavailable: number; off: number; total: number } };
 
   // -- Error Telemetry --
   get_error_telemetry: { params: { limit?: number }; result: { id: number; category: string; message: string; context: string | null; count: number; first_seen: string; last_seen: string }[] };

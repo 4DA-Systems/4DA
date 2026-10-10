@@ -1851,11 +1851,27 @@ pub async fn get_preemption_alerts(
 ) -> std::result::Result<EvidenceFeed, String> {
     let feed = feed_cache::current_tier_feed_off_thread().await?;
     let dismissed = dismissed_ids.unwrap_or_default();
-    Ok(crate::evidence::present_preemption_list(
-        feed,
-        &dismissed,
-        full_plan.unwrap_or(false),
-    ))
+    let mut list =
+        crate::evidence::present_preemption_list(feed, &dismissed, full_plan.unwrap_or(false));
+    // An empty worklist means "no threats" only when there is a stack to
+    // threaten. Fresh-profile E2E 2026-10-10: a profile with NO dependencies
+    // was told "Your stack is clean". Carry the dependency universe so the
+    // view can ask for a project scan instead. A failed read leaves it unset
+    // (the view then keeps the no-threats copy rather than telling a scanned
+    // user to scan).
+    if list.total == 0 && list.total_tracked.is_none() {
+        list.total_tracked =
+            crate::ipc_blocking::off_ui_thread_infallible("preemption dep count", || {
+                crate::open_db_connection().ok().map(|conn| {
+                    usize::try_from(crate::knowledge_decay::known_dependency_count(&conn))
+                        .unwrap_or(0)
+                })
+            })
+            .await
+            .ok()
+            .flatten();
+    }
+    Ok(list)
 }
 
 /// Detail path for ONE preemption card (AD-035): returns the item with its

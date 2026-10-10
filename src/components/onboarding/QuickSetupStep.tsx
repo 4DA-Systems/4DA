@@ -191,7 +191,10 @@ export function QuickSetupStep({ isAnimating, onComplete, onBack }: QuickSetupSt
             subtitle={scanning
               ? t('onboarding.setup.scanning')
               : discoveryDone
-                ? (detectedTech.length > 0 ? t('onboarding.setup.techDetected', { count: detectedTech.length }) : t('onboarding.setup.discoveryComplete'))
+                // Counts the chips below — what will be saved to the stack —
+                // not everything the scan detected (E2E 2026-10-10: "3
+                // technologies detected" beside a scan that found 14).
+                ? (detectedTech.length > 0 ? t('onboarding.setup.techToAdd', { count: detectedTech.length }) : t('onboarding.setup.discoveryComplete'))
                 : t('onboarding.setup.chooseFolders')}
             isOpen={projectsOpen}
             onToggle={() => setProjectsOpen(!projectsOpen)}

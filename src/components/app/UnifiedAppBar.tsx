@@ -250,8 +250,8 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
             </span>
           )}
 
-          {/* System health — shows amber/red dot if issues detected */}
-          <SystemHealthDot onClick={onOpenSettings} />
+          {/* System health — amber/red dot if issues detected; opens the tab that fixes them */}
+          <SystemHealthDot />
 
           {/* Theme toggle — dark (the void) <-> light (paper) */}
           <ThemeToggle />

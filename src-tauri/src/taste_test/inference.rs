@@ -20,6 +20,25 @@ pub(crate) const NUM_ITEMS: usize = 15;
 const EARLY_TERMINATION_MIN_ITEMS: usize = 7;
 const EARLY_TERMINATION_ENTROPY_THRESHOLD: f64 = 1.2;
 
+/// How much of a persona's predicted interest turns into an actual "like" on a
+/// quick swipe deck. The observation model is `P(like | persona) = s * p` and
+/// `P(skip | persona) = 1 - s * p`, where `p` is the [`LIKELIHOOD_MATRIX`]
+/// entry. The scale cancels out of a like (every persona is multiplied by the
+/// same `s`), so likes keep their full discriminating power; a skip becomes
+/// weaker evidence, because people skip cards they would read on another day.
+///
+/// With `s = 1` (the old model) a skip was as strong as a like. Fresh-profile
+/// E2E 2026-10-10: a user who liked the Rust and sqlite-vec cards and skipped
+/// the rest saw "Python ML 35%, Rust 6%" — the Rust persona predicts tokio,
+/// WASM and Go at 0.9 / 0.9 / 0.65, so three skips cost it 100x, while the ML
+/// persona lost only once, on the PyTorch card it was skipped for.
+const SKIP_ENGAGEMENT: f64 = 0.6;
+
+/// Probability of a "like" for a persona whose matrix entry is `p`.
+fn like_probability(p: f64) -> f64 {
+    SKIP_ENGAGEMENT * p
+}
+
 /// Bayesian inference state tracking posterior over personas.
 #[derive(Debug, Clone)]
 pub struct InferenceState {
@@ -112,7 +131,7 @@ impl InferenceState {
             let p = likelihoods[j];
             let base_likelihood = match response {
                 TasteResponse::Interested => p,
-                TasteResponse::NotInterested => 1.0 - p,
+                TasteResponse::NotInterested => 1.0 - like_probability(p),
                 TasteResponse::StrongInterest => {
                     // Squaring function: amplifies differences
                     p * p / (p * p + (1.0 - p) * (1.0 - p))
@@ -195,7 +214,7 @@ impl InferenceState {
             .posterior
             .iter()
             .zip(likelihoods.iter())
-            .map(|(&w, &l)| w * l)
+            .map(|(&w, &l)| w * like_probability(l))
             .sum();
         let p_not_interested = 1.0 - p_interested;
 
@@ -226,7 +245,7 @@ impl InferenceState {
             let mut post = self.posterior;
             let mut sum = 0.0;
             for j in 0..NUM_PERSONAS {
-                post[j] *= 1.0 - likelihoods[j];
+                post[j] *= 1.0 - like_probability(likelihoods[j]);
                 sum += post[j];
             }
             if sum > 0.0 {
@@ -282,6 +301,11 @@ impl InferenceState {
 
         let blended = super::blending::blend_profile(&self.posterior, 0.10, &self.items_shown);
         let (top_interests, liked_interests, guessed_interests) = blended.summary_lists();
+        // A persona the user's answers rule out (its signature card skipped,
+        // none of them liked) is not shown as part of "your blend", whatever
+        // share of the posterior it keeps. Shares are not renormalised: each
+        // bar stays the persona's real posterior.
+        let ruled_out = super::blending::ruled_out_personas(&self.items_shown);
 
         TasteProfileSummary {
             dominant_persona_name: PERSONA_NAMES[dominant].to_string(),
@@ -292,7 +316,7 @@ impl InferenceState {
                 .posterior
                 .iter()
                 .enumerate()
-                .filter(|(_, &w)| w > 0.05)
+                .filter(|(i, &w)| w > 0.05 && !ruled_out[*i])
                 .map(|(i, &w)| PersonaWeight {
                     name: PERSONA_NAMES[i].to_string(),
                     weight: w,

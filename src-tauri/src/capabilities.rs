@@ -120,6 +120,16 @@ pub enum CapabilityState {
         /// User-actionable remediation step.
         remediation: String,
     },
+
+    /// Not running because of a choice the user made (e.g. "Skip — no AI for
+    /// now"). Not a fault: the health dot ignores it. Before this state the
+    /// registry reported AI Re-ranking "full" for a profile with no AI
+    /// provider at all (fresh-profile E2E 2026-10-10).
+    #[serde(rename = "off")]
+    Off {
+        /// Why it is off, in the user's terms.
+        reason: String,
+    },
 }
 
 // ============================================================================
@@ -133,6 +143,8 @@ pub struct CapabilitySummary {
     pub full: u32,
     pub degraded: u32,
     pub unavailable: u32,
+    /// Off by the user's choice ([`CapabilityState::Off`]) — not a fault.
+    pub off: u32,
     pub total: u32,
 }
 
@@ -216,6 +228,70 @@ pub fn report_restored(cap: Capability) {
     registry.insert(cap, CapabilityState::Full);
 }
 
+/// Why [`Capability::AceContext`] is degraded when no project folder exists.
+pub(crate) const ACE_CONTEXT_MISSING_REASON: &str = "No project directories configured";
+/// What the user can do about it.
+pub(crate) const ACE_CONTEXT_MISSING_FALLBACK: &str =
+    "Add project directories in Settings for personalized scoring";
+
+/// Recompute [`Capability::AceContext`] from whether any project folder is
+/// configured. The warning used to be set once at startup and never cleared:
+/// fresh-profile E2E 2026-10-10 added projects during onboarding and kept a
+/// "1 system warning" dot for the rest of the session. Called on every read
+/// of the capability states, so it follows the folders whichever path changed
+/// them (onboarding scan, Settings > Projects, auto-discovery).
+pub(crate) fn reconcile_ace_context(has_context_dirs: bool) {
+    if has_context_dirs {
+        let stale = matches!(
+            CAPABILITY_REGISTRY.read().get(&Capability::AceContext),
+            Some(CapabilityState::Degraded { .. } | CapabilityState::Unavailable { .. })
+        );
+        if stale {
+            report_restored(Capability::AceContext);
+        }
+    } else {
+        report_degraded(
+            Capability::AceContext,
+            ACE_CONTEXT_MISSING_REASON,
+            ACE_CONTEXT_MISSING_FALLBACK,
+        );
+    }
+}
+
+/// Recompute [`Capability::LlmReranking`] from the settings: with no AI
+/// provider, or re-ranking switched off, it is `Off` — not `Full`, which is
+/// what the registry's all-Full initial state reported for a user who chose
+/// "no AI". A runtime fault (`Degraded` / `Unavailable`, e.g. a rejected key)
+/// is left alone while a provider is configured; choosing "no AI" replaces it.
+pub(crate) fn reconcile_llm_reranking(has_llm: bool, rerank_enabled: bool) {
+    let off_reason = if !has_llm {
+        Some("No AI provider chosen")
+    } else if !rerank_enabled {
+        Some("Re-ranking is turned off in Settings")
+    } else {
+        None
+    };
+    let mut registry = CAPABILITY_REGISTRY.write();
+    match off_reason {
+        Some(reason) => {
+            registry.insert(
+                Capability::LlmReranking,
+                CapabilityState::Off {
+                    reason: reason.to_string(),
+                },
+            );
+        }
+        None => {
+            if matches!(
+                registry.get(&Capability::LlmReranking),
+                Some(CapabilityState::Off { .. })
+            ) {
+                registry.insert(Capability::LlmReranking, CapabilityState::Full);
+            }
+        }
+    }
+}
+
 /// Returns `true` if the capability is operational (Full **or** Degraded).
 pub fn is_available(cap: Capability) -> bool {
     let registry = CAPABILITY_REGISTRY.read();
@@ -244,17 +320,20 @@ pub fn get_summary() -> CapabilitySummary {
     let mut full = 0u32;
     let mut degraded = 0u32;
     let mut unavailable = 0u32;
+    let mut off = 0u32;
     for state in registry.values() {
         match state {
             CapabilityState::Full => full += 1,
             CapabilityState::Degraded { .. } => degraded += 1,
             CapabilityState::Unavailable { .. } => unavailable += 1,
+            CapabilityState::Off { .. } => off += 1,
         }
     }
     CapabilitySummary {
         full,
         degraded,
         unavailable,
+        off,
         total: registry.len() as u32,
     }
 }
@@ -263,10 +342,26 @@ pub fn get_summary() -> CapabilitySummary {
 // Tauri Commands
 // ============================================================================
 
-/// Get capability states for the frontend health dashboard.
+/// Get capability states for the frontend health dashboard. Project Context
+/// is recomputed from the configured folders first ([`reconcile_ace_context`]);
+/// that reads settings and checks the folders exist, so this runs off the UI
+/// thread.
 #[tauri::command]
-pub fn get_capability_states() -> HashMap<Capability, CapabilityState> {
-    get_all_states()
+pub async fn get_capability_states() -> Result<HashMap<Capability, CapabilityState>, String> {
+    crate::ipc_blocking::off_ui_thread_infallible("get_capability_states", || {
+        reconcile_ace_context(!crate::get_context_dirs().is_empty());
+        let (has_llm, rerank_enabled) = {
+            let manager = crate::get_settings_manager().lock();
+            let s = manager.get();
+            (
+                crate::llm_gate::compute_has_llm(&s.llm.provider, &s.llm.api_key),
+                s.rerank.enabled,
+            )
+        };
+        reconcile_llm_reranking(has_llm, rerank_enabled);
+        get_all_states()
+    })
+    .await
 }
 
 /// Get capability summary counts.

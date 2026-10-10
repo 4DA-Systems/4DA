@@ -159,6 +159,38 @@ fn test_check_settings_missing() {
     let _ = fs::remove_dir_all(&tmp);
 }
 
+/// The first-run "No settings.json found" warning is cached at startup; once
+/// onboarding saves settings.json the re-check must drop it, while issues of
+/// other components keep their cached result.
+#[test]
+fn recheck_settings_issues_clears_a_resolved_first_run_warning() {
+    let tmp = std::env::temp_dir().join("4da_health_test_recheck_settings");
+    let _ = fs::remove_dir_all(&tmp);
+    fs::create_dir_all(&tmp).expect("mkdir");
+
+    let mut issues = Vec::new();
+    check_settings(&tmp, &mut issues);
+    issues.push(HealthIssue {
+        component: "disk",
+        severity: HealthSeverity::Warning,
+        message: "cached".to_string(),
+    });
+    assert!(issues.iter().any(|i| i.component == "settings"));
+
+    fs::write(tmp.join("settings.json"), "{}").expect("write settings");
+    recheck_settings_issues(&mut issues, &tmp);
+    assert!(
+        !issues.iter().any(|i| i.component == "settings"),
+        "{issues:?}"
+    );
+    assert!(
+        issues.iter().any(|i| i.component == "disk"),
+        "other issues stay"
+    );
+
+    let _ = fs::remove_dir_all(&tmp);
+}
+
 #[test]
 fn test_check_settings_invalid_json() {
     let tmp = std::env::temp_dir().join("4da_health_test_settings_bad");

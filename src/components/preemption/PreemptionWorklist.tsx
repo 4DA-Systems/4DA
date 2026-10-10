@@ -13,6 +13,7 @@ import { PreemptionTierSection } from './PreemptionTierSection';
 import { PreemptionFreeFloorNotice } from './PreemptionFreeFloorNotice';
 import { SignalUpgradeCTA } from '../SignalUpgradeCTA';
 import { ReportAge } from '../ReportAge';
+import { ScanProjectsPrompt } from '../blindspots/BlindSpotsFirstDay';
 
 // The Upgrade Plan is a ranked list that can run to 100+ steps on a large
 // stack. The list transport ships only this many (keep in sync with
@@ -135,6 +136,8 @@ export const PreemptionWorklist = memo(function PreemptionWorklist() {
   // Render the floor normally plus a compact locked-tiers notice — never a
   // full-page paywall over real security data.
   const isFreeFloor = feed?.tier_scope === 'free_floor';
+  const noDependenciesKnown = feed?.total_tracked === 0;
+  const rescan = useCallback(() => { void loadPreemption(); }, [loadPreemption]);
 
   return (
     <div className="space-y-5">
@@ -170,7 +173,21 @@ export const PreemptionWorklist = memo(function PreemptionWorklist() {
         </div>
       )}
 
-      {feed && totalAlerts === 0 && !isColdStart && (
+      {/* No dependencies known: "Your stack is clean" would be a claim about a
+          stack 4DA has never seen (fresh-profile E2E 2026-10-10). Ask for the
+          scan instead — the same local, click-is-consent flow as Blind Spots'
+          day one (#888). `total_tracked` is null when the count could not be
+          read; the no-threats copy is kept then. */}
+      {feed && totalAlerts === 0 && noDependenciesKnown && (
+        <ScanProjectsPrompt
+          onScanned={rescan}
+          titleKey="preemption.noDeps.title"
+          bodyKey="preemption.noDeps.body"
+          testId="preemption-scan-prompt"
+        />
+      )}
+
+      {feed && totalAlerts === 0 && !noDependenciesKnown && !isColdStart && (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mb-3">
             {/* eslint-disable-next-line i18next/no-literal-string */}

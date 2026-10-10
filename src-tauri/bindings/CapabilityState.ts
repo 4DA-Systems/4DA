@@ -23,4 +23,8 @@ reason: string,
 /**
  * User-actionable remediation step.
  */
-remediation: string, };
+remediation: string, } | { "state": "off", 
+/**
+ * Why it is off, in the user's terms.
+ */
+reason: string, };

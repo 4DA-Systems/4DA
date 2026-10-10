@@ -712,7 +712,23 @@ pub(crate) async fn get_startup_health() -> std::result::Result<Vec<HealthIssue>
 }
 
 fn get_startup_health_blocking() -> Vec<HealthIssue> {
-    initialize_startup_health_cache()
+    let mut issues = initialize_startup_health_cache();
+    recheck_settings_issues(&mut issues, &get_data_dir());
+    issues
+}
+
+/// The startup cache is computed once per process, so a condition the user
+/// fixes during the session (first-run "No settings.json found", which
+/// onboarding resolves by saving) would otherwise stay on the health dot until
+/// a restart. Settings issues are the only cached class that is cheap to
+/// re-check (one small file read, no keychain, no probe write), so they are
+/// recomputed on every read; the expensive checks keep their cached result.
+pub(crate) fn recheck_settings_issues(issues: &mut Vec<HealthIssue>, data_dir: &Path) {
+    if !issues.iter().any(|i| i.component == "settings") {
+        return;
+    }
+    issues.retain(|i| i.component != "settings");
+    check_settings(data_dir, issues);
 }
 
 fn suppress_in_memory_api_key_false_positive(issues: &mut Vec<HealthIssue>) {

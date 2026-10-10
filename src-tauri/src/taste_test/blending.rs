@@ -302,6 +302,29 @@ pub(crate) fn contradicted_personas(responses: &[(usize, TasteResponse)]) -> [bo
     balance.map(|b| b > 0)
 }
 
+/// Personas the answers rule out for DISPLAY: at least one signature card
+/// ([`SIGNATURE_PERSONAS`]) was skipped and none was liked. Stricter about
+/// likes than [`contradicted_personas`]: a single liked signature card keeps
+/// the persona in the blend (a Rust 2024 like with tokio skipped is still a
+/// Rust developer), while a skipped PyTorch card with nothing ML liked removes
+/// "Python ML" from the blend the user is shown as theirs.
+pub(crate) fn ruled_out_personas(responses: &[(usize, TasteResponse)]) -> [bool; 9] {
+    let mut skipped = [false; 9];
+    let mut liked = [false; 9];
+    for (slot, response) in responses {
+        let target = match response {
+            TasteResponse::NotInterested => &mut skipped,
+            TasteResponse::Interested | TasteResponse::StrongInterest => &mut liked,
+        };
+        for &p in SIGNATURE_PERSONAS.get(*slot).copied().unwrap_or(&[]) {
+            if let Some(flag) = target.get_mut(p) {
+                *flag = true;
+            }
+        }
+    }
+    std::array::from_fn(|i| skipped[i] && !liked[i])
+}
+
 /// Template topics of every persona whose posterior clears
 /// [`PERSONA_TOPIC_MIN_POSTERIOR`] and that the answers do not contradict
 /// ([`contradicted_personas`]), minus topics already liked and topics the
@@ -601,6 +624,66 @@ mod tests {
         // A breadth card stands for no persona.
         let breadth = [(10usize, TasteResponse::NotInterested)];
         assert!(!contradicted_personas(&breadth).iter().any(|&c| c));
+    }
+
+    /// Fresh-profile E2E 2026-10-10 repro, the exact recorded answer order:
+    /// liked Rust 2024 + sqlite-vec, skipped everything else (PyTorch
+    /// included). The summary showed "Python ML 35%, Rust 6%". A liked card
+    /// must lift its persona above a persona whose only card was skipped, and
+    /// the skipped persona must not appear in the blend at all.
+    #[test]
+    fn liked_rust_outranks_skipped_ml_in_the_blend() {
+        let mut state = InferenceState::new();
+        state.update(3, &TasteResponse::NotInterested);
+        state.update(10, &TasteResponse::Interested);
+        state.update(0, &TasteResponse::Interested);
+        for slot in [2usize, 8, 6, 1, 5, 4, 7, 12, 13, 11, 14, 9] {
+            state.update(slot, &TasteResponse::NotInterested);
+        }
+        let w = state.posterior();
+        assert!(
+            w[0] > w[1],
+            "Rust {:.3} must outrank Python ML {:.3}",
+            w[0],
+            w[1]
+        );
+        assert!(w[0] > 1.0 / 9.0, "the liked persona rises above the prior");
+        assert!(w[1] < w[0] / 2.0, "{w:?}");
+
+        let summary = state.build_summary();
+        let shown: Vec<&str> = summary
+            .persona_weights
+            .iter()
+            .map(|p| p.name.as_str())
+            .collect();
+        for gone in ["Python ML Engineer", "Mobile Developer", "Niche Specialist"] {
+            assert!(!shown.contains(&gone), "{gone} in {shown:?}");
+        }
+        assert!(shown.contains(&"Rust Systems Developer"), "{shown:?}");
+    }
+
+    /// A skip is weaker evidence than a like: one like and one skip on two
+    /// cards that predict the same persona equally must leave it above prior.
+    #[test]
+    fn a_skip_weighs_less_than_a_like() {
+        let mut state = InferenceState::new();
+        state.update(0, &TasteResponse::Interested); // Rust 2024
+        state.update(6, &TasteResponse::NotInterested); // tokio
+        assert!(state.posterior()[0] > 1.0 / 9.0, "{:?}", state.posterior());
+    }
+
+    #[test]
+    fn ruled_out_needs_a_skipped_signature_card_and_no_liked_one() {
+        let one_like = [
+            (0usize, TasteResponse::Interested),
+            (6, TasteResponse::NotInterested),
+            (8, TasteResponse::NotInterested),
+        ];
+        assert!(!ruled_out_personas(&one_like)[0]);
+        let skipped = [(1usize, TasteResponse::NotInterested)];
+        assert!(ruled_out_personas(&skipped)[1]);
+        let breadth = [(13usize, TasteResponse::NotInterested)];
+        assert!(!ruled_out_personas(&breadth).iter().any(|&r| r));
     }
 
     #[test]
