@@ -1,0 +1,19 @@
+{
+  "id": "poly-fastapi-template-uv",
+  "source": "repository",
+  "repo": "https://github.com/fastapi/full-stack-fastapi-template",
+  "ref": "0.8.0",
+  "commit": "2eb8f5b624e60d4074318dec6f33400080eceef9",
+  "licence": "MIT",
+  "include": [
+    "backend/uv.lock",
+    "backend/pyproject.toml",
+    "frontend/package-lock.json",
+    "frontend/package.json"
+  ],
+  "formats": [
+    "uv.lock",
+    "package-lock.json v2"
+  ],
+  "notes": "Polyglot monorepo: uv-locked back end + npm front end."
+}

@@ -1,0 +1,23 @@
+# Requirements-format edge cases (authored for the conformance corpus).
+-r requirements-base.txt
+--index-url https://pypi.org/simple
+
+# hash-pinned, continued over several lines
+sqlparse==0.4.1 \
+    --hash=sha256:017cde379adbd6a1f15a61873f43e8274179378e95ef3fede90b5aa64d304ed0 \
+    --hash=sha256:0f91fd2e829c44362cbcfab3e9ae12e22badaa8a29ad5ff599f9ec109f0454e8
+# extras
+requests[security,socks]==2.19.0
+# environment marker
+PyYAML==5.3 ; python_version >= "3.6"
+# spaces around the operator, mixed case
+urllib3 == 1.24.1
+# arbitrary-equality pin
+Pillow===6.2.0
+# trailing comment
+Jinja2==2.10.1  # templating
+# a range is not an installed version
+flask>=1.0,<2
+# VCS and local installs are not registry packages
+-e git+https://github.com/pallets/click.git@7.0#egg=click
+./vendor/local-pkg

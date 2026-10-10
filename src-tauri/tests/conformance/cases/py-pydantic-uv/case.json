@@ -1,0 +1,16 @@
+{
+  "id": "py-pydantic-uv",
+  "source": "repository",
+  "repo": "https://github.com/pydantic/pydantic",
+  "ref": "v2.10.0",
+  "commit": "910bc54b6d5c05e4eabb4a9076def9e7ed23d38a",
+  "licence": "MIT",
+  "include": [
+    "uv.lock",
+    "pyproject.toml"
+  ],
+  "formats": [
+    "uv.lock (resolution markers, dependency groups)"
+  ],
+  "notes": "uv lock with resolution-markers (multiple versions of one package for different Pythons) and dev dependency groups; the root package is editable/local."
+}

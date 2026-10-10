@@ -1,0 +1,16 @@
+{
+  "id": "rs-ripgrep-12",
+  "source": "repository",
+  "repo": "https://github.com/BurntSushi/ripgrep",
+  "ref": "12.0.0",
+  "commit": "b9cd95faf18ed6914b3b20720bb9e5ea4cffa5b9",
+  "licence": "Unlicense OR MIT",
+  "include": [
+    "Cargo.lock",
+    "@cargo-manifests"
+  ],
+  "formats": [
+    "Cargo.lock (v1 format, workspace)"
+  ],
+  "notes": "Old (v1 `[metadata]` checksum) Cargo.lock format with local workspace crates."
+}

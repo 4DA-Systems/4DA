@@ -9,6 +9,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const {
   discoverLockfiles,
+  NOT_INSTALLED_PREFIXES,
   commandFor,
   looksLikeHarnessError,
   annotationBody,
@@ -124,4 +125,10 @@ test('the annotation survives being a single line', () => {
   assert.ok(!body.includes('\n'), 'a raw newline truncates a GitHub annotation');
   assert.match(body, /Severity: high/);
   assert.match(body, /%0A/);
+});
+
+test('conformance-corpus lockfiles are test data: never audited, and nothing else is skipped', () => {
+  assert.deepStrictEqual(NOT_INSTALLED_PREFIXES, ['src-tauri/tests/conformance/cases/']);
+  const corpus = discoverLockfiles().filter((f) => f.startsWith('src-tauri/tests/conformance/'));
+  assert.deepStrictEqual(corpus, [], 'vendored corpus lockfiles are never installed and must not be audited');
 });

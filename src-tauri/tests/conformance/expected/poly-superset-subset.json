@@ -1,0 +1,1349 @@
+{
+ "schema": 1,
+ "case": "poly-superset-subset",
+ "lockfiles": [
+  {
+   "path": "RELEASING/requirements.txt",
+   "dir": "RELEASING",
+   "format": "requirements",
+   "ecosystem": "PyPI",
+   "status": "supported",
+   "truth_packages": 0
+  },
+  {
+   "path": "superset-websocket/package-lock.json",
+   "dir": "superset-websocket",
+   "format": "npm-v2",
+   "ecosystem": "npm",
+   "status": "supported",
+   "truth_packages": 486
+  },
+  {
+   "path": "superset-websocket/utils/client-ws-app/package-lock.json",
+   "dir": "superset-websocket/utils/client-ws-app",
+   "format": "npm-v2",
+   "ecosystem": "npm",
+   "status": "supported",
+   "truth_packages": 112
+  },
+  {
+   "path": "superset/translations/requirements.txt",
+   "dir": "superset/translations",
+   "format": "requirements",
+   "ecosystem": "PyPI",
+   "status": "supported",
+   "truth_packages": 1
+  }
+ ],
+ "inventory": {
+  "count": 599,
+  "packages": [
+   "npm|superset-websocket/utils/client-ws-app|@babel/helper-validator-identifier|7.15.7",
+   "npm|superset-websocket/utils/client-ws-app|@babel/parser|7.16.2",
+   "npm|superset-websocket/utils/client-ws-app|@babel/types|7.16.0",
+   "npm|superset-websocket/utils/client-ws-app|accepts|1.3.8",
+   "npm|superset-websocket/utils/client-ws-app|acorn|7.4.1",
+   "npm|superset-websocket/utils/client-ws-app|array-flatten|1.1.1",
+   "npm|superset-websocket/utils/client-ws-app|asap|2.0.6",
+   "npm|superset-websocket/utils/client-ws-app|assert-never|1.2.1",
+   "npm|superset-websocket/utils/client-ws-app|babel-walk|3.0.0-canary-5",
+   "npm|superset-websocket/utils/client-ws-app|basic-auth|2.0.1",
+   "npm|superset-websocket/utils/client-ws-app|body-parser|1.20.1",
+   "npm|superset-websocket/utils/client-ws-app|buffer-equal-constant-time|1.0.1",
+   "npm|superset-websocket/utils/client-ws-app|bytes|3.1.2",
+   "npm|superset-websocket/utils/client-ws-app|call-bind|1.0.2",
+   "npm|superset-websocket/utils/client-ws-app|character-parser|2.2.0",
+   "npm|superset-websocket/utils/client-ws-app|constantinople|4.0.1",
+   "npm|superset-websocket/utils/client-ws-app|content-disposition|0.5.4",
+   "npm|superset-websocket/utils/client-ws-app|content-type|1.0.4",
+   "npm|superset-websocket/utils/client-ws-app|cookie-parser|1.4.6",
+   "npm|superset-websocket/utils/client-ws-app|cookie-signature|1.0.6",
+   "npm|superset-websocket/utils/client-ws-app|cookie|0.4.1",
+   "npm|superset-websocket/utils/client-ws-app|cookie|0.5.0",
+   "npm|superset-websocket/utils/client-ws-app|debug|2.6.9",
+   "npm|superset-websocket/utils/client-ws-app|debug|4.3.4",
+   "npm|superset-websocket/utils/client-ws-app|depd|2.0.0",
+   "npm|superset-websocket/utils/client-ws-app|destroy|1.2.0",
+   "npm|superset-websocket/utils/client-ws-app|doctypes|1.1.0",
+   "npm|superset-websocket/utils/client-ws-app|ecdsa-sig-formatter|1.0.11",
+   "npm|superset-websocket/utils/client-ws-app|ee-first|1.1.1",
+   "npm|superset-websocket/utils/client-ws-app|encodeurl|1.0.2",
+   "npm|superset-websocket/utils/client-ws-app|escape-html|1.0.3",
+   "npm|superset-websocket/utils/client-ws-app|etag|1.8.1",
+   "npm|superset-websocket/utils/client-ws-app|express|4.18.2",
+   "npm|superset-websocket/utils/client-ws-app|finalhandler|1.2.0",
+   "npm|superset-websocket/utils/client-ws-app|forwarded|0.2.0",
+   "npm|superset-websocket/utils/client-ws-app|fresh|0.5.2",
+   "npm|superset-websocket/utils/client-ws-app|function-bind|1.1.1",
+   "npm|superset-websocket/utils/client-ws-app|get-intrinsic|1.1.1",
+   "npm|superset-websocket/utils/client-ws-app|has-symbols|1.0.2",
+   "npm|superset-websocket/utils/client-ws-app|has-tostringtag|1.0.0",
+   "npm|superset-websocket/utils/client-ws-app|has|1.0.3",
+   "npm|superset-websocket/utils/client-ws-app|http-errors|2.0.0",
+   "npm|superset-websocket/utils/client-ws-app|iconv-lite|0.4.24",
+   "npm|superset-websocket/utils/client-ws-app|inherits|2.0.4",
+   "npm|superset-websocket/utils/client-ws-app|ipaddr.js|1.9.1",
+   "npm|superset-websocket/utils/client-ws-app|is-core-module|2.8.0",
+   "npm|superset-websocket/utils/client-ws-app|is-expression|4.0.0",
+   "npm|superset-websocket/utils/client-ws-app|is-promise|2.2.2",
+   "npm|superset-websocket/utils/client-ws-app|is-regex|1.1.4",
+   "npm|superset-websocket/utils/client-ws-app|js-stringify|1.0.2",
+   "npm|superset-websocket/utils/client-ws-app|jsonwebtoken|9.0.0",
+   "npm|superset-websocket/utils/client-ws-app|jstransformer|1.0.0",
+   "npm|superset-websocket/utils/client-ws-app|jwa|1.4.1",
+   "npm|superset-websocket/utils/client-ws-app|jws|3.2.2",
+   "npm|superset-websocket/utils/client-ws-app|lodash|4.17.21",
+   "npm|superset-websocket/utils/client-ws-app|lru-cache|6.0.0",
+   "npm|superset-websocket/utils/client-ws-app|media-typer|0.3.0",
+   "npm|superset-websocket/utils/client-ws-app|merge-descriptors|1.0.1",
+   "npm|superset-websocket/utils/client-ws-app|methods|1.1.2",
+   "npm|superset-websocket/utils/client-ws-app|mime-db|1.52.0",
+   "npm|superset-websocket/utils/client-ws-app|mime-types|2.1.35",
+   "npm|superset-websocket/utils/client-ws-app|mime|1.6.0",
+   "npm|superset-websocket/utils/client-ws-app|morgan|1.10.0",
+   "npm|superset-websocket/utils/client-ws-app|ms|2.0.0",
+   "npm|superset-websocket/utils/client-ws-app|ms|2.1.2",
+   "npm|superset-websocket/utils/client-ws-app|ms|2.1.3",
+   "npm|superset-websocket/utils/client-ws-app|negotiator|0.6.3",
+   "npm|superset-websocket/utils/client-ws-app|object-assign|4.1.1",
+   "npm|superset-websocket/utils/client-ws-app|object-inspect|1.12.2",
+   "npm|superset-websocket/utils/client-ws-app|on-finished|2.3.0",
+   "npm|superset-websocket/utils/client-ws-app|on-finished|2.4.1",
+   "npm|superset-websocket/utils/client-ws-app|on-headers|1.0.2",
+   "npm|superset-websocket/utils/client-ws-app|parseurl|1.3.3",
+   "npm|superset-websocket/utils/client-ws-app|path-parse|1.0.7",
+   "npm|superset-websocket/utils/client-ws-app|path-to-regexp|0.1.7",
+   "npm|superset-websocket/utils/client-ws-app|promise|7.3.1",
+   "npm|superset-websocket/utils/client-ws-app|proxy-addr|2.0.7",
+   "npm|superset-websocket/utils/client-ws-app|pug-attrs|3.0.0",
+   "npm|superset-websocket/utils/client-ws-app|pug-code-gen|3.0.2",
+   "npm|superset-websocket/utils/client-ws-app|pug-error|2.0.0",
+   "npm|superset-websocket/utils/client-ws-app|pug-filters|4.0.0",
+   "npm|superset-websocket/utils/client-ws-app|pug-lexer|5.0.1",
+   "npm|superset-websocket/utils/client-ws-app|pug-linker|4.0.0",
+   "npm|superset-websocket/utils/client-ws-app|pug-load|3.0.0",
+   "npm|superset-websocket/utils/client-ws-app|pug-parser|6.0.0",
+   "npm|superset-websocket/utils/client-ws-app|pug-runtime|3.0.1",
+   "npm|superset-websocket/utils/client-ws-app|pug-strip-comments|2.0.0",
+   "npm|superset-websocket/utils/client-ws-app|pug-walk|2.0.0",
+   "npm|superset-websocket/utils/client-ws-app|pug|3.0.2",
+   "npm|superset-websocket/utils/client-ws-app|qs|6.11.0",
+   "npm|superset-websocket/utils/client-ws-app|range-parser|1.2.1",
+   "npm|superset-websocket/utils/client-ws-app|raw-body|2.5.1",
+   "npm|superset-websocket/utils/client-ws-app|resolve|1.20.0",
+   "npm|superset-websocket/utils/client-ws-app|safe-buffer|5.1.2",
+   "npm|superset-websocket/utils/client-ws-app|safe-buffer|5.2.1",
+   "npm|superset-websocket/utils/client-ws-app|safer-buffer|2.1.2",
+   "npm|superset-websocket/utils/client-ws-app|semver|7.3.8",
+   "npm|superset-websocket/utils/client-ws-app|send|0.18.0",
+   "npm|superset-websocket/utils/client-ws-app|serve-static|1.15.0",
+   "npm|superset-websocket/utils/client-ws-app|setprototypeof|1.2.0",
+   "npm|superset-websocket/utils/client-ws-app|side-channel|1.0.4",
+   "npm|superset-websocket/utils/client-ws-app|statuses|2.0.1",
+   "npm|superset-websocket/utils/client-ws-app|to-fast-properties|2.0.0",
+   "npm|superset-websocket/utils/client-ws-app|toidentifier|1.0.1",
+   "npm|superset-websocket/utils/client-ws-app|token-stream|1.0.0",
+   "npm|superset-websocket/utils/client-ws-app|type-is|1.6.18",
+   "npm|superset-websocket/utils/client-ws-app|unpipe|1.0.0",
+   "npm|superset-websocket/utils/client-ws-app|utils-merge|1.0.1",
+   "npm|superset-websocket/utils/client-ws-app|vary|1.1.2",
+   "npm|superset-websocket/utils/client-ws-app|void-elements|3.1.0",
+   "npm|superset-websocket/utils/client-ws-app|with|7.0.2",
+   "npm|superset-websocket/utils/client-ws-app|yallist|4.0.0",
+   "npm|superset-websocket|@babel/code-frame|7.16.0",
+   "npm|superset-websocket|@babel/compat-data|7.16.0",
+   "npm|superset-websocket|@babel/core|7.16.0",
+   "npm|superset-websocket|@babel/generator|7.16.0",
+   "npm|superset-websocket|@babel/helper-compilation-targets|7.16.0",
+   "npm|superset-websocket|@babel/helper-function-name|7.16.0",
+   "npm|superset-websocket|@babel/helper-get-function-arity|7.16.0",
+   "npm|superset-websocket|@babel/helper-hoist-variables|7.16.0",
+   "npm|superset-websocket|@babel/helper-member-expression-to-functions|7.16.0",
+   "npm|superset-websocket|@babel/helper-module-imports|7.16.0",
+   "npm|superset-websocket|@babel/helper-module-transforms|7.16.0",
+   "npm|superset-websocket|@babel/helper-optimise-call-expression|7.16.0",
+   "npm|superset-websocket|@babel/helper-plugin-utils|7.14.5",
+   "npm|superset-websocket|@babel/helper-replace-supers|7.16.0",
+   "npm|superset-websocket|@babel/helper-simple-access|7.16.0",
+   "npm|superset-websocket|@babel/helper-split-export-declaration|7.16.0",
+   "npm|superset-websocket|@babel/helper-validator-identifier|7.15.7",
+   "npm|superset-websocket|@babel/helper-validator-option|7.14.5",
+   "npm|superset-websocket|@babel/helpers|7.16.0",
+   "npm|superset-websocket|@babel/highlight|7.16.0",
+   "npm|superset-websocket|@babel/parser|7.16.2",
+   "npm|superset-websocket|@babel/plugin-syntax-async-generators|7.8.4",
+   "npm|superset-websocket|@babel/plugin-syntax-bigint|7.8.3",
+   "npm|superset-websocket|@babel/plugin-syntax-class-properties|7.12.13",
+   "npm|superset-websocket|@babel/plugin-syntax-import-meta|7.10.4",
+   "npm|superset-websocket|@babel/plugin-syntax-json-strings|7.8.3",
+   "npm|superset-websocket|@babel/plugin-syntax-logical-assignment-operators|7.10.4",
+   "npm|superset-websocket|@babel/plugin-syntax-nullish-coalescing-operator|7.8.3",
+   "npm|superset-websocket|@babel/plugin-syntax-numeric-separator|7.10.4",
+   "npm|superset-websocket|@babel/plugin-syntax-object-rest-spread|7.8.3",
+   "npm|superset-websocket|@babel/plugin-syntax-optional-catch-binding|7.8.3",
+   "npm|superset-websocket|@babel/plugin-syntax-optional-chaining|7.8.3",
+   "npm|superset-websocket|@babel/plugin-syntax-top-level-await|7.14.5",
+   "npm|superset-websocket|@babel/plugin-syntax-typescript|7.16.0",
+   "npm|superset-websocket|@babel/template|7.16.0",
+   "npm|superset-websocket|@babel/traverse|7.16.0",
+   "npm|superset-websocket|@babel/types|7.16.0",
+   "npm|superset-websocket|@bcoe/v8-coverage|0.2.3",
+   "npm|superset-websocket|@colors/colors|1.5.0",
+   "npm|superset-websocket|@cspotcode/source-map-support|0.8.1",
+   "npm|superset-websocket|@dabh/diagnostics|2.0.2",
+   "npm|superset-websocket|@eslint/eslintrc|1.4.1",
+   "npm|superset-websocket|@humanwhocodes/config-array|0.11.8",
+   "npm|superset-websocket|@humanwhocodes/module-importer|1.0.1",
+   "npm|superset-websocket|@humanwhocodes/object-schema|1.2.1",
+   "npm|superset-websocket|@istanbuljs/load-nyc-config|1.1.0",
+   "npm|superset-websocket|@istanbuljs/schema|0.1.3",
+   "npm|superset-websocket|@jest/console|27.3.1",
+   "npm|superset-websocket|@jest/core|27.3.1",
+   "npm|superset-websocket|@jest/environment|27.3.1",
+   "npm|superset-websocket|@jest/fake-timers|27.3.1",
+   "npm|superset-websocket|@jest/globals|27.3.1",
+   "npm|superset-websocket|@jest/reporters|27.3.1",
+   "npm|superset-websocket|@jest/source-map|27.0.6",
+   "npm|superset-websocket|@jest/test-result|27.3.1",
+   "npm|superset-websocket|@jest/test-sequencer|27.3.1",
+   "npm|superset-websocket|@jest/transform|27.3.1",
+   "npm|superset-websocket|@jest/types|27.2.5",
+   "npm|superset-websocket|@jridgewell/resolve-uri|3.1.0",
+   "npm|superset-websocket|@jridgewell/sourcemap-codec|1.4.14",
+   "npm|superset-websocket|@jridgewell/trace-mapping|0.3.9",
+   "npm|superset-websocket|@nodelib/fs.scandir|2.1.5",
+   "npm|superset-websocket|@nodelib/fs.stat|2.0.5",
+   "npm|superset-websocket|@nodelib/fs.walk|1.2.8",
+   "npm|superset-websocket|@sinonjs/commons|1.8.3",
+   "npm|superset-websocket|@sinonjs/fake-timers|8.0.1",
+   "npm|superset-websocket|@tootallnate/once|1.1.2",
+   "npm|superset-websocket|@tsconfig/node10|1.0.9",
+   "npm|superset-websocket|@tsconfig/node12|1.0.11",
+   "npm|superset-websocket|@tsconfig/node14|1.0.3",
+   "npm|superset-websocket|@tsconfig/node16|1.0.3",
+   "npm|superset-websocket|@types/babel__core|7.1.16",
+   "npm|superset-websocket|@types/babel__generator|7.6.3",
+   "npm|superset-websocket|@types/babel__template|7.4.1",
+   "npm|superset-websocket|@types/babel__traverse|7.14.2",
+   "npm|superset-websocket|@types/cookie|0.5.1",
+   "npm|superset-websocket|@types/graceful-fs|4.1.5",
+   "npm|superset-websocket|@types/ioredis|4.28.0",
+   "npm|superset-websocket|@types/istanbul-lib-coverage|2.0.3",
+   "npm|superset-websocket|@types/istanbul-lib-report|3.0.0",
+   "npm|superset-websocket|@types/istanbul-reports|3.0.0",
+   "npm|superset-websocket|@types/jest|27.0.2",
+   "npm|superset-websocket|@types/json-schema|7.0.11",
+   "npm|superset-websocket|@types/jsonwebtoken|9.0.1",
+   "npm|superset-websocket|@types/node|18.13.0",
+   "npm|superset-websocket|@types/prettier|2.4.1",
+   "npm|superset-websocket|@types/semver|7.3.13",
+   "npm|superset-websocket|@types/stack-utils|2.0.1",
+   "npm|superset-websocket|@types/uuid|9.0.0",
+   "npm|superset-websocket|@types/ws|8.5.4",
+   "npm|superset-websocket|@types/yargs-parser|20.2.0",
+   "npm|superset-websocket|@types/yargs|16.0.4",
+   "npm|superset-websocket|@typescript-eslint/eslint-plugin|5.52.0",
+   "npm|superset-websocket|@typescript-eslint/parser|5.51.0",
+   "npm|superset-websocket|@typescript-eslint/scope-manager|5.51.0",
+   "npm|superset-websocket|@typescript-eslint/scope-manager|5.52.0",
+   "npm|superset-websocket|@typescript-eslint/type-utils|5.52.0",
+   "npm|superset-websocket|@typescript-eslint/types|5.51.0",
+   "npm|superset-websocket|@typescript-eslint/types|5.52.0",
+   "npm|superset-websocket|@typescript-eslint/typescript-estree|5.51.0",
+   "npm|superset-websocket|@typescript-eslint/typescript-estree|5.52.0",
+   "npm|superset-websocket|@typescript-eslint/utils|5.52.0",
+   "npm|superset-websocket|@typescript-eslint/visitor-keys|5.51.0",
+   "npm|superset-websocket|@typescript-eslint/visitor-keys|5.52.0",
+   "npm|superset-websocket|abab|2.0.5",
+   "npm|superset-websocket|acorn-globals|6.0.0",
+   "npm|superset-websocket|acorn-jsx|5.3.2",
+   "npm|superset-websocket|acorn-walk|7.2.0",
+   "npm|superset-websocket|acorn-walk|8.2.0",
+   "npm|superset-websocket|acorn|7.4.1",
+   "npm|superset-websocket|acorn|8.5.0",
+   "npm|superset-websocket|acorn|8.8.1",
+   "npm|superset-websocket|agent-base|6.0.2",
+   "npm|superset-websocket|ajv|6.12.6",
+   "npm|superset-websocket|ansi-escapes|4.3.2",
+   "npm|superset-websocket|ansi-regex|5.0.1",
+   "npm|superset-websocket|ansi-styles|3.2.1",
+   "npm|superset-websocket|ansi-styles|4.3.0",
+   "npm|superset-websocket|ansi-styles|5.2.0",
+   "npm|superset-websocket|anymatch|3.1.2",
+   "npm|superset-websocket|arg|4.1.3",
+   "npm|superset-websocket|argparse|1.0.10",
+   "npm|superset-websocket|argparse|2.0.1",
+   "npm|superset-websocket|array-union|2.1.0",
+   "npm|superset-websocket|async|3.2.3",
+   "npm|superset-websocket|asynckit|0.4.0",
+   "npm|superset-websocket|babel-jest|27.3.1",
+   "npm|superset-websocket|babel-plugin-istanbul|6.1.1",
+   "npm|superset-websocket|babel-plugin-jest-hoist|27.2.0",
+   "npm|superset-websocket|babel-preset-current-node-syntax|1.0.1",
+   "npm|superset-websocket|babel-preset-jest|27.2.0",
+   "npm|superset-websocket|balanced-match|1.0.0",
+   "npm|superset-websocket|bindings|1.5.0",
+   "npm|superset-websocket|brace-expansion|1.1.11",
+   "npm|superset-websocket|braces|3.0.2",
+   "npm|superset-websocket|browser-process-hrtime|1.0.0",
+   "npm|superset-websocket|browserslist|4.17.5",
+   "npm|superset-websocket|bs-logger|0.2.6",
+   "npm|superset-websocket|bser|2.1.1",
+   "npm|superset-websocket|buffer-equal-constant-time|1.0.1",
+   "npm|superset-websocket|buffer-from|1.1.1",
+   "npm|superset-websocket|callsites|3.1.0",
+   "npm|superset-websocket|camelcase|5.3.1",
+   "npm|superset-websocket|camelcase|6.2.0",
+   "npm|superset-websocket|caniuse-lite|1.0.30001274",
+   "npm|superset-websocket|chalk|2.4.2",
+   "npm|superset-websocket|chalk|4.1.0",
+   "npm|superset-websocket|char-regex|1.0.2",
+   "npm|superset-websocket|ci-info|3.2.0",
+   "npm|superset-websocket|cjs-module-lexer|1.2.2",
+   "npm|superset-websocket|cliui|7.0.4",
+   "npm|superset-websocket|cluster-key-slot|1.1.0",
+   "npm|superset-websocket|co|4.6.0",
+   "npm|superset-websocket|collect-v8-coverage|1.0.1",
+   "npm|superset-websocket|color-convert|1.9.3",
+   "npm|superset-websocket|color-convert|2.0.1",
+   "npm|superset-websocket|color-name|1.1.3",
+   "npm|superset-websocket|color-name|1.1.4",
+   "npm|superset-websocket|color-string|1.5.5",
+   "npm|superset-websocket|color|3.0.0",
+   "npm|superset-websocket|colorspace|1.1.2",
+   "npm|superset-websocket|combined-stream|1.0.8",
+   "npm|superset-websocket|concat-map|0.0.1",
+   "npm|superset-websocket|convert-source-map|1.8.0",
+   "npm|superset-websocket|cookie|0.5.0",
+   "npm|superset-websocket|create-require|1.1.1",
+   "npm|superset-websocket|cross-spawn|7.0.3",
+   "npm|superset-websocket|cssom|0.3.8",
+   "npm|superset-websocket|cssom|0.4.4",
+   "npm|superset-websocket|cssstyle|2.3.0",
+   "npm|superset-websocket|data-urls|2.0.0",
+   "npm|superset-websocket|debug|4.3.4",
+   "npm|superset-websocket|decimal.js|10.3.1",
+   "npm|superset-websocket|dedent|0.7.0",
+   "npm|superset-websocket|deep-is|0.1.3",
+   "npm|superset-websocket|deepmerge|4.2.2",
+   "npm|superset-websocket|delayed-stream|1.0.0",
+   "npm|superset-websocket|denque|1.4.1",
+   "npm|superset-websocket|detect-newline|3.1.0",
+   "npm|superset-websocket|diff-sequences|27.0.6",
+   "npm|superset-websocket|diff|4.0.2",
+   "npm|superset-websocket|dir-glob|3.0.1",
+   "npm|superset-websocket|doctrine|3.0.0",
+   "npm|superset-websocket|domexception|2.0.1",
+   "npm|superset-websocket|ecdsa-sig-formatter|1.0.11",
+   "npm|superset-websocket|electron-to-chromium|1.3.886",
+   "npm|superset-websocket|emittery|0.8.1",
+   "npm|superset-websocket|emoji-regex|8.0.0",
+   "npm|superset-websocket|enabled|2.0.0",
+   "npm|superset-websocket|escalade|3.1.1",
+   "npm|superset-websocket|escape-string-regexp|1.0.5",
+   "npm|superset-websocket|escape-string-regexp|2.0.0",
+   "npm|superset-websocket|escape-string-regexp|4.0.0",
+   "npm|superset-websocket|escodegen|2.0.0",
+   "npm|superset-websocket|eslint-config-prettier|8.6.0",
+   "npm|superset-websocket|eslint-scope|5.1.1",
+   "npm|superset-websocket|eslint-scope|7.1.1",
+   "npm|superset-websocket|eslint-utils|3.0.0",
+   "npm|superset-websocket|eslint-visitor-keys|2.0.0",
+   "npm|superset-websocket|eslint-visitor-keys|3.3.0",
+   "npm|superset-websocket|eslint|8.34.0",
+   "npm|superset-websocket|espree|9.4.1",
+   "npm|superset-websocket|esprima|4.0.1",
+   "npm|superset-websocket|esquery|1.4.0",
+   "npm|superset-websocket|esrecurse|4.3.0",
+   "npm|superset-websocket|estraverse|4.3.0",
+   "npm|superset-websocket|estraverse|5.2.0",
+   "npm|superset-websocket|estraverse|5.3.0",
+   "npm|superset-websocket|esutils|2.0.3",
+   "npm|superset-websocket|execa|5.1.1",
+   "npm|superset-websocket|exit|0.1.2",
+   "npm|superset-websocket|expect|27.3.1",
+   "npm|superset-websocket|fast-deep-equal|3.1.3",
+   "npm|superset-websocket|fast-glob|3.2.12",
+   "npm|superset-websocket|fast-json-stable-stringify|2.1.0",
+   "npm|superset-websocket|fast-levenshtein|2.0.6",
+   "npm|superset-websocket|fastq|1.13.0",
+   "npm|superset-websocket|fb-watchman|2.0.1",
+   "npm|superset-websocket|fecha|4.2.3",
+   "npm|superset-websocket|file-entry-cache|6.0.1",
+   "npm|superset-websocket|file-uri-to-path|1.0.0",
+   "npm|superset-websocket|fill-range|7.0.1",
+   "npm|superset-websocket|find-up|4.1.0",
+   "npm|superset-websocket|find-up|5.0.0",
+   "npm|superset-websocket|flat-cache|3.0.4",
+   "npm|superset-websocket|flatted|3.1.1",
+   "npm|superset-websocket|fn.name|1.1.0",
+   "npm|superset-websocket|form-data|3.0.1",
+   "npm|superset-websocket|fs.realpath|1.0.0",
+   "npm|superset-websocket|fsevents|2.3.2",
+   "npm|superset-websocket|function-bind|1.1.1",
+   "npm|superset-websocket|gensync|1.0.0-beta.2",
+   "npm|superset-websocket|get-caller-file|2.0.5",
+   "npm|superset-websocket|get-package-type|0.1.0",
+   "npm|superset-websocket|get-stream|6.0.1",
+   "npm|superset-websocket|glob-parent|5.1.2",
+   "npm|superset-websocket|glob-parent|6.0.2",
+   "npm|superset-websocket|glob|7.1.6",
+   "npm|superset-websocket|globals|11.12.0",
+   "npm|superset-websocket|globals|13.19.0",
+   "npm|superset-websocket|globby|11.1.0",
+   "npm|superset-websocket|graceful-fs|4.2.6",
+   "npm|superset-websocket|grapheme-splitter|1.0.4",
+   "npm|superset-websocket|has-flag|3.0.0",
+   "npm|superset-websocket|has-flag|4.0.0",
+   "npm|superset-websocket|has|1.0.3",
+   "npm|superset-websocket|hot-shots|10.0.0",
+   "npm|superset-websocket|html-encoding-sniffer|2.0.1",
+   "npm|superset-websocket|html-escaper|2.0.2",
+   "npm|superset-websocket|http-proxy-agent|4.0.1",
+   "npm|superset-websocket|https-proxy-agent|5.0.0",
+   "npm|superset-websocket|human-signals|2.1.0",
+   "npm|superset-websocket|iconv-lite|0.4.24",
+   "npm|superset-websocket|ignore|5.2.1",
+   "npm|superset-websocket|import-fresh|3.3.0",
+   "npm|superset-websocket|import-local|3.0.3",
+   "npm|superset-websocket|imurmurhash|0.1.4",
+   "npm|superset-websocket|inflight|1.0.6",
+   "npm|superset-websocket|inherits|2.0.4",
+   "npm|superset-websocket|ioredis|4.28.0",
+   "npm|superset-websocket|is-arrayish|0.3.2",
+   "npm|superset-websocket|is-core-module|2.8.0",
+   "npm|superset-websocket|is-extglob|2.1.1",
+   "npm|superset-websocket|is-fullwidth-code-point|3.0.0",
+   "npm|superset-websocket|is-generator-fn|2.1.0",
+   "npm|superset-websocket|is-glob|4.0.3",
+   "npm|superset-websocket|is-number|7.0.0",
+   "npm|superset-websocket|is-path-inside|3.0.3",
+   "npm|superset-websocket|is-potential-custom-element-name|1.0.1",
+   "npm|superset-websocket|is-stream|2.0.1",
+   "npm|superset-websocket|is-typedarray|1.0.0",
+   "npm|superset-websocket|isexe|2.0.0",
+   "npm|superset-websocket|istanbul-lib-coverage|3.2.0",
+   "npm|superset-websocket|istanbul-lib-instrument|4.0.3",
+   "npm|superset-websocket|istanbul-lib-instrument|5.1.0",
+   "npm|superset-websocket|istanbul-lib-report|3.0.0",
+   "npm|superset-websocket|istanbul-lib-source-maps|4.0.1",
+   "npm|superset-websocket|istanbul-reports|3.0.5",
+   "npm|superset-websocket|jest-changed-files|27.3.0",
+   "npm|superset-websocket|jest-circus|27.3.1",
+   "npm|superset-websocket|jest-cli|27.3.1",
+   "npm|superset-websocket|jest-config|27.3.1",
+   "npm|superset-websocket|jest-diff|27.3.1",
+   "npm|superset-websocket|jest-docblock|27.0.6",
+   "npm|superset-websocket|jest-each|27.3.1",
+   "npm|superset-websocket|jest-environment-jsdom|27.3.1",
+   "npm|superset-websocket|jest-environment-node|27.3.1",
+   "npm|superset-websocket|jest-get-type|27.3.1",
+   "npm|superset-websocket|jest-haste-map|27.3.1",
+   "npm|superset-websocket|jest-jasmine2|27.3.1",
+   "npm|superset-websocket|jest-leak-detector|27.3.1",
+   "npm|superset-websocket|jest-matcher-utils|27.3.1",
+   "npm|superset-websocket|jest-message-util|27.3.1",
+   "npm|superset-websocket|jest-mock|27.3.0",
+   "npm|superset-websocket|jest-pnp-resolver|1.2.2",
+   "npm|superset-websocket|jest-regex-util|27.0.6",
+   "npm|superset-websocket|jest-resolve-dependencies|27.3.1",
+   "npm|superset-websocket|jest-resolve|27.3.1",
+   "npm|superset-websocket|jest-runner|27.3.1",
+   "npm|superset-websocket|jest-runtime|27.3.1",
+   "npm|superset-websocket|jest-serializer|27.0.6",
+   "npm|superset-websocket|jest-snapshot|27.3.1",
+   "npm|superset-websocket|jest-util|27.3.1",
+   "npm|superset-websocket|jest-validate|27.3.1",
+   "npm|superset-websocket|jest-watcher|27.3.1",
+   "npm|superset-websocket|jest-worker|27.3.1",
+   "npm|superset-websocket|jest|27.3.1",
+   "npm|superset-websocket|js-sdsl|4.2.0",
+   "npm|superset-websocket|js-tokens|4.0.0",
+   "npm|superset-websocket|js-yaml|3.14.1",
+   "npm|superset-websocket|js-yaml|4.1.0",
+   "npm|superset-websocket|jsdom|16.7.0",
+   "npm|superset-websocket|jsesc|2.5.2",
+   "npm|superset-websocket|json-schema-traverse|0.4.1",
+   "npm|superset-websocket|json-stable-stringify-without-jsonify|1.0.1",
+   "npm|superset-websocket|json5|2.2.3",
+   "npm|superset-websocket|jsonwebtoken|9.0.0",
+   "npm|superset-websocket|jwa|1.4.1",
+   "npm|superset-websocket|jws|3.2.2",
+   "npm|superset-websocket|kleur|3.0.3",
+   "npm|superset-websocket|kuler|2.0.0",
+   "npm|superset-websocket|leven|3.1.0",
+   "npm|superset-websocket|levn|0.3.0",
+   "npm|superset-websocket|levn|0.4.1",
+   "npm|superset-websocket|locate-path|5.0.0",
+   "npm|superset-websocket|locate-path|6.0.0",
+   "npm|superset-websocket|lodash.defaults|4.2.0",
+   "npm|superset-websocket|lodash.flatten|4.4.0",
+   "npm|superset-websocket|lodash.isarguments|3.1.0",
+   "npm|superset-websocket|lodash.memoize|4.1.2",
+   "npm|superset-websocket|lodash.merge|4.6.2",
+   "npm|superset-websocket|lodash|4.17.21",
+   "npm|superset-websocket|logform|2.4.2",
+   "npm|superset-websocket|lru-cache|6.0.0",
+   "npm|superset-websocket|make-dir|3.1.0",
+   "npm|superset-websocket|make-error|1.3.6",
+   "npm|superset-websocket|makeerror|1.0.12",
+   "npm|superset-websocket|merge-stream|2.0.0",
+   "npm|superset-websocket|merge2|1.4.1",
+   "npm|superset-websocket|micromatch|4.0.4",
+   "npm|superset-websocket|mime-db|1.50.0",
+   "npm|superset-websocket|mime-types|2.1.33",
+   "npm|superset-websocket|mimic-fn|2.1.0",
+   "npm|superset-websocket|minimatch|3.1.2",
+   "npm|superset-websocket|ms|2.1.2",
+   "npm|superset-websocket|nan|2.14.2",
+   "npm|superset-websocket|natural-compare-lite|1.4.0",
+   "npm|superset-websocket|natural-compare|1.4.0",
+   "npm|superset-websocket|node-int64|0.4.0",
+   "npm|superset-websocket|node-modules-regexp|1.0.0",
+   "npm|superset-websocket|node-releases|2.0.1",
+   "npm|superset-websocket|normalize-path|3.0.0",
+   "npm|superset-websocket|npm-run-path|4.0.1",
+   "npm|superset-websocket|nwsapi|2.2.0",
+   "npm|superset-websocket|once|1.4.0",
+   "npm|superset-websocket|one-time|1.0.0",
+   "npm|superset-websocket|onetime|5.1.2",
+   "npm|superset-websocket|optionator|0.8.3",
+   "npm|superset-websocket|optionator|0.9.1",
+   "npm|superset-websocket|p-limit|2.3.0",
+   "npm|superset-websocket|p-limit|3.1.0",
+   "npm|superset-websocket|p-locate|4.1.0",
+   "npm|superset-websocket|p-locate|5.0.0",
+   "npm|superset-websocket|p-map|2.1.0",
+   "npm|superset-websocket|p-try|2.2.0",
+   "npm|superset-websocket|parent-module|1.0.1",
+   "npm|superset-websocket|parse5|6.0.1",
+   "npm|superset-websocket|path-exists|4.0.0",
+   "npm|superset-websocket|path-is-absolute|1.0.1",
+   "npm|superset-websocket|path-key|3.1.1",
+   "npm|superset-websocket|path-parse|1.0.7",
+   "npm|superset-websocket|path-type|4.0.0",
+   "npm|superset-websocket|picocolors|1.0.0",
+   "npm|superset-websocket|picomatch|2.3.0",
+   "npm|superset-websocket|pirates|4.0.1",
+   "npm|superset-websocket|pkg-dir|4.2.0",
+   "npm|superset-websocket|prelude-ls|1.1.2",
+   "npm|superset-websocket|prelude-ls|1.2.1",
+   "npm|superset-websocket|prettier|2.8.4",
+   "npm|superset-websocket|pretty-format|27.3.1",
+   "npm|superset-websocket|prompts|2.4.2",
+   "npm|superset-websocket|psl|1.8.0",
+   "npm|superset-websocket|punycode|2.1.1",
+   "npm|superset-websocket|queue-microtask|1.2.3",
+   "npm|superset-websocket|react-is|17.0.1",
+   "npm|superset-websocket|readable-stream|3.6.0",
+   "npm|superset-websocket|redis-commands|1.7.0",
+   "npm|superset-websocket|redis-errors|1.2.0",
+   "npm|superset-websocket|redis-parser|3.0.0",
+   "npm|superset-websocket|regexpp|3.2.0",
+   "npm|superset-websocket|require-directory|2.1.1",
+   "npm|superset-websocket|resolve-cwd|3.0.0",
+   "npm|superset-websocket|resolve-from|4.0.0",
+   "npm|superset-websocket|resolve-from|5.0.0",
+   "npm|superset-websocket|resolve.exports|1.1.0",
+   "npm|superset-websocket|resolve|1.20.0",
+   "npm|superset-websocket|reusify|1.0.4",
+   "npm|superset-websocket|rimraf|3.0.2",
+   "npm|superset-websocket|run-parallel|1.2.0",
+   "npm|superset-websocket|safe-buffer|5.1.2",
+   "npm|superset-websocket|safe-buffer|5.2.1",
+   "npm|superset-websocket|safe-stable-stringify|2.4.2",
+   "npm|superset-websocket|safer-buffer|2.1.2",
+   "npm|superset-websocket|saxes|5.0.1",
+   "npm|superset-websocket|semver|6.3.0",
+   "npm|superset-websocket|semver|7.3.8",
+   "npm|superset-websocket|shebang-command|2.0.0",
+   "npm|superset-websocket|shebang-regex|3.0.0",
+   "npm|superset-websocket|signal-exit|3.0.5",
+   "npm|superset-websocket|simple-swizzle|0.2.2",
+   "npm|superset-websocket|sisteransi|1.0.5",
+   "npm|superset-websocket|slash|3.0.0",
+   "npm|superset-websocket|source-map-support|0.5.19",
+   "npm|superset-websocket|source-map|0.5.7",
+   "npm|superset-websocket|source-map|0.6.1",
+   "npm|superset-websocket|source-map|0.7.3",
+   "npm|superset-websocket|sprintf-js|1.0.3",
+   "npm|superset-websocket|stack-trace|0.0.10",
+   "npm|superset-websocket|stack-utils|2.0.5",
+   "npm|superset-websocket|standard-as-callback|2.1.0",
+   "npm|superset-websocket|string_decoder|1.3.0",
+   "npm|superset-websocket|string-length|4.0.2",
+   "npm|superset-websocket|string-width|4.2.3",
+   "npm|superset-websocket|strip-ansi|6.0.1",
+   "npm|superset-websocket|strip-bom|4.0.0",
+   "npm|superset-websocket|strip-final-newline|2.0.0",
+   "npm|superset-websocket|strip-json-comments|3.1.1",
+   "npm|superset-websocket|supports-color|5.5.0",
+   "npm|superset-websocket|supports-color|7.2.0",
+   "npm|superset-websocket|supports-color|8.1.1",
+   "npm|superset-websocket|supports-hyperlinks|2.2.0",
+   "npm|superset-websocket|symbol-tree|3.2.4",
+   "npm|superset-websocket|terminal-link|2.1.1",
+   "npm|superset-websocket|test-exclude|6.0.0",
+   "npm|superset-websocket|text-hex|1.0.0",
+   "npm|superset-websocket|text-table|0.2.0",
+   "npm|superset-websocket|throat|6.0.1",
+   "npm|superset-websocket|tmpl|1.0.5",
+   "npm|superset-websocket|to-fast-properties|2.0.0",
+   "npm|superset-websocket|to-regex-range|5.0.1",
+   "npm|superset-websocket|tough-cookie|4.0.0",
+   "npm|superset-websocket|tr46|2.1.0",
+   "npm|superset-websocket|triple-beam|1.3.0",
+   "npm|superset-websocket|ts-jest|27.0.7",
+   "npm|superset-websocket|ts-node|10.9.1",
+   "npm|superset-websocket|tslib|1.14.1",
+   "npm|superset-websocket|tsutils|3.21.0",
+   "npm|superset-websocket|type-check|0.3.2",
+   "npm|superset-websocket|type-check|0.4.0",
+   "npm|superset-websocket|type-detect|4.0.8",
+   "npm|superset-websocket|type-fest|0.20.2",
+   "npm|superset-websocket|type-fest|0.21.3",
+   "npm|superset-websocket|typedarray-to-buffer|3.1.5",
+   "npm|superset-websocket|typescript|4.9.5",
+   "npm|superset-websocket|universalify|0.1.2",
+   "npm|superset-websocket|unix-dgram|2.0.4",
+   "npm|superset-websocket|uri-js|4.4.1",
+   "npm|superset-websocket|util-deprecate|1.0.2",
+   "npm|superset-websocket|uuid|9.0.0",
+   "npm|superset-websocket|v8-compile-cache-lib|3.0.1",
+   "npm|superset-websocket|v8-to-istanbul|8.1.0",
+   "npm|superset-websocket|w3c-hr-time|1.0.2",
+   "npm|superset-websocket|w3c-xmlserializer|2.0.0",
+   "npm|superset-websocket|walker|1.0.8",
+   "npm|superset-websocket|webidl-conversions|5.0.0",
+   "npm|superset-websocket|webidl-conversions|6.1.0",
+   "npm|superset-websocket|whatwg-encoding|1.0.5",
+   "npm|superset-websocket|whatwg-mimetype|2.3.0",
+   "npm|superset-websocket|whatwg-url|8.7.0",
+   "npm|superset-websocket|which|2.0.2",
+   "npm|superset-websocket|winston-transport|4.5.0",
+   "npm|superset-websocket|winston|3.8.2",
+   "npm|superset-websocket|word-wrap|1.2.3",
+   "npm|superset-websocket|wrap-ansi|7.0.0",
+   "npm|superset-websocket|wrappy|1.0.2",
+   "npm|superset-websocket|write-file-atomic|3.0.3",
+   "npm|superset-websocket|ws|7.5.5",
+   "npm|superset-websocket|ws|8.12.1",
+   "npm|superset-websocket|xml-name-validator|3.0.0",
+   "npm|superset-websocket|xmlchars|2.2.0",
+   "npm|superset-websocket|y18n|5.0.8",
+   "npm|superset-websocket|yallist|4.0.0",
+   "npm|superset-websocket|yargs-parser|20.2.6",
+   "npm|superset-websocket|yargs|16.2.0",
+   "npm|superset-websocket|yn|3.1.1",
+   "npm|superset-websocket|yocto-queue|0.1.0",
+   "PyPI|superset/translations|babel|2.9.1"
+  ]
+ },
+ "findings": [
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket/utils/client-ws-app",
+   "package": "body-parser",
+   "version": "1.20.1",
+   "ids": [
+    "GHSA-qwcr-r2fm-qrc7"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket/utils/client-ws-app",
+   "package": "body-parser",
+   "version": "1.20.1",
+   "ids": [
+    "GHSA-v422-hmwv-36x6"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket/utils/client-ws-app",
+   "package": "cookie",
+   "version": "0.4.1",
+   "ids": [
+    "GHSA-pxg6-pf52-xh8x"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket/utils/client-ws-app",
+   "package": "cookie",
+   "version": "0.5.0",
+   "ids": [
+    "GHSA-pxg6-pf52-xh8x"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket/utils/client-ws-app",
+   "package": "express",
+   "version": "4.18.2",
+   "ids": [
+    "GHSA-qw6h-vgh9-j6wx"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket/utils/client-ws-app",
+   "package": "express",
+   "version": "4.18.2",
+   "ids": [
+    "GHSA-rv95-896h-c2vc"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket/utils/client-ws-app",
+   "package": "jws",
+   "version": "3.2.2",
+   "ids": [
+    "GHSA-869p-cjfg-cm3x"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket/utils/client-ws-app",
+   "package": "lodash",
+   "version": "4.17.21",
+   "ids": [
+    "GHSA-f23m-r3pf-42rh",
+    "GHSA-xxjr-mmjv-4gpg"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket/utils/client-ws-app",
+   "package": "lodash",
+   "version": "4.17.21",
+   "ids": [
+    "GHSA-r5fr-rjxr-66jc"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket/utils/client-ws-app",
+   "package": "morgan",
+   "version": "1.10.0",
+   "ids": [
+    "GHSA-4vj7-5mj6-jm8m"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket/utils/client-ws-app",
+   "package": "morgan",
+   "version": "1.10.0",
+   "ids": [
+    "GHSA-9f6g-j8ch-79g4"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket/utils/client-ws-app",
+   "package": "morgan",
+   "version": "1.10.0",
+   "ids": [
+    "GHSA-jxfw-x594-9x9m"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket/utils/client-ws-app",
+   "package": "on-headers",
+   "version": "1.0.2",
+   "ids": [
+    "GHSA-76c9-3jph-rj3q"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket/utils/client-ws-app",
+   "package": "path-to-regexp",
+   "version": "0.1.7",
+   "ids": [
+    "GHSA-37ch-88jc-xwx2",
+    "GHSA-9wv6-86v2-598j"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket/utils/client-ws-app",
+   "package": "path-to-regexp",
+   "version": "0.1.7",
+   "ids": [
+    "GHSA-rhx6-c78j-4q9w"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket/utils/client-ws-app",
+   "package": "proxy-addr",
+   "version": "2.0.7",
+   "ids": [
+    "GHSA-jqcg-44mw-7w3h"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket/utils/client-ws-app",
+   "package": "pug-code-gen",
+   "version": "3.0.2",
+   "ids": [
+    "GHSA-3965-hpx2-q597"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket/utils/client-ws-app",
+   "package": "pug",
+   "version": "3.0.2",
+   "ids": [
+    "GHSA-3965-hpx2-q597"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket/utils/client-ws-app",
+   "package": "qs",
+   "version": "6.11.0",
+   "ids": [
+    "GHSA-4mjr-xmp4-gh2g"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket/utils/client-ws-app",
+   "package": "qs",
+   "version": "6.11.0",
+   "ids": [
+    "GHSA-6rw7-vpxm-498p"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket/utils/client-ws-app",
+   "package": "qs",
+   "version": "6.11.0",
+   "ids": [
+    "GHSA-w7fw-mjwx-w883"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket/utils/client-ws-app",
+   "package": "semver",
+   "version": "7.3.8",
+   "ids": [
+    "GHSA-c2qf-rxjj-qqgw"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket/utils/client-ws-app",
+   "package": "send",
+   "version": "0.18.0",
+   "ids": [
+    "GHSA-m6fv-jmcg-4jfg"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket/utils/client-ws-app",
+   "package": "serve-static",
+   "version": "1.15.0",
+   "ids": [
+    "GHSA-cm22-4g7w-348p"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "@babel/core",
+   "version": "7.16.0",
+   "ids": [
+    "GHSA-4x5r-pxfx-6jf8"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "@babel/helpers",
+   "version": "7.16.0",
+   "ids": [
+    "GHSA-968p-4wvh-cqc8"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "@babel/traverse",
+   "version": "7.16.0",
+   "ids": [
+    "GHSA-67hx-6x53-jw92"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "@tootallnate/once",
+   "version": "1.1.2",
+   "ids": [
+    "GHSA-vpq2-c234-7xj6"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "ajv",
+   "version": "6.12.6",
+   "ids": [
+    "GHSA-2g4f-4pwh-qvx6"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "brace-expansion",
+   "version": "1.1.11",
+   "ids": [
+    "GHSA-3jxr-9vmj-r5cp"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "brace-expansion",
+   "version": "1.1.11",
+   "ids": [
+    "GHSA-6j4f-fj2g-mc7p"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "brace-expansion",
+   "version": "1.1.11",
+   "ids": [
+    "GHSA-f886-m6hf-6m8v"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "brace-expansion",
+   "version": "1.1.11",
+   "ids": [
+    "GHSA-mh99-v99m-4gvg"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "brace-expansion",
+   "version": "1.1.11",
+   "ids": [
+    "GHSA-q2hr-2g5m-vwhr"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "brace-expansion",
+   "version": "1.1.11",
+   "ids": [
+    "GHSA-qhr7-859c-m2p7"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "brace-expansion",
+   "version": "1.1.11",
+   "ids": [
+    "GHSA-rgw5-rvv9-x895"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "brace-expansion",
+   "version": "1.1.11",
+   "ids": [
+    "GHSA-v6h2-p8h4-qcjw"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "braces",
+   "version": "3.0.2",
+   "ids": [
+    "GHSA-grv7-fg5c-xmjg"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "braces",
+   "version": "3.0.2",
+   "ids": [
+    "GHSA-vfj7-8cjw-p6xm"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "browserslist",
+   "version": "4.17.5",
+   "ids": [
+    "GHSA-73wf-gq98-2v4g"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "browserslist",
+   "version": "4.17.5",
+   "ids": [
+    "GHSA-c83g-rgw3-j3cx"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "cookie",
+   "version": "0.5.0",
+   "ids": [
+    "GHSA-pxg6-pf52-xh8x"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "cross-spawn",
+   "version": "7.0.3",
+   "ids": [
+    "GHSA-3xgq-45jj-v275"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "diff",
+   "version": "4.0.2",
+   "ids": [
+    "GHSA-73rr-hh4g-fpgx"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "flatted",
+   "version": "3.1.1",
+   "ids": [
+    "GHSA-25h7-pfq9-p65f"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "flatted",
+   "version": "3.1.1",
+   "ids": [
+    "GHSA-rf6f-7fwh-wjgh"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "form-data",
+   "version": "3.0.1",
+   "ids": [
+    "GHSA-fjxv-7rqg-78g4"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "form-data",
+   "version": "3.0.1",
+   "ids": [
+    "GHSA-hmw2-7cc7-3qxx"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "js-yaml",
+   "version": "3.14.1",
+   "ids": [
+    "GHSA-2883-xcg3-v3hh"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "js-yaml",
+   "version": "3.14.1",
+   "ids": [
+    "GHSA-52cp-r559-cp3m"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "js-yaml",
+   "version": "3.14.1",
+   "ids": [
+    "GHSA-5p4m-2wfm-xmqj"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "js-yaml",
+   "version": "3.14.1",
+   "ids": [
+    "GHSA-h67p-54hq-rp68"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "js-yaml",
+   "version": "3.14.1",
+   "ids": [
+    "GHSA-mh29-5h37-fv8m"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "js-yaml",
+   "version": "4.1.0",
+   "ids": [
+    "GHSA-2883-xcg3-v3hh"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "js-yaml",
+   "version": "4.1.0",
+   "ids": [
+    "GHSA-52cp-r559-cp3m"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "js-yaml",
+   "version": "4.1.0",
+   "ids": [
+    "GHSA-5p4m-2wfm-xmqj"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "js-yaml",
+   "version": "4.1.0",
+   "ids": [
+    "GHSA-h67p-54hq-rp68"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "js-yaml",
+   "version": "4.1.0",
+   "ids": [
+    "GHSA-mh29-5h37-fv8m"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "jws",
+   "version": "3.2.2",
+   "ids": [
+    "GHSA-869p-cjfg-cm3x"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "lodash",
+   "version": "4.17.21",
+   "ids": [
+    "GHSA-f23m-r3pf-42rh",
+    "GHSA-xxjr-mmjv-4gpg"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "lodash",
+   "version": "4.17.21",
+   "ids": [
+    "GHSA-r5fr-rjxr-66jc"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "micromatch",
+   "version": "4.0.4",
+   "ids": [
+    "GHSA-952p-6rrq-rcjv"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "minimatch",
+   "version": "3.1.2",
+   "ids": [
+    "GHSA-23c5-xmqv-rm74"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "minimatch",
+   "version": "3.1.2",
+   "ids": [
+    "GHSA-3ppc-4f35-3m26"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "minimatch",
+   "version": "3.1.2",
+   "ids": [
+    "GHSA-7r86-cg39-jmmj"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "picomatch",
+   "version": "2.3.0",
+   "ids": [
+    "GHSA-3v7f-55p6-f55p"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "picomatch",
+   "version": "2.3.0",
+   "ids": [
+    "GHSA-c2c7-rcm5-vvqj"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "semver",
+   "version": "6.3.0",
+   "ids": [
+    "GHSA-c2qf-rxjj-qqgw"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "semver",
+   "version": "7.3.8",
+   "ids": [
+    "GHSA-c2qf-rxjj-qqgw"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "sprintf-js",
+   "version": "1.0.3",
+   "ids": [
+    "GHSA-hp3w-g68c-fv3c"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "tough-cookie",
+   "version": "4.0.0",
+   "ids": [
+    "GHSA-72xf-g2v4-qvf3"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "uuid",
+   "version": "9.0.0",
+   "ids": [
+    "GHSA-w5hq-g745-h8pq"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "word-wrap",
+   "version": "1.2.3",
+   "ids": [
+    "GHSA-j8xg-fqg3-53r7"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "ws",
+   "version": "7.5.5",
+   "ids": [
+    "GHSA-3h5v-q93c-6h6q"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "ws",
+   "version": "7.5.5",
+   "ids": [
+    "GHSA-96hv-2xvq-fx4p"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "ws",
+   "version": "8.12.1",
+   "ids": [
+    "GHSA-3h5v-q93c-6h6q"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "ws",
+   "version": "8.12.1",
+   "ids": [
+    "GHSA-58qx-3vcg-4xpx"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": "superset-websocket",
+   "package": "ws",
+   "version": "8.12.1",
+   "ids": [
+    "GHSA-96hv-2xvq-fx4p"
+   ]
+  }
+ ]
+}

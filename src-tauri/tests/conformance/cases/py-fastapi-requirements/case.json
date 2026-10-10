@@ -1,0 +1,18 @@
+{
+  "id": "py-fastapi-requirements",
+  "source": "repository",
+  "repo": "https://github.com/fastapi/fastapi",
+  "ref": "0.100.0",
+  "commit": "f8356d9fffcc728062cc4dbfc905882969bd5123",
+  "licence": "MIT",
+  "include": [
+    "requirements.txt",
+    "requirements-tests.txt",
+    "requirements-docs.txt",
+    "pyproject.toml"
+  ],
+  "formats": [
+    "requirements.txt (-r includes, `== ` with spaces, ranges)"
+  ],
+  "notes": "requirements.txt that only `-r`-includes two siblings; pins written `name ==1.2` and `name == 1.2`; most lines are ranges (no installed version)."
+}

@@ -1,0 +1,3934 @@
+{
+ "schema": 1,
+ "case": "rb-js-rails-6.0",
+ "lockfiles": [
+  {
+   "path": "Gemfile.lock",
+   "dir": ".",
+   "format": "Gemfile.lock",
+   "ecosystem": "RubyGems",
+   "status": "supported",
+   "truth_packages": 189
+  },
+  {
+   "path": "yarn.lock",
+   "dir": ".",
+   "format": "yarn-v1",
+   "ecosystem": "npm",
+   "status": "supported",
+   "truth_packages": 825
+  }
+ ],
+ "inventory": {
+  "count": 1014,
+  "packages": [
+   "npm|.|@types/estree|0.0.38",
+   "npm|.|@types/node|10.12.11",
+   "npm|.|@webassemblyjs/ast|1.7.11",
+   "npm|.|@webassemblyjs/floating-point-hex-parser|1.7.11",
+   "npm|.|@webassemblyjs/helper-api-error|1.7.11",
+   "npm|.|@webassemblyjs/helper-buffer|1.7.11",
+   "npm|.|@webassemblyjs/helper-code-frame|1.7.11",
+   "npm|.|@webassemblyjs/helper-fsm|1.7.11",
+   "npm|.|@webassemblyjs/helper-module-context|1.7.11",
+   "npm|.|@webassemblyjs/helper-wasm-bytecode|1.7.11",
+   "npm|.|@webassemblyjs/helper-wasm-section|1.7.11",
+   "npm|.|@webassemblyjs/ieee754|1.7.11",
+   "npm|.|@webassemblyjs/leb128|1.7.11",
+   "npm|.|@webassemblyjs/utf8|1.7.11",
+   "npm|.|@webassemblyjs/wasm-edit|1.7.11",
+   "npm|.|@webassemblyjs/wasm-gen|1.7.11",
+   "npm|.|@webassemblyjs/wasm-opt|1.7.11",
+   "npm|.|@webassemblyjs/wasm-parser|1.7.11",
+   "npm|.|@webassemblyjs/wast-parser|1.7.11",
+   "npm|.|@webassemblyjs/wast-printer|1.7.11",
+   "npm|.|@xtuc/ieee754|1.2.0",
+   "npm|.|@xtuc/long|4.2.1",
+   "npm|.|abbrev|1.1.1",
+   "npm|.|accepts|1.3.5",
+   "npm|.|acorn-dynamic-import|3.0.0",
+   "npm|.|acorn-jsx|3.0.1",
+   "npm|.|acorn|3.3.0",
+   "npm|.|acorn|5.7.3",
+   "npm|.|adm-zip|0.4.13",
+   "npm|.|after|0.8.2",
+   "npm|.|agent-base|4.2.1",
+   "npm|.|ajv-errors|1.0.0",
+   "npm|.|ajv-keywords|1.5.1",
+   "npm|.|ajv-keywords|2.1.1",
+   "npm|.|ajv-keywords|3.2.0",
+   "npm|.|ajv|4.11.8",
+   "npm|.|ajv|5.5.2",
+   "npm|.|ajv|6.6.1",
+   "npm|.|ansi-escapes|1.4.0",
+   "npm|.|ansi-escapes|3.1.0",
+   "npm|.|ansi-regex|2.1.1",
+   "npm|.|ansi-regex|3.0.0",
+   "npm|.|ansi-styles|2.2.1",
+   "npm|.|ansi-styles|3.2.1",
+   "npm|.|anymatch|2.0.0",
+   "npm|.|aproba|1.2.0",
+   "npm|.|archiver-utils|1.3.0",
+   "npm|.|archiver|2.1.1",
+   "npm|.|are-we-there-yet|1.1.5",
+   "npm|.|argparse|1.0.10",
+   "npm|.|arr-diff|2.0.0",
+   "npm|.|arr-diff|4.0.0",
+   "npm|.|arr-flatten|1.1.0",
+   "npm|.|arr-union|3.1.0",
+   "npm|.|array-slice|0.2.3",
+   "npm|.|array-unique|0.2.1",
+   "npm|.|array-unique|0.3.2",
+   "npm|.|arraybuffer.slice|0.0.7",
+   "npm|.|asn1.js|4.10.1",
+   "npm|.|asn1|0.2.4",
+   "npm|.|assert-plus|1.0.0",
+   "npm|.|assert|1.4.1",
+   "npm|.|assign-symbols|1.0.0",
+   "npm|.|async-each|1.0.1",
+   "npm|.|async-limiter|1.0.0",
+   "npm|.|async|2.0.1",
+   "npm|.|async|2.6.1",
+   "npm|.|asynckit|0.4.0",
+   "npm|.|atob|2.1.2",
+   "npm|.|aws-sign2|0.7.0",
+   "npm|.|aws4|1.8.0",
+   "npm|.|babel-code-frame|6.26.0",
+   "npm|.|babel-core|6.26.3",
+   "npm|.|babel-generator|6.26.1",
+   "npm|.|babel-helper-builder-binary-assignment-operator-visitor|6.24.1",
+   "npm|.|babel-helper-call-delegate|6.24.1",
+   "npm|.|babel-helper-define-map|6.26.0",
+   "npm|.|babel-helper-explode-assignable-expression|6.24.1",
+   "npm|.|babel-helper-function-name|6.24.1",
+   "npm|.|babel-helper-get-function-arity|6.24.1",
+   "npm|.|babel-helper-hoist-variables|6.24.1",
+   "npm|.|babel-helper-optimise-call-expression|6.24.1",
+   "npm|.|babel-helper-regex|6.26.0",
+   "npm|.|babel-helper-remap-async-to-generator|6.24.1",
+   "npm|.|babel-helper-replace-supers|6.24.1",
+   "npm|.|babel-helpers|6.24.1",
+   "npm|.|babel-messages|6.23.0",
+   "npm|.|babel-plugin-check-es2015-constants|6.22.0",
+   "npm|.|babel-plugin-external-helpers|6.22.0",
+   "npm|.|babel-plugin-syntax-async-functions|6.13.0",
+   "npm|.|babel-plugin-syntax-exponentiation-operator|6.13.0",
+   "npm|.|babel-plugin-syntax-trailing-function-commas|6.22.0",
+   "npm|.|babel-plugin-transform-async-to-generator|6.24.1",
+   "npm|.|babel-plugin-transform-es2015-arrow-functions|6.22.0",
+   "npm|.|babel-plugin-transform-es2015-block-scoped-functions|6.22.0",
+   "npm|.|babel-plugin-transform-es2015-block-scoping|6.26.0",
+   "npm|.|babel-plugin-transform-es2015-classes|6.24.1",
+   "npm|.|babel-plugin-transform-es2015-computed-properties|6.24.1",
+   "npm|.|babel-plugin-transform-es2015-destructuring|6.23.0",
+   "npm|.|babel-plugin-transform-es2015-duplicate-keys|6.24.1",
+   "npm|.|babel-plugin-transform-es2015-for-of|6.23.0",
+   "npm|.|babel-plugin-transform-es2015-function-name|6.24.1",
+   "npm|.|babel-plugin-transform-es2015-literals|6.22.0",
+   "npm|.|babel-plugin-transform-es2015-modules-amd|6.24.1",
+   "npm|.|babel-plugin-transform-es2015-modules-commonjs|6.26.2",
+   "npm|.|babel-plugin-transform-es2015-modules-systemjs|6.24.1",
+   "npm|.|babel-plugin-transform-es2015-modules-umd|6.24.1",
+   "npm|.|babel-plugin-transform-es2015-object-super|6.24.1",
+   "npm|.|babel-plugin-transform-es2015-parameters|6.24.1",
+   "npm|.|babel-plugin-transform-es2015-shorthand-properties|6.24.1",
+   "npm|.|babel-plugin-transform-es2015-spread|6.22.0",
+   "npm|.|babel-plugin-transform-es2015-sticky-regex|6.24.1",
+   "npm|.|babel-plugin-transform-es2015-template-literals|6.22.0",
+   "npm|.|babel-plugin-transform-es2015-typeof-symbol|6.23.0",
+   "npm|.|babel-plugin-transform-es2015-unicode-regex|6.24.1",
+   "npm|.|babel-plugin-transform-exponentiation-operator|6.24.1",
+   "npm|.|babel-plugin-transform-regenerator|6.26.0",
+   "npm|.|babel-plugin-transform-strict-mode|6.24.1",
+   "npm|.|babel-preset-env|1.7.0",
+   "npm|.|babel-register|6.26.0",
+   "npm|.|babel-runtime|6.26.0",
+   "npm|.|babel-template|6.26.0",
+   "npm|.|babel-traverse|6.26.0",
+   "npm|.|babel-types|6.26.0",
+   "npm|.|babylon|6.18.0",
+   "npm|.|backo2|1.0.2",
+   "npm|.|balanced-match|1.0.0",
+   "npm|.|base|0.11.2",
+   "npm|.|base64-arraybuffer|0.1.5",
+   "npm|.|base64-js|1.3.0",
+   "npm|.|base64id|1.0.0",
+   "npm|.|bcrypt-pbkdf|1.0.2",
+   "npm|.|better-assert|1.0.2",
+   "npm|.|big.js|3.2.0",
+   "npm|.|binary-extensions|1.12.0",
+   "npm|.|bl|1.2.2",
+   "npm|.|blob|0.0.5",
+   "npm|.|bluebird|3.5.3",
+   "npm|.|bn.js|4.11.8",
+   "npm|.|body-parser|1.18.3",
+   "npm|.|brace-expansion|1.1.11",
+   "npm|.|braces|0.1.5",
+   "npm|.|braces|1.8.5",
+   "npm|.|braces|2.3.2",
+   "npm|.|brorand|1.1.0",
+   "npm|.|browserify-aes|1.2.0",
+   "npm|.|browserify-cipher|1.0.1",
+   "npm|.|browserify-des|1.0.2",
+   "npm|.|browserify-rsa|4.0.1",
+   "npm|.|browserify-sign|4.0.4",
+   "npm|.|browserify-zlib|0.2.0",
+   "npm|.|browserslist|3.2.8",
+   "npm|.|bser|2.0.0",
+   "npm|.|buffer-alloc-unsafe|1.1.0",
+   "npm|.|buffer-alloc|1.2.0",
+   "npm|.|buffer-crc32|0.2.13",
+   "npm|.|buffer-fill|1.0.0",
+   "npm|.|buffer-from|1.1.1",
+   "npm|.|buffer-xor|1.0.3",
+   "npm|.|buffer|4.9.1",
+   "npm|.|buffer|5.2.1",
+   "npm|.|builtin-modules|1.1.1",
+   "npm|.|builtin-modules|2.0.0",
+   "npm|.|builtin-status-codes|3.0.0",
+   "npm|.|bytes|3.0.0",
+   "npm|.|cacache|11.3.1",
+   "npm|.|cache-base|1.0.1",
+   "npm|.|caller-path|0.1.0",
+   "npm|.|callsite|1.0.0",
+   "npm|.|callsites|0.2.0",
+   "npm|.|caniuse-lite|1.0.30000912",
+   "npm|.|capture-exit|1.2.0",
+   "npm|.|caseless|0.12.0",
+   "npm|.|chalk|1.1.3",
+   "npm|.|chalk|2.4.1",
+   "npm|.|chardet|0.4.2",
+   "npm|.|chokidar|2.0.4",
+   "npm|.|chownr|1.1.1",
+   "npm|.|chrome-trace-event|1.0.0",
+   "npm|.|cipher-base|1.0.4",
+   "npm|.|circular-json|0.3.3",
+   "npm|.|circular-json|0.5.9",
+   "npm|.|class-utils|0.3.6",
+   "npm|.|cli-cursor|1.0.2",
+   "npm|.|cli-cursor|2.1.0",
+   "npm|.|cli-width|2.2.0",
+   "npm|.|co|4.6.0",
+   "npm|.|code-point-at|1.1.0",
+   "npm|.|coffeelint|2.1.0",
+   "npm|.|coffeescript|2.3.2",
+   "npm|.|collection-visit|1.0.0",
+   "npm|.|color-convert|1.9.3",
+   "npm|.|color-name|1.1.3",
+   "npm|.|colors|1.3.2",
+   "npm|.|combine-lists|1.0.1",
+   "npm|.|combined-stream|1.0.7",
+   "npm|.|commander|2.12.2",
+   "npm|.|commander|2.13.0",
+   "npm|.|commander|2.17.1",
+   "npm|.|commondir|1.0.1",
+   "npm|.|component-bind|1.0.0",
+   "npm|.|component-emitter|1.2.1",
+   "npm|.|component-inherit|0.0.3",
+   "npm|.|compress-commons|1.2.2",
+   "npm|.|concat-map|0.0.1",
+   "npm|.|concat-stream|1.6.2",
+   "npm|.|connect|3.6.6",
+   "npm|.|console-browserify|1.1.0",
+   "npm|.|console-control-strings|1.1.0",
+   "npm|.|constants-browserify|1.0.0",
+   "npm|.|contains-path|0.1.0",
+   "npm|.|content-type|1.0.4",
+   "npm|.|convert-source-map|1.6.0",
+   "npm|.|cookie|0.3.1",
+   "npm|.|copy-concurrently|1.0.5",
+   "npm|.|copy-descriptor|0.1.1",
+   "npm|.|core-js|2.5.7",
+   "npm|.|core-util-is|1.0.2",
+   "npm|.|crc|3.8.0",
+   "npm|.|crc32-stream|2.0.0",
+   "npm|.|create-ecdh|4.0.3",
+   "npm|.|create-hash|1.2.0",
+   "npm|.|create-hmac|1.1.7",
+   "npm|.|cross-spawn|5.1.0",
+   "npm|.|cross-spawn|6.0.5",
+   "npm|.|crypto-browserify|3.12.0",
+   "npm|.|custom-event|1.0.1",
+   "npm|.|cyclist|0.2.2",
+   "npm|.|d|1.0.0",
+   "npm|.|dashdash|1.14.1",
+   "npm|.|date-format|1.2.0",
+   "npm|.|date-now|0.1.4",
+   "npm|.|debug|2.6.9",
+   "npm|.|debug|3.1.0",
+   "npm|.|debug|3.2.6",
+   "npm|.|decode-uri-component|0.2.0",
+   "npm|.|deep-extend|0.6.0",
+   "npm|.|deep-is|0.1.3",
+   "npm|.|define-property|0.2.5",
+   "npm|.|define-property|1.0.0",
+   "npm|.|define-property|2.0.2",
+   "npm|.|delayed-stream|1.0.0",
+   "npm|.|delegates|1.0.0",
+   "npm|.|depd|1.1.2",
+   "npm|.|des.js|1.0.0",
+   "npm|.|detect-file|1.0.0",
+   "npm|.|detect-indent|4.0.0",
+   "npm|.|detect-libc|1.0.3",
+   "npm|.|di|0.0.1",
+   "npm|.|diffie-hellman|5.0.3",
+   "npm|.|doctrine|1.5.0",
+   "npm|.|doctrine|2.1.0",
+   "npm|.|dom-serialize|2.2.1",
+   "npm|.|domain-browser|1.2.0",
+   "npm|.|duplexify|3.6.1",
+   "npm|.|ecc-jsbn|0.1.2",
+   "npm|.|ee-first|1.1.1",
+   "npm|.|electron-to-chromium|1.3.86",
+   "npm|.|elliptic|6.4.1",
+   "npm|.|emojis-list|2.1.0",
+   "npm|.|encodeurl|1.0.2",
+   "npm|.|end-of-stream|1.4.1",
+   "npm|.|engine.io-client|3.2.1",
+   "npm|.|engine.io-parser|2.1.3",
+   "npm|.|engine.io|3.2.1",
+   "npm|.|enhanced-resolve|4.1.0",
+   "npm|.|ensure-posix-path|1.0.2",
+   "npm|.|ent|2.2.0",
+   "npm|.|errno|0.1.7",
+   "npm|.|error-ex|1.3.2",
+   "npm|.|es5-ext|0.10.46",
+   "npm|.|es6-iterator|2.0.3",
+   "npm|.|es6-map|0.1.5",
+   "npm|.|es6-promise|4.2.5",
+   "npm|.|es6-promisify|5.0.0",
+   "npm|.|es6-set|0.1.5",
+   "npm|.|es6-symbol|3.1.1",
+   "npm|.|es6-weak-map|2.0.2",
+   "npm|.|escape-html|1.0.3",
+   "npm|.|escape-string-regexp|1.0.5",
+   "npm|.|escope|3.6.0",
+   "npm|.|eslint-import-resolver-node|0.3.2",
+   "npm|.|eslint-module-utils|2.2.0",
+   "npm|.|eslint-plugin-import|2.14.0",
+   "npm|.|eslint-scope|3.7.3",
+   "npm|.|eslint-scope|4.0.0",
+   "npm|.|eslint-visitor-keys|1.0.0",
+   "npm|.|eslint|2.13.1",
+   "npm|.|eslint|4.19.1",
+   "npm|.|espree|3.5.4",
+   "npm|.|esprima|4.0.1",
+   "npm|.|esquery|1.0.1",
+   "npm|.|esrecurse|4.2.1",
+   "npm|.|estraverse|4.2.0",
+   "npm|.|estree-walker|0.2.1",
+   "npm|.|estree-walker|0.5.2",
+   "npm|.|esutils|2.0.2",
+   "npm|.|event-emitter|0.3.5",
+   "npm|.|eventemitter3|3.1.0",
+   "npm|.|events|1.1.1",
+   "npm|.|evp_bytestokey|1.0.3",
+   "npm|.|exec-sh|0.2.2",
+   "npm|.|exec-sh|0.3.2",
+   "npm|.|execa|1.0.0",
+   "npm|.|exists-stat|1.0.0",
+   "npm|.|exit-hook|1.1.1",
+   "npm|.|expand-braces|0.1.2",
+   "npm|.|expand-brackets|0.1.5",
+   "npm|.|expand-brackets|2.1.4",
+   "npm|.|expand-range|0.1.1",
+   "npm|.|expand-range|1.8.2",
+   "npm|.|expand-tilde|2.0.2",
+   "npm|.|extend-shallow|2.0.1",
+   "npm|.|extend-shallow|3.0.2",
+   "npm|.|extend|3.0.2",
+   "npm|.|external-editor|2.2.0",
+   "npm|.|extglob|0.3.2",
+   "npm|.|extglob|2.0.4",
+   "npm|.|extsprintf|1.3.0",
+   "npm|.|extsprintf|1.4.0",
+   "npm|.|fast-deep-equal|1.1.0",
+   "npm|.|fast-deep-equal|2.0.1",
+   "npm|.|fast-json-stable-stringify|2.0.0",
+   "npm|.|fast-levenshtein|2.0.6",
+   "npm|.|fb-watchman|2.0.0",
+   "npm|.|figgy-pudding|3.5.1",
+   "npm|.|figures|1.7.0",
+   "npm|.|figures|2.0.0",
+   "npm|.|file-entry-cache|1.3.1",
+   "npm|.|file-entry-cache|2.0.0",
+   "npm|.|filename-regex|2.0.1",
+   "npm|.|fill-range|2.2.4",
+   "npm|.|fill-range|4.0.0",
+   "npm|.|finalhandler|1.1.0",
+   "npm|.|find-cache-dir|2.0.0",
+   "npm|.|find-up|1.1.2",
+   "npm|.|find-up|2.1.0",
+   "npm|.|find-up|3.0.0",
+   "npm|.|findup-sync|2.0.0",
+   "npm|.|flat-cache|1.3.4",
+   "npm|.|flatted|2.0.0",
+   "npm|.|flush-write-stream|1.0.3",
+   "npm|.|follow-redirects|1.5.10",
+   "npm|.|for-in|1.0.2",
+   "npm|.|for-own|0.1.5",
+   "npm|.|forever-agent|0.6.1",
+   "npm|.|form-data|2.3.3",
+   "npm|.|fragment-cache|0.2.1",
+   "npm|.|from2|2.3.0",
+   "npm|.|fs-access|1.0.1",
+   "npm|.|fs-constants|1.0.0",
+   "npm|.|fs-minipass|1.2.5",
+   "npm|.|fs-write-stream-atomic|1.0.10",
+   "npm|.|fs.realpath|1.0.0",
+   "npm|.|fsevents|1.2.4",
+   "npm|.|function-bind|1.1.1",
+   "npm|.|functional-red-black-tree|1.0.1",
+   "npm|.|gauge|2.7.4",
+   "npm|.|generate-function|2.3.1",
+   "npm|.|generate-object-property|1.2.0",
+   "npm|.|get-stream|4.1.0",
+   "npm|.|get-value|2.0.6",
+   "npm|.|getpass|0.1.7",
+   "npm|.|glob-base|0.3.0",
+   "npm|.|glob-parent|2.0.0",
+   "npm|.|glob-parent|3.1.0",
+   "npm|.|glob|7.1.3",
+   "npm|.|global-modules|1.0.0",
+   "npm|.|global-prefix|1.0.2",
+   "npm|.|globals|11.9.0",
+   "npm|.|globals|9.18.0",
+   "npm|.|graceful-fs|4.1.15",
+   "npm|.|har-schema|2.0.0",
+   "npm|.|har-validator|5.1.3",
+   "npm|.|has-ansi|2.0.0",
+   "npm|.|has-binary2|1.0.3",
+   "npm|.|has-cors|1.1.0",
+   "npm|.|has-flag|3.0.0",
+   "npm|.|has-unicode|2.0.1",
+   "npm|.|has-value|0.3.1",
+   "npm|.|has-value|1.0.0",
+   "npm|.|has-values|0.1.4",
+   "npm|.|has-values|1.0.0",
+   "npm|.|has|1.0.3",
+   "npm|.|hash-base|3.0.4",
+   "npm|.|hash.js|1.1.7",
+   "npm|.|hmac-drbg|1.0.1",
+   "npm|.|home-or-tmp|2.0.0",
+   "npm|.|homedir-polyfill|1.0.1",
+   "npm|.|hosted-git-info|2.7.1",
+   "npm|.|http-errors|1.6.3",
+   "npm|.|http-proxy|1.17.0",
+   "npm|.|http-signature|1.2.0",
+   "npm|.|https-browserify|1.0.0",
+   "npm|.|https-proxy-agent|2.2.1",
+   "npm|.|iconv-lite|0.4.23",
+   "npm|.|iconv-lite|0.4.24",
+   "npm|.|ieee754|1.1.12",
+   "npm|.|iferr|0.1.5",
+   "npm|.|ignore-walk|3.0.1",
+   "npm|.|ignore|3.3.10",
+   "npm|.|imurmurhash|0.1.4",
+   "npm|.|indexof|0.0.1",
+   "npm|.|inflight|1.0.6",
+   "npm|.|inherits|2.0.1",
+   "npm|.|inherits|2.0.3",
+   "npm|.|ini|1.3.5",
+   "npm|.|inquirer|0.12.0",
+   "npm|.|inquirer|3.3.0",
+   "npm|.|invariant|2.2.4",
+   "npm|.|is-accessor-descriptor|0.1.6",
+   "npm|.|is-accessor-descriptor|1.0.0",
+   "npm|.|is-arrayish|0.2.1",
+   "npm|.|is-binary-path|1.0.1",
+   "npm|.|is-buffer|1.1.6",
+   "npm|.|is-builtin-module|1.0.0",
+   "npm|.|is-data-descriptor|0.1.4",
+   "npm|.|is-data-descriptor|1.0.0",
+   "npm|.|is-descriptor|0.1.6",
+   "npm|.|is-descriptor|1.0.2",
+   "npm|.|is-dotfile|1.0.3",
+   "npm|.|is-equal-shallow|0.1.3",
+   "npm|.|is-extendable|0.1.1",
+   "npm|.|is-extendable|1.0.1",
+   "npm|.|is-extglob|1.0.0",
+   "npm|.|is-extglob|2.1.1",
+   "npm|.|is-finite|1.0.2",
+   "npm|.|is-fullwidth-code-point|1.0.0",
+   "npm|.|is-fullwidth-code-point|2.0.0",
+   "npm|.|is-glob|2.0.1",
+   "npm|.|is-glob|3.1.0",
+   "npm|.|is-glob|4.0.0",
+   "npm|.|is-module|1.0.0",
+   "npm|.|is-my-ip-valid|1.0.0",
+   "npm|.|is-my-json-valid|2.19.0",
+   "npm|.|is-number|0.1.1",
+   "npm|.|is-number|2.1.0",
+   "npm|.|is-number|3.0.0",
+   "npm|.|is-number|4.0.0",
+   "npm|.|is-plain-object|2.0.4",
+   "npm|.|is-posix-bracket|0.1.1",
+   "npm|.|is-primitive|2.0.0",
+   "npm|.|is-promise|2.1.0",
+   "npm|.|is-property|1.0.2",
+   "npm|.|is-resolvable|1.1.0",
+   "npm|.|is-stream|1.1.0",
+   "npm|.|is-typedarray|1.0.0",
+   "npm|.|is-windows|1.0.2",
+   "npm|.|isarray|1.0.0",
+   "npm|.|isarray|2.0.1",
+   "npm|.|isbinaryfile|3.0.3",
+   "npm|.|isexe|2.0.0",
+   "npm|.|isobject|2.1.0",
+   "npm|.|isobject|3.0.1",
+   "npm|.|isstream|0.1.2",
+   "npm|.|js-reporters|1.2.1",
+   "npm|.|js-tokens|3.0.2",
+   "npm|.|js-tokens|4.0.0",
+   "npm|.|js-yaml|3.12.0",
+   "npm|.|jsbn|0.1.1",
+   "npm|.|jsesc|0.5.0",
+   "npm|.|jsesc|1.3.0",
+   "npm|.|json-parse-better-errors|1.0.2",
+   "npm|.|json-schema-traverse|0.3.1",
+   "npm|.|json-schema-traverse|0.4.1",
+   "npm|.|json-schema|0.2.3",
+   "npm|.|json-stable-stringify-without-jsonify|1.0.1",
+   "npm|.|json-stable-stringify|1.0.1",
+   "npm|.|json-stringify-safe|5.0.1",
+   "npm|.|json5|0.5.1",
+   "npm|.|jsonify|0.0.0",
+   "npm|.|jsonpointer|4.0.1",
+   "npm|.|jsprim|1.4.1",
+   "npm|.|karma-chrome-launcher|2.2.0",
+   "npm|.|karma-qunit|2.1.0",
+   "npm|.|karma-sauce-launcher|1.2.0",
+   "npm|.|karma|3.1.3",
+   "npm|.|kind-of|3.2.2",
+   "npm|.|kind-of|4.0.0",
+   "npm|.|kind-of|5.1.0",
+   "npm|.|kind-of|6.0.2",
+   "npm|.|lazystream|1.0.0",
+   "npm|.|levn|0.3.0",
+   "npm|.|load-json-file|2.0.0",
+   "npm|.|loader-runner|2.3.1",
+   "npm|.|loader-utils|1.1.0",
+   "npm|.|locate-path|2.0.0",
+   "npm|.|locate-path|3.0.0",
+   "npm|.|lodash.debounce|4.0.8",
+   "npm|.|lodash|4.17.11",
+   "npm|.|log4js|3.0.6",
+   "npm|.|loose-envify|1.4.0",
+   "npm|.|lru-cache|4.1.5",
+   "npm|.|magic-string|0.25.1",
+   "npm|.|make-dir|1.3.0",
+   "npm|.|makeerror|1.0.11",
+   "npm|.|map-cache|0.2.2",
+   "npm|.|map-visit|1.0.0",
+   "npm|.|matcher-collection|1.0.5",
+   "npm|.|math-random|1.0.1",
+   "npm|.|md5.js|1.3.5",
+   "npm|.|media-typer|0.3.0",
+   "npm|.|memory-fs|0.4.1",
+   "npm|.|merge|1.2.1",
+   "npm|.|micromatch|2.3.11",
+   "npm|.|micromatch|3.1.10",
+   "npm|.|miller-rabin|4.0.1",
+   "npm|.|mime-db|1.37.0",
+   "npm|.|mime-types|2.1.21",
+   "npm|.|mime|2.4.0",
+   "npm|.|mimic-fn|1.2.0",
+   "npm|.|minimalistic-assert|1.0.1",
+   "npm|.|minimalistic-crypto-utils|1.0.1",
+   "npm|.|minimatch|3.0.4",
+   "npm|.|minimist|0.0.10",
+   "npm|.|minimist|0.0.8",
+   "npm|.|minimist|1.2.0",
+   "npm|.|minipass|2.3.5",
+   "npm|.|minizlib|1.1.1",
+   "npm|.|mississippi|3.0.0",
+   "npm|.|mixin-deep|1.3.1",
+   "npm|.|mkdirp|0.5.1",
+   "npm|.|mock-socket|2.0.0",
+   "npm|.|move-concurrently|1.0.1",
+   "npm|.|ms|2.0.0",
+   "npm|.|ms|2.1.1",
+   "npm|.|mute-stream|0.0.5",
+   "npm|.|mute-stream|0.0.7",
+   "npm|.|nan|2.11.1",
+   "npm|.|nanomatch|1.2.13",
+   "npm|.|natural-compare|1.4.0",
+   "npm|.|needle|2.2.4",
+   "npm|.|negotiator|0.6.1",
+   "npm|.|neo-async|2.6.0",
+   "npm|.|next-tick|1.0.0",
+   "npm|.|nice-try|1.0.5",
+   "npm|.|node-int64|0.4.0",
+   "npm|.|node-libs-browser|2.1.0",
+   "npm|.|node-pre-gyp|0.10.3",
+   "npm|.|nopt|4.0.1",
+   "npm|.|normalize-package-data|2.4.0",
+   "npm|.|normalize-path|2.1.1",
+   "npm|.|npm-bundled|1.0.5",
+   "npm|.|npm-packlist|1.1.12",
+   "npm|.|npm-run-path|2.0.2",
+   "npm|.|npmlog|4.1.2",
+   "npm|.|null-check|1.0.0",
+   "npm|.|number-is-nan|1.0.1",
+   "npm|.|oauth-sign|0.9.0",
+   "npm|.|object-assign|4.1.1",
+   "npm|.|object-component|0.0.3",
+   "npm|.|object-copy|0.1.0",
+   "npm|.|object-visit|1.0.1",
+   "npm|.|object.omit|2.0.1",
+   "npm|.|object.pick|1.3.0",
+   "npm|.|on-finished|2.3.0",
+   "npm|.|once|1.4.0",
+   "npm|.|onetime|1.1.0",
+   "npm|.|onetime|2.0.1",
+   "npm|.|optimist|0.6.1",
+   "npm|.|optionator|0.8.2",
+   "npm|.|os-browserify|0.3.0",
+   "npm|.|os-homedir|1.0.2",
+   "npm|.|os-tmpdir|1.0.2",
+   "npm|.|osenv|0.1.5",
+   "npm|.|p-finally|1.0.0",
+   "npm|.|p-limit|1.3.0",
+   "npm|.|p-limit|2.0.0",
+   "npm|.|p-locate|2.0.0",
+   "npm|.|p-locate|3.0.0",
+   "npm|.|p-try|1.0.0",
+   "npm|.|p-try|2.0.0",
+   "npm|.|pako|1.0.7",
+   "npm|.|parallel-transform|1.1.0",
+   "npm|.|parse-asn1|5.1.1",
+   "npm|.|parse-glob|3.0.4",
+   "npm|.|parse-json|2.2.0",
+   "npm|.|parse-passwd|1.0.0",
+   "npm|.|parseqs|0.0.5",
+   "npm|.|parseuri|0.0.5",
+   "npm|.|parseurl|1.3.2",
+   "npm|.|pascalcase|0.1.1",
+   "npm|.|path-browserify|0.0.0",
+   "npm|.|path-dirname|1.0.2",
+   "npm|.|path-exists|2.1.0",
+   "npm|.|path-exists|3.0.0",
+   "npm|.|path-is-absolute|1.0.1",
+   "npm|.|path-is-inside|1.0.2",
+   "npm|.|path-key|2.0.1",
+   "npm|.|path-parse|1.0.6",
+   "npm|.|path-type|2.0.0",
+   "npm|.|pbkdf2|3.0.17",
+   "npm|.|performance-now|2.1.0",
+   "npm|.|pify|2.3.0",
+   "npm|.|pify|3.0.0",
+   "npm|.|pinkie-promise|2.0.1",
+   "npm|.|pinkie|2.0.4",
+   "npm|.|pkg-dir|1.0.0",
+   "npm|.|pkg-dir|3.0.0",
+   "npm|.|pluralize|1.2.1",
+   "npm|.|pluralize|7.0.0",
+   "npm|.|posix-character-classes|0.1.1",
+   "npm|.|prelude-ls|1.1.2",
+   "npm|.|preserve|0.2.0",
+   "npm|.|private|0.1.8",
+   "npm|.|process-nextick-args|2.0.0",
+   "npm|.|process|0.11.10",
+   "npm|.|progress|1.1.8",
+   "npm|.|progress|2.0.1",
+   "npm|.|promise-inflight|1.0.1",
+   "npm|.|prr|1.0.1",
+   "npm|.|pseudomap|1.0.2",
+   "npm|.|psl|1.1.29",
+   "npm|.|public-encrypt|4.0.3",
+   "npm|.|pump|2.0.1",
+   "npm|.|pump|3.0.0",
+   "npm|.|pumpify|1.5.1",
+   "npm|.|punycode|1.3.2",
+   "npm|.|punycode|1.4.1",
+   "npm|.|punycode|2.1.1",
+   "npm|.|q|1.4.1",
+   "npm|.|q|1.5.1",
+   "npm|.|qjobs|1.2.0",
+   "npm|.|qs|6.5.2",
+   "npm|.|querystring-es3|0.2.1",
+   "npm|.|querystring|0.2.0",
+   "npm|.|qunit|2.8.0",
+   "npm|.|randomatic|3.1.1",
+   "npm|.|randombytes|2.0.6",
+   "npm|.|randomfill|1.0.4",
+   "npm|.|range-parser|1.2.0",
+   "npm|.|raw-body|2.3.3",
+   "npm|.|rc|1.2.8",
+   "npm|.|read-pkg-up|2.0.0",
+   "npm|.|read-pkg|2.0.0",
+   "npm|.|readable-stream|2.3.6",
+   "npm|.|readdirp|2.2.1",
+   "npm|.|readline2|1.0.1",
+   "npm|.|regenerate|1.4.0",
+   "npm|.|regenerator-runtime|0.11.1",
+   "npm|.|regenerator-transform|0.10.1",
+   "npm|.|regex-cache|0.4.4",
+   "npm|.|regex-not|1.0.2",
+   "npm|.|regexpp|1.1.0",
+   "npm|.|regexpu-core|2.0.0",
+   "npm|.|regjsgen|0.2.0",
+   "npm|.|regjsparser|0.1.5",
+   "npm|.|remove-trailing-separator|1.1.0",
+   "npm|.|repeat-element|1.1.3",
+   "npm|.|repeat-string|0.2.2",
+   "npm|.|repeat-string|1.6.1",
+   "npm|.|repeating|2.0.1",
+   "npm|.|request|2.88.0",
+   "npm|.|require-uncached|1.0.3",
+   "npm|.|requires-port|1.0.0",
+   "npm|.|resolve-dir|1.0.1",
+   "npm|.|resolve-from|1.0.1",
+   "npm|.|resolve-url|0.2.1",
+   "npm|.|resolve|0.6.3",
+   "npm|.|resolve|1.5.0",
+   "npm|.|resolve|1.8.1",
+   "npm|.|restore-cursor|1.0.1",
+   "npm|.|restore-cursor|2.0.0",
+   "npm|.|ret|0.1.15",
+   "npm|.|rfdc|1.1.2",
+   "npm|.|rimraf|2.6.2",
+   "npm|.|ripemd160|2.0.2",
+   "npm|.|rollup-plugin-babel|3.0.7",
+   "npm|.|rollup-plugin-commonjs|9.2.0",
+   "npm|.|rollup-plugin-node-resolve|3.4.0",
+   "npm|.|rollup-plugin-uglify|3.0.0",
+   "npm|.|rollup-pluginutils|1.5.2",
+   "npm|.|rollup-pluginutils|2.3.3",
+   "npm|.|rollup|0.58.2",
+   "npm|.|rsvp|3.6.2",
+   "npm|.|run-async|0.1.0",
+   "npm|.|run-async|2.3.0",
+   "npm|.|run-queue|1.0.3",
+   "npm|.|rx-lite-aggregates|4.0.8",
+   "npm|.|rx-lite|3.1.2",
+   "npm|.|rx-lite|4.0.8",
+   "npm|.|safe-buffer|5.1.2",
+   "npm|.|safe-regex|1.1.0",
+   "npm|.|safer-buffer|2.1.2",
+   "npm|.|sane|4.0.2",
+   "npm|.|sauce-connect-launcher|1.2.4",
+   "npm|.|saucelabs|1.5.0",
+   "npm|.|sax|1.2.4",
+   "npm|.|schema-utils|0.4.7",
+   "npm|.|schema-utils|1.0.0",
+   "npm|.|semver|5.6.0",
+   "npm|.|serialize-javascript|1.5.0",
+   "npm|.|set-blocking|2.0.0",
+   "npm|.|set-value|0.4.3",
+   "npm|.|set-value|2.0.0",
+   "npm|.|setimmediate|1.0.5",
+   "npm|.|setprototypeof|1.1.0",
+   "npm|.|sha.js|2.4.11",
+   "npm|.|shebang-command|1.2.0",
+   "npm|.|shebang-regex|1.0.0",
+   "npm|.|shelljs|0.6.1",
+   "npm|.|signal-exit|3.0.2",
+   "npm|.|slash|1.0.0",
+   "npm|.|slice-ansi|0.0.4",
+   "npm|.|slice-ansi|1.0.0",
+   "npm|.|snapdragon-node|2.1.1",
+   "npm|.|snapdragon-util|3.0.1",
+   "npm|.|snapdragon|0.8.2",
+   "npm|.|socket.io-adapter|1.1.1",
+   "npm|.|socket.io-client|2.1.1",
+   "npm|.|socket.io-parser|3.2.0",
+   "npm|.|socket.io|2.1.1",
+   "npm|.|source-list-map|2.0.1",
+   "npm|.|source-map-resolve|0.5.2",
+   "npm|.|source-map-support|0.4.18",
+   "npm|.|source-map-support|0.5.9",
+   "npm|.|source-map-url|0.4.0",
+   "npm|.|source-map|0.5.7",
+   "npm|.|source-map|0.6.1",
+   "npm|.|sourcemap-codec|1.4.4",
+   "npm|.|spark-md5|3.0.0",
+   "npm|.|spdx-correct|3.0.2",
+   "npm|.|spdx-exceptions|2.2.0",
+   "npm|.|spdx-expression-parse|3.0.0",
+   "npm|.|spdx-license-ids|3.0.2",
+   "npm|.|split-string|3.1.0",
+   "npm|.|sprintf-js|1.0.3",
+   "npm|.|sshpk|1.15.2",
+   "npm|.|ssri|6.0.1",
+   "npm|.|static-extend|0.1.2",
+   "npm|.|statuses|1.3.1",
+   "npm|.|statuses|1.5.0",
+   "npm|.|stream-browserify|2.0.1",
+   "npm|.|stream-each|1.2.3",
+   "npm|.|stream-http|2.8.3",
+   "npm|.|stream-shift|1.0.0",
+   "npm|.|streamroller|0.7.0",
+   "npm|.|string_decoder|1.1.1",
+   "npm|.|string_decoder|1.2.0",
+   "npm|.|string-width|1.0.2",
+   "npm|.|string-width|2.1.1",
+   "npm|.|strip-ansi|3.0.1",
+   "npm|.|strip-ansi|4.0.0",
+   "npm|.|strip-bom|3.0.0",
+   "npm|.|strip-eof|1.0.0",
+   "npm|.|strip-json-comments|1.0.4",
+   "npm|.|strip-json-comments|2.0.1",
+   "npm|.|supports-color|2.0.0",
+   "npm|.|supports-color|5.5.0",
+   "npm|.|table|3.8.3",
+   "npm|.|table|4.0.2",
+   "npm|.|tapable|1.1.1",
+   "npm|.|tar-stream|1.6.2",
+   "npm|.|tar|4.4.8",
+   "npm|.|terser-webpack-plugin|1.1.0",
+   "npm|.|terser|3.10.13",
+   "npm|.|text-table|0.2.0",
+   "npm|.|through|2.3.8",
+   "npm|.|through2|2.0.5",
+   "npm|.|timers-browserify|2.0.10",
+   "npm|.|tmp|0.0.33",
+   "npm|.|tmpl|1.0.4",
+   "npm|.|to-array|0.1.4",
+   "npm|.|to-arraybuffer|1.0.1",
+   "npm|.|to-buffer|1.1.1",
+   "npm|.|to-fast-properties|1.0.3",
+   "npm|.|to-object-path|0.3.0",
+   "npm|.|to-regex-range|2.1.1",
+   "npm|.|to-regex|3.0.2",
+   "npm|.|tough-cookie|2.4.3",
+   "npm|.|trim-right|1.0.1",
+   "npm|.|tslib|1.9.3",
+   "npm|.|tty-browserify|0.0.0",
+   "npm|.|tunnel-agent|0.6.0",
+   "npm|.|tweetnacl|0.14.5",
+   "npm|.|type-check|0.3.2",
+   "npm|.|type-is|1.6.16",
+   "npm|.|typedarray|0.0.6",
+   "npm|.|uglify-es|3.3.9",
+   "npm|.|ultron|1.1.1",
+   "npm|.|union-value|1.0.0",
+   "npm|.|unique-filename|1.1.1",
+   "npm|.|unique-slug|2.0.1",
+   "npm|.|unpipe|1.0.0",
+   "npm|.|unset-value|1.0.0",
+   "npm|.|upath|1.1.0",
+   "npm|.|uri-js|4.2.2",
+   "npm|.|urijs|1.17.1",
+   "npm|.|urix|0.1.0",
+   "npm|.|url|0.11.0",
+   "npm|.|use|3.1.1",
+   "npm|.|user-home|2.0.0",
+   "npm|.|useragent|2.3.0",
+   "npm|.|util-deprecate|1.0.2",
+   "npm|.|util|0.10.3",
+   "npm|.|util|0.10.4",
+   "npm|.|utils-merge|1.0.1",
+   "npm|.|uuid|3.3.2",
+   "npm|.|validate-npm-package-license|3.0.4",
+   "npm|.|vargs|0.1.0",
+   "npm|.|verror|1.10.0",
+   "npm|.|vm-browserify|0.0.4",
+   "npm|.|void-elements|2.0.1",
+   "npm|.|walk-sync|0.3.2",
+   "npm|.|walker|1.0.7",
+   "npm|.|watch|0.18.0",
+   "npm|.|watchpack|1.6.0",
+   "npm|.|wd|1.11.1",
+   "npm|.|webpack-sources|1.3.0",
+   "npm|.|webpack|4.26.1",
+   "npm|.|which|1.3.1",
+   "npm|.|wide-align|1.1.3",
+   "npm|.|wordwrap|0.0.3",
+   "npm|.|wordwrap|1.0.0",
+   "npm|.|worker-farm|1.6.0",
+   "npm|.|wrappy|1.0.2",
+   "npm|.|write|0.2.1",
+   "npm|.|ws|3.3.3",
+   "npm|.|xmlhttprequest-ssl|1.5.5",
+   "npm|.|xtend|4.0.1",
+   "npm|.|y18n|4.0.0",
+   "npm|.|yallist|2.1.2",
+   "npm|.|yallist|3.0.3",
+   "npm|.|yeast|0.1.2",
+   "npm|.|zip-stream|1.2.0",
+   "RubyGems|.|activerecord-jdbc-adapter|52.1",
+   "RubyGems|.|activerecord-jdbcmysql-adapter|52.1",
+   "RubyGems|.|activerecord-jdbcpostgresql-adapter|52.1",
+   "RubyGems|.|activerecord-jdbcsqlite3-adapter|52.1",
+   "RubyGems|.|addressable|2.6.0",
+   "RubyGems|.|amq-protocol|2.3.0",
+   "RubyGems|.|ansi|1.5.0",
+   "RubyGems|.|ast|2.4.0",
+   "RubyGems|.|aws-eventstream|1.0.1",
+   "RubyGems|.|aws-partitions|1.111.0",
+   "RubyGems|.|aws-sdk-core|3.37.0",
+   "RubyGems|.|aws-sdk-kms|1.11.0",
+   "RubyGems|.|aws-sdk-s3|1.23.1",
+   "RubyGems|.|aws-sdk-sns|1.8.1",
+   "RubyGems|.|aws-sigv4|1.0.3",
+   "RubyGems|.|azure-core|0.1.14",
+   "RubyGems|.|azure-storage|0.15.0.preview",
+   "RubyGems|.|backburner|1.5.0",
+   "RubyGems|.|bcrypt|3.1.12",
+   "RubyGems|.|beaneater|1.0.0",
+   "RubyGems|.|benchmark-ips|2.7.2",
+   "RubyGems|.|blade-qunit_adapter|2.0.1",
+   "RubyGems|.|blade-sauce_labs_plugin|0.7.3",
+   "RubyGems|.|blade|0.7.1",
+   "RubyGems|.|bootsnap|1.4.2",
+   "RubyGems|.|builder|3.2.3",
+   "RubyGems|.|bunny|2.13.0",
+   "RubyGems|.|byebug|10.0.2",
+   "RubyGems|.|capybara|3.10.1",
+   "RubyGems|.|childprocess|1.0.1",
+   "RubyGems|.|coffee-script-source|1.12.2",
+   "RubyGems|.|coffee-script|2.4.1",
+   "RubyGems|.|concurrent-ruby|1.1.4",
+   "RubyGems|.|connection_pool|2.2.2",
+   "RubyGems|.|cookiejar|0.3.3",
+   "RubyGems|.|crack|0.4.3",
+   "RubyGems|.|crass|1.0.4",
+   "RubyGems|.|curses|1.0.2",
+   "RubyGems|.|daemons|1.2.6",
+   "RubyGems|.|dalli|2.7.9",
+   "RubyGems|.|dante|0.2.0",
+   "RubyGems|.|declarative-option|0.1.0",
+   "RubyGems|.|declarative|0.0.10",
+   "RubyGems|.|delayed_job_active_record|4.1.3",
+   "RubyGems|.|delayed_job|4.1.5",
+   "RubyGems|.|digest-crc|0.4.1",
+   "RubyGems|.|em-http-request|1.1.5",
+   "RubyGems|.|em-socksify|0.3.2",
+   "RubyGems|.|erubi|1.8.0",
+   "RubyGems|.|et-orbi|1.1.6",
+   "RubyGems|.|event_emitter|0.2.6",
+   "RubyGems|.|eventmachine|1.2.7",
+   "RubyGems|.|execjs|2.7.0",
+   "RubyGems|.|faraday_middleware|0.12.2",
+   "RubyGems|.|faraday|0.15.3",
+   "RubyGems|.|faye-websocket|0.10.7",
+   "RubyGems|.|faye|1.2.4",
+   "RubyGems|.|ffi|1.11.1",
+   "RubyGems|.|fugit|1.1.6",
+   "RubyGems|.|globalid|0.4.2",
+   "RubyGems|.|google-api-client|0.25.0",
+   "RubyGems|.|google-cloud-core|1.2.7",
+   "RubyGems|.|google-cloud-env|1.0.5",
+   "RubyGems|.|google-cloud-storage|1.15.0",
+   "RubyGems|.|googleauth|0.6.7",
+   "RubyGems|.|hashdiff|0.3.7",
+   "RubyGems|.|hiredis|0.6.3",
+   "RubyGems|.|http_parser.rb|0.6.0",
+   "RubyGems|.|httpclient|2.8.3",
+   "RubyGems|.|i18n|1.6.0",
+   "RubyGems|.|image_processing|1.7.1",
+   "RubyGems|.|jar-dependencies|0.4.0",
+   "RubyGems|.|jaro_winkler|1.5.2",
+   "RubyGems|.|jdbc-mysql|5.1.46",
+   "RubyGems|.|jdbc-postgres|42.1.4",
+   "RubyGems|.|jdbc-sqlite3|3.20.1",
+   "RubyGems|.|jmespath|1.4.0",
+   "RubyGems|.|json|2.1.0",
+   "RubyGems|.|jwt|2.1.0",
+   "RubyGems|.|kindlerb|1.2.0",
+   "RubyGems|.|libxml-ruby|3.1.0",
+   "RubyGems|.|listen|3.1.5",
+   "RubyGems|.|loofah|2.2.3",
+   "RubyGems|.|mail|2.7.1",
+   "RubyGems|.|marcel|0.3.3",
+   "RubyGems|.|memoist|0.16.0",
+   "RubyGems|.|method_source|0.9.2",
+   "RubyGems|.|mime-types-data|3.2018.0812",
+   "RubyGems|.|mime-types|3.2.2",
+   "RubyGems|.|mimemagic|0.3.3",
+   "RubyGems|.|mini_magick|4.9.2",
+   "RubyGems|.|mini_mime|1.0.1",
+   "RubyGems|.|mini_portile2|2.4.0",
+   "RubyGems|.|minitest-bisect|1.4.0",
+   "RubyGems|.|minitest-reporters|1.3.6",
+   "RubyGems|.|minitest-retry|0.1.9",
+   "RubyGems|.|minitest-server|1.0.5",
+   "RubyGems|.|minitest|5.11.3",
+   "RubyGems|.|mono_logger|1.1.0",
+   "RubyGems|.|msgpack|1.2.9",
+   "RubyGems|.|multi_json|1.13.1",
+   "RubyGems|.|multipart-post|2.0.0",
+   "RubyGems|.|mustache|1.1.0",
+   "RubyGems|.|mustermann|1.0.3",
+   "RubyGems|.|mysql2|0.5.2",
+   "RubyGems|.|net_http_ssl_fix|0.0.10",
+   "RubyGems|.|nio4r|2.4.0",
+   "RubyGems|.|nokogiri|1.9.1",
+   "RubyGems|.|os|1.0.0",
+   "RubyGems|.|parallel|1.13.0",
+   "RubyGems|.|parser|2.6.2.0",
+   "RubyGems|.|path_expander|1.0.3",
+   "RubyGems|.|pg|1.1.3",
+   "RubyGems|.|psych|3.1.0",
+   "RubyGems|.|public_suffix|3.0.3",
+   "RubyGems|.|puma|3.12.1",
+   "RubyGems|.|que|0.14.3",
+   "RubyGems|.|qunit-selenium|0.0.4",
+   "RubyGems|.|raabro|1.1.6",
+   "RubyGems|.|racc|1.4.15",
+   "RubyGems|.|rack-cache|1.8.0",
+   "RubyGems|.|rack-protection|2.0.4",
+   "RubyGems|.|rack-proxy|0.6.5",
+   "RubyGems|.|rack-test|1.1.0",
+   "RubyGems|.|rack|2.0.6",
+   "RubyGems|.|rails-dom-testing|2.0.3",
+   "RubyGems|.|rails-html-sanitizer|1.2.0",
+   "RubyGems|.|rainbow|3.0.0",
+   "RubyGems|.|rake|12.3.2",
+   "RubyGems|.|rb-fsevent|0.10.3",
+   "RubyGems|.|rb-inotify|0.10.0",
+   "RubyGems|.|rdoc|6.0.4",
+   "RubyGems|.|redcarpet|3.2.3",
+   "RubyGems|.|redis-namespace|1.6.0",
+   "RubyGems|.|redis|4.0.3",
+   "RubyGems|.|regexp_parser|1.3.0",
+   "RubyGems|.|representable|3.0.4",
+   "RubyGems|.|resque-scheduler|4.3.1",
+   "RubyGems|.|resque|1.27.4",
+   "RubyGems|.|retriable|3.1.2",
+   "RubyGems|.|rubocop-performance|1.1.0",
+   "RubyGems|.|rubocop|0.67.2",
+   "RubyGems|.|ruby_dep|1.5.0",
+   "RubyGems|.|ruby-progressbar|1.10.0",
+   "RubyGems|.|ruby-vips|2.0.13",
+   "RubyGems|.|rubyzip|1.2.3",
+   "RubyGems|.|rufus-scheduler|3.5.2",
+   "RubyGems|.|safe_yaml|1.0.4",
+   "RubyGems|.|sass-listen|4.0.0",
+   "RubyGems|.|sass-rails|5.0.7",
+   "RubyGems|.|sass|3.7.2",
+   "RubyGems|.|sdoc|1.0.0",
+   "RubyGems|.|selenium-webdriver|3.142.3",
+   "RubyGems|.|sequel|5.14.0",
+   "RubyGems|.|serverengine|2.0.7",
+   "RubyGems|.|sidekiq|5.2.3",
+   "RubyGems|.|sigdump|0.2.4",
+   "RubyGems|.|signet|0.11.0",
+   "RubyGems|.|sinatra|2.0.4",
+   "RubyGems|.|sneakers|2.11.0",
+   "RubyGems|.|sprockets-export|1.0.0",
+   "RubyGems|.|sprockets-rails|3.2.1",
+   "RubyGems|.|sprockets|3.7.2",
+   "RubyGems|.|sqlite3|1.4.0",
+   "RubyGems|.|stackprof|0.2.12",
+   "RubyGems|.|sucker_punch|2.1.1",
+   "RubyGems|.|thin|1.7.2",
+   "RubyGems|.|thor|0.20.3",
+   "RubyGems|.|thread_safe|0.3.6",
+   "RubyGems|.|tilt|2.0.8",
+   "RubyGems|.|turbolinks-source|5.2.0",
+   "RubyGems|.|turbolinks|5.2.0",
+   "RubyGems|.|tzinfo-data|1.2018.7",
+   "RubyGems|.|tzinfo|1.2.5",
+   "RubyGems|.|uber|0.1.0",
+   "RubyGems|.|uglifier|4.1.19",
+   "RubyGems|.|unicode-display_width|1.5.0",
+   "RubyGems|.|useragent|0.16.10",
+   "RubyGems|.|vegas|0.1.11",
+   "RubyGems|.|w3c_validators|1.3.4",
+   "RubyGems|.|wdm|0.1.1",
+   "RubyGems|.|webdrivers|3.7.0",
+   "RubyGems|.|webmock|3.4.2",
+   "RubyGems|.|webpacker|4.0.2",
+   "RubyGems|.|websocket-driver|0.7.0",
+   "RubyGems|.|websocket-extensions|0.1.3",
+   "RubyGems|.|websocket|1.2.8",
+   "RubyGems|.|xpath|3.2.0",
+   "RubyGems|.|zeitwerk|2.1.9"
+  ]
+ },
+ "findings": [
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "acorn",
+   "version": "5.7.3",
+   "ids": [
+    "GHSA-6chw-6frg-f759"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "adm-zip",
+   "version": "0.4.13",
+   "ids": [
+    "GHSA-7q85-xj36-vmfc"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "adm-zip",
+   "version": "0.4.13",
+   "ids": [
+    "GHSA-8238-w5pm-2374"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "adm-zip",
+   "version": "0.4.13",
+   "ids": [
+    "GHSA-c6fg-446q-cg94"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "adm-zip",
+   "version": "0.4.13",
+   "ids": [
+    "GHSA-j5f4-cc29-5x44"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "adm-zip",
+   "version": "0.4.13",
+   "ids": [
+    "GHSA-p634-w6r4-rjp2"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "adm-zip",
+   "version": "0.4.13",
+   "ids": [
+    "GHSA-rcw4-f5rp-g42v"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "adm-zip",
+   "version": "0.4.13",
+   "ids": [
+    "GHSA-xcpc-8h2w-3j85"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "ajv",
+   "version": "4.11.8",
+   "ids": [
+    "GHSA-2g4f-4pwh-qvx6"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "ajv",
+   "version": "4.11.8",
+   "ids": [
+    "GHSA-v88g-cgmw-v5xw"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "ajv",
+   "version": "5.5.2",
+   "ids": [
+    "GHSA-2g4f-4pwh-qvx6"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "ajv",
+   "version": "5.5.2",
+   "ids": [
+    "GHSA-v88g-cgmw-v5xw"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "ajv",
+   "version": "6.6.1",
+   "ids": [
+    "GHSA-2g4f-4pwh-qvx6"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "ajv",
+   "version": "6.6.1",
+   "ids": [
+    "GHSA-v88g-cgmw-v5xw"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "ansi-regex",
+   "version": "3.0.0",
+   "ids": [
+    "GHSA-93q8-gq69-wqmw"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "async",
+   "version": "2.0.1",
+   "ids": [
+    "GHSA-fwr7-v2mv-hh25"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "async",
+   "version": "2.6.1",
+   "ids": [
+    "GHSA-fwr7-v2mv-hh25"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "babel-traverse",
+   "version": "6.26.0",
+   "ids": [
+    "GHSA-67hx-6x53-jw92"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "bl",
+   "version": "1.2.2",
+   "ids": [
+    "GHSA-pp7h-53gx-mx7r"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "bn.js",
+   "version": "4.11.8",
+   "ids": [
+    "GHSA-378v-28hj-76wf"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "body-parser",
+   "version": "1.18.3",
+   "ids": [
+    "GHSA-qwcr-r2fm-qrc7"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "body-parser",
+   "version": "1.18.3",
+   "ids": [
+    "GHSA-v422-hmwv-36x6"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "brace-expansion",
+   "version": "1.1.11",
+   "ids": [
+    "GHSA-3jxr-9vmj-r5cp"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "brace-expansion",
+   "version": "1.1.11",
+   "ids": [
+    "GHSA-6j4f-fj2g-mc7p"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "brace-expansion",
+   "version": "1.1.11",
+   "ids": [
+    "GHSA-f886-m6hf-6m8v"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "brace-expansion",
+   "version": "1.1.11",
+   "ids": [
+    "GHSA-mh99-v99m-4gvg"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "brace-expansion",
+   "version": "1.1.11",
+   "ids": [
+    "GHSA-q2hr-2g5m-vwhr"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "brace-expansion",
+   "version": "1.1.11",
+   "ids": [
+    "GHSA-qhr7-859c-m2p7"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "brace-expansion",
+   "version": "1.1.11",
+   "ids": [
+    "GHSA-rgw5-rvv9-x895"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "brace-expansion",
+   "version": "1.1.11",
+   "ids": [
+    "GHSA-v6h2-p8h4-qcjw"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "braces",
+   "version": "0.1.5",
+   "ids": [
+    "GHSA-grv7-fg5c-xmjg"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "braces",
+   "version": "0.1.5",
+   "ids": [
+    "GHSA-vfj7-8cjw-p6xm"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "braces",
+   "version": "1.8.5",
+   "ids": [
+    "GHSA-grv7-fg5c-xmjg"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "braces",
+   "version": "1.8.5",
+   "ids": [
+    "GHSA-vfj7-8cjw-p6xm"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "braces",
+   "version": "2.3.2",
+   "ids": [
+    "GHSA-grv7-fg5c-xmjg"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "braces",
+   "version": "2.3.2",
+   "ids": [
+    "GHSA-vfj7-8cjw-p6xm"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "browserify-sign",
+   "version": "4.0.4",
+   "ids": [
+    "GHSA-x9w5-v3q2-3rhw"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "browserslist",
+   "version": "3.2.8",
+   "ids": [
+    "GHSA-73wf-gq98-2v4g"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "browserslist",
+   "version": "3.2.8",
+   "ids": [
+    "GHSA-c83g-rgw3-j3cx"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "cipher-base",
+   "version": "1.0.4",
+   "ids": [
+    "GHSA-cpq7-6gpm-g9rc"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "cookie",
+   "version": "0.3.1",
+   "ids": [
+    "GHSA-pxg6-pf52-xh8x"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "cross-spawn",
+   "version": "5.1.0",
+   "ids": [
+    "GHSA-3xgq-45jj-v275"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "cross-spawn",
+   "version": "6.0.5",
+   "ids": [
+    "GHSA-3xgq-45jj-v275"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "debug",
+   "version": "3.2.6",
+   "ids": [
+    "GHSA-gxpj-cx7g-858c"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "decode-uri-component",
+   "version": "0.2.0",
+   "ids": [
+    "GHSA-vcc3-ghjq-m6fr"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "decode-uri-component",
+   "version": "0.2.0",
+   "ids": [
+    "GHSA-w573-4hg7-7wgq"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "elliptic",
+   "version": "6.4.1",
+   "ids": [
+    "GHSA-434g-2637-qmqr"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "elliptic",
+   "version": "6.4.1",
+   "ids": [
+    "GHSA-49q7-c7j4-3p7m"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "elliptic",
+   "version": "6.4.1",
+   "ids": [
+    "GHSA-848j-6mx2-7j84"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "elliptic",
+   "version": "6.4.1",
+   "ids": [
+    "GHSA-977x-g7h5-7qgw"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "elliptic",
+   "version": "6.4.1",
+   "ids": [
+    "GHSA-f7q4-pwc6-w24p"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "elliptic",
+   "version": "6.4.1",
+   "ids": [
+    "GHSA-fc9h-whq2-v747"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "elliptic",
+   "version": "6.4.1",
+   "ids": [
+    "GHSA-r9p9-mrjm-926w"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "elliptic",
+   "version": "6.4.1",
+   "ids": [
+    "GHSA-vh7m-p724-62c2"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "elliptic",
+   "version": "6.4.1",
+   "ids": [
+    "GHSA-vjh7-7g9h-fjfh"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "engine.io",
+   "version": "3.2.1",
+   "ids": [
+    "GHSA-j4f2-536g-r55m"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "engine.io",
+   "version": "3.2.1",
+   "ids": [
+    "GHSA-r7qp-cfhv-p84w"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "es5-ext",
+   "version": "0.10.46",
+   "ids": [
+    "GHSA-4gmj-3p3h-gm8h"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "flatted",
+   "version": "2.0.0",
+   "ids": [
+    "GHSA-25h7-pfq9-p65f"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "flatted",
+   "version": "2.0.0",
+   "ids": [
+    "GHSA-rf6f-7fwh-wjgh"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "follow-redirects",
+   "version": "1.5.10",
+   "ids": [
+    "GHSA-74fj-2j2h-c42q"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "follow-redirects",
+   "version": "1.5.10",
+   "ids": [
+    "GHSA-cxjh-pqwp-8mfp"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "follow-redirects",
+   "version": "1.5.10",
+   "ids": [
+    "GHSA-jchw-25xp-jwwc"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "follow-redirects",
+   "version": "1.5.10",
+   "ids": [
+    "GHSA-pw2r-vq6v-hr8c"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "follow-redirects",
+   "version": "1.5.10",
+   "ids": [
+    "GHSA-r4q5-vmmm-2653"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "form-data",
+   "version": "2.3.3",
+   "ids": [
+    "GHSA-fjxv-7rqg-78g4"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "form-data",
+   "version": "2.3.3",
+   "ids": [
+    "GHSA-hmw2-7cc7-3qxx"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "fsevents",
+   "version": "1.2.4",
+   "ids": [
+    "GHSA-8r6j-v8pm-fqw3"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "fsevents",
+   "version": "1.2.4",
+   "ids": [
+    "MAL-2023-462"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "hosted-git-info",
+   "version": "2.7.1",
+   "ids": [
+    "GHSA-43f8-2h32-f4cj"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "http-proxy",
+   "version": "1.17.0",
+   "ids": [
+    "GHSA-6x33-pw7p-hmpq"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "https-proxy-agent",
+   "version": "2.2.1",
+   "ids": [
+    "GHSA-pc5p-h8pf-mvwp"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "ini",
+   "version": "1.3.5",
+   "ids": [
+    "GHSA-qqgx-2p2h-9c37"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "js-yaml",
+   "version": "3.12.0",
+   "ids": [
+    "GHSA-2883-xcg3-v3hh"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "js-yaml",
+   "version": "3.12.0",
+   "ids": [
+    "GHSA-2pr6-76vf-7546"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "js-yaml",
+   "version": "3.12.0",
+   "ids": [
+    "GHSA-52cp-r559-cp3m"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "js-yaml",
+   "version": "3.12.0",
+   "ids": [
+    "GHSA-5p4m-2wfm-xmqj"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "js-yaml",
+   "version": "3.12.0",
+   "ids": [
+    "GHSA-8j8c-7jfh-h6hx"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "js-yaml",
+   "version": "3.12.0",
+   "ids": [
+    "GHSA-h67p-54hq-rp68"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "js-yaml",
+   "version": "3.12.0",
+   "ids": [
+    "GHSA-mh29-5h37-fv8m"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "json-schema",
+   "version": "0.2.3",
+   "ids": [
+    "GHSA-896r-f27r-55mw"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "json5",
+   "version": "0.5.1",
+   "ids": [
+    "GHSA-9c47-m6qq-7p4h"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "jsonpointer",
+   "version": "4.0.1",
+   "ids": [
+    "GHSA-282f-qqgm-c34q"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "karma",
+   "version": "3.1.3",
+   "ids": [
+    "GHSA-7x7c-qm48-pq9c"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "karma",
+   "version": "3.1.3",
+   "ids": [
+    "GHSA-rc3x-jf5g-xvc5"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "kind-of",
+   "version": "6.0.2",
+   "ids": [
+    "GHSA-6c8f-qphg-qjgp"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "loader-utils",
+   "version": "1.1.0",
+   "ids": [
+    "GHSA-3rfm-jhwj-7488"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "loader-utils",
+   "version": "1.1.0",
+   "ids": [
+    "GHSA-76p3-8jx3-jpfq"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "loader-utils",
+   "version": "1.1.0",
+   "ids": [
+    "GHSA-hhq3-ff78-jv3g"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "lodash",
+   "version": "4.17.11",
+   "ids": [
+    "GHSA-29mw-wpgm-hmr9"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "lodash",
+   "version": "4.17.11",
+   "ids": [
+    "GHSA-35jh-r3h4-6jhm",
+    "GHSA-r5fr-rjxr-66jc"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "lodash",
+   "version": "4.17.11",
+   "ids": [
+    "GHSA-f23m-r3pf-42rh",
+    "GHSA-xxjr-mmjv-4gpg"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "lodash",
+   "version": "4.17.11",
+   "ids": [
+    "GHSA-jf85-cpcp-j695"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "lodash",
+   "version": "4.17.11",
+   "ids": [
+    "GHSA-p6mc-m468-83gw"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "log4js",
+   "version": "3.0.6",
+   "ids": [
+    "GHSA-82v2-mx6x-wq7q"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "merge",
+   "version": "1.2.1",
+   "ids": [
+    "GHSA-7wpw-2hjm-89gp"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "micromatch",
+   "version": "2.3.11",
+   "ids": [
+    "GHSA-952p-6rrq-rcjv"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "micromatch",
+   "version": "3.1.10",
+   "ids": [
+    "GHSA-952p-6rrq-rcjv"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "minimatch",
+   "version": "3.0.4",
+   "ids": [
+    "GHSA-23c5-xmqv-rm74"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "minimatch",
+   "version": "3.0.4",
+   "ids": [
+    "GHSA-3ppc-4f35-3m26"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "minimatch",
+   "version": "3.0.4",
+   "ids": [
+    "GHSA-7r86-cg39-jmmj"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "minimatch",
+   "version": "3.0.4",
+   "ids": [
+    "GHSA-f8q6-p94x-37v3"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "minimist",
+   "version": "0.0.10",
+   "ids": [
+    "GHSA-vh95-rmgr-6w4m"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "minimist",
+   "version": "0.0.10",
+   "ids": [
+    "GHSA-xvch-5gv4-984h"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "minimist",
+   "version": "0.0.8",
+   "ids": [
+    "GHSA-vh95-rmgr-6w4m"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "minimist",
+   "version": "0.0.8",
+   "ids": [
+    "GHSA-xvch-5gv4-984h"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "minimist",
+   "version": "1.2.0",
+   "ids": [
+    "GHSA-vh95-rmgr-6w4m"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "minimist",
+   "version": "1.2.0",
+   "ids": [
+    "GHSA-xvch-5gv4-984h"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "mixin-deep",
+   "version": "1.3.1",
+   "ids": [
+    "GHSA-fhjf-83wg-r2j9"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "parseuri",
+   "version": "0.0.5",
+   "ids": [
+    "GHSA-6fx8-h7jm-663j"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "path-parse",
+   "version": "1.0.6",
+   "ids": [
+    "GHSA-hj48-42vr-x3v9"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "pbkdf2",
+   "version": "3.0.17",
+   "ids": [
+    "GHSA-477h-4r7f-fvrx"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "pbkdf2",
+   "version": "3.0.17",
+   "ids": [
+    "GHSA-h7cp-r72f-jxh6"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "pbkdf2",
+   "version": "3.0.17",
+   "ids": [
+    "GHSA-v62p-rq8g-8h59"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "qs",
+   "version": "6.5.2",
+   "ids": [
+    "GHSA-4mjr-xmp4-gh2g"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "qs",
+   "version": "6.5.2",
+   "ids": [
+    "GHSA-6rw7-vpxm-498p"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "qs",
+   "version": "6.5.2",
+   "ids": [
+    "GHSA-hrpp-h998-j3pp"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "request",
+   "version": "2.88.0",
+   "ids": [
+    "GHSA-p8p7-x288-28g6"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "rollup",
+   "version": "0.58.2",
+   "ids": [
+    "GHSA-gcx4-mw62-g8wm"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "rollup",
+   "version": "0.58.2",
+   "ids": [
+    "GHSA-mw96-cpmx-2vgc"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "semver",
+   "version": "5.6.0",
+   "ids": [
+    "GHSA-c2qf-rxjj-qqgw"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "serialize-javascript",
+   "version": "1.5.0",
+   "ids": [
+    "GHSA-5c6j-r48x-rmvq"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "serialize-javascript",
+   "version": "1.5.0",
+   "ids": [
+    "GHSA-h9rv-jmmf-4pgx"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "serialize-javascript",
+   "version": "1.5.0",
+   "ids": [
+    "GHSA-hxcc-f52p-wc94"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "set-value",
+   "version": "0.4.3",
+   "ids": [
+    "GHSA-4g88-fppr-53pp"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "set-value",
+   "version": "0.4.3",
+   "ids": [
+    "GHSA-4jqc-8m5r-9rpr"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "set-value",
+   "version": "2.0.0",
+   "ids": [
+    "GHSA-4g88-fppr-53pp"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "set-value",
+   "version": "2.0.0",
+   "ids": [
+    "GHSA-4jqc-8m5r-9rpr"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "sha.js",
+   "version": "2.4.11",
+   "ids": [
+    "GHSA-95m3-7q98-8xr5"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "shelljs",
+   "version": "0.6.1",
+   "ids": [
+    "GHSA-4rq4-32rv-6wp6"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "shelljs",
+   "version": "0.6.1",
+   "ids": [
+    "GHSA-64g7-mvw6-v9qj"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "socket.io-parser",
+   "version": "3.2.0",
+   "ids": [
+    "GHSA-2m8v-j782-fhvr"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "socket.io-parser",
+   "version": "3.2.0",
+   "ids": [
+    "GHSA-677m-j7p3-52f9"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "socket.io-parser",
+   "version": "3.2.0",
+   "ids": [
+    "GHSA-cqmj-92xf-r6r9"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "socket.io-parser",
+   "version": "3.2.0",
+   "ids": [
+    "GHSA-qm95-pgcg-qqfq"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "socket.io-parser",
+   "version": "3.2.0",
+   "ids": [
+    "GHSA-xfhh-g9f5-x4m4"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "socket.io",
+   "version": "2.1.1",
+   "ids": [
+    "GHSA-25hc-qcg6-38wj"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "socket.io",
+   "version": "2.1.1",
+   "ids": [
+    "GHSA-fxwf-4rqh-v8g3"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "sprintf-js",
+   "version": "1.0.3",
+   "ids": [
+    "GHSA-hp3w-g68c-fv3c"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "ssri",
+   "version": "6.0.1",
+   "ids": [
+    "GHSA-vx3p-948g-6vhq"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "tar",
+   "version": "4.4.8",
+   "ids": [
+    "GHSA-23hp-3jrh-7fpw"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "tar",
+   "version": "4.4.8",
+   "ids": [
+    "GHSA-34x7-hfp2-rc4v"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "tar",
+   "version": "4.4.8",
+   "ids": [
+    "GHSA-3jfq-g458-7qm9"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "tar",
+   "version": "4.4.8",
+   "ids": [
+    "GHSA-5955-9wpr-37jh"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "tar",
+   "version": "4.4.8",
+   "ids": [
+    "GHSA-83g3-92jg-28cx"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "tar",
+   "version": "4.4.8",
+   "ids": [
+    "GHSA-8qq5-rm4j-mr97"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "tar",
+   "version": "4.4.8",
+   "ids": [
+    "GHSA-8x88-c5mf-7j5w"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "tar",
+   "version": "4.4.8",
+   "ids": [
+    "GHSA-9ppj-qmqm-q256"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "tar",
+   "version": "4.4.8",
+   "ids": [
+    "GHSA-9r2w-394v-53qc"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "tar",
+   "version": "4.4.8",
+   "ids": [
+    "GHSA-f5x3-32g6-xq36"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "tar",
+   "version": "4.4.8",
+   "ids": [
+    "GHSA-gvwx-54wh-qm9j"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "tar",
+   "version": "4.4.8",
+   "ids": [
+    "GHSA-qffp-2rhf-9h96"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "tar",
+   "version": "4.4.8",
+   "ids": [
+    "GHSA-qq89-hq3f-393p"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "tar",
+   "version": "4.4.8",
+   "ids": [
+    "GHSA-r292-9mhp-454m"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "tar",
+   "version": "4.4.8",
+   "ids": [
+    "GHSA-r628-mhmh-qjhw"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "tar",
+   "version": "4.4.8",
+   "ids": [
+    "GHSA-r6q2-hw4h-h46w"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "tar",
+   "version": "4.4.8",
+   "ids": [
+    "GHSA-vmf3-w455-68vh"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "tar",
+   "version": "4.4.8",
+   "ids": [
+    "GHSA-w8wr-v893-vjvp"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "terser",
+   "version": "3.10.13",
+   "ids": [
+    "GHSA-4wf5-vphf-c2xc"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "tmp",
+   "version": "0.0.33",
+   "ids": [
+    "GHSA-52f5-9888-hmc6"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "tmp",
+   "version": "0.0.33",
+   "ids": [
+    "GHSA-ph9p-34f9-6g65"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "tmpl",
+   "version": "1.0.4",
+   "ids": [
+    "GHSA-jgrx-mgxx-jf9v"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "tough-cookie",
+   "version": "2.4.3",
+   "ids": [
+    "GHSA-72xf-g2v4-qvf3"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "urijs",
+   "version": "1.17.1",
+   "ids": [
+    "GHSA-3329-pjwv-fjpg"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "urijs",
+   "version": "1.17.1",
+   "ids": [
+    "GHSA-3vjf-82ff-p4r3"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "urijs",
+   "version": "1.17.1",
+   "ids": [
+    "GHSA-89gv-h8wf-cg8r"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "urijs",
+   "version": "1.17.1",
+   "ids": [
+    "GHSA-8h2f-7jc4-7m3m"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "urijs",
+   "version": "1.17.1",
+   "ids": [
+    "GHSA-g694-m8vq-gv9h"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "urijs",
+   "version": "1.17.1",
+   "ids": [
+    "GHSA-gcv8-gh4r-25x6"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "urijs",
+   "version": "1.17.1",
+   "ids": [
+    "GHSA-gmv4-r438-p67f"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "urijs",
+   "version": "1.17.1",
+   "ids": [
+    "GHSA-p6j9-7xhc-rhwp"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "useragent",
+   "version": "2.3.0",
+   "ids": [
+    "GHSA-mgfv-m47x-4wqp"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "uuid",
+   "version": "3.3.2",
+   "ids": [
+    "GHSA-w5hq-g745-h8pq"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "ws",
+   "version": "3.3.3",
+   "ids": [
+    "GHSA-3h5v-q93c-6h6q"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "ws",
+   "version": "3.3.3",
+   "ids": [
+    "GHSA-96hv-2xvq-fx4p"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "xmlhttprequest-ssl",
+   "version": "1.5.5",
+   "ids": [
+    "GHSA-72mh-269x-7mh5"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "xmlhttprequest-ssl",
+   "version": "1.5.5",
+   "ids": [
+    "GHSA-h4j5-c7cj-74xg"
+   ]
+  },
+  {
+   "ecosystem": "npm",
+   "dir": ".",
+   "package": "y18n",
+   "version": "4.0.0",
+   "ids": [
+    "GHSA-c4w7-xm78-47vh"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "addressable",
+   "version": "2.6.0",
+   "ids": [
+    "GHSA-h27x-rffw-24p4"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "addressable",
+   "version": "2.6.0",
+   "ids": [
+    "GHSA-jxhc-q857-3j6g"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "aws-sdk-s3",
+   "version": "1.23.1",
+   "ids": [
+    "GHSA-2xgq-q749-89fq"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "bcrypt",
+   "version": "3.1.12",
+   "ids": [
+    "GHSA-f27w-vcwj-c954"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "concurrent-ruby",
+   "version": "1.1.4",
+   "ids": [
+    "GHSA-6wx8-w4f5-wwcr"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "concurrent-ruby",
+   "version": "1.1.4",
+   "ids": [
+    "GHSA-h8w8-99g7-qmvj"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "concurrent-ruby",
+   "version": "1.1.4",
+   "ids": [
+    "GHSA-wv3x-4vxv-whpp"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "dalli",
+   "version": "2.7.9",
+   "ids": [
+    "GHSA-3xg8-cc8f-9wv2"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "em-http-request",
+   "version": "1.1.5",
+   "ids": [
+    "GHSA-q27f-v3r6-9v77"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "faye-websocket",
+   "version": "0.10.7",
+   "ids": [
+    "GHSA-2v5c-755p-p4gv"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "faye",
+   "version": "1.2.4",
+   "ids": [
+    "GHSA-3q49-h8f9-9fr9"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "faye",
+   "version": "1.2.4",
+   "ids": [
+    "GHSA-qpg4-4w7w-2mq5"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "fugit",
+   "version": "1.1.6",
+   "ids": [
+    "GHSA-2m96-52r3-2f3g"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "globalid",
+   "version": "0.4.2",
+   "ids": [
+    "GHSA-23c2-gwp5-pxw9"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "image_processing",
+   "version": "1.7.1",
+   "ids": [
+    "GHSA-cxf7-qrc5-9446"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "jmespath",
+   "version": "1.4.0",
+   "ids": [
+    "GHSA-5c5f-7vfq-3732"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "json",
+   "version": "2.1.0",
+   "ids": [
+    "GHSA-jphg-qwrw-7w9g"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "jwt",
+   "version": "2.1.0",
+   "ids": [
+    "GHSA-c32j-vqhx-rx3x"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "loofah",
+   "version": "2.2.3",
+   "ids": [
+    "GHSA-228g-948r-83gx"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "loofah",
+   "version": "2.2.3",
+   "ids": [
+    "GHSA-3x8r-x6xp-q4vm"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "loofah",
+   "version": "2.2.3",
+   "ids": [
+    "GHSA-486f-hjj9-9vhh"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "loofah",
+   "version": "2.2.3",
+   "ids": [
+    "GHSA-9wjq-cp2p-hrgf"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "loofah",
+   "version": "2.2.3",
+   "ids": [
+    "GHSA-c3gv-9cxf-6f57"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "mail",
+   "version": "2.7.1",
+   "ids": [
+    "GHSA-mvxr-6m87-mv2q"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "mini_magick",
+   "version": "4.9.2",
+   "ids": [
+    "GHSA-r7j3-vvh2-xrpj"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "msgpack",
+   "version": "1.2.9",
+   "ids": [
+    "GHSA-4mrv-5p47-p938"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "nokogiri",
+   "version": "1.9.1",
+   "ids": [
+    "GHSA-242x-7cm6-4w8j"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "nokogiri",
+   "version": "1.9.1",
+   "ids": [
+    "GHSA-286v-pcf5-25rc"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "nokogiri",
+   "version": "1.9.1",
+   "ids": [
+    "GHSA-2qc6-mcvw-92cw"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "nokogiri",
+   "version": "1.9.1",
+   "ids": [
+    "GHSA-2rr5-8q37-2w7h"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "nokogiri",
+   "version": "1.9.1",
+   "ids": [
+    "GHSA-353f-x4gh-cqq8"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "nokogiri",
+   "version": "1.9.1",
+   "ids": [
+    "GHSA-4hm9-844j-jmxp"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "nokogiri",
+   "version": "1.9.1",
+   "ids": [
+    "GHSA-59gp-qqm7-cw4j"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "nokogiri",
+   "version": "1.9.1",
+   "ids": [
+    "GHSA-5prr-v3j2-97mh"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "nokogiri",
+   "version": "1.9.1",
+   "ids": [
+    "GHSA-5v8h-3h3q-446p"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "nokogiri",
+   "version": "1.9.1",
+   "ids": [
+    "GHSA-5w6v-399v-w3cc"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "nokogiri",
+   "version": "1.9.1",
+   "ids": [
+    "GHSA-7553-jr98-vx47"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "nokogiri",
+   "version": "1.9.1",
+   "ids": [
+    "GHSA-7rrm-v45f-jp64"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "nokogiri",
+   "version": "1.9.1",
+   "ids": [
+    "GHSA-8678-w3jw-xfc2"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "nokogiri",
+   "version": "1.9.1",
+   "ids": [
+    "GHSA-9cv2-cfxc-v4v2"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "nokogiri",
+   "version": "1.9.1",
+   "ids": [
+    "GHSA-c4rq-3m3g-8wgx"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "nokogiri",
+   "version": "1.9.1",
+   "ids": [
+    "GHSA-cf46-6xxh-pc75"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "nokogiri",
+   "version": "1.9.1",
+   "ids": [
+    "GHSA-cgx6-hpwq-fhv5"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "nokogiri",
+   "version": "1.9.1",
+   "ids": [
+    "GHSA-cr5j-953j-xw5p"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "nokogiri",
+   "version": "1.9.1",
+   "ids": [
+    "GHSA-crjr-9rc5-ghw8"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "nokogiri",
+   "version": "1.9.1",
+   "ids": [
+    "GHSA-fq42-c5rg-92c2"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "nokogiri",
+   "version": "1.9.1",
+   "ids": [
+    "GHSA-gx8x-g87m-h5q6"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "nokogiri",
+   "version": "1.9.1",
+   "ids": [
+    "GHSA-jc36-42cf-vqwj"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "nokogiri",
+   "version": "1.9.1",
+   "ids": [
+    "GHSA-jw9f-hh49-cvp9"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "nokogiri",
+   "version": "1.9.1",
+   "ids": [
+    "GHSA-mrxw-mxhj-p664"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "nokogiri",
+   "version": "1.9.1",
+   "ids": [
+    "GHSA-p67v-3w7g-wjg7"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "nokogiri",
+   "version": "1.9.1",
+   "ids": [
+    "GHSA-phwj-rprq-35pp"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "nokogiri",
+   "version": "1.9.1",
+   "ids": [
+    "GHSA-pxvg-2qj5-37jq"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "nokogiri",
+   "version": "1.9.1",
+   "ids": [
+    "GHSA-qxcg-xjjg-66mj"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "nokogiri",
+   "version": "1.9.1",
+   "ids": [
+    "GHSA-r95h-9x8f-r3f7"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "nokogiri",
+   "version": "1.9.1",
+   "ids": [
+    "GHSA-v2fc-qm4h-8hqv"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "nokogiri",
+   "version": "1.9.1",
+   "ids": [
+    "GHSA-v4f8-2847-rwm7"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "nokogiri",
+   "version": "1.9.1",
+   "ids": [
+    "GHSA-v6gp-9mmm-c6p5"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "nokogiri",
+   "version": "1.9.1",
+   "ids": [
+    "GHSA-vmfx-gcfq-wvm2"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "nokogiri",
+   "version": "1.9.1",
+   "ids": [
+    "GHSA-vr8q-g5c7-m54m"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "nokogiri",
+   "version": "1.9.1",
+   "ids": [
+    "GHSA-vvfq-8hwr-qm4m"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "nokogiri",
+   "version": "1.9.1",
+   "ids": [
+    "GHSA-wfpw-mmfh-qq69"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "nokogiri",
+   "version": "1.9.1",
+   "ids": [
+    "GHSA-wjv4-x9w8-wm3h"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "nokogiri",
+   "version": "1.9.1",
+   "ids": [
+    "GHSA-wx95-c6cv-8532"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "nokogiri",
+   "version": "1.9.1",
+   "ids": [
+    "GHSA-xc9x-jj77-9p9j"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "nokogiri",
+   "version": "1.9.1",
+   "ids": [
+    "GHSA-xh29-r2w5-wx8m"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "nokogiri",
+   "version": "1.9.1",
+   "ids": [
+    "GHSA-xxx9-3xcr-gjj3"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "puma",
+   "version": "3.12.1",
+   "ids": [
+    "GHSA-33vf-4xgg-9r58"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "puma",
+   "version": "3.12.1",
+   "ids": [
+    "GHSA-48w2-rm65-62xx"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "puma",
+   "version": "3.12.1",
+   "ids": [
+    "GHSA-68xg-gqqm-vgj8"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "puma",
+   "version": "3.12.1",
+   "ids": [
+    "GHSA-7xx3-m584-x994"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "puma",
+   "version": "3.12.1",
+   "ids": [
+    "GHSA-84j7-475p-hp8v"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "puma",
+   "version": "3.12.1",
+   "ids": [
+    "GHSA-9hf4-67fc-4vf4"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "puma",
+   "version": "3.12.1",
+   "ids": [
+    "GHSA-c2f4-cvqm-65w2"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "puma",
+   "version": "3.12.1",
+   "ids": [
+    "GHSA-h99w-9q5r-gjq9"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "puma",
+   "version": "3.12.1",
+   "ids": [
+    "GHSA-q28m-8xjw-8vr5"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "puma",
+   "version": "3.12.1",
+   "ids": [
+    "GHSA-rmj8-8hhh-gv5h"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "puma",
+   "version": "3.12.1",
+   "ids": [
+    "GHSA-w64w-qqph-5gxm"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "puma",
+   "version": "3.12.1",
+   "ids": [
+    "GHSA-x7jg-6pwg-fx5h"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "rack",
+   "version": "2.0.6",
+   "ids": [
+    "GHSA-22f2-v57c-j9cx"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "rack",
+   "version": "2.0.6",
+   "ids": [
+    "GHSA-3h57-hmj3-gj3p"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "rack",
+   "version": "2.0.6",
+   "ids": [
+    "GHSA-54rr-7fvw-6x8f"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "rack",
+   "version": "2.0.6",
+   "ids": [
+    "GHSA-5f9h-9pjv-v6j7"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "rack",
+   "version": "2.0.6",
+   "ids": [
+    "GHSA-625h-95r8-8xpm"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "rack",
+   "version": "2.0.6",
+   "ids": [
+    "GHSA-65f5-mfpf-vfhj"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "rack",
+   "version": "2.0.6",
+   "ids": [
+    "GHSA-6xw4-3v39-52mm"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "rack",
+   "version": "2.0.6",
+   "ids": [
+    "GHSA-7g2v-jj9q-g3rg"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "rack",
+   "version": "2.0.6",
+   "ids": [
+    "GHSA-7mqq-6cf9-v2qp"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "rack",
+   "version": "2.0.6",
+   "ids": [
+    "GHSA-7wqh-767x-r66v"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "rack",
+   "version": "2.0.6",
+   "ids": [
+    "GHSA-8cgq-6mh2-7j6v"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "rack",
+   "version": "2.0.6",
+   "ids": [
+    "GHSA-8vqr-qjwx-82mw"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "rack",
+   "version": "2.0.6",
+   "ids": [
+    "GHSA-93pm-5p5f-3ghx"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "rack",
+   "version": "2.0.6",
+   "ids": [
+    "GHSA-c6qg-cjj8-47qp"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "rack",
+   "version": "2.0.6",
+   "ids": [
+    "GHSA-gjh7-p2fx-99vx"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "rack",
+   "version": "2.0.6",
+   "ids": [
+    "GHSA-h2jq-g4cq-5ppq"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "rack",
+   "version": "2.0.6",
+   "ids": [
+    "GHSA-hrqr-hxpp-chr3"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "rack",
+   "version": "2.0.6",
+   "ids": [
+    "GHSA-hxqx-xwvh-44m2"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "rack",
+   "version": "2.0.6",
+   "ids": [
+    "GHSA-j6w9-fv6q-3q52"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "rack",
+   "version": "2.0.6",
+   "ids": [
+    "GHSA-mxw3-3hh2-x2mh"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "rack",
+   "version": "2.0.6",
+   "ids": [
+    "GHSA-p543-xpfm-54cp"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "rack",
+   "version": "2.0.6",
+   "ids": [
+    "GHSA-q2ww-5357-x388"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "rack",
+   "version": "2.0.6",
+   "ids": [
+    "GHSA-q4qf-9j86-f5mh"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "rack",
+   "version": "2.0.6",
+   "ids": [
+    "GHSA-qv7j-4883-hwh7"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "rack",
+   "version": "2.0.6",
+   "ids": [
+    "GHSA-r657-rxjc-j557"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "rack",
+   "version": "2.0.6",
+   "ids": [
+    "GHSA-rqv2-275x-2jq5"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "rack",
+   "version": "2.0.6",
+   "ids": [
+    "GHSA-v569-hp3g-36wr"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "rack",
+   "version": "2.0.6",
+   "ids": [
+    "GHSA-vgpv-f759-9wx3"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "rack",
+   "version": "2.0.6",
+   "ids": [
+    "GHSA-vpfw-47h7-xj4g"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "rack",
+   "version": "2.0.6",
+   "ids": [
+    "GHSA-w9pc-fmgc-vxvw"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "rack",
+   "version": "2.0.6",
+   "ids": [
+    "GHSA-whrj-4476-wvmp"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "rack",
+   "version": "2.0.6",
+   "ids": [
+    "GHSA-wpv5-97wm-hp9c"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "rack",
+   "version": "2.0.6",
+   "ids": [
+    "GHSA-wq4h-7r42-5hrr"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "rack",
+   "version": "2.0.6",
+   "ids": [
+    "GHSA-x8cg-fq8g-mxfx"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "rack",
+   "version": "2.0.6",
+   "ids": [
+    "GHSA-xj5v-6v4g-jfw6"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "rails-html-sanitizer",
+   "version": "1.2.0",
+   "ids": [
+    "GHSA-5x79-w82f-gw8w"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "rails-html-sanitizer",
+   "version": "1.2.0",
+   "ids": [
+    "GHSA-9h9g-93gc-623h"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "rails-html-sanitizer",
+   "version": "1.2.0",
+   "ids": [
+    "GHSA-cj75-f6xr-r4g7"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "rails-html-sanitizer",
+   "version": "1.2.0",
+   "ids": [
+    "GHSA-mcvf-2q2m-x72m"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "rails-html-sanitizer",
+   "version": "1.2.0",
+   "ids": [
+    "GHSA-pg8v-g4xq-hww9"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "rails-html-sanitizer",
+   "version": "1.2.0",
+   "ids": [
+    "GHSA-rrfc-7g8p-99q8"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "rake",
+   "version": "12.3.2",
+   "ids": [
+    "GHSA-jppv-gw3r-w3q8"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "rdoc",
+   "version": "6.0.4",
+   "ids": [
+    "GHSA-ggxm-pgc9-g7fp"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "redcarpet",
+   "version": "3.2.3",
+   "ids": [
+    "GHSA-q3wr-qw3g-3p4h"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "resque-scheduler",
+   "version": "4.3.1",
+   "ids": [
+    "GHSA-9hmq-fm33-x4xx"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "resque",
+   "version": "1.27.4",
+   "ids": [
+    "GHSA-gc3j-vvwf-4rp8"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "resque",
+   "version": "1.27.4",
+   "ids": [
+    "GHSA-r8xx-8vm8-x6wj"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "resque",
+   "version": "1.27.4",
+   "ids": [
+    "GHSA-r9mq-m72x-257g"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "rubyzip",
+   "version": "1.2.3",
+   "ids": [
+    "GHSA-47m2-wp7j-p9vc"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "rubyzip",
+   "version": "1.2.3",
+   "ids": [
+    "GHSA-5m2v-hc64-56h6"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "sidekiq",
+   "version": "5.2.3",
+   "ids": [
+    "GHSA-3qc2-v3hp-6cv8"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "sidekiq",
+   "version": "5.2.3",
+   "ids": [
+    "GHSA-jrfj-98qg-qjgv"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "sinatra",
+   "version": "2.0.4",
+   "ids": [
+    "GHSA-2x8x-jmrp-phxw"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "sinatra",
+   "version": "2.0.4",
+   "ids": [
+    "GHSA-hxx2-7vcw-mqr3"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "sinatra",
+   "version": "2.0.4",
+   "ids": [
+    "GHSA-mr3q-g2mv-mr4q"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "sinatra",
+   "version": "2.0.4",
+   "ids": [
+    "GHSA-qp49-3pvw-x4m5"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "sqlite3",
+   "version": "1.4.0",
+   "ids": [
+    "GHSA-28hh-pr2h-2w89"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "sqlite3",
+   "version": "1.4.0",
+   "ids": [
+    "GHSA-mwm8-39rw-8826"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "tzinfo",
+   "version": "1.2.5",
+   "ids": [
+    "GHSA-5cm2-9h8c-rvfx"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "websocket-driver",
+   "version": "0.7.0",
+   "ids": [
+    "GHSA-2x63-gw47-w4mm"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "websocket-driver",
+   "version": "0.7.0",
+   "ids": [
+    "GHSA-33ph-fccm-39pj"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "websocket-driver",
+   "version": "0.7.0",
+   "ids": [
+    "GHSA-8j3g-f24p-4mpw"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "websocket-driver",
+   "version": "0.7.0",
+   "ids": [
+    "GHSA-ghhp-3qvg-889p"
+   ]
+  },
+  {
+   "ecosystem": "RubyGems",
+   "dir": ".",
+   "package": "websocket-extensions",
+   "version": "0.1.3",
+   "ids": [
+    "GHSA-g6wq-qcwm-j5g2"
+   ]
+  }
+ ]
+}

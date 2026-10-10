@@ -1,0 +1,21 @@
+{
+  "id": "go-hugo-legacy",
+  "source": "repository",
+  "repo": "https://github.com/gohugoio/hugo",
+  "ref": "v0.80.0",
+  "commit": "792ef0f41a8217c90872b115ed8a41c213490284",
+  "licence": "Apache-2.0",
+  "include": [
+    "go.mod",
+    "go.sum",
+    "docs/go.mod",
+    "docs/go.sum",
+    "docs/src/package-lock.json"
+  ],
+  "formats": [
+    "go.mod (go < 1.17)",
+    "go.sum",
+    "package-lock.json v1 (empty)"
+  ],
+  "notes": "Go 1.12 module: go.mod omits indirect modules, so the truth is the MVS build list (`go list -m all`), not go.mod and not the go.sum universe. Also a nested docs module and an EMPTY package-lock (0 packages, must not count as a drop)."
+}

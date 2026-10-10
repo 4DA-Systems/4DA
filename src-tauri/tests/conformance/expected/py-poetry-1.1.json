@@ -1,0 +1,586 @@
+{
+ "schema": 1,
+ "case": "py-poetry-1.1",
+ "lockfiles": [
+  {
+   "path": "poetry.lock",
+   "dir": ".",
+   "format": "poetry.lock",
+   "ecosystem": "PyPI",
+   "status": "supported",
+   "truth_packages": 83
+  }
+ ],
+ "inventory": {
+  "count": 83,
+  "packages": [
+   "PyPI|.|appdirs|1.4.4",
+   "PyPI|.|atomicwrites|1.4",
+   "PyPI|.|attrs|20.2",
+   "PyPI|.|backports-functools-lru-cache|1.6.1",
+   "PyPI|.|cachecontrol|0.12.6",
+   "PyPI|.|cachy|0.3",
+   "PyPI|.|certifi|2020.6.20",
+   "PyPI|.|cffi|1.14.3",
+   "PyPI|.|cfgv|3.2",
+   "PyPI|.|chardet|3.0.4",
+   "PyPI|.|cleo|0.8.1",
+   "PyPI|.|clikit|0.6.2",
+   "PyPI|.|colorama|0.4.3",
+   "PyPI|.|configparser|4.0.2",
+   "PyPI|.|contextlib2|0.6.post1",
+   "PyPI|.|coverage|5.3",
+   "PyPI|.|crashtest|0.3.1",
+   "PyPI|.|cryptography|3.1.1",
+   "PyPI|.|distlib|0.3.1",
+   "PyPI|.|entrypoints|0.3",
+   "PyPI|.|enum34|1.1.10",
+   "PyPI|.|filelock|3.0.12",
+   "PyPI|.|funcsigs|1.0.2",
+   "PyPI|.|functools32|3.2.3-2",
+   "PyPI|.|futures|3.3",
+   "PyPI|.|glob2|0.6",
+   "PyPI|.|html5lib|1.1",
+   "PyPI|.|httpretty|0.9.7",
+   "PyPI|.|identify|1.5.5",
+   "PyPI|.|idna|2.10",
+   "PyPI|.|importlib-metadata|1.7",
+   "PyPI|.|importlib-resources|3",
+   "PyPI|.|ipaddress|1.0.23",
+   "PyPI|.|jeepney|0.4.3",
+   "PyPI|.|keyring|18.0.1",
+   "PyPI|.|keyring|20.0.1",
+   "PyPI|.|keyring|21.4",
+   "PyPI|.|lockfile|0.12.2",
+   "PyPI|.|mock|3.0.5",
+   "PyPI|.|more-itertools|5",
+   "PyPI|.|more-itertools|8.5",
+   "PyPI|.|msgpack|1",
+   "PyPI|.|nodeenv|1.5",
+   "PyPI|.|packaging|20.4",
+   "PyPI|.|pastel|0.2.1",
+   "PyPI|.|pathlib2|2.3.5",
+   "PyPI|.|pexpect|4.8",
+   "PyPI|.|pkginfo|1.5.0.1",
+   "PyPI|.|pluggy|0.13.1",
+   "PyPI|.|poetry-core|1",
+   "PyPI|.|pre-commit|2.7.1",
+   "PyPI|.|ptyprocess|0.6",
+   "PyPI|.|py|1.9",
+   "PyPI|.|pycparser|2.20",
+   "PyPI|.|pylev|1.3",
+   "PyPI|.|pyparsing|2.4.7",
+   "PyPI|.|pytest-cov|2.10.1",
+   "PyPI|.|pytest-mock|1.13",
+   "PyPI|.|pytest-sugar|0.9.4",
+   "PyPI|.|pytest|4.6.11",
+   "PyPI|.|pytest|5.4.3",
+   "PyPI|.|pywin32-ctypes|0.2",
+   "PyPI|.|pyyaml|5.3.1",
+   "PyPI|.|requests-toolbelt|0.9.1",
+   "PyPI|.|requests|2.24",
+   "PyPI|.|scandir|1.10",
+   "PyPI|.|secretstorage|2.3.1",
+   "PyPI|.|secretstorage|3.1.2",
+   "PyPI|.|shellingham|1.3.2",
+   "PyPI|.|singledispatch|3.4.0.3",
+   "PyPI|.|six|1.15",
+   "PyPI|.|subprocess32|3.5.4",
+   "PyPI|.|termcolor|1.1",
+   "PyPI|.|toml|0.10.1",
+   "PyPI|.|tomlkit|0.7",
+   "PyPI|.|tox|3.20",
+   "PyPI|.|typing-extensions|3.7.4.3",
+   "PyPI|.|typing|3.7.4.3",
+   "PyPI|.|urllib3|1.25.10",
+   "PyPI|.|virtualenv|20.0.31",
+   "PyPI|.|wcwidth|0.2.5",
+   "PyPI|.|webencodings|0.5.1",
+   "PyPI|.|zipp|1.2"
+  ]
+ },
+ "findings": [
+  {
+   "ecosystem": "PyPI",
+   "dir": ".",
+   "package": "certifi",
+   "version": "2020.6.20",
+   "ids": [
+    "GHSA-43fp-rhv2-5gv8",
+    "PYSEC-2022-42986"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": ".",
+   "package": "certifi",
+   "version": "2020.6.20",
+   "ids": [
+    "GHSA-xqr8-7jwr-rhp7",
+    "PYSEC-2023-135"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": ".",
+   "package": "certifi",
+   "version": "2020.6.20",
+   "ids": [
+    "PYSEC-2024-230"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": ".",
+   "package": "cleo",
+   "version": "0.8.1",
+   "ids": [
+    "PYSEC-2022-43178"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": ".",
+   "package": "cryptography",
+   "version": "3.1.1",
+   "ids": [
+    "GHSA-3ww4-gg4f-jr7f",
+    "PYSEC-2026-1283"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": ".",
+   "package": "cryptography",
+   "version": "3.1.1",
+   "ids": [
+    "GHSA-537c-gmf6-5ccf"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": ".",
+   "package": "cryptography",
+   "version": "3.1.1",
+   "ids": [
+    "GHSA-5cpq-8wj7-hf2v"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": ".",
+   "package": "cryptography",
+   "version": "3.1.1",
+   "ids": [
+    "GHSA-9v9h-cgj8-h64p",
+    "PYSEC-2026-1285"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": ".",
+   "package": "cryptography",
+   "version": "3.1.1",
+   "ids": [
+    "GHSA-hggm-jpg3-v476",
+    "PYSEC-2021-62"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": ".",
+   "package": "cryptography",
+   "version": "3.1.1",
+   "ids": [
+    "GHSA-jfhm-5ghh-2f97",
+    "PYSEC-2023-254"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": ".",
+   "package": "cryptography",
+   "version": "3.1.1",
+   "ids": [
+    "GHSA-jm77-qphf-c4w8"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": ".",
+   "package": "cryptography",
+   "version": "3.1.1",
+   "ids": [
+    "GHSA-m959-cc7f-wv43",
+    "PYSEC-2026-35"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": ".",
+   "package": "cryptography",
+   "version": "3.1.1",
+   "ids": [
+    "GHSA-r6ph-v2qm-q3c2",
+    "PYSEC-2026-2141"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": ".",
+   "package": "cryptography",
+   "version": "3.1.1",
+   "ids": [
+    "GHSA-rhm9-p9w5-fwm7",
+    "PYSEC-2021-63"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": ".",
+   "package": "cryptography",
+   "version": "3.1.1",
+   "ids": [
+    "GHSA-v8gr-m533-ghj9"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": ".",
+   "package": "cryptography",
+   "version": "3.1.1",
+   "ids": [
+    "GHSA-w7pp-m8wf-vj6r",
+    "PYSEC-2023-11"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": ".",
+   "package": "cryptography",
+   "version": "3.1.1",
+   "ids": [
+    "GHSA-x4qr-2fvf-3mr5",
+    "PYSEC-2026-800"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": ".",
+   "package": "cryptography",
+   "version": "3.1.1",
+   "ids": [
+    "PYSEC-2026-3553"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": ".",
+   "package": "cryptography",
+   "version": "3.1.1",
+   "ids": [
+    "PYSEC-2026-3554"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": ".",
+   "package": "filelock",
+   "version": "3.0.12",
+   "ids": [
+    "GHSA-qmgc-5h2g-mvrw",
+    "PYSEC-2026-1374"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": ".",
+   "package": "filelock",
+   "version": "3.0.12",
+   "ids": [
+    "GHSA-w853-jp5j-5j7f",
+    "PYSEC-2026-1375"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": ".",
+   "package": "idna",
+   "version": "2.10",
+   "ids": [
+    "GHSA-65pc-fj4g-8rjx",
+    "PYSEC-2026-215"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": ".",
+   "package": "idna",
+   "version": "2.10",
+   "ids": [
+    "GHSA-jjg7-2v4v-x38h",
+    "PYSEC-2024-60"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": ".",
+   "package": "msgpack",
+   "version": "1.0.0",
+   "ids": [
+    "GHSA-6v7p-g79w-8964",
+    "PYSEC-2026-3625"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": ".",
+   "package": "py",
+   "version": "1.9.0",
+   "ids": [
+    "GHSA-hj5v-574p-mj7c",
+    "PYSEC-2020-92"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": ".",
+   "package": "pytest",
+   "version": "4.6.11",
+   "ids": [
+    "GHSA-6w46-j5rx-g56g",
+    "PYSEC-2026-1845"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": ".",
+   "package": "pytest",
+   "version": "5.4.3",
+   "ids": [
+    "GHSA-6w46-j5rx-g56g",
+    "PYSEC-2026-1845"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": ".",
+   "package": "pyyaml",
+   "version": "5.3.1",
+   "ids": [
+    "GHSA-8q59-q68h-6hv4",
+    "PYSEC-2021-142"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": ".",
+   "package": "requests",
+   "version": "2.24.0",
+   "ids": [
+    "GHSA-9hjg-9r4m-mvj7",
+    "PYSEC-2026-1872"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": ".",
+   "package": "requests",
+   "version": "2.24.0",
+   "ids": [
+    "GHSA-9wx4-h78v-vm56",
+    "PYSEC-2026-1873"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": ".",
+   "package": "requests",
+   "version": "2.24.0",
+   "ids": [
+    "GHSA-gc5v-m9x4-r6x2",
+    "PYSEC-2026-2275"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": ".",
+   "package": "requests",
+   "version": "2.24.0",
+   "ids": [
+    "GHSA-j8r2-6x86-q33q",
+    "PYSEC-2023-74"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": ".",
+   "package": "urllib3",
+   "version": "1.25.10",
+   "ids": [
+    "GHSA-2xpw-w6gg-jr37",
+    "PYSEC-2026-1994"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": ".",
+   "package": "urllib3",
+   "version": "1.25.10",
+   "ids": [
+    "GHSA-34jh-p97f-mpxf",
+    "PYSEC-2026-1995"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": ".",
+   "package": "urllib3",
+   "version": "1.25.10",
+   "ids": [
+    "GHSA-38jv-5279-wg99",
+    "PYSEC-2026-1996"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": ".",
+   "package": "urllib3",
+   "version": "1.25.10",
+   "ids": [
+    "GHSA-g4mx-q9vg-27p4",
+    "PYSEC-2023-212"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": ".",
+   "package": "urllib3",
+   "version": "1.25.10",
+   "ids": [
+    "GHSA-gm62-xv2j-4w53",
+    "PYSEC-2026-1998"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": ".",
+   "package": "urllib3",
+   "version": "1.25.10",
+   "ids": [
+    "GHSA-pq67-6m6q-mj2v",
+    "PYSEC-2026-1999"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": ".",
+   "package": "urllib3",
+   "version": "1.25.10",
+   "ids": [
+    "GHSA-q2q7-5pp4-w6pg",
+    "PYSEC-2021-108"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": ".",
+   "package": "urllib3",
+   "version": "1.25.10",
+   "ids": [
+    "GHSA-qccp-gfcp-xxvc",
+    "PYSEC-2026-141"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": ".",
+   "package": "urllib3",
+   "version": "1.25.10",
+   "ids": [
+    "GHSA-v845-jxx5-vc9f",
+    "PYSEC-2023-192"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": ".",
+   "package": "urllib3",
+   "version": "1.25.10",
+   "ids": [
+    "GHSA-vxq7-64xx-v4gw",
+    "PYSEC-2026-4177"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": ".",
+   "package": "virtualenv",
+   "version": "20.0.31",
+   "ids": [
+    "GHSA-597g-3phw-6986",
+    "PYSEC-2026-2009"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": ".",
+   "package": "virtualenv",
+   "version": "20.0.31",
+   "ids": [
+    "GHSA-94p9-xgh2-xp45",
+    "PYSEC-2026-4011"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": ".",
+   "package": "virtualenv",
+   "version": "20.0.31",
+   "ids": [
+    "GHSA-9h9j-4vrj-gf7g",
+    "PYSEC-2026-4012"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": ".",
+   "package": "virtualenv",
+   "version": "20.0.31",
+   "ids": [
+    "GHSA-p58f-9548-mpm2",
+    "PYSEC-2026-4013"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": ".",
+   "package": "virtualenv",
+   "version": "20.0.31",
+   "ids": [
+    "GHSA-rqc4-2hc7-8c8v",
+    "PYSEC-2024-187"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": ".",
+   "package": "virtualenv",
+   "version": "20.0.31",
+   "ids": [
+    "GHSA-x78j-v8h9-3j2q",
+    "PYSEC-2026-4014"
+   ]
+  },
+  {
+   "ecosystem": "PyPI",
+   "dir": ".",
+   "package": "zipp",
+   "version": "1.2.0",
+   "ids": [
+    "GHSA-jfmj-5v4g-7637",
+    "PYSEC-2026-2074"
+   ]
+  }
+ ]
+}

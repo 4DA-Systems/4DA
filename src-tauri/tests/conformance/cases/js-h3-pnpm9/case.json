@@ -1,0 +1,17 @@
+{
+  "id": "js-h3-pnpm9",
+  "source": "repository",
+  "repo": "https://github.com/unjs/h3",
+  "ref": "v1.12.0",
+  "commit": "112fa338ef5bbde6207f3317d2ef51f0e52a59fa",
+  "licence": "MIT",
+  "include": [
+    "pnpm-lock.yaml",
+    "package.json",
+    "@workspaces"
+  ],
+  "formats": [
+    "pnpm-lock.yaml v9"
+  ],
+  "notes": "pnpm v9 lock (`packages` + `snapshots` split, `name@version(peer@x)` keys). Trimmed: docs/bun.lockb omitted."
+}

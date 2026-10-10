@@ -1,0 +1,16 @@
+{
+  "id": "js-nest-npm3",
+  "source": "repository",
+  "repo": "https://github.com/nestjs/nest",
+  "ref": "v10.0.0",
+  "commit": "d0850d2062373b3c15a4c8e2cf0fe6e546d7593e",
+  "licence": "MIT",
+  "include": [
+    "package-lock.json",
+    "package.json"
+  ],
+  "formats": [
+    "package-lock.json v3"
+  ],
+  "notes": "npm v3 lock with deeply nested node_modules/a/node_modules/b duplicates at different versions. Trimmed: only the root lock is vendored (the 37 sample-app locks are omitted)."
+}

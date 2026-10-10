@@ -1,0 +1,16 @@
+{
+  "id": "py-requests-html-pipfile",
+  "source": "repository",
+  "repo": "https://github.com/psf/requests-html",
+  "ref": "v0.10.0",
+  "commit": "c561e9bc6914fefad65a803d11b55d301b2c8b3f",
+  "licence": "MIT",
+  "include": [
+    "Pipfile.lock",
+    "Pipfile"
+  ],
+  "formats": [
+    "Pipfile.lock"
+  ],
+  "notes": "Second Pipfile.lock (older pipenv format)."
+}

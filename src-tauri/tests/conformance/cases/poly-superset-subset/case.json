@@ -1,0 +1,21 @@
+{
+  "id": "poly-superset-subset",
+  "source": "repository",
+  "repo": "https://github.com/apache/superset",
+  "ref": "2.1.0",
+  "commit": "2817aebd69dc7d199ec45d973a2079f35e5658b6",
+  "licence": "Apache-2.0",
+  "include": [
+    "superset-websocket/package-lock.json",
+    "superset-websocket/package.json",
+    "superset-websocket/utils/client-ws-app/package-lock.json",
+    "superset-websocket/utils/client-ws-app/package.json",
+    "RELEASING/requirements.txt",
+    "superset/translations/requirements.txt"
+  ],
+  "formats": [
+    "package-lock.json v2",
+    "requirements.txt"
+  ],
+  "notes": "Polyglot monorepo, trimmed to keep the corpus small: the 4.2 MB superset-frontend, 0.75 MB cypress and 0.57 MB embedded-sdk locks are omitted; two npm v2 projects (one nested inside the other) and two requirements files are kept."
+}

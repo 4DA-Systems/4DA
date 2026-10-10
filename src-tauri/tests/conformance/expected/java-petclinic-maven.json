@@ -1,0 +1,19 @@
+{
+ "schema": 1,
+ "case": "java-petclinic-maven",
+ "lockfiles": [
+  {
+   "path": "pom.xml",
+   "dir": ".",
+   "format": "pom.xml",
+   "ecosystem": "Maven",
+   "status": "unsupported",
+   "reason": "Maven is not a supported lockfile ecosystem; a pom.xml is a manifest whose transitive set needs a network resolver"
+  }
+ ],
+ "inventory": {
+  "count": 0,
+  "packages": []
+ },
+ "findings": []
+}

@@ -157,6 +157,12 @@ const STAGED_EXCLUDE = [
   /privacy\.njk$/,
   /contact\.njk$/,
   /PRIVACY-POLICY\.md$/,
+  // Pinned third-party OSV advisory records (dependency-engine conformance
+  // corpus): unmodified upstream JSON whose advisory TEXT quotes example AWS
+  // keys, private-key headers and passwords from the vulnerable projects.
+  // Verified false positives 2026-10-10; never edited, never local secrets.
+  // .husky/pre-push excludes the same path from its added-lines scan.
+  /^src-tauri\/tests\/conformance\/osv\//,
 ];
 
 // Surfaces where the company ABN/ACN is a REQUIRED statutory disclosure.

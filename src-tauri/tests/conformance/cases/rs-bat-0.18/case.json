@@ -1,0 +1,16 @@
+{
+  "id": "rs-bat-0.18",
+  "source": "repository",
+  "repo": "https://github.com/sharkdp/bat",
+  "ref": "v0.18.0",
+  "commit": "b8a18d3ebb5b29162c346b74174239ea077f0796",
+  "licence": "Apache-2.0 OR MIT",
+  "include": [
+    "Cargo.lock",
+    "Cargo.toml"
+  ],
+  "formats": [
+    "Cargo.lock"
+  ],
+  "notes": "Single crate with dev-dependencies and optional features (git2, regex-onig)."
+}

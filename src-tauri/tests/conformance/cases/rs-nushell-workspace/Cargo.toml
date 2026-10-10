@@ -1,0 +1,105 @@
+[package]
+authors = ["The Nushell Project Developers"]
+default-run = "nu"
+description = "A new type of shell"
+documentation = "https://www.nushell.sh/book/"
+edition = "2018"
+exclude = ["images"]
+homepage = "https://www.nushell.sh"
+license = "MIT"
+name = "nu"
+readme = "README.md"
+repository = "https://github.com/nushell/nushell"
+version = "0.60.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[workspace]
+members = [
+	"crates/nu-cli",
+	"crates/nu-engine",
+	"crates/nu-parser",
+	"crates/nu-system",
+	"crates/nu-command",
+	"crates/nu-protocol",
+	"crates/nu-plugin",
+	"crates/nu_plugin_inc",
+	"crates/nu_plugin_gstat",
+	"crates/nu_plugin_example",
+	"crates/nu_plugin_query",
+	"crates/nu-utils",
+]
+
+[dependencies]
+chrono = "0.4.19"
+crossterm = "0.23.0"
+crossterm_winapi = "0.9.0"
+ctrlc = "3.2.1"
+log = "0.4"
+miette = "4.1.0"
+nu-ansi-term = "0.45.0"
+nu-cli = { path="./crates/nu-cli", version = "0.60.0"  }
+nu-color-config = { path = "./crates/nu-color-config", version = "0.60.0"  }
+nu-command = { path="./crates/nu-command", version = "0.60.0"  }
+nu-engine = { path="./crates/nu-engine", version = "0.60.0"  }
+nu-json = { path="./crates/nu-json", version = "0.60.0"  }
+nu-parser = { path="./crates/nu-parser", version = "0.60.0"  }
+nu-path = { path="./crates/nu-path", version = "0.60.0"  }
+nu-plugin = { path = "./crates/nu-plugin", optional = true, version = "0.60.0"  }
+nu-pretty-hex = { path = "./crates/nu-pretty-hex", version = "0.60.0"  }
+nu-protocol = { path = "./crates/nu-protocol", version = "0.60.0"  }
+nu-system = { path = "./crates/nu-system", version = "0.60.0" }
+nu-table = { path = "./crates/nu-table", version = "0.60.0"  }
+nu-term-grid = { path = "./crates/nu-term-grid", version = "0.60.0"  }
+nu-utils = { path = "./crates/nu-utils", version = "0.60.0" }
+pretty_env_logger = "0.4.0"
+rayon = "1.5.1"
+reedline = "0.3.0"
+is_executable = "1.0.1"
+
+[dev-dependencies]
+nu-test-support = { path="./crates/nu-test-support" }
+tempfile = "3.2.0"
+assert_cmd = "2.0.2"
+pretty_assertions = "1.0.0"
+serial_test = "0.5.1"
+hamcrest2 = "0.3.0"
+rstest = "0.12.0"
+itertools = "0.10.3"
+
+[target.'cfg(windows)'.build-dependencies]
+embed-resource = "1"
+
+[features]
+plugin = ["nu-plugin", "nu-cli/plugin", "nu-parser/plugin", "nu-command/plugin", "nu-protocol/plugin", "nu-engine/plugin"]
+default = ["plugin", "which", "zip-support", "trash-support"]
+stable = ["default"]
+extra = ["default", "dataframe"]
+wasi = []
+
+# Stable (Default)
+which = ["nu-command/which"]
+zip-support = ["nu-command/zip"]
+trash-support = ["nu-command/trash-support"]
+
+# Extra
+
+# Dataframe feature for nushell
+dataframe = ["nu-command/dataframe"]
+
+[profile.release]
+opt-level = "s" # Optimize for size
+strip = "debuginfo"
+lto = "thin"
+
+# build with `cargo build --profile profiling`
+# to analyze performance with tooling like linux perf
+[profile.profiling]
+inherits = "release"
+strip = false
+debug = true
+
+# Main nu binary
+[[bin]]
+name = "nu"
+path = "src/main.rs"

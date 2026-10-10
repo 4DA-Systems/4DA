@@ -1,0 +1,16 @@
+{
+  "id": "py-httpbin-pipfile",
+  "source": "repository",
+  "repo": "https://github.com/postmanlabs/httpbin",
+  "ref": "f8ec666b4d1b654e4ff6aedd356f510dcac09f83",
+  "commit": "f8ec666b4d1b654e4ff6aedd356f510dcac09f83",
+  "licence": "ISC",
+  "include": [
+    "Pipfile.lock",
+    "Pipfile"
+  ],
+  "formats": [
+    "Pipfile.lock"
+  ],
+  "notes": "Pipfile.lock with default + develop sections."
+}

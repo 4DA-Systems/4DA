@@ -1,0 +1,16 @@
+{
+  "id": "py-poetry-1.1",
+  "source": "repository",
+  "repo": "https://github.com/python-poetry/poetry",
+  "ref": "1.1.0",
+  "commit": "539d7f732c34c821258a9853cd3078cbda34a717",
+  "licence": "MIT",
+  "include": [
+    "poetry.lock",
+    "pyproject.toml"
+  ],
+  "formats": [
+    "poetry.lock (1.1 format, markers/extras)"
+  ],
+  "notes": "Poetry's own lock: python_version/sys_platform markers and extras on many packages."
+}

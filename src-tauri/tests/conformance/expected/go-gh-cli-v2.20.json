@@ -1,0 +1,471 @@
+{
+ "schema": 1,
+ "case": "go-gh-cli-v2.20",
+ "lockfiles": [
+  {
+   "path": "go.mod",
+   "dir": ".",
+   "format": "go.mod-go1.18",
+   "ecosystem": "Go",
+   "status": "supported",
+   "truth_packages": 72
+  },
+  {
+   "path": "go.sum",
+   "dir": ".",
+   "format": "go.sum",
+   "ecosystem": "Go",
+   "status": "supported",
+   "truth_packages": 72
+  }
+ ],
+ "inventory": {
+  "count": 72,
+  "packages": [
+   "Go|.|github.com/AlecAivazis/survey/v2|2.3.6",
+   "Go|.|github.com/alecthomas/chroma|0.10.0",
+   "Go|.|github.com/aymerick/douceur|0.2.0",
+   "Go|.|github.com/briandowns/spinner|1.18.1",
+   "Go|.|github.com/cenkalti/backoff/v4|4.1.3",
+   "Go|.|github.com/charmbracelet/glamour|0.5.1-0.20220727184942-e70ff2d969da",
+   "Go|.|github.com/charmbracelet/lipgloss|0.5.0",
+   "Go|.|github.com/cli/browser|1.1.0",
+   "Go|.|github.com/cli/crypto|0.0.0-20210929142629-6be313f59b03",
+   "Go|.|github.com/cli/go-gh|0.1.3-0.20221102170023-e3ec45fb1d1b",
+   "Go|.|github.com/cli/oauth|0.9.0",
+   "Go|.|github.com/cli/safeexec|1.0.0",
+   "Go|.|github.com/cli/shurcooL-graphql|0.0.2",
+   "Go|.|github.com/cpuguy83/go-md2man/v2|2.0.2",
+   "Go|.|github.com/creack/pty|1.1.18",
+   "Go|.|github.com/davecgh/go-spew|1.1.1",
+   "Go|.|github.com/dlclark/regexp2|1.4.0",
+   "Go|.|github.com/fatih/color|1.7.0",
+   "Go|.|github.com/gabriel-vasile/mimetype|1.4.1",
+   "Go|.|github.com/gdamore/encoding|1.0.0",
+   "Go|.|github.com/gdamore/tcell/v2|2.5.3",
+   "Go|.|github.com/golang/protobuf|1.5.2",
+   "Go|.|github.com/google/go-cmp|0.5.9",
+   "Go|.|github.com/google/shlex|0.0.0-20191202100458-e7afc7fbc510",
+   "Go|.|github.com/gorilla/css|1.0.0",
+   "Go|.|github.com/gorilla/websocket|1.4.2",
+   "Go|.|github.com/hashicorp/errwrap|1.0.0",
+   "Go|.|github.com/hashicorp/go-multierror|1.1.1",
+   "Go|.|github.com/hashicorp/go-version|1.3.0",
+   "Go|.|github.com/henvic/httpretty|0.0.6",
+   "Go|.|github.com/inconshreveable/mousetrap|1.0.0",
+   "Go|.|github.com/itchyny/gojq|0.12.8",
+   "Go|.|github.com/itchyny/timefmt-go|0.1.3",
+   "Go|.|github.com/joho/godotenv|1.4.0",
+   "Go|.|github.com/kballard/go-shellquote|0.0.0-20180428030007-95032a82bc51",
+   "Go|.|github.com/lucasb-eyer/go-colorful|1.2.0",
+   "Go|.|github.com/MakeNowJust/heredoc|1.0.0",
+   "Go|.|github.com/mattn/go-colorable|0.1.13",
+   "Go|.|github.com/mattn/go-isatty|0.0.16",
+   "Go|.|github.com/mattn/go-runewidth|0.0.13",
+   "Go|.|github.com/mgutz/ansi|0.0.0-20200706080929-d51e80ef957d",
+   "Go|.|github.com/microcosm-cc/bluemonday|1.0.20",
+   "Go|.|github.com/muesli/reflow|0.3.0",
+   "Go|.|github.com/muesli/termenv|0.12.0",
+   "Go|.|github.com/muhammadmuzzammil1998/jsonc|0.0.0-20201229145248-615b0916ca38",
+   "Go|.|github.com/olekukonko/tablewriter|0.0.5",
+   "Go|.|github.com/opentracing/opentracing-go|1.1.0",
+   "Go|.|github.com/pmezard/go-difflib|1.0.0",
+   "Go|.|github.com/rivo/tview|0.0.0-20221029100920-c4a7e501810d",
+   "Go|.|github.com/rivo/uniseg|0.4.2",
+   "Go|.|github.com/russross/blackfriday/v2|2.1.0",
+   "Go|.|github.com/shurcooL/githubv4|0.0.0-20220520033151-0b4e3294ff00",
+   "Go|.|github.com/shurcooL/graphql|0.0.0-20220606043923-3cf50f8a0a29",
+   "Go|.|github.com/sourcegraph/jsonrpc2|0.1.0",
+   "Go|.|github.com/spf13/cobra|1.5.0",
+   "Go|.|github.com/spf13/pflag|1.0.5",
+   "Go|.|github.com/stretchr/objx|0.4.0",
+   "Go|.|github.com/stretchr/testify|1.7.5",
+   "Go|.|github.com/thlib/go-timezone-local|0.0.0-20210907160436-ef149e42d28e",
+   "Go|.|github.com/yuin/goldmark-emoji|1.0.1",
+   "Go|.|github.com/yuin/goldmark|1.4.4",
+   "Go|.|golang.org/x/net|0.0.0-20220923203811-8be639271d50",
+   "Go|.|golang.org/x/oauth2|0.0.0-20220309155454-6242fa91716a",
+   "Go|.|golang.org/x/sync|0.0.0-20210220032951-036812b2e83c",
+   "Go|.|golang.org/x/sys|0.0.0-20220811171246-fbc7d0a398ab",
+   "Go|.|golang.org/x/term|0.0.0-20210927222741-03fcf44c2211",
+   "Go|.|golang.org/x/text|0.3.8",
+   "Go|.|google.golang.org/genproto|0.0.0-20200825200019-8632dd797987",
+   "Go|.|google.golang.org/grpc|1.49.0",
+   "Go|.|google.golang.org/protobuf|1.27.1",
+   "Go|.|gopkg.in/check.v1|1.0.0-20190902080502-41f04d3bba15",
+   "Go|.|gopkg.in/yaml.v3|3.0.1"
+  ]
+ },
+ "findings": [
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/cli/go-gh",
+   "version": "0.1.3-0.20221102170023-e3ec45fb1d1b",
+   "ids": [
+    "GHSA-55v3-xh23-96gh",
+    "GO-2024-3295"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/gorilla/websocket",
+   "version": "1.4.2",
+   "ids": [
+    "GHSA-w67g-5rqw-f597",
+    "GO-2026-6278"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "github.com/yuin/goldmark",
+   "version": "1.4.4",
+   "ids": [
+    "GO-2026-5320"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/net",
+   "version": "0.0.0-20220923203811-8be639271d50",
+   "ids": [
+    "GHSA-2wrh-6pvc-2jm9",
+    "GO-2023-1988"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/net",
+   "version": "0.0.0-20220923203811-8be639271d50",
+   "ids": [
+    "GHSA-4374-p667-p6c8",
+    "GO-2023-2102"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/net",
+   "version": "0.0.0-20220923203811-8be639271d50",
+   "ids": [
+    "GHSA-4v7x-pqxf-cx7m",
+    "GO-2024-2687"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/net",
+   "version": "0.0.0-20220923203811-8be639271d50",
+   "ids": [
+    "GHSA-5cv4-jp36-h3mw",
+    "GO-2026-5028"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/net",
+   "version": "0.0.0-20220923203811-8be639271d50",
+   "ids": [
+    "GHSA-fxg5-wq6x-vr4w",
+    "GO-2023-1495"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/net",
+   "version": "0.0.0-20220923203811-8be639271d50",
+   "ids": [
+    "GHSA-qppj-fm5r-hxr3"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/net",
+   "version": "0.0.0-20220923203811-8be639271d50",
+   "ids": [
+    "GHSA-qxp5-gwg8-xv66",
+    "GO-2025-3503"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/net",
+   "version": "0.0.0-20220923203811-8be639271d50",
+   "ids": [
+    "GHSA-vvgc-356p-c3xw",
+    "GO-2025-3595"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/net",
+   "version": "0.0.0-20220923203811-8be639271d50",
+   "ids": [
+    "GHSA-vvpx-j8f3-3w6h",
+    "GO-2023-1571"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/net",
+   "version": "0.0.0-20220923203811-8be639271d50",
+   "ids": [
+    "GHSA-xrjj-mj9h-534m",
+    "GO-2022-1144"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/net",
+   "version": "0.0.0-20220923203811-8be639271d50",
+   "ids": [
+    "GO-2024-3333"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/net",
+   "version": "0.0.0-20220923203811-8be639271d50",
+   "ids": [
+    "GO-2026-4440"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/net",
+   "version": "0.0.0-20220923203811-8be639271d50",
+   "ids": [
+    "GO-2026-4441"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/net",
+   "version": "0.0.0-20220923203811-8be639271d50",
+   "ids": [
+    "GO-2026-4918"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/net",
+   "version": "0.0.0-20220923203811-8be639271d50",
+   "ids": [
+    "GO-2026-5025"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/net",
+   "version": "0.0.0-20220923203811-8be639271d50",
+   "ids": [
+    "GO-2026-5026"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/net",
+   "version": "0.0.0-20220923203811-8be639271d50",
+   "ids": [
+    "GO-2026-5027"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/net",
+   "version": "0.0.0-20220923203811-8be639271d50",
+   "ids": [
+    "GO-2026-5029"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/net",
+   "version": "0.0.0-20220923203811-8be639271d50",
+   "ids": [
+    "GO-2026-5030"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/net",
+   "version": "0.0.0-20220923203811-8be639271d50",
+   "ids": [
+    "GO-2026-5942"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/net",
+   "version": "0.0.0-20220923203811-8be639271d50",
+   "ids": [
+    "GO-2026-6603"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/net",
+   "version": "0.0.0-20220923203811-8be639271d50",
+   "ids": [
+    "GO-2026-6610"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/net",
+   "version": "0.0.0-20220923203811-8be639271d50",
+   "ids": [
+    "GO-2026-6611"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/net",
+   "version": "0.0.0-20220923203811-8be639271d50",
+   "ids": [
+    "GO-2026-6612"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/net",
+   "version": "0.0.0-20220923203811-8be639271d50",
+   "ids": [
+    "GO-2026-6617"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/oauth2",
+   "version": "0.0.0-20220309155454-6242fa91716a",
+   "ids": [
+    "GHSA-6v2p-p543-phr9",
+    "GO-2025-3488"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/sys",
+   "version": "0.0.0-20220811171246-fbc7d0a398ab",
+   "ids": [
+    "GO-2026-5024"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/text",
+   "version": "0.3.8",
+   "ids": [
+    "GO-2026-5970"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "golang.org/x/text",
+   "version": "0.3.8",
+   "ids": [
+    "GO-2026-6629"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "google.golang.org/grpc",
+   "version": "1.49.0",
+   "ids": [
+    "GHSA-2v4p-qf9q-27wj",
+    "GO-2026-6443"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "google.golang.org/grpc",
+   "version": "1.49.0",
+   "ids": [
+    "GHSA-hrxh-6v49-42gf",
+    "GO-2026-6061"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "google.golang.org/grpc",
+   "version": "1.49.0",
+   "ids": [
+    "GHSA-m425-mq94-257g",
+    "GO-2023-2153"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "google.golang.org/grpc",
+   "version": "1.49.0",
+   "ids": [
+    "GHSA-p77j-4mvh-x3m3",
+    "GO-2026-4762"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "google.golang.org/grpc",
+   "version": "1.49.0",
+   "ids": [
+    "GHSA-qc2q-p7wx-3px3",
+    "GO-2026-6441"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "google.golang.org/grpc",
+   "version": "1.49.0",
+   "ids": [
+    "GHSA-vp52-pcj8-j9qc",
+    "GO-2026-6348"
+   ]
+  },
+  {
+   "ecosystem": "Go",
+   "dir": ".",
+   "package": "google.golang.org/protobuf",
+   "version": "1.27.1",
+   "ids": [
+    "GHSA-8r3f-844c-mc37",
+    "GO-2024-2611"
+   ]
+  }
+ ]
+}

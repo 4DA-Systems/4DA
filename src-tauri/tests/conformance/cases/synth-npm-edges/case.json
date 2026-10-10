@@ -1,0 +1,9 @@
+{
+  "id": "synth-npm-edges",
+  "source": "synthetic",
+  "licence": "CC0-1.0 (authored for this corpus; package names/versions are public registry facts)",
+  "formats": [
+    "package-lock.json v3"
+  ],
+  "notes": "Deliberate npm edge cases: the same package installed at two versions (top-level minimist 1.2.8, nested optimist/node_modules/minimist 0.0.10); a dev-only subtree (minimatch 3.0.4 and its deps, `dev: true`); an optional dependency; and a workspace package named `express` at 4.0.0 linked from node_modules (`link: true`) — it is local code and must NOT be matched to the registry's express advisories."
+}

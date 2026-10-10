@@ -1,0 +1,18 @@
+{
+  "id": "py-js-ctfd",
+  "source": "repository",
+  "repo": "https://github.com/CTFd/CTFd",
+  "ref": "3.5.0",
+  "commit": "6d74c1c4267b4dc395949a65331c369e0737d16f",
+  "licence": "Apache-2.0",
+  "include": [
+    "requirements.txt",
+    "yarn.lock",
+    "package.json"
+  ],
+  "formats": [
+    "requirements.txt",
+    "yarn.lock v1"
+  ],
+  "notes": "Pinned requirements.txt plus a yarn v1 front-end lock in one directory (two ecosystems, one project path)."
+}

@@ -1,0 +1,32 @@
+[package]
+name = "grep"
+version = "0.2.5"  #:version
+authors = ["Andrew Gallant <jamslam@gmail.com>"]
+description = """
+Fast line oriented regex searching as a library.
+"""
+documentation = "http://burntsushi.net/rustdoc/grep/"
+homepage = "https://github.com/BurntSushi/ripgrep/tree/master/crates/grep"
+repository = "https://github.com/BurntSushi/ripgrep/tree/master/crates/grep"
+readme = "README.md"
+keywords = ["regex", "grep", "egrep", "search", "pattern"]
+license = "Unlicense/MIT"
+
+[dependencies]
+grep-cli = { version = "0.1.4", path = "../cli" }
+grep-matcher = { version = "0.1.4", path = "../matcher" }
+grep-pcre2 = { version = "0.1.4", path = "../pcre2", optional = true }
+grep-printer = { version = "0.1.4", path = "../printer" }
+grep-regex = { version = "0.1.6", path = "../regex" }
+grep-searcher = { version = "0.1.7", path = "../searcher" }
+
+[dev-dependencies]
+termcolor = "1.0.4"
+walkdir = "2.2.7"
+
+[features]
+simd-accel = ["grep-searcher/simd-accel"]
+pcre2 = ["grep-pcre2"]
+
+# This feature is DEPRECATED. Runtime dispatch is used for SIMD now.
+avx-accel = []

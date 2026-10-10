@@ -1,0 +1,19 @@
+{
+  "id": "poly-fastapi-template-poetry",
+  "source": "repository",
+  "repo": "https://github.com/fastapi/full-stack-fastapi-template",
+  "ref": "0.6.0",
+  "commit": "1b8b78415f0b2397bbd10b73caaf44c01299b969",
+  "licence": "MIT",
+  "include": [
+    "backend/poetry.lock",
+    "backend/pyproject.toml",
+    "frontend/package-lock.json",
+    "frontend/package.json"
+  ],
+  "formats": [
+    "poetry.lock",
+    "package-lock.json v2"
+  ],
+  "notes": "Polyglot monorepo: Python back end (poetry) + npm front end in sibling directories."
+}
