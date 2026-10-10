@@ -38,11 +38,20 @@ export interface ToastSlice {
 
 export type EmbeddingStatus = 'active' | 'degraded' | 'unavailable';
 
+/** Main navigation: three tabs (AD-054 — Brief · Preemption · Signal). */
 export type ActiveView =
   | 'briefing'
   | 'results'
-  | 'preemption'
-  | 'blindspots';
+  | 'preemption';
+
+/** View ids retired by AD-054. Blind Spots and Knowledge Gaps are Preemption
+ *  sub-views now; a caller still holding an old id (a Victauri script, a
+ *  remembered command-search pick) lands on the right sub-view, not nowhere. */
+export type LegacyActiveView = 'blindspots' | 'knowledge';
+
+/** Preemption's sub-views. The worklist (findings + fix paths + the Upgrade
+ *  Plan) is the default; Blind Spots and Knowledge Gaps support it. */
+export type PreemptionSubView = 'worklist' | 'blindspots' | 'knowledge';
 
 type SignalViewMode = 'list' | 'themes' | 'graph';
 
@@ -54,6 +63,7 @@ export interface UiSlice {
   showSplash: boolean;
   activeView: ActiveView;
   signalViewMode: SignalViewMode;
+  preemptionSubView: PreemptionSubView;
   isFirstRun: boolean;
   firstRunDismissed: boolean;
   embeddingMode: 'semantic' | 'keyword-only' | null;
@@ -62,8 +72,11 @@ export interface UiSlice {
   searchFocusItemId: number | null;
   setShowSettings: (show: boolean) => void;
   setSettingsInitialTab: (tab: string | null) => void;
-  setActiveView: (view: ActiveView) => void;
+  setActiveView: (view: ActiveView | LegacyActiveView) => void;
   setSignalViewMode: (mode: SignalViewMode) => void;
+  setPreemptionSubView: (sub: PreemptionSubView) => void;
+  /** Navigate to Preemption with `sub` selected (search, cross-view links). */
+  openPreemption: (sub: PreemptionSubView) => void;
   setIsFirstRun: (v: boolean) => void;
   setFirstRunDismissed: (v: boolean) => void;
   setEmbeddingMode: (mode: 'semantic' | 'keyword-only' | null) => void;

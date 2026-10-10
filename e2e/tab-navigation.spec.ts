@@ -5,7 +5,7 @@
  * Tab Navigation E2E Test
  *
  * Regression guard for the 2026-04-11 bug where Preemption and Blind Spots
- * tabs were VISIBLE in the navbar but clicking them silently failed because
+ * tabs (Blind Spots is a Preemption sub-view since AD-054) were VISIBLE in the navbar but clicking them silently failed because
  * ui-slice.ts's TIER_VIEWS didn't match ViewTabBar.tsx's TIER_VIEWS.
  *
  * This test catches the exact class of bug: a tab renders in the DOM but
@@ -15,7 +15,7 @@
 
 import { test, expect } from '@playwright/test';
 
-import { crashFallbacks } from './support/app';
+import { MAIN_TABS, PREEMPTION_SUB_VIEWS, crashFallbacks, preemptionTablist } from './support/app';
 
 // Relative to playwright.config's baseURL, so a run on another port tests its own server.
 const APP_URL = '/';
@@ -38,14 +38,14 @@ test.describe('Tab navigation', () => {
   // If this fails for a tab, either TIER_VIEWS has drifted OR the tab is
   // rendered but setActiveView is rejecting it.
   //
-  // The ids are ViewTabBar.tsx's TABS (main nav is locked at four tabs), and
+  // The ids are ViewTabBar.tsx's TABS (main nav is three tabs, AD-054), and
   // each tab is located by the `id="tab-<id>"` it renders. The previous
   // locator filtered on the text `nav.<id>` — an i18n KEY, never the rendered
   // label ("Brief", "Blind Spots", ...) — so it matched nothing, every case hit
   // the "not visible" skip, and the suite could not fail. (CodeQL
   // js/identity-replacement flagged the `.replace('blindspots', 'blindspots')`
   // no-op inside that dead filter.)
-  const ALL_NAVIGABLE_TABS = ['briefing', 'preemption', 'blindspots', 'results'];
+  const ALL_NAVIGABLE_TABS = MAIN_TABS.map((t) => t.id);
 
   for (const tabId of ALL_NAVIGABLE_TABS) {
     test(`clicking tab "${tabId}" changes selection`, async ({ page }) => {
@@ -83,27 +83,38 @@ test.describe('Tab navigation', () => {
     await expect(crashFallbacks(page)).toHaveCount(0);
   });
 
-  test('blindspots tab renders its view without error overlay', async ({ page }) => {
-    const blindSpotsTab = page.getByRole('tab').filter({ hasText: /blind ?spots?/i }).first();
-    const visible = await blindSpotsTab.isVisible().catch(() => false);
-    test.skip(!visible, 'Blind Spots tab not visible at current tier');
+  // AD-054: Blind Spots and Knowledge Gaps are Preemption sub-views. Every
+  // sub-tab must select, mount its lazy view and survive the backendless IPC
+  // failures without an error boundary.
+  for (const { id, label } of PREEMPTION_SUB_VIEWS) {
+    test(`preemption sub-view "${id}" selects and renders without error`, async ({ page }) => {
+      await page.getByRole('tablist', { name: /content views/i }).locator('#tab-preemption').click();
+      const subTab = preemptionTablist(page).locator(`#preemption-tab-${id}`);
+      await expect(subTab).toContainText(label);
+      await subTab.click();
+      await expect(subTab).toHaveAttribute('aria-selected', 'true', { timeout: 3000 });
+      const subPanel = page.locator(`#preemption-panel-${id}`);
+      await expect(subPanel).toBeVisible();
+      await expect(subPanel).toHaveAttribute('aria-labelledby', `preemption-tab-${id}`);
+      await page.waitForTimeout(500);
+      expect(await page.locator('vite-error-overlay').count()).toBe(0);
+      await expect(crashFallbacks(page)).toHaveCount(0);
+    });
+  }
 
-    await blindSpotsTab.click();
-    await expect(blindSpotsTab).toHaveAttribute('aria-selected', 'true', { timeout: 3000 });
-
-    await page.waitForTimeout(500);
-
-    const errorOverlay = page.locator('vite-error-overlay');
-    expect(await errorOverlay.count()).toBe(0);
-
-    // The view mounted and no React error boundary replaced it. With no
-    // backend the scan fails and Blind Spots shows its designed, recoverable
-    // error state ("Coverage scan unavailable" + Retry, whose body text is the
-    // generic "Something went wrong. Please try again.") — that is the view
-    // handling an IPC failure, not a crash, so the old `/something went
-    // wrong/` text match was a false positive.
-    const panel = page.getByRole('tabpanel', { name: 'Blind Spots' });
-    await expect(panel.getByRole('heading', { name: 'Coverage Gaps', level: 2 })).toBeVisible();
-    await expect(crashFallbacks(page)).toHaveCount(0);
+  test('preemption sub-tabs use a roving tabindex driven by the arrow keys', async ({ page }) => {
+    await page.getByRole('tablist', { name: /content views/i }).locator('#tab-preemption').click();
+    const list = preemptionTablist(page);
+    const worklist = list.locator('#preemption-tab-worklist');
+    await expect(worklist).toHaveAttribute('aria-selected', 'true');
+    await expect(list.locator('[role="tab"][tabindex="0"]')).toHaveCount(1);
+    await worklist.focus();
+    await page.keyboard.press('ArrowRight');
+    const blindSpots = list.locator('#preemption-tab-blindspots');
+    await expect(blindSpots).toBeFocused();
+    await expect(blindSpots).toHaveAttribute('aria-selected', 'true');
+    await expect(blindSpots).toHaveAttribute('tabindex', '0');
+    await page.keyboard.press('End');
+    await expect(list.locator('#preemption-tab-knowledge')).toBeFocused();
   });
 });

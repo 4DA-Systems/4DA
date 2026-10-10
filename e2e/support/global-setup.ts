@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { chromium, type FullConfig, type Page } from '@playwright/test';
 
-import { MAIN_TABS, mainTablist } from './app';
+import { MAIN_TABS, PREEMPTION_SUB_VIEWS, mainTablist, preemptionTablist } from './app';
 
 /**
  * Warm the E2E Vite server before the first test runs.
@@ -38,6 +38,12 @@ async function importLazyChunks(page: Page): Promise<void> {
   for (const { label } of MAIN_TABS) {
     const tab = mainTablist(page).getByRole('tab', { name: label });
     await tab.click({ timeout: 10_000 });
+    await page.waitForLoadState('networkidle', { timeout: 30_000 });
+  }
+  // Preemption's sub-views are lazy chunks of their own (AD-054).
+  await mainTablist(page).getByRole('tab', { name: 'Preemption' }).click({ timeout: 10_000 });
+  for (const { id } of PREEMPTION_SUB_VIEWS) {
+    await preemptionTablist(page).locator(`#preemption-tab-${id}`).click({ timeout: 10_000 });
     await page.waitForLoadState('networkidle', { timeout: 30_000 });
   }
   await page.keyboard.press(',');

@@ -115,7 +115,7 @@ test.describe('4DA Critical Path', () => {
     const tablist = page.getByRole('tablist', { name: /content views/i });
     await expect(tablist).toBeVisible();
 
-    // Main nav is locked at four tabs (intelligence doctrine rule 2).
+    // Main nav is three tabs (intelligence doctrine rule 2, amended by AD-054).
     const tabNames = MAIN_TABS.map((t) => t.label);
     await expect(tablist.getByRole('tab')).toHaveCount(tabNames.length);
 

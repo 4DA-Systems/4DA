@@ -6,10 +6,11 @@ import { useAppStore } from '../store';
 import { trackEvent } from '../hooks/use-telemetry';
 import type { ActiveView } from '../store/types';
 
+// Main nav is three tabs (AD-054; doctrine rule 2). Blind Spots and Knowledge
+// Gaps are Preemption sub-views (PreemptionView's own sub-navigation).
 const TABS: Array<{ id: ActiveView; labelKey: string; subtitleKey: string; activeColor: string }> = [
   { id: 'briefing', labelKey: 'nav.briefing.label', subtitleKey: 'nav.briefing.subtitle', activeColor: 'bg-orange-500/20 text-orange-400' },
   { id: 'preemption', labelKey: 'nav.preemption.label', subtitleKey: 'nav.preemption.subtitle', activeColor: 'bg-red-500/20 text-red-400' },
-  { id: 'blindspots', labelKey: 'nav.blindspots.label', subtitleKey: 'nav.blindspots.subtitle', activeColor: 'bg-amber-500/20 text-amber-400' },
   { id: 'results', labelKey: 'nav.signal.label', subtitleKey: 'nav.signal.subtitle', activeColor: 'bg-orange-500/20 text-orange-400' },
 ];
 

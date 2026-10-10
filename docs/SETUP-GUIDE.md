@@ -31,9 +31,8 @@ When you first open 4DA, you'll see a splash screen while the system initializes
 | Tab | Purpose |
 |-----|---------|
 | **Brief** | Your intelligence at a glance — AI-generated summary, top picks, attention cards |
-| **Preemption** | What matters before it hurts — forward-looking dependency and ecosystem risk |
-| **Blind Spots** | What you're not watching — gaps in your coverage |
-| **Signal** | Your curated intelligence feed — every item scored against your stack. Toggle between **List** and **Graph** views (top right of the panel) |
+| **Preemption** | What matters before it hurts — version-confirmed dependency findings with their fix paths. Switch between **Worklist** (the default: findings and the Upgrade Plan), **Blind Spots** (gaps in your coverage) and **Learning Opportunities** (dependency news you haven't read) at the top right of the panel |
+| **Signal** | Your curated intelligence feed — every item scored against your stack. Toggle between **List**, **Themes** and **Graph** views (top right of the panel) |
 
 **Settings** (gear icon, top right) has these tabs:
 
@@ -320,7 +319,7 @@ Your current tier is shown:
 
 ## STREETS Playbook (on the web)
 
-The STREETS Playbook — 7 modules on turning developer skills into independent income — is published free on the open web. It is not a tab inside the app; 4DA stays focused on intelligence (Brief, Preemption, Blind Spots, Signal).
+The STREETS Playbook — 7 modules on turning developer skills into independent income — is published free on the open web. It is not a tab inside the app; 4DA stays focused on intelligence (Brief, Preemption, Signal).
 
 | Module | Name | Read it |
 |--------|------|---------|

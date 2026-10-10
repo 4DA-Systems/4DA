@@ -1,32 +1,13 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-import { useState, useEffect, memo } from 'react';
+import { useState, useEffect, useCallback, memo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../lib/commands';
+import { isSignalGateError } from '../utils/error-messages';
 import { KnowledgeGapsScanPrompt } from './KnowledgeGapsScanPrompt';
+import { KnowledgeGapCard } from './KnowledgeGapCard';
 import { ProGate } from './ProGate';
-import { useTranslatedContent } from './ContentTranslationProvider';
 import { useColdStartGate } from '../hooks/use-cold-start-gate';
 import type { EvidenceItem } from '../../src-tauri/bindings/bindings/EvidenceItem';
-import type { Urgency } from '../../src-tauri/bindings/bindings/Urgency';
-
-// Phase 5 (2026-04-17): consumes canonical EvidenceFeed of kind=Gap items.
-// The 4-severity legacy scale is mapped 1:1 to the shared Urgency scale
-// (critical/high/medium/watch).
-
-const URGENCY_CONFIG: Record<Urgency, { color: string; bg: string; border: string }> = {
-  critical: { color: 'text-red-400', bg: 'bg-red-500/10', border: 'border-red-500/20' },
-  high: { color: 'text-amber-400', bg: 'bg-amber-500/10', border: 'border-amber-500/20' },
-  medium: { color: 'text-yellow-400', bg: 'bg-yellow-500/10', border: 'border-yellow-500/20' },
-  watch: { color: 'text-text-secondary', bg: 'bg-gray-500/10', border: 'border-gray-500/20' },
-};
-
-/** Extract the displayed dependency name from an EvidenceItem. Prefer
- * affected_deps[0] (set by the materializer for gap items); fall back to
- * title stripped of its "Knowledge gap: " prefix. */
-function depNameFromItem(item: EvidenceItem): string {
-  if (item.affected_deps.length > 0) return item.affected_deps[0]!;
-  return item.title.replace(/^Knowledge gap:\s*/, '');
-}
 
 // Module-level in-flight share: `get_knowledge_gaps` is a ~6s backend query,
 // and StrictMode's double-mount fired it twice in parallel for identical
@@ -44,187 +25,120 @@ function fetchKnowledgeGaps(): Promise<GapsFeed> {
   return gapsInFlight;
 }
 
+type LoadState = 'pending' | 'loaded' | 'gated' | 'failed';
+
+/**
+ * Preemption's Knowledge Gaps sub-view (AD-054): dependencies with security,
+ * breaking or release news you have not read yet. Signal-tier — the backend
+ * gates `get_knowledge_gaps`, and ProGate renders the upgrade path.
+ */
 export const KnowledgeGapsPanel = memo(function KnowledgeGapsPanel() {
   const { t } = useTranslation();
-  const { getTranslated } = useTranslatedContent();
   const isColdStart = useColdStartGate();
   const [items, setItems] = useState<EvidenceItem[]>([]);
-  const [expanded, setExpanded] = useState(false);
-  const [loaded, setLoaded] = useState(false);
+  const [state, setState] = useState<LoadState>('pending');
   const [noDependencies, setNoDependencies] = useState(false);
 
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const feed = await fetchKnowledgeGaps();
-        setItems(feed.items);
-        setNoDependencies(feed.total_tracked === 0);
-        setLoaded(true);
-      } catch {
-        // Knowledge gaps are optional — leave `loaded` false so a FAILED fetch
-        // never masquerades as the "no gaps — you're current" success state.
-      }
-    };
-    void load();
+  const load = useCallback(async () => {
+    setState('pending');
+    try {
+      const feed = await fetchKnowledgeGaps();
+      setItems(feed.items);
+      setNoDependencies(feed.total_tracked === 0);
+      setState('loaded');
+    } catch (e) {
+      // A FAILED fetch must never masquerade as the "no gaps — you're current"
+      // success state: a tier gate gets the upgrade path, anything else Retry.
+      setState(isSignalGateError(e) ? 'gated' : 'failed');
+    }
   }, []);
+
+  useEffect(() => { void load(); }, [load]);
+
+  const intro = <p className="text-xs text-text-muted">{t('knowledgeGaps.subtitle')}</p>;
+
+  if (state === 'pending') {
+    return (
+      <div className="space-y-4">
+        {intro}
+        <p className="text-sm text-text-muted animate-pulse py-12 text-center">{t('action.loading')}</p>
+      </div>
+    );
+  }
+
+  if (state === 'gated') {
+    return (
+      <div className="space-y-4">
+        {intro}
+        <ProGate feature={t('knowledgeGaps.feature')}>
+          {/* Room for the gate's upgrade card — no fake rows under the blur. */}
+          <div className="min-h-72 bg-bg-secondary rounded-lg border border-border" data-testid="knowledge-gaps-gated" />
+        </ProGate>
+      </div>
+    );
+  }
+
+  if (state === 'failed') {
+    return (
+      <div className="space-y-4">
+        {intro}
+        <div className="bg-bg-secondary rounded-lg border border-border px-5 py-4" data-testid="knowledge-gaps-error">
+          <p className="text-sm text-text-secondary">{t('knowledgeGaps.loadFailed')}</p>
+          <button
+            type="button"
+            onClick={() => void load()}
+            className="mt-3 px-3 py-1.5 text-xs text-text-primary bg-bg-tertiary border border-border rounded-lg hover:border-text-muted transition-colors"
+          >
+            {t('action.retry')}
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  // No dependency known: nothing was checked, so no "you're current" — the
+  // scan that would let it check. Independent of fetch volume (the gate below).
+  if (noDependencies && items.length === 0) {
+    return (
+      <div className="space-y-4">
+        {intro}
+        <ProGate feature={t('knowledgeGaps.feature')}>
+          <KnowledgeGapsScanPrompt />
+        </ProGate>
+      </div>
+    );
+  }
+
+  // Intelligence Doctrine Rule 6: on day one an empty result says nothing —
+  // never "no gaps", which the first week of reading cannot yet support.
+  if (isColdStart && items.length === 0) return intro;
 
   const urgentCount = items.filter(
     (it) => it.urgency === 'critical' || it.urgency === 'high',
   ).length;
 
-  // Intelligence Doctrine Rule 6: silent until data arrives. Also silent until a
-  // SUCCESSFUL load (loaded) — a failed/pending fetch must not render the
-  // "no gaps — your knowledge is current" assurance with an empty list.
-  if (!loaded && items.length === 0) return null;
-  // No dependency known: nothing was checked, so no "you're current" — the
-  // scan that would let it check. Independent of fetch volume (the gate below).
-  if (loaded && noDependencies && items.length === 0) {
-    return (
-      <ProGate feature={t('knowledgeGaps.feature')}>
-        <KnowledgeGapsScanPrompt />
-      </ProGate>
-    );
-  }
-  if (isColdStart && items.length === 0) return null;
-
   return (
-    <ProGate feature={t('knowledgeGaps.feature')}>
-    <div className="mb-6 bg-bg-secondary rounded-lg border border-border overflow-hidden">
-      {items.length === 0 ? (
-        <div className="px-5 py-4 flex items-center gap-3">
-          <div className="w-8 h-8 bg-bg-tertiary rounded-lg flex items-center justify-center">
-            {/* eslint-disable-next-line i18next/no-literal-string */}
-            <span className="text-text-secondary">✓</span>
+    <div className="space-y-4">
+      {intro}
+      <ProGate feature={t('knowledgeGaps.feature')}>
+        {items.length === 0 ? (
+          <div className="bg-bg-secondary rounded-lg border border-border px-5 py-4 flex items-center gap-3">
+            <div className="w-8 h-8 bg-bg-tertiary rounded-lg flex items-center justify-center shrink-0">
+              {/* eslint-disable-next-line i18next/no-literal-string */}
+              <span className="text-text-secondary" aria-hidden="true">✓</span>
+            </div>
+            <p className="text-sm text-text-secondary">{t('knowledgeGaps.noGaps', 'No gaps detected — your knowledge is current')}</p>
           </div>
-          <div>
-            <h2 className="font-medium text-text-primary text-sm">{t('knowledgeGaps.title')}</h2>
-            <p className="text-xs text-text-muted">{t('knowledgeGaps.noGaps', 'No gaps detected — your knowledge is current')}</p>
-          </div>
-        </div>
-      ) : (
-      <>
-      <button
-        onClick={() => setExpanded(!expanded)}
-        className="w-full px-5 py-4 flex items-center justify-between hover:bg-[#1A1A1A] transition-colors"
-      >
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-bg-tertiary rounded-lg flex items-center justify-center">
-            <span className="text-text-secondary">📖</span>
-          </div>
-          <div className="text-start">
-            <h2 className="font-medium text-text-primary text-sm">{t('knowledgeGaps.title')}</h2>
-            <p className="text-xs text-text-muted">
+        ) : (
+          <section className="space-y-2" aria-label={t('knowledgeGaps.title')}>
+            <p className="text-xs text-text-muted tabular-nums">
               {t('knowledgeGaps.count', { count: items.length })}
               {urgentCount > 0 && <span className="text-amber-400 ms-1">{t('knowledgeGaps.needAttention', { count: urgentCount })}</span>}
             </p>
-          </div>
-        </div>
-        <span className="text-text-muted text-sm">{expanded ? '▾' : '▸'}</span>
-      </button>
-
-      {expanded && (
-        <div className="p-4 space-y-2 border-t border-border">
-          {items.map((it) => {
-            const cfg = URGENCY_CONFIG[it.urgency];
-            const depName = depNameFromItem(it);
-            const missedCount = it.evidence.filter(c => c.url !== null).length;
-            const rawPath = it.affected_projects[0] ?? '';
-            const projectPath = rawPath.split(/[/\\]/).filter(Boolean).pop() ?? rawPath;
-            return (
-              <div key={it.id} className={`px-4 py-3 rounded-lg border ${cfg.border} ${cfg.bg}`}>
-                <div className="flex items-center gap-2">
-                  <span className={`text-sm font-medium ${cfg.color}`}>{depName}</span>
-                  <span className={`ms-auto text-[10px] px-1.5 py-0.5 rounded ${cfg.bg} ${cfg.color} border ${cfg.border}`}>
-                    {it.urgency}
-                  </span>
-                </div>
-                <p className="text-xs text-text-secondary mt-1">
-                  {t('knowledgeGaps.missedArticles', { count: missedCount })}
-                </p>
-                {it.evidence.length > 0 && (() => {
-                  const topCite = it.evidence[0]!;
-                  // relevance_note is optional on the wire since AD-035.
-                  const isSecurityTop = (topCite.relevance_note ?? '').toLowerCase().includes('security');
-                  const rest = it.evidence.slice(1, 4);
-                  return (
-                  <div className="mt-2 space-y-1">
-                    <div className={`text-xs p-1.5 rounded ${isSecurityTop ? 'bg-red-500/10 border border-red-500/20' : 'bg-bg-tertiary/50'}`}>
-                      <span className="text-[9px] text-text-muted uppercase tracking-wide">{t('knowledgeGaps.startHere', 'Start here')}</span>
-                      <div className="mt-0.5">
-                        {topCite.url ? (
-                          <a href={topCite.url} target="_blank" rel="noopener noreferrer" className={`font-medium ${isSecurityTop ? 'text-red-400 hover:text-red-300' : 'text-text-primary hover:text-text-primary'} transition-colors`}>
-                            {getTranslated(`${it.id}_cite_0`, topCite.title)}
-                          </a>
-                        ) : (
-                          <span className="font-medium text-text-primary">{getTranslated(`${it.id}_cite_0`, topCite.title)}</span>
-                        )}
-                      </div>
-                    </div>
-                    {rest.length > 0 && (
-                      <details className="group">
-                        <summary className="flex items-center gap-1 cursor-pointer select-none text-[10px] text-text-muted hover:text-text-secondary transition-colors list-none">
-                          <span className="group-open:rotate-90 transition-transform">&#9654;</span>
-                          {/* eslint-disable-next-line i18next/no-literal-string */}
-                          {rest.length} more {rest.length === 1 ? 'article' : 'articles'}
-                        </summary>
-                        <div className="mt-1 space-y-1">
-                          {rest.map((cite, i) => (
-                            <div key={i + 1} className="text-[11px]">
-                              {cite.url ? (
-                                <a href={cite.url} target="_blank" rel="noopener noreferrer" className="text-text-secondary hover:text-text-primary transition-colors">
-                                  {getTranslated(`${it.id}_cite_${i + 1}`, cite.title)}
-                                </a>
-                              ) : (
-                                <span className="text-text-secondary">{getTranslated(`${it.id}_cite_${i + 1}`, cite.title)}</span>
-                              )}
-                            </div>
-                          ))}
-                        </div>
-                      </details>
-                    )}
-                  </div>
-                  );
-                })()}
-                {it.suggested_actions.length > 0 && (() => {
-                  const firstUrl = it.evidence.find(c => c.url)?.url;
-                  return (
-                  <div className="mt-2 flex flex-wrap gap-1.5">
-                    {it.suggested_actions.map((action) => (
-                      firstUrl ? (
-                        <button
-                          key={action.action_id}
-                          onClick={() => {
-                            import('@tauri-apps/plugin-opener').then(({ openUrl }) => {
-                              void openUrl(firstUrl);
-                            }).catch(() => {
-                              window.open(firstUrl, '_blank', 'noopener,noreferrer');
-                            });
-                          }}
-                          className={`text-[10px] px-2 py-0.5 rounded border ${cfg.border} ${cfg.color} hover:brightness-125 transition-all cursor-pointer`}
-                          title={action.description}
-                        >
-                          {action.label} &#8599;
-                        </button>
-                      ) : (
-                        <span key={action.action_id} className={`text-[10px] px-2 py-0.5 rounded border ${cfg.border} ${cfg.color} cursor-default`} title={action.description}>
-                          {action.label}
-                        </span>
-                      )
-                    ))}
-                  </div>
-                  );
-                })()}
-                <div className="text-[10px] text-text-muted mt-1">
-                  {it.explanation} {projectPath && `· ${projectPath}`}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-      </>
-      )}
+            {items.map((it) => <KnowledgeGapCard key={it.id} item={it} />)}
+          </section>
+        )}
+      </ProGate>
     </div>
-    </ProGate>
   );
 });

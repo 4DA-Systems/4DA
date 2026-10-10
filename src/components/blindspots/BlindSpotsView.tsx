@@ -182,12 +182,10 @@ const BlindSpotsView = memo(function BlindSpotsView() {
   if (error) {
     const isTimeoutError = /timed?\s*out|deadline/i.test(error);
     return (
-      <div className="space-y-4" role="tabpanel" id="view-panel-blindspots" aria-labelledby="tab-blindspots">
-        <header className="mb-2">
-          {/* h2, not h1: App.tsx owns the document h1; sections below are h3. */}
-          <h2 className="text-xl font-semibold text-text-primary tracking-tight">{t('blindspots.title')}</h2>
-          <p className="text-sm text-text-muted mt-1">{t('blindspots.subtitle')}</p>
-        </header>
+      <div className="space-y-4">
+        {/* No heading of its own: the Preemption shell owns the h2 and the
+            sub-tab names this view; sections below are h3. */}
+        <p className="text-xs text-text-muted">{t('blindspots.subtitle')}</p>
         <div className="bg-bg-secondary rounded-lg border border-red-500/20 px-5 py-5">
           <div className="flex items-start gap-4">
             <div className="w-9 h-9 rounded-full bg-red-500/10 border border-red-500/20 flex items-center justify-center shrink-0">
@@ -260,11 +258,8 @@ const BlindSpotsView = memo(function BlindSpotsView() {
     : undefined;
 
   return (
-    <div className="space-y-4 pb-8" role="tabpanel" id="view-panel-blindspots" aria-labelledby="tab-blindspots">
-      <header className="mb-2">
-        <h2 className="text-xl font-semibold text-text-primary tracking-tight">{t('blindspots.title')}</h2>
-        <p className="text-sm text-text-muted mt-1">{t('blindspots.subtitle')}</p>
-      </header>
+    <div className="space-y-4 pb-8">
+      <p className="text-xs text-text-muted">{t('blindspots.subtitle')}</p>
       <ReportAge computedAt={dataFreshness?.computed_at} onReload={refreshQuietly} />
       {/* Day one: nothing scanned → the scan is the action; scanned but not
           yet assessed (score < 0) → what will appear, not a bare count. */}

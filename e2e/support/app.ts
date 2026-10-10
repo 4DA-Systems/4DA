@@ -7,16 +7,26 @@ import type { Locator, Page } from '@playwright/test';
  * which is exactly the "backend errored" path the app must survive.
  */
 
-/** The four main views, by their `tab-<id>` id and rendered English label (ViewTabBar TABS). */
+/** The three main views (AD-054), by their `tab-<id>` id and rendered English label (ViewTabBar TABS). */
 export const MAIN_TABS = [
   { id: 'briefing', label: 'Brief' },
   { id: 'preemption', label: 'Preemption' },
-  { id: 'blindspots', label: 'Blind Spots' },
   { id: 'results', label: 'Signal' },
+] as const;
+
+/** Preemption's sub-views, by their `preemption-tab-<id>` id and English label. */
+export const PREEMPTION_SUB_VIEWS = [
+  { id: 'worklist', label: 'Worklist' },
+  { id: 'blindspots', label: 'Blind Spots' },
+  { id: 'knowledge', label: 'Learning Opportunities' },
 ] as const;
 
 export function mainTablist(page: Page): Locator {
   return page.getByRole('tablist', { name: /content views/i });
+}
+
+export function preemptionTablist(page: Page): Locator {
+  return page.getByRole('tablist', { name: 'Preemption views' });
 }
 
 /**

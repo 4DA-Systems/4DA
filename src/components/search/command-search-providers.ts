@@ -20,7 +20,7 @@
 import { cmd } from '../../lib/commands';
 import type { NLQResult } from '../../lib/commands';
 import { openExternalUrl } from '../../lib/open-url';
-import type { ActiveView } from '../../store/types';
+import type { ActiveView, PreemptionSubView } from '../../store/types';
 import {
   type CommandResult,
   type SearchProvider,
@@ -31,6 +31,8 @@ import {
 export interface ProviderDeps {
   t: (key: string, fallback?: string) => string;
   setActiveView: (view: ActiveView) => void;
+  /** Go to Preemption with a sub-view selected. */
+  openPreemption: (sub: PreemptionSubView) => void;
   onAnalyze: () => void;
   onOpenSettings: () => void;
   /** Ask the Signal view to scroll to + expand a specific item after navigating to it. */
@@ -49,16 +51,22 @@ const INTELLIGENCE_MAX_ROWS = 6;
 // ----------------------------------------------------------------------------
 
 interface NavEntry {
+  /** Result id suffix (`goto-<key>`). Stable across AD-054: frecency picks
+   *  persisted under `goto-blindspots` keep ranking the same destination. */
+  key: string;
   view: ActiveView;
+  /** Preemption sub-view to select (Blind Spots / Knowledge Gaps live there). */
+  preemptionSubView?: PreemptionSubView;
   labelKey: string;
   keywords: string;
 }
 
 const NAV_ENTRIES: readonly NavEntry[] = [
-  { view: 'briefing', labelKey: 'nav.briefing.label', keywords: 'brief daily morning summary today' },
-  { view: 'preemption', labelKey: 'nav.preemption.label', keywords: 'alerts preempt risk ahead warning' },
-  { view: 'blindspots', labelKey: 'nav.blindspots.label', keywords: 'coverage gaps missing blind spots' },
-  { view: 'results', labelKey: 'nav.signal.label', keywords: 'signal feed results items relevant' },
+  { key: 'briefing', view: 'briefing', labelKey: 'nav.briefing.label', keywords: 'brief daily morning summary today' },
+  { key: 'preemption', view: 'preemption', preemptionSubView: 'worklist', labelKey: 'nav.preemption.label', keywords: 'alerts preempt risk ahead warning worklist fix upgrade plan vulnerabilities' },
+  { key: 'blindspots', view: 'preemption', preemptionSubView: 'blindspots', labelKey: 'preemption.views.blindspots', keywords: 'coverage gaps missing blind spots' },
+  { key: 'knowledge', view: 'preemption', preemptionSubView: 'knowledge', labelKey: 'knowledgeGaps.title', keywords: 'knowledge gaps learning missed unread catch up' },
+  { key: 'results', view: 'results', labelKey: 'nav.signal.label', keywords: 'signal feed results items relevant' },
 ];
 
 function navProvider(deps: ProviderDeps): SearchProvider {
@@ -74,13 +82,14 @@ function navProvider(deps: ProviderDeps): SearchProvider {
         const label = deps.t(entry.labelKey);
         const score = Math.max(fuzzyScore(query, label), fuzzyScore(query, entry.keywords));
         if (score < 0) continue;
+        const sub = entry.preemptionSubView;
         results.push({
-          id: `goto-${entry.view}`,
+          id: `goto-${entry.key}`,
           group: 'goto',
           title: label,
           subtitle: goPrefix,
           score,
-          run: () => deps.setActiveView(entry.view),
+          run: sub !== undefined ? () => deps.openPreemption(sub) : () => deps.setActiveView(entry.view),
         });
       }
 

@@ -26,6 +26,7 @@ const PANEL_CLASS = 'max-h-[60vh] overflow-y-auto rounded-lg border border-borde
 export const CommandSearch = memo(function CommandSearch({ onAnalyze, onOpenSettings }: CommandSearchProps) {
   const { t } = useTranslation();
   const setActiveView = useAppStore(s => s.setActiveView);
+  const openPreemption = useAppStore(s => s.openPreemption);
   const setSearchFocusItemId = useAppStore(s => s.setSearchFocusItemId);
 
   // Adapt i18next's TFunction to the providers' simple (key, fallback?) => string contract.
@@ -41,7 +42,7 @@ export const CommandSearch = memo(function CommandSearch({ onAnalyze, onOpenSett
     [],
   );
 
-  const search = useCommandSearch({ t: translate, setActiveView, onAnalyze, onOpenSettings, setSearchFocusItemId, isItemInFeed });
+  const search = useCommandSearch({ t: translate, setActiveView, openPreemption, onAnalyze, onOpenSettings, setSearchFocusItemId, isItemInFeed });
   const { query, setQuery, results, loading, activeId, setActiveId, moveActive, reset } = search;
 
   const [open, setOpen] = useState(false);

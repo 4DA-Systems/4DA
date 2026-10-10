@@ -124,6 +124,8 @@ export type {
   ToastSlice,
   EmbeddingStatus,
   ActiveView,
+  LegacyActiveView,
+  PreemptionSubView,
   UiSlice,
   ModelRegistryData,
   SettingsSlice,

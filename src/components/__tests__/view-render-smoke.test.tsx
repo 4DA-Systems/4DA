@@ -32,10 +32,12 @@ vi.mock('../../lib/commands', () => ({
   cmd: vi.fn(() => Promise.resolve(null)),
 }));
 
-// Every view that ViewRouter can render
+// Every lazily loaded view ViewRouter can render, plus Preemption's
+// lazily loaded sub-views (AD-054).
 const VIEWS = [
   { id: 'preemption', module: () => import('../preemption/PreemptionView') },
-  { id: 'blindspots', module: () => import('../blindspots/BlindSpotsView') },
+  { id: 'preemption/blindspots', module: () => import('../blindspots/BlindSpotsView') },
+  { id: 'preemption/knowledge', module: () => import('../KnowledgeGapsPanel').then(m => ({ default: m.KnowledgeGapsPanel })) },
 ];
 
 describe('View render smoke', () => {
