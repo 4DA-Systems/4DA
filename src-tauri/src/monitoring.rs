@@ -661,9 +661,11 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                         );
                         if let Ok(db) = crate::get_database() {
                             let job_started = std::time::Instant::now();
-                            match db.conn.lock().execute_batch("VACUUM;") {
-                                Ok(()) => {
-                                    info!(target: "4da::monitor", "Weekly VACUUM completed — disk space reclaimed");
+                            // Weekly CHECK, not a weekly full rewrite: compacts
+                            // only when the freelist is worth it.
+                            match db.vacuum_if_reclaimable() {
+                                Ok(vacuumed) => {
+                                    info!(target: "4da::monitor", vacuumed, "Weekly VACUUM check completed");
                                     record_job_outcome(
                                         crate::scheduler_state::jobs::VACUUM,
                                         job_started,
@@ -1253,10 +1255,10 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                     if let Ok(db) = crate::get_database() {
                         match db.cleanup_old_items(max_age_days) {
                             Ok(deleted) if deleted > 0 => {
+                                // No VACUUM here: `run_maintenance` below runs
+                                // one only when the freelist is worth it, which
+                                // a large prune makes it.
                                 info!(target: "4da::monitor", deleted, max_age_days, "Pruned old source items (post-autophagy)");
-                                if let Err(e) = db.vacuum_if_needed(deleted, 1000) {
-                                    warn!(target: "4da::monitor", error = %e, "VACUUM after cleanup failed");
-                                }
                             }
                             Ok(_) => {}
                             Err(e) => {

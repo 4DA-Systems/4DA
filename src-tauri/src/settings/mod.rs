@@ -300,6 +300,28 @@ mod tests {
         assert_eq!(monitoring.retention_days(), 365);
     }
 
+    /// Trajectory 2026-10-10: the SHIPPED retention is bounded to 30-90 days.
+    /// 365 is a value a user may pick (the slider's maximum), never one a
+    /// fresh install or the example settings start with — the founder's
+    /// 365-day setting grew the database to ~2 GB, 92% social items.
+    #[test]
+    fn test_shipped_retention_default_is_bounded() {
+        use crate::settings::types::RETENTION_DEFAULT_DAYS;
+        assert!((30..=90).contains(&RETENTION_DEFAULT_DAYS));
+        assert_eq!(
+            MonitoringConfig::default().retention_days(),
+            RETENTION_DEFAULT_DAYS
+        );
+        let example: serde_json::Value =
+            serde_json::from_str(include_str!("../../../data/settings.example.json"))
+                .expect("settings.example.json parses");
+        let shipped = &example["monitoring"]["cleanup_max_age_days"];
+        assert!(
+            shipped.is_null() || shipped.as_u64().is_some_and(|d| (30..=90).contains(&d)),
+            "settings.example.json must not ship a retention outside 30-90 days: {shipped}"
+        );
+    }
+
     #[test]
     fn test_validate_removes_empty_context_dirs() {
         let mut settings = Settings::default();
