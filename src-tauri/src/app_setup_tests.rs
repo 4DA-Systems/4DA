@@ -107,3 +107,28 @@ async fn normal_completion_preserves_the_cycles_own_gate_release() {
     assert!(completed_normally);
     assert!(!state.is_checking.load(Ordering::SeqCst));
 }
+
+/// The dev purge targets the RUNNING app's WebView2 folder. It used to
+/// hard-code `com.4da.app`, so a test profile under another identifier wiped
+/// the operator's real webview cache (fresh-profile E2E 2026-10-10).
+#[test]
+fn webview_purge_targets_the_running_identifier_only() {
+    use super::webview_service_worker_dir;
+    let local = std::path::Path::new("C:/Users/x/AppData/Local");
+
+    let test_profile = webview_service_worker_dir(local, "com.4da.app.freshqa").expect("valid id");
+    assert!(test_profile.starts_with(local.join("com.4da.app.freshqa")));
+    assert!(!test_profile.starts_with(local.join("com.4da.app").join("EBWebView")));
+    assert!(test_profile.ends_with(
+        std::path::Path::new("EBWebView")
+            .join("Default")
+            .join("Service Worker")
+    ));
+
+    let real = webview_service_worker_dir(local, "com.4da.app").expect("valid id");
+    assert_ne!(test_profile, real);
+
+    for bad in ["", "  ", "..", "com/../x", "com\\x", "com..app", ".hidden"] {
+        assert!(webview_service_worker_dir(local, bad).is_none(), "{bad:?}");
+    }
+}

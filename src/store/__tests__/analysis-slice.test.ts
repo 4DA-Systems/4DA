@@ -31,6 +31,23 @@ describe('analysis-slice', () => {
       expect(useAppStore.getState().appState.contextFiles).toEqual([]);
     });
 
+    it('loadContextFiles stores the metadata page and the full total, not a page-length count', async () => {
+      const { invoke } = await import('@tauri-apps/api/core');
+      const files = [
+        { path: 'D:/p/a.rs', lines: 10, size_bytes: 200, kind: 'rs', modified_at: null },
+        { path: 'D:/p/b.md', lines: 3, size_bytes: 40, kind: 'md', modified_at: null },
+      ];
+      vi.mocked(invoke).mockResolvedValueOnce({ files, total: 1913, offset: 0, limit: 500 });
+
+      await useAppStore.getState().loadContextFiles();
+
+      const state = useAppStore.getState().appState;
+      expect(vi.mocked(invoke)).toHaveBeenCalledWith('get_context_files', {});
+      expect(state.contextFiles).toEqual(files);
+      expect(state.contextFilesTotal).toBe(1913);
+      expect(state.status).toContain('1913');
+    });
+
     it('has analysisComplete false', () => {
       expect(useAppStore.getState().appState.analysisComplete).toBe(false);
     });

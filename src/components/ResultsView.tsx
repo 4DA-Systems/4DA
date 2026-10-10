@@ -52,8 +52,8 @@ export function ResultsView({
     setExpandedItem(useAppStore.getState().expandedItem === itemId ? null : itemId);
   }, [setExpandedItem]);
 
-  // The file list is read lazily on first open (it reads every file under the
-  // context dirs). Until then the count is UNKNOWN, not zero — the summary
+  // The file list is read lazily on first open (it walks every file under the
+  // context dirs; only a metadata page crosses IPC). Until then the count is UNKNOWN, not zero — the summary
   // used to print "(0 files)" for a freshly scanned D:\4DA because nothing had
   // asked yet (fresh-profile E2E 2026-10-09).
   const [contextFilesLoaded, setContextFilesLoaded] = useState(false);
@@ -217,11 +217,12 @@ export function ResultsView({
       >
         <summary className="px-5 py-3 text-xs text-text-muted cursor-pointer hover:text-text-secondary">
           {(contextFilesLoaded && !state.loading) || state.contextFiles.length > 0
-            ? t('results.contextFilesCount', { count: state.contextFiles.length })
+            ? t('results.contextFilesCount', { count: state.contextFilesTotal ?? state.contextFiles.length })
             : t('results.contextFiles')}
         </summary>
         <ContextPanel
           contextFiles={state.contextFiles}
+          totalCount={state.contextFilesTotal}
           discoveredContext={discoveredContext}
           loading={state.loading}
           onReload={() => { void loadContextFiles(); }}

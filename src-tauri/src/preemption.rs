@@ -1279,11 +1279,7 @@ fn chain_to_alert(
     PreemptionAlert {
         id: format!("chain-{}", uuid::Uuid::new_v4()),
         alert_type,
-        title: if let Some(first_link) = chain.links.first() {
-            truncate(&first_link.title, 120)
-        } else {
-            truncate(&chain.chain_name, 120)
-        },
+        title: truncate(&chain.headline(), 120),
         explanation: {
             let source_count = chain.links.len();
             let first_ts = chain.links.first().map(|l| &l.timestamp);
@@ -2339,7 +2335,47 @@ mod tests {
             updated_at: "2026-08-21T00:00:00Z".to_string(),
             verified_dep: verified_dep.map(String::from),
             dep_advisory,
+            topic: "vm2".to_string(),
         }
+    }
+
+    /// Fresh-profile E2E 2026-10-10: the `rust` and `sqlite` chains both led
+    /// with the same shared article as their card headline.
+    #[test]
+    fn chains_sharing_an_article_get_distinct_topic_headlines() {
+        let conn = rusqlite::Connection::open_in_memory().expect("in-memory db");
+        let shared = "Writing safe hypermedia apps for a resource-constrained world";
+        let mut rust = chain_fixture(None, &[shared, "TokioConf 2027 call for talks"]);
+        rust.topic = "rust".to_string();
+        rust.chain_name = "rust signal chain (2 events)".to_string();
+        let mut sqlite = chain_fixture(None, &[shared]);
+        sqlite.topic = "sqlite".to_string();
+        sqlite.chain_name = "sqlite signal chain (1 events)".to_string();
+
+        let rust_alert = chain_to_alert(&rust, &chain_prediction_fixture(), &conn);
+        let sqlite_alert = chain_to_alert(&sqlite, &chain_prediction_fixture(), &conn);
+        assert_ne!(rust_alert.title, sqlite_alert.title);
+        assert_eq!(sqlite_alert.title, format!("sqlite: {shared}"));
+        assert_eq!(rust_alert.title, format!("rust: {shared}"));
+    }
+
+    #[test]
+    fn chain_headline_prefers_a_link_that_names_the_topic() {
+        let mut chain = chain_fixture(
+            None,
+            &[
+                "Unrelated roundup of the week",
+                "SQLite 3.51 adds JSONB indexes",
+            ],
+        );
+        chain.topic = "sqlite".to_string();
+        assert_eq!(chain.headline(), "SQLite 3.51 adds JSONB indexes");
+
+        // A pre-field chain (empty topic) recovers it from the chain name.
+        chain.topic = String::new();
+        chain.chain_name = "sqlite signal chain (2 events)".to_string();
+        assert_eq!(chain.topic_label(), "sqlite");
+        assert_eq!(chain.headline(), "SQLite 3.51 adds JSONB indexes");
     }
 
     fn chain_prediction_fixture() -> crate::signal_chains::ChainPrediction {

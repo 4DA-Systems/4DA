@@ -21,7 +21,7 @@
 //! business course (`module-e1-execution-playbook.md` alone = 3,455 chunks),
 //! surfacing `Similar to your code: "Nunca perca entregas de clientes"` on a
 //! Docker tool. The prior defenses were all **path/name blocklists**
-//! (`collect_context_files` SKIP_DIRS/SKIP_FILES/`is_meta_doc`,
+//! (`collect_context_paths` SKIP_DIRS/SKIP_FILES/`is_meta_doc`,
 //! `project_inclusion` path tiers). A lowercase-kebab `.md` essay in a legit
 //! repo slips through every one of them — each new content type finds a new gap.
 //!

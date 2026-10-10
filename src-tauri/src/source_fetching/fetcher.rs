@@ -327,7 +327,9 @@ pub(crate) async fn fetch_all_sources(
                 let items = crate::sources::drop_items_past_max_age(items, &source.manifest());
 
                 for (idx, item) in items.into_iter().take(effective_cap).enumerate() {
-                    // Generate a numeric ID from source_id hash
+                    // Placeholder id (hash of source_id) until the item is
+                    // stored; `id_resolution::resolve_stored_ids` swaps in the
+                    // real `source_items.id` before this function returns.
                     let id = {
                         use std::collections::hash_map::DefaultHasher;
                         use std::hash::{Hash, Hasher};
@@ -637,6 +639,11 @@ pub(crate) async fn fetch_all_sources(
         }
         // ---- End per-source embed + insert ----
     }
+
+    // Every item is stored by now (complete or pending). Swap the hash
+    // placeholder ids for real `source_items.id`s, so the scores, ranks and
+    // necessity this deep scan persists land on the rows they describe.
+    super::id_resolution::resolve_stored_ids(db, &mut all_items);
 
     // Link newly ingested items to known dependencies
     if let Err(e) = crate::dep_linker::link_recent_items(db) {

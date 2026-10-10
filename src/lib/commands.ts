@@ -28,7 +28,7 @@ import type {
   Anomaly,
 } from '../types/settings';
 import type {
-  ContextFile,
+  ContextFilesPage,
   VoidSignal,
   SuggestedInterest,
   IndexedStats,
@@ -286,7 +286,7 @@ interface CommandMap {
   measure_noise_prune: { params: { noiseThreshold?: number; minAgeDays?: number }; result: unknown };
   run_noise_prune: { params: { noiseThreshold?: number; minAgeDays?: number; maxDelete?: number }; result: number };
   score_tuning_snapshot: { params: Record<string, never>; result: unknown };
-  get_context_files: { params: Record<string, never>; result: ContextFile[] };
+  get_context_files: { params: Record<string, never>; result: ContextFilesPage };
   clear_context: { params: Record<string, never>; result: string };
   index_context: { params: Record<string, never>; result: string };
   index_project_readmes: { params: Record<string, never>; result: string };

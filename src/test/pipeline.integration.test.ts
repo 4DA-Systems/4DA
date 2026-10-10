@@ -73,8 +73,8 @@ function makeSourceRelevance(id: number, overrides?: Partial<SourceRelevance>): 
 function makeAppState(resultCount: number): AppState {
   return {
     contextFiles: [
-      { path: 'src/main.rs', content: 'fn main() {}', lines: 1 },
-      { path: 'Cargo.toml', content: '[package]\nname = "test"', lines: 2 },
+      { path: 'src/main.rs', lines: 1, size_bytes: 12, kind: 'rs', modified_at: null },
+      { path: 'Cargo.toml', lines: 2, size_bytes: 24, kind: 'toml', modified_at: null },
     ],
     relevanceResults: Array.from({ length: resultCount }, (_, i) => makeSourceRelevance(i + 1)),
     status: 'complete',

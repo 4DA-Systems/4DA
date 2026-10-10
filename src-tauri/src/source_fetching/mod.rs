@@ -17,6 +17,7 @@
 #![deny(clippy::string_slice)]
 
 mod fetcher;
+mod id_resolution;
 mod processor;
 mod yield_throttle;
 

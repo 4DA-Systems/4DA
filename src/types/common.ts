@@ -3,11 +3,11 @@
 
 import type { SourceRelevance } from './analysis';
 
-export interface ContextFile {
-  path: string;
-  content: string;
-  lines: number;
-}
+import type { ContextFileMeta } from '../../src-tauri/bindings/bindings/ContextFileMeta';
+
+/** One listed context file: metadata only, contents stay in the backend. */
+export type ContextFile = ContextFileMeta;
+export type { ContextFilesPage } from '../../src-tauri/bindings/bindings/ContextFilesPage';
 
 export interface AppState {
   contextFiles: ContextFile[];

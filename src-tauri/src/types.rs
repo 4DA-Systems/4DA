@@ -10,12 +10,39 @@ use ts_rs::TS;
 // Types
 // ============================================================================
 
-#[derive(Debug, Clone, Serialize, Deserialize, TS)]
-#[ts(export, export_to = "bindings/")]
+/// A context file WITH its contents. Backend-only: `index_context` chunks it.
+/// Never crosses IPC — the Context Files panel gets [`ContextFileMeta`].
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ContextFile {
     pub path: String,
     pub content: String,
     pub lines: usize,
+}
+
+/// What the Context Files panel lists: metadata only. Shipping every file's
+/// contents moved ~26.6 MB in one IPC call for 1913 files (fresh-profile E2E
+/// 2026-10-10) to render a filename and a line count.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "bindings/")]
+pub struct ContextFileMeta {
+    pub path: String,
+    pub lines: usize,
+    pub size_bytes: usize,
+    /// File extension, lowercase (`rs`, `md`, ...).
+    pub kind: String,
+    /// Last-modified time, RFC 3339; `None` when the filesystem won't say.
+    pub modified_at: Option<String>,
+}
+
+/// One page of [`ContextFileMeta`], sorted by path. `total` counts every
+/// context file, not just this page.
+#[derive(Debug, Clone, Serialize, Deserialize, TS)]
+#[ts(export, export_to = "bindings/")]
+pub struct ContextFilesPage {
+    pub files: Vec<ContextFileMeta>,
+    pub total: usize,
+    pub offset: usize,
+    pub limit: usize,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -606,7 +633,8 @@ mod binding_tests {
     fn export_bindings() {
         // ts-rs auto-exports when the test runs
         // Just reference the types to ensure they compile
-        let _ = std::any::type_name::<ContextFile>();
+        let _ = std::any::type_name::<ContextFileMeta>();
+        let _ = std::any::type_name::<ContextFilesPage>();
         let _ = std::any::type_name::<RelevanceMatch>();
         let _ = std::any::type_name::<ScoreBreakdown>();
         let _ = std::any::type_name::<SourceRelevance>();

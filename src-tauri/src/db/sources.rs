@@ -551,6 +551,22 @@ impl Database {
         }
     }
 
+    /// The `source_items.id` for each `(source_type, source_id)` key, in input
+    /// order; `None` where no row exists. Any embedding status — a pending row
+    /// is still the item's durable identity.
+    pub fn source_item_row_ids(&self, keys: &[(&str, &str)]) -> SqliteResult<Vec<Option<i64>>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare_cached(
+            "SELECT id FROM source_items WHERE source_type = ?1 AND source_id = ?2",
+        )?;
+        keys.iter()
+            .map(|(source_type, source_id)| {
+                stmt.query_row(params![source_type, source_id], |row| row.get(0))
+                    .optional()
+            })
+            .collect()
+    }
+
     /// Load embeddings for a set of item IDs. Used by topic clustering to
     /// compute cosine similarity without loading full item content.
     /// Returns (id, embedding) pairs.
@@ -1599,11 +1615,18 @@ impl Database {
         // A single transaction reduces I/O by ~99%.
         let tx = conn.unchecked_transaction()?;
         {
+            // Only for items that still have a row: one pruned between scoring
+            // and this write has nothing left to describe, and a single orphan
+            // used to fail the FK and roll back the whole batch.
             let mut stmt = tx.prepare_cached(
                 "INSERT OR REPLACE INTO item_necessity (source_item_id, necessity_score, necessity_reason, necessity_category, necessity_urgency, scored_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, datetime('now'))",
+                 SELECT ?1, ?2, ?3, ?4, ?5, datetime('now')
+                 WHERE EXISTS (SELECT 1 FROM source_items WHERE id = ?1)",
             )?;
             for (id, score, reason, category, urgency) in items {
+                let Ok(id) = i64::try_from(*id) else {
+                    continue; // not a row id at all
+                };
                 stmt.execute(params![id, score, reason, category, urgency])?;
             }
         }

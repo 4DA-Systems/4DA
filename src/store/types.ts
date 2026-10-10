@@ -94,7 +94,10 @@ export interface BriefingState {
 }
 
 export interface AppState {
+  /** First page of context-file metadata (the backend pages it). */
   contextFiles: ContextFile[];
+  /** Every context file, not just the listed page. Unset until first load. */
+  contextFilesTotal?: number;
   relevanceResults: SourceRelevance[];
   /** Items that almost passed the relevance threshold (for zero-result guidance) */
   nearMisses: SourceRelevance[] | null;

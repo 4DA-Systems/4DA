@@ -71,12 +71,31 @@ impl YouTubeSource {
 
         debug!(channel_name = %channel.name, channel_id = %channel.channel_id, "Fetching YouTube feed");
 
-        let resp = self
-            .client
-            .get(&url)
-            .send()
-            .await
-            .with_context(|| format!("Network error for {}", channel.name))?;
+        // The feed endpoint intermittently answers a LIVE channel with 404 or
+        // 5xx: a fresh-profile E2E (2026-10-10) logged 16 of 16 default
+        // channels failing at some point, a different subset each run, while
+        // all 16 served 200 on 3/3 direct checks the same day. A short retry
+        // turns that flake into a fetch instead of a recorded feed failure.
+        let mut attempt = 1;
+        let resp = loop {
+            let resp = self
+                .client
+                .get(&url)
+                .send()
+                .await
+                .with_context(|| format!("Network error for {}", channel.name))?;
+            if attempt >= FEED_MAX_ATTEMPTS || !is_transient_feed_status(resp.status().as_u16()) {
+                break resp;
+            }
+            debug!(
+                channel = %channel.name,
+                status = resp.status().as_u16(),
+                attempt,
+                "Transient YouTube feed status — retrying"
+            );
+            tokio::time::sleep(FEED_RETRY_BACKOFF * attempt).await;
+            attempt += 1;
+        };
 
         let status = resp.status();
         if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
@@ -185,7 +204,19 @@ pub(crate) fn extract_attr(xml: &str, tag: &str, attr: &str) -> Option<String> {
     Some(tag_content[value_start..value_end].to_string())
 }
 
-/// Default tech YouTube channels
+/// Attempts per channel feed (first try + retries) and the linear backoff step.
+const FEED_MAX_ATTEMPTS: u32 = 3;
+const FEED_RETRY_BACKOFF: std::time::Duration = std::time::Duration::from_millis(750);
+
+/// Statuses the feed endpoint returns transiently for live channels. 429/403
+/// are NOT retried here: they are rate/permission answers the caller reports
+/// as such.
+fn is_transient_feed_status(status: u16) -> bool {
+    matches!(status, 404 | 500 | 502 | 503 | 504)
+}
+
+/// Default tech YouTube channels. Every id verified live (feed 200, channel
+/// title matches, uploads within the last ~10 weeks) on 2026-10-10.
 fn default_channels() -> Vec<YouTubeChannel> {
     vec![
         YouTubeChannel {
@@ -491,5 +522,55 @@ mod tests {
     fn test_fetch_interval() {
         let source = YouTubeSource::new();
         assert_eq!(source.config.fetch_interval_secs, 1800); // 30 minutes
+    }
+
+    #[test]
+    fn default_channels_have_no_duplicates_and_valid_ids() {
+        let channels = default_channels();
+        let mut ids = std::collections::HashSet::new();
+        let mut names = std::collections::HashSet::new();
+        for c in &channels {
+            assert!(
+                ids.insert(c.channel_id.as_str()),
+                "duplicate id {}",
+                c.channel_id
+            );
+            assert!(names.insert(c.name.as_str()), "duplicate name {}", c.name);
+            assert!(
+                c.channel_id.len() == 24 && c.channel_id.starts_with("UC"),
+                "not a YouTube channel id: {}",
+                c.channel_id
+            );
+        }
+    }
+
+    #[test]
+    fn transient_feed_statuses_are_retried_rate_limits_are_not() {
+        for s in [404, 500, 502, 503, 504] {
+            assert!(is_transient_feed_status(s), "{s}");
+        }
+        for s in [200, 400, 403, 429] {
+            assert!(!is_transient_feed_status(s), "{s}");
+        }
+    }
+
+    /// LIVE: every default channel's feed answers (with the same retry the
+    /// source uses) and parses to at least one video.
+    #[tokio::test]
+    #[ignore = "network: verifies every default YouTube channel feed is live"]
+    async fn default_channel_feeds_are_live() {
+        let source = YouTubeSource::new();
+        let mut dead = Vec::new();
+        for channel in default_channels() {
+            match source.fetch_channel_feed(&channel).await {
+                Ok(entries) if !entries.is_empty() => {}
+                Ok(_) => dead.push(format!(
+                    "{} ({}): empty feed",
+                    channel.name, channel.channel_id
+                )),
+                Err(e) => dead.push(format!("{} ({}): {e}", channel.name, channel.channel_id)),
+            }
+        }
+        assert!(dead.is_empty(), "dead default channels: {dead:#?}");
     }
 }
