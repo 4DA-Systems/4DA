@@ -515,6 +515,11 @@ async fn persist_one_time_flag(db: &crate::db::Database, key: &str, version: &st
 
 async fn warm_preemption_cache_after_first_light(reason: &'static str) {
     const WAIT_FOR_FRONTEND: std::time::Duration = std::time::Duration::from_secs(90);
+    // The data this warm is for (the OSV mirror, synced or current) is in
+    // place now. A refresh that started after this moment — the rebuild a
+    // restored snapshot kicked when the tab opened during the grace — already
+    // covers it, and the warm joins it instead of computing twice.
+    let data_ready_at = std::time::Instant::now();
 
     if crate::startup_frontend::victauri_e2e_active() {
         info!(
@@ -540,7 +545,7 @@ async fn warm_preemption_cache_after_first_light(reason: &'static str) {
     }
 
     tokio::time::sleep(crate::startup_frontend::heavy_startup_work_grace_after_first_light()).await;
-    crate::preemption::warm_preemption_cache().await;
+    crate::preemption::warm_preemption_cache_since(data_ready_at).await;
     // Sequenced after the Preemption warm so the two builds never overlap.
     crate::blind_spots::warm_blind_spot_cache_after_startup().await;
 }

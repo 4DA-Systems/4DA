@@ -14,13 +14,27 @@
 //! A refresh runs in the background after each engine cycle is recorded, so
 //! the next read is a hit. A cold read computes once — callers that race on
 //! it wait for that one computation instead of each starting their own.
+//!
+//! Across a restart (live 2026-10-10: the first read after launch took
+//! 5.7 s, a warm one 19 ms) the previous run's result is persisted
+//! (`restart_snapshot`) and comes back two ways:
+//!
+//! - computed for EXACTLY the current inputs, within [`MAX_AGE`]: it is the
+//!   answer a recompute would give, so it seeds the cache for every caller;
+//! - computed for other inputs (the usual case — an engine cycle ran since):
+//!   only the Knowledge Gaps VIEW ([`knowledge_gaps_for_display`]) is served
+//!   it, with its computed-at time, while this run's result computes in the
+//!   background. Internal callers (Blind Spots, stack health, the digest)
+//!   never see it: what they build from must be current.
 
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{Duration, Instant};
 
 use parking_lot::Mutex;
 use tracing::{info, warn};
 
 use crate::error::Result;
+use crate::restart_snapshot::SnapshotFile;
 
 use super::KnowledgeGap;
 
@@ -84,9 +98,22 @@ pub(super) fn with_tracked_dependencies(
     feed
 }
 
+/// Gaps with the moment they were computed (RFC 3339 UTC), so a surface can
+/// say how old its picture is.
+#[derive(Debug, Clone)]
+pub(super) struct Timed {
+    pub gaps: Vec<KnowledgeGap>,
+    pub computed_at: String,
+}
+
+fn now_rfc3339() -> String {
+    chrono::Utc::now().to_rfc3339()
+}
+
 struct Entry {
     key: CacheKey,
     computed_at: Instant,
+    computed_wall: String,
     gaps: Vec<KnowledgeGap>,
 }
 
@@ -94,6 +121,20 @@ pub(super) struct GapsCache {
     slot: Mutex<Option<Entry>>,
     /// Single flight: held for the duration of one computation.
     compute: Mutex<()>,
+    /// The previous run's result for OTHER inputs — the view's answer while
+    /// [`Self::revalidating`]. Cleared by the next computation, whatever its
+    /// outcome: a failed rebuild must not be papered over with an old result.
+    stale: Mutex<Option<Timed>>,
+    revalidating: AtomicBool,
+}
+
+/// Clears the revalidation flag even if the computation panics.
+struct RevalidatingGuard<'a>(&'a AtomicBool);
+
+impl Drop for RevalidatingGuard<'_> {
+    fn drop(&mut self) {
+        self.0.store(false, Ordering::SeqCst);
+    }
 }
 
 impl GapsCache {
@@ -101,12 +142,20 @@ impl GapsCache {
         Self {
             slot: Mutex::new(None),
             compute: Mutex::new(()),
+            stale: Mutex::new(None),
+            revalidating: AtomicBool::new(false),
         }
     }
 
     /// Fill an EMPTY slot with a result computed `age` ago for `key` (the
     /// previous run's, from disk). It then expires on the usual schedule.
-    pub(super) fn seed(&self, key: CacheKey, gaps: Vec<KnowledgeGap>, age: Duration) -> bool {
+    pub(super) fn seed(
+        &self,
+        key: CacheKey,
+        gaps: Vec<KnowledgeGap>,
+        age: Duration,
+        computed_wall: String,
+    ) -> bool {
         let mut slot = self.slot.lock();
         if slot.is_some() {
             return false;
@@ -115,16 +164,38 @@ impl GapsCache {
         *slot = Some(Entry {
             key,
             computed_at: now.checked_sub(age).unwrap_or(now),
+            computed_wall,
             gaps,
         });
         true
     }
 
-    fn fresh(&self, key: CacheKey) -> Option<Vec<KnowledgeGap>> {
+    /// Hold a previous run's result for other inputs, for the view to serve
+    /// while this run's result computes. Never displaces a value of this run.
+    pub(super) fn keep_stale(&self, stale: Timed) -> bool {
+        if self.slot.lock().is_some() {
+            return false;
+        }
+        let mut held = self.stale.lock();
+        if held.is_some() {
+            return false;
+        }
+        *held = Some(stale);
+        true
+    }
+
+    fn fresh_timed(&self, key: CacheKey) -> Option<Timed> {
         let slot = self.slot.lock();
         slot.as_ref()
             .filter(|e| e.key == key && e.computed_at.elapsed() < MAX_AGE)
-            .map(|e| e.gaps.clone())
+            .map(|e| Timed {
+                gaps: e.gaps.clone(),
+                computed_at: e.computed_wall.clone(),
+            })
+    }
+
+    fn fresh(&self, key: CacheKey) -> Option<Vec<KnowledgeGap>> {
+        self.fresh_timed(key).map(|t| t.gaps)
     }
 
     /// The cached gaps for `key`, or `compute()`'s result stored under it.
@@ -133,29 +204,74 @@ impl GapsCache {
         key: CacheKey,
         compute: impl FnOnce() -> Result<Vec<KnowledgeGap>>,
     ) -> Result<Vec<KnowledgeGap>> {
-        if let Some(hit) = self.fresh(key) {
+        self.get_or_compute_timed(key, compute).map(|t| t.gaps)
+    }
+
+    fn get_or_compute_timed(
+        &self,
+        key: CacheKey,
+        compute: impl FnOnce() -> Result<Vec<KnowledgeGap>>,
+    ) -> Result<Timed> {
+        if let Some(hit) = self.fresh_timed(key) {
             return Ok(hit);
         }
         let _flight = self.compute.lock();
         // Another caller may have finished the same computation while this
         // one waited for the flight lock.
-        if let Some(hit) = self.fresh(key) {
+        if let Some(hit) = self.fresh_timed(key) {
             return Ok(hit);
         }
-        let gaps = compute()?;
+        let result = compute();
+        // Whatever the outcome, the previous run's result has had its turn.
+        *self.stale.lock() = None;
+        let gaps = result?;
+        let computed_wall = now_rfc3339();
         *self.slot.lock() = Some(Entry {
             key,
             computed_at: Instant::now(),
+            computed_wall: computed_wall.clone(),
             gaps: gaps.clone(),
         });
-        Ok(gaps)
+        Ok(Timed {
+            gaps,
+            computed_at: computed_wall,
+        })
+    }
+
+    /// The held previous-run result, served only while its replacement is
+    /// computing: the first call starts that computation in the background
+    /// (`revalidate`). `None` when nothing is held or no computation could
+    /// start — the caller then computes itself.
+    pub(super) fn stale_while_revalidating(&'static self, revalidate: fn()) -> Option<Timed> {
+        let stale = self.stale.lock().clone()?;
+        if self.revalidating.swap(true, Ordering::SeqCst) {
+            return Some(stale);
+        }
+        let spawned = std::thread::Builder::new()
+            .name("knowledge-gaps-revalidate".to_string())
+            .spawn(move || {
+                let _guard = RevalidatingGuard(&self.revalidating);
+                revalidate();
+                // A revalidation that never reached a computation (no
+                // database) must not leave the old result serving.
+                *self.stale.lock() = None;
+            });
+        if let Err(e) = spawned {
+            self.revalidating.store(false, Ordering::SeqCst);
+            warn!(target: "4da::knowledge_decay", error = %e, "Could not spawn knowledge-gap revalidation");
+            return None;
+        }
+        Some(stale)
     }
 }
 
 static CACHE: GapsCache = GapsCache::new();
 
-/// The persisted last result — see `blind_spots::report_snapshot`.
-const SNAPSHOT_FILE: &str = "knowledge_gaps_snapshot.json";
+/// The persisted last result. Restored for exactly-matching inputs within
+/// [`MAX_AGE`]; otherwise served to the view while it recomputes, up to a
+/// week old (the Blind Spots horizon).
+static SNAPSHOT: SnapshotFile =
+    SnapshotFile::new("knowledge_gaps_snapshot.json", Duration::from_hours(24 * 7));
 
 /// A result on disk with the inputs it was computed for.
 #[derive(serde::Serialize, serde::Deserialize)]
@@ -165,67 +281,102 @@ struct Persisted {
 }
 
 /// Knowledge gaps for every caller. Blocking on a cold cache — call it off
-/// the UI thread (the Tauri command runs it in `spawn_blocking`).
-///
-/// After a restart, the previous run's result is reused when it was computed
-/// for EXACTLY the current inputs (same engine run, engagement and dependency
-/// counts, within [`MAX_AGE`]) — the answer a recompute would give, without
-/// the pass. Any other input recomputes, as before.
+/// the UI thread (the Tauri command runs it in `spawn_blocking`). Always
+/// current: a previous run's result is reused only for identical inputs.
 pub fn cached_knowledge_gaps(conn: &rusqlite::Connection) -> Result<Vec<KnowledgeGap>> {
     let key = CacheKey::read(conn);
     if let Some(hit) = CACHE.fresh(key) {
         return Ok(hit);
     }
-    if let Some((gaps, age)) = restore_once(conn, key) {
-        if CACHE.seed(key, gaps.clone(), age) {
-            return Ok(gaps);
-        }
-    }
-    CACHE.get_or_compute(key, || {
-        let gaps = super::detect_knowledge_gaps(conn)?;
-        persist(conn, key, &gaps);
-        Ok(gaps)
-    })
+    restore_once(conn, key);
+    CACHE.get_or_compute(key, || compute_and_persist(conn, key))
 }
 
-/// The previous run's result for `key`, read at most once per process.
-fn restore_once(
-    conn: &rusqlite::Connection,
-    key: CacheKey,
-) -> Option<(Vec<KnowledgeGap>, Duration)> {
-    static ATTEMPTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-    if ATTEMPTED.swap(true, std::sync::atomic::Ordering::SeqCst) {
-        return None;
+/// The Knowledge Gaps view's read: [`cached_knowledge_gaps`], except that
+/// after a restart the previous run's result is served at once (with when it
+/// was computed) while this run's result computes in the background.
+pub(super) fn knowledge_gaps_for_display(conn: &rusqlite::Connection) -> Result<Timed> {
+    let key = CacheKey::read(conn);
+    if let Some(hit) = CACHE.fresh_timed(key) {
+        return Ok(hit);
     }
-    use crate::blind_spots::report_snapshot as snapshot;
-    let stamp = snapshot::Stamp::current(conn)?;
-    let restored: snapshot::Restored<Persisted> =
-        snapshot::load(&snapshot::snapshot_path(SNAPSHOT_FILE), &stamp, MAX_AGE)?;
-    (restored.value.key == key).then(|| {
+    restore_once(conn, key);
+    if let Some(hit) = CACHE.fresh_timed(key) {
+        return Ok(hit);
+    }
+    if let Some(stale) = CACHE.stale_while_revalidating(revalidate) {
         info!(
             target: "4da::knowledge_decay",
-            age_secs = restored.age.as_secs(),
-            "Knowledge gaps restored from the previous run (same inputs)"
+            computed_at = %stale.computed_at,
+            "Serving the previous run's knowledge gaps while they recompute"
         );
-        (restored.value.gaps, restored.age)
-    })
+        return Ok(stale);
+    }
+    CACHE.get_or_compute_timed(key, || compute_and_persist(conn, key))
+}
+
+fn compute_and_persist(conn: &rusqlite::Connection, key: CacheKey) -> Result<Vec<KnowledgeGap>> {
+    let gaps = super::detect_knowledge_gaps(conn)?;
+    persist(conn, key, &gaps);
+    Ok(gaps)
+}
+
+/// The background half of [`knowledge_gaps_for_display`].
+fn revalidate() {
+    let started = Instant::now();
+    match crate::open_db_connection().and_then(|conn| cached_knowledge_gaps(&conn)) {
+        Ok(gaps) => info!(
+            target: "4da::knowledge_decay",
+            gaps = gaps.len(),
+            elapsed_ms = started.elapsed().as_millis() as u64,
+            "Knowledge gaps revalidated after restart"
+        ),
+        Err(e) => {
+            warn!(target: "4da::knowledge_decay", error = %e, "Knowledge-gap revalidation failed")
+        }
+    }
+}
+
+/// The previous run's result, read at most once per process: seeded for
+/// every caller when its inputs match, held for the view otherwise.
+fn restore_once(conn: &rusqlite::Connection, key: CacheKey) {
+    if let Some(restored) = SNAPSHOT.restore_once::<Persisted>(conn) {
+        place_restored(&CACHE, restored, key);
+    }
+}
+
+/// Where a restored result goes: the cache proper for identical inputs
+/// still inside [`MAX_AGE`], the view-only stale slot for anything else.
+fn place_restored(
+    cache: &GapsCache,
+    restored: crate::restart_snapshot::Restored<Persisted>,
+    key: CacheKey,
+) {
+    let computed_at = restored.computed_at();
+    if restored.value.key == key && restored.age < MAX_AGE {
+        if cache.seed(key, restored.value.gaps, restored.age, computed_at) {
+            info!(
+                target: "4da::knowledge_decay",
+                age_secs = restored.age.as_secs(),
+                "Knowledge gaps restored from the previous run (same inputs)"
+            );
+        }
+        return;
+    }
+    cache.keep_stale(Timed {
+        gaps: restored.value.gaps,
+        computed_at,
+    });
 }
 
 fn persist(conn: &rusqlite::Connection, key: CacheKey, gaps: &[KnowledgeGap]) {
-    use crate::blind_spots::report_snapshot as snapshot;
-    let Some(stamp) = snapshot::Stamp::current(conn) else {
-        return;
-    };
     // Same JSON shape as `Persisted`, without copying the gaps.
     #[derive(serde::Serialize)]
     struct PersistedRef<'a> {
         key: CacheKey,
         gaps: &'a [KnowledgeGap],
     }
-    let value = PersistedRef { key, gaps };
-    if let Err(e) = snapshot::save(&snapshot::snapshot_path(SNAPSHOT_FILE), &stamp, &value) {
-        warn!(target: "4da::knowledge_decay", error = %e, "could not persist knowledge gaps");
-    }
+    SNAPSHOT.persist(conn, &PersistedRef { key, gaps });
 }
 
 /// Recompute after an engine cycle is recorded, on a background thread, so
@@ -252,176 +403,5 @@ pub fn refresh_knowledge_gaps_in_background() {
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::sync::atomic::{AtomicUsize, Ordering};
-
-    fn one_gap() -> Vec<KnowledgeGap> {
-        vec![KnowledgeGap {
-            dependency: "chrono".to_string(),
-            version: Some("0.4.44".to_string()),
-            project_path: "d:/runyourempire/victauri".to_string(),
-            projects: vec!["d:/runyourempire/victauri".to_string()],
-            basis: super::super::GapBasis::Release,
-            latest_release: Some("0.4.45".to_string()),
-            missed_items: Vec::new(),
-            gap_severity: super::super::GapSeverity::Low,
-            days_since_last_engagement: 999,
-        }]
-    }
-
-    #[test]
-    fn a_cache_hit_returns_without_recomputing() {
-        let cache = GapsCache::new();
-        let runs = AtomicUsize::new(0);
-        let compute = || {
-            runs.fetch_add(1, Ordering::SeqCst);
-            Ok(one_gap())
-        };
-        let key = CacheKey::new(4261, 18, 5605);
-        let first = cache.get_or_compute(key, compute).unwrap();
-        let second = cache.get_or_compute(key, compute).unwrap();
-        assert_eq!(runs.load(Ordering::SeqCst), 1, "the second read is a hit");
-        assert_eq!(first.len(), second.len());
-        assert_eq!(second[0].dependency, "chrono");
-    }
-
-    #[test]
-    fn every_input_change_recomputes() {
-        let cache = GapsCache::new();
-        let runs = AtomicUsize::new(0);
-        let compute = || {
-            runs.fetch_add(1, Ordering::SeqCst);
-            Ok(one_gap())
-        };
-        cache
-            .get_or_compute(CacheKey::new(1, 0, 10), compute)
-            .unwrap();
-        cache
-            .get_or_compute(CacheKey::new(2, 0, 10), compute)
-            .unwrap(); // engine cycle
-        cache
-            .get_or_compute(CacheKey::new(2, 1, 10), compute)
-            .unwrap(); // a click
-        cache
-            .get_or_compute(CacheKey::new(2, 1, 11), compute)
-            .unwrap(); // a rescan
-        assert_eq!(runs.load(Ordering::SeqCst), 4);
-    }
-
-    #[test]
-    fn a_failed_computation_is_not_cached() {
-        let cache = GapsCache::new();
-        let key = CacheKey::new(1, 0, 0);
-        let failed = cache.get_or_compute(key, || {
-            Err(crate::error::FourDaError::Internal("boom".into()))
-        });
-        assert!(failed.is_err());
-        let runs = AtomicUsize::new(0);
-        cache
-            .get_or_compute(key, || {
-                runs.fetch_add(1, Ordering::SeqCst);
-                Ok(one_gap())
-            })
-            .unwrap();
-        assert_eq!(
-            runs.load(Ordering::SeqCst),
-            1,
-            "the failure left the slot empty"
-        );
-    }
-
-    /// The app-wide freeze of 2026-10-07: a NON-async Tauri command runs on
-    /// the UI thread. Fails if `get_knowledge_gaps` ever loses `async`.
-    #[test]
-    fn get_knowledge_gaps_stays_an_async_command() {
-        let src = include_str!("knowledge_decay.rs");
-        let compact: String = src.split_whitespace().collect::<Vec<_>>().join(" ");
-        assert!(
-            compact.contains("#[tauri::command] pub async fn get_knowledge_gaps("),
-            "get_knowledge_gaps must be an async Tauri command"
-        );
-        assert!(!compact.contains("pub fn get_knowledge_gaps("));
-        assert!(
-            compact.contains("spawn_blocking(knowledge_gaps_feed)"),
-            "its body must run on the blocking pool"
-        );
-    }
-
-    /// A restored result answers its own key until the usual expiry, and
-    /// never displaces a result this run computed.
-    #[test]
-    fn a_seeded_result_serves_its_key_and_ages_like_any_other() {
-        let cache = GapsCache::new();
-        let key = CacheKey::new(7, 1, 3);
-        assert!(cache.seed(key, one_gap(), Duration::from_mins(10)));
-        let runs = AtomicUsize::new(0);
-        let got = cache
-            .get_or_compute(key, || {
-                runs.fetch_add(1, Ordering::SeqCst);
-                Ok(Vec::new())
-            })
-            .unwrap();
-        assert_eq!(runs.load(Ordering::SeqCst), 0, "served without the pass");
-        assert_eq!(got[0].dependency, "chrono");
-        assert!(
-            cache.fresh(CacheKey::new(8, 1, 3)).is_none(),
-            "other inputs recompute"
-        );
-        assert!(
-            !cache.seed(key, Vec::new(), Duration::ZERO),
-            "never displaces"
-        );
-
-        let stale = GapsCache::new();
-        assert!(stale.seed(key, one_gap(), MAX_AGE + Duration::from_secs(1)));
-        assert!(stale.fresh(key).is_none(), "past the expiry it recomputes");
-    }
-
-    /// The persisted shape round-trips through the snapshot store.
-    #[test]
-    fn the_persisted_result_round_trips() {
-        use crate::blind_spots::report_snapshot as snapshot;
-        let dir = std::env::temp_dir().join(format!("4da-gaps-snapshot-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let path = dir.join("gaps.json");
-        let stamp = snapshot::Stamp::with_schema(124);
-        let value = Persisted {
-            key: CacheKey::new(4261, 18, 5605),
-            gaps: one_gap(),
-        };
-        snapshot::save(&path, &stamp, &value).unwrap();
-        let back: snapshot::Restored<Persisted> = snapshot::load(&path, &stamp, MAX_AGE).unwrap();
-        assert_eq!(back.value.key, value.key);
-        assert_eq!(back.value.gaps.len(), 1);
-        assert_eq!(back.value.gaps[0].latest_release.as_deref(), Some("0.4.45"));
-    }
-
-    #[test]
-    fn the_key_reads_zero_from_an_empty_database() {
-        let conn = rusqlite::Connection::open_in_memory().unwrap();
-        assert_eq!(CacheKey::read(&conn), CacheKey::new(0, 0, 0));
-    }
-
-    /// The feed carries the dependency universe, so the panel can tell a
-    /// clean result from "no lockfile read yet".
-    #[test]
-    fn the_feed_reports_how_many_dependencies_it_covered() {
-        let conn = rusqlite::Connection::open_in_memory().unwrap();
-        let empty =
-            with_tracked_dependencies(crate::evidence::EvidenceFeed::from_items(vec![]), &conn);
-        assert_eq!(empty.total_tracked, Some(0), "no tables: nothing known");
-
-        conn.execute_batch(
-            "CREATE TABLE user_dependencies (package_name TEXT);
-             CREATE TABLE project_dependencies (package_name TEXT);
-             INSERT INTO user_dependencies VALUES ('serde');
-             INSERT INTO project_dependencies VALUES ('react'), ('vite');",
-        )
-        .unwrap();
-        assert_eq!(known_dependency_count(&conn), 3);
-        let feed =
-            with_tracked_dependencies(crate::evidence::EvidenceFeed::from_items(vec![]), &conn);
-        assert_eq!(feed.total_tracked, Some(3));
-    }
-}
+#[path = "knowledge_gaps_cache_tests.rs"]
+mod tests;

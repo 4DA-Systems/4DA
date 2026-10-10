@@ -144,3 +144,52 @@ describe('preemption-slice — backend-owned visibility (AD-035)', () => {
     });
   });
 });
+
+// Wave 9e: after a restart the previous run's feed serves while this run's
+// builds; the view re-asks quietly so the rebuilt one swaps in without a
+// loading flash — with the same dismissals, so none can resurface.
+describe('preemption-slice — quiet refresh after a restart', () => {
+  const DISMISS_KEY = 'preemption_dismissed';
+  const feed = (computed_at: string) => ({ items: [], total: 0, critical_count: 0, high_count: 0, score: null, computed_at });
+
+  beforeEach(() => {
+    useAppStore.setState(initialState, true);
+    mockCmd.mockReset();
+    localStorage.removeItem(DISMISS_KEY);
+  });
+
+  it('swaps in the rebuilt feed without the loading state, sending the dismissals', async () => {
+    localStorage.setItem(DISMISS_KEY, JSON.stringify([{ id: 'osv-lodash', ts: Date.now() }]));
+    mockCmd.mockResolvedValueOnce(feed('2026-10-09T01:00:00Z'));
+    await useAppStore.getState().loadPreemption();
+
+    let resolve: (v: unknown) => void = () => {};
+    mockCmd.mockReturnValueOnce(new Promise((r) => { resolve = r; }));
+    const pending = useAppStore.getState().refreshPreemptionQuietly();
+    expect(useAppStore.getState().preemptionLoading).toBe(false);
+    resolve(feed('2026-10-10T02:00:00Z'));
+    await pending;
+
+    expect(mockCmd).toHaveBeenLastCalledWith('get_preemption_alerts', {
+      dismissedIds: ['osv-lodash'],
+      fullPlan: false,
+    });
+    expect(useAppStore.getState().preemptionFeed?.computed_at).toBe('2026-10-10T02:00:00Z');
+  });
+
+  it('keeps the shown feed when the quiet refresh fails', async () => {
+    mockCmd.mockResolvedValueOnce(feed('2026-10-09T01:00:00Z'));
+    await useAppStore.getState().loadPreemption();
+    mockCmd.mockRejectedValueOnce('Request timed out');
+    await useAppStore.getState().refreshPreemptionQuietly();
+    const s = useAppStore.getState();
+    expect(s.preemptionFeed?.computed_at).toBe('2026-10-09T01:00:00Z');
+    expect(s.preemptionError).toBeNull();
+  });
+
+  it('defers to a normal load in flight (a dismissal refetch wins)', async () => {
+    useAppStore.setState({ preemptionLoading: true });
+    await useAppStore.getState().refreshPreemptionQuietly();
+    expect(mockCmd).not.toHaveBeenCalled();
+  });
+});

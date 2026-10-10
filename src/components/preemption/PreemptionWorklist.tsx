@@ -12,6 +12,7 @@ import { URGENCY_ORDER, ItemCard } from './PreemptionCard';
 import { PreemptionTierSection } from './PreemptionTierSection';
 import { PreemptionFreeFloorNotice } from './PreemptionFreeFloorNotice';
 import { SignalUpgradeCTA } from '../SignalUpgradeCTA';
+import { ReportAge } from '../ReportAge';
 
 // The Upgrade Plan is a ranked list that can run to 100+ steps on a large
 // stack. The list transport ships only this many (keep in sync with
@@ -43,6 +44,7 @@ export const PreemptionWorklist = memo(function PreemptionWorklist() {
     })),
   );
   const loadPreemption = useAppStore(s => s.loadPreemption);
+  const refreshQuietly = useAppStore(s => s.refreshPreemptionQuietly);
   const dismissPreemptionItem = useAppStore(s => s.dismissPreemptionItem);
   const undoPreemptionDismissal = useAppStore(s => s.undoPreemptionDismissal);
   const clearPreemptionUndo = useAppStore(s => s.clearPreemptionUndo);
@@ -136,6 +138,8 @@ export const PreemptionWorklist = memo(function PreemptionWorklist() {
 
   return (
     <div className="space-y-5">
+      {/* A previous run's feed (after a restart) says its age; the rebuild swaps in quietly. */}
+      <ReportAge computedAt={feed?.computed_at} onReload={refreshQuietly} i18nKey="preemption.reportAge" testId="preemption-report-age" />
       {/* Stale-backend fallback only: since the 2026-06-12 tier rebalance the
           backend never gates get_preemption_alerts (free tier gets the OSV
           floor), so this branch fires only against an older backend binary.

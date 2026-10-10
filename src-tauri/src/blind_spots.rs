@@ -29,7 +29,6 @@ mod coverage_evidence;
 mod dep_breakdowns;
 use dep_breakdowns::count_signal_types_for_dep_conn;
 mod report_cache;
-pub(crate) mod report_snapshot;
 
 // ============================================================================
 // Report-level cache (per engine cycle, pre-warmed) — see `report_cache`
@@ -46,12 +45,12 @@ struct CachedBlindSpots {
 static BLIND_SPOT_CACHE: report_cache::CycleCache<CachedBlindSpots> =
     report_cache::CycleCache::new();
 
-/// The persisted last good report — see `report_snapshot`.
-const SNAPSHOT_FILE: &str = "blind_spots_snapshot.json";
-
-/// How old a persisted report may be and still answer the first open after a
-/// launch. A week covers a weekend away; anything older is rebuilt cold.
-const SNAPSHOT_MAX_AGE: std::time::Duration = std::time::Duration::from_hours(24 * 7);
+/// The persisted last good report — see `restart_snapshot`. A week covers a
+/// weekend away; anything older is rebuilt cold.
+static SNAPSHOT: crate::restart_snapshot::SnapshotFile = crate::restart_snapshot::SnapshotFile::new(
+    "blind_spots_snapshot.json",
+    std::time::Duration::from_hours(24 * 7),
+);
 
 /// The uncached build the cache stores: the report and its items. Every
 /// successful build is persisted, so the next launch starts warm.
@@ -59,35 +58,14 @@ fn build_cached_blind_spots() -> Result<CachedBlindSpots> {
     let report = generate_blind_spot_report_uncached()?;
     let items = blind_spot_report_items(&report);
     let built = CachedBlindSpots { report, items };
-    persist_blind_spot_snapshot(&built);
+    SNAPSHOT.persist_detached(&built);
     Ok(built)
 }
 
-fn persist_blind_spot_snapshot(built: &CachedBlindSpots) {
-    let Some(stamp) = crate::open_db_connection()
-        .ok()
-        .and_then(|conn| report_snapshot::Stamp::current(&conn))
-    else {
-        return;
-    };
-    let path = report_snapshot::snapshot_path(SNAPSHOT_FILE);
-    if let Err(e) = report_snapshot::save(&path, &stamp, built) {
-        warn!(target: "4da::blind_spots", error = %e, "could not persist the blind-spot report");
-    }
-}
-
-/// The previous run's report, read once per process: after its first use
-/// (or a miss) the cache has a value of this run's own, or a failed rebuild
-/// that must not be papered over with an old report.
+/// The previous run's report, read once per process (see
+/// `SnapshotFile::restore_once`).
 fn restore_blind_spot_snapshot_once() -> Option<CachedBlindSpots> {
-    static ATTEMPTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-    if ATTEMPTED.swap(true, std::sync::atomic::Ordering::SeqCst) {
-        return None;
-    }
-    let conn = crate::open_db_connection().ok()?;
-    let stamp = report_snapshot::Stamp::current(&conn)?;
-    let path = report_snapshot::snapshot_path(SNAPSHOT_FILE);
-    let restored = report_snapshot::load(&path, &stamp, SNAPSHOT_MAX_AGE)?;
+    let restored = SNAPSHOT.restore_once_detached::<CachedBlindSpots>()?;
     info!(
         target: "4da::blind_spots",
         age_secs = restored.age.as_secs(),

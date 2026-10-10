@@ -65,6 +65,33 @@ describe('KnowledgeGapsPanel', () => {
     expect(screen.getByTestId('knowledge-gaps-scan-prompt')).toBeInTheDocument();
   });
 
+  // Wave 9e: after a restart the previous run's gaps serve while this run's
+  // compute. The panel says how old they are, then swaps the fresh ones in.
+  it('labels the previous run\'s gaps and quietly swaps in the recomputed ones', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: false });
+    try {
+      const hoursAgo = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
+      cmdMock.mockResolvedValueOnce({ items: [], total: 0, total_tracked: 94, computed_at: hoursAgo });
+      cmdMock.mockResolvedValueOnce({ items: [], total: 0, total_tracked: 94, computed_at: new Date().toISOString() });
+      render(<KnowledgeGapsPanel />);
+      await act(async () => {});
+      expect(screen.getByTestId('knowledge-gaps-report-age').textContent).toBe('knowledgeGaps.reportAge');
+
+      await act(async () => { vi.advanceTimersByTime(15_000); });
+      expect(cmdMock).toHaveBeenCalledTimes(2);
+      expect(screen.queryByTestId('knowledge-gaps-report-age')).not.toBeInTheDocument();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('says nothing about gaps computed this cycle', async () => {
+    cmdMock.mockResolvedValue({ items: [], total: 0, total_tracked: 94, computed_at: new Date().toISOString() });
+    render(<KnowledgeGapsPanel />);
+    await act(async () => {});
+    expect(screen.queryByTestId('knowledge-gaps-report-age')).not.toBeInTheDocument();
+  });
+
   it('keeps the all-clear for a user whose dependencies were checked', async () => {
     cmdMock.mockResolvedValue({ items: [], total: 0, total_tracked: 94 });
     render(<KnowledgeGapsPanel />);

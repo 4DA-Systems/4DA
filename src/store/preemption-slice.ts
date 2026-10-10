@@ -50,6 +50,13 @@ export interface PreemptionSlice {
    */
   preemptionPlanExpanded: boolean;
   loadPreemption: () => Promise<void>;
+  /**
+   * Re-fetch without the loading state, keeping the shown feed on failure.
+   * For a feed served while its replacement builds in the background (the
+   * previous run's, after a restart): the rebuilt one swaps in without
+   * blanking the tab. Same dismissals and plan scope as a normal load.
+   */
+  refreshPreemptionQuietly: () => Promise<void>;
   /** Persist a dismissal, then refetch so items AND counts move together. */
   dismissPreemptionItem: (id: string) => Promise<void>;
   /** Undo the most recent dismissal, then refetch. */
@@ -119,6 +126,20 @@ export const createPreemptionSlice: StateCreator<
       });
     preemptionInflight = entry;
     return entry.promise;
+  },
+
+  refreshPreemptionQuietly: async () => {
+    // A normal load (first open, dismiss, undo) owns the feed while it runs.
+    if (get().preemptionLoading || preemptionInflight) return;
+    const dismissedIds = [...loadPersistedDismissals()].sort();
+    const fullPlan = get().preemptionPlanExpanded;
+    try {
+      const feed = await cmd('get_preemption_alerts', { dismissedIds, fullPlan });
+      // A dismissal made while this was in flight wins: its load refetches.
+      if (!get().preemptionLoading && !preemptionInflight) set({ preemptionFeed: feed });
+    } catch {
+      // Keep what is shown; the next open or reload reports any real error.
+    }
   },
 
   dismissPreemptionItem: async (id: string) => {

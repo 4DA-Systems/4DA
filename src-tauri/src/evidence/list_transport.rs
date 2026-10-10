@@ -109,6 +109,7 @@ pub fn preemption_visible_feed(feed: EvidenceFeed, dismissed_ids: &[String]) -> 
         weak_match_count: feed.weak_match_count,
         data_freshness: feed.data_freshness,
         tier_scope: feed.tier_scope,
+        computed_at: feed.computed_at,
     }
 }
 

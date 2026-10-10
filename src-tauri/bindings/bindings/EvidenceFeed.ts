@@ -40,4 +40,11 @@ data_freshness?: DataFreshness | null,
  * at the command boundary instead). Preemption sets this so the UI
  * can render the free OSV floor honestly.
  */
-tier_scope?: TierScope | null, };
+tier_scope?: TierScope | null, 
+/**
+ * When this feed's analysis was computed (RFC 3339, UTC). Set by lenses
+ * whose result may be served from a cache or a restart snapshot
+ * (Preemption, Knowledge Gaps) so the UI can say how old its picture
+ * is. `None` when the lens does not track it.
+ */
+computed_at?: string | null, };
