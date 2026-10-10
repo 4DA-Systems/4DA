@@ -1081,7 +1081,21 @@ pub fn get_preemption_feed() -> Result<PreemptionFeed> {
     // Critical/High card pool. Cap-and-annotate — nothing is dropped.
     apply_liveness_policy(&mut alerts, &conn);
 
-    // Sort: Critical first, then High, Medium, Watch. Within same urgency, highest confidence first.
+    Ok(rank_feed(alerts))
+}
+
+/// Rank the finished alert set and count it. Critical first, then High,
+/// Medium, Watch; within one urgency, highest confidence first.
+///
+/// Nothing is dropped here (AD-054, "0 silent drops"). This used to
+/// `truncate(30)` after the sort and count what was left, so every advisory
+/// past the 30th vanished from the Preemption worklist, the brief and Signal
+/// Lane 1, and the Critical/High totals described the cut list: on a 19-repo
+/// fixture corpus all 30 survivors were Critical and every High and Medium
+/// advisory was invisible. A consumer that needs a short list applies its own
+/// cap and says how many it held back — the worklist sections ("Show N
+/// more"), the brief's line caps, the briefing's card pool.
+fn rank_feed(mut alerts: Vec<PreemptionAlert>) -> PreemptionFeed {
     alerts.sort_by(|a, b| {
         urgency_rank(&a.urgency)
             .cmp(&urgency_rank(&b.urgency))
@@ -1091,10 +1105,6 @@ pub fn get_preemption_feed() -> Result<PreemptionFeed> {
                     .unwrap_or(std::cmp::Ordering::Equal),
             )
     });
-
-    // Cap total alerts to keep the UI scannable.
-    const MAX_ALERTS: usize = 30;
-    alerts.truncate(MAX_ALERTS);
 
     let critical_count = alerts
         .iter()
@@ -1106,12 +1116,12 @@ pub fn get_preemption_feed() -> Result<PreemptionFeed> {
         .count();
     let total = alerts.len();
 
-    Ok(PreemptionFeed {
+    PreemptionFeed {
         alerts,
         total,
         critical_count,
         high_count,
-    })
+    }
 }
 
 // (Tier 3 heuristics and suppression list removed — see get_preemption_feed comment)
@@ -2162,6 +2172,10 @@ fn validated_preemption_items() -> std::result::Result<Vec<EvidenceItem>, String
 // ============================================================================
 // Tests
 // ============================================================================
+
+#[cfg(test)]
+#[path = "preemption_rank_tests.rs"]
+mod rank_tests;
 
 #[cfg(test)]
 mod tests {
