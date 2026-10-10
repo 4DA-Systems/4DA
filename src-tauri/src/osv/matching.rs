@@ -13,6 +13,7 @@ use semver::Version;
 use super::fix_target;
 use super::reachability::ReachFilter;
 use super::types::{MatchedAdvisory, MatchedDependency, NotCompiledMatch, Range};
+use super::version_order::{in_window, Lower, OrderedVersion, Upper};
 
 /// Get all advisories that match the user's installed dependencies.
 /// Merges deps from both `user_dependencies` (user-curated) and
@@ -54,7 +55,7 @@ pub(crate) fn get_matched_advisories_with_not_compiled(
         .iter()
         .map(|d| {
             (
-                d.package_name.to_lowercase(),
+                package_key(&d.package_name, &d.ecosystem),
                 d.project_path.replace('\\', "/").to_lowercase(),
                 normalize_ecosystem(&d.ecosystem).to_string(),
             )
@@ -63,7 +64,7 @@ pub(crate) fn get_matched_advisories_with_not_compiled(
 
     for dep in scanned {
         let key = (
-            dep.package_name.to_lowercase(),
+            package_key(&dep.package_name, &dep.ecosystem),
             dep.project_path.replace('\\', "/").to_lowercase(),
             normalize_ecosystem(&dep.ecosystem).to_string(),
         );
@@ -81,7 +82,7 @@ pub(crate) fn get_matched_advisories_with_not_compiled(
         HashMap::new();
     for dep in &deps {
         let key = (
-            dep.package_name.to_lowercase(),
+            package_key(&dep.package_name, &dep.ecosystem),
             normalize_ecosystem(&dep.ecosystem).to_string(),
         );
         dep_index.entry(key).or_default().push(dep);
@@ -103,7 +104,7 @@ pub(crate) fn get_matched_advisories_with_not_compiled(
             for r in rows {
                 let key = (
                     normalize_project_path(&r.project_path),
-                    r.package_name.to_lowercase(),
+                    package_key(&r.package_name, &r.ecosystem),
                     normalize_ecosystem(&r.ecosystem).to_string(),
                 );
                 instance_index
@@ -125,7 +126,7 @@ pub(crate) fn get_matched_advisories_with_not_compiled(
     for advisory in &advisories {
         package_ranges
             .entry((
-                advisory.package_name.to_lowercase(),
+                package_key(&advisory.package_name, &advisory.ecosystem),
                 normalize_ecosystem(&advisory.ecosystem).to_string(),
             ))
             .or_default()
@@ -139,7 +140,7 @@ pub(crate) fn get_matched_advisories_with_not_compiled(
 
     for advisory in &advisories {
         let key = (
-            advisory.package_name.to_lowercase(),
+            package_key(&advisory.package_name, &advisory.ecosystem),
             normalize_ecosystem(&advisory.ecosystem).to_string(),
         );
 
@@ -158,7 +159,7 @@ pub(crate) fn get_matched_advisories_with_not_compiled(
             // (a version can be direct in one place, transitive in another).
             let inst_key = (
                 normalize_project_path(&dep.project_path),
-                dep.package_name.to_lowercase(),
+                package_key(&dep.package_name, &dep.ecosystem),
                 normalize_ecosystem(&dep.ecosystem).to_string(),
             );
             let mut candidates: Vec<(Option<String>, bool, bool)> = Vec::new();
@@ -376,80 +377,29 @@ pub(crate) fn check_version_affected(
         _ => return (true, false), // No version → conservative
     };
 
-    let parsed_user = match parse_version(user_ver_str) {
-        Some(v) => v,
-        None => return (true, false), // Can't parse user version → conservative
+    let Some(user) = OrderedVersion::parse(user_ver_str) else {
+        return (true, false); // Can't parse user version → conservative
     };
 
-    // A bound the matcher cannot parse leaves its window undecided. Reading
-    // that as "not in any window" answered "confirmed NOT affected" about a
-    // window it never evaluated (dependency-handoff Phase 1.4).
+    // A bound the matcher cannot parse (or compare with this version) leaves
+    // its window undecided. Reading that as "not in any window" answered
+    // "confirmed NOT affected" about a window it never evaluated
+    // (dependency-handoff Phase 1.4).
     let mut undecided = false;
-    let mut parse_bound = |s: &str| {
-        let parsed = parse_version(s);
-        undecided |= parsed.is_none();
-        parsed
-    };
-
     for range in &ranges {
+        if range.range_type == super::types::ENUMERATED_RANGE {
+            if enumerated_contains(&user, user_ver_str, range) {
+                return (true, true);
+            }
+            continue;
+        }
         if range.range_type != "SEMVER" && range.range_type != "ECOSYSTEM" {
             continue;
         }
-
-        let events = match &range.events {
-            Some(e) if !e.is_empty() => e,
-            _ => continue,
-        };
-
-        // Process events as (introduced, fixed/last_affected) pairs
-        let mut introduced: Option<Version> = None;
-
-        for event in events {
-            let obj = match event.as_object() {
-                Some(o) => o,
-                None => continue,
-            };
-
-            if let Some(intro_str) = obj.get("introduced").and_then(|v| v.as_str()) {
-                introduced = if intro_str == "0" {
-                    Some(Version::new(0, 0, 0))
-                } else {
-                    parse_bound(intro_str)
-                };
-            }
-
-            if let Some(fixed_str) = obj.get("fixed").and_then(|v| v.as_str()) {
-                if !is_unknown_bound(fixed_str) {
-                    if let Some(fix_ver) = parse_bound(fixed_str) {
-                        if let Some(ref intro_ver) = introduced {
-                            if parsed_user >= *intro_ver && parsed_user < fix_ver {
-                                return (true, true);
-                            }
-                        }
-                    }
-                }
-                introduced = None;
-            }
-
-            if let Some(la_str) = obj.get("last_affected").and_then(|v| v.as_str()) {
-                if !is_unknown_bound(la_str) {
-                    if let Some(la_ver) = parse_bound(la_str) {
-                        if let Some(ref intro_ver) = introduced {
-                            if parsed_user >= *intro_ver && parsed_user <= la_ver {
-                                return (true, true);
-                            }
-                        }
-                    }
-                }
-                introduced = None;
-            }
-        }
-
-        // introduced with no fixed → all versions from introduced onward
-        if let Some(ref intro_ver) = introduced {
-            if parsed_user >= *intro_ver {
-                return (true, true);
-            }
+        match range_contains(&user, range) {
+            Some(true) => return (true, true),
+            Some(false) => {}
+            None => undecided = true,
         }
     }
 
@@ -459,6 +409,77 @@ pub(crate) fn check_version_affected(
     }
     // Went through all ranges, version not in any affected window
     (false, true)
+}
+
+/// Whether an advisory's enumerated `versions` list (stored as an
+/// [`super::types::ENUMERATED_RANGE`] range) names this version — exactly, or
+/// as the same version under the ecosystem's ordering (`19.9` = `19.9.0`).
+fn enumerated_contains(user: &OrderedVersion, raw: &str, range: &Range) -> bool {
+    range
+        .events
+        .iter()
+        .flatten()
+        .filter_map(|v| v.as_str())
+        .any(|listed| {
+            listed == raw.trim()
+                || OrderedVersion::parse(listed)
+                    .and_then(|v| user.compare(&v))
+                    .is_some_and(|o| o.is_eq())
+        })
+}
+
+/// Whether `user` sits in any window of one range: `Some(true)` inside one,
+/// `Some(false)` outside all of them, `None` when a window could not be
+/// decided (an unreadable bound, or one no ordering compares with `user`).
+fn range_contains(user: &OrderedVersion, range: &Range) -> Option<bool> {
+    let mut undecided = false;
+    let mut lower: Option<Lower> = None;
+    let mut note = |verdict: Option<bool>| match verdict {
+        Some(true) => true,
+        Some(false) => false,
+        None => {
+            undecided = true;
+            false
+        }
+    };
+    for obj in range.events.iter().flatten().filter_map(|e| e.as_object()) {
+        if let Some(intro) = obj.get("introduced").and_then(|v| v.as_str()) {
+            lower = Lower::parse(intro);
+            if lower.is_none() && note(None) {
+                return Some(true);
+            }
+        }
+        let upper = obj
+            .get("fixed")
+            .map(|v| (v, false))
+            .or_else(|| obj.get("last_affected").map(|v| (v, true)));
+        if let Some((bound, inclusive)) = upper {
+            let bound = bound.as_str().unwrap_or("");
+            if let (Some(low), false) = (lower.as_ref(), is_unknown_bound(bound)) {
+                let verdict = OrderedVersion::parse(bound).and_then(|version| {
+                    in_window(
+                        user,
+                        low,
+                        Some(Upper {
+                            version: &version,
+                            inclusive,
+                        }),
+                    )
+                });
+                if note(verdict) {
+                    return Some(true);
+                }
+            }
+            lower = None;
+        }
+    }
+    // introduced with no fix → every version from introduced onward
+    if let Some(low) = lower.as_ref() {
+        if note(in_window(user, low, None)) {
+            return Some(true);
+        }
+    }
+    (!undecided).then_some(false)
 }
 
 /// npm's "Security holding package": after a malicious package is taken
@@ -519,6 +540,28 @@ pub(super) fn parse_version(ver: &str) -> Option<Version> {
         }
     }
 
+    // Leading zeros in the numeric core ("17.06.0-ce", a Docker-style bound a
+    // Go advisory carries): semver rejects them, every ecosystem reads them
+    // as the number. Left unparsed, the window was undecided and the copy
+    // stayed an unconfirmed match forever.
+    let split = v.find(['-', '+']).unwrap_or(v.len());
+    let (core, rest) = v.split_at(split);
+    let numbers: Vec<&str> = core.split('.').collect();
+    if numbers.len() == 3
+        && numbers
+            .iter()
+            .all(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
+    {
+        let trimmed: Vec<&str> = numbers
+            .iter()
+            .map(|n| match n.trim_start_matches('0') {
+                "" => "0",
+                t => t,
+            })
+            .collect();
+        return Version::parse(&format!("{}{rest}", trimmed.join("."))).ok();
+    }
+
     None
 }
 
@@ -530,453 +573,44 @@ fn normalize_ecosystem(eco: &str) -> &str {
     crate::ecosystem::Ecosystem::parse(eco).map_or(eco, |e| e.osv_name())
 }
 
+/// The name a registry treats as one package: PyPI compares PEP 503
+/// normalized names (`typing_extensions` = `Typing-Extensions` =
+/// `typing.extensions`), every other ecosystem here case-insensitively. A
+/// lockfile and an advisory routinely spell a Python package differently;
+/// keying by the lowercase spelling alone missed the match.
+pub(crate) fn package_key(name: &str, ecosystem: &str) -> String {
+    if normalize_ecosystem(ecosystem) == "PyPI" {
+        pep503_name(name)
+    } else {
+        name.to_lowercase()
+    }
+}
+
+/// PEP 503: lowercase, every run of `-`, `_` and `.` collapsed to one `-`.
+pub(crate) fn pep503_name(name: &str) -> String {
+    let mut out = String::with_capacity(name.len());
+    let mut in_separator = false;
+    for c in name.trim().chars() {
+        if matches!(c, '-' | '_' | '.') {
+            if !in_separator {
+                out.push('-');
+            }
+            in_separator = true;
+        } else {
+            out.extend(c.to_lowercase());
+            in_separator = false;
+        }
+    }
+    out
+}
+
 // ============================================================================
 // Tests
 // ============================================================================
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn npm_security_holding_placeholder_is_not_malware() {
-        assert!(is_npm_security_holding(
-            "MAL-2025-21003",
-            "npm",
-            Some("0.0.1-security")
-        ));
-        assert!(!is_npm_security_holding(
-            "MAL-2025-21003",
-            "npm",
-            Some("0.0.2")
-        ));
-        assert!(!is_npm_security_holding(
-            "GHSA-xxxx",
-            "npm",
-            Some("0.0.1-security")
-        ));
-        assert!(!is_npm_security_holding(
-            "MAL-2025-21003",
-            "crates.io",
-            Some("0.0.1-security")
-        ));
-        assert!(!is_npm_security_holding("MAL-2025-21003", "npm", None));
-    }
-
-    #[test]
-    fn unplaced_copies_fall_back_to_the_fix_that_clears_every_range() {
-        assert_eq!(
-            highest_listed_fix(&Some(r#"["15.5.24","16.3.3"]"#.to_string())).as_deref(),
-            Some("16.3.3")
-        );
-        assert_eq!(
-            highest_listed_fix(&Some(r#"["0.41.0"]"#.to_string())).as_deref(),
-            Some("0.41.0")
-        );
-        assert_eq!(highest_listed_fix(&None), None);
-    }
-
-    #[test]
-    fn test_version_in_simple_range() {
-        let ranges = Some(
-            r#"[{"type":"SEMVER","events":[{"introduced":"0"},{"fixed":"1.2.3"}]}]"#.to_string(),
-        );
-
-        let (affected, confirmed) = check_version_affected(Some("1.2.2"), &ranges);
-        assert!(affected, "1.2.2 < 1.2.3 should be affected");
-        assert!(confirmed);
-
-        let (affected, confirmed) = check_version_affected(Some("1.2.3"), &ranges);
-        assert!(!affected, "1.2.3 == fixed, should NOT be affected");
-        assert!(confirmed);
-
-        let (affected, confirmed) = check_version_affected(Some("2.0.0"), &ranges);
-        assert!(!affected, "2.0.0 > 1.2.3 should NOT be affected");
-        assert!(confirmed);
-    }
-
-    #[test]
-    fn test_version_in_compound_range() {
-        let ranges = Some(
-            r#"[{"type":"SEMVER","events":[
-                {"introduced":"1.0.0"},{"fixed":"1.0.5"},
-                {"introduced":"2.0.0"},{"fixed":"2.1.0"}
-            ]}]"#
-                .to_string(),
-        );
-
-        // In first range
-        let (affected, _) = check_version_affected(Some("1.0.3"), &ranges);
-        assert!(affected);
-
-        // Between ranges (not affected)
-        let (affected, confirmed) = check_version_affected(Some("1.5.0"), &ranges);
-        assert!(!affected);
-        assert!(confirmed);
-
-        // In second range
-        let (affected, _) = check_version_affected(Some("2.0.5"), &ranges);
-        assert!(affected);
-
-        // After all ranges
-        let (affected, _) = check_version_affected(Some("2.1.0"), &ranges);
-        assert!(!affected);
-    }
-
-    #[test]
-    fn test_no_version_conservative() {
-        let ranges = Some(
-            r#"[{"type":"SEMVER","events":[{"introduced":"0"},{"fixed":"1.0.0"}]}]"#.to_string(),
-        );
-
-        let (affected, confirmed) = check_version_affected(None, &ranges);
-        assert!(affected, "No version → conservative match");
-        assert!(!confirmed, "No version → not confirmed");
-    }
-
-    #[test]
-    fn test_no_ranges_conservative() {
-        let (affected, confirmed) = check_version_affected(Some("1.0.0"), &None);
-        assert!(affected, "No ranges → conservative match");
-        assert!(!confirmed);
-    }
-
-    #[test]
-    fn test_introduced_no_fixed() {
-        let ranges = Some(r#"[{"type":"SEMVER","events":[{"introduced":"2.0.0"}]}]"#.to_string());
-
-        let (affected, confirmed) = check_version_affected(Some("2.5.0"), &ranges);
-        assert!(affected, "After introduced with no fix → affected");
-        assert!(confirmed);
-
-        let (affected, confirmed) = check_version_affected(Some("1.9.0"), &ranges);
-        assert!(!affected, "Before introduced → not affected");
-        assert!(confirmed);
-    }
-
-    #[test]
-    fn test_last_affected() {
-        let ranges = Some(
-            r#"[{"type":"SEMVER","events":[{"introduced":"1.0.0"},{"last_affected":"1.5.0"}]}]"#
-                .to_string(),
-        );
-
-        let (affected, _) = check_version_affected(Some("1.3.0"), &ranges);
-        assert!(affected, "1.3.0 <= 1.5.0 (last_affected)");
-
-        let (affected, _) = check_version_affected(Some("1.5.0"), &ranges);
-        assert!(affected, "1.5.0 == last_affected → still affected");
-
-        let (affected, _) = check_version_affected(Some("1.5.1"), &ranges);
-        assert!(!affected, "1.5.1 > last_affected → not affected");
-    }
-
-    #[test]
-    fn test_v_prefix_handled() {
-        let ranges = Some(
-            r#"[{"type":"SEMVER","events":[{"introduced":"0"},{"fixed":"2.0.0"}]}]"#.to_string(),
-        );
-
-        let (affected, confirmed) = check_version_affected(Some("v1.5.0"), &ranges);
-        assert!(affected);
-        assert!(confirmed);
-    }
-
-    #[test]
-    fn test_two_part_version() {
-        let ranges = Some(
-            r#"[{"type":"SEMVER","events":[{"introduced":"0"},{"fixed":"2.0.0"}]}]"#.to_string(),
-        );
-
-        let (affected, confirmed) = check_version_affected(Some("1.5"), &ranges);
-        assert!(affected, "1.5 → 1.5.0 < 2.0.0");
-        assert!(confirmed);
-    }
-
-    #[test]
-    fn test_unparseable_version_conservative() {
-        let ranges = Some(
-            r#"[{"type":"SEMVER","events":[{"introduced":"0"},{"fixed":"1.0.0"}]}]"#.to_string(),
-        );
-
-        let (affected, confirmed) = check_version_affected(Some("banana"), &ranges);
-        assert!(affected, "Unparseable → conservative");
-        assert!(!confirmed);
-    }
-
-    #[test]
-    fn test_non_semver_range_type_skipped() {
-        let ranges = Some(
-            r#"[{"type":"GIT","events":[{"introduced":"abc123"},{"fixed":"def456"}]}]"#.to_string(),
-        );
-
-        // GIT ranges are skipped, no SEMVER ranges found → conservative false
-        // (because we went through all ranges and found none applicable)
-        let (affected, confirmed) = check_version_affected(Some("1.0.0"), &ranges);
-        // No SEMVER range matched → not affected (we only skip non-SEMVER ranges)
-        assert!(!affected);
-        assert!(confirmed);
-    }
-
-    #[test]
-    fn test_na_unknown_boundary_does_not_match() {
-        // Real shape of PYSEC-2025-210 (torch): last_affected "2.5.0-NA"/"2.7.1-NA".
-        // OSV's own matcher does NOT return torch 2.3.0 for it; semver parses "-NA" as a
-        // prerelease and a naive compare would over-match. An unknown bound must not match.
-        let ranges = Some(
-            r#"[{"type":"ECOSYSTEM","events":[{"introduced":"0"},{"last_affected":"2.5.0-NA"},{"last_affected":"2.7.1-NA"}]}]"#
-                .to_string(),
-        );
-        let (affected, confirmed) = check_version_affected(Some("2.3.0"), &ranges);
-        assert!(!affected, "unknown '-NA' boundary must not ground a match");
-        assert!(
-            confirmed,
-            "we DID evaluate the ranges (just found no usable bound)"
-        );
-
-        // A concrete prerelease/build bound still matches normally.
-        let rc = Some(
-            r#"[{"type":"ECOSYSTEM","events":[{"introduced":"0"},{"fixed":"2.7.1-rc1"}]}]"#
-                .to_string(),
-        );
-        let (affected, _) = check_version_affected(Some("2.5.0"), &rc);
-        assert!(affected, "concrete prerelease bound still compares");
-    }
-
-    #[test]
-    fn test_normalize_ecosystem() {
-        assert_eq!(normalize_ecosystem("rust"), "crates.io");
-        assert_eq!(normalize_ecosystem("javascript"), "npm");
-        assert_eq!(normalize_ecosystem("python"), "PyPI");
-        assert_eq!(normalize_ecosystem("pip"), "PyPI");
-        assert_eq!(normalize_ecosystem("go"), "Go");
-        assert_eq!(normalize_ecosystem("golang"), "Go");
-        assert_eq!(normalize_ecosystem("unknown"), "unknown");
-    }
-
-    #[test]
-    fn test_parse_version_formats() {
-        assert!(parse_version("1.2.3").is_some());
-        assert!(parse_version("v1.2.3").is_some());
-        assert!(parse_version("1.2").is_some());
-        assert!(parse_version("0.0.0").is_some());
-        assert!(parse_version("banana").is_none());
-        assert!(parse_version("").is_none());
-    }
-
-    #[test]
-    fn test_matched_advisories_integration() {
-        use crate::test_utils::test_db;
-
-        let db = test_db();
-
-        // Store a dependency
-        db.store_dependency("/project/a", "lodash", Some("4.17.20"), "npm", false, None)
-            .unwrap();
-
-        // Store an advisory that affects lodash < 4.17.21
-        db.upsert_osv_advisory(
-            "GHSA-test-001",
-            "Prototype pollution in lodash",
-            Some("Details here"),
-            "lodash",
-            "npm",
-            Some(r#"[{"type":"SEMVER","events":[{"introduced":"0"},{"fixed":"4.17.21"}]}]"#),
-            Some(r#"["4.17.21"]"#),
-            Some("CVSS_V3"),
-            Some(7.5),
-            Some("https://github.com/advisories/GHSA-test-001"),
-            Some("2026-01-01T00:00:00Z"),
-            None,
-            None,
-        )
-        .unwrap();
-
-        let matches = get_matched_advisories(&db).unwrap();
-        assert_eq!(matches.len(), 1);
-        assert_eq!(matches[0].advisory_id, "GHSA-test-001");
-        assert_eq!(matches[0].installed_version.as_deref(), Some("4.17.20"));
-        assert_eq!(matches[0].fixed_version.as_deref(), Some("4.17.21"));
-        assert!(matches[0].is_version_confirmed);
-        assert_eq!(matches[0].project_paths, vec!["/project/a"]);
-        assert_eq!(matches[0].dependency_instances.len(), 1);
-        assert!(matches[0].dependency_instances[0].is_direct);
-        assert!(!matches[0].dependency_instances[0].is_dev);
-    }
-
-    #[test]
-    fn test_no_match_when_version_patched() {
-        use crate::test_utils::test_db;
-
-        let db = test_db();
-
-        db.store_dependency("/project/a", "lodash", Some("4.17.21"), "npm", false, None)
-            .unwrap();
-
-        db.upsert_osv_advisory(
-            "GHSA-test-002",
-            "Vuln in lodash",
-            None,
-            "lodash",
-            "npm",
-            Some(r#"[{"type":"SEMVER","events":[{"introduced":"0"},{"fixed":"4.17.21"}]}]"#),
-            Some(r#"["4.17.21"]"#),
-            Some("CVSS_V3"),
-            Some(7.5),
-            None,
-            None,
-            None,
-            None,
-        )
-        .unwrap();
-
-        let matches = get_matched_advisories(&db).unwrap();
-        assert!(matches.is_empty(), "Patched version should not match");
-    }
-
-    #[test]
-    fn test_multiple_projects_same_dep() {
-        use crate::test_utils::test_db;
-
-        let db = test_db();
-
-        db.store_dependency("/project/a", "serde", Some("1.0.100"), "rust", false, None)
-            .unwrap();
-        db.store_dependency("/project/b", "serde", Some("1.0.100"), "rust", false, None)
-            .unwrap();
-
-        db.upsert_osv_advisory(
-            "GHSA-test-003",
-            "Vuln in serde",
-            None,
-            "serde",
-            "crates.io",
-            Some(r#"[{"type":"SEMVER","events":[{"introduced":"0"},{"fixed":"1.0.200"}]}]"#),
-            Some(r#"["1.0.200"]"#),
-            None,
-            Some(5.0),
-            None,
-            None,
-            None,
-            None,
-        )
-        .unwrap();
-
-        let matches = get_matched_advisories(&db).unwrap();
-        assert_eq!(matches.len(), 1);
-        assert_eq!(matches[0].project_paths.len(), 2);
-    }
-
-    // ---- Multi-version inventory (Phase 92) — false-negative fix ----
-
-    fn vuln_advisory(db: &Database, id: &str, pkg: &str, eco: &str, fixed: &str) {
-        db.upsert_osv_advisory(
-            id,
-            &format!("Vuln in {pkg}"),
-            None,
-            pkg,
-            eco,
-            Some(&format!(
-                r#"[{{"type":"SEMVER","events":[{{"introduced":"0"}},{{"fixed":"{fixed}"}}]}}]"#
-            )),
-            Some(&format!(r#"["{fixed}"]"#)),
-            Some("CVSS_V3"),
-            Some(7.5),
-            None,
-            Some("2026-01-01T00:00:00Z"),
-            None,
-            None,
-        )
-        .unwrap();
-    }
-
-    fn inst(pkg: &str, version: &str, is_direct: bool) -> crate::db::DependencyInstanceInput {
-        crate::db::DependencyInstanceInput {
-            package_name: pkg.to_string(),
-            version: version.to_string(),
-            is_direct,
-            is_dev: false,
-            scope: "unknown".to_string(),
-        }
-    }
-
-    #[test]
-    fn matcher_surfaces_vulnerable_duplicate_hidden_by_collapse() {
-        use crate::test_utils::test_db;
-        let db = test_db();
-
-        // The collapsed user_dependencies row keeps only the patched survivor —
-        // exactly the state in which test_no_match_when_version_patched (above)
-        // correctly reports NO match. But the project ALSO installs a vulnerable
-        // transitive copy, retained only by the multi-version inventory.
-        db.store_dependency("/project/a", "lodash", Some("4.17.21"), "npm", false, None)
-            .unwrap();
-        db.store_dependency_instances(
-            "/project/a",
-            "npm",
-            &[
-                inst("lodash", "4.17.21", true),
-                inst("lodash", "4.17.20", false),
-            ],
-        )
-        .unwrap();
-        vuln_advisory(&db, "GHSA-dup-1", "lodash", "npm", "4.17.21");
-
-        let matches = get_matched_advisories(&db).unwrap();
-        assert_eq!(
-            matches.len(),
-            1,
-            "the hidden vulnerable 4.17.20 duplicate must surface the advisory"
-        );
-        assert!(matches[0].is_version_confirmed);
-        assert!(
-            matches[0]
-                .dependency_instances
-                .iter()
-                .any(
-                    |d| d.installed_version.as_deref() == Some("4.17.20") && d.is_version_confirmed
-                ),
-            "the confirmed-affected instance is the vulnerable duplicate; got {:?}",
-            matches[0].dependency_instances
-        );
-        assert_eq!(matches[0].project_paths, vec!["/project/a"]);
-    }
-
-    #[test]
-    fn matcher_no_instances_falls_back_to_collapsed_unchanged() {
-        use crate::test_utils::test_db;
-        let db = test_db();
-        // No instance rows (a pre-Phase-92 scan): behavior is identical to before
-        // — the collapsed version alone decides the match.
-        db.store_dependency("/project/a", "lodash", Some("4.17.21"), "npm", false, None)
-            .unwrap();
-        vuln_advisory(&db, "GHSA-fallback-1", "lodash", "npm", "4.17.21");
-        assert!(
-            get_matched_advisories(&db).unwrap().is_empty(),
-            "patched collapsed version with no instances still must not match"
-        );
-    }
-
-    #[test]
-    fn matcher_dedups_instance_matching_collapsed_version() {
-        use crate::test_utils::test_db;
-        let db = test_db();
-        db.store_dependency("/project/a", "lodash", Some("4.17.20"), "npm", false, None)
-            .unwrap();
-        // Instance carries the SAME version as the collapsed survivor.
-        db.store_dependency_instances("/project/a", "npm", &[inst("lodash", "4.17.20", true)])
-            .unwrap();
-        vuln_advisory(&db, "GHSA-dedup-1", "lodash", "npm", "4.17.21");
-
-        let matches = get_matched_advisories(&db).unwrap();
-        assert_eq!(matches.len(), 1);
-        assert_eq!(
-            matches[0].dependency_instances.len(),
-            1,
-            "instance duplicating the collapsed version must not be double-counted"
-        );
-    }
-}
+#[path = "matching_tests.rs"]
+mod tests;
 
 #[cfg(test)]
 #[path = "matching_audit_tests.rs"]

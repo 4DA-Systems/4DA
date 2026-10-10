@@ -55,6 +55,7 @@ fn discover_projects_recursive(
     skip_dirs: &[&str],
 ) -> Vec<PathBuf> {
     fn walk(
+        root: &PathBuf,
         dir: &PathBuf,
         depth: usize,
         max_depth: usize,
@@ -73,7 +74,7 @@ fn discover_projects_recursive(
             let path_str = dir.to_string_lossy();
             if path_str.contains(".git/worktrees/")
                 || path_str.contains(".git\\worktrees\\")
-                || crate::project_inclusion::is_scan_excluded_dir(&path_str)
+                || crate::project_inclusion::is_scan_excluded_below(root, dir)
             {
                 return;
             }
@@ -101,13 +102,13 @@ fn discover_projects_recursive(
                     }
                 }
 
-                walk(&path, depth + 1, max_depth, skip_dirs, projects);
+                walk(root, &path, depth + 1, max_depth, skip_dirs, projects);
             }
         }
     }
 
     let mut projects = Vec::new();
-    walk(root, 0, max_depth, skip_dirs, &mut projects);
+    walk(root, root, 0, max_depth, skip_dirs, &mut projects);
     projects
 }
 

@@ -386,7 +386,7 @@ fn vulnerability_matches_packages(vuln: &Vulnerability, user_packages: &HashSet<
 
     for entry in affected {
         if let Some(ref pkg) = entry.package {
-            if user_packages.contains(&pkg.name.to_lowercase()) {
+            if user_packages.contains(&super::matching::package_key(&pkg.name, &pkg.ecosystem)) {
                 return true;
             }
         }
@@ -464,7 +464,10 @@ fn collect_ecosystem_packages(
         by_ecosystem
             .entry(osv_eco)
             .or_default()
-            .insert(dep.package_name.to_lowercase());
+            .insert(super::matching::package_key(
+                &dep.package_name,
+                &dep.ecosystem,
+            ));
     }
     Ok(by_ecosystem)
 }

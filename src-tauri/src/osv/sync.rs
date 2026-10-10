@@ -181,8 +181,10 @@ async fn populate_from_zip_mirror(
     ecosystem: &str,
     packages: &[String],
 ) -> Result<usize> {
-    let pkg_set: std::collections::HashSet<String> =
-        packages.iter().map(|p| p.to_lowercase()).collect();
+    let pkg_set: std::collections::HashSet<String> = packages
+        .iter()
+        .map(|p| super::matching::package_key(p, ecosystem))
+        .collect();
 
     // Refresh the cached ZIP when OSV has published a new advisory set for this
     // ecosystem (ETag mismatch) or when no ZIP exists yet. The staleness check is
@@ -501,6 +503,7 @@ pub(super) fn store_vulnerability(
             Affected {
                 package: Some(pkg.clone()),
                 ranges: Some(Vec::new()),
+                versions: None,
             }
         });
         if let Some(ranges) = &affected.ranges {
@@ -508,6 +511,21 @@ pub(super) fn store_vulnerability(
                 .ranges
                 .get_or_insert_with(Vec::new)
                 .extend(ranges.iter().cloned());
+        }
+        if let Some(versions) = affected.versions.as_ref().filter(|v| !v.is_empty()) {
+            merged
+                .ranges
+                .get_or_insert_with(Vec::new)
+                .push(super::types::Range {
+                    range_type: super::types::ENUMERATED_RANGE.to_string(),
+                    events: Some(
+                        versions
+                            .iter()
+                            .cloned()
+                            .map(serde_json::Value::from)
+                            .collect(),
+                    ),
+                });
         }
     }
 
@@ -649,6 +667,7 @@ mod tests {
                     serde_json::json!({"fixed": "1.2.3"}),
                 ]),
             }]),
+            versions: None,
         };
 
         let fixed = extract_fixed_versions(&affected).unwrap();
@@ -670,6 +689,7 @@ mod tests {
                     serde_json::json!({"fixed": "2.1.0"}),
                 ]),
             }]),
+            versions: None,
         };
 
         let fixed = extract_fixed_versions(&affected).unwrap();
@@ -687,6 +707,7 @@ mod tests {
                 range_type: "SEMVER".to_string(),
                 events: Some(vec![serde_json::json!({"introduced": "0"})]),
             }]),
+            versions: None,
         };
 
         assert!(extract_fixed_versions(&affected).is_none());
@@ -713,6 +734,7 @@ mod tests {
                     ecosystem: "npm".to_string(),
                 }),
                 ranges: None,
+                versions: None,
             }]),
             references: None,
             published: None,
@@ -727,6 +749,28 @@ mod tests {
 
         let stored2 = store_vulnerability(&db, &vuln, &mut seen).unwrap();
         assert_eq!(stored2, 0, "Duplicate should be skipped");
+    }
+
+    /// A `versions`-only advisory (GHSA-q58r-hwc8-rm9j's shape) keeps its list,
+    /// so the matcher can confirm the listed versions.
+    #[test]
+    fn a_versions_only_advisory_is_stored_matchable() {
+        let db = crate::test_utils::test_db();
+        let vuln: Vulnerability = serde_json::from_value(serde_json::json!({
+            "id": "GHSA-q58r-hwc8-rm9j",
+            "affected": [{
+                "package": {"name": "bootstrap", "ecosystem": "npm"},
+                "versions": ["3.4.0", "3.4.1"]
+            }]
+        }))
+        .unwrap();
+        store_vulnerability(&db, &vuln, &mut std::collections::HashSet::new()).unwrap();
+        let stored = db.get_all_osv_advisories().unwrap();
+        let ranges = &stored[0].affected_ranges;
+        assert_eq!(
+            super::super::matching::check_version_affected(Some("3.4.1"), ranges),
+            (true, true)
+        );
     }
 
     #[test]

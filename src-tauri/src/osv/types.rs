@@ -72,14 +72,20 @@ pub(crate) struct Severity {
 pub(crate) struct Affected {
     pub package: Option<PackageRef>,
     pub ranges: Option<Vec<Range>>,
-    // `versions` (the OSV explicit affected-version list) is deliberately not
-    // deserialized: nothing in this crate ever read it, and matching runs off
-    // `ranges` via check_version_affected, which falls back to "assume
-    // affected" when it cannot decide. An advisory carrying only `versions`
-    // therefore still alerts — dropping the field costs no coverage. Serde
-    // ignores unknown fields, so the wire format is unaffected. Reinstate it
-    // only alongside real matching logic that consumes it.
+    /// OSV's explicit list of affected versions. Some advisories carry ONLY
+    /// this (GHSA-q58r-hwc8-rm9j, bootstrap) or only `GIT` ranges plus this.
+    /// It used to be dropped on the belief that the matcher would then "assume
+    /// affected" — it did not: the stored ranges were `[]` and an empty
+    /// range list reads as "confirmed not affected". Stored as an
+    /// [`ENUMERATED_RANGE`] range so every ranges reader sees it.
+    #[serde(default)]
+    pub versions: Option<Vec<String>>,
 }
+
+/// The `type` of the synthetic range that carries an advisory's enumerated
+/// `versions` list in the stored ranges JSON (events are the version
+/// strings). Readers that only understand `SEMVER`/`ECOSYSTEM` skip it.
+pub(crate) const ENUMERATED_RANGE: &str = "ENUMERATED";
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub(crate) struct Range {

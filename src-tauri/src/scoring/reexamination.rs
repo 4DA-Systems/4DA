@@ -61,7 +61,14 @@ const CONVERGE_MAX_CHUNKS: usize = 12;
 /// the already-installed ceiling.
 /// 2 (2026-10-03): a dormant project (`ace::dormancy`, no activity in
 /// `DORMANT_AFTER_DAYS`) is not a pin either.
-pub(crate) const RELEASE_GRADE_RULES: u32 = 2;
+/// 3 (2026-10-10): the same pins are judged against advisories differently —
+/// OSV `introduced: "0"` is unbounded below (Go pseudo-versions were "not
+/// affected"), build metadata no longer orders versions, PyPI versions order
+/// by PEP 440 and PyPI names compare PEP 503-normalized (`osv::version_order`,
+/// `osv::matching::package_key`). One scoped re-examination of the held
+/// dependency releases and buried advisories instead of a corpus-wide
+/// `PIPELINE_VERSION` drain (AD-034).
+pub(crate) const RELEASE_GRADE_RULES: u32 = 3;
 
 /// Stable hash of the developer's pins: every included project's (path, package,
 /// version, direct, dev), sorted, plus [`RELEASE_GRADE_RULES`]. `DefaultHasher` is

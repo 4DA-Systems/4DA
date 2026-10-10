@@ -1,26 +1,30 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! ACE dependency storage: direct and transitive dependency discovery from lockfiles.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use tracing::info;
 
+use crate::ace::lockfile::{self, LockFormat, LockfileOutcome, LockfileRead, LockfileReport};
 use crate::ace::repo_identity::{self, RepoScope, Step};
 use crate::db::Database;
 use crate::db::DependencyInstanceInput;
 use crate::get_ace_engine;
 
-#[path = "dependencies_npm.rs"]
-mod npm;
+#[path = "dependencies_manifests.rs"]
+mod manifests;
+#[path = "dependencies_store.rs"]
+mod store;
+
+use manifests::{direct_names, keep_names};
 
 /// Build the multi-version instance list (`dependency_instances`, Phase 92)
 /// from a parsed lockfile's `(name, version)` pairs, classifying `is_direct`
 /// by manifest membership. A lockfile that resolves a package at multiple
 /// versions yields multiple instances here — the data the collapsing
 /// `store_dependency` upsert discards. `is_dev`/`scope` start as `false` /
-/// `"unknown"`; the npm processors (`dependencies_npm.rs`) then fill them
-/// from the lockfile graph (AD-046). Ecosystems whose lockfiles do not
-/// separate dev from runtime keep the honest `unknown`.
+/// `"unknown"`; the Cargo processor then fills them from the lockfile graph.
 fn instances_from_packages(
     packages: &[(String, String)],
     direct_deps: &[String],
@@ -84,40 +88,6 @@ pub(super) fn store_direct_dependencies(db: &Database) {
     }
 }
 
-/// Every file the walk reads dependencies from. Used to pick the relevance
-/// probe for a directory (the gate is per project dir, not per lockfile).
-const LOCKFILE_NAMES: &[&str] = &[
-    "Cargo.lock",
-    "package-lock.json",
-    "pnpm-lock.yaml",
-    "yarn.lock",
-    "poetry.lock",
-    "requirements.txt",
-    "go.sum",
-    "go.mod",
-    "Gemfile.lock",
-    "composer.lock",
-];
-
-/// Directory names the walk never descends into. Mirrors the ACE scanner's
-/// skip list: build output, package caches, and agent infrastructure
-/// (`.claude`/`.codex` worktrees + scratch fixtures are not user projects).
-const SKIPPED_DIR_NAMES: &[&str] = &[
-    "node_modules",
-    "target",
-    ".git",
-    "dist",
-    "build",
-    ".next",
-    "__pycache__",
-    ".venv",
-    "venv",
-    "vendor",
-    ".cargo",
-    ".claude",
-    ".codex",
-];
-
 /// One pending directory of the lockfile walk: where it is, how deep, and
 /// which repository (if any) it belongs to.
 type PendingDir = (PathBuf, u8, RepoScope);
@@ -130,16 +100,29 @@ type PendingDir = (PathBuf, u8, RepoScope);
 /// DIFFERENT repository is skipped as foreign code (`repo_identity`), and
 /// scaffolding paths are skipped by relevance. Dormancy is NOT a skip reason
 /// — see [`lockfile_dir_is_relevant`].
-pub(super) fn store_lockfile_dependencies(db: &Database, scan_paths: &[PathBuf]) {
+///
+/// Returns the walk's report — every lockfile read, failed, unsupported or
+/// skipped — which is also logged and saved to `kv_store` so the scan
+/// summary can show it (no silent drops).
+pub(super) fn store_lockfile_dependencies(db: &Database, scan_paths: &[PathBuf]) -> LockfileReport {
     let scanner = crate::ace::scanner::ProjectScanner::new();
+    let mut report = LockfileReport::default();
     let mut lockfile_count = 0u32;
-    for dir in collect_lockfile_dirs(scan_paths) {
+    for dir in collect_lockfile_dirs_reporting(scan_paths, &mut report) {
         let project_path = dir.to_string_lossy().to_string();
-        lockfile_count += process_lockfile_dir(db, &scanner, &dir, &project_path);
+        lockfile_count += process_lockfile_dir(db, &scanner, &dir, &project_path, &mut report);
     }
     if lockfile_count > 0 {
         info!(target: "4da::ace", count = lockfile_count, "Stored transitive dependencies from lockfiles");
     }
+    report.log();
+    if let Err(e) = db.set_kv(
+        lockfile::report::REPORT_KV_KEY,
+        &report.to_json().to_string(),
+    ) {
+        tracing::warn!(target: "4da::ace", error = %e, "Failed to save the lockfile walk report");
+    }
+    report
 }
 
 /// Walk `scan_paths` and return every directory whose lockfiles may feed
@@ -147,51 +130,65 @@ pub(super) fn store_lockfile_dependencies(db: &Database, scan_paths: &[PathBuf])
 /// excluded by the inclusion policy, passes the relevance gate, and is not a
 /// nested checkout of somebody else's repository. Pure with respect to the
 /// database, so the walk's decisions are testable on a temp tree.
+#[cfg(test)]
 fn collect_lockfile_dirs(scan_paths: &[PathBuf]) -> Vec<PathBuf> {
+    collect_lockfile_dirs_reporting(scan_paths, &mut LockfileReport::default())
+}
+
+/// [`collect_lockfile_dirs`], recording every directory holding a dependency
+/// file that a gate skipped.
+fn collect_lockfile_dirs_reporting(
+    scan_paths: &[PathBuf],
+    report: &mut LockfileReport,
+) -> Vec<PathBuf> {
     // "Your Stack" exclusions (tier 3), fetched once per walk: lockfiles under
     // a user-excluded project must not feed user_dependencies (the OSV / audit
-    // surface). Tiers 1+2 are handled by is_scan_excluded_dir below plus the
+    // surface). Tiers 1+2 are handled by is_scan_excluded_below plus the
     // DB write guards.
     let user_excluded = crate::project_inclusion::user_excluded_paths();
     let mut selected = Vec::new();
 
-    for path in scan_paths {
-        if !path.exists() || !path.is_dir() {
+    for root in scan_paths {
+        if !root.exists() || !root.is_dir() {
             continue;
         }
         let mut dirs_to_visit: Vec<PendingDir> =
-            vec![(path.clone(), 0u8, repo_identity::scope_at(path))];
+            vec![(root.clone(), 0u8, repo_identity::scope_at(root))];
         while let Some((dir, depth, scope)) = dirs_to_visit.pop() {
-            if depth > 5 {
+            if depth > lockfile::MAX_WALK_DEPTH {
+                if lockfile::probe(&dir).is_some() {
+                    report.skip_dir(&dir, "deeper than the walk's depth limit");
+                }
                 continue;
             }
+            // Canonical inclusion policy, judged below the root the user
+            // configured: covers a walk ROOTED inside an agent tree and
+            // tier-2/3 dirs whose names aren't in the skip list.
             let project_path = dir.to_string_lossy().to_string();
-            // Canonical inclusion policy: covers a walk ROOTED inside an
-            // excluded tree (the name-based skip list below only prunes
-            // descent) and tier-2/3 dirs whose names aren't in that list.
-            if crate::project_inclusion::is_scan_excluded_dir(&project_path)
-                || crate::project_inclusion::is_user_excluded(&project_path, &user_excluded)
-            {
+            let excluded = if crate::project_inclusion::is_scan_excluded_below(root, &dir) {
+                Some("agent infrastructure or test-fixture scaffolding")
+            } else if crate::project_inclusion::is_user_excluded(&project_path, &user_excluded) {
+                Some("excluded by the user (Your Stack)")
+            } else {
+                None
+            };
+            if let Some(reason) = excluded {
+                if lockfile::probe(&dir).is_some() {
+                    report.skip_dir(&dir, reason);
+                }
                 continue;
             }
-            if let Some(probe) = lockfile_probe(&dir) {
-                if lockfile_dir_is_relevant(&dir, &probe) {
+            if let Some(probe) = lockfile::probe(&dir) {
+                if lockfile_dir_is_relevant(root, &dir, &probe) {
                     selected.push(dir.clone());
+                } else {
+                    report.skip_dir(&dir, "example / fixture / scaffolding path");
                 }
             }
-            queue_subdirectories(&dir, depth, &scope, &mut dirs_to_visit);
+            queue_subdirectories(&dir, depth, &scope, &mut dirs_to_visit, report);
         }
     }
     selected
-}
-
-/// The first lockfile/manifest present in `dir` — the file the relevance
-/// gate is computed against — or `None` when there is nothing to read.
-fn lockfile_probe(dir: &Path) -> Option<PathBuf> {
-    LOCKFILE_NAMES
-        .iter()
-        .map(|name| dir.join(name))
-        .find(|p| p.exists())
 }
 
 /// The manifest scan's relevance gate (`ace/mod.rs`) applied to a lockfile's
@@ -206,15 +203,18 @@ fn lockfile_probe(dir: &Path) -> Option<PathBuf> {
 /// carries no relevance, the gated reads (`project_dependencies`, still
 /// floored) are unchanged, and Preemption collapses the findings into ONE
 /// quiet notice (`evidence::collapse_dormant_alerts`). Scaffolding is still
-/// skipped — it is scaffolding whatever its git log says.
-fn lockfile_dir_is_relevant(dir: &Path, probe: &Path) -> bool {
-    let relevance = crate::ace::scanner::compute_project_relevance(probe);
+/// skipped — it is scaffolding whatever its git log says — judged below the
+/// walk root: where the user keeps a project is not evidence it is scaffolding.
+fn lockfile_dir_is_relevant(root: &Path, dir: &Path, probe: &Path) -> bool {
+    let relevance = crate::ace::scanner::compute_project_relevance_below(root, probe);
     if relevance >= crate::ace::scanner::PROJECT_RELEVANCE_FLOOR
         || crate::ace::scanner::forced_relevant_by_context_dir(probe)
     {
         return true;
     }
-    if crate::ace::scanner::path_relevance(probe) >= crate::ace::scanner::PROJECT_RELEVANCE_FLOOR {
+    if crate::ace::scanner::path_relevance_below(root, probe)
+        >= crate::ace::scanner::PROJECT_RELEVANCE_FLOOR
+    {
         info!(
             target: "4da::ace",
             dir = %dir.display(),
@@ -233,23 +233,38 @@ fn lockfile_dir_is_relevant(dir: &Path, probe: &Path) -> bool {
     false
 }
 
-/// Run every lockfile processor on one project directory.
+/// Read every dependency file in one project directory and store it: Cargo
+/// through its own processor (host reachability, workspace members), every
+/// other ecosystem merged across its lockfiles and written once
+/// (`dependencies_store`). Every outcome lands in `report`.
 fn process_lockfile_dir(
     db: &Database,
     scanner: &crate::ace::scanner::ProjectScanner,
     dir: &PathBuf,
     project_path: &str,
+    report: &mut LockfileReport,
 ) -> u32 {
+    let outcomes = lockfile::read_dir(dir);
     let mut count = 0u32;
-    count += process_cargo_lock(db, scanner, dir, project_path);
-    count += npm::process_package_lock(db, scanner, dir, project_path);
-    count += npm::process_pnpm_lock(db, scanner, dir, project_path);
-    count += process_yarn_lock(db, scanner, dir, project_path);
-    count += process_poetry_lock(db, scanner, dir, project_path);
-    count += process_requirements_txt(db, dir, project_path);
-    count += process_go_sum(db, scanner, dir, project_path);
-    count += process_gemfile_lock(db, scanner, dir, project_path);
-    count += process_composer_lock(db, dir, project_path);
+    let mut by_ecosystem: BTreeMap<&'static str, Vec<&LockfileRead>> = BTreeMap::new();
+    for outcome in &outcomes {
+        report.record(outcome);
+        if let LockfileOutcome::Read(read) = outcome {
+            if read.format == LockFormat::Cargo {
+                count += process_cargo_lock(db, scanner, dir, project_path);
+            } else {
+                by_ecosystem
+                    .entry(read.format.ecosystem())
+                    .or_default()
+                    .push(read);
+            }
+        }
+    }
+    for (ecosystem, reads) in by_ecosystem {
+        let direct = direct_names(scanner, dir, ecosystem, &reads);
+        let keep = keep_names(dir, ecosystem);
+        count += store::store_ecosystem(db, project_path, ecosystem, &reads, &direct, &keep);
+    }
     store_go_directive_dependencies(db, dir, project_path);
     count
 }
@@ -260,8 +275,8 @@ fn process_lockfile_dir(
 /// standard-library and toolchain advisories against the package names
 /// "stdlib"/"toolchain" (ecosystem Go) with SEMVER ranges, so without the
 /// version the matcher can only produce unconfirmed matches that Preemption
-/// filters out. Done here, not in process_go_sum: a stdlib-only project has
-/// no go.sum.
+/// filters out. Done per directory, not per lockfile: a stdlib-only project
+/// has no go.sum.
 fn store_go_directive_dependencies(db: &Database, dir: &Path, project_path: &str) {
     let Ok(content) = std::fs::read_to_string(dir.join("go.mod")) else {
         return;
@@ -288,8 +303,15 @@ fn store_go_directive_dependencies(db: &Database, dir: &Path, project_path: &str
 
 /// Queue `dir`'s subdirectories, skipping build/cache/agent dirs and any
 /// nested checkout of a DIFFERENT repository (a vendored third-party clone
-/// is that project's stack, not the user's). Skips log both remotes.
-fn queue_subdirectories(dir: &Path, depth: u8, scope: &RepoScope, stack: &mut Vec<PendingDir>) {
+/// is that project's stack, not the user's). Skips log both remotes and are
+/// recorded in the walk report.
+fn queue_subdirectories(
+    dir: &Path,
+    depth: u8,
+    scope: &RepoScope,
+    stack: &mut Vec<PendingDir>,
+    report: &mut LockfileReport,
+) {
     let Ok(entries) = std::fs::read_dir(dir) else {
         return;
     };
@@ -301,7 +323,7 @@ fn queue_subdirectories(dir: &Path, depth: u8, scope: &RepoScope, stack: &mut Ve
         let Some(name) = entry_path.file_name().and_then(|n| n.to_str()) else {
             continue;
         };
-        if SKIPPED_DIR_NAMES.contains(&name) {
+        if lockfile::SKIPPED_DIR_NAMES.contains(&name) {
             continue;
         }
         match repo_identity::step_into(&entry_path, scope) {
@@ -313,6 +335,13 @@ fn queue_subdirectories(dir: &Path, depth: u8, scope: &RepoScope, stack: &mut Ve
                     nested_remote = nested.as_deref().unwrap_or("(none)"),
                     enclosing_remote = enclosing.as_deref().unwrap_or("(none)"),
                     "Lockfile walk: skipping nested checkout of a different repository"
+                );
+                report.skip_dir(
+                    &entry_path,
+                    format!(
+                        "nested checkout of a different repository ({})",
+                        nested.as_deref().unwrap_or("no origin")
+                    ),
                 );
             }
         }
@@ -501,444 +530,10 @@ fn cargo_manifest_roots(
     CargoRoots { runtime, dev }
 }
 
-/// Process a yarn.lock file, storing transitive deps and updating direct dep versions.
-fn process_yarn_lock(
-    db: &Database,
-    scanner: &crate::ace::scanner::ProjectScanner,
-    dir: &PathBuf,
-    project_path: &str,
-) -> u32 {
-    let yarn_lock = dir.join("yarn.lock");
-    if !yarn_lock.exists() {
-        return 0;
-    }
-    let Ok(content) = std::fs::read_to_string(&yarn_lock) else {
-        return 0;
-    };
-
-    let direct_deps = read_package_json_deps(scanner, dir);
-
-    let mut count = 0u32;
-    let packages = crate::ace::scanner::ProjectScanner::parse_yarn_lock(&content);
-    db.store_dependency_instances(
-        project_path,
-        "javascript",
-        &instances_from_packages(&packages, &direct_deps, false),
-    )
-    .ok();
-    for (name, version) in &packages {
-        if direct_deps.is_empty() || !direct_deps.iter().any(|d| d == name) {
-            db.store_transitive_dependency(
-                project_path,
-                name,
-                Some(version.as_str()),
-                "javascript",
-                false,
-            )
-            .ok();
-            count += 1;
-        } else {
-            db.store_dependency(
-                project_path,
-                name,
-                Some(version.as_str()),
-                "javascript",
-                false,
-                None,
-            )
-            .ok();
-        }
-    }
-    prune_stale_rows(db, project_path, "javascript", &packages, &direct_deps);
-    count
-}
-
-/// Process a poetry.lock file, storing transitive deps and updating direct dep versions.
-fn process_poetry_lock(
-    db: &Database,
-    scanner: &crate::ace::scanner::ProjectScanner,
-    dir: &PathBuf,
-    project_path: &str,
-) -> u32 {
-    let poetry_lock = dir.join("poetry.lock");
-    if !poetry_lock.exists() {
-        return 0;
-    }
-    let Ok(content) = std::fs::read_to_string(&poetry_lock) else {
-        return 0;
-    };
-
-    let direct_deps = read_pyproject_deps(scanner, dir);
-
-    let mut count = 0u32;
-    let packages = crate::ace::scanner::ProjectScanner::parse_poetry_lock(&content);
-    db.store_dependency_instances(
-        project_path,
-        "python",
-        &instances_from_packages(&packages, &direct_deps, true),
-    )
-    .ok();
-    for (name, version) in &packages {
-        if direct_deps.is_empty() || !direct_deps.iter().any(|d| d.eq_ignore_ascii_case(name)) {
-            db.store_transitive_dependency(
-                project_path,
-                name,
-                Some(version.as_str()),
-                "python",
-                false,
-            )
-            .ok();
-            count += 1;
-        } else {
-            db.store_dependency(
-                project_path,
-                name,
-                Some(version.as_str()),
-                "python",
-                false,
-                None,
-            )
-            .ok();
-        }
-    }
-    prune_stale_rows(db, project_path, "python", &packages, &direct_deps);
-    count
-}
-
-/// Process a requirements.txt: its `==` pins are exact installed versions (a pinned
-/// requirements.txt is the lock for the stack), so record them as the direct deps' versions —
-/// the same role poetry.lock plays for Poetry projects. Without this, version-exact OSV matching
-/// can't run for requirements.txt stacks: the deps surface version-less and fall back to
-/// conservative matching, silently missing version-specific advisories.
-fn process_requirements_txt(db: &Database, dir: &PathBuf, project_path: &str) -> u32 {
-    let requirements = dir.join("requirements.txt");
-    if !requirements.exists() {
-        return 0;
-    }
-    let Ok(content) = std::fs::read_to_string(&requirements) else {
-        return 0;
-    };
-    let pins = crate::ace::scanner::ProjectScanner::parse_requirements_txt_pins(&content);
-    // requirements.txt `==` pins ARE the direct deps (there is no separate
-    // manifest membership to check), so every instance is direct.
-    db.store_dependency_instances(
-        project_path,
-        "python",
-        &pins
-            .iter()
-            .map(|(name, version)| DependencyInstanceInput {
-                package_name: name.clone(),
-                version: version.clone(),
-                is_direct: true,
-                is_dev: false,
-                scope: "unknown".to_string(),
-            })
-            .collect::<Vec<_>>(),
-    )
-    .ok();
-    let mut count = 0u32;
-    for (name, version) in &pins {
-        // requirements.txt entries are direct deps; store_dependency upserts the version onto the
-        // existing direct row (COALESCE keeps it if a later manifest pass re-stores version-less).
-        db.store_dependency(
-            project_path,
-            name,
-            Some(version.as_str()),
-            "python",
-            false,
-            None,
-        )
-        .ok();
-        count += 1;
-    }
-    prune_stale_rows(db, project_path, "python", &pins, &[]);
-    count
-}
-
-/// Process a go.sum file, storing transitive deps and updating direct dep versions.
-fn process_go_sum(
-    db: &Database,
-    scanner: &crate::ace::scanner::ProjectScanner,
-    dir: &PathBuf,
-    project_path: &str,
-) -> u32 {
-    let go_sum = dir.join("go.sum");
-    if !go_sum.exists() {
-        return 0;
-    }
-    let Ok(content) = std::fs::read_to_string(&go_sum) else {
-        return 0;
-    };
-
-    let direct_deps = read_go_mod_deps(scanner, dir);
-
-    let mut count = 0u32;
-    let packages = crate::ace::scanner::ProjectScanner::parse_go_sum(&content);
-    db.store_dependency_instances(
-        project_path,
-        "go",
-        &instances_from_packages(&packages, &direct_deps, false),
-    )
-    .ok();
-    for (name, version) in &packages {
-        if direct_deps.is_empty() || !direct_deps.iter().any(|d| d == name) {
-            db.store_transitive_dependency(project_path, name, Some(version.as_str()), "go", false)
-                .ok();
-            count += 1;
-        } else {
-            db.store_dependency(
-                project_path,
-                name,
-                Some(version.as_str()),
-                "go",
-                false,
-                None,
-            )
-            .ok();
-        }
-    }
-    // The go.mod `go`/`toolchain` directives become synthetic "stdlib" /
-    // "toolchain" rows (store_go_directive_dependencies, after this call) —
-    // keep them, or every scan would delete and re-insert them.
-    let mut keep = direct_deps.clone();
-    if let Ok(go_mod) = std::fs::read_to_string(dir.join("go.mod")) {
-        keep.extend(
-            crate::ace::scanner::ProjectScanner::parse_go_directives(&go_mod)
-                .into_iter()
-                .map(|(name, _)| name),
-        );
-    }
-    prune_stale_rows(db, project_path, "go", &packages, &keep);
-    count
-}
-
-/// Process a Gemfile.lock, storing transitive deps and updating direct dep versions.
-fn process_gemfile_lock(
-    db: &Database,
-    _scanner: &crate::ace::scanner::ProjectScanner,
-    dir: &PathBuf,
-    project_path: &str,
-) -> u32 {
-    let gemfile_lock = dir.join("Gemfile.lock");
-    if !gemfile_lock.exists() {
-        return 0;
-    }
-    let Ok(content) = std::fs::read_to_string(&gemfile_lock) else {
-        return 0;
-    };
-
-    let direct_deps = read_gemfile_deps(dir);
-
-    let mut count = 0u32;
-    let packages = crate::ace::scanner::ProjectScanner::parse_gemfile_lock(&content);
-    db.store_dependency_instances(
-        project_path,
-        "ruby",
-        &instances_from_packages(&packages, &direct_deps, false),
-    )
-    .ok();
-    for (name, version) in &packages {
-        if direct_deps.is_empty() || !direct_deps.iter().any(|d| d == name) {
-            db.store_transitive_dependency(
-                project_path,
-                name,
-                Some(version.as_str()),
-                "ruby",
-                false,
-            )
-            .ok();
-            count += 1;
-        } else {
-            db.store_dependency(
-                project_path,
-                name,
-                Some(version.as_str()),
-                "ruby",
-                false,
-                None,
-            )
-            .ok();
-        }
-    }
-    prune_stale_rows(db, project_path, "ruby", &packages, &direct_deps);
-    count
-}
-
-fn process_composer_lock(db: &Database, dir: &PathBuf, project_path: &str) -> u32 {
-    let lockfile = dir.join("composer.lock");
-    if !lockfile.exists() {
-        return 0;
-    }
-    let Ok(content) = std::fs::read_to_string(&lockfile) else {
-        return 0;
-    };
-
-    let direct_deps = read_composer_json_deps(dir);
-
-    let mut count = 0u32;
-    let packages = crate::ace::scanner::ProjectScanner::parse_composer_lock(&content);
-    db.store_dependency_instances(
-        project_path,
-        "php",
-        &instances_from_packages(&packages, &direct_deps, false),
-    )
-    .ok();
-    for (name, version) in &packages {
-        if direct_deps.is_empty() || !direct_deps.iter().any(|d| d == name) {
-            db.store_transitive_dependency(
-                project_path,
-                name,
-                Some(version.as_str()),
-                "php",
-                false,
-            )
-            .ok();
-            count += 1;
-        } else {
-            db.store_dependency(
-                project_path,
-                name,
-                Some(version.as_str()),
-                "php",
-                false,
-                None,
-            )
-            .ok();
-        }
-    }
-    prune_stale_rows(db, project_path, "php", &packages, &direct_deps);
-    count
-}
-
-fn read_composer_json_deps(dir: &PathBuf) -> Vec<String> {
-    let path = dir.join("composer.json");
-    let Ok(content) = std::fs::read_to_string(&path) else {
-        return Vec::new();
-    };
-    let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&content) else {
-        return Vec::new();
-    };
-    parsed
-        .get("require")
-        .and_then(|v| v.as_object())
-        .map(|obj| obj.keys().cloned().collect())
-        .unwrap_or_default()
-}
-
-/// Shared: read direct deps from package.json for lockfile processing.
-fn read_package_json_deps(
-    scanner: &crate::ace::scanner::ProjectScanner,
-    dir: &PathBuf,
-) -> Vec<String> {
-    if let Ok(pkg_content) = std::fs::read_to_string(dir.join("package.json")) {
-        let mut signal = crate::ace::scanner::ProjectSignal {
-            manifest_type: crate::ace::scanner::ManifestType::PackageJson,
-            manifest_path: dir.join("package.json"),
-            project_name: None,
-            languages: vec!["javascript".to_string()],
-            frameworks: Vec::new(),
-            dependencies: Vec::new(),
-            dev_dependencies: Vec::new(),
-            indirect_dependencies: Vec::new(),
-            target_dependencies: Vec::new(),
-            detected_at: String::new(),
-            project_license: None,
-            project_relevance: 1.0,
-        };
-        scanner.parse_package_json(&pkg_content, &mut signal);
-        let mut all = signal.dependencies;
-        all.extend(signal.dev_dependencies);
-        all
-    } else {
-        Vec::new()
-    }
-}
-
-/// Shared: read direct deps from pyproject.toml for poetry.lock processing.
-fn read_pyproject_deps(
-    scanner: &crate::ace::scanner::ProjectScanner,
-    dir: &PathBuf,
-) -> Vec<String> {
-    if let Ok(content) = std::fs::read_to_string(dir.join("pyproject.toml")) {
-        let mut signal = crate::ace::scanner::ProjectSignal {
-            manifest_type: crate::ace::scanner::ManifestType::PyprojectToml,
-            manifest_path: dir.join("pyproject.toml"),
-            project_name: None,
-            languages: vec!["python".to_string()],
-            frameworks: Vec::new(),
-            dependencies: Vec::new(),
-            dev_dependencies: Vec::new(),
-            indirect_dependencies: Vec::new(),
-            target_dependencies: Vec::new(),
-            detected_at: String::new(),
-            project_license: None,
-            project_relevance: 1.0,
-        };
-        scanner.parse_pyproject_toml(&content, &mut signal);
-        let mut all = signal.dependencies;
-        all.extend(signal.dev_dependencies);
-        all
-    } else {
-        Vec::new()
-    }
-}
-
-/// Shared: read direct deps from go.mod for go.sum processing.
-fn read_go_mod_deps(scanner: &crate::ace::scanner::ProjectScanner, dir: &PathBuf) -> Vec<String> {
-    if let Ok(content) = std::fs::read_to_string(dir.join("go.mod")) {
-        let mut signal = crate::ace::scanner::ProjectSignal {
-            manifest_type: crate::ace::scanner::ManifestType::GoMod,
-            manifest_path: dir.join("go.mod"),
-            project_name: None,
-            languages: vec!["go".to_string()],
-            frameworks: Vec::new(),
-            dependencies: Vec::new(),
-            dev_dependencies: Vec::new(),
-            indirect_dependencies: Vec::new(),
-            target_dependencies: Vec::new(),
-            detected_at: String::new(),
-            project_license: None,
-            project_relevance: 1.0,
-        };
-        scanner.parse_go_mod(&content, &mut signal);
-        let mut all = signal.dependencies;
-        all.extend(signal.dev_dependencies);
-        all
-    } else {
-        Vec::new()
-    }
-}
-
-/// Shared: read direct deps from Gemfile for Gemfile.lock processing.
-/// Gemfile uses a simple DSL — we extract gem names from `gem 'name'` lines.
-fn read_gemfile_deps(dir: &PathBuf) -> Vec<String> {
-    let Ok(content) = std::fs::read_to_string(dir.join("Gemfile")) else {
-        return Vec::new();
-    };
-    let mut deps = Vec::new();
-    for line in content.lines() {
-        let trimmed = line.trim();
-        if let Some(rest) = trimmed.strip_prefix("gem ") {
-            // gem 'name', '~> 1.0'  or  gem "name"
-            let rest = rest.trim();
-            let quote = if rest.starts_with('\'') {
-                '\''
-            } else if rest.starts_with('"') {
-                '"'
-            } else {
-                continue;
-            };
-            if let Some(end) = rest[1..].find(quote) {
-                let name = &rest[1..=end];
-                if !name.is_empty() {
-                    deps.push(name.to_string());
-                }
-            }
-        }
-    }
-    deps
-}
-
 #[cfg(test)]
 #[path = "dependencies_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "dependencies_fixture_audit.rs"]
+mod fixture_audit;

@@ -291,30 +291,36 @@ impl ProjectScanner {
     /// Check if a path contains known non-project subdirectory patterns that
     /// should be excluded from scanning. These are multi-segment path patterns
     /// that can't be caught by the single-name `skip_dirs` check.
+    #[cfg(test)]
     fn is_excluded_path(path: &Path) -> bool {
+        Self::is_git_worktree_metadata(path)
+            || crate::project_inclusion::is_scan_excluded_dir(&path.to_string_lossy())
+    }
+
+    /// `is_excluded_path` for a directory the walk reached from `root`:
+    /// scaffolding segments count only below the configured root
+    /// (`project_inclusion::is_scan_excluded_below`).
+    fn is_excluded_path_below(root: &Path, path: &Path) -> bool {
+        Self::is_git_worktree_metadata(path)
+            || crate::project_inclusion::is_scan_excluded_below(root, path)
+    }
+
+    fn is_git_worktree_metadata(path: &Path) -> bool {
         let path_str = path.to_string_lossy();
 
         // .git/worktrees/ — git's internal worktree metadata. Both separators
         // matched literally so the check is correct on every platform (and so
         // backslash Windows paths are still excluded on a Linux CI runner,
         // where '\\' is not a path separator).
-        for pattern in &[".git/worktrees/", ".git\\worktrees\\"] {
-            if path_str.contains(pattern) {
-                return true;
-            }
-        }
-
-        // Canonical scan-time policy (project_inclusion):
-        // - .claude/ and .codex/ — the ENTIRE agent-infrastructure trees: plans,
-        //   scratch fixtures (e.g. the multi-ecosystem ledger fixtures under
-        //   .claude/plans/ledger-fixtures/ that surfaced flutter/laravel/spring
-        //   as the user's stack), agent worktrees, scripts. None of it is a real
-        //   project; manifests here pollute the dependency / "Affects You" pool.
-        // - Tier-2 non-project scaffolding — fixture-tree segments (fixtures/,
-        //   test-fixtures/, testdata/, ...) and -placeholder dirs (registry
-        //   squats). Waived in strict-manifest (ledger) mode, where fixture
-        //   stacks ARE the configured context.
-        crate::project_inclusion::is_scan_excluded_dir(&path_str)
+        // The canonical scan-time policy (project_inclusion) is applied by the
+        // callers: the ENTIRE .claude/ and .codex/ agent trees (plans, scratch
+        // ledger fixtures that once surfaced flutter/laravel/spring as the
+        // user's stack, worktrees), and tier-2 scaffolding segments
+        // (fixtures/, testdata/, -placeholder dirs; waived in strict-manifest
+        // ledger mode, where fixture stacks ARE the configured context).
+        [".git/worktrees/", ".git\\worktrees\\"]
+            .iter()
+            .any(|pattern| path_str.contains(pattern))
     }
 
     /// Scan a directory for project manifests
@@ -324,7 +330,12 @@ impl ProjectScanner {
         // The walk root's repository (if any): a nested checkout of a DIFFERENT
         // repository is skipped below, exactly as the lockfile walk does.
         let scope = crate::ace::repo_identity::scope_at(path);
-        self.scan_recursive(path, 0, &scope, &mut signals, &mut visited)?;
+        self.scan_recursive(path, path, 0, &scope, &mut signals, &mut visited)?;
+        // The path half of relevance is judged below the walk root: where the
+        // user keeps the project is not evidence that it is scaffolding.
+        for signal in &mut signals {
+            signal.project_relevance = compute_project_relevance_below(path, &signal.manifest_path);
+        }
         // Workspace members, private packages and .npmrc-scoped names are the
         // user's own code: never let them become public-registry lookups.
         super::npm_local::drop_local_npm_deps(&mut signals);
@@ -333,6 +344,7 @@ impl ProjectScanner {
 
     fn scan_recursive(
         &self,
+        root: &Path,
         path: &Path,
         depth: usize,
         scope: &crate::ace::repo_identity::RepoScope,
@@ -385,7 +397,7 @@ impl ProjectScanner {
         // the excluded ancestor as a directory node:
         // - .claude/        — Claude Code agent infrastructure (plans, fixtures, worktrees)
         // - .git/worktrees/ — git's own worktree metadata
-        if Self::is_excluded_path(path) {
+        if Self::is_excluded_path_below(root, path) {
             return Ok(());
         }
 
@@ -421,7 +433,7 @@ impl ProjectScanner {
             if entry_path.is_dir() {
                 // Don't propagate errors from subdirectories - just skip them
                 if let Err(e) =
-                    self.scan_recursive(&entry_path, depth + 1, &scope, signals, visited)
+                    self.scan_recursive(root, &entry_path, depth + 1, &scope, signals, visited)
                 {
                     tracing::warn!("Recursive scan failed: {e}");
                 }
@@ -1225,45 +1237,6 @@ impl ProjectScanner {
         packages
     }
 
-    /// Parse a package-lock.json (v1/v2/v3) and return (package_name, version) pairs.
-    /// Skips nested node_modules (transitive-of-transitive) and the root "" entry.
-    pub(crate) fn parse_package_lock_json(content: &str) -> Vec<(String, String)> {
-        let Ok(lock) = serde_json::from_str::<serde_json::Value>(content) else {
-            return Vec::new();
-        };
-
-        let mut packages = Vec::new();
-
-        // v2/v3 format uses "packages" key
-        if let Some(pkgs) = lock.get("packages").and_then(|v| v.as_object()) {
-            for (key, value) in pkgs {
-                // Skip the root "" entry
-                if key.is_empty() {
-                    continue;
-                }
-                // Extract package name from path (e.g., "node_modules/@scope/pkg" -> "@scope/pkg")
-                let name = key.strip_prefix("node_modules/").unwrap_or(key);
-                // Skip nested node_modules (too deep — we want first-level transitive only)
-                if name.contains("node_modules/") {
-                    continue;
-                }
-                if let Some(version) = value.get("version").and_then(|v| v.as_str()) {
-                    packages.push((name.to_string(), version.to_string()));
-                }
-            }
-        }
-        // v1 format uses "dependencies" key (older lockfile format)
-        else if let Some(deps) = lock.get("dependencies").and_then(|v| v.as_object()) {
-            for (name, value) in deps {
-                if let Some(version) = value.get("version").and_then(|v| v.as_str()) {
-                    packages.push((name.clone(), version.to_string()));
-                }
-            }
-        }
-
-        packages
-    }
-
     /// Parse a pnpm-lock.yaml (v5/v6/v9) and return (package_name, version) pairs.
     /// Uses focused line-by-line parsing (no YAML crate needed) since the `packages:`
     /// section has a predictable structure: top-level keys at 2-space indent.
@@ -1319,155 +1292,6 @@ impl ProjectScanner {
                     }
                     pending_name = None;
                 }
-            }
-        }
-
-        packages
-    }
-
-    /// Parse a yarn.lock (v1 classic) and return (package_name, version) pairs.
-    /// Keys look like `"lodash@^4.17.20":` and resolved version appears as `version "4.17.21"`.
-    pub(crate) fn parse_yarn_lock(content: &str) -> Vec<(String, String)> {
-        let mut packages = Vec::new();
-        let mut current_name: Option<String> = None;
-
-        for line in content.lines() {
-            let trimmed = line.trim();
-
-            if !trimmed.starts_with('#')
-                && !trimmed.is_empty()
-                && !line.starts_with(' ')
-                && !line.starts_with('\t')
-            {
-                // Top-level key line like `"lodash@^4.17.20":` or `lodash@^4.17.20:`
-                let clean = trimmed.trim_end_matches(':').replace('"', "");
-                // Take the first specifier (before any comma) and extract the package name
-                if let Some(spec) = clean.split(',').next() {
-                    let spec = spec.trim();
-                    // Split at last '@' that isn't at position 0 (scoped packages start with @)
-                    if let Some(at_pos) = spec.rfind('@').filter(|&p| p > 0) {
-                        current_name = Some(spec[..at_pos].to_string());
-                    }
-                }
-            } else if let Some(ref name) = current_name {
-                if let Some(rest) = trimmed.strip_prefix("version ") {
-                    let version = rest.trim_matches('"').to_string();
-                    if !version.is_empty() {
-                        packages.push((name.clone(), version));
-                    }
-                    current_name = None;
-                }
-            }
-        }
-
-        packages
-    }
-
-    /// Parse a requirements.txt and return (package_name, version) for EXACT (`==`) pins only.
-    /// A `name==X` pin IS the installed version (a pinned requirements.txt is the lock for the
-    /// stack), so it plays the same role poetry.lock does for Poetry projects. Non-exact
-    /// specifiers (`>=`, `~=`, ranges, `===` arbitrary equality) yield no single resolved
-    /// version and are skipped. Environment markers (`; python_version<...`), extras
-    /// (`pkg[extra]==`), and inline comments are stripped.
-    pub(crate) fn parse_requirements_txt_pins(content: &str) -> Vec<(String, String)> {
-        let mut out = Vec::new();
-        for line in content.lines() {
-            let trimmed = line.trim();
-            if trimmed.is_empty() || trimmed.starts_with('#') || trimmed.starts_with('-') {
-                continue;
-            }
-            // Drop environment markers (after `;`) and inline comments (after ` #`).
-            let core = trimmed
-                .split(';')
-                .next()
-                .unwrap_or(trimmed)
-                .split(" #")
-                .next()
-                .unwrap_or(trimmed)
-                .trim();
-            let name = core
-                .split(&['=', '>', '<', '~', '!', '['][..])
-                .next()
-                .unwrap_or(core)
-                .trim()
-                .to_string();
-            if name.is_empty() {
-                continue;
-            }
-            let Some(idx) = core.find("==") else {
-                continue; // only exact pins carry a resolved version
-            };
-            let after = &core[idx + 2..];
-            if after.starts_with('=') {
-                continue; // `===` arbitrary equality — not a clean version
-            }
-            let version: String = after
-                .trim()
-                .chars()
-                .take_while(|c| !c.is_whitespace() && *c != ',')
-                .collect();
-            let version = version.trim().to_string();
-            if !version.is_empty() {
-                out.push((name, version));
-            }
-        }
-        out
-    }
-
-    /// Parse a poetry.lock file and return (package_name, version) pairs.
-    /// Format: TOML with `[[package]]` sections containing `name` and `version` fields.
-    pub(crate) fn parse_poetry_lock(content: &str) -> Vec<(String, String)> {
-        let mut packages = Vec::new();
-        let mut current_name: Option<String> = None;
-        let mut current_version: Option<String> = None;
-
-        for line in content.lines() {
-            let trimmed = line.trim();
-            if trimmed == "[[package]]" {
-                if let (Some(name), Some(version)) = (current_name.take(), current_version.take()) {
-                    packages.push((name, version));
-                }
-            } else if let Some(rest) = trimmed.strip_prefix("name = ") {
-                current_name = Some(rest.trim_matches('"').to_string());
-            } else if let Some(rest) = trimmed.strip_prefix("version = ") {
-                current_version = Some(rest.trim_matches('"').to_string());
-            }
-        }
-        if let (Some(name), Some(version)) = (current_name, current_version) {
-            packages.push((name, version));
-        }
-
-        packages
-    }
-
-    /// Parse a go.sum file and return (module_name, version) pairs.
-    /// Format: `module version hash` per line. Each module appears twice
-    /// (once for module, once for go.mod). Deduplicates by (module, version).
-    pub(crate) fn parse_go_sum(content: &str) -> Vec<(String, String)> {
-        let mut seen = std::collections::HashSet::new();
-        let mut packages = Vec::new();
-
-        for line in content.lines() {
-            let trimmed = line.trim();
-            if trimmed.is_empty() {
-                continue;
-            }
-            let parts: Vec<&str> = trimmed.splitn(3, ' ').collect();
-            if parts.len() < 2 {
-                continue;
-            }
-            let module = parts[0];
-            let version_raw = parts[1];
-            // Strip /go.mod suffix from version
-            let version = version_raw.strip_suffix("/go.mod").unwrap_or(version_raw);
-            // Strip the "v" prefix for consistency with semver
-            let version_clean = version.trim_start_matches('v');
-            if version_clean.is_empty() {
-                continue;
-            }
-            let key = (module.to_string(), version_clean.to_string());
-            if seen.insert(key.clone()) {
-                packages.push(key);
             }
         }
 
@@ -2009,8 +1833,37 @@ pub(crate) fn compute_project_relevance(manifest_path: &Path) -> f32 {
 /// dependencies out of the corpus entirely.
 ///
 /// 1.0 for a real project path, 0.1 for example/demo/test/fixture scaffolding.
+///
+/// Judged on the part of the path BELOW the user's configured project root
+/// that contains it (`project_inclusion::judged_below_configured_roots`):
+/// where the user keeps their projects (`~/templates`, `D:\demos`, a
+/// checkout under `...\fixtures\repos`) says nothing about whether a project
+/// is scaffolding.
 pub(crate) fn path_relevance(manifest_path: &Path) -> f32 {
-    let path_str = manifest_path.to_string_lossy().to_lowercase();
+    path_pattern_relevance(&crate::project_inclusion::judged_below_configured_roots(
+        &manifest_path.to_string_lossy(),
+    ))
+}
+
+/// [`path_relevance`] for a manifest a walk reached from `root`: only the
+/// part below `root` is judged.
+pub(crate) fn path_relevance_below(root: &Path, manifest_path: &Path) -> f32 {
+    match crate::project_inclusion::relative_to_root(
+        &manifest_path.to_string_lossy(),
+        &root.to_string_lossy(),
+    ) {
+        Some(rel) => path_pattern_relevance(&rel),
+        None => path_relevance(manifest_path),
+    }
+}
+
+/// [`compute_project_relevance`] with the path half judged below `root`.
+pub(crate) fn compute_project_relevance_below(root: &Path, manifest_path: &Path) -> f32 {
+    (path_relevance_below(root, manifest_path) * compute_git_recency(manifest_path)).clamp(0.0, 1.0)
+}
+
+fn path_pattern_relevance(path: &str) -> f32 {
+    let path_str = path.to_lowercase();
 
     // Path pattern penalty: example/demo/test/tutorial directories -> 0.1x
     if path_str.contains("/example")
@@ -3822,61 +3675,6 @@ axum = "0.7"
         assert!(packages.is_empty());
     }
 
-    #[test]
-    fn test_parse_package_lock_json_v3() {
-        let content = serde_json::json!({
-            "name": "my-app",
-            "version": "1.0.0",
-            "lockfileVersion": 3,
-            "packages": {
-                "": { "name": "my-app", "version": "1.0.0" },
-                "node_modules/lodash": { "version": "4.17.21" },
-                "node_modules/@babel/core": { "version": "7.24.0" },
-                "node_modules/@babel/core/node_modules/semver": { "version": "6.3.1" }
-            }
-        })
-        .to_string();
-
-        let packages = ProjectScanner::parse_package_lock_json(&content);
-        // Root "" entry and nested node_modules should be excluded
-        assert_eq!(packages.len(), 2);
-        assert!(packages
-            .iter()
-            .any(|(n, v)| n == "lodash" && v == "4.17.21"));
-        assert!(packages
-            .iter()
-            .any(|(n, v)| n == "@babel/core" && v == "7.24.0"));
-    }
-
-    #[test]
-    fn test_parse_package_lock_json_v1() {
-        let content = serde_json::json!({
-            "name": "old-app",
-            "version": "1.0.0",
-            "lockfileVersion": 1,
-            "dependencies": {
-                "express": { "version": "4.18.2" },
-                "body-parser": { "version": "1.20.2" }
-            }
-        })
-        .to_string();
-
-        let packages = ProjectScanner::parse_package_lock_json(&content);
-        assert_eq!(packages.len(), 2);
-        assert!(packages
-            .iter()
-            .any(|(n, v)| n == "express" && v == "4.18.2"));
-        assert!(packages
-            .iter()
-            .any(|(n, v)| n == "body-parser" && v == "1.20.2"));
-    }
-
-    #[test]
-    fn test_parse_package_lock_json_invalid() {
-        let packages = ProjectScanner::parse_package_lock_json("not valid json");
-        assert!(packages.is_empty());
-    }
-
     // ─── Project relevance scoring ──────────────────────────────────
 
     /// `compute_project_relevance` is a PRODUCT of two independent
@@ -4125,145 +3923,6 @@ packages:
                 .any(|(n, v)| n == "react-dom" && v == "18.2.0"),
             "should strip peer suffix, got: {packages:?}"
         );
-    }
-
-    // ─── yarn.lock parsing ─────────────────────────────────────────
-
-    #[test]
-    fn test_parse_yarn_lock() {
-        let content = r#"# yarn lockance v1
-
-lodash@^4.17.20:
-  version "4.17.21"
-  resolved "https://registry.yarnpkg.com/lodash/-/lodash-4.17.21.tgz"
-
-"@babel/core@^7.24.0":
-  version "7.24.0"
-  resolved "https://registry.yarnpkg.com/@babel/core/-/core-7.24.0.tgz"
-"#;
-        let packages = ProjectScanner::parse_yarn_lock(content);
-        assert!(
-            packages
-                .iter()
-                .any(|(n, v)| n == "lodash" && v == "4.17.21"),
-            "should parse lodash, got: {packages:?}"
-        );
-        assert!(
-            packages
-                .iter()
-                .any(|(n, v)| n == "@babel/core" && v == "7.24.0"),
-            "should parse scoped package, got: {packages:?}"
-        );
-    }
-
-    #[test]
-    fn test_parse_yarn_lock_empty() {
-        let content = "# yarn lockfile v1\n\n";
-        let packages = ProjectScanner::parse_yarn_lock(content);
-        assert!(packages.is_empty());
-    }
-
-    // ─── poetry.lock parsing ──────────────────────────────────────
-
-    #[test]
-    fn test_parse_poetry_lock() {
-        let content = r#"
-[[package]]
-name = "requests"
-version = "2.31.0"
-description = "Python HTTP for Humans."
-
-[[package]]
-name = "urllib3"
-version = "2.1.0"
-description = "HTTP library"
-
-[[package]]
-name = "certifi"
-version = "2024.2.2"
-"#;
-        let packages = ProjectScanner::parse_poetry_lock(content);
-        assert_eq!(packages.len(), 3);
-        assert!(packages.contains(&("requests".to_string(), "2.31.0".to_string())));
-        assert!(packages.contains(&("urllib3".to_string(), "2.1.0".to_string())));
-        assert!(packages.contains(&("certifi".to_string(), "2024.2.2".to_string())));
-    }
-
-    #[test]
-    fn test_parse_poetry_lock_empty() {
-        assert!(ProjectScanner::parse_poetry_lock("").is_empty());
-    }
-
-    // ─── requirements.txt exact-pin parsing ───────────────────────
-
-    #[test]
-    fn test_parse_requirements_txt_pins() {
-        let content = "\
-# Reference stack
-torch==2.3.0
-transformers==4.41.0
-pillow==10.3.0  # inline comment
-fastapi[all]==0.111.0
-uvicorn==0.29.0 ; python_version >= '3.8'
-numpy>=1.26.0
-pandas~=2.2
-flask
--r other.txt
-weird===1.0.0
-";
-        let pins = ProjectScanner::parse_requirements_txt_pins(content);
-        // Exact pins captured (name + version), extras/markers/comments stripped.
-        assert!(pins.contains(&("torch".to_string(), "2.3.0".to_string())));
-        assert!(pins.contains(&("transformers".to_string(), "4.41.0".to_string())));
-        assert!(pins.contains(&("pillow".to_string(), "10.3.0".to_string())));
-        assert!(pins.contains(&("fastapi".to_string(), "0.111.0".to_string())));
-        assert!(pins.contains(&("uvicorn".to_string(), "0.29.0".to_string())));
-        // Non-exact specifiers, bare names, options, and `===` are NOT captured.
-        for (name, _) in &pins {
-            assert!(
-                !["numpy", "pandas", "flask", "weird"].contains(&name.as_str()),
-                "non-exact/option/arbitrary line wrongly captured: {name}"
-            );
-        }
-        assert_eq!(pins.len(), 5);
-    }
-
-    #[test]
-    fn test_parse_requirements_txt_pins_empty() {
-        assert!(ProjectScanner::parse_requirements_txt_pins("").is_empty());
-        assert!(ProjectScanner::parse_requirements_txt_pins("# only a comment\n-e .\n").is_empty());
-    }
-
-    // ─── go.sum parsing ───────────────────────────────────────────
-
-    #[test]
-    fn test_parse_go_sum() {
-        let content = r#"golang.org/x/net v0.17.0 h1:hash123=
-golang.org/x/net v0.17.0/go.mod h1:hash456=
-golang.org/x/crypto v0.14.0 h1:hash789=
-golang.org/x/crypto v0.14.0/go.mod h1:hashabc=
-github.com/gin-gonic/gin v1.9.1 h1:hashdef=
-github.com/gin-gonic/gin v1.9.1/go.mod h1:hashghi=
-"#;
-        let packages = ProjectScanner::parse_go_sum(content);
-        assert_eq!(packages.len(), 3, "should dedup module+go.mod entries");
-        assert!(packages.contains(&("golang.org/x/net".to_string(), "0.17.0".to_string())));
-        assert!(packages.contains(&("golang.org/x/crypto".to_string(), "0.14.0".to_string())));
-        assert!(packages.contains(&("github.com/gin-gonic/gin".to_string(), "1.9.1".to_string())));
-    }
-
-    #[test]
-    fn test_parse_go_sum_empty() {
-        assert!(ProjectScanner::parse_go_sum("").is_empty());
-    }
-
-    #[test]
-    fn test_parse_go_sum_pseudo_version() {
-        let content = "golang.org/x/sys v0.0.0-20220520151302-bc2c85ada10a h1:hash=\n";
-        let packages = ProjectScanner::parse_go_sum(content);
-        assert_eq!(packages.len(), 1);
-        assert_eq!(packages[0].0, "golang.org/x/sys");
-        assert_eq!(packages[0].1, "0.0.0-20220520151302-bc2c85ada10a");
     }
 
     // ─── Gemfile.lock parsing ─────────────────────────────────────

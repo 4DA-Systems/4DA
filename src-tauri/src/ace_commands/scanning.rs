@@ -186,14 +186,18 @@ pub async fn ace_full_scan(paths: Vec<String>) -> Result<serde_json::Value> {
     // Phase 1a: Store discovered dependencies in user_dependencies table
     // Phase 1a-lockfiles: Parse lockfiles for transitive dependency discovery.
     let dependency_scan_paths = scan_paths.clone();
-    if let Err(e) = tauri::async_runtime::spawn_blocking(move || {
+    let lockfile_report = tauri::async_runtime::spawn_blocking(move || {
+        let mut report = None;
         if let Ok(db) = crate::get_database() {
             let scan_started = crate::open_db_connection().ok().and_then(|c| {
                 c.query_row("SELECT datetime('now')", [], |r| r.get::<_, String>(0))
                     .ok()
             });
             super::dependencies::store_direct_dependencies(db);
-            super::dependencies::store_lockfile_dependencies(db, &dependency_scan_paths);
+            report = Some(
+                super::dependencies::store_lockfile_dependencies(db, &dependency_scan_paths)
+                    .to_json(),
+            );
             // Rows only the manifest sync wrote, for declarations that are gone
             // and that no lockfile confirmed in this scan.
             if let (Some(started), Ok(conn)) = (scan_started, crate::open_db_connection()) {
@@ -222,11 +226,13 @@ pub async fn ace_full_scan(paths: Vec<String>) -> Result<serde_json::Value> {
                 }
             }
         }
+        report
     })
     .await
-    {
+    .unwrap_or_else(|e| {
         warn!(target: "4da::ace", error = %e, "Dependency storage task failed");
-    }
+        None
+    });
 
     // Phase 1a-reconcile: prune dependency rows of projects DELETED or MOVED
     // on disk, or whose directory no longer holds any manifest (a leftover
@@ -384,6 +390,8 @@ pub async fn ace_full_scan(paths: Vec<String>) -> Result<serde_json::Value> {
         "readme_index": {
             "chunks_indexed": readme_chunks_indexed
         },
+        // Every lockfile read, failed, unsupported or skipped (no silent drops).
+        "lockfiles": lockfile_report,
         "learning_trajectory": {
             "topics": learning_topics,
         },
@@ -455,7 +463,18 @@ pub async fn ace_get_scan_summary() -> Result<serde_json::Value> {
     };
     key_packages.truncate(10);
     let total_deps = rust_deps + npm_deps + python_deps + other_deps;
+    // The last lockfile walk's account of itself (read / failed /
+    // unsupported / skipped), saved by `store_lockfile_dependencies`.
+    let lockfiles = crate::get_database()
+        .ok()
+        .and_then(|db| {
+            db.get_kv(crate::ace::lockfile::report::REPORT_KV_KEY)
+                .ok()
+                .flatten()
+        })
+        .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok());
     Ok(serde_json::json!({
+        "lockfiles": lockfiles,
         "projects_scanned": projects_scanned,
         "total_dependencies": total_deps,
         "dependencies_by_ecosystem": {
