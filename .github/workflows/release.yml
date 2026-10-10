@@ -312,20 +312,21 @@ jobs:
       - name: Install frontend dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Download and verify OCR models (SHA-256 pinned)
-        # Was two bare `curl -sSL` calls with NO integrity check whatsoever,
-        # feeding two multi-megabyte third-party blobs straight into the bundle
-        # that this workflow then EV-signs and notarizes. The signature attested
-        # to bytes nobody had verified. Three lines above, the same workflow
-        # SHA-256-pins CodeSignTool and hard-fails on mismatch; the models now
-        # get the same treatment, through the one script that owns the pins
-        # (scripts/fetch-ocr-models.cjs) so the dev and release paths cannot
-        # drift apart. `--require` makes a network failure fatal here — a
-        # release must not proceed without verified models — while a developer's
-        # offline `pnpm install` stays non-fatal.
+      - name: OCR models — ship only when the release compiles OCR
+        # tauri.conf.json bundles all of src-tauri/models, but the OCR code is
+        # `#[cfg(feature = "ocr")]` and this workflow builds the default feature
+        # set, which leaves `ocr` off — so the two `.rten` files (~12 MB) shipped
+        # in every installer with nothing able to load them (audit 2026-10-09).
+        # scripts/release-ocr-models.cjs reads the release feature set from
+        # Cargo.toml: with `ocr` off it removes the `.rten` files the postinstall
+        # fetched, before tauri bundles the directory; with `ocr` on it runs
+        # `fetch-ocr-models.cjs --require` (SHA-256 pinned, network failure
+        # fatal), exactly what this step did before. The dev/`--features ocr`
+        # path still reads src-tauri/models from the source tree, untouched.
+        # Keep `--features` here in sync with any features `args:` adds below.
         shell: bash
         run: |
-          node scripts/fetch-ocr-models.cjs --require
+          node scripts/release-ocr-models.cjs --features ""
           ls -lh src-tauri/models/
 
       # Supply-chain policy is a release gate, not a suggestion.

@@ -232,7 +232,8 @@ pub async fn get_data_health() -> Result<DataHealth> {
     })
 }
 
-/// Run deep database clean: prune all tables + VACUUM.
+/// Run deep database clean: prune all tables, then VACUUM when the freelist is
+/// worth a full-file rewrite (bounds in `db/history_vacuum.rs`).
 #[tauri::command]
 pub async fn run_deep_clean() -> Result<crate::db::MaintenanceResult> {
     let retention_days = {

@@ -192,9 +192,11 @@ impl Database {
 
         tx.commit()?;
 
-        // PRAGMA optimize and VACUUM run outside the transaction (VACUUM cannot be transactional)
+        // PRAGMA optimize and VACUUM run outside the transaction (VACUUM cannot be
+        // transactional). VACUUM only when there is space to give back: see
+        // `vacuum_worthwhile`.
         conn.execute_batch("PRAGMA optimize;")?;
-        conn.execute_batch("VACUUM;")?;
+        let vacuumed = vacuum_conn_if_reclaimable(&conn)?;
 
         Ok(MaintenanceResult {
             deleted_items,
@@ -204,7 +206,7 @@ impl Database {
             deleted_windows,
             deleted_cycles,
             deleted_necessity,
-            vacuumed: true,
+            vacuumed,
         })
     }
 
@@ -607,14 +609,11 @@ impl Database {
         Ok(freelist.saturating_mul(page_size))
     }
 
-    /// Run VACUUM if more than threshold rows were deleted.
-    pub fn vacuum_if_needed(&self, deleted_count: usize, threshold: usize) -> SqliteResult<()> {
-        if deleted_count >= threshold {
-            let conn = self.conn.lock();
-            info!(target: "4da::db", deleted_count, "Running VACUUM after large cleanup");
-            conn.execute_batch("VACUUM")?;
-        }
-        Ok(())
+    /// VACUUM only when the freelist holds enough to be worth a full rewrite
+    /// (see [`vacuum_worthwhile`]). Returns whether it ran.
+    pub fn vacuum_if_reclaimable(&self) -> SqliteResult<bool> {
+        let conn = self.conn.lock();
+        vacuum_conn_if_reclaimable(&conn)
     }
 
     /// Get source health summary: (source_type, status, consecutive_failures)
@@ -638,6 +637,10 @@ impl Database {
         &self.db_path
     }
 }
+
+#[path = "history_vacuum.rs"]
+mod vacuum;
+use vacuum::vacuum_conn_if_reclaimable;
 
 #[cfg(test)]
 mod tests {
@@ -728,9 +731,8 @@ mod tests {
         assert_eq!(deleted, 1, "Should delete 1 item older than 5 days");
         assert_eq!(db.total_item_count().unwrap(), 2);
 
-        // vacuum_if_needed should not error
-        db.vacuum_if_needed(deleted, 100).unwrap(); // threshold not met, no vacuum
-        db.vacuum_if_needed(deleted, 1).unwrap(); // threshold met, runs vacuum
+        // One deleted row frees nothing worth a full-file rewrite.
+        assert!(!db.vacuum_if_reclaimable().unwrap());
     }
 
     /// `run_maintenance` shares `cleanup_old_items`' day boundary. With

@@ -245,7 +245,8 @@ pub struct MonitoringConfig {
     /// Notification quality threshold: "critical_only", "high_and_above" (default), "all"
     #[serde(default = "default_notification_threshold")]
     pub notification_threshold: String,
-    /// Max age in days for source_items before cleanup (default: 30)
+    /// Max age in days for source_items before cleanup (default:
+    /// `RETENTION_DEFAULT_DAYS`, bounded 7..=365 at every read)
     #[serde(default)]
     pub cleanup_max_age_days: Option<u32>,
     /// When true, closing the window hides to tray instead of quitting
@@ -328,7 +329,7 @@ impl Default for MonitoringConfig {
             enabled: true,        // Autonomous by default - no manual enabling needed
             interval_minutes: 10, // Check every 10 minutes
             notification_threshold: default_notification_threshold(),
-            cleanup_max_age_days: None, // Uses 30 days default in monitoring.rs
+            cleanup_max_age_days: None, // RETENTION_DEFAULT_DAYS via retention_days()
             close_to_tray: None,        // Defaults to true via unwrap_or(true)
             auto_briefing_on_critical: None,
             morning_briefing: None, // Defaults to true via unwrap_or(true)
