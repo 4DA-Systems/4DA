@@ -1015,6 +1015,7 @@
   "cmdk.ariaLabel": "4DA 검색",
   "cmdk.groupGoto": "이동",
   "cmdk.groupAction": "작업",
+  "cmdk.groupDependencies": "내 의존성",
   "cmdk.groupIntelligence": "인텔리전스",
   "cmdk.goToPrefix": "이동",
   "cmdk.actionPrefix": "작업",

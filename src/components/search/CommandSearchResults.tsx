@@ -10,12 +10,14 @@ import { GROUP_ORDER, type CommandGroup, type CommandResult } from './command-se
 const GROUP_LABEL_KEYS: Record<CommandGroup, string> = {
   goto: 'cmdk.groupGoto',
   action: 'cmdk.groupAction',
+  dependency: 'cmdk.groupDependencies',
   intelligence: 'cmdk.groupIntelligence',
 };
 
 const GROUP_DEFAULT_LABEL: Record<CommandGroup, string> = {
   goto: 'Go to',
   action: 'Actions',
+  dependency: 'Your dependencies',
   intelligence: 'Intelligence',
 };
 
@@ -29,6 +31,11 @@ function GroupGlyph({ group }: { group: CommandGroup }) {
   if (group === 'action') {
     return (
       <svg {...common}><path d="M7.5 1.5L3 8h3.5L6 12.5 11 6H7L7.5 1.5Z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" /></svg>
+    );
+  }
+  if (group === 'dependency') {
+    return (
+      <svg {...common}><path d="M7 1.6l4.8 2.6v5.6L7 12.4 2.2 9.8V4.2L7 1.6ZM2.2 4.2 7 6.8l4.8-2.6M7 6.8v5.6" stroke="currentColor" strokeWidth="1.1" strokeLinejoin="round" /></svg>
     );
   }
   return (

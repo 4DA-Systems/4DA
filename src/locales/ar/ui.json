@@ -1020,6 +1020,7 @@
   "cmdk.ariaLabel": "البحث في 4DA",
   "cmdk.groupGoto": "الانتقال إلى",
   "cmdk.groupAction": "الإجراءات",
+  "cmdk.groupDependencies": "تبعياتك",
   "cmdk.groupIntelligence": "الذكاء",
   "cmdk.goToPrefix": "الانتقال إلى",
   "cmdk.actionPrefix": "إجراء",

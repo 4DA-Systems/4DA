@@ -1033,6 +1033,7 @@
   "cmdk.ariaLabel": "4DA'da ara",
   "cmdk.groupGoto": "Şuraya git",
   "cmdk.groupAction": "Eylemler",
+  "cmdk.groupDependencies": "Bağımlılıklarınız",
   "cmdk.groupIntelligence": "Zekâ",
   "cmdk.goToPrefix": "Şuraya git",
   "cmdk.actionPrefix": "Eylem",

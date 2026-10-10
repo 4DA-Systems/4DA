@@ -13,9 +13,9 @@
  */
 
 /** Result categories, rendered as labelled sections in display order. */
-export type CommandGroup = 'goto' | 'action' | 'intelligence';
+export type CommandGroup = 'goto' | 'action' | 'dependency' | 'intelligence';
 
-export const GROUP_ORDER: readonly CommandGroup[] = ['goto', 'action', 'intelligence'];
+export const GROUP_ORDER: readonly CommandGroup[] = ['goto', 'action', 'dependency', 'intelligence'];
 
 export interface CommandResult {
   /** Stable unique id (used as React key and for de-duplication). */

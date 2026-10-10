@@ -1078,6 +1078,7 @@
   "cmdk.ariaLabel": "4DA खोजें",
   "cmdk.groupGoto": "जाएँ",
   "cmdk.groupAction": "क्रियाएँ",
+  "cmdk.groupDependencies": "आपकी निर्भरताएँ",
   "cmdk.groupIntelligence": "इंटेलिजेंस",
   "cmdk.goToPrefix": "जाएँ",
   "cmdk.actionPrefix": "क्रिया",

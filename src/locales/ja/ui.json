@@ -15,6 +15,7 @@
   "cmdk.ariaLabel": "4DA を検索",
   "cmdk.groupGoto": "移動",
   "cmdk.groupAction": "アクション",
+  "cmdk.groupDependencies": "ご使用の依存関係",
   "cmdk.groupIntelligence": "インテリジェンス",
   "cmdk.goToPrefix": "移動",
   "cmdk.actionPrefix": "アクション",
