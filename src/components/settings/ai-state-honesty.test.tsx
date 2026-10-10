@@ -57,7 +57,12 @@ describe('AI provider "none" is shown as none', () => {
         onRefreshRegistry={vi.fn()}
       />,
     );
-    expect(screen.getByLabelText('settings.ai.provider')).toHaveValue('none');
+    const select = screen.getByLabelText('settings.ai.provider');
+    expect(select).toHaveValue('none');
+    // Product decision: the recommended provider stays first, None goes last.
+    const values = Array.from(select.querySelectorAll('option')).map(o => o.getAttribute('value'));
+    expect(values[0]).toBe('anthropic');
+    expect(values[values.length - 1]).toBe('none');
     expect(screen.getByTestId('ai-provider-none-hint')).toHaveTextContent('settings.ai.providerNoneHint');
     expect(screen.queryByTestId('api-key-input')).toBeNull();
     expect(screen.queryByLabelText('settings.ai.model')).toBeNull();

@@ -155,11 +155,12 @@ export function AIProviderSection({
               }}
               className="w-full px-4 py-2 bg-bg-secondary border border-border rounded-lg text-sm text-text-primary focus:border-orange-500 focus:outline-none"
             >
-              <option value="none">{t('settings.ai.providerNone')}</option>
               <option value="anthropic">{t('settings.ai.providerAnthropic')} ({t('settings.ai.recommended')})</option>
               <option value="openai">{t('settings.ai.providerOpenAI')}</option>
               <option value="openai-compatible">{t('settings.ai.providerOpenAICompatible')}</option>
               <option value="ollama">{t('settings.ai.providerOllama')}</option>
+              {/* Last: the recommended provider stays first; "none" is a real, selectable choice. */}
+              <option value="none">{t('settings.ai.providerNone')}</option>
             </select>
           </div>
 
