@@ -57,8 +57,9 @@ use super::types::{
 mod releases;
 use releases::ReleaseChange;
 
-/// Items the command returns at most. The lane shows 20 before "Show all".
-const MAX_ITEMS: usize = 200;
+/// The command returns every item, so `total` is true and nothing is dropped
+/// unannounced; the lane itself shows 20 before "Show all".
+const ALL_ITEMS: usize = usize::MAX;
 /// Commands named on one item at most (one per project tool).
 const MAX_COMMANDS: usize = 3;
 /// Advisory citations on one item at most.
@@ -635,7 +636,7 @@ async fn compute_feed(entitled: bool) -> Result<EvidenceFeed> {
         Vec::new()
     } else {
         let mut ctx = MaterializeContext::new();
-        ctx.max_items = MAX_ITEMS;
+        ctx.max_items = ALL_ITEMS;
         StackChangeMaterializer {
             db,
             include_releases: entitled,
