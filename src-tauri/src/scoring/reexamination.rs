@@ -68,7 +68,13 @@ const CONVERGE_MAX_CHUNKS: usize = 12;
 /// `osv::matching::package_key`). One scoped re-examination of the held
 /// dependency releases and buried advisories instead of a corpus-wide
 /// `PIPELINE_VERSION` drain (AD-034).
-pub(crate) const RELEASE_GRADE_RULES: u32 = 3;
+/// 4 (2026-10-10): what counts as installed changed (conformance gate G1):
+/// pre-1.17 Go modules go.sum only walks (no source hash at the selected
+/// version) are not built, Gemfile.lock `GIT`/`PATH` gems and platform
+/// suffixes are no longer registry versions, a pnpm entry's own `name:` field
+/// names it (tarball-URL keys), and uv/poetry git and URL sources are not
+/// index releases. Same scoped re-examination, no schema change.
+pub(crate) const RELEASE_GRADE_RULES: u32 = 4;
 
 /// Stable hash of the developer's pins: every included project's (path, package,
 /// version, direct, dev), sorted, plus [`RELEASE_GRADE_RULES`]. `DefaultHasher` is

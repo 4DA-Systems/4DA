@@ -1244,10 +1244,19 @@ impl ProjectScanner {
     /// v5/v6 keys: `  /@scope/pkg/1.2.3:` or `  /pkg/1.2.3:`
     /// v9 keys:    `  @scope/pkg@1.2.3:` or `  pkg@1.2.3:`
     /// Some entries have a nested `version:` field instead of version-in-key.
+    ///
+    /// An entry that records its own `name:` (pnpm writes one when the key is
+    /// not `name@version`: a tarball URL, a git or directory source) is
+    /// identified by its `name:` / `version:` fields, never by its key — trpc's
+    /// `'@registry.npmjs.com/@prisma/client/-/client-4.7.1.tgz?id=…'` key was
+    /// read as a package name (conformance corpus, 2026-10-10). Such an entry
+    /// is a registry release only when it resolves to a registry tarball
+    /// (`…/<name>/-/<name>-<version>.tgz`); git, codeload and directory
+    /// sources are local code and are not returned.
     pub(crate) fn parse_pnpm_lock_yaml(content: &str) -> Vec<(String, String)> {
         let mut packages = Vec::new();
         let mut in_packages = false;
-        let mut pending_name: Option<String> = None;
+        let mut entry: Option<PnpmEntry> = None;
 
         for line in content.lines() {
             if line.starts_with("packages:") {
@@ -1269,90 +1278,16 @@ impl ProjectScanner {
                 || (line.starts_with('\t') && !line.starts_with("\t\t"));
 
             if is_package_key && trimmed.ends_with(':') {
-                pending_name = None;
+                packages.extend(entry.take().and_then(PnpmEntry::identity));
                 let key = trimmed.trim_end_matches(':');
                 // Strip optional YAML quoting
                 let key = key.trim_matches('\'').trim_matches('"');
-                if let Some((name, ver)) = parse_pnpm_package_key(key) {
-                    packages.push((name, ver));
-                } else {
-                    // Version might be in a nested `version:` field
-                    let name = key.trim_start_matches('/');
-                    if !name.is_empty() {
-                        pending_name = Some(name.to_string());
-                    }
-                }
-            } else if let Some(ref name) = pending_name {
-                if let Some(rest) = trimmed.strip_prefix("version:") {
-                    let ver = rest.trim().trim_matches('\'').trim_matches('"');
-                    // Strip pnpm peer-dep suffixes like `1.2.3(react@18.2.0)`
-                    let ver = ver.split('(').next().unwrap_or(ver).trim();
-                    if !ver.is_empty() {
-                        packages.push((name.clone(), ver.to_string()));
-                    }
-                    pending_name = None;
-                }
+                entry = Some(PnpmEntry::new(key));
+            } else if let Some(current) = entry.as_mut() {
+                current.field_line(line, trimmed);
             }
         }
-
-        packages
-    }
-
-    /// Parse a Gemfile.lock file and return (gem_name, version) pairs.
-    /// Format: Indentation-based. Gems listed under `GEM > specs:` section
-    /// as `    gem_name (version)` (4-space indent = direct, 6-space = transitive).
-    pub(crate) fn parse_gemfile_lock(content: &str) -> Vec<(String, String)> {
-        let mut packages = Vec::new();
-        let mut in_gem_specs = false;
-
-        for line in content.lines() {
-            // Detect "GEM" section
-            if line == "GEM" {
-                in_gem_specs = false;
-                continue;
-            }
-            // Detect "  specs:" within GEM section
-            if line == "  specs:" {
-                in_gem_specs = true;
-                continue;
-            }
-            // A non-indented line (other than GEM) ends the specs section
-            if !line.starts_with(' ') && !line.is_empty() {
-                if in_gem_specs {
-                    in_gem_specs = false;
-                }
-                continue;
-            }
-
-            if !in_gem_specs {
-                continue;
-            }
-
-            let trimmed = line.trim();
-            if trimmed.is_empty() {
-                continue;
-            }
-
-            // Gem entries are at exactly 4-space indent; sub-dependency constraints
-            // are at 6+ spaces. Only parse 4-space-indented lines as actual gems.
-            let indent = line.len() - line.trim_start().len();
-            if indent != 4 {
-                continue;
-            }
-
-            // Gem lines: "    gem_name (1.2.3)" — exactly 4-space indent with parenthesized version
-            if let Some(paren_start) = trimmed.rfind('(') {
-                if let Some(paren_end) = trimmed.rfind(')') {
-                    if paren_end > paren_start {
-                        let name = trimmed[..paren_start].trim();
-                        let version = &trimmed[paren_start + 1..paren_end];
-                        if !name.is_empty() && !version.is_empty() && !name.contains(' ') {
-                            packages.push((name.to_string(), version.to_string()));
-                        }
-                    }
-                }
-            }
-        }
+        packages.extend(entry.take().and_then(PnpmEntry::identity));
 
         packages
     }
@@ -1685,6 +1620,110 @@ fn pnpm_entry_key(trimmed: &str) -> Option<(String, Option<String>)> {
         None => (key.trim_start_matches('/').to_string(), None),
     };
     (!name.is_empty()).then_some((name, version))
+}
+
+/// One `packages:` entry of a pnpm lockfile, as far as its identity goes.
+struct PnpmEntry {
+    key: String,
+    /// The entry's own `name:` field (written when the key is not `name@version`).
+    name: Option<String>,
+    version: Option<String>,
+    tarball: Option<String>,
+    /// A git or directory resolution (`commit:` / `repo:` / `directory:`).
+    local: bool,
+    in_resolution: bool,
+}
+
+impl PnpmEntry {
+    fn new(key: &str) -> Self {
+        Self {
+            key: key.to_string(),
+            name: None,
+            version: None,
+            tarball: None,
+            local: false,
+            in_resolution: false,
+        }
+    }
+
+    /// A line below the entry key: an entry field at 4 spaces (or 2 tabs),
+    /// or a continuation of a multi-line `resolution:` mapping.
+    fn field_line(&mut self, line: &str, trimmed: &str) {
+        let field_level = (line.starts_with("    ") && !line.starts_with("     "))
+            || (line.starts_with("\t\t") && !line.starts_with("\t\t\t"));
+        if !field_level {
+            if self.in_resolution {
+                self.resolution_text(trimmed);
+            }
+            return;
+        }
+        self.in_resolution = false;
+        if let Some(name) = yaml_scalar_field(trimmed, "name") {
+            self.name = Some(name);
+        } else if let Some(version) = yaml_scalar_field(trimmed, "version") {
+            self.version = Some(strip_pnpm_peer_suffix(&version).to_string());
+        } else if let Some(rest) = trimmed.strip_prefix("resolution:") {
+            self.in_resolution = true;
+            self.resolution_text(rest);
+        }
+    }
+
+    fn resolution_text(&mut self, text: &str) {
+        for part in text.split([',', '{', '}']) {
+            let part = part.trim();
+            if let Some(url) = part.strip_prefix("tarball:") {
+                self.tarball = Some(url.trim().trim_matches(['\'', '"']).to_string());
+            } else if ["commit:", "repo:", "directory:"]
+                .iter()
+                .any(|k| part.starts_with(k))
+            {
+                self.local = true;
+            }
+        }
+    }
+
+    /// The `(name, version)` this entry installs from a registry, if any.
+    fn identity(self) -> Option<(String, String)> {
+        if self.local {
+            return None;
+        }
+        if let Some(name) = self.name {
+            if self
+                .tarball
+                .as_deref()
+                .is_some_and(|t| !is_registry_tarball(t))
+            {
+                return None;
+            }
+            let version = self
+                .version
+                .or_else(|| parse_pnpm_package_key(&self.key).map(|(_, v)| v))?;
+            return (!name.is_empty() && !version.is_empty()).then_some((name, version));
+        }
+        if let Some(id) = parse_pnpm_package_key(&self.key) {
+            return Some(id);
+        }
+        let name = self.key.trim_start_matches('/');
+        let version = self.version?;
+        (!name.is_empty() && !version.is_empty()).then(|| (name.to_string(), version))
+    }
+}
+
+/// `key: value` (value unquoted) when the line is exactly that field.
+fn yaml_scalar_field(trimmed: &str, key: &str) -> Option<String> {
+    let value = trimmed.strip_prefix(key)?.strip_prefix(':')?.trim();
+    let value = value.trim_matches(['\'', '"']).trim();
+    (!value.is_empty()).then(|| value.to_string())
+}
+
+/// A registry tarball (`https://<registry>/<name>/-/<name>-<version>.tgz`,
+/// query allowed), as opposed to a codeload / git / arbitrary URL archive.
+fn is_registry_tarball(url: &str) -> bool {
+    let path = url.split(['?', '#']).next().unwrap_or(url);
+    path.contains("/-/")
+        && std::path::Path::new(path)
+            .extension()
+            .is_some_and(|ext| ext.eq_ignore_ascii_case("tgz"))
 }
 
 /// Parse pnpm package key formats:
@@ -3923,59 +3962,6 @@ packages:
                 .any(|(n, v)| n == "react-dom" && v == "18.2.0"),
             "should strip peer suffix, got: {packages:?}"
         );
-    }
-
-    // ─── Gemfile.lock parsing ─────────────────────────────────────
-
-    #[test]
-    fn test_parse_gemfile_lock() {
-        let content = r#"GEM
-  remote: https://rubygems.org/
-  specs:
-    actioncable (7.1.3)
-      actionpack (= 7.1.3)
-    actionpack (7.1.3)
-      rack (~> 3.0)
-    rack (3.0.8)
-    rails (7.1.3)
-      actioncable (= 7.1.3)
-
-PLATFORMS
-  ruby
-
-DEPENDENCIES
-  rails (~> 7.1)
-
-BUNDLED WITH
-   2.5.6
-"#;
-        let packages = ProjectScanner::parse_gemfile_lock(content);
-        assert_eq!(packages.len(), 4);
-        assert!(packages.contains(&("actioncable".to_string(), "7.1.3".to_string())));
-        assert!(packages.contains(&("actionpack".to_string(), "7.1.3".to_string())));
-        assert!(packages.contains(&("rack".to_string(), "3.0.8".to_string())));
-        assert!(packages.contains(&("rails".to_string(), "7.1.3".to_string())));
-    }
-
-    #[test]
-    fn test_parse_gemfile_lock_empty() {
-        assert!(ProjectScanner::parse_gemfile_lock("").is_empty());
-    }
-
-    #[test]
-    fn test_parse_gemfile_lock_skips_dependency_constraints() {
-        let content = r#"GEM
-  specs:
-    nokogiri (1.16.2)
-      racc (~> 1.4)
-    racc (1.7.3)
-"#;
-        let packages = ProjectScanner::parse_gemfile_lock(content);
-        // Both nokogiri and racc should be found (the (~> 1.4) constraint line
-        // for racc as a sub-dep should NOT be parsed as a package)
-        assert_eq!(packages.len(), 2);
-        assert!(packages.contains(&("nokogiri".to_string(), "1.16.2".to_string())));
-        assert!(packages.contains(&("racc".to_string(), "1.7.3".to_string())));
     }
 
     #[test]

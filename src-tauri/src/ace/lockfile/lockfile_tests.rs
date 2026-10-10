@@ -510,3 +510,203 @@ fn parse_lockfiles_under_flattens_every_directory() {
     got.sort();
     assert_eq!(got, ["PyPI|flask|3.0.0", "npm|hono|4.6.0"]);
 }
+
+#[test]
+fn go_mod_pre_117_skips_graph_only_modules() {
+    let tmp = tempfile::tempdir().unwrap();
+    let path = tmp.path().join("go.mod");
+    let go_mod = "module example.com/old\n\ngo 1.14\n\nrequire github.com/a/a v1.2.0\n";
+    // node_exporter / hugo / traefik shape: `c/c` is only walked (go.mod
+    // hashes), `gogo` has a leftover v1.1.1 source hash but the graph
+    // selects v1.2.1, whose source go.sum never hashed.
+    std::fs::write(
+        tmp.path().join("go.sum"),
+        "github.com/a/a v1.2.0 h1:x=\n\
+         github.com/a/a v1.2.0/go.mod h1:x=\n\
+         github.com/c/c v0.4.0/go.mod h1:x=\n\
+         github.com/c/c v0.5.0/go.mod h1:x=\n\
+         github.com/gogo/protobuf v1.1.1 h1:x=\n\
+         github.com/gogo/protobuf v1.1.1/go.mod h1:x=\n\
+         github.com/gogo/protobuf v1.2.1/go.mod h1:x=\n\
+         github.com/d/d v1.0.0 h1:x=\n\
+         github.com/d/d v1.0.0/go.mod h1:x=\n",
+    )
+    .unwrap();
+    let read = read(&path.display().to_string(), LockFormat::GoMod, go_mod);
+    assert_eq!(ids(&read), ["github.com/a/a@1.2.0", "github.com/d/d@1.0.0"]);
+}
+
+#[test]
+fn gemfile_lock_reads_only_gem_sections_and_strips_platforms() {
+    // Cut down from rails 6.0's Gemfile.lock.
+    let lock = "GIT
+  remote: https://github.com/QueueClassic/queue_classic.git
+  revision: 655144d0a1a5fb2c0a2e0ea1ac2d1bd6d1d5a0e3
+  branch: master
+  specs:
+    queue_classic (3.2.0.RC1)
+      pg (>= 0.17, < 2.0)
+
+PATH
+  remote: .
+  specs:
+    actionpack (6.0.0)
+      rack (~> 2.0)
+    rails (6.0.0)
+      actionpack (= 6.0.0)
+
+GEM
+  remote: https://rubygems.org/
+  specs:
+    activerecord-jdbc-adapter (52.1-java)
+    nokogiri (1.9.1)
+      mini_portile2 (~> 2.4.0)
+    nokogiri (1.9.1-java)
+    nokogiri (1.9.1-x64-mingw32)
+      mini_portile2 (~> 2.4.0)
+    rack (2.0.7)
+
+GEM
+  remote: https://gems.example.com/
+  specs:
+    private-gem (0.1.0)
+
+PLATFORMS
+  java
+  ruby
+  x64-mingw32
+
+DEPENDENCIES
+  queue_classic!
+  rails!
+
+BUNDLED WITH
+   1.17.3
+";
+    let read = read("Gemfile.lock", LockFormat::Gemfile, lock);
+    assert_eq!(
+        ids(&read),
+        [
+            "activerecord-jdbc-adapter@52.1",
+            "nokogiri@1.9.1",
+            "private-gem@0.1.0",
+            "rack@2.0.7"
+        ]
+    );
+    assert_eq!(read.non_registry_entries, 3, "1 GIT + 2 PATH specs");
+    assert!(read
+        .packages
+        .iter()
+        .all(|p| p.primary && p.scope == DepScope::Unknown));
+}
+
+#[test]
+fn gemfile_lock_empty_and_plain() {
+    let empty = read("Gemfile.lock", LockFormat::Gemfile, "");
+    assert!(empty.packages.is_empty());
+    let lock = "GEM\n  specs:\n    nokogiri (1.16.2)\n      racc (~> 1.4)\n    racc (1.7.3)\n";
+    let read = read("Gemfile.lock", LockFormat::Gemfile, lock);
+    assert_eq!(ids(&read), ["nokogiri@1.16.2", "racc@1.7.3"]);
+}
+
+#[test]
+fn pnpm_entry_with_its_own_name_is_identified_by_its_fields() {
+    // trpc's pnpm 5.4 lock: a registry tarball keyed by its URL, plus the
+    // non-registry sources that also carry `name:` fields.
+    let lock = "lockfileVersion: 5.4
+
+packages:
+
+  /zod/3.20.2:
+    resolution: {integrity: sha512-1MzNQdAvO+54H+EaK5YpyEy0T+Ejo/7YLHS93G3RnYWh5gaotGHwGeN/ZO687qEDU2y4CdStQYXVHIgrUl5UVQ==}
+    dev: false
+
+  '@registry.npmjs.com/@prisma/client/-/client-4.7.1.tgz?id=%2540examples%252Flegacy-next-starter_prisma@4.7.1':
+    resolution:
+      {
+        tarball: https://registry.npmjs.com/@prisma/client/-/client-4.7.1.tgz?id=%40examples%2Flegacy-next-starter,
+      }
+    id: '@registry.npmjs.com/@prisma/client/-/client-4.7.1.tgz?id=%2540examples%252Flegacy-next-starter'
+    name: '@prisma/client'
+    version: 4.7.1
+    engines: {node: '>=14.17'}
+    dependencies:
+      name: 1.0.0
+    dev: false
+
+  codeload.github.com/user/forked/tar.gz/0123456789abcdef:
+    resolution: {tarball: https://codeload.github.com/user/forked/tar.gz/0123456789abcdef}
+    name: forked
+    version: 2.0.0
+    dev: false
+
+  github.com/user/gitdep/fedcba9876543210:
+    resolution: {commit: fedcba9876543210, repo: https://github.com/user/gitdep.git, type: git}
+    name: gitdep
+    version: 1.0.0
+    dev: true
+";
+    let mut packages = crate::ace::scanner::ProjectScanner::parse_pnpm_lock_yaml(lock);
+    packages.sort();
+    assert_eq!(
+        packages,
+        [
+            ("@prisma/client".to_string(), "4.7.1".to_string()),
+            ("zod".to_string(), "3.20.2".to_string()),
+        ]
+    );
+}
+
+#[test]
+fn uv_and_poetry_git_sources_are_not_registry_installs() {
+    let uv = r#"version = 1
+
+[[package]]
+name = "pydantic-extra-types"
+version = "2.10.0"
+source = { git = "https://github.com/pydantic/pydantic-extra-types.git?rev=main#f27a1325de5112ccd86b192645bfbb6b633ffcae" }
+
+[[package]]
+name = "wheel-from-url"
+version = "1.0.0"
+source = { url = "https://example.com/wheel_from_url-1.0.0-py3-none-any.whl" }
+
+[[package]]
+name = "pydantic-core"
+version = "2.27.0"
+source = { registry = "https://pypi.org/simple" }
+"#;
+    let read_uv = read("uv.lock", LockFormat::Uv, uv);
+    assert_eq!(ids(&read_uv), ["pydantic-core@2.27.0"]);
+    assert_eq!(read_uv.non_registry_entries, 2);
+
+    let poetry = r#"[[package]]
+name = "forked"
+version = "0.3.0"
+category = "main"
+
+[package.source]
+type = "git"
+url = "https://github.com/x/forked.git"
+reference = "main"
+resolved_reference = "abc"
+
+[[package]]
+name = "private"
+version = "1.0.0"
+category = "main"
+
+[package.source]
+type = "legacy"
+url = "https://pypi.example.com/simple"
+reference = "private"
+
+[[package]]
+name = "requests"
+version = "2.31.0"
+category = "main"
+"#;
+    let read_poetry = read("poetry.lock", LockFormat::Poetry, poetry);
+    assert_eq!(ids(&read_poetry), ["private@1.0.0", "requests@2.31.0"]);
+    assert_eq!(read_poetry.non_registry_entries, 1);
+}

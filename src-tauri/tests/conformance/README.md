@@ -178,7 +178,9 @@ Per OSV ecosystem: `findings_precision`, `findings_recall`,
 lockfiles with truth packages from which the engine read nothing). The values
 are what the engine measured when the corpus landed; the test fails if any
 falls. When a fix moves a number up, the test prints `ratchet can rise` — raise
-the file in the same PR. Precision with no claims and recall with nothing to
+the file in the same PR. Since W1-F (2026-10-10) every ecosystem measures
+1.0 on all four and `engine_disagreements` is empty, so any new disagreement
+fails the ratchet. Precision with no claims and recall with nothing to
 find are 1.0. Only version-confirmed matches are scored; the run prints the
 count of unconfirmed ones.
 

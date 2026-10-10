@@ -13,20 +13,22 @@
 //!   pruning makes go.mod name every module the build needs, `// indirect`
 //!   ones included). go.sum is not consulted.
 //! - **go < 1.17** (or no `go` directive, which Go reads as pre-1.17): go.mod
-//!   names only direct requirements. A module the graph needs but go.mod does
-//!   not name is completed from go.sum at the HIGHEST version recorded there
-//!   — MVS selects the highest required version, and go.sum records every
-//!   version the graph required. This deliberately goes beyond osv-scanner,
-//!   which reads only go.mod's requirements for such modules and so misses
-//!   most of the build (traefik, go 1.16: 83 of the 806 modules
-//!   `go list -m all` reports).
+//!   names only direct requirements. A module the build needs but go.mod does
+//!   not name is completed from go.sum: MVS selects the HIGHEST version the
+//!   graph requires (go.sum records every one), and the module is built only
+//!   if go.sum also hashes that version's source (the zip `h1:` line, not
+//!   just the `/go.mod` line). A module with only a `/go.mod` line at its
+//!   selected version was visited by the graph walk but never built. This
+//!   deliberately goes beyond osv-scanner, which reads only go.mod's
+//!   requirements for such modules and so misses most of the build
+//!   (traefik, go 1.16: 83 of the 806 modules `go list -m all` reports).
 //!
 //! `replace` directives apply (a module replaced by another module version is
 //! installed as that version; one replaced by a local path is local code and
 //! dropped). `exclude` needs no handling: it only removes versions MVS would
 //! otherwise consider, and the requirement lines already record the result.
 
-use std::collections::{BTreeMap, HashMap};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use super::{LockFormat, LockedPackage, LockfileRead};
@@ -160,26 +162,53 @@ fn directive(out: &mut GoMod, kind: Block, line: &str) {
     }
 }
 
-/// Per module, the highest version `go.sum` records (zip or `/go.mod` hash).
+/// Per module, the version the build list selects from `go.sum` — the
+/// HIGHEST version recorded there, by either line — when go.sum also hashes
+/// that version's SOURCE (the zip line `module v1.2.3 h1:…`).
+///
+/// A `module v1.2.3/go.mod h1:…` line alone is not a build: the go command
+/// records the go.mod hash of every module version it visits while walking
+/// the module graph, but downloads (and hashes) the source only of modules
+/// whose packages the build imports. Counting graph-only modules read 728
+/// never-built modules as installed on hugo, node_exporter and traefik
+/// (conformance corpus, 2026-10-10; truth `go list -m all` restricted to
+/// source-hashed modules, the set govulncheck-style tools treat as built).
+///
+/// The selection is still the highest version overall: MVS picks the
+/// highest version the graph requires, and an older version's leftover zip
+/// hash does not make that older version built. node_exporter's go.sum
+/// hashes `gogo/protobuf v1.1.1` source while the graph selects v1.2.1
+/// (go.mod hash only) — the module is not built at either version.
 pub(super) fn highest_in_go_sum(content: &str) -> BTreeMap<String, String> {
-    let mut selected: BTreeMap<String, String> = BTreeMap::new();
+    let mut highest: BTreeMap<&str, &str> = BTreeMap::new();
+    let mut source_hashed: HashSet<(&str, &str)> = HashSet::new();
     for line in content.lines() {
         let mut tokens = line.split_whitespace();
         let (Some(module), Some(raw)) = (tokens.next(), tokens.next()) else {
             continue;
         };
-        let version = raw.strip_suffix("/go.mod").unwrap_or(raw);
+        let version = match raw.strip_suffix("/go.mod") {
+            Some(v) => v,
+            None => {
+                source_hashed.insert((module, raw));
+                raw
+            }
+        };
         if !is_go_version(version) {
             continue;
         }
-        let higher = selected
+        let higher = highest
             .get(module)
             .is_none_or(|current| go_order(version, current).is_gt());
         if higher {
-            selected.insert(module.to_string(), version.to_string());
+            highest.insert(module, version);
         }
     }
-    selected
+    highest
+        .into_iter()
+        .filter(|(module, version)| source_hashed.contains(&(*module, *version)))
+        .map(|(module, version)| (module.to_string(), version.to_string()))
+        .collect()
 }
 
 /// Semver precedence over two Go versions; build metadata ignored.
