@@ -3,7 +3,7 @@ import type { StateCreator } from 'zustand';
 import { ENABLED_SOURCE_IDS, markSourceEnabled } from '../config/sources';
 import type { AppStore, FiltersSlice } from './types';
 
-export const createFiltersSlice: StateCreator<AppStore, [], [], FiltersSlice> = (set) => ({
+export const createFiltersSlice: StateCreator<AppStore, [], [], FiltersSlice> = (set, get) => ({
   sourceFilters: new Set(ENABLED_SOURCE_IDS),
   sortBy: 'score',
   showOnlyRelevant: true,
@@ -56,6 +56,9 @@ export const createFiltersSlice: StateCreator<AppStore, [], [], FiltersSlice> = 
         },
       };
     });
+    // Source health lists only enabled sources, so the cold-start gate and
+    // the health rows follow the toggle now, not at the next analysis.
+    void get().loadSourceHealth();
   },
 
   setSortBy: (sort) => set({ sortBy: sort }),

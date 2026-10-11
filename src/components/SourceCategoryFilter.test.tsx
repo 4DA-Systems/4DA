@@ -173,6 +173,13 @@ describe('applySourceEnabled', () => {
     expect(ENABLED_SOURCE_IDS.has('hackernews')).toBe(true);
   });
 
+  it('re-reads source health, so the cold-start gate follows the toggle', async () => {
+    await boot(ALL_INTERESTS_OFF);
+    cmdMock.mockClear();
+    act(() => { useAppStore.getState().applySourceEnabled('hackernews', true); });
+    expect(cmdMock).toHaveBeenCalledWith('get_source_health_status');
+  });
+
   it('falls back to every enabled source when the last filtered source is turned off', async () => {
     await boot([
       ...ALL_INTERESTS_OFF.slice(0, 2),
