@@ -8,6 +8,7 @@ import { BlindSpotsAssessSection } from './BlindSpotsAssessSection';
 import { YourStackSection } from './YourStackSection';
 import { StandingQueriesSection } from './StandingQueriesSection';
 import { LicenseSection } from './LicenseSection';
+import { LocalSearchModelStatus } from './LocalSearchModelStatus';
 
 import type { Settings } from '../../types';
 import type { OllamaStatus } from '../../hooks/use-settings';
@@ -118,6 +119,7 @@ export const SettingsIntelligenceTab = memo(function SettingsIntelligenceTab({
               {/* The backend names the model actually producing the vectors. */}
               <span className="text-xs text-purple-300 font-mono" data-testid="engine-embedding-model">{embeddingEngine ?? ''}</span>
             </div>
+            <LocalSearchModelStatus />
             <div className="flex items-center justify-between px-3 py-2 bg-bg-secondary rounded-lg">
               <span className="text-xs text-text-muted">{t('settings.ai.engineTopics')}</span>
               <span className="text-xs text-purple-300 font-mono">{t('settings.ai.engineTopicsValue', { count: 100 })}</span>

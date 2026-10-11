@@ -39,6 +39,16 @@ describe('semanticSummary', () => {
     });
   });
 
+  it('says the model downloads on demand when it is not on disk (AD-054), not that it failed', () => {
+    expect(semanticSummary(status('not_downloaded'), null)).toEqual({
+      tone: 'ok',
+      key: 'calibration.onboarding.summaryOnDemand',
+    });
+    expect(semanticSummary(status('not_downloaded'), 'keyword-only').key).toBe('calibration.onboarding.summaryOnDemand');
+    // Ollama serving embeddings still reads as active.
+    expect(semanticSummary(status('not_downloaded'), 'semantic').key).toBe('calibration.onboarding.summaryAI');
+  });
+
   it('reports a failed engine as a warning, and keyword-only as before', () => {
     expect(semanticSummary(status('failed'), null)).toMatchObject({ tone: 'warn', key: 'calibration.onboarding.summaryFailed' });
     expect(semanticSummary(status('ready'), 'keyword-only').key).toBe('calibration.onboarding.summaryKeyword');

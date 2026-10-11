@@ -158,6 +158,18 @@ interface BriefingSnapshotResult {
 
 /** Validation result for RSS feed URL. */
 /**
+ * The in-process embedding engine (Rust `EmbeddingEngineStatus`). `not_downloaded`:
+ * no copy of the local search model is on disk (AD-054: it downloads on demand).
+ * `idle`: on disk, loads on first use.
+ */
+export interface EmbeddingEngineStatusDto {
+  state: 'idle' | 'preparing' | 'ready' | 'failed' | 'not_downloaded' | 'unavailable';
+  message: string | null;
+  bytes_downloaded: number;
+  bytes_total: number;
+}
+
+/**
  * One "Your Stack" row. `included` is the user's toggle; `counts` is the
  * backend's verdict (`project_inclusion::counts_toward_stack`) — a dormant or
  * scratch project can be included and still not count until forced in.
@@ -312,7 +324,8 @@ interface CommandMap {
   pull_ollama_model: { params: { model: string; baseUrl: string | null }; result: void };
   cancel_ollama_pull: { params: Record<string, never>; result: string };
   prepare_embedding_engine: { params: Record<string, never>; result: { status: string; message?: string } };
-  get_embedding_engine_status: { params: Record<string, never>; result: { state: 'idle' | 'preparing' | 'ready' | 'failed' | 'unavailable'; message: string | null; bytes_downloaded: number; bytes_total: number } };
+  get_embedding_engine_status: { params: Record<string, never>; result: EmbeddingEngineStatusDto };
+  download_embedding_model: { params: Record<string, never>; result: EmbeddingEngineStatusDto };
   list_provider_models: { params: { provider: string; baseUrl: string | null; apiKey: string | null }; result: { models: string[]; error?: string } };
   detect_local_servers: { params: Record<string, never>; result: { servers: Array<{ name: string; base_url: string; model_count: number; models?: string[]; running: boolean }> } };
   get_llm_key_for_mcp: { params: Record<string, never>; result: { provider: string; api_key_masked: string; has_api_key: boolean; model: string; base_url: string | null } };

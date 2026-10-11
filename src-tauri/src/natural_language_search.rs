@@ -443,6 +443,10 @@ pub async fn natural_language_query(query_text: String) -> Result<QueryResult> {
     }
 
     crate::settings::require_signal_feature("natural_language_query")?;
+    // Natural-language search is a feature that needs embeddings (AD-054
+    // decision 7): fetch the local search model once if this install has none.
+    // This search still answers now, from its keyword legs.
+    crate::embeddings::request_model_on_demand("natural-language-search");
     let is_pro = crate::settings::is_signal();
     run_search(query_text, is_pro)
         .await

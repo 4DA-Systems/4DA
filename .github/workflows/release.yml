@@ -329,6 +329,19 @@ jobs:
           node scripts/release-ocr-models.cjs --features ""
           ls -lh src-tauri/models/
 
+      - name: Embedding model — downloaded on demand, not bundled
+        # AD-054 decision 7: the dependency engine needs no embeddings, and the
+        # nomic fp16 weights (261 MB raw, ~234 MB compressed) were most of every
+        # installer (1.0.3's setup.exe: 279.7 MB). The app now downloads the
+        # same pinned files on first use (embeddings_providers/model_store.rs:
+        # pinned revision, every file SHA-256 pinned, resumable). bundle:resources
+        # (tauri's beforeBuildCommand) no longer fetches it; this step removes
+        # any copy already in the tree and prints the bundle's size report.
+        # `--bundle` would ship it instead (fetch + verify), for an offline build.
+        shell: bash
+        run: |
+          node scripts/release-embedding-model.cjs
+
       # Supply-chain policy is a release gate, not a suggestion.
       #
       # Was: `cargo install cargo-deny --locked --quiet 2>/dev/null || true`
@@ -435,7 +448,8 @@ jobs:
           # keychain"). Prepend ours, keeping the existing entries. tauri-action
           # re-configures the search list afterwards for its own .app signing.
           security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | sed s/\"//g)
-          # Place the ORT dylib (+ embedding model) now so we can sign the dylib.
+          # Place the ORT dylib now so we can sign it (bundle:resources no longer
+          # fetches the embedding model: AD-054 decision 7).
           pnpm run bundle:resources
           DYLIB="src-tauri/models/ort/libonnxruntime.dylib"
           codesign --force --options runtime --timestamp \

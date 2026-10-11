@@ -1235,8 +1235,9 @@ jobs:
           key: fourda-models-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('scripts/download-ort.cjs', 'scripts/download-embedding-model.cjs') }}-${{ steps.model-rev.outputs.sha }}
 
       - name: Fetch embedding model + ORT runtime (real-embedding gate)
-        # Same artifacts `pnpm run bundle:resources` fetches (download-ort +
-        # download-embedding-model), invoked directly so this job doesn't need
+        # The ORT runtime (`pnpm run bundle:resources`) plus the embedding
+        # model (`pnpm run bundle:model`; release installers no longer carry
+        # it, AD-054 decision 7), invoked directly so this job doesn't need
         # pnpm. In debug builds the crate resolves src-tauri/models/ as the
         # bundled dir (runtime_paths::bundled_models_dir), so tests find the
         # model without any network fallback. Without this fetch the

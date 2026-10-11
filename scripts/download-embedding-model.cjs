@@ -1,19 +1,23 @@
 /**
- * Download the in-process embedding model for bundling with the Tauri installer.
+ * Download the in-process embedding model into src-tauri/models/embeddings.
  *
  * Fetches nomic-embed-text v1.5 (fp16 ONNX weights, f32 inputs/outputs, 768-dim)
- * from HuggingFace at a PINNED revision and verifies the ONNX file's SHA-256. It is
+ * from HuggingFace at a PINNED revision and verifies every file's SHA-256. It is
  * the model Ollama serves by default, so the in-process route writes the same
  * vector space as the Ollama route (measured median cosine 1.00000 vs Ollama's
- * nomic). The app loads these files directly from the bundle (fastembed
- * user-defined model, src-tauri/src/embeddings_providers/fastembed.rs); nothing is
- * copied into the user's cache.
+ * nomic).
+ *
+ * Release installers no longer carry it (AD-054 decision 7): the app downloads
+ * the same pinned files on demand (src-tauri/src/embeddings_providers/model_store.rs,
+ * whose FILES must match this list), and scripts/release-embedding-model.cjs
+ * strips any copy from the release bundle. This script is for a dev tree, the
+ * CI real-embedding gate, and `release-embedding-model.cjs --bundle`. In a debug
+ * build the app reads src-tauri/models as its bundled dir, so a fetched copy is
+ * used in place.
  *
  * Usage:
  *   node scripts/download-embedding-model.cjs          # download model
  *   node scripts/download-embedding-model.cjs --force   # re-download even if cached
- *
- * Run before `cargo tauri build` alongside download-ort.cjs.
  */
 
 'use strict';
@@ -36,10 +40,26 @@ const FILES = [
     local: 'model_fp16.onnx',
     sha256: 'cf5b5a86edb00f895561803cfc04729090a958340b8ca2ad76c143f565f6bb04',
   },
-  { remote: 'tokenizer.json', local: 'tokenizer.json' },
-  { remote: 'config.json', local: 'config.json' },
-  { remote: 'special_tokens_map.json', local: 'special_tokens_map.json' },
-  { remote: 'tokenizer_config.json', local: 'tokenizer_config.json' },
+  {
+    remote: 'tokenizer.json',
+    local: 'tokenizer.json',
+    sha256: 'd241a60d5e8f04cc1b2b3e9ef7a4921b27bf526d9f6050ab90f9267a1f9e5c66',
+  },
+  {
+    remote: 'config.json',
+    local: 'config.json',
+    sha256: '9ab00bd92cee80a569f708140b7b6c1661a65891ff3765b1519e181ba2f2c92b',
+  },
+  {
+    remote: 'special_tokens_map.json',
+    local: 'special_tokens_map.json',
+    sha256: '5d5b662e421ea9fac075174bb0688ee0d9431699900b90662acd44b2a350503a',
+  },
+  {
+    remote: 'tokenizer_config.json',
+    local: 'tokenizer_config.json',
+    sha256: 'd7e0000bcc80134debd2222220427e6bf5fa20a669f40a0d0d1409cc18e0a9bc',
+  },
 ];
 
 const DEST_ROOT = path.resolve(__dirname, '..', 'src-tauri', 'models', 'embeddings');

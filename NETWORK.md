@@ -391,18 +391,29 @@ machine to the SMTP server you named; 4DA operates no mail server and never sees
 
 ## 3. Setup-time (one-time downloads)
 
-Embeddings run **in-process via fastembed (ONNX Runtime) with zero network by default**. If the
-ONNX runtime and model weights are not already bundled/cached, they are fetched **once** on first
-use (`src-tauri/src/embeddings_providers/fastembed.rs`):
+Embeddings run **in-process via fastembed (ONNX Runtime) with zero network** once the model is on
+disk. The ONNX runtime ships in the installer. The embedding model does **not** (AD-054: the
+dependency engine needs no embeddings; only opt-in interests and natural-language search use them),
+so it is fetched **once, on demand** (`src-tauri/src/embeddings_providers/model_store.rs`):
 
 | What | Host | Endpoint |
 |---|---|---|
-| ONNX Runtime library | `github.com` | `/microsoft/onnxruntime/releases/download/v1.24.2/onnxruntime-{platform}.{zip,tgz}` |
-| Embedding model weights (`nomic-embed-text-v1.5`, ~550 MB; normally bundled as a 274 MB fp16 build, so never fetched) | HuggingFace Hub CDN (`huggingface.co` + its LFS/Xet CDN) | downloaded by the fastembed/hf-hub client on first init if not bundled |
+| Embedding model (`nomic-embed-text-v1.5`, fp16 ONNX + tokenizer, 5 files, ~262 MB) | `huggingface.co`, which redirects to its CDN (`cdn.hf.co` / Xet storage) | `GET /nomic-ai/nomic-embed-text-v1.5/resolve/e9b6763023c676ca8431644204f50c2b100d9aab/{onnx/model_fp16.onnx, tokenizer.json, config.json, special_tokens_map.json, tokenizer_config.json}` (a `Range` header resumes a partial file) |
+| ONNX Runtime library (only if missing from the install, e.g. a hand-built binary) | `github.com` | `/microsoft/onnxruntime/releases/download/v1.24.2/onnxruntime-{platform}.{zip,tgz}` |
 
-- **Trigger:** first embedding init only, and only if not already bundled in the install or cached.
-- **After setup:** embeddings are 100% local — zero network. If no provider is available at all,
-  scoring degrades to keyword-only (still no network).
+- **What is sent:** plain `GET`s for those fixed public files. No user data, no identifier, no
+  file, project or query content: the request is the same for every install.
+- **Pinned:** a fixed revision, and every file's SHA-256 and size are compiled into the app. A file
+  only gets its final name once it matches; a mismatch is deleted and reported.
+- **Trigger:** only when a feature needs embeddings and no copy is on disk: you turn on an interest
+  (Settings → Sources), run a natural-language search, or press **Download** in Settings →
+  Intelligence. Not when Ollama already serves embeddings or cloud embeddings are on. A copy already
+  on disk (an older installer's bundled model, or a previous download) is used and never fetched
+  again. Background work never downloads it.
+- **Where:** the app cache (`<cache>/models/nomic-embed-text-v1.5-fp16`).
+- **Without it:** embeddings come from Ollama if it runs; otherwise scoring and search use keyword
+  matching (FTS). The dependency engine (Preemption, Brief facts, Signal's stack changes, MCP) does
+  not use embeddings. No network either way.
 
 ---
 
