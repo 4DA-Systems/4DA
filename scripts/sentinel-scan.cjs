@@ -364,56 +364,61 @@ function checkTypeScript() {
 // CHECK 2: IPC Contract Validation
 // ---------------------------------------------------------------------------
 
+/// Classify a validate-commands run. Pure — exported for negative tests.
+/// Same rule as classifyTscResult: a validator that never finished is
+/// INCONCLUSIVE, never "failed". 2026-10-11: the validator took 14.3 s on a
+/// loaded machine against a 15 s budget, and the scan reported "IPC validation
+/// failed (unknown issue)" for a contract that was clean.
+function classifyIpcResult(result) {
+  const output = result.output || "";
+  if (result.ok) {
+    const registered = output.match(/generate_handler!\[\] registrations\s*:\s*(\d+)/);
+    const mapped = output.match(/CommandMap TS keys\s*:\s*(\d+)/);
+    const counts = registered && mapped ? ` (${mapped[1]}/${registered[1]})` : "";
+    return [{ severity: "ok", message: `IPC contract clean${counts}`, detail: "" }];
+  }
+  if (result.timedOut) {
+    return [{
+      severity: "warning",
+      message: "IPC check inconclusive — validate-commands did not finish within the timeout",
+      detail: output.slice(0, 300),
+    }];
+  }
+  const ghost = Number((output.match(/Registered in Rust but missing from CommandMap \((\d+)\)/) || [])[1] || 0);
+  const dead = Number((output.match(/In CommandMap but not registered .* \((\d+)\)/) || [])[1] || 0);
+  const out = [];
+  if (ghost > 0) {
+    out.push({
+      severity: "critical",
+      expert: "4da-ipc-expert",
+      message: `${ghost} ghost command${ghost > 1 ? "s" : ""} detected — registered in Rust but no TypeScript binding`,
+      detail: output.slice(0, 500),
+    });
+  }
+  if (dead > 0) {
+    out.push({
+      severity: "warning",
+      expert: "4da-ipc-expert",
+      message: `${dead} dead command${dead > 1 ? "s" : ""} in commands.ts — no registered Rust handler`,
+      detail: output.slice(0, 500),
+    });
+  }
+  if (out.length === 0) {
+    out.push({
+      severity: "warning",
+      expert: "4da-ipc-expert",
+      message: `IPC validation failed — validate-commands exited ${result.code ?? result.errCode ?? "abnormally"} with no ghost or dead commands reported`,
+      detail: output.slice(0, 300),
+    });
+  }
+  return out;
+}
+
 function checkIPCContract() {
-  const result = safeExec("node scripts/validate-commands.cjs", {
-    timeout: 15000,
-  });
-
-  if (!result.ok) {
-    // Parse the validator output for specific issues
-    const output = result.output || "";
-    const ghostMatch = output.match(
-      /Registered in Rust but missing from CommandMap \((\d+)\)/
-    );
-    const deadMatch = output.match(
-      /In CommandMap but not registered .* \((\d+)\)/
-    );
-
-    const ghostCount = ghostMatch ? parseInt(ghostMatch[1]) : 0;
-    const deadCount = deadMatch ? parseInt(deadMatch[1]) : 0;
-
-    if (ghostCount > 0) {
-      addSignal(
-        "ipc_contract",
-        "critical",
-        "IPC Bridge",
-        "4da-ipc-expert",
-        `${ghostCount} ghost command${ghostCount > 1 ? "s" : ""} detected — registered in Rust but no TypeScript binding`,
-        output.slice(0, 500)
-      );
-    }
-    if (deadCount > 0) {
-      addSignal(
-        "ipc_contract",
-        "warning",
-        "IPC Bridge",
-        "4da-ipc-expert",
-        `${deadCount} dead command${deadCount > 1 ? "s" : ""} in commands.ts — no registered Rust handler`,
-        output.slice(0, 500)
-      );
-    }
-    if (ghostCount === 0 && deadCount === 0) {
-      addSignal(
-        "ipc_contract",
-        "warning",
-        "IPC Bridge",
-        "4da-ipc-expert",
-        "IPC validation failed (unknown issue)",
-        output.slice(0, 300)
-      );
-    }
-  } else {
-    addSignal("ipc_contract", "ok", "IPC Bridge", "", "IPC contract clean (315/315)");
+  // The scan runs detached (sentinel-hook.cjs), so a generous budget costs no prompt time.
+  const result = safeExec("node scripts/validate-commands.cjs", { timeout: 60000 });
+  for (const f of classifyIpcResult(result)) {
+    addSignal("ipc_contract", f.severity, "IPC Bridge", f.expert || "", f.message, f.detail);
   }
 }
 
@@ -1016,5 +1021,5 @@ if (require.main === module) {
   // Exported for negative tests (scripts/sentinel-scan.test.cjs) — a
   // detector fix without a negative test is how the last five detector
   // bugs shipped (recipe-gate-precision-negative-test).
-  module.exports = { classifyTscResult, classifyMergeGateHealth, parseCargoDiagnostics, safeExec };
+  module.exports = { classifyTscResult, classifyIpcResult, classifyMergeGateHealth, parseCargoDiagnostics, safeExec };
 }
