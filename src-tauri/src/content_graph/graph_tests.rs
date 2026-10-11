@@ -973,6 +973,9 @@ fn test_build_graph_deterministic_across_processes() {
             crate::EMBEDDING_DIMS
         ))
         .expect("vector index");
+        // Every vector write also maintains the compact search copies (Phase 127).
+        conn.execute_batch(crate::db::vector_quant::SCHEMA_SQL)
+            .expect("compact vector index");
 
         // Four 6-member cone groups: every within-group pair at exactly
         // cos 0.80 — massive float ties, the ordering-leak trigger.

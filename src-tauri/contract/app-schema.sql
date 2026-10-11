@@ -1,7 +1,7 @@
 -- 4DA app-schema contract. GENERATED, do not edit by hand.
 -- Regenerate: UPDATE_APP_SCHEMA_CONTRACT=1 cargo test --lib app_schema_contract
 -- Consumer: github.com/4DA-Systems/4da-mcp-server (pnpm run contract)
--- schema_version: 126
+-- schema_version: 127
 
 CREATE TABLE accuracy_history (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -762,6 +762,17 @@ CREATE TABLE item_necessity (
                             necessity_urgency TEXT,
                             scored_at TEXT NOT NULL DEFAULT (datetime('now'))
                         );
+
+CREATE TABLE item_vec_bits (
+        id INTEGER PRIMARY KEY,
+        source_type TEXT NOT NULL,
+        bits BLOB NOT NULL
+    );
+
+CREATE TABLE item_vec_i8 (
+        id INTEGER PRIMARY KEY,
+        v BLOB NOT NULL
+    );
 
 CREATE TABLE kv_store (
                 key TEXT PRIMARY KEY NOT NULL,
@@ -1839,6 +1850,12 @@ CREATE TRIGGER item_context_cache_gone
                                  DELETE FROM item_context_match WHERE item_id = old.id;
                              END;
 
+CREATE TRIGGER item_vec_quant_item_delete
+    AFTER DELETE ON source_items BEGIN
+        DELETE FROM item_vec_bits WHERE id = OLD.id;
+        DELETE FROM item_vec_i8 WHERE id = OLD.id;
+    END;
+
 CREATE TRIGGER trg_channel_renders_cascade_delete
                              AFTER DELETE ON channel_renders
                              BEGIN
@@ -1908,4 +1925,4 @@ CREATE VIEW current_dependencies AS
                                 AND ds.ecosystem = latest.ecosystem
                                 AND ds.scanned_at = latest.latest;
 
-INSERT INTO schema_version (version) VALUES (126);
+INSERT INTO schema_version (version) VALUES (127);

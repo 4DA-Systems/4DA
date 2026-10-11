@@ -1488,7 +1488,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 126;
+        const TARGET_VERSION: i64 = 127;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -5881,6 +5881,33 @@ impl Database {
                             parked,
                             cleared,
                             "Phase 126: interests turned off; source_vec is the one vector store"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
+            // Phase 127 (audit 2026-10-11): compact copies of every item vector
+            // for the search KNN (`db::vector_quant`). The float scan over
+            // `source_vec` read ~500 MB per query and cost 3.9-4.8 s whenever the
+            // file cache had dropped it; the new scan reads ~20 MB and skips
+            // turned-off sources. One-time backfill from `source_vec`.
+            if current_version < 127 {
+                Self::run_versioned_migration(
+                    &conn,
+                    126,
+                    127,
+                    "Phase 127: compact vector index for search",
+                    |c| {
+                        let started = std::time::Instant::now();
+                        let (indexed, without_vector) =
+                            crate::db::vector_quant::create_and_backfill(c)?;
+                        info!(
+                            target: "4da::db",
+                            indexed,
+                            without_vector,
+                            elapsed_ms = started.elapsed().as_millis() as u64,
+                            "Phase 127: compact search index built from source_vec"
                         );
                         Ok(())
                     },

@@ -260,8 +260,14 @@ pub(crate) async fn reembed_all_items() {
         // are in the superseded space, so they are dropped and the rows go
         // back to `pending`: the pending retry embeds them if the interest is
         // turned on again, and until then nothing reads a wrong-space vector.
+        // The compact search copies (Phase 127) go with them.
         let disabled_pending = conn.execute_batch(
             "DELETE FROM source_vec WHERE rowid IN (
+                 SELECT id FROM source_items
+                 WHERE source_type IN (SELECT source_type FROM sources WHERE enabled = 0));
+             DELETE FROM item_vec_bits
+             WHERE source_type IN (SELECT source_type FROM sources WHERE enabled = 0);
+             DELETE FROM item_vec_i8 WHERE id IN (
                  SELECT id FROM source_items
                  WHERE source_type IN (SELECT source_type FROM sources WHERE enabled = 0));
              UPDATE source_items SET embedding_status = 'pending'

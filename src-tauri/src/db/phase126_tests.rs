@@ -25,7 +25,7 @@ fn the_schema_reaches_126_and_the_reembed_trigger_is_gone() {
     let version: i64 = conn
         .query_row("SELECT version FROM schema_version", [], |r| r.get(0))
         .expect("version");
-    assert_eq!(version, 126);
+    assert!(version >= 126, "schema {version} predates Phase 126");
     let trigger: i64 = conn
         .query_row(
             "SELECT COUNT(*) FROM sqlite_master WHERE type = 'trigger' AND name = 'item_context_cache_reembed'",
