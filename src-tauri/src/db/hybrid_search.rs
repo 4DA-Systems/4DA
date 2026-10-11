@@ -178,11 +178,51 @@ fn bm25_leg(conn: &Connection, query_text: &str, k: usize) -> Vec<Candidate> {
     )
 }
 
-/// Vector KNN leg via sqlite-vec. KNN needs `k = ?` in WHERE, never a trailing LIMIT.
+/// Vector KNN leg. Reads the compact index (`vector_quant`, Phase 127); the
+/// float KNN over `source_vec` is the fallback while that index is empty.
 fn vector_leg(conn: &Connection, query_embedding: &[f32], k: usize) -> Vec<Candidate> {
     if !query_embedding.iter().any(|&v| v != 0.0) {
         return Vec::new();
     }
+    match super::vector_quant::knn(conn, query_embedding, k) {
+        Ok(Some(hits)) => return candidates_in_order(conn, &hits),
+        Ok(None) => {}
+        Err(e) => {
+            tracing::warn!(target: "4da::hybrid_search", error = %e,
+                "compact KNN failed; using the float index");
+        }
+    }
+    float_vector_leg(conn, query_embedding, k)
+}
+
+/// Item rows for `(id, distance)` hits, in hit order. An id whose item is gone
+/// (deleted between the scan and this read) is skipped.
+fn candidates_in_order(conn: &Connection, hits: &[(i64, f64)]) -> Vec<Candidate> {
+    let mut rows: HashMap<i64, Candidate> = HashMap::with_capacity(hits.len());
+    for batch in hits.chunks(900) {
+        let placeholders = vec!["?"; batch.len()].join(",");
+        let sql = format!(
+            "SELECT si.id, si.title, si.content, si.source_type, si.url, si.created_at
+             FROM source_items si WHERE si.id IN ({placeholders})"
+        );
+        let ids = batch.iter().map(|(id, _)| *id);
+        for cand in run_leg(conn, &sql, rusqlite::params_from_iter(ids), false) {
+            rows.insert(cand.id, cand);
+        }
+    }
+    hits.iter()
+        .filter_map(|&(id, d)| {
+            rows.remove(&id).map(|mut c| {
+                c.distance = Some(d);
+                c
+            })
+        })
+        .collect()
+}
+
+/// sqlite-vec's float KNN over `source_vec`. KNN needs `k = ?` in WHERE, never a
+/// trailing LIMIT.
+fn float_vector_leg(conn: &Connection, query_embedding: &[f32], k: usize) -> Vec<Candidate> {
     let embedding_blob = embedding_to_blob(query_embedding);
     // A source the user turned off is not searched (AD-054). The KNN runs
     // before that filter, so it over-fetches and the leg keeps the best `k`

@@ -183,7 +183,8 @@ fn load_chunked(conn: &Connection, ids: &[i64]) -> SqliteResult<HashMap<i64, Vec
 /// (`item_context_cache` / `item_context_match`), the job the
 /// `item_context_cache_reembed` trigger did while the BLOB column was the
 /// store (vec0 tables cannot carry triggers, so every vector write comes
-/// through here instead).
+/// through here instead). It also refreshes the compact copies the search
+/// KNN reads (`vector_quant`, Phase 127).
 pub(crate) fn write_item_vector(conn: &Connection, id: i64, blob: &[u8]) -> SqliteResult<bool> {
     let existing = load_item_vector_blob(conn, id)?;
     match existing {
@@ -193,6 +194,7 @@ pub(crate) fn write_item_vector(conn: &Connection, id: i64, blob: &[u8]) -> Sqli
                 "UPDATE source_vec SET embedding = ?1 WHERE rowid = ?2",
                 params![blob, id],
             )?;
+            super::vector_quant::write(conn, id, blob)?;
             conn.execute(
                 "DELETE FROM item_context_cache WHERE item_id = ?1",
                 params![id],
@@ -208,6 +210,7 @@ pub(crate) fn write_item_vector(conn: &Connection, id: i64, blob: &[u8]) -> Sqli
                 "INSERT INTO source_vec (rowid, embedding) VALUES (?1, ?2)",
                 params![id, blob],
             )?;
+            super::vector_quant::write(conn, id, blob)?;
             Ok(true)
         }
     }
