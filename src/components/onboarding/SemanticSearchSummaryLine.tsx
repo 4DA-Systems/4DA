@@ -1,15 +1,10 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { memo, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { cmd } from '../../lib/commands';
+import { cmd, type EmbeddingEngineStatusDto } from '../../lib/commands';
 
 /** `get_embedding_engine_status` (mirrors `EmbeddingEngineStatus` in Rust). */
-export interface EngineStatus {
-  state: 'idle' | 'preparing' | 'ready' | 'failed' | 'unavailable';
-  message: string | null;
-  bytes_downloaded: number;
-  bytes_total: number;
-}
+export type EngineStatus = EmbeddingEngineStatusDto;
 type EmbeddingMode = 'semantic' | 'keyword-only' | null;
 
 export interface SemanticSummary {
@@ -29,10 +24,13 @@ const POLL_MS = 2_000;
  * still downloading.
  */
 export function semanticSummary(engine: EngineStatus | null, mode: EmbeddingMode): SemanticSummary {
-  if (mode === 'keyword-only') return { tone: 'ok', key: 'calibration.onboarding.summaryKeyword' };
-  if (mode === 'semantic' || engine?.state === 'ready') {
+  if (mode === 'semantic' || (mode !== 'keyword-only' && engine?.state === 'ready')) {
     return { tone: 'ok', key: 'calibration.onboarding.summaryAI' };
   }
+  // AD-054: the model is not in the installer; it downloads when a feature
+  // needs it. That is the designed state, not a failure.
+  if (engine?.state === 'not_downloaded') return { tone: 'ok', key: 'calibration.onboarding.summaryOnDemand' };
+  if (mode === 'keyword-only') return { tone: 'ok', key: 'calibration.onboarding.summaryKeyword' };
   if (engine?.state === 'failed') return { tone: 'warn', key: 'calibration.onboarding.summaryFailed' };
   if (engine?.state === 'preparing' && engine.bytes_total > 0) {
     return {

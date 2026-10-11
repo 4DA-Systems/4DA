@@ -4,8 +4,9 @@
 
 //! In-process fastembed provider (ONNX Runtime — zero network dependency).
 //!
-//! Handles ONNX runtime download/setup, bundled model copy, fastembed initialization,
-//! and the `prepare_embedding_engine` Tauri command.
+//! Handles ONNX runtime download/setup, loading the model from the copy
+//! `model_store` resolves (bundled resource, then cache; never a download),
+//! fastembed initialization, and the `prepare_embedding_engine` Tauri command.
 
 #[cfg(feature = "fastembed-local")]
 use once_cell::sync::OnceCell;
@@ -234,9 +235,6 @@ fn extract_ort_library(
 /// rejected: ~0.90 agreement is too noisy for the top-1 match over thousands
 /// of code chunks (context AUC 0.499). See `reembed_space`.
 #[cfg(feature = "fastembed-local")]
-const BUNDLED_MODEL_DIR: &str = "nomic-embed-text-v1.5-fp16";
-
-#[cfg(feature = "fastembed-local")]
 const BUNDLED_ONNX: &str = "model_fp16.onnx";
 
 /// Caches of retired in-process models (hf-hub layout). Nothing reads them any
@@ -266,15 +264,8 @@ fn remove_legacy_caches(cache_dir: &std::path::Path) {
     }
 }
 
-#[cfg(feature = "fastembed-local")]
-fn bundled_model_dir() -> std::path::PathBuf {
-    crate::runtime_paths::RuntimePaths::get()
-        .bundled_models_dir()
-        .join("embeddings")
-        .join(BUNDLED_MODEL_DIR)
-}
-
-/// Load the bundled fp16 build (a read-only resource, never copied).
+/// Load the fp16 build from `dir` (a bundled resource is read in place,
+/// never copied).
 #[cfg(feature = "fastembed-local")]
 fn load_bundled_nomic(
     dir: &std::path::Path,
@@ -295,62 +286,44 @@ fn load_bundled_nomic(
     .map_err(|e| e.to_string())
 }
 
-/// The in-process embedding model: the bundled fp16 nomic when present, else
-/// the same pinned fp16 files downloaded once into the cache
-/// (`fastembed_setup::download`, with progress, a stall timeout and a
-/// checksum). Same bytes either way, so the same vector space.
+/// The in-process embedding model, from the first copy that loads, in
+/// `model_store` resolution order (bundled resource, then the cache). Never
+/// downloads: that is `model_store::start_download`, on demand.
 #[cfg(feature = "fastembed-local")]
 fn load_embedding_model(
-    cache_dir: std::path::PathBuf,
-    progress: Option<&std::sync::mpsc::Sender<DownloadProgress>>,
+    copies: &[super::model_store::ModelLocation],
 ) -> std::result::Result<fastembed::TextEmbedding, FourDaError> {
-    remove_legacy_caches(&cache_dir);
-    let bundled = bundled_model_dir();
-    if bundled.join(BUNDLED_ONNX).is_file() {
-        tracing::info!(target: "4da::embeddings", dir = %bundled.display(), "Loading bundled embedding model (nomic-embed-text v1.5, fp16)");
-        match load_bundled_nomic(&bundled) {
+    let mut last_err = String::from(super::model_store::NOT_DOWNLOADED);
+    for copy in copies {
+        let dir = copy.dir();
+        tracing::info!(target: "4da::embeddings", ?copy, "Loading the local search model (nomic-embed-text v1.5, fp16)");
+        match load_bundled_nomic(dir) {
             Ok(model) => return Ok(model),
             Err(e) => {
-                tracing::warn!(target: "4da::embeddings", error = %e, "Bundled embedding model failed to load; downloading the same model instead");
+                tracing::warn!(target: "4da::embeddings", dir = %dir.display(), error = %e, "Embedding model copy failed to load");
+                last_err = e;
             }
         }
     }
-    let dir = cache_dir.join(BUNDLED_MODEL_DIR);
-    tracing::info!(target: "4da::embeddings", cache = %dir.display(), "Fetching embedding model (nomic-embed-text v1.5 fp16, ~275MB, once)");
-    let dir = super::fastembed_setup::download::ensure_model(&dir, |done, total, file| {
-        super::fastembed_setup::set_preparing("Downloading the local search model", done, total);
-        if let Some(tx) = progress {
-            let pct = if total > 0 {
-                50 + ((done as f64 / total as f64) * 45.0) as u32
-            } else {
-                50
-            };
-            let _ = tx.send(DownloadProgress {
-                stage: "model-download".into(),
-                percent: pct,
-                bytes_downloaded: done,
-                bytes_total: total,
-                message: format!("Downloading {file}..."),
-                done: false,
-            });
-        }
-    })?;
-    super::fastembed_setup::set_preparing("Loading the local search model", 0, 0);
-    load_bundled_nomic(&dir).map_err(|e| {
-        tracing::warn!(target: "4da::embeddings", error = %e, "fastembed init failed");
-        FourDaError::from(format!("fastembed init: {e}"))
-    })
+    Err(FourDaError::from(format!("fastembed init: {last_err}")))
 }
 
 /// Build the engine once, recording each step in the status the UI reads.
+/// With no copy of the model on disk it fails at once and leaves the status
+/// alone (`not_downloaded`, or a download's progress).
 #[cfg(feature = "fastembed-local")]
 fn init_engine(
     progress: Option<&std::sync::mpsc::Sender<DownloadProgress>>,
 ) -> std::result::Result<parking_lot::Mutex<fastembed::TextEmbedding>, FourDaError> {
-    super::fastembed_setup::set_preparing("Starting the local search model", 0, 0);
     let cache_dir = crate::runtime_paths::RuntimePaths::get().model_cache_dir();
+    remove_legacy_caches(&cache_dir);
+    let copies = super::model_store::installed_here();
+    if copies.is_empty() {
+        return Err(FourDaError::from(super::model_store::NOT_DOWNLOADED));
+    }
+    super::fastembed_setup::set_preparing("Starting the local search model", 0, 0);
     let result = ensure_ort_runtime(&cache_dir, progress)
-        .and_then(|()| load_embedding_model(cache_dir, progress))
+        .and_then(|()| load_embedding_model(&copies))
         .map(parking_lot::Mutex::new);
     match &result {
         Ok(_) => super::fastembed_setup::set_ready(),
@@ -363,6 +336,16 @@ fn init_engine(
 fn get_or_init_fastembed(
 ) -> std::result::Result<&'static parking_lot::Mutex<fastembed::TextEmbedding>, FourDaError> {
     FASTEMBED_MODEL.get_or_try_init(|| init_engine(None))
+}
+
+/// Load the engine now that a copy is on disk (after a download, or when the
+/// user asks for a model that is already there), so the status reaches
+/// Ready, or Failed with the reason.
+#[cfg(feature = "fastembed-local")]
+pub(crate) fn load_after_download() {
+    if let Err(e) = get_or_init_fastembed() {
+        tracing::warn!(target: "4da::embeddings", error = %e, "Local search model is on disk but did not load");
+    }
 }
 
 /// Embedding chunk size. Same OOM class as the cross-encoder reranker
@@ -397,20 +380,13 @@ pub(in crate::embeddings) fn init_fastembed_with_progress(
     progress: Option<std::sync::mpsc::Sender<DownloadProgress>>,
 ) -> std::result::Result<(), FourDaError> {
     let _ = FASTEMBED_MODEL.get_or_try_init(|| {
-        let bundled = bundled_model_dir().join(BUNDLED_ONNX).is_file();
-
         if let Some(tx) = progress.as_ref() {
-            let msg = if bundled {
-                "Loading bundled embedding model...".to_string()
-            } else {
-                "Downloading embedding model (~275MB first run)...".to_string()
-            };
             let _ = tx.send(DownloadProgress {
                 stage: "model-init".into(),
                 percent: 50,
                 bytes_downloaded: 0,
                 bytes_total: 0,
-                message: msg,
+                message: "Loading the local search model...".to_string(),
                 done: false,
             });
         }
@@ -443,6 +419,11 @@ pub async fn prepare_embedding_engine(
     if FASTEMBED_MODEL.get().is_some() {
         return Ok(serde_json::json!({"status": "ready", "cached": true}));
     }
+    // AD-054 decision 7: preparing loads a copy that is on disk; it never
+    // starts the one-time download (`download_embedding_model` does).
+    if !super::model_store::is_installed() {
+        return Ok(serde_json::json!({"status": "not_downloaded"}));
+    }
 
     let (tx, rx) = std::sync::mpsc::channel::<DownloadProgress>();
     let init_handle = tokio::task::spawn_blocking(move || init_fastembed_with_progress(Some(tx)));
@@ -472,4 +453,37 @@ pub async fn prepare_embedding_engine() -> std::result::Result<serde_json::Value
     Ok(
         serde_json::json!({"status": "unavailable", "reason": "fastembed-local feature not enabled"}),
     )
+}
+
+#[cfg(all(test, feature = "fastembed-local"))]
+mod tests {
+    use super::*;
+
+    /// No copy on disk: loading fails at once with the "not downloaded"
+    /// reason. It never reaches the network (the download is on demand only).
+    #[test]
+    fn with_no_copy_loading_fails_fast_without_downloading() {
+        let started = std::time::Instant::now();
+        let err = load_embedding_model(&[]).err().map(|e| e.to_string());
+        assert!(
+            err.as_deref()
+                .is_some_and(|e| e.contains(super::super::model_store::NOT_DOWNLOADED)),
+            "{err:?}"
+        );
+        assert!(started.elapsed() < std::time::Duration::from_secs(1));
+    }
+
+    /// A copy that is present but unreadable reports why it failed.
+    #[test]
+    fn a_broken_copy_reports_its_error() {
+        let dir = std::env::temp_dir().join(format!("4da-broken-model-{}", std::process::id()));
+        let _ = std::fs::create_dir_all(&dir);
+        let copies = [super::super::model_store::ModelLocation::Cache(dir.clone())];
+        let err = load_embedding_model(&copies).err().map(|e| e.to_string());
+        assert!(
+            err.as_deref().is_some_and(|e| e.contains("tokenizer.json")),
+            "{err:?}"
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 }

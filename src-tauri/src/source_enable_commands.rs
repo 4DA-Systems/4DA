@@ -94,6 +94,11 @@ pub(crate) async fn set_source_enabled(
         info!(target: "4da::sources", source = st, removed, "Interest turned off");
     } else {
         info!(target: "4da::sources", source = st, "Interest turned on");
+        // Interests are what embeddings serve (AD-054 decision 7): fetch the
+        // local search model once if this install embeds in-process and has none.
+        if source_class::is_interest(st) {
+            crate::embeddings::request_model_on_demand("interest-turned-on");
+        }
     }
     Ok(SourceSetting {
         source_type: st.to_string(),

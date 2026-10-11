@@ -181,7 +181,7 @@ fn skip_or_fail_model_unavailable(test_name: &str, err: &str, required: bool) {
             "FOURDA_REQUIRE_REAL_EMBEDDINGS=1 but the embedding model is unavailable — \
              {test_name} would have SKIPPED and reported a vacuous green pass. \
              Fetch the model first (node scripts/download-ort.cjs && \
-             node scripts/download-embedding-model.cjs, or `pnpm run bundle:resources`) \
+             node scripts/download-embedding-model.cjs, or `pnpm run bundle:model`) \
              or unset the env var to accept a loud skip. Underlying error: {err}"
         );
     }

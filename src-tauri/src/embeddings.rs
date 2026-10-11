@@ -55,6 +55,13 @@ const FASTEMBED_CALL_TIMEOUT_SECS: u64 = 10;
 /// Returns `Some(embeddings)` on success, `None` on failure or timeout.
 #[cfg(feature = "fastembed-local")]
 async fn try_fastembed_fallback(texts: &[String]) -> Option<Vec<Vec<f32>>> {
+    // AD-054 decision 7: no copy of the model means no in-process embedding,
+    // and a background embed never downloads one. If an interest is on, this
+    // is the first use that needs it (`on_missing_model`).
+    if !embeddings_providers::model_store::is_installed() {
+        embeddings_providers::model_store::on_missing_model();
+        return None;
+    }
     let texts_for_fe = texts.to_vec();
     // Run init+embed on a blocking thread. A `spawn_blocking` task is NOT
     // cancelled when the JoinHandle is dropped, so on timeout the lazy engine
@@ -184,9 +191,21 @@ fn zero_vector_fallback(count: usize) -> Vec<Vec<f32>> {
     crate::capabilities::report_degraded(
         crate::capabilities::Capability::EmbeddingSearch,
         "No embedding provider available",
-        "Keyword matching with context synthesis (install Ollama for semantic search)",
+        "Keyword matching with context synthesis (download the local search model in Settings, or run Ollama, for semantic search)",
     );
     (0..count).map(|_| vec![0.0f32; EMBEDDING_DIMS]).collect()
+}
+
+/// A feature that needs embeddings is in use (an interest was turned on, a
+/// natural-language search ran): fetch the local search model once, in the
+/// background, if this install embeds in-process and has no copy. Returns at
+/// once; a no-op when the model is on disk, downloading, or not needed
+/// (Ollama serves embeddings, or the user opted into cloud embeddings).
+pub(crate) fn request_model_on_demand(reason: &'static str) {
+    #[cfg(feature = "fastembed-local")]
+    embeddings_providers::model_store::request_on_demand_in_background(reason);
+    #[cfg(not(feature = "fastembed-local"))]
+    let _ = reason;
 }
 
 /// Generate embeddings for a list of texts

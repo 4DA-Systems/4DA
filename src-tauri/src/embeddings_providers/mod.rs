@@ -8,6 +8,8 @@
 
 pub mod fastembed;
 pub mod fastembed_setup;
+#[cfg(feature = "fastembed-local")]
+pub(crate) mod model_store;
 mod observe;
 mod ollama;
 mod openai;
