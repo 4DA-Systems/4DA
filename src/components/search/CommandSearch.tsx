@@ -93,6 +93,15 @@ export const CommandSearch = memo(function CommandSearch({ onAnalyze, onOpenSett
     if (!s.preemptionFeed && !s.preemptionLoading && !s.preemptionPaywalled) void s.loadPreemption();
   }, [open]);
 
+  // When that feed lands after the user already typed (a pasted query, a slow
+  // first load), re-run the query so the group appears without another
+  // keystroke. The intelligence tier answers from its cache.
+  const preemptionFeed = useAppStore(s => s.preemptionFeed);
+  useEffect(() => {
+    if (open && query.trim()) setQuery(query);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only a newly loaded feed re-runs the query, not each keystroke
+  }, [preemptionFeed]);
+
   // Global Cmd/Ctrl+K — platform-correct (⌘ on macOS, Ctrl on Windows/Linux).
   // The `/` focus shortcut is handled by the app's keyboard layer via the
   // [data-search-input] hook target, which fires this input's onFocus.
