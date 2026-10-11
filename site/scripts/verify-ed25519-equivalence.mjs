@@ -10,18 +10,7 @@
 import crypto from 'node:crypto';
 import * as ed from '@noble/ed25519';
 
-// Wire @noble's async SHA-512 to WebCrypto — exactly as functions/api/license/activate.js does.
-ed.etc.sha512Async = async (...msgs) => {
-  let total = 0;
-  for (const m of msgs) total += m.length;
-  const data = new Uint8Array(total);
-  let offset = 0;
-  for (const m of msgs) {
-    data.set(m, offset);
-    offset += m.length;
-  }
-  return new Uint8Array(await crypto.webcrypto.subtle.digest('SHA-512', data));
-};
+// @noble/ed25519 v3 hashes with WebCrypto by itself — exactly as functions/api/license/activate.js runs.
 
 // Fixed 32-byte seed (test only — NOT a real key).
 const privHex = '9d61b19deffdaa4b27b0e9d4a5c9f3f28e0dd3a9f5c9f0e1d2a3b4c5d6e7f8091';

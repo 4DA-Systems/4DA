@@ -10,18 +10,9 @@
 
 import * as ed from '@noble/ed25519';
 
-// Wire @noble's async SHA-512 to the runtime's WebCrypto (Workers + Node 20+).
-ed.etc.sha512Async = async (...msgs) => {
-  let total = 0;
-  for (const m of msgs) total += m.length;
-  const data = new Uint8Array(total);
-  let offset = 0;
-  for (const m of msgs) {
-    data.set(m, offset);
-    offset += m.length;
-  }
-  return new Uint8Array(await crypto.subtle.digest('SHA-512', data));
-};
+// @noble/ed25519 v3 hashes with the runtime's WebCrypto (Workers + Node 20+) by
+// itself. Do not assign `ed.etc.sha512Async` (the v2 hook): v3 freezes `ed.etc`
+// and the assignment throws at module load, taking every licence route down.
 
 export function hexToBytes(hex) {
   const clean = hex.trim();

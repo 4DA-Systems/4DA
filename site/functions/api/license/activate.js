@@ -68,21 +68,10 @@ import {
 // Ed25519 — byte-identical signatures to Node crypto and Rust ed25519_dalek for
 // the same 32-byte seed + message; proven by scripts/verify-ed25519-equivalence.mjs).
 //
-// @noble/ed25519 v2's async signing needs a SHA-512 implementation; wire it to
-// the runtime's WebCrypto (available on both Workers and Node 20+).
+// @noble/ed25519 v3 hashes with the runtime's WebCrypto (`crypto.subtle`, on both
+// Workers and Node 20+) by itself. v2 needed `ed.etc.sha512Async` wired by hand;
+// v3 freezes `ed.etc`, so assigning it there throws at module load.
 // ---------------------------------------------------------------------------
-
-ed.etc.sha512Async = async (...msgs) => {
-  let total = 0;
-  for (const m of msgs) total += m.length;
-  const data = new Uint8Array(total);
-  let offset = 0;
-  for (const m of msgs) {
-    data.set(m, offset);
-    offset += m.length;
-  }
-  return new Uint8Array(await crypto.subtle.digest('SHA-512', data));
-};
 
 function hexToBytes(hex) {
   const clean = hex.trim();
