@@ -27,7 +27,7 @@
 //
 // Secrets: STRIPE_SECRET_KEY, LICENSE_PRIVATE_KEY_HEX. KV: LICENSE_KV (optional).
 
-import Stripe from 'stripe';
+import { createStripe } from '../../../lib/stripe-client.js';
 import * as ed from '@noble/ed25519';
 import { hexToBytes, signLicenseToken } from '../../../lib/ed25519-license.js';
 import { APP_LICENSE_PUBLIC_KEY_HEX } from '../../../lib/license-health.js';
@@ -182,7 +182,7 @@ export async function onRequest({ request, env }) {
   }
 
   try {
-    const stripe = new Stripe(env.STRIPE_SECRET_KEY, { httpClient: Stripe.createFetchHttpClient() });
+    const stripe = createStripe(env.STRIPE_SECRET_KEY);
     const entitled = await findEntitledCustomer(stripe, presented.email);
     if (!entitled) return json({ status: 'not_entitled' }, 403);
 

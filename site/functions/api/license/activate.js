@@ -27,6 +27,7 @@
 //   ENVIRONMENT             — "production" in prod; anything else enables localhost CORS
 
 import Stripe from 'stripe';
+import { createStripe } from '../../../lib/stripe-client.js';
 import * as ed from '@noble/ed25519';
 import {
   hasOtherStandingCharge,
@@ -523,7 +524,7 @@ export async function onRequest({ request, env, waitUntil }) {
     const rawBody = await request.text();
     const signature = request.headers.get('stripe-signature');
 
-    const stripe = new Stripe(env.STRIPE_SECRET_KEY, { httpClient: Stripe.createFetchHttpClient() });
+    const stripe = createStripe(env.STRIPE_SECRET_KEY);
 
     let event;
     try {
@@ -661,7 +662,7 @@ const SESSION_LOOKUP_MAX_AGE_SECONDS = 24 * 60 * 60;
 
 async function handleSessionLookup(env, session_id, headers) {
   try {
-    const stripe = new Stripe(env.STRIPE_SECRET_KEY, { httpClient: Stripe.createFetchHttpClient() });
+    const stripe = createStripe(env.STRIPE_SECRET_KEY);
 
     let session;
     try {
@@ -819,7 +820,7 @@ async function handleEmailRecovery(env, request, email, headers, waitUntil) {
     );
   }
 
-  const stripe = new Stripe(env.STRIPE_SECRET_KEY, { httpClient: Stripe.createFetchHttpClient() });
+  const stripe = createStripe(env.STRIPE_SECRET_KEY);
   const delivery = (async () => {
     // Per-address window, checked AFTER the constant 202 has gone out (this
     // whole closure rides waitUntil), so hitting the cap changes nothing the
