@@ -482,14 +482,52 @@ pub(super) fn store_vulnerability(
     let source_url = vuln.best_url();
     let summary = vuln.summary.as_deref().unwrap_or("Security advisory");
 
-    let affected_list = vuln.affected.as_deref().unwrap_or(&[]);
+    let mut stored = 0;
+    for (key, affected) in merge_affected(vuln) {
+        let dedup_key = format!("{}:{}:{}", vuln.id, key.0, key.1);
+        if !seen.insert(dedup_key) {
+            continue;
+        }
+        let ranges_json = serialize_ranges(&affected);
+        let fixed_json = extract_fixed_versions(&affected);
 
-    // Group affected entries by (package, ecosystem) and UNION their ranges. OSV can list the
-    // SAME package in MULTIPLE affected entries (different version branches, e.g. next
-    // [13.4.6,15.5.16) AND [16.0.0,16.2.5)). osv_advisories holds one row per (advisory,
-    // package), so keeping only the first dropped the branch that matched the user's pinned
-    // version — a completeness gap the live cycle exposed (this is the mirror-path twin of the
-    // same fix in sources/osv_live.rs).
+        db.upsert_osv_advisory_with_meta(
+            &vuln.id,
+            summary,
+            vuln.details.as_deref(),
+            &key.0,
+            &key.1,
+            ranges_json.as_deref(),
+            fixed_json.as_deref(),
+            severity_type.as_deref(),
+            cvss_score,
+            source_url.as_deref(),
+            vuln.published.as_deref(),
+            vuln.modified.as_deref(),
+            vuln.withdrawn.as_deref(),
+            vuln.aliases_json().as_deref(),
+            vuln.severity_label().as_deref(),
+        )
+        .map_err(|e| FourDaError::Internal(format!("Failed to store advisory: {e}")))?;
+
+        stored += 1;
+    }
+
+    Ok(stored)
+}
+
+/// One advisory's affected entries grouped by (package, ecosystem), in first
+/// appearance order, with their ranges UNIONED. OSV can list the SAME package
+/// in MULTIPLE affected entries (different version branches, e.g. next
+/// [13.4.6,15.5.16) AND [16.0.0,16.2.5)). osv_advisories holds one row per
+/// (advisory, package), so keeping only the first dropped the branch that
+/// matched the user's pinned version — a completeness gap the live cycle
+/// exposed (this is the mirror-path twin of the same fix in
+/// sources/osv_live.rs). An explicit `versions` list becomes an
+/// [`super::types::ENUMERATED_RANGE`] range. Shared with the rule vectors
+/// (`vectors_tests`), so they evaluate a record exactly as it is stored.
+pub(super) fn merge_affected(vuln: &Vulnerability) -> Vec<((String, String), Affected)> {
+    let affected_list = vuln.affected.as_deref().unwrap_or(&[]);
     let mut by_pkg: std::collections::HashMap<(String, String), Affected> =
         std::collections::HashMap::new();
     let mut order: Vec<(String, String)> = Vec::new();
@@ -528,44 +566,14 @@ pub(super) fn store_vulnerability(
                 });
         }
     }
-
-    let mut stored = 0;
-    for key in order {
-        let dedup_key = format!("{}:{}:{}", vuln.id, key.0, key.1);
-        if !seen.insert(dedup_key) {
-            continue;
-        }
-        let affected = &by_pkg[&key];
-        let ranges_json = serialize_ranges(affected);
-        let fixed_json = extract_fixed_versions(affected);
-
-        db.upsert_osv_advisory_with_meta(
-            &vuln.id,
-            summary,
-            vuln.details.as_deref(),
-            &key.0,
-            &key.1,
-            ranges_json.as_deref(),
-            fixed_json.as_deref(),
-            severity_type.as_deref(),
-            cvss_score,
-            source_url.as_deref(),
-            vuln.published.as_deref(),
-            vuln.modified.as_deref(),
-            vuln.withdrawn.as_deref(),
-            vuln.aliases_json().as_deref(),
-            vuln.severity_label().as_deref(),
-        )
-        .map_err(|e| FourDaError::Internal(format!("Failed to store advisory: {e}")))?;
-
-        stored += 1;
-    }
-
-    Ok(stored)
+    order
+        .into_iter()
+        .filter_map(|key| by_pkg.remove(&key).map(|affected| (key, affected)))
+        .collect()
 }
 
 /// Serialize the affected ranges to JSON for storage.
-fn serialize_ranges(affected: &Affected) -> Option<String> {
+pub(super) fn serialize_ranges(affected: &Affected) -> Option<String> {
     affected
         .ranges
         .as_ref()
