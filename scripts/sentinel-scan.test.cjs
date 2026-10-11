@@ -200,3 +200,32 @@ test("ipc: a non-zero exit with nothing parsed names the exit code", () => {
   assert.strictEqual(f.severity, "warning");
   assert.match(f.message, /exited 3/);
 });
+
+// ── Dependabot alerts (2026-10-11: 3,664 fixture alerts buried the one real alert) ──
+const { classifyDependabotAlerts } = require("./sentinel-scan.cjs");
+const fx = (n) => ({ number: n, manifest: `src-tauri/tests/conformance/cases/c${n}/package-lock.json`, severity: "high", pkg: "p" });
+
+test("dependabot: unknown (gh unavailable) and none open are not findings", () => {
+  assert.deepStrictEqual(classifyDependabotAlerts(null), []);
+  assert.deepStrictEqual(classifyDependabotAlerts([]), []);
+});
+
+test("dependabot: fixture-only alerts are one warning that names the fix command, never critical", () => {
+  const out = classifyDependabotAlerts([fx(1), fx(2), fx(3)]);
+  assert.strictEqual(out.length, 1);
+  assert.strictEqual(out[0].severity, "warning");
+  assert.match(out[0].message, /^3 Dependabot alert\(s\) on the vendored conformance fixtures/);
+  assert.match(out[0].message, /dismiss-fixture-alerts\.cjs --execute/);
+});
+
+test("dependabot: a real high alert is CRITICAL and is reported apart from fixture noise", () => {
+  const out = classifyDependabotAlerts([fx(1), { number: 9, manifest: "src-tauri/Cargo.lock", severity: "high", pkg: "rustls" }]);
+  assert.deepStrictEqual(out.map((f) => f.severity), ["critical", "warning"]);
+  assert.match(out[0].message, /1 open Dependabot alert\(s\) on 4DA's own manifests \(1 high\/critical\)/);
+  assert.match(out[0].detail, /#9 rustls high src-tauri\/Cargo\.lock/);
+});
+
+test("dependabot: a real medium alert is a warning", () => {
+  const [f] = classifyDependabotAlerts([{ number: 4, manifest: "site/pnpm-lock.yaml", severity: "medium", pkg: "x" }]);
+  assert.strictEqual(f.severity, "warning");
+});
