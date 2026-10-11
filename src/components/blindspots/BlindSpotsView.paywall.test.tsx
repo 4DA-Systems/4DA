@@ -13,7 +13,6 @@ import BlindSpotsView from './BlindSpotsView';
 // nonzero. Zero counts or cold_start render the plain paywall unchanged
 // (doctrine rule 6: no "no data yet" states).
 
-vi.mock('../../hooks/use-cold-start-gate', () => ({ useColdStartGate: () => false }));
 vi.mock('../../hooks/use-blind-spots-data', () => ({
   useBlindSpotsData: () => ({ depRows: [], unmatchedSignals: [], recommendations: [] }),
 }));

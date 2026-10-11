@@ -209,7 +209,7 @@ fn the_key_reads_zero_from_an_empty_database() {
 #[test]
 fn the_feed_reports_how_many_dependencies_it_covered() {
     let conn = rusqlite::Connection::open_in_memory().unwrap();
-    let empty = with_tracked_dependencies(crate::evidence::EvidenceFeed::from_items(vec![]), &conn);
+    let empty = with_gap_inputs(crate::evidence::EvidenceFeed::from_items(vec![]), &conn);
     assert_eq!(empty.total_tracked, Some(0), "no tables: nothing known");
 
     conn.execute_batch(
@@ -220,8 +220,38 @@ fn the_feed_reports_how_many_dependencies_it_covered() {
     )
     .unwrap();
     assert_eq!(known_dependency_count(&conn), 3);
-    let feed = with_tracked_dependencies(crate::evidence::EvidenceFeed::from_items(vec![]), &conn);
+    let feed = with_gap_inputs(crate::evidence::EvidenceFeed::from_items(vec![]), &conn);
     assert_eq!(feed.total_tracked, Some(3));
+}
+
+/// "Your knowledge is current" rests on sources having been read, so the
+/// feed carries their freshness: absent source and run tables read as
+/// stale with no check ever, which keeps that claim closed.
+#[test]
+fn the_feed_carries_the_freshness_of_the_news_it_read() {
+    let conn = rusqlite::Connection::open_in_memory().unwrap();
+    let feed = with_gap_inputs(crate::evidence::EvidenceFeed::from_items(vec![]), &conn);
+    let fresh = feed.data_freshness.expect("freshness is always attached");
+    assert!(fresh.is_stale);
+    assert!(fresh.newest_source_check_age_hours.is_none());
+    assert!(fresh.last_run_age_minutes.is_none());
+
+    conn.execute_batch(
+        "CREATE TABLE source_items (created_at TEXT);
+         CREATE TABLE feed_health (last_success_at TEXT, consecutive_failures INTEGER, circuit_open INTEGER);
+         CREATE TABLE engine_runs (id INTEGER PRIMARY KEY, items_scored INTEGER, sources_succeeded INTEGER,
+                                   sources_failed INTEGER, completed_at TEXT);
+         INSERT INTO source_items VALUES (datetime('now', '-2 hours'));
+         INSERT INTO feed_health VALUES (datetime('now', '-1 hours'), 0, 0);
+         INSERT INTO engine_runs (items_scored, sources_succeeded, sources_failed, completed_at)
+              VALUES (12, 6, 0, datetime('now', '-30 minutes'));",
+    )
+    .unwrap();
+    let feed = with_gap_inputs(crate::evidence::EvidenceFeed::from_items(vec![]), &conn);
+    let fresh = feed.data_freshness.unwrap();
+    assert!(!fresh.is_stale);
+    assert!(fresh.newest_source_check_age_hours.is_some());
+    assert!(fresh.last_run_age_minutes.is_some());
 }
 
 // ─── Restart: serve the previous run's result while revalidating ─────────

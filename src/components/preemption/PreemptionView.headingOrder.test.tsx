@@ -17,7 +17,6 @@ import PreemptionView from './PreemptionView';
 // These render the REAL PreemptionTierSection / ItemCard / EvidenceList
 // components (not stubs), because the point is the heading tags they emit.
 
-vi.mock('../../hooks/use-cold-start-gate', () => ({ useColdStartGate: () => false }));
 vi.mock('../SignalUpgradeCTA', () => ({ SignalUpgradeCTA: () => <div /> }));
 vi.mock('../../lib/commands', () => ({ cmd: vi.fn(() => Promise.resolve(null)) }));
 vi.mock('../../lib/trust-feedback', () => ({ recordTrustEvent: vi.fn() }));

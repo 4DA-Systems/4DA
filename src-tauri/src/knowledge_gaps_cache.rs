@@ -86,15 +86,22 @@ pub fn known_dependency_count(conn: &rusqlite::Connection) -> i64 {
         + scalar(conn, "SELECT COUNT(*) FROM project_dependencies")
 }
 
-/// The gaps feed with the dependency universe it was computed over, so the
-/// panel can tell "no gaps across N dependencies" from "no dependencies
-/// known" (fresh-profile E2E 2026-10-09: a user who skipped the project scan
-/// was told "No gaps detected — your knowledge is current").
-pub(super) fn with_tracked_dependencies(
+/// The gaps feed with the inputs a "no gaps" claim rests on:
+///
+/// - the dependency universe it was computed over, so the panel can tell "no
+///   gaps across N dependencies" from "no dependencies known" (fresh-profile
+///   E2E 2026-10-09: a user who skipped the project scan was told "No gaps
+///   detected — your knowledge is current");
+/// - the freshness of the news it read (source checks, the last engine
+///   cycle), so "your knowledge is current" is said only once sources have
+///   actually been read and linked — not after some number of fetched items,
+///   which a stack-only profile (AD-054) may never reach.
+pub(super) fn with_gap_inputs(
     mut feed: crate::evidence::EvidenceFeed,
     conn: &rusqlite::Connection,
 ) -> crate::evidence::EvidenceFeed {
     feed.total_tracked = Some(usize::try_from(known_dependency_count(conn)).unwrap_or(0));
+    feed.data_freshness = Some(crate::monitoring_briefing::compute_data_freshness_from_conn(conn));
     feed
 }
 

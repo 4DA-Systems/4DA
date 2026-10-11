@@ -15,6 +15,7 @@ pub(crate) mod identity;
 pub(crate) mod matching;
 pub(crate) mod parent_hint;
 pub(crate) mod reachability;
+pub(crate) mod readiness;
 pub(crate) mod sync;
 pub(crate) mod types;
 #[cfg(test)]

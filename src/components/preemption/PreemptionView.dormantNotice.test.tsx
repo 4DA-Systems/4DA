@@ -8,7 +8,6 @@ import PreemptionView from './PreemptionView';
 // alarming rows about a repo nobody is deploying. One quiet footer row per
 // dormant project, kept OUT of the urgency tiers.
 
-vi.mock('../../hooks/use-cold-start-gate', () => ({ useColdStartGate: () => false }));
 vi.mock('../SignalUpgradeCTA', () => ({ SignalUpgradeCTA: () => <div /> }));
 
 vi.mock('./PreemptionTierSection', () => ({

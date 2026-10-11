@@ -15,7 +15,6 @@ import PreemptionView from './PreemptionView';
 // (client-side copies of the filter are exactly what produced the audit's
 // 12/41/120-vs-15/67/149 header drift).
 
-vi.mock('../../hooks/use-cold-start-gate', () => ({ useColdStartGate: () => false }));
 vi.mock('../SignalUpgradeCTA', () => ({ SignalUpgradeCTA: () => <div /> }));
 vi.mock('./PreemptionFreeFloorNotice', () => ({ PreemptionFreeFloorNotice: () => <div /> }));
 

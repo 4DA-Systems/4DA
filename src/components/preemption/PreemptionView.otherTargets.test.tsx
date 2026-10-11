@@ -7,7 +7,6 @@ import PreemptionView from './PreemptionView';
 // on the host (lens_hints.other_build_target) are pulled OUT of the main tiers
 // into a collapsed "other build targets" group — surfaced, never hidden.
 
-vi.mock('../../hooks/use-cold-start-gate', () => ({ useColdStartGate: () => false }));
 vi.mock('../SignalUpgradeCTA', () => ({ SignalUpgradeCTA: () => <div /> }));
 
 // Render each tier section's item ids so we can assert what landed in the tiers.

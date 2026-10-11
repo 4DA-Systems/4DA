@@ -16,7 +16,6 @@ import type { DepRow } from './types';
 // These tests render the REAL TierSection / EmergingSignals / CollapsedSections
 // components (not stubs) — the point is the heading tags they actually emit.
 
-vi.mock('../../hooks/use-cold-start-gate', () => ({ useColdStartGate: () => false }));
 vi.mock('../../lib/commands', () => ({ cmd: vi.fn(() => Promise.resolve({ total_active: 0, total_failing: 0, total_disabled: 0 })) }));
 vi.mock('../../lib/trust-feedback', () => ({ recordTrustEvent: vi.fn() }));
 vi.mock('./dismissal-utils', () => ({

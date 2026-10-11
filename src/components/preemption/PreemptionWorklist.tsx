@@ -7,10 +7,11 @@ import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '../../store';
 import type { EvidenceItem } from '../../../src-tauri/bindings/bindings/EvidenceItem';
-import { useColdStartGate } from '../../hooks/use-cold-start-gate';
+import { preemptionNegative } from '../../lib/negative-readiness';
 import { URGENCY_ORDER, ItemCard } from './PreemptionCard';
 import { PreemptionTierSection } from './PreemptionTierSection';
 import { PreemptionFreeFloorNotice } from './PreemptionFreeFloorNotice';
+import { PreemptionAdvisoryNotice } from './PreemptionAdvisoryNotice';
 import { SignalUpgradeCTA } from '../SignalUpgradeCTA';
 import { ReportAge } from '../ReportAge';
 import { ScanProjectsPrompt } from '../blindspots/BlindSpotsFirstDay';
@@ -36,7 +37,6 @@ const FINDINGS_VISIBLE_CAP = 20;
  */
 export const PreemptionWorklist = memo(function PreemptionWorklist() {
   const { t } = useTranslation();
-  const isColdStart = useColdStartGate();
   const surfacedRef = useRef(new Set<string>());
   const undoTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [showOtherTargets, setShowOtherTargets] = useState(false);
@@ -144,6 +144,10 @@ export const PreemptionWorklist = memo(function PreemptionWorklist() {
   const isFreeFloor = feed?.tier_scope === 'free_floor';
   const noDependenciesKnown = feed?.total_tracked === 0;
   const rescan = useCallback(() => { void loadPreemption(); }, [loadPreemption]);
+  // "Your stack is clean" only when the advisory data that would contradict it
+  // was synced, is recent, and was matched by this feed (doctrine rule 6).
+  const negative = preemptionNegative(feed?.advisory_sync);
+  const recheck = useCallback(() => { void refreshQuietly(); }, [refreshQuietly]);
 
   return (
     <div className="space-y-5">
@@ -193,7 +197,11 @@ export const PreemptionWorklist = memo(function PreemptionWorklist() {
         />
       )}
 
-      {feed && totalAlerts === 0 && !noDependenciesKnown && !isColdStart && (
+      {feed && totalAlerts === 0 && !noDependenciesKnown && negative.kind !== 'assert' && negative.kind !== 'silent' && (
+        <PreemptionAdvisoryNotice negative={negative} onRecheck={recheck} />
+      )}
+
+      {feed && totalAlerts === 0 && !noDependenciesKnown && negative.kind === 'assert' && (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mb-3">
             {/* eslint-disable-next-line i18next/no-literal-string */}
@@ -370,7 +378,7 @@ export const PreemptionWorklist = memo(function PreemptionWorklist() {
         </section>
       )}
 
-      {feed && isFreeFloor && !isColdStart && <PreemptionFreeFloorNotice />}
+      {feed && isFreeFloor && (totalAlerts > 0 || negative.kind === 'assert') && <PreemptionFreeFloorNotice />}
     </div>
   );
 });

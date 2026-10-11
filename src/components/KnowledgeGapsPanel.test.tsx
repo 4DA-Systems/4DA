@@ -12,10 +12,16 @@ vi.mock('../lib/commands', () => ({
   cmd: (...args: unknown[]) => cmdMock(...args),
 }));
 
-let coldStart = false;
-vi.mock('../hooks/use-cold-start-gate', () => ({
-  useColdStartGate: () => coldStart,
-}));
+// "Your knowledge is current" rests on the news having been read: a source
+// check succeeded, the data is not stale, an engine cycle linked it. A
+// stack-only profile (AD-054) with a handful of fetched items qualifies.
+const NEWS_READ = {
+  newest_item_age_hours: 1, items_last_24h: 6, items_last_72h: 6,
+  newest_source_check_age_hours: 0.5, source_checks_last_24h: 6, source_checks_last_72h: 6,
+  failing_sources: 0, stale_sources: 0, total_sources: 6, is_stale: false, no_recent_fetches: false,
+  last_run_items_scored: 6, last_run_sources_succeeded: 6, last_run_sources_failed: 0,
+  last_run_age_minutes: 20, computed_at: null,
+};
 
 vi.mock('./ProGate', () => ({
   ProGate: ({ children }: { children: React.ReactNode }) => <div data-testid="pro-gate">{children}</div>,
@@ -39,7 +45,6 @@ describe('KnowledgeGapsPanel', () => {
   beforeEach(() => {
     cmdMock.mockReset();
     runAutoDiscovery.mockClear();
-    coldStart = false;
   });
 
   it('never claims "current" when no dependency is known, and offers the scan', async () => {
@@ -58,8 +63,7 @@ describe('KnowledgeGapsPanel', () => {
   });
 
   it('offers the scan on day one too: no lockfile is not a cold-start silence', async () => {
-    coldStart = true;
-    cmdMock.mockResolvedValue({ items: [], total: 0, total_tracked: 0 });
+    cmdMock.mockResolvedValue({ items: [], total: 0, total_tracked: 0, data_freshness: null });
     render(<KnowledgeGapsPanel />);
     await act(async () => {});
     expect(screen.getByTestId('knowledge-gaps-scan-prompt')).toBeInTheDocument();
@@ -71,8 +75,8 @@ describe('KnowledgeGapsPanel', () => {
     vi.useFakeTimers({ shouldAdvanceTime: false });
     try {
       const hoursAgo = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString();
-      cmdMock.mockResolvedValueOnce({ items: [], total: 0, total_tracked: 94, computed_at: hoursAgo });
-      cmdMock.mockResolvedValueOnce({ items: [], total: 0, total_tracked: 94, computed_at: new Date().toISOString() });
+      cmdMock.mockResolvedValueOnce({ items: [], total: 0, total_tracked: 94, computed_at: hoursAgo, data_freshness: NEWS_READ });
+      cmdMock.mockResolvedValueOnce({ items: [], total: 0, total_tracked: 94, computed_at: new Date().toISOString(), data_freshness: NEWS_READ });
       render(<KnowledgeGapsPanel />);
       await act(async () => {});
       expect(screen.getByTestId('knowledge-gaps-report-age').textContent).toBe('knowledgeGaps.reportAge');
@@ -86,14 +90,14 @@ describe('KnowledgeGapsPanel', () => {
   });
 
   it('says nothing about gaps computed this cycle', async () => {
-    cmdMock.mockResolvedValue({ items: [], total: 0, total_tracked: 94, computed_at: new Date().toISOString() });
+    cmdMock.mockResolvedValue({ items: [], total: 0, total_tracked: 94, computed_at: new Date().toISOString(), data_freshness: NEWS_READ });
     render(<KnowledgeGapsPanel />);
     await act(async () => {});
     expect(screen.queryByTestId('knowledge-gaps-report-age')).not.toBeInTheDocument();
   });
 
   it('keeps the all-clear for a user whose dependencies were checked', async () => {
-    cmdMock.mockResolvedValue({ items: [], total: 0, total_tracked: 94 });
+    cmdMock.mockResolvedValue({ items: [], total: 0, total_tracked: 94, data_freshness: NEWS_READ });
     render(<KnowledgeGapsPanel />);
     await act(async () => {});
     expect(screen.queryByTestId('knowledge-gaps-scan-prompt')).not.toBeInTheDocument();
@@ -127,20 +131,48 @@ describe('KnowledgeGapsPanel', () => {
     expect(screen.getByTestId('knowledge-gaps-error')).toBeInTheDocument();
     expect(screen.queryByText('knowledgeGaps.noGaps')).not.toBeInTheDocument();
 
-    cmdMock.mockResolvedValueOnce({ items: [], total_tracked: 94 });
+    cmdMock.mockResolvedValueOnce({ items: [], total_tracked: 94, data_freshness: NEWS_READ });
     await act(async () => {
       fireEvent.click(screen.getByText('action.retry'));
     });
     expect(screen.getByText('knowledgeGaps.noGaps')).toBeInTheDocument();
   });
 
-  it('says nothing beyond its description on day one with no gaps', async () => {
-    coldStart = true;
-    cmdMock.mockResolvedValue({ items: [], total_tracked: 94 });
+  it('says nothing beyond its description before any source was read', async () => {
+    cmdMock.mockResolvedValue({ items: [], total_tracked: 94, data_freshness: null });
     render(<KnowledgeGapsPanel />);
     await act(async () => {});
     expect(screen.getByText('knowledgeGaps.subtitle')).toBeInTheDocument();
     expect(screen.queryByText('knowledgeGaps.noGaps')).not.toBeInTheDocument();
+  });
+
+  it('says nothing when the news it read is stale', async () => {
+    cmdMock.mockResolvedValue({ items: [], total_tracked: 94, data_freshness: { ...NEWS_READ, is_stale: true } });
+    render(<KnowledgeGapsPanel />);
+    await act(async () => {});
+    expect(screen.queryByText('knowledgeGaps.noGaps')).not.toBeInTheDocument();
+  });
+
+  it('says nothing until an engine cycle has linked what was fetched', async () => {
+    cmdMock.mockResolvedValue({ items: [], total_tracked: 94, data_freshness: { ...NEWS_READ, last_run_age_minutes: null } });
+    render(<KnowledgeGapsPanel />);
+    await act(async () => {});
+    expect(screen.queryByText('knowledgeGaps.noGaps')).not.toBeInTheDocument();
+  });
+
+  it('a small stack-only profile may be told it is current: no item-count floor', async () => {
+    // Six stack items, far below the retired 100-item threshold.
+    cmdMock.mockResolvedValue({ items: [], total_tracked: 3, data_freshness: NEWS_READ });
+    render(<KnowledgeGapsPanel />);
+    await act(async () => {});
+    expect(screen.getByText('knowledgeGaps.noGaps')).toBeInTheDocument();
+  });
+
+  it('real gaps render even before the news is confirmed fresh', async () => {
+    cmdMock.mockResolvedValue({ items: [gapItem('serde', 'high')], total_tracked: 94, data_freshness: null });
+    render(<KnowledgeGapsPanel />);
+    await act(async () => {});
+    expect(screen.getByText('serde')).toBeInTheDocument();
   });
 });
 
