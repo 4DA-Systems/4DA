@@ -47,9 +47,12 @@ export function SourceCategoryFilter({ sourceFilters, sourcesWithResults, onTogg
     return () => { document.removeEventListener('mousedown', handler); };
   }, [openCategory]);
 
+  // Only the sources the user reads (AD-054): a turned-off interest is not a
+  // filter choice. With every interest off this is the stack sources alone.
   const categories = getSourcesByCategory();
-  const totalActive = sourceFilters.size;
-  const totalSources = Array.from(categories.values()).flat().length;
+  const listed = Array.from(categories.values()).flat();
+  const totalActive = listed.filter(s => sourceFilters.has(s)).length;
+  const totalSources = listed.length;
 
   const toggleCategory = useCallback((cat: string, enabled: boolean) => {
     const sources = categories.get(cat) ?? [];
@@ -59,6 +62,10 @@ export function SourceCategoryFilter({ sourceFilters, sourcesWithResults, onTogg
       }
     }
   }, [categories, sourceFilters, onToggle]);
+
+  // Metadata not loaded (or nothing registered): no chip row at all, rather
+  // than a "Sources" label over an empty row.
+  if (totalSources === 0) return null;
 
   return (
     <div ref={dropdownRef} className="flex items-center gap-1.5 flex-wrap" role="group" aria-label="Source category filters">

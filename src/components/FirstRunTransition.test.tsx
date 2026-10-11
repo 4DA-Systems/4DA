@@ -103,7 +103,9 @@ vi.mock('../config/sources', () => ({
   },
   getSourceCategory: () => 'general',
   loadSourceMeta: vi.fn(),
-  ALL_SOURCE_IDS: new Set(),
+  ENABLED_SOURCE_IDS: new Set(),
+  isSourceTurnedOff: () => false,
+  markSourceEnabled: () => true,
   getSourcesByCategory: () => new Map(),
 }));
 

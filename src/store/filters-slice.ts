@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import type { StateCreator } from 'zustand';
-import { ALL_SOURCE_IDS } from '../config/sources';
+import { ENABLED_SOURCE_IDS, markSourceEnabled } from '../config/sources';
 import type { AppStore, FiltersSlice } from './types';
 
 export const createFiltersSlice: StateCreator<AppStore, [], [], FiltersSlice> = (set) => ({
-  sourceFilters: new Set(ALL_SOURCE_IDS),
+  sourceFilters: new Set(ENABLED_SOURCE_IDS),
   sortBy: 'score',
   showOnlyRelevant: true,
   searchQuery: '',
@@ -22,8 +22,41 @@ export const createFiltersSlice: StateCreator<AppStore, [], [], FiltersSlice> = 
     });
   },
 
-  // Re-read ALL_SOURCE_IDS at call time (it's populated dynamically by loadSourceMeta)
-  resetSourceFilters: () => set({ sourceFilters: new Set(ALL_SOURCE_IDS) }),
+  // Re-read ENABLED_SOURCE_IDS at call time (it's populated dynamically by loadSourceMeta)
+  resetSourceFilters: () => set({ sourceFilters: new Set(ENABLED_SOURCE_IDS) }),
+
+  // Settings turned a source on or off (AD-054). Keep the Signal filter and
+  // the displayed results in step with it, without waiting for a reload.
+  applySourceEnabled: (source, enabled) => {
+    set(state => {
+      // Was the filter showing everything the user reads? Checked before the
+      // change, so a newly turned-on source joins an unfiltered view but does
+      // not widen a view the user narrowed by hand.
+      const wasUnfiltered = [...ENABLED_SOURCE_IDS].every(id => state.sourceFilters.has(id));
+      markSourceEnabled(source, enabled);
+      // Always a new Set: the chips read the enabled list from source
+      // metadata, so a new identity is what re-renders them.
+      let sourceFilters = new Set(state.sourceFilters);
+      if (enabled) {
+        if (wasUnfiltered) sourceFilters.add(source);
+      } else {
+        sourceFilters.delete(source);
+        if (sourceFilters.size === 0) sourceFilters = new Set(ENABLED_SOURCE_IDS);
+      }
+      if (enabled) return { sourceFilters };
+      // Mirror the backend's drop from the display set (set_source_enabled):
+      // a turned-off source's items leave the list and every count at once.
+      const keep = (r: { source_type?: string }) => (r.source_type || 'hackernews') !== source;
+      return {
+        sourceFilters,
+        appState: {
+          ...state.appState,
+          relevanceResults: state.appState.relevanceResults.filter(keep),
+          nearMisses: state.appState.nearMisses?.filter(keep) ?? null,
+        },
+      };
+    });
+  },
 
   setSortBy: (sort) => set({ sortBy: sort }),
   setShowOnlyRelevant: (show) => set({ showOnlyRelevant: show }),

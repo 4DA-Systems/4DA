@@ -117,7 +117,9 @@ vi.mock('../../config/sources', () => ({
   getSourcesByCategory: () => new Map([['general', ['hackernews']]]),
   isSourcesLoaded: () => true,
   loadSourceMeta: () => Promise.resolve(),
-  ALL_SOURCE_IDS: new Set(['hackernews']),
+  ENABLED_SOURCE_IDS: new Set(['hackernews']),
+  isSourceTurnedOff: () => false,
+  markSourceEnabled: () => true,
 }));
 
 import { ResultsView } from '../ResultsView';

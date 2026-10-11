@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd, type SourceSetting } from '../../lib/commands';
+import { useAppStore } from '../../store';
 import { translateError } from '../../utils/error-messages';
 
 interface SourceTogglesProps {
@@ -25,6 +26,7 @@ export function SourceToggles({ onStatusChange }: SourceTogglesProps) {
   const { t } = useTranslation();
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
   const [saving, setSaving] = useState<string | null>(null);
+  const applySourceEnabled = useAppStore(s => s.applySourceEnabled);
 
   const load = useCallback(async () => {
     setState({ kind: 'loading' });
@@ -46,6 +48,8 @@ export function SourceToggles({ onStatusChange }: SourceTogglesProps) {
       setSaving(row.source_type);
       try {
         const saved = await cmd('set_source_enabled', { sourceType: row.source_type, enabled: next });
+        // The Signal source filter and the displayed results follow at once.
+        applySourceEnabled(saved.source_type, saved.enabled);
         setState((prev) =>
           prev.kind === 'ready'
             ? { kind: 'ready', rows: prev.rows.map((r) => (r.source_type === saved.source_type ? saved : r)) }
@@ -60,7 +64,7 @@ export function SourceToggles({ onStatusChange }: SourceTogglesProps) {
         setSaving(null);
       }
     },
-    [onStatusChange, t],
+    [onStatusChange, t, applySourceEnabled],
   );
 
   return (
