@@ -156,6 +156,8 @@ export interface FiltersSlice {
   showSavedOnly: boolean;
   toggleSourceFilter: (source: string) => void;
   resetSourceFilters: () => void;
+  /** Settings turned a source on or off: update the filter and drop its items when off. */
+  applySourceEnabled: (source: string, enabled: boolean) => void;
   setSortBy: (
     sort:
       | 'score'

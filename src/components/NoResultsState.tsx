@@ -2,7 +2,7 @@
 import { useTranslation } from 'react-i18next';
 
 import { getRelevancePresentation } from '../utils/score';
-import { ALL_SOURCE_IDS } from '../config/sources';
+import { ENABLED_SOURCE_IDS } from '../config/sources';
 
 import type { SourceRelevance } from '../types';
 
@@ -26,6 +26,9 @@ export function NoResultsState({
   getTranslated,
 }: NoResultsStateProps) {
   const { t } = useTranslation();
+  // Narrowed = some source the user reads is filtered out. Turned-off
+  // sources never count: they are not offered as filters at all.
+  const narrowed = [...ENABLED_SOURCE_IDS].some(id => !sourceFilters.has(id));
 
   return (
     <div className="text-center py-16">
@@ -47,7 +50,7 @@ export function NoResultsState({
             {t('results.showAll')}
           </button>
         )}
-        {sourceFilters.size < ALL_SOURCE_IDS.size && (
+        {narrowed && (
           <button
             onClick={() => resetSourceFilters()}
             className="px-4 py-2 text-sm bg-bg-tertiary text-text-secondary rounded-lg border border-border hover:border-orange-500/30 transition-all"
@@ -56,7 +59,7 @@ export function NoResultsState({
           </button>
         )}
         {/* eslint-disable-next-line i18next/no-literal-string */}
-        {!showOnlyRelevant && sourceFilters.size === ALL_SOURCE_IDS.size && <p className="text-xs text-text-muted">Try a broader search query or add more interests in Settings</p>}
+        {!showOnlyRelevant && !narrowed &&<p className="text-xs text-text-muted">Try a broader search query or add more interests in Settings</p>}
       </div>
       {nearMisses && nearMisses.length > 0 && (
         <section className="mt-8 mx-auto max-w-lg" aria-label={t('results.nearMissesTitle', 'Almost relevant')}>

@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
 import { cmd } from '../../lib/commands';
+import { isSourceTurnedOff } from '../../config/sources';
 
 interface DiagnosticCheck {
   key: string;
@@ -82,7 +83,8 @@ export function ConfigDiagnostics() {
     setChecks([...results, { key: 'sources', name: t('enterprise.diagnostics.check.sources'), status: 'running', message: t('enterprise.diagnostics.checking') }]);
     try {
       const sources = await cmd('get_source_health_status');
-      const arr = sources;
+      // Turned-off sources (AD-054) are not read: their last status is stale.
+      const arr = sources.filter(s => !isSourceTurnedOff(s.source_type));
       const healthy = arr.filter(s => s.status === 'healthy').length;
       const total = arr.length;
       if (total === 0) {

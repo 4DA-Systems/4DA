@@ -48,7 +48,9 @@ vi.mock('../config/sources', () => ({
   },
   getSourceCategory: () => 'general',
   loadSourceMeta: vi.fn(),
-  ALL_SOURCE_IDS: new Set(['hackernews', 'reddit', 'github', 'producthunt', 'arxiv']),
+  ENABLED_SOURCE_IDS: new Set(['hackernews', 'reddit', 'github', 'producthunt', 'arxiv']),
+  isSourceTurnedOff: () => false,
+  markSourceEnabled: () => true,
   getSourcesByCategory: () => new Map(),
 }));
 

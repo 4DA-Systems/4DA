@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { useMemo, useCallback, useEffect } from 'react';
+import { isSourceTurnedOff } from '../config/sources';
 import { useAppStore } from '../store';
 import { isProfileEmpty } from '../utils/profile-empty';
 import { normalizeUrlForDedup } from '../utils/normalize-url';
@@ -140,8 +141,12 @@ export const useResultFilters = () => {
       // Snoozed = deferred, not rejected: hidden until the snooze expires.
       if (snoozedItemIds.has(item.id)) return false;
       const source = item.source_type || 'hackernews';
+      // A source the user turned off in Settings (AD-054) is never shown,
+      // even if a stale row of it is still in the list and the filter below
+      // is failing open.
+      if (isSourceTurnedOff(source)) return false;
       // Fail open while source metadata is unavailable. At cold start
-      // ALL_SOURCE_IDS is populated asynchronously; if that load fails once,
+      // ENABLED_SOURCE_IDS is populated asynchronously; if that load fails once,
       // sourceFilters can be an empty Set. Treating that as "exclude every
       // source" black-holed valid analysis results under an empty Sources bar.
       if (sourceFilteringActive && !sourceFilters.has(source)) return false;

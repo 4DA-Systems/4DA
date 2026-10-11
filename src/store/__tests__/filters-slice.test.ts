@@ -5,11 +5,13 @@ vi.mock('@tauri-apps/api/core', () => ({
   invoke: vi.fn(),
 }));
 
-// Mock dynamic source metadata — provide a pre-populated ALL_SOURCE_IDS set
+// Mock dynamic source metadata — provide a pre-populated ENABLED_SOURCE_IDS set
 vi.mock('../../config/sources', () => {
   const ids = new Set(['hackernews', 'arxiv', 'reddit', 'github', 'rss', 'youtube', 'twitter', 'producthunt', 'lobsters', 'devto', 'cve', 'osv', 'npm_registry', 'pypi', 'crates_io', 'huggingface', 'stackoverflow', 'bluesky', 'papers_with_code', 'go_modules']);
   return {
-    ALL_SOURCE_IDS: ids,
+    ENABLED_SOURCE_IDS: ids,
+    isSourceTurnedOff: () => false,
+    markSourceEnabled: () => true,
     getSourceLabel: (s: string) => s,
     getSourceFullName: (s: string) => s,
     getSourceColorClass: () => 'bg-gray-500/20 text-gray-400',

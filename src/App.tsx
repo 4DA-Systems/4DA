@@ -56,7 +56,7 @@ import { useUpdateCheck } from './hooks/use-update-check';
 import { trackEvent } from './hooks/use-telemetry';
 import { useDirection } from './i18n/rtl';
 import { useAppListeners } from './hooks/use-app-listeners';
-import { ALL_SOURCE_IDS, loadSourceMeta } from './config/sources';
+import { ENABLED_SOURCE_IDS, loadSourceMeta } from './config/sources';
 import { runWhenIdle } from './lib/defer';
 import { isSurfacedSignal } from './utils/score';
 import { useSignalDisplayOrder } from './components/signals/signal-display-order';
@@ -250,7 +250,7 @@ function App() {
       // Source metadata populates the dynamic source registry + resets filters
       // (only visible in the relevance view, never the default Brief view).
       void loadSourceMeta().then((loaded) => {
-        if (loaded || ALL_SOURCE_IDS.size > 0) {
+        if (loaded || ENABLED_SOURCE_IDS.size > 0) {
           useAppStore.getState().resetSourceFilters();
         }
       });

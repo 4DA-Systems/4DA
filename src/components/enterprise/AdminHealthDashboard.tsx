@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
 import { cmd } from '../../lib/commands';
+import { isSourceTurnedOff } from '../../config/sources';
 
 interface RelayHealth {
   connected: boolean;
@@ -44,7 +45,10 @@ export function AdminHealthDashboard() {
   const loadHealthData = async () => {
     setLoading(true);
     try {
-      const sources = await cmd('get_source_health_status').catch(() => []);
+      // A source the user turned off (AD-054) is not read, so its frozen
+      // health row is not a status worth reporting.
+      const sources = (await cmd('get_source_health_status').catch(() => []))
+        .filter(s => !isSourceTurnedOff(s.source_type));
       setSourceHealth(sources.map(s => ({
         source_type: s.source_type,
         status: s.status,
