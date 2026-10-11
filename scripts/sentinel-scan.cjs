@@ -25,7 +25,7 @@
 
 const fs = require("fs");
 const path = require("path");
-const { execSync } = require("child_process");
+const { execSync, execFileSync } = require("child_process");
 
 const ROOT = path.resolve(__dirname, "..");
 const OPS_STATE = path.join(ROOT, ".claude", "wisdom", "ops-state.json");
@@ -921,6 +921,57 @@ function checkMergeGateHealth() {
   for (const f of findings) addSignal("merge_gate", f.severity, "CI", "", f.message, f.detail);
 }
 
+/// Classify open Dependabot alerts. Pure — exported for negative tests.
+/// `null` (gh offline, no permission) is unknown, never a finding.
+/// 2026-10-11: 3,664 of 3,665 open alerts sat on the vendored conformance
+/// fixtures and buried the one real alert; GitHub reported "3665
+/// vulnerabilities" on every push. Real alerts and fixture drift are reported
+/// separately, each with its next step.
+function classifyDependabotAlerts(alerts) {
+  if (!Array.isArray(alerts)) return [];
+  const { fixture, real } = require("./dismiss-fixture-alerts.cjs").splitAlerts(alerts);
+  const out = [];
+  if (real.length > 0) {
+    const severe = real.filter((a) => a.severity === "critical" || a.severity === "high");
+    out.push({
+      severity: severe.length > 0 ? "critical" : "warning",
+      message: `${real.length} open Dependabot alert(s) on 4DA's own manifests${severe.length ? ` (${severe.length} high/critical)` : ""}`,
+      detail: real.slice(0, 5).map((a) => `#${a.number} ${a.pkg} ${a.severity} ${a.manifest}`).join("\n"),
+    });
+  }
+  if (fixture.length > 0) {
+    out.push({
+      severity: "warning",
+      message: `${fixture.length} Dependabot alert(s) on the vendored conformance fixtures — run: node scripts/dismiss-fixture-alerts.cjs --execute`,
+      detail: "Fixtures are pinned to vulnerable versions on purpose (src-tauri/tests/conformance).",
+    });
+  }
+  return out;
+}
+
+function checkDependabotAlerts() {
+  let alerts = null;
+  try {
+    alerts = require("./dismiss-fixture-alerts.cjs").listOpenAlerts((args) =>
+      execFileSync("gh", args, {
+        cwd: ROOT,
+        encoding: "utf-8",
+        timeout: 60000,
+        maxBuffer: 256 * 1024 * 1024,
+        ...NO_WINDOW,
+      }),
+    );
+  } catch {
+    // gh offline or no permission: unknown, not clean and not red.
+  }
+  const findings = classifyDependabotAlerts(alerts);
+  if (findings.length === 0) {
+    if (alerts) addSignal("dependabot_alerts", "ok", "Security", "", "No open Dependabot alerts");
+    return;
+  }
+  for (const f of findings) addSignal("dependabot_alerts", f.severity, "Security", "", f.message, f.detail);
+}
+
 // ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
@@ -938,6 +989,7 @@ function main() {
   checkFileSizes();
   checkGitHygiene();
   checkMergeGateHealth();
+  checkDependabotAlerts();
 
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
 
@@ -1021,5 +1073,5 @@ if (require.main === module) {
   // Exported for negative tests (scripts/sentinel-scan.test.cjs) — a
   // detector fix without a negative test is how the last five detector
   // bugs shipped (recipe-gate-precision-negative-test).
-  module.exports = { classifyTscResult, classifyIpcResult, classifyMergeGateHealth, parseCargoDiagnostics, safeExec };
+  module.exports = { classifyTscResult, classifyIpcResult, classifyMergeGateHealth, classifyDependabotAlerts, parseCargoDiagnostics, safeExec };
 }
