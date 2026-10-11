@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
+import { isSourceTurnedOff } from '../config/sources';
 import { useAppStore } from '../store';
 
 /**
@@ -17,9 +18,21 @@ import { useAppStore } from '../store';
  */
 const COLD_START_MIN_FETCHED = 100;
 
+/**
+ * Only sources the user reads count. A source turned off in Settings (AD-054)
+ * keeps its last fetch count frozen in `source_health`; counting it would let
+ * fetches 4DA no longer makes open the gate. `get_source_health_status` leaves
+ * those rows out; the filter here keeps the gate honest against a backend
+ * that still returns them.
+ *
+ * With every interest off and no stack fetch yet the list is empty, so the
+ * gate stays closed: the panels stay silent on their negatives, and the
+ * no-dependencies scan prompts (which do not read this gate) still onboard.
+ */
 export function useColdStartGate(): boolean {
   const sourceHealth = useAppStore((s) => s.sourceHealth);
-  if (sourceHealth.length === 0) return true;
-  const totalFetched = sourceHealth.reduce((sum, s) => sum + s.items_fetched, 0);
+  const totalFetched = sourceHealth
+    .filter((s) => !isSourceTurnedOff(s.source_type))
+    .reduce((sum, s) => sum + s.items_fetched, 0);
   return totalFetched < COLD_START_MIN_FETCHED;
 }

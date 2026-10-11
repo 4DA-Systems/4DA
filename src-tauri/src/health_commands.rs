@@ -59,6 +59,9 @@ fn gap_message(source: &str, status: &str) -> Option<String> {
     ))
 }
 
+/// Health of every source the user reads. A source turned off in Settings is
+/// left out (see `Database::get_source_health`): its row is frozen at its
+/// last fetch and must not feed the frontend's cold-start gate.
 #[tauri::command]
 pub async fn get_source_health_status() -> Result<Vec<SourceHealthStatus>> {
     let db = get_database()?;

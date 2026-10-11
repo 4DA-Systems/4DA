@@ -1069,15 +1069,22 @@ impl Database {
         Ok(())
     }
 
-    /// Get source health for all sources
+    /// Source health for every source the user reads.
+    ///
+    /// A source turned off in Settings (AD-054) keeps its `source_health` row
+    /// frozen at its last fetch. That row is not a status of anything 4DA is
+    /// reading, and its `items_fetched` must not count toward the frontend's
+    /// cold-start gate, so it is left out here — through the shared
+    /// [`enabled_source_sql`] predicate every source-item reader uses.
     pub fn get_source_health(&self) -> SqliteResult<Vec<SourceHealthRecord>> {
         let conn = self.read_conn();
 
-        let mut stmt = conn.prepare(
+        let mut stmt = conn.prepare(&format!(
             "SELECT source_type, status, last_success, last_error, error_count,
                     consecutive_failures, items_fetched, response_time_ms, checked_at
-             FROM source_health ORDER BY source_type",
-        )?;
+             FROM source_health WHERE {} ORDER BY source_type",
+            enabled_source_sql("source_type"),
+        ))?;
 
         let rows = stmt.query_map([], |row| {
             Ok(SourceHealthRecord {
@@ -2290,6 +2297,54 @@ mod tests {
         );
         assert_eq!(health[0].consecutive_failures, 0);
         assert_eq!(health[0].error_count, 1, "cumulative history is kept");
+    }
+
+    /// A turned-off interest's frozen health row is not returned (its stale
+    /// `items_fetched` fed the cold-start gate); stack sources, enabled
+    /// interests and never-registered sources are. Turning it back on brings
+    /// the row back.
+    #[test]
+    fn test_source_health_lists_only_enabled_sources() {
+        let db = test_db();
+        db.register_source("osv", "OSV").unwrap(); // stack: on by default
+        db.register_source("hackernews", "Hacker News").unwrap(); // interest: off by default
+        db.set_source_enabled("reddit", "Reddit", true).unwrap(); // interest turned on
+        for (source, count) in [
+            ("osv", 7),
+            ("hackernews", 112),
+            ("reddit", 16),
+            ("unregistered_source", 3),
+        ] {
+            db.record_source_health(source, true, count, 10, None, None)
+                .unwrap();
+        }
+
+        let listed: Vec<(String, i64)> = db
+            .get_source_health()
+            .unwrap()
+            .into_iter()
+            .map(|r| (r.source_type, r.items_fetched))
+            .collect();
+        assert_eq!(
+            listed,
+            vec![
+                ("osv".to_string(), 7),
+                ("reddit".to_string(), 16),
+                ("unregistered_source".to_string(), 3),
+            ],
+            "the turned-off interest (hackernews) must not be listed"
+        );
+
+        db.set_source_enabled("hackernews", "Hacker News", true)
+            .unwrap();
+        let types: Vec<String> = db
+            .get_source_health()
+            .unwrap()
+            .into_iter()
+            .map(|r| r.source_type)
+            .collect();
+        assert!(types.contains(&"hackernews".to_string()));
+        assert_eq!(types.len(), 4);
     }
 
     #[test]
