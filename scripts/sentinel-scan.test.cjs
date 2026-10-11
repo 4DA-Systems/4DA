@@ -164,3 +164,39 @@ test("cargo summary is kept only when nothing specific parsed (never '0 errors' 
   assert.deepStrictEqual(out.errorFiles, []);
   assert.deepStrictEqual(out.errors, ["error: could not compile `fourda` (lib)"]);
 });
+
+// ── IPC contract (2026-10-11: a 14.3 s run against a 15 s budget read as "failed") ──
+const { classifyIpcResult } = require("./sentinel-scan.cjs");
+
+test("ipc: a clean run is ok and reports the real counts, not a stale constant", () => {
+  const out = classifyIpcResult({
+    ok: true,
+    output: ["  generate_handler![] registrations  : 392", "  CommandMap TS keys                 : 392"].join("\n"),
+  });
+  assert.deepStrictEqual(out.map((f) => [f.severity, f.message]), [["ok", "IPC contract clean (392/392)"]]);
+});
+
+test("ipc: a timeout is INCONCLUSIVE, never 'failed'", () => {
+  const [f] = classifyIpcResult({ ok: false, timedOut: true, output: "=== 4DA IPC Command Validator ===" });
+  assert.strictEqual(f.severity, "warning");
+  assert.match(f.message, /inconclusive/);
+  assert.doesNotMatch(f.message, /failed/);
+});
+
+test("ipc: ghost commands are CRITICAL, dead ones a warning", () => {
+  const out = classifyIpcResult({
+    ok: false,
+    code: 1,
+    output: [
+      "--- Registered in Rust but missing from CommandMap (2) ---",
+      "--- In CommandMap but not registered in generate_handler![] (1) ---",
+    ].join("\n"),
+  });
+  assert.deepStrictEqual(out.map((f) => f.severity), ["critical", "warning"]);
+});
+
+test("ipc: a non-zero exit with nothing parsed names the exit code", () => {
+  const [f] = classifyIpcResult({ ok: false, code: 3, output: "" });
+  assert.strictEqual(f.severity, "warning");
+  assert.match(f.message, /exited 3/);
+});
