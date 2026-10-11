@@ -1,0 +1,85 @@
+{"id":"vo-001","rule":"PEP 440 ordering","source":"PEP 440, 'Summary of permitted suffixes and relative ordering' (the spec's example list, in order)","eco":"PyPI","a":"1.dev0","b":"1.0.dev456","cmp":"<"}
+{"id":"vo-002","rule":"PEP 440 ordering","source":"PEP 440, 'Summary of permitted suffixes and relative ordering' (the spec's example list, in order)","eco":"PyPI","a":"1.0.dev456","b":"1.0a1","cmp":"<"}
+{"id":"vo-003","rule":"PEP 440 ordering","source":"PEP 440, 'Summary of permitted suffixes and relative ordering' (the spec's example list, in order)","eco":"PyPI","a":"1.0a1","b":"1.0a2.dev456","cmp":"<"}
+{"id":"vo-004","rule":"PEP 440 ordering","source":"PEP 440, 'Summary of permitted suffixes and relative ordering' (the spec's example list, in order)","eco":"PyPI","a":"1.0a2.dev456","b":"1.0a12.dev456","cmp":"<"}
+{"id":"vo-005","rule":"PEP 440 ordering","source":"PEP 440, 'Summary of permitted suffixes and relative ordering' (the spec's example list, in order)","eco":"PyPI","a":"1.0a12.dev456","b":"1.0a12","cmp":"<"}
+{"id":"vo-006","rule":"PEP 440 ordering","source":"PEP 440, 'Summary of permitted suffixes and relative ordering' (the spec's example list, in order)","eco":"PyPI","a":"1.0a12","b":"1.0b1.dev456","cmp":"<"}
+{"id":"vo-007","rule":"PEP 440 ordering","source":"PEP 440, 'Summary of permitted suffixes and relative ordering' (the spec's example list, in order)","eco":"PyPI","a":"1.0b1.dev456","b":"1.0b2","cmp":"<"}
+{"id":"vo-008","rule":"PEP 440 ordering","source":"PEP 440, 'Summary of permitted suffixes and relative ordering' (the spec's example list, in order)","eco":"PyPI","a":"1.0b2","b":"1.0b2.post345.dev456","cmp":"<"}
+{"id":"vo-009","rule":"PEP 440 ordering","source":"PEP 440, 'Summary of permitted suffixes and relative ordering' (the spec's example list, in order)","eco":"PyPI","a":"1.0b2.post345.dev456","b":"1.0b2.post345","cmp":"<"}
+{"id":"vo-010","rule":"PEP 440 ordering","source":"PEP 440, 'Summary of permitted suffixes and relative ordering' (the spec's example list, in order)","eco":"PyPI","a":"1.0b2.post345","b":"1.0rc1.dev456","cmp":"<"}
+{"id":"vo-011","rule":"PEP 440 ordering","source":"PEP 440, 'Summary of permitted suffixes and relative ordering' (the spec's example list, in order)","eco":"PyPI","a":"1.0rc1.dev456","b":"1.0rc1","cmp":"<"}
+{"id":"vo-012","rule":"PEP 440 ordering","source":"PEP 440, 'Summary of permitted suffixes and relative ordering' (the spec's example list, in order)","eco":"PyPI","a":"1.0rc1","b":"1.0","cmp":"<"}
+{"id":"vo-013","rule":"PEP 440 ordering","source":"PEP 440, 'Summary of permitted suffixes and relative ordering' (the spec's example list, in order)","eco":"PyPI","a":"1.0","b":"1.0+abc.5","cmp":"<"}
+{"id":"vo-014","rule":"PEP 440 ordering","source":"PEP 440, 'Summary of permitted suffixes and relative ordering' (the spec's example list, in order)","eco":"PyPI","a":"1.0+abc.5","b":"1.0+abc.7","cmp":"<"}
+{"id":"vo-015","rule":"PEP 440 ordering","source":"PEP 440, 'Summary of permitted suffixes and relative ordering' (the spec's example list, in order)","eco":"PyPI","a":"1.0+abc.7","b":"1.0+5","cmp":"<"}
+{"id":"vo-016","rule":"PEP 440 ordering","source":"PEP 440, 'Summary of permitted suffixes and relative ordering' (the spec's example list, in order)","eco":"PyPI","a":"1.0+5","b":"1.0.post456.dev34","cmp":"<"}
+{"id":"vo-017","rule":"PEP 440 ordering","source":"PEP 440, 'Summary of permitted suffixes and relative ordering' (the spec's example list, in order)","eco":"PyPI","a":"1.0.post456.dev34","b":"1.0.post456","cmp":"<"}
+{"id":"vo-018","rule":"PEP 440 ordering","source":"PEP 440, 'Summary of permitted suffixes and relative ordering' (the spec's example list, in order)","eco":"PyPI","a":"1.0.post456","b":"1.0.15","cmp":"<"}
+{"id":"vo-019","rule":"PEP 440 ordering","source":"PEP 440, 'Summary of permitted suffixes and relative ordering' (the spec's example list, in order)","eco":"PyPI","a":"1.0.15","b":"1.1.dev1","cmp":"<"}
+{"id":"vo-020","rule":"PEP 440: epoch outranks release","source":"PEP 440","eco":"PyPI","a":"1!1.0","b":"2.0","cmp":">"}
+{"id":"vo-021","rule":"PEP 440: epoch outranks release","source":"PEP 440","eco":"PyPI","a":"1!2.0","b":"2013.10","cmp":">"}
+{"id":"vo-022","rule":"PEP 440: the implicit epoch is 0","source":"PEP 440","eco":"PyPI","a":"0!1.0","b":"1.0","cmp":"="}
+{"id":"vo-023","rule":"PEP 440: release segments are zero-padded","source":"PEP 440","eco":"PyPI","a":"1.0","b":"1.0.0","cmp":"="}
+{"id":"vo-024","rule":"PEP 440: release segments are zero-padded","source":"PEP 440","eco":"PyPI","a":"2","b":"2.0.0","cmp":"="}
+{"id":"vo-025","rule":"PEP 440: release segments are zero-padded","source":"PEP 440","eco":"PyPI","a":"1.0.0.0","b":"1","cmp":"="}
+{"id":"vo-026","rule":"PEP 440: a fourth release segment","source":"PEP 440","eco":"PyPI","a":"1.2.3.4","b":"1.2.3","cmp":">"}
+{"id":"vo-027","rule":"PEP 440: a fourth release segment","source":"PEP 440","eco":"PyPI","a":"1.2.3.4","b":"1.2.4","cmp":"<"}
+{"id":"vo-028","rule":"PEP 440: normalization: case-insensitive","source":"PEP 440","eco":"PyPI","a":"1.0RC1","b":"1.0rc1","cmp":"="}
+{"id":"vo-029","rule":"PEP 440: normalization: alpha spelling and separators","source":"PEP 440","eco":"PyPI","a":"1.0-alpha.1","b":"1.0a1","cmp":"="}
+{"id":"vo-030","rule":"PEP 440: normalization: c is rc","source":"PEP 440","eco":"PyPI","a":"1.0c1","b":"1.0rc1","cmp":"="}
+{"id":"vo-031","rule":"PEP 440: normalization: implicit post release","source":"PEP 440","eco":"PyPI","a":"1.0-1","b":"1.0.post1","cmp":"="}
+{"id":"vo-032","rule":"PEP 440: normalization: implicit dev number","source":"PEP 440","eco":"PyPI","a":"1.0.dev","b":"1.0.dev0","cmp":"="}
+{"id":"vo-033","rule":"PEP 440: normalization: leading v","source":"PEP 440","eco":"PyPI","a":"v1.0","b":"1.0","cmp":"="}
+{"id":"vo-034","rule":"PEP 440: pre-release phases: a < b","source":"PEP 440","eco":"PyPI","a":"1.0a1","b":"1.0b1","cmp":"<"}
+{"id":"vo-035","rule":"PEP 440: pre-release phases: b < rc","source":"PEP 440","eco":"PyPI","a":"1.0b1","b":"1.0rc1","cmp":"<"}
+{"id":"vo-036","rule":"PEP 440: a pre-release precedes its final","source":"PEP 440","eco":"PyPI","a":"1.0rc1","b":"1.0","cmp":"<"}
+{"id":"vo-037","rule":"PEP 440: a post-release follows its final","source":"PEP 440","eco":"PyPI","a":"1.0.post1","b":"1.0","cmp":">"}
+{"id":"vo-038","rule":"PEP 440: a post-release precedes the next release","source":"PEP 440","eco":"PyPI","a":"1.0.post1","b":"1.0.1","cmp":"<"}
+{"id":"vo-039","rule":"PEP 440: a dev release precedes every pre-release","source":"PEP 440","eco":"PyPI","a":"1.0.dev1","b":"1.0a1","cmp":"<"}
+{"id":"vo-040","rule":"PEP 440: PyPI pre-release vs an older final","source":"PEP 440","eco":"PyPI","a":"2.0rc1","b":"1.9.9","cmp":">"}
+{"id":"vo-041","rule":"PEP 440: normalization: separators around the pre-release","source":"PEP 440","eco":"PyPI","a":"2.0.0-rc.1","b":"2.0.0rc1","cmp":"="}
+{"id":"vo-042","rule":"PEP 440: normalization: '-N' is an implicit POST release (not a semver pre-release)","source":"PEP 440","eco":"PyPI","a":"1.0.0-1","b":"1.0.0","cmp":">"}
+{"id":"vo-043","rule":"PEP 440: normalization: '-post1' is a post release (not a semver pre-release)","source":"PEP 440","eco":"PyPI","a":"1.0.0-post1","b":"1.0.0","cmp":">"}
+{"id":"vo-044","rule":"PEP 440: pre-release numbers compare numerically (a10 > a9)","source":"PEP 440","eco":"PyPI","a":"1.0.0-a10","b":"1.0.0-a9","cmp":">"}
+{"id":"vo-045","rule":"PEP 440: normalization: '-dev' is a dev release","source":"PEP 440","eco":"PyPI","a":"1.0.0-dev","b":"1.0.0","cmp":"<"}
+{"id":"vo-046","rule":"PEP 440: zero padding applies with a post release","source":"PEP 440","eco":"PyPI","a":"2.0.post1","b":"2.0.0.post1","cmp":"="}
+{"id":"vo-047","rule":"SemVer precedence","source":"SemVer 2.0.0 §11 (precedence example list)","eco":"npm","a":"1.0.0-alpha","b":"1.0.0-alpha.1","cmp":"<"}
+{"id":"vo-048","rule":"SemVer precedence","source":"SemVer 2.0.0 §11 (precedence example list)","eco":"npm","a":"1.0.0-alpha.1","b":"1.0.0-alpha.beta","cmp":"<"}
+{"id":"vo-049","rule":"SemVer precedence","source":"SemVer 2.0.0 §11 (precedence example list)","eco":"npm","a":"1.0.0-alpha.beta","b":"1.0.0-beta","cmp":"<"}
+{"id":"vo-050","rule":"SemVer precedence","source":"SemVer 2.0.0 §11 (precedence example list)","eco":"npm","a":"1.0.0-beta","b":"1.0.0-beta.2","cmp":"<"}
+{"id":"vo-051","rule":"SemVer precedence","source":"SemVer 2.0.0 §11 (precedence example list)","eco":"npm","a":"1.0.0-beta.2","b":"1.0.0-beta.11","cmp":"<"}
+{"id":"vo-052","rule":"SemVer precedence","source":"SemVer 2.0.0 §11 (precedence example list)","eco":"npm","a":"1.0.0-beta.11","b":"1.0.0-rc.1","cmp":"<"}
+{"id":"vo-053","rule":"SemVer precedence","source":"SemVer 2.0.0 §11 (precedence example list)","eco":"npm","a":"1.0.0-rc.1","b":"1.0.0","cmp":"<"}
+{"id":"vo-054","rule":"SemVer precedence","source":"SemVer 2.0.0 §11 (precedence example list)","eco":"crates.io","a":"1.0.0-alpha","b":"1.0.0-alpha.1","cmp":"<"}
+{"id":"vo-055","rule":"SemVer precedence","source":"SemVer 2.0.0 §11 (precedence example list)","eco":"crates.io","a":"1.0.0-alpha.1","b":"1.0.0-alpha.beta","cmp":"<"}
+{"id":"vo-056","rule":"SemVer precedence","source":"SemVer 2.0.0 §11 (precedence example list)","eco":"crates.io","a":"1.0.0-alpha.beta","b":"1.0.0-beta","cmp":"<"}
+{"id":"vo-057","rule":"SemVer precedence","source":"SemVer 2.0.0 §11 (precedence example list)","eco":"crates.io","a":"1.0.0-beta","b":"1.0.0-beta.2","cmp":"<"}
+{"id":"vo-058","rule":"SemVer precedence","source":"SemVer 2.0.0 §11 (precedence example list)","eco":"crates.io","a":"1.0.0-beta.2","b":"1.0.0-beta.11","cmp":"<"}
+{"id":"vo-059","rule":"SemVer precedence","source":"SemVer 2.0.0 §11 (precedence example list)","eco":"crates.io","a":"1.0.0-beta.11","b":"1.0.0-rc.1","cmp":"<"}
+{"id":"vo-060","rule":"SemVer precedence","source":"SemVer 2.0.0 §11 (precedence example list)","eco":"crates.io","a":"1.0.0-rc.1","b":"1.0.0","cmp":"<"}
+{"id":"vo-061","rule":"SemVer precedence: major","source":"SemVer 2.0.0 §11.2","eco":"npm","a":"1.0.0","b":"2.0.0","cmp":"<"}
+{"id":"vo-062","rule":"SemVer precedence: patch","source":"SemVer 2.0.0 §11.2","eco":"npm","a":"2.1.0","b":"2.1.1","cmp":"<"}
+{"id":"vo-063","rule":"SemVer precedence: numeric, not lexical","source":"SemVer 2.0.0 §11.2","eco":"npm","a":"1.10.0","b":"1.9.0","cmp":">"}
+{"id":"vo-064","rule":"SemVer precedence: numeric patch (openssl 0.10.80, AD-055 ¶5)","source":"SemVer 2.0.0 §11.2","eco":"crates.io","a":"0.10.80","b":"0.10.79","cmp":">"}
+{"id":"vo-065","rule":"SemVer: numeric identifiers compare numerically","source":"SemVer 2.0.0 §11.4.1","eco":"npm","a":"1.0.0-alpha.10","b":"1.0.0-alpha.9","cmp":">"}
+{"id":"vo-066","rule":"SemVer: numeric identifiers have lower precedence than alphanumeric","source":"SemVer 2.0.0 §11.4.3","eco":"npm","a":"1.0.0-1","b":"1.0.0-alpha","cmp":"<"}
+{"id":"vo-067","rule":"SemVer: build metadata ignored","source":"SemVer 2.0.0 §10 (build metadata MUST be ignored when determining precedence)","eco":"npm","a":"1.0.0+20130313144700","b":"1.0.0","cmp":"="}
+{"id":"vo-068","rule":"SemVer: build metadata ignored","source":"SemVer 2.0.0 §10 (build metadata MUST be ignored when determining precedence)","eco":"crates.io","a":"1.0.0-beta+exp.sha.5114f85","b":"1.0.0-beta","cmp":"="}
+{"id":"vo-069","rule":"SemVer: build metadata ignored","source":"SemVer 2.0.0 §10 (build metadata MUST be ignored when determining precedence)","eco":"crates.io","a":"1.0.0+a","b":"1.0.0+b","cmp":"="}
+{"id":"vo-070","rule":"SemVer: build metadata ignored (libgit2-sys 0.12.18+1.1.0)","source":"SemVer 2.0.0 §10 (build metadata MUST be ignored when determining precedence)","eco":"crates.io","a":"0.12.18+1.1.0","b":"0.12.18","cmp":"="}
+{"id":"vo-071","rule":"SemVer: a pre-release precedes its release (npm security holding package)","source":"SemVer 2.0.0 §11.3","eco":"npm","a":"0.0.1-security","b":"0.0.1","cmp":"<"}
+{"id":"vo-072","rule":"SemVer: numeric identifiers compare numerically (next canary)","source":"SemVer 2.0.0 §11.4.1","eco":"npm","a":"13.3.2-canary.13","b":"13.3.2-canary.2","cmp":">"}
+{"id":"vo-073","rule":"Go: the v prefix is not part of the order (OSV Go versions carry none)","source":"Go Modules Reference, go.dev/ref/mod §Versions and §Pseudo-versions (golang.org/x/mod/semver.Compare)","eco":"Go","a":"v1.2.3","b":"1.2.3","cmp":"="}
+{"id":"vo-074","rule":"Go: pseudo-versions order by commit time","source":"Go Modules Reference, go.dev/ref/mod §Versions and §Pseudo-versions (golang.org/x/mod/semver.Compare)","eco":"Go","a":"0.0.0-20190308221718-c2843e01d9a2","b":"0.0.0-20191109021931-daa7c04131f5","cmp":"<"}
+{"id":"vo-075","rule":"Go: a v0.0.0 pseudo-version precedes every release","source":"Go Modules Reference, go.dev/ref/mod §Versions and §Pseudo-versions (golang.org/x/mod/semver.Compare)","eco":"Go","a":"0.0.0-20220812165438-1d4ff48094d1","b":"0.1.0","cmp":"<"}
+{"id":"vo-076","rule":"Go: a v0.0.0 pseudo-version is a pre-release of v0.0.0","source":"Go Modules Reference, go.dev/ref/mod §Versions and §Pseudo-versions (golang.org/x/mod/semver.Compare)","eco":"Go","a":"0.0.0-20220812165438-1d4ff48094d1","b":"0.0.0","cmp":"<"}
+{"id":"vo-077","rule":"Go: vX.Y.(Z+1)-0.<time>-<rev> sorts after vX.Y.Z","source":"Go Modules Reference, go.dev/ref/mod §Versions and §Pseudo-versions (golang.org/x/mod/semver.Compare)","eco":"Go","a":"1.2.4-0.20191109021931-daa7c04131f5","b":"1.2.3","cmp":">"}
+{"id":"vo-078","rule":"Go: vX.Y.(Z+1)-0.<time>-<rev> sorts before vX.Y.(Z+1)","source":"Go Modules Reference, go.dev/ref/mod §Versions and §Pseudo-versions (golang.org/x/mod/semver.Compare)","eco":"Go","a":"1.2.4-0.20191109021931-daa7c04131f5","b":"1.2.4","cmp":"<"}
+{"id":"vo-079","rule":"Go: vX.Y.Z-pre.0.<time>-<rev> sorts after vX.Y.Z-pre","source":"Go Modules Reference, go.dev/ref/mod §Versions and §Pseudo-versions (golang.org/x/mod/semver.Compare)","eco":"Go","a":"1.2.3-pre.0.20191109021931-daa7c04131f5","b":"1.2.3-pre","cmp":">"}
+{"id":"vo-080","rule":"Go: vX.Y.Z-pre.0.<time>-<rev> sorts before vX.Y.Z","source":"Go Modules Reference, go.dev/ref/mod §Versions and §Pseudo-versions (golang.org/x/mod/semver.Compare)","eco":"Go","a":"1.2.3-pre.0.20191109021931-daa7c04131f5","b":"1.2.3","cmp":"<"}
+{"id":"vo-081","rule":"Go: a pseudo-version after a tag (moby/buildkit)","source":"Go Modules Reference, go.dev/ref/mod §Versions and §Pseudo-versions (golang.org/x/mod/semver.Compare)","eco":"Go","a":"0.8.2-0.20210401015549-df49b648c8bf","b":"0.8.1","cmp":">"}
+{"id":"vo-082","rule":"Go: +incompatible is build metadata, not precedence","source":"Go Modules Reference, go.dev/ref/mod §Versions and §Pseudo-versions (golang.org/x/mod/semver.Compare)","eco":"Go","a":"2.0.0+incompatible","b":"2.0.0","cmp":"="}
+{"id":"vo-083","rule":"Go: +incompatible releases order by their version (docker/docker)","source":"Go Modules Reference, go.dev/ref/mod §Versions and §Pseudo-versions (golang.org/x/mod/semver.Compare)","eco":"Go","a":"20.10.7+incompatible","b":"20.10.9+incompatible","cmp":"<"}
+{"id":"vo-084","rule":"Go: +incompatible vs a plain version","source":"Go Modules Reference, go.dev/ref/mod §Versions and §Pseudo-versions (golang.org/x/mod/semver.Compare)","eco":"Go","a":"20.10.7+incompatible","b":"20.10.10","cmp":"<"}
+{"id":"vo-085","rule":"Go: a pre-release precedes its release (filippo.io/edwards25519)","source":"Go Modules Reference, go.dev/ref/mod §Versions and §Pseudo-versions (golang.org/x/mod/semver.Compare)","eco":"Go","a":"1.0.0-rc.1","b":"1.0.0","cmp":"<"}

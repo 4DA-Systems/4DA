@@ -17,6 +17,8 @@ pub(crate) mod parent_hint;
 pub(crate) mod reachability;
 pub(crate) mod sync;
 pub(crate) mod types;
+#[cfg(test)]
+mod vectors_tests;
 pub(crate) mod version_order;
 
 use crate::error::{Result, ResultExt};
