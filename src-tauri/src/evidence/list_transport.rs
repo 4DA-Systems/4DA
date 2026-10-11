@@ -110,6 +110,7 @@ pub fn preemption_visible_feed(feed: EvidenceFeed, dismissed_ids: &[String]) -> 
         data_freshness: feed.data_freshness,
         tier_scope: feed.tier_scope,
         computed_at: feed.computed_at,
+        advisory_sync: feed.advisory_sync,
     }
 }
 

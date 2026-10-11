@@ -8,7 +8,6 @@ import type { DepRow } from './types';
 // deps then regroup into "Worth reviewing" vs a collapsed "Probably fine" bucket,
 // each row annotated with the model's one-line recommendation.
 
-vi.mock('../../hooks/use-cold-start-gate', () => ({ useColdStartGate: () => false }));
 vi.mock('../../lib/trust-feedback', () => ({ recordTrustEvent: vi.fn() }));
 vi.mock('./dismissal-utils', () => ({
   loadPersistedDismissals: () => new Set<string>(),

@@ -15,7 +15,6 @@ import PreemptionView from './PreemptionView';
 // real Tier 1 alerts render normally, locked tiers collapse to a compact
 // inline notice, and the full-page lock screen never appears over real data.
 
-vi.mock('../../hooks/use-cold-start-gate', () => ({ useColdStartGate: () => false }));
 vi.mock('../SignalUpgradeCTA', () => ({
   SignalUpgradeCTA: () => <div data-testid="signal-upgrade-cta" />,
 }));
@@ -109,6 +108,8 @@ function makeFloorFeed(items: ReturnType<typeof makeFloorItem>[]) {
     weak_match_count: null,
     data_freshness: null,
     tier_scope: 'free_floor',
+    // The advisory data the empty floor rests on is synced and matched.
+    advisory_sync: { state: 'ready', ecosystems: 1, synced_at: '2026-10-12 06:00:00', error: null },
   };
 }
 

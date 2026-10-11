@@ -9,7 +9,6 @@ import type { DepRow } from './types';
 // dep-set change — no click. It must NOT fire when the toggle is off or when no
 // key is configured (local-only / key-less users keep the manual button).
 
-vi.mock('../../hooks/use-cold-start-gate', () => ({ useColdStartGate: () => false }));
 vi.mock('../../lib/trust-feedback', () => ({ recordTrustEvent: vi.fn() }));
 vi.mock('./dismissal-utils', () => ({
   loadPersistedDismissals: () => new Set<string>(),

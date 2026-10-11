@@ -128,6 +128,14 @@ fn auditable_packages_by_ecosystem(db: &Database) -> Result<HashMap<String, Vec<
     Ok(by_ecosystem)
 }
 
+/// The OSV ecosystems the auditable inventory needs advisories for — the
+/// same set [`sync`] syncs and [`needs_sync`] checks — sorted.
+pub(crate) fn auditable_ecosystems(db: &Database) -> Result<Vec<String>> {
+    let mut ecosystems: Vec<String> = auditable_packages_by_ecosystem(db)?.into_keys().collect();
+    ecosystems.sort();
+    Ok(ecosystems)
+}
+
 /// Whether any dependency ecosystem is missing a successful recent sync.
 ///
 /// Requiring every active ecosystem avoids the previous false-fresh state where

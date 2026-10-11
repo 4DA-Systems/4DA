@@ -476,6 +476,13 @@ pub struct EvidenceFeed {
     /// is. `None` when the lens does not track it.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub computed_at: Option<String>,
+
+    /// Whether the advisory data an empty Preemption worklist rests on is in
+    /// place (inventory read, every ecosystem synced, recent, matched). The
+    /// view asserts "no known vulnerabilities" only when this is `ready`.
+    /// Preemption only; `None` elsewhere and from builds before it existed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub advisory_sync: Option<crate::osv::readiness::AdvisorySync>,
 }
 
 impl EvidenceFeed {
@@ -498,6 +505,7 @@ impl EvidenceFeed {
             data_freshness: None,
             tier_scope: None,
             computed_at: None,
+            advisory_sync: None,
         }
     }
 

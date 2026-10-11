@@ -9,8 +9,15 @@ import type { DepRow } from './types';
 // rule 6) — above a "27/100 Moderate gaps" score that informs no action
 // (rule 3), and a "N source adapters failing" banner unrelated to this tab.
 
-let coldStart = false;
-vi.mock('../../hooks/use-cold-start-gate', () => ({ useColdStartGate: () => coldStart }));
+// A coverage negative rests on the news having been read (a source check
+// succeeded, not stale, an engine cycle linked it) — no item-count floor.
+const NEWS_READ = {
+  newest_item_age_hours: 1, items_last_24h: 6, items_last_72h: 6,
+  newest_source_check_age_hours: 0.5, source_checks_last_24h: 6, source_checks_last_72h: 6,
+  failing_sources: 0, stale_sources: 0, total_sources: 6, is_stale: false, no_recent_fetches: false,
+  last_run_items_scored: 6, last_run_sources_succeeded: 6, last_run_sources_failed: 0,
+  last_run_age_minutes: 20, computed_at: null,
+};
 vi.mock('../../lib/trust-feedback', () => ({ recordTrustEvent: vi.fn() }));
 vi.mock('./dismissal-utils', () => ({
   loadPersistedDismissals: () => new Set<string>(),
@@ -63,7 +70,6 @@ function expectNoBannedText(container: HTMLElement) {
 }
 
 beforeEach(() => {
-  coldStart = false;
   cmdMock.mockClear();
 });
 
@@ -75,10 +81,28 @@ describe('BlindSpotsView — cold start renders no banned empty state', () => {
   });
 
   it('a cold-start profile with an empty report claims nothing', () => {
-    coldStart = true;
     mockState = stateWith({ items: [], score: 0, total_tracked: 0, weak_match_count: 0, data_freshness: null });
     const { container } = render(<BlindSpotsView />);
     expectNoBannedText(container);
+  });
+
+  it('a scanned, assessed profile claims nothing before any source was read', () => {
+    mockState = stateWith({ items: [], score: 5, total_tracked: 40, weak_match_count: 0, data_freshness: null });
+    const { container } = render(<BlindSpotsView />);
+    expect(screen.queryByText('blindspots.scoreContext.excellent')).toBeNull();
+    expectNoBannedText(container);
+  });
+
+  it('claims nothing on stale news', () => {
+    mockState = stateWith({ items: [], score: 5, total_tracked: 40, weak_match_count: 0, data_freshness: { ...NEWS_READ, is_stale: true } });
+    render(<BlindSpotsView />);
+    expect(screen.queryByText('blindspots.scoreContext.excellent')).toBeNull();
+  });
+
+  it('a small stack-only profile whose news was read gets its negative', () => {
+    mockState = stateWith({ items: [], score: 5, total_tracked: 4, weak_match_count: 0, data_freshness: NEWS_READ });
+    render(<BlindSpotsView />);
+    expect(screen.getByText('blindspots.scoreContext.excellent')).toBeInTheDocument();
   });
 
   it('no report at all renders nothing, not "no gaps detected"', () => {

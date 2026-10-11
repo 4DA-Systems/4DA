@@ -16,7 +16,6 @@ vi.mock('react-i18next', () => ({
     i18n: { language: 'en', changeLanguage: vi.fn() },
   }),
 }));
-vi.mock('../../hooks/use-cold-start-gate', () => ({ useColdStartGate: () => false }));
 vi.mock('../SignalUpgradeCTA', () => ({ SignalUpgradeCTA: () => <div /> }));
 vi.mock('./PreemptionFreeFloorNotice', () => ({ PreemptionFreeFloorNotice: () => <div /> }));
 vi.mock('../ReportAge', () => ({ ReportAge: () => null }));

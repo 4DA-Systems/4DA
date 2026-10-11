@@ -8,7 +8,6 @@ import { PreemptionWorklist } from './PreemptionWorklist';
 // "no threats" only when there is a stack; with none known it asks for the
 // project scan (the Blind Spots day-one flow, #888).
 
-vi.mock('../../hooks/use-cold-start-gate', () => ({ useColdStartGate: () => false }));
 vi.mock('../SignalUpgradeCTA', () => ({ SignalUpgradeCTA: () => <div /> }));
 
 let mockState: Record<string, unknown> = {};
@@ -17,11 +16,21 @@ vi.mock('../../store', () => ({
 }));
 
 const loadPreemption = vi.fn();
+const refreshPreemptionQuietly = vi.fn(() => Promise.resolve());
 const runAutoDiscovery = vi.fn(() => Promise.resolve());
 const loadUserContext = vi.fn(() => Promise.resolve());
 
-function setFeed(totalTracked: number | null) {
+type Sync = { state: string; ecosystems: number; synced_at: string | null; error: string | null };
+const READY: Sync = { state: 'ready', ecosystems: 2, synced_at: '2026-10-12 06:00:00', error: null };
+
+function setFeed(
+  totalTracked: number | null,
+  advisorySync: Sync | null = READY,
+  extra: Record<string, unknown> = {},
+) {
   mockState = {
+    sourceHealth: [],
+    ...extra,
     preemptionFeed: {
       items: [],
       total: 0,
@@ -32,13 +41,14 @@ function setFeed(totalTracked: number | null) {
       weak_match_count: null,
       data_freshness: null,
       tier_scope: 'full',
+      advisory_sync: advisorySync,
     },
     preemptionLoading: false,
     preemptionError: null,
     preemptionPaywalled: false,
     preemptionLastDismissed: null,
     loadPreemption,
-    refreshPreemptionQuietly: vi.fn(),
+    refreshPreemptionQuietly,
     dismissPreemptionItem: vi.fn(),
     undoPreemptionDismissal: vi.fn(),
     clearPreemptionUndo: vi.fn(),
@@ -84,3 +94,131 @@ describe('PreemptionWorklist — empty state', () => {
     expect(screen.queryByTestId('preemption-scan-prompt')).toBeNull();
   });
 });
+
+// The all-clear is a claim that every installed version was matched against
+// synced advisories. It used to wait for 100 fetched items across enabled
+// sources, which a stack-only profile (AD-054) with a small project may never
+// reach. Now it waits for exactly what makes it true: the advisory sync.
+describe('PreemptionWorklist — the all-clear follows advisory readiness', () => {
+  const CLEAN = 'preemption.empty.title';
+
+  it('no lockfiles: the scan prompt, whatever the advisory state', () => {
+    setFeed(0, { ...READY, state: 'no_inventory', ecosystems: 0 });
+    render(<PreemptionWorklist />);
+    expect(screen.getByTestId('preemption-scan-prompt')).toBeInTheDocument();
+    expect(screen.queryByText(CLEAN)).toBeNull();
+    expect(screen.queryByTestId(/preemption-advisories-/)).toBeNull();
+  });
+
+  it('lockfiles read but advisories never synced: checking, not clean', () => {
+    setFeed(40, { state: 'syncing', ecosystems: 2, synced_at: null, error: null });
+    render(<PreemptionWorklist />);
+    expect(screen.getByTestId('preemption-advisories-checking')).toHaveTextContent('preemption.advisories.checking.title');
+    expect(screen.queryByText(CLEAN)).toBeNull();
+  });
+
+  it('synced after this feed was computed: still checking, and asks again', () => {
+    vi.useFakeTimers();
+    try {
+      setFeed(40, { ...READY, state: 'matching' });
+      render(<PreemptionWorklist />);
+      expect(screen.getByTestId('preemption-advisories-checking')).toBeInTheDocument();
+      expect(screen.queryByText(CLEAN)).toBeNull();
+      vi.advanceTimersByTime(30_000);
+      expect(refreshPreemptionQuietly).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('the sync failed: the error, never the all-clear', () => {
+    setFeed(40, { state: 'failed', ecosystems: 2, synced_at: null, error: 'npm: HTTP 503' });
+    render(<PreemptionWorklist />);
+    const notice = screen.getByTestId('preemption-advisories-failed');
+    expect(notice).toHaveTextContent('preemption.advisories.failed.title');
+    expect(notice).toHaveTextContent('npm: HTTP 503');
+    expect(screen.queryByText(CLEAN)).toBeNull();
+  });
+
+  it('advisory data past the trust horizon: stale, not clean', () => {
+    setFeed(40, { ...READY, state: 'stale', synced_at: '2026-10-01 06:00:00' });
+    render(<PreemptionWorklist />);
+    expect(screen.getByTestId('preemption-advisories-stale')).toHaveTextContent('preemption.advisories.stale.title');
+    expect(screen.queryByText(CLEAN)).toBeNull();
+  });
+
+  it('dependencies in no ecosystem the advisory database covers: says so', () => {
+    setFeed(12, { state: 'no_inventory', ecosystems: 0, synced_at: null, error: null });
+    render(<PreemptionWorklist />);
+    expect(screen.getByTestId('preemption-advisories-uncovered')).toBeInTheDocument();
+    expect(screen.queryByText(CLEAN)).toBeNull();
+  });
+
+  it('synced with zero findings: the all-clear is allowed', () => {
+    setFeed(40, READY);
+    render(<PreemptionWorklist />);
+    expect(screen.getByText(CLEAN)).toBeInTheDocument();
+    expect(screen.queryByTestId(/preemption-advisories-/)).toBeNull();
+  });
+
+  it('a small project far below 100 fetched items: clean once synced', () => {
+    // Three stack sources with a handful of items: the retired gate's sum is 7.
+    const sourceHealth = [
+      { source_type: 'crates_io', status: 'healthy', last_success_relative: '1h', items_fetched: 3, gap_message: null },
+      { source_type: 'osv', status: 'healthy', last_success_relative: '1h', items_fetched: 2, gap_message: null },
+      { source_type: 'cve', status: 'healthy', last_success_relative: '1h', items_fetched: 2, gap_message: null },
+    ];
+    setFeed(5, READY, { sourceHealth });
+    render(<PreemptionWorklist />);
+    expect(screen.getByText(CLEAN)).toBeInTheDocument();
+  });
+
+  it('interests on or off make no difference to the claim', () => {
+    const stackOnly = [
+      { source_type: 'npm_registry', status: 'healthy', last_success_relative: '1h', items_fetched: 4, gap_message: null },
+    ];
+    const withInterests = [
+      ...stackOnly,
+      { source_type: 'hackernews', status: 'healthy', last_success_relative: '1h', items_fetched: 400, gap_message: null },
+      { source_type: 'reddit', status: 'healthy', last_success_relative: '1h', items_fetched: 300, gap_message: null },
+    ];
+    for (const sync of [READY, { state: 'syncing', ecosystems: 1, synced_at: null, error: null }]) {
+      const rendered = [stackOnly, withInterests].map((sourceHealth) => {
+        setFeed(20, sync, { sourceHealth });
+        const { container, unmount } = render(<PreemptionWorklist />);
+        const text = container.textContent;
+        unmount();
+        return text;
+      });
+      expect(rendered[0]).toBe(rendered[1]);
+    }
+  });
+
+  it('a backend without the readiness field stays silent, never a false all-clear', () => {
+    setFeed(40, null);
+    const { container } = render(<PreemptionWorklist />);
+    expect(screen.queryByText(CLEAN)).toBeNull();
+    expect(container.textContent).toBe('');
+  });
+
+  it('real findings render whatever the advisory state', () => {
+    setFeed(40, { state: 'syncing', ecosystems: 2, synced_at: null, error: null });
+    const feed = mockState.preemptionFeed as Record<string, unknown>;
+    mockState.preemptionFeed = { ...feed, total: 1, high_count: 1, items: [finding()] };
+    render(<PreemptionWorklist />);
+    expect(screen.getByText('preemption.alert')).toBeInTheDocument();
+    expect(screen.queryByTestId(/preemption-advisories-/)).toBeNull();
+  });
+});
+
+function finding() {
+  return {
+    id: 'osv-1', kind: 'alert', title: 'lodash prototype pollution', explanation: 'x',
+    confidence: { value: 0.9, provenance: 'osv_verified', sample_size: null },
+    urgency: 'high', reversibility: null, evidence: [], evidence_total: 0,
+    affected_projects: [], affected_deps: ['lodash'], suggested_actions: [],
+    precedents: [], refutation_condition: null,
+    lens_hints: { briefing: false, preemption: true, blind_spots: false, evidence: false, other_build_target: false, upgrade_plan: false, no_coverage: false },
+    created_at: 0, expires_at: null,
+  };
+}

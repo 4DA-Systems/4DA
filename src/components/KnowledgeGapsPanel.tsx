@@ -7,7 +7,8 @@ import { KnowledgeGapsScanPrompt } from './KnowledgeGapsScanPrompt';
 import { KnowledgeGapCard } from './KnowledgeGapCard';
 import { ProGate } from './ProGate';
 import { ReportAge } from './ReportAge';
-import { useColdStartGate } from '../hooks/use-cold-start-gate';
+import { sourceNewsReady } from '../lib/negative-readiness';
+import type { DataFreshness } from '../../src-tauri/bindings/bindings/DataFreshness';
 import type { EvidenceItem } from '../../src-tauri/bindings/bindings/EvidenceItem';
 
 // Module-level in-flight share: `get_knowledge_gaps` is a ~6s backend query,
@@ -16,8 +17,14 @@ import type { EvidenceItem } from '../../src-tauri/bindings/bindings/EvidenceIte
 // awaits ONE call; the slot clears on settle so a later remount refetches.
 /** `total_tracked`: the dependencies the gaps were computed over (0 = none known).
  *  `computed_at`: when they were computed — after a restart, the previous run's
- *  gaps serve while this run's compute. */
-type GapsFeed = { items: EvidenceItem[]; total_tracked?: number | null; computed_at?: string | null };
+ *  gaps serve while this run's compute.
+ *  `data_freshness`: whether the news the gaps were read from was fetched. */
+type GapsFeed = {
+  items: EvidenceItem[];
+  total_tracked?: number | null;
+  computed_at?: string | null;
+  data_freshness?: DataFreshness | null;
+};
 
 let gapsInFlight: Promise<GapsFeed> | null = null;
 
@@ -37,16 +44,17 @@ type LoadState = 'pending' | 'loaded' | 'gated' | 'failed';
  */
 export const KnowledgeGapsPanel = memo(function KnowledgeGapsPanel() {
   const { t } = useTranslation();
-  const isColdStart = useColdStartGate();
   const [items, setItems] = useState<EvidenceItem[]>([]);
   const [state, setState] = useState<LoadState>('pending');
   const [noDependencies, setNoDependencies] = useState(false);
   const [computedAt, setComputedAt] = useState<string | null>(null);
+  const [newsReady, setNewsReady] = useState(false);
 
   const apply = useCallback((feed: GapsFeed) => {
     setItems(feed.items);
     setNoDependencies(feed.total_tracked === 0);
     setComputedAt(feed.computed_at ?? null);
+    setNewsReady(sourceNewsReady(feed.data_freshness));
     setState('loaded');
   }, []);
 
@@ -128,9 +136,10 @@ export const KnowledgeGapsPanel = memo(function KnowledgeGapsPanel() {
     );
   }
 
-  // Intelligence Doctrine Rule 6: on day one an empty result says nothing —
-  // never "no gaps", which the first week of reading cannot yet support.
-  if (isColdStart && items.length === 0) return intro;
+  // Intelligence Doctrine Rule 6: "your knowledge is current" is a claim
+  // about the news 4DA read. Until a source check has succeeded and an engine
+  // cycle has linked what it fetched, an empty result says nothing.
+  if (!newsReady && items.length === 0) return intro;
 
   const urgentCount = items.filter(
     (it) => it.urgency === 'critical' || it.urgency === 'high',

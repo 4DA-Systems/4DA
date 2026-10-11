@@ -1881,6 +1881,20 @@ pub async fn get_preemption_alerts(
             .ok()
             .flatten();
     }
+    // "No known vulnerabilities" needs advisory data that was synced, is
+    // recent, and was matched by this feed — not a fetched-item count. The
+    // live read catches a sync that failed or aged since the compute; the
+    // stamp catches a feed computed before the data existed.
+    let live = crate::ipc_blocking::off_ui_thread_infallible("preemption advisory sync", || {
+        crate::get_database()
+            .ok()
+            .map(|db| crate::osv::readiness::advisory_sync(&db))
+    })
+    .await
+    .ok()
+    .flatten();
+    list.advisory_sync =
+        live.map(|live| crate::osv::readiness::overlay(list.advisory_sync.as_ref(), live));
     Ok(list)
 }
 
@@ -1909,6 +1923,7 @@ fn free_floor_view(feed: EvidenceFeed) -> EvidenceFeed {
         return feed;
     }
     let computed_at = feed.computed_at.clone();
+    let advisory_sync = feed.advisory_sync.clone();
     let tier1: Vec<EvidenceItem> = feed
         .items
         .into_iter()
@@ -1917,6 +1932,7 @@ fn free_floor_view(feed: EvidenceFeed) -> EvidenceFeed {
     let mut floor = EvidenceFeed::from_items(tier1);
     floor.tier_scope = Some(TierScope::FreeFloor);
     floor.computed_at = computed_at;
+    floor.advisory_sync = advisory_sync;
     floor
 }
 
@@ -2089,6 +2105,12 @@ fn assemble_feed(mut items: Vec<EvidenceItem>, scope: TierScope) -> EvidenceFeed
     // What the tab shows as "computed <age>" when the feed is served later
     // (the per-cycle cache, or a restart snapshot).
     feed.computed_at = Some(chrono::Utc::now().to_rfc3339());
+    // What the matching above saw of the advisory data. Read after the items,
+    // so a sync landing mid-compute can stamp `ready` on a feed matched just
+    // before it; the post-sync cache warm recomputes that feed.
+    feed.advisory_sync = crate::get_database()
+        .ok()
+        .map(|db| crate::osv::readiness::advisory_sync(&db));
     feed
 }
 
@@ -2225,6 +2247,32 @@ mod tests {
         // Counts must describe the narrowed list, not the original feed.
         assert_eq!(floor.critical_count, 1);
         assert_eq!(floor.high_count, 1);
+    }
+
+    #[test]
+    fn advisory_readiness_survives_the_free_floor_and_the_list_transport() {
+        // The view asserts "no known vulnerabilities" only on a `ready`
+        // stamp; narrowing to the floor or trimming for the list must never
+        // drop it (a dropped stamp reads as "not ready", a silent panel).
+        let sync = crate::osv::readiness::AdvisorySync {
+            state: crate::osv::readiness::AdvisorySyncState::Ready,
+            ecosystems: 2,
+            synced_at: Some("2026-10-12 06:00:00".to_string()),
+            error: None,
+        };
+        let full = EvidenceFeed {
+            tier_scope: Some(TierScope::Full),
+            advisory_sync: Some(sync.clone()),
+            ..EvidenceFeed::from_items(vec![floor_test_item(
+                "osv-1",
+                Confidence::osv_verified(0.9),
+                Urgency::High,
+            )])
+        };
+        let floor = free_floor_view(full.clone());
+        assert_eq!(floor.advisory_sync.as_ref(), Some(&sync));
+        let list = crate::evidence::present_preemption_list(full, &[], false);
+        assert_eq!(list.advisory_sync, Some(sync));
     }
 
     #[test]

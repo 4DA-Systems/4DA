@@ -8,7 +8,6 @@ import type { DepRow } from './types';
 // does not build on the host are pulled OUT of the stack/ecosystem tiers into a
 // collapsed "Other build targets" group — surfaced, de-prioritised, never hidden.
 
-vi.mock('../../hooks/use-cold-start-gate', () => ({ useColdStartGate: () => false }));
 vi.mock('../../lib/commands', () => ({ cmd: vi.fn(() => Promise.resolve({ total_active: 0, total_failing: 0, total_disabled: 0 })) }));
 vi.mock('../../lib/trust-feedback', () => ({ recordTrustEvent: vi.fn() }));
 vi.mock('./dismissal-utils', () => ({

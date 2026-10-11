@@ -1409,7 +1409,7 @@ fn knowledge_gaps_feed() -> Result<EvidenceFeed> {
             }
         })
         .collect();
-    let mut feed = gaps_cache::with_tracked_dependencies(EvidenceFeed::from_items(items), &conn);
+    let mut feed = gaps_cache::with_gap_inputs(EvidenceFeed::from_items(items), &conn);
     feed.computed_at = Some(computed_at);
     Ok(feed)
 }

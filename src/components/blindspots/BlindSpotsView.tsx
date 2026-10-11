@@ -9,7 +9,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '../../store';
 import { cmd } from '../../lib/commands';
 import { recordTrustEvent } from '../../lib/trust-feedback';
-import { useColdStartGate } from '../../hooks/use-cold-start-gate';
+import { sourceNewsReady } from '../../lib/negative-readiness';
 import { useBlindSpotsData } from '../../hooks/use-blind-spots-data';
 
 import { BlindSpotsPaywall } from './BlindSpotsPaywall';
@@ -27,7 +27,6 @@ import type { BlindSpotAssessment } from '../../../src-tauri/bindings/bindings/B
 
 const BlindSpotsView = memo(function BlindSpotsView() {
   const { t } = useTranslation();
-  const isColdStart = useColdStartGate();
   const { report, loading, error, paywalled } = useAppStore(
     useShallow((s) => ({
       report: s.blindSpotReport,
@@ -236,6 +235,10 @@ const BlindSpotsView = memo(function BlindSpotsView() {
   const hasProblems = stackDeps.length > 0 || ecosystemDeps.length > 0 || noCoverageDeps.length > 0;
   const hasContent = hasProblems || unmatchedSignals.length > 0;
   const dataFreshness = report.data_freshness;
+  // A coverage negative ("few gaps" / "nothing to flag") is a claim about the
+  // news 4DA read for these dependencies: said only once a source check has
+  // succeeded, the data is not stale, and an engine cycle has linked it.
+  const newsReady = sourceNewsReady(dataFreshness);
 
   // Phase B: when the AI triage has run, split the JUDGED gap deps into
   // "worth reviewing" vs "probably fine" by the model's verdict. A dep the
@@ -348,7 +351,7 @@ const BlindSpotsView = memo(function BlindSpotsView() {
       {!hasContent ? (
         /* Doctrine rule 6: a cold-start (-1 sentinel) or day-one report renders
            NOTHING here — never a "building / check back soon" panel. */
-        score < 0 || isColdStart || totalTracked === 0 ? null : score > 0 && score <= 10 ? (
+        score < 0 || !newsReady || totalTracked === 0 ? null : score > 0 && score <= 10 ? (
           /* Genuinely excellent: the system actively evaluated and found very few issues */
           <div className="bg-bg-secondary rounded-lg border border-emerald-500/20 px-5 py-6">
             <div className="flex items-start gap-4">
