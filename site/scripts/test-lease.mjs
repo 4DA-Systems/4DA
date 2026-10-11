@@ -15,17 +15,7 @@
 import * as ed from '@noble/ed25519';
 import { signLicenseToken } from '../lib/ed25519-license.js';
 
-ed.etc.sha512Async = async (...msgs) => {
-  let t = 0;
-  for (const m of msgs) t += m.length;
-  const d = new Uint8Array(t);
-  let o = 0;
-  for (const m of msgs) {
-    d.set(m, o);
-    o += m.length;
-  }
-  return new Uint8Array(await crypto.subtle.digest('SHA-512', d));
-};
+// @noble/ed25519 v3 hashes with WebCrypto by itself (v2 needed ed.etc.sha512Async wired by hand).
 
 const b64ToBytes = (b64) => Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
 let failures = 0;

@@ -6,7 +6,7 @@
 // lib/license-health.js for why "the secret exists" is not enough.
 
 import * as ed from '@noble/ed25519';
-import { hexToBytes } from '../../../lib/ed25519-license.js'; // also wires @noble's SHA-512
+import { hexToBytes } from '../../../lib/ed25519-license.js';
 import { signingKeyReport } from '../../../lib/license-health.js';
 
 function toHex(bytes) {

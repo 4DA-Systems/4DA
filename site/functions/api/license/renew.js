@@ -29,7 +29,7 @@
 
 import Stripe from 'stripe';
 import * as ed from '@noble/ed25519';
-import { hexToBytes, signLicenseToken } from '../../../lib/ed25519-license.js'; // also wires SHA-512
+import { hexToBytes, signLicenseToken } from '../../../lib/ed25519-license.js';
 import { APP_LICENSE_PUBLIC_KEY_HEX } from '../../../lib/license-health.js';
 import { isRevoked, licenseEmail, licenseEmailSearchQuery, meta, metaKey } from '../../../lib/entitlement.js';
 import { checkAndCount } from '../../../lib/abuse-guards.js';
