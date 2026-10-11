@@ -13,7 +13,7 @@
 //   SITE_URL              — Base URL for redirects (e.g. https://4da.ai)
 //   ENVIRONMENT           — "production" in prod; anything else enables localhost CORS
 
-import Stripe from 'stripe';
+import { createStripe } from '../../../lib/stripe-client.js';
 
 const PLANS = {
   // metadata writes the CURRENT `signal_tier` key. The webhook reads it through
@@ -89,7 +89,7 @@ export async function onRequest({ request, env }) {
   const siteUrl = env.SITE_URL || 'https://4da.ai';
 
   try {
-    const stripe = new Stripe(env.STRIPE_SECRET_KEY, { httpClient: Stripe.createFetchHttpClient() });
+    const stripe = createStripe(env.STRIPE_SECRET_KEY);
     const sessionParams = {
       mode: config.mode,
       // Stripe, through Link, is the merchant of record (AD-053): it calculates,

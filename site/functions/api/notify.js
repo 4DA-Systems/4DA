@@ -7,7 +7,7 @@
 //   STRIPE_SECRET_KEY  — Stripe secret key (sk_live_... or sk_test_...)
 //   ENVIRONMENT        — "production" in prod; anything else enables localhost CORS
 
-import Stripe from 'stripe';
+import { createStripe } from '../../lib/stripe-client.js';
 import {
   checkAndCount,
   IP_WINDOW_TTL_SECONDS,
@@ -77,7 +77,7 @@ export async function onRequest({ request, env }) {
   }
 
   try {
-    const stripe = new Stripe(env.STRIPE_SECRET_KEY, { httpClient: Stripe.createFetchHttpClient() });
+    const stripe = createStripe(env.STRIPE_SECRET_KEY);
 
     const existing = await stripe.customers.list({ email: email.toLowerCase(), limit: 1 });
     if (existing.data.length > 0) {
