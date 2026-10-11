@@ -34,6 +34,7 @@ function deps(overrides: Partial<ProviderDeps> = {}): ProviderDeps {
     onOpenSettings: vi.fn(),
     setSearchFocusItemId: vi.fn(),
     isItemInFeed: () => false,
+    getPreemptionFeed: () => null,
     ...overrides,
   };
 }

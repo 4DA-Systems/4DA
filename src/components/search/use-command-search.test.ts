@@ -31,6 +31,7 @@ const deps = {
   onOpenSettings: () => {},
   setSearchFocusItemId: () => {},
   isItemInFeed: () => false,
+  getPreemptionFeed: () => null,
 };
 
 function intelTitles(results: Array<{ group: string; title: string }>): string[] {

@@ -15,6 +15,7 @@
   "cmdk.ariaLabel": "Buscar en 4DA",
   "cmdk.groupGoto": "Ir a",
   "cmdk.groupAction": "Acciones",
+  "cmdk.groupDependencies": "Tus dependencias",
   "cmdk.groupIntelligence": "Inteligencia",
   "cmdk.goToPrefix": "Ir a",
   "cmdk.actionPrefix": "Acción",

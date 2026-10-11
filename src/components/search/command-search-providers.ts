@@ -20,6 +20,7 @@
 import { cmd } from '../../lib/commands';
 import type { NLQResult } from '../../lib/commands';
 import { openExternalUrl } from '../../lib/open-url';
+import type { EvidenceFeed } from '../../../src-tauri/bindings/bindings/EvidenceFeed';
 import type { ActiveView, PreemptionSubView } from '../../store/types';
 import {
   type CommandResult,
@@ -27,6 +28,7 @@ import {
   type ProviderContext,
   fuzzyScore,
 } from './command-search-types';
+import { dependencyProvider } from './dependency-search-provider';
 
 export interface ProviderDeps {
   t: (key: string, fallback?: string) => string;
@@ -39,6 +41,8 @@ export interface ProviderDeps {
   setSearchFocusItemId: (id: number | null) => void;
   /** True if the item is present in the current Signal feed (so the deep-link can land on it). */
   isItemInFeed: (id: number) => boolean;
+  /** The Preemption feed in the store, read at query time (null until loaded). */
+  getPreemptionFeed: () => EvidenceFeed | null;
 }
 
 /** Minimum query length before the async intelligence backend is queried. */
@@ -235,5 +239,5 @@ function intelligenceProvider(deps: ProviderDeps): SearchProvider {
 
 /** Build the ordered provider registry for the current app context. */
 export function buildProviders(deps: ProviderDeps): SearchProvider[] {
-  return [navProvider(deps), actionProvider(deps), intelligenceProvider(deps)];
+  return [navProvider(deps), actionProvider(deps), dependencyProvider(deps), intelligenceProvider(deps)];
 }

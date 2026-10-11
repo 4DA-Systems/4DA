@@ -42,7 +42,10 @@ export const CommandSearch = memo(function CommandSearch({ onAnalyze, onOpenSett
     [],
   );
 
-  const search = useCommandSearch({ t: translate, setActiveView, openPreemption, onAnalyze, onOpenSettings, setSearchFocusItemId, isItemInFeed });
+  // Live read of the Preemption feed for the "Your dependencies" group.
+  const getPreemptionFeed = useCallback(() => useAppStore.getState().preemptionFeed, []);
+
+  const search = useCommandSearch({ t: translate, setActiveView, openPreemption, onAnalyze, onOpenSettings, setSearchFocusItemId, isItemInFeed, getPreemptionFeed });
   const { query, setQuery, results, loading, activeId, setActiveId, moveActive, reset } = search;
 
   const [open, setOpen] = useState(false);
@@ -80,6 +83,14 @@ export const CommandSearch = memo(function CommandSearch({ onAnalyze, onOpenSett
   // Load the query embedder while the user types, not inside their first search.
   useEffect(() => {
     if (open) warmSearchBackend();
+  }, [open]);
+
+  // The dependency group reads the Preemption feed; load it once if no view has
+  // (a paywall or an in-flight load is left alone; the load sets its own state).
+  useEffect(() => {
+    if (!open) return;
+    const s = useAppStore.getState();
+    if (!s.preemptionFeed && !s.preemptionLoading && !s.preemptionPaywalled) void s.loadPreemption();
   }, [open]);
 
   // Global Cmd/Ctrl+K — platform-correct (⌘ on macOS, Ctrl on Windows/Linux).
