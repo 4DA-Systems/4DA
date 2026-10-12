@@ -31,8 +31,8 @@ importers:
         specifier: ^3.2.0
         version: 3.2.0
       stripe:
-        specifier: ^20.3.1
-        version: 20.3.1
+        specifier: ^23.0.0
+        version: 23.0.0
     devDependencies:
       '@11ty/eleventy':
         specifier: '3'
@@ -955,11 +955,11 @@ packages:
     resolution: {integrity: sha512-uCC2VHvQRYu+lMh4My/sFNmF2klFymLX1wHJeXnbEJERpV/ZsVuonzerjfrGpIGF7LBVa1O7i9kjiWvJiFck8g==}
     engines: {node: '>=0.10.0'}
 
-  stripe@20.3.1:
-    resolution: {integrity: sha512-k990yOT5G5rhX3XluRPw5Y8RLdJDW4dzQ29wWT66piHrbnM2KyamJ1dKgPsw4HzGHRWjDiSSdcI2WdxQUPV3aQ==}
-    engines: {node: '>=16'}
+  stripe@23.0.0:
+    resolution: {integrity: sha512-MDE2A5ZVVluYURORaZEVghSmnLJc3w6aHAlZSxDQMsOjOb3V0O6ro/CiaeFlJS4N7uIVmsg98ocRsPmUK6YfyA==}
+    engines: {node: '>=20'}
     peerDependencies:
-      '@types/node': '>=16'
+      '@types/node': '>=20'
     peerDependenciesMeta:
       '@types/node':
         optional: true
@@ -1845,7 +1845,7 @@ snapshots:
 
   strip-bom-string@1.0.0: {}
 
-  stripe@20.3.1: {}
+  stripe@23.0.0: {}
 
   supports-color@10.2.2: {}
 
