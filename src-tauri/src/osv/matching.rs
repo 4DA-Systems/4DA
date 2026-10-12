@@ -132,7 +132,8 @@ pub(crate) fn get_matched_advisories_with_not_compiled(
             .or_default()
             .push(&advisory.affected_ranges);
     }
-    let mut clean_cache: HashMap<(String, String, String), Option<String>> = HashMap::new();
+    let mut walk_cache: HashMap<(String, String, String), Option<fix_target::WalkTarget>> =
+        HashMap::new();
     let mut reach = ReachFilter::default();
 
     let mut matches: Vec<MatchedAdvisory> = Vec::new();
@@ -192,28 +193,42 @@ pub(crate) fn get_matched_advisories_with_not_compiled(
                 ) {
                     continue;
                 }
-                let (is_affected, confirmed) =
-                    check_version_affected(version.as_deref(), &advisory.affected_ranges);
+                let (is_affected, confirmed) = check_version_affected(
+                    &advisory.ecosystem,
+                    version.as_deref(),
+                    &advisory.affected_ranges,
+                );
                 if is_affected {
                     // Targets are facts about THIS copy (Phase 1.1): its own
-                    // line's fix, and the version clearing every advisory.
-                    let (fixed_version, clean_version) = match version.as_deref() {
+                    // line's fix, and where the walk over every advisory of
+                    // the package lands (clean, or clearing every advisory
+                    // that has a way out).
+                    let (fixed_version, walk) = match version.as_deref() {
                         Some(v) if confirmed => {
-                            let clean = clean_cache
+                            let walk = walk_cache
                                 .entry((key.0.clone(), key.1.clone(), v.to_string()))
                                 .or_insert_with(|| {
-                                    package_ranges
-                                        .get(&key)
-                                        .and_then(|ranges| fix_target::clean_version(v, ranges))
+                                    package_ranges.get(&key).and_then(|ranges| {
+                                        fix_target::walk_target(&advisory.ecosystem, v, ranges)
+                                    })
                                 })
                                 .clone();
                             (
-                                fix_target::fix_for_version(v, &advisory.affected_ranges),
-                                clean,
+                                fix_target::fix_for_version(
+                                    &advisory.ecosystem,
+                                    v,
+                                    &advisory.affected_ranges,
+                                ),
+                                walk,
                             )
                         }
                         _ => (None, None),
                     };
+                    let clean_version = walk
+                        .as_ref()
+                        .filter(|w| w.clears_all)
+                        .map(|w| w.version.clone());
+                    let target_version = walk.map(|w| w.version);
                     dependency_instances.push(MatchedDependency {
                         project_path: normalize_project_path(&dep.project_path),
                         installed_version: version,
@@ -222,6 +237,7 @@ pub(crate) fn get_matched_advisories_with_not_compiled(
                         is_version_confirmed: confirmed,
                         fixed_version,
                         clean_version,
+                        target_version,
                     });
                 }
             }
@@ -358,7 +374,12 @@ pub fn count_matches(db: &Database) -> Result<usize> {
 /// Returns (is_affected, is_confirmed).
 /// - is_affected: true if the version falls within affected ranges (or conservative fallback)
 /// - is_confirmed: true only if we could definitively verify via semver
+///
+/// `ecosystem` is the advisory's: a PyPI version orders by PEP 440 even when
+/// it also reads as semver (`version_order::OrderedVersion::parse_in`). An
+/// empty or unknown ecosystem keeps the generic semver-first order.
 pub(crate) fn check_version_affected(
+    ecosystem: &str,
     user_version: Option<&str>,
     affected_ranges_json: &Option<String>,
 ) -> (bool, bool) {
@@ -377,7 +398,7 @@ pub(crate) fn check_version_affected(
         _ => return (true, false), // No version → conservative
     };
 
-    let Some(user) = OrderedVersion::parse(user_ver_str) else {
+    let Some(user) = OrderedVersion::parse_in(user_ver_str, ecosystem) else {
         return (true, false); // Can't parse user version → conservative
     };
 
@@ -388,7 +409,7 @@ pub(crate) fn check_version_affected(
     let mut undecided = false;
     for range in &ranges {
         if range.range_type == super::types::ENUMERATED_RANGE {
-            if enumerated_contains(&user, user_ver_str, range) {
+            if enumerated_contains(ecosystem, &user, user_ver_str, range) {
                 return (true, true);
             }
             continue;
@@ -396,7 +417,7 @@ pub(crate) fn check_version_affected(
         if range.range_type != "SEMVER" && range.range_type != "ECOSYSTEM" {
             continue;
         }
-        match range_contains(&user, range) {
+        match range_contains(ecosystem, &user, range) {
             Some(true) => return (true, true),
             Some(false) => {}
             None => undecided = true,
@@ -414,7 +435,7 @@ pub(crate) fn check_version_affected(
 /// Whether an advisory's enumerated `versions` list (stored as an
 /// [`super::types::ENUMERATED_RANGE`] range) names this version — exactly, or
 /// as the same version under the ecosystem's ordering (`19.9` = `19.9.0`).
-fn enumerated_contains(user: &OrderedVersion, raw: &str, range: &Range) -> bool {
+fn enumerated_contains(ecosystem: &str, user: &OrderedVersion, raw: &str, range: &Range) -> bool {
     range
         .events
         .iter()
@@ -422,7 +443,7 @@ fn enumerated_contains(user: &OrderedVersion, raw: &str, range: &Range) -> bool 
         .filter_map(|v| v.as_str())
         .any(|listed| {
             listed == raw.trim()
-                || OrderedVersion::parse(listed)
+                || OrderedVersion::parse_in(listed, ecosystem)
                     .and_then(|v| user.compare(&v))
                     .is_some_and(|o| o.is_eq())
         })
@@ -431,7 +452,7 @@ fn enumerated_contains(user: &OrderedVersion, raw: &str, range: &Range) -> bool 
 /// Whether `user` sits in any window of one range: `Some(true)` inside one,
 /// `Some(false)` outside all of them, `None` when a window could not be
 /// decided (an unreadable bound, or one no ordering compares with `user`).
-fn range_contains(user: &OrderedVersion, range: &Range) -> Option<bool> {
+fn range_contains(ecosystem: &str, user: &OrderedVersion, range: &Range) -> Option<bool> {
     let mut undecided = false;
     let mut lower: Option<Lower> = None;
     let mut note = |verdict: Option<bool>| match verdict {
@@ -444,7 +465,7 @@ fn range_contains(user: &OrderedVersion, range: &Range) -> Option<bool> {
     };
     for obj in range.events.iter().flatten().filter_map(|e| e.as_object()) {
         if let Some(intro) = obj.get("introduced").and_then(|v| v.as_str()) {
-            lower = Lower::parse(intro);
+            lower = Lower::parse_in(intro, ecosystem);
             if lower.is_none() && note(None) {
                 return Some(true);
             }
@@ -456,7 +477,7 @@ fn range_contains(user: &OrderedVersion, range: &Range) -> Option<bool> {
         if let Some((bound, inclusive)) = upper {
             let bound = bound.as_str().unwrap_or("");
             if let (Some(low), false) = (lower.as_ref(), is_unknown_bound(bound)) {
-                let verdict = OrderedVersion::parse(bound).and_then(|version| {
+                let verdict = OrderedVersion::parse_in(bound, ecosystem).and_then(|version| {
                     in_window(
                         user,
                         low,

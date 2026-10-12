@@ -188,7 +188,7 @@ pub fn load_routes(
     let is_clear = |version: &str| {
         advisories
             .iter()
-            .all(|a| !check_version_affected(Some(version), &a.affected_ranges).0)
+            .all(|a| !check_version_affected(ecosystem_norm, Some(version), &a.affected_ranges).0)
     };
     let raw = |project: &str| {
         raw_paths

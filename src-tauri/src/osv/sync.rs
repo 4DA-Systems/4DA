@@ -784,7 +784,7 @@ mod tests {
         let stored = db.get_all_osv_advisories().unwrap();
         let ranges = &stored[0].affected_ranges;
         assert_eq!(
-            super::super::matching::check_version_affected(Some("3.4.1"), ranges),
+            super::super::matching::check_version_affected("npm", Some("3.4.1"), ranges),
             (true, true)
         );
     }

@@ -111,7 +111,7 @@ fn unparseable_bound_is_unknown_not_confirmed_safe() {
             .to_string(),
     );
     assert_eq!(
-        check_version_affected(Some("2.0.0"), &ranges),
+        check_version_affected("", Some("2.0.0"), &ranges),
         (true, false),
         "an undecided window must not read as confirmed-not-affected"
     );
@@ -120,14 +120,14 @@ fn unparseable_bound_is_unknown_not_confirmed_safe() {
         r#"[{"type":"ECOSYSTEM","events":[{"introduced":"0"},{"fixed":"1.0.post1"}]}]"#.to_string(),
     );
     assert_eq!(
-        check_version_affected(Some("2.0.0"), &pep440),
+        check_version_affected("", Some("2.0.0"), &pep440),
         (false, true)
     );
     let ranges = Some(
         r#"[{"type":"ECOSYSTEM","events":[{"introduced":"weird"},{"fixed":"3.0.0"}]}]"#.to_string(),
     );
     assert_eq!(
-        check_version_affected(Some("2.0.0"), &ranges),
+        check_version_affected("", Some("2.0.0"), &ranges),
         (true, false)
     );
 
@@ -136,7 +136,36 @@ fn unparseable_bound_is_unknown_not_confirmed_safe() {
         r#"[{"type":"ECOSYSTEM","events":[{"introduced":"0"},{"fixed":"r1.0~weird"}]},{"type":"SEMVER","events":[{"introduced":"2.0.0"},{"fixed":"2.1.0"}]}]"#
             .to_string(),
     );
-    assert_eq!(check_version_affected(Some("2.0.5"), &mixed), (true, true));
+    assert_eq!(
+        check_version_affected("", Some("2.0.5"), &mixed),
+        (true, true)
+    );
+}
+
+/// The matcher takes the advisory's ecosystem: a PyPI post release spelled
+/// `-N` is past a fix at the release; for npm the same text is a pre-release.
+#[test]
+fn pypi_post_release_is_past_the_fix_npm_prerelease_is_not() {
+    let ranges = Some(
+        r#"[{"type":"ECOSYSTEM","events":[{"introduced":"0"},{"fixed":"1.0.0"}]}]"#.to_string(),
+    );
+    assert_eq!(
+        check_version_affected("PyPI", Some("1.0.0-1"), &ranges),
+        (false, true)
+    );
+    assert_eq!(
+        check_version_affected("npm", Some("1.0.0-1"), &ranges),
+        (true, true)
+    );
+    let last = Some(
+        r#"[{"type":"ECOSYSTEM","events":[{"introduced":"0"},{"last_affected":"2.3.0"}]}]"#
+            .to_string(),
+    );
+    assert_eq!(
+        check_version_affected("PyPI", Some("2.3.0+cpu"), &last),
+        (false, true),
+        "PEP 440 (python `packaging`) puts a local label above its release"
+    );
 }
 
 /// Phase 1.1 at the matcher: each copy carries its OWN line's fix and clean

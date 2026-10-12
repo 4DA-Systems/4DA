@@ -12,7 +12,7 @@ fn ranges(json: &[&str]) -> Vec<Option<String>> {
 
 fn walk(installed: &str, owned: &[Option<String>]) -> Option<String> {
     let refs: Vec<&Option<String>> = owned.iter().collect();
-    clean_version(installed, &refs)
+    clean_version("", installed, &refs)
 }
 
 const fn sem(intro: &'static str, fixed: &'static str) -> (&'static str, &'static str) {

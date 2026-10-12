@@ -56,10 +56,11 @@ Field conventions:
 
 ### Version order
 
-`osv/version_order.rs`: *"The rule for a pair of versions: compare as semver
-when BOTH parse as semver (npm, crates.io, Go and most PyPI releases), else as
-PEP 440 when both parse as PEP 440, else the pair is undecidable and the
-caller stays conservative."* It also says: *"Build metadata decided order.
+`osv/version_order.rs`: *"The rule for a pair of versions: a PyPI version is
+read ONLY as PEP 440 (`OrderedVersion::parse_in`), so a pair with a PyPI side
+orders by PEP 440. Otherwise compare as semver when BOTH parse as semver (npm,
+crates.io, Go), else as PEP 440 when both parse as PEP 440, else the pair is
+undecidable and the caller stays conservative."* It also says: *"Build metadata decided order.
 `semver::Version`'s `Ord` compares build metadata as a tiebreaker; OSV (and
 Go's `+incompatible`) treat it as no part of the precedence."* And: *"PyPI is
 PEP 440, not semver. `1.0.post1`, `2.0rc1`, `1.2.3.4` and `1!2.0` failed the
@@ -118,6 +119,7 @@ form.
 - The 22 oracle cases: ft-001..ft-022 (openssl 0.10.80: ft-006; braces `last_affected`: ft-004)
 - OSV per published release, all four registries: ft-023..ft-061
 - No clean version, so the target clears only the fixed advisories (`clears: false`): ft-004, ft-029, ft-041, ft-042, ft-055, ft-060, ft-061
+- A `last_affected` window that later releases leave (the walk steps past the bound and keeps checking every advisory): ft-043 (pyjwt), ft-052 (mistune)
 
 ### Refresh verdict — AD-055 ¶1, ¶2, ¶3
 
@@ -202,14 +204,26 @@ and say why in the commit.
 
 ## Rust skip list (2026-10-12)
 
-36 entries, `RUST_SKIP_BASELINE = 36`.
+28 entries, `RUST_SKIP_BASELINE = 28`.
 
 | Ids | Reason |
 |---|---|
 | rc-001..rc-028 | Not implemented in Rust. `range_check` exists only in `@4da/mcp-server` (6.2.0 `dependency_check`). |
-| vo-013, vo-014, vo-015 | PEP 440 orders local labels (`1.0 < 1.0+abc.5 < 1.0+abc.7 < 1.0+5`). `version_order::parse_pep440` drops the local label, so these compare equal. |
-| vo-042, vo-043, vo-044 | `OrderedVersion::compare` uses semver whenever both sides parse as semver, whatever the ecosystem. For PyPI, `1.0.0-1` and `1.0.0-post1` are post releases (above `1.0.0`), and `a10` is above `a9`. Semver reads the first two as pre-releases and compares `a10` lexically. |
-| ft-043, ft-052 | `fix_target::clean_version` gives up when an advisory affecting the current version has only a `last_affected` bound (`fix_for_version` returns `None`), even when releases above that bound are clean. **pyjwt 2.9.0** (PYSEC-2025-183, last_affected 2.10.1): the target is right (2.15.0), but the engine says it clears only the fixed advisories. **mistune 0.8.3** (GHSA-8g87-j6q8-g93x, last_affected 3.2.0): the fallback target is 3.3.0, which GHSA-6m44-fpc8-c3rq / PYSEC-2026-3863 (introduced 3.3.0, fixed 3.3.3) still affect. That recommended target is still vulnerable; the truth is 3.3.3. |
+
+Fixed and removed (2026-10-12):
+
+- **vo-013..vo-015:** `version_order::parse_pep440` now keeps the local
+  label and orders it per PEP 440 (`1.0 < 1.0+abc.5 < 1.0+abc.7 < 1.0+5`).
+- **vo-042..vo-044:** a PyPI version is read only as PEP 440
+  (`OrderedVersion::parse_in`, and every matcher entry point now takes the
+  advisory's ecosystem), so `1.0.0-1` / `1.0.0-post1` are post releases and
+  `a10 > a9`. Other ecosystems order exactly as before.
+- **ft-043, ft-052:** `fix_target::walk_target` leaves a `last_affected`
+  window at the first release the advisory data names above the bound, and
+  keeps checking every advisory until it reaches a version none with a way
+  out affects. pyjwt 2.9.0 now claims 2.15.0 clean; mistune 0.8.3 moves
+  from 3.3.0 (still affected by GHSA-6m44-fpc8-c3rq / PYSEC-2026-3863) to
+  3.3.3.
 
 ## Regenerating
 

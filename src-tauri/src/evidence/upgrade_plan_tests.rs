@@ -494,6 +494,7 @@ fn matched(cvss: f64, installs: &[(bool, bool, bool)]) -> crate::osv::types::Mat
                     is_version_confirmed: confirmed,
                     fixed_version: None,
                     clean_version: None,
+                    target_version: None,
                 },
             )
             .collect(),

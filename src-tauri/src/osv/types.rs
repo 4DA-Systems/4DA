@@ -226,10 +226,20 @@ pub struct MatchedDependency {
     /// The lowest version reachable from this copy by successive fixes that
     /// no known advisory of the package affects — the version that clears
     /// everything, on this copy's own line where one exists. `None` when the
-    /// path runs into a window with no fix, or an advisory the matcher cannot
-    /// evaluate (no clean version can then be claimed).
+    /// path runs into a window no known release leaves (open-ended, or a
+    /// `last_affected` bound with nothing published above it in the data), or
+    /// an advisory the matcher cannot evaluate (no clean version can then be
+    /// claimed).
     #[serde(default)]
     pub clean_version: Option<String>,
+    /// Where that walk lands when it cannot clear everything: the lowest
+    /// version reachable by successive fixes that no advisory WITH a way out
+    /// affects (equal to `clean_version` when that is set). It is never
+    /// inside a window a later release leaves; only advisories no release
+    /// fixes stay open there. `None` when nothing has a way out, or the walk
+    /// could not evaluate an advisory.
+    #[serde(default)]
+    pub target_version: Option<String>,
 }
 
 /// Result of a sync operation.

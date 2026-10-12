@@ -197,8 +197,11 @@ fn mirror_version_verdict(
     if !dependencies::ecosystem_congruent(lang, &dep.ecosystem) {
         return None;
     }
-    let (affected, confirmed) =
-        crate::osv::matching::check_version_affected(Some(installed), &advisory.affected_ranges);
+    let (affected, confirmed) = crate::osv::matching::check_version_affected(
+        &advisory.ecosystem,
+        Some(installed),
+        &advisory.affected_ranges,
+    );
     confirmed.then_some(affected)
 }
 
@@ -2536,6 +2539,7 @@ fn mirror_affected_projects(
             continue;
         };
         let (affected, confirmed) = crate::osv::matching::check_version_affected(
+            &advisory.ecosystem,
             Some(version.as_str()),
             &advisory.affected_ranges,
         );

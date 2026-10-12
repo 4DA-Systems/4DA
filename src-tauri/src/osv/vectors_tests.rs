@@ -28,14 +28,14 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 
 use super::fix_path::{refresh_verdict, Basis, Manager, Refresh, Requirement};
-use super::fix_target::{clean_version, fix_for_version};
+use super::fix_target::{fix_for_version, walk_target};
 use super::matching::{check_version_affected, package_key, parse_version};
 use super::types::Vulnerability;
 use super::version_order::OrderedVersion;
 
 /// The committed size of the `rust` skip list. Shrink-only: lower it in the
 /// same change that removes entries; it may never rise.
-const RUST_SKIP_BASELINE: usize = 36;
+const RUST_SKIP_BASELINE: usize = 28;
 
 const FILES: [&str; 6] = [
     "version_order",
@@ -102,8 +102,9 @@ fn check_version_order(v: &Value) -> Result<(), String> {
         ">" => Ordering::Greater,
         other => return Err(format!("bad cmp {other:?}")),
     };
-    let got = OrderedVersion::parse(a)
-        .zip(OrderedVersion::parse(b))
+    let eco = s(v, "eco");
+    let got = OrderedVersion::parse_in(a, eco)
+        .zip(OrderedVersion::parse_in(b, eco))
         .and_then(|(x, y)| x.compare(&y));
     match got {
         Some(o) if o == want => Ok(()),
@@ -141,20 +142,23 @@ impl Records {
 fn check_osv_range(v: &Value, records: &mut Records) -> Result<(), String> {
     let ranges = records.ranges(s(v, "record_id"), s(v, "eco"), s(v, "name"))?;
     let want = v.get("affected").and_then(Value::as_bool).unwrap_or(false);
-    match check_version_affected(Some(s(v, "version")), &ranges) {
+    match check_version_affected(s(v, "eco"), Some(s(v, "version")), &ranges) {
         (got, true) if got == want => Ok(()),
         (got, true) => Err(format!("affected: got {got}, want {want}")),
         (_, false) => Err("unconfirmed (the engine could not decide the window)".into()),
     }
 }
 
-fn same_version(a: Option<&str>, b: Option<&str>) -> bool {
+/// Equal as versions. Build metadata is ignored whatever the ecosystem (the
+/// README's convention), so a PyPI local label is compared away here too.
+fn same_version(eco: &str, a: Option<&str>, b: Option<&str>) -> bool {
+    let strip = |v: &str| v.split('+').next().unwrap_or(v).to_string();
     match (a, b) {
         (None, None) => true,
         (Some(x), Some(y)) => {
             x == y
-                || OrderedVersion::parse(x)
-                    .zip(OrderedVersion::parse(y))
+                || OrderedVersion::parse_in(&strip(x), eco)
+                    .zip(OrderedVersion::parse_in(&strip(y), eco))
                     .and_then(|(p, q)| p.compare(&q))
                     == Some(Ordering::Equal)
         }
@@ -162,18 +166,19 @@ fn same_version(a: Option<&str>, b: Option<&str>) -> bool {
     }
 }
 
-/// The copy's target as `fix_target::line_targets` forms it: the clean walk
-/// when it succeeds (`clears_all_known`), else the highest own-line fix among
-/// the advisories that affect the copy.
-fn engine_target(installed: &str, ranges: &[Option<String>]) -> (Option<String>, bool) {
+/// The copy's target as `fix_target::line_targets` forms it: where the walk
+/// lands (`clears_all_known` when it clears everything), else, when the walk
+/// cannot run, the highest own-line fix among the advisories that affect the
+/// copy.
+fn engine_target(eco: &str, installed: &str, ranges: &[Option<String>]) -> (Option<String>, bool) {
     let refs: Vec<&Option<String>> = ranges.iter().collect();
-    if let Some(clean) = clean_version(installed, &refs) {
-        return (Some(clean), true);
+    if let Some(walk) = walk_target(eco, installed, &refs) {
+        return (Some(walk.version), walk.clears_all);
     }
     let partial = ranges
         .iter()
-        .filter(|r| check_version_affected(Some(installed), r) == (true, true))
-        .filter_map(|r| fix_for_version(installed, r))
+        .filter(|r| check_version_affected(eco, Some(installed), r) == (true, true))
+        .filter_map(|r| fix_for_version(eco, installed, r))
         .filter_map(|f| parse_version(&f).map(|p| (p, f)))
         .max_by(|a, b| a.0.cmp(&b.0))
         .map(|(_, f)| f);
@@ -191,10 +196,10 @@ fn check_fix_target(v: &Value, records: &mut Records) -> Result<(), String> {
     {
         ranges.push(records.ranges(id.as_str().unwrap_or_default(), eco, name)?);
     }
-    let (target, clears) = engine_target(installed, &ranges);
+    let (target, clears) = engine_target(eco, installed, &ranges);
     let want_target = opt_s(v, "target");
     let want_clears = v.get("clears").and_then(Value::as_bool).unwrap_or(false);
-    if !same_version(target.as_deref(), want_target) {
+    if !same_version(eco, target.as_deref(), want_target) {
         return Err(format!("target: got {target:?}, want {want_target:?}"));
     }
     // `clears` is only meaningful for a target.

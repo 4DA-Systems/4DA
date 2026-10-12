@@ -191,6 +191,7 @@ fn instance(project: &str, version: &str, confirmed: bool) -> MatchedDependency 
         is_version_confirmed: confirmed,
         fixed_version: Some("2.0.0".to_string()),
         clean_version: None,
+        target_version: None,
     }
 }
 

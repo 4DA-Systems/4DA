@@ -3113,6 +3113,7 @@ mod tests {
                     is_version_confirmed: true,
                     fixed_version: None,
                     clean_version: None,
+                    target_version: None,
                 },
                 crate::osv::types::MatchedDependency {
                     project_path: "/direct".into(),
@@ -3122,6 +3123,7 @@ mod tests {
                     is_version_confirmed: true,
                     fixed_version: None,
                     clean_version: None,
+                    target_version: None,
                 },
             ],
         };
@@ -3162,6 +3164,7 @@ mod tests {
             is_version_confirmed: true,
             fixed_version: Some(fix.into()),
             clean_version: Some(fix.into()),
+            target_version: Some(fix.into()),
         };
         let advisory = crate::osv::types::MatchedAdvisory {
             advisory_id: "GHSA-q2hr-2g5m-vwhr".into(),
@@ -3237,6 +3240,7 @@ mod tests {
                 is_version_confirmed: true,
                 fixed_version: None,
                 clean_version: None,
+                target_version: None,
             }],
         };
         let projects = vec!["/paddle-webhook".to_string()];
