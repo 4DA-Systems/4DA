@@ -223,6 +223,23 @@ describe('idle sampler classification', () => {
     assert.ok(r.cycle.appPctCore > 1);
   });
 
+  it('a working fourda-engine is a cycle even with no animation', () => {
+    const samples = [];
+    let app = 0;
+    let eng = 0;
+    for (let t = 0; t <= 600; t += 10) {
+      app += 0.1;
+      eng += t >= 300 && t < 400 ? 3 : 0; // engine at 30% of a core for 100 s
+      samples.push({ ...s(t, 0, app), engine100ns: eng * 1e7 });
+    }
+    const r = summarise(annotateQuiet(samples), 120);
+    assert.equal(r.idle.enginePctCore, 0, 'engine work never lands in idle');
+    // 30 engine-seconds land in the 350 s that are not idle.
+    assert.ok(Math.abs(r.cycle.enginePctCore - (100 * 30) / 350) < 1e-9);
+    // quiet from 0 -> idle intervals 120..290; engine busy 290..390; quiet from 400 -> idle 520..600.
+    assert.equal(r.idle.wallSec, 170 + 80);
+  });
+
   it('an unreachable bridge is unknown, not idle', () => {
     const r = summarise([s(0, null, 0), s(10, null, 1)], 0);
     assert.equal(r.idle.wallSec, 0);

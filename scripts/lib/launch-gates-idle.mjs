@@ -6,10 +6,11 @@
 //     descendant tree (WebView2 renderers/GPU process), plus any
 //     fourda-engine.exe, sampled every `intervalSec`.
 //   * GPU: `nvidia-smi pmon -c 1 -s u` SM% for the same pids (if available).
-//   * Idle detection: the app animates its mark while a background cycle runs,
-//     so an interval counts as IDLE only when `document.getAnimations().length`
-//     (via the embedded Victauri bridge, eval_js) has been 0 for >= `holdSec`
-//     at the interval start and is still 0 at its end. Everything else is
+//   * Idle detection: the app animates its mark while a GUI cycle runs, and the
+//     scheduled fourda-engine runs without animating it. An interval counts as
+//     IDLE only when `document.getAnimations().length` (via the embedded Victauri
+//     bridge, eval_js) is 0 and no engine used > 1% of a core, continuously for
+//     >= `holdSec` before the interval and through its end. Everything else is
 //     reported as in-cycle.
 // The pure classification (`summarise`) is exported for unit tests.
 
@@ -133,7 +134,7 @@ export function summarise(samples, holdSec = 120) {
     const prevQuietSince = prev.quietSince;
     let bucket;
     if (prev.anim == null || s.anim == null) bucket = 'unknown';
-    else if (prev.anim === 0 && s.anim === 0 && prevQuietSince != null && prev.t - prevQuietSince >= holdSec * 1000)
+    else if (s.quietSince != null && prevQuietSince != null && prev.t - prevQuietSince >= holdSec * 1000)
       bucket = 'idle';
     else bucket = 'cycle';
     const b = acc[bucket];
@@ -158,14 +159,26 @@ export function summarise(samples, holdSec = 120) {
   return out;
 }
 
-/** Pre-pass so `summarise` can read quietSince of the previous sample. */
+/** fourda-engine using more than this share of a core marks a background cycle. */
+export const ENGINE_BUSY_PCT = 1;
+
+/**
+ * Pre-pass so `summarise` can read quietSince of the previous sample. A sample is
+ * quiet when the GUI shows no animation AND no fourda-engine worked since the
+ * previous sample: scheduled engine runs do not animate the GUI's mark.
+ */
 export function annotateQuiet(samples) {
   let quietSince = null;
-  for (const s of samples) {
-    if (s.anim === 0) quietSince ??= s.t;
+  samples.forEach((s, i) => {
+    const prev = samples[i - 1];
+    const engineBusy =
+      prev != null &&
+      s.t > prev.t &&
+      (100 * Math.max(0, s.engine100ns - prev.engine100ns)) / HUNDRED_NS_PER_SEC / ((s.t - prev.t) / 1000) > ENGINE_BUSY_PCT;
+    if (s.anim === 0 && !engineBusy) quietSince ??= s.t;
     else quietSince = null;
     s.quietSince = quietSince;
-  }
+  });
   return samples;
 }
 

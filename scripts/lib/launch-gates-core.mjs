@@ -219,7 +219,10 @@ export function evaluateG6({ db, idle, cold }) {
     const appPct = idle.appPctCore;
     sub.idle = appPct == null ? 'pending' : appPct + (idle.enginePctCore || 0) < G6_IDLE_BAR_PCT ? 'pass' : 'fail';
     parts.push(
-      `idle CPU ${appPct == null ? 'n/a (no idle window)' : `${appPct.toFixed(2)}%`} of a core for the GUI tree + ${(idle.enginePctCore ?? 0).toFixed(2)}% engine over ${idle.wallSec}s idle (bar < ${G6_IDLE_BAR_PCT}%); GPU SM ${idle.gpuSmMean == null ? 'n/a' : `${idle.gpuSmMean.toFixed(1)}%`}`,
+      `idle CPU ${appPct == null ? 'n/a (no idle window)' : `${appPct.toFixed(2)}%`} of a core for the GUI tree + ${(idle.enginePctCore ?? 0).toFixed(2)}% engine over ${idle.wallSec}s idle (bar < ${G6_IDLE_BAR_PCT}%); GPU SM ${idle.gpuSmMean == null ? 'n/a' : `${idle.gpuSmMean.toFixed(1)}%`}` +
+        (idle.cycle?.wallSec
+          ? `; in-cycle (reported apart) GUI ${(idle.cycle.appPctCore ?? 0).toFixed(1)}% + engine ${(idle.cycle.enginePctCore ?? 0).toFixed(1)}% over ${idle.cycle.wallSec}s`
+          : ''),
     );
     evidence.push('idle sampler (Win32_Process CPU time, nvidia-smi pmon, getAnimations()==0 for >= 120 s)');
   } else {

@@ -324,7 +324,7 @@ export async function collect(opts) {
   if (opts.measureIdle) {
     const { measureIdle } = await import('./lib/launch-gates-idle.mjs');
     const r = await measureIdle({ appRoot, minutes: opts.measureIdle, log: (l) => process.stderr.write(`${l}\n`) });
-    idle = r.summary.idle;
+    idle = { ...r.summary.idle, cycle: r.summary.cycle };
   }
 
   const capSrc = join(REPO, 'src-tauri', 'src', 'morning_floor.rs');
