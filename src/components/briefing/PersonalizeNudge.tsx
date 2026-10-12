@@ -33,10 +33,7 @@ export const PersonalizeNudge = memo(function PersonalizeNudge({
       <div className="flex-1 min-w-0">
         <h3 className="text-sm font-medium text-text-primary mb-1">{t('briefing.personalizeTitle')}</h3>
         <p className="text-xs text-text-secondary mb-3">
-          {t(
-            'onboarding.choice.scanProjectsDesc',
-            '100% local — nothing ever leaves your machine. Personalizes 4DA to your real stack.',
-          )}
+          {t('onboarding.choice.scanProjectsDesc')}
         </p>
         {isScanning ? (
           <div
