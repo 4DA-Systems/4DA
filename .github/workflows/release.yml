@@ -17,6 +17,10 @@ jobs:
       release_id: ${{ steps.create.outputs.result }}
       production: ${{ steps.tagkind.outputs.production }}
       unsigned_windows_ok: ${{ steps.tagkind.outputs.unsigned_windows_ok }}
+      # 'artifact-signing' when the three ARTIFACT_SIGNING_* repository
+      # variables are all set, otherwise 'legacy' (the SSL.com / waiver path,
+      # unchanged). See "Classify the tag" for why the variables are the switch.
+      windows_signer: ${{ steps.tagkind.outputs.windows_signer }}
     permissions:
       contents: write
     steps:
@@ -34,10 +38,49 @@ jobs:
           # to true silently authorises every future release; a tag name cannot,
           # because the next release has a different tag and fails closed again.
           ALLOW_UNSIGNED_WINDOWS: ${{ vars.ALLOW_UNSIGNED_WINDOWS }}
+          # Azure Artifact Signing (launch gate G8). REPOSITORY variables, not
+          # secrets: none of them is sensitive, and a variable is visible in
+          # Settings so the switch can be seen. The credentials themselves
+          # (AZURE_CLIENT_ID / AZURE_CLIENT_SECRET / AZURE_TENANT_ID) are
+          # secrets, and are required by the build job's preflight.
+          ARTIFACT_SIGNING_ENDPOINT: ${{ vars.ARTIFACT_SIGNING_ENDPOINT }}
+          ARTIFACT_SIGNING_ACCOUNT: ${{ vars.ARTIFACT_SIGNING_ACCOUNT }}
+          ARTIFACT_SIGNING_PROFILE: ${{ vars.ARTIFACT_SIGNING_PROFILE }}
         shell: bash
         run: |
           set -euo pipefail
           TAG="${GITHUB_REF#refs/tags/}"
+
+          # Which Windows signer does this release use? The three variables are
+          # the switch. All three unset: 'legacy', and every Windows step below
+          # behaves exactly as it did before Artifact Signing existed. All three
+          # set: 'artifact-signing'. Some but not all: a half-finished setup,
+          # which fails HERE, in seconds, before a draft release or a 45-minute
+          # build exists. Falling back to legacy instead would quietly ship
+          # whatever the legacy path produces after the operator asked for
+          # Artifact Signing, which is the silent-skip shape this workflow's
+          # preflight was written to remove.
+          AS_SET=0
+          for v in ARTIFACT_SIGNING_ENDPOINT ARTIFACT_SIGNING_ACCOUNT ARTIFACT_SIGNING_PROFILE; do
+            if [ -n "${!v:-}" ]; then AS_SET=$((AS_SET + 1)); fi
+          done
+          if [ "$AS_SET" -eq 0 ]; then
+            WINDOWS_SIGNER=legacy
+          elif [ "$AS_SET" -eq 3 ]; then
+            WINDOWS_SIGNER=artifact-signing
+            # The endpoint is region-specific and goes straight into signtool's
+            # metadata. A typo here would otherwise surface as an opaque 403
+            # or DNS failure from deep inside the bundler.
+            if ! [[ "$ARTIFACT_SIGNING_ENDPOINT" =~ ^https://[a-z0-9]+\.codesigning\.azure\.net/?$ ]]; then
+              echo "::error title=Artifact Signing misconfigured::ARTIFACT_SIGNING_ENDPOINT='${ARTIFACT_SIGNING_ENDPOINT}' is not an Artifact Signing endpoint (expected e.g. https://wus2.codesigning.azure.net, matching the account's region)."
+              exit 1
+            fi
+          else
+            echo "::error title=Artifact Signing half-configured::Only ${AS_SET} of the 3 repository variables ARTIFACT_SIGNING_ENDPOINT / ARTIFACT_SIGNING_ACCOUNT / ARTIFACT_SIGNING_PROFILE are set. Set all three to sign with Artifact Signing, or clear all three to release exactly as before."
+            exit 1
+          fi
+          echo "windows_signer=${WINDOWS_SIGNER}" >> "$GITHUB_OUTPUT"
+          echo "Windows signer: ${WINDOWS_SIGNER}"
           if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
             echo "production=true" >> "$GITHUB_OUTPUT"
             echo "$TAG is a production version tag - artifacts will be published."
@@ -50,7 +93,17 @@ jobs:
           # notarization is untouched: an un-notarized .app is REFUSED by
           # Gatekeeper, not merely warned about, so waiving it would ship a mac
           # build that cannot be opened. The updater signature is untouched too.
-          if [ -n "${ALLOW_UNSIGNED_WINDOWS:-}" ] && [ "${ALLOW_UNSIGNED_WINDOWS}" = "$TAG" ]; then
+          #
+          # With Artifact Signing configured the waiver has nothing to waive: the
+          # build WILL be signed and the verify step REQUIRES it. Honouring a
+          # stale waiver would also put "not code-signed" in the release notes
+          # of a signed build, so it is ignored, out loud.
+          if [ "$WINDOWS_SIGNER" = "artifact-signing" ]; then
+            echo "unsigned_windows_ok=false" >> "$GITHUB_OUTPUT"
+            if [ -n "${ALLOW_UNSIGNED_WINDOWS:-}" ]; then
+              echo "::notice title=Signing waiver ignored::ALLOW_UNSIGNED_WINDOWS is set to '${ALLOW_UNSIGNED_WINDOWS}', but Artifact Signing is configured, so this release is signed and a valid signature is REQUIRED. Delete the variable to stop seeing this."
+            fi
+          elif [ -n "${ALLOW_UNSIGNED_WINDOWS:-}" ] && [ "${ALLOW_UNSIGNED_WINDOWS}" = "$TAG" ]; then
             echo "unsigned_windows_ok=true" >> "$GITHUB_OUTPUT"
             echo "::warning title=UNSIGNED WINDOWS BUILD::ALLOW_UNSIGNED_WINDOWS is set to ${TAG}, so the Windows installer in this release will NOT be code-signed. Users will see a SmartScreen warning and Windows cannot tell them who published it. This authorisation applies to ${TAG} only."
           else
@@ -161,6 +214,10 @@ jobs:
           SSL_COM_CREDENTIAL_ID: ${{ secrets.SSL_COM_CREDENTIAL_ID }}
           SSL_COM_TOTP_SECRET: ${{ secrets.SSL_COM_TOTP_SECRET }}
           UNSIGNED_WINDOWS_OK: ${{ needs.create-release.outputs.unsigned_windows_ok }}
+          WINDOWS_SIGNER: ${{ needs.create-release.outputs.windows_signer }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
@@ -199,13 +256,31 @@ jobs:
               # ALLOW_UNSIGNED_WINDOWS repository variable. macOS is NOT: an
               # un-notarized .app is refused by Gatekeeper outright, so a waiver
               # there would ship a build that cannot be opened at all.
-              if [ "${UNSIGNED_WINDOWS_OK:-}" = "true" ]; then
+              #
+              # Artifact Signing (selected by create-release from the three
+              # ARTIFACT_SIGNING_* variables) is checked FIRST. Its App
+              # Registration credentials are required, never waivable: the
+              # operator asked for signing by setting the variables, and the
+              # waiver is already forced off for this signer.
+              if [ "${WINDOWS_SIGNER:-}" = "artifact-signing" ]; then
+                echo "Windows signer: Azure Artifact Signing."
+                require AZURE_CLIENT_ID
+                require AZURE_CLIENT_SECRET
+                require AZURE_TENANT_ID
+              elif [ "${UNSIGNED_WINDOWS_OK:-}" = "true" ]; then
                 echo "::warning title=Windows signing waived::ALLOW_UNSIGNED_WINDOWS authorises this exact tag, so the Windows credential requirement is skipped and this build will be UNSIGNED."
               else
                 require SSL_COM_USERNAME
                 require SSL_COM_PASSWORD
                 require SSL_COM_CREDENTIAL_ID
                 require SSL_COM_TOTP_SECRET
+              fi
+              # Credentials without the switch are not a configuration, so the
+              # legacy path runs unchanged, but say so: this is what a
+              # half-finished Artifact Signing setup looks like.
+              if [ "${WINDOWS_SIGNER:-}" != "artifact-signing" ] && \
+                 { [ -n "${AZURE_CLIENT_ID:-}" ] || [ -n "${AZURE_CLIENT_SECRET:-}" ] || [ -n "${AZURE_TENANT_ID:-}" ]; }; then
+                echo "::notice title=Artifact Signing not active::AZURE_* secrets are present but the ARTIFACT_SIGNING_ENDPOINT / _ACCOUNT / _PROFILE repository variables are not all set, so this release uses the legacy Windows signing path."
               fi
               ;;
             macOS)
@@ -226,6 +301,13 @@ jobs:
                    APPLE_ID APPLE_TEAM_ID; do
             shape "$s"
           done
+          # Only when they are in use: on the legacy path these secrets are
+          # never read, so they must not be able to block a legacy release.
+          if [ "${WINDOWS_SIGNER:-}" = "artifact-signing" ]; then
+            for s in AZURE_CLIENT_ID AZURE_CLIENT_SECRET AZURE_TENANT_ID; do
+              shape "$s"
+            done
+          fi
 
           if [ ${#MALFORMED[@]} -gt 0 ]; then
             echo "::error::Signing credentials are present but MALFORMED - release blocked."
@@ -377,7 +459,9 @@ jobs:
         # which is supposed to police the other. The waiver check is a
         # different question (is signing expected at all?) and is safe: with it
         # active nothing calls CodeSignTool, so installing it is dead weight.
-        if: runner.os == 'Windows' && needs.create-release.outputs.unsigned_windows_ok != 'true'
+        # Likewise with Artifact Signing selected: the signCommand is replaced
+        # and CodeSignTool is never called.
+        if: runner.os == 'Windows' && needs.create-release.outputs.unsigned_windows_ok != 'true' && needs.create-release.outputs.windows_signer != 'artifact-signing'
         shell: powershell
         run: |
           # Download CodeSignTool for Windows
@@ -411,6 +495,89 @@ jobs:
           echo "CODESIGNTOOL_BAT=$($cstBat.FullName)" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
           # Keep the dir on PATH too (belt-and-suspenders for any other consumer).
           echo "$($cstBat.Directory.FullName)" | Out-File -Append -Encoding utf8 $env:GITHUB_PATH
+
+      - name: Install Azure Artifact Signing CLI (Windows)
+        # Only when create-release selected Artifact Signing. Tauri's documented
+        # integration (v2.tauri.app/distribute/sign/windows) is
+        # artifact-signing-cli in bundle.windows.signCommand; the CLI logs in
+        # with `az login --service-principal` and runs signtool with Microsoft's
+        # Artifact Signing dlib. It needs Azure CLI, signtool from Windows SDK
+        # 10.0.26100+ and a .NET 8+ runtime - all on windows-latest
+        # (windows-2025-vs2026 image: Azure CLI 2.90, SDK 10.0.26100.0,
+        # Microsoft.NETCore.App 8/9/10) - and each is resolved and asserted
+        # here rather than assumed, so an image change fails in this step, not
+        # 30 minutes later inside the bundler with its output swallowed.
+        if: runner.os == 'Windows' && needs.create-release.outputs.windows_signer == 'artifact-signing'
+        # pwsh, not Windows PowerShell 5.1: cargo writes its progress to
+        # stderr, and 5.1 under ErrorActionPreference=Stop can turn native
+        # stderr into a terminating error.
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+
+          # 1. The CLI, at a pinned version. `cargo install` is the documented
+          #    route; --locked uses the lockfile published with the crate.
+          $cliVersion = '0.11.0'
+          cargo install artifact-signing-cli --version $cliVersion --locked
+          if ($LASTEXITCODE -ne 0) { Write-Error "cargo install artifact-signing-cli $cliVersion failed"; exit 1 }
+          $cli = Join-Path $env:USERPROFILE '.cargo\bin\artifact-signing-cli.exe'
+          if (-not (Test-Path $cli)) {
+            $found = Get-Command artifact-signing-cli -ErrorAction SilentlyContinue
+            if ($found) { $cli = $found.Source } else { Write-Error "artifact-signing-cli.exe not found after install"; exit 1 }
+          }
+          $reported = (& $cli --version | Out-String).Trim()
+          Write-Host "artifact-signing-cli: $cli ($reported)"
+          if ($reported -notmatch [regex]::Escape($cliVersion)) { Write-Error "Expected artifact-signing-cli $cliVersion, got '$reported'"; exit 1 }
+
+          # 2. The signing client the CLI would otherwise download UNVERIFIED on
+          #    first use (Microsoft.ArtifactSigning.Client 1.0.128, hard-coded
+          #    in artifact-signing-cli 0.11.0's source). Pre-seeding it at the
+          #    path the CLI checks (~\.artifact-signing-cli\lib\bin\x64) makes it
+          #    skip that download, and lets us pin the package by SHA-256 the
+          #    same way CodeSignTool is pinned above. Bumping the CLI may bump
+          #    this package: recompute the hash from nuget.org when it does.
+          $nugetVersion = '1.0.128'
+          $nugetSha256 = '74bd7d27e6ce1051409c38d9b46bc8df0400ecd643d51ffbf2ac00869061e40b'
+          $nupkg = Join-Path $env:RUNNER_TEMP "artifact-signing-client.$nugetVersion.zip"
+          Invoke-WebRequest -Uri "https://www.nuget.org/api/v2/package/Microsoft.ArtifactSigning.Client/$nugetVersion" -OutFile $nupkg -UseBasicParsing
+          $nugetActual = (Get-FileHash -Path $nupkg -Algorithm SHA256).Hash.ToLowerInvariant()
+          Write-Host "Microsoft.ArtifactSigning.Client $nugetVersion SHA-256: $nugetActual"
+          if ($nugetActual -ne $nugetSha256) { Write-Error "Artifact Signing client SHA-256 mismatch - expected $nugetSha256, got $nugetActual"; exit 1 }
+          $libDir = Join-Path $env:USERPROFILE '.artifact-signing-cli\lib'
+          Expand-Archive -Path $nupkg -DestinationPath $libDir -Force
+          $dlib = Join-Path $libDir 'bin\x64\Azure.CodeSigning.Dlib.dll'
+          if (-not (Test-Path $dlib)) { Write-Error "Azure.CodeSigning.Dlib.dll missing at $dlib after extraction"; exit 1 }
+          Write-Host "Signing dlib: $dlib"
+
+          # 3. signtool: the newest x64 build at or above 10.0.26100.0. Exported
+          #    as SIGNTOOL_PATH, which the CLI reads, so a future image whose SDK
+          #    directory is not exactly 10.0.26100.0 still works.
+          $kits = 'C:\Program Files (x86)\Windows Kits\10\bin'
+          $minSdk = [version]'10.0.26100.0'
+          $signtool = Get-ChildItem -Path $kits -Directory -Filter '10.0.*' |
+            Where-Object { $v = $null; [version]::TryParse($_.Name, [ref]$v) -and $v -ge $minSdk } |
+            Sort-Object { [version]$_.Name } -Descending |
+            ForEach-Object { Join-Path $_.FullName 'x64\signtool.exe' } |
+            Where-Object { Test-Path $_ } |
+            Select-Object -First 1
+          if (-not $signtool) { Write-Error "No x64 signtool.exe from Windows SDK 10.0.26100 or later under $kits"; exit 1 }
+          Write-Host "signtool: $signtool"
+
+          # 4. Azure CLI, exported as AZURE_CLI_PATH (also read by the CLI).
+          $az = Get-Command az.cmd -ErrorAction SilentlyContinue
+          if (-not $az) { Write-Error "Azure CLI (az.cmd) not found on PATH"; exit 1 }
+          Write-Host "Azure CLI: $($az.Source)"
+
+          # 5. .NET runtime. The dlib targets net8.0 with rollForward=Major, so
+          #    any Microsoft.NETCore.App 8 or later satisfies it.
+          $runtimes = (& dotnet --list-runtimes | Out-String)
+          if ($runtimes -notmatch 'Microsoft\.NETCore\.App (8|9|[1-9][0-9])\.') { Write-Error "No .NET 8+ runtime (Microsoft.NETCore.App) found:`n$runtimes"; exit 1 }
+
+          # Absolute paths, exported through GITHUB_ENV: a GITHUB_PATH addition
+          # did not reach Tauri's signCommand subprocess for CodeSignTool.
+          echo "ARTIFACT_SIGNING_CLI=$cli" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          echo "SIGNTOOL_PATH=$signtool" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
+          echo "AZURE_CLI_PATH=$($az.Source)" | Out-File -Append -Encoding utf8 $env:GITHUB_ENV
 
       - name: Pre-sign bundled ORT dylib (macOS notarization)
         # tauri bundles src-tauri/models/ort/libonnxruntime.dylib as a plain
@@ -479,9 +646,28 @@ jobs:
           # via signCommand. With the waiver active the script exits 0 without
           # signing, instead of failing the build on absent credentials.
           ALLOW_UNSIGNED_WINDOWS: ${{ needs.create-release.outputs.unsigned_windows_ok }}
+          # Windows signing via Azure Artifact Signing - read by
+          # scripts/sign-windows-artifact.ps1 (and, for the AZURE_* trio, by
+          # artifact-signing-cli itself). Empty on every other leg and on the
+          # legacy path, where nothing reads them.
+          AZURE_CLIENT_ID: ${{ runner.os == 'Windows' && needs.create-release.outputs.windows_signer == 'artifact-signing' && secrets.AZURE_CLIENT_ID || '' }}
+          AZURE_CLIENT_SECRET: ${{ runner.os == 'Windows' && needs.create-release.outputs.windows_signer == 'artifact-signing' && secrets.AZURE_CLIENT_SECRET || '' }}
+          AZURE_TENANT_ID: ${{ runner.os == 'Windows' && needs.create-release.outputs.windows_signer == 'artifact-signing' && secrets.AZURE_TENANT_ID || '' }}
+          ARTIFACT_SIGNING_ENDPOINT: ${{ runner.os == 'Windows' && needs.create-release.outputs.windows_signer == 'artifact-signing' && vars.ARTIFACT_SIGNING_ENDPOINT || '' }}
+          ARTIFACT_SIGNING_ACCOUNT: ${{ runner.os == 'Windows' && needs.create-release.outputs.windows_signer == 'artifact-signing' && vars.ARTIFACT_SIGNING_ACCOUNT || '' }}
+          ARTIFACT_SIGNING_PROFILE: ${{ runner.os == 'Windows' && needs.create-release.outputs.windows_signer == 'artifact-signing' && vars.ARTIFACT_SIGNING_PROFILE || '' }}
         with:
           releaseId: ${{ needs.create-release.outputs.release_id }}
-          args: --target ${{ matrix.target }}
+          # Legacy: exactly `--target <triple>`, as before. Artifact Signing on
+          # the Windows leg: additionally merge src-tauri/tauri.artifact-signing.conf.json
+          # (JSON Merge Patch over tauri.conf.json), which swaps
+          # bundle.windows.signCommand from the SSL.com script to
+          # scripts/sign-windows-artifact.ps1. The signCommand is injected
+          # here, at release time, and never lives in the default config, so a
+          # dev `tauri build` can never try to sign through Azure. The file is
+          # deliberately NOT named tauri.windows.conf.json, which Tauri would
+          # merge automatically on every Windows build.
+          args: ${{ (runner.os == 'Windows' && needs.create-release.outputs.windows_signer == 'artifact-signing') && format('--target {0} --config src-tauri/tauri.artifact-signing.conf.json', matrix.target) || format('--target {0}', matrix.target) }}
           # Explicit - tauri-action generates and merges latest.json across
           # matrix jobs when updater signing is configured. The desktop updater
           # endpoint points at the dedicated desktop-latest manifest release,
@@ -514,10 +700,17 @@ jobs:
         if: runner.os == 'Windows'
         env:
           ALLOW_UNSIGNED_WINDOWS: ${{ needs.create-release.outputs.unsigned_windows_ok }}
+          WINDOWS_SIGNER: ${{ needs.create-release.outputs.windows_signer }}
         shell: powershell
         run: |
           $ErrorActionPreference = 'Stop'
           $bundleDir = "src-tauri\target\${{ matrix.target }}\release\bundle"
+          # With Artifact Signing selected, a valid signature is REQUIRED on
+          # every artifact and no waiver can soften that. It must also be
+          # TIMESTAMPED: Artifact Signing certificates are valid for days, so
+          # an untimestamped signature turns invalid soon after the release.
+          $requireSigned = ($env:WINDOWS_SIGNER -eq 'artifact-signing')
+          if ($requireSigned) { Write-Host "Windows signer: Azure Artifact Signing - a valid, timestamped signature is REQUIRED." }
 
           # "I verified nothing" must never be a pass. A missing bundle
           # directory - or a bundle path change that moves the artifacts out
@@ -533,8 +726,12 @@ jobs:
 
           foreach ($f in $bundles) {
             $sig = Get-AuthenticodeSignature -FilePath $f.FullName
-            if ($sig.Status -eq 'Valid') {
+            if ($sig.Status -eq 'Valid' -and $requireSigned -and -not $sig.TimeStamperCertificate) {
+              Write-Host "::error::NOT TIMESTAMPED: $($f.Name) - signed, but the signature expires with its short-lived certificate"
+              $failed++
+            } elseif ($sig.Status -eq 'Valid') {
               Write-Host "  SIGNED: $($f.Name) - $($sig.SignerCertificate.Subject)"
+              Write-Host "          issuer: $($sig.SignerCertificate.Issuer)"
               $signed++
             } else {
               # A `::error::` annotation rather than Write-Error, so every
@@ -556,7 +753,10 @@ jobs:
           # still runs, still inspects every artifact, and still says out loud
           # that they are unsigned. It only stops that being fatal.
           if ($failed -gt 0) {
-            if ($env:ALLOW_UNSIGNED_WINDOWS -eq 'true') {
+            if ($requireSigned) {
+              Write-Host "::error::$failed Windows artifact(s) lack a valid, timestamped Authenticode signature, and Artifact Signing is configured - release blocked. The signing log is printed by the step above."
+              exit 1
+            } elseif ($env:ALLOW_UNSIGNED_WINDOWS -eq 'true') {
               Write-Host "::warning::$failed Windows artifact(s) are UNSIGNED. Allowed because ALLOW_UNSIGNED_WINDOWS authorises this tag. Users will see a SmartScreen warning."
             } else {
               Write-Host "::error::One or more binaries are unsigned - release blocked"
