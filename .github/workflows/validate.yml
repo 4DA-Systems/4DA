@@ -75,6 +75,7 @@ jobs:
     timeout-minutes: 5
     outputs:
       rust: ${{ steps.filter.outputs.rust }}
+      depengine: ${{ steps.filter.outputs.depengine }}
       frontend: ${{ steps.filter.outputs.frontend }}
       contract: ${{ steps.filter.outputs.contract }}
       relay: ${{ steps.filter.outputs.relay }}
@@ -111,6 +112,7 @@ jobs:
             uncovered:
               - '!src/**'
               - '!src-tauri/**'
+              - '!crates/**'
               - '!scripts/**'
               - '!public/**'
               - '!e2e/**'
@@ -143,6 +145,13 @@ jobs:
               - '.github/**'
             rust:
               - 'src-tauri/**'
+              # Path dependencies of src-tauri (crates/fourda-depengine): a
+              # change there changes what the app compiles and tests.
+              - 'crates/**'
+            depengine:
+              # The pure engine crate, and the rule vectors its own test reads.
+              - 'crates/fourda-depengine/**'
+              - 'src-tauri/tests/conformance/vectors/**'
             frontend:
               - 'src/**'
               # .husky/ holds the local commit-msg / pre-push guards. A PR that
@@ -564,6 +573,86 @@ jobs:
         run: |
           cargo install cargo-audit --locked --quiet 2>/dev/null || true
           cargo audit
+
+  # ─────────────────────────────────────────────────────────────────────
+  # The pure dependency engine (single-engine plan, Stage C0). The app's Rust
+  # matrix compiles it as a path dependency and its vector + corpus gates call
+  # it; this job proves the crate on its own: fmt, clippy (native and wasm32),
+  # its own tests, and the wasm32-unknown-unknown build with ZERO imports
+  # (no WASI, no host functions, so it cannot reach a file, socket or clock).
+  # The size goes in the job summary. Standalone crate with its own lockfile,
+  # like relay/, so it needs neither the tauri system packages nor the app's
+  # ~2.3 GB build cache.
+  # ─────────────────────────────────────────────────────────────────────
+  depengine:
+    name: Depengine (pure crate + wasm)
+    needs: changes
+    # See the `!cancelled()` note on the frontend job.
+    if: ${{ !cancelled() && (needs.changes.outputs.depengine == 'true' || needs.changes.outputs.workflows == 'true' || github.event_name == 'workflow_dispatch' || github.event_name == 'merge_group' || github.event_name == 'schedule') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: bash
+        working-directory: crates/fourda-depengine
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # v1
+        with:
+          toolchain: stable
+          targets: wasm32-unknown-unknown
+          components: rustfmt, clippy
+
+      - name: Rust cache
+        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          workspaces: crates/fourda-depengine
+          # Main-only, like relay and the Rust matrix (see relay's note).
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v4
+        with:
+          node-version: '22'
+
+      - name: Format
+        run: cargo fmt --check
+
+      - name: Clippy (native)
+        run: cargo clippy --locked -- -D warnings
+
+      # The wasm exports (src/wasm.rs) only compile on wasm32.
+      - name: Clippy (wasm32)
+        run: cargo clippy --locked --target wasm32-unknown-unknown -- -D warnings
+
+      - name: Test
+        run: cargo test --locked
+
+      # `cargo rustc --crate-type cdylib`: the manifest declares a plain rlib,
+      # so the app never links a cdylib; only this build asks for one. The
+      # release settings come from the environment (a path dependency's own
+      # [profile] would be ignored inside the app build).
+      - name: Build wasm32-unknown-unknown
+        env:
+          CARGO_PROFILE_RELEASE_OPT_LEVEL: s
+          CARGO_PROFILE_RELEASE_LTO: 'true'
+          CARGO_PROFILE_RELEASE_CODEGEN_UNITS: '1'
+          CARGO_PROFILE_RELEASE_STRIP: 'true'
+          CARGO_PROFILE_RELEASE_PANIC: abort
+        run: cargo rustc --lib --release --locked --target wasm32-unknown-unknown --crate-type cdylib
+
+      - name: Zero imports, runs, size
+        run: |
+          set -o pipefail
+          node scripts/check-wasm.cjs target/wasm32-unknown-unknown/release/fourda_depengine.wasm | tee wasm-report.txt
+          {
+            echo '### fourda-depengine wasm'
+            echo '```'
+            cat wasm-report.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
   # ─────────────────────────────────────────────────────────────────────
   # Repo-wide invariants. NO path filter and NO `needs:` — these must run on
@@ -1303,7 +1392,7 @@ jobs:
     # protection change is needed to enforce it. It runs on pull_request AND
     # merge_group (where it scans the final squash commits) and SKIPS on
     # workflow_dispatch/schedule (skipped == pass below).
-    needs: [changes, pr-metadata, repo-guards, dependabot-notice, frontend, e2e, mcp-contract, relay, rust, rust-calibration]
+    needs: [changes, pr-metadata, repo-guards, dependabot-notice, frontend, e2e, mcp-contract, relay, depengine, rust, rust-calibration]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

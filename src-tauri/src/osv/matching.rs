@@ -8,12 +8,15 @@ use std::collections::HashMap;
 
 use crate::db::Database;
 use crate::error::{FourDaError, Result};
-use semver::Version;
 
 use super::fix_target;
 use super::reachability::ReachFilter;
-use super::types::{MatchedAdvisory, MatchedDependency, NotCompiledMatch, Range};
-use super::version_order::{in_window, Lower, OrderedVersion, Upper};
+use super::types::{MatchedAdvisory, MatchedDependency, NotCompiledMatch};
+
+// The pure affected-window evaluation lives in the engine crate (single-engine
+// C0.1). Re-exported so `crate::osv::matching::check_version_affected` and
+// `parse_version` keep their paths for every caller.
+pub(crate) use fourda_depengine::range::{check_version_affected, parse_version};
 
 /// Get all advisories that match the user's installed dependencies.
 /// Merges deps from both `user_dependencies` (user-curated) and
@@ -370,139 +373,6 @@ pub fn count_matches(db: &Database) -> Result<usize> {
     get_matched_advisories(db).map(|m| m.len())
 }
 
-/// Check if a user's version is affected by the advisory's ranges.
-/// Returns (is_affected, is_confirmed).
-/// - is_affected: true if the version falls within affected ranges (or conservative fallback)
-/// - is_confirmed: true only if we could definitively verify via semver
-///
-/// `ecosystem` is the advisory's: a PyPI version orders by PEP 440 even when
-/// it also reads as semver (`version_order::OrderedVersion::parse_in`). An
-/// empty or unknown ecosystem keeps the generic semver-first order.
-pub(crate) fn check_version_affected(
-    ecosystem: &str,
-    user_version: Option<&str>,
-    affected_ranges_json: &Option<String>,
-) -> (bool, bool) {
-    let ranges_json = match affected_ranges_json {
-        Some(json) if !json.is_empty() => json,
-        _ => return (true, false), // No range info → conservative match
-    };
-
-    let ranges: Vec<Range> = match serde_json::from_str(ranges_json) {
-        Ok(r) => r,
-        Err(_) => return (true, false), // Can't parse → conservative
-    };
-
-    let user_ver_str = match user_version {
-        Some(v) if !v.is_empty() => v,
-        _ => return (true, false), // No version → conservative
-    };
-
-    let Some(user) = OrderedVersion::parse_in(user_ver_str, ecosystem) else {
-        return (true, false); // Can't parse user version → conservative
-    };
-
-    // A bound the matcher cannot parse (or compare with this version) leaves
-    // its window undecided. Reading that as "not in any window" answered
-    // "confirmed NOT affected" about a window it never evaluated
-    // (dependency-handoff Phase 1.4).
-    let mut undecided = false;
-    for range in &ranges {
-        if range.range_type == super::types::ENUMERATED_RANGE {
-            if enumerated_contains(ecosystem, &user, user_ver_str, range) {
-                return (true, true);
-            }
-            continue;
-        }
-        if range.range_type != "SEMVER" && range.range_type != "ECOSYSTEM" {
-            continue;
-        }
-        match range_contains(ecosystem, &user, range) {
-            Some(true) => return (true, true),
-            Some(false) => {}
-            None => undecided = true,
-        }
-    }
-
-    if undecided {
-        // Conservative, unconfirmed: the same answer as unparseable ranges JSON.
-        return (true, false);
-    }
-    // Went through all ranges, version not in any affected window
-    (false, true)
-}
-
-/// Whether an advisory's enumerated `versions` list (stored as an
-/// [`super::types::ENUMERATED_RANGE`] range) names this version — exactly, or
-/// as the same version under the ecosystem's ordering (`19.9` = `19.9.0`).
-fn enumerated_contains(ecosystem: &str, user: &OrderedVersion, raw: &str, range: &Range) -> bool {
-    range
-        .events
-        .iter()
-        .flatten()
-        .filter_map(|v| v.as_str())
-        .any(|listed| {
-            listed == raw.trim()
-                || OrderedVersion::parse_in(listed, ecosystem)
-                    .and_then(|v| user.compare(&v))
-                    .is_some_and(|o| o.is_eq())
-        })
-}
-
-/// Whether `user` sits in any window of one range: `Some(true)` inside one,
-/// `Some(false)` outside all of them, `None` when a window could not be
-/// decided (an unreadable bound, or one no ordering compares with `user`).
-fn range_contains(ecosystem: &str, user: &OrderedVersion, range: &Range) -> Option<bool> {
-    let mut undecided = false;
-    let mut lower: Option<Lower> = None;
-    let mut note = |verdict: Option<bool>| match verdict {
-        Some(true) => true,
-        Some(false) => false,
-        None => {
-            undecided = true;
-            false
-        }
-    };
-    for obj in range.events.iter().flatten().filter_map(|e| e.as_object()) {
-        if let Some(intro) = obj.get("introduced").and_then(|v| v.as_str()) {
-            lower = Lower::parse_in(intro, ecosystem);
-            if lower.is_none() && note(None) {
-                return Some(true);
-            }
-        }
-        let upper = obj
-            .get("fixed")
-            .map(|v| (v, false))
-            .or_else(|| obj.get("last_affected").map(|v| (v, true)));
-        if let Some((bound, inclusive)) = upper {
-            let bound = bound.as_str().unwrap_or("");
-            if let (Some(low), false) = (lower.as_ref(), is_unknown_bound(bound)) {
-                let verdict = OrderedVersion::parse_in(bound, ecosystem).and_then(|version| {
-                    in_window(
-                        user,
-                        low,
-                        Some(Upper {
-                            version: &version,
-                            inclusive,
-                        }),
-                    )
-                });
-                if note(verdict) {
-                    return Some(true);
-                }
-            }
-            lower = None;
-        }
-    }
-    // introduced with no fix → every version from introduced onward
-    if let Some(low) = lower.as_ref() {
-        if note(in_window(user, low, None)) {
-            return Some(true);
-        }
-    }
-    (!undecided).then_some(false)
-}
-
 /// npm's "Security holding package": after a malicious package is taken
 /// down, npm republishes the name as an empty `0.0.1-security` placeholder.
 /// A malicious-package advisory (`MAL-`) covers every version ("introduced
@@ -528,62 +398,6 @@ fn highest_listed_fix(fixed_versions_json: &Option<String>) -> Option<String> {
         .filter_map(|v| parse_version(&v).map(|parsed| (parsed, v)))
         .max_by(|a, b| a.0.cmp(&b.0))
         .map(|(_, v)| v)
-}
-
-/// Whether an OSV version boundary is an unknown ("not available") sentinel rather than a
-/// concrete version. OSV's PYSEC import appends "-NA" when the exact affected boundary is
-/// unknown; `semver` parses "2.5.0-NA" as a 2.5.0 prerelease, so a naive comparison would
-/// over-match (e.g. torch 2.3.0 <= "2.5.0-NA" => affected) — yet OSV's own `/v1/query`
-/// matcher does NOT place a version inside such a range. Treat it as no usable bound so the
-/// engine stays conservative and consistent with OSV (verified 2026-06-18 via the ledger's
-/// external accuracy audit).
-pub(super) fn is_unknown_bound(v: &str) -> bool {
-    let t = v.trim();
-    t.ends_with("-NA") || t.ends_with("-na")
-}
-
-/// Parse a version string, handling common non-semver formats.
-pub(super) fn parse_version(ver: &str) -> Option<Version> {
-    let v = ver.trim().trim_start_matches('v');
-    if v.is_empty() {
-        return None;
-    }
-
-    if let Ok(version) = Version::parse(v) {
-        return Some(version);
-    }
-
-    // Two-part version: "1.2" → "1.2.0"
-    let parts: Vec<&str> = v.split('.').collect();
-    if parts.len() == 2 {
-        if let Ok(version) = Version::parse(&format!("{v}.0")) {
-            return Some(version);
-        }
-    }
-
-    // Leading zeros in the numeric core ("17.06.0-ce", a Docker-style bound a
-    // Go advisory carries): semver rejects them, every ecosystem reads them
-    // as the number. Left unparsed, the window was undecided and the copy
-    // stayed an unconfirmed match forever.
-    let split = v.find(['-', '+']).unwrap_or(v.len());
-    let (core, rest) = v.split_at(split);
-    let numbers: Vec<&str> = core.split('.').collect();
-    if numbers.len() == 3
-        && numbers
-            .iter()
-            .all(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
-    {
-        let trimmed: Vec<&str> = numbers
-            .iter()
-            .map(|n| match n.trim_start_matches('0') {
-                "" => "0",
-                t => t,
-            })
-            .collect();
-        return Version::parse(&format!("{}{rest}", trimmed.join("."))).ok();
-    }
-
-    None
 }
 
 /// Normalize an ecosystem name to its OSV identifier for matching. Alias

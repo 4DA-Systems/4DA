@@ -2316,6 +2316,7 @@ dependencies = [
  "ed25519-dalek 3.0.0",
  "fastembed",
  "flate2",
+ "fourda-depengine",
  "fourda-macros",
  "futures",
  "getrandom 0.4.3",
@@ -2379,6 +2380,16 @@ dependencies = [
  "x509-cert",
  "zeroize",
  "zip 8.6.0",
+]
+
+[[package]]
+name = "fourda-depengine"
+version = "0.1.0"
+dependencies = [
+ "regex",
+ "semver",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

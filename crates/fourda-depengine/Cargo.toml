@@ -1,0 +1,49 @@
+[package]
+name = "fourda-depengine"
+version = "0.1.0"
+description = "4DA's pure dependency engine: version order, OSV affected-window evaluation and fix targets. No IO."
+edition = "2021"
+rust-version = "1.95"
+# Same licence as the app. Relicensing this crate (single-engine design §3.6,
+# option L1) is the operator's Decision 13 item 4 and is NOT done here.
+license = "FSL-1.1-Apache-2.0"
+publish = false
+
+# Purity is a dependency rule: nothing here may reach the filesystem, the
+# network, a database or the clock. No tokio, reqwest, rusqlite or tracing
+# (diagnostics are returned, not logged). The wasm32-unknown-unknown build in
+# CI (`Depengine (pure crate + wasm)`) fails if any of them, or anything else
+# that needs a host import, creeps in.
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+semver = "1"
+regex = "1"
+
+# The app's lint set (src-tauri/Cargo.toml), so moved code is held to the
+# same bar it was held to inside the app.
+[lints.rust]
+unsafe_code = "deny"
+
+[lints.clippy]
+unwrap_used = "deny"
+expect_used = "warn"
+panic = "warn"
+pedantic = { level = "warn", priority = -1 }
+module_name_repetitions = "allow"
+must_use_candidate = "allow"
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
+doc_markdown = "allow"
+items_after_statements = "allow"
+too_many_lines = "allow"
+cast_possible_truncation = "allow"
+cast_sign_loss = "allow"
+cast_precision_loss = "allow"
+cast_lossless = "allow"
+struct_excessive_bools = "allow"
+fn_params_excessive_bools = "allow"
+similar_names = "allow"
+unreadable_literal = "allow"
+wildcard_imports = "allow"
+enum_glob_use = "allow"
