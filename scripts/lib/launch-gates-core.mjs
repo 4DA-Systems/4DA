@@ -130,36 +130,101 @@ export function evaluateG3({ mcp }) {
 }
 
 // --- G4 Brief ---------------------------------------------------------------
+export const G4_BAR = { days: 14, deliveredRate: 0.95 };
+
 /**
- * outcomes: { 'YYYY-MM-DD': {outcome, reason, path, at} } from kv_store
- * morning_brief_outcomes_v1; briefingDays: ['YYYY-MM-DD'] (local) with a briefing row;
- * today: local 'YYYY-MM-DD'; capConstant: MORNING_ACT_NOW_SHOWN if read from source.
+ * One local day of G4. A day qualifies when a Brief went out (narrated summary or
+ * facts view), the audit of what it showed recorded zero version faults, and both
+ * caps held: the morning's act-now cap (items_shown <= cap, recorded) and the
+ * daily auto-brief cap (auto briefs <= dailyCap). A field the record lacks is
+ * unknown, and an unknown day does not qualify.
+ *
+ * o: the day's morning_brief_outcomes_v1 record; writes: its brief_writes_by_day_v1
+ * entry {auto, manual} or undefined; briefingRows: briefings rows that local day.
  */
-export function evaluateG4({ outcomes, briefingDays = [], today, capConstant }) {
-  const name = 'G4 Brief';
-  const delivered = (o) => ['narrated', 'facts', 'items_only'].includes(o?.outcome);
-  const days = Object.keys(outcomes || {}).sort();
-  const evidence = ['kv_store morning_brief_outcomes_v1', 'briefings table'];
-  if (!days.length)
-    return gate('G4', name, 'pending', 'no morning outcomes recorded yet (kv_store morning_brief_outcomes_v1 empty)', evidence);
-  // Consecutive delivered days ending today (or yesterday when today has no record yet).
-  let streak = 0;
-  let cursor = outcomes[today] ? today : prevDay(today);
-  while (outcomes[cursor] && delivered(outcomes[cursor])) {
-    streak++;
-    cursor = prevDay(cursor);
+export function g4Day(day, o, { writes, briefingRows = 0, dailyCap } = {}) {
+  const res = { day, delivered: false, qualifies: false, fault: false, capBreach: false, unknown: false, why: '' };
+  if (!o) return { ...res, why: 'no morning recorded' };
+  res.delivered = o.outcome === 'narrated' || o.outcome === 'facts';
+  const autoBriefs = writes ? writes.auto ?? 0 : briefingRows;
+  const autoSource = writes ? 'auto briefs' : 'briefings rows (auto and manual: no per-trigger count that day)';
+  if (dailyCap != null && autoBriefs > dailyCap) {
+    res.capBreach = true;
+    res.why = `${autoSource} ${autoBriefs} > ${dailyCap}`;
   }
-  const deliveredCount = days.filter((d) => delivered(outcomes[d])).length;
-  const rate = deliveredCount / days.length;
-  const byOutcome = {};
-  for (const d of days) byOutcome[outcomes[d].outcome] = (byOutcome[outcomes[d].outcome] || 0) + 1;
-  const summary =
-    `${streak}/14 consecutive delivered mornings; delivered ${deliveredCount}/${days.length} recorded days (${pct(rate)}; bar 95%) since ${days[0]}; ` +
-    `outcomes ${JSON.stringify(byOutcome)}; ${briefingDays.length} local days with a briefing row; ` +
-    `cap: ${capConstant != null ? `${capConstant} act-now facts listed per morning (code constant)` : 'not read'}; ` +
-    'version faults: not recorded in the DB (needs the fault audit)';
-  if (days.length >= 14 && rate < 0.95) return gate('G4', name, 'fail', summary, evidence);
-  return gate('G4', name, 'pending', summary, evidence, { streak, deliveredCount, recordedDays: days.length });
+  if (Array.isArray(o.version_faults) && o.version_faults.length) {
+    res.fault = true;
+    res.why = [res.why, `version faults: ${o.version_faults.join('; ')}`].filter(Boolean).join('; ');
+  }
+  if (Number.isFinite(o.items_shown) && Number.isFinite(o.cap) && o.items_shown > o.cap) {
+    res.capBreach = true;
+    res.why = [res.why, `act-now named ${o.items_shown} > ${o.cap}`].filter(Boolean).join('; ');
+  }
+  if (res.fault || res.capBreach) return res;
+  if (!res.delivered) return { ...res, why: `outcome ${o.outcome}${o.reason ? ` (${o.reason})` : ''}` };
+  if (!Array.isArray(o.version_faults)) {
+    return { ...res, unknown: true, why: o.audit_error ? `audit failed: ${o.audit_error}` : 'no version audit recorded (written before the audit existed)' };
+  }
+  if (!Number.isFinite(o.items_shown) || !Number.isFinite(o.cap)) return { ...res, unknown: true, why: 'no act-now cap recorded' };
+  if (dailyCap == null) return { ...res, unknown: true, why: 'daily brief cap not read' };
+  return { ...res, qualifies: true, why: 'qualifies' };
+}
+
+/**
+ * outcomes: { 'YYYY-MM-DD': record } from kv_store morning_brief_outcomes_v1;
+ * briefWrites: { day: {auto, manual} } from kv_store brief_writes_by_day_v1;
+ * briefingRowsByDay: { day: n } briefings rows per local day; today: local 'YYYY-MM-DD';
+ * dailyCap: DAILY_AUTO_BRIEF_CAP read from source.
+ *
+ * pass: the last 14 days (ending today, or yesterday while today has no record)
+ * all qualify, and the delivered rate over that window is >= 95%.
+ * fail: a version fault or a cap breach inside the window, or a full 14-day window
+ * delivered below 95%. pending otherwise (with how far the streak has got).
+ */
+export function evaluateG4({ outcomes, briefWrites = {}, briefingRowsByDay = {}, today, dailyCap }) {
+  const name = 'G4 Brief';
+  const evidence = ['kv_store morning_brief_outcomes_v1', 'kv_store brief_writes_by_day_v1', 'briefings table'];
+  const recorded = Object.keys(outcomes || {}).sort();
+  if (!recorded.length)
+    return gate('G4', name, 'pending', 'no morning outcomes recorded yet (kv_store morning_brief_outcomes_v1 empty)', evidence);
+  const day = (d) => g4Day(d, outcomes[d], { writes: briefWrites[d], briefingRows: briefingRowsByDay[d] || 0, dailyCap });
+  const end = outcomes[today] ? today : prevDay(today);
+
+  let streak = 0;
+  let breakDay = null;
+  for (let d = end; ; d = prevDay(d)) {
+    const r = day(d);
+    if (!r.qualifies) {
+      breakDay = r;
+      break;
+    }
+    streak++;
+  }
+  // The window: the last 14 days to `end`, never before recording began.
+  const window = [];
+  for (let d = end; window.length < G4_BAR.days && d >= recorded[0]; d = prevDay(d)) window.unshift(day(d));
+  const deliveredN = window.filter((r) => r.delivered).length;
+  const rate = window.length ? deliveredN / window.length : null;
+  const faults = window.filter((r) => r.fault);
+  const breaches = window.filter((r) => r.capBreach);
+  const unknown = window.filter((r) => r.unknown);
+
+  const summary = [
+    `${Math.min(streak, G4_BAR.days)}/${G4_BAR.days} consecutive qualifying mornings to ${end} (delivered as narrated or facts, 0 shown version faults, caps held)`,
+    `delivered ${deliveredN}/${window.length} days in the window ${window[0]?.day}..${end} (${pct(rate)}; bar 95%)`,
+    `version-fault days ${faults.length}${faults.length ? ` (${faults.map((r) => `${r.day}: ${r.why}`).join(' | ')})` : ''}`,
+    `cap-breach days ${breaches.length}${breaches.length ? ` (${breaches.map((r) => `${r.day}: ${r.why}`).join(' | ')})` : ''}`,
+    unknown.length ? `unknown days ${unknown.length} (${unknown.map((r) => r.day).join(', ')}: ${unknown[0].why})` : 'unknown days 0',
+    `daily auto-brief cap ${dailyCap ?? 'not read'}`,
+    breakDay && streak < G4_BAR.days ? `streak stops at ${breakDay.day}: ${breakDay.why}` : '',
+  ]
+    .filter(Boolean)
+    .join('; ');
+  const details = { streak, end, window };
+  if (streak >= G4_BAR.days && rate >= G4_BAR.deliveredRate) return gate('G4', name, 'pass', summary, evidence, details);
+  if (faults.length || breaches.length || (window.length >= G4_BAR.days && rate < G4_BAR.deliveredRate))
+    return gate('G4', name, 'fail', summary, evidence, details);
+  return gate('G4', name, 'pending', summary, evidence, details);
 }
 
 export function prevDay(ymd) {
@@ -169,15 +234,47 @@ export function prevDay(ymd) {
 }
 
 // --- G5 Lane 1 --------------------------------------------------------------
-export function evaluateG5({ lane1 }) {
+export const G5_BAR = { lowerBound: 0.8, n: 80, staleDays: 14 };
+
+/**
+ * Pool weekly Lane 1 results into independent items: an item measured in several
+ * weeks counts once, with its latest verdict. records: the weekly harness's
+ * result lines ({measured_at, n, useful, items: [{key, useful}]}), any order.
+ * A record without per-item keys cannot be pooled: the latest record stands alone.
+ */
+export function poolLane1(records) {
+  const sorted = [...(records || [])].filter((r) => Number.isFinite(r?.n)).sort((a, b) => String(a.measured_at).localeCompare(String(b.measured_at)));
+  const latest = sorted.at(-1) || null;
+  if (!latest) return null;
+  if (!sorted.every((r) => Array.isArray(r.items))) return { latest, n: latest.n, useful: latest.useful, runs: 1, pooled: false };
+  const verdict = new Map();
+  for (const r of sorted) for (const it of r.items) verdict.set(it.key, !!it.useful);
+  return { latest, n: verdict.size, useful: [...verdict.values()].filter(Boolean).length, runs: sorted.length, pooled: true };
+}
+
+/**
+ * lane1Records: parsed lines of data/launch-gates/lane1-weekly.jsonl (written by the
+ * weekly re-measure) or a --lane1 file; source: where they came from; today: local date.
+ * pass: Wilson 95% lower bound >= 0.80 over >= 80 independent items, latest week fresh.
+ */
+export function evaluateG5({ lane1Records, source, today }) {
   const name = 'G5 Lane 1';
-  if (!lane1)
-    return gate('G5', name, 'pending', 'no weekly Lane 1 re-measure result is stored (pass --lane1 <result.json> with {successes, n, measured_at})', []);
-  const lb = wilsonLower(lane1.successes, lane1.n);
-  const summary = `${lane1.successes}/${lane1.n} correct (measured ${lane1.measured_at || '?'}); Wilson lower bound ${lb.toFixed(3)} (bar >= 0.80 at n >= 80)`;
-  const evidence = [lane1.source || 'lane1 result file'];
-  if (lane1.n < 80) return gate('G5', name, 'pending', `${summary}; n below 80`, evidence);
-  return gate('G5', name, lb >= 0.8 ? 'pass' : 'fail', summary, evidence);
+  const evidence = [source || 'data/launch-gates/lane1-weekly.jsonl'];
+  const pool = poolLane1(lane1Records);
+  if (!pool)
+    return gate('G5', name, 'pending', `no weekly Lane 1 re-measure result is stored (${evidence[0]}; the weekly harness writes it)`, evidence);
+  const { latest } = pool;
+  const lb = wilsonLower(pool.useful, pool.n);
+  const latestLb = latest.wilson_lower ?? wilsonLower(latest.useful, latest.n);
+  const ageDays = today && latest.measured_at ? Math.floor((Date.parse(`${today}T00:00:00Z`) - Date.parse(String(latest.measured_at).slice(0, 10) + 'T00:00:00Z')) / 86400000) : null;
+  const summary =
+    `latest week ${latest.useful}/${latest.n} useful (${latest.run || 'run'}, measured ${latest.measured_at}${latest.method ? '' : ', method not recorded'}; Wilson LB ${latestLb.toFixed(3)}); ` +
+    `${pool.pooled ? `pooled over ${pool.runs} week(s): ${pool.useful}/${pool.n} independent items` : `${pool.n} items (latest week alone: no per-item keys to pool)`}, ` +
+    `Wilson 95% lower bound ${lb.toFixed(3)} (bar >= ${G5_BAR.lowerBound} at n >= ${G5_BAR.n})`;
+  if (ageDays != null && ageDays > G5_BAR.staleDays)
+    return gate('G5', name, 'pending', `${summary}; latest result is ${ageDays} days old (the harness runs weekly)`, evidence);
+  if (pool.n < G5_BAR.n) return gate('G5', name, 'pending', `${summary}; n ${pool.n} below ${G5_BAR.n}`, evidence);
+  return gate('G5', name, lb >= G5_BAR.lowerBound ? 'pass' : 'fail', summary, evidence);
 }
 
 // --- G6 resources -----------------------------------------------------------
@@ -321,17 +418,41 @@ export function evaluateG8({ signingConfigured }) {
   );
 }
 
-export function evaluateG9({ dogfoodStart, today }) {
-  if (!dogfoodStart)
-    return gate('G9', 'G9 7-day dogfood', 'pending', 'starts on the final build; no start date recorded (pass --dogfood-start YYYY-MM-DD)', []);
-  const days = Math.floor((Date.parse(`${today}T00:00:00Z`) - Date.parse(`${dogfoodStart}T00:00:00Z`)) / 86400000);
-  return gate(
-    'G9',
-    'G9 7-day dogfood',
-    days >= 7 ? 'operator' : 'pending',
-    `dogfood started ${dogfoodStart}: day ${days}/7${days >= 7 ? '; the founder confirms zero "this isn\'t right" issues' : ''}`,
-    ['--dogfood-start'],
-  );
+export const G9_DAYS = 7;
+
+/**
+ * Doctrine rule 10: seven consecutive days of founder use on the build, with zero
+ * "this isn't right" issues filed (GitHub label `dogfood-defect`).
+ * dogfood: scripts/launch-gates-dogfood.json ({label, windows: [{started, activated_at, build}]});
+ * the last window is current. issues: [{number, title, state, createdAt}] carrying the
+ * label, or {error}. now: epoch ms.
+ * pass: 7 x 24 h since activation and no issue filed inside the window.
+ * fail: an issue filed inside the window (a fixed build starts a new window).
+ */
+export function evaluateG9({ dogfood, issues, now = Date.now() }) {
+  const name = 'G9 7-day dogfood';
+  const w = dogfood?.windows?.at(-1);
+  const label = dogfood?.label || 'dogfood-defect';
+  const evidence = ['scripts/launch-gates-dogfood.json', `GitHub issues labelled ${label}`];
+  if (!w) return gate('G9', name, 'pending', 'no dogfood window recorded (scripts/launch-gates-dogfood.json)', evidence);
+  const start = Date.parse(w.activated_at || `${w.started}T00:00:00Z`);
+  if (!Number.isFinite(start)) return gate('G9', name, 'pending', `dogfood window start unreadable (${w.activated_at || w.started})`, evidence);
+  const end = start + G9_DAYS * 86400000;
+  const days = Math.max(0, Math.floor((now - start) / 86400000));
+  const head = `window ${w.started} on build ${w.build || '?'}${w.branch ? ` (${w.branch})` : ''}: day ${Math.min(days, G9_DAYS)}/${G9_DAYS}, ends ${new Date(end).toISOString().slice(0, 16)}Z`;
+  if (!Array.isArray(issues))
+    return gate('G9', name, 'pending', `${head}; ${label} issues not read (${issues?.error || 'gh unavailable'})`, evidence);
+  const filed = issues.filter((i) => {
+    const t = Date.parse(i.createdAt);
+    return t >= start && t < end;
+  });
+  const after = issues.filter((i) => Date.parse(i.createdAt) >= end);
+  const list = (xs) => xs.map((i) => `#${i.number} ${i.state.toLowerCase()} "${i.title}"`).join(', ');
+  const tail = after.length ? `; ${after.length} filed after the window (${list(after)})` : '';
+  if (filed.length)
+    return gate('G9', name, 'fail', `${head}; ${filed.length} ${label} issue(s) filed in the window: ${list(filed)}; a fixed build starts a new window${tail}`, evidence);
+  if (now < end) return gate('G9', name, 'pending', `${head}; 0 ${label} issues filed so far${tail}`, evidence);
+  return gate('G9', name, 'pass', `${head}; 0 ${label} issues filed in the window${tail}`, evidence);
 }
 
 /** Render gates as an ASCII table (operator terminals render unicode as '?'). */

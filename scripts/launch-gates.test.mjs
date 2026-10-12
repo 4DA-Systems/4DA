@@ -88,11 +88,12 @@ describe('fixture DB (read-only)', () => {
     const b = readBrief(db, 600);
     db.close();
     assert.deepEqual(Object.keys(b.outcomes), ['2026-10-09', '2026-10-10', '2026-10-11']);
-    assert.deepEqual(b.briefingDays, ['2026-10-11'], 'UTC 21:00 is the next local day at UTC+10');
-    const g4 = evaluateG4({ ...b, today: '2026-10-12', capConstant: 6 });
+    assert.deepEqual(b.briefingRowsByDay, { '2026-10-11': 1 }, 'UTC 21:00 is the next local day at UTC+10');
+    assert.deepEqual(b.briefWrites, {}, 'no brief_writes_by_day_v1 row yet');
+    const g4 = evaluateG4({ ...b, today: '2026-10-12', dailyCap: 3 });
     assert.equal(g4.status, 'pending');
-    assert.equal(g4.details.streak, 2, 'the failed 10-09 ends the streak; today unrecorded counts from yesterday');
-    assert.match(g4.summary, /version faults: not recorded/);
+    assert.equal(g4.details.streak, 0, 'records from before the audit are unknown, never a pass');
+    assert.match(g4.summary, /streak stops at 2026-10-11: no version audit recorded/);
   });
 });
 
@@ -104,7 +105,7 @@ describe('evaluators never pass on missing data', () => {
     assert.equal(evaluateG4({ outcomes: {}, today: '2026-10-12' }).status, 'pending');
     assert.equal(evaluateG5({}).status, 'pending');
     assert.equal(evaluateG6({ db: null, idle: null, cold: null }).status, 'pending');
-    assert.equal(evaluateG9({ today: '2026-10-12' }).status, 'pending');
+    assert.equal(evaluateG9({}).status, 'pending');
   });
 
   it('a passing corpus without CI is pending, with CI it passes, a red CI fails', () => {
@@ -153,9 +154,10 @@ describe('G1 / G2 on the real corpus files', () => {
 describe('G5 Wilson bound', () => {
   it('matches the textbook value and enforces n >= 80', () => {
     assert.ok(Math.abs(wilsonLower(49, 50) - 0.8950) < 0.001);
-    assert.equal(evaluateG5({ lane1: { successes: 49, n: 50 } }).status, 'pending');
-    assert.equal(evaluateG5({ lane1: { successes: 78, n: 80 } }).status, 'pass');
-    assert.equal(evaluateG5({ lane1: { successes: 64, n: 80 } }).status, 'fail');
+    const week = (useful, n) => [{ measured_at: '2026-10-12', useful, n }];
+    assert.equal(evaluateG5({ lane1Records: week(49, 50), today: '2026-10-13' }).status, 'pending');
+    assert.equal(evaluateG5({ lane1Records: week(78, 80), today: '2026-10-13' }).status, 'pass');
+    assert.equal(evaluateG5({ lane1Records: week(64, 80), today: '2026-10-13' }).status, 'fail');
   });
 });
 

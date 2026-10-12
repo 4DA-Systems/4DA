@@ -305,6 +305,7 @@ mod monitoring_briefing;
 mod monitoring_commands;
 mod monitoring_jobs;
 mod monitoring_notifications;
+mod morning_audit;
 mod morning_floor;
 mod natural_language_search;
 mod notification_window;

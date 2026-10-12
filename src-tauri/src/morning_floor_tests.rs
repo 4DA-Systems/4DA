@@ -260,6 +260,111 @@ fn a_delivered_day_is_not_overwritten_by_a_later_quiet_check() {
     assert_eq!(load_outcomes(&db)["2026-10-11"].outcome, "narrated");
 }
 
+fn audit(shown: &[&str], faults: &[&str], items: usize) -> Result<MorningAudit, String> {
+    Ok(MorningAudit {
+        versions_shown: shown.iter().map(|s| (*s).to_string()).collect(),
+        version_faults: faults.iter().map(|s| (*s).to_string()).collect(),
+        items_shown: items,
+        cap: MORNING_ACT_NOW_SHOWN,
+    })
+}
+
+#[test]
+fn a_delivered_morning_records_what_it_showed() {
+    let db = crate::test_utils::test_db();
+    let a = audit(&["hono 4.13.3", "hono 4.13.5"], &[], 2);
+    let facts = MorningOutcome::Facts(MorningWhy::Abstained);
+    record_outcome_audited(&db, "2026-10-13", &facts, "scheduled", Some(&a));
+    let rec = &load_outcomes(&db)["2026-10-13"];
+    assert_eq!(
+        rec.versions_shown.as_deref(),
+        Some(&["hono 4.13.3".to_string(), "hono 4.13.5".to_string()][..])
+    );
+    assert_eq!(rec.version_faults.as_deref(), Some(&[][..]));
+    assert_eq!((rec.items_shown, rec.cap), (Some(2), Some(6)));
+    assert!(rec.brief_delivered());
+
+    let raw = db.get_kv(OUTCOMES_KV_KEY).unwrap().unwrap();
+    assert!(raw.contains("\"version_faults\":[]"), "{raw}");
+    assert!(raw.contains("\"items_shown\":2,\"cap\":6"), "{raw}");
+}
+
+#[test]
+fn a_record_from_before_the_audit_reads_as_unknown() {
+    let db = crate::test_utils::test_db();
+    db.set_kv(
+        OUTCOMES_KV_KEY,
+        r#"{"2026-10-12":{"outcome":"facts","reason":"abstained","path":"scheduled","at":"2026-10-11T21:00:00Z"}}"#,
+    )
+    .unwrap();
+    let rec = &load_outcomes(&db)["2026-10-12"];
+    assert_eq!(rec.outcome, "facts");
+    assert!(rec.versions_shown.is_none() && rec.version_faults.is_none());
+    assert!(rec.items_shown.is_none() && rec.cap.is_none());
+    // And a record without audit fields writes none: absent, not zero.
+    let raw = serde_json::to_string(rec).unwrap();
+    assert!(!raw.contains("version_faults"), "{raw}");
+}
+
+#[test]
+fn an_audit_that_could_not_run_is_recorded_as_such() {
+    let db = crate::test_utils::test_db();
+    let err: Result<MorningAudit, String> = Err("database unavailable: locked".into());
+    record_outcome_audited(
+        &db,
+        "2026-10-13",
+        &MorningOutcome::Narrated,
+        "scheduled",
+        Some(&err),
+    );
+    let rec = &load_outcomes(&db)["2026-10-13"];
+    assert!(rec.version_faults.is_none());
+    assert_eq!(
+        rec.audit_error.as_deref(),
+        Some("database unavailable: locked")
+    );
+}
+
+#[test]
+fn a_second_delivery_keeps_the_first_ones_fault() {
+    let db = crate::test_utils::test_db();
+    let facts = MorningOutcome::Facts(MorningWhy::TimedOut);
+    let bad = audit(&["hono 4.7.5"], &["fix: hono 4.7.5"], 1);
+    record_outcome_audited(&db, "2026-10-13", &facts, "cold_boot", Some(&bad));
+    let clean = audit(&["hono 4.13.5"], &[], 0);
+    record_outcome_audited(
+        &db,
+        "2026-10-13",
+        &MorningOutcome::Narrated,
+        "scheduled",
+        Some(&clean),
+    );
+    let rec = &load_outcomes(&db)["2026-10-13"];
+    assert_eq!(rec.outcome, "narrated");
+    assert_eq!(
+        rec.version_faults.as_deref(),
+        Some(&["fix: hono 4.7.5".to_string()][..])
+    );
+    assert_eq!(rec.versions_shown.as_ref().map(Vec::len), Some(2));
+    assert_eq!(rec.items_shown, Some(1));
+
+    // A Brief delivered first is not demoted by a later items-only window.
+    let items = MorningOutcome::ItemsOnly(MorningWhy::Abstained);
+    record_outcome_audited(&db, "2026-10-13", &items, "scheduled", Some(&clean));
+    assert_eq!(load_outcomes(&db)["2026-10-13"].outcome, "narrated");
+
+    // An unaudited earlier delivery leaves the day unknown.
+    record_outcome(&db, "2026-10-14", &MorningOutcome::Narrated, "cold_boot");
+    record_outcome_audited(
+        &db,
+        "2026-10-14",
+        &MorningOutcome::Narrated,
+        "scheduled",
+        Some(&clean),
+    );
+    assert!(load_outcomes(&db)["2026-10-14"].version_faults.is_none());
+}
+
 #[tokio::test]
 async fn items_without_facts_still_go_out_with_the_quiet_line() {
     let mut b = briefing(3);
@@ -624,72 +729,17 @@ fn an_empty_fact_set_renders_no_floor() {
 
 // ---- Replay on a real snapshot (G4 measurement) ----
 
-/// Is `version` a real version of `package`: installed in some project, a
-/// fixed version OSV lists for it, or a release the registry feed carries?
-fn version_is_true(conn: &rusqlite::Connection, package: &str, version: &str) -> bool {
-    let q = |sql: &str| -> bool {
-        conn.query_row(sql, rusqlite::params![package, version], |_| Ok(()))
-            .is_ok()
-    };
-    q("SELECT 1 FROM dependency_instances WHERE LOWER(package_name) = LOWER(?1) AND version = ?2 LIMIT 1")
-        || q("SELECT 1 FROM osv_advisories WHERE LOWER(package_name) = LOWER(?1)
-               AND fixed_versions LIKE '%\"' || ?2 || '\"%' LIMIT 1")
-        || q("SELECT 1 FROM source_items WHERE title LIKE '%' || ?1 || ' v' || ?2 || '%' LIMIT 1")
-}
-
 /// Every version the facts view can show, checked against the database's
-/// own truth. Returns (checked, faults).
+/// own truth (`morning_audit`: the check each delivered morning records).
+/// Returns (checked, faults).
 fn verify_versions(conn: &rusqlite::Connection, facts: &BriefFacts) -> (usize, Vec<String>) {
-    use crate::brief_facts::FixPath;
-    let mut checked = 0;
-    let mut faults = Vec::new();
-    let mut check = |pkg: &str, v: &str, what: &str| {
-        checked += 1;
-        if !version_is_true(conn, pkg, v) {
-            faults.push(format!("{what}: {pkg} {v}"));
-        }
-    };
-    for f in facts.security.iter().chain(facts.also_open.iter()) {
-        for s in &f.sites {
-            if let Some(i) = &s.installed {
-                check(&f.package, i, "installed");
-            }
-            match &s.fix_path {
-                FixPath::Bump { to }
-                | FixPath::Refresh { to, .. }
-                | FixPath::ParentUnknown { to }
-                | FixPath::Reinstall { to }
-                | FixPath::Update { to } => check(&f.package, to, "fix"),
-                FixPath::Parent {
-                    parent,
-                    parent_version,
-                    to,
-                    proven,
-                    ..
-                } => {
-                    check(&f.package, to, "fix");
-                    check(parent, parent_version, "parent installed");
-                    if let Some(p) = proven {
-                        check(parent, &p.parent_version, "proven parent");
-                        check(&f.package, &p.child_version, "proven child");
-                    }
-                }
-                FixPath::PerLine { lines } => {
-                    for l in lines {
-                        check(&f.package, &l.to, "line fix");
-                    }
-                }
-                FixPath::NoFix => {}
-            }
-        }
-    }
-    for u in &facts.upgrades {
-        check(&u.package, &u.announced, "announced");
-        for s in &u.sites {
-            check(&u.package, &s.installed, "upgrade installed");
-        }
-    }
-    (checked, faults)
+    let all = crate::morning_audit::fact_versions(facts);
+    let faults = all
+        .iter()
+        .filter(|(p, v, _)| !crate::morning_audit::version_is_true(conn, p, v))
+        .map(|(p, v, what)| format!("{what}: {p} {v}"))
+        .collect();
+    (all.len(), faults)
 }
 
 /// Articles listed under the floor's "Worth knowing".

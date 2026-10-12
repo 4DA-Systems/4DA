@@ -376,7 +376,7 @@ fn sentence_has_upgrade_intent(tokens: &[&str], i: usize) -> bool {
 /// Calendar dates ("2025.02.15") are explicitly excluded so a date sitting near
 /// a package name is never mistaken for a fabricated version (the same guard the
 /// sibling salient-term extractor applies).
-fn looks_like_version_token(t: &str) -> bool {
+pub(crate) fn looks_like_version_token(t: &str) -> bool {
     let bytes: Vec<char> = t.chars().collect();
     if !t.contains('.') {
         return false;
