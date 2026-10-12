@@ -22,7 +22,10 @@
 //!   semver compatibility — and the text says which;
 //! - a newer parent is cited only where a project actually resolved it, and
 //!   only when that resolved child version is outside every advisory 4DA
-//!   holds for the package. No registry metadata is consulted.
+//!   holds for the package;
+//! - whether a newer parent release exists at all is read from the registry
+//!   rows 4DA already holds ([`ParentStanding`]), never fetched: no row, no
+//!   claim either way.
 
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
@@ -94,6 +97,221 @@ pub struct ParentLink {
     /// Newer releases of `parent` resolved elsewhere on this machine to a
     /// child version no advisory 4DA holds affects, lowest parent first.
     pub resolutions: Vec<Resolution>,
+    /// The DIRECT dependency `parent` arrives through, when `parent` is not
+    /// itself declared: the package the project can actually move.
+    pub through: Option<Through>,
+    /// What the registry rows 4DA holds say about newer `parent` releases.
+    pub standing: ParentStanding,
+    /// How this project's tool forces the copy past the parent's
+    /// requirement (`fix_path::override_hint`), worded to follow "with".
+    pub override_hint: Option<String>,
+}
+
+/// What the registry rows 4DA already holds say about releases of a parent
+/// newer than the installed one. Read offline from `source_items` (the npm,
+/// crates.io, PyPI and Go registry adapters): never a network call, and a
+/// package 4DA does not watch is `Unknown`, which claims nothing.
+///
+/// Live 2026-10-12: Preemption said "request itself must be updated" for
+/// uuid 3.4.0, but request 2.88.2 is its last release and is deprecated; no
+/// update exists to take.
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize)]
+#[serde(tag = "kind", rename_all = "snake_case")]
+pub enum ParentStanding {
+    /// No registry row for this package.
+    #[default]
+    Unknown,
+    /// The registry showed a release above the installed one. Whether it
+    /// admits the fix is not on disk.
+    Newer { latest: String },
+    /// The installed version is the newest release the registry showed.
+    Newest { deprecated: bool },
+    /// The registry marks the package deprecated; no version was recorded.
+    Deprecated,
+}
+
+/// A direct dependency a transitive parent arrives through.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct Through {
+    pub name: String,
+    pub version: String,
+    pub standing: ParentStanding,
+}
+
+/// The registry `source_type`s and title prefix for an OSV-canonical
+/// ecosystem (the adapters' own title shapes, `dep_linker::registry_release_identity`).
+fn registry_shape(ecosystem_norm: &str) -> Option<(&'static [&'static str], &'static str)> {
+    match ecosystem_norm {
+        "npm" => Some((&["npm_registry", "npm"], "npm: ")),
+        "crates.io" => Some((&["crates_io", "crates"], "crates.io: ")),
+        "PyPI" => Some((&["pypi"], "PyPI: ")),
+        "Go" => Some((&["go_modules", "go"], "Go: ")),
+        _ => None,
+    }
+}
+
+/// [`ParentStanding`] of `name` at `installed`, from the registry rows held.
+pub fn parent_standing(
+    db: &Database,
+    ecosystem_norm: &str,
+    name: &str,
+    installed: &str,
+) -> ParentStanding {
+    let Some((types, prefix)) = registry_shape(ecosystem_norm) else {
+        return ParentStanding::Unknown;
+    };
+    let rows: Vec<(i64, String)> = {
+        let conn = db.conn.lock();
+        let list = types
+            .iter()
+            .map(|t| format!("'{t}'"))
+            .collect::<Vec<_>>()
+            .join(",");
+        let sql = format!(
+            "SELECT id, title FROM source_items
+             WHERE source_type IN ({list}) AND (title LIKE ?1 OR title = ?2)
+             ORDER BY id"
+        );
+        conn.prepare(&sql)
+            .and_then(|mut stmt| {
+                stmt.query_map(
+                    rusqlite::params![format!("{prefix}{name} %"), format!("[DEPRECATED] {name}")],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .map(|rows| rows.filter_map(Result::ok).collect())
+            })
+            .unwrap_or_default()
+    };
+    standing_from(&rows, name, installed)
+}
+
+/// The pure core of [`parent_standing`]: `rows` are `(id, title)` registry
+/// rows, oldest first. The newest row decides deprecation (a package can be
+/// un-deprecated); the highest version recorded decides the rest.
+pub fn standing_from(rows: &[(i64, String)], name: &str, installed: &str) -> ParentStanding {
+    let deprecated_title = format!("[DEPRECATED] {name}");
+    let mine: Vec<&(i64, String)> = rows
+        .iter()
+        .filter(|(_, t)| {
+            t.eq_ignore_ascii_case(&deprecated_title)
+                || crate::dep_linker::registry_release_identity(t)
+                    .is_some_and(|(n, _)| crate::dep_linker::registry_names_equal(&n, name))
+        })
+        .collect();
+    let deprecated = mine
+        .iter()
+        .max_by_key(|(id, _)| *id)
+        .is_some_and(|(_, t)| t.eq_ignore_ascii_case(&deprecated_title));
+    let newest = mine
+        .iter()
+        .filter_map(|(_, t)| crate::dep_linker::registry_release_identity(t)?.1)
+        .filter_map(|v| {
+            parse_version(&v)
+                .filter(|p| p.pre.is_empty())
+                .map(|p| (p, v))
+        })
+        .max_by(|a, b| a.0.cmp(&b.0));
+    match (newest, parse_version(installed)) {
+        (Some((latest, raw)), Some(inst)) if latest > inst => ParentStanding::Newer { latest: raw },
+        (Some(_), Some(_)) => ParentStanding::Newest { deprecated },
+        _ if deprecated => ParentStanding::Deprecated,
+        _ => ParentStanding::Unknown,
+    }
+}
+
+/// How far up the lockfile graph [`direct_through`] climbs.
+const MAX_THROUGH_DEPTH: usize = 6;
+
+/// The direct dependency `parent` `parent_version` reaches `project`
+/// through: walk `dependency_edges` up, keeping only edges backed by an
+/// installed copy, lowest name first at each level (deterministic). `None`
+/// when no direct ancestor can be read.
+fn direct_through(
+    db: &Database,
+    ecosystem_norm: &str,
+    project: &str,
+    parent: &str,
+    parent_version: &str,
+) -> Option<(String, String)> {
+    let mut frontier: Vec<(String, String)> =
+        vec![(parent.to_string(), parent_version.to_string())];
+    let mut seen: Vec<String> = vec![parent.to_lowercase()];
+    for _ in 0..MAX_THROUGH_DEPTH {
+        let mut next: Vec<(String, String)> = Vec::new();
+        for (child, child_version) in &frontier {
+            let mut edges: Vec<EdgeObs> = read_edges(db, ecosystem_norm, child)
+                .unwrap_or_default()
+                .into_iter()
+                .filter(|e| e.project == project && e.parent != ROOT_PARENT)
+                .filter(|e| {
+                    e.child_spec
+                        .as_deref()
+                        .is_none_or(|s| requirement_admits(s, child_version) != Some(false))
+                })
+                .collect();
+            edges.sort_by(|a, b| a.parent.cmp(&b.parent));
+            for edge in edges {
+                let name = edge.parent.to_lowercase();
+                if seen.contains(&name) {
+                    continue;
+                }
+                let installed: Vec<InstalledObs> = db
+                    .get_package_instances(ecosystem_norm, &edge.parent)
+                    .unwrap_or_default()
+                    .into_iter()
+                    .map(|r| InstalledObs {
+                        project: normalize_path(&r.project_path),
+                        package: r.package_name.to_lowercase(),
+                        version: r.version,
+                        is_direct: r.is_direct,
+                    })
+                    .collect();
+                let Some(copy) = installed_parent(&installed, &edge) else {
+                    continue;
+                };
+                seen.push(name);
+                if copy.is_direct {
+                    return Some((edge.parent.clone(), copy.version.clone()));
+                }
+                next.push((edge.parent.clone(), copy.version.clone()));
+            }
+        }
+        if next.is_empty() {
+            return None;
+        }
+        frontier = next;
+    }
+    None
+}
+
+/// Fill what the registry rows and the graph above the parent say: its
+/// standing, the direct dependency it arrives through, the override hint.
+fn annotate(
+    db: &Database,
+    ecosystem_norm: &str,
+    links: &mut [ParentLink],
+    manager: &dyn Fn(&str) -> Option<Manager>,
+) {
+    // Only a link whose parent must move names a parent move: a
+    // refresh-enough link needs neither the graph above it nor the registry.
+    for link in links.iter_mut().filter(|l| !l.refresh.is_enough()) {
+        link.standing = parent_standing(db, ecosystem_norm, &link.parent, &link.parent_version);
+        link.override_hint = super::fix_path::override_hint(manager(&link.project), ecosystem_norm);
+        if !link.parent_is_direct {
+            link.through = direct_through(
+                db,
+                ecosystem_norm,
+                &link.project,
+                &link.parent,
+                &link.parent_version,
+            )
+            .map(|(name, version)| Through {
+                standing: parent_standing(db, ecosystem_norm, &name, &version),
+                name,
+                version,
+            });
+        }
+    }
 }
 
 /// A transitive copy for which no installed parent could be read (yarn
@@ -204,7 +422,8 @@ pub fn load_routes(
         manager: &manager,
         requirements: &requirements,
     };
-    let links = parent_links_with(package, lines, &edges, &installed, &is_clear, &readers);
+    let mut links = parent_links_with(package, lines, &edges, &installed, &is_clear, &readers);
+    annotate(db, ecosystem_norm, &mut links, &manager);
     let unlinked = unlinked_sites(package, lines, &links, &manager);
     TransitiveRoutes { links, unlinked }
 }
@@ -317,6 +536,9 @@ pub fn parent_links_with(
                         installed,
                         is_clear,
                     ),
+                    through: None,
+                    standing: ParentStanding::Unknown,
+                    override_hint: None,
                 };
                 if !out.iter().any(|l| same_link(l, &link)) {
                     out.push(link);

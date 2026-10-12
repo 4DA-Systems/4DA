@@ -196,6 +196,34 @@ impl Manager {
             )),
         }
     }
+
+    /// Where this tool lets a project force a transitive copy past its
+    /// parent's requirement, worded to follow "with". `None` for Cargo: no
+    /// manifest key moves a crate outside the line its parent requires.
+    pub fn override_mechanism(self) -> Option<&'static str> {
+        match self {
+            Self::Npm => Some("an `overrides` entry in package.json (npm)"),
+            Self::Pnpm | Self::PnpmWorkspace => Some("a `pnpm.overrides` entry in package.json"),
+            Self::YarnClassic | Self::YarnBerry => {
+                Some("a `resolutions` entry in package.json (yarn)")
+            }
+            Self::Cargo => None,
+        }
+    }
+}
+
+/// The override mechanism for a project's tool, or, when the tool is not
+/// known, every npm-family one (`ecosystem_norm` is OSV-canonical). `None`
+/// for an ecosystem with no such mechanism.
+pub fn override_hint(manager: Option<Manager>, ecosystem_norm: &str) -> Option<String> {
+    match manager {
+        Some(m) => m.override_mechanism().map(str::to_string),
+        None if ecosystem_norm == "npm" => Some(
+            "an override in package.json (npm `overrides`, pnpm `pnpm.overrides` or yarn `resolutions`)"
+                .to_string(),
+        ),
+        None => None,
+    }
 }
 
 /// The npm-family lockfile in one directory (no ascent). The walk runs the

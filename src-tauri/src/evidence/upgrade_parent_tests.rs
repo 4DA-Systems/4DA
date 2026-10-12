@@ -179,7 +179,7 @@ fn without_a_recorded_parent_the_route_is_the_semver_inference() {
         rmcp.explanation.contains(
             "Fixed only upstream: rmcp 1.7.0 is transitive (the lockfile names no parent 4DA can \
              read); 2.1.0 is a semver-incompatible jump, so the dependency that pulls it in must \
-             be updated"
+             move to a release that admits it, or be replaced"
         ),
         "{}",
         rmcp.explanation
@@ -286,6 +286,9 @@ fn a_refresh_is_enough_so_no_newer_parent_is_offered() {
             child_version: "5.0.12".to_string(),
             project: APP.to_string(),
         }],
+        through: None,
+        standing: Default::default(),
+        override_hint: None,
     };
     let links = std::slice::from_ref(&link);
     let routes = TransitiveRoutes {
@@ -301,4 +304,134 @@ fn a_refresh_is_enough_so_no_newer_parent_is_offered() {
     let cites = super::path_citations("brace-expansion", links);
     assert_eq!(cites.len(), 1, "{cites:?}");
     assert_eq!(super::single_parent(links), None);
+}
+
+const LEDGER: &str = "d:/work/ledger";
+
+fn npm_edge(parent: &str, version: &str, child: &str, spec: &str) -> DependencyEdge {
+    DependencyEdge {
+        parent: parent.to_string(),
+        parent_version: Some(version.to_string()),
+        child: child.to_string(),
+        child_version: Some(spec.to_string()),
+        scope: EdgeScope::Runtime,
+    }
+}
+
+fn registry_row(db: &Database, title: &str) {
+    let conn = db.conn.lock();
+    conn.execute(
+        "INSERT INTO source_items (source_type, source_id, title, content, content_hash, embedding)
+         VALUES ('npm_registry', ?1, ?1, '', ?1, X'00')",
+        [title],
+    )
+    .unwrap();
+}
+
+/// uuid 3.4.0 reaches 4da-ledger through request 2.88.2 (`^3.3.2`), which
+/// arrives through javascript-opentimestamps 0.4.5, the declared dependency
+/// (live 2026-10-12, project path neutralised).
+fn seed_uuid(db: &Database) {
+    db.store_transitive_dependency(LEDGER, "uuid", Some("3.4.0"), "npm", false)
+        .unwrap();
+    db.store_dependency_instances(
+        LEDGER,
+        "npm",
+        &[
+            instance("javascript-opentimestamps", "0.4.5", true, false),
+            instance("request", "2.88.2", false, false),
+            instance("uuid", "3.4.0", false, false),
+        ],
+    )
+    .unwrap();
+    db.store_dependency_edges(
+        LEDGER,
+        "npm",
+        &[
+            npm_edge("javascript-opentimestamps", "0.4.5", "request", "^2.88.0"),
+            npm_edge("request", "2.88.2", "uuid", "^3.3.2"),
+        ],
+    )
+    .unwrap();
+    advisory(db, "GHSA-w5hq-g745-h8pq", "uuid", "npm", "11.1.1", 6.3);
+}
+
+/// Live 2026-10-12: "request itself must be updated" — but request 2.88.2
+/// is its last release and deprecated, and the declared
+/// javascript-opentimestamps 0.4.5 is its last release too. No update
+/// exists, so the step says replace or override, never "must be updated".
+#[test]
+fn a_parent_at_its_newest_release_is_not_told_to_update() {
+    let db = test_db();
+    seed_uuid(&db);
+    registry_row(&db, "npm: request v2.88.2");
+    registry_row(&db, "[DEPRECATED] request");
+    registry_row(&db, "npm: javascript-opentimestamps v0.4.5");
+    let plan = plan(&db);
+    let uuid = row(&plan, "uuid");
+    validate_item(uuid).expect("schema-valid");
+    assert!(
+        uuid.explanation.contains(
+            "uuid 3.4.0 comes in through request 2.88.2, whose requirement ^3.3.2 excludes 11.1.1 \
+             — request 2.88.2 is already the newest request release 4DA has seen and is \
+             deprecated, and it arrives through javascript-opentimestamps 0.4.5, a direct \
+             dependency; javascript-opentimestamps 0.4.5 is already the newest \
+             javascript-opentimestamps release 4DA has seen, so no javascript-opentimestamps \
+             upgrade is known to admit it: replace javascript-opentimestamps, or force uuid >= \
+             11.1.1 with an override in package.json (npm `overrides`, pnpm `pnpm.overrides` or \
+             yarn `resolutions`)"
+        ),
+        "{}",
+        uuid.explanation
+    );
+    assert!(
+        !uuid.explanation.contains("must be updated"),
+        "{}",
+        uuid.explanation
+    );
+}
+
+/// The declared parent HAS a newer release on record: upgrading it is the
+/// move, with the check its requirement needs (not on disk).
+#[test]
+fn a_declared_parent_with_a_newer_release_is_the_upgrade() {
+    let db = test_db();
+    seed_uuid(&db);
+    registry_row(&db, "npm: javascript-opentimestamps v0.4.5");
+    registry_row(&db, "npm: javascript-opentimestamps v0.5.0");
+    let plan = plan(&db);
+    let uuid = row(&plan, "uuid");
+    assert!(
+        uuid.explanation.contains(
+            "request arrives through javascript-opentimestamps 0.4.5, a direct dependency; \
+             upgrade javascript-opentimestamps (javascript-opentimestamps 0.5.0 is the newest \
+             release 4DA has seen; check that it admits uuid >= 11.1.1)"
+        ),
+        "{}",
+        uuid.explanation
+    );
+}
+
+/// Nothing on record about the parent: it must move, and no update is
+/// claimed to exist.
+#[test]
+fn a_parent_with_no_registry_record_must_move_without_a_claimed_update() {
+    let db = test_db();
+    seed_uuid(&db);
+    let plan = plan(&db);
+    let uuid = row(&plan, "uuid");
+    assert!(
+        uuid.explanation.contains(
+            "javascript-opentimestamps must move (4DA holds no record of a \
+             javascript-opentimestamps release that admits uuid >= 11.1.1): upgrade \
+             javascript-opentimestamps if one does, or replace it"
+        ),
+        "{}",
+        uuid.explanation
+    );
+    assert!(
+        !uuid.explanation.contains("must be updated"),
+        "{}",
+        uuid.explanation
+    );
 }

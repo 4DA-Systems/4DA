@@ -13,6 +13,12 @@ use crate::scoring::release_grade::{self, ReleaseClass};
 
 use super::*;
 
+// Per-copy targets and parent routes (file-size gate).
+#[path = "brief_facts_copies.rs"]
+mod copies;
+pub(crate) use copies::{copy_fix, CopyFix};
+use copies::{project_copies, with_parent_route};
+
 /// Build every fact the brief is written from. Best-effort: a failed lane
 /// yields an empty lane, never an error that costs the user the whole brief.
 pub(crate) fn build_brief_facts(db: &Database) -> BriefFacts {
@@ -237,55 +243,81 @@ fn security_fact(
 
     // Newer parents other projects here already resolved past the advisories
     // (the same read Preemption's upgrade plan names them from).
-    let parent_links = crate::osv::exposure::canonical(&ecosystem)
-        .map(|eco| {
-            let lines = crate::osv::fix_target::line_targets(&group, &projects);
-            crate::osv::parent_hint::load_parent_links(ctx.db, eco, &package, &lines)
-        })
+    // The fix target of each installed copy, per release line — the same
+    // targets the Preemption alert and the Upgrade Plan print. The alert's
+    // own `fixed_version` is `None` whenever the copies span several lines,
+    // and reading that as "no fix" told navcal its undici (26 advisories,
+    // every one fixed) and brace-expansion had no fix published (2026-10-12).
+    // The alert's project paths as the matcher wrote them (the matcher's
+    // copies compare by exact path), as Preemption passes them.
+    let lines = crate::osv::fix_target::line_targets(&group, &alert.affected_projects);
+    let eco_norm = crate::osv::exposure::canonical(&ecosystem);
+    let parent_links = eco_norm
+        .map(|eco| crate::osv::parent_hint::load_parent_links(ctx.db, eco, &package, &lines))
         .unwrap_or_default();
 
     let mut sites = Vec::new();
     for project in &alert.affected_projects {
         let pnorm = norm_path(project);
-        // The confirmed instance in this project, when the matcher has one.
-        let instance = group
-            .iter()
-            .flat_map(|m| m.dependency_instances.iter())
-            .find(|d| d.is_version_confirmed && norm_path(&d.project_path) == pnorm);
-        let installed = instance
-            .and_then(|d| d.installed_version.clone())
-            .or_else(|| alert.installed_version.clone());
-        let is_direct = instance.map(|d| d.is_direct).or(alert.is_direct);
-        let dev_only = instance.map(|d| d.is_dev).or(alert.is_dev).unwrap_or(false);
-        let fix = alert.fixed_version.as_deref();
-        let fix_path = if is_drift {
-            match fix {
-                Some(to) => FixPath::Reinstall { to: to.to_string() },
-                None => FixPath::NoFix,
-            }
-        } else {
-            let parent = if is_direct == Some(false) {
-                conn.and_then(|c| {
-                    direct_parent(c, project, &ecosystem, &package, installed.as_deref(), fix)
-                })
+        for copy in project_copies(&group, &pnorm) {
+            let installed = copy
+                .and_then(|d| d.installed_version.clone())
+                .or_else(|| alert.installed_version.clone());
+            let is_direct = copy.map(|d| d.is_direct).or(alert.is_direct);
+            let dev_only = copy.map(|d| d.is_dev).or(alert.is_dev).unwrap_or(false);
+            let fix_path = if is_drift {
+                match alert.fixed_version.as_deref() {
+                    Some(to) => FixPath::Reinstall { to: to.to_string() },
+                    None => FixPath::NoFix,
+                }
             } else {
-                None
+                match copy_fix(
+                    &lines,
+                    &pnorm,
+                    installed.as_deref(),
+                    alert.fixed_version.as_deref(),
+                ) {
+                    CopyFix::Target(fix) => {
+                        let fix = fix.as_deref();
+                        let parent = if is_direct == Some(false) {
+                            conn.and_then(|c| {
+                                direct_parent(
+                                    c,
+                                    project,
+                                    &ecosystem,
+                                    &package,
+                                    installed.as_deref(),
+                                    fix,
+                                )
+                            })
+                        } else {
+                            None
+                        };
+                        let path = fix_path(installed.as_deref(), fix, is_direct, parent.as_ref());
+                        let path = with_refresh_command(
+                            path,
+                            project,
+                            &ecosystem,
+                            &package,
+                            installed.as_deref(),
+                        );
+                        let path = with_proven_parent(path, &parent_links, &pnorm, labels);
+                        with_parent_route(path, &parent_links, &pnorm, project, eco_norm, ctx.db)
+                    }
+                    CopyFix::PerLine(lines) => FixPath::PerLine { lines },
+                }
             };
-            let path = fix_path(installed.as_deref(), fix, is_direct, parent.as_ref());
-            let path =
-                with_refresh_command(path, project, &ecosystem, &package, installed.as_deref());
-            with_proven_parent(path, &parent_links, &pnorm, labels)
-        };
-        sites.push(SecuritySite {
-            label: labels.label(project),
-            installed,
-            dev_only,
-            scratch: liveness.is_scratch(project),
-            dormant_days: liveness
-                .dormant_days(project)
-                .filter(|d| crate::ace::dormancy::is_dormant_days(*d)),
-            fix_path,
-        });
+            sites.push(SecuritySite {
+                label: labels.label(project),
+                installed,
+                dev_only,
+                scratch: liveness.is_scratch(project),
+                dormant_days: liveness
+                    .dormant_days(project)
+                    .filter(|d| crate::ace::dormancy::is_dormant_days(*d)),
+                fix_path,
+            });
+        }
     }
     sites.sort_by(|a, b| a.label.cmp(&b.label));
     sites.dedup_by(|a, b| a.label == b.label && a.installed == b.installed);
@@ -363,6 +395,7 @@ fn with_proven_parent(
         to,
         by_requirement,
         proven: None,
+        route,
     } = path
     else {
         return path;
@@ -386,6 +419,7 @@ fn with_proven_parent(
         to,
         by_requirement,
         proven,
+        route,
     }
 }
 
@@ -485,13 +519,15 @@ fn direct_parent(
     let manager = Manager::detect(std::path::Path::new(project), inst_eco);
     let requirement_recorded = manager.is_some_and(Manager::records_requirements);
 
-    // Each frontier entry carries the requirements of the depth-0 edge it
-    // descends from, so the reported requirement is the one on THIS chain.
-    let mut frontier: Vec<(String, Vec<Requirement>)> = vec![(package.to_string(), Vec::new())];
+    // Each frontier entry carries the depth-0 edge it descends from — the
+    // immediate parent and its requirements — so the reported requirement,
+    // and the parent it belongs to, are the ones on THIS chain.
+    let mut frontier: Vec<(String, Vec<Requirement>, Option<(String, String)>)> =
+        vec![(package.to_string(), Vec::new(), None)];
     let mut seen: HashSet<String> = HashSet::new();
     for depth in 0..MAX_PARENT_DEPTH {
         let mut next = Vec::new();
-        for (child, chain_req) in &frontier {
+        for (child, chain_req, immediate) in &frontier {
             let mut hops: Vec<(String, String, bool, Vec<Requirement>)> = Vec::new();
             for (parent, parent_version, child_req) in edges_of(child) {
                 if parent == "__root__" || seen.contains(&parent) {
@@ -549,14 +585,19 @@ fn direct_parent(
                 if !seen.insert(parent.clone()) {
                     continue;
                 }
+                let immediate = immediate
+                    .clone()
+                    .unwrap_or_else(|| (parent.clone(), current.clone()));
                 if direct {
                     return Some(ParentLink {
                         direct: parent,
                         direct_version: current,
+                        immediate: immediate.0,
+                        immediate_version: immediate.1,
                         requirements: req,
                     });
                 }
-                next.push((parent, req));
+                next.push((parent, req, Some(immediate)));
             }
         }
         if next.is_empty() {

@@ -36,6 +36,7 @@ use serde::{Deserialize, Serialize};
 use crate::brief_cadence::{same_state, upgrade_signature};
 use crate::db::Database;
 use crate::osv::fix_path::{refresh_verdict, Basis, Refresh, Requirement};
+use crate::osv::parent_hint::ParentStanding;
 use crate::preemption::AlertUrgency;
 use crate::scoring::release_version::lenient_semver;
 
@@ -83,11 +84,12 @@ pub(crate) enum FixPath {
         inferred: bool,
         command: Option<String>,
     },
-    /// Transitive, and the parent that pulls it in pins an older line:
-    /// that DIRECT dependency has to move. `by_requirement` is true when the
-    /// lockfile recorded the requirement and it excludes the fix (npm
-    /// package-lock); false when inferred from a semver-incompatible jump
-    /// (Cargo.lock and pnpm record resolved versions, not requirements).
+    /// Transitive, and the parent that pulls it in pins an older line: that
+    /// parent has to move. `parent` is the package whose requirement holds
+    /// the copy back (the same one the Upgrade Plan names); when it is not
+    /// declared, `route.through` names the direct dependency it arrives
+    /// through. `by_requirement` is true when the requirement was read and
+    /// excludes the fix; false when inferred from a semver-incompatible jump.
     Parent {
         parent: String,
         parent_version: String,
@@ -97,16 +99,43 @@ pub(crate) enum FixPath {
         /// resolved to a copy of the package no known advisory affects
         /// (`osv::parent_hint`). `None` when no lockfile here proves one.
         proven: Option<ProvenParent>,
+        /// What the registry rows and the graph above `parent` say about
+        /// moving it (`osv::parent_hint::ParentStanding`).
+        route: ParentRoute,
     },
     /// Transitive, the jump is semver-incompatible, the parent is unknown.
     ParentUnknown { to: String },
     /// The lockfile already pins the fix; node_modules still runs the old
     /// copy (install drift). Reinstalling is the whole fix.
     Reinstall { to: String },
-    /// The advisory lists no fixed version.
+    /// Copies on several release lines, each fixed on its own line, and
+    /// this site's copy could not be told apart (its installed version is
+    /// unknown). Never "no fix": every line listed has one.
+    PerLine { lines: Vec<LineFix> },
+    /// No advisory on this copy has a way out on its line: no `fixed` bound,
+    /// and no release past a `last_affected` one (`osv::fix_target`).
     NoFix,
     /// A fix exists, scope unknown.
     Update { to: String },
+}
+
+/// One release line and the version that fixes it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct LineFix {
+    pub installed: String,
+    pub to: String,
+}
+
+/// How a parent that must move can move, from 4DA's own data.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub(crate) struct ParentRoute {
+    /// The direct dependency `parent` arrives through, when `parent` is not
+    /// itself declared.
+    pub through: Option<crate::osv::parent_hint::Through>,
+    /// The registry's newer-release record for `parent`.
+    pub standing: crate::osv::parent_hint::ParentStanding,
+    /// The project tool's override mechanism, worded to follow "with".
+    pub override_hint: Option<String>,
 }
 
 /// Lockfile proof that a parent release clears the package: the project
@@ -263,11 +292,21 @@ pub(crate) fn fix_path(
                 },
                 Refresh::ParentMustMove(basis) => match parent {
                     Some(link) => FixPath::Parent {
-                        parent: link.direct.clone(),
-                        parent_version: link.direct_version.clone(),
+                        parent: link.immediate.clone(),
+                        parent_version: link.immediate_version.clone(),
                         to,
                         by_requirement: basis == Basis::Requirement,
                         proven: None,
+                        route: ParentRoute {
+                            through: (!link.immediate.eq_ignore_ascii_case(&link.direct)).then(
+                                || crate::osv::parent_hint::Through {
+                                    name: link.direct.clone(),
+                                    version: link.direct_version.clone(),
+                                    standing: ParentStanding::default(),
+                                },
+                            ),
+                            ..ParentRoute::default()
+                        },
                     },
                     None => FixPath::ParentUnknown { to },
                 },
@@ -285,6 +324,12 @@ pub(crate) struct ParentLink {
     /// The direct dependency at the top of the chain.
     pub direct: String,
     pub direct_version: String,
+    /// The IMMEDIATE parent, whose requirement `requirements` is: the
+    /// package that holds the copy back. Live 2026-10-12 the brief named
+    /// javascript-opentimestamps 0.4.5 as requiring a uuid line, while the
+    /// requirement (^3.3.2) was request's, the parent Preemption named.
+    pub immediate: String,
+    pub immediate_version: String,
     /// What the IMMEDIATE parent requires of the vulnerable package, where it
     /// could be read (`osv::fix_path`). Empty: not recorded, not on disk.
     pub requirements: Vec<Requirement>,
@@ -322,31 +367,54 @@ pub(crate) fn fix_clause(package: &str, path: &FixPath) -> String {
             parent,
             parent_version,
             to,
-            by_requirement: true,
+            by_requirement,
             proven,
-        } => format!(
-            "transitive; {parent} {parent_version} requires a {package} line that excludes the fix \
-             ({package} >= {to}), so a lockfile refresh will NOT fix it: upgrade {parent}{}",
-            proven_clause(package, proven.as_ref())
-        ),
-        FixPath::Parent {
-            parent,
-            parent_version,
-            to,
-            by_requirement: false,
-            proven,
-        } => format!(
-            "transitive; {parent} {parent_version} stays on an older {package} line, and the fix \
-             ({package} >= {to}) is a semver-incompatible jump, so a lockfile refresh will NOT fix it: \
-             upgrade {parent}{}",
-            proven_clause(package, proven.as_ref())
-        ),
+            route,
+        } => {
+            let why = if *by_requirement {
+                format!(
+                    "{parent} {parent_version} requires a {package} line that excludes the fix \
+                     ({package} >= {to}), so a lockfile refresh will NOT fix it"
+                )
+            } else {
+                format!(
+                    "{parent} {parent_version} stays on an older {package} line, and the fix \
+                     ({package} >= {to}) is a semver-incompatible jump, so a lockfile refresh will \
+                     NOT fix it"
+                )
+            };
+            // A release proven on this machine is the move; otherwise only
+            // what the registry rows support (never "upgrade" a parent with
+            // no newer release on record as if one existed).
+            let action = match proven {
+                Some(p) => format!("upgrade {parent}{}", proven_clause(package, Some(p))),
+                None => crate::evidence::parent_move(
+                    package,
+                    to,
+                    parent,
+                    parent_version,
+                    &route.standing,
+                    route.through.as_ref(),
+                    route.override_hint.as_deref(),
+                ),
+            };
+            format!("transitive; {why}: {action}")
+        }
         FixPath::ParentUnknown { to } => format!(
             "transitive; the fix ({package} >= {to}) is a semver-incompatible jump, so a lockfile \
-             refresh will NOT reach it: upgrade the dependency that pulls {package} in"
+             refresh will NOT reach it: the dependency that pulls {package} in must move to a \
+             release that admits it, or be replaced"
         ),
         FixPath::Reinstall { to } => format!(
             "the lockfile already pins {package} {to} but node_modules still runs the old copy: reinstall"
+        ),
+        FixPath::PerLine { lines } => format!(
+            "fixed on each line: {}",
+            lines
+                .iter()
+                .map(|l| format!("{package} {} needs >= {}", l.installed, l.to))
+                .collect::<Vec<_>>()
+                .join("; ")
         ),
         FixPath::NoFix => "no fix published: pin, patch locally, replace, or accept the risk".to_string(),
         FixPath::Update { to } => format!("update {package} to >= {to}"),
@@ -411,7 +479,8 @@ pub(crate) fn also_open_line(also: &[SecurityFact]) -> String {
         .iter()
         .take(ALSO_OPEN_SHOWN)
         .map(|f| {
-            let labels: Vec<&str> = f.sites.iter().map(|s| s.label.as_str()).collect();
+            let mut labels: Vec<&str> = f.sites.iter().map(|s| s.label.as_str()).collect();
+            labels.dedup();
             format!("{} ({})", f.package, labels.join(", "))
         })
         .collect();
@@ -677,8 +746,11 @@ pub(crate) fn package_facts(facts: &BriefFacts) -> Vec<crate::briefing_groundedn
     for f in facts.security.iter().chain(facts.also_open.iter()) {
         for s in &f.sites {
             mark(&f.package, s.dev_only);
-            if let FixPath::Parent { parent, .. } = &s.fix_path {
+            if let FixPath::Parent { parent, route, .. } = &s.fix_path {
                 mark(parent, s.dev_only);
+                if let Some(t) = &route.through {
+                    mark(&t.name, s.dev_only);
+                }
             }
         }
     }
@@ -700,6 +772,7 @@ pub(crate) fn package_facts(facts: &BriefFacts) -> Vec<crate::briefing_groundedn
                     parent_version,
                     to,
                     proven,
+                    route,
                     ..
                 } => {
                     add(&f.package, Some(to));
@@ -707,6 +780,21 @@ pub(crate) fn package_facts(facts: &BriefFacts) -> Vec<crate::briefing_groundedn
                     if let Some(p) = proven {
                         add(parent, Some(&p.parent_version));
                         add(&f.package, Some(&p.child_version));
+                    }
+                    if let ParentStanding::Newer { latest } = &route.standing {
+                        add(parent, Some(latest));
+                    }
+                    if let Some(t) = &route.through {
+                        add(&t.name, Some(&t.version));
+                        if let ParentStanding::Newer { latest } = &t.standing {
+                            add(&t.name, Some(latest));
+                        }
+                    }
+                }
+                FixPath::PerLine { lines } => {
+                    for l in lines {
+                        add(&f.package, Some(&l.installed));
+                        add(&f.package, Some(&l.to));
                     }
                 }
                 FixPath::NoFix => {}
@@ -893,7 +981,7 @@ pub(crate) fn fingerprint(
 mod build;
 pub(crate) use build::build_brief_facts;
 #[cfg(test)]
-use build::own_package_names;
+use build::{copy_fix, own_package_names, CopyFix};
 
 #[cfg(test)]
 #[path = "brief_facts_tests.rs"]

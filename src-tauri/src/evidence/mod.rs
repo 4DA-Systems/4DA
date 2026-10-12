@@ -59,7 +59,7 @@ pub use upgrade_plan::{build_upgrade_plan, BuiltPlan};
 
 // The ONE transitive-route sentence (`osv::fix_path`): the plan step prints
 // it, and so does the Preemption alert for an all-transitive package.
-pub(crate) use upgrade_parent::transitive_route_note;
+pub(crate) use upgrade_parent::{parent_move, transitive_route_note};
 
 // Preemption LIST transport (AD-036): the single visibility filter (returned
 // counts == rendered cards) plus the list-payload trim, applied only in

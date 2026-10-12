@@ -336,3 +336,97 @@ fn a_copy_with_no_readable_parent_gets_a_semver_route() {
     let unlinked = unlinked_sites("minimist", &lines, &[], &npm);
     assert_eq!(unlinked[0].command.as_deref(), Some("npm update minimist"));
 }
+
+fn rows(titles: &[&str]) -> Vec<(i64, String)> {
+    titles
+        .iter()
+        .enumerate()
+        .map(|(i, t)| (i as i64 + 1, (*t).to_string()))
+        .collect()
+}
+
+/// Live 2026-10-12: request 2.88.2 is the last request release and is
+/// deprecated. The registry rows 4DA holds say so; nothing is fetched.
+#[test]
+fn a_parent_at_its_newest_deprecated_release_reads_as_such() {
+    let held = rows(&["npm: request v2.88.2", "[DEPRECATED] request"]);
+    assert_eq!(
+        standing_from(&held, "request", "2.88.2"),
+        ParentStanding::Newest { deprecated: true }
+    );
+    // Deprecation without a recorded version still says deprecated.
+    assert_eq!(
+        standing_from(&rows(&["[DEPRECATED] request"]), "request", "2.88.2"),
+        ParentStanding::Deprecated
+    );
+    // Not deprecated, already the newest.
+    assert_eq!(
+        standing_from(
+            &rows(&["npm: javascript-opentimestamps v0.4.5"]),
+            "javascript-opentimestamps",
+            "0.4.5"
+        ),
+        ParentStanding::Newest { deprecated: false }
+    );
+}
+
+#[test]
+fn a_newer_parent_release_on_record_is_named_and_lookalikes_are_not() {
+    let held = rows(&[
+        "npm: minimatch v9.0.5",
+        "npm: minimatch v10.2.6",
+        "npm: minimatch-browser v12.0.0",
+        "npm: minimatch v11.0.0-rc.1",
+    ]);
+    assert_eq!(
+        standing_from(&held, "minimatch", "3.1.5"),
+        ParentStanding::Newer {
+            latest: "10.2.6".into()
+        },
+        "the highest stable release of THIS package"
+    );
+    // No row for the package: nothing is claimed either way.
+    assert_eq!(
+        standing_from(&held, "request", "2.88.2"),
+        ParentStanding::Unknown
+    );
+    // A later undeprecation: the newest row decides.
+    let undeprecated = rows(&["[DEPRECATED] left-pad", "npm: left-pad v1.3.0"]);
+    assert_eq!(
+        standing_from(&undeprecated, "left-pad", "1.3.0"),
+        ParentStanding::Newest { deprecated: false }
+    );
+    // crates.io titles read the same way.
+    assert_eq!(
+        standing_from(
+            &rows(&["crates.io: victauri-plugin v0.9.0"]),
+            "victauri-plugin",
+            "0.8.4"
+        ),
+        ParentStanding::Newer {
+            latest: "0.9.0".into()
+        }
+    );
+}
+
+#[test]
+fn the_override_hint_names_the_projects_own_tool() {
+    use crate::osv::fix_path::override_hint;
+    assert_eq!(
+        override_hint(Some(Manager::Npm), "npm").as_deref(),
+        Some("an `overrides` entry in package.json (npm)")
+    );
+    assert_eq!(
+        override_hint(Some(Manager::PnpmWorkspace), "npm").as_deref(),
+        Some("a `pnpm.overrides` entry in package.json")
+    );
+    assert_eq!(
+        override_hint(Some(Manager::YarnClassic), "npm").as_deref(),
+        Some("a `resolutions` entry in package.json (yarn)")
+    );
+    assert!(override_hint(None, "npm")
+        .is_some_and(|h| h.contains("`overrides`") && h.contains("`resolutions`")));
+    // Cargo has no key that forces a crate outside its parent's line.
+    assert_eq!(override_hint(Some(Manager::Cargo), "crates.io"), None);
+    assert_eq!(override_hint(None, "crates.io"), None);
+}

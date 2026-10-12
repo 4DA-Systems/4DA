@@ -191,17 +191,40 @@ fn version_context(
     }
 }
 
-/// The version a fix path moves the package to, when it names one.
-fn fix_target(path: &FixPath) -> Option<&str> {
+/// The versions a fix path moves the package to (one per line for a
+/// per-line path; none for no fix).
+fn fix_targets(path: &FixPath) -> Vec<&str> {
     match path {
         FixPath::Bump { to }
         | FixPath::Refresh { to, .. }
         | FixPath::Parent { to, .. }
         | FixPath::ParentUnknown { to }
         | FixPath::Reinstall { to }
-        | FixPath::Update { to } => Some(to),
-        FixPath::NoFix => None,
+        | FixPath::Update { to } => vec![to.as_str()],
+        FixPath::PerLine { lines } => lines.iter().map(|l| l.to.as_str()).collect(),
+        FixPath::NoFix => Vec::new(),
     }
+}
+
+/// Every distinct fix target across the sites, ascending: "1.1.21 / 5.0.12"
+/// when copies on several lines each have their own. `None` only when no
+/// site has a fix — the one case the title may say "no fix published".
+fn targets_span(sites: &[SecuritySite]) -> Option<String> {
+    let mut targets: Vec<&str> = sites
+        .iter()
+        .flat_map(|s| fix_targets(&s.fix_path))
+        .collect();
+    targets.sort_by(|a, b| {
+        match (
+            crate::scoring::release_version::lenient_semver(a, None),
+            crate::scoring::release_version::lenient_semver(b, None),
+        ) {
+            (Some(va), Some(vb)) => va.cmp(&vb),
+            _ => a.cmp(b),
+        }
+    });
+    targets.dedup();
+    (!targets.is_empty()).then(|| targets.join(" / "))
 }
 
 /// "1.7.0", or "1.7.0 (+1 other version)" when projects run different copies.
@@ -241,7 +264,8 @@ fn site_qualifiers(s: &SecuritySite) -> String {
 /// One advisory fact from the Brief as a stream item.
 pub(crate) fn security_item(fact: &SecurityFact, now_ms: i64) -> Ranked {
     let pkg = &fact.package;
-    let target = fact.sites.iter().find_map(|s| fix_target(&s.fix_path));
+    let target_span = targets_span(&fact.sites);
+    let target = target_span.as_deref();
     let installed = installed_span(fact.sites.iter().filter_map(|s| s.installed.as_deref()));
     let urgency = crate::preemption::alert_urgency_to_canonical(&fact.urgency);
     let tier = fact
@@ -268,8 +292,15 @@ pub(crate) fn security_item(fact: &SecurityFact, now_ms: i64) -> Ranked {
         ),
     ];
     for s in &fact.sites {
+        // A project holding copies on several lines gets one sentence per
+        // copy, each naming the copy it is about.
+        let copies_here = fact.sites.iter().filter(|o| o.label == s.label).count();
+        let copy = match (copies_here > 1, s.installed.as_deref()) {
+            (true, Some(v)) => format!(" {pkg} {v}"),
+            _ => String::new(),
+        };
         explanation.push(sentence(&format!(
-            "{}{}: {}",
+            "{}{copy}{}: {}",
             s.label,
             site_qualifiers(s),
             fix_clause(pkg, &s.fix_path)
