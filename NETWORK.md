@@ -28,7 +28,9 @@ All shared outbound requests use a pooled `reqwest` client
 - **Exceptions (purpose-built User-Agents):**
   - crates.io adapter → `4DA-Developer-OS/1.0 (https://4da.ai)` (`sources/crates_io.rs`); the
     release-changelog lane sends the same to `static.crates.io` and `4DA-Developer-OS/1.0` to
-    `registry.npmjs.org` (`release_changelog/fetch.rs`)
+    `registry.npmjs.org` (`release_changelog/fetch.rs`); the opt-in GitHub release-notes fallback
+    sends `4DA-Developer-OS/1.0 (https://4da.ai)` to `crates.io`, `registry.npmjs.org` and
+    `api.github.com` (`release_changelog/github.rs`, §2m)
   - HuggingFace / PapersWithCode / GitHub Advisory adapters → `4DA-Developer-OS/1.0`
     (`sources/huggingface.rs`, `sources/papers_with_code.rs`, `sources/cve.rs`)
   - OSV dependency sync → `4DA/1.0 (local-osv-mirror)` (`osv/sync.rs`)
@@ -152,9 +154,11 @@ package itself** to say what changed between your version and the new one
   and both registries already receive these package names from the release watch (§1b). The
   version sent is the one the registry itself announced. **Your installed version is never sent**;
   the range is cut on your machine.
-- **Never contacted for this:** GitHub, docs sites, or any host a registry document points to.
-  The archive URL must be https on one of the two hosts above, and a redirect off them is not
-  followed. If the package ships no changelog, the card says so; nothing else is fetched.
+- **Never contacted for this by default:** GitHub, docs sites, or any host a registry document
+  points to. The archive URL must be https on one of the two hosts above, and a redirect off them
+  is not followed. If the package ships no changelog, the card says so; nothing else is fetched,
+  **unless you turn on "Release notes from GitHub" (Settings → Privacy, off by default)**, which
+  reads the project's GitHub releases for that one release instead (§2m).
 - **Read, never run:** archive contents are read in memory as text. Nothing is written to disk
   or executed; only a root-level changelog file is kept. Archives over 5 MB compressed or 64 MB
   uncompressed are refused; a single file over 2 MB is skipped.
@@ -387,6 +391,36 @@ machine to the SMTP server you named; 4DA operates no mail server and never sees
 - **Trigger:** on the digest schedule (daily/weekly) while the app runs, plus the manual test.
 - **Disable:** clear the digest email address or the SMTP settings.
 
+### 2m. Release notes from GitHub (opt-in, off by default)
+
+(`src-tauri/src/release_changelog/github.rs`) — silent unless you turn on **Settings → Privacy →
+Release notes from GitHub** (`privacy.github_release_notes`, default `false`). With it on, when the
+release lane (§1e) finds nothing for a graded release (the package ships no changelog, the
+changelog cannot be read, or it has no entry for the release), 4DA reads the project's own GitHub
+release notes for that release instead:
+
+| Host | Request | When | Data sent |
+|---|---|---|---|
+| `crates.io` / `registry.npmjs.org` | `GET /api/v1/crates/{crate}` / `GET /{package}/{version}` | only if the setting is on and the package archive yields nothing for the release | The package name and the new public version — the same registries and names as §1b/§1e; read for the `repository` URL in the registry's own metadata |
+| `api.github.com` | `GET /repos/{owner}/{repo}/releases?per_page=100&page={n}` (at most 3 pages) | only if the setting is on, the archive yields nothing, and the registry entry links a `github.com` repository | **The GitHub repository of that dependency**, so GitHub learns which repositories you depend on. Unauthenticated (no token, no account), User-Agent `4DA-Developer-OS/1.0 (https://4da.ai)` |
+
+- **New party:** this is the only flow that tells GitHub which of your dependencies' repositories
+  you read. That is why it is off by default. Your installed version is not sent; pages are read
+  newest first and stop at the first release at or below it, so the number of pages requested
+  depends on how far behind you are.
+- **Only github.com, only the registry's link:** the repository comes from the package's registry
+  metadata, never guessed from its name; a repository on any other host is skipped, and a
+  redirect off the three hosts above is not followed. A release counts only when its tag names an
+  exact version of the package (`1.2.3`, `v1.2.3`, monorepo `pkg@1.2.3` / `pkg-v1.2.3`).
+- **Rate limits:** GitHub allows 60 unauthenticated requests an hour. A rate-limited answer is
+  shown on the card ("try again after HH:MM UTC"), is never cached, and 4DA sends nothing more to
+  GitHub until the limit resets.
+- **Read, never run:** release notes are third-party text, parsed as data by the same parser as a
+  package changelog (control and bidirectional characters stripped, entries capped) and shown on
+  the card with "From the project's GitHub releases". Answers are cached locally (found notes 120
+  days, "no release found" 24 h) under a parser version, so each release is read once.
+- **Disable:** turn the setting off. Nothing is sent to GitHub for release notes while it is off.
+
 ---
 
 ## 3. Setup-time (one-time downloads)
@@ -457,6 +491,7 @@ so it is fetched **once, on demand** (`src-tauri/src/embeddings_providers/model_
   | `pypi.org` | your Python package names | as above |
   | `crates.io` | your crate names | as above |
   | `static.crates.io` / `registry.npmjs.org` (§1e) | the crate / package name and the new public version of a graded release — never your installed version | the release card's "what changed" |
+  | `api.github.com/repos/{owner}/{repo}/releases` (§2m) — **only with `github_release_notes = true`** (off by default) | the GitHub repository of a dependency whose package shipped no usable changelog for a graded release | the release card's "what changed" |
   | `registry.npmjs.org` full packument (MCP `dependency_check`, §2j) | the npm package name being checked — name only | release vetting |
   | `crates.io/api/v1/crates/{crate}/versions` (MCP `dependency_check`, §2j) | the crate name being checked — name only | release vetting |
   | `proxy.golang.org` | your **full Go module paths** | as above |

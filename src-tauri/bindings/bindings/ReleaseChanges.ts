@@ -19,6 +19,11 @@ versions: Array<string>,
  */
 covers_range: boolean, breaking: number, features: number, fixes: number, security: number, deprecations: number, other: number, top_breaking: Array<ReleaseChangeEntry>, 
 /**
+ * The entries come from the project's GitHub releases (the opt-in
+ * fallback), not from the changelog in the package.
+ */
+from_github: boolean, 
+/**
  * Where the user can read the changelog itself (a link, never fetched).
  */
 source_url: string | null, 
