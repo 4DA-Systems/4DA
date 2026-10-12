@@ -18,6 +18,8 @@ import { setActivityTrackingEnabled } from '../../hooks/use-telemetry';
  *     and chooses whether to attach to a bug report. Nothing leaves the device.
  *   • Local activity tracking — opt-in, default OFF, stays on device, powers
  *     relevance learning.
+ *   • GitHub release notes — opt-in, default OFF. GitHub learns which
+ *     repositories you depend on (NETWORK.md §2m).
  *
  * Design principle: every option here defaults to the most privacy-preserving
  * state. Sharing is always an explicit, per-incident user action.
@@ -26,6 +28,7 @@ export function PrivacySection() {
   const { t } = useTranslation();
   const [activityOptedIn, setActivityOptedIn] = useState<boolean | null>(null);
   const [titlesOnly, setTitlesOnly] = useState(false);
+  const [githubNotes, setGithubNotes] = useState(false);
   const [saving, setSaving] = useState(false);
   const [showDetails, setShowDetails] = useState(false);
 
@@ -44,6 +47,7 @@ export function PrivacySection() {
         if (!cancelled) {
           setActivityOptedIn(Boolean(privacy.activity_tracking_opt_in));
           setTitlesOnly(privacy.llm_content_level === 'titles_only');
+          setGithubNotes(privacy.github_release_notes === true);
         }
       } catch {
         if (!cancelled) {
@@ -75,6 +79,18 @@ export function PrivacySection() {
     try {
       await cmd('set_privacy_config', { llmContentLevel: next ? 'titles_only' : 'full' });
       setTitlesOnly(next);
+    } catch {
+      // Toggle stays where it was.
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleGithubNotesToggle = async (next: boolean) => {
+    setSaving(true);
+    try {
+      await cmd('set_privacy_config', { githubReleaseNotes: next });
+      setGithubNotes(next);
     } catch {
       // Toggle stays where it was.
     } finally {
@@ -270,6 +286,32 @@ export function PrivacySection() {
               {t(
                 'settings.privacy.titlesOnly.subtitle',
                 'When a cloud AI provider is configured, 4DA sends it item titles but no article text. Judging is less accurate and article summaries are unavailable. A local model (Ollama or another endpoint on this machine) always gets the full text, because nothing leaves your device. Off by default.',
+              )}
+            </p>
+          </div>
+        </label>
+      </div>
+
+      <div className="border-t border-border/40 pt-3">
+        <label htmlFor="privacy-github-release-notes" aria-label={t('settings.privacy.githubReleaseNotes.title', 'Release notes from GitHub')} className="flex items-start gap-3 cursor-pointer">
+          <input
+            id="privacy-github-release-notes"
+            type="checkbox"
+            checked={githubNotes}
+            disabled={saving}
+            onChange={(e) => {
+              void handleGithubNotesToggle(e.target.checked);
+            }}
+            className="mt-0.5 w-4 h-4 rounded border-border bg-bg-secondary text-accent-gold focus:ring-accent-gold/50"
+          />
+          <div className="flex-1">
+            <div className="text-sm font-medium text-text-primary">
+              {t('settings.privacy.githubReleaseNotes.title', 'Release notes from GitHub')}
+            </div>
+            <p className="text-xs text-text-muted mt-0.5">
+              {t(
+                'settings.privacy.githubReleaseNotes.subtitle',
+                'Looks up release notes on GitHub for packages whose registry entry links a GitHub repo. GitHub sees which repositories you depend on.',
               )}
             </p>
           </div>

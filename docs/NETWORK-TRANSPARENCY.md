@@ -74,8 +74,9 @@ Every outbound connection, in one table:
 | 20 | Webhook endpoints | Enterprise events | HMAC-signed payloads | HMAC-SHA256 | `src-tauri/src/webhooks/dispatch.rs` |
 | 21 | OIDC/JWKS endpoints | Enterprise SSO | Public key fetch | None | `src-tauri/src/sso_crypto.rs` |
 | 22 | User-specified domains | Toolkit HTTP proxy | User-crafted request | User-specified | `src-tauri/src/toolkit_http.rs` |
+| 23 | `api.github.com/repos/{owner}/{repo}/releases` | Opt-in only (Settings → Privacy → Release notes from GitHub, off by default), when a package ships no usable changelog for a graded release | The dependency's GitHub repository (GitHub learns which repositories you depend on) | None | `src-tauri/src/release_changelog/github.rs` (NETWORK.md §2m) |
 
-**Total distinct connection types: 22**
+**Total distinct connection types: 23**
 
 ---
 

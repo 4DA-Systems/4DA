@@ -611,6 +611,12 @@ pub struct PrivacyConfig {
     /// invariants and runtime behavior are out of alignment".
     #[serde(default)]
     pub activity_tracking_opt_in: bool,
+    /// Opt-in: read a dependency's release notes from its GitHub releases
+    /// when the package archive ships none for that release (Decision 1,
+    /// option B). GitHub then sees which repositories the user depends on,
+    /// so it is off by default and listed in NETWORK.md §2m.
+    #[serde(default)]
+    pub github_release_notes: bool,
 }
 
 fn default_llm_content_level() -> String {
@@ -623,6 +629,7 @@ impl Default for PrivacyConfig {
             llm_content_level: default_llm_content_level(),
             cloud_llm_disclosure_accepted: false,
             activity_tracking_opt_in: false,
+            github_release_notes: false,
         }
     }
 }

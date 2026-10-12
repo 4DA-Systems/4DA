@@ -22,11 +22,17 @@
 //! The card never invents: no changelog in the package, a changelog this
 //! parser cannot read, or a registry that could not be reached are each said
 //! as such.
+//!
+//! Opt-in (option B, off by default): when the user turns on GitHub release
+//! notes in Settings → Privacy and the archive yields nothing for a release,
+//! `github.rs` reads the project's GitHub releases instead (NETWORK.md §2m).
 
 pub(crate) mod archive;
 mod classify;
 pub(crate) mod commands;
 pub(crate) mod fetch;
+pub(crate) mod github;
+mod github_store;
 pub(crate) mod parse;
 pub(crate) mod store;
 
@@ -106,6 +112,9 @@ pub struct ReleaseChanges {
     pub deprecations: u32,
     pub other: u32,
     pub top_breaking: Vec<ReleaseChangeEntry>,
+    /// The entries come from the project's GitHub releases (the opt-in
+    /// fallback), not from the changelog in the package.
+    pub from_github: bool,
     /// Where the user can read the changelog itself (a link, never fetched).
     pub source_url: Option<String>,
     /// Why there is nothing to show, in plain words.
@@ -243,6 +252,7 @@ fn base_changes(t: &ReleaseTarget, status: ReleaseChangesStatus) -> ReleaseChang
         deprecations: 0,
         other: 0,
         top_breaking: Vec::new(),
+        from_github: false,
         source_url: None,
         reason: None,
     }
@@ -286,7 +296,13 @@ pub(crate) fn summarize(t: &ReleaseTarget, record: &ChangelogRecord) -> ReleaseC
         return out;
     }
     out.covers_range = covers;
-    for section in &sections {
+    tally(&mut out, &sections);
+    out
+}
+
+/// Count `sections`' entries by kind onto `out`, keeping the first breaking ones.
+fn tally(out: &mut ReleaseChanges, sections: &[&parse::ChangelogSection]) {
+    for section in sections {
         out.versions.push(section.version.clone());
         for entry in &section.entries {
             match entry.kind {
@@ -308,7 +324,6 @@ pub(crate) fn summarize(t: &ReleaseTarget, record: &ChangelogRecord) -> ReleaseC
             }
         }
     }
-    out
 }
 
 /// Registry rows the backlog considers: recent, newest first.
@@ -362,7 +377,11 @@ pub(crate) async fn run_backlog(db: &Database) -> usize {
     if let Err(e) = store::prune(db) {
         warn!(target: "4da::release_changelog", "cache prune failed: {e}");
     }
+    if let Err(e) = github_store::prune(db) {
+        warn!(target: "4da::release_changelog", "github notes cache prune failed: {e}");
+    }
     let targets = backlog_targets(db);
+    let use_github = github::enabled();
     let mut fetched = 0;
     for t in targets.iter().take(MAX_FETCHES_PER_CYCLE) {
         if fetched > 0 {
@@ -370,7 +389,17 @@ pub(crate) async fn run_backlog(db: &Database) -> usize {
         }
         match changelog_for(db, t).await {
             Ok(r) => {
-                debug!(target: "4da::release_changelog", package = %t.package, version = %t.to, status = ?r.status, "changelog cached")
+                debug!(target: "4da::release_changelog", package = %t.package, version = %t.to, status = ?r.status, "changelog cached");
+                // Warms the opt-in GitHub cache; a no-op unless the setting
+                // is on and the archive yields nothing for this release.
+                github::with_github_fallback(
+                    db,
+                    t,
+                    summarize(t, &r),
+                    use_github,
+                    &github::LIVE_NET,
+                )
+                .await;
             }
             Err(e) => {
                 debug!(target: "4da::release_changelog", package = %t.package, version = %t.to, "changelog fetch deferred: {e}")

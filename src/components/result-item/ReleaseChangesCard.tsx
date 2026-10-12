@@ -5,7 +5,8 @@ import type { ReleaseChanges } from '../../../src-tauri/bindings/bindings/Releas
 
 /**
  * "What changed" for a graded registry release, read from the changelog the
- * package ships in its own registry archive. Counts by kind, the first
+ * package ships in its own registry archive (or, with the opt-in setting on and
+ * no changelog in the package, from the project's GitHub releases). Counts by kind, the first
  * breaking entries, and a link to the changelog itself. When there is no
  * changelog, or it cannot be read, the card says so — it never invents.
  */
@@ -91,6 +92,11 @@ function FoundBody({ changes }: { changes: ReleaseChanges }) {
       <div className="mt-1 text-[10px] text-text-muted">
         {t('results.releaseChanges.releases', { versions: changes.versions.join(', ') })}
       </div>
+      {changes.from_github && (
+        <div className="mt-0.5 text-[10px] text-text-muted" data-testid="release-changes-github">
+          {t('results.releaseChanges.fromGithub')}
+        </div>
+      )}
       {!changes.covers_range && (
         <div className="mt-0.5 text-[10px] text-amber-400/80">
           {t('results.releaseChanges.partial', { from: changes.from_version })}

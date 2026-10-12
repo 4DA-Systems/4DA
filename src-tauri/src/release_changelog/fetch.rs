@@ -6,8 +6,9 @@
 //! crate, `registry.npmjs.org` for an npm package — which already receive the
 //! user's package names from the release watch. What is sent is the package
 //! name and the PUBLIC version being announced; the user's installed version
-//! never leaves the machine (the range is cut locally). Never GitHub, never a
-//! docs site, even when the archive ships no changelog.
+//! never leaves the machine (the range is cut locally). This path never
+//! contacts GitHub or a docs site, even when the archive ships no changelog;
+//! the GitHub fallback is a separate, opt-in path (`github.rs`, NETWORK.md §2m).
 //!
 //! Every URL is built here and checked against [`ARCHIVE_HOSTS`] before a
 //! request goes out, so a registry document pointing a tarball elsewhere is

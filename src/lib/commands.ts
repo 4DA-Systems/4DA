@@ -309,8 +309,8 @@ interface CommandMap {
   get_startup_runtime_flags: { params: Record<string, never>; result: { victauriE2e: boolean; debugBuild: boolean; backgroundGraceSecs: number; heavyStartupGraceSecs: number } };
 
   // -- Settings & Configuration --
-  get_privacy_config: { params: Record<string, never>; result: { llm_content_level: string; proxy_url: string | null; cloud_llm_disclosure_accepted: boolean; activity_tracking_opt_in: boolean } };
-  set_privacy_config: { params: { llmContentLevel?: string; cloudLlmDisclosureAccepted?: boolean; activityTrackingOptIn?: boolean }; result: void };
+  get_privacy_config: { params: Record<string, never>; result: { llm_content_level: string; proxy_url: string | null; cloud_llm_disclosure_accepted: boolean; activity_tracking_opt_in: boolean; github_release_notes: boolean } };
+  set_privacy_config: { params: { llmContentLevel?: string; cloudLlmDisclosureAccepted?: boolean; activityTrackingOptIn?: boolean; githubReleaseNotes?: boolean }; result: void };
   get_settings: { params: Record<string, never>; result: Settings };
   get_llm_usage: { params: Record<string, never>; result: { used: number; limit: number; limit_reached: boolean; unlimited: boolean; cost_used_cents: number; cost_limit_cents: number; cost_limit_reached: boolean } };
   set_llm_provider: { params: { provider: string; apiKey: string; model: string; baseUrl: string | null; openaiApiKey?: string | null }; result: void };

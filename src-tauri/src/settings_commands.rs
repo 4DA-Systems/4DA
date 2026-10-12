@@ -466,16 +466,18 @@ pub async fn get_privacy_config() -> Result<serde_json::Value> {
         "proxy_url": settings.network.proxy_url,
         "cloud_llm_disclosure_accepted": settings.privacy.cloud_llm_disclosure_accepted,
         "activity_tracking_opt_in": settings.privacy.activity_tracking_opt_in,
+        "github_release_notes": settings.privacy.github_release_notes,
     }))
 }
 
 /// Update privacy settings (content level, cloud-LLM disclosure acceptance,
-/// and/or activity-tracking opt-in).
+/// activity-tracking opt-in, and/or the GitHub release-notes opt-in).
 #[tauri::command]
 pub async fn set_privacy_config(
     llm_content_level: Option<String>,
     cloud_llm_disclosure_accepted: Option<bool>,
     activity_tracking_opt_in: Option<bool>,
+    github_release_notes: Option<bool>,
 ) -> Result<()> {
     if let Some(ref level) = llm_content_level {
         validate_input_length(level, "llm_content_level", 20)?;
@@ -496,6 +498,9 @@ pub async fn set_privacy_config(
     }
     if let Some(opt_in) = activity_tracking_opt_in {
         guard.get_mut().privacy.activity_tracking_opt_in = opt_in;
+    }
+    if let Some(opt_in) = github_release_notes {
+        guard.get_mut().privacy.github_release_notes = opt_in;
     }
     guard.save().map_err(|e| {
         crate::error::FourDaError::Config(format!("Failed to save privacy config: {e}"))

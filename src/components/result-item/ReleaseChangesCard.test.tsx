@@ -46,6 +46,7 @@ function changes(overrides: Partial<ReleaseChanges> = {}): ReleaseChanges {
       { version: '0.27.0', text: '`Model::run` now returns a `Result`', under: 'Breaking changes' },
       { version: '0.25.0', text: 'Bump MSRV to 1.85', under: null },
     ],
+    from_github: false,
     source_url: 'https://docs.rs/crate/rten/0.27.0/source/CHANGELOG.md',
     reason: null,
     ...overrides,
@@ -66,6 +67,28 @@ describe('ReleaseChangesCard', () => {
     const link = screen.getByText('Read the changelog');
     expect(link.getAttribute('href')).toBe('https://docs.rs/crate/rten/0.27.0/source/CHANGELOG.md');
     expect(screen.queryByText(/Partial history/)).toBeNull();
+  });
+
+  it('names GitHub releases as the source when the opt-in fallback supplied them', () => {
+    render(
+      <ReleaseChangesCard
+        changes={changes({
+          from_github: true,
+          file: 'GitHub releases',
+          source_url: 'https://github.com/robertknight/rten/releases',
+        })}
+        loading={false}
+      />,
+    );
+    expect(screen.getByTestId('release-changes-github').textContent).toBe("From the project's GitHub releases");
+    expect(screen.getByText('Read the changelog').getAttribute('href')).toBe(
+      'https://github.com/robertknight/rten/releases',
+    );
+  });
+
+  it('does not claim GitHub as the source for a package changelog', () => {
+    render(<ReleaseChangesCard changes={changes()} loading={false} />);
+    expect(screen.queryByTestId('release-changes-github')).toBeNull();
   });
 
   it('adds security and deprecation counts only when present', () => {
