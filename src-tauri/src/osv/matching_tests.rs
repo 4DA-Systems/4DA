@@ -46,15 +46,15 @@ fn test_version_in_simple_range() {
     let ranges =
         Some(r#"[{"type":"SEMVER","events":[{"introduced":"0"},{"fixed":"1.2.3"}]}]"#.to_string());
 
-    let (affected, confirmed) = check_version_affected(Some("1.2.2"), &ranges);
+    let (affected, confirmed) = check_version_affected("", Some("1.2.2"), &ranges);
     assert!(affected, "1.2.2 < 1.2.3 should be affected");
     assert!(confirmed);
 
-    let (affected, confirmed) = check_version_affected(Some("1.2.3"), &ranges);
+    let (affected, confirmed) = check_version_affected("", Some("1.2.3"), &ranges);
     assert!(!affected, "1.2.3 == fixed, should NOT be affected");
     assert!(confirmed);
 
-    let (affected, confirmed) = check_version_affected(Some("2.0.0"), &ranges);
+    let (affected, confirmed) = check_version_affected("", Some("2.0.0"), &ranges);
     assert!(!affected, "2.0.0 > 1.2.3 should NOT be affected");
     assert!(confirmed);
 }
@@ -70,20 +70,20 @@ fn test_version_in_compound_range() {
     );
 
     // In first range
-    let (affected, _) = check_version_affected(Some("1.0.3"), &ranges);
+    let (affected, _) = check_version_affected("", Some("1.0.3"), &ranges);
     assert!(affected);
 
     // Between ranges (not affected)
-    let (affected, confirmed) = check_version_affected(Some("1.5.0"), &ranges);
+    let (affected, confirmed) = check_version_affected("", Some("1.5.0"), &ranges);
     assert!(!affected);
     assert!(confirmed);
 
     // In second range
-    let (affected, _) = check_version_affected(Some("2.0.5"), &ranges);
+    let (affected, _) = check_version_affected("", Some("2.0.5"), &ranges);
     assert!(affected);
 
     // After all ranges
-    let (affected, _) = check_version_affected(Some("2.1.0"), &ranges);
+    let (affected, _) = check_version_affected("", Some("2.1.0"), &ranges);
     assert!(!affected);
 }
 
@@ -92,14 +92,14 @@ fn test_no_version_conservative() {
     let ranges =
         Some(r#"[{"type":"SEMVER","events":[{"introduced":"0"},{"fixed":"1.0.0"}]}]"#.to_string());
 
-    let (affected, confirmed) = check_version_affected(None, &ranges);
+    let (affected, confirmed) = check_version_affected("", None, &ranges);
     assert!(affected, "No version → conservative match");
     assert!(!confirmed, "No version → not confirmed");
 }
 
 #[test]
 fn test_no_ranges_conservative() {
-    let (affected, confirmed) = check_version_affected(Some("1.0.0"), &None);
+    let (affected, confirmed) = check_version_affected("", Some("1.0.0"), &None);
     assert!(affected, "No ranges → conservative match");
     assert!(!confirmed);
 }
@@ -108,11 +108,11 @@ fn test_no_ranges_conservative() {
 fn test_introduced_no_fixed() {
     let ranges = Some(r#"[{"type":"SEMVER","events":[{"introduced":"2.0.0"}]}]"#.to_string());
 
-    let (affected, confirmed) = check_version_affected(Some("2.5.0"), &ranges);
+    let (affected, confirmed) = check_version_affected("", Some("2.5.0"), &ranges);
     assert!(affected, "After introduced with no fix → affected");
     assert!(confirmed);
 
-    let (affected, confirmed) = check_version_affected(Some("1.9.0"), &ranges);
+    let (affected, confirmed) = check_version_affected("", Some("1.9.0"), &ranges);
     assert!(!affected, "Before introduced → not affected");
     assert!(confirmed);
 }
@@ -124,13 +124,13 @@ fn test_last_affected() {
             .to_string(),
     );
 
-    let (affected, _) = check_version_affected(Some("1.3.0"), &ranges);
+    let (affected, _) = check_version_affected("", Some("1.3.0"), &ranges);
     assert!(affected, "1.3.0 <= 1.5.0 (last_affected)");
 
-    let (affected, _) = check_version_affected(Some("1.5.0"), &ranges);
+    let (affected, _) = check_version_affected("", Some("1.5.0"), &ranges);
     assert!(affected, "1.5.0 == last_affected → still affected");
 
-    let (affected, _) = check_version_affected(Some("1.5.1"), &ranges);
+    let (affected, _) = check_version_affected("", Some("1.5.1"), &ranges);
     assert!(!affected, "1.5.1 > last_affected → not affected");
 }
 
@@ -139,7 +139,7 @@ fn test_v_prefix_handled() {
     let ranges =
         Some(r#"[{"type":"SEMVER","events":[{"introduced":"0"},{"fixed":"2.0.0"}]}]"#.to_string());
 
-    let (affected, confirmed) = check_version_affected(Some("v1.5.0"), &ranges);
+    let (affected, confirmed) = check_version_affected("", Some("v1.5.0"), &ranges);
     assert!(affected);
     assert!(confirmed);
 }
@@ -149,7 +149,7 @@ fn test_two_part_version() {
     let ranges =
         Some(r#"[{"type":"SEMVER","events":[{"introduced":"0"},{"fixed":"2.0.0"}]}]"#.to_string());
 
-    let (affected, confirmed) = check_version_affected(Some("1.5"), &ranges);
+    let (affected, confirmed) = check_version_affected("", Some("1.5"), &ranges);
     assert!(affected, "1.5 → 1.5.0 < 2.0.0");
     assert!(confirmed);
 }
@@ -159,7 +159,7 @@ fn test_unparseable_version_conservative() {
     let ranges =
         Some(r#"[{"type":"SEMVER","events":[{"introduced":"0"},{"fixed":"1.0.0"}]}]"#.to_string());
 
-    let (affected, confirmed) = check_version_affected(Some("banana"), &ranges);
+    let (affected, confirmed) = check_version_affected("", Some("banana"), &ranges);
     assert!(affected, "Unparseable → conservative");
     assert!(!confirmed);
 }
@@ -172,7 +172,7 @@ fn test_non_semver_range_type_skipped() {
 
     // GIT ranges are skipped, no SEMVER ranges found → conservative false
     // (because we went through all ranges and found none applicable)
-    let (affected, confirmed) = check_version_affected(Some("1.0.0"), &ranges);
+    let (affected, confirmed) = check_version_affected("", Some("1.0.0"), &ranges);
     // No SEMVER range matched → not affected (we only skip non-SEMVER ranges)
     assert!(!affected);
     assert!(confirmed);
@@ -187,7 +187,7 @@ fn test_na_unknown_boundary_does_not_match() {
         r#"[{"type":"ECOSYSTEM","events":[{"introduced":"0"},{"last_affected":"2.5.0-NA"},{"last_affected":"2.7.1-NA"}]}]"#
             .to_string(),
     );
-    let (affected, confirmed) = check_version_affected(Some("2.3.0"), &ranges);
+    let (affected, confirmed) = check_version_affected("", Some("2.3.0"), &ranges);
     assert!(!affected, "unknown '-NA' boundary must not ground a match");
     assert!(
         confirmed,
@@ -198,7 +198,7 @@ fn test_na_unknown_boundary_does_not_match() {
     let rc = Some(
         r#"[{"type":"ECOSYSTEM","events":[{"introduced":"0"},{"fixed":"2.7.1-rc1"}]}]"#.to_string(),
     );
-    let (affected, _) = check_version_affected(Some("2.5.0"), &rc);
+    let (affected, _) = check_version_affected("", Some("2.5.0"), &rc);
     assert!(affected, "concrete prerelease bound still compares");
 }
 
@@ -442,18 +442,18 @@ fn go_pseudo_version_is_inside_an_introduced_zero_window() {
             .to_string(),
     );
     assert_eq!(
-        check_version_affected(Some("0.0.0-20190308221718-c2843e01d9a2"), &ranges),
+        check_version_affected("", Some("0.0.0-20190308221718-c2843e01d9a2"), &ranges),
         (true, true),
         "a pseudo-version of 0.0.0 is above introduced 0"
     );
     assert_eq!(
-        check_version_affected(Some("0.0.0-20220315000000-abcdefabcdef"), &ranges),
+        check_version_affected("", Some("0.0.0-20220315000000-abcdefabcdef"), &ranges),
         (false, true),
         "a later pseudo-version is past the fix"
     );
     let open_ended = Some(r#"[{"type":"SEMVER","events":[{"introduced":"0"}]}]"#.to_string());
     assert_eq!(
-        check_version_affected(Some("0.0.0-20200101000000-abcdefabcdef"), &open_ended),
+        check_version_affected("", Some("0.0.0-20200101000000-abcdefabcdef"), &open_ended),
         (true, true)
     );
 }
@@ -463,11 +463,11 @@ fn go_incompatible_build_metadata_does_not_decide_the_window() {
     let ranges =
         Some(r#"[{"type":"SEMVER","events":[{"introduced":"0"},{"fixed":"3.2.1"}]}]"#.to_string());
     assert_eq!(
-        check_version_affected(Some("3.2.0+incompatible"), &ranges),
+        check_version_affected("", Some("3.2.0+incompatible"), &ranges),
         (true, true)
     );
     assert_eq!(
-        check_version_affected(Some("3.2.1+incompatible"), &ranges),
+        check_version_affected("", Some("3.2.1+incompatible"), &ranges),
         (false, true)
     );
 }
@@ -477,17 +477,20 @@ fn pypi_pep440_versions_are_confirmed_not_conservative() {
     let ranges = Some(
         r#"[{"type":"ECOSYSTEM","events":[{"introduced":"0"},{"fixed":"2.0.post1"}]}]"#.to_string(),
     );
-    assert_eq!(check_version_affected(Some("2.0"), &ranges), (true, true));
     assert_eq!(
-        check_version_affected(Some("2.0rc1"), &ranges),
+        check_version_affected("", Some("2.0"), &ranges),
         (true, true)
     );
     assert_eq!(
-        check_version_affected(Some("2.0.post1"), &ranges),
+        check_version_affected("", Some("2.0rc1"), &ranges),
+        (true, true)
+    );
+    assert_eq!(
+        check_version_affected("", Some("2.0.post1"), &ranges),
         (false, true)
     );
     assert_eq!(
-        check_version_affected(Some("1.2.3.4"), &ranges),
+        check_version_affected("", Some("1.2.3.4"), &ranges),
         (true, true)
     );
 }
@@ -510,7 +513,7 @@ fn fix_for_a_pseudo_version_is_its_window_fix() {
             .to_string(),
     );
     assert_eq!(
-        fix_target::fix_for_version("0.0.0-20190308221718-c2843e01d9a2", &ranges).as_deref(),
+        fix_target::fix_for_version("", "0.0.0-20190308221718-c2843e01d9a2", &ranges).as_deref(),
         Some("0.0.0-20220314234659-1baeb1ce4c0b")
     );
 }
@@ -520,14 +523,20 @@ fn an_advisory_with_only_an_enumerated_versions_list_matches_those_versions() {
     // GHSA-q58r-hwc8-rm9j (bootstrap) carries `versions` and no ranges; it was
     // stored as `[]` and read as confirmed-not-affected.
     let ranges = Some(r#"[{"type":"ENUMERATED","events":["3.4.0","3.4.1"]}]"#.to_string());
-    assert_eq!(check_version_affected(Some("3.4.1"), &ranges), (true, true));
     assert_eq!(
-        check_version_affected(Some("3.4.2"), &ranges),
+        check_version_affected("", Some("3.4.1"), &ranges),
+        (true, true)
+    );
+    assert_eq!(
+        check_version_affected("", Some("3.4.2"), &ranges),
         (false, true)
     );
     let pypi = Some(r#"[{"type":"ENUMERATED","events":["19.9"]}]"#.to_string());
-    assert_eq!(check_version_affected(Some("19.9.0"), &pypi), (true, true));
-    assert_eq!(fix_target::fix_for_version("3.4.1", &ranges), None);
+    assert_eq!(
+        check_version_affected("", Some("19.9.0"), &pypi),
+        (true, true)
+    );
+    assert_eq!(fix_target::fix_for_version("", "3.4.1", &ranges), None);
 }
 
 #[test]
@@ -538,11 +547,11 @@ fn a_bound_with_leading_zeros_is_read_as_its_number() {
             .to_string(),
     );
     assert_eq!(
-        check_version_affected(Some("20.10.7+incompatible"), &ranges),
+        check_version_affected("", Some("20.10.7+incompatible"), &ranges),
         (false, true)
     );
     assert_eq!(
-        check_version_affected(Some("17.03.2-ce"), &ranges),
+        check_version_affected("", Some("17.03.2-ce"), &ranges),
         (true, true)
     );
 }

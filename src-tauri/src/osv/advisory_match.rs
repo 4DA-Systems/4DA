@@ -111,7 +111,11 @@ pub(crate) fn exposure_for_advisory(db: &Database, advisory: &StoredAdvisory) ->
                 continue;
             }
             out.copies_checked += 1;
-            match check_version_affected(version.as_deref(), &advisory.affected_ranges) {
+            match check_version_affected(
+                &advisory.ecosystem,
+                version.as_deref(),
+                &advisory.affected_ranges,
+            ) {
                 (true, true) => confirmed.push(ExposedCopy {
                     project_path: project.clone(),
                     installed_version: version.unwrap_or_default(),

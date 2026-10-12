@@ -637,7 +637,7 @@ fn classify(
 /// Only a version-CONFIRMED range match is exposure: a range the matcher
 /// cannot evaluate is evidence of nothing.
 fn confirmed_affected(ranges: &Option<String>, version: &str) -> bool {
-    crate::osv::matching::check_version_affected(Some(version), ranges) == (true, true)
+    crate::osv::matching::check_version_affected("npm", Some(version), ranges) == (true, true)
 }
 
 struct NpmAdvisory {

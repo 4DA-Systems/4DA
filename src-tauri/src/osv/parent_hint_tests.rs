@@ -49,7 +49,9 @@ fn rmcp_clear(v: &str) -> bool {
         Some(r#"[{"type":"SEMVER","events":[{"introduced":"0"},{"fixed":"2.1.0"}]}]"#.to_string()),
         Some(r#"[{"type":"SEMVER","events":[{"introduced":"0"},{"fixed":"1.4.0"}]}]"#.to_string()),
     ];
-    ranges.iter().all(|r| !check_version_affected(Some(v), r).0)
+    ranges
+        .iter()
+        .all(|r| !check_version_affected("", Some(v), r).0)
 }
 
 /// The live rmcp graph: Cargo.lock edges carry no child version; the app

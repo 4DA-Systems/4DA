@@ -29,22 +29,22 @@ fn some(s: &str) -> Option<String> {
 fn fix_is_the_one_for_the_installed_release_line() {
     let ranges = some(NEXT_RCE_RANGES);
     assert_eq!(
-        fix_for_version("16.2.10", &ranges).as_deref(),
+        fix_for_version("", "16.2.10", &ranges).as_deref(),
         Some("16.3.3")
     );
     assert_eq!(
-        fix_for_version("15.1.0", &ranges).as_deref(),
+        fix_for_version("", "15.1.0", &ranges).as_deref(),
         Some("15.5.24")
     );
-    assert_eq!(fix_for_version("16.3.3", &ranges), None, "not affected");
-    assert_eq!(fix_for_version("12.0.0", &ranges), None, "not affected");
+    assert_eq!(fix_for_version("", "16.3.3", &ranges), None, "not affected");
+    assert_eq!(fix_for_version("", "12.0.0", &ranges), None, "not affected");
 }
 
 #[test]
 fn last_affected_window_has_no_fix() {
     let ranges =
         some(r#"[{"type":"SEMVER","events":[{"introduced":"0"},{"last_affected":"0.9.6"}]}]"#);
-    assert_eq!(fix_for_version("0.9.6", &ranges), None);
+    assert_eq!(fix_for_version("", "0.9.6", &ranges), None);
 }
 
 /// The navcal defect: a 1.1.12 copy stays on the 1.x line.
@@ -52,10 +52,19 @@ fn last_affected_window_has_no_fix() {
 fn clean_version_stays_on_the_installed_line() {
     let (q2hr, jxr) = (some(BRACE_Q2HR), some(BRACE_3JXR));
     let ranges = [&q2hr, &jxr];
-    assert_eq!(clean_version("1.1.12", &ranges).as_deref(), Some("1.1.21"));
-    assert_eq!(clean_version("1.1.15", &ranges).as_deref(), Some("1.1.21"));
-    assert_eq!(clean_version("5.0.9", &ranges).as_deref(), Some("5.0.12"));
-    assert_eq!(clean_version("5.0.12", &ranges), None, "already clean");
+    assert_eq!(
+        clean_version("", "1.1.12", &ranges).as_deref(),
+        Some("1.1.21")
+    );
+    assert_eq!(
+        clean_version("", "1.1.15", &ranges).as_deref(),
+        Some("1.1.21")
+    );
+    assert_eq!(
+        clean_version("", "5.0.9", &ranges).as_deref(),
+        Some("5.0.12")
+    );
+    assert_eq!(clean_version("", "5.0.12", &ranges), None, "already clean");
 }
 
 /// The navcal undici defect: the per-advisory maximum (6.28.0) sits inside
@@ -70,9 +79,18 @@ fn clean_version_walks_past_a_window_the_first_fix_lands_in() {
         some(UNDICI_2GQQ),
     ];
     let ranges: Vec<&Option<String>> = all.iter().collect();
-    assert_eq!(clean_version("5.28.4", &ranges).as_deref(), Some("6.28.1"));
-    assert_eq!(clean_version("7.28.0", &ranges).as_deref(), Some("7.29.1"));
-    assert_eq!(clean_version("6.28.0", &ranges).as_deref(), Some("6.28.1"));
+    assert_eq!(
+        clean_version("", "5.28.4", &ranges).as_deref(),
+        Some("6.28.1")
+    );
+    assert_eq!(
+        clean_version("", "7.28.0", &ranges).as_deref(),
+        Some("7.29.1")
+    );
+    assert_eq!(
+        clean_version("", "6.28.0", &ranges).as_deref(),
+        Some("6.28.1")
+    );
 }
 
 #[test]
@@ -80,13 +98,13 @@ fn clean_version_refuses_a_window_without_a_fix_or_an_unreadable_advisory() {
     let fixed = some(r#"[{"type":"SEMVER","events":[{"introduced":"0"},{"fixed":"2.0.0"}]}]"#);
     let open_ended = some(r#"[{"type":"SEMVER","events":[{"introduced":"1.5.0"}]}]"#);
     assert_eq!(
-        clean_version("1.0.0", &[&fixed, &open_ended]),
+        clean_version("", "1.0.0", &[&fixed, &open_ended]),
         None,
         "2.0.0 is inside an open-ended window: nothing is clean"
     );
     let unreadable: Option<String> = None;
     assert_eq!(
-        clean_version("1.0.0", &[&fixed, &unreadable]),
+        clean_version("", "1.0.0", &[&fixed, &unreadable]),
         None,
         "an advisory with no range data cannot be cleared"
     );
@@ -113,6 +131,7 @@ fn copy(project: &str, version: &str, fix: Option<&str>, clean: Option<&str>) ->
         is_version_confirmed: true,
         fixed_version: fix.map(str::to_string),
         clean_version: clean.map(str::to_string),
+        target_version: clean.map(str::to_string),
     }
 }
 
@@ -200,4 +219,143 @@ fn major_jump_is_flagged_and_described() {
     let lines = line_targets(&[&adv], &["/navcal".to_string()]);
     assert!(lines[0].is_major());
     assert_eq!(describe_lines(&lines), "5.28.4 -> 6.28.1 (major)");
+}
+
+// ============================================================================
+// `last_affected` windows and the walk (rule vectors ft-043, ft-052)
+// ============================================================================
+
+fn ranges(json: &[&str]) -> Vec<Option<String>> {
+    json.iter().map(|j| some(j)).collect()
+}
+
+fn walk(eco: &str, installed: &str, all: &[Option<String>]) -> Option<WalkTarget> {
+    let refs: Vec<&Option<String>> = all.iter().collect();
+    walk_target(eco, installed, &refs)
+}
+
+fn landed(version: &str, clears_all: bool) -> Option<WalkTarget> {
+    Some(WalkTarget {
+        version: version.to_string(),
+        clears_all,
+    })
+}
+
+/// mistune 0.8.3, the pinned records reduced to the windows that decide it
+/// (OSV 2026-10-10). GHSA-8g87 ends at `last_affected 3.2.0`, so the walk
+/// used to give up; the plan then printed the highest line fix, 3.3.0, the
+/// version GHSA-6m44 / PYSEC-2026-3863 open at. OSV: 3.3.3 is clean.
+#[test]
+fn mistune_walks_past_last_affected_and_the_window_its_highest_fix_opens() {
+    let all = ranges(&[
+        // GHSA-8g87-j6q8-g93x
+        r#"[{"type":"ECOSYSTEM","events":[{"introduced":"0"},{"last_affected":"3.2.0"}]},{"type":"ENUMERATED","events":["0.8.3","3.1.4","3.2.0"]}]"#,
+        // GHSA-2hm2-hc3v-44h9 (and the others fixed in 3.3.0)
+        r#"[{"type":"ECOSYSTEM","events":[{"introduced":"0"},{"fixed":"3.3.0"}]},{"type":"ENUMERATED","events":["0.8.3","3.1.4","3.2.0","3.2.1"]}]"#,
+        // GHSA-6m44-fpc8-c3rq / PYSEC-2026-3863
+        r#"[{"type":"ECOSYSTEM","events":[{"introduced":"3.3.0"},{"fixed":"3.3.3"}]},{"type":"ENUMERATED","events":["3.3.0","3.3.1","3.3.2"]}]"#,
+    ]);
+    assert_eq!(walk("PyPI", "0.8.3", &all), landed("3.3.3", true));
+    // The old fallback target is still vulnerable: never offer it.
+    assert_eq!(
+        crate::osv::matching::check_version_affected("PyPI", Some("3.3.0"), &all[2]),
+        (true, true)
+    );
+}
+
+/// pyjwt 2.9.0: PYSEC-2025-183 ends at `last_affected 2.10.1`; the releases
+/// above it are named by other records. The target (2.15.0) was right, but
+/// the engine said it cleared only the fixed advisories; OSV: it is clean.
+#[test]
+fn pyjwt_last_affected_no_longer_declines_a_clean_target() {
+    let all = ranges(&[
+        // PYSEC-2025-183
+        r#"[{"type":"ECOSYSTEM","events":[{"introduced":"0"},{"last_affected":"2.10.1"}]},{"type":"ENUMERATED","events":["2.9.0","2.10.0","2.10.1"]}]"#,
+        // GHSA-42vr-xj54-vc7v
+        r#"[{"type":"ECOSYSTEM","events":[{"introduced":"2.0.0a1"},{"fixed":"2.15.0"}]}]"#,
+        // GHSA-gvp8-978c-rx2q
+        r#"[{"type":"ECOSYSTEM","events":[{"introduced":"2.11.0"},{"last_affected":"2.13.0"}]},{"type":"ENUMERATED","events":["2.11.0","2.12.0","2.12.1","2.13.0"]}]"#,
+    ]);
+    assert_eq!(walk("PyPI", "2.9.0", &all), landed("2.15.0", true));
+}
+
+/// AD-055 ¶5 still holds where it should: braces' GHSA-vfj7 ends at
+/// `last_affected 3.0.3` and the data names no release above it, so 3.0.3
+/// clears only the advisories that have a fix.
+#[test]
+fn last_affected_with_nothing_known_above_it_declines_the_clean_claim() {
+    let all = ranges(&[
+        r#"[{"type":"SEMVER","events":[{"introduced":"0"},{"fixed":"3.0.3"}]}]"#,
+        r#"[{"type":"SEMVER","events":[{"introduced":"0"},{"last_affected":"3.0.3"}]}]"#,
+    ]);
+    assert_eq!(walk("npm", "3.0.2", &all), landed("3.0.3", false));
+    let refs: Vec<&Option<String>> = all.iter().collect();
+    assert_eq!(clean_version("npm", "3.0.2", &refs), None);
+}
+
+/// With an advisory no release leaves, the walk still clears every one that
+/// HAS a way out. The old fallback (highest own-line fix, 2.0.0) sat inside
+/// the second window.
+#[test]
+fn a_target_that_cannot_clear_everything_still_clears_every_fixable_window() {
+    let all = ranges(&[
+        r#"[{"type":"SEMVER","events":[{"introduced":"0"},{"fixed":"2.0.0"}]}]"#,
+        r#"[{"type":"SEMVER","events":[{"introduced":"2.0.0"},{"fixed":"2.5.0"}]}]"#,
+        r#"[{"type":"SEMVER","events":[{"introduced":"1.5.0"}]}]"#,
+    ]);
+    assert_eq!(walk("npm", "1.0.0", &all), landed("2.5.0", false));
+    // Nothing with a way out affects the copy: no target to name.
+    let open_only = ranges(&[r#"[{"type":"SEMVER","events":[{"introduced":"1.5.0"}]}]"#]);
+    assert_eq!(walk("npm", "1.6.0", &open_only), None);
+}
+
+/// The release past a `last_affected` bound is a final release, never a
+/// pre-release the data happens to name.
+#[test]
+fn last_affected_successor_skips_pre_releases() {
+    let all = ranges(&[
+        r#"[{"type":"ECOSYSTEM","events":[{"introduced":"0"},{"last_affected":"1.0.0"}]}]"#,
+        r#"[{"type":"ECOSYSTEM","events":[{"introduced":"1.1.0rc1"},{"fixed":"1.1.0"}]}]"#,
+    ]);
+    assert_eq!(walk("PyPI", "0.9.0", &all), landed("1.1.0", true));
+}
+
+/// An enumerated `versions` list is left at the first known release it does
+/// not name, in one step rather than one hop per listed version.
+#[test]
+fn enumerated_versions_are_left_at_the_first_unlisted_release() {
+    let all = ranges(&[
+        r#"[{"type":"ENUMERATED","events":["1.0.0","1.0.1","1.0.2","1.0.3"]}]"#,
+        r#"[{"type":"SEMVER","events":[{"introduced":"1.0.4"},{"fixed":"1.0.5"}]}]"#,
+    ]);
+    assert_eq!(walk("npm", "1.0.0", &all), landed("1.0.5", true));
+}
+
+/// Two advisories spell the same Go fix with and without `+incompatible`
+/// (docker/docker on the fixture corpus): the target is the published tag,
+/// whichever order the advisories come in.
+#[test]
+fn a_tie_between_spellings_keeps_the_published_go_tag() {
+    let plain = r#"[{"type":"SEMVER","events":[{"introduced":"0"},{"fixed":"25.0.13"}]}]"#;
+    let tagged =
+        r#"[{"type":"SEMVER","events":[{"introduced":"0"},{"fixed":"25.0.13+incompatible"}]}]"#;
+    for order in [[plain, tagged], [tagged, plain]] {
+        assert_eq!(
+            walk("Go", "20.10.7+incompatible", &ranges(&order)),
+            landed("25.0.13+incompatible", true)
+        );
+    }
+}
+
+/// PyPI windows order by PEP 440 in the fix lookup too: `1.0.0-1` is the
+/// post release 1.0.0.post1, past a fix at 1.0.0.
+#[test]
+fn pypi_fix_lookup_reads_post_releases_as_pep440() {
+    let fixed = some(r#"[{"type":"ECOSYSTEM","events":[{"introduced":"0"},{"fixed":"1.0.0"}]}]"#);
+    assert_eq!(fix_for_version("PyPI", "1.0.0-1", &fixed), None);
+    assert_eq!(
+        fix_for_version("npm", "1.0.0-1", &fixed).as_deref(),
+        Some("1.0.0"),
+        "npm reads it as a pre-release of 1.0.0"
+    );
 }

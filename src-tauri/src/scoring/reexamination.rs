@@ -74,7 +74,13 @@ const CONVERGE_MAX_CHUNKS: usize = 12;
 /// suffixes are no longer registry versions, a pnpm entry's own `name:` field
 /// names it (tarball-URL keys), and uv/poetry git and URL sources are not
 /// index releases. Same scoped re-examination, no schema change.
-pub(crate) const RELEASE_GRADE_RULES: u32 = 4;
+/// 5 (2026-10-12): the same pins are judged against advisories differently
+/// again (rule vectors vo-013..015, vo-042..044): every matcher entry point
+/// takes the advisory's ecosystem and a PyPI version orders ONLY by PEP 440,
+/// so `1.0.0-1` / `1.0.0-post1` are post releases (above a fix at `1.0.0`),
+/// `a10 > a9`, and a local label (`2.3.0+cpu`) sorts above its release.
+/// Scoped re-examination, no schema change, no `PIPELINE_VERSION` bump.
+pub(crate) const RELEASE_GRADE_RULES: u32 = 5;
 
 /// Stable hash of the developer's pins: every included project's (path, package,
 /// version, direct, dev), sorted, plus [`RELEASE_GRADE_RULES`]. `DefaultHasher` is

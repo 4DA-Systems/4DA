@@ -894,6 +894,7 @@
   - *A new `Mechanism` variant (`lockfile_refresh`) in the work order:* Deferred — the MCP reader is fail-closed on the envelope schema, so it needs a coordinated schema bump with `@4da/mcp-server`.
   - *Naming the minimal parent release that admits a clean child from the registry:* Deferred for the same reason; a parent release is named only where a project here already resolved it (AD-051 rule 4).
 - **Amends:** AD-050 rule 1 (the security fix path is this rule, not the brief's own), AD-049 (`lockfile_or_parent_update` steps now carry the decided route in the item text).
+- **Amended 2026-10-12 (¶5, rule vectors ft-043 / ft-052):** a `last_affected` window is left at the first release the advisory data names above the bound, and the walk (`fix_target::walk_target`) keeps checking every advisory from there. Only a window no known release leaves (open-ended, or nothing named above its `last_affected`) declines the clean claim, and the target then still clears every advisory that has a way out — braces is unchanged. mistune 0.8.3 had been told 3.3.0, which GHSA-6m44-fpc8-c3rq still affects; it now gets 3.3.3 (gate G2). pyjwt 2.9.0's 2.15.0 is now claimed clean.
 - **Date:** 2026-10-10
 - **Status:** Final
 

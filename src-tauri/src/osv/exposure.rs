@@ -123,6 +123,7 @@ pub(crate) fn advisory_row_reaches(
             };
             same_ecosystem
                 && crate::osv::matching::check_version_affected(
+                    advisory_ecosystem.or(install.ecosystem).unwrap_or_default(),
                     Some(install.version.as_str()),
                     ranges,
                 )

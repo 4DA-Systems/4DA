@@ -731,6 +731,7 @@ mod tests {
             is_version_confirmed: confirmed,
             fixed_version: None,
             clean_version: None,
+            target_version: None,
         };
         let mut sandbox = adv("GHSA-s", "sandbox", None, "s", &[], Some(9.8), None);
         sandbox.dependency_instances = vec![

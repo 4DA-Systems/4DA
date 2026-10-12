@@ -950,6 +950,7 @@ pub(crate) fn installs_still_vulnerable(
             }
             saw_relevant = true;
             let (affected, _confirmed) = crate::osv::matching::check_version_affected(
+                advisory_ecosystem.or(install.ecosystem).unwrap_or_default(),
                 Some(install.version.as_str()),
                 &ranges,
             );
@@ -1086,6 +1087,7 @@ fn advisory_tier_for(
             };
             same_ecosystem
                 && crate::osv::matching::check_version_affected(
+                    advisory_ecosystem.or(install.ecosystem).unwrap_or_default(),
                     Some(install.version.as_str()),
                     &ranges,
                 )
@@ -1164,6 +1166,7 @@ fn affected_project_paths(
                 };
                 same_ecosystem
                     && crate::osv::matching::check_version_affected(
+                        advisory_ecosystem.or(install.ecosystem).unwrap_or_default(),
                         Some(install.version.as_str()),
                         ranges,
                     )
