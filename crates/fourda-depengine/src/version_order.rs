@@ -36,7 +36,7 @@ use semver::{BuildMetadata, Version};
 
 /// A PEP 440 version, local label included.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct Pep440 {
+pub struct Pep440 {
     epoch: u64,
     release: Vec<u64>,
     /// `(rank, n)`: a/alpha = 0, b/beta = 1, c/rc/pre/preview = 2.
@@ -88,7 +88,7 @@ fn number(text: &str) -> Option<u64> {
 }
 
 /// Parse a PEP 440 version, or `None` when it is not one.
-pub(crate) fn parse_pep440(raw: &str) -> Option<Pep440> {
+pub fn parse_pep440(raw: &str) -> Option<Pep440> {
     let caps = pep440_regex()?.captures(raw.trim())?;
     let group = |i: usize| caps.get(i).map(|m| m.as_str());
     let release = group(2)?
@@ -107,8 +107,7 @@ pub(crate) fn parse_pep440(raw: &str) -> Option<Pep440> {
         None => None,
     };
     let post = match (group(5), group(6)) {
-        (Some(n), _) => Some(number(n)?),
-        (None, Some(n)) => Some(number(n)?),
+        (Some(n), _) | (None, Some(n)) => Some(number(n)?),
         (None, None) => None,
     };
     let dev = match group(7) {
@@ -148,7 +147,7 @@ fn cmp_pep440(a: &Pep440, b: &Pep440) -> Ordering {
 /// then dev (none highest).
 fn pep440_key(v: &Pep440) -> (i8, u64, i128, i128) {
     let phase = match v.pre {
-        Some((rank, _)) => rank as i8,
+        Some((rank, _)) => rank.cast_signed(),
         None if v.post.is_none() && v.dev.is_some() => -1,
         None => 3,
     };
@@ -160,15 +159,15 @@ fn pep440_key(v: &Pep440) -> (i8, u64, i128, i128) {
 
 /// One version, readable under semver, PEP 440, or both.
 #[derive(Debug, Clone)]
-pub(crate) struct OrderedVersion {
+pub struct OrderedVersion {
     semver: Option<Version>,
     pep440: Option<Pep440>,
 }
 
 impl OrderedVersion {
     /// `None` when the text is a version under neither scheme.
-    pub(crate) fn parse(raw: &str) -> Option<Self> {
-        let semver = super::matching::parse_version(raw).map(|mut v| {
+    pub fn parse(raw: &str) -> Option<Self> {
+        let semver = crate::range::parse_version(raw).map(|mut v| {
             v.build = BuildMetadata::EMPTY;
             v
         });
@@ -181,7 +180,7 @@ impl OrderedVersion {
     /// `1.0.0.post1`, `1.0.0-a10` is above `1.0.0-a9`, and `2.3.0+cpu` is
     /// above `2.3.0`, where semver reads all three differently. Any other
     /// ecosystem (or an unknown one) parses as [`Self::parse`].
-    pub(crate) fn parse_in(raw: &str, ecosystem: &str) -> Option<Self> {
+    pub fn parse_in(raw: &str, ecosystem: &str) -> Option<Self> {
         if is_pypi(ecosystem) {
             if let Some(pep440) = parse_pep440(raw) {
                 return Some(Self {
@@ -194,7 +193,7 @@ impl OrderedVersion {
     }
 
     /// A pre-release (or a PEP 440 dev release).
-    pub(crate) fn is_prerelease(&self) -> bool {
+    pub fn is_prerelease(&self) -> bool {
         match (&self.semver, &self.pep440) {
             (Some(v), _) => !v.pre.is_empty(),
             (None, Some(p)) => p.pre.is_some() || p.dev.is_some(),
@@ -203,7 +202,7 @@ impl OrderedVersion {
     }
 
     /// The pair's order, or `None` when no scheme reads both sides.
-    pub(crate) fn compare(&self, other: &Self) -> Option<Ordering> {
+    pub fn compare(&self, other: &Self) -> Option<Ordering> {
         if let (Some(a), Some(b)) = (&self.semver, &other.semver) {
             return Some(a.cmp(b));
         }
@@ -215,14 +214,11 @@ impl OrderedVersion {
 }
 
 /// Whether `ecosystem` names PyPI, under any alias the app uses.
-pub(crate) fn is_pypi(ecosystem: &str) -> bool {
-    crate::ecosystem::Ecosystem::parse(ecosystem).map(crate::ecosystem::Ecosystem::osv_name)
-        == Some("PyPI")
-}
+pub use crate::ecosystem::is_pypi;
 
 /// The lower edge of an affected window.
 #[derive(Debug, Clone)]
-pub(crate) enum Lower {
+pub enum Lower {
     /// OSV's `introduced: "0"`: every version, pre-releases of 0.0.0 included.
     Unbounded,
     At(OrderedVersion),
@@ -230,7 +226,7 @@ pub(crate) enum Lower {
 
 impl Lower {
     /// The bound as `ecosystem` reads it; `None` when it is unreadable.
-    pub(crate) fn parse_in(raw: &str, ecosystem: &str) -> Option<Self> {
+    pub fn parse_in(raw: &str, ecosystem: &str) -> Option<Self> {
         if raw.trim() == "0" {
             return Some(Lower::Unbounded);
         }
@@ -240,18 +236,15 @@ impl Lower {
 
 /// The upper edge of an affected window: `fixed` (exclusive) or
 /// `last_affected` (inclusive).
-pub(crate) struct Upper<'a> {
+#[derive(Debug, Clone, Copy)]
+pub struct Upper<'a> {
     pub version: &'a OrderedVersion,
     pub inclusive: bool,
 }
 
 /// Whether `user` lies in `[lower, upper)` (or `[lower, upper]`). `None` when
 /// an edge cannot be compared with `user`.
-pub(crate) fn in_window(
-    user: &OrderedVersion,
-    lower: &Lower,
-    upper: Option<Upper<'_>>,
-) -> Option<bool> {
+pub fn in_window(user: &OrderedVersion, lower: &Lower, upper: Option<Upper<'_>>) -> Option<bool> {
     let above_lower = match lower {
         Lower::Unbounded => true,
         Lower::At(bound) => user.compare(bound)?.is_ge(),

@@ -82,17 +82,10 @@ pub(crate) struct Affected {
     pub versions: Option<Vec<String>>,
 }
 
-/// The `type` of the synthetic range that carries an advisory's enumerated
-/// `versions` list in the stored ranges JSON (events are the version
-/// strings). Readers that only understand `SEMVER`/`ECOSYSTEM` skip it.
-pub(crate) const ENUMERATED_RANGE: &str = "ENUMERATED";
-
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub(crate) struct Range {
-    #[serde(rename = "type")]
-    pub range_type: String,
-    pub events: Option<Vec<serde_json::Value>>,
-}
+// `Range` (one stored OSV range) and `ENUMERATED_RANGE` (the synthetic range
+// carrying an advisory's enumerated `versions` list) live in the pure engine
+// crate, which evaluates them (single-engine C0.1).
+pub(crate) use fourda_depengine::range::{Range, ENUMERATED_RANGE};
 
 #[derive(Debug, Deserialize, Clone)]
 pub(crate) struct Reference {

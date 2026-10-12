@@ -160,6 +160,10 @@ victauri-plugin = "0.9"
 
 # Compile-time scoring macros
 fourda-macros = { path = "fourda-macros" }
+# The pure dependency engine (single-engine plan, Stage C0): version order,
+# OSV affected-window evaluation, fix targets. No IO; also builds to a
+# zero-import wasm32 module (crates/fourda-depengine/README.md).
+fourda-depengine = { path = "../crates/fourda-depengine" }
 # v3: the v2 "rand_core" feature is gone (and was unused — every call site is
 # from_bytes / sign / verify; no RNG-backed key generation anywhere).
 ed25519-dalek = "3.0.0"

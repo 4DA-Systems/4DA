@@ -3,8 +3,9 @@
 //! until there is one (AD-054 decision 4).
 //!
 //! Runs every line of `src-tauri/tests/conformance/vectors/*.jsonl` against the
-//! REAL functions: `version_order`, the matcher's window check, the fix-target
-//! walk, `fix_path::refresh_verdict` and the refresh commands. The TypeScript
+//! REAL functions: `version_order`, the matcher's window check and the
+//! fix-target walk (all in `crates/fourda-depengine`), then
+//! `fix_path::refresh_verdict` and the refresh commands. The TypeScript
 //! MCP engine runs the same files. Expected values come from stated truth
 //! (OSV's own answers, the 2026-10-10 fix-path oracle, PEP 440 / SemVer / Go
 //! spec examples, AD-055), never from this engine; `vectors/README.md` maps
@@ -27,11 +28,16 @@ use std::path::{Path, PathBuf};
 
 use serde_json::Value;
 
+// version_order, osv_range and fix_target run against the pure engine crate
+// directly (single-engine C0.1); refresh_verdict and fix_command are still the
+// app's `fix_path` (C0.4), and records are merged by the app's `osv::sync`.
+use fourda_depengine::fix_target::{fix_for_version, walk_target};
+use fourda_depengine::range::{check_version_affected, parse_version};
+use fourda_depengine::version_order::OrderedVersion;
+
 use super::fix_path::{refresh_verdict, Basis, Manager, Refresh, Requirement};
-use super::fix_target::{fix_for_version, walk_target};
-use super::matching::{check_version_affected, package_key, parse_version};
+use super::matching::package_key;
 use super::types::Vulnerability;
-use super::version_order::OrderedVersion;
 
 /// The committed size of the `rust` skip list. Shrink-only: lower it in the
 /// same change that removes entries; it may never rise.
