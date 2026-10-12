@@ -10,7 +10,9 @@
 use crate::db::Database;
 use crate::osv::fix_path::{Basis, Refresh};
 use crate::osv::fix_target::LineTarget;
-use crate::osv::parent_hint::{ParentLink, TransitiveRoutes, UnlinkedSite};
+use crate::osv::parent_hint::{
+    ParentLink, ParentStanding, Through, TransitiveRoutes, UnlinkedSite,
+};
 
 use super::types::EvidenceCitation;
 use super::upgrade_plan::truncate;
@@ -198,8 +200,8 @@ fn link_sentence(package: &str, l: &ParentLink, multi_project: bool) -> String {
             "{head}, whose requirement {req} already admits {target} — a lockfile refresh is enough"
         ),
         Refresh::ParentMustMove(Basis::Requirement) => format!(
-            "{head}, whose requirement {req} excludes {target} — {} itself must be updated",
-            l.parent
+            "{head}, whose requirement {req} excludes {target} — {}",
+            link_move(package, target, l)
         ),
         Refresh::Enough(Basis::Semver) => format!(
             "{head}; its requirement is not on disk, but {target} is semver-compatible with {}, \
@@ -207,12 +209,100 @@ fn link_sentence(package: &str, l: &ParentLink, multi_project: bool) -> String {
             l.child_version
         ),
         Refresh::ParentMustMove(Basis::Semver) => format!(
-            "{head}; {target} is a semver-incompatible jump from {}, so {} itself must be updated",
-            l.child_version, l.parent
+            "{head}; {target} is a semver-incompatible jump from {}, so {}",
+            l.child_version,
+            link_move(package, target, l)
         ),
         Refresh::Unknown => format!(
             "{head} — update {}, or refresh the lockfile if its requirement admits {package} {target}",
             l.parent
+        ),
+    }
+}
+
+/// The move for a link whose parent's line excludes the target. A newer
+/// parent a project here already resolved clear is proof an update exists
+/// ("Seen in your projects" follows); otherwise the registry rows decide
+/// what may be claimed ([`parent_move`]).
+fn link_move(package: &str, target: &str, l: &ParentLink) -> String {
+    if !l.resolutions.is_empty() {
+        return format!("{} itself must be updated", l.parent);
+    }
+    parent_move(
+        package,
+        target,
+        &l.parent,
+        &l.parent_version,
+        &l.standing,
+        l.through.as_ref(),
+        l.override_hint.as_deref(),
+    )
+}
+
+/// What the reader can do when `parent` `parent_version` keeps `package` off
+/// `target`, saying only what 4DA's own data supports. The lever is the
+/// package the project declares: `through` when the parent arrives through
+/// a direct dependency, else the parent itself. Its registry standing
+/// decides the words:
+/// - a newer release seen: upgrade it, and check that it admits the target
+///   (its requirement is not on disk);
+/// - already the newest release seen (or deprecated): no upgrade is known
+///   to help, so replace it or force the copy;
+/// - nothing on record: it must move, and whether a release that admits the
+///   target exists is left open.
+///
+/// Every version follows its own package's name (the Brief's version check,
+/// `briefing_groundedness::check_factual_claims`, reads the nearest
+/// preceding package). Shared by the Upgrade Plan, Preemption and the Brief
+/// (`brief_facts::fix_clause`), so the three name the same parent and the
+/// same move.
+pub(crate) fn parent_move(
+    package: &str,
+    target: &str,
+    parent: &str,
+    parent_version: &str,
+    standing: &ParentStanding,
+    through: Option<&Through>,
+    override_hint: Option<&str>,
+) -> String {
+    let (lever, lever_version, lever_standing) = match through {
+        Some(t) => (t.name.as_str(), t.version.as_str(), &t.standing),
+        None => (parent, parent_version, standing),
+    };
+    // When the parent is not the lever, what is known about the parent
+    // itself still tells the reader why moving it alone is not the answer.
+    let via = through.map_or_else(String::new, |t| {
+        let own = match standing {
+            ParentStanding::Newest { deprecated } => format!(
+                "{parent} {parent_version} is already the newest {parent} release 4DA has seen{}, and it ",
+                if *deprecated { " and is deprecated" } else { "" }
+            ),
+            ParentStanding::Deprecated => format!("{parent} is deprecated, and it "),
+            _ => format!("{parent} "),
+        };
+        format!("{own}arrives through {} {}, a direct dependency; ", t.name, t.version)
+    });
+    let force = override_hint.map_or_else(String::new, |h| {
+        format!(", or force {package} >= {target} with {h}")
+    });
+    match lever_standing {
+        ParentStanding::Newer { latest } => format!(
+            "{via}upgrade {lever} ({lever} {latest} is the newest release 4DA has seen; check \
+             that it admits {package} >= {target}){force}"
+        ),
+        ParentStanding::Newest { deprecated } => {
+            format!(
+            "{via}{lever} {lever_version} is already the newest {lever} release 4DA has seen{}, \
+             so no {lever} upgrade is known to admit it: replace {lever}{force}",
+            if *deprecated { " and is deprecated" } else { "" }
+        )
+        }
+        ParentStanding::Deprecated => {
+            format!("{via}{lever} is deprecated: replace {lever}{force}")
+        }
+        ParentStanding::Unknown => format!(
+            "{via}{lever} must move (4DA holds no record of a {lever} release that admits \
+             {package} >= {target}): upgrade {lever} if one does, or replace it{force}"
         ),
     }
 }
@@ -229,7 +319,7 @@ fn unlinked_sentence(package: &str, u: &UnlinkedSite, multi_project: bool) -> St
             u.target, u.installed
         ),
         Refresh::ParentMustMove(_) => format!(
-            "{head}; {} is a semver-incompatible jump, so the dependency that pulls it in must be updated",
+            "{head}; {} is a semver-incompatible jump, so the dependency that pulls it in must move to a release that admits it, or be replaced",
             u.target
         ),
         Refresh::Unknown => format!("{head}; it awaits a parent-package update or lockfile refresh"),

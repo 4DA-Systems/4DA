@@ -312,11 +312,10 @@ fn upgrade_line(u: &UpgradeFact) -> String {
 }
 
 fn site_labels_sec(f: &SecurityFact) -> String {
-    f.sites
-        .iter()
-        .map(|s| s.label.as_str())
-        .collect::<Vec<_>>()
-        .join(", ")
+    // A project with copies on two lines has two sites; name it once.
+    let mut labels: Vec<&str> = f.sites.iter().map(|s| s.label.as_str()).collect();
+    labels.dedup();
+    labels.join(", ")
 }
 
 fn site_labels_up(u: &UpgradeFact) -> String {

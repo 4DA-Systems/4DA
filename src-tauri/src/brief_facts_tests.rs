@@ -8,6 +8,8 @@ fn link(direct: &str, version: &str, req: Option<&str>) -> ParentLink {
     ParentLink {
         direct: direct.to_string(),
         direct_version: version.to_string(),
+        immediate: direct.to_string(),
+        immediate_version: version.to_string(),
         requirements: req.map(|r| vec![Requirement::npm(r)]).unwrap_or_default(),
     }
 }
@@ -26,6 +28,7 @@ fn a_semver_incompatible_transitive_fix_names_the_parent() {
             to: "2.1.0".into(),
             by_requirement: false,
             proven: None,
+            route: Default::default(),
         }
     );
     let clause = fix_clause("rmcp", &path);
@@ -61,6 +64,7 @@ fn an_exact_npm_pin_sends_the_fix_to_the_parent() {
             to: "5.28.5".into(),
             by_requirement: true,
             proven: None,
+            route: Default::default(),
         }
     );
     // An UNREADABLE requirement falls back to semver compatibility: a patch
@@ -298,6 +302,7 @@ fn parent_rmcp_facts() -> BriefFacts {
         to: "2.1.0".into(),
         by_requirement: false,
         proven: None,
+        route: Default::default(),
     };
     BriefFacts {
         security: vec![f],
@@ -346,6 +351,7 @@ fn a_proven_parent_release_is_named_with_its_evidence() {
         to: "2.1.0".into(),
         by_requirement: false,
         proven: Some(proven_090()),
+        route: Default::default(),
     };
     let clause = fix_clause("rmcp", &path);
     assert!(
@@ -395,6 +401,7 @@ fn every_fix_clause_quoted_verbatim_passes_the_version_check() {
             to: "2.1.0".into(),
             by_requirement: false,
             proven: None,
+            route: Default::default(),
         },
         FixPath::Parent {
             parent: "victauri-plugin".into(),
@@ -402,6 +409,7 @@ fn every_fix_clause_quoted_verbatim_passes_the_version_check() {
             to: "2.1.0".into(),
             by_requirement: true,
             proven: None,
+            route: Default::default(),
         },
         FixPath::Parent {
             parent: "victauri-plugin".into(),
@@ -409,9 +417,54 @@ fn every_fix_clause_quoted_verbatim_passes_the_version_check() {
             to: "2.1.0".into(),
             by_requirement: false,
             proven: Some(proven_090()),
+            route: Default::default(),
+        },
+        FixPath::Parent {
+            parent: "victauri-plugin".into(),
+            parent_version: "0.8.4".into(),
+            to: "2.1.0".into(),
+            by_requirement: true,
+            proven: None,
+            route: ParentRoute {
+                through: Some(Through {
+                    name: "atlas-core".into(),
+                    version: "0.3.0".into(),
+                    standing: ParentStanding::Newer {
+                        latest: "0.4.1".into(),
+                    },
+                }),
+                standing: ParentStanding::Newest { deprecated: true },
+                override_hint: None,
+            },
+        },
+        FixPath::Parent {
+            parent: "victauri-plugin".into(),
+            parent_version: "0.8.4".into(),
+            to: "2.1.0".into(),
+            by_requirement: true,
+            proven: None,
+            route: ParentRoute {
+                through: None,
+                standing: ParentStanding::Newer {
+                    latest: "0.9.5".into(),
+                },
+                override_hint: Some("an `overrides` entry in package.json (npm)".into()),
+            },
         },
         FixPath::ParentUnknown { to: "2.1.0".into() },
         FixPath::Reinstall { to: "2.1.0".into() },
+        FixPath::PerLine {
+            lines: vec![
+                LineFix {
+                    installed: "1.7.0".into(),
+                    to: "1.7.9".into(),
+                },
+                LineFix {
+                    installed: "2.0.0".into(),
+                    to: "2.1.0".into(),
+                },
+            ],
+        },
         FixPath::Update { to: "2.1.0".into() },
     ];
     for path in paths {
@@ -592,7 +645,7 @@ fn fix_target(path: &FixPath) -> Option<&str> {
         | FixPath::ParentUnknown { to }
         | FixPath::Reinstall { to }
         | FixPath::Update { to } => Some(to),
-        FixPath::NoFix => None,
+        FixPath::PerLine { .. } | FixPath::NoFix => None,
     }
 }
 
@@ -871,5 +924,249 @@ fn act_now_ids_name_each_advisory_of_each_act_now_fact() {
     assert_eq!(
         crate::brief_cadence::act_now_ids(&facts),
         vec!["crates.io:rmcp:atlas#GHSA-a".to_string()]
+    );
+}
+
+// ============================================================================
+// Per-line fix targets and honest parent moves (2026-10-12)
+// ============================================================================
+
+use crate::osv::fix_target::{InstallSite, LineTarget};
+use crate::osv::parent_hint::Through;
+
+const NAVCAL: &str = "d:/runyourempire/navcal";
+
+fn line_in(project: &str, installed: &str, target: Option<&str>) -> LineTarget {
+    LineTarget {
+        installed_version: installed.into(),
+        target_version: target.map(str::to_string),
+        clears_all_known: target.is_some(),
+        upgrade_type: None,
+        sites: vec![InstallSite {
+            project_path: project.into(),
+            is_direct: false,
+            is_dev: true,
+        }],
+    }
+}
+
+/// Live 2026-10-12: navcal holds undici 5.28.4 and 7.28.0. Each line has its
+/// own fix, so the alert carries no single `fixed_version` — and the brief
+/// read that as "no fix published" for 26 advisories that were all fixed.
+/// Each copy now takes its own line's target.
+#[test]
+fn copies_on_several_lines_each_take_their_own_target_not_no_fix() {
+    let lines = vec![
+        line_in(NAVCAL, "5.28.4", Some("6.28.1")),
+        line_in(NAVCAL, "7.28.0", Some("7.29.1")),
+    ];
+    assert_eq!(
+        copy_fix(&lines, NAVCAL, Some("7.28.0"), None),
+        CopyFix::Target(Some("7.29.1".into()))
+    );
+    assert_eq!(
+        copy_fix(&lines, NAVCAL, Some("5.28.4"), None),
+        CopyFix::Target(Some("6.28.1".into()))
+    );
+    // The copy's own target becomes a real path, never NoFix.
+    let CopyFix::Target(fix) = copy_fix(&lines, NAVCAL, Some("7.28.0"), None) else {
+        panic!("a known copy has a target");
+    };
+    assert_eq!(
+        fix_path(Some("7.28.0"), fix.as_deref(), Some(false), None),
+        FixPath::Refresh {
+            to: "7.29.1".into(),
+            inferred: true,
+            command: None,
+        }
+    );
+
+    // A copy whose version is unknown cannot be placed on a line: every
+    // line's fix is stated, and the clause never says "no fix".
+    let CopyFix::PerLine(per_line) = copy_fix(&lines, NAVCAL, None, None) else {
+        panic!("an unplaceable copy lists each line");
+    };
+    let clause = fix_clause("undici", &FixPath::PerLine { lines: per_line });
+    assert_eq!(
+        clause,
+        "fixed on each line: undici 5.28.4 needs >= 6.28.1; undici 7.28.0 needs >= 7.29.1"
+    );
+    assert!(!clause.contains("no fix"), "{clause}");
+}
+
+/// The other side of the same rule: "no fix published" stays for a copy
+/// whose line has no way out, and only for it.
+#[test]
+fn no_fix_is_produced_only_when_the_copys_line_has_none() {
+    let lines = vec![
+        line_in(NAVCAL, "3.0.3", None),
+        line_in("d:/4da/site", "3.0.3", None),
+    ];
+    let fix = copy_fix(&lines, NAVCAL, Some("3.0.3"), None);
+    assert_eq!(fix, CopyFix::Target(None));
+    assert_eq!(
+        fix_path(Some("3.0.3"), None, Some(false), None),
+        FixPath::NoFix
+    );
+    // Unplaceable, and no line has a fix: still genuinely none.
+    assert_eq!(copy_fix(&lines, NAVCAL, None, None), CopyFix::Target(None));
+    // One line fixed, one not: each copy says what is true of IT.
+    let mixed = vec![
+        line_in(NAVCAL, "1.1.12", Some("1.1.21")),
+        line_in(NAVCAL, "0.9.0", None),
+    ];
+    assert_eq!(
+        copy_fix(&mixed, NAVCAL, Some("0.9.0"), None),
+        CopyFix::Target(None)
+    );
+    assert_eq!(
+        copy_fix(&mixed, NAVCAL, Some("1.1.12"), None),
+        CopyFix::Target(Some("1.1.21".into()))
+    );
+    // A copy matched by name only (no line) keeps the alert's single fix.
+    assert_eq!(
+        copy_fix(&[], NAVCAL, Some("2.0.0"), Some("2.0.1")),
+        CopyFix::Target(Some("2.0.1".into()))
+    );
+}
+
+fn uuid_link() -> ParentLink {
+    ParentLink {
+        direct: "javascript-opentimestamps".into(),
+        direct_version: "0.4.5".into(),
+        immediate: "request".into(),
+        immediate_version: "2.88.2".into(),
+        requirements: vec![Requirement::npm("^3.3.2")],
+    }
+}
+
+/// Live 2026-10-12: Preemption named request (whose ^3.3.2 excludes the
+/// fix) and the brief named javascript-opentimestamps as if IT required a
+/// uuid line. The brief now names the parent that holds the copy back, and
+/// the direct dependency it arrives through.
+#[test]
+fn the_brief_names_the_blocking_parent_and_the_direct_dependency_it_arrives_through() {
+    let path = fix_path(
+        Some("3.4.0"),
+        Some("11.1.1"),
+        Some(false),
+        Some(&uuid_link()),
+    );
+    let FixPath::Parent {
+        parent,
+        parent_version,
+        by_requirement,
+        route,
+        ..
+    } = &path
+    else {
+        panic!("{path:?}");
+    };
+    assert_eq!(parent, "request");
+    assert_eq!(parent_version, "2.88.2");
+    assert!(by_requirement);
+    let through = route
+        .through
+        .as_ref()
+        .expect("arrives through a direct dependency");
+    assert_eq!(through.name, "javascript-opentimestamps");
+    assert_eq!(through.version, "0.4.5");
+
+    // A direct parent has nothing to arrive through.
+    let direct = fix_path(
+        Some("1.7.0"),
+        Some("2.1.0"),
+        Some(false),
+        Some(&link("victauri-plugin", "0.8.4", None)),
+    );
+    assert!(matches!(&direct, FixPath::Parent { route, .. } if route.through.is_none()));
+}
+
+fn uuid_path(standing: ParentStanding, through_standing: ParentStanding) -> FixPath {
+    FixPath::Parent {
+        parent: "request".into(),
+        parent_version: "2.88.2".into(),
+        to: "11.1.1".into(),
+        by_requirement: true,
+        proven: None,
+        route: ParentRoute {
+            through: Some(Through {
+                name: "javascript-opentimestamps".into(),
+                version: "0.4.5".into(),
+                standing: through_standing,
+            }),
+            standing,
+            override_hint: Some("an `overrides` entry in package.json (npm)".into()),
+        },
+    }
+}
+
+/// request 2.88.2 is its last release and is deprecated, and
+/// javascript-opentimestamps 0.4.5 is its last release too: no upgrade
+/// exists, so the clause must not tell the reader to upgrade one.
+#[test]
+fn a_parent_at_its_newest_release_gets_replace_or_override_not_upgrade() {
+    let path = uuid_path(
+        ParentStanding::Newest { deprecated: true },
+        ParentStanding::Newest { deprecated: false },
+    );
+    let clause = fix_clause("uuid", &path);
+    assert_eq!(
+        clause,
+        "transitive; request 2.88.2 requires a uuid line that excludes the fix (uuid >= 11.1.1), \
+         so a lockfile refresh will NOT fix it: request 2.88.2 is already the newest request \
+         release 4DA has seen and is deprecated, and it arrives through javascript-opentimestamps \
+         0.4.5, a direct dependency; javascript-opentimestamps 0.4.5 is already the newest \
+         javascript-opentimestamps release 4DA has seen, so no javascript-opentimestamps upgrade \
+         is known to admit it: replace javascript-opentimestamps, or force uuid >= 11.1.1 with an \
+         `overrides` entry in package.json (npm)"
+    );
+    assert!(!clause.contains("upgrade request"), "{clause}");
+    assert!(!clause.contains("must be updated"), "{clause}");
+
+    // Quoted verbatim, every version sits after its own package.
+    let mut facts = parent_rmcp_facts();
+    facts.security[0].package = "uuid".into();
+    facts.security[0].sites[0].installed = Some("3.4.0".into());
+    facts.security[0].sites[0].fix_path = path;
+    let pf = package_facts(&facts);
+    let sentence = format!("- **uuid 3.4.0** (4da-ledger): {clause}.");
+    let v = crate::briefing_groundedness::check_factual_claims(&sentence, &pf);
+    assert!(v.is_empty(), "{v:?}");
+}
+
+/// A newer release on record: upgrading the lever is the move, and the
+/// clause says the requirement of that release is not on disk.
+#[test]
+fn a_lever_with_a_newer_release_on_record_is_upgraded_with_a_check() {
+    let clause = fix_clause(
+        "uuid",
+        &uuid_path(
+            ParentStanding::Unknown,
+            ParentStanding::Newer {
+                latest: "0.5.0".into(),
+            },
+        ),
+    );
+    assert!(
+        clause.ends_with(
+            "request arrives through javascript-opentimestamps 0.4.5, a direct dependency; upgrade \
+             javascript-opentimestamps (javascript-opentimestamps 0.5.0 is the newest release 4DA \
+             has seen; check that it admits uuid >= 11.1.1), or force uuid >= 11.1.1 with an \
+             `overrides` entry in package.json (npm)"
+        ),
+        "{clause}"
+    );
+    // Nothing on record: the parent must move, and no update is claimed.
+    let unknown = fix_clause(
+        "uuid",
+        &uuid_path(ParentStanding::Unknown, ParentStanding::Unknown),
+    );
+    assert!(
+        unknown.contains(
+            "javascript-opentimestamps must move (4DA holds no record of a \
+             javascript-opentimestamps release that admits uuid >= 11.1.1)"
+        ),
+        "{unknown}"
     );
 }

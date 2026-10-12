@@ -30,6 +30,7 @@ fn rmcp(status: FactStatus) -> SecurityFact {
                 to: "2.1.0".into(),
                 by_requirement: false,
                 proven: None,
+                route: Default::default(),
             },
         }],
         not_compiled: vec![],

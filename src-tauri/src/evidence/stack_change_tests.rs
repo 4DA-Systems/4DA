@@ -301,6 +301,82 @@ fn a_security_fact_becomes_an_item_with_the_fix_and_the_command() {
     assert!(validate_item(item).is_ok());
 }
 
+/// Live 2026-10-12, Signal lane 1: "undici 7.28.0: high advisory, no fix
+/// published" for navcal, whose undici copies (5.28.4 and 7.28.0) are each
+/// fixed on their own line. Every copy is named with its own target, and the
+/// title states both targets.
+#[test]
+fn copies_fixed_on_separate_lines_are_never_called_unfixed() {
+    let refresh = |to: &str| FixPath::Refresh {
+        to: to.to_string(),
+        inferred: true,
+        command: None,
+    };
+    let f = fact(
+        "undici",
+        AlertUrgency::Medium,
+        vec![
+            site("navcal", "5.28.4", refresh("6.28.1")),
+            site("navcal", "7.28.0", refresh("7.29.1")),
+        ],
+    );
+    let item = security_item(&f, NOW).item;
+    assert_eq!(
+        item.title,
+        "undici 5.28.4 (+1 other version) \u{2192} 6.28.1 / 7.29.1: security fix (high)"
+    );
+    assert!(!item.title.contains("no fix"), "{}", item.title);
+    assert!(
+        item.explanation
+            .contains("navcal undici 5.28.4: transitive;")
+            && item
+                .explanation
+                .contains("navcal undici 7.28.0: transitive;"),
+        "{}",
+        item.explanation
+    );
+    assert_eq!(item.affected_projects, vec!["navcal".to_string()]);
+    assert!(validate_item(&item).is_ok());
+
+    // A copy the brief could not place on a line still states each fix.
+    let per_line = fact(
+        "brace-expansion",
+        AlertUrgency::Medium,
+        vec![SecuritySite {
+            installed: None,
+            ..site(
+                "navcal",
+                "?",
+                FixPath::PerLine {
+                    lines: vec![
+                        crate::brief_facts::LineFix {
+                            installed: "1.1.12".into(),
+                            to: "1.1.21".into(),
+                        },
+                        crate::brief_facts::LineFix {
+                            installed: "2.0.2".into(),
+                            to: "2.1.7".into(),
+                        },
+                    ],
+                },
+            )
+        }],
+    );
+    let item = security_item(&per_line, NOW).item;
+    assert_eq!(
+        item.title,
+        "brace-expansion \u{2192} 1.1.21 / 2.1.7: security fix (high)"
+    );
+    assert!(
+        item.explanation.contains(
+            "fixed on each line: brace-expansion 1.1.12 needs >= 1.1.21; brace-expansion 2.0.2 \
+             needs >= 2.1.7"
+        ),
+        "{}",
+        item.explanation
+    );
+}
+
 #[test]
 fn a_fact_with_no_published_fix_says_so() {
     let mut f = fact(

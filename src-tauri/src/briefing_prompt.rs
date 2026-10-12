@@ -155,6 +155,32 @@ fn render_security(n: usize, f: &SecurityFact) -> String {
     out
 }
 
+/// The fix for a lower-severity fact's one line: the clause, once, when
+/// every copy shares it; else each distinct clause after the copy it is
+/// for. The first site's clause alone told the model a 5.x copy's fix for
+/// the 1.x copy beside it.
+fn also_open_fix(f: &SecurityFact) -> String {
+    let mut clauses: Vec<(Option<&str>, String)> = Vec::new();
+    for s in &f.sites {
+        let clause = fix_clause(&f.package, &s.fix_path);
+        if !clauses.iter().any(|(_, c)| *c == clause) {
+            clauses.push((s.installed.as_deref(), clause));
+        }
+    }
+    match clauses.as_slice() {
+        [] => String::new(),
+        [(_, only)] => only.clone(),
+        many => many
+            .iter()
+            .map(|(installed, c)| match installed {
+                Some(v) => format!("{} {v}: {c}", f.package),
+                None => c.clone(),
+            })
+            .collect::<Vec<_>>()
+            .join("; "),
+    }
+}
+
 fn render_upgrade(n: usize, u: &UpgradeFact) -> String {
     let released = u
         .published
@@ -226,17 +252,15 @@ pub(crate) fn render_facts_for_prompt(facts: &BriefFacts) -> String {
             .iter()
             .take(crate::brief_facts::ALSO_OPEN_SHOWN)
         {
-            let labels: Vec<&str> = f.sites.iter().map(|s| s.label.as_str()).collect();
+            let mut labels: Vec<&str> = f.sites.iter().map(|s| s.label.as_str()).collect();
+            labels.dedup();
             out.push_str(&format!(
                 "- {} ({}, {}): {} — fix: {}. Status: {}.\n",
                 f.package,
                 f.ecosystem,
                 urgency_label(&f.urgency),
                 labels.join(", "),
-                f.sites
-                    .first()
-                    .map(|s| fix_clause(&f.package, &s.fix_path))
-                    .unwrap_or_default(),
+                also_open_fix(f),
                 status_label(&f.status),
             ));
         }

@@ -674,6 +674,11 @@ fn verify_versions(conn: &rusqlite::Connection, facts: &BriefFacts) -> (usize, V
                         check(&f.package, &p.child_version, "proven child");
                     }
                 }
+                FixPath::PerLine { lines } => {
+                    for l in lines {
+                        check(&f.package, &l.to, "line fix");
+                    }
+                }
                 FixPath::NoFix => {}
             }
         }
