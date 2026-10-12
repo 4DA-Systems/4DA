@@ -224,7 +224,7 @@ export function evaluateG6({ db, idle, cold }) {
           ? `; in-cycle (reported apart) GUI ${(idle.cycle.appPctCore ?? 0).toFixed(1)}% + engine ${(idle.cycle.enginePctCore ?? 0).toFixed(1)}% over ${idle.cycle.wallSec}s`
           : ''),
     );
-    evidence.push('idle sampler (Win32_Process CPU time, nvidia-smi pmon, getAnimations()==0 for >= 120 s)');
+    evidence.push('idle sampler (Win32_Process CPU time of the GUI tree + fourda-engine, nvidia-smi pmon; idle = getAnimations()==0 and engine < 1% for >= 120 s)');
   } else {
     sub.idle = 'pending';
     parts.push('idle CPU not measured (run with --measure-idle)');
