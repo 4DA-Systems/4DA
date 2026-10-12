@@ -20,6 +20,7 @@ const FIXTURE_FILES = [
   'docs/NETWORK-TRANSPARENCY.md',
   'docs/SECURITY-AUDIT-GUIDE.md',
   'src-tauri/desktop-template.desktop',
+  'src-tauri/tauri.artifact-signing.conf.json',
 ];
 
 function copyFixture() {
@@ -348,4 +349,88 @@ test('skipping the signature CHECK under the waiver fails the gate', () => {
 
 test('the current workflow, with the waiver present, passes all three', () => {
   assert.deepEqual(checkReleaseChannel(REPO_ROOT), []);
+});
+
+// ── Azure Artifact Signing (launch gate G8) ──────────────────────────────
+//
+// Wired in inert: nothing changes until the ARTIFACT_SIGNING_* variables are
+// set. These tests keep it inert for dev builds and binding once switched on.
+
+const ARTIFACT_CONFIG = 'src-tauri/tauri.artifact-signing.conf.json';
+
+test('putting the Azure signCommand in the default tauri.conf.json fails the gate', () => {
+  const root = copyFixture();
+  replaceInFile(root, 'src-tauri/tauri.conf.json', 'sign-windows.ps1', 'sign-windows-artifact.ps1');
+  assert.ok(checkReleaseChannel(root).some((f) => f.includes('dev builds would try to sign through Azure')));
+});
+
+test('putting it in the auto-merged tauri.windows.conf.json fails the gate', () => {
+  const root = copyFixture();
+  fs.copyFileSync(path.join(root, ARTIFACT_CONFIG), path.join(root, 'src-tauri/tauri.windows.conf.json'));
+  assert.ok(checkReleaseChannel(root).some((f) => f.includes('merged into every Windows build')));
+});
+
+test('an override that does not sign each file (%1) fails the gate', () => {
+  const root = copyFixture();
+  replaceInFile(root, ARTIFACT_CONFIG, '"%1"', '"--all"');
+  assert.ok(checkReleaseChannel(root).some((f) => f.includes('with the %1 file argument')));
+});
+
+test('injecting the override unconditionally fails the gate', () => {
+  const root = copyFixture();
+  replaceInFile(
+    root,
+    '.github/workflows/release.yml',
+    "args: ${{ (runner.os == 'Windows' && needs.create-release.outputs.windows_signer == 'artifact-signing') && format('--target {0} --config src-tauri/tauri.artifact-signing.conf.json', matrix.target) || format('--target {0}', matrix.target) }}",
+    'args: --target ${{ matrix.target }} --config src-tauri/tauri.artifact-signing.conf.json'
+  );
+  assert.ok(checkReleaseChannel(root).some((f) => f.includes('only under')));
+});
+
+test('honouring the waiver while Artifact Signing is configured fails the gate', () => {
+  const root = copyFixture();
+  replaceInFile(
+    root,
+    '.github/workflows/release.yml',
+    'if [ "$WINDOWS_SIGNER" = "artifact-signing" ]; then\n            echo "unsigned_windows_ok=false"',
+    'if [ "$WINDOWS_SIGNER" = "never" ]; then\n            echo "unsigned_windows_ok=false"'
+  );
+  assert.ok(checkReleaseChannel(root).some((f) => f.includes('force unsigned_windows_ok=false')));
+});
+
+test('letting the waiver soften the verdict under Artifact Signing fails the gate', () => {
+  const root = copyFixture();
+  replaceInFile(
+    root,
+    '.github/workflows/release.yml',
+    "            if ($requireSigned) {\n              Write-Host \"::error::$failed Windows artifact(s) lack a valid, timestamped Authenticode signature, and Artifact Signing is configured - release blocked. The signing log is printed by the step above.\"\n              exit 1\n            } elseif",
+    "            if ($requireSigned) {\n              Write-Host \"::warning::unsigned\"\n            } elseif"
+  );
+  assert.ok(checkReleaseChannel(root).some((f) => f.includes('REQUIRE a signature')));
+});
+
+test('dropping the timestamp requirement fails the gate', () => {
+  const root = copyFixture();
+  replaceInFile(root, '.github/workflows/release.yml', '-and -not $sig.TimeStamperCertificate', '-and $false');
+  assert.ok(checkReleaseChannel(root).some((f) => f.includes('require a timestamp')));
+});
+
+test('an unpinned CLI or an unverified signing client fails the gate', () => {
+  const unpinned = copyFixture();
+  replaceInFile(
+    unpinned,
+    '.github/workflows/release.yml',
+    'cargo install artifact-signing-cli --version $cliVersion --locked',
+    'cargo install artifact-signing-cli'
+  );
+  assert.ok(checkReleaseChannel(unpinned).some((f) => f.includes('pinned exact version')));
+
+  const unverified = copyFixture();
+  replaceInFile(
+    unverified,
+    '.github/workflows/release.yml',
+    'if ($nugetActual -ne $nugetSha256)',
+    'if ($false)'
+  );
+  assert.ok(checkReleaseChannel(unverified).some((f) => f.includes('by SHA-256')));
 });

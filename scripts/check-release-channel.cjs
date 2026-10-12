@@ -43,6 +43,88 @@ function isExpectedDesktopVersion(version) {
   return /^1\.0\.[1-9]\d*$/.test(version);
 }
 
+const ARTIFACT_SIGNING_CONFIG = 'src-tauri/tauri.artifact-signing.conf.json';
+const ARTIFACT_SIGNING_SCRIPT = 'sign-windows-artifact.ps1';
+const ARTIFACT_SIGNING_GUARD = "needs.create-release.outputs.windows_signer == 'artifact-signing'";
+
+/** The text of one workflow step, from its `- name:` line to the next step. */
+function stepText(yml, name) {
+  const start = yml.indexOf(`- name: ${name}`);
+  if (start === -1) return null;
+  const next = yml.indexOf('\n      - ', start + 1);
+  return yml.slice(start, next === -1 ? undefined : next);
+}
+
+// Azure Artifact Signing (launch gate G8) is wired in INERT: it activates only
+// when the ARTIFACT_SIGNING_* repository variables are set. Four properties
+// keep that both inert and, once switched on, binding.
+function checkArtifactSigning(root, tauriConfig, releaseYml, fail) {
+  // 1. Dev builds can never sign through Azure: the signCommand lives only in
+  //    an override that release.yml passes explicitly, never in the default
+  //    config, and never in tauri.windows.conf.json, which Tauri merges into
+  //    EVERY Windows build automatically.
+  if (JSON.stringify(tauriConfig).includes(ARTIFACT_SIGNING_SCRIPT)) {
+    fail(`tauri.conf.json must not reference ${ARTIFACT_SIGNING_SCRIPT}; dev builds would try to sign through Azure.`);
+  }
+  const autoMerged = path.join(root, 'src-tauri', 'tauri.windows.conf.json');
+  if (fs.existsSync(autoMerged) && fs.readFileSync(autoMerged, 'utf8').includes(ARTIFACT_SIGNING_SCRIPT)) {
+    fail('src-tauri/tauri.windows.conf.json is merged into every Windows build; the Artifact Signing signCommand must not live there.');
+  }
+  const overridePath = path.join(root, ARTIFACT_SIGNING_CONFIG);
+  if (!fs.existsSync(overridePath)) {
+    fail(`${ARTIFACT_SIGNING_CONFIG} is missing; release.yml injects it when Artifact Signing is configured.`);
+  } else {
+    const sign = JSON.parse(fs.readFileSync(overridePath, 'utf8')).bundle?.windows?.signCommand;
+    const args = Array.isArray(sign?.args) ? sign.args : [];
+    if (!args.some((a) => a.endsWith(ARTIFACT_SIGNING_SCRIPT)) || !args.includes('%1')) {
+      fail(`${ARTIFACT_SIGNING_CONFIG} must set bundle.windows.signCommand to ${ARTIFACT_SIGNING_SCRIPT} with the %1 file argument.`);
+    }
+  }
+
+  // 2. The override is injected only on the Artifact Signing path, so the
+  //    legacy path's tauri build arguments stay exactly `--target <triple>`.
+  const configArg = `--config ${ARTIFACT_SIGNING_CONFIG}`;
+  const argsLine = releaseYml.split('\n').find((l) => l.includes(configArg));
+  if (!argsLine) {
+    fail(`release.yml must pass ${configArg} to tauri build when Artifact Signing is configured.`);
+  } else if (!argsLine.includes(ARTIFACT_SIGNING_GUARD) || !argsLine.includes("format('--target {0}', matrix.target)")) {
+    fail(`release.yml must pass ${configArg} only under ${ARTIFACT_SIGNING_GUARD}, and plain --target otherwise.`);
+  }
+
+  // 3. Once configured, the signature is REQUIRED: the waiver is forced off,
+  //    and the verify step fails on any unsigned or untimestamped artifact
+  //    before it ever consults the waiver.
+  if (!/if \[ "\$WINDOWS_SIGNER" = "artifact-signing" \]; then\s+echo "unsigned_windows_ok=false"/.test(releaseYml)) {
+    fail('release.yml must force unsigned_windows_ok=false when Artifact Signing is configured; a stale waiver would otherwise label a signed build unsigned.');
+  }
+  const verify = stepText(releaseYml, 'Verify Windows Authenticode signature') ?? '';
+  // Anchored to the verdict block itself: the required-signature branch must
+  // exit 1 and be the branch the waiver is an `elseif` of. (A looser
+  // indexOf-and-slice version passed with that exit removed, because it
+  // matched an earlier one-line `if ($requireSigned)` log statement.)
+  const verdict = /if \(\$requireSigned\) \{[ \t]*\n(?:(?!\} elseif)[\s\S])*?\n[ \t]*exit 1[ \t]*\n[ \t]*\} elseif \(\$env:ALLOW_UNSIGNED_WINDOWS -eq 'true'\)/;
+  if (!verify.includes("$requireSigned = ($env:WINDOWS_SIGNER -eq 'artifact-signing')") || !verdict.test(verify)) {
+    fail('the Windows verify step must REQUIRE a signature (exit 1) under Artifact Signing, checked before the waiver.');
+  }
+  if (!verify.includes('TimeStamperCertificate')) {
+    fail('the Windows verify step must require a timestamp under Artifact Signing; its certificates live for days.');
+  }
+
+  // 4. Pinned tooling: the CLI by exact version, and the signing client it
+  //    would otherwise download unverified, by SHA-256.
+  const install = stepText(releaseYml, 'Install Azure Artifact Signing CLI (Windows)') ?? '';
+  if (!install.includes(ARTIFACT_SIGNING_GUARD)) {
+    fail('the Artifact Signing install step must run only when Artifact Signing is configured.');
+  }
+  if (!/\$cliVersion = '\d+\.\d+\.\d+'/.test(install) ||
+      !install.includes('cargo install artifact-signing-cli --version $cliVersion --locked')) {
+    fail('release.yml must install artifact-signing-cli at a pinned exact version with --locked.');
+  }
+  if (!/\$nugetSha256 = '[0-9a-f]{64}'/.test(install) || !install.includes('if ($nugetActual -ne $nugetSha256)')) {
+    fail('release.yml must pin the Artifact Signing client package by SHA-256 and fail on mismatch.');
+  }
+}
+
 function checkReleaseChannel(root = path.resolve(__dirname, '..')) {
   const errors = [];
   const fail = (message) => errors.push(message);
@@ -229,6 +311,8 @@ function checkReleaseChannel(root = path.resolve(__dirname, '..')) {
       );
     }
   }
+  checkArtifactSigning(root, tauriConfig, releaseYml, fail);
+
   // The MCP server ships only from its own repository (4DA-Systems/4da-mcp-server,
   // release.yml on an mcp-v* tag): npm Trusted Publishing is bound to that one
   // workflow, and the package disallows token publishes. A second, token-based
