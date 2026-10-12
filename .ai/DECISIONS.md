@@ -900,6 +900,50 @@
 
 ---
 
+### AD-056: One Dependency Engine, Reached by Extraction to a Pure Crate (wasm), Not by Native Binaries
+
+- **Decision:** 2026-10-12, operator-approved ("apply your recommendations"). It implements AD-054 rule 4 ("one truth"; target: a single engine).
+  1. **The route to one engine is a pure Rust crate compiled to WebAssembly, not per-platform native binaries.**
+     - `crates/fourda-depengine` holds the dependency logic with no file system, network, database or clock: lockfile reading over host-supplied text, version ordering, the OSV affected-window evaluation, fix targets, fix paths and range checks.
+     - The app links it natively. The MCP server would load it as a single `.wasm` file inside `@4da/mcp-server`.
+     - The native optionalDependencies route (6–7 per-platform npm packages, unsigned executables, a TypeScript fallback that keeps two engines) is **retired** from the trajectory plan.
+  2. **Extraction (Stage C0) starts now; it is internal and reversible.**
+     - The crate stays FSL-1.1-Apache-2.0 like the app, and nothing ships outside the 4DA repo.
+     - Each step keeps the conformance corpus at 1.0 and the shared rule vectors green.
+     - CI proves the crate builds for `wasm32-unknown-unknown` with zero imports.
+     - Order:
+       1. the pure version/advisory/fix-target modules;
+       2. inventory matching split from the database;
+       3. lockfile readers behind a host `FileSource`;
+       4. fix-path/parent hints with a `needs` round-trip;
+       5. a Rust `range_check`;
+       6. the wasm running the corpus and vectors under Node in CI.
+  3. **Shipping the wasm inside the MCP package (Stage C1 onward) waits for the operator's licence decision.**
+     - The MCP is Apache-2.0 for ecosystem adoption; the extracted crate would have to be Apache-2.0 (L1, recommended), ship FSL inside an Apache package (L2), or not ship (L3).
+     - Relicensing is irreversible for released versions, so it is the operator's call (PENDING-DECISION Decision 13 item 4).
+     - Once it is decided, the migration runs behind `FOURDA_ENGINE=ts|shadow|wasm`. The TypeScript duplicates are deleted only after a shadow period with 0 differences on the corpus, the G7 task set and the operator's machine for 14 days.
+  4. **The MCP 6.2.4 `refreshInferred` fallback stays.**
+     - It is AD-055 rule 1 (an unreadable requirement falls back to semver compatibility, and says so), the same rule the app's Rust engine follows.
+     - A pinned parent is readable, so the inference does not apply to it.
+- **Rationale:** the two engines exist for historical reasons, not design. The MCP was a TypeScript reader of the app's database (Feb 2026); standalone mode (Mar) and "MCP-first" vulnerability scanning (Apr) gave it its own engine, because the Rust logic was tied to the app's database and files and could not be compiled for Node. Measured once Stages A+B compared them (2026-10-10..12):
+  - **Five rules were fixed separately in both engines in three days:**
+    - Go `/go.mod`-only modules (4DA #912 / MCP #27);
+    - pnpm tarball-keyed entries (#912 / MCP #27);
+    - uv/poetry VCS sources (#912 / MCP #27);
+    - PEP 440 local labels (#932 / MCP #33);
+    - yarn aliases (#902 / MCP #27, #30).
+  - **In three of the five, both engines had the same defect,** so the second engine did not act as a cross-check; the external corpus caught them.
+  - **Wasm removes the cost without losing either distribution channel:** Tauri needs Rust; `npx` needs Node. A pure-core proxy measured 0.95 MB raw / 0.32 MB gzip with 0 imports (design: `.claude/plans/single-engine-design-2026-10-12.md` §3.3).
+- **Considered:**
+  - *Native binaries per platform:* Rejected. They mean 6–7 new npm package names, unsigned executables (antivirus risk; G8 is open) and a fallback that is the second engine.
+  - *Keep two engines permanently, policed by A+B:* Rejected as the end state. It works (drift can no longer ship), but every rule is still written, reviewed and fixed twice. It remains the state until C1.
+  - *Rewrite the MCP server in Rust, or the app in TypeScript:* Rejected. Shipping Rust over `npx` needs the native-binary route; a TypeScript/Electron app is larger and slower at the local work 4DA does.
+- **Amends:** AD-054 rule 4 (names the vehicle), and the trajectory plan Phase 3 item 1 (native optionalDependencies → wasm).
+- **Date:** 2026-10-12
+- **Status:** Accepted (C0 executing; C1+ gated on the licence decision)
+
+---
+
 ## Decision Template
 
 When adding a new decision:
