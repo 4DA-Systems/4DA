@@ -1544,7 +1544,56 @@ jobs:
         with:
           tool: cargo-nextest
 
+      # TEMPORARY DIAGNOSTIC (macOS pipeline_integration hang). Removed before merge.
+      - name: DIAG macOS hang probe
+        env:
+          FOURDA_DATA_DIR: ${{ runner.temp }}/4da-validate-data
+          FOURDA_DB_PATH: ${{ runner.temp }}/4da-validate-data/4da.db
+          RUST_BACKTRACE: '1'
+          RUST_LOG: trace
+        run: |
+          set -u
+          cargo test --tests --no-run --message-format=json 2>/dev/null > "$RUNNER_TEMP/build.json"
+          bin_of() {
+            node -e '
+              const lines = require("fs").readFileSync(process.argv[1], "utf8").split("\n");
+              for (const l of lines) { try { const j = JSON.parse(l);
+                if (j.reason === "compiler-artifact" && j.executable && j.target.name === process.argv[2] && j.profile.test) { console.log(j.executable); process.exit(0); } } catch (e) {} }
+              process.exit(1);' "$RUNNER_TEMP/build.json" "$1"
+          }
+          kc() {
+            echo "--- keychain state ---"
+            security default-keychain; security list-keychains
+            security find-generic-password -s com.4da.app -a 4da_db_encryption_key 2>&1 | grep -E 'keychain:|class:|"svce"|"acct"|could not' || true
+          }
+          probe() {
+            label=$1; target=$2; test=$3
+            bin=$(bin_of "$target"); echo "=== PROBE $label: $target::$test ($bin)"
+            "$bin" "$test" --exact --nocapture --test-threads=1 > "$RUNNER_TEMP/$label.out" 2>&1 &
+            pid=$!
+            for i in $(seq 1 60); do
+              if ! kill -0 "$pid" 2>/dev/null; then wait "$pid"; echo "=== $label EXITED code=$? after ${i}s"; tail -n 20 "$RUNNER_TEMP/$label.out"; kc; return; fi
+              sleep 1
+            done
+            echo "=== $label HUNG >60s (pid $pid); sampling"
+            tail -n 40 "$RUNNER_TEMP/$label.out"
+            sudo sample "$pid" 3 -file "$RUNNER_TEMP/$label.sample" >/dev/null 2>&1 || true
+            sed -n '1,200p' "$RUNNER_TEMP/$label.sample" 2>/dev/null | grep -vE '^\s*$' | head -150
+            sudo lldb -p "$pid" --batch -o 'thread backtrace all' 2>&1 | head -120 || true
+            ps -axo pid,ppid,stat,comm | grep -iE 'SecurityAgent|securityd|coreauth|pipeline|migration' || true
+            kill -9 "$pid" 2>/dev/null || true
+            kc
+          }
+          kc
+          probe A pipeline_integration test_upsert_and_count
+          probe B migration_tests test_fresh_database_init
+          probe C pipeline_integration test_upsert_and_count
+          security delete-generic-password -s com.4da.app -a 4da_db_encryption_key >/dev/null 2>&1 || true
+          probe D migration_tests test_fresh_database_init
+          probe E pipeline_integration test_upsert_and_count
+
       - name: Run tests (unit + integration) and verify count floor
+        if: false
         env:
           FOURDA_DATA_DIR: ${{ runner.temp }}/4da-validate-data
           FOURDA_DB_PATH: ${{ runner.temp }}/4da-validate-data/4da.db
