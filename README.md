@@ -66,7 +66,7 @@ What passes the gate goes through 12 quality multipliers: content depth, novelty
 
 ### LLM Verification
 
-After keyword scoring, an LLM layer verifies the top items against your full developer context — stack, dependencies, recent commits, anti-technologies, and engagement history. Strict 1-5 rubric:
+After keyword scoring, an LLM layer verifies the top items against your full developer context — stack, dependency names, topics derived from your recent git activity (never the commit messages themselves), anti-technologies, and the titles of items you saved. Strict 1-5 rubric:
 
 - **5 = MUST-READ**: Security alert for YOUR dependency, breaking change YOU must act on
 - **3 = WORTH KNOWING**: Useful tool that fits YOUR exact stack
@@ -91,19 +91,21 @@ No algorithm can be gamed when the scoring signal comes from your local filesyst
 
 ## Privacy & Trust
 
-4DA is local-first and direct-to-provider. There is no 4DA-operated server, no analytics, and no user account system. Your indexed content, scores, and intelligence live in a SQLite database on your machine.
+4DA is local-first and direct-to-provider. It has no analytics, no telemetry, no crash reporting and no user accounts, and 4DA runs no server that receives your projects, scores or reading. Your indexed content, scores, and intelligence live in a SQLite database on your machine. Your source code and file contents never leave it (one opt-in exception, cloud embeddings, is described in [NETWORK.md §2a](NETWORK.md#2a-byok-cloud-llm-relevance-judging)).
 
-**The only outbound traffic:**
+**Outbound traffic, in summary:**
 
-| Category | Where | Why |
+| Category | Where | What it receives |
 |----------|-------|-----|
-| Source adapters | HN, GitHub, Reddit, arXiv, etc. | Fetching public content you configured |
-| LLM providers | Anthropic / OpenAI / localhost Ollama | Only if YOU set up BYOK keys |
-| License validation | Keygen | Only if you activated a paid license |
-| Updater | GitHub Releases | Signed via minisign, once per session |
+| Dependency checks | OSV.dev; npm, crates.io, PyPI and the Go module proxy | The package names and versions from your lockfiles (OSV.dev gets installed versions; registries get names). Go module paths are sent in full, so a private module path such as `github.com/yourco/internal-svc` names that repository. Never your code. |
+| News sources | HN, GitHub, Reddit, arXiv, RSS and the others you enable | Plain requests for public content; Reddit and Stack Overflow see the subreddits and tags you follow |
+| AI provider | Anthropic / OpenAI / any OpenAI-compatible endpoint, or local Ollama | Only if you set one up with your own key: item titles and snippets plus a short context profile (dependency names, project labels, git-derived topics, interests). File paths are replaced with project labels; source code and commit messages are never sent |
+| Licence | Keygen (`api.keygen.sh`) and 4DA's own `4da.ai` | Paid licences only: the key, to validate it and, for subscriptions, to renew it near expiry. `4da.ai` also receives your email if you use "Recover License by Email" |
+| Updater | GitHub Releases | A plain request for the update manifest, once per session; updates are minisign-verified |
+| One-time downloads | Hugging Face, GitHub | The local search model, only when a feature first needs it (see System Requirements) |
 | Crash reports | **None** | 4DA sends no crash reports. Export a scrubbed diagnostic bundle locally, on demand. |
 
-That's the whole list. There is no 4DA telemetry endpoint because there is no 4DA cloud.
+[NETWORK.md](NETWORK.md) is the complete, source-referenced list, including the opt-in flows (cloud translation, digest email, GitHub release notes) and the local-only Signal Terminal port (`127.0.0.1:4446`). On Windows, the Microsoft WebView2 runtime that draws the window also contacts Microsoft on its own; [NETWORK.md §5](NETWORK.md#5-not-4das-code-the-windows-webview-runtime) explains what it is and how to limit it.
 
 Don't take our word for it:
 
@@ -130,6 +132,8 @@ Don't take our word for it:
 Every release publishes `SHASUMS256.txt` and per-file `.sha256` sidecars. [Verification instructions.](docs/VERIFY-DOWNLOADS.md)
 
 > **Windows users:** the Windows installer is not yet code-signed, so SmartScreen shows "Windows protected your PC / Unknown publisher". Verify the SHA-256 against `SHASUMS256.txt` from the release first, then click **More info → Run anyway**. [Full details.](docs/launch/WINDOWS-INSTALL.md)
+>
+> **Signing, per file:** the macOS app is signed with an Apple Developer ID and notarized. The Windows installer is not Authenticode-signed (see above). The standalone `4da-cli-*` binaries are not code-signed on any platform. Every installer and CLI binary is listed in `SHASUMS256.txt`; the Windows and Linux installers and the macOS update bundle also carry a minisign `.sig` from the 4DA release key (the `.dmg` and the CLI binaries do not). [SECURITY.md](SECURITY.md#update-mechanism-and-release-signing) has the full table.
 
 Or install the **MCP server** for Claude Code / Cursor / Windsurf:
 ```bash
@@ -145,7 +149,7 @@ pnpm install
 pnpm tauri dev   # First build: 5-15 min. Dev server: localhost:4444.
 ```
 
-**Prerequisites:** Rust (1.93.1 via `rust-toolchain.toml`), Node.js 20, pnpm 9.15. Platform-specific: [Windows](docs/BUILD-FROM-SOURCE.md) needs VS Build Tools 2022 with C++ workload. [Full build guide.](docs/BUILD-FROM-SOURCE.md)
+**Prerequisites:** Rust 1.95.0 (pinned in `rust-toolchain.toml`), Node.js 22 (what CI uses; `package.json` requires at least 20), pnpm 10.34.6 (pinned by `packageManager` in `package.json`; `corepack enable` picks it up). Platform-specific: [Windows](docs/BUILD-FROM-SOURCE.md) needs VS Build Tools 2022 with C++ workload. [Full build guide.](docs/BUILD-FROM-SOURCE.md)
 
 **First-run setup** (API keys, context dirs, sources): [Getting Started.](docs/GETTING_STARTED.md)
 
@@ -153,7 +157,7 @@ pnpm tauri dev   # First build: 5-15 min. Dev server: localhost:4444.
 
 ## System Requirements
 
-4DA runs on modest hardware. Private semantic search is built in — no GPU, no API key, and no first-run download required.
+4DA runs on modest hardware. The dependency engine needs no GPU, no API key and no model download. Private semantic search (for interests and natural-language search) runs on your machine too, after a one-time model download.
 
 | | Baseline (free) | + Cloud AI (BYOK) | + Local AI (offline) |
 |---|---|---|---|
@@ -161,12 +165,12 @@ pnpm tauri dev   # First build: 5-15 min. Dev server: localhost:4444.
 | CPU | any 64-bit | any 64-bit | 6–8 cores |
 | GPU | not needed | not needed | optional (recommended for speed) |
 | Disk | several GB (grows with use) | several GB (grows with use) | + 5–9 GB per model |
-| Network | install only | install + your AI provider | install + one model download (or none with Ollama) |
+| Network | advisory, registry and news checks (offline: cached data) | the same + your AI provider | the same + one model download (or none with Ollama) |
 
 - OS: Windows 10 (1803+) / 11, macOS 10.15+, Ubuntu 22.04+ (WebKitGTK 4.1).
-- One installer (~280 MB on Windows, ~300 MB on macOS, ~300–370 MB on Linux). Most of that is the local embedding model (nomic-embed-text v1.5, fp16 ONNX), which ships inside it — no separate download, works fully offline on first run.
+- One installer. Up to v1.0.3 it included the local search model (nomic-embed-text v1.5, fp16 ONNX), which is most of its ~280–390 MB. From the next release the model (~262 MB, pinned by SHA-256) is downloaded once from Hugging Face, only when you first turn on an interest, run a natural-language search or press Download in Settings → Intelligence; the dependency engine never needs it. Without it, scoring and search fall back to Ollama or keyword matching ([NETWORK.md §3](NETWORK.md#3-setup-time-one-time-downloads)).
 - Disk use grows with your corpus. An active install's database reaches a couple of GB and grows by tens of MB a day; each schema migration keeps up to 2 full database backups; caches and models add about 1 GB more. Plan for several GB. The data-retention setting (default 30 days, adjustable 7–365) bounds how long items are kept.
-- Baseline = private on-device semantic search. Cloud AI adds AI-written briefings + deeper reranking via your own API key. Local AI runs everything offline (Ollama or a downloaded model).
+- Baseline = the dependency engine plus private on-device semantic search. Cloud AI adds AI-written briefings + deeper reranking via your own API key. Local AI runs everything offline (Ollama or a downloaded model).
 
 ---
 
@@ -205,7 +209,7 @@ Your Codebase                    External Sources
 | Frontend | React 19 + TypeScript + Tailwind CSS v4 |
 | Database | SQLite 3.45+ with sqlite-vec (vector search) |
 | Scoring | Custom pipeline → build-time Rust codegen |
-| Embeddings | nomic-embed-text v1.5 locally — bundled ONNX model (fastembed), or local Ollama when running; OpenAI only on explicit opt-in |
+| Embeddings | nomic-embed-text v1.5 locally — ONNX model run in-process (fastembed, downloaded once on first use), or local Ollama when running; OpenAI only on explicit opt-in |
 | LLM | Anthropic Claude / OpenAI / Ollama (BYOK) |
 
 ---
@@ -235,7 +239,7 @@ The [STREETS Playbook](https://4da.ai/streets) — 7 modules on turning develope
 <details>
 <summary><strong>Dependency engine</strong></summary>
 
-- Lockfile inventory across every project: `Cargo.lock`, `package-lock.json`, `pnpm-lock.yaml`, `yarn.lock`, `poetry.lock`, `requirements.txt`, `go.mod`/`go.sum`, plus early `Gemfile.lock` and `composer.lock` support
+- Lockfile inventory across every project: `Cargo.lock`, `package-lock.json` / `npm-shrinkwrap.json`, `pnpm-lock.yaml`, `yarn.lock` (classic and Berry), `bun.lock`, `poetry.lock`, `uv.lock`, `pdm.lock`, `Pipfile.lock`, `requirements*.txt`, `go.mod`/`go.sum`, plus early `Gemfile.lock` and `composer.lock` support. Bun's older binary `bun.lockb` is reported but not read; Maven, Gradle and NuGet files are reported as not covered
 - Version-confirmed OSV matching, scoped by dev-only, transitive and per-platform reachability
 - Fix targets per release line; the Upgrade Plan names a lockfile refresh or a parent upgrade where the lockfile proves it
 - Install drift: flags a `node_modules` that disagrees with its lockfile, with the install command to run
