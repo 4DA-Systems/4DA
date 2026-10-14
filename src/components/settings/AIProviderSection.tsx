@@ -209,7 +209,7 @@ export function AIProviderSection({
 
           {/* Cloud data disclosure — informed consent, mirrors the onboarding BYOK step */}
           {settingsForm.provider !== 'ollama' && settingsForm.provider !== 'none' && (
-            <p className="text-[10px] text-text-muted leading-relaxed border-l-2 border-border/60 pl-2">
+            <p className="text-[10px] text-text-muted leading-relaxed border-l-2 border-border/60 pl-2" data-testid="cloud-data-disclosure">
               {t('onboarding.setupAi.cloudDataDisclosure')}
             </p>
           )}

@@ -368,7 +368,7 @@ export function SetupAIProvider({
 
           {/* Cloud data disclosure — informed consent at the BYOK moment */}
           {(provider === 'anthropic' || provider === 'openai' || (provider === 'openai-compatible' && !localServer)) && (
-            <p className="text-[10px] text-text-muted leading-relaxed border-s-2 border-border/60 ps-2">
+            <p className="text-[10px] text-text-muted leading-relaxed border-s-2 border-border/60 ps-2" data-testid="cloud-data-disclosure">
               {/* Each item is pinned to the code in NETWORK.md §2a/§4 (analysis_rerank.rs,
                   briefing_prompt.rs, privacy_egress.rs, llm_judge.rs). */}
               {t('onboarding.setupAi.cloudDataDisclosure')}
