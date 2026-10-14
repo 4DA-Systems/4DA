@@ -14,12 +14,20 @@ use tracing::{info, warn};
 
 const DB_KEY_NAME: &str = "4da_db_encryption_key";
 
+#[cfg(test)]
+thread_local! {
+    /// How many times this thread reached the keychain for the database key.
+    static KEYCHAIN_LOOKUPS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
 /// Get or generate the database encryption key from the OS keychain.
 ///
 /// On first call: generates a random 256-bit key, stores in keychain, returns it.
 /// On subsequent calls: retrieves the existing key from keychain.
 /// On keychain failure: returns None (database runs unencrypted).
 pub(crate) fn get_or_create_db_key() -> Option<String> {
+    #[cfg(test)]
+    KEYCHAIN_LOOKUPS.with(|c| c.set(c.get() + 1));
     // Try to retrieve existing key
     match crate::settings::keystore::get_secret(DB_KEY_NAME) {
         Ok(Some(key)) if !key.is_empty() => {
@@ -54,6 +62,37 @@ pub(crate) fn get_or_create_db_key() -> Option<String> {
             None
         }
     }
+}
+
+/// The database key for `conn`, fetched only where it can actually be applied.
+///
+/// The keychain is consulted only when the linked SQLite is SQLCipher. This
+/// build links plain SQLite (rusqlite `bundled`, see Cargo.toml), where
+/// `PRAGMA key` is a no-op, so the lookup bought nothing and cost a keychain
+/// round-trip on every open. On macOS it was worse than useless: a keychain
+/// item created by one binary blocks any OTHER binary's read on an access
+/// prompt, which hung every pipeline_integration test on the macOS runner
+/// (PR #941). Existing keychain items are left untouched; when SQLCipher is
+/// enabled the original get-or-create behaviour applies unchanged.
+pub(crate) fn db_key_for(conn: &rusqlite::Connection) -> Option<String> {
+    key_if_cipher(sqlcipher_linked(conn), get_or_create_db_key)
+}
+
+/// Run `fetch` only when encryption is available. Split out so the gate can
+/// be tested with an injected key source.
+fn key_if_cipher(cipher: bool, fetch: impl FnOnce() -> Option<String>) -> Option<String> {
+    if cipher {
+        fetch()
+    } else {
+        None
+    }
+}
+
+/// Is the linked SQLite SQLCipher? `PRAGMA cipher_version` returns a row only
+/// there; plain SQLite ignores the unknown pragma and returns nothing.
+pub(crate) fn sqlcipher_linked(conn: &rusqlite::Connection) -> bool {
+    conn.query_row("PRAGMA cipher_version", [], |r| r.get::<_, String>(0))
+        .is_ok()
 }
 
 /// Apply the encryption key to an open SQLite connection.
@@ -132,5 +171,47 @@ mod tests {
         let conn = rusqlite::Connection::open_in_memory().unwrap();
         // Should not error with None key
         assert!(apply_key_to_connection(&conn, None).is_ok());
+    }
+
+    /// Opening a database on a build without SQLCipher must never touch the
+    /// keychain. The key could not be applied anyway (`PRAGMA key` is a no-op
+    /// on plain SQLite), and on macOS a keychain item created by another binary
+    /// blocks the read on an access prompt: that hung all 13
+    /// pipeline_integration tests on the macOS runner (PR #941).
+    #[test]
+    fn opening_a_database_without_sqlcipher_never_reaches_the_keychain() {
+        let before = KEYCHAIN_LOOKUPS.with(std::cell::Cell::get);
+        let _db = crate::db::Database::new(std::path::Path::new(":memory:")).expect("open");
+        let dir = tempfile::tempdir().expect("tempdir");
+        let _file_db = crate::db::Database::new(&dir.path().join("4da.db")).expect("open file db");
+        assert_eq!(KEYCHAIN_LOOKUPS.with(std::cell::Cell::get), before);
+    }
+
+    #[test]
+    fn plain_bundled_sqlite_is_not_sqlcipher() {
+        let conn = rusqlite::Connection::open_in_memory().unwrap();
+        assert!(!sqlcipher_linked(&conn));
+        assert_eq!(db_key_for(&conn), None);
+    }
+
+    #[test]
+    fn the_key_source_runs_only_when_sqlcipher_is_linked() {
+        let mut calls = 0;
+        assert_eq!(
+            key_if_cipher(false, || {
+                calls += 1;
+                Some("k".into())
+            }),
+            None
+        );
+        assert_eq!(calls, 0);
+        assert_eq!(
+            key_if_cipher(true, || {
+                calls += 1;
+                Some("k".into())
+            }),
+            Some("k".to_string())
+        );
+        assert_eq!(calls, 1);
     }
 }
