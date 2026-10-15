@@ -14,12 +14,24 @@
 //! - [`fix_target`]: the fix for a version's release line, and the walk to the
 //!   lowest version that leaves every window with a way out.
 //!
+//! C0.2 adds inventory matching, split from the app's database:
+//! - [`osv`]: a verbatim OSV record as the mirror stores it (one row per
+//!   package, `affected` entries merged);
+//! - [`matching`]: `match_inventory(&[Package], &[AdvisoryRecord])`, the
+//!   findings per installed copy with each copy's fix targets;
+//! - [`exposure`]: the same check for one advisory (the scorer's verdict);
+//! - [`lines`]: the per-project, per-release-line upgrade targets.
+//!
 //! The app (`src-tauri`) keeps the DB and network halves and re-exports these
 //! under their old `crate::osv::...` paths.
 
 pub mod api;
 pub mod ecosystem;
+pub mod exposure;
 pub mod fix_target;
+pub mod lines;
+pub mod matching;
+pub mod osv;
 pub mod range;
 pub mod version_order;
 

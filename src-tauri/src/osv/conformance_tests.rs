@@ -4,9 +4,16 @@
 //! Reads `src-tauri/tests/conformance/` (format: README.md there): ~35 cases
 //! of vendored public lockfiles, the OSV records that name their packages
 //! (pinned, as served by api.osv.dev), and an adjudicated truth set per case.
-//! Offline and deterministic: the lockfiles go through the app's lockfile
-//! readers into an in-memory DB, the pinned advisories go in exactly the way
-//! `osv::sync` stores them (`store_vulnerability`), and the REAL matcher runs.
+//! Offline and deterministic, and no database: the lockfiles go through the
+//! app's lockfile readers into an inventory shaped like the one the app's DB
+//! adapter builds (a resolved row per package plus every installed copy), the
+//! pinned advisories are stored the way `osv::sync` stores them
+//! (`fourda_depengine::osv::stored_records`), and the engine crate's REAL
+//! matcher, `match_inventory`, runs on both (single-engine C0.2).
+//!
+//! `FOURDA_DEPENGINE_FIXTURE=1` rewrites the crate's wasm/native fixture
+//! (`crates/fourda-depengine/tests/fixtures/`) from [`FIXTURE_CASE`]; without
+//! it, a test holds the committed fixture to what the readers produce today.
 //!
 //! The result is scored per ecosystem against `thresholds.json`, a RATCHET:
 //! it records the values measured when the corpus landed, so CI stays green
@@ -19,9 +26,9 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 
+use fourda_depengine::matching::{match_inventory, Package};
+use fourda_depengine::osv::{stored_records, AdvisoryRecord, OsvRecord};
 use serde::Deserialize;
-
-use crate::db::{Database, DependencyInstanceInput};
 
 fn corpus_dir() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -282,24 +289,24 @@ fn project_path(case: &str, rel_dir: &str) -> String {
 /// Feed every lockfile directory of one case to the readers: the lockfile
 /// walk's own directory selection (`ace::lockfile::walk_dirs` — skip list and
 /// depth, without the user-scope gates, which are policy, not parsing).
-fn ingest_case(db: &Database, case: &Case) {
+fn ingest_case(case: &Case, inventory: &mut Vec<Package>) {
     for dir in crate::ace::lockfile::walk_dirs(&case.dir) {
         let rel = dir
             .strip_prefix(&case.dir)
             .map(|r| r.to_string_lossy().replace('\\', "/"))
             .unwrap_or_default();
         let rel = if rel.is_empty() { ".".to_string() } else { rel };
-        read_lockfile_dir(db, &dir, &project_path(&case.meta.id, &rel));
+        read_lockfile_dir(&dir, &project_path(&case.meta.id, &rel), inventory);
     }
 }
 
-/// What `ace_commands::dependencies::process_lockfile_dir` stores for one
+/// What `ace_commands::dependencies::process_lockfile_dir` records for one
 /// directory: every lockfile read by `ace::lockfile::read_dir` (the same
-/// readers, Cargo workspace crates already removed), merged per ecosystem and
-/// written once — minus what cannot affect matching (direct/dev labels,
-/// dependency edges, the `cargo tree` host probe, prunes). Failed and
-/// unsupported outcomes store nothing; the silent-drop score sees them.
-fn read_lockfile_dir(db: &Database, dir: &Path, project: &str) {
+/// readers, Cargo workspace crates already removed), merged per ecosystem —
+/// minus what cannot affect matching (direct/dev labels, dependency edges,
+/// the `cargo tree` host probe, prunes). Failed and unsupported outcomes add
+/// nothing; the silent-drop score sees them.
+fn read_lockfile_dir(dir: &Path, project: &str, inventory: &mut Vec<Package>) {
     use crate::ace::lockfile::{read_dir, LockfileOutcome};
     let mut by_ecosystem: BTreeMap<&'static str, Vec<(String, String)>> = BTreeMap::new();
     for outcome in read_dir(dir) {
@@ -311,37 +318,60 @@ fn read_lockfile_dir(db: &Database, dir: &Path, project: &str) {
     for (language, mut packages) in by_ecosystem {
         packages.sort();
         packages.dedup();
-        store_packages(db, project, language, &packages);
+        inventory_rows(project, language, &packages, inventory);
     }
 }
 
-/// The two writes every processor makes: the multi-version instance
-/// inventory, then the collapsed per-package rows the matcher indexes.
-fn store_packages(db: &Database, project: &str, language: &str, packages: &[(String, String)]) {
-    let instances: Vec<DependencyInstanceInput> = packages
-        .iter()
-        .map(|(name, version)| DependencyInstanceInput {
-            package_name: name.clone(),
-            version: version.clone(),
-            is_direct: false,
-            is_dev: false,
-            scope: "unknown".to_string(),
-        })
-        .collect();
-    db.store_dependency_instances(project, language, &instances)
-        .expect("conformance: store instances");
+/// The two layers the app's DB adapter hands the matcher, as a lockfile
+/// processor writes them: every installed copy (`dependency_instances`, OSV
+/// ecosystem name), and one resolved row per package (`user_dependencies`,
+/// language string, the last version written wins).
+fn inventory_rows(
+    project: &str,
+    language: &str,
+    packages: &[(String, String)],
+    inventory: &mut Vec<Package>,
+) {
+    let row = |name: &str, version: &str, ecosystem: &str, primary: bool| Package {
+        ecosystem: ecosystem.to_string(),
+        project: project.to_string(),
+        name: name.to_string(),
+        version: Some(version.to_string()),
+        is_direct: false,
+        is_dev: false,
+        primary,
+    };
+    let osv = osv_ecosystem(language);
+    let mut resolved: BTreeMap<&str, &str> = BTreeMap::new();
     for (name, version) in packages {
-        db.store_transitive_dependency(project, name, Some(version), language, false)
-            .expect("conformance: store dependency");
+        inventory.push(row(name, version, &osv, false));
+        resolved.insert(name, version);
+    }
+    for (name, version) in resolved {
+        inventory.push(row(name, version, language, true));
     }
 }
 
-/// Every pinned record, stored the way `osv::sync` stores a fetched one.
-/// Returns the alias union (id -> canonical id) used to group advisories.
-fn load_pinned_advisories(db: &Database) -> HashMap<String, String> {
+/// The pinned OSV records, read once.
+struct Pinned {
+    /// Stored rows, the way `osv::sync` stores a fetched record.
+    records: Vec<AdvisoryRecord>,
+    /// The alias union (id -> canonical id) used to group advisories.
+    canon: HashMap<String, String>,
+    /// id -> the record's own alias list (for the dump).
+    aliases: HashMap<String, Vec<String>>,
+}
+
+/// Every pinned record, stored the way one `osv::sync` store pass stores
+/// them: within the pass the first row per (id, package, ecosystem) wins.
+/// (Across syncs `osv_advisories` is an upsert, `ON CONFLICT DO UPDATE`, so
+/// the last write wins there; the pinned corpus holds each record once.)
+fn load_pinned_advisories() -> Pinned {
     let dir = corpus_dir().join("osv");
     let mut seen = std::collections::HashSet::new();
     let mut uf = AliasUnion::default();
+    let mut records = Vec::new();
+    let mut aliases = HashMap::new();
     let mut files: Vec<PathBuf> = std::fs::read_dir(&dir)
         .expect("conformance: osv/ directory")
         .flatten()
@@ -349,14 +379,23 @@ fn load_pinned_advisories(db: &Database) -> HashMap<String, String> {
         .collect();
     files.sort();
     for path in files {
-        let vuln: super::types::Vulnerability = read_json(&path);
+        let vuln: OsvRecord = read_json(&path);
         for alias in vuln.aliases.iter().flatten() {
             uf.union(&vuln.id, alias);
         }
-        super::sync::store_vulnerability(db, &vuln, &mut seen)
-            .unwrap_or_else(|e| panic!("conformance: store {}: {e}", vuln.id));
+        for row in stored_records(&vuln) {
+            let key = format!("{}:{}:{}", row.advisory_id, row.package_name, row.ecosystem);
+            if seen.insert(key) {
+                records.push(row);
+            }
+        }
+        aliases.insert(vuln.id.clone(), vuln.aliases.clone().unwrap_or_default());
     }
-    uf.canonical_map()
+    Pinned {
+        records,
+        canon: uf.canonical_map(),
+        aliases,
+    }
 }
 
 #[derive(Default)]
@@ -465,32 +504,42 @@ fn path_index(cases: &[Case]) -> HashMap<String, (String, String)> {
 
 fn run_engine(cases: &[Case]) -> (EngineRun, HashMap<String, String>) {
     let t = std::time::Instant::now();
-    let db = crate::test_utils::test_db();
+    let mut inventory = Vec::new();
     for case in cases {
-        ingest_case(&db, case);
+        ingest_case(case, &mut inventory);
     }
     eprintln!("conformance: ingest {:.1}s", t.elapsed().as_secs_f64());
-    let canon = load_pinned_advisories(&db);
+    let Pinned {
+        records,
+        canon,
+        aliases: pinned_aliases,
+    } = load_pinned_advisories();
     eprintln!("conformance: advisories {:.1}s", t.elapsed().as_secs_f64());
     let index = path_index(cases);
     let mut run = EngineRun::default();
-    for row in db.get_all_dependency_instances().expect("instances") {
-        if let Some((case, dir)) = locate(&index, &row.project_path) {
-            let eco = osv_ecosystem(&row.ecosystem);
-            let key = inv_key(&eco, &dir, &row.package_name, &row.version);
+    for copy in inventory.iter().filter(|p| !p.primary) {
+        if let (Some((case, dir)), Some(version)) =
+            (locate(&index, &copy.project), copy.version.as_deref())
+        {
+            let eco = osv_ecosystem(&copy.ecosystem);
+            let key = inv_key(&eco, &dir, &copy.name, version);
             run.inventory.entry(case).or_default().insert(key);
         }
     }
-    let (matches, _not_compiled) = super::matching::get_matched_advisories_with_not_compiled(&db)
-        .expect("conformance: matcher");
+    let findings = match_inventory(&inventory, &records);
     eprintln!("conformance: matched {:.1}s", t.elapsed().as_secs_f64());
-    for m in &matches {
+    for f in &findings {
+        let m = &records[f.record];
         let eco = osv_ecosystem(&m.ecosystem);
         let group = canon
             .get(&m.advisory_id)
             .cloned()
             .unwrap_or_else(|| m.advisory_id.clone());
-        for inst in &m.dependency_instances {
+        let aliases = pinned_aliases
+            .get(&m.advisory_id)
+            .cloned()
+            .unwrap_or_default();
+        for inst in &f.dependency_instances {
             let (Some((case, dir)), Some(version)) = (
                 locate(&index, &inst.project_path),
                 inst.installed_version.as_deref(),
@@ -509,7 +558,7 @@ fn run_engine(cases: &[Case]) -> (EngineRun, HashMap<String, String>) {
                 .or_default()
                 .push(serde_json::json!({
                     "ecosystem": eco, "dir": dir, "package": m.package_name,
-                    "version": version, "id": m.advisory_id, "aliases": m.aliases,
+                    "version": version, "id": m.advisory_id, "aliases": aliases,
                 }));
         }
     }
@@ -709,6 +758,128 @@ fn dump(run: &EngineRun, s: &Score) {
         std::fs::write(dir.join(format!("{case}.json")), body.to_string()).expect("dump case");
     }
     std::fs::write(dir.join("diff.tsv"), s.diffs.join("\n")).expect("dump diff");
+}
+
+// ============================================================================
+// The crate's native/wasm fixture: one real case as a `match_inventory` call
+// ============================================================================
+
+/// The corpus case the engine crate's fixture is cut from: a real project
+/// (FastAPI's requirements), PyPI, so PEP 503 names and PEP 440 order are in
+/// the path.
+const FIXTURE_CASE: &str = "py-fastapi-requirements";
+
+fn fixture_path() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("crates")
+        .join("fourda-depengine")
+        .join("tests")
+        .join("fixtures")
+        .join("match_inventory_case.json")
+}
+
+/// The OSV fields the matcher reads; the rest of a pinned record (details,
+/// references, severity) only makes the fixture bigger.
+fn trimmed_record(record: &serde_json::Value) -> serde_json::Value {
+    let mut out = serde_json::Map::new();
+    for key in ["id", "aliases", "withdrawn", "affected"] {
+        if let Some(v) = record.get(key) {
+            out.insert(key.to_string(), v.clone());
+        }
+    }
+    serde_json::Value::Object(out)
+}
+
+/// The `match_inventory` request for [`FIXTURE_CASE`]: the inventory the
+/// app's readers produce, and every pinned record naming one of its packages.
+fn fixture_request(case: &Case) -> serde_json::Value {
+    use fourda_depengine::ecosystem::normalize;
+    use fourda_depengine::matching::package_key;
+    let mut inventory = Vec::new();
+    ingest_case(case, &mut inventory);
+    let held: BTreeSet<(String, String)> = inventory
+        .iter()
+        .map(|p| {
+            (
+                normalize(&p.ecosystem).to_string(),
+                package_key(&p.name, &p.ecosystem),
+            )
+        })
+        .collect();
+    let mut files: Vec<PathBuf> = std::fs::read_dir(corpus_dir().join("osv"))
+        .expect("conformance: osv/ directory")
+        .flatten()
+        .map(|e| e.path())
+        .collect();
+    files.sort();
+    let osv: Vec<serde_json::Value> = files
+        .iter()
+        .map(|path| read_json::<serde_json::Value>(path))
+        .filter(|record| {
+            let parsed: Option<OsvRecord> = serde_json::from_value(record.clone()).ok();
+            parsed.is_some_and(|r| {
+                r.affected
+                    .iter()
+                    .flatten()
+                    .filter_map(|a| a.package.as_ref())
+                    .any(|p| {
+                        held.contains(&(
+                            normalize(&p.ecosystem).to_string(),
+                            package_key(&p.name, &p.ecosystem),
+                        ))
+                    })
+            })
+        })
+        .map(|record| trimmed_record(&record))
+        .collect();
+    serde_json::json!({
+        "op": "match_inventory",
+        "inventory": inventory,
+        "osv": osv,
+    })
+}
+
+/// The crate's fixture (request, native response) is what the app's readers
+/// and the engine produce for [`FIXTURE_CASE`] today, so the wasm check that
+/// replays it (`crates/fourda-depengine/scripts/check-wasm.cjs`) compares
+/// the wasm module with the native engine on real input.
+/// `FOURDA_DEPENGINE_FIXTURE=1` rewrites it.
+#[test]
+fn depengine_fixture_is_the_native_engine_on_a_real_case() {
+    let cases = load_cases();
+    let case = cases
+        .iter()
+        .find(|c| c.meta.id == FIXTURE_CASE)
+        .expect("fixture case in the corpus");
+    let request = fixture_request(case);
+    let response: serde_json::Value =
+        serde_json::from_str(&fourda_depengine::api::call(&request.to_string()))
+            .expect("engine answers JSON");
+    assert_eq!(response["ok"], true, "{response}");
+    let findings = response["result"]["findings"]
+        .as_array()
+        .map_or(0, Vec::len);
+    assert!(findings > 0, "the fixture case must produce findings");
+    let fixture = serde_json::json!({
+        "case": FIXTURE_CASE,
+        "request": request,
+        "response": response,
+    });
+    let path = fixture_path();
+    if std::env::var_os("FOURDA_DEPENGINE_FIXTURE").is_some() {
+        // Pretty, so a change to the readers or the engine shows up as a
+        // reviewable diff (~490 KB; compact would be one ~200 KB line).
+        let text = serde_json::to_string_pretty(&fixture).expect("fixture json") + "\n";
+        std::fs::write(&path, text).expect("write fixture");
+        return;
+    }
+    let committed: serde_json::Value = read_json(&path);
+    assert!(
+        committed == fixture,
+        "{} is stale: rerun with FOURDA_DEPENGINE_FIXTURE=1",
+        path.display()
+    );
 }
 
 // ============================================================================
