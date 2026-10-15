@@ -1203,11 +1203,21 @@ pub(crate) const OLLAMA_NUM_CTX: u32 = 8192;
 // 14 days to 2026-09-24): lowering this below 8,192 truncates them again.
 const _: () = assert!(OLLAMA_NUM_CTX >= 8192);
 
-/// How long Ollama keeps a 4DA model loaded after a request. Ollama's default
-/// is 5 minutes, but the judge lanes run every ~10–12 minutes, so the judge
-/// model was evicted between every pass and reloaded on the next one —
-/// measured 2026-10-04: 117 loads of gemma4:26b in ~24 h, 46–112 s each.
-pub(crate) const OLLAMA_KEEP_ALIVE: &str = "30m";
+/// How long Ollama keeps a 4DA model loaded after a request: long enough to
+/// bridge the judge lanes WITHIN one cycle (scoring rerank, post-cycle judge,
+/// verdict drain run back to back), shorter than the ~10–12 minute gap BETWEEN
+/// cycles, so the model is never held resident from one cycle to the next.
+///
+/// History: 30m (2026-10-04) stopped gemma4:26b reloading inside a timed call
+/// (117 loads in ~24 h, 46–112 s each). That reason is gone: every judge lane
+/// now loads the model first through `local_judge::warm`, outside the breaker's
+/// timing. And 30m against a 10-minute cadence meant the judge never left:
+/// gemma4:12b held 8.1 GB of VRAM around the clock (G6, 2026-10-12). The
+/// cycle's last lane unloads it explicitly (`local_judge::release_after_cycle`);
+/// this window is the backstop when that does not run. Measured 2026-10-15
+/// (gemma4:12b, RTX 4080 SUPER): a reload costs 6.5–9.3 s from the OS file
+/// cache, 36 s from disk; a warm judge call ~0.3 s.
+pub(crate) const OLLAMA_KEEP_ALIVE: &str = "5m";
 
 /// The `keep_alive` 4DA sends, given the user's `OLLAMA_KEEP_ALIVE`. A
 /// per-request `keep_alive` overrides the server's setting, so a user who set
@@ -1276,16 +1286,17 @@ mod tests {
     }
 
     #[test]
-    fn keep_alive_outlasts_the_judge_cadence() {
-        // The judge lanes run every ~10–12 min; anything shorter evicts the
-        // model between passes and every pass pays a full reload again.
+    fn keep_alive_never_bridges_two_cycles() {
+        // Cycles start every ~10–12 min. A window that long or longer keeps
+        // the judge in VRAM permanently (G6). Under 2 min would evict it
+        // between the lanes of one cycle.
         let minutes: u64 = OLLAMA_KEEP_ALIVE
             .strip_suffix('m')
             .and_then(|m| m.parse().ok())
             .expect("OLLAMA_KEEP_ALIVE is expressed in minutes");
         assert!(
-            minutes >= 15,
-            "keep_alive {minutes}m is shorter than a judge pass gap"
+            (2..10).contains(&minutes),
+            "keep_alive {minutes}m must stay between 2 and 9 minutes"
         );
     }
 

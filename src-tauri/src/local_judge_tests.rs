@@ -92,6 +92,34 @@ fn a_slow_or_failed_call_opens_the_breaker_for_the_cool_off() {
 }
 
 #[test]
+fn the_routed_judge_is_released_after_a_cycle_unless_the_user_set_keep_alive() {
+    let routed = State {
+        model: Some("gemma4:12b".into()),
+        base_url: DEFAULT_OLLAMA_URL.into(),
+        tripped_until: Some(Instant::now() + COOL_OFF),
+        ..State::default()
+    };
+    assert_eq!(
+        release_target(&routed, None),
+        Some(("gemma4:12b".to_string(), DEFAULT_OLLAMA_URL.to_string())),
+        "released even while the breaker is open: the model may still be loaded"
+    );
+    assert_eq!(
+        release_target(&routed, Some("  ")).map(|t| t.0).as_deref(),
+        Some("gemma4:12b")
+    );
+    assert!(
+        release_target(&routed, Some("24h")).is_none(),
+        "the user's residency policy stands"
+    );
+    assert!(release_target(&routed, Some("0")).is_none());
+    assert!(
+        release_target(&State::default(), None).is_none(),
+        "no routed judge (cloud sibling, or an Ollama main model): nothing to release"
+    );
+}
+
+#[test]
 fn only_the_three_judge_lanes_route_locally() {
     for p in ["ingest_judge", "verdict_drain", "rerank_judge"] {
         assert!(is_judge_purpose(Some(p)));

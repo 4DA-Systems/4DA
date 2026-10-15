@@ -296,6 +296,55 @@ async fn load_model(base_url: &str, model: &str) -> bool {
         .is_ok()
 }
 
+/// Unload the routed local judge once a cycle's judge lanes are done, so its
+/// VRAM (8.4 GB for gemma4:12b) is free between cycles. The next cycle's first
+/// lane reloads it through [`warm`], untimed by the breaker: 6.5–9.3 s from the
+/// OS file cache, 36 s cold (measured 2026-10-15).
+///
+/// Only the judge 4DA routed on its own goes: a user whose main model is on
+/// Ollama chose that model, and it ages out on `OLLAMA_KEEP_ALIVE` instead.
+/// A user who set `OLLAMA_KEEP_ALIVE` keeps their residency policy. A request
+/// still in flight finishes first: Ollama unloads when the model is idle.
+pub(crate) async fn release_after_cycle() {
+    let user_keep_alive = std::env::var("OLLAMA_KEEP_ALIVE").ok();
+    let Some((model, base_url)) = release_target(&STATE.lock(), user_keep_alive.as_deref()) else {
+        return;
+    };
+    let Ok(client) = reqwest::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()
+    else {
+        return;
+    };
+    // An empty prompt with keep_alive 0 is Ollama's unload request; it never
+    // loads a model that is not resident.
+    let body = serde_json::json!({ "model": model, "keep_alive": 0 });
+    match client
+        .post(format!("{base_url}/api/generate"))
+        .json(&body)
+        .send()
+        .await
+        .and_then(reqwest::Response::error_for_status)
+    {
+        Ok(_) => {
+            info!(target: "4da::local_judge", model, "Local judge unloaded until the next cycle")
+        }
+        Err(e) => {
+            warn!(target: "4da::local_judge", model, error = %e, "Local judge unload failed; it expires on keep_alive")
+        }
+    }
+}
+
+/// The model [`release_after_cycle`] unloads, if any: the routed local judge,
+/// unless the user configured Ollama's residency themselves.
+/// A tripped breaker does not matter here: the model may still be loaded.
+fn release_target(state: &State, user_keep_alive: Option<&str>) -> Option<(String, String)> {
+    if user_keep_alive.is_some_and(|v| !v.trim().is_empty()) {
+        return None;
+    }
+    state.model.clone().map(|m| (m, state.base_url.clone()))
+}
+
 async fn redetect_if_stale() {
     let base_url = {
         let mut s = STATE.lock();

@@ -381,6 +381,7 @@ mod url_validation;
 mod void_commands;
 mod void_engine;
 mod waitlist;
+mod webview_visibility;
 mod weekly_digest;
 
 mod stack_commands;
@@ -827,7 +828,9 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_deep_link::init());
+        .plugin(tauri_plugin_deep_link::init())
+        // A hidden or minimised window's WebView2 stops rendering (G6 idle).
+        .plugin(webview_visibility::init());
 
     #[cfg(not(debug_assertions))]
     {
