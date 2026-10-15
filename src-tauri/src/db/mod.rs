@@ -277,9 +277,10 @@ impl Database {
 
         let conn = Connection::open(db_path)?;
 
-        // Apply database encryption key if available.
-        // When SQLCipher is enabled, this must be the first statement after open.
-        let db_key = encryption::get_or_create_db_key();
+        // Apply the database encryption key. The keychain is read only when
+        // SQLCipher is linked (see `encryption::db_key_for`); with SQLCipher,
+        // `PRAGMA key` must be the first statement after open.
+        let db_key = encryption::db_key_for(&conn);
         if let Err(e) = encryption::apply_key_to_connection(&conn, db_key.as_deref()) {
             tracing::warn!(target: "4da::db", error = %e, "Failed to apply encryption key — continuing unencrypted");
         }

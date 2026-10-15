@@ -314,7 +314,7 @@ jobs:
               'Hermetic is not a merge-queue check, so this landed. A contributor cloning main today cannot build or test it on at least one platform. Failing legs:',
               runUrl,
               '',
-              'Usually a Windows-only break (Validate runs Rust on ubuntu only). This issue closes itself on the next green push or nightly run.',
+              'Validate tests Rust on ubuntu and windows before the merge, so look first at what only a fresh clone exercises (cold build, postinstall fetch, uncached toolchain). This issue closes itself on the next green push or nightly run.',
             ].join('\n');
             if (issue) {
               await github.rest.issues.createComment({ ...context.repo, issue_number: issue.number, body });
