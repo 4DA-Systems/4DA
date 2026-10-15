@@ -333,3 +333,32 @@ fn managers_are_detected_per_ecosystem() {
     );
     assert!(Manager::Npm.records_requirements() && !Manager::Pnpm.records_requirements());
 }
+
+/// NodeGoat's tree (audit E8): needle 2.2.4 is hoisted and resolves the
+/// hoisted debug 2.6.9 although its `^2.1.2` also admits 2.2.0; connect
+/// 3.4.1 resolves its own nested 2.2.0; finalhandler, nested inside
+/// connect, climbs to connect's copy. npm's lookup, not the range, decides.
+#[test]
+fn npm_lock_resolutions_follow_npms_lookup() {
+    let lock: serde_json::Value = serde_json::from_str(
+        r#"{"lockfileVersion": 2, "packages": {
+            "": { "dependencies": { "needle": "^2.2.4", "connect": "3.4.1" } },
+            "node_modules/debug": { "version": "2.6.9" },
+            "node_modules/needle": { "version": "2.2.4", "dependencies": { "debug": "^2.1.2" } },
+            "node_modules/connect": { "version": "3.4.1", "dependencies": { "debug": "~2.2.0", "finalhandler": "0.4.1" } },
+            "node_modules/connect/node_modules/debug": { "version": "2.2.0" },
+            "node_modules/connect/node_modules/finalhandler": { "version": "0.4.1", "dependencies": { "debug": "~2.2.0" } }
+        }}"#,
+    )
+    .unwrap();
+    let r = |p: &str, v: &str| npm_lock_resolutions(&lock, p, v, "debug");
+    assert_eq!(r("needle", "2.2.4"), Some(vec!["2.6.9".to_string()]));
+    assert_eq!(r("connect", "3.4.1"), Some(vec!["2.2.0".to_string()]));
+    assert_eq!(r("finalhandler", "0.4.1"), Some(vec!["2.2.0".to_string()]));
+    // Not installed at that version: no copy is held.
+    assert_eq!(r("needle", "9.9.9"), Some(vec![]));
+    // A v1 lockfile has no tree to read: the caller keeps its range guess.
+    let v1: serde_json::Value =
+        serde_json::from_str(r#"{"lockfileVersion": 1, "dependencies": {}}"#).unwrap();
+    assert_eq!(npm_lock_resolutions(&v1, "needle", "2.2.4", "debug"), None);
+}

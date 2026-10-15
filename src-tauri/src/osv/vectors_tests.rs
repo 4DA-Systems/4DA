@@ -300,8 +300,15 @@ fn check_fix_command(v: &Value) -> Result<(), String> {
     for (name, body) in tool_files(s(v, "tool"), workspace_root) {
         std::fs::write(dir.path().join(name), body).map_err(|e| e.to_string())?;
     }
-    let command = Manager::detect(dir.path(), s(v, "eco"))
-        .and_then(|m| m.refresh_command(s(v, "pkg"), s(v, "installed"), s(v, "target")));
+    let manager = Manager::detect(dir.path(), s(v, "eco"));
+    // `kind: "direct"` (audit E8): the command that moves a DECLARED
+    // dependency; otherwise the refresh of a transitive copy (AD-055 ¶4).
+    let command = if v.get("kind").and_then(Value::as_str) == Some("direct") {
+        let dev = v.get("dev").and_then(Value::as_bool).unwrap_or(false);
+        manager.map(|m| m.direct_command(s(v, "pkg"), s(v, "target"), dev))
+    } else {
+        manager.and_then(|m| m.refresh_command(s(v, "pkg"), s(v, "installed"), s(v, "target")))
+    };
     let want = opt_s(v, "command");
     if command.as_deref() == want {
         Ok(())

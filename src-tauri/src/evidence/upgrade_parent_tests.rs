@@ -435,3 +435,49 @@ fn a_parent_with_no_registry_record_must_move_without_a_claimed_update() {
         uuid.explanation
     );
 }
+
+const GOAT: &str = "d:/work/nodegoat";
+
+/// NodeGoat (audit E8): debug 2.2.0 ships bundled inside nyc 14.1.1, the
+/// declared dev tool. `npm update debug` cannot move it and npm `overrides`
+/// do not reach bundled dependencies: the step says the copy is bundled,
+/// offers no override, and never prints the edge's internal marker.
+#[test]
+fn a_bundled_copy_names_its_owner_and_no_override() {
+    let db = test_db();
+    db.store_transitive_dependency(GOAT, "debug", Some("2.2.0"), "npm", false)
+        .unwrap();
+    db.store_dependency_instances(
+        GOAT,
+        "npm",
+        &[
+            instance("nyc", "14.1.1", true, true),
+            instance("debug", "2.2.0", false, true),
+        ],
+    )
+    .unwrap();
+    let edges = crate::ace::scanner::ProjectScanner::parse_package_lock_edges(
+        r#"{"lockfileVersion": 2, "packages": {
+            "": { "devDependencies": { "nyc": "^14.0.0" } },
+            "node_modules/nyc": { "version": "14.1.1", "dev": true },
+            "node_modules/nyc/node_modules/debug": { "version": "2.2.0", "dev": true, "inBundle": true }
+        }}"#,
+    );
+    db.store_dependency_edges(GOAT, "npm", &edges).unwrap();
+    advisory(&db, "GHSA-gxpj-cx7g-858c", "debug", "npm", "2.6.9", 5.3);
+    let plan = plan(&db);
+    let debug = row(&plan, "debug");
+    validate_item(debug).expect("schema-valid");
+    let text = &debug.explanation;
+    assert!(
+        text.contains(
+            "debug 2.2.0 comes in through nyc 14.1.1 (a direct dependency), which ships it \
+             bundled inside its own package, so neither a lockfile refresh nor an override can \
+             move it to 2.6.9"
+        ),
+        "{text}"
+    );
+    assert!(!text.contains("(bundled)"), "{text}");
+    assert!(!text.contains("overrides"), "{text}");
+    assert!(!text.contains("npm update"), "{text}");
+}

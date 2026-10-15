@@ -1439,17 +1439,36 @@ impl ProjectScanner {
         let mut edges = Vec::new();
 
         // v2/v3: a `packages` map keyed by node_modules path. "" is the root.
+        //
+        // Nested keys are parents too: `node_modules/glob/node_modules/minimatch`
+        // is minimatch 9.0.5, whose `^2.0.1` is what holds the nested
+        // brace-expansion copy. First-level edges only left every such copy
+        // "no parent 4DA can read" (audit A7, navcal 2026-10-12).
+        //
+        // A bundled copy (`inBundle`) ships inside its bundle owner's tarball:
+        // no refresh moves it, only a new owner release does. It gets ONE edge,
+        // from the owner, pinned to the exact version shipped, and the bundle's
+        // inner packages declare no edges of their own (audit E8: `npm update
+        // debug` cannot reach debug inside nyc, npm or fsevents).
         if let Some(pkgs) = lock.get("packages").and_then(|v| v.as_object()) {
             for (key, value) in pkgs {
-                // Skip deeply nested node_modules — first-level edges only.
-                let name_part = key.strip_prefix("node_modules/").unwrap_or(key);
-                if name_part.contains("node_modules/") {
+                let in_bundle = value
+                    .get("inBundle")
+                    .and_then(serde_json::Value::as_bool)
+                    .unwrap_or(false);
+                if in_bundle {
+                    if let Some(edge) = bundled_edge(pkgs, key, value) {
+                        edges.push(edge);
+                    }
                     continue;
                 }
+                let Some(name) = package_lock_name(key) else {
+                    continue;
+                };
                 let parent = if key.is_empty() {
                     ROOT_PARENT.to_string()
                 } else {
-                    name_part.to_string()
+                    name.to_string()
                 };
                 let parent_version = value
                     .get("version")
@@ -1597,6 +1616,59 @@ impl ProjectScanner {
 
         edges
     }
+}
+
+/// The package a `package-lock.json` v2/v3 `packages` key installs: the name
+/// after the LAST `node_modules/` (`node_modules/a/node_modules/@s/b` is
+/// `@s/b`). `""` is the root. A key with no `node_modules/` (a workspace
+/// member's folder, `packages/web`) is kept as written, as before.
+fn package_lock_name(key: &str) -> Option<&str> {
+    let name = key.rsplit_once("node_modules/").map_or(key, |(_, n)| n);
+    (!name.is_empty() || key.is_empty()).then_some(name)
+}
+
+/// The edge for a bundled copy: from its bundle owner (the nearest enclosing
+/// package that is not itself `inBundle`) to the exact version shipped,
+/// spelled as an npm pin. `None` when the owner cannot be read.
+fn bundled_edge(
+    pkgs: &serde_json::Map<String, serde_json::Value>,
+    key: &str,
+    value: &serde_json::Value,
+) -> Option<DependencyEdge> {
+    let child = package_lock_name(key)?.to_string();
+    let child_version = value.get("version")?.as_str()?.to_string();
+    // Climb enclosing folders; a level the lockfile does not list (a folder
+    // with no entry of its own) is passed over, not a dead end.
+    let mut owner_key = key;
+    let owner = loop {
+        let (enclosing, _) = owner_key.rsplit_once("/node_modules/")?;
+        owner_key = enclosing;
+        let Some(entry) = pkgs.get(enclosing) else {
+            continue;
+        };
+        if !entry
+            .get("inBundle")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false)
+        {
+            break (enclosing, entry);
+        }
+    };
+    let scope = if value.get("dev").and_then(serde_json::Value::as_bool) == Some(true) {
+        EdgeScope::Dev
+    } else {
+        EdgeScope::Runtime
+    };
+    Some(DependencyEdge {
+        parent: package_lock_name(owner.0)?.to_string(),
+        parent_version: owner.1.get("version")?.as_str().map(str::to_string),
+        child,
+        child_version: Some(format!(
+            "{child_version}{}",
+            crate::osv::fix_path::BUNDLED_SUFFIX
+        )),
+        scope,
+    })
 }
 
 /// Leading indentation of a pnpm-lock line, a tab counting as two spaces.
@@ -2548,6 +2620,105 @@ dependencies = ["once_cell", "log 0.4.20"]
         assert!(edges.iter().any(|e| e.parent == "left-pad"
             && e.child == "tiny-dep"
             && e.scope == EdgeScope::Runtime));
+    }
+
+    /// navcal's shape (audit A7, 2026-10-12): brace-expansion 2.0.2 is held by
+    /// a NESTED minimatch 9.0.5, which must be a parent like a hoisted one.
+    #[test]
+    fn package_lock_nested_packages_are_parents() {
+        let content = r#"{
+            "lockfileVersion": 3,
+            "packages": {
+                "": { "name": "app", "dependencies": { "glob": "^10.0.0", "minimatch": "^3.1.2" } },
+                "node_modules/minimatch": { "version": "3.1.2", "dependencies": { "brace-expansion": "^1.1.7" } },
+                "node_modules/brace-expansion": { "version": "1.1.12" },
+                "node_modules/glob": { "version": "10.4.5", "dependencies": { "minimatch": "^9.0.4" } },
+                "node_modules/glob/node_modules/minimatch": { "version": "9.0.5", "dependencies": { "brace-expansion": "^2.0.1" } },
+                "node_modules/glob/node_modules/brace-expansion": { "version": "2.0.2" },
+                "node_modules/@ts/est/node_modules/@scope/inner": { "version": "1.0.0", "dependencies": { "brace-expansion": "^2.0.1" } }
+            }
+        }"#;
+        let edges = ProjectScanner::parse_package_lock_edges(content);
+        let into_brace: Vec<(&str, Option<&str>, Option<&str>)> = edges
+            .iter()
+            .filter(|e| e.child == "brace-expansion")
+            .map(|e| {
+                (
+                    e.parent.as_str(),
+                    e.parent_version.as_deref(),
+                    e.child_version.as_deref(),
+                )
+            })
+            .collect();
+        // The first-level edge is unchanged.
+        assert!(into_brace.contains(&("minimatch", Some("3.1.2"), Some("^1.1.7"))));
+        // The nested parent is named by its own name and version.
+        assert!(into_brace.contains(&("minimatch", Some("9.0.5"), Some("^2.0.1"))));
+        // A scoped nested parent keeps its scope.
+        assert!(into_brace.contains(&("@scope/inner", Some("1.0.0"), Some("^2.0.1"))));
+        assert!(edges
+            .iter()
+            .any(|e| e.parent == "glob" && e.child == "minimatch"));
+        assert_eq!(edges.iter().filter(|e| e.parent == ROOT_PARENT).count(), 2);
+    }
+
+    /// NodeGoat's shape (audit E8): debug inside nyc's bundle (and two levels
+    /// down inside npm's) ships with its owner; `npm update debug` cannot move
+    /// it. One edge from the owner, pinned and marked bundled; the bundle's
+    /// inner packages declare none.
+    #[test]
+    fn package_lock_bundled_copies_hang_off_their_owner() {
+        let content = r#"{
+            "lockfileVersion": 2,
+            "packages": {
+                "": { "name": "app", "devDependencies": { "nyc": "^14.0.0", "npm": "^6.0.0" } },
+                "node_modules/nyc": { "version": "14.1.1", "dev": true, "bundleDependencies": ["babel-traverse", "debug"] },
+                "node_modules/nyc/node_modules/babel-traverse": { "version": "6.11.4", "dev": true, "inBundle": true, "dependencies": { "debug": "^2.2.0" } },
+                "node_modules/nyc/node_modules/debug": { "version": "2.2.0", "dev": true, "inBundle": true },
+                "node_modules/npm": { "version": "6.14.18" },
+                "node_modules/npm/node_modules/node-gyp/node_modules/array-index": { "version": "1.0.0", "inBundle": true, "dependencies": { "debug": "^2.2.0" } },
+                "node_modules/npm/node_modules/node-gyp/node_modules/array-index/node_modules/debug": { "version": "2.6.9", "inBundle": true }
+            }
+        }"#;
+        let edges = ProjectScanner::parse_package_lock_edges(content);
+        let mut into_debug: Vec<(&str, Option<&str>, Option<&str>, EdgeScope)> = edges
+            .iter()
+            .filter(|e| e.child == "debug")
+            .map(|e| {
+                (
+                    e.parent.as_str(),
+                    e.parent_version.as_deref(),
+                    e.child_version.as_deref(),
+                    e.scope,
+                )
+            })
+            .collect();
+        into_debug.sort_by_key(|e| e.0);
+        assert_eq!(
+            into_debug,
+            vec![
+                (
+                    "npm",
+                    Some("6.14.18"),
+                    Some("2.6.9 (bundled)"),
+                    EdgeScope::Runtime
+                ),
+                (
+                    "nyc",
+                    Some("14.1.1"),
+                    Some("2.2.0 (bundled)"),
+                    EdgeScope::Dev
+                ),
+            ]
+        );
+        // Bundled packages declare nothing: babel-traverse's `^2.2.0` would
+        // read as "a refresh is enough".
+        assert!(!edges.iter().any(|e| e.parent == "babel-traverse"));
+        assert!(!edges.iter().any(|e| e.parent == "array-index"));
+        // The owner itself is not bundled: an ordinary root edge.
+        assert!(edges
+            .iter()
+            .any(|e| e.parent == ROOT_PARENT && e.child == "nyc"));
     }
 
     #[test]

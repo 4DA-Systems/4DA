@@ -197,6 +197,35 @@ impl Manager {
         }
     }
 
+    /// The command that moves a DIRECT dependency to `target` where the
+    /// project declares it, run in that project's directory (audit E8: a
+    /// direct row said only "4.2 → 5.2.17"). Each was checked against the
+    /// tool on 2026-10-15 to keep the dependency in its own section:
+    /// - npm 10: `npm install` keeps a devDependency a devDependency and works
+    ///   from a workspace member (the root lockfile moves);
+    /// - pnpm 10: `pnpm up` works at a workspace root and in a member (`pnpm
+    ///   add` at a root needs `-w`) and keeps the pin style;
+    /// - yarn 1.22 `upgrade`, yarn 4 `up`: keep the section;
+    /// - cargo `add` keeps the entry's features but writes a NEW
+    ///   `[dependencies]` entry for a dev-dependency unless given `--dev`.
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "named by the rule vectors now; the Upgrade Plan and Brief direct rows call it once #961 (W1) lands (audit E8, C2)"
+        )
+    )]
+    pub fn direct_command(self, package: &str, target: &str, dev: bool) -> String {
+        match self {
+            Self::Npm => format!("npm install {package}@{target}"),
+            Self::Pnpm | Self::PnpmWorkspace => format!("pnpm up {package}@{target}"),
+            Self::YarnClassic => format!("yarn upgrade {package}@{target}"),
+            Self::YarnBerry => format!("yarn up {package}@{target}"),
+            Self::Cargo if dev => format!("cargo add {package}@{target} --dev"),
+            Self::Cargo => format!("cargo add {package}@{target}"),
+        }
+    }
+
     /// Where this tool lets a project force a transitive copy past its
     /// parent's requirement, worded to follow "with". `None` for Cargo: no
     /// manifest key moves a crate outside the line its parent requires.
@@ -214,8 +243,17 @@ impl Manager {
 
 /// The override mechanism for a project's tool, or, when the tool is not
 /// known, every npm-family one (`ecosystem_norm` is OSV-canonical). `None`
-/// for an ecosystem with no such mechanism.
-pub fn override_hint(manager: Option<Manager>, ecosystem_norm: &str) -> Option<String> {
+/// for an ecosystem with no such mechanism, and for a `bundled` copy: npm
+/// `overrides` (and pnpm's and yarn's) do not reach a dependency that ships
+/// inside its owner's tarball ([`BUNDLED_SUFFIX`]); only the owner can move.
+pub fn override_hint(
+    manager: Option<Manager>,
+    ecosystem_norm: &str,
+    bundled: bool,
+) -> Option<String> {
+    if bundled {
+        return None;
+    }
     match manager {
         Some(m) => m.override_mechanism().map(str::to_string),
         None if ecosystem_norm == "npm" => Some(
@@ -260,6 +298,62 @@ impl NpmLockfile {
             Self::Yarn => "yarn install",
         }
     }
+}
+
+/// The versions of `child` that the installed `parent` `parent_version`
+/// resolves to in a `package-lock.json` v2/v3 tree, by npm's own lookup: the
+/// parent's folder's `node_modules`, then each enclosing folder's, up to the
+/// root. `None` when the lockfile has no `packages` map (v1), so the caller
+/// keeps its range-based guess. A range alone cannot tell which copy a parent
+/// holds: NodeGoat's needle 2.2.4 (`^2.1.2`) admits debug 2.2.0 but resolves
+/// the hoisted 2.6.9, and was told `npm update debug` for a copy it never
+/// held (audit E8).
+pub(crate) fn npm_lock_resolutions(
+    lock: &serde_json::Value,
+    parent: &str,
+    parent_version: &str,
+    child: &str,
+) -> Option<Vec<String>> {
+    let pkgs = lock.get("packages")?.as_object()?;
+    let mut out: Vec<String> = Vec::new();
+    for (key, entry) in pkgs {
+        let name = key
+            .rsplit_once("node_modules/")
+            .map_or(key.as_str(), |(_, n)| n);
+        if key.is_empty()
+            || !name.eq_ignore_ascii_case(parent)
+            || entry.get("version").and_then(serde_json::Value::as_str) != Some(parent_version)
+        {
+            continue;
+        }
+        let declares = ["dependencies", "optionalDependencies", "peerDependencies"]
+            .iter()
+            .any(|s| entry.get(*s).and_then(|d| d.get(child)).is_some());
+        if !declares {
+            continue;
+        }
+        let mut base = key.as_str();
+        let resolved = loop {
+            let candidate = if base.is_empty() {
+                format!("node_modules/{child}")
+            } else {
+                format!("{base}/node_modules/{child}")
+            };
+            if let Some(found) = pkgs.get(&candidate) {
+                break found.get("version").and_then(serde_json::Value::as_str);
+            }
+            if base.is_empty() {
+                break None;
+            }
+            base = base.rsplit_once("/node_modules/").map_or("", |(b, _)| b);
+        };
+        if let Some(v) = resolved {
+            if !out.iter().any(|o| o == v) {
+                out.push(v.to_string());
+            }
+        }
+    }
+    Some(out)
 }
 
 fn is_yarn_berry(lockfile: &Path) -> bool {
@@ -487,6 +581,18 @@ fn unquote(s: &str) -> &str {
 /// Cargo treats `-` and `_` in crate names as the same crate.
 fn crate_key(name: &str) -> String {
     name.trim().to_lowercase().replace('_', "-")
+}
+
+/// Marks a `package-lock.json` edge to a BUNDLED copy (`inBundle`): the
+/// exact version the bundle owner ships, e.g. `2.2.0 (bundled)`. Every reader
+/// here sees an exact pin (the text after `(` is dropped), so no refresh is
+/// enough; and since npm `overrides` do not reach bundled dependencies, a
+/// bundled link names no override either — only a new owner release moves it.
+pub const BUNDLED_SUFFIX: &str = " (bundled)";
+
+/// The edge spec names a bundled copy ([`BUNDLED_SUFFIX`]).
+pub fn is_bundled(spec: &str) -> bool {
+    spec.ends_with(BUNDLED_SUFFIX)
 }
 
 /// The spec without a pnpm peer suffix (`4.28.1(postcss@8.4.0)`), a leading
