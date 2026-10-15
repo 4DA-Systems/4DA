@@ -16,126 +16,47 @@
 //! [`super::matching::get_matched_advisories`] — the auditable user and scanned
 //! dependency readers (identical filters, sliced to the advisory's package),
 //! unioned with every multi-version instance — and decides each copy with the
-//! SAME primitive, [`super::matching::check_version_affected`].
+//! SAME rules, the engine crate's `exposure_for_record` (single-engine C0.2).
+//! This module is its database adapter.
 
-use std::collections::HashSet;
+use fourda_depengine::matching::Package;
 
-use crate::db::{Database, StoredDependency};
+use crate::db::Database;
 
-use super::matching::{check_version_affected, is_npm_security_holding};
+use super::matching::{advisory_record, resolved_row};
 use super::types::StoredAdvisory;
 
-/// One installed copy the matcher placed inside the affected range with a
-/// parseable version (the only copies a positive verdict may cite).
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct ExposedCopy {
-    pub project_path: String,
-    pub installed_version: String,
-    pub is_direct: bool,
-    pub is_dev: bool,
-}
-
-/// The matcher's verdict for one mirror advisory against the user's
-/// auditable inventory.
-#[derive(Debug, Clone, Default)]
-pub(crate) struct AdvisoryExposure {
-    /// Copies CONFIRMED inside the affected range, worst first (runtime
-    /// before dev, direct before transitive).
-    pub confirmed: Vec<ExposedCopy>,
-    /// Copies the range could not decide (no / unparseable version) — the
-    /// matcher's conservative match; never a positive verdict on its own.
-    pub unconfirmed: usize,
-    /// Installed copies of the package that were evaluated. Zero means the
-    /// inventory does not hold the package in this ecosystem — no verdict.
-    pub copies_checked: usize,
-}
-
-fn osv_ecosystem(eco: &str) -> &str {
-    crate::ecosystem::Ecosystem::parse(eco).map_or(eco, |e| e.osv_name())
-}
-
-fn norm_path(path: &str) -> String {
-    path.replace('\\', "/")
-        .to_lowercase()
-        .trim_end_matches('/')
-        .to_string()
-}
+pub(crate) use fourda_depengine::exposure::{AdvisoryExposure, ExposedCopy};
 
 /// Run the Preemption matcher's per-copy check for ONE advisory.
 pub(crate) fn exposure_for_advisory(db: &Database, advisory: &StoredAdvisory) -> AdvisoryExposure {
-    let mut out = AdvisoryExposure::default();
     let Ok((user, scanned)) = db.get_auditable_dependencies_for_package(&advisory.package_name)
     else {
-        return out;
+        return AdvisoryExposure::default();
     };
-    let eco = osv_ecosystem(&advisory.ecosystem).to_string();
-
-    // The matcher's merge: user rows win, scanned rows fill (project, package,
-    // ecosystem) keys the user table lacks.
-    let mut seen: HashSet<String> = HashSet::new();
-    let deps: Vec<StoredDependency> = user
-        .into_iter()
-        .chain(scanned)
-        .filter(|d| osv_ecosystem(&d.ecosystem) == eco)
-        .filter(|d| seen.insert(norm_path(&d.project_path)))
+    // Resolved rows in the matcher's precedence (user rows win), then every
+    // installed copy of the package.
+    let mut inventory: Vec<Package> = user
+        .iter()
+        .chain(scanned.iter())
+        .map(resolved_row)
         .collect();
-    if deps.is_empty() {
-        return out;
+    if inventory.is_empty() {
+        return AdvisoryExposure::default();
     }
     let instances = db
         .get_dependency_instances_named(&advisory.package_name)
         .unwrap_or_default();
-
-    let mut confirmed: Vec<ExposedCopy> = Vec::new();
-    for dep in &deps {
-        let project = norm_path(&dep.project_path);
-        // Union of every installed instance of this (project, package) with
-        // the collapsed survivor, deduped by version — exactly the matcher's
-        // candidate set.
-        let mut versions: HashSet<String> = HashSet::new();
-        let mut candidates: Vec<(Option<String>, bool, bool)> = instances
-            .iter()
-            .filter(|i| norm_path(&i.project_path) == project && osv_ecosystem(&i.ecosystem) == eco)
-            .filter(|i| versions.insert(i.version.clone()))
-            .map(|i| (Some(i.version.clone()), i.is_direct, i.is_dev))
-            .collect();
-        if !dep.version.as_ref().is_some_and(|v| versions.contains(v)) {
-            candidates.push((dep.version.clone(), dep.is_direct, dep.is_dev));
-        }
-        for (version, is_direct, is_dev) in candidates {
-            if is_npm_security_holding(
-                &advisory.advisory_id,
-                &advisory.ecosystem,
-                version.as_deref(),
-            ) {
-                continue;
-            }
-            out.copies_checked += 1;
-            match check_version_affected(
-                &advisory.ecosystem,
-                version.as_deref(),
-                &advisory.affected_ranges,
-            ) {
-                (true, true) => confirmed.push(ExposedCopy {
-                    project_path: project.clone(),
-                    installed_version: version.unwrap_or_default(),
-                    is_direct,
-                    is_dev,
-                }),
-                (true, false) => out.unconfirmed += 1,
-                (false, _) => {}
-            }
-        }
-    }
-    confirmed.sort_by(|a, b| {
-        a.is_dev
-            .cmp(&b.is_dev)
-            .then_with(|| b.is_direct.cmp(&a.is_direct))
-            .then_with(|| a.project_path.cmp(&b.project_path))
-    });
-    confirmed.dedup();
-    out.confirmed = confirmed;
-    out
+    inventory.extend(instances.into_iter().map(|i| Package {
+        ecosystem: i.ecosystem,
+        project: i.project_path,
+        name: i.package_name,
+        version: Some(i.version),
+        is_direct: i.is_direct,
+        is_dev: i.is_dev,
+        primary: false,
+    }));
+    fourda_depengine::exposure::exposure_for_record(&advisory_record(advisory), &inventory)
 }
 
 #[cfg(test)]

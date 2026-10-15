@@ -14,6 +14,13 @@
 //! - `{"op":"affected","eco":"npm","version":"1.2.3","ranges":[...]}` → `{"affected":bool,"confirmed":bool}`
 //! - `{"op":"fix_target","eco":"npm","installed":"1.2.3","ranges":[[...],[...]]}`
 //!   → `{"line_fixes":[..],"walk":{"version":"..","clears_all":bool}|null}`
+//! - `{"op":"match_inventory","inventory":[Package..],"osv":[verbatim OSV records],
+//!   "records":[AdvisoryRecord..]}` → `{"records":n,"findings":[{"advisory_id",
+//!   "package_name","ecosystem","installed_version","fixed_version",
+//!   "is_version_confirmed","project_paths","dependency_instances":[..]}]}`.
+//!   `osv` records are stored the way the app's mirror stores them
+//!   ([`crate::osv::stored_records`], the first row per (id, package,
+//!   ecosystem) wins) after any `records` given as already-stored rows.
 
 use std::cmp::Ordering;
 
@@ -21,6 +28,8 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::fix_target::{fix_for_version, walk_target};
+use crate::matching::{match_inventory, Package};
+use crate::osv::{stored_records, AdvisoryRecord, OsvRecord};
 use crate::range::check_version_affected;
 use crate::version_order::OrderedVersion;
 
@@ -45,6 +54,48 @@ enum Request {
         installed: String,
         ranges: Vec<Option<Value>>,
     },
+    MatchInventory {
+        inventory: Vec<Package>,
+        #[serde(default)]
+        records: Vec<AdvisoryRecord>,
+        #[serde(default)]
+        osv: Vec<OsvRecord>,
+    },
+}
+
+/// The `match_inventory` op: stored rows plus verbatim records, matched.
+fn match_op(inventory: &[Package], mut records: Vec<AdvisoryRecord>, osv: &[OsvRecord]) -> Value {
+    let key = |r: &AdvisoryRecord| {
+        (
+            r.advisory_id.clone(),
+            r.package_name.clone(),
+            r.ecosystem.clone(),
+        )
+    };
+    let mut seen: std::collections::HashSet<(String, String, String)> =
+        records.iter().map(key).collect();
+    for row in osv.iter().flat_map(stored_records) {
+        if seen.insert(key(&row)) {
+            records.push(row);
+        }
+    }
+    let findings: Vec<Value> = match_inventory(inventory, &records)
+        .into_iter()
+        .map(|f| {
+            let r = &records[f.record];
+            json!({
+                "advisory_id": r.advisory_id,
+                "package_name": r.package_name,
+                "ecosystem": r.ecosystem,
+                "installed_version": f.installed_version,
+                "fixed_version": f.fixed_version,
+                "is_version_confirmed": f.is_version_confirmed,
+                "project_paths": f.project_paths,
+                "dependency_instances": f.dependency_instances,
+            })
+        })
+        .collect();
+    json!({ "records": records.len(), "findings": findings })
 }
 
 /// A ranges array as the stored JSON text the rules read.
@@ -89,6 +140,11 @@ fn answer(request: Request) -> Value {
                 .map(|w| json!({ "version": w.version, "clears_all": w.clears_all }));
             json!({ "line_fixes": line_fixes, "walk": walk })
         }
+        Request::MatchInventory {
+            inventory,
+            records,
+            osv,
+        } => match_op(&inventory, records, &osv),
     }
 }
 
@@ -135,6 +191,27 @@ mod tests {
             r,
             json!({"line_fixes": ["1.2.4"], "walk": {"version": "1.2.4", "clears_all": true}})
         );
+    }
+
+    #[test]
+    fn match_inventory_stores_verbatim_records_and_matches_them() {
+        let r = result(
+            r#"{"op":"match_inventory",
+                "inventory":[{"ecosystem":"javascript","project":"/p","name":"ws","version":"7.5.9","primary":true}],
+                "osv":[{"id":"GHSA-ws","modified":"x","affected":[{"package":{"name":"ws","ecosystem":"npm"},
+                  "ranges":[{"type":"SEMVER","events":[{"introduced":"7.0.0"},{"fixed":"7.5.10"}]}]}]},
+                       {"id":"GHSA-ws","affected":[{"package":{"name":"ws","ecosystem":"npm"}}]}]}"#,
+        );
+        assert_eq!(
+            r["records"], 1,
+            "a repeated (id, package, ecosystem) row is stored once"
+        );
+        let f = &r["findings"][0];
+        assert_eq!(f["advisory_id"], "GHSA-ws");
+        assert_eq!(f["is_version_confirmed"], true);
+        assert_eq!(f["fixed_version"], "7.5.10");
+        assert_eq!(f["dependency_instances"][0]["clean_version"], "7.5.10");
+        assert_eq!(f["project_paths"], json!(["/p"]));
     }
 
     #[test]

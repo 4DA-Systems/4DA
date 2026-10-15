@@ -43,3 +43,55 @@ fn depengine_pypi_aliases_match_the_app() {
         );
     }
 }
+
+/// The matcher (C0.2) joins advisories and copies on the crate's alias
+/// table; it must be the app's, alias for alias.
+#[test]
+fn depengine_osv_names_match_the_app() {
+    let candidates = [
+        "npm",
+        "javascript",
+        "TypeScript",
+        "node",
+        "js",
+        "ts",
+        "rust",
+        "cargo",
+        "crates.io",
+        "crates",
+        "python",
+        "PyPI",
+        " pip ",
+        "py",
+        "go",
+        "golang",
+        "java",
+        "maven",
+        "kotlin",
+        "gradle",
+        "csharp",
+        "C#",
+        "dotnet",
+        "nuget",
+        "php",
+        "composer",
+        "packagist",
+        "ruby",
+        "rubygems",
+        "gem",
+        "dart",
+        "flutter",
+        "pub",
+        "",
+        "swift",
+        "advisory",
+        "conda",
+    ];
+    for alias in candidates {
+        assert_eq!(
+            fourda_depengine::ecosystem::osv_name(alias),
+            Ecosystem::parse(alias).map(Ecosystem::osv_name),
+            "osv_name({alias:?}) disagrees with crate::ecosystem"
+        );
+    }
+}

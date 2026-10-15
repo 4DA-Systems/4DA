@@ -525,95 +525,23 @@ pub(super) fn store_vulnerability(
 }
 
 /// One advisory's affected entries grouped by (package, ecosystem), in first
-/// appearance order, with their ranges UNIONED. OSV can list the SAME package
-/// in MULTIPLE affected entries (different version branches, e.g. next
-/// [13.4.6,15.5.16) AND [16.0.0,16.2.5)). osv_advisories holds one row per
-/// (advisory, package), so keeping only the first dropped the branch that
-/// matched the user's pinned version — a completeness gap the live cycle
-/// exposed (this is the mirror-path twin of the same fix in
-/// sources/osv_live.rs). An explicit `versions` list becomes an
-/// [`super::types::ENUMERATED_RANGE`] range. Shared with the rule vectors
-/// (`vectors_tests`), so they evaluate a record exactly as it is stored.
+/// appearance order, with their ranges UNIONED and an explicit `versions`
+/// list as an `ENUMERATED` range. The rule lives in the
+/// pure engine crate (`fourda_depengine::osv::merge_affected`, single-engine
+/// C0.2), so the mirror, the conformance harness, the rule vectors and the
+/// wasm module store a record identically.
 pub(super) fn merge_affected(vuln: &Vulnerability) -> Vec<((String, String), Affected)> {
-    let affected_list = vuln.affected.as_deref().unwrap_or(&[]);
-    let mut by_pkg: std::collections::HashMap<(String, String), Affected> =
-        std::collections::HashMap::new();
-    let mut order: Vec<(String, String)> = Vec::new();
-    for affected in affected_list {
-        let Some(pkg) = &affected.package else {
-            continue;
-        };
-        let key = (pkg.name.clone(), pkg.ecosystem.clone());
-        let merged = by_pkg.entry(key.clone()).or_insert_with(|| {
-            order.push(key.clone());
-            Affected {
-                package: Some(pkg.clone()),
-                ranges: Some(Vec::new()),
-                versions: None,
-            }
-        });
-        if let Some(ranges) = &affected.ranges {
-            merged
-                .ranges
-                .get_or_insert_with(Vec::new)
-                .extend(ranges.iter().cloned());
-        }
-        if let Some(versions) = affected.versions.as_ref().filter(|v| !v.is_empty()) {
-            merged
-                .ranges
-                .get_or_insert_with(Vec::new)
-                .push(super::types::Range {
-                    range_type: super::types::ENUMERATED_RANGE.to_string(),
-                    events: Some(
-                        versions
-                            .iter()
-                            .cloned()
-                            .map(serde_json::Value::from)
-                            .collect(),
-                    ),
-                });
-        }
-    }
-    order
-        .into_iter()
-        .filter_map(|key| by_pkg.remove(&key).map(|affected| (key, affected)))
-        .collect()
+    fourda_depengine::osv::merge_affected(vuln.affected.as_deref().unwrap_or(&[]))
 }
 
 /// Serialize the affected ranges to JSON for storage.
 pub(super) fn serialize_ranges(affected: &Affected) -> Option<String> {
-    affected
-        .ranges
-        .as_ref()
-        .and_then(|r| serde_json::to_string(r).ok())
+    fourda_depengine::osv::serialize_ranges(affected)
 }
 
 /// Extract fixed versions from range events.
 fn extract_fixed_versions(affected: &Affected) -> Option<String> {
-    let fixed: Vec<String> = affected
-        .ranges
-        .as_ref()
-        .map(|ranges| {
-            ranges
-                .iter()
-                .filter_map(|r| r.events.as_ref())
-                .flatten()
-                .filter_map(|event| {
-                    event
-                        .as_object()
-                        .and_then(|obj| obj.get("fixed"))
-                        .and_then(|v| v.as_str())
-                        .map(String::from)
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-
-    if fixed.is_empty() {
-        None
-    } else {
-        serde_json::to_string(&fixed).ok()
-    }
+    fourda_depengine::osv::fixed_versions_json(affected)
 }
 
 #[cfg(test)]

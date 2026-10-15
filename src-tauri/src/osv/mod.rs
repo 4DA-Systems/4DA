@@ -8,6 +8,8 @@ pub(crate) mod advisory_match;
 pub(crate) mod cache;
 #[cfg(test)]
 mod conformance_tests;
+#[cfg(test)]
+mod engine_snapshot_tests;
 pub(crate) mod exposure;
 pub(crate) mod fix_path;
 pub(crate) mod fix_target;
