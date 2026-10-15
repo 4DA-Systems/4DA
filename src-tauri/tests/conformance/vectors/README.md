@@ -41,6 +41,7 @@ Field conventions:
   was read and the verdict comes from semver compatibility; `unknown` always
   has `inferred: true`. `via` lists the parents whose requirement was read
   and excludes the target, in input order.
+- `requirements[].bundled: true` marks a copy shipped inside its parent's tarball (package-lock `inBundle`): `text` is the exact version shipped. The optional top-level `override` says whether an override (npm `overrides`, pnpm `pnpm.overrides`, yarn `resolutions`) may be offered for the copy; lines without it do not check it.
 - `requirements[].dialect` is `npm` (a bare version is an exact pin, `||`
   unions, spaces AND) or `cargo` (a bare version is a caret, commas AND).
 - A `fix_target` `target` is compared as a version (build metadata ignored).
@@ -147,6 +148,7 @@ form.
 - Cargo requirement syntax (bare = caret, `=`, `~`, comma AND): rv-052..rv-059
 - The semver fallback, including the 0.0.z caret: rv-049, rv-050, rv-060..rv-064 (0.0.z: rv-046, rv-057, rv-063, rv-064)
 - Nothing readable at all, so no verdict: rv-065
+- A bundled copy (package-lock `inBundle`, requirement `bundled: true`) is pinned by its owner: the parent must move and no override is offered (`override: false`): rv-066, rv-067. An ordinary exact pin also needs its parent to move but does take an override: rv-068 (audit E8)
 
 ### Command — AD-055 ¶4
 
@@ -162,7 +164,7 @@ form.
 - yarn 1, no command: fc-011, fc-012
 - Cargo: fc-013..fc-020
 - Tools no command is named for (pip, poetry, uv, pipenv, go, bundler, composer): fc-021..fc-027
-- A direct dependency (`kind: "direct"`, audit E8): `npm install <pkg>@<target>` (fc-028, fc-029), `pnpm up <pkg>@<target>` at a member or a workspace root (fc-030, fc-031), `yarn upgrade` / `yarn up` (fc-032, fc-033), `cargo add <pkg>@<target>`, with `--dev` for a dev-dependency (fc-034, fc-035); none for go or pip (fc-036, fc-037). The TypeScript engine skips these until it implements them (`engines_skip.json`).
+- A direct dependency (`kind: "direct"`, audit E8): `npm install <pkg>@<target>` (fc-028, fc-029), `pnpm up <pkg>@<target>` at a member or a workspace root (fc-030, fc-031), `yarn upgrade` / `yarn up` (fc-032, fc-033), `cargo add <pkg>@<target>`, with `--dev` for a dev-dependency (fc-034, fc-035); none for go or pip (fc-036, fc-037). `@4da/mcp-server` implements these with the same pin (its own `conformance/vectors-skip.json` stays empty).
 
 ### Constraint checks — `@4da/mcp-server` 6.2.0 CHANGELOG
 

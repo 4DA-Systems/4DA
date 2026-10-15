@@ -30,16 +30,5 @@
     "rc-027": "not implemented in Rust: range_check exists only in @4da/mcp-server (6.2.0 dependency_check)",
     "rc-028": "not implemented in Rust: range_check exists only in @4da/mcp-server (6.2.0 dependency_check)"
   },
-  "ts": {
-    "fc-028": "not implemented in @4da/mcp-server: direct-upgrade commands (audit E8) exist only in the Rust engine so far",
-    "fc-029": "not implemented in @4da/mcp-server: direct-upgrade commands (audit E8) exist only in the Rust engine so far",
-    "fc-030": "not implemented in @4da/mcp-server: direct-upgrade commands (audit E8) exist only in the Rust engine so far",
-    "fc-031": "not implemented in @4da/mcp-server: direct-upgrade commands (audit E8) exist only in the Rust engine so far",
-    "fc-032": "not implemented in @4da/mcp-server: direct-upgrade commands (audit E8) exist only in the Rust engine so far",
-    "fc-033": "not implemented in @4da/mcp-server: direct-upgrade commands (audit E8) exist only in the Rust engine so far",
-    "fc-034": "not implemented in @4da/mcp-server: direct-upgrade commands (audit E8) exist only in the Rust engine so far",
-    "fc-035": "not implemented in @4da/mcp-server: direct-upgrade commands (audit E8) exist only in the Rust engine so far",
-    "fc-036": "not implemented in @4da/mcp-server: direct-upgrade commands (audit E8) exist only in the Rust engine so far",
-    "fc-037": "not implemented in @4da/mcp-server: direct-upgrade commands (audit E8) exist only in the Rust engine so far"
-  }
+  "ts": {}
 }

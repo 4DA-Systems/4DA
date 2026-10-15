@@ -225,6 +225,10 @@ fn check_refresh_verdict(v: &Value) -> Result<(), String> {
             let text = s(r, "text");
             let req = if s(r, "dialect") == "cargo" {
                 Requirement::cargo(text)
+            } else if r.get("bundled").and_then(Value::as_bool) == Some(true) {
+                // A bundled copy: the owner's tarball pins the shipped version,
+                // spelled as the scanner stores it (audit E8).
+                Requirement::npm(&format!("{text}{}", crate::osv::fix_path::BUNDLED_SUFFIX))
             } else {
                 Requirement::npm(text)
             };
@@ -251,6 +255,20 @@ fn check_refresh_verdict(v: &Value) -> Result<(), String> {
         .filter_map(Value::as_str)
         .collect();
     let want_inferred = v.get("inferred").and_then(Value::as_bool).unwrap_or(false);
+    // `override` (optional): whether an override may be offered for this
+    // copy — never when any blocking parent ships it bundled (audit E8).
+    if let Some(want_override) = v.get("override").and_then(Value::as_bool) {
+        let bundled = only
+            .iter()
+            .any(|r| crate::osv::fix_path::is_bundled(&r.text) && r.admits(target) == Some(false));
+        let manager = (s(v, "eco") == "npm").then_some(crate::osv::fix_path::Manager::Npm);
+        let offered = crate::osv::fix_path::override_hint(manager, s(v, "eco"), bundled).is_some();
+        if offered != want_override {
+            return Err(format!(
+                "override offered: got {offered}, want {want_override}"
+            ));
+        }
+    }
     if verdict != s(v, "verdict") || inferred != want_inferred || via != want_via {
         return Err(format!(
             "got ({verdict}, inferred {inferred}, via {via:?}), want ({}, inferred {want_inferred}, via {want_via:?})",
