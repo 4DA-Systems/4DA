@@ -9,6 +9,7 @@ import { formatLocalDateTime } from '../../utils/format-date';
 import { useTranslatedContent } from '../ContentTranslationProvider';
 import { cmd } from '../../lib/commands';
 import { extractTechTopics } from '../../lib/known-tech';
+import { isActivityTrackingEnabled } from '../../hooks/use-telemetry';
 
 interface ResultItemCollapsedProps {
   item: SourceRelevance;
@@ -69,6 +70,8 @@ export const ResultItemCollapsed = memo(function ResultItemCollapsed({
   );
 
   const recordTitleClick = useCallback(() => {
+    // Opening an item is a passive activity signal, gated on the opt-in.
+    if (!isActivityTrackingEnabled()) return;
     const topics = extractTechTopics(item.title);
     cmd('ace_record_interaction', {
       itemId: item.id,

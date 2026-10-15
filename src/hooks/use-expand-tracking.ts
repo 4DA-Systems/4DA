@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { useRef, useEffect } from 'react';
 import { cmd } from '../lib/commands';
+import { isActivityTrackingEnabled } from './use-telemetry';
 
 /**
  * Classifies a click interaction into an InteractionPattern from available
@@ -54,6 +55,9 @@ function emitExpandSignals(
   dwellSeconds: number,
   label: string,
 ) {
+  // Dwell time is "view duration" — exactly what the Local activity tracking
+  // opt-in (off by default) promises not to record without consent.
+  if (!isActivityTrackingEnabled()) return;
   const pattern = classifyInteractionPattern(dwellSeconds);
 
   // Click + dwell + pattern. Pattern is the load-bearing field — a bounced

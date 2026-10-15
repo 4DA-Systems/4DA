@@ -30,6 +30,16 @@ export function setActivityTrackingEnabled(enabled: boolean): void {
 }
 
 /**
+ * True only after the user opted in to local activity tracking. Every passive
+ * signal (view opens, expand dwell, title clicks) checks this before writing
+ * anything. Explicit feedback the user gives on purpose (save, dismiss,
+ * thumbs, mark irrelevant) is not activity tracking and does not.
+ */
+export function isActivityTrackingEnabled(): boolean {
+  return activityTrackingEnabled === true;
+}
+
+/**
  * Fire-and-forget telemetry event.
  *
  * All data stays in local SQLite — no network calls, no external
@@ -41,7 +51,7 @@ export function trackEvent(
   viewId?: string,
   metadata?: Record<string, unknown>,
 ): void {
-  if (activityTrackingEnabled !== true) return;
+  if (!isActivityTrackingEnabled()) return;
   void cmd('track_event', {
     eventType,
     viewId,
