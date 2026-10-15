@@ -653,12 +653,6 @@
       "reason": "pre-existing backlog — registered but no frontend call site"
     },
     {
-      "command": "toolkit_env_snapshot",
-      "since": "2026-08-14",
-      "rust": "src-tauri/src/toolkit.rs:286",
-      "reason": "pre-existing backlog — registered but no frontend call site"
-    },
-    {
       "command": "toolkit_generate_export_pack",
       "since": "2026-08-14",
       "rust": "src-tauri/src/toolkit_export.rs:29",
