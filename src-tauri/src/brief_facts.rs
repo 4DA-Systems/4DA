@@ -260,6 +260,10 @@ pub(crate) struct BriefFacts {
     /// Where the advisory check stands. Anything but `Ready` forbids an
     /// all-clear (audit E3); `None` (not read: tests) is treated as ready.
     pub advisories: Option<crate::osv::readiness::AdvisorySyncState>,
+    /// Project folders the last lockfile walk skipped as copies inside the
+    /// OS temp directory. With `NoInventory` that, not coverage, is why
+    /// nothing was checked.
+    pub advisory_temp_skipped: u32,
 }
 
 // ============================================================================
@@ -983,6 +987,8 @@ pub(crate) fn fingerprint(
 #[path = "brief_facts_build.rs"]
 mod build;
 pub(crate) use build::build_brief_facts;
+#[cfg(test)]
+pub(crate) use build::with_advisory_state;
 #[cfg(test)]
 use build::{copy_fix, own_package_names, CopyFix};
 

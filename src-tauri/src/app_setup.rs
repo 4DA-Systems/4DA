@@ -539,23 +539,25 @@ async fn persist_one_time_flag(db: &crate::db::Database, key: &str, version: &st
     }
 }
 
-/// Launch's advisory sync: sync when due (through the shared gate), refresh
-/// the offline ZIP caches after a sync, then warm Preemption after first light
-/// either way — the recompute is CPU-heavy and must not starve boot.
+/// Launch's advisory sync: sync when due and refresh the offline ZIP caches,
+/// both inside the shared gate (the cache refresh rewrites the archives in
+/// place, so it must not overlap another sync), then warm Preemption after
+/// first light either way: the recompute is CPU-heavy and must not starve
+/// boot.
 async fn startup_advisory_sync() {
     use crate::osv::readiness::refresh::Outcome;
     let Ok(db) = crate::get_database() else {
         return;
     };
-    match crate::osv::readiness::refresh::sync_if_due(&db).await {
+    match crate::osv::readiness::refresh::sync_with_caches_if_due(&db).await {
         Outcome::NotDue => {
-            info!(target: "4da::osv", "OSV mirror current (or no dependencies) — skipping startup sync");
+            info!(target: "4da::osv", "OSV mirror current (or no dependencies) - skipping startup sync");
         }
         Outcome::Busy => {
-            info!(target: "4da::osv", "An advisory sync is already running — startup sync skipped");
+            info!(target: "4da::osv", "An advisory sync is already running - startup sync skipped");
         }
-        Outcome::Ran(result) => {
-            match result {
+        Outcome::Ran((sync, caches)) => {
+            match sync {
                 Ok(r) => info!(
                     target: "4da::osv",
                     stored = r.advisories_stored,
@@ -564,11 +566,11 @@ async fn startup_advisory_sync() {
                     "Background OSV sync complete"
                 ),
                 Err(e) => {
-                    warn!(target: "4da::osv", error = %e, "Background OSV sync failed (the scheduler retries)");
+                    warn!(target: "4da::osv", error = %e, "Background OSV sync failed (retried after a back-off)");
                 }
             }
             // Stale checks are cheap (HTTP HEAD), downloads only when ETags differ.
-            match crate::osv::cache::update_all_caches(&db).await {
+            match caches {
                 Ok(r) if !r.ecosystems_updated.is_empty() => info!(
                     target: "4da::osv::cache",
                     updated = ?r.ecosystems_updated,
@@ -584,6 +586,7 @@ async fn startup_advisory_sync() {
     }
     warm_preemption_cache_after_first_light("osv-startup").await;
 }
+
 async fn warm_preemption_cache_after_first_light(reason: &'static str) {
     const WAIT_FOR_FRONTEND: std::time::Duration = std::time::Duration::from_secs(90);
     // The data this warm is for (the OSV mirror, synced or current) is in

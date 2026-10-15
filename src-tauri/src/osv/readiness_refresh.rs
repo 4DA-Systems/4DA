@@ -23,7 +23,7 @@
 //! the sync's writes are upserts.
 
 use std::future::Future;
-use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU32, Ordering};
 use std::sync::OnceLock;
 
 use sha2::{Digest, Sha256};
@@ -40,19 +40,27 @@ use crate::osv::types::SyncResult;
 /// fresh the ecosystem's sync time looks.
 const INVENTORY_KV_KEY: &str = "osv.synced_inventory.v1";
 
-/// After a failed sync the scheduler waits this long before retrying a merely
-/// stale mirror (a changed inventory and "Check now" still run at once), so
-/// an offline machine does not hammer OSV every few minutes.
-const RETRY_AFTER_FAILURE_SECS: i64 = 30 * 60;
+/// Back-off after a failed or partial sync: 5, then 15, then 30 minutes
+/// (the cap), reset by a clean sync. It applies to every automatic trigger,
+/// a changed inventory included: a sync that keeps failing (OSV rate limits,
+/// offline) would otherwise re-POST the whole inventory, and re-fetch the
+/// ecosystem archives, on every full check (PR #961 review). "Check now"
+/// bypasses it.
+const RETRY_BACKOFF_SECS: [i64; 3] = [5 * 60, 15 * 60, 30 * 60];
 
 /// The scheduler's full due check (it reads the whole inventory) runs at most
-/// this often; the cheap never-synced probe runs on every tick.
+/// this often (stretched by the battery/CPU policy); the cheap never-synced
+/// probe can run on every tick.
 const FULL_CHECK_EVERY_SECS: i64 = 5 * 60;
 
 static GUI_TRIGGERS: AtomicBool = AtomicBool::new(false);
 static IN_FLIGHT: AtomicBool = AtomicBool::new(false);
-static LAST_FAILURE_AT: AtomicI64 = AtomicI64::new(0);
 static LAST_FULL_CHECK_AT: AtomicI64 = AtomicI64::new(0);
+/// The probe already led to a check that found nothing due (an inventory of
+/// only uncovered ecosystems never writes a sync row, so the probe would fire
+/// every minute forever). Re-armed by a scan.
+static PROBE_SPENT: AtomicBool = AtomicBool::new(false);
+static BACKOFF: Backoff = Backoff::new();
 
 fn gate() -> &'static Mutex<()> {
     static GATE: OnceLock<Mutex<()>> = OnceLock::new();
@@ -88,7 +96,8 @@ pub(crate) enum Trigger {
 pub(crate) enum Outcome<T> {
     /// Another desktop sync holds the gate.
     Busy,
-    /// Nothing to do: no inventory, or the mirror covers it and is fresh.
+    /// Nothing to do: no inventory, the mirror covers it and is fresh, or the
+    /// failure back-off is running.
     NotDue,
     Ran(T),
 }
@@ -106,6 +115,49 @@ impl<'a> InFlight<'a> {
 impl Drop for InFlight<'_> {
     fn drop(&mut self) {
         self.0.store(false, Ordering::SeqCst);
+    }
+}
+
+/// The failure back-off: when the last failure was and how many in a row.
+pub(crate) struct Backoff {
+    failed_at: AtomicI64,
+    streak: AtomicU32,
+}
+
+impl Backoff {
+    pub(crate) const fn new() -> Self {
+        Self {
+            failed_at: AtomicI64::new(0),
+            streak: AtomicU32::new(0),
+        }
+    }
+
+    /// Seconds to wait after `streak` failures in a row (0 for none).
+    pub(crate) fn delay_secs(streak: u32) -> i64 {
+        let Some(i) = streak.checked_sub(1) else {
+            return 0;
+        };
+        let i = usize::try_from(i).unwrap_or(usize::MAX);
+        RETRY_BACKOFF_SECS[i.min(RETRY_BACKOFF_SECS.len() - 1)]
+    }
+
+    /// Inside the back-off window at `now`.
+    pub(crate) fn blocked(&self, now: i64) -> bool {
+        let streak = self.streak.load(Ordering::SeqCst);
+        streak > 0 && now - self.failed_at.load(Ordering::SeqCst) < Self::delay_secs(streak)
+    }
+
+    /// A sync finished: clean resets, anything else extends the streak.
+    pub(crate) fn record(&self, clean: bool, now: i64) {
+        if clean {
+            self.streak.store(0, Ordering::SeqCst);
+            self.failed_at.store(0, Ordering::SeqCst);
+        } else {
+            let streak = self.streak.load(Ordering::SeqCst);
+            self.streak
+                .store(streak.saturating_add(1), Ordering::SeqCst);
+            self.failed_at.store(now, Ordering::SeqCst);
+        }
     }
 }
 
@@ -133,9 +185,61 @@ where
     Outcome::Ran(run().await)
 }
 
-/// The due rule. Pure. A changed inventory is always due (its new packages
-/// have no advisories stored); a stale or never-synced mirror is due unless a
-/// sync failed within the retry window.
+/// [`run_exclusive`] with a follow-up that runs only after the sync ran,
+/// still holding the gate: launch's offline-archive refresh rewrites the
+/// ecosystem ZIPs in place, so it must never overlap another sync.
+pub(crate) async fn run_exclusive_then<D, F, Fut, T, A, AFut, U>(
+    gate: &Mutex<()>,
+    flag: &AtomicBool,
+    due: D,
+    run: F,
+    after: A,
+) -> Outcome<(T, U)>
+where
+    D: FnOnce() -> bool,
+    F: FnOnce() -> Fut,
+    Fut: Future<Output = T>,
+    A: FnOnce() -> AFut,
+    AFut: Future<Output = U>,
+{
+    run_exclusive(gate, flag, due, || async {
+        let ran = run().await;
+        (ran, after().await)
+    })
+    .await
+}
+
+/// "Check now" through the gate. A free gate runs at once. A busy gate is
+/// waited for, then `due_after_wait()` decides: the sync it waited on may
+/// already have been the check. `None` = waited, nothing left to do.
+pub(crate) async fn run_check_now<D, F, Fut, T>(
+    gate: &Mutex<()>,
+    flag: &AtomicBool,
+    due_after_wait: D,
+    run: F,
+) -> Option<T>
+where
+    D: FnOnce() -> bool,
+    F: FnOnce() -> Fut,
+    Fut: Future<Output = T>,
+{
+    let _guard = match gate.try_lock() {
+        Ok(guard) => guard,
+        Err(_) => {
+            let guard = gate.lock().await;
+            if !due_after_wait() {
+                return None;
+            }
+            guard
+        }
+    };
+    let _mark = InFlight::mark(flag);
+    Some(run().await)
+}
+
+/// The due rule. Pure. A changed inventory (its new packages have no
+/// advisories stored) or a stale / never-synced mirror is due — unless the
+/// failure back-off is running.
 pub(crate) fn sync_due(
     stale: bool,
     synced_inventory: Option<&str>,
@@ -143,7 +247,7 @@ pub(crate) fn sync_due(
     retry_blocked: bool,
 ) -> bool {
     let changed = synced_inventory.is_some_and(|synced| synced != inventory);
-    changed || (stale && !retry_blocked)
+    (changed || stale) && !retry_blocked
 }
 
 /// Fingerprint of the auditable inventory (the packages the sync reads), or
@@ -174,25 +278,17 @@ pub(crate) fn inventory_fingerprint(db: &Database) -> Option<String> {
     Some(hex::encode(hasher.finalize()))
 }
 
-fn retry_blocked(now: i64) -> bool {
-    let failed_at = LAST_FAILURE_AT.load(Ordering::SeqCst);
-    failed_at > 0 && now - failed_at < RETRY_AFTER_FAILURE_SECS
-}
-
-/// Whether a desktop sync is due now, read from the database.
-fn due_now(db: &Database) -> bool {
+/// Whether a desktop sync is due at `now`, read from the database. With
+/// `honor_backoff` false ("Check now") a recent failure does not block it.
+pub(crate) fn due_at(db: &Database, backoff: &Backoff, honor_backoff: bool, now: i64) -> bool {
     let Some(inventory) = inventory_fingerprint(db) else {
         return false;
     };
     let stale = crate::osv::sync::needs_sync(db, crate::osv::sync::osv_sync_max_age_hours())
         .unwrap_or(true);
     let synced = db.get_kv(INVENTORY_KV_KEY).ok().flatten();
-    sync_due(
-        stale,
-        synced.as_deref(),
-        &inventory,
-        retry_blocked(now_secs()),
-    )
+    let blocked = honor_backoff && backoff.blocked(now);
+    sync_due(stale, synced.as_deref(), &inventory, blocked)
 }
 
 /// Run the sync and record what it covered. The fingerprint is taken BEFORE
@@ -201,25 +297,47 @@ fn due_now(db: &Database) -> bool {
 async fn run_sync(db: &Database) -> Result<SyncResult> {
     let inventory = inventory_fingerprint(db);
     let result = crate::osv::sync::sync(db).await;
-    match &result {
-        Ok(r) if r.errors.is_empty() => {
-            LAST_FAILURE_AT.store(0, Ordering::SeqCst);
-            if let Some(inventory) = inventory {
-                if let Err(e) = db.set_kv(INVENTORY_KV_KEY, &inventory) {
-                    warn!(target: "4da::osv", error = %e, "Could not record the synced inventory");
-                }
+    let clean = matches!(&result, Ok(r) if r.errors.is_empty());
+    BACKOFF.record(clean, now_secs());
+    if clean {
+        if let Some(inventory) = inventory {
+            if let Err(e) = db.set_kv(INVENTORY_KV_KEY, &inventory) {
+                warn!(target: "4da::osv", error = %e, "Could not record the synced inventory");
             }
         }
-        _ => LAST_FAILURE_AT.store(now_secs(), Ordering::SeqCst),
     }
     result
 }
 
-/// One gated attempt: sync when due, without warming anything. For launch,
-/// which warms Preemption on its own schedule (after first light).
+/// One gated attempt: sync when due, without warming anything.
 pub(crate) async fn sync_if_due(db: &Database) -> Outcome<Result<SyncResult>> {
-    run_exclusive(gate(), &IN_FLIGHT, || due_now(db), || run_sync(db)).await
+    run_exclusive(
+        gate(),
+        &IN_FLIGHT,
+        || due_at(db, &BACKOFF, true, now_secs()),
+        || run_sync(db),
+    )
+    .await
 }
+
+/// Launch's attempt: sync when due, then refresh the offline archive caches,
+/// both inside the gate. Launch warms Preemption on its own schedule (after
+/// first light).
+pub(crate) async fn sync_with_caches_if_due(db: &Database) -> Outcome<(SyncOutcome, CacheOutcome)> {
+    run_exclusive_then(
+        gate(),
+        &IN_FLIGHT,
+        || due_at(db, &BACKOFF, true, now_secs()),
+        || run_sync(db),
+        || crate::osv::cache::update_all_caches(db),
+    )
+    .await
+}
+
+/// A sync's result.
+pub(crate) type SyncOutcome = Result<SyncResult>;
+/// An offline-archive refresh's result.
+pub(crate) type CacheOutcome = Result<crate::osv::types::CacheUpdateResult>;
 
 /// One gated attempt, then a Preemption recompute so findings appear without
 /// any user action.
@@ -229,7 +347,12 @@ async fn refresh_if_due(trigger: Trigger) {
     };
     match sync_if_due(&db).await {
         Outcome::Busy => debug!(target: "4da::osv", ?trigger, "Advisory sync already running"),
-        Outcome::NotDue => debug!(target: "4da::osv", ?trigger, "Advisory mirror current"),
+        Outcome::NotDue => {
+            if trigger == Trigger::Scheduler {
+                PROBE_SPENT.store(true, Ordering::SeqCst);
+            }
+            debug!(target: "4da::osv", ?trigger, "Advisory sync not due");
+        }
         Outcome::Ran(Ok(r)) => {
             info!(
                 target: "4da::osv",
@@ -243,7 +366,7 @@ async fn refresh_if_due(trigger: Trigger) {
             crate::preemption::warm_preemption_cache().await;
         }
         Outcome::Ran(Err(e)) => {
-            warn!(target: "4da::osv", ?trigger, error = %e, "Advisory sync failed; the scheduler retries");
+            warn!(target: "4da::osv", ?trigger, error = %e, "Advisory sync failed; retried after a back-off");
         }
     }
 }
@@ -253,21 +376,47 @@ pub(crate) fn spawn_if_due(trigger: Trigger) {
     if !GUI_TRIGGERS.load(Ordering::SeqCst) || sync_in_flight() {
         return;
     }
+    if trigger == Trigger::Scan {
+        PROBE_SPENT.store(false, Ordering::SeqCst);
+    }
     tauri::async_runtime::spawn(refresh_if_due(trigger));
 }
 
-/// The scheduler's per-tick hook. A cheap probe (dependencies stored, no
-/// ecosystem ever synced) starts the first sync on the next tick; the full
-/// due check, which reads the whole inventory, runs every few minutes.
+/// The scheduler tick's decision. Pure. Nothing while the battery/CPU policy
+/// holds background work; the full check once per `full_every`; in between,
+/// the never-synced `probe` — skipped inside the failure back-off and once it
+/// has led to a check that found nothing due.
+pub(crate) fn tick_wants_check(
+    policy_allows: bool,
+    since_full_check: i64,
+    full_every: i64,
+    backoff_blocked: bool,
+    probe_spent: bool,
+    probe: impl FnOnce() -> bool,
+) -> bool {
+    policy_allows
+        && (since_full_check >= full_every || (!backoff_blocked && !probe_spent && probe()))
+}
+
+/// The scheduler's per-tick hook.
 pub(crate) fn on_scheduler_tick() {
     if !GUI_TRIGGERS.load(Ordering::SeqCst) || sync_in_flight() {
         return;
     }
     let now = now_secs();
-    let full_check_due = now - LAST_FULL_CHECK_AT.load(Ordering::SeqCst) >= FULL_CHECK_EVERY_SECS;
-    // Offline after a failure: the probe would only find the retry window
-    // closed, so skip it until the window passes (the full check still runs).
-    if full_check_due || (!retry_blocked(now) && never_synced_with_inventory()) {
+    let full_every = i64::try_from(crate::scheduler_gate::effective_interval(
+        FULL_CHECK_EVERY_SECS.unsigned_abs(),
+    ))
+    .unwrap_or(FULL_CHECK_EVERY_SECS);
+    let wants = tick_wants_check(
+        crate::scheduler_gate::should_run_job(crate::scheduler_gate::JobPriority::High),
+        now - LAST_FULL_CHECK_AT.load(Ordering::SeqCst),
+        full_every,
+        BACKOFF.blocked(now),
+        PROBE_SPENT.load(Ordering::SeqCst),
+        never_synced_with_inventory,
+    );
+    if wants {
         LAST_FULL_CHECK_AT.store(now, Ordering::SeqCst);
         spawn_if_due(Trigger::Scheduler);
     }
@@ -287,25 +436,27 @@ fn never_synced_with_inventory() -> bool {
     .unwrap_or(false)
 }
 
-/// "Check now": always syncs, through the same gate. When another sync held
-/// the gate, it waits for it and then syncs only if that sync left the mirror
-/// stale or the inventory changed — the sync it waited on was the check.
+/// "Check now": an explicit request, so the failure back-off does not apply.
+/// After waiting behind another sync it runs only if that one left the
+/// mirror stale or the inventory changed (a failed sync leaves it stale, so
+/// this runs) — never a silent no-op behind a failure.
 pub(crate) async fn sync_now(db: &Database) -> Result<SyncResult> {
-    let (_guard, waited) = match gate().try_lock() {
-        Ok(guard) => (guard, false),
-        Err(_) => (gate().lock().await, true),
-    };
-    if waited && !due_now(db) {
-        return Ok(SyncResult {
+    let ran = run_check_now(
+        gate(),
+        &IN_FLIGHT,
+        || due_at(db, &BACKOFF, false, now_secs()),
+        || run_sync(db),
+    )
+    .await;
+    ran.unwrap_or_else(|| {
+        Ok(SyncResult {
             ecosystems_synced: Vec::new(),
             advisories_stored: 0,
             advisories_matched: 0,
             duration_ms: 0,
             errors: Vec::new(),
-        });
-    }
-    let _mark = InFlight::mark(&IN_FLIGHT);
-    run_sync(db).await
+        })
+    })
 }
 
 #[cfg(test)]

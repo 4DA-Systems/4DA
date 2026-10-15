@@ -70,6 +70,27 @@ describe('CelebrationState after a project scan', () => {
     expect(screen.queryByText('firstRun.relevantToYou')).toBeNull();
     expect(screen.queryByText(/Nothing matched yet/)).toBeNull();
     expect(screen.queryByText('firstRun.addSignalCta')).toBeNull();
+    // PR #961 review: the ecosystem count was wrong (Go/Ruby/PHP lumped into
+    // one bucket) and informed nothing, so it is not shown.
+    expect(screen.queryByText('firstRun.ecosystems')).toBeNull();
+  });
+
+  it('a stale advisory check says so, not "starts within a few minutes"', () => {
+    render(
+      <CelebrationState
+        relevantCount={0}
+        totalCount={400}
+        topSignal={null}
+        stackInsights={[]}
+        embeddingMode={null}
+        scanSummary={{
+          ...summary,
+          advisory_sync: { ...summary.advisory_sync, state: 'stale' as const, in_flight: false },
+        }}
+        onDismiss={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId('first-run-advisory')).toHaveTextContent('firstRun.advisory.stale');
   });
 
   it('without a scan, the relevance view is unchanged', () => {

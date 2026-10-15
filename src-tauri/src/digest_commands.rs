@@ -121,7 +121,9 @@ pub(crate) async fn generate_briefing_internal(
 
     let act_now = crate::brief_cadence::act_now_ids(&facts);
     if auto_triggered {
-        if let Some(cached) = try_reuse_recent_briefing(db, &facts.fingerprint, &act_now) {
+        if let Some(cached) =
+            try_reuse_recent_briefing(db, &facts.fingerprint, &act_now, facts.advisories_ready())
+        {
             return Ok(cached);
         }
     }
@@ -274,7 +276,13 @@ pub(crate) async fn generate_briefing_internal(
             // Join trailer indices back to the candidate slate's real ids.
             // `slate_ids` came out of the same pass that rendered the prompt.
             crate::brief_rejections::record_rejections(db, briefing_id, &rejects, &slate_ids);
-            remember_fingerprint(db, briefing_id, &facts.fingerprint, &act_now);
+            remember_fingerprint(
+                db,
+                briefing_id,
+                &facts.fingerprint,
+                &act_now,
+                facts.advisories_ready(),
+            );
             crate::brief_cadence::note_brief_written(db, auto_triggered);
         }
         Err(e) => {
@@ -318,6 +326,7 @@ fn serve_deterministic(
                 id,
                 &facts.fingerprint,
                 &crate::brief_cadence::act_now_ids(facts),
+                facts.advisories_ready(),
             );
             crate::brief_cadence::note_brief_written(db, auto_triggered);
         }

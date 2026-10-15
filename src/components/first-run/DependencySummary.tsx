@@ -23,14 +23,15 @@ function advisoryKey(state: AdvisorySyncState): string {
     case 'no_inventory':
       return 'firstRun.advisory.uncovered';
     case 'not_started':
-    case 'stale':
       return 'firstRun.advisory.notStarted';
+    case 'stale':
+      return 'firstRun.advisory.stale';
   }
 }
 
 /**
  * The first-run result, dependency first (fresh-profile audit E7): what the
- * scan found — projects, dependencies, ecosystems — and where the
+ * scan found — projects and dependencies — and where the
  * vulnerability check of them stands, instead of leading with a news
  * relevance count ("0 relevant … Nothing matched yet").
  */
@@ -56,12 +57,11 @@ export function DependencySummary({ initial }: { initial: ScanSummary }) {
     return () => { cancelled = true; clearInterval(id); };
   }, [running]);
 
-  const eco = summary.dependencies_by_ecosystem;
-  const ecosystems = [eco.rust, eco.npm, eco.python, eco.other].filter(n => n > 0).length;
+  // No ecosystem count: the scan summary lumps Go, Ruby and PHP into one
+  // bucket, so the number was wrong, and it informs no action (rule 3).
   const stats: Array<[number, string]> = [
     [summary.projects_scanned, t('firstRun.projects')],
     [summary.total_dependencies, t('firstRun.dependencies')],
-    [ecosystems, t('firstRun.ecosystems')],
   ];
 
   return (

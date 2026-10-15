@@ -54,8 +54,10 @@ struct CrateVersion {
 
 /// When `version` itself was published, from its entry in `versions`. The
 /// crate-level `updated_at` changes for any metadata edit, so it is not the
-/// release date; without the version's own date the item carries none and
-/// the Brief shows no "released" date rather than the fetch date (audit E5).
+/// release date; stored as `published_date`, this is read into
+/// `published_at` ahead of it (audit E5). Without the version's own date the
+/// store still falls back to the crate's `updated_at` (a registry date, not
+/// the fetch date), which is at or after the release.
 fn release_published<'a>(versions: Option<&'a [CrateVersion]>, version: &str) -> Option<&'a str> {
     versions?
         .iter()

@@ -229,6 +229,14 @@ pub(crate) fn advisory_gap_line(facts: &BriefFacts) -> Option<&'static str> {
              so it does not call your dependencies clear. It re-checks on its own; Preemption \
              shows the age."
         }
+        // Every project the walk found sat inside the OS temp folder: that,
+        // not advisory coverage, is why nothing was checked (as Preemption
+        // says).
+        S::NoInventory if facts.advisory_temp_skipped > 0 => {
+            "Your projects are inside the system temp folder, which 4DA treats as temporary \
+             copies and does not check against vulnerability advisories, so nothing here means \
+             they are clear. Move them out of the temp folder and scan again to check them."
+        }
         S::NoInventory => {
             "None of the dependencies 4DA read are in an ecosystem it can check against \
              vulnerability advisories, so nothing here means they are clear."

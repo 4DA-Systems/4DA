@@ -327,6 +327,21 @@ fn no_all_clear_until_the_advisory_check_is_ready() {
     );
 }
 
+/// PR #961 review: when every project was skipped as a temp copy, the brief
+/// names that reason (as Preemption does), not missing advisory coverage.
+#[test]
+fn no_inventory_from_temp_skips_names_the_temp_folder() {
+    let facts = BriefFacts {
+        advisories: Some(crate::osv::readiness::AdvisorySyncState::NoInventory),
+        advisory_temp_skipped: 2,
+        ..BriefFacts::default()
+    };
+    let out = build_deterministic_brief(&facts, FloorReason::NoCapableModel);
+    assert!(out.contains("system temp folder"), "{out}");
+    assert!(!out.contains("in an ecosystem it can check"), "{out}");
+    assert!(!out.contains("Nothing new touches your code"), "{out}");
+}
+
 #[test]
 fn a_narration_before_the_advisory_check_drops_its_all_clear() {
     let checking = BriefFacts {

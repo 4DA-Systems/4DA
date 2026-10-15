@@ -32,7 +32,11 @@ pub(crate) fn build_brief_facts(db: &Database) -> BriefFacts {
     let (security, also_open) = build_security_facts(db, &novelty, &liveness, &mut labels);
     let upgrades = build_upgrade_facts(db, &novelty, &liveness, &mut labels);
     let worth_knowing = build_worth_knowing(db, &novelty, &today);
-    let fingerprint = fingerprint(&security, &also_open, &upgrades);
+    let readiness = crate::osv::readiness::advisory_sync(db);
+    let fingerprint = with_advisory_state(
+        &fingerprint(&security, &also_open, &upgrades),
+        Some(readiness.state),
+    );
     // A failed read keeps the old behaviour (dependencies assumed known)
     // rather than telling a scanned user to scan.
     let no_dependencies_known = crate::open_db_connection()
@@ -45,7 +49,8 @@ pub(crate) fn build_brief_facts(db: &Database) -> BriefFacts {
         worth_knowing,
         fingerprint,
         no_dependencies_known,
-        advisories: Some(crate::osv::readiness::advisory_sync(db).state),
+        advisories: Some(readiness.state),
+        advisory_temp_skipped: readiness.skipped_temp,
     }
 }
 
@@ -867,4 +872,27 @@ fn build_worth_knowing(
             },
         )
         .collect()
+}
+
+impl super::BriefFacts {
+    /// The advisory check supports an all-clear: `Ready`, or not read (tests).
+    pub(crate) fn advisories_ready(&self) -> bool {
+        self.advisories
+            .is_none_or(|s| s == crate::osv::readiness::AdvisorySyncState::Ready)
+    }
+}
+
+/// The brief's reuse identity: the facts' [`super::fingerprint`] plus where the
+/// advisory check stands. The brief's wording depends on readiness (no
+/// all-clear before `Ready`), so a brief written in one state must not be
+/// re-served in another — a Ready-time all-clear surviving into Failed, or a
+/// "not downloaded yet" brief outliving the sync (PR #961 review).
+pub(crate) fn with_advisory_state(
+    fingerprint: &str,
+    advisories: Option<crate::osv::readiness::AdvisorySyncState>,
+) -> String {
+    match advisories {
+        Some(state) => format!("{fingerprint}:advisories={state:?}"),
+        None => fingerprint.to_string(),
+    }
 }
