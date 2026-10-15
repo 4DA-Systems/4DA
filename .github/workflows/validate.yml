@@ -152,6 +152,9 @@ jobs:
               # The pure engine crate, and the rule vectors its own test reads.
               - 'crates/fourda-depengine/**'
               - 'src-tauri/tests/conformance/vectors/**'
+              # The app's lockfile: the job's drift check holds the crate's
+              # own lockfile to it (scripts/check-lock-drift.cjs).
+              - 'src-tauri/Cargo.lock'
             frontend:
               - 'src/**'
               # .husky/ holds the local commit-msg / pre-push guards. A PR that
@@ -632,6 +635,25 @@ jobs:
 
       - name: Test
         run: cargo test --locked
+
+      # The crate's own Cargo.lock feeds this job and the wasm module; the
+      # app's audit (rust job) only sees the versions src-tauri/Cargo.lock
+      # resolves for it. Same tools, same policy file as the app.
+      - name: Install cargo-audit + cargo-deny (prebuilt)
+        uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2
+        with:
+          tool: cargo-audit,cargo-deny
+
+      - name: Advisory audit (crate lockfile)
+        run: cargo audit
+
+      # src-tauri/deny.toml's ignore list names app-only crates; on this
+      # 17-crate graph those entries are simply not encountered.
+      - name: Supply chain policy check (crate lockfile)
+        run: cargo deny check --config ../../src-tauri/deny.toml -A advisory-not-detected -A license-not-encountered -A license-exception-not-encountered
+
+      - name: Shared dependencies match the app's lockfile
+        run: node scripts/check-lock-drift.cjs
 
       # `cargo rustc --crate-type cdylib`: the manifest declares a plain rlib,
       # so the app never links a cdylib; only this build asks for one. The

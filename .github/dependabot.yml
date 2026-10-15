@@ -10,6 +10,7 @@
 #   - github-actions (/)                — workflow action pins
 #   - cargo          (/src-tauri)       — Rust crates (Cargo.lock)
 #   - cargo          (/relay)           — Team Relay server (Cargo.lock)
+#   - cargo          (/crates/fourda-depengine) — pure engine crate (Cargo.lock)
 #   - npm            (/)                — root frontend (pnpm-lock.yaml)
 #   - npm            (/mcp-memory-server) — MCP memory server (package-lock.json)
 #   - npm            (/editors/vscode/4da) — VS Code extension (package-lock.json)
@@ -128,6 +129,38 @@ updates:
       - "runyourempire"
     commit-message:
       prefix: "chore(relay)"
+      include: "scope"
+
+  # ── Rust (pure dependency engine) ─────────────────────────────────
+  # crates/fourda-depengine has its own Cargo.lock for its standalone CI
+  # build and the wasm module (inside the app it resolves through
+  # /src-tauri's lockfile). Four direct deps (serde, serde_json, semver,
+  # regex); the depengine CI job holds their major.minor to the app's
+  # (scripts/check-lock-drift.cjs), so a minor bump here lands with the
+  # matching /src-tauri bump.
+  - package-ecosystem: "cargo"
+    directory: "/crates/fourda-depengine"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+    cooldown:
+      default-days: 3
+      semver-major-days: 7
+    labels:
+      - "dependencies"
+      - "rust"
+    assignees:
+      - "runyourempire"
+    reviewers:
+      - "runyourempire"
+    commit-message:
+      prefix: "chore(depengine)"
       include: "scope"
 
   # ── Frontend (root pnpm workspace) ────────────────────────────────

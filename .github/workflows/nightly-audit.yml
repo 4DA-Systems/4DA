@@ -2,8 +2,9 @@
 #
 # Runs every night at 06:00 UTC (≈ early evening AEST) on main. Executes:
 #   1. cargo audit               — RustSec advisories against EVERY Cargo.lock
-#      in the repo: src-tauri/ (desktop app) and relay/ (Team Relay server,
-#      a standalone crate that is not a src-tauri workspace member).
+#      in the repo: src-tauri/ (desktop app), relay/ (Team Relay server,
+#      a standalone crate that is not a src-tauri workspace member) and
+#      crates/fourda-depengine/ (the pure engine's own lockfile).
 #   2. cargo deny check          — licence/source/advisory policy (src-tauri)
 #   3. scripts/audit-lockfiles.cjs — npm advisories against EVERY lockfile
 #      `git ls-files` reports, discovered rather than listed, using pnpm audit
@@ -87,7 +88,9 @@ jobs:
           # rustls-webpki certificate-validation advisories when this was
           # added, 2026-08-14). cargo-audit resolves its ignore list from
           # <dir>/.cargo/audit.toml, hence the `cd` per directory.
-          for dir in src-tauri relay; do
+          # crates/fourda-depengine: the pure engine crate keeps its own
+          # lockfile for its standalone and wasm builds (single-engine C0.2).
+          for dir in src-tauri relay crates/fourda-depengine; do
             RESULT=$(cd "$dir" && cargo audit 2>&1)
             CODE=$?
             echo "=== cargo audit $dir — exit $CODE ==="
