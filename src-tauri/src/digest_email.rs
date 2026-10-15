@@ -109,6 +109,9 @@ pub async fn send_test_email(to_address: &str, smtp: &SmtpConfig) -> Result<()> 
 
 /// Build an async SMTP transport from user config.
 fn build_transport(smtp: &SmtpConfig) -> Result<AsyncSmtpTransport<Tokio1Executor>> {
+    // settings.json is hand-editable; never send credentials in the clear to a
+    // remote server whatever it says.
+    plaintext_smtp_allowed(&smtp.host, smtp.use_tls).map_err(crate::error::FourDaError::Config)?;
     let creds = Credentials::new(smtp.username.clone(), smtp.password.clone());
 
     let builder = if smtp.use_tls {
@@ -169,6 +172,83 @@ fn test_email_html() -> String {
 </html>"#.to_string()
 }
 
+/// Fields a `set_digest_email_config` call may change; `None` = unchanged.
+pub(crate) struct SmtpUpdate {
+    pub host: Option<String>,
+    pub port: Option<u16>,
+    pub username: Option<String>,
+    pub password: Option<String>,
+    pub from_address: Option<String>,
+    pub use_tls: Option<bool>,
+}
+
+impl SmtpUpdate {
+    fn is_empty(&self) -> bool {
+        self.host.is_none()
+            && self.port.is_none()
+            && self.username.is_none()
+            && self.password.is_none()
+            && self.from_address.is_none()
+            && self.use_tls.is_none()
+    }
+}
+
+fn normalized_smtp_host(host: &str) -> String {
+    host.trim().trim_end_matches('.').to_lowercase()
+}
+
+/// Apply an update to the stored SMTP config (audit C6).
+///
+/// * The password stays bound to the server it was entered for: a host change
+///   that does not carry a new password clears it, so one IPC call cannot
+///   redirect the saved credential to another mail server.
+/// * Plaintext SMTP (`use_tls = false`) is refused unless the server is this
+///   machine — otherwise the password crosses the network in the clear.
+pub(crate) fn merge_smtp_update(
+    current: Option<SmtpConfig>,
+    update: SmtpUpdate,
+) -> std::result::Result<SmtpConfig, String> {
+    let current = current.unwrap_or(SmtpConfig {
+        host: String::new(),
+        port: 587,
+        username: String::new(),
+        password: String::new(),
+        from_address: String::new(),
+        use_tls: true,
+    });
+    let host = update.host.unwrap_or_else(|| current.host.clone());
+    let host_changed = normalized_smtp_host(&host) != normalized_smtp_host(&current.host);
+    let password = match update.password {
+        Some(p) => p,
+        None if host_changed => String::new(),
+        None => current.password,
+    };
+    let use_tls = update.use_tls.unwrap_or(current.use_tls);
+    plaintext_smtp_allowed(&host, use_tls)?;
+    Ok(SmtpConfig {
+        host,
+        port: update.port.unwrap_or(current.port),
+        username: update.username.unwrap_or(current.username),
+        password,
+        from_address: update.from_address.unwrap_or(current.from_address),
+        use_tls,
+    })
+}
+
+/// `use_tls = false` is only acceptable when the SMTP server is loopback (a
+/// local relay or test server); anywhere else the credentials would be sent
+/// unencrypted.
+fn plaintext_smtp_allowed(host: &str, use_tls: bool) -> std::result::Result<(), String> {
+    if use_tls || host.trim().is_empty() || crate::url_validation::is_loopback_host(host) {
+        Ok(())
+    } else {
+        Err(format!(
+            "Refusing unencrypted SMTP to {}: TLS is required for any server other than this machine",
+            host.trim()
+        ))
+    }
+}
+
 // ==========================================================================
 // Tauri Commands
 // ==========================================================================
@@ -214,30 +294,16 @@ pub async fn set_digest_email_config(
     }
 
     // Update SMTP config — create if any field provided, update if exists
-    if smtp_host.is_some()
-        || smtp_port.is_some()
-        || smtp_username.is_some()
-        || smtp_password.is_some()
-        || smtp_from.is_some()
-        || smtp_use_tls.is_some()
-    {
-        let current = digest.smtp.clone().unwrap_or(SmtpConfig {
-            host: String::new(),
-            port: 587,
-            username: String::new(),
-            password: String::new(),
-            from_address: String::new(),
-            use_tls: true,
-        });
-
-        digest.smtp = Some(SmtpConfig {
-            host: smtp_host.unwrap_or(current.host),
-            port: smtp_port.unwrap_or(current.port),
-            username: smtp_username.unwrap_or(current.username),
-            password: smtp_password.unwrap_or(current.password),
-            from_address: smtp_from.unwrap_or(current.from_address),
-            use_tls: smtp_use_tls.unwrap_or(current.use_tls),
-        });
+    let update = SmtpUpdate {
+        host: smtp_host,
+        port: smtp_port,
+        username: smtp_username,
+        password: smtp_password,
+        from_address: smtp_from,
+        use_tls: smtp_use_tls,
+    };
+    if !update.is_empty() {
+        digest.smtp = Some(merge_smtp_update(digest.smtp.clone(), update)?);
     }
 
     settings.save().map_err(|e| e.to_string())?;
@@ -345,5 +411,112 @@ mod tests {
         assert!(html.contains("4DA"));
         assert!(html.contains("Email delivery is working"));
         assert!(html.contains("#0A0A0A"));
+    }
+
+    fn stored_smtp() -> SmtpConfig {
+        SmtpConfig {
+            host: "smtp.fastmail.com".into(),
+            port: 587,
+            username: "me@example.com".into(),
+            password: "fake-app-password".into(),
+            from_address: "me@example.com".into(),
+            use_tls: true,
+        }
+    }
+
+    fn update() -> SmtpUpdate {
+        SmtpUpdate {
+            host: None,
+            port: None,
+            username: None,
+            password: None,
+            from_address: None,
+            use_tls: None,
+        }
+    }
+
+    /// C6: changing only the host must not carry the saved password to it.
+    #[test]
+    fn host_change_without_password_clears_it() {
+        let merged = merge_smtp_update(
+            Some(stored_smtp()),
+            SmtpUpdate {
+                host: Some("smtp.attacker.example".into()),
+                ..update()
+            },
+        )
+        .expect("merge");
+        assert_eq!(merged.host, "smtp.attacker.example");
+        assert!(
+            merged.password.is_empty(),
+            "password must not follow a host change"
+        );
+    }
+
+    #[test]
+    fn host_change_with_new_password_keeps_the_new_one() {
+        let merged = merge_smtp_update(
+            Some(stored_smtp()),
+            SmtpUpdate {
+                host: Some("smtp.gmail.com".into()),
+                password: Some("new-secret".into()),
+                ..update()
+            },
+        )
+        .expect("merge");
+        assert_eq!(merged.password, "new-secret");
+    }
+
+    #[test]
+    fn same_host_edits_keep_the_password() {
+        let merged = merge_smtp_update(
+            Some(stored_smtp()),
+            SmtpUpdate {
+                host: Some(" SMTP.Fastmail.com. ".into()),
+                port: Some(465),
+                ..update()
+            },
+        )
+        .expect("merge");
+        assert_eq!(merged.password, "fake-app-password");
+        assert_eq!(merged.port, 465);
+    }
+
+    #[test]
+    fn plaintext_smtp_is_refused_for_remote_hosts() {
+        let err = merge_smtp_update(
+            Some(stored_smtp()),
+            SmtpUpdate {
+                use_tls: Some(false),
+                ..update()
+            },
+        )
+        .expect_err("remote plaintext must be refused");
+        assert!(err.contains("TLS is required"), "{err}");
+    }
+
+    #[test]
+    fn plaintext_smtp_is_allowed_for_loopback() {
+        let merged = merge_smtp_update(
+            None,
+            SmtpUpdate {
+                host: Some("127.0.0.1".into()),
+                port: Some(1025),
+                use_tls: Some(false),
+                ..update()
+            },
+        )
+        .expect("loopback plaintext is fine");
+        assert!(!merged.use_tls);
+    }
+
+    /// A hand-edited settings.json with `use_tls: false` is refused at send time.
+    #[tokio::test]
+    async fn transport_refuses_remote_plaintext() {
+        let mut smtp = stored_smtp();
+        smtp.use_tls = false;
+        assert!(build_transport(&smtp).is_err());
+        smtp.host = "localhost".into();
+        assert!(build_transport(&smtp).is_ok());
     }
 }

@@ -109,6 +109,74 @@ pub(crate) fn incoming_key_replaces_stored(key: &str) -> bool {
     !key.is_empty() && key != IMPORTED_KEY_PLACEHOLDER
 }
 
+/// The host a stored LLM key is sent to for this provider and `base_url`,
+/// mirroring the request routing in `llm.rs` / `llm_stream.rs`: Anthropic
+/// always calls api.anthropic.com; OpenAI and OpenAI-compatible call
+/// `base_url` (default api.openai.com). `None` = the key is sent nowhere
+/// (`ollama` never sends it, `none` makes no call) or the URL has no host.
+pub(crate) fn llm_key_destination(provider: &str, base_url: Option<&str>) -> Option<String> {
+    let base = base_url.map(str::trim).filter(|u| !u.is_empty());
+    match provider {
+        "anthropic" => Some("api.anthropic.com".to_string()),
+        "openai" | "openai-compatible" => match base {
+            Some(url) => crate::url_validation::url_host(url),
+            None => Some("api.openai.com".to_string()),
+        },
+        _ => None,
+    }
+}
+
+/// The vendor's own API host, where a key saved under that provider belongs.
+fn first_party_host(provider: &str) -> Option<&'static str> {
+    match provider {
+        "anthropic" => Some("api.anthropic.com"),
+        "openai" => Some("api.openai.com"),
+        _ => None,
+    }
+}
+
+/// Must a stored key that the caller did not replace be dropped, because this
+/// save would start sending it to a different host than before?
+///
+/// Kept: the key goes nowhere (`new_dest` None), only to this machine, to the
+/// same host as before, or — coming back from "no provider"/a local server —
+/// to the new provider's own first-party API (switching `none` -> `anthropic`
+/// must not cost the user their key). Everything else re-binds it to a new
+/// third-party host and drops it.
+pub(crate) fn stored_key_must_be_dropped(
+    old_dest: Option<&str>,
+    new_dest: Option<&str>,
+    new_provider: &str,
+) -> bool {
+    let Some(new) = new_dest else {
+        return false;
+    };
+    if crate::url_validation::is_loopback_host(new) || old_dest == Some(new) {
+        return false;
+    }
+    let old_sent_nowhere = old_dest.is_none_or(crate::url_validation::is_loopback_host);
+    !(old_sent_nowhere && first_party_host(new_provider) == Some(new))
+}
+
+/// Remove the stored LLM key from the keychain BEFORE the settings save:
+/// `SettingsManager::save` re-hydrates an empty in-memory key from the
+/// keychain, so clearing only the in-memory copy would bring it straight back.
+/// Fails closed: if the keychain still returns the key, the save is refused.
+fn forget_stored_llm_key() -> Result<()> {
+    let _ = crate::settings::keystore::delete_secret("llm_api_key");
+    if matches!(crate::settings::keystore::get_secret("llm_api_key"), Ok(Some(ref k)) if !k.is_empty())
+    {
+        return Err(
+            "The endpoint host changed, so the saved API key must be re-entered, \
+                    but the OS credential store refused to remove the old key. Enter the key \
+                    for the new endpoint to save."
+                .into(),
+        );
+    }
+    warn!(target: "4da::settings", "LLM endpoint host changed without a new key — stored key removed, not sent to the new host");
+    Ok(())
+}
+
 /// Update LLM provider settings
 #[tauri::command]
 pub async fn set_llm_provider(
@@ -172,7 +240,30 @@ pub async fn set_llm_provider(
     // Saving it verbatim overwrote the imported key with the marker text.
     // Storage (keychain first, owner-only file fallback) is decided by
     // `SettingsManager::save()`, which also records the posture the UI shows.
-    let effective_api_key = if !incoming_key_replaces_stored(&api_key) {
+    //
+    // A kept key stays bound to the host it was entered for: when the save
+    // moves it to a different third-party host without supplying a new key,
+    // the stored key is dropped (memory, settings.json AND keychain) rather
+    // than sent there. Otherwise one IPC call changing only `base_url` would
+    // deliver the user's Anthropic/OpenAI key to any server (audit C6).
+    let keep_stored = !incoming_key_replaces_stored(&api_key);
+    // Not gated on the in-memory key being non-empty: `save()` re-hydrates an
+    // empty in-memory key from the keychain, so a key that only the keychain
+    // holds would otherwise follow the new host too.
+    let rebinds = keep_stored
+        && stored_key_must_be_dropped(
+            llm_key_destination(
+                &guard.get().llm.provider,
+                guard.get().llm.base_url.as_deref(),
+            )
+            .as_deref(),
+            llm_key_destination(&provider, base_url.as_deref()).as_deref(),
+            &provider,
+        );
+    let effective_api_key = if rebinds {
+        forget_stored_llm_key()?;
+        String::new()
+    } else if keep_stored {
         guard.get().llm.api_key.clone()
     } else {
         api_key
