@@ -71,7 +71,7 @@ A successful verification confirms the app was signed with a valid Developer ID 
 
 The installer performs no network activity. The application itself is local-first:
 
-- All analysis runs on your machine.
+- All analysis runs on your machine. Your source code never leaves it; the dependency checks send package names and versions to OSV.dev and the package registries ([NETWORK.md](https://github.com/4DA-Systems/4DA/blob/main/NETWORK.md) lists every connection).
 - API keys you configure for AI providers are stored in your macOS Keychain.
 - No telemetry or crash reporting is sent — ever. If something breaks, Settings → Privacy → Export diagnostics writes a scrubbed local report you choose whether to share.
 

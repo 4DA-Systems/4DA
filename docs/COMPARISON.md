@@ -242,7 +242,7 @@ This would give OpenClaw users ambient intelligence without leaving chat, and gi
 - **Automatic context discovery**: Reads Cargo.toml, package.json, go.mod, pyproject.toml — zero manual configuration
 - **5-axis scoring with confirmation gate**: An item needs 2+ independent signals to surface. Measured rejection rate: 93% overall, 98.9% noise accuracy (9 developer personas, 245 labeled items, 1,997 evaluations — reproduce with `cargo test scoring::simulation -- --nocapture`)
 - **Full score transparency**: Every item shows exactly why it scored the way it did across all 5 axes
-- **Privacy by architecture**: No 4DA server — your indexed data, scores, and learning stay local. BYOK; a cloud model sees only what you send it. Zero telemetry. Fully offline with a local model.
+- **Privacy by architecture**: no 4DA server receives your projects — your code, indexed data, scores, and learning stay local; the dependency checks send only package names and versions to OSV.dev and the registries. BYOK; a cloud model sees only what you send it. Zero telemetry. AI fully offline with a local model.
 - **84 deterministic benchmark tests** validating scoring accuracy, edge cases, and regression prevention
 
 ---

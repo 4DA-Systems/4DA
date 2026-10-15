@@ -171,10 +171,10 @@ permalink: "/privacy.html"
 
   <div class="legal-container">
     <h1>Privacy Policy</h1>
-    <p class="effective-date"><strong>4DA Systems Pty Ltd</strong> &middot; Effective Date: 15 March 2026 &middot; Last Updated: 5 October 2026</p>
+    <p class="effective-date"><strong>4DA Systems Pty Ltd</strong> &middot; Effective Date: 15 March 2026 &middot; Last Updated: 15 October 2026</p>
 
     <div class="short-version">
-      4DA is a desktop application that runs on your computer. Your data stays on your computer. We do not collect it, we do not transmit it, we do not store it on our servers, and we do not sell it. This privacy policy exists because the law requires one, but also because we believe you deserve to know exactly how your software works.
+      4DA is a desktop application that runs on your computer. Your data stays on your computer. We do not collect it, we do not transmit it, we do not store it on our servers, and we do not sell it. To check your dependencies, the App sends the names and versions of your packages (never your code) to the public vulnerability and package services described in Section 2.6. This privacy policy exists because the law requires one, but also because we believe you deserve to know exactly how your software works.
     </div>
 
     <h2>1. Introduction and Scope</h2>
@@ -191,14 +191,14 @@ permalink: "/privacy.html"
     <h2>2. The 4DA Desktop Application</h2>
 
     <h3>2.1 Privacy by Architecture</h3>
-    <p>4DA is designed so that privacy is not a policy choice but a technical fact. The App has no server-side component that collects user data. There is no 4DA cloud service, no user database on our end, and no mechanism for us to receive your data even if we wanted to. Your data lives in a local SQLite database on your machine and nowhere else.</p>
+    <p>4DA is designed so that privacy is not a policy choice but a technical fact. The App has no server-side component that collects user data. There is no 4DA cloud service, no user database on our end, and no mechanism for us to receive your project data even if we wanted to. The only data the App ever sends to us is the licence data described in Section 2.8. Your data lives in a local SQLite database on your machine and nowhere else.</p>
     <p>No cloud account is required. No sign-up. No registration. You download the App and use it.</p>
 
     <h3>2.2 What Data the App Processes Locally</h3>
     <p>The App processes the following data <strong>entirely on your local machine</strong>:</p>
     <ul>
       <li><strong>Content from public APIs:</strong> The App fetches publicly available content from sources including Hacker News, GitHub, arXiv, Reddit, and RSS feeds. These requests go directly from your machine to the public APIs. No personal data is included in these requests beyond your device's IP address, which is inherent to any network request.</li>
-      <li><strong>Your project files:</strong> The Autonomous Context Engine (ACE) can scan local project directories you configure to understand your development context and improve content relevance. This data is processed locally and never leaves your machine.</li>
+      <li><strong>Your project files:</strong> The Autonomous Context Engine (ACE) can scan local project directories you configure to understand your development context and improve content relevance. This data is processed locally; the file contents never leave your machine. The names and versions of the packages listed in your lockfiles are sent to public services to check them for known vulnerabilities and new releases (see Section 2.6).</li>
       <li><strong>Your preferences and settings:</strong> Configuration data stored in a local JSON file on your device. This file contains non-sensitive preferences such as theme, source configuration, and display options. Sensitive credentials are stored separately in your operating system's keychain (see Section 2.4).</li>
       <li><strong>Local database:</strong> A SQLite database (with sqlite-vec for vector search) stored on your device containing aggregated content, embeddings, and relevance scores. This database is never synced to, uploaded to, or transmitted to any external service.</li>
       <li><strong>Local telemetry:</strong> Usage analytics are stored locally for your own reference. This telemetry data is never sent to 4DA Systems or any third party.</li>
@@ -258,6 +258,12 @@ permalink: "/privacy.html"
       <li><strong>arXiv:</strong> Public API requests to <code>export.arxiv.org</code>.</li>
     </ul>
     <p>All of these requests go directly from your machine to the respective service. Your device's IP address is visible to each service as part of the standard HTTPS connection.</p>
+    <p><strong>Dependency checks.</strong> When the App finds lockfiles in the projects you configure, it checks the packages they list:</p>
+    <ul>
+      <li><strong>OSV.dev</strong> (<code>api.osv.dev</code>, operated by Google): receives the package names, their ecosystems and, where the lockfile gives it, the installed version of each, to look up known vulnerabilities.</li>
+      <li><strong>Package registries</strong> (npm, crates.io, PyPI and the Go module proxy): receive package names, to look up releases, deprecations and changelogs. Go module paths are sent in full, so a private module path (for example <code>github.com/yourco/internal-svc</code>) names that repository.</li>
+      <li>Your source code and file contents are never sent. The complete, source-referenced list of the App's connections is published in <a href="https://github.com/4DA-Systems/4DA/blob/main/NETWORK.md">NETWORK.md</a>.</li>
+    </ul>
 
     <h3>2.7 Digest Email (Optional)</h3>
     <p>The App can optionally send you a periodic email digest of relevant content. This feature is <strong>off by default</strong> and requires you to configure your own SMTP server credentials. When enabled:</p>
@@ -276,6 +282,7 @@ permalink: "/privacy.html"
       <li>Happens only when your key is within 10 days of expiry &mdash; in practice about once per billing period &mdash; or when you paste an expired subscription key to activate it, and never for free users or Lifetime licenses</li>
       <li>Does <strong>not</strong> send device identifiers, usage data, or any other personal data; if it fails, your current key keeps working until its own expiry</li>
     </ul>
+    <p>If you lose your key, the App's <strong>Recover License by Email</strong> action sends the email address you type to the same endpoint, which emails the key to that address if it matches a purchase. This happens only when you use that action.</p>
     <p>Older license keys issued through the <a href="https://keygen.sh">Keygen</a> license service are validated with Keygen's API, which receives the license key only. Keygen may log the IP address of the request as part of standard server operations; see <a href="https://keygen.sh/privacy/">Keygen's Privacy Policy</a>. Our own endpoint is hosted on Cloudflare, which may likewise log request IP addresses.</p>
     <p>The free tier of 4DA does not perform any license validation and makes no license-related network calls.</p>
 
@@ -294,7 +301,7 @@ permalink: "/privacy.html"
       <li><strong>End-to-end encryption:</strong> All data synced through the relay is encrypted on the client using XChaCha20Poly1305 with X25519 key exchange and HKDF key derivation. Encryption and decryption happen exclusively on your device.</li>
       <li><strong>Zero-knowledge relay:</strong> The relay server handles only encrypted blobs. It cannot read, decrypt, or access the plaintext content of any synced data. It is architecturally a "dumb pipe" -- it routes encrypted payloads without any ability to inspect them.</li>
       <li><strong>Key management is local:</strong> Each team member's X25519 private key is generated on their device and never leaves it. Team-wide symmetric keys are distributed encrypted per-member. Private keys are zeroized from memory when no longer needed.</li>
-      <li><strong>No content visibility:</strong> 4DA Systems operates the relay infrastructure but has no ability to view the content being synced between team members.</li>
+      <li><strong>No content visibility:</strong> The relay is a server whose address your team enters when creating or joining a team; the App has no built-in relay address, and 4DA Systems does not currently operate a relay. Whoever operates the relay you choose has no ability to view the content being synced between team members.</li>
     </ul>
 
     <h3>2.11 Source Code Transparency</h3>
@@ -357,7 +364,10 @@ permalink: "/privacy.html"
         <tr><td>arXiv</td><td>App</td><td>Standard HTTP requests (your IP visible)</td><td>Content aggregation</td></tr>
         <tr><td>RSS/Atom feeds</td><td>App</td><td>Standard HTTP requests (your IP visible)</td><td>Content aggregation</td></tr>
         <tr><td>Keygen</td><td>App (Signal tier only)</td><td>License key</td><td>License validation</td></tr>
-        <tr><td>4DA licensing endpoint (4da.ai)</td><td>App (Signal monthly / annual subscriptions only, near key expiry)</td><td>License key</td><td>Automatic license renewal, confirmed against your Stripe subscription</td></tr>
+        <tr><td>4DA licensing endpoint (4da.ai)</td><td>App (Signal monthly / annual subscriptions only, near key expiry; and Recover License by Email, only when you use it)</td><td>License key; for recovery, the email address you enter</td><td>Automatic license renewal, confirmed against your Stripe subscription; re-sending a lost key</td></tr>
+        <tr><td>OSV.dev (Google)</td><td>App (dependency checks)</td><td>Package names, ecosystems and installed versions from your lockfiles (your IP visible)</td><td>Known-vulnerability lookup</td></tr>
+        <tr><td>npm, crates.io, PyPI, Go module proxy</td><td>App (dependency checks)</td><td>Package names, including full Go module paths (your IP visible)</td><td>Releases, deprecations and changelogs</td></tr>
+        <tr><td>Hugging Face</td><td>App (versions after 1.0.3; once, when a feature first needs the local search model)</td><td>A plain download request (your IP visible)</td><td>Downloading the local embedding model</td></tr>
         <tr><td>User's SMTP provider</td><td>App (optional, user-configured)</td><td>Digest email contents</td><td>Email delivery</td></tr>
         <tr><td>Cloudflare</td><td>Website</td><td>Server logs, analytics</td><td>Website hosting</td></tr>
         <tr><td>PostHog</td><td>Website (all pages)</td><td>Page views and product events (e.g. which download button was pressed), plus the IP and browser data any web request carries</td><td>Aggregate traffic and funnel analytics. Not used for advertising or cross-site tracking.</td></tr>
@@ -454,7 +464,7 @@ permalink: "/privacy.html"
     <h2>10. International Data Transfers</h2>
 
     <h3>10.1 The App</h3>
-    <p>The App does not transfer your data internationally -- or at all -- because your data stays on your device. When you choose to use LLM provider APIs, data flows directly from your device to the provider's servers. The location of those servers depends on the provider you choose:</p>
+    <p>Your project data, scores and reading history stay on your device and are not transferred anywhere. The package names and versions used for dependency checks go to OSV.dev (operated by Google) and to the package registries (npm, crates.io, PyPI, the Go module proxy), whose servers are primarily in the United States. When you choose to use LLM provider APIs, data flows directly from your device to the provider's servers. The location of those servers depends on the provider you choose:</p>
     <ul>
       <li><strong>Anthropic:</strong> Servers primarily in the United States</li>
       <li><strong>OpenAI:</strong> Servers primarily in the United States</li>
@@ -470,7 +480,7 @@ permalink: "/privacy.html"
 
     <h3>11.1 The App</h3>
     <p>The App's security model is straightforward: your data is on your device, protected by your operating system's security controls.</p>
-    <p><strong>API key protection:</strong> API keys are stored in your operating system's native credential manager (Windows Credential Manager, macOS Keychain, or Linux Secret Service), which provides hardware-backed or OS-level encryption depending on your platform. Keys are never written to plaintext files.</p>
+    <p><strong>API key protection:</strong> API keys are stored in your operating system's native credential manager (Windows Credential Manager, macOS Keychain, or Linux Secret Service), which provides hardware-backed or OS-level encryption depending on your platform. Keys are written to a file only in the fallback described in Section 2.4, when the OS keychain is unavailable: the settings file on your machine, readable only by your user account.</p>
     <p><strong>Team Relay encryption:</strong> The Team Relay feature uses XChaCha20Poly1305 authenticated encryption with X25519 key exchange and HKDF key derivation (SHA-256). Private keys are zeroized from memory when no longer needed. This ensures that data in transit and at rest on the relay server is cryptographically protected against unauthorised access, including by 4DA Systems.</p>
     <p><strong>Recommendations:</strong></p>
     <ul>
