@@ -108,3 +108,71 @@ pub fn exposure_for_record(record: &AdvisoryRecord, inventory: &[Package]) -> Ad
     out.confirmed = confirmed;
     out
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn row(eco: &str, project: &str, version: Option<&str>, primary: bool, dev: bool) -> Package {
+        Package {
+            ecosystem: eco.to_string(),
+            project: project.to_string(),
+            name: "ws".to_string(),
+            version: version.map(str::to_string),
+            is_direct: primary,
+            is_dev: dev,
+            primary,
+        }
+    }
+
+    fn ws_below_7_5_10() -> AdvisoryRecord {
+        AdvisoryRecord {
+            advisory_id: "GHSA-ws".to_string(),
+            package_name: "ws".to_string(),
+            ecosystem: "npm".to_string(),
+            affected_ranges: Some(
+                r#"[{"type":"SEMVER","events":[{"introduced":"7.0.0"},{"fixed":"7.5.10"}]}]"#
+                    .to_string(),
+            ),
+            fixed_versions: Some(r#"["7.5.10"]"#.to_string()),
+        }
+    }
+
+    #[test]
+    fn confirms_copies_counts_unconfirmed_and_orders_runtime_first() {
+        let inventory = [
+            // Resolved rows: the first per project wins (user before scan).
+            row("javascript", r"C:\App\", Some("7.5.10"), true, false),
+            row("npm", "c:/app", Some("7.0.0"), true, false),
+            row("npm", "/dev-only", None, true, true),
+            // Installed copies of c:/app: one vulnerable, transitive, dev.
+            row("npm", "C:/App", Some("7.5.9"), false, true),
+            row("npm", "C:/App", Some("7.5.10"), false, false),
+            // A copy in another ecosystem is not this advisory's.
+            row("PyPI", "c:/app", Some("7.5.9"), false, false),
+        ];
+        let e = exposure_for_record(&ws_below_7_5_10(), &inventory);
+        assert_eq!(
+            e.confirmed,
+            vec![ExposedCopy {
+                project_path: "c:/app".to_string(),
+                installed_version: "7.5.9".to_string(),
+                is_direct: false,
+                is_dev: true,
+            }]
+        );
+        // The version-less resolved row of /dev-only cannot be decided.
+        assert_eq!(e.unconfirmed, 1);
+        // c:/app: copies 7.5.9 and 7.5.10 (the resolved 7.5.10 is a dup);
+        // /dev-only: its resolved row.
+        assert_eq!(e.copies_checked, 3);
+    }
+
+    #[test]
+    fn no_resolved_row_in_the_ecosystem_is_no_verdict() {
+        let inventory = [row("PyPI", "/p", Some("7.5.9"), true, false)];
+        let e = exposure_for_record(&ws_below_7_5_10(), &inventory);
+        assert_eq!(e.copies_checked, 0);
+        assert!(e.confirmed.is_empty());
+    }
+}

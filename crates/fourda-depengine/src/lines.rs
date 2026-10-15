@@ -164,3 +164,109 @@ pub fn describe_lines(lines: &[LineTarget]) -> String {
         .collect::<Vec<_>>()
         .join(", ")
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn copy(
+        project: &str,
+        installed: &str,
+        fixed: Option<&str>,
+        clean: Option<&str>,
+        walked: Option<&str>,
+        direct: bool,
+        dev: bool,
+    ) -> MatchedDependency {
+        MatchedDependency {
+            project_path: project.to_string(),
+            installed_version: Some(installed.to_string()),
+            is_direct: direct,
+            is_dev: dev,
+            is_version_confirmed: true,
+            fixed_version: fixed.map(str::to_string),
+            clean_version: clean.map(str::to_string),
+            target_version: walked.map(str::to_string),
+        }
+    }
+
+    #[test]
+    fn one_target_per_installed_line_sorted_by_version() {
+        let copies = [
+            copy(
+                "/a",
+                "5.0.9",
+                Some("5.0.12"),
+                Some("5.0.12"),
+                Some("5.0.12"),
+                false,
+                true,
+            ),
+            copy(
+                "/a",
+                "1.1.18",
+                Some("1.1.21"),
+                Some("1.1.21"),
+                Some("1.1.21"),
+                true,
+                false,
+            ),
+            copy("/b", "1.1.18", Some("1.1.20"), None, None, false, true),
+            // A project the caller does not speak for sets nothing (AD-044).
+            copy(
+                "/other",
+                "0.9.0",
+                Some("2.0.0"),
+                Some("2.0.0"),
+                Some("2.0.0"),
+                true,
+                false,
+            ),
+            // An unconfirmed copy sets nothing either.
+            MatchedDependency {
+                is_version_confirmed: false,
+                ..copy("/a", "0.1.0", Some("9.0.0"), None, None, true, false)
+            },
+        ];
+        let projects = vec!["/a".to_string(), "/b".to_string()];
+        let lines = line_targets(&copies, &projects);
+        let installed: Vec<&str> = lines.iter().map(|l| l.installed_version.as_str()).collect();
+        assert_eq!(installed, ["1.1.18", "5.0.9"]);
+
+        let l = &lines[0];
+        assert_eq!(l.target_version.as_deref(), Some("1.1.21"));
+        assert!(l.clears_all_known);
+        assert_eq!(l.upgrade_type, Some(UpgradeType::Patch));
+        assert_eq!(
+            l.sites,
+            vec![
+                InstallSite {
+                    project_path: "/a".to_string(),
+                    is_direct: true,
+                    is_dev: false
+                },
+                InstallSite {
+                    project_path: "/b".to_string(),
+                    is_direct: false,
+                    is_dev: true
+                },
+            ]
+        );
+        assert_eq!(distinct_targets(&lines), ["1.1.21", "5.0.12"]);
+        assert_eq!(describe_lines(&lines), "1.1.18 -> 1.1.21, 5.0.9 -> 5.0.12");
+    }
+
+    #[test]
+    fn without_a_walk_the_highest_line_fix_is_the_partial_target() {
+        let copies = [
+            copy("/a", "1.0.0", Some("1.0.5"), None, None, true, false),
+            copy("/a", "1.0.0", Some("2.0.1"), None, None, true, false),
+        ];
+        let lines = line_targets(&copies, &["/a".to_string()]);
+        assert_eq!(lines.len(), 1);
+        assert_eq!(lines[0].target_version.as_deref(), Some("2.0.1"));
+        assert!(!lines[0].clears_all_known);
+        assert!(lines[0].is_major());
+        assert_eq!(describe_lines(&lines), "1.0.0 -> 2.0.1 (major)");
+    }
+}

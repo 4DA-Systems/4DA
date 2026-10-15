@@ -18,9 +18,14 @@
 //!   "records":[AdvisoryRecord..]}` → `{"records":n,"findings":[{"advisory_id",
 //!   "package_name","ecosystem","installed_version","fixed_version",
 //!   "is_version_confirmed","project_paths","dependency_instances":[..]}]}`.
-//!   `osv` records are stored the way the app's mirror stores them
-//!   ([`crate::osv::stored_records`], the first row per (id, package,
-//!   ecosystem) wins) after any `records` given as already-stored rows.
+//!   `osv` records are stored the way one store pass of the app's mirror
+//!   stores them ([`crate::osv::stored_records`]; within this request the
+//!   first row per (id, package, ecosystem) wins, after any `records` given
+//!   as already-stored rows). Across syncs the app's table is an upsert
+//!   (`ON CONFLICT DO UPDATE`), so there the LAST write of a row wins; give
+//!   the current rows as `records` to reproduce a mirror state.
+//!   Every `inventory` row must say `primary`; copies with no primary row
+//!   are an error, not an empty result.
 
 use std::cmp::Ordering;
 
@@ -28,7 +33,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::fix_target::{fix_for_version, walk_target};
-use crate::matching::{match_inventory, Package};
+use crate::matching::{inventory_problem, match_inventory, Package};
 use crate::osv::{stored_records, AdvisoryRecord, OsvRecord};
 use crate::range::check_version_affected;
 use crate::version_order::OrderedVersion;
@@ -63,8 +68,17 @@ enum Request {
     },
 }
 
-/// The `match_inventory` op: stored rows plus verbatim records, matched.
-fn match_op(inventory: &[Package], mut records: Vec<AdvisoryRecord>, osv: &[OsvRecord]) -> Value {
+/// The `match_inventory` op: stored rows plus verbatim records, matched. An
+/// inventory with copies but no primary rows is an error, never an empty
+/// all-clear ([`inventory_problem`]).
+fn match_op(
+    inventory: &[Package],
+    mut records: Vec<AdvisoryRecord>,
+    osv: &[OsvRecord],
+) -> Result<Value, String> {
+    if let Some(problem) = inventory_problem(inventory) {
+        return Err(problem);
+    }
     let key = |r: &AdvisoryRecord| {
         (
             r.advisory_id.clone(),
@@ -95,7 +109,7 @@ fn match_op(inventory: &[Package], mut records: Vec<AdvisoryRecord>, osv: &[OsvR
             })
         })
         .collect();
-    json!({ "records": records.len(), "findings": findings })
+    Ok(json!({ "records": records.len(), "findings": findings }))
 }
 
 /// A ranges array as the stored JSON text the rules read.
@@ -103,8 +117,8 @@ fn stored(ranges: Option<&Value>) -> Option<String> {
     ranges.filter(|v| !v.is_null()).map(Value::to_string)
 }
 
-fn answer(request: Request) -> Value {
-    match request {
+fn answer(request: Request) -> Result<Value, String> {
+    Ok(match request {
         Request::VersionCmp { eco, a, b } => {
             let order = OrderedVersion::parse_in(&a, &eco)
                 .zip(OrderedVersion::parse_in(&b, &eco))
@@ -144,16 +158,21 @@ fn answer(request: Request) -> Value {
             inventory,
             records,
             osv,
-        } => match_op(&inventory, records, &osv),
-    }
+        } => match_op(&inventory, records, &osv)?,
+    })
 }
 
 /// Answer one JSON request. Never panics on bad input: a request that does
-/// not parse comes back as `{"ok": false, "error": ...}`.
+/// not parse, or one the engine cannot answer truthfully, comes back as
+/// `{"ok": false, "error": ...}`.
 pub fn call(request: &str) -> String {
+    let error = |e: String| json!({ "schema": SCHEMA, "ok": false, "error": e });
     let response = match serde_json::from_str::<Request>(request) {
-        Ok(req) => json!({ "schema": SCHEMA, "ok": true, "result": answer(req) }),
-        Err(e) => json!({ "schema": SCHEMA, "ok": false, "error": e.to_string() }),
+        Ok(req) => match answer(req) {
+            Ok(result) => json!({ "schema": SCHEMA, "ok": true, "result": result }),
+            Err(e) => error(e),
+        },
+        Err(e) => error(e.to_string()),
     };
     response.to_string()
 }
@@ -212,6 +231,28 @@ mod tests {
         assert_eq!(f["fixed_version"], "7.5.10");
         assert_eq!(f["dependency_instances"][0]["clean_version"], "7.5.10");
         assert_eq!(f["project_paths"], json!(["/p"]));
+    }
+
+    #[test]
+    fn copies_without_a_primary_row_are_an_error_not_an_all_clear() {
+        let request = r#"{"op":"match_inventory",
+            "inventory":[{"ecosystem":"npm","project":"/p","name":"ws","version":"7.5.9","primary":false}],
+            "osv":[{"id":"GHSA-ws","affected":[{"package":{"name":"ws","ecosystem":"npm"},
+              "ranges":[{"type":"SEMVER","events":[{"introduced":"0"}]}]}]}]}"#;
+        let v: Value = serde_json::from_str(&call(request)).unwrap_or_default();
+        assert_eq!(v["ok"], false, "{v}");
+        assert!(v["error"]
+            .as_str()
+            .is_some_and(|e| e.contains("no primary")));
+        // `primary` is required: leaving it out is a parse error too.
+        let v: Value = serde_json::from_str(&call(
+            r#"{"op":"match_inventory","inventory":[{"ecosystem":"npm","project":"/p","name":"ws","version":"7.5.9"}]}"#,
+        ))
+        .unwrap_or_default();
+        assert_eq!(v["ok"], false, "{v}");
+        // An empty inventory is a truthful empty answer.
+        let r = result(r#"{"op":"match_inventory","inventory":[]}"#);
+        assert_eq!(r["findings"], json!([]));
     }
 
     #[test]

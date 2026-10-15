@@ -50,7 +50,8 @@ pub struct Package {
     pub is_direct: bool,
     #[serde(default)]
     pub is_dev: bool,
-    #[serde(default)]
+    /// Required (no default): a caller that forgets it would otherwise mark
+    /// every row an installed copy, audit nothing, and read as all-clear.
     pub primary: bool,
 }
 
@@ -102,6 +103,23 @@ pub struct Finding {
     pub project_paths: Vec<String>,
     /// Every affected copy, confirmed first, then direct, then runtime.
     pub dependency_instances: Vec<MatchedDependency>,
+}
+
+/// Why `inventory` cannot be matched meaningfully, if it cannot: installed
+/// copies with no resolved (`primary`) row. Only primary rows decide which
+/// (project, package) pairs are audited, so such an inventory matches
+/// nothing and would read as a silent all-clear. Hosts that build their own
+/// inventory (the JSON API) must refuse it; the app always supplies both
+/// layers.
+pub fn inventory_problem(inventory: &[Package]) -> Option<String> {
+    let copies = inventory.iter().filter(|p| !p.primary).count();
+    let primary = inventory.len() - copies;
+    (copies > 0 && primary == 0).then(|| {
+        format!(
+            "inventory has {copies} installed cop{} and no primary (resolved) rows:              nothing would be audited; mark each project's resolved row primary:true",
+            if copies == 1 { "y" } else { "ies" }
+        )
+    })
 }
 
 /// [`match_inventory_with`] without a host hook: every affected copy counts.

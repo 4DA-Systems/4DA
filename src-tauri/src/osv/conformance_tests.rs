@@ -362,8 +362,10 @@ struct Pinned {
     aliases: HashMap<String, Vec<String>>,
 }
 
-/// Every pinned record, stored the way `osv::sync` stores a fetched one (the
-/// first row per (id, package, ecosystem) wins).
+/// Every pinned record, stored the way one `osv::sync` store pass stores
+/// them: within the pass the first row per (id, package, ecosystem) wins.
+/// (Across syncs `osv_advisories` is an upsert, `ON CONFLICT DO UPDATE`, so
+/// the last write wins there; the pinned corpus holds each record once.)
 fn load_pinned_advisories() -> Pinned {
     let dir = corpus_dir().join("osv");
     let mut seen = std::collections::HashSet::new();
