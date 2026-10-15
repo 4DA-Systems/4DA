@@ -68,6 +68,8 @@ const SignalRow = memo(function SignalRow({
   }, [item.id, item.title, cite, requestTranslation]);
   const displayTitle = getTranslated(item.id, item.title);
   const freshness = (() => {
+    // Negative: the publish date is unknown — no label, never "today".
+    if (cite && cite.freshness_days < 0) return '';
     if (!cite || cite.freshness_days <= 0) return t('preemption.freshness.today');
     const d = Math.round(cite.freshness_days);
     if (d === 1) return t('preemption.freshness.yesterday');

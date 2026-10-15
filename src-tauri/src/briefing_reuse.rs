@@ -38,15 +38,22 @@ pub(super) static BRIEF_GENERATION_GATE: tokio::sync::Mutex<()> = tokio::sync::M
 const FINGERPRINT_KV_KEY: &str = "brief_fingerprint_v1";
 
 /// Record the facts a persisted briefing was written from: the fingerprint,
-/// and the act-now identities the daily cap compares against.
+/// the act-now identities the daily cap compares against, and whether the
+/// advisory check was ready (an all-clear was allowed) when it was written.
 pub(super) fn remember_fingerprint(
     db: &crate::db::Database,
     briefing_id: i64,
     fingerprint: &str,
     act_now: &[String],
+    advisories_ready: bool,
 ) {
-    let value =
-        serde_json::json!({ "id": briefing_id, "fp": fingerprint, "act": act_now }).to_string();
+    let value = serde_json::json!({
+        "id": briefing_id,
+        "fp": fingerprint,
+        "act": act_now,
+        "ready": advisories_ready,
+    })
+    .to_string();
     if let Err(e) = db.set_kv(FINGERPRINT_KV_KEY, &value) {
         tracing::warn!(target: "4da::briefing", error = %e, "briefing fingerprint not persisted");
     }
@@ -63,9 +70,17 @@ pub(super) fn try_reuse_recent_briefing(
     db: &crate::db::Database,
     fingerprint: &str,
     act_now: &[String],
+    advisories_ready: bool,
 ) -> Option<serde_json::Value> {
     let offset = *chrono::Local::now().offset();
-    try_reuse_at(db, fingerprint, act_now, chrono::Utc::now(), offset)
+    try_reuse_at(
+        db,
+        fingerprint,
+        act_now,
+        advisories_ready,
+        chrono::Utc::now(),
+        offset,
+    )
 }
 
 /// The latest briefing row: id, content, model, item_count, created_at.
@@ -106,17 +121,24 @@ fn briefs_since(db: &crate::db::Database, since: &str) -> i64 {
 }
 
 /// Past the daily cap, with nothing new to act on? A record from before the
-/// cap existed has no act-now list: it cannot prove nothing new arrived.
+/// cap existed has no act-now list: it cannot prove nothing new arrived. The
+/// cap never holds across a change in whether the advisory check is ready:
+/// that flips the brief between an all-clear and "not checked yet", and a
+/// record without the flag cannot prove it did not flip.
 fn capped(
     db: &crate::db::Database,
     stored: &serde_json::Value,
     act_now: &[String],
+    advisories_ready: bool,
     day_start: &str,
 ) -> bool {
     let recorded: Option<Vec<String>> = stored
         .get("act")
         .and_then(|v| serde_json::from_value(v.clone()).ok());
-    recorded.is_some_and(|r| !has_new_act_now(&r, act_now))
+    let same_readiness =
+        stored.get("ready").and_then(serde_json::Value::as_bool) == Some(advisories_ready);
+    same_readiness
+        && recorded.is_some_and(|r| !has_new_act_now(&r, act_now))
         && briefs_since(db, day_start) >= DAILY_AUTO_BRIEF_CAP
 }
 
@@ -124,6 +146,7 @@ fn try_reuse_at(
     db: &crate::db::Database,
     fingerprint: &str,
     act_now: &[String],
+    advisories_ready: bool,
     now: chrono::DateTime<chrono::Utc>,
     offset: chrono::FixedOffset,
 ) -> Option<serde_json::Value> {
@@ -143,7 +166,7 @@ fn try_reuse_at(
     let day_start = day_start.format("%Y-%m-%d %H:%M:%S").to_string();
     let reason = if same_brief && same_facts {
         "facts unchanged"
-    } else if same_brief && capped(db, &stored, act_now, &day_start) {
+    } else if same_brief && capped(db, &stored, act_now, advisories_ready, &day_start) {
         "daily cap reached, no new act-now fact"
     } else {
         info!(
@@ -197,7 +220,7 @@ mod tests {
         let id = db
             .save_briefing(text, Some("claude-sonnet-5"), 7, Some(6290), Some(32000))
             .unwrap();
-        remember_fingerprint(db, id, fp, &[]);
+        remember_fingerprint(db, id, fp, &[], true);
         id
     }
 
@@ -209,7 +232,8 @@ mod tests {
         let db = crate::test_utils::test_db();
         save(&db, "## Fresh brief", "fp-a");
 
-        let cached = try_reuse_recent_briefing(&db, "fp-a", &[]).expect("same day, same facts");
+        let cached =
+            try_reuse_recent_briefing(&db, "fp-a", &[], true).expect("same day, same facts");
         assert_eq!(cached["success"], true);
         assert_eq!(cached["briefing"], "## Fresh brief");
         assert_eq!(cached["item_count"], 7);
@@ -229,7 +253,7 @@ mod tests {
     fn auto_reuse_regenerates_when_the_facts_change() {
         let db = crate::test_utils::test_db();
         save(&db, "## Brief", "fp-a");
-        assert!(try_reuse_recent_briefing(&db, "fp-b", &[]).is_none());
+        assert!(try_reuse_recent_briefing(&db, "fp-b", &[], true).is_none());
     }
 
     /// Yesterday's briefing is never today's, however fresh its facts.
@@ -238,7 +262,7 @@ mod tests {
         let db = crate::test_utils::test_db();
         save(&db, "## Old brief", "fp-a");
         backdate_latest_briefing(&db, 30.0);
-        assert!(try_reuse_recent_briefing(&db, "fp-a", &[]).is_none());
+        assert!(try_reuse_recent_briefing(&db, "fp-a", &[], true).is_none());
     }
 
     /// A briefing persisted without a fingerprint (an older build, or a
@@ -249,7 +273,7 @@ mod tests {
         db.save_briefing("## No fingerprint", Some("m"), 3, Some(0), Some(0))
             .unwrap();
         assert!(
-            try_reuse_recent_briefing(&db, "fp-a", &[]).is_none(),
+            try_reuse_recent_briefing(&db, "fp-a", &[], true).is_none(),
             "nothing recorded"
         );
 
@@ -258,7 +282,7 @@ mod tests {
             .unwrap();
         assert!(first > 0);
         assert!(
-            try_reuse_recent_briefing(&db, "fp-a", &[]).is_none(),
+            try_reuse_recent_briefing(&db, "fp-a", &[], true).is_none(),
             "the recorded fingerprint belongs to an older briefing"
         );
     }
@@ -269,13 +293,13 @@ mod tests {
     fn auto_reuse_declines_without_a_sane_briefing() {
         let db = crate::test_utils::test_db();
         assert!(
-            try_reuse_recent_briefing(&db, "fp", &[]).is_none(),
+            try_reuse_recent_briefing(&db, "fp", &[], true).is_none(),
             "empty table"
         );
         save(&db, "## From the future", "fp");
         backdate_latest_briefing(&db, -2.0);
         assert!(
-            try_reuse_recent_briefing(&db, "fp", &[]).is_none(),
+            try_reuse_recent_briefing(&db, "fp", &[], true).is_none(),
             "negative age (clock skew) must regenerate, not reuse"
         );
     }
@@ -302,7 +326,7 @@ mod tests {
                 rusqlite::params![created, id],
             )
             .unwrap();
-        remember_fingerprint(db, id, fp, act);
+        remember_fingerprint(db, id, fp, act, true);
         id
     }
 
@@ -321,11 +345,11 @@ mod tests {
         save_at(&db, "2026-10-05 21:00:00", "fp-1", &a); // 07:00 local
         save_at(&db, "2026-10-06 01:00:00", "fp-2", &a); // 11:00 local
         assert!(
-            try_reuse_at(&db, "fp-3", &a, now, plus_ten()).is_none(),
+            try_reuse_at(&db, "fp-3", &a, true, now, plus_ten()).is_none(),
             "two briefs today: the facts changed, regenerate"
         );
         save_at(&db, "2026-10-06 05:00:00", "fp-3", &a); // 15:00 local
-        let cached = try_reuse_at(&db, "fp-4", &a, now, plus_ten()).expect("capped");
+        let cached = try_reuse_at(&db, "fp-4", &a, true, now, plus_ten()).expect("capped");
         assert_eq!(cached["cached"], true);
     }
 
@@ -343,9 +367,9 @@ mod tests {
             save_at(&db, t, "fp-1", &a);
         }
         let grown = act(&["npm:x:navcal#GHSA-a", "npm:x:navcal#GHSA-b"]);
-        assert!(try_reuse_at(&db, "fp-2", &grown, now, plus_ten()).is_none());
+        assert!(try_reuse_at(&db, "fp-2", &grown, true, now, plus_ten()).is_none());
         let other = act(&["npm:y:navcal#GHSA-c"]);
-        assert!(try_reuse_at(&db, "fp-2", &other, now, plus_ten()).is_none());
+        assert!(try_reuse_at(&db, "fp-2", &other, true, now, plus_ten()).is_none());
     }
 
     /// The day is the user's LOCAL day. At 01:30 on 2026-10-07 (UTC+10) the
@@ -366,16 +390,16 @@ mod tests {
         save_at(&db, "2026-10-06 14:30:00", "fp-1", &a); // 00:30 local on the 7th
         let now = utc("2026-10-06T15:30:00Z"); // 01:30 local on the 7th
         assert!(
-            try_reuse_at(&db, "fp-2", &a, now, plus_ten()).is_none(),
+            try_reuse_at(&db, "fp-2", &a, true, now, plus_ten()).is_none(),
             "one brief so far on local 2026-10-07"
         );
         let utc_offset = chrono::FixedOffset::east_opt(0).expect("UTC");
         assert!(
-            try_reuse_at(&db, "fp-2", &a, now, utc_offset).is_some(),
+            try_reuse_at(&db, "fp-2", &a, true, now, utc_offset).is_some(),
             "four briefs on the UTC day"
         );
         assert!(
-            try_reuse_at(&db, "fp-1", &a, now, plus_ten()).is_some(),
+            try_reuse_at(&db, "fp-1", &a, true, now, plus_ten()).is_some(),
             "today's brief, same facts"
         );
     }
@@ -396,7 +420,7 @@ mod tests {
         save(&db, "## Fresh brief", "fp-a");
         let run = |db: std::sync::Arc<crate::db::Database>| async move {
             let _gate = BRIEF_GENERATION_GATE.lock().await;
-            if try_reuse_recent_briefing(&db, "fp-b", &[]).is_none() {
+            if try_reuse_recent_briefing(&db, "fp-b", &[], true).is_none() {
                 // The facts build + model call the gate spans.
                 tokio::time::sleep(std::time::Duration::from_millis(50)).await;
                 save(&db, "## Fresh brief", "fp-b");
@@ -429,6 +453,40 @@ mod tests {
         }
         let legacy = serde_json::json!({ "id": last, "fp": "fp-1" }).to_string();
         db.set_kv(FINGERPRINT_KV_KEY, &legacy).unwrap();
-        assert!(try_reuse_at(&db, "fp-2", &[], now, plus_ten()).is_none());
+        assert!(try_reuse_at(&db, "fp-2", &[], true, now, plus_ten()).is_none());
+    }
+
+    /// PR #961 review: the advisory check's readiness is part of what the
+    /// brief says (an all-clear only when ready), so a brief is never
+    /// re-served across a readiness change, in either direction, even past
+    /// the daily cap.
+    #[test]
+    fn a_readiness_change_regenerates_in_both_directions_even_past_the_cap() {
+        use crate::brief_facts::with_advisory_state;
+        use crate::osv::readiness::AdvisorySyncState as S;
+        let now = utc("2026-10-06T12:00:00Z");
+        let a = act(&[]);
+        let fp = |s| with_advisory_state("facts", Some(s));
+        for (before, after) in [(S::Ready, S::Failed), (S::NotStarted, S::Ready)] {
+            let db = crate::test_utils::test_db();
+            for t in [
+                "2026-10-05 21:00:00",
+                "2026-10-06 01:00:00",
+                "2026-10-06 05:00:00",
+            ] {
+                let id = save_at(&db, t, &fp(before), &a);
+                remember_fingerprint(&db, id, &fp(before), &a, before == S::Ready);
+            }
+            assert_ne!(fp(before), fp(after), "the identity carries readiness");
+            assert!(
+                try_reuse_at(&db, &fp(after), &a, after == S::Ready, now, plus_ten()).is_none(),
+                "{before:?} -> {after:?} must regenerate"
+            );
+            // Same readiness past the cap still reuses (the cap holds).
+            assert!(
+                try_reuse_at(&db, "other", &a, before == S::Ready, now, plus_ten()).is_some(),
+                "{before:?}: the cap still applies without a readiness change"
+            );
+        }
     }
 }

@@ -437,9 +437,6 @@ impl Database {
                AND project_path NOT LIKE '%\\.claude\\%'
                AND project_path NOT LIKE '%/.codex/%'
                AND project_path NOT LIKE '%\\.codex\\%'
-               AND project_path NOT LIKE '%/tmp/%'
-               AND project_path NOT LIKE '%\\tmp\\%'
-               AND project_path NOT LIKE '%AppData%Local%Temp%'
                AND (?1 IS NULL OR LOWER(package_name) = LOWER(?1))
              ORDER BY ecosystem, package_name",
         )?;
@@ -453,6 +450,8 @@ impl Database {
                     None
                 }
             })
+            // Temporary copies: the OS temp dir itself, not any "tmp" segment.
+            .filter(|d: &StoredDependency| !super::temp_paths::is_os_temp_path(&d.project_path))
             .collect(),
         );
         // Security/audit reader: a dormant project you own is still yours,
@@ -590,9 +589,6 @@ impl Database {
                AND project_path NOT LIKE '%\\.claude\\%'
                AND project_path NOT LIKE '%/.codex/%'
                AND project_path NOT LIKE '%\\.codex\\%'
-               AND project_path NOT LIKE '%/tmp/%'
-               AND project_path NOT LIKE '%\\tmp\\%'
-               AND project_path NOT LIKE '%AppData%Local%Temp%'
                AND project_relevance >= 0.15
                AND (?1 IS NULL OR LOWER(package_name) = LOWER(?1))
              ORDER BY language, package_name"
@@ -608,6 +604,7 @@ impl Database {
                     None
                 }
             })
+            .filter(|d: &StoredDependency| !super::temp_paths::is_os_temp_path(&d.project_path))
             .collect(),
         ))
     }

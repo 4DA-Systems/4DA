@@ -10,6 +10,12 @@ import { PreemptionWorklist } from './PreemptionWorklist';
 
 vi.mock('../SignalUpgradeCTA', () => ({ SignalUpgradeCTA: () => <div /> }));
 
+const cmdMock = vi.fn((..._args: unknown[]) => Promise.resolve({}));
+vi.mock('../../lib/commands', () => ({
+  cmd: (...args: unknown[]) => cmdMock(...args),
+  CommandTimeoutError: class CommandTimeoutError extends Error {},
+}));
+
 let mockState: Record<string, unknown> = {};
 vi.mock('../../store', () => ({
   useAppStore: vi.fn((selector: (s: Record<string, unknown>) => unknown) => selector(mockState)),
@@ -20,7 +26,10 @@ const refreshPreemptionQuietly = vi.fn(() => Promise.resolve());
 const runAutoDiscovery = vi.fn(() => Promise.resolve());
 const loadUserContext = vi.fn(() => Promise.resolve());
 
-type Sync = { state: string; ecosystems: number; synced_at: string | null; error: string | null };
+type Sync = {
+  state: string; ecosystems: number; synced_at: string | null; error: string | null;
+  in_flight?: boolean; skipped_temp?: number;
+};
 const READY: Sync = { state: 'ready', ecosystems: 2, synced_at: '2026-10-12 06:00:00', error: null };
 
 function setFeed(
@@ -152,6 +161,38 @@ describe('PreemptionWorklist — the all-clear follows advisory readiness', () =
     render(<PreemptionWorklist />);
     expect(screen.getByTestId('preemption-advisories-uncovered')).toBeInTheDocument();
     expect(screen.queryByText(CLEAN)).toBeNull();
+  });
+
+  // Fresh-profile audit E2/E3: a profile showed "syncing the advisory
+  // database" for 8.5 h while no sync ran. Not started is its own state, and
+  // the user can start the check.
+  it('lockfiles read, no sync ever ran: says so and offers Check now', async () => {
+    setFeed(40, { state: 'not_started', ecosystems: 2, synced_at: null, error: null, in_flight: false });
+    render(<PreemptionWorklist />);
+    const notice = screen.getByTestId('preemption-advisories-not_started');
+    expect(notice).toHaveTextContent('preemption.advisories.notStarted.title');
+    expect(screen.queryByText(CLEAN)).toBeNull();
+    fireEvent.click(screen.getByTestId('preemption-advisories-check-now'));
+    expect(cmdMock).toHaveBeenCalledWith('osv_sync_now');
+    await waitFor(() => expect(refreshPreemptionQuietly).toHaveBeenCalled());
+  });
+
+  it('a failed or stale check can be re-run; a running one cannot be doubled', () => {
+    setFeed(40, { state: 'failed', ecosystems: 2, synced_at: null, error: 'npm: timeout', in_flight: false });
+    const { unmount } = render(<PreemptionWorklist />);
+    expect(screen.getByTestId('preemption-advisories-check-now')).not.toBeDisabled();
+    unmount();
+    setFeed(40, { ...READY, state: 'stale', in_flight: true });
+    render(<PreemptionWorklist />);
+    expect(screen.getByTestId('preemption-advisories-check-now')).toBeDisabled();
+  });
+
+  it('every project skipped as a temp copy: names that reason, not coverage', () => {
+    setFeed(12, { state: 'no_inventory', ecosystems: 0, synced_at: null, error: null, skipped_temp: 2 });
+    render(<PreemptionWorklist />);
+    const notice = screen.getByTestId('preemption-advisories-uncovered');
+    expect(notice).toHaveTextContent('preemption.advisories.tempSkipped.title');
+    expect(notice).not.toHaveTextContent('preemption.advisories.uncovered.title');
   });
 
   it('synced with zero findings: the all-clear is allowed', () => {

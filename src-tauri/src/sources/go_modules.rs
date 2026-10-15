@@ -26,6 +26,25 @@ struct GoLatestInfo {
     time: Option<String>,
 }
 
+/// Item metadata for one module release. The proxy's `Time` is the release
+/// time: it goes under `published_at` too (a key the store reads into the
+/// `published_at` column), so the Brief's "released" date is the module's,
+/// not the day 4DA fetched it (audit E5). `timestamp` stays for old readers.
+fn module_metadata(module: &str, info: &GoLatestInfo) -> serde_json::Value {
+    let mut metadata = serde_json::json!({
+        "module_path": module,
+        "version": info.version,
+        "ecosystem": "go",
+        "source_name": "go_modules",
+        "manifest_grounded": true,
+    });
+    if let Some(ref ts) = info.time {
+        metadata["timestamp"] = serde_json::json!(ts);
+        metadata["published_at"] = serde_json::json!(ts);
+    }
+    metadata
+}
+
 /// Encode a module path for the Go module proxy. The proxy lower-cases paths and escapes
 /// each uppercase letter as `!<lower>` (e.g. `github.com/BurntSushi/toml` ->
 /// `github.com/!burnt!sushi/toml`), so a case-sensitive path resolves correctly.
@@ -147,16 +166,7 @@ impl GoModulesSource {
         }
         let content = content_parts.join("\n");
 
-        let mut metadata = serde_json::json!({
-            "module_path": module,
-            "version": info.version,
-            "ecosystem": "go",
-            "source_name": "go_modules",
-            "manifest_grounded": true,
-        });
-        if let Some(ref ts) = info.time {
-            metadata["timestamp"] = serde_json::json!(ts);
-        }
+        let metadata = module_metadata(module, &info);
 
         Ok(Some(
             SourceItem::new("go_modules", &source_id, &title)
@@ -220,6 +230,31 @@ impl Source for GoModulesSource {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// E5: the proxy's `Time` reaches the stored `published_at` (it used to
+    /// sit only under `timestamp`, which the store does not read, so the
+    /// Brief showed the fetch date as the release date).
+    #[test]
+    fn the_proxy_release_time_is_the_published_date() {
+        let info = GoLatestInfo {
+            version: "v1.9.0".to_string(),
+            time: Some("2026-09-30T12:00:00Z".to_string()),
+        };
+        let item = SourceItem::new("go_modules", "x", "x")
+            .with_metadata(module_metadata("github.com/x/y", &info));
+        assert_eq!(
+            crate::source_fetching::extract_published_at(&item).as_deref(),
+            Some("2026-09-30 12:00:00")
+        );
+
+        let undated = GoLatestInfo {
+            version: "v1.9.0".to_string(),
+            time: None,
+        };
+        let item = SourceItem::new("go_modules", "x", "x")
+            .with_metadata(module_metadata("github.com/x/y", &undated));
+        assert_eq!(crate::source_fetching::extract_published_at(&item), None);
+    }
 
     #[test]
     fn test_go_modules_source_creation() {

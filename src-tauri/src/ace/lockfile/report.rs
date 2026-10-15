@@ -15,6 +15,21 @@ use super::{LockFormat, LockfileOutcome};
 /// `kv_store` key the latest walk's report is saved under.
 pub(crate) const REPORT_KV_KEY: &str = "ace.lockfile_report.v1";
 
+/// Skip reason for a project inside the OS temp directory. Counted
+/// separately in the report (`skipped_temp_count`) so the advisory readiness
+/// can name it instead of "no advisory database covers these".
+pub(crate) const TEMP_DIR_REASON: &str =
+    "inside the system temp folder: treated as a temporary copy, not checked for vulnerabilities";
+
+/// The `skipped_temp_count` of a saved report (`to_json` output), 0 when absent.
+pub(crate) fn skipped_temp_count(saved: &serde_json::Value) -> u32 {
+    saved
+        .get("skipped_temp_count")
+        .and_then(serde_json::Value::as_u64)
+        .and_then(|n| u32::try_from(n).ok())
+        .unwrap_or(0)
+}
+
 /// Entries kept per list in the persisted / returned report (counts are exact).
 const LIST_CAP: usize = 200;
 
@@ -128,6 +143,11 @@ impl LockfileReport {
             "failed_count": self.failed.len(),
             "unsupported_count": self.unsupported.len(),
             "skipped_dir_count": self.skipped_dirs.len(),
+            "skipped_temp_count": self
+                .skipped_dirs
+                .iter()
+                .filter(|s| s.reason == TEMP_DIR_REASON)
+                .count(),
             "read": &self.read[..cap(self.read.len())],
             "failed": &self.failed[..cap(self.failed.len())],
             "unsupported": &self.unsupported[..cap(self.unsupported.len())],

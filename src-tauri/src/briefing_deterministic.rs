@@ -131,6 +131,12 @@ pub(crate) fn build_deterministic_brief(facts: &BriefFacts, reason: FloorReason)
         // nothing may be called clear.
         out.push_str(NO_LOCKFILES_LINE);
         out.push_str("\n\n");
+    } else if let Some(line) = advisory_gap_line(facts) {
+        // Fresh-profile audit E3: "Nothing new touches your code today" was
+        // said against 156 vulnerable packages while the advisory database
+        // had never synced. Until the check is ready, say where it stands.
+        out.push_str(line);
+        out.push_str("\n\n");
     } else if new_security.is_empty() && new_upgrades.is_empty() && facts.worth_knowing.is_empty() {
         out.push_str("Nothing new touches your code today.\n\n");
     }
@@ -168,10 +174,13 @@ pub(crate) fn build_deterministic_brief(facts: &BriefFacts, reason: FloorReason)
             "Facts view: computed from your lockfiles, OSV advisories and package registries, \
              with no AI narration."
         };
-        out.push_str(&format!("---\n_{source} {}_\n", why.sentence()));
+        out.push_str(&with_honest_sources(
+            &format!("---\n_{source} {}_\n", why.sentence()),
+            facts,
+        ));
         return out;
     }
-    out.push_str(match (reason, facts.no_dependencies_known) {
+    let footer = match (reason, facts.no_dependencies_known) {
         (FloorReason::NoCapableModel, false) => {
             "---\n_Computed from your lockfiles, OSV advisories and package registries, with no AI \
              narration. Add a Sonnet-class model in Settings → AI Provider for a written brief._\n"
@@ -190,8 +199,61 @@ pub(crate) fn build_deterministic_brief(facts: &BriefFacts, reason: FloorReason)
         }
         // Rendered above with its reason.
         (FloorReason::Morning(_), _) => "",
-    });
+    };
+    out.push_str(&with_honest_sources(footer, facts));
     out
+}
+
+/// What the brief says in place of an all-clear while the advisory check is
+/// not ready, or `None` when it is (or was not read).
+pub(crate) fn advisory_gap_line(facts: &BriefFacts) -> Option<&'static str> {
+    use crate::osv::readiness::AdvisorySyncState as S;
+    Some(match facts.advisories? {
+        S::Ready => return None,
+        S::NotStarted => {
+            "Vulnerability data has not been downloaded yet, so your dependencies have not been \
+             checked against published advisories and nothing here means they are clear. The \
+             check starts within a few minutes; Preemption has a Check now button."
+        }
+        S::Syncing | S::Matching => {
+            "4DA is downloading vulnerability advisories and checking your dependencies against \
+             them now, so nothing here means they are clear yet. Findings appear in Preemption \
+             when the check finishes."
+        }
+        S::Failed => {
+            "The last vulnerability-advisory check failed, so 4DA cannot say your dependencies are \
+             clear. It retries on its own; Preemption shows the error."
+        }
+        S::Stale => {
+            "The vulnerability advisories 4DA last checked against are more than three days old, \
+             so it does not call your dependencies clear. It re-checks on its own; Preemption \
+             shows the age."
+        }
+        // Every project the walk found sat inside the OS temp folder: that,
+        // not advisory coverage, is why nothing was checked (as Preemption
+        // says).
+        S::NoInventory if facts.advisory_temp_skipped > 0 => {
+            "Your projects are inside the system temp folder, which 4DA treats as temporary \
+             copies and does not check against vulnerability advisories, so nothing here means \
+             they are clear. Move them out of the temp folder and scan again to check them."
+        }
+        S::NoInventory => {
+            "None of the dependencies 4DA read are in an ecosystem it can check against \
+             vulnerability advisories, so nothing here means they are clear."
+        }
+    })
+}
+
+/// A footer that names "OSV advisories" as a source only when the advisory
+/// check actually completed.
+fn with_honest_sources(footer: &str, facts: &BriefFacts) -> String {
+    if advisory_gap_line(facts).is_none() {
+        return footer.to_string();
+    }
+    footer.replace(
+        "lockfiles, OSV advisories and package registries",
+        "lockfiles and package registries (the advisory check is not complete)",
+    )
 }
 
 /// What the brief says when no lockfile has been read: the honest state and
@@ -200,24 +262,30 @@ pub(crate) const NO_LOCKFILES_LINE: &str = "4DA has not read any of your project
      so nothing here was checked against your dependencies. Scan your projects (Settings → \
      Projects) and the brief will flag advisories and breaking releases that touch your code.";
 
-/// A narrated brief written while no lockfile is known: drop any all-clear
-/// sentence the model wrote anyway and end on [`NO_LOCKFILES_LINE`]. The
-/// prompt already says nothing was checked; this makes it hold regardless of
-/// what the model does with that.
+/// A narrated brief written while nothing was checked — no lockfile known, or
+/// the advisory check not ready: drop any all-clear sentence the model wrote
+/// anyway and end on the line that says where things stand
+/// ([`NO_LOCKFILES_LINE`] or [`advisory_gap_line`]). The prompt already says
+/// so; this makes it hold regardless of what the model does with that.
 pub(crate) fn honest_without_lockfiles(content: &str, facts: &BriefFacts) -> String {
-    if !facts.no_dependencies_known {
-        return content.to_string();
-    }
+    let line = if facts.no_dependencies_known {
+        NO_LOCKFILES_LINE
+    } else {
+        match advisory_gap_line(facts) {
+            Some(line) => line,
+            None => return content.to_string(),
+        }
+    };
     let kept: Vec<&str> = content
         .lines()
         .filter(|l| !l.contains("Nothing new touches your code"))
         .collect();
     let mut out = kept.join("\n").trim_end().to_string();
-    if !out.contains(NO_LOCKFILES_LINE) {
+    if !out.contains(line) {
         if !out.is_empty() {
             out.push_str("\n\n");
         }
-        out.push_str(NO_LOCKFILES_LINE);
+        out.push_str(line);
     }
     out.push('\n');
     out

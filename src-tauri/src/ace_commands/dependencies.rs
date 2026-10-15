@@ -108,7 +108,8 @@ pub(super) fn store_lockfile_dependencies(db: &Database, scan_paths: &[PathBuf])
     let scanner = crate::ace::scanner::ProjectScanner::new();
     let mut report = LockfileReport::default();
     let mut lockfile_count = 0u32;
-    for dir in collect_lockfile_dirs_reporting(scan_paths, &mut report) {
+    let temp_roots = crate::db::temp_paths::os_temp_roots();
+    for dir in collect_lockfile_dirs_reporting(scan_paths, temp_roots, &mut report) {
         let project_path = dir.to_string_lossy().to_string();
         lockfile_count += process_lockfile_dir(db, &scanner, &dir, &project_path, &mut report);
     }
@@ -132,13 +133,17 @@ pub(super) fn store_lockfile_dependencies(db: &Database, scan_paths: &[PathBuf])
 /// database, so the walk's decisions are testable on a temp tree.
 #[cfg(test)]
 fn collect_lockfile_dirs(scan_paths: &[PathBuf]) -> Vec<PathBuf> {
-    collect_lockfile_dirs_reporting(scan_paths, &mut LockfileReport::default())
+    collect_lockfile_dirs_reporting(scan_paths, &[], &mut LockfileReport::default())
 }
 
 /// [`collect_lockfile_dirs`], recording every directory holding a dependency
-/// file that a gate skipped.
+/// file that a gate skipped. A directory inside `temp_roots` (the OS temp
+/// directory in production; tests walk temp trees and pass none) is a
+/// temporary copy: skipped, and reported with that reason so Preemption can
+/// say why it is not checked (fresh-profile audit E6).
 fn collect_lockfile_dirs_reporting(
     scan_paths: &[PathBuf],
+    temp_roots: &[String],
     report: &mut LockfileReport,
 ) -> Vec<PathBuf> {
     // "Your Stack" exclusions (tier 3), fetched once per walk: lockfiles under
@@ -179,7 +184,9 @@ fn collect_lockfile_dirs_reporting(
                 continue;
             }
             if let Some(probe) = lockfile::probe(&dir) {
-                if lockfile_dir_is_relevant(root, &dir, &probe) {
+                if crate::db::temp_paths::is_under_any(&project_path, temp_roots) {
+                    report.skip_dir(&dir, lockfile::report::TEMP_DIR_REASON);
+                } else if lockfile_dir_is_relevant(root, &dir, &probe) {
                     selected.push(dir.clone());
                 } else {
                     report.skip_dir(&dir, "example / fixture / scaffolding path");

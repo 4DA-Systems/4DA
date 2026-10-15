@@ -203,8 +203,11 @@ fn load_rows(conn: &rusqlite::Connection) -> Vec<RegistryRow> {
         .map(|s| format!("'{s}'"))
         .collect::<Vec<_>>()
         .join(",");
+    // `published` is the registry's own date or nothing: the fetch time
+    // (`created_at`) read as "released <the day 4DA saw it>" (audit E5). The
+    // window still falls back to it so an undated release is not lost.
     let sql = format!(
-        "SELECT source_type, title, COALESCE(content, ''), url, COALESCE(published_at, created_at)
+        "SELECT source_type, title, COALESCE(content, ''), url, published_at
          FROM source_items
          WHERE source_type IN ({placeholders})
            AND COALESCE(published_at, created_at) >= datetime('now', ?1)
@@ -281,4 +284,40 @@ pub(crate) fn collect_release_changes(
     best.into_values()
         .filter_map(|(_, grade, row)| release_change(&grade, &row, &liveness))
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    /// Fresh-profile audit E5: "released <date>" showed the day 4DA fetched
+    /// the row when the registry gave no publish date. Only the registry's
+    /// date is shown; without one there is no date (the window still counts
+    /// the fetch time, so the release is not lost).
+    #[test]
+    fn a_release_without_a_registry_date_shows_no_date_not_the_fetch_date() {
+        let db = crate::test_utils::test_db();
+        let conn = db.conn.lock();
+        for (id, published) in [
+            ("undated@2.0.0", None),
+            ("dated@3.0.0", Some("2026-10-01 10:00:00")),
+        ] {
+            conn.execute(
+                "INSERT INTO source_items (source_type, source_id, title, content, content_hash,
+                     embedding, published_at)
+                 VALUES ('crates_io', ?1, ?1, '', ?1, x'', ?2)",
+                rusqlite::params![id, published],
+            )
+            .unwrap();
+        }
+        let rows = super::load_rows(&conn);
+        let published = |t: &str| {
+            rows.iter()
+                .find(|r| r.title == t)
+                .map(|r| r.published.clone())
+        };
+        assert_eq!(published("undated@2.0.0"), Some(None), "{rows:?}");
+        assert_eq!(
+            published("dated@3.0.0"),
+            Some(Some("2026-10-01 10:00:00".to_string()))
+        );
+    }
 }

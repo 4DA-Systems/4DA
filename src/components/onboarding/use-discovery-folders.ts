@@ -8,6 +8,12 @@ export interface FolderChoice {
   checked: boolean;
 }
 
+/** Why a typed folder was not added (`reason`: `ace_check_scan_folder`'s code). */
+export interface FolderProblem {
+  path: string;
+  reason: string;
+}
+
 const samePath = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 
 function mergeFolders(prev: FolderChoice[], paths: readonly string[], checked: boolean): FolderChoice[] {
@@ -47,14 +53,27 @@ export function useDiscoveryFolders() {
     setFolders(prev => prev.map(f => (f.path === path ? { ...f, checked: !f.checked } : f)));
   }, []);
 
-  const addFolder = useCallback((raw: string) => {
+  // A typed folder is checked before it is listed: a mistyped path used to be
+  // accepted, then silently dropped by the scan (fresh-profile audit E9).
+  const [addError, setAddError] = useState<FolderProblem | null>(null);
+  const addFolder = useCallback(async (raw: string): Promise<boolean> => {
     const path = raw.trim();
-    if (!path) return;
+    if (!path) return false;
+    let problem: string | null = null;
+    try {
+      problem = await cmd('ace_check_scan_folder', { path });
+    } catch { /* the scan re-checks every folder; let it through */ }
+    if (problem) {
+      setAddError({ path, reason: problem });
+      return false;
+    }
+    setAddError(null);
     setFolders(prev => {
       const existing = prev.find(f => samePath(f.path, path));
       if (existing) return prev.map(f => (f === existing ? { ...f, checked: true } : f));
       return [...prev, { path, checked: true }];
     });
+    return true;
   }, []);
 
   // Opt-in: other drives are only looked at when the user asks, and what is
@@ -73,7 +92,9 @@ export function useDiscoveryFolders() {
 
   const selected = useMemo(() => folders.filter(f => f.checked).map(f => f.path), [folders]);
 
-  return { folders, loading, selected, toggleFolder, addFolder, findMoreFolders, searchingDrives, drivesSearched };
+  return {
+    folders, loading, selected, toggleFolder, addFolder, addError, findMoreFolders, searchingDrives, drivesSearched,
+  };
 }
 
 export type DiscoveryFolders = ReturnType<typeof useDiscoveryFolders>;

@@ -497,6 +497,13 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
             // Background Jobs (run regardless of monitoring enabled state)
             // ================================================================
 
+            // Advisory mirror: start a sync (in the background, single
+            // flight) when dependencies were never synced, the mirror is
+            // stale, or a scan changed the inventory. The app's own check, on
+            // every platform: the headless engine is opt-in and Windows-only,
+            // and launch alone left long-running apps unsynced (audit E1).
+            crate::osv::readiness::refresh::on_scheduler_tick();
+
             // Health check - every 5 minutes (Critical — always runs)
             let last_health = state.last_health_check.load(Ordering::Relaxed);
             if now - last_health >= crate::scheduler_gate::effective_interval(HEALTH_CHECK_INTERVAL)

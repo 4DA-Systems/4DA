@@ -72,12 +72,15 @@ pub(crate) fn is_agent_infra_path(path: &str) -> bool {
     has_agent_infra_segment(path) || is_temp_path(path)
 }
 
-/// Temp-directory patterns (`/tmp/`, `AppData\Local\Temp`). Judged on
-/// whatever the caller passes — callers that know a project root pass only
-/// the part BELOW it (see [`relative_to_root`]).
+/// Inside the operating system's temp directory (a temporary copy). The
+/// directory itself, judged on the FULL path: the `/tmp/` and
+/// `AppData\Local\Temp` substring patterns this used to be dropped any
+/// project with a `tmp` segment (`D:\work\tmp\api`) and any other user's
+/// temp-like folder (fresh-profile audit E6, 2026-10-13). The rule and its
+/// spelling handling live with the inventory reads that apply it too
+/// (`db::temp_paths`).
 fn is_temp_path(path: &str) -> bool {
-    let p = comparison_form(path);
-    p.contains("/tmp/") || (p.contains("appdata") && p.contains("local") && p.contains("temp"))
+    crate::db::temp_paths::is_os_temp_path(path)
 }
 
 /// The part of `path` below `root`, in comparison form with a leading `/`
@@ -199,14 +202,15 @@ pub(crate) fn is_hard_excluded_with(path: &str, tier2_waived: bool) -> bool {
 }
 
 /// [`is_hard_excluded`] with explicit roots: agent-infrastructure segments
-/// anywhere in the path exclude it; temp and scaffolding patterns are judged
-/// only on the part below the deepest root that contains it.
+/// anywhere in the path exclude it, and so does a location inside the OS temp
+/// directory (where the copy lives, not what it is); scaffolding patterns are
+/// judged only on the part below the deepest root that contains it.
 pub(crate) fn is_hard_excluded_under(path: &str, tier2_waived: bool, roots: &[String]) -> bool {
-    if has_agent_infra_segment(path) {
+    if has_agent_infra_segment(path) || is_temp_path(path) {
         return true;
     }
     let judged = judged_part(path, roots);
-    is_temp_path(&judged) || (!tier2_waived && is_non_project_path(&judged))
+    !tier2_waived && is_non_project_path(&judged)
 }
 
 /// Scan-time exclusion for filesystem WALKS (ACE scanner, lockfile walk,
@@ -336,8 +340,8 @@ mod tests {
 
     #[test]
     fn tier1_temp_paths() {
-        assert!(is_agent_infra_path("/tmp/clone/project"));
-        assert!(is_agent_infra_path(r"C:\Users\x\AppData\Local\Temp\clone"));
+        let inside = std::env::temp_dir().join("clone").join("project");
+        assert!(is_agent_infra_path(&inside.display().to_string()));
     }
 
     #[test]
@@ -347,6 +351,11 @@ mod tests {
             r"D:\projects\my.codexplorer",
             "my.claude-tools/src", // relative lookalike — segment is "my.claude-tools"
             "/home/u/tmpfiles/app", // "tmpfiles" is not the "/tmp/" segment
+            // E6: a `tmp` segment, or another account's Temp folder, is not the
+            // OS temp directory — these are real projects.
+            r"D:\work\tmp\api",
+            "/home/u/tmp/site",
+            r"C:\Users\somebody-else\AppData\Local\Temp-projects\app",
         ] {
             assert!(!is_agent_infra_path(p), "false positive: {p}");
         }
@@ -463,41 +472,51 @@ mod tests {
     // ── Judged below the project root ───────────────────────────────────
 
     #[test]
-    fn a_root_under_temp_or_fixtures_is_not_excluded_by_its_own_location() {
+    fn a_root_under_fixtures_is_not_excluded_by_its_own_location() {
         let roots = vec![
-            r"C:\Users\me\AppData\Local\Temp\checkout".to_string(),
+            r"D:\work\checkout".to_string(),
             "/home/me/fixtures".to_string(),
         ];
         for p in [
-            r"C:\Users\me\AppData\Local\Temp\checkout\app",
-            "c:/users/me/appdata/local/temp/checkout",
+            r"D:\work\checkout\app",
             "/home/me/fixtures/my-service",
+            // A `tmp` segment below a root is a folder name, not a temp copy (E6).
+            "/home/me/fixtures/svc/tmp/clone/x",
         ] {
             assert!(!is_hard_excluded_under(p, false, &roots), "{p}");
         }
-        // Below the root the same patterns still exclude.
+        // Below the root the scaffolding patterns still exclude.
         assert!(is_hard_excluded_under(
-            r"C:\Users\me\AppData\Local\Temp\checkout\app\testdata\mod",
-            false,
-            &roots
-        ));
-        assert!(is_hard_excluded_under(
-            "/home/me/fixtures/svc/tmp/clone/x",
+            r"D:\work\checkout\app\testdata\mod",
             false,
             &roots
         ));
         // Agent infrastructure is excluded wherever it sits.
         assert!(is_hard_excluded_under(
-            r"C:\Users\me\AppData\Local\Temp\checkout\.claude\worktrees\a",
+            r"D:\work\checkout\.claude\worktrees\a",
             false,
             &roots
         ));
         // Outside every root: judged whole, as before.
         assert!(is_hard_excluded_under(
-            r"C:\Users\me\AppData\Local\Temp\other",
+            "/home/other/fixtures/app",
             false,
             &roots
         ));
+    }
+
+    /// The OS temp directory is where temporary copies live; a project there
+    /// is excluded even when the user configured a root inside it (the
+    /// lockfile walk reports it as skipped with that reason).
+    #[test]
+    fn the_os_temp_dir_is_excluded_wherever_the_root_is() {
+        let root = std::env::temp_dir().join("checkout").display().to_string();
+        let app = std::env::temp_dir()
+            .join("checkout")
+            .join("app")
+            .display()
+            .to_string();
+        assert!(is_hard_excluded_under(&app, false, &[root]));
     }
 
     #[test]

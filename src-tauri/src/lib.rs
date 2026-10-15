@@ -988,6 +988,7 @@ pub fn run() {
             ace_commands::ace_auto_discover,
             ace_commands::ace_preview_discovery_dirs,
             ace_commands::ace_candidate_dev_roots,
+            ace_commands::ace_check_scan_folder,
             ace_commands::ace_get_scan_summary,
             ace_commands::ace_record_interaction,
             ace_commands::ace_find_similar_topics,

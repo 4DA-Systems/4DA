@@ -36,12 +36,14 @@ use crate::error::{Result, ResultExt};
 // Tauri Commands
 // ============================================================================
 
-/// Trigger a manual OSV sync. Queries the OSV API for all user dependencies
-/// and stores advisories locally.
+/// Trigger a manual OSV sync ("Check now"). Queries the OSV API for all user
+/// dependencies and stores advisories locally. Single flight with every other
+/// desktop sync (`readiness::refresh`): it waits for a running one instead of
+/// starting a second.
 #[tauri::command]
 pub async fn osv_sync_now() -> Result<serde_json::Value> {
     let db = crate::get_database()?;
-    let result = sync::sync(&db).await?;
+    let result = readiness::refresh::sync_now(&db).await?;
     // The sync recomputed matches — refresh the Preemption feed cache in the
     // background so a manual refresh is reflected on the next tab open without
     // paying the 30-40s recompute (live matching + adversarial deliberation).

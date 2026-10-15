@@ -443,6 +443,8 @@ interface CommandMap {
   ace_get_scan_summary: { params: Record<string, never>; result: ScanSummary };
   ace_preview_discovery_dirs: { params: Record<string, never>; result: string[] };
   ace_candidate_dev_roots: { params: Record<string, never>; result: string[] };
+  /** Why a typed folder cannot be scanned ('not_found' | 'not_a_folder' | 'system_folder'), or null. */
+  ace_check_scan_folder: { params: { path: string }; result: string | null };
 
   // -- Learned Preferences (P6) --
   get_learned_preferences: { params: Record<string, never>; result: { facets: Array<{ facet_id: string; class: string; key: string; value: string; stability: number; state: string; user_state: string; evidence_count: number; first_seen_at: number; last_seen_at: number }>; count: number } };
@@ -1962,6 +1964,8 @@ const LONG_RUNNING_COMMANDS = new Set<string>([
   'index_context',
   'ace_full_scan',
   'ace_auto_discover',
+  // "Check now": a first advisory download (npm's export is ~200 MB) runs for minutes.
+  'osv_sync_now',
   'pull_ollama_model',
   'prepare_embedding_engine',
   // Embeds every Quick Setup interest; a cold local embedder can take a while.
