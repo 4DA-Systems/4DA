@@ -151,9 +151,115 @@ fn public_addrs_drops_internal_answers() {
 async fn resolver_refuses_a_name_that_resolves_internal() {
     use reqwest::dns::Resolve;
     let name = reqwest::dns::Name::from_str("localhost").expect("name");
-    let result = PublicOnlyResolver.resolve(name).await;
-    let err = result.err().expect("localhost must be refused");
+    let result = PublicOnlyResolver::with_exempt_hosts(vec!["proxy.corp".into()])
+        .resolve(name)
+        .await;
+    let err = result.err().expect("non-exempt localhost must be refused");
     assert!(err.to_string().contains("internal/private"), "{err}");
+}
+
+/// Review of #958: reqwest resolves the PROXY's hostname through this
+/// resolver, so an env/registry proxy on an internal address was refused and
+/// every fetch failed. An exempt (proxy) host resolves unfiltered.
+#[tokio::test]
+async fn resolver_lets_an_exempt_proxy_host_resolve_internal() {
+    use reqwest::dns::Resolve;
+    let name = reqwest::dns::Name::from_str("localhost").expect("name");
+    let addrs: Vec<SocketAddr> = PublicOnlyResolver::with_exempt_hosts(vec!["LocalHost.".into()])
+        .resolve(name)
+        .await
+        .expect("exempt proxy host must resolve")
+        .collect();
+    assert!(addrs.iter().any(|a| a.ip().is_loopback()), "{addrs:?}");
+}
+
+fn pairs(list: &[(&str, &str)]) -> Vec<(String, String)> {
+    list.iter()
+        .map(|(k, v)| ((*k).to_string(), (*v).to_string()))
+        .collect()
+}
+
+#[test]
+fn proxy_hosts_parses_env_and_registry_forms() {
+    let hosts = proxy_hosts(&pairs(&[
+        ("HTTP_PROXY", "proxy.corp:8080"),
+        ("https_proxy", "http://user:pw@Secure.Proxy.Corp.:3128/"),
+        ("ALL_PROXY", "socks5://socks.corp:1080"),
+        ("all_proxy", ""),
+        ("HTTP_PROXY", "   "),
+        (
+            "ProxyServer",
+            "http=reg-http.corp:80;https=reg-https.corp:443",
+        ),
+        ("NO_PROXY", "nope.corp"),
+        ("PATH", "C:\\Windows"),
+    ]));
+    assert_eq!(
+        hosts,
+        vec![
+            "proxy.corp",
+            "secure.proxy.corp",
+            "socks.corp",
+            "reg-http.corp",
+            "reg-https.corp"
+        ]
+    );
+}
+
+#[test]
+fn proxy_hosts_skips_ip_literals_and_dedups() {
+    let hosts = proxy_hosts(&pairs(&[
+        ("HTTP_PROXY", "10.0.0.5:8080"),
+        ("HTTPS_PROXY", "http://[fd00::1]:3128"),
+        ("ProxyServer", "proxy.corp:8080"),
+        ("http_proxy", "http://PROXY.corp:8080"),
+    ]));
+    assert_eq!(hosts, vec!["proxy.corp"]);
+}
+
+/// End to end: a client using a proxy named `localhost` (internal) with that
+/// host exempt reaches the proxy; without the exemption it cannot.
+#[tokio::test]
+async fn proxied_request_reaches_an_exempt_internal_proxy() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("bind");
+    let port = listener.local_addr().expect("addr").port();
+    tokio::spawn(async move {
+        while let Ok((mut sock, _)) = listener.accept().await {
+            let mut buf = [0u8; 2048];
+            let _ = sock.read(&mut buf).await;
+            let _ = sock
+                .write_all(
+                    b"HTTP/1.1 200 OK\r\ncontent-length: 7\r\nconnection: close\r\n\r\nproxied",
+                )
+                .await;
+        }
+    });
+    let client = |exempt: Vec<String>| {
+        reqwest::Client::builder()
+            .proxy(reqwest::Proxy::all(format!("http://localhost:{port}")).expect("proxy"))
+            .dns_resolver(std::sync::Arc::new(PublicOnlyResolver::with_exempt_hosts(
+                exempt,
+            )))
+            .build()
+            .expect("client")
+    };
+    let ok = client(vec!["localhost".into()])
+        .get("http://feeds.example.org/rss")
+        .send()
+        .await
+        .expect("request through exempt proxy");
+    assert_eq!(ok.text().await.expect("body"), "proxied");
+    let refused = client(Vec::new())
+        .get("http://feeds.example.org/rss")
+        .send()
+        .await;
+    assert!(
+        refused.is_err(),
+        "non-exempt internal proxy must be refused"
+    );
 }
 
 /// The rebinding window, end to end through the client that fetches feeds:

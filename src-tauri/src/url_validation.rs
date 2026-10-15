@@ -290,11 +290,139 @@ fn public_addrs(addrs: impl IntoIterator<Item = SocketAddr>) -> Vec<SocketAddr> 
 /// lookup. A name with only internal addresses fails to connect. IP-literal
 /// hosts never reach a resolver; `validate_not_internal` and the redirect
 /// policy judge those statically.
-pub(crate) struct PublicOnlyResolver;
+///
+/// Proxies: reqwest resolves a configured proxy's hostname through this same
+/// resolver, and a corporate proxy (`proxy.corp:8080` -> 10.x) legitimately
+/// lives on an internal address. The system proxy hosts (env vars, and on
+/// Windows the Internet Settings proxy reqwest also honours) are therefore
+/// exempt and resolve unfiltered. Behind a proxy the TARGET's DNS happens at
+/// the proxy, never here, so rebinding protection for targets rests on
+/// `validate_not_internal` exactly as it did before this resolver existed.
+pub(crate) struct PublicOnlyResolver {
+    exempt_hosts: Vec<String>,
+}
+
+impl PublicOnlyResolver {
+    /// A resolver that lets exactly these hosts (the proxies) resolve
+    /// unfiltered. Tests inject the set here instead of reading the env.
+    pub(crate) fn with_exempt_hosts(hosts: Vec<String>) -> Self {
+        let mut exempt_hosts: Vec<String> = hosts
+            .iter()
+            .map(|h| normalize_host(h))
+            .filter(|h| !h.is_empty())
+            .collect();
+        exempt_hosts.sort();
+        exempt_hosts.dedup();
+        Self { exempt_hosts }
+    }
+
+    /// Exempt the system proxy hosts, read once (`HTTP_CLIENT` is a LazyLock).
+    pub(crate) fn from_system() -> Self {
+        let hosts = proxy_hosts(&system_proxy_settings());
+        if !hosts.is_empty() {
+            tracing::debug!(
+                target: "4da::security",
+                proxies = ?hosts,
+                "System proxy host(s) exempt from the public-only DNS filter"
+            );
+        }
+        Self::with_exempt_hosts(hosts)
+    }
+
+    fn is_exempt(&self, host: &str) -> bool {
+        self.exempt_hosts.contains(&normalize_host(host))
+    }
+}
+
+fn normalize_host(host: &str) -> String {
+    host.trim().trim_end_matches('.').to_ascii_lowercase()
+}
+
+/// Proxy settings reqwest's system matcher reads, as (name, value) pairs.
+fn system_proxy_settings() -> Vec<(String, String)> {
+    #[allow(unused_mut)] // only the Windows branch appends
+    let mut settings: Vec<(String, String)> = PROXY_ENV_VARS
+        .iter()
+        .filter_map(|var| std::env::var(var).ok().map(|v| ((*var).to_string(), v)))
+        .collect();
+    #[cfg(windows)]
+    if let Some(server) = windows_proxy_server() {
+        settings.push(("ProxyServer".to_string(), server));
+    }
+    settings
+}
+
+const PROXY_ENV_VARS: &[&str] = &[
+    "ALL_PROXY",
+    "all_proxy",
+    "HTTP_PROXY",
+    "http_proxy",
+    "HTTPS_PROXY",
+    "https_proxy",
+];
+
+/// `HKCU\...\Internet Settings` ProxyServer when ProxyEnable is set — the
+/// source hyper-util's `client-proxy-system` falls back to on Windows.
+#[cfg(windows)]
+fn windows_proxy_server() -> Option<String> {
+    let key = winreg::RegKey::predef(winreg::enums::HKEY_CURRENT_USER)
+        .open_subkey(r"Software\Microsoft\Windows\CurrentVersion\Internet Settings")
+        .ok()?;
+    let enabled: u32 = key.get_value("ProxyEnable").unwrap_or(0);
+    if enabled == 0 {
+        return None;
+    }
+    key.get_value::<String, _>("ProxyServer")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+}
+
+/// Hostnames of the proxies named in `settings` (pure; the test seam).
+/// Accepts the env-var names in either case and the Windows `ProxyServer`
+/// value, whose form is `host:port` or `http=host:port;https=host:port`.
+/// Scheme-less values are read as `http://`. IP-literal proxies are left out:
+/// they never reach a resolver, so they need no exemption.
+pub(crate) fn proxy_hosts(settings: &[(String, String)]) -> Vec<String> {
+    let mut hosts = Vec::new();
+    for (name, value) in settings {
+        let name = name.to_ascii_lowercase();
+        if !matches!(
+            name.as_str(),
+            "all_proxy" | "http_proxy" | "https_proxy" | "proxyserver"
+        ) {
+            continue;
+        }
+        for entry in value.split(';').map(str::trim).filter(|e| !e.is_empty()) {
+            // `http=host:port` (registry per-protocol form); a `://` before
+            // any `=` means a URL whose own query may contain `=`.
+            let entry = match (entry.find('='), entry.find("://")) {
+                (Some(eq), None) => &entry[eq + 1..],
+                (Some(eq), Some(sch)) if eq < sch => &entry[eq + 1..],
+                _ => entry,
+            };
+            let with_scheme = if entry.contains("://") {
+                entry.to_string()
+            } else {
+                format!("http://{entry}")
+            };
+            let Ok(url) = Url::parse(&with_scheme) else {
+                continue;
+            };
+            if let Some(Host::Domain(d)) = url.host() {
+                let host = normalize_host(d);
+                if !host.is_empty() && !hosts.contains(&host) {
+                    hosts.push(host);
+                }
+            }
+        }
+    }
+    hosts
+}
 
 impl reqwest::dns::Resolve for PublicOnlyResolver {
     fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
         let host = name.as_str().to_owned();
+        let exempt = self.is_exempt(&host);
         Box::pin(async move {
             let lookup = host.clone();
             let answer = tokio::task::spawn_blocking(move || {
@@ -304,6 +432,10 @@ impl reqwest::dns::Resolve for PublicOnlyResolver {
             })
             .await
             .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { Box::new(e) })??;
+            if exempt {
+                let addrs: reqwest::dns::Addrs = Box::new(answer.into_iter());
+                return Ok(addrs);
+            }
             let public = public_addrs(answer);
             if public.is_empty() {
                 tracing::warn!(

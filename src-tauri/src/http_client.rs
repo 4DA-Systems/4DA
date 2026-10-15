@@ -100,7 +100,7 @@ pub(crate) static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
         .timeout(Duration::from_secs(30))
         .connect_timeout(Duration::from_secs(10))
         .dns_resolver(std::sync::Arc::new(
-            crate::url_validation::PublicOnlyResolver,
+            crate::url_validation::PublicOnlyResolver::from_system(),
         ))
         .redirect(ssrf_guarded_redirect_policy())
         .build()
