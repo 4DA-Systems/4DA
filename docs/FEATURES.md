@@ -115,7 +115,7 @@ Where:
 ### Local-Only Processing
 
 - All file scanning happens locally
-- Embeddings computed on-device
+- Embeddings computed on-device (cloud embeddings only if you explicitly opt in)
 - Database stored locally
 - No telemetry
 
@@ -129,7 +129,7 @@ Where:
 ### Data Isolation
 
 - Raw file contents never leave your machine
-- Only titles/summaries sent to LLM (if configured)
+- Only item titles and snippets plus a short context profile (dependency names, project labels, git-derived topics) sent to the LLM you configured; never source code or commit messages
 - Option for fully local with Ollama
 
 ## System Tray

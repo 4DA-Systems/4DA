@@ -2,7 +2,7 @@
 
 **4DA Systems Pty Ltd** | **Version:** 1.0.1 | **Last updated:** 2026-06-05
 
-This document lists every outbound network connection the 4DA application makes. Every claim is backed by a source code reference you can audit yourself. If the application makes a connection not listed here, it is a bug -- report it to security@4da.ai.
+This document is an audit-oriented companion to `NETWORK.md`, written for v1.0.1. It is **not complete**: it does not cover the dependency checks (package names and versions sent to OSV.dev and the package registries), licence recovery at `4da.ai`, the one-time model download, or the Windows WebView2 runtime. `NETWORK.md` lists every outbound connection with source references; if the application makes a connection not listed there, it is a bug -- report it to security@4da.ai.
 
 > **Canonical manifest:** `NETWORK.md` (repo root) is the fuller, canonical network manifest; this document is the audit-oriented companion.
 >

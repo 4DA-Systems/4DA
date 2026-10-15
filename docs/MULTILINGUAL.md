@@ -201,7 +201,7 @@ The daily intelligence briefing is generated natively in your language — not t
 
 All translation follows 4DA's privacy-first architecture:
 
-- **Ollama translations** — everything stays on your machine. Zero network calls.
+- **Ollama translations** — everything stays on your machine (Ollama runs on `localhost`). No translation request leaves it.
 - **Dedicated API translations** — only the text being translated is sent to the API. No metadata, no user data, no tracking.
 - **API keys** — stored locally in your system's secure keychain. Never sent to 4DA servers.
 - **Translation cache** — stored locally in your SQLite database. Never synced externally.
