@@ -275,6 +275,7 @@ pub(crate) async fn generate_briefing_internal(
             // `slate_ids` came out of the same pass that rendered the prompt.
             crate::brief_rejections::record_rejections(db, briefing_id, &rejects, &slate_ids);
             remember_fingerprint(db, briefing_id, &facts.fingerprint, &act_now);
+            crate::brief_cadence::note_brief_written(db, auto_triggered);
         }
         Err(e) => {
             error!(target: "4da::briefing", error = %e, "Failed to persist briefing");
@@ -311,12 +312,15 @@ fn serve_deterministic(
         Some(0),
         Some(0),
     ) {
-        Ok(id) => remember_fingerprint(
-            db,
-            id,
-            &facts.fingerprint,
-            &crate::brief_cadence::act_now_ids(facts),
-        ),
+        Ok(id) => {
+            remember_fingerprint(
+                db,
+                id,
+                &facts.fingerprint,
+                &crate::brief_cadence::act_now_ids(facts),
+            );
+            crate::brief_cadence::note_brief_written(db, auto_triggered);
+        }
         Err(e) => {
             error!(target: "4da::briefing", error = %e, "Failed to persist deterministic briefing");
         }

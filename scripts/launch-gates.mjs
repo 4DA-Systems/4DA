@@ -12,8 +12,9 @@
  *   --app-root <dir>        the checkout the running app was built from (default: main checkout)
  *   --no-gh                 do not query GitHub (CI-backed gates show pending)
  *   --no-dbstat             skip the per-table size scan (~10 s on a 2 GB DB)
- *   --lane1 <file.json>     G5 weekly re-measure result {successes, n, measured_at}
- *   --dogfood-start <date>  G9 start date (YYYY-MM-DD)
+ *   --lane1 <file>          G5 results instead of <main checkout>/data/launch-gates/lane1-weekly.jsonl
+ *                           (.jsonl lines from the weekly harness, or a .json {successes, n, measured_at})
+ *   --dogfood-start <date>  G9 window start (YYYY-MM-DD) instead of scripts/launch-gates-dogfood.json
  *   --measure-idle [min]    G6 idle sampler (Windows; default 12 minutes)
  *
  * Read-only by construction: the DB is opened with node:sqlite {readOnly: true}; settings.json is
@@ -178,17 +179,49 @@ export async function openReadOnly(dbPath) {
 const localDay = (iso, offsetMin) => new Date(Date.parse(iso) + offsetMin * 60000).toISOString().slice(0, 10);
 
 export function readBrief(db, offsetMin = -new Date().getTimezoneOffset()) {
-  const row = db.prepare("SELECT value FROM kv_store WHERE key = 'morning_brief_outcomes_v1'").get();
-  const outcomes = row ? JSON.parse(row.value) : {};
-  let briefingDays = [];
+  const kv = (key) => {
+    const row = db.prepare('SELECT value FROM kv_store WHERE key = ?').get(key);
+    return row ? JSON.parse(row.value) : {};
+  };
+  const outcomes = kv('morning_brief_outcomes_v1');
+  const briefWrites = kv('brief_writes_by_day_v1');
+  const briefingRowsByDay = {};
   try {
-    briefingDays = [
-      ...new Set(db.prepare('SELECT created_at FROM briefings').all().map((r) => localDay(`${r.created_at.replace(' ', 'T')}Z`, offsetMin))),
-    ].sort();
+    for (const r of db.prepare('SELECT created_at FROM briefings').all()) {
+      const d = localDay(`${r.created_at.replace(' ', 'T')}Z`, offsetMin);
+      briefingRowsByDay[d] = (briefingRowsByDay[d] || 0) + 1;
+    }
   } catch {
-    briefingDays = [];
+    /* no briefings table: every day reads 0 rows */
   }
-  return { outcomes, briefingDays };
+  return { outcomes, briefWrites, briefingRowsByDay };
+}
+
+// --- G5 / G9 records -----------------------------------------------------------
+/** Weekly Lane 1 results: the harness's jsonl, or a legacy {successes, n, measured_at} file. */
+export function readLane1(file) {
+  if (!existsSync(file)) return [];
+  const text = readFileSync(file, 'utf8');
+  if (file.endsWith('.jsonl')) return text.split(/\r?\n/).filter(Boolean).map((l) => JSON.parse(l));
+  const o = JSON.parse(text);
+  return [Array.isArray(o.items) ? o : { ...o, useful: o.useful ?? o.successes, items: undefined }];
+}
+
+export function readDogfood(file, startOverride) {
+  if (startOverride) return { label: 'dogfood-defect', windows: [{ started: startOverride, activated_at: `${startOverride}T00:00:00`, build: 'n/a (--dogfood-start)' }] };
+  return readJson(file);
+}
+
+/** Issues carrying the dogfood label; {error} when gh or the label is unavailable. */
+export function dogfoodIssues(label, useGh) {
+  if (!useGh) return { error: 'gh disabled (--no-gh)' };
+  try {
+    const labels = gh(['label', 'list', '--search', label, '--limit', '50', '--json', 'name']);
+    if (!labels.some((l) => l.name === label)) return { error: `label ${label} does not exist on the repo` };
+    return gh(['issue', 'list', '--label', label, '--state', 'all', '--limit', '500', '--json', 'number,title,state,createdAt,closedAt,url']);
+  } catch (e) {
+    return { error: `gh failed: ${String(e.message).split('\n')[0]}` };
+  }
 }
 
 /** Retention the app uses: settings.json monitoring.cleanup_max_age_days, clamped like retention_days(). */
@@ -327,15 +360,16 @@ export async function collect(opts) {
     idle = { ...r.summary.idle, cycle: r.summary.cycle };
   }
 
-  const capSrc = join(REPO, 'src-tauri', 'src', 'morning_floor.rs');
-  const capConstant = existsSync(capSrc)
-    ? Number(/MORNING_ACT_NOW_SHOWN: usize = (\d+)/.exec(readFileSync(capSrc, 'utf8'))?.[1]) || null
+  const capSrc = join(REPO, 'src-tauri', 'src', 'brief_cadence.rs');
+  const dailyCap = existsSync(capSrc)
+    ? Number(/DAILY_AUTO_BRIEF_CAP: i64 = (\d+)/.exec(readFileSync(capSrc, 'utf8'))?.[1]) || null
     : null;
   const releaseYml = join(REPO, '.github', 'workflows', 'release.yml');
   const signingConfigured = existsSync(releaseYml) && /signCommand|artifact-signing|ArtifactSigning|AZURE_.*SIGN/i.test(readFileSync(releaseYml, 'utf8'));
-  const lane1 = opts.lane1 ? { ...readJson(opts.lane1), source: opts.lane1 } : null;
+  const lane1File = opts.lane1 || join(root, 'data', 'launch-gates', 'lane1-weekly.jsonl');
+  const dogfood = readDogfood(join(REPO, 'scripts', 'launch-gates-dogfood.json'), opts.dogfoodStart);
 
-  const g4 = brief ? evaluateG4({ ...brief, today, capConstant }) : evaluateG4({ outcomes: {}, today });
+  const g4 = brief ? evaluateG4({ ...brief, today, dailyCap }) : evaluateG4({ outcomes: {}, today, dailyCap });
   if (dbError) g4.summary += `; DB: ${dbError}`;
   return {
     generated_at: new Date().toISOString(),
@@ -347,11 +381,11 @@ export async function collect(opts) {
       evaluateG2({ ...corpus, ci }),
       evaluateG3({ mcp: readMcp(root, opts.gh) }),
       g4,
-      evaluateG5({ lane1 }),
+      evaluateG5({ lane1Records: readLane1(lane1File), source: lane1File, today }),
       evaluateG6({ db: footprint, idle, cold: latestColdStart(join(root, 'data', 'logs')) }),
       evaluateG7(),
       evaluateG8({ signingConfigured }),
-      evaluateG9({ dogfoodStart: opts.dogfoodStart, today }),
+      evaluateG9({ dogfood, issues: dogfood ? dogfoodIssues(dogfood.label || 'dogfood-defect', opts.gh) : [] }),
     ],
   };
 }

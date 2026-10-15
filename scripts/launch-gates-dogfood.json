@@ -1,0 +1,13 @@
+{
+  "$comment": "Launch gate G9 (doctrine rule 10, .claude/rules/intelligence-doctrine.md): seven consecutive days of founder use on the final build with zero \"this isn't right\" issues. Issues are GitHub issues carrying `label`, filed by the operator only. The last entry in `windows` is the current window; a new build under test appends a new entry (never edit a past one). Read by scripts/launch-gates.mjs.",
+  "label": "dogfood-defect",
+  "windows": [
+    {
+      "started": "2026-10-13",
+      "activated_at": "2026-10-13T02:31:00+10:00",
+      "build": "322edca52",
+      "branch": "main",
+      "note": "Operator's app activated at 02:31 local on main 322edca52 (#937)."
+    }
+  ]
+}

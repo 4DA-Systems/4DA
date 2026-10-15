@@ -31,6 +31,7 @@ use crate::brief_facts::BriefFacts;
 use crate::briefing_deterministic::{FloorReason, MorningWhy, FLOOR_ARTICLES};
 use crate::db::Database;
 use crate::monitoring_briefing::{is_abstention_synthesis, BriefingNotification, SynthesisResult};
+use crate::morning_audit::MorningAudit;
 
 /// The whole synthesis (every attempt and provider) must finish inside this,
 /// or the facts go out. Local models take 1-3 minutes on a good day.
@@ -87,13 +88,44 @@ impl MorningOutcome {
 }
 
 /// One day's recorded outcome.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+///
+/// The audit fields (`morning_audit`, G4) are absent on records written
+/// before they existed and on mornings that showed nothing; a reader must
+/// treat an absent field as unknown, never as zero faults.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
 pub(crate) struct OutcomeRecord {
     pub outcome: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub reason: Option<String>,
     pub path: String,
     pub at: String,
+    /// `package version` for every version the window's own text showed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub versions_shown: Option<Vec<String>>,
+    /// The shown versions that are not real (`morning_audit::version_is_true`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub version_faults: Option<Vec<String>>,
+    /// New act-now facts the facts view named.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub items_shown: Option<usize>,
+    /// [`MORNING_ACT_NOW_SHOWN`] when the morning was recorded.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub cap: Option<usize>,
+    /// Why the audit could not run (the fields above are then absent).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub audit_error: Option<String>,
+}
+
+impl OutcomeRecord {
+    /// A narrated summary or the facts view: a Brief went out.
+    pub(crate) fn brief_delivered(&self) -> bool {
+        matches!(self.outcome.as_str(), "narrated" | "facts")
+    }
+
+    fn window_delivered(&self) -> bool {
+        self.brief_delivered() || self.outcome == "items_only"
+    }
+    // `set_audit` / `merge_earlier`: in `morning_audit`.
 }
 
 /// The facts view, rendered, with the facts it was rendered from (so what it
@@ -475,19 +507,55 @@ pub(crate) async fn resolve_live(
     };
     let resolution = resolve_morning(briefing, synthesis, MORNING_SYNTHESIS_BUDGET, floor).await;
     if path != "manual" {
+        let today = crate::brief_facts::local_today();
+        // The facts the window shows: attached here, or by the quiet-feed
+        // check before synthesis (stashed for this audit).
+        let quiet = take_quiet_floor_facts(&today);
+        let shown_facts = resolution.floor.as_ref().map(|f| f.facts.clone()).or(quiet);
+        let audit = if resolution.outcome.delivered() {
+            Some(audit_shown(briefing.clone(), shown_facts).await)
+        } else {
+            None
+        };
         if let Ok(db) = crate::get_database() {
             if let Some(f) = &resolution.floor {
                 record_floor_shown(db, f);
             }
-            record_outcome(
-                db,
-                &crate::brief_facts::local_today(),
-                &resolution.outcome,
-                path,
-            );
+            record_outcome_audited(db, &today, &resolution.outcome, path, audit.as_ref());
         }
     }
     resolution
+}
+
+/// Audit what the window shows (`morning_audit`), off the async runtime:
+/// the version checks scan the item table.
+async fn audit_shown(
+    briefing: BriefingNotification,
+    facts: Option<BriefFacts>,
+) -> Result<MorningAudit, String> {
+    tokio::task::spawn_blocking(move || {
+        let conn = crate::open_db_connection().map_err(|e| format!("database unavailable: {e}"))?;
+        Ok(crate::morning_audit::audit_morning(
+            &conn,
+            &briefing,
+            facts.as_ref(),
+            MORNING_ACT_NOW_SHOWN,
+        ))
+    })
+    .await
+    .map_err(|e| format!("audit task failed: {e}"))?
+}
+
+/// The facts a quiet-feed morning attached before synthesis, by local day.
+static QUIET_FLOOR_FACTS: parking_lot::Mutex<Option<(String, BriefFacts)>> =
+    parking_lot::Mutex::new(None);
+
+fn take_quiet_floor_facts(today: &str) -> Option<BriefFacts> {
+    let mut slot = QUIET_FLOOR_FACTS.lock();
+    match slot.take() {
+        Some((day, facts)) if day == today => Some(facts),
+        _ => None,
+    }
 }
 
 /// A quiet-feed morning (no item, alert or chain made the cut): attach the
@@ -517,6 +585,7 @@ pub(crate) fn attach_floor_for_quiet_morning(
             attach_floor(briefing, &f);
             record_floor_shown(db, &f);
             *LAST_QUIET.lock() = None;
+            *QUIET_FLOOR_FACTS.lock() = Some((today.to_string(), f.facts));
             true
         }
         None => {
@@ -532,36 +601,59 @@ pub(crate) fn attach_floor_for_quiet_morning(
     }
 }
 
-/// Record a morning's outcome. A delivered outcome is never overwritten by a
-/// later "nothing to say" for the same day (the quiet check keeps running).
+/// Record a morning's outcome, unaudited (a morning that showed nothing).
 pub(crate) fn record_outcome(db: &Database, day: &str, outcome: &MorningOutcome, path: &str) {
+    record_outcome_audited(db, day, outcome, path, None);
+}
+
+/// Record a morning's outcome with the audit of what it showed. A delivered
+/// outcome is never overwritten by a later "nothing to say" for the same day
+/// (the quiet check keeps running); a second delivery the same day keeps the
+/// first one's faults.
+pub(crate) fn record_outcome_audited(
+    db: &Database,
+    day: &str,
+    outcome: &MorningOutcome,
+    path: &str,
+    audit: Option<&Result<MorningAudit, String>>,
+) {
+    let faults = match audit {
+        Some(Ok(a)) => a.version_faults.len().to_string(),
+        Some(Err(_)) => "unknown".into(),
+        None => String::new(),
+    };
     info!(
         target: "4da::briefing",
         day,
         outcome = outcome.as_str(),
         reason = outcome.reason().as_deref().unwrap_or(""),
         path,
+        version_faults = %faults,
         "Morning brief outcome"
     );
-    let mut all = load_outcomes(db);
-    if let Some(existing) = all.get(day) {
-        let existing_delivered = matches!(
-            existing.outcome.as_str(),
-            "narrated" | "facts" | "items_only"
-        );
-        if existing_delivered && !outcome.delivered() {
-            return;
+    if let Some(Ok(a)) = audit {
+        for f in &a.version_faults {
+            warn!(target: "4da::briefing", day, fault = %f, "Morning showed a version with no record");
         }
     }
-    all.insert(
-        day.to_string(),
-        OutcomeRecord {
-            outcome: outcome.as_str().to_string(),
-            reason: outcome.reason(),
-            path: path.to_string(),
-            at: chrono::Utc::now().to_rfc3339(),
-        },
-    );
+    let mut all = load_outcomes(db);
+    let mut record = OutcomeRecord {
+        outcome: outcome.as_str().to_string(),
+        reason: outcome.reason(),
+        path: path.to_string(),
+        at: chrono::Utc::now().to_rfc3339(),
+        ..OutcomeRecord::default()
+    };
+    record.set_audit(audit);
+    if let Some(existing) = all.get(day) {
+        if existing.window_delivered() {
+            if !outcome.delivered() {
+                return;
+            }
+            record.merge_earlier(existing);
+        }
+    }
+    all.insert(day.to_string(), record);
     let cutoff = (chrono::Local::now() - chrono::Duration::days(OUTCOME_RETENTION_DAYS))
         .format("%Y-%m-%d")
         .to_string();
