@@ -170,7 +170,7 @@ ed25519-dalek = "3.0.0"
 tauri-plugin-deep-link = "2.4.7"
 
 # SSO cryptographic verification (enterprise feature)
-jsonwebtoken = { version = "10", features = ["rust_crypto"], optional = true }
+jsonwebtoken = { version = "11", features = ["rust_crypto"], optional = true }
 # SECURITY: RUSTSEC-2023-0071 (Marvin Attack timing sidechannel) addressed in 0.10.0-pre.
 # Only compiled when enterprise feature is enabled (SSO crypto). Monitor: https://rustsec.org/advisories/RUSTSEC-2023-0071
 rsa = { version = "0.10.0-pre", features = ["sha2"], optional = true }
