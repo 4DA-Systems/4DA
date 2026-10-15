@@ -639,10 +639,13 @@ jobs:
       # The crate's own Cargo.lock feeds this job and the wasm module; the
       # app's audit (rust job) only sees the versions src-tauri/Cargo.lock
       # resolves for it. Same tools, same policy file as the app.
+      # cargo-deny pinned: 0.20 moved `--config` from `check` to a global
+      # option (0.19 accepts only the old form, 0.20 only the new), so this
+      # job's invocation is valid on exactly one line of releases.
       - name: Install cargo-audit + cargo-deny (prebuilt)
         uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2
         with:
-          tool: cargo-audit,cargo-deny
+          tool: cargo-audit,cargo-deny@0.20.2
 
       - name: Advisory audit (crate lockfile)
         run: cargo audit
@@ -650,7 +653,7 @@ jobs:
       # src-tauri/deny.toml's ignore list names app-only crates; on this
       # 17-crate graph those entries are simply not encountered.
       - name: Supply chain policy check (crate lockfile)
-        run: cargo deny check --config ../../src-tauri/deny.toml -A advisory-not-detected -A license-not-encountered -A license-exception-not-encountered
+        run: cargo deny --config ../../src-tauri/deny.toml check -A advisory-not-detected -A license-not-encountered -A license-exception-not-encountered
 
       - name: Shared dependencies match the app's lockfile
         run: node scripts/check-lock-drift.cjs
