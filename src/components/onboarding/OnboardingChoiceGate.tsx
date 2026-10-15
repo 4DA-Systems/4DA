@@ -99,10 +99,7 @@ export function OnboardingChoiceGate({
             </span>
           </button>
           <p className="text-xs text-orange-400/80 -mt-2">
-            {t(
-              'onboarding.choice.scanProjectsDesc',
-              '100% local — nothing ever leaves your machine. Personalizes 4DA to your real stack.',
-            )}
+            {t('onboarding.choice.scanProjectsDesc')}
           </p>
           <div className="w-full p-3 bg-bg-secondary rounded-lg border border-border">
             <DiscoveryFolderPicker discovery={discovery} disabled={busy} />

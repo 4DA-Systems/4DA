@@ -31,8 +31,13 @@ test.describe('Privacy Disclosure Fix', () => {
 
     const provider = dialog.locator('#ai-provider-select');
     await expect(provider).toHaveValue('anthropic');
-    // Informed consent: the disclosure is on screen before anything is saved.
-    await expect(dialog.getByText(/what gets sent: when you use a cloud model/i)).toBeVisible();
+    // Informed consent: the disclosure is on screen before anything is saved, and it
+    // names the context profile too, not only item titles (NETWORK.md §2a/§4).
+    const disclosure = dialog.getByTestId('cloud-data-disclosure');
+    await expect(disclosure).toBeVisible();
+    await expect(disclosure).toContainText(/what gets sent/i);
+    await expect(disclosure).toContainText(/dependency names/i);
+    await expect(disclosure).toContainText(/never sent: your source code/i);
 
     // Fake, scanner-safe placeholder (no provider prefix); validation is mocked.
     const key = 'e2e-placeholder-key-0123456789';

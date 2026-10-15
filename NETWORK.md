@@ -1,10 +1,14 @@
 # 4DA Network Manifest
 
-**This document lists every outbound network connection 4DA makes — nothing else leaves your
-machine.** Run Wireshark while 4DA is running and every host you see is accounted for below. Your
+**This document lists every outbound network connection 4DA's own code makes, and the one local
+port it listens on (§1f).** Run Wireshark while 4DA is running and every connection made by the
+`fourda` process is accounted for below. On Windows you will also see connections from
+`msedgewebview2.exe`: that is Microsoft's WebView2 browser runtime, which draws 4DA's window and
+talks to Microsoft on its own (§5). Your
 raw project files, source code, git history, file contents, and personal information **never leave
 your machine** by default. Every flow that transmits anything *derived* from your local content —
-chiefly the names of your dependencies, sent to package registries and OSV (never your code) — is
+chiefly the names and versions of your dependencies, sent to OSV.dev and the package registries
+(never your code) — is
 listed exhaustively in §4 ("What IS derived from local content and does leave"). The one opt-in
 setting that sends text from your local files is cloud embeddings (`allow_cloud_embeddings`, off by
 default, §2a).
@@ -95,7 +99,7 @@ All retrieve **public** developer content. Trigger cadence is the default fetch 
 | Stack Overflow | `api.stackexchange.com` | `/2.3/questions?...&site=stackoverflow&tagged={tag}&filter=withbody` | auto | None |
 | Go modules | `proxy.golang.org` | `/{module}/@latest`, one request per module your `go.mod` files declare (200 ms apart). The global `index.golang.org` feed is never read | auto, only if Go modules were discovered | Your **full Go module paths** (see the derived-content table in §4) |
 | GitHub Advisories | `api.github.com` | `/advisories?per_page=…&sort=published&direction=desc&published=>={date}[&ecosystem={eco}]` (paged via `Link`) | auto | Unauthenticated. Ecosystem names + a date filter. UA `4DA-Developer-OS/1.0` (`sources/cve.rs`) |
-| OSV advisories | `api.osv.dev` | `POST /v1/query`, `POST /v1/querybatch`, `GET /v1/vulns/{id}` | auto, only if dependencies were discovered | Your package names + ecosystems (and, in strict-manifest mode, pinned versions) — see §2c (`sources/osv.rs`, `sources/osv_live.rs`) |
+| OSV advisories | `api.osv.dev` | `POST /v1/query`, `POST /v1/querybatch`, `GET /v1/vulns/{id}` | auto, only if dependencies were discovered | Your package names + ecosystems, **plus the installed version of each one whenever the lockfile gives it** (`sources/osv.rs` `fetch_ecosystem_vulns` / `fetch_batch_vuln_refs`, `sources/osv_live.rs`) — see §2c |
 | Mastodon | `hachyderm.io` | `GET /api/v1/timelines/tag/{tag}?limit={n}` (n ≤ 40); fallback `GET /tags/{tag}.rss` | auto | None. Public hashtag timelines for fixed dev tags (`rust`, `programming`, `javascript`, `python`, `golang`, `webdev`, `linux`, `devops`, `opensource`, `security`). UA `4DA/1.0 (+https://4da.ai)` (`sources/mastodon.rs`) |
 | Lemmy | `programming.dev` | `GET /api/v3/post/list?type_=All&sort=Hot&limit={n}` (n ≤ 50); fallback `GET /feeds/all.xml?sort=Hot` | auto | None. UA `4DA/1.0 (+https://4da.ai)` (`sources/lemmy.rs`) |
 
@@ -167,6 +171,33 @@ package itself** to say what changed between your version and the new one
   card reads its archive on demand if the background pass has not. 30 s timeout per archive.
 - **Disable:** disabling the crates.io / npm sources (Settings → Sources) stops the release rows,
   and with them this lane.
+
+### 1f. Local listener: Signal Terminal on `127.0.0.1:4446` (inbound, this machine only)
+
+Not an outbound connection; listed so that nothing 4DA listens on is undocumented. Every time the
+app starts it serves a small web page and read-only JSON API, the **Signal Terminal**, for a browser
+tab or your own scripts on this machine: signals, the briefing, radar, decisions, knowledge gaps,
+search over already-scored items, and a live event stream (`src-tauri/src/signal_terminal.rs`
+`start_signal_terminal`, called from `app_setup.rs` during startup).
+
+- **Address:** bound to `127.0.0.1` only, port **4446** (4447 in development builds). Other machines
+  on your network cannot reach it.
+- **Host check:** every request, including the page itself, must carry a `Host` header of
+  `127.0.0.1:<port>`, `localhost:<port>` or `[::1]:<port>`; anything else gets `403`. This stops a
+  web page from reaching it through DNS rebinding. No cross-origin (CORS) headers are sent.
+- **Token:** every `/api/*` route requires an `X-4DA-Token` header equal to a 32-character random
+  token that 4DA generates on first start and keeps in `signal_terminal_token.txt` in its data
+  directory (Windows `%APPDATA%\com.4da.app\data`). The token survives restarts; delete the file and
+  a new one is generated at the next start. A missing or wrong token is `401` (compared in constant
+  time), with no exception for local callers. `/api/stream` also accepts `?token=` because a
+  browser `EventSource` cannot set headers. The routes without a token serve fixed UI pages only.
+- **What it exposes:** the same intelligence the app shows you. `/api/decisions` and `/api/gaps`
+  include local project paths. Any program running under your user account can read the token
+  file and therefore the API — the same account can already read 4DA's database directly.
+- **Nothing outbound:** the routes read 4DA's in-memory state and local database; none of them
+  makes a network request.
+- **Disable:** there is no setting to turn it off yet. It stops when 4DA quits. If the port is
+  already taken (for example by a second 4DA instance) it simply does not start.
 
 ---
 
@@ -241,9 +272,11 @@ Off by default. Only used if you enable a cloud translation provider and supply 
 ### 2c. Dependency-vulnerability sync (OSV) — discloses local package names
 
 Runs only **if 4DA has discovered local dependencies** (from your projects via ACE / lockfile
-scanning). This is the **one flow that transmits data derived from your local content** — it sends
-the **names of your packages and their ecosystems** (e.g. `tokio` / `crates.io`), **never your code
-or file contents**. (`src-tauri/src/osv/`)
+scanning). It sends the **names of your packages and their ecosystems** (e.g. `tokio` /
+`crates.io`), **never your code or file contents**. (`src-tauri/src/osv/`) This mirror sync sends
+no versions; the advisory source in §1b does send installed versions to `api.osv.dev`. It is one of
+several flows that send names derived from your projects — the package registries and the Go
+module proxy (§1b, §1e) receive them too; §4 has the complete list.
 
 | Host | Endpoint | Data sent |
 |---|---|---|
@@ -513,6 +546,39 @@ so it is fetched **once, on demand** (`src-tauri/src/embeddings_providers/model_
 
 ---
 
+## 5. Not 4DA's code: the Windows webview runtime
+
+On Windows, 4DA's window is drawn by **Microsoft Edge WebView2**, the browser runtime built into
+Windows and shared by other apps. It runs as `msedgewebview2.exe` processes and makes its own
+connections to Microsoft, independently of anything 4DA's code does. Microsoft documents that
+WebView2 collects required and optional diagnostic data, keeps itself updated, and sends crash dumps
+to Microsoft ([Data and privacy in WebView2](https://learn.microsoft.com/microsoft-edge/webview2/concepts/data-privacy)).
+
+- **Observed (2026-10-13, Windows 10, 4DA running):** `msedgewebview2.exe` held HTTPS connections to
+  `2620:1ec:33:2::11` (the Microsoft Edge front-end range behind `*.msedge.net`) and
+  `2603:1016:401:302a::2` (Azure). The system DNS cache at the time also held Edge update and
+  component hosts (`msedge.api.cdp.microsoft.com`, `msedge.b.tlu.dl.delivery.mp.microsoft.com`) and
+  `c.bing.com`; the DNS cache is machine-wide, so those may equally come from Microsoft Edge itself.
+- **What 4DA sends through it:** nothing. The webview's CSP allows no network host (below), so 4DA's
+  interface code cannot open a connection; every request 4DA makes comes from the Rust backend and
+  is listed in §1–§3.
+- **SmartScreen:** WebView2 turns Microsoft Defender SmartScreen on by default, and 4DA does not
+  turn it off (it does not set WebView2's `IsReputationCheckingRequired`). Microsoft says
+  SmartScreen sends information about the content a webview loads to Microsoft. 4DA's webview loads the
+  app's own bundled pages, and the app opens article links through your default browser
+  (`tauri-plugin-opener`).
+- **Crash dumps:** if a WebView2 process crashes, Windows sends its minidump to Microsoft unless the
+  app enables WebView2's custom crash reporting. 4DA does not enable it today.
+- **How to limit it:** Microsoft's documented control for WebView2's *optional* diagnostic data is
+  Windows **Settings → Privacy & security → Diagnostics & feedback → Diagnostic data**; required
+  data is collected regardless of that setting. A firewall rule blocking `msedgewebview2.exe` would
+  not affect 4DA's features (its interface needs no network), but it applies to every app that uses
+  WebView2 and also blocks the runtime's own security updates.
+- **macOS and Linux** use the system WebKit (WKWebView / WebKitGTK). Their background traffic has
+  not been measured for this document.
+
+---
+
 ## Content Security Policy (CSP)
 
 The Tauri webview enforces a strict CSP (`src-tauri/tauri.conf.json` → `app.security.csp`). The
@@ -543,4 +609,5 @@ can reach the local dev server. Release builds use `csp`, never `devCsp`.
 ---
 
 Everything above is verifiable: read the cited source files, or run Wireshark while 4DA is open and
-match every connection against this manifest.
+match every connection made by the `fourda` process against this manifest (on Windows, the
+`msedgewebview2.exe` processes are Microsoft's runtime, §5).
