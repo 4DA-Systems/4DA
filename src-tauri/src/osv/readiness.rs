@@ -35,7 +35,13 @@ pub(crate) const TRUST_HORIZON_HOURS: i64 = 72;
 pub enum AdvisorySyncState {
     /// No dependency in an ecosystem OSV covers: nothing could be checked.
     NoInventory,
-    /// An ecosystem in the inventory has never been synced.
+    /// An ecosystem in the inventory has never been synced and no sync is
+    /// running in this app. Self-healing: the scheduler starts one on its next
+    /// tick ([`refresh`]). A fresh profile used to read "syncing" here for
+    /// hours while nothing ran (fresh-profile audit E2).
+    NotStarted,
+    /// An ecosystem in the inventory has never been synced, and a sync is
+    /// running now.
     Syncing,
     /// Advisories are synced, but this feed was computed before they were;
     /// the recompute that matches against them has not landed yet.
@@ -60,17 +66,29 @@ pub struct AdvisorySync {
     pub synced_at: Option<String>,
     /// The failing ecosystem's error, when `state` is `failed`.
     pub error: Option<String>,
+    /// A sync is running in this app now (a failed or stale state is being
+    /// re-checked; "Check now" would only queue behind it).
+    #[serde(default)]
+    pub in_flight: bool,
+    /// Project folders the last lockfile walk skipped because they are inside
+    /// the OS temp directory. With `no_inventory`, that is why nothing could
+    /// be checked — not missing advisory coverage.
+    #[serde(default)]
+    pub skipped_temp: u32,
 }
 
 const SYNC_TIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S";
 
 /// Classify the sync rows for the ecosystems the inventory needs. Pure: the
-/// caller supplies `now`. A failure outranks a missing sync, which outranks
-/// staleness — the most actionable problem is the one reported.
+/// caller supplies `now` and whether a sync is running (`in_flight`). A
+/// failure outranks a missing sync, which outranks staleness — the most
+/// actionable problem is the one reported. A missing sync is `Syncing` only
+/// while a sync actually runs; otherwise it has `NotStarted`.
 pub(crate) fn classify(
     required: &[String],
     statuses: &[SyncStatus],
     now: NaiveDateTime,
+    in_flight: bool,
 ) -> AdvisorySync {
     let ecosystems = u32::try_from(required.len()).unwrap_or(u32::MAX);
     let mut out = AdvisorySync {
@@ -78,6 +96,8 @@ pub(crate) fn classify(
         ecosystems,
         synced_at: None,
         error: None,
+        in_flight,
+        skipped_temp: 0,
     };
     if required.is_empty() {
         out.state = AdvisorySyncState::NoInventory;
@@ -111,8 +131,10 @@ pub(crate) fn classify(
     out.synced_at = oldest.map(|t| t.format(SYNC_TIME_FORMAT).to_string());
     out.state = if out.error.is_some() {
         AdvisorySyncState::Failed
-    } else if never_synced {
+    } else if never_synced && in_flight {
         AdvisorySyncState::Syncing
+    } else if never_synced {
+        AdvisorySyncState::NotStarted
     } else if oldest
         .is_some_and(|o| now.signed_duration_since(o).num_hours() >= TRUST_HORIZON_HOURS)
     {
@@ -125,32 +147,59 @@ pub(crate) fn classify(
 
 /// The live readiness: the OSV ecosystems of the auditable inventory (the
 /// same set the sync and the matcher read) against the sync status rows.
-/// An unreadable inventory or status table reads as `Syncing` — never as
-/// `Ready`.
+/// An unreadable inventory or status table reads as not yet checked — never
+/// as `Ready`.
 pub(crate) fn advisory_sync(db: &Database) -> AdvisorySync {
+    let in_flight = refresh::sync_in_flight();
     let required: Vec<String> = match super::sync::auditable_ecosystems(db) {
         Ok(r) => r,
         Err(e) => {
             tracing::warn!(target: "4da::osv", error = %e, "advisory readiness: inventory unreadable");
-            return unreadable();
+            return unreadable(in_flight);
         }
     };
     let statuses = match db.get_osv_sync_statuses() {
         Ok(s) => s,
         Err(e) => {
             tracing::warn!(target: "4da::osv", error = %e, "advisory readiness: sync status unreadable");
-            return unreadable();
+            return unreadable(in_flight);
         }
     };
-    classify(&required, &statuses, chrono::Utc::now().naive_utc())
+    let mut out = classify(
+        &required,
+        &statuses,
+        chrono::Utc::now().naive_utc(),
+        in_flight,
+    );
+    if out.state == AdvisorySyncState::NoInventory {
+        out.skipped_temp = temp_skipped_projects(db);
+    }
+    out
 }
 
-fn unreadable() -> AdvisorySync {
+/// Project folders the last lockfile walk skipped as temp copies.
+fn temp_skipped_projects(db: &Database) -> u32 {
+    db.get_kv(crate::ace::lockfile::report::REPORT_KV_KEY)
+        .ok()
+        .flatten()
+        .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
+        .map_or(0, |saved| {
+            crate::ace::lockfile::report::skipped_temp_count(&saved)
+        })
+}
+
+fn unreadable(in_flight: bool) -> AdvisorySync {
     AdvisorySync {
-        state: AdvisorySyncState::Syncing,
+        state: if in_flight {
+            AdvisorySyncState::Syncing
+        } else {
+            AdvisorySyncState::NotStarted
+        },
         ecosystems: 0,
         synced_at: None,
         error: None,
+        in_flight,
+        skipped_temp: 0,
     }
 }
 
@@ -172,6 +221,11 @@ pub(crate) fn overlay(stamped: Option<&AdvisorySync>, live: AdvisorySync) -> Adv
         _ => live,
     }
 }
+
+// Keeping the mirror current from the desktop app: single-flight syncs on a
+// changed inventory and on the scheduler's freshness check.
+#[path = "readiness_refresh.rs"]
+pub(crate) mod refresh;
 
 #[cfg(test)]
 #[path = "readiness_tests.rs"]

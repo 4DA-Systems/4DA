@@ -84,10 +84,11 @@ export const ScanProjectsPrompt = memo(function ScanProjectsPrompt({
 
 /**
  * Dependencies are tracked but the report is not computed yet (`score < 0`:
- * under a week of reading, or too few direct dependencies). Say what will
- * appear and where the actionable part lives today — advisories that affect
- * the user reach Preemption's worklist immediately — instead of a bare
- * dependency count.
+ * too little read so far, or too few direct dependencies). Say what the view
+ * is built from and where the actionable part lives today — advisories that
+ * affect the user reach Preemption's worklist immediately — instead of a bare
+ * dependency count. No waiting period is promised: "about a week" was a
+ * banned check-back-later state (doctrine rule 6, fresh-profile audit E9).
  */
 export const AssessingNotice = memo(function AssessingNotice() {
   const { t } = useTranslation();
@@ -96,7 +97,7 @@ export const AssessingNotice = memo(function AssessingNotice() {
   return (
     <div className="bg-bg-secondary rounded-lg border border-border px-5 py-5" data-testid="blindspots-assessing">
       <h3 className="text-sm font-medium text-text-primary">{t('blindspots.firstDay.assessingTitle')}</h3>
-      <p className="text-xs text-text-muted mt-1 mb-3">{t('blindspots.firstDay.assessingBody')}</p>
+      <p className="text-xs text-text-muted mt-1 mb-3">{t('blindspots.firstDay.assessingNow')}</p>
       <button
         type="button"
         onClick={() => openPreemption('worklist')}

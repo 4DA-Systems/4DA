@@ -282,6 +282,12 @@ pub async fn ace_full_scan(paths: Vec<String>) -> Result<serde_json::Value> {
         }
     }
 
+    // The inventory may have changed: sync the advisory mirror now rather than
+    // at the next launch (a fresh install showed zero findings until a
+    // restart, audit E1). Background, single flight, desktop only; a no-op
+    // when the mirror already covers these packages.
+    crate::osv::readiness::refresh::spawn_if_due(crate::osv::readiness::refresh::Trigger::Scan);
+
     // Phase 1b: Learning trajectory detection
     let learning_scan_paths = scan_paths.clone();
     let learning_topics: Vec<String> = tauri::async_runtime::spawn_blocking(move || {
@@ -488,6 +494,11 @@ pub async fn ace_get_scan_summary() -> Result<serde_json::Value> {
         .and_then(|db| db.get_all_user_dependencies().ok())
         .map(|rows| dependency_breakdown(&rows))
         .unwrap_or_default();
+    // Where the vulnerability check of these dependencies stands, so the
+    // first-run screen leads with it instead of a news relevance count (E7).
+    let advisory_sync = db
+        .as_ref()
+        .map(|db| crate::osv::readiness::advisory_sync(db));
     // The last lockfile walk's account of itself (read / failed /
     // unsupported / skipped), saved by `store_lockfile_dependencies`.
     let lockfiles = db
@@ -500,6 +511,7 @@ pub async fn ace_get_scan_summary() -> Result<serde_json::Value> {
     let total_deps = deps.total;
     Ok(serde_json::json!({
         "lockfiles": lockfiles,
+        "advisory_sync": advisory_sync,
         "projects_scanned": projects_scanned,
         "total_dependencies": total_deps,
         "dependencies_by_ecosystem": {

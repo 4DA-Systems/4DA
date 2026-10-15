@@ -3,4 +3,4 @@
 /**
  * What the advisory data behind an empty worklist supports.
  */
-export type AdvisorySyncState = "no_inventory" | "syncing" | "matching" | "failed" | "stale" | "ready";
+export type AdvisorySyncState = "no_inventory" | "not_started" | "syncing" | "matching" | "failed" | "stale" | "ready";

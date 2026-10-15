@@ -458,7 +458,7 @@ impl PackageGroup<'_> {
                 source: "osv-advisory".to_string(),
                 title: truncate(&a.summary, 160),
                 url: a.source_url.clone(),
-                freshness_days: 0.0,
+                freshness_days: advisory_age_days(a.published_at.as_deref()),
                 relevance_note: truncate(
                     &format!(
                         "{sev}affects installed {ver}",
@@ -718,7 +718,7 @@ fn informational_item(
             source: "osv-advisory".to_string(),
             title: truncate(&a.summary, 160),
             url: a.source_url.clone(),
-            freshness_days: 0.0,
+            freshness_days: advisory_age_days(a.published_at.as_deref()),
             relevance_note: truncate(
                 &format!(
                     "{}: no fixed version; installed {}",
@@ -880,10 +880,31 @@ pub(super) fn truncate(s: &str, max: usize) -> String {
     format!("{}\u{2026}", &s[..end])
 }
 
-#[cfg(test)]
-#[path = "upgrade_plan_tests.rs"]
-mod tests;
+/// A citation age the UI shows as unknown (no label) — never "today".
+pub(crate) const UNKNOWN_AGE_DAYS: f32 = -1.0;
+
+/// Days since an advisory was published (OSV `published`: RFC 3339, SQLite
+/// `YYYY-MM-DD HH:MM:SS`, or a bare date), or [`UNKNOWN_AGE_DAYS`] without a
+/// parseable date. The citations carried a 0.0 placeholder, so 2023 CVEs read
+/// "today" (fresh-profile audit E9).
+pub(crate) fn advisory_age_days(published: Option<&str>) -> f32 {
+    let Some(p) = published.map(str::trim).filter(|p| !p.is_empty()) else {
+        return UNKNOWN_AGE_DAYS;
+    };
+    chrono::DateTime::parse_from_rfc3339(p)
+        .map(|d| d.naive_utc())
+        .or_else(|_| chrono::NaiveDateTime::parse_from_str(p, "%Y-%m-%d %H:%M:%S"))
+        .or_else(|_| {
+            chrono::NaiveDate::parse_from_str(p.get(..10).unwrap_or(p), "%Y-%m-%d")
+                .map(|d| d.and_time(chrono::NaiveTime::MIN))
+        })
+        .map(|at| ((chrono::Utc::now().naive_utc() - at).num_hours() as f32 / 24.0).max(0.0))
+        .unwrap_or(UNKNOWN_AGE_DAYS)
+}
 
 #[cfg(test)]
 #[path = "upgrade_targets_tests.rs"]
 mod target_tests;
+#[cfg(test)]
+#[path = "upgrade_plan_tests.rs"]
+mod tests;

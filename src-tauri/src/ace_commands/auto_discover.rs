@@ -185,23 +185,50 @@ fn choose_dirs_to_add(base_dirs: &[String], project_dirs: &[String]) -> Vec<Stri
     }
 }
 
+/// Why a folder the user typed cannot be scanned: `"not_found"`,
+/// `"not_a_folder"` or `"system_folder"` (a system folder, drive root or
+/// network share), or `None` when it can be. Checked when the folder is
+/// added: a mistyped path used to be accepted and then silently dropped by
+/// the scan (fresh-profile audit E9). Existence checks only; nothing is read.
+#[tauri::command]
+pub async fn ace_check_scan_folder(path: String) -> Result<Option<String>> {
+    tokio::task::spawn_blocking(move || folder_problem(&path).map(str::to_string))
+        .await
+        .map_err(|e| format!("Folder check failed: {e}").into())
+}
+
+/// [`ace_check_scan_folder`]'s rule, shared with the scan's own filter.
+/// A network share is refused before any filesystem probe: a dead share can
+/// block for the full SMB timeout.
+fn folder_problem(raw: &str) -> Option<&'static str> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Some("not_found");
+    }
+    let path = expand_home(trimmed);
+    if is_system_directory(&strip_extended_prefix(&path)) {
+        return Some("system_folder");
+    }
+    if !path.exists() {
+        return Some("not_found");
+    }
+    if !path.is_dir() {
+        return Some("not_a_folder");
+    }
+    let canonical = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
+    is_system_directory(&strip_extended_prefix(&canonical)).then_some("system_folder")
+}
+
 /// Keep confirmed folders that exist and are not system folders, drive roots
 /// or network shares; expand `~`; drop duplicates.
 fn sanitize_confirmed_dirs(list: Vec<String>) -> Vec<String> {
     let mut kept: Vec<String> = Vec::new();
     for raw in list {
         let trimmed = raw.trim();
-        if trimmed.is_empty() {
+        if trimmed.is_empty() || folder_problem(trimmed).is_some() {
             continue;
         }
         let path = expand_home(trimmed);
-        if !path.is_dir() {
-            continue;
-        }
-        let canonical = std::fs::canonicalize(&path).unwrap_or_else(|_| path.clone());
-        if is_system_directory(&strip_extended_prefix(&canonical)) {
-            continue;
-        }
         let shown = path.display().to_string();
         if !kept.iter().any(|k| same_path(k, &shown)) {
             kept.push(shown);
@@ -394,6 +421,30 @@ mod tests {
             },
         ]);
         assert_eq!(kept, vec![real_s]);
+    }
+
+    /// E9: "Add folder" accepted a path that does not exist. The check names
+    /// the problem so the picker can refuse it with a reason.
+    #[test]
+    fn a_typed_folder_is_checked_before_it_is_added() {
+        let root = tempfile::tempdir().unwrap();
+        let real = root.path().join("proj");
+        std::fs::create_dir_all(&real).unwrap();
+        let file = root.path().join("notes.txt");
+        std::fs::write(&file, "x").unwrap();
+
+        assert_eq!(folder_problem(&real.display().to_string()), None);
+        assert_eq!(
+            folder_problem(&root.path().join("missing").display().to_string()),
+            Some("not_found")
+        );
+        assert_eq!(folder_problem("   "), Some("not_found"));
+        assert_eq!(
+            folder_problem(&file.display().to_string()),
+            Some("not_a_folder")
+        );
+        let drive_root = if cfg!(windows) { "C:\\" } else { "/" };
+        assert_eq!(folder_problem(drive_root), Some("system_folder"));
     }
 
     #[test]

@@ -281,3 +281,73 @@ fn titles_are_escaped_where_they_enter_markdown() {
     assert_eq!(escape_markdown("a\\b"), "a\\\\b");
     assert_eq!(escape_markdown("plain title"), "plain title");
 }
+
+/// Fresh-profile audit E3 (2026-10-12): with lockfiles read but the advisory
+/// database never synced, the brief said "Nothing new touches your code
+/// today" against 156 vulnerable packages. Only a ready advisory check allows
+/// an all-clear; every other state says plainly where the check stands.
+#[test]
+fn no_all_clear_until_the_advisory_check_is_ready() {
+    use crate::osv::readiness::AdvisorySyncState as S;
+    let cases = [
+        (S::NotStarted, "has not been downloaded yet"),
+        (S::Syncing, "downloading vulnerability advisories"),
+        (S::Matching, "downloading vulnerability advisories"),
+        (S::Failed, "check failed"),
+        (S::Stale, "more than three days old"),
+        (S::NoInventory, "can check against vulnerability advisories"),
+    ];
+    for (state, phrase) in cases {
+        let facts = BriefFacts {
+            advisories: Some(state),
+            ..BriefFacts::default()
+        };
+        for reason in [
+            FloorReason::NoCapableModel,
+            FloorReason::NarrationRejected,
+            FloorReason::Morning(super::MorningWhy::Skipped),
+        ] {
+            let out = build_deterministic_brief(&facts, reason);
+            assert!(
+                !out.contains("Nothing new touches your code"),
+                "{state:?}: {out}"
+            );
+            assert!(out.contains(phrase), "{state:?}: {out}");
+            assert!(!out.contains("OSV advisories"), "{state:?}: {out}");
+        }
+    }
+    let ready = BriefFacts {
+        advisories: Some(S::Ready),
+        ..BriefFacts::default()
+    };
+    let out = build_deterministic_brief(&ready, FloorReason::NoCapableModel);
+    assert!(
+        out.contains("Nothing new touches your code today."),
+        "{out}"
+    );
+}
+
+#[test]
+fn a_narration_before_the_advisory_check_drops_its_all_clear() {
+    let checking = BriefFacts {
+        advisories: Some(crate::osv::readiness::AdvisorySyncState::Syncing),
+        ..BriefFacts::default()
+    };
+    let draft = "## Worth knowing\n- Tokio 2 is out.\n\nNothing new touches your code today.\n";
+    let out = super::honest_without_lockfiles(draft, &checking);
+    assert!(!out.contains("Nothing new touches your code"), "{out}");
+    assert!(out.contains("- Tokio 2 is out."), "{out}");
+    assert!(
+        out.contains("downloading vulnerability advisories"),
+        "{out}"
+    );
+    assert_eq!(
+        super::honest_without_lockfiles(&out, &checking),
+        out,
+        "idempotent"
+    );
+
+    let prompt = crate::digest_commands::render_facts_for_prompt(&checking);
+    assert!(prompt.contains("ADVISORY CHECK NOT COMPLETE"), "{prompt}");
+    assert!(!prompt.contains("none — no confirmed advisory"), "{prompt}");
+}

@@ -9,6 +9,7 @@ import { FreeBriefingPanel } from './briefing/FreeBriefingPanel';
 import { InstantSnapshotPanel } from './briefing/InstantSnapshotPanel';
 import { MorningBriefPanel } from './briefing/MorningBriefPanel';
 import { PersonalizeNudge } from './briefing/PersonalizeNudge';
+import { useScanHasDependencies } from './briefing/use-scan-has-dependencies';
 import { BriefingLoadingState, BriefingReadyState } from './BriefingEmptyStates';
 import { BriefingWarmupState } from './BriefingWarmupState';
 import { useLicense } from '../hooks/use-license';
@@ -53,9 +54,12 @@ export const BriefingView = memo(function BriefingView() {
   const isScanning = useAppStore(s => s.isScanning);
   const loadUserContext = useAppStore(s => s.loadUserContext);
   const [personalizeCardDismissed, setPersonalizeCardDismissed] = useState(false);
-  const showPersonalizeNudge = isFirstRun
+  const nudgeCandidate = isFirstRun
     && !personalizeCardDismissed
     && (!userContext?.interests || userContext.interests.length === 0);
+  // A completed scan with dependencies is the personalization the nudge asks for.
+  const [scanHasDependencies, recheckScan] = useScanHasDependencies(nudgeCandidate);
+  const showPersonalizeNudge = nudgeCandidate && !scanHasDependencies;
 
   const { isPro } = useLicense();
 
@@ -71,8 +75,9 @@ export const BriefingView = memo(function BriefingView() {
   const handleScanProjects = useCallback(async () => {
     await runAutoDiscovery();
     await loadUserContext();
+    recheckScan();
     void startAnalysis();
-  }, [runAutoDiscovery, loadUserContext, startAnalysis]);
+  }, [runAutoDiscovery, loadUserContext, recheckScan, startAnalysis]);
 
   // Listen for standing query matches
   useEffect(() => {

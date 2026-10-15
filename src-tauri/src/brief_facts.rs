@@ -257,6 +257,9 @@ pub(crate) struct BriefFacts {
     /// No lockfile has been read yet: the security and upgrade lanes are
     /// empty because nothing was checked, not because nothing was found.
     pub no_dependencies_known: bool,
+    /// Where the advisory check stands. Anything but `Ready` forbids an
+    /// all-clear (audit E3); `None` (not read: tests) is treated as ready.
+    pub advisories: Option<crate::osv::readiness::AdvisorySyncState>,
 }
 
 // ============================================================================

@@ -20,14 +20,20 @@ import type { DataFreshness } from '../../src-tauri/bindings/bindings/DataFreshn
 export type PreemptionNegative =
   /** Every ecosystem synced recently and this feed was matched against it. */
   | { kind: 'assert' }
-  /** Advisories not synced yet, or synced after this feed was computed. */
+  /** A sync is downloading advisories, or ran after this feed was computed. */
   | { kind: 'checking' }
+  /** An ecosystem was never synced and no sync is running (yet). */
+  | { kind: 'not_started' }
   /** The latest advisory sync failed. */
-  | { kind: 'failed'; error: string | null }
+  | { kind: 'failed'; error: string | null; inFlight: boolean }
   /** The advisory data is older than the backend's trust horizon. */
-  | { kind: 'stale'; syncedAt: string | null }
-  /** No dependency in an ecosystem the advisory database covers. */
-  | { kind: 'uncovered' }
+  | { kind: 'stale'; syncedAt: string | null; inFlight: boolean }
+  /**
+   * No dependency in an ecosystem the advisory database covers. `tempSkipped`
+   * counts project folders the lockfile walk skipped because they are inside
+   * the OS temp directory — then THAT is the reason, not coverage.
+   */
+  | { kind: 'uncovered'; tempSkipped: number }
   /** Readiness unknown (a backend without the field, or an unreadable DB). */
   | { kind: 'silent' };
 
@@ -45,12 +51,14 @@ export function preemptionNegative(sync: AdvisorySync | null | undefined): Preem
     case 'syncing':
     case 'matching':
       return { kind: 'checking' };
+    case 'not_started':
+      return { kind: 'not_started' };
     case 'failed':
-      return { kind: 'failed', error: sync.error };
+      return { kind: 'failed', error: sync.error, inFlight: sync.in_flight === true };
     case 'stale':
-      return { kind: 'stale', syncedAt: sync.synced_at };
+      return { kind: 'stale', syncedAt: sync.synced_at, inFlight: sync.in_flight === true };
     case 'no_inventory':
-      return { kind: 'uncovered' };
+      return { kind: 'uncovered', tempSkipped: sync.skipped_temp ?? 0 };
     default:
       return { kind: 'silent' };
   }

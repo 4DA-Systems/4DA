@@ -45,6 +45,7 @@ pub(crate) fn build_brief_facts(db: &Database) -> BriefFacts {
         worth_knowing,
         fingerprint,
         no_dependencies_known,
+        advisories: Some(crate::osv::readiness::advisory_sync(db).state),
     }
 }
 
@@ -650,8 +651,8 @@ fn build_upgrade_facts(
             .collect::<Vec<_>>()
             .join(",");
         let sql = format!(
-            "SELECT id, source_type, title, COALESCE(content, ''), url,
-                    COALESCE(published_at, created_at)
+            // The registry's publish date or none — never the fetch time (E5).
+            "SELECT id, source_type, title, COALESCE(content, ''), url, published_at
              FROM source_items
              WHERE source_type IN ({placeholders})
                AND COALESCE(published_at, created_at) >= datetime('now', ?1)

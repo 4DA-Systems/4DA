@@ -220,15 +220,30 @@ pub(crate) fn render_facts_for_prompt(facts: &BriefFacts) -> String {
                 are unaffected; the software appends the scan instruction itself.\n"
             .to_string();
     }
-    let mut out = String::from(
-        "FACTS (computed by 4DA from the user's lockfiles, OSV advisories and package registries; \
-         authoritative and complete for security and upgrades):\n\n",
-    );
+    let advisory_gap = crate::briefing_deterministic::advisory_gap_line(facts).is_some();
+    let mut out = if advisory_gap {
+        // The security lanes below are empty because advisories were not (all)
+        // checked, not because nothing applies (audit E3).
+        String::from(
+            "ADVISORY CHECK NOT COMPLETE: the user's dependencies have not been fully checked \
+             against published vulnerability advisories yet. An empty ACT NOW or ALSO OPEN does \
+             NOT mean they are unaffected. Never say nothing touches their code or that they are \
+             unaffected; the software appends the status line itself.\n\n\
+             FACTS (computed by 4DA from the user's lockfiles and package registries):\n\n",
+        )
+    } else {
+        String::from(
+            "FACTS (computed by 4DA from the user's lockfiles, OSV advisories and package \
+             registries; authoritative and complete for security and upgrades):\n\n",
+        )
+    };
     out.push_str(
         "ACT NOW — confirmed security, HIGH or CRITICAL (each installed version is inside the \
          advisory's affected range):\n",
     );
-    if facts.security.is_empty() {
+    if facts.security.is_empty() && advisory_gap {
+        out.push_str("none found so far — the advisory check is not complete.\n");
+    } else if facts.security.is_empty() {
         out.push_str(
             "none — no confirmed advisory at HIGH or CRITICAL affects an installed dependency.\n",
         );

@@ -47,6 +47,20 @@ struct CrateInfo {
 struct CrateVersion {
     num: String,
     yanked: bool,
+    /// When this version was published (RFC 3339).
+    #[serde(default)]
+    created_at: Option<String>,
+}
+
+/// When `version` itself was published, from its entry in `versions`. The
+/// crate-level `updated_at` changes for any metadata edit, so it is not the
+/// release date; without the version's own date the item carries none and
+/// the Brief shows no "released" date rather than the fetch date (audit E5).
+fn release_published<'a>(versions: Option<&'a [CrateVersion]>, version: &str) -> Option<&'a str> {
+    versions?
+        .iter()
+        .find(|v| v.num == version)
+        .and_then(|v| v.created_at.as_deref())
 }
 
 // ============================================================================
@@ -223,6 +237,9 @@ impl CratesIoSource {
         if !keywords.is_empty() {
             metadata["keywords"] = serde_json::json!(keywords);
         }
+        if let Some(published) = release_published(data.versions.as_deref(), &version) {
+            metadata["published_date"] = serde_json::json!(published);
+        }
         if let Some(updated) = &krate.updated_at {
             metadata["updated_at"] = serde_json::json!(updated);
         }
@@ -345,6 +362,33 @@ impl Source for CratesIoSource {
 mod tests {
     use super::*;
 
+    /// E5: the item names the release's own publish date (read into
+    /// `published_at` through the `published_date` key), not the crate's.
+    #[test]
+    fn the_release_date_is_the_versions_own() {
+        let versions: Vec<CrateVersion> = serde_json::from_value(serde_json::json!([
+            { "num": "2.0.0", "yanked": false, "created_at": "2026-10-01T09:00:00.123+00:00" },
+            { "num": "1.9.0", "yanked": false, "created_at": "2026-08-01T09:00:00+00:00" },
+            { "num": "1.8.0", "yanked": true }
+        ]))
+        .unwrap();
+        assert_eq!(
+            release_published(Some(&versions), "2.0.0"),
+            Some("2026-10-01T09:00:00.123+00:00")
+        );
+        assert_eq!(release_published(Some(&versions), "1.8.0"), None);
+        assert_eq!(release_published(Some(&versions), "3.0.0"), None);
+        assert_eq!(release_published(None, "2.0.0"), None);
+
+        let item = SourceItem::new("crates_io", "x", "x").with_metadata(serde_json::json!({
+            "published_date": "2026-10-01T09:00:00.123+00:00",
+            "updated_at": "2026-10-12T00:00:00+00:00",
+        }));
+        assert_eq!(
+            crate::source_fetching::extract_published_at(&item).as_deref(),
+            Some("2026-10-01 09:00:00")
+        );
+    }
     #[test]
     fn test_crates_io_source_creation() {
         let source = CratesIoSource::new();

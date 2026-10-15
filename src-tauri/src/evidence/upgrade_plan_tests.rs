@@ -1250,3 +1250,15 @@ fn read_upgrade_plan_snapshot_rejects_incompatible_schema_version() {
     db.set_kv("upgrade_plan_snapshot", "not json").unwrap();
     assert!(read_upgrade_plan_snapshot(&db).is_none());
 }
+
+/// E9: plan citations carried a 0.0 age, so 2023 advisories read "today".
+#[test]
+fn advisory_citation_age_comes_from_the_publish_date() {
+    use super::{advisory_age_days, UNKNOWN_AGE_DAYS};
+    assert!(advisory_age_days(Some("2023-01-02T00:00:00Z")) > 365.0);
+    assert!(advisory_age_days(Some("2023-01-02 00:00:00")) > 365.0);
+    assert!(advisory_age_days(Some("2023-01-02")) > 365.0);
+    assert_eq!(advisory_age_days(None), UNKNOWN_AGE_DAYS);
+    assert_eq!(advisory_age_days(Some("")), UNKNOWN_AGE_DAYS);
+    assert_eq!(advisory_age_days(Some("not a date")), UNKNOWN_AGE_DAYS);
+}

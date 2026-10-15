@@ -505,7 +505,13 @@ pub(crate) fn release_item(r: &ReleaseChange, now_ms: i64) -> Ranked {
         source: r.source_type.clone(),
         title: r.row_title.clone(),
         url: r.url.clone(),
-        freshness_days: days_since(r.published.as_deref()),
+        // No registry date: unknown age (no label), not "today" (E5/E9).
+        freshness_days: r
+            .published
+            .as_deref()
+            .map_or(super::upgrade_plan::UNKNOWN_AGE_DAYS, |p| {
+                days_since(Some(p))
+            }),
         relevance_note: String::new(),
     });
 

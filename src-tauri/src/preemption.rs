@@ -777,11 +777,12 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
                     source: "osv".to_string(),
                     title: m.summary.clone(),
                     url: m.source_url.clone(),
+                    // Unknown publish date: a negative age the UI shows as
+                    // no label, never "today" (fresh-profile audit E9).
                     freshness_days: m
                         .published_at
                         .as_deref()
-                        .map(|ts| freshness_from_timestamp(ts))
-                        .unwrap_or(0.0),
+                        .map_or(-1.0, freshness_from_timestamp),
                     relevance_score: 1.0,
                 })
                 .collect();
@@ -2259,6 +2260,8 @@ mod tests {
             ecosystems: 2,
             synced_at: Some("2026-10-12 06:00:00".to_string()),
             error: None,
+            in_flight: false,
+            skipped_temp: 0,
         };
         let full = EvidenceFeed {
             tier_scope: Some(TierScope::Full),

@@ -17,4 +17,15 @@ synced_at: string | null,
 /**
  * The failing ecosystem's error, when `state` is `failed`.
  */
-error: string | null, };
+error: string | null, 
+/**
+ * A sync is running in this app now (a failed or stale state is being
+ * re-checked; "Check now" would only queue behind it).
+ */
+in_flight: boolean, 
+/**
+ * Project folders the last lockfile walk skipped because they are inside
+ * the OS temp directory. With `no_inventory`, that is why nothing could
+ * be checked — not missing advisory coverage.
+ */
+skipped_temp: number, };

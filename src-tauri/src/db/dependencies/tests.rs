@@ -490,8 +490,10 @@ fn test_get_auditable_user_dependencies_keeps_scope_but_filters_ephemeral_paths(
         None,
     )
     .unwrap();
+    // A temporary copy: inside the OS temp directory itself (E6 — not any
+    // path that merely looks like a temp folder).
     db.store_dependency(
-        r"C:\Users\Admin\AppData\Local\Temp\clone",
+        &std::env::temp_dir().join("clone").display().to_string(),
         "axios",
         Some("1.8.0"),
         "javascript",
@@ -620,13 +622,12 @@ fn test_startup_user_dependency_cleanup() {
         "Should deduplicate 1 casing/hyphen variant"
     );
 
-    // --- Step 3: purge temp paths (separate app_setup block) ---
-    let deleted_temp = conn
-        .execute(
-            "DELETE FROM user_dependencies WHERE project_path LIKE '%/tmp/%' OR project_path LIKE '%\\tmp\\%' OR project_path LIKE '%AppData%Local%Temp%'",
-            [],
-        )
-        .expect("temp purge");
+    // --- Step 3: purge rows under the OS temp dir (separate app_setup block;
+    // the temp root is injected so the test is the same on every platform) ---
+    let temp_roots =
+        super::temp_paths::roots_for(std::path::Path::new(r"C:\Users\Admin\AppData\Local\Temp"));
+    let deleted_temp =
+        super::temp_paths::purge_temp_dependency_rows(&conn, &temp_roots).expect("temp purge");
     assert_eq!(deleted_temp, 1, "Should purge 1 temp-path row");
 
     // --- Verify final state ---

@@ -200,6 +200,35 @@ fn walk_selects_only_dirs_holding_a_lockfile() {
     assert_eq!(selected, vec![app]);
 }
 
+/// E6: a project inside the OS temp directory is not read, and the walk
+/// report says so with the temp reason (counted for the readiness notice),
+/// instead of the inventory silently missing it.
+#[test]
+fn walk_skips_and_reports_projects_inside_the_temp_root() {
+    let tmp = tempfile::tempdir().unwrap();
+    let app = tmp.path().join("app");
+    lockfile(&app, "package-lock.json");
+    let roots = crate::db::temp_paths::roots_for(tmp.path());
+    let mut report = LockfileReport::default();
+
+    let selected =
+        collect_lockfile_dirs_reporting(&[tmp.path().to_path_buf()], &roots, &mut report);
+    assert!(selected.is_empty(), "{selected:?}");
+    assert_eq!(report.skipped_dirs.len(), 1, "{:?}", report.skipped_dirs);
+    assert_eq!(
+        report.skipped_dirs[0].reason,
+        lockfile::report::TEMP_DIR_REASON
+    );
+    let saved = report.to_json();
+    assert_eq!(lockfile::report::skipped_temp_count(&saved), 1);
+
+    // The same tree outside any temp root is read.
+    assert_eq!(
+        collect_lockfile_dirs(&[tmp.path().to_path_buf()]),
+        vec![app]
+    );
+}
+
 /// A workspace root's lockfile, cut down from the live 2026-10-02 shape: the
 /// members `acme-cli` / `acme-core` have no `source`; `tempfile` is a
 /// dev-dependency and `fastrand` reaches the project only through it.
