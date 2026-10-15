@@ -16,26 +16,53 @@ use super::{
 };
 
 /// Check if the user activated within the grace period (judged against the
-/// anti-rollback clock floor).
+/// anti-rollback clock floor and the machine-scope grace anchor).
+///
+/// Only consulted when the tier is paid and NO usable key exists anywhere, so
+/// `activated_at` here is an unauthenticated settings.json value. It used to be
+/// trusted outright: writing `tier: "signal"` + `activated_at: <now>` granted
+/// 30 days of Signal, renewable forever by editing the date again (audit C11).
+/// The first `activated_at` seen in this state is now anchored in the keychain
+/// and license_clock.json (clock.rs), and the window counts from the EARLIEST
+/// anchor — a later or edited date never reopens it. Residual limit, as for
+/// the trial stamp: deleting every store restarts it once.
 fn is_within_activation_grace(license: &LicenseConfig) -> bool {
-    is_within_activation_grace_at(license, super::license_effective_now())
+    let now = super::license_effective_now();
+    let Some(activated) = parse_activated_at(license, now) else {
+        return false;
+    };
+    let anchor = super::clock::anchor_grace_start(activated);
+    grace_window_open(anchor, now)
 }
 
-/// [`is_within_activation_grace`] at an explicit instant. A FUTURE
-/// `activated_at` is outside grace: it used to yield a negative elapsed time,
-/// i.e. an unbounded grace period for a hand-edited timestamp.
+/// `activated_at` as unix seconds, or `None` when absent, unparseable or in
+/// the FUTURE (a future date used to yield a negative elapsed time, i.e. an
+/// unbounded grace period).
+fn parse_activated_at(license: &LicenseConfig, now: chrono::DateTime<chrono::Utc>) -> Option<i64> {
+    let activated = chrono::DateTime::parse_from_rfc3339(license.activated_at.as_deref()?).ok()?;
+    (activated.timestamp() <= now.timestamp()).then_some(activated.timestamp())
+}
+
+/// Is the grace window that started at `anchor_unix` still open at `now`?
+fn grace_window_open(anchor_unix: i64, now: chrono::DateTime<chrono::Utc>) -> bool {
+    let elapsed = now.timestamp() - anchor_unix;
+    (0..ACTIVATION_GRACE_PERIOD_DAYS * 86_400).contains(&elapsed)
+}
+
+/// [`is_within_activation_grace`] at an explicit instant against an explicit
+/// recorded anchor (`0` = none) — the I/O-free seam the tests drive.
+#[cfg(test)]
 fn is_within_activation_grace_at(
     license: &LicenseConfig,
     now: chrono::DateTime<chrono::Utc>,
+    recorded_anchor_unix: i64,
 ) -> bool {
-    let Some(activated) = license.activated_at.as_deref() else {
-        return false;
-    };
-    let Ok(activated_date) = chrono::DateTime::parse_from_rfc3339(activated) else {
-        return false;
-    };
-    let elapsed = now.signed_duration_since(activated_date);
-    elapsed.num_seconds() >= 0 && elapsed.num_days() < ACTIVATION_GRACE_PERIOD_DAYS
+    parse_activated_at(license, now).is_some_and(|activated| {
+        grace_window_open(
+            super::clock::merge_grace_anchor(recorded_anchor_unix, activated),
+            now,
+        )
+    })
 }
 
 /// Periodically re-run license integrity checks at runtime.
@@ -355,13 +382,41 @@ mod reconcile_tests {
         let now = chrono::Utc::now();
         let mut l = lic("signal", "");
         l.activated_at = Some((now + chrono::Duration::days(3650)).to_rfc3339());
-        assert!(!is_within_activation_grace_at(&l, now));
+        assert!(!is_within_activation_grace_at(&l, now, 0));
         l.activated_at = Some((now - chrono::Duration::days(5)).to_rfc3339());
-        assert!(is_within_activation_grace_at(&l, now));
+        assert!(is_within_activation_grace_at(&l, now, 0));
         l.activated_at = Some((now - chrono::Duration::days(45)).to_rfc3339());
-        assert!(!is_within_activation_grace_at(&l, now));
+        assert!(!is_within_activation_grace_at(&l, now, 0));
         l.activated_at = Some("garbage".into());
-        assert!(!is_within_activation_grace_at(&l, now));
+        assert!(!is_within_activation_grace_at(&l, now, 0));
+    }
+
+    /// Audit C11: `tier: "signal"` + a freshly edited `activated_at`, with no
+    /// key anywhere, re-opened the 30-day grace every time the date was
+    /// re-edited. The anchor recorded the first time grace was consulted wins.
+    #[test]
+    fn re_edited_activated_at_cannot_reopen_an_expired_grace() {
+        let now = chrono::Utc::now();
+        let mut l = lic("signal", "");
+        let first_seen = (now - chrono::Duration::days(40)).timestamp();
+        l.activated_at = Some(now.to_rfc3339());
+        assert!(
+            !is_within_activation_grace_at(&l, now, first_seen),
+            "an activated_at edited to now must not restart a 40-day-old grace"
+        );
+        // A genuine recent activation with an anchor from the same moment is in grace.
+        let recent = now - chrono::Duration::days(3);
+        l.activated_at = Some(recent.to_rfc3339());
+        assert!(is_within_activation_grace_at(&l, now, recent.timestamp()));
+    }
+
+    #[test]
+    fn grace_anchor_merge_keeps_the_earliest() {
+        use super::super::clock::merge_grace_anchor;
+        assert_eq!(merge_grace_anchor(0, 500), 500);
+        assert_eq!(merge_grace_anchor(100, 500), 100);
+        assert_eq!(merge_grace_anchor(500, 100), 100);
+        assert_eq!(merge_grace_anchor(100, 0), 100);
     }
 
     #[test]

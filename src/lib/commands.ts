@@ -702,7 +702,6 @@ interface CommandMap {
   toolkit_test_feed: { params: { url: string }; result: FeedTestResult };
   toolkit_score_sandbox: { params: { title: string; content: string | null; sourceType: string }; result: SandboxScoreResult };
   toolkit_generate_export_pack: { params: Record<string, never>; result: ExportPackResult };
-  toolkit_env_snapshot: { params: { workingDir: string | null }; result: EnvSnapshot };
 
   // -- Channels --
   list_channels: { params: Record<string, never>; result: ChannelSummary[] };
@@ -1562,15 +1561,6 @@ interface ExportPackResult {
   items_exported: number;
 }
 
-interface EnvSnapshot {
-  os: string;
-  arch: string;
-  node_version: string | null;
-  rust_version: string | null;
-  tools: Array<{ name: string; version: string | null; available: boolean }>;
-  env_vars: Record<string, string>;
-}
-
 interface ScanSummary {
   languages: string[];
   frameworks: string[];
@@ -2049,7 +2039,6 @@ export type {
   FeedTestResult,
   SandboxScoreResult,
   ExportPackResult,
-  EnvSnapshot,
   ScanSummary,
   ScoringStats,
   FeedbackLiveness,

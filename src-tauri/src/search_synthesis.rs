@@ -164,7 +164,11 @@ fn gather_decision_context(
         return Vec::new();
     }
 
-    let sql = "SELECT subject, decision FROM decisions WHERE status != 'superseded' LIMIT 50";
+    // The table is `developer_decisions` (decisions.rs); this used to query a
+    // `decisions` table that never existed, so `prepare` failed and the
+    // "contradicts your decisions" context was silently always empty.
+    let sql = "SELECT subject, decision FROM developer_decisions \
+               WHERE status != 'superseded' ORDER BY updated_at DESC LIMIT 50";
     let mut stmt = match conn.prepare(sql) {
         Ok(s) => s,
         Err(_) => return Vec::new(),
@@ -448,6 +452,31 @@ pub async fn synthesize_search(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Audit C16: against the REAL migrated schema, a recorded decision whose
+    /// subject matches the query must come back (it never did: the query hit a
+    /// non-existent `decisions` table), and superseded ones must not.
+    #[test]
+    fn decision_context_reads_the_migrated_developer_decisions_table() {
+        let db = crate::test_utils::test_db();
+        let conn = db.conn.lock();
+        conn.execute_batch(
+            "INSERT INTO developer_decisions (decision_type, subject, decision, status)
+                 VALUES ('tech_choice', 'Use SQLite for storage', 'SQLite over Postgres', 'active'),
+                        ('tech_choice', 'Use Redis for caching', 'Redis', 'superseded'),
+                        ('pattern', 'Error handling', 'thiserror + anyhow', 'active');",
+        )
+        .expect("seed decisions");
+
+        let found = gather_decision_context(&conn, &["sqlite".to_string(), "redis".to_string()]);
+        assert_eq!(
+            found.len(),
+            1,
+            "only the active matching decision: {found:?}"
+        );
+        assert_eq!(found[0].subject, "Use SQLite for storage");
+        assert_eq!(found[0].decision, "SQLite over Postgres");
+    }
 
     #[test]
     fn build_system_prompt_includes_stack_summary() {

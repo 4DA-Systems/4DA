@@ -22,6 +22,86 @@ mod tests {
     }
 
     // ========================================================================
+    // set_llm_provider: a kept key stays bound to its host (audit C6)
+    // ========================================================================
+
+    use crate::settings_commands::{llm_key_destination, stored_key_must_be_dropped};
+
+    fn drops(old: (&str, Option<&str>), new: (&str, Option<&str>)) -> bool {
+        stored_key_must_be_dropped(
+            llm_key_destination(old.0, old.1).as_deref(),
+            llm_key_destination(new.0, new.1).as_deref(),
+            new.0,
+        )
+    }
+
+    #[test]
+    fn key_destination_mirrors_request_routing() {
+        assert_eq!(
+            llm_key_destination("anthropic", Some("https://evil.example")).as_deref(),
+            Some("api.anthropic.com")
+        );
+        assert_eq!(
+            llm_key_destination("openai", None).as_deref(),
+            Some("api.openai.com")
+        );
+        assert_eq!(
+            llm_key_destination("openai-compatible", Some("https://api.groq.com/openai/v1"))
+                .as_deref(),
+            Some("api.groq.com")
+        );
+        assert_eq!(
+            llm_key_destination("ollama", Some("http://localhost:11434")),
+            None
+        );
+        assert_eq!(llm_key_destination("none", None), None);
+    }
+
+    /// The audited attack: only `base_url` changes, no key in the request.
+    #[test]
+    fn base_url_to_a_new_host_drops_the_stored_key() {
+        assert!(drops(
+            ("openai", None),
+            (
+                "openai",
+                Some("https://collector.example/v1/chat/completions")
+            )
+        ));
+        assert!(drops(
+            ("openai-compatible", Some("https://api.groq.com/openai/v1")),
+            ("openai-compatible", Some("https://api.attacker.example/v1"))
+        ));
+        assert!(drops(
+            ("anthropic", None),
+            ("openai-compatible", Some("https://api.attacker.example/v1"))
+        ));
+        // Parking on `none` first does not launder the key to a third party.
+        assert!(drops(
+            ("none", None),
+            ("openai-compatible", Some("https://api.attacker.example/v1"))
+        ));
+    }
+
+    #[test]
+    fn same_host_local_or_first_party_keeps_the_key() {
+        assert!(!drops(("anthropic", None), ("anthropic", None)));
+        assert!(!drops(
+            ("openai-compatible", Some("https://api.groq.com/openai/v1")),
+            ("openai-compatible", Some("https://API.groq.com/openai/v1/"))
+        ));
+        // Moving to a local server or to no provider sends the key nowhere new.
+        assert!(!drops(
+            ("anthropic", None),
+            ("openai-compatible", Some("http://127.0.0.1:8080/v1"))
+        ));
+        assert!(!drops(("anthropic", None), ("ollama", None)));
+        assert!(!drops(("anthropic", None), ("none", None)));
+        // Coming back from none/local to the vendor's own API keeps the key.
+        assert!(!drops(("none", None), ("anthropic", None)));
+        assert!(!drops(("ollama", None), ("openai", None)));
+    }
+
+    // ========================================================================
     // validate_input_length tests
     // ========================================================================
 

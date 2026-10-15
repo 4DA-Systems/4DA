@@ -298,7 +298,64 @@ pub struct DiagnosticReport {
 /// (`sanitize_api_error` in `llm.rs`, `SensitiveString` Debug impls), but a
 /// bundle a user might post publicly must not rely on that alone.
 pub fn scrub(input: &str) -> String {
-    redact_secret_tokens(&redact_user_paths(input))
+    scrub_for_user(input, current_os_username().as_deref())
+}
+
+/// [`scrub`] with an explicit account name (the test seam). Paths are
+/// redacted by shape first; then every remaining whole-word occurrence of the
+/// account name itself — a username also turns up outside paths (`USERNAME=`,
+/// a profile directory with a space in it, a user@host prompt).
+pub(crate) fn scrub_for_user(input: &str, username: Option<&str>) -> String {
+    let paths = redact_user_paths(input);
+    let named = match username.map(str::trim).filter(|u| u.chars().count() >= 3) {
+        Some(name) => redact_word_ci(&paths, name),
+        None => paths,
+    };
+    redact_secret_tokens(&named)
+}
+
+/// The account name of the user running 4DA, from the environment, else the
+/// home directory's last component.
+fn current_os_username() -> Option<String> {
+    ["USERNAME", "USER", "LOGNAME"]
+        .iter()
+        .find_map(|v| std::env::var(v).ok().filter(|s| !s.trim().is_empty()))
+        .or_else(|| {
+            ["USERPROFILE", "HOME"].iter().find_map(|v| {
+                std::env::var(v).ok().and_then(|home| {
+                    std::path::Path::new(&home)
+                        .file_name()
+                        .map(|n| n.to_string_lossy().into_owned())
+                })
+            })
+        })
+}
+
+/// Replace whole-word, ASCII-case-insensitive occurrences of `word` with
+/// `<user>`. "Whole word" = not flanked by an ASCII alphanumeric, so the name
+/// `dev` never mangles `development`.
+fn redact_word_ci(text: &str, word: &str) -> String {
+    let hay = text.to_ascii_lowercase();
+    let needle = word.to_ascii_lowercase();
+    let bytes = text.as_bytes();
+    let is_word = |b: u8| b.is_ascii_alphanumeric();
+    let mut out = String::with_capacity(text.len());
+    let mut last = 0;
+    let mut from = 0;
+    while let Some(rel) = hay[from..].find(needle.as_str()) {
+        let at = from + rel;
+        let end = at + needle.len();
+        let left_ok = at == 0 || !is_word(bytes[at - 1]);
+        let right_ok = end == bytes.len() || !is_word(bytes[end]);
+        if left_ok && right_ok {
+            out.push_str(&text[last..at]);
+            out.push_str("<user>");
+            last = end;
+        }
+        from = end;
+    }
+    out.push_str(&text[last..]);
+    out
 }
 
 /// Replace the path segment immediately following a known user-dir marker
@@ -311,17 +368,58 @@ fn redact_user_paths(input: &str) -> String {
         .join("\n")
 }
 
+/// Markers match ASCII-case-insensitively (`c:\users\`), and any run of further
+/// separators after a marker is skipped, so every spelling a log line carries
+/// is covered: `C:\Users\name`, the JSON-escaped `C:\\Users\\name` (there the
+/// marker ends on the first of two backslashes, leaving an empty segment — the
+/// audit-C9 leak), `C:/Users/name`, `/home/name`, URL-encoded `%5CUsers%5C`.
 fn redact_user_paths_in_line(line: &str) -> String {
-    const MARKERS: &[&str] = &["\\Users\\", "/Users/", "/home/"];
+    const MARKERS: &[&str] = &[
+        "\\users\\",
+        "/users/",
+        "/home/",
+        "%5cusers%5c",
+        "%2fusers%2f",
+        "%2fhome%2f",
+    ];
+    const SEPARATORS: &[&str] = &["\\", "/", "%5c", "%2f"];
     let mut out = line.to_string();
     for marker in MARKERS {
         let mut search_from = 0;
-        while let Some(rel) = out[search_from..].find(marker) {
-            let seg_start = search_from + rel + marker.len();
+        loop {
+            let lower = out.to_ascii_lowercase();
+            let Some(rel) = lower[search_from..].find(marker) else {
+                break;
+            };
+            let mut seg_start = search_from + rel + marker.len();
+            while let Some(sep) = SEPARATORS
+                .iter()
+                .find(|sep| lower[seg_start..].starts_with(**sep))
+            {
+                seg_start += sep.len();
+            }
             let rest = &out[seg_start..];
             let seg_end_rel = rest
                 .find(|c: char| {
-                    c == '/' || c == '\\' || c.is_whitespace() || c == '"' || c == '\'' || c == ':'
+                    c.is_whitespace()
+                        || matches!(
+                            c,
+                            '/' | '\\'
+                                | '"'
+                                | '\''
+                                | ':'
+                                | '%'
+                                | ','
+                                | ';'
+                                | ')'
+                                | ']'
+                                | '}'
+                                | '<'
+                                | '>'
+                                | '&'
+                                | '?'
+                                | '#'
+                        )
                 })
                 .unwrap_or(rest.len());
             let seg = &rest[..seg_end_rel];

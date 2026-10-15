@@ -4,7 +4,7 @@
 //! Blocks requests to internal/private network addresses to prevent
 //! Server-Side Request Forgery (SSRF) attacks.
 
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, ToSocketAddrs};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, ToSocketAddrs};
 
 use url::{Host, Url};
 
@@ -27,84 +27,62 @@ fn is_internal_ip(ip: IpAddr) -> bool {
     }
 }
 
-/// Check if an IPv4 address is private, loopback, link-local, or otherwise internal.
+/// Check if an IPv4 address is private, loopback, link-local, or otherwise
+/// not a public unicast destination (IANA special-purpose registry).
 fn is_internal_ipv4(ip: Ipv4Addr) -> bool {
-    let octets = ip.octets();
+    let [a, b, c, _] = ip.octets();
+    a == 0                                  // 0.0.0.0/8 — "this network"; 0.x reaches the local host on Linux/macOS
+        || a == 10                          // 10.0.0.0/8 — RFC 1918
+        || a == 127                         // 127.0.0.0/8 — loopback
+        || (a == 100 && (64..=127).contains(&b)) // 100.64.0.0/10 — CGNAT (incl. Alibaba metadata 100.100.100.200)
+        || (a == 169 && b == 254)           // 169.254.0.0/16 — link-local (AWS/GCP/Azure metadata)
+        || (a == 172 && (16..=31).contains(&b)) // 172.16.0.0/12 — RFC 1918
+        || (a == 192 && b == 0 && c == 0)   // 192.0.0.0/24 — IETF protocol assignments
+        || (a == 192 && b == 0 && c == 2)   // 192.0.2.0/24 — TEST-NET-1
+        || (a == 192 && b == 168)           // 192.168.0.0/16 — RFC 1918
+        || (a == 198 && (b == 18 || b == 19)) // 198.18.0.0/15 — benchmarking
+        || (a == 198 && b == 51 && c == 100) // 198.51.100.0/24 — TEST-NET-2
+        || (a == 203 && b == 0 && c == 113) // 203.0.113.0/24 — TEST-NET-3
+        || a >= 224 // 224.0.0.0/4 multicast, 240.0.0.0/4 reserved, 255.255.255.255 broadcast
+}
 
-    // 0.0.0.0
-    if ip.is_unspecified() {
-        return true;
+/// The IPv4 address a transition-mechanism IPv6 address carries, if any:
+/// IPv4-mapped `::ffff:a.b.c.d`, IPv4-compatible `::a.b.c.d`, NAT64
+/// `64:ff9b::a.b.c.d` and 6to4 `2002:aabb:ccdd::`. Each of these can deliver a
+/// packet to that IPv4 host, so it is judged as that host.
+fn embedded_ipv4(ip: Ipv6Addr) -> Option<Ipv4Addr> {
+    let s = ip.segments();
+    let from =
+        |hi: u16, lo: u16| Ipv4Addr::new((hi >> 8) as u8, hi as u8, (lo >> 8) as u8, lo as u8);
+    if s[0..5] == [0, 0, 0, 0, 0] && (s[5] == 0xffff || s[5] == 0) {
+        return Some(from(s[6], s[7]));
     }
-
-    // 127.0.0.0/8 — loopback
-    if ip.is_loopback() {
-        return true;
+    if s[0..6] == [0x0064, 0xff9b, 0, 0, 0, 0] {
+        return Some(from(s[6], s[7]));
     }
-
-    // 10.0.0.0/8 — RFC 1918
-    if octets[0] == 10 {
-        return true;
+    if s[0] == 0x2002 {
+        return Some(from(s[1], s[2]));
     }
-
-    // 172.16.0.0/12 — RFC 1918
-    if octets[0] == 172 && (16..=31).contains(&octets[1]) {
-        return true;
-    }
-
-    // 192.168.0.0/16 — RFC 1918
-    if octets[0] == 192 && octets[1] == 168 {
-        return true;
-    }
-
-    // 169.254.0.0/16 — link-local (includes AWS metadata 169.254.169.254)
-    if octets[0] == 169 && octets[1] == 254 {
-        return true;
-    }
-
-    // 100.64.0.0/10 — Carrier-grade NAT (RFC 6598), includes 100.100.100.200
-    if octets[0] == 100 && (64..=127).contains(&octets[1]) {
-        return true;
-    }
-
-    false
+    None
 }
 
 /// Check if an IPv6 address is loopback, link-local, or otherwise internal.
 fn is_internal_ipv6(ip: Ipv6Addr) -> bool {
-    // ::1 — loopback
-    if ip.is_loopback() {
+    if ip.is_loopback() || ip.is_unspecified() {
         return true;
     }
-
-    // :: — unspecified
-    if ip.is_unspecified() {
-        return true;
-    }
-
-    let segments = ip.segments();
-
-    // fe80::/10 — link-local
-    if segments[0] & 0xffc0 == 0xfe80 {
-        return true;
-    }
-
-    // fc00::/7 — unique local address (RFC 4193)
-    if segments[0] & 0xfe00 == 0xfc00 {
-        return true;
-    }
-
-    // ::ffff:0:0/96 — IPv4-mapped addresses, check the embedded IPv4
-    if segments[0..5] == [0, 0, 0, 0, 0] && segments[5] == 0xffff {
-        let v4 = Ipv4Addr::new(
-            (segments[6] >> 8) as u8,
-            segments[6] as u8,
-            (segments[7] >> 8) as u8,
-            segments[7] as u8,
-        );
+    if let Some(v4) = embedded_ipv4(ip) {
         return is_internal_ipv4(v4);
     }
-
-    false
+    let s = ip.segments();
+    (s[0] & 0xffc0) == 0xfe80          // fe80::/10 — link-local
+        || (s[0] & 0xffc0) == 0xfec0   // fec0::/10 — deprecated site-local
+        || (s[0] & 0xfe00) == 0xfc00   // fc00::/7 — unique local (RFC 4193), incl. AWS fd00:ec2::254
+        || (s[0] & 0xff00) == 0xff00   // ff00::/8 — multicast
+        || (s[0] == 0x0064 && s[1] == 0xff9b && s[2] == 0x0001) // 64:ff9b:1::/48 — local-use NAT64
+        || (s[0] == 0x2001 && s[1] == 0x0000) // 2001::/32 — Teredo (embedded IPv4 is obfuscated)
+        || (s[0] == 0x2001 && s[1] == 0x0db8) // 2001:db8::/32 — documentation
+        || (s[0] == 0x0100 && s[1..4] == [0, 0, 0]) // 100::/64 — discard-only
 }
 
 /// Error message emitted when a URL resolves to an internal address.
@@ -263,6 +241,219 @@ pub(crate) fn validate_llm_endpoint(url: &str) -> Result<()> {
     }
     validate_not_internal(url)
 }
+
+/// Lower-cased host of a URL (root label trimmed, IPv6 without brackets), or
+/// `None` when the URL does not parse or has no host. The identity a stored
+/// credential is bound to: see `settings_commands::llm_key_destination` and
+/// `digest_email::merge_smtp_update`.
+pub(crate) fn url_host(url: &str) -> Option<String> {
+    let parsed = Url::parse(url.trim()).ok()?;
+    Some(match parsed.host()? {
+        Host::Domain(d) => d.trim_end_matches('.').to_lowercase(),
+        Host::Ipv4(v4) => v4.to_string(),
+        Host::Ipv6(v6) => v6.to_string(),
+    })
+}
+
+/// Is this bare host name (no scheme or port) the local machine itself?
+pub(crate) fn is_loopback_host(host: &str) -> bool {
+    let h = host
+        .trim()
+        .trim_start_matches('[')
+        .trim_end_matches(']')
+        .trim_end_matches('.')
+        .to_lowercase();
+    h == "localhost"
+        || h.ends_with(".localhost")
+        || matches!(h.parse::<IpAddr>(), Ok(ip) if ip.is_loopback())
+}
+
+/// Drop every internal address from a DNS answer.
+fn public_addrs(addrs: impl IntoIterator<Item = SocketAddr>) -> Vec<SocketAddr> {
+    addrs
+        .into_iter()
+        .filter(|a| !is_internal_ip(a.ip()))
+        .collect()
+}
+
+/// DNS resolver for the client that fetches user-supplied URLs
+/// (`http_client::HTTP_CLIENT`). It resolves through the OS exactly as
+/// reqwest's default resolver does, then removes every internal address before
+/// a connection can be attempted.
+///
+/// Why this exists: `validate_not_internal` resolves the host once, and reqwest
+/// used to resolve it AGAIN to connect. A hostile DNS server can answer the
+/// first lookup with a public address and the second with 127.0.0.1 or
+/// 169.254.169.254 (DNS rebinding), so the pre-flight check passed and the
+/// request still landed inside. With this resolver the addresses a connection
+/// may use are the checked addresses — the check and the connect are the same
+/// lookup. A name with only internal addresses fails to connect. IP-literal
+/// hosts never reach a resolver; `validate_not_internal` and the redirect
+/// policy judge those statically.
+///
+/// Proxies: reqwest resolves a configured proxy's hostname through this same
+/// resolver, and a corporate proxy (`proxy.corp:8080` -> 10.x) legitimately
+/// lives on an internal address. The system proxy hosts (env vars, and on
+/// Windows the Internet Settings proxy reqwest also honours) are therefore
+/// exempt and resolve unfiltered. Behind a proxy the TARGET's DNS happens at
+/// the proxy, never here, so rebinding protection for targets rests on
+/// `validate_not_internal` exactly as it did before this resolver existed.
+pub(crate) struct PublicOnlyResolver {
+    exempt_hosts: Vec<String>,
+}
+
+impl PublicOnlyResolver {
+    /// A resolver that lets exactly these hosts (the proxies) resolve
+    /// unfiltered. Tests inject the set here instead of reading the env.
+    pub(crate) fn with_exempt_hosts(hosts: Vec<String>) -> Self {
+        let mut exempt_hosts: Vec<String> = hosts
+            .iter()
+            .map(|h| normalize_host(h))
+            .filter(|h| !h.is_empty())
+            .collect();
+        exempt_hosts.sort();
+        exempt_hosts.dedup();
+        Self { exempt_hosts }
+    }
+
+    /// Exempt the system proxy hosts, read once (`HTTP_CLIENT` is a LazyLock).
+    pub(crate) fn from_system() -> Self {
+        let hosts = proxy_hosts(&system_proxy_settings());
+        if !hosts.is_empty() {
+            tracing::debug!(
+                target: "4da::security",
+                proxies = ?hosts,
+                "System proxy host(s) exempt from the public-only DNS filter"
+            );
+        }
+        Self::with_exempt_hosts(hosts)
+    }
+
+    fn is_exempt(&self, host: &str) -> bool {
+        self.exempt_hosts.contains(&normalize_host(host))
+    }
+}
+
+fn normalize_host(host: &str) -> String {
+    host.trim().trim_end_matches('.').to_ascii_lowercase()
+}
+
+/// Proxy settings reqwest's system matcher reads, as (name, value) pairs.
+fn system_proxy_settings() -> Vec<(String, String)> {
+    #[allow(unused_mut)] // only the Windows branch appends
+    let mut settings: Vec<(String, String)> = PROXY_ENV_VARS
+        .iter()
+        .filter_map(|var| std::env::var(var).ok().map(|v| ((*var).to_string(), v)))
+        .collect();
+    #[cfg(windows)]
+    if let Some(server) = windows_proxy_server() {
+        settings.push(("ProxyServer".to_string(), server));
+    }
+    settings
+}
+
+const PROXY_ENV_VARS: &[&str] = &[
+    "ALL_PROXY",
+    "all_proxy",
+    "HTTP_PROXY",
+    "http_proxy",
+    "HTTPS_PROXY",
+    "https_proxy",
+];
+
+/// `HKCU\...\Internet Settings` ProxyServer when ProxyEnable is set — the
+/// source hyper-util's `client-proxy-system` falls back to on Windows.
+#[cfg(windows)]
+fn windows_proxy_server() -> Option<String> {
+    let key = winreg::RegKey::predef(winreg::enums::HKEY_CURRENT_USER)
+        .open_subkey(r"Software\Microsoft\Windows\CurrentVersion\Internet Settings")
+        .ok()?;
+    let enabled: u32 = key.get_value("ProxyEnable").unwrap_or(0);
+    if enabled == 0 {
+        return None;
+    }
+    key.get_value::<String, _>("ProxyServer")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+}
+
+/// Hostnames of the proxies named in `settings` (pure; the test seam).
+/// Accepts the env-var names in either case and the Windows `ProxyServer`
+/// value, whose form is `host:port` or `http=host:port;https=host:port`.
+/// Scheme-less values are read as `http://`. IP-literal proxies are left out:
+/// they never reach a resolver, so they need no exemption.
+pub(crate) fn proxy_hosts(settings: &[(String, String)]) -> Vec<String> {
+    let mut hosts = Vec::new();
+    for (name, value) in settings {
+        let name = name.to_ascii_lowercase();
+        if !matches!(
+            name.as_str(),
+            "all_proxy" | "http_proxy" | "https_proxy" | "proxyserver"
+        ) {
+            continue;
+        }
+        for entry in value.split(';').map(str::trim).filter(|e| !e.is_empty()) {
+            // `http=host:port` (registry per-protocol form); a `://` before
+            // any `=` means a URL whose own query may contain `=`.
+            let entry = match (entry.find('='), entry.find("://")) {
+                (Some(eq), None) => &entry[eq + 1..],
+                (Some(eq), Some(sch)) if eq < sch => &entry[eq + 1..],
+                _ => entry,
+            };
+            let with_scheme = if entry.contains("://") {
+                entry.to_string()
+            } else {
+                format!("http://{entry}")
+            };
+            let Ok(url) = Url::parse(&with_scheme) else {
+                continue;
+            };
+            if let Some(Host::Domain(d)) = url.host() {
+                let host = normalize_host(d);
+                if !host.is_empty() && !hosts.contains(&host) {
+                    hosts.push(host);
+                }
+            }
+        }
+    }
+    hosts
+}
+
+impl reqwest::dns::Resolve for PublicOnlyResolver {
+    fn resolve(&self, name: reqwest::dns::Name) -> reqwest::dns::Resolving {
+        let host = name.as_str().to_owned();
+        let exempt = self.is_exempt(&host);
+        Box::pin(async move {
+            let lookup = host.clone();
+            let answer = tokio::task::spawn_blocking(move || {
+                (lookup.as_str(), 0u16)
+                    .to_socket_addrs()
+                    .map(Iterator::collect::<Vec<_>>)
+            })
+            .await
+            .map_err(|e| -> Box<dyn std::error::Error + Send + Sync> { Box::new(e) })??;
+            if exempt {
+                let addrs: reqwest::dns::Addrs = Box::new(answer.into_iter());
+                return Ok(addrs);
+            }
+            let public = public_addrs(answer);
+            if public.is_empty() {
+                tracing::warn!(
+                    target: "4da::security",
+                    host = %host,
+                    "Refused connection: host resolves only to internal addresses (SSRF / DNS rebinding)"
+                );
+                return Err(format!("{host}: {INTERNAL_URL_BLOCKED}").into());
+            }
+            let addrs: reqwest::dns::Addrs = Box::new(public.into_iter());
+            Ok(addrs)
+        })
+    }
+}
+
+#[cfg(test)]
+#[path = "url_validation_tests.rs"]
+mod hardening_tests;
 
 #[cfg(test)]
 mod tests {
