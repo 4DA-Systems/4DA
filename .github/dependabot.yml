@@ -135,9 +135,13 @@ updates:
   # crates/fourda-depengine has its own Cargo.lock for its standalone CI
   # build and the wasm module (inside the app it resolves through
   # /src-tauri's lockfile). Four direct deps (serde, serde_json, semver,
-  # regex); the depengine CI job holds their major.minor to the app's
-  # (scripts/check-lock-drift.cjs), so a minor bump here lands with the
-  # matching /src-tauri bump.
+  # regex), 16 packages shared with /src-tauri. This block and the
+  # /src-tauri one open SEPARATE PRs. The depengine CI job
+  # (scripts/check-lock-drift.cjs) lets either merge alone in the right
+  # order: a /src-tauri PR that moves a shared package to a new major.minor
+  # merges with a ::warning; a PR here that moves the crate PAST the app
+  # fails until the /src-tauri bump has landed, after which Dependabot's
+  # rebase of it passes. Patch-level differences are only noted.
   - package-ecosystem: "cargo"
     directory: "/crates/fourda-depengine"
     schedule:

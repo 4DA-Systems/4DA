@@ -655,8 +655,27 @@ jobs:
       - name: Supply chain policy check (crate lockfile)
         run: cargo deny --config ../../src-tauri/deny.toml check -A advisory-not-detected -A license-not-encountered -A license-exception-not-encountered
 
+      # Drift the crate's lockfile introduces fails; drift the app's lockfile
+      # led (a one-sided Dependabot bump of /src-tauri) only warns, so each
+      # directory's Dependabot PR can merge on its own. Blame needs the crate
+      # lockfile at the merge base; with no base (schedule, dispatch) drift
+      # only warns.
       - name: Shared dependencies match the app's lockfile
-        run: node scripts/check-lock-drift.cjs
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+        run: |
+          node --test scripts/check-lock-drift.test.cjs
+          args=()
+          if [ -n "$BASE_SHA" ]; then
+            if git fetch --no-tags --depth=1 origin "$BASE_SHA" 2>/dev/null; then
+              # Absent at the base: an empty file, so every crate version is new.
+              git show "$BASE_SHA:crates/fourda-depengine/Cargo.lock" > "$RUNNER_TEMP/base-crate.lock" 2>/dev/null || : > "$RUNNER_TEMP/base-crate.lock"
+              args=(--base-crate-lock "$RUNNER_TEMP/base-crate.lock")
+            else
+              echo "::warning::could not fetch base $BASE_SHA; lockfile drift is reported, not blamed"
+            fi
+          fi
+          node scripts/check-lock-drift.cjs "${args[@]}"
 
       # `cargo rustc --crate-type cdylib`: the manifest declares a plain rlib,
       # so the app never links a cdylib; only this build asks for one. The

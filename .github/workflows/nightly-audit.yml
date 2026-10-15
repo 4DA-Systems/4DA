@@ -90,7 +90,15 @@ jobs:
           # <dir>/.cargo/audit.toml, hence the `cd` per directory.
           # crates/fourda-depengine: the pure engine crate keeps its own
           # lockfile for its standalone and wasm builds (single-engine C0.2).
-          for dir in src-tauri relay crates/fourda-depengine; do
+          DIRS=(src-tauri relay crates/fourda-depengine)
+          # Every directory's chunk must survive the final `tail -c 6000`
+          # below, all failing at once included (they share crates, so one
+          # advisory fails several). Budget: 6000 B shared by N directories,
+          # 100 B each reserved for the "[dir] FAILED (exit N):" header and
+          # newlines: PER_DIR = (6000 - 100*N) / N = 1900 B for N = 3, so the
+          # worst case is 3 x (1900 + ~45) = ~5.8 KB, under the 6000 B tail.
+          PER_DIR=$(( (6000 - 100 * ${#DIRS[@]}) / ${#DIRS[@]} ))
+          for dir in "${DIRS[@]}"; do
             RESULT=$(cd "$dir" && cargo audit 2>&1)
             CODE=$?
             echo "=== cargo audit $dir — exit $CODE ==="
@@ -103,7 +111,7 @@ jobs:
               # single `tail -c 6000` at the end kept only the LAST directory's
               # text, so with two or more failing directories the earlier ones
               # were dropped entirely from both the annotation and the issue.
-              OUTPUT="${OUTPUT}[$dir] FAILED (exit $CODE):"$'\n'"$(printf '%s' "$RESULT" | tail -c 2500)"$'\n'
+              OUTPUT="${OUTPUT}[$dir] FAILED (exit $CODE):"$'\n'"$(printf '%s' "$RESULT" | tail -c "$PER_DIR")"$'\n'
             fi
           done
           set -e

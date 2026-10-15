@@ -65,7 +65,9 @@ app and planned to move: the lockfile readers behind a `FileSource` (C0.3),
 
 ```bash
 cd crates/fourda-depengine
-cargo test --locked                       # unit tests + the version_order vectors
+cargo test --locked                       # unit tests, the version_order vectors, and
+                                          # tests/match_fixture.rs (native replay of the corpus case)
+node --test scripts/check-lock-drift.test.cjs
 cargo clippy --locked -- -D warnings
 CARGO_PROFILE_RELEASE_OPT_LEVEL=s CARGO_PROFILE_RELEASE_LTO=true \
 CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 CARGO_PROFILE_RELEASE_STRIP=true \
@@ -88,10 +90,14 @@ The crate keeps its own `Cargo.lock` for the standalone build and the wasm
 module; inside the app it resolves through `src-tauri/Cargo.lock`. That
 lockfile is covered on its own: Dependabot (`/crates/fourda-depengine`), and
 the depengine CI job runs `cargo audit` and `cargo deny check` against
-`src-tauri/deny.toml`. `scripts/check-lock-drift.cjs` fails the job when a
-package both lockfiles hold differs in major.minor (a patch difference is
-reported, not failed), so the wasm and the app cannot run a different minor
-of `semver`, `regex` or `serde_json`.
+`src-tauri/deny.toml`. `scripts/check-lock-drift.cjs` compares the packages
+both lockfiles hold (16 today). A major.minor drift that the crate's own
+lockfile introduces (its version is not in the crate lockfile at the merge
+base) fails the job: the crate follows the app, never leads it. Drift the
+app's lockfile led only warns, so a one-sided Dependabot PR for
+`/src-tauri` can merge, and the crate's PR to the same line then passes.
+Patch differences are notes. The rule's both directions are tested in
+`scripts/check-lock-drift.test.cjs`.
 
 ## Licence
 
