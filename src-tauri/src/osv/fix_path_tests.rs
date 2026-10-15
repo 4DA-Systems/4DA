@@ -336,29 +336,89 @@ fn managers_are_detected_per_ecosystem() {
 
 /// NodeGoat's tree (audit E8): needle 2.2.4 is hoisted and resolves the
 /// hoisted debug 2.6.9 although its `^2.1.2` also admits 2.2.0; connect
-/// 3.4.1 resolves its own nested 2.2.0; finalhandler, nested inside
-/// connect, climbs to connect's copy. npm's lookup, not the range, decides.
+/// 3.4.1 resolves its own nested 2.2.0; finalhandler, nested inside connect,
+/// climbs to connect's copy. npm's lookup, not the range, decides. A scoped
+/// parent resolves the same way; a workspace member is not a dependency copy
+/// (no answer: the range fallback); a copy of the parent BUNDLED inside nyc
+/// resolves inside the frozen bundle and must not credit the hoisted copy.
 #[test]
 fn npm_lock_resolutions_follow_npms_lookup() {
     let lock: serde_json::Value = serde_json::from_str(
         r#"{"lockfileVersion": 2, "packages": {
-            "": { "dependencies": { "needle": "^2.2.4", "connect": "3.4.1" } },
+            "": { "dependencies": { "needle": "^2.2.4", "connect": "3.4.1", "@scope/kit": "1.0.0", "babel-traverse": "6.11.4", "nyc": "7.1.0" } },
             "node_modules/debug": { "version": "2.6.9" },
             "node_modules/needle": { "version": "2.2.4", "dependencies": { "debug": "^2.1.2" } },
             "node_modules/connect": { "version": "3.4.1", "dependencies": { "debug": "~2.2.0", "finalhandler": "0.4.1" } },
             "node_modules/connect/node_modules/debug": { "version": "2.2.0" },
-            "node_modules/connect/node_modules/finalhandler": { "version": "0.4.1", "dependencies": { "debug": "~2.2.0" } }
+            "node_modules/connect/node_modules/finalhandler": { "version": "0.4.1", "dependencies": { "debug": "~2.2.0" } },
+            "node_modules/@scope/kit": { "version": "1.0.0", "dependencies": { "debug": "^2.0.0" } },
+            "node_modules/@scope/kit/node_modules/debug": { "version": "2.3.0" },
+            "packages/web": { "name": "web", "dependencies": { "debug": "^2.6.0" } },
+            "node_modules/babel-traverse": { "version": "6.11.4", "dependencies": { "debug": "^2.2.0" } },
+            "node_modules/nyc": { "version": "7.1.0", "dependencies": { "babel-traverse": "6.11.4", "debug": "^2.2.0" } },
+            "node_modules/nyc/node_modules/babel-traverse": { "version": "6.11.4", "inBundle": true, "dependencies": { "debug": "^2.2.0" } },
+            "node_modules/nyc/node_modules/debug": { "version": "2.2.0", "inBundle": true }
         }}"#,
     )
     .unwrap();
     let r = |p: &str, v: &str| npm_lock_resolutions(&lock, p, v, "debug");
-    assert_eq!(r("needle", "2.2.4"), Some(vec!["2.6.9".to_string()]));
-    assert_eq!(r("connect", "3.4.1"), Some(vec!["2.2.0".to_string()]));
-    assert_eq!(r("finalhandler", "0.4.1"), Some(vec!["2.2.0".to_string()]));
-    // Not installed at that version: no copy is held.
-    assert_eq!(r("needle", "9.9.9"), Some(vec![]));
-    // A v1 lockfile has no tree to read: the caller keeps its range guess.
+    let one = |v: &str| Some(vec![v.to_string()]);
+    assert_eq!(r("needle", "2.2.4"), one("2.6.9"));
+    assert_eq!(r("connect", "3.4.1"), one("2.2.0"));
+    assert_eq!(r("finalhandler", "0.4.1"), one("2.2.0"));
+    assert_eq!(r("@scope/kit", "1.0.0"), one("2.3.0"));
+    // Only the hoisted babel-traverse counts; its bundled twin inside nyc
+    // resolves nyc's frozen 2.2.0, which is not what a refresh can move.
+    assert_eq!(r("babel-traverse", "6.11.4"), one("2.6.9"));
+    // A workspace member is not a dependency copy, and nothing matches a
+    // version the lockfile does not hold: no answer, so the caller keeps its
+    // range-based attribution (a database older than the lockfile on disk).
+    assert_eq!(r("packages/web", "1.0.0"), None);
+    assert_eq!(r("needle", "9.9.9"), None);
+    // A v1 lockfile has no tree to read.
     let v1: serde_json::Value =
         serde_json::from_str(r#"{"lockfileVersion": 1, "dependencies": {}}"#).unwrap();
     assert_eq!(npm_lock_resolutions(&v1, "needle", "2.2.4", "debug"), None);
+}
+
+/// Bundled means bundled inside a DEPENDENCY: a project's own or a workspace
+/// member's `bundleDependencies` also set `inBundle`, but in the user's tree.
+#[test]
+fn npm_lock_entry_bundled_needs_a_dependency_as_bundler() {
+    let lock: serde_json::Value = serde_json::from_str(
+        r#"{"lockfileVersion": 3, "packages": {
+            "": { "bundleDependencies": ["left-pad"] },
+            "node_modules/left-pad": { "version": "1.3.0", "inBundle": true },
+            "packages/web/node_modules/kleur": { "version": "4.1.5", "inBundle": true },
+            "packages/web": { "name": "web" },
+            "node_modules/nyc": { "version": "7.1.0" },
+            "node_modules/nyc/node_modules/debug": { "version": "2.2.0", "inBundle": true },
+            "node_modules/npm": { "version": "3.10.10" },
+            "node_modules/npm/node_modules/node-gyp/node_modules/array-index": { "version": "1.0.0", "inBundle": true }
+        }}"#,
+    )
+    .unwrap();
+    let pkgs = lock["packages"].as_object().unwrap();
+    assert!(!npm_lock_entry_bundled(pkgs, "node_modules/left-pad"));
+    assert!(!npm_lock_entry_bundled(
+        pkgs,
+        "packages/web/node_modules/kleur"
+    ));
+    assert!(npm_lock_entry_bundled(
+        pkgs,
+        "node_modules/nyc/node_modules/debug"
+    ));
+    // An unlisted level (node-gyp) is passed over on the way to the owner.
+    assert!(npm_lock_entry_bundled(
+        pkgs,
+        "node_modules/npm/node_modules/node-gyp/node_modules/array-index"
+    ));
+    assert_eq!(
+        npm_bundle_owner(
+            pkgs,
+            "node_modules/npm/node_modules/node-gyp/node_modules/array-index"
+        ),
+        Some("node_modules/npm")
+    );
+    assert!(!npm_lock_entry_bundled(pkgs, "node_modules/nyc"));
 }

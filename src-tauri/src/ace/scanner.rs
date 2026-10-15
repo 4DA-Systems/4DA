@@ -1452,11 +1452,10 @@ impl ProjectScanner {
         // debug` cannot reach debug inside nyc, npm or fsevents).
         if let Some(pkgs) = lock.get("packages").and_then(|v| v.as_object()) {
             for (key, value) in pkgs {
-                let in_bundle = value
-                    .get("inBundle")
-                    .and_then(serde_json::Value::as_bool)
-                    .unwrap_or(false);
-                if in_bundle {
+                // Bundled inside a DEPENDENCY's tarball: one owner edge, no edges
+                // of its own. A project's or workspace member's own bundle is the
+                // user's tree and keeps its ordinary edges.
+                if crate::osv::fix_path::npm_lock_entry_bundled(pkgs, key) {
                     if let Some(edge) = bundled_edge(pkgs, key, value) {
                         edges.push(edge);
                     }
@@ -1483,6 +1482,18 @@ impl ProjectScanner {
                 ] {
                     if let Some(deps) = value.get(section).and_then(|v| v.as_object()) {
                         for (child, spec) in deps {
+                            // An owner declares what it bundles (npm requires it;
+                            // npm 3.10.10 declares all 82 of its bundled packages).
+                            // That copy's edge is the bundled one: its range would
+                            // read as "a refresh is enough".
+                            let nested = if key.is_empty() {
+                                format!("node_modules/{child}")
+                            } else {
+                                format!("{key}/node_modules/{child}")
+                            };
+                            if crate::osv::fix_path::npm_lock_entry_bundled(pkgs, &nested) {
+                                continue;
+                            }
                             edges.push(DependencyEdge {
                                 parent: parent.clone(),
                                 parent_version: parent_version.clone(),
@@ -1627,9 +1638,9 @@ fn package_lock_name(key: &str) -> Option<&str> {
     (!name.is_empty() || key.is_empty()).then_some(name)
 }
 
-/// The edge for a bundled copy: from its bundle owner (the nearest enclosing
-/// package that is not itself `inBundle`) to the exact version shipped,
-/// spelled as an npm pin. `None` when the owner cannot be read.
+/// The edge for a copy bundled inside a dependency: from its bundle owner
+/// (`fix_path::npm_bundle_owner`) to the exact version shipped, spelled as an
+/// npm pin with the bundled marker. `None` when the owner cannot be read.
 fn bundled_edge(
     pkgs: &serde_json::Map<String, serde_json::Value>,
     key: &str,
@@ -1637,31 +1648,16 @@ fn bundled_edge(
 ) -> Option<DependencyEdge> {
     let child = package_lock_name(key)?.to_string();
     let child_version = value.get("version")?.as_str()?.to_string();
-    // Climb enclosing folders; a level the lockfile does not list (a folder
-    // with no entry of its own) is passed over, not a dead end.
-    let mut owner_key = key;
-    let owner = loop {
-        let (enclosing, _) = owner_key.rsplit_once("/node_modules/")?;
-        owner_key = enclosing;
-        let Some(entry) = pkgs.get(enclosing) else {
-            continue;
-        };
-        if !entry
-            .get("inBundle")
-            .and_then(serde_json::Value::as_bool)
-            .unwrap_or(false)
-        {
-            break (enclosing, entry);
-        }
-    };
+    let owner_key = crate::osv::fix_path::npm_bundle_owner(pkgs, key)?;
+    let owner = pkgs.get(owner_key)?;
     let scope = if value.get("dev").and_then(serde_json::Value::as_bool) == Some(true) {
         EdgeScope::Dev
     } else {
         EdgeScope::Runtime
     };
     Some(DependencyEdge {
-        parent: package_lock_name(owner.0)?.to_string(),
-        parent_version: owner.1.get("version")?.as_str().map(str::to_string),
+        parent: package_lock_name(owner_key)?.to_string(),
+        parent_version: owner.get("version")?.as_str().map(str::to_string),
         child,
         child_version: Some(format!(
             "{child_version}{}",
@@ -2672,10 +2668,11 @@ dependencies = ["once_cell", "log 0.4.20"]
             "lockfileVersion": 2,
             "packages": {
                 "": { "name": "app", "devDependencies": { "nyc": "^14.0.0", "npm": "^6.0.0" } },
-                "node_modules/nyc": { "version": "14.1.1", "dev": true, "bundleDependencies": ["babel-traverse", "debug"] },
+                "node_modules/nyc": { "version": "14.1.1", "dev": true, "bundleDependencies": ["babel-traverse", "debug"], "dependencies": { "babel-traverse": "^6.11.4", "debug": "^2.2.0" } },
                 "node_modules/nyc/node_modules/babel-traverse": { "version": "6.11.4", "dev": true, "inBundle": true, "dependencies": { "debug": "^2.2.0" } },
                 "node_modules/nyc/node_modules/debug": { "version": "2.2.0", "dev": true, "inBundle": true },
-                "node_modules/npm": { "version": "6.14.18" },
+                "node_modules/npm": { "version": "6.14.18", "dependencies": { "node-gyp": "^5.1.1", "semver": "^5.7.1" } },
+                "node_modules/npm/node_modules/semver": { "version": "5.7.1", "inBundle": true },
                 "node_modules/npm/node_modules/node-gyp/node_modules/array-index": { "version": "1.0.0", "inBundle": true, "dependencies": { "debug": "^2.2.0" } },
                 "node_modules/npm/node_modules/node-gyp/node_modules/array-index/node_modules/debug": { "version": "2.6.9", "inBundle": true }
             }
@@ -2719,6 +2716,48 @@ dependencies = ["once_cell", "log 0.4.20"]
         assert!(edges
             .iter()
             .any(|e| e.parent == ROOT_PARENT && e.child == "nyc"));
+        // An owner DECLARES what it bundles (npm 3.10.10 declares all 82): its
+        // range must not become a second, refreshable edge to the same copy.
+        let into_semver: Vec<Option<&str>> = edges
+            .iter()
+            .filter(|e| e.child == "semver")
+            .map(|e| e.child_version.as_deref())
+            .collect();
+        assert_eq!(into_semver, vec![Some("5.7.1 (bundled)")]);
+        assert!(!edges
+            .iter()
+            .any(|e| e.parent == "nyc" && e.child_version.as_deref() == Some("^2.2.0")));
+    }
+
+    /// A project's OWN `bundleDependencies` also mark its top-level copies
+    /// `inBundle` (npm Arborist: the bundler can be the root). Those sit in the
+    /// user's tree, where `npm update` and overrides reach them: they keep
+    /// their ordinary edges and get no bundled marker.
+    #[test]
+    fn package_lock_root_bundles_keep_their_edges() {
+        let content = r#"{
+            "lockfileVersion": 3,
+            "packages": {
+                "": { "name": "app", "bundleDependencies": ["left-pad"], "dependencies": { "left-pad": "^1.3.0" } },
+                "node_modules/left-pad": { "version": "1.3.0", "inBundle": true, "dependencies": { "tiny-dep": "^2.0.0" } },
+                "node_modules/tiny-dep": { "version": "2.0.1", "inBundle": true },
+                "packages/web": { "name": "web", "bundleDependencies": ["kleur"], "dependencies": { "kleur": "^4.0.0" } },
+                "packages/web/node_modules/kleur": { "version": "4.1.5", "inBundle": true }
+            }
+        }"#;
+        let edges = ProjectScanner::parse_package_lock_edges(content);
+        let has = |parent: &str, child: &str, spec: &str| {
+            edges.iter().any(|e| {
+                e.parent == parent && e.child == child && e.child_version.as_deref() == Some(spec)
+            })
+        };
+        assert!(has(ROOT_PARENT, "left-pad", "^1.3.0"));
+        assert!(has("left-pad", "tiny-dep", "^2.0.0"));
+        assert!(has("packages/web", "kleur", "^4.0.0"));
+        assert!(!edges.iter().any(|e| e
+            .child_version
+            .as_deref()
+            .is_some_and(|v| v.ends_with("(bundled)"))));
     }
 
     #[test]

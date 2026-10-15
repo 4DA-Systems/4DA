@@ -308,7 +308,15 @@ fn security_fact(
                             installed.as_deref(),
                         );
                         let path = with_proven_parent(path, &parent_links, &pnorm, labels);
-                        with_parent_route(path, &parent_links, &pnorm, project, eco_norm, ctx.db)
+                        with_parent_route(
+                            path,
+                            &parent_links,
+                            &pnorm,
+                            project,
+                            eco_norm,
+                            ctx.db,
+                            installed.as_deref(),
+                        )
                     }
                     CopyFix::PerLine(lines) => FixPath::PerLine { lines },
                 }

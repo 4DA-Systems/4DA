@@ -197,35 +197,6 @@ impl Manager {
         }
     }
 
-    /// The command that moves a DIRECT dependency to `target` where the
-    /// project declares it, run in that project's directory (audit E8: a
-    /// direct row said only "4.2 → 5.2.17"). Each was checked against the
-    /// tool on 2026-10-15 to keep the dependency in its own section:
-    /// - npm 10: `npm install` keeps a devDependency a devDependency and works
-    ///   from a workspace member (the root lockfile moves);
-    /// - pnpm 10: `pnpm up` works at a workspace root and in a member (`pnpm
-    ///   add` at a root needs `-w`) and keeps the pin style;
-    /// - yarn 1.22 `upgrade`, yarn 4 `up`: keep the section;
-    /// - cargo `add` keeps the entry's features but writes a NEW
-    ///   `[dependencies]` entry for a dev-dependency unless given `--dev`.
-    #[cfg_attr(
-        not(test),
-        expect(
-            dead_code,
-            reason = "named by the rule vectors now; the Upgrade Plan and Brief direct rows call it once #961 (W1) lands (audit E8, C2)"
-        )
-    )]
-    pub fn direct_command(self, package: &str, target: &str, dev: bool) -> String {
-        match self {
-            Self::Npm => format!("npm install {package}@{target}"),
-            Self::Pnpm | Self::PnpmWorkspace => format!("pnpm up {package}@{target}"),
-            Self::YarnClassic => format!("yarn upgrade {package}@{target}"),
-            Self::YarnBerry => format!("yarn up {package}@{target}"),
-            Self::Cargo if dev => format!("cargo add {package}@{target} --dev"),
-            Self::Cargo => format!("cargo add {package}@{target}"),
-        }
-    }
-
     /// Where this tool lets a project force a transitive copy past its
     /// parent's requirement, worded to follow "with". `None` for Cargo: no
     /// manifest key moves a crate outside the line its parent requires.
@@ -300,14 +271,111 @@ impl NpmLockfile {
     }
 }
 
+/// The parsed `package-lock.json` that owns the npm tree of the project at
+/// `dir`: the nearest one up the same ascent [`Manager::detect`] takes (a
+/// workspace member's lockfile sits at the workspace root). Parsed once per
+/// file and kept while its modification time and size are unchanged: the Upgrade
+/// Plan asks once per vulnerable package, and a lockfile can be megabytes.
+pub(crate) fn npm_lock_tree(dir: &Path) -> Option<std::sync::Arc<serde_json::Value>> {
+    use std::collections::HashMap;
+    use std::sync::{Arc, LazyLock};
+    type Entry = (std::time::SystemTime, u64, Arc<serde_json::Value>);
+    static CACHE: LazyLock<parking_lot::Mutex<HashMap<PathBuf, Entry>>> =
+        LazyLock::new(Default::default);
+    const MAX_CACHED: usize = 16;
+
+    let mut here = Some(dir);
+    let mut file = None;
+    for _ in 0..=MAX_LOCKFILE_ASCENT {
+        let d = here?;
+        match NpmLockfile::detect(d) {
+            Some(NpmLockfile::Npm) => {
+                file = Some(d.join(NpmLockfile::Npm.file_name()));
+                break;
+            }
+            Some(_) => return None, // pnpm or yarn owns this tree
+            None => here = d.parent(),
+        }
+    }
+    let file = file?;
+    let meta = std::fs::metadata(&file).ok()?;
+    let stamp = (meta.modified().ok()?, meta.len());
+    if let Some((modified, len, tree)) = CACHE.lock().get(&file) {
+        if (*modified, *len) == stamp {
+            return Some(Arc::clone(tree));
+        }
+    }
+    let tree: Arc<serde_json::Value> =
+        Arc::new(serde_json::from_str(&std::fs::read_to_string(&file).ok()?).ok()?);
+    let mut cache = CACHE.lock();
+    if cache.len() >= MAX_CACHED {
+        cache.clear();
+    }
+    cache.insert(file, (stamp.0, stamp.1, Arc::clone(&tree)));
+    Some(tree)
+}
+
+/// A `package-lock.json` v2/v3 key that installs a DEPENDENCY (under some
+/// `node_modules/`), as opposed to the root (`""`) or a workspace member's
+/// folder (`packages/web`).
+fn is_dependency_key(key: &str) -> bool {
+    key.starts_with("node_modules/") || key.contains("/node_modules/")
+}
+
+/// The key of the package a bundled entry at `key` ships inside: the nearest
+/// enclosing entry that is not itself `inBundle` (a level the lockfile does
+/// not list is passed over). `None` when no enclosing entry is listed.
+pub(crate) fn npm_bundle_owner<'a>(
+    pkgs: &'a serde_json::Map<String, serde_json::Value>,
+    key: &'a str,
+) -> Option<&'a str> {
+    let mut at = key;
+    loop {
+        let (enclosing, _) = at.rsplit_once("/node_modules/")?;
+        at = enclosing;
+        match pkgs.get(enclosing) {
+            Some(entry)
+                if !entry
+                    .get("inBundle")
+                    .and_then(serde_json::Value::as_bool)
+                    .unwrap_or(false) =>
+            {
+                return Some(enclosing)
+            }
+            _ => {}
+        }
+    }
+}
+
+/// Whether the entry at `key` is a copy bundled inside a DEPENDENCY's tarball:
+/// `inBundle`, with a dependency as its bundler. A project's or workspace
+/// member's own `bundleDependencies` also set `inBundle` (npm Arborist's
+/// `getBundler()` can be the root), but those copies sit in the user's own
+/// tree, where `npm update` and overrides reach them like any other.
+pub(crate) fn npm_lock_entry_bundled(
+    pkgs: &serde_json::Map<String, serde_json::Value>,
+    key: &str,
+) -> bool {
+    let in_bundle = pkgs
+        .get(key)
+        .and_then(|e| e.get("inBundle"))
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false);
+    in_bundle && npm_bundle_owner(pkgs, key).is_some_and(is_dependency_key)
+}
+
 /// The versions of `child` that the installed `parent` `parent_version`
 /// resolves to in a `package-lock.json` v2/v3 tree, by npm's own lookup: the
 /// parent's folder's `node_modules`, then each enclosing folder's, up to the
-/// root. `None` when the lockfile has no `packages` map (v1), so the caller
-/// keeps its range-based guess. A range alone cannot tell which copy a parent
-/// holds: NodeGoat's needle 2.2.4 (`^2.1.2`) admits debug 2.2.0 but resolves
-/// the hoisted 2.6.9, and was told `npm update debug` for a copy it never
-/// held (audit E8).
+/// root. A range alone cannot tell which copy a parent holds: NodeGoat's
+/// needle 2.2.4 (`^2.1.2`) admits debug 2.2.0 but resolves the hoisted 2.6.9,
+/// and was told `npm update debug` for a copy it never held (audit E8).
+///
+/// Copies of `parent` bundled inside a dependency are skipped: what they
+/// resolve is frozen in that bundle, and the bundled edge already names its
+/// owner. `None` when the lockfile has no `packages` map (v1) or holds no
+/// matching copy of `parent` that declares `child` (a database older than the
+/// lockfile on disk), so the caller keeps its range-based attribution.
 pub(crate) fn npm_lock_resolutions(
     lock: &serde_json::Value,
     parent: &str,
@@ -315,14 +383,16 @@ pub(crate) fn npm_lock_resolutions(
     child: &str,
 ) -> Option<Vec<String>> {
     let pkgs = lock.get("packages")?.as_object()?;
+    let mut matched = false;
     let mut out: Vec<String> = Vec::new();
     for (key, entry) in pkgs {
         let name = key
             .rsplit_once("node_modules/")
             .map_or(key.as_str(), |(_, n)| n);
-        if key.is_empty()
+        if !is_dependency_key(key)
             || !name.eq_ignore_ascii_case(parent)
             || entry.get("version").and_then(serde_json::Value::as_str) != Some(parent_version)
+            || npm_lock_entry_bundled(pkgs, key)
         {
             continue;
         }
@@ -332,6 +402,7 @@ pub(crate) fn npm_lock_resolutions(
         if !declares {
             continue;
         }
+        matched = true;
         let mut base = key.as_str();
         let resolved = loop {
             let candidate = if base.is_empty() {
@@ -353,7 +424,7 @@ pub(crate) fn npm_lock_resolutions(
             }
         }
     }
-    Some(out)
+    matched.then_some(out)
 }
 
 fn is_yarn_berry(lockfile: &Path) -> bool {

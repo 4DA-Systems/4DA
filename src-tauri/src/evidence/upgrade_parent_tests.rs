@@ -481,3 +481,74 @@ fn a_bundled_copy_names_its_owner_and_no_override() {
     assert!(!text.contains("overrides"), "{text}");
     assert!(!text.contains("npm update"), "{text}");
 }
+
+/// End to end on a real project directory (audit E8): the plan reads the
+/// project's package-lock.json from disk (Manager::Npm detection, the cached
+/// tree, npm's lookup). needle 2.2.4 admits debug 2.2.0 by range but resolves
+/// the hoisted 2.6.9, so it is no parent of 2.2.0; connect holds 2.2.0 by
+/// `~2.2.0`; nyc DECLARES and bundles its 2.2.0. No "npm update debug".
+#[test]
+fn the_plan_reads_the_lockfile_tree_on_disk() {
+    let dir = tempfile::Builder::new()
+        .prefix("fx-e2e-")
+        .tempdir_in(env!("CARGO_MANIFEST_DIR"))
+        .expect("tempdir");
+    let project = dir.path().to_string_lossy().replace('\\', "/");
+    if crate::project_inclusion::is_hard_excluded(&project) {
+        eprintln!("SKIPPED the_plan_reads_the_lockfile_tree_on_disk: {project} is excluded from DB writes here");
+        return;
+    }
+    let lock = r#"{"name": "app", "lockfileVersion": 2, "packages": {
+        "": { "name": "app", "dependencies": { "needle": "2.2.4", "connect": "3.4.1", "nyc": "7.1.0" } },
+        "node_modules/debug": { "version": "2.6.9" },
+        "node_modules/needle": { "version": "2.2.4", "dependencies": { "debug": "^2.1.2" } },
+        "node_modules/connect": { "version": "3.4.1", "dependencies": { "debug": "~2.2.0" } },
+        "node_modules/connect/node_modules/debug": { "version": "2.2.0" },
+        "node_modules/nyc": { "version": "7.1.0", "bundleDependencies": ["debug"], "dependencies": { "debug": "^2.2.0" } },
+        "node_modules/nyc/node_modules/debug": { "version": "2.2.0", "inBundle": true }
+    }}"#;
+    std::fs::write(dir.path().join("package-lock.json"), lock).unwrap();
+    std::fs::write(
+        dir.path().join("package.json"),
+        r#"{"name": "app", "dependencies": {"needle": "2.2.4", "connect": "3.4.1", "nyc": "7.1.0"}}"#,
+    )
+    .unwrap();
+
+    let db = test_db();
+    db.store_transitive_dependency(&project, "debug", Some("2.2.0"), "npm", false)
+        .unwrap();
+    db.store_dependency_instances(
+        &project,
+        "npm",
+        &[
+            instance("needle", "2.2.4", true, false),
+            instance("connect", "3.4.1", true, false),
+            instance("nyc", "7.1.0", true, false),
+            instance("debug", "2.6.9", false, false),
+            instance("debug", "2.2.0", false, false),
+        ],
+    )
+    .unwrap();
+    let edges = crate::ace::scanner::ProjectScanner::parse_package_lock_edges(lock);
+    db.store_dependency_edges(&project, "npm", &edges).unwrap();
+    advisory(&db, "GHSA-gxpj-cx7g-858c", "debug", "npm", "2.6.9", 5.3);
+
+    let plan = plan(&db);
+    let debug = row(&plan, "debug");
+    validate_item(debug).expect("schema-valid");
+    let text = &debug.explanation;
+    assert!(
+        text.contains("comes in through connect 3.4.1 (a direct dependency), whose requirement ~2.2.0 excludes 2.6.9"),
+        "{text}"
+    );
+    assert!(
+        text.contains("comes in through nyc 7.1.0 (a direct dependency), which ships it bundled"),
+        "{text}"
+    );
+    assert!(
+        !text.contains("needle"),
+        "needle resolves the hoisted 2.6.9: {text}"
+    );
+    assert!(!text.contains("npm update debug"), "{text}");
+    assert!(!text.contains("(bundled)"), "{text}");
+}

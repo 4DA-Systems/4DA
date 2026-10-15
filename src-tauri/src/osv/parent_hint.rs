@@ -27,7 +27,6 @@
 //!   rows 4DA already holds ([`ParentStanding`]), never fetched: no row, no
 //!   claim either way.
 
-use std::cell::RefCell;
 use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
 
@@ -36,8 +35,8 @@ use semver::Version;
 use crate::db::Database;
 
 use super::fix_path::{
-    installed_parent_requirements, is_bundled, npm_lock_resolutions, refresh_verdict,
-    requirement_admits, strip_spec, Dialect, Manager, Refresh, Requirement,
+    installed_parent_requirements, is_bundled, npm_lock_resolutions, npm_lock_tree,
+    refresh_verdict, requirement_admits, strip_spec, Dialect, Manager, Refresh, Requirement,
 };
 use super::fix_target::LineTarget;
 use super::matching::{check_version_affected, parse_version};
@@ -436,18 +435,9 @@ pub fn load_routes(
     let requirements = |project: &str, m: Manager, parent: &str, version: &str, child: &str| {
         installed_parent_requirements(m, Path::new(&raw(project)), parent, version, child)
     };
-    // One parse per project's package-lock.json (it can be megabytes).
-    let locks: RefCell<HashMap<String, Option<serde_json::Value>>> = RefCell::default();
     let resolved_children = |project: &str, parent: &str, version: &str, child: &str| {
-        if manager(project) != Some(Manager::Npm) {
-            return None;
-        }
-        let mut locks = locks.borrow_mut();
-        let lock = locks.entry(project.to_string()).or_insert_with(|| {
-            let text = std::fs::read_to_string(Path::new(&raw(project)).join("package-lock.json"));
-            text.ok().and_then(|t| serde_json::from_str(&t).ok())
-        });
-        npm_lock_resolutions(lock.as_ref()?, parent, version, child)
+        let tree = npm_lock_tree(Path::new(&raw(project)))?;
+        npm_lock_resolutions(&tree, parent, version, child)
     };
     let readers = Readers {
         manager: &manager,
