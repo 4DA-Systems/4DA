@@ -97,6 +97,7 @@ dated and judged"*.
 - Pre, post and dev phases (`rc`, `.post1`, `.dev`): vo-034..vo-040, vo-045
 - A PyPI version that is also valid semver must still order by PEP 440: vo-042 (`1.0.0-1` is a post release), vo-043 (`-post1`), vo-044 (`a10 > a9`)
 - SemVer §11 precedence list, for npm and crates.io: vo-047..vo-060
+- Packagist and RubyGems, including two-part OSV bounds (readiness audit H2: the TS engine could not order `6.4`): vo-086..vo-091. Truth: composer/semver and PHP `version_compare`, and Gem::Version. The Packagist pair `6.4.0` / `6.4` is deliberately unpinned, because composer/semver's normaliser calls them equal and its comparator does not.
 - SemVer numeric order, identifiers and pre-releases: vo-061..vo-066, vo-071, vo-072
 - Build metadata is not precedence (SemVer §10): vo-067..vo-070
 - Go: `v` prefix, pseudo-versions, `+incompatible`, pre-releases: vo-073..vo-085
@@ -137,6 +138,7 @@ form.
 
 - The 22 oracle cases: ft-001..ft-022 (openssl 0.10.80: ft-006; braces `last_affected`: ft-004)
 - OSV per published release, all four registries: ft-023..ft-061, ft-062, ft-063, ft-067, ft-068
+- Packagist and RubyGems same-line fixes below a two-part bound (readiness audit H2): ft-065 (symfony/process v5.1.0 -> v5.4.51), ft-066 (rack 2.0.6 -> 2.2.23 on the pinned records)
 - No clean version, so the target clears only the fixed advisories (`clears: false`): ft-004, ft-029, ft-041, ft-042, ft-055, ft-060, ft-061
 - A `last_affected` window that later releases leave (the walk steps past the bound and keeps checking every advisory): ft-043 (pyjwt), ft-052 (mistune)
 - A release the registry withdrew is never the target (FX-H5): npm deprecated, ft-007 (lodash 4.18.0, "Bad release", so 4.18.1) and ft-063 (brace-expansion 3.0.3, so 3.0.4); crates.io yanked, ft-062 (h2 0.3.17, so 0.3.18); every clearing release withdrawn, so no target and `withheld` names it, ft-064 (by hand)
