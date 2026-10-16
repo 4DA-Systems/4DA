@@ -6,7 +6,7 @@
  * covering all 13 error pattern categories plus fallbacks.
  */
 import { describe, it, expect } from 'vitest';
-import { translateError, translateErrorWithRaw } from '../error-messages';
+import { dailyBudgetMessage, translateError, translateErrorWithRaw } from '../error-messages';
 
 describe('translateError', () => {
   // --- Network errors ---
@@ -164,5 +164,34 @@ describe('translateErrorWithRaw', () => {
     const [friendly, raw] = translateErrorWithRaw(null);
     expect(friendly).toBe('Something went wrong. Please try again.');
     expect(raw).toBe('');
+  });
+});
+
+// Audit L2 (2026-10-12): a spent daily AI budget surfaced as
+// "Assessment failed — try again". The backend's sentence names the cause
+// and the local reset time; it must reach the user verbatim.
+describe('dailyBudgetMessage', () => {
+  const backend =
+    'AI assessment failed: Daily AI budget reached — resets at 00:00 local time (in 3 h 12 min). ' +
+    'Daily LLM cost limit exceeded (used: 151c, limit: 150c / $1.50). Adjust in Settings > Intelligence, or wait until midnight reset.';
+
+  it('extracts the budget sentence with its reset time', () => {
+    expect(dailyBudgetMessage(backend)).toBe(
+      'Daily AI budget reached — resets at 00:00 local time (in 3 h 12 min)',
+    );
+    expect(dailyBudgetMessage(new Error(backend))).toBe(
+      'Daily AI budget reached — resets at 00:00 local time (in 3 h 12 min)',
+    );
+  });
+
+  it('is null for other failures', () => {
+    expect(dailyBudgetMessage('AI assessment failed: network error')).toBeNull();
+    expect(dailyBudgetMessage(null)).toBeNull();
+  });
+
+  it('wins over the generic patterns in translateError (never "try again")', () => {
+    const friendly = translateError(backend);
+    expect(friendly).toBe('Daily AI budget reached — resets at 00:00 local time (in 3 h 12 min)');
+    expect(friendly).not.toMatch(/try again/i);
   });
 });

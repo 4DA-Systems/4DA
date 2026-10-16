@@ -1085,7 +1085,9 @@ impl LLMClient {
         cost_used: u64,
         cost_limit: u64,
     ) -> String {
-        let mut parts = Vec::new();
+        // The headline names the cause and when it clears; the UI shows it
+        // instead of a generic "try again" (audit L2).
+        let mut parts = vec![crate::state::daily_budget_reached_message()];
 
         if tokens_limit > 0 && tokens_used >= tokens_limit {
             parts.push(format!(
@@ -1101,7 +1103,7 @@ impl LLMClient {
             ));
         }
 
-        if parts.is_empty() {
+        if parts.len() == 1 {
             // Fallback (shouldn't happen, but be defensive)
             parts.push("Daily LLM limit reached".to_string());
         }
@@ -1150,10 +1152,10 @@ impl LLMClient {
                 "LLM call skipped — estimated cost would cross the daily cap"
             );
             return Err(format!(
-                "Daily AI cost limit would be exceeded: this call is estimated at ~{:.1}c \
-                 with {cost_used}c of {cost_limit}c already spent today. The call was \
-                 skipped before spending anything. Raise the daily cost limit in Settings \
-                 or wait for the daily reset.",
+                "{}. This call is estimated at ~{:.1}c with {cost_used}c of {cost_limit}c \
+                 already spent today, so it was skipped before spending anything. Raise \
+                 the daily cost limit in Settings to continue today.",
+                crate::state::daily_budget_reached_message(),
                 estimated_millicents as f64 / 1000.0
             )
             .into());

@@ -10,6 +10,7 @@ import { useAppStore } from '../../store';
 import { cmd } from '../../lib/commands';
 import { recordTrustEvent } from '../../lib/trust-feedback';
 import { sourceNewsReady } from '../../lib/negative-readiness';
+import { dailyBudgetMessage } from '../../utils/error-messages';
 import { useBlindSpotsData } from '../../hooks/use-blind-spots-data';
 
 import { BlindSpotsPaywall } from './BlindSpotsPaywall';
@@ -324,7 +325,7 @@ const BlindSpotsView = memo(function BlindSpotsView() {
             <span className="text-[10px] text-text-muted">{t('blindspots.ai.noModel')}</span>
           )}
           {aiError && aiError !== 'no_llm' && (
-            <span className="text-[10px] text-red-400">{t('blindspots.ai.failed')}</span>
+            <span className="text-[10px] text-red-400">{dailyBudgetMessage(aiError) ?? t('blindspots.ai.failed')}</span>
           )}
         </div>
       )}

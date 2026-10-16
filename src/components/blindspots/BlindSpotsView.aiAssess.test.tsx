@@ -42,11 +42,12 @@ const assessment = {
   from_cache: false,
 };
 
-const cmdMock = vi.fn((name: string) => {
+const defaultCmd = (name: string): Promise<unknown> => {
   if (name === 'assess_blind_spots_with_ai') return Promise.resolve(assessment);
   if (name === 'get_source_health') return Promise.resolve({ total_active: 1, total_failing: 0, total_disabled: 0 });
   return Promise.resolve(null);
-});
+};
+const cmdMock = vi.fn(defaultCmd);
 vi.mock('../../lib/commands', () => ({ cmd: (...a: unknown[]) => cmdMock(...(a as [string])) }));
 
 let mockDepRows: DepRow[] = [];
@@ -69,6 +70,7 @@ function depRow(name: string): DepRow {
 
 beforeEach(() => {
   cmdMock.mockClear();
+  cmdMock.mockImplementation(defaultCmd);
   mockDepRows = [depRow('react (npm)'), depRow('ammonia (crates.io)')];
   mockState = {
     blindSpotReport: { items: [], score: 50, total_tracked: 2, weak_match_count: 0, data_freshness: null },
@@ -105,5 +107,18 @@ describe('BlindSpotsView — AI triage (Phase B)', () => {
     await waitFor(() => expect(screen.getByTestId('probably-fine')).toBeInTheDocument());
     const worth = screen.queryAllByTestId('worth-dep').map(n => n.textContent);
     expect(worth).toContain('unjudged (npm)'); // not in the assessment -> stays surfaced
+  });
+
+  // Audit L2: a refusal for a spent budget said "Assessment failed — try again".
+  it('says the daily budget is spent and when it resets, not "try again"', async () => {
+    const refusal = 'AI assessment failed: Daily AI budget reached — resets at 00:00 local time (in 2 h 5 min). Daily LLM cost limit exceeded';
+    cmdMock.mockImplementation((name: string) =>
+      name === 'assess_blind_spots_with_ai' ? Promise.reject(refusal) : Promise.resolve(null));
+    render(<BlindSpotsView />);
+    fireEvent.click(screen.getByText('blindspots.ai.assess'));
+    await waitFor(() => expect(
+      screen.getByText('Daily AI budget reached — resets at 00:00 local time (in 2 h 5 min)'),
+    ).toBeInTheDocument());
+    expect(screen.queryByText('blindspots.ai.failed')).toBeNull();
   });
 });

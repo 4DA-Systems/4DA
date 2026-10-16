@@ -106,6 +106,10 @@ function parseStructuredError(error: unknown): StructuredError | null {
  * @returns A user-friendly error string
  */
 export function translateError(error: unknown): string {
+  // A spent daily AI budget is not a fault to retry: say so, and when it resets.
+  const budget = dailyBudgetMessage(error);
+  if (budget) return budget;
+
   // Try structured error first (new backend error framework)
   const structured = parseStructuredError(error);
   if (structured) {
@@ -156,6 +160,22 @@ export function translateError(error: unknown): string {
 export function isSignalGateError(error: unknown): boolean {
   const raw = error instanceof Error ? error.message : String(error ?? '');
   return /requires 4DA Signal/i.test(raw);
+}
+
+/**
+ * The backend's "Daily AI budget reached — resets at HH:MM local time (in …)"
+ * sentence, when a call was refused because today's AI budget is spent.
+ *
+ * The backend (`state_llm_limits::daily_budget_reached_message`) is the sole
+ * producer and computes the reset time in the user's local zone, so the
+ * sentence is shown verbatim. A budget refusal used to surface as
+ * "Assessment failed — try again" although retrying could not succeed until
+ * the reset (audit L2, 2026-10-12).
+ */
+export function dailyBudgetMessage(error: unknown): string | null {
+  const raw = error instanceof Error ? error.message : String(error ?? '');
+  const match = /Daily AI budget reached[^.(]*(\([^)]*\))?/.exec(raw);
+  return match ? match[0].trim() : null;
 }
 
 /**

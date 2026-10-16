@@ -182,6 +182,75 @@ pub(crate) fn is_llm_limit_reached() -> bool {
     false
 }
 
+/// Share of the daily token and cost caps, in percent, that background
+/// passes (adversarial deliberation) may spend. The rest is reserved for
+/// calls the user asks for: before this existed the background pass spent
+/// the whole cap every day (334 calls / $2.49 on 2026-10-11 against $1.50)
+/// and the user's own "Assess with AI" was refused (audit L2).
+pub(crate) const BACKGROUND_BUDGET_SHARE_PERCENT: u64 = 60;
+
+/// `used` has reached `percent` of `limit`. A zero limit is unlimited.
+pub(crate) fn share_reached(used: u64, limit: u64, percent: u64) -> bool {
+    limit > 0 && u128::from(used) * 100 >= u128::from(limit) * u128::from(percent)
+}
+
+/// Whether a background pass has spent its share of today's budget
+/// ([`BACKGROUND_BUDGET_SHARE_PERCENT`] of either cap).
+pub(crate) fn background_llm_budget_reached() -> bool {
+    maybe_reset_daily_counter();
+    let share = BACKGROUND_BUDGET_SHARE_PERCENT;
+    share_reached(
+        LLM_DAILY_TOKENS.load(Ordering::Relaxed),
+        get_llm_daily_token_limit(),
+        share,
+    ) || share_reached(
+        LLM_DAILY_COST_MILLICENTS.load(Ordering::Relaxed),
+        get_llm_daily_cost_limit().saturating_mul(1000),
+        share,
+    )
+}
+
+/// What a refused user-initiated call says: the budget is spent and when it
+/// comes back. Never "try again": nothing changes until the reset.
+pub(crate) fn daily_budget_reached_message() -> String {
+    budget_reached_message_at(&chrono::Local::now())
+}
+
+/// [`daily_budget_reached_message`] for a given moment. The counters reset
+/// at local midnight ([`maybe_reset_daily_counter`]); on a day whose
+/// midnight does not exist (a DST jump) the first valid time is named.
+pub(crate) fn budget_reached_message_at<Tz: chrono::TimeZone>(now: &chrono::DateTime<Tz>) -> String
+where
+    Tz::Offset: std::fmt::Display,
+{
+    let reset = now
+        .date_naive()
+        .succ_opt()
+        .and_then(|day| day.and_hms_opt(0, 0, 0))
+        .and_then(|midnight| {
+            let tz = now.timezone();
+            tz.from_local_datetime(&midnight).earliest().or_else(|| {
+                tz.from_local_datetime(&(midnight + chrono::Duration::hours(1)))
+                    .earliest()
+            })
+        });
+    match reset {
+        Some(reset) => {
+            let minutes = (reset.clone() - now.clone()).num_minutes().max(1);
+            let wait = if minutes >= 60 {
+                format!("{} h {} min", minutes / 60, minutes % 60)
+            } else {
+                format!("{minutes} min")
+            };
+            format!(
+                "Daily AI budget reached \u{2014} resets at {} local time (in {wait})",
+                reset.format("%H:%M")
+            )
+        }
+        None => "Daily AI budget reached \u{2014} resets at midnight local time".to_string(),
+    }
+}
+
 /// Get current daily LLM token usage and the configured limit.
 /// Returns `(used, limit)` where limit=0 means unlimited.
 pub(crate) fn get_llm_token_usage() -> (u64, u64) {
@@ -362,6 +431,7 @@ pub(crate) fn set_relevance_threshold(value: f32) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::TimeZone;
     use std::sync::atomic::Ordering;
 
     #[test]
@@ -485,6 +555,77 @@ mod tests {
         assert!(!would_exceed_llm_cost_limit(0));
 
         LLM_DAILY_COST_MILLICENTS.store(0, Ordering::Relaxed);
+    }
+
+    /// Audit L2: the background pass stops at its share, leaving the rest of
+    /// the cap for calls the user makes.
+    #[test]
+    fn background_share_reserves_headroom_for_user_calls() {
+        assert!(!share_reached(59, 100, BACKGROUND_BUDGET_SHARE_PERCENT));
+        assert!(share_reached(60, 100, BACKGROUND_BUDGET_SHARE_PERCENT));
+        // $1.50 cap in millicents: the background pass stops at $0.90.
+        assert!(!share_reached(
+            89_999,
+            150_000,
+            BACKGROUND_BUDGET_SHARE_PERCENT
+        ));
+        assert!(share_reached(
+            90_000,
+            150_000,
+            BACKGROUND_BUDGET_SHARE_PERCENT
+        ));
+        // A zero limit is unlimited, and huge values do not overflow.
+        assert!(!share_reached(u64::MAX, 0, BACKGROUND_BUDGET_SHARE_PERCENT));
+        assert!(share_reached(
+            u64::MAX,
+            u64::MAX,
+            BACKGROUND_BUDGET_SHARE_PERCENT
+        ));
+    }
+
+    #[test]
+    fn background_share_follows_the_live_counters() {
+        let _guard = LLM_TEST_LOCK.lock().unwrap();
+        *LLM_DAILY_RESET_DATE.lock() = chrono::Local::now().format("%Y-%m-%d").to_string();
+        let limit_millicents = get_llm_daily_cost_limit().saturating_mul(1000);
+        assert!(
+            limit_millicents > 0,
+            "test assumes a nonzero default cost cap"
+        );
+        LLM_DAILY_TOKENS.store(0, Ordering::Relaxed);
+        LLM_DAILY_COST_MILLICENTS.store(limit_millicents * 59 / 100, Ordering::Relaxed);
+        assert!(!background_llm_budget_reached());
+        assert!(!is_llm_limit_reached(), "user calls are far from the cap");
+        LLM_DAILY_COST_MILLICENTS.store(limit_millicents * 61 / 100, Ordering::Relaxed);
+        assert!(background_llm_budget_reached());
+        assert!(
+            !is_llm_limit_reached(),
+            "the background stop leaves the rest of the cap to the user"
+        );
+        LLM_DAILY_COST_MILLICENTS.store(0, Ordering::Relaxed);
+    }
+
+    /// The user-facing refusal names the cause and the local reset, never
+    /// "try again".
+    #[test]
+    fn budget_message_names_the_local_reset_time() {
+        let tz = chrono::FixedOffset::east_opt(10 * 3600).expect("offset");
+        let now = tz
+            .with_ymd_and_hms(2026, 10, 16, 20, 48, 0)
+            .single()
+            .expect("time");
+        let msg = budget_reached_message_at(&now);
+        assert_eq!(
+            msg,
+            "Daily AI budget reached \u{2014} resets at 00:00 local time (in 3 h 12 min)"
+        );
+        assert!(!msg.to_lowercase().contains("try again"));
+
+        let late = tz
+            .with_ymd_and_hms(2026, 10, 16, 23, 55, 30)
+            .single()
+            .expect("time");
+        assert!(budget_reached_message_at(&late).ends_with("(in 4 min)"));
     }
 
     #[test]
