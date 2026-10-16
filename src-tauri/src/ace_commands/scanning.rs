@@ -52,14 +52,20 @@ pub(super) fn is_system_directory(path: &Path) -> bool {
     }
     #[cfg(not(target_os = "windows"))]
     {
-        let s = path.to_string_lossy();
-        return s.starts_with("/etc")
-            || s.starts_with("/usr")
-            || s.starts_with("/var")
-            || s.starts_with("/sys")
-            || s.starts_with("/proc")
-            || s.starts_with("/boot")
-            || s == "/";
+        // Whole components, not string prefixes: `/variants` is a user folder.
+        // macOS canonicalises `/etc` and `/var` to `/private/...`, so a typed
+        // folder re-checked after `canonicalize` must still be refused.
+        const SYSTEM_ROOTS: [&str; 8] = [
+            "/etc",
+            "/usr",
+            "/var",
+            "/sys",
+            "/proc",
+            "/boot",
+            "/private/etc",
+            "/private/var",
+        ];
+        return path == Path::new("/") || SYSTEM_ROOTS.iter().any(|root| path.starts_with(root));
     }
 }
 
@@ -597,5 +603,23 @@ mod tests {
         assert!(!is_system_directory(Path::new(
             r"C:\Users\dev\projects\app"
         )));
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn rejects_system_roots_by_component_not_by_prefix() {
+        use std::path::Path;
+        assert!(is_system_directory(Path::new("/")));
+        assert!(is_system_directory(Path::new("/etc")));
+        assert!(is_system_directory(Path::new("/var/lib/app")));
+        assert!(is_system_directory(Path::new("/usr/local/src")));
+        // macOS canonical forms of /etc and /var.
+        assert!(is_system_directory(Path::new("/private/var/folders/x")));
+        assert!(is_system_directory(Path::new("/private/etc")));
+        // Same leading letters, different folder.
+        assert!(!is_system_directory(Path::new("/variants/app")));
+        assert!(!is_system_directory(Path::new("/usr-projects")));
+        assert!(!is_system_directory(Path::new("/private/code")));
+        assert!(!is_system_directory(Path::new("/home/dev/projects/app")));
     }
 }
