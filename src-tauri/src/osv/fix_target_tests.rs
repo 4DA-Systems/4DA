@@ -132,6 +132,7 @@ fn copy(project: &str, version: &str, fix: Option<&str>, clean: Option<&str>) ->
         fixed_version: fix.map(str::to_string),
         clean_version: clean.map(str::to_string),
         target_version: clean.map(str::to_string),
+        withheld: Vec::new(),
     }
 }
 

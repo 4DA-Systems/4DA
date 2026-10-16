@@ -179,6 +179,10 @@ struct PackageGroup<'a> {
     /// "Upgrade" (2026-09-06: 14 of 30 live plan items said "Upgrade gtk —
     /// clears 1 advisory" with nothing to upgrade to).
     has_fix: bool,
+    /// With no fix: the releases that fixed it but that the registry withdrew
+    /// (yanked, deprecated; FX-H5). Non-empty means "no installable fix",
+    /// never "no fix published".
+    withheld: Vec<String>,
     /// Every advisory is a maintenance notice (unmaintained / deprecated: no
     /// fix, no CVSS). Folded into ONE Watch item, never an upgrade step.
     informational: bool,
@@ -246,7 +250,16 @@ fn package_group<'a>(
     // (no fix exists) read "Fixable now via a direct dependency bump"
     // on the live plan (2026-09-06).
     let fixable_now = has_fix && instances().any(|d| d.is_direct);
-    let informational = !has_fix && advisories.iter().all(|a| is_informational(a));
+    let mut withheld: Vec<String> = Vec::new();
+    if !has_fix {
+        for w in instances().flat_map(|d| d.withheld.iter()) {
+            if !withheld.contains(w) {
+                withheld.push(w.clone());
+            }
+        }
+    }
+    let informational =
+        !has_fix && withheld.is_empty() && advisories.iter().all(|a| is_informational(a));
     // The inputs of the ONE scope rule (AD-046): version-confirmed installs in
     // the projects this row names — the set the alert path reads too.
     let scope = crate::osv::identity::ExposureScope::of(&advisories, &projects);
@@ -287,6 +300,7 @@ fn package_group<'a>(
         lines,
         targets,
         has_fix,
+        withheld,
         informational,
         cohort_key,
         routes: crate::osv::parent_hint::TransitiveRoutes::default(),
@@ -383,7 +397,12 @@ impl PackageGroup<'_> {
             )
         } else {
             format!(
-                "No fix published for {pkg} — {n} {adv} across {m} {proj}",
+                "{none} for {pkg} — {n} {adv} across {m} {proj}",
+                none = if self.withheld.is_empty() {
+                    "No fix published"
+                } else {
+                    "No installable fix"
+                },
                 pkg = self.package,
                 n = n,
                 adv = plural(n, "advisory", "advisories"),
@@ -392,7 +411,13 @@ impl PackageGroup<'_> {
             )
         });
 
-        let scope_note = if !self.has_fix {
+        let scope_note = if !self.has_fix && !self.withheld.is_empty() {
+            format!(
+                "The release that fixes it ({}) was withdrawn by its registry (yanked or \
+                 deprecated), and no later release is known to clear it — pin, patch, or replace",
+                self.withheld.join(", ")
+            )
+        } else if !self.has_fix {
             "No fix has been published — pin, patch, or replace; there is nothing to upgrade to yet"
                 .to_string()
         } else if self.fixable_now {

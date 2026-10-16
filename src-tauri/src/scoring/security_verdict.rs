@@ -288,13 +288,34 @@ pub(crate) fn ranges_verdict(installed: Option<&str>, ranges: &[String]) -> Opti
     Some(reqs?.iter().any(|req| req.matches(&version)))
 }
 
-fn highest_fix(advisory: &StoredAdvisory) -> Option<String> {
+/// The advisory's highest listed fix, as a release its registry still offers
+/// (FX-H5): a yanked or deprecated fix gives way to the next allowed release
+/// the advisory does not affect, or to nothing.
+fn highest_fix(db: &Database, advisory: &StoredAdvisory) -> Option<String> {
     let versions: Vec<String> = serde_json::from_str(advisory.fixed_versions.as_deref()?).ok()?;
-    versions
+    let fix = versions
         .into_iter()
         .filter_map(|v| super::release_version::lenient_semver(&v, None).map(|parsed| (parsed, v)))
         .max_by(|a, b| a.0.cmp(&b.0))
-        .map(|(_, v)| v)
+        .map(|(_, v)| v)?;
+    let eco = crate::ecosystem::Ecosystem::parse(&advisory.ecosystem)
+        .map_or(advisory.ecosystem.as_str(), |e| e.osv_name());
+    let key = (
+        crate::osv::matching::package_key(&advisory.package_name, eco),
+        eco.to_string(),
+    );
+    match crate::osv::release_facts::load(db).get(&key) {
+        Some(facts) => {
+            fourda_depengine::fix_target::installable_fix(
+                eco,
+                &fix,
+                &advisory.affected_ranges,
+                facts,
+            )
+            .fix
+        }
+        None => Some(fix),
+    }
 }
 
 /// Run the Preemption matcher for every mirror row of the advisory the item
@@ -331,7 +352,7 @@ pub(crate) fn matcher_verdict(db: &Database, ids: &[String]) -> Option<SecurityV
                 deciding_tier = tier;
             }
             if verdict.fixed_version.is_none() {
-                verdict.fixed_version = highest_fix(row);
+                verdict.fixed_version = highest_fix(db, row);
             }
             verdict.exposed.extend(exposure.confirmed);
         }

@@ -187,6 +187,7 @@ mod tests {
             fixed_version: fixed.map(str::to_string),
             clean_version: clean.map(str::to_string),
             target_version: walked.map(str::to_string),
+            withheld: Vec::new(),
         }
     }
 

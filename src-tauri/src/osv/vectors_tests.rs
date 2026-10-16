@@ -31,8 +31,9 @@ use serde_json::Value;
 // version_order, osv_range and fix_target run against the pure engine crate
 // directly (single-engine C0.1); refresh_verdict and fix_command are still the
 // app's `fix_path` (C0.4), and records are merged by the app's `osv::sync`.
-use fourda_depengine::fix_target::{fix_for_version, walk_target};
+use fourda_depengine::fix_target::{installable_line_fix, walk_target_in};
 use fourda_depengine::range::{check_version_affected, parse_version};
+use fourda_depengine::registry::RegistryReleases;
 use fourda_depengine::version_order::OrderedVersion;
 
 use super::fix_path::{refresh_verdict, Basis, Manager, Refresh, Requirement};
@@ -175,20 +176,37 @@ fn same_version(eco: &str, a: Option<&str>, b: Option<&str>) -> bool {
 /// The copy's target as `fix_target::line_targets` forms it: where the walk
 /// lands (`clears_all_known` when it clears everything), else, when the walk
 /// cannot run, the highest own-line fix among the advisories that affect the
-/// copy.
-fn engine_target(eco: &str, installed: &str, ranges: &[Option<String>]) -> (Option<String>, bool) {
+/// copy. Neither is ever a release `registry` withdrew; the third value names
+/// the withdrawn ones the walk stepped over.
+fn engine_target(
+    eco: &str,
+    installed: &str,
+    ranges: &[Option<String>],
+    registry: &RegistryReleases,
+) -> (Option<String>, bool, Vec<String>) {
     let refs: Vec<&Option<String>> = ranges.iter().collect();
-    if let Some(walk) = walk_target(eco, installed, &refs) {
-        return (Some(walk.version), walk.clears_all);
+    let outcome = walk_target_in(eco, installed, &refs, registry);
+    if let Some(walk) = outcome.target {
+        return (Some(walk.version), walk.clears_all, outcome.withheld);
     }
     let partial = ranges
         .iter()
         .filter(|r| check_version_affected(eco, Some(installed), r) == (true, true))
-        .filter_map(|r| fix_for_version(eco, installed, r))
+        .filter_map(|r| installable_line_fix(eco, installed, r, registry).fix)
         .filter_map(|f| parse_version(&f).map(|p| (p, f)))
         .max_by(|a, b| a.0.cmp(&b.0))
         .map(|(_, f)| f);
-    (partial, false)
+    (partial, false, outcome.withheld)
+}
+
+/// A string-array field of a vector line (absent reads as empty).
+fn strings(v: &Value, key: &str) -> Vec<String> {
+    v.get(key)
+        .and_then(Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|s| s.as_str().map(str::to_string))
+        .collect()
 }
 
 fn check_fix_target(v: &Value, records: &mut Records) -> Result<(), String> {
@@ -202,7 +220,11 @@ fn check_fix_target(v: &Value, records: &mut Records) -> Result<(), String> {
     {
         ranges.push(records.ranges(id.as_str().unwrap_or_default(), eco, name)?);
     }
-    let (target, clears) = engine_target(eco, installed, &ranges);
+    let registry = RegistryReleases {
+        published: strings(v, "published"),
+        excluded: strings(v, "excluded"),
+    };
+    let (target, clears, withheld) = engine_target(eco, installed, &ranges, &registry);
     let want_target = opt_s(v, "target");
     let want_clears = v.get("clears").and_then(Value::as_bool).unwrap_or(false);
     if !same_version(eco, target.as_deref(), want_target) {
@@ -211,6 +233,13 @@ fn check_fix_target(v: &Value, records: &mut Records) -> Result<(), String> {
     // `clears` is only meaningful for a target.
     if want_target.is_some() && clears != want_clears {
         return Err(format!("clears: got {clears}, want {want_clears}"));
+    }
+    // `withheld` is checked only on lines that state it.
+    if v.get("withheld").is_some() && withheld != strings(v, "withheld") {
+        return Err(format!(
+            "withheld: got {withheld:?}, want {:?}",
+            strings(v, "withheld")
+        ));
     }
     Ok(())
 }

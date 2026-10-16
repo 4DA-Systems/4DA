@@ -17,9 +17,10 @@ use std::collections::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 
 use crate::ecosystem::normalize as normalize_ecosystem;
-use crate::fix_target::{fix_for_version, walk_target, WalkTarget};
+use crate::fix_target::{installable_fix, installable_line_fix, walk_target_in, WalkOutcome};
 use crate::osv::AdvisoryRecord;
 use crate::range::{check_version_affected, parse_version};
+use crate::registry::{RegistryIndex, RegistryReleases};
 
 /// Installed copies by (project, package key, OSV ecosystem): each copy's
 /// (version, is_direct, is_dev).
@@ -84,6 +85,12 @@ pub struct MatchedDependency {
     /// could not evaluate an advisory.
     #[serde(default)]
     pub target_version: Option<String>,
+    /// Releases the registry withdrew (yanked, deprecated) that this copy's
+    /// line fix or walk would otherwise have named; none of the fields above
+    /// ever holds one. With no target, a non-empty list means the fix exists
+    /// but was withdrawn ("no installable fix", not "no fix published").
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub withheld: Vec<String>,
 }
 
 /// One advisory row that affects at least one installed copy.
@@ -122,9 +129,10 @@ pub fn inventory_problem(inventory: &[Package]) -> Option<String> {
     })
 }
 
-/// [`match_inventory_with`] without a host hook: every affected copy counts.
+/// [`match_inventory_with`] without registry facts or a host hook: every
+/// affected copy counts.
 pub fn match_inventory(inventory: &[Package], records: &[AdvisoryRecord]) -> Vec<Finding> {
-    match_inventory_with(inventory, records, |_, _, _| {})
+    match_inventory_with(inventory, records, &RegistryIndex::new(), |_, _, _| {})
 }
 
 /// Match `records` against `inventory`. Findings come in `records` order (one
@@ -133,12 +141,18 @@ pub fn match_inventory(inventory: &[Package], records: &[AdvisoryRecord]) -> Vec
 /// versions inside parseable windows; a copy with no version, or an advisory
 /// whose window cannot be read, is a conservative (unconfirmed) match.
 ///
+/// `registry` holds what each package's registry says about its releases
+/// (keyed by [`package_key`] and OSV ecosystem); no copy's target, line fix
+/// or finding fix is ever a release it withdrew. A package with no entry is
+/// matched on the advisory data alone.
+///
 /// `retain(index, record, copies)` sees each advisory's affected copies
 /// (`index` into `records`) before they are grouped and may drop some (the
 /// app's reachability filter).
 pub fn match_inventory_with<F>(
     inventory: &[Package],
     records: &[AdvisoryRecord],
+    registry: &RegistryIndex,
     mut retain: F,
 ) -> Vec<Finding>
 where
@@ -190,7 +204,8 @@ where
             .or_default()
             .push(&record.affected_ranges);
     }
-    let mut walk_cache: HashMap<(String, String, String), Option<WalkTarget>> = HashMap::new();
+    let mut walk_cache: HashMap<(String, String, String), WalkOutcome> = HashMap::new();
+    let no_facts = RegistryReleases::default();
 
     let mut findings: Vec<Finding> = Vec::new();
     let mut seen = HashSet::new();
@@ -203,6 +218,7 @@ where
         let Some(dep_entries) = dep_index.get(&key) else {
             continue;
         };
+        let facts = registry.get(&key).unwrap_or(&no_facts);
 
         let mut copies = Vec::new();
         for dep in dep_entries {
@@ -225,37 +241,33 @@ where
                 // Targets are facts about THIS copy: its own line's fix, and
                 // where the walk over every advisory of the package lands
                 // (clean, or clearing every advisory that has a way out).
-                let (fixed_version, walk) = match version.as_deref() {
+                let targets = match version.as_deref() {
                     Some(v) if confirmed => {
                         let walk = walk_cache
                             .entry((key.0.clone(), key.1.clone(), v.to_string()))
                             .or_insert_with(|| {
                                 package_ranges
                                     .get(&key)
-                                    .and_then(|ranges| walk_target(&record.ecosystem, v, ranges))
+                                    .map(|ranges| {
+                                        walk_target_in(&record.ecosystem, v, ranges, facts)
+                                    })
+                                    .unwrap_or_default()
                             })
                             .clone();
-                        (
-                            fix_for_version(&record.ecosystem, v, &record.affected_ranges),
-                            walk,
-                        )
+                        CopyTargets::new(record, v, walk, facts)
                     }
-                    _ => (None, None),
+                    _ => CopyTargets::default(),
                 };
-                let clean_version = walk
-                    .as_ref()
-                    .filter(|w| w.clears_all)
-                    .map(|w| w.version.clone());
-                let target_version = walk.map(|w| w.version);
                 copies.push(MatchedDependency {
                     project_path: normalize_project_path(&dep.project),
                     installed_version: version,
                     is_direct,
                     is_dev,
                     is_version_confirmed: confirmed,
-                    fixed_version,
-                    clean_version,
-                    target_version,
+                    fixed_version: targets.fixed,
+                    clean_version: targets.clean,
+                    target_version: targets.target,
+                    withheld: targets.withheld,
                 });
             }
         }
@@ -314,7 +326,11 @@ where
             .filter_map(|fix| parse_version(&fix).map(|parsed| (parsed, fix)))
             .max_by(|a, b| a.0.cmp(&b.0))
             .map(|(_, fix)| fix)
-            .or_else(|| highest_listed_fix(&record.fixed_versions));
+            .or_else(|| {
+                highest_listed_fix(&record.fixed_versions).and_then(|fix| {
+                    installable_fix(&record.ecosystem, &fix, &record.affected_ranges, facts).fix
+                })
+            });
 
         findings.push(Finding {
             record: index,
@@ -326,6 +342,44 @@ where
         });
     }
     findings
+}
+
+/// One confirmed copy's targets, none of them a release the registry
+/// withdrew.
+#[derive(Default)]
+struct CopyTargets {
+    fixed: Option<String>,
+    clean: Option<String>,
+    target: Option<String>,
+    withheld: Vec<String>,
+}
+
+impl CopyTargets {
+    fn new(
+        record: &AdvisoryRecord,
+        installed: &str,
+        walk: WalkOutcome,
+        facts: &RegistryReleases,
+    ) -> Self {
+        let line =
+            installable_line_fix(&record.ecosystem, installed, &record.affected_ranges, facts);
+        let mut withheld = walk.withheld;
+        for w in line.withheld {
+            if !withheld.contains(&w) {
+                withheld.push(w);
+            }
+        }
+        CopyTargets {
+            fixed: line.fix,
+            clean: walk
+                .target
+                .as_ref()
+                .filter(|w| w.clears_all)
+                .map(|w| w.version.clone()),
+            target: walk.target.map(|w| w.version),
+            withheld,
+        }
+    }
 }
 
 /// The versions checked for one resolved row: every installed copy of that

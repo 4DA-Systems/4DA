@@ -29,7 +29,7 @@ specific enough to recheck).
 |---|---|---|
 | `version_order.jsonl` | `{eco, a, b, cmp}`, `cmp` one of `<` `=` `>` | PEP 440, SemVer 2.0.0 and the Go Modules Reference spec examples. Every line is cross-checked when written: PyPI lines with python `packaging` 25.0, the others with node `semver` 7 (Go with the `v` stripped). |
 | `osv_range.jsonl` | `{record_id, eco, name, version, affected}` | OSV's own answer: `/v1/querybatch` at the exact version, recorded in `../expected/<case>.json` (records pinned 2026-10-10 in `../osv/`). `affected: true` is used only when the finding's alias group holds exactly one pinned record for that package, so OSV returned exactly that record. |
-| `fix_target.jsonl` | `{eco, name, installed, record_ids[], target, clears, evidence}` | ft-001..ft-022: the 22 cases of the 2026-10-10 fix-path oracle (the action was applied, re-resolved and re-scanned, and the target checked minimal against OSV per published version), re-checked 2026-10-12 against the pinned ids. ft-023..: OSV `/v1/querybatch` per published stable release (2026-10-12), restricted to the pinned `record_ids`. `evidence` holds the OSV ids at `installed` and at `target`. |
+| `fix_target.jsonl` | `{eco, name, installed, record_ids[], target, clears, evidence}`, optionally `published[]`, `excluded[]`, `withheld[]` | ft-001..ft-022: the 22 cases of the 2026-10-10 fix-path oracle (the action was applied, re-resolved and re-scanned, and the target checked minimal against OSV per published version), re-checked 2026-10-12 against the pinned ids. ft-023..: OSV `/v1/querybatch` per published stable release (2026-10-12), restricted to the pinned `record_ids`. `evidence` holds the OSV ids at `installed` and at `target`. |
 | `refresh_verdict.jsonl` | `{eco, name, installed, target, requirements[], verdict, via, inferred}` | The 16 transitive oracle cases (the refresh was applied: it reached the target, or it did not move the copy), each with its parents' requirements read from the case lockfile (`package-lock.json` `requires`, `yarn.lock` `dependencies`) or the parent's published manifest (npm registry for pnpm, crates.io for Cargo). Each case also appears with `requirements: []` to pin the semver fallback. The rest apply AD-055 ¶1 by hand. |
 | `fix_command.jsonl` | `{tool, eco, pkg, installed, target, workspace_root, command}` | The command text of AD-055 ¶4. Where the oracle applied that tool's refresh, the `source` names the case. |
 | `range_check.jsonl` | `{eco, name, constraint, from, releases[], record_ids[], expected}` | `@4da/mcp-server` 6.2.0 recorded fixtures (`src/__tests__/fixtures/dependency-check/recorded/`, origin/main `bae421b`): OSV's querybatch answer per release of ws, Jinja2 and golang.org/x/net. Constraint membership: node `semver` (npm, Go without `v`; `v0` is the v0 line), python `packaging` `SpecifierSet` (PyPI). |
@@ -46,7 +46,20 @@ Field conventions:
   unions, spaces AND) or `cargo` (a bare version is a caret, commas AND).
 - A `fix_target` `target` is compared as a version (build metadata ignored).
   `clears: false` means the target clears only the advisories that have a
-  fix. `target: null` means no advisory on the copy has one.
+  fix. `target: null` means no advisory on the copy has one, or (with
+  `excluded`) every release that has one was withdrawn.
+- Optional `fix_target` registry fields (FX-H5, 2026-10-16). Lines without
+  them run on the advisory data alone, as before:
+  - `published[]`: the registry's releases above `installed`, as the
+    registry listed them on the date in `source`. They join the releases the
+    advisory data names, so the walk can step to a release no advisory
+    mentions.
+  - `excluded[]`: releases the registry withdrew (crates.io and PyPI
+    `yanked`; npm `deprecated` while the package's `latest` is not). No
+    target may be one; the walk steps over them as it steps over
+    pre-releases.
+  - `withheld[]` (expected, checked only when present): the withdrawn
+    releases the walk would otherwise have named, in the order met.
 - `range_check` `releases` are the stable releases that have a recorded OSV
   answer. `record_ids` are the pinned records in `../osv/`; they are the same
   set as the MCP's recorded `/v1/query` answer for each package. A release is
@@ -118,9 +131,10 @@ form.
 > fix").
 
 - The 22 oracle cases: ft-001..ft-022 (openssl 0.10.80: ft-006; braces `last_affected`: ft-004)
-- OSV per published release, all four registries: ft-023..ft-061
+- OSV per published release, all four registries: ft-023..ft-061, ft-062, ft-063
 - No clean version, so the target clears only the fixed advisories (`clears: false`): ft-004, ft-029, ft-041, ft-042, ft-055, ft-060, ft-061
 - A `last_affected` window that later releases leave (the walk steps past the bound and keeps checking every advisory): ft-043 (pyjwt), ft-052 (mistune)
+- A release the registry withdrew is never the target (FX-H5): npm deprecated, ft-007 (lodash 4.18.0, "Bad release", so 4.18.1) and ft-063 (brace-expansion 3.0.3, so 3.0.4); crates.io yanked, ft-062 (h2 0.3.17, so 0.3.18); every clearing release withdrawn, so no target and `withheld` names it, ft-064 (by hand)
 
 ### Refresh verdict — AD-055 ¶1, ¶2, ¶3
 
@@ -181,7 +195,9 @@ form.
 - golang.org/x/net (Go), including `v0` -> v0.60.0 / v0.61.0: rc-023..rc-028
 
 The release-age hold and withdrawn or deprecated releases are not part of
-these vectors. They depend on the clock and on registry metadata.
+these `range_check` vectors. They depend on the clock and on registry
+metadata. (Withdrawn releases as fix targets are pinned in `fix_target.jsonl`
+with the registry state written into the line, above.)
 
 ## `engines_skip.json` — the shrink-only gate
 
