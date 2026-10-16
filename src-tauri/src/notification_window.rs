@@ -370,7 +370,7 @@ pub fn show_notification_now<R: Runtime>(app: &AppHandle<R>, data: NotificationD
     );
 
     // Start auto-dismiss timer.
-    let dismiss_ms = dismiss_duration_ms(&data.priority);
+    let dismiss_ms = dismiss_duration_ms(&data.priority, WINDOW_READY.load(Ordering::Relaxed));
 
     let cancelled = Arc::new(AtomicBool::new(false));
     {
@@ -442,20 +442,33 @@ fn js_display_ms(priority: &str) -> u64 {
         "critical" => 8000,
         "alert" => 6000,
         "advisory" => 5000,
-        _ => 6000, // "watch" and fallback
+        "watch" => 6000,
+        // `DISMISS_DURATIONS[p] || 4000`: any other priority, e.g. "high" from
+        // the flood summary.
+        _ => 4000,
     }
 }
 
 /// Slack past the script's own timer before the backend hides the window
-/// anyway. Only a page that never answers (its script failed) reaches it, so it
-/// is generous: a user hovering the card keeps it, and the window is never
-/// hidden mid-animation. Hiding mid-animation froze that frame in the hidden
-/// webview (`webview_visibility`), and the next show could flash it.
+/// anyway, for a page that has reported ready. Its script ends the showing,
+/// so this is generous: a user hovering the card keeps it, and the window is
+/// never hidden mid-animation. Hiding mid-animation froze that frame in the
+/// hidden webview (`webview_visibility`), and the next show could flash it.
 const FALLBACK_SLACK_MS: u64 = 60_000;
 
-/// The backend's fallback hide, in milliseconds after a show.
-fn dismiss_duration_ms(priority: &str) -> u64 {
-    js_display_ms(priority) + FALLBACK_SLACK_MS
+/// The script's exit animation (`hideNotification`: 400 ms for an auto hide).
+const EXIT_ANIMATION_MS: u64 = 400;
+
+/// The backend's fallback hide, in milliseconds after a show. A page that never
+/// reported ready may never hide itself, so the backend hides it on the
+/// script's own schedule rather than leaving an empty window up for a minute.
+fn dismiss_duration_ms(priority: &str, page_ready: bool) -> u64 {
+    let slack = if page_ready {
+        FALLBACK_SLACK_MS
+    } else {
+        EXIT_ANIMATION_MS
+    };
+    js_display_ms(priority) + slack
 }
 
 // ============================================================================
@@ -513,7 +526,8 @@ mod tests {
         assert_eq!(js_display_ms("alert"), 6000);
         assert_eq!(js_display_ms("advisory"), 5000);
         assert_eq!(js_display_ms("watch"), 6000);
-        assert_eq!(js_display_ms("unknown"), 6000);
+        assert_eq!(js_display_ms("high"), 4000);
+        assert_eq!(js_display_ms("unknown"), 4000);
     }
 
     #[test]
@@ -530,8 +544,23 @@ mod tests {
                 "notification.js DISMISS_DURATIONS.{p} must stay {ms} ms"
             );
             // Never before the script's own hide and its 400 ms exit animation.
-            assert!(dismiss_duration_ms(p) >= js_display_ms(p) + 400);
+            assert!(dismiss_duration_ms(p, true) >= js_display_ms(p) + 400);
+            assert!(dismiss_duration_ms(p, false) >= js_display_ms(p) + 400);
         }
+        assert!(
+            js.contains("DISMISS_DURATIONS[currentPriority] || 4000"),
+            "notification.js default duration must stay 4000 ms"
+        );
+        assert!(js.contains("var delay = reason === 'dismiss' ? 150 : 400;"));
+    }
+
+    #[test]
+    fn a_page_that_never_loaded_is_hidden_on_the_scripts_schedule() {
+        // Ready: the script hides itself; the backend waits a minute past it.
+        assert_eq!(dismiss_duration_ms("alert", true), 6000 + 60_000);
+        // Never ready: nothing will hide it, so the backend does at once.
+        assert_eq!(dismiss_duration_ms("alert", false), 6000 + 400);
+        assert_eq!(dismiss_duration_ms("high", false), 4000 + 400);
     }
 
     // The two cancel_dismiss_timer tests mutate the process-global DISMISS_CANCEL

@@ -100,23 +100,23 @@ fn the_routed_judge_is_released_after_a_cycle_unless_the_user_set_keep_alive() {
         ..State::default()
     };
     assert_eq!(
-        release_target(&routed, true, None),
+        release_target(&routed, true, "claude-sonnet-5", None),
         Some(("gemma4:12b".to_string(), DEFAULT_OLLAMA_URL.to_string())),
         "released even while the breaker is open: the model may still be loaded"
     );
     assert_eq!(
-        release_target(&routed, true, Some("  "))
+        release_target(&routed, true, "claude-sonnet-5", Some("  "))
             .map(|t| t.0)
             .as_deref(),
         Some("gemma4:12b")
     );
     assert!(
-        release_target(&routed, true, Some("24h")).is_none(),
+        release_target(&routed, true, "claude-sonnet-5", Some("24h")).is_none(),
         "the user's residency policy stands"
     );
-    assert!(release_target(&routed, true, Some("0")).is_none());
+    assert!(release_target(&routed, true, "claude-sonnet-5", Some("0")).is_none());
     assert!(
-        release_target(&State::default(), true, None).is_none(),
+        release_target(&State::default(), true, "claude-sonnet-5", None).is_none(),
         "no routed judge (cloud sibling): nothing to release"
     );
 }
@@ -136,9 +136,40 @@ fn an_ollama_main_model_is_never_unloaded() {
     assert!(release_target(
         &detected,
         may_route_local(&main.provider, &main.api_key),
+        "", // the routing rule alone must refuse it
         None
     )
     .is_none());
+}
+
+/// An `openai-compatible` (or any non-"ollama") provider pointed at the local
+/// Ollama: routing still picks a local judge, and when it is the same model as
+/// the user's own, unloading it would cost their next brief a reload.
+#[test]
+fn a_compatible_provider_on_the_same_local_model_is_never_unloaded() {
+    let routed = State {
+        model: Some("gemma4:12b".into()),
+        base_url: DEFAULT_OLLAMA_URL.into(),
+        ..State::default()
+    };
+    let compat = llm("openai-compatible", "gemma4:12b", "sk-local");
+    assert!(release_target(&routed, true, &compat.model, None).is_none());
+    assert!(
+        release_target(&routed, true, " gemma4:12b ", None).is_none(),
+        "trimmed"
+    );
+    let latest = State {
+        model: Some("qwen3:14b:latest".into()),
+        ..routed
+    };
+    assert!(
+        release_target(&latest, true, "qwen3:14b", None).is_none(),
+        ":latest is implicit"
+    );
+    assert!(
+        release_target(&latest, true, "gemma4:12b", None).is_some(),
+        "a different model is 4DA's"
+    );
 }
 
 #[test]
@@ -149,7 +180,7 @@ fn a_running_lane_keeps_the_judge_loaded() {
         lanes_in_flight: 1,
         ..State::default()
     };
-    assert!(release_target(&busy, true, None).is_none());
+    assert!(release_target(&busy, true, "claude-sonnet-5", None).is_none());
 }
 
 #[tokio::test]

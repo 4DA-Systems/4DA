@@ -338,14 +338,20 @@ async fn load_model(base_url: &str, model: &str) -> bool {
 /// timed calls. That reload is not charged to the breaker: [`observe_load`]
 /// subtracts Ollama's reported `load_duration` from the timed call.
 pub(crate) async fn release_after_cycle() {
-    let route_local = {
+    let (route_local, own_model) = {
         let llm = configured_llm();
-        may_route_local(&llm.provider, &llm.api_key)
+        (
+            may_route_local(&llm.provider, &llm.api_key),
+            llm.model.clone(),
+        )
     };
     let user_keep_alive = std::env::var("OLLAMA_KEEP_ALIVE").ok();
-    let Some((model, base_url)) =
-        release_target(&STATE.lock(), route_local, user_keep_alive.as_deref())
-    else {
+    let Some((model, base_url)) = release_target(
+        &STATE.lock(),
+        route_local,
+        &own_model,
+        user_keep_alive.as_deref(),
+    ) else {
         return;
     };
     let Ok(client) = reqwest::Client::builder()
@@ -375,9 +381,13 @@ pub(crate) async fn release_after_cycle() {
 
 /// The model [`release_after_cycle`] unloads, if any (see its rules). A
 /// tripped breaker does not matter here: the model may still be loaded.
+/// `own_model` is the user's configured main model: a non-"ollama" provider
+/// (say `openai-compatible`) can point at the same local Ollama model the
+/// judge was routed to, and that model is the user's, not 4DA's to unload.
 fn release_target(
     state: &State,
     route_local: bool,
+    own_model: &str,
     user_keep_alive: Option<&str>,
 ) -> Option<(String, String)> {
     if !route_local || state.lanes_in_flight > 0 {
@@ -385,7 +395,20 @@ fn release_target(
     }
     // `None` from the keep-alive rule means the user configured their own.
     crate::llm::ollama_keep_alive_for(user_keep_alive)?;
-    state.model.clone().map(|m| (m, state.base_url.clone()))
+    let model = state.model.as_deref()?;
+    if same_model(model, own_model) {
+        return None;
+    }
+    Some((model.to_string(), state.base_url.clone()))
+}
+
+/// Ollama names compare equal with or without the implicit `:latest` tag.
+fn same_model(a: &str, b: &str) -> bool {
+    let norm = |m: &str| {
+        let m = m.trim();
+        m.strip_suffix(":latest").unwrap_or(m).to_string()
+    };
+    !b.trim().is_empty() && norm(a) == norm(b)
 }
 
 tokio::task_local! {
