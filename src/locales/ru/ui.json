@@ -2101,6 +2101,7 @@
   "blindspots.ai.assessedWith": "Оценено моделью {{model}}",
   "blindspots.ai.noModel": "Добавьте ключ API в настройках, чтобы включить оценку ИИ",
   "blindspots.ai.failed": "Не удалось выполнить оценку — повторите попытку",
+  "blindspots.ai.budgetReached": "Дневной бюджет ИИ исчерпан — сброс в {{time}} ({{in}})",
   "blindspots.ai.tag": "AI",
   "blindspots.ai.worthReviewing": "Стоит проверить",
   "blindspots.ai.worthReviewingSubtitle_one": "{{count}} отмечена ИИ",

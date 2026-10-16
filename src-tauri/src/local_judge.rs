@@ -518,8 +518,10 @@ pub(crate) fn local_provider(base: &LLMProvider) -> Option<LLMProvider> {
 
 /// The daily cap guards SPEND: a local (Ollama) judge costs nothing and is
 /// never blocked by it (`LLMClient::metered`). No provider: the cap decides.
+/// Every caller is a background judge pass, so it stops at the background
+/// share and leaves the rest of the cap to user-initiated calls (audit L2).
 pub(crate) fn budget_blocks(provider: Option<&LLMProvider>) -> bool {
-    provider.is_none_or(|p| p.provider != "ollama") && crate::state::is_llm_limit_reached()
+    provider.is_none_or(|p| p.provider != "ollama") && crate::state::background_llm_budget_reached()
 }
 
 pub(crate) fn is_judge_purpose(purpose: Option<&str>) -> bool {

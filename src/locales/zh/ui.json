@@ -2101,6 +2101,7 @@
   "blindspots.ai.assessedWith": "由 {{model}} 评估",
   "blindspots.ai.noModel": "在设置中添加 API 密钥以启用 AI 评估",
   "blindspots.ai.failed": "评估失败 — 请重试",
+  "blindspots.ai.budgetReached": "已达到每日 AI 预算 — 将于 {{time}} 重置（{{in}}）",
   "blindspots.ai.tag": "AI",
   "blindspots.ai.worthReviewing": "值得审查",
   "blindspots.ai.worthReviewingSubtitle_one": "AI 标记了 {{count}} 项",

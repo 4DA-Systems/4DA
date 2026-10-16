@@ -1963,24 +1963,29 @@ async fn compute_preemption_evidence_feed() -> std::result::Result<EvidenceFeed,
         "preemption feed recomputed"
     );
     // TitanCA-inspired adversarial deliberation — two-perspective signal/noise
-    // validation. Critical/High items bypass; Medium/Watch get deliberated.
-    // Gracefully degrades when LLM is unavailable (items pass through unchanged).
+    // validation, with verdicts cached by content (audit L2). It FAILS CLOSED:
+    // a rejected item stays out while its verdict is valid, and an unvetted
+    // heuristic item (a signal chain) is held back when the model cannot
+    // judge it (background budget share spent, provider error). OSV-verified,
+    // LLM-assessed and corroborated Critical/High items always pass; with no
+    // deliberation configured, items pass after the escalation gate.
     let user_context = crate::adversarial::build_user_context_summary();
     let before = items.len();
-    let items = crate::adversarial::filter_batch(items, &user_context).await;
+    let crate::adversarial::BatchOutcome {
+        passed: items,
+        stats,
+    } = crate::adversarial::filter_batch(items, &user_context).await;
     let dropped = before.saturating_sub(items.len());
     if dropped > 0 {
+        // Routine once the background share is spent: the held-back chains
+        // return when the model can vet them (or from cached verdicts).
         info!(
             target: "4da::preemption",
             dropped, before, after = items.len(),
+            filtered_by_verdict = stats.filtered,
+            held_back_unjudged = stats.held_back,
+            model_unavailable = ?stats.unavailable,
             "adversarial filter dropped preemption items"
-        );
-    }
-    if before > 0 && items.is_empty() {
-        warn!(
-            target: "4da::preemption",
-            before,
-            "adversarial filter dropped ALL preemption items - possible LLM failure"
         );
     }
 

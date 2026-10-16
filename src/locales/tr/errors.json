@@ -39,6 +39,7 @@
   "errorMsg.parse": "Veri biçimi hatası. Tekrar deneyin veya uygulamayı yeniden başlatın.",
   "errorMsg.permission": "İzin reddedildi. Dosya izinlerini kontrol edin.",
   "errorMsg.rateLimit": "İstek sınırına ulaşıldı. Lütfen biraz bekleyin ve tekrar deneyin.",
+  "errorMsg.budgetReached": "Günlük yapay zekâ bütçesine ulaşıldı — {{time}} itibarıyla sıfırlanır ({{in}})",
   "errorMsg.timeout": "İstek zaman aşımına uğradı. Biraz sonra tekrar deneyin.",
   "translation.noLlm": "LLM yapılandırılmadı — içerik çevirisini etkinleştirmek için Ayarlar'da API anahtarınızı girin"
 }

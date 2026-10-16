@@ -2119,6 +2119,7 @@
   "blindspots.ai.assessedWith": "Evaluado por {{model}}",
   "blindspots.ai.noModel": "Añade una clave de API en Ajustes para habilitar la evaluación con IA",
   "blindspots.ai.failed": "La evaluación falló: inténtalo de nuevo",
+  "blindspots.ai.budgetReached": "Presupuesto diario de IA alcanzado: se restablece a las {{time}} ({{in}})",
   "blindspots.ai.tag": "AI",
   "blindspots.ai.worthReviewing": "Vale la pena revisar",
   "blindspots.ai.worthReviewingSubtitle_one": "{{count}} marcada por la IA",

@@ -111,14 +111,13 @@ describe('BlindSpotsView — AI triage (Phase B)', () => {
 
   // Audit L2: a refusal for a spent budget said "Assessment failed — try again".
   it('says the daily budget is spent and when it resets, not "try again"', async () => {
-    const refusal = 'AI assessment failed: Daily AI budget reached — resets at 00:00 local time (in 2 h 5 min). Daily LLM cost limit exceeded';
+    const refusal = 'AI assessment failed: Daily AI budget reached — resets at 00:00 local time (in 2 h 5 min) [budget_reset:00:00:125]. Daily LLM cost limit exceeded';
     cmdMock.mockImplementation((name: string) =>
       name === 'assess_blind_spots_with_ai' ? Promise.reject(refusal) : Promise.resolve(null));
     render(<BlindSpotsView />);
     fireEvent.click(screen.getByText('blindspots.ai.assess'));
-    await waitFor(() => expect(
-      screen.getByText('Daily AI budget reached — resets at 00:00 local time (in 2 h 5 min)'),
-    ).toBeInTheDocument());
+    // Rendered through the locale key (the test i18n mock returns keys).
+    await waitFor(() => expect(screen.getByText('blindspots.ai.budgetReached')).toBeInTheDocument());
     expect(screen.queryByText('blindspots.ai.failed')).toBeNull();
   });
 });

@@ -2119,6 +2119,7 @@
   "blindspots.ai.assessedWith": "Bewertet von {{model}}",
   "blindspots.ai.noModel": "API-Schlüssel in den Einstellungen hinzufügen, um die KI-Bewertung zu aktivieren",
   "blindspots.ai.failed": "Bewertung fehlgeschlagen – erneut versuchen",
+  "blindspots.ai.budgetReached": "Tägliches KI-Budget erreicht – wird um {{time}} zurückgesetzt ({{in}})",
   "blindspots.ai.tag": "AI",
   "blindspots.ai.worthReviewing": "Prüfenswert",
   "blindspots.ai.worthReviewingSubtitle_one": "{{count}} von KI markiert",

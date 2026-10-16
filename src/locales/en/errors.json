@@ -29,6 +29,7 @@
   "errorMsg.timeout": "Request timed out. Try again in a moment.",
   "errorMsg.auth": "Authentication failed. Check your API key in Settings.",
   "errorMsg.rateLimit": "Rate limit reached. Please wait a moment and try again.",
+  "errorMsg.budgetReached": "Daily AI budget reached — resets at {{time}} ({{in}})",
   "errorMsg.ollamaNotRunning": "Ollama is not running. Start Ollama or set an API key in Settings.",
   "errorMsg.embedding": "Embedding service unavailable. Check that Ollama is running.",
   "errorMsg.connectionRefused": "Network request failed. Check your internet connection.",

@@ -335,6 +335,28 @@ fn verdicts_persist_across_loads() {
     assert!(outcome.passed.is_empty());
 }
 
+/// Review nit: the fast feed with no readable database must fail closed,
+/// not pass every item (unvetted chains held back, grounded items kept).
+#[test]
+fn fast_feed_without_a_database_holds_back_unvetted_chains() {
+    let outcome = super::super::settle_stored(
+        vec![
+            item(
+                "osv-pkg-a-npm",
+                "a: 1 known vulnerability",
+                Confidence::osv_verified(0.9),
+                Urgency::High,
+            ),
+            chain("chain-a", "sandbox"),
+        ],
+        None,
+        keyer,
+        NOW,
+    );
+    assert_eq!(ids(&outcome), vec!["osv-pkg-a-npm"]);
+    assert_eq!(outcome.stats.held_back, 1);
+}
+
 #[test]
 fn corrupt_store_starts_empty() {
     let db = crate::test_utils::test_db();

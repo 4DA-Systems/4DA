@@ -196,7 +196,15 @@ pub(crate) fn share_reached(used: u64, limit: u64, percent: u64) -> bool {
 
 /// Whether a background pass has spent its share of today's budget
 /// ([`BACKGROUND_BUDGET_SHARE_PERCENT`] of either cap).
+///
+/// The in-process counters only see this process's spend after the startup
+/// seed, so the GUI would not see what `fourda-engine` spent since (and vice
+/// versa). Before deciding, the counters are re-seeded from the persisted
+/// `ai_usage` ledger, at most once a minute (one indexed SUM; `fetch_max`,
+/// so nothing recorded in-process is lost). The reserve therefore holds
+/// across processes sharing a database.
 pub(crate) fn background_llm_budget_reached() -> bool {
+    reseed_from_ledger_throttled();
     maybe_reset_daily_counter();
     let share = BACKGROUND_BUDGET_SHARE_PERCENT;
     share_reached(
@@ -210,16 +218,37 @@ pub(crate) fn background_llm_budget_reached() -> bool {
     )
 }
 
-/// What a refused user-initiated call says: the budget is spent and when it
-/// comes back. Never "try again": nothing changes until the reset.
-pub(crate) fn daily_budget_reached_message() -> String {
-    budget_reached_message_at(&chrono::Local::now())
+/// Unix seconds of the last ledger re-seed (0 = never).
+static LAST_LEDGER_RESEED: AtomicU64 = AtomicU64::new(0);
+const LEDGER_RESEED_INTERVAL_SECS: u64 = 60;
+
+fn reseed_from_ledger_throttled() {
+    // Unit tests drive the counters directly and must never open a database.
+    if cfg!(test) {
+        return;
+    }
+    let now = u64::try_from(chrono::Utc::now().timestamp()).unwrap_or(0);
+    let last = LAST_LEDGER_RESEED.load(Ordering::Relaxed);
+    if now.saturating_sub(last) < LEDGER_RESEED_INTERVAL_SECS
+        || LAST_LEDGER_RESEED
+            .compare_exchange(last, now, Ordering::Relaxed, Ordering::Relaxed)
+            .is_err()
+    {
+        return;
+    }
+    if let Some((tokens, millicents)) = crate::llm::todays_persisted_usage() {
+        maybe_reset_daily_counter();
+        LLM_DAILY_TOKENS.fetch_max(tokens, Ordering::Relaxed);
+        LLM_DAILY_COST_MILLICENTS.fetch_max(millicents, Ordering::Relaxed);
+    }
 }
 
-/// [`daily_budget_reached_message`] for a given moment. The counters reset
-/// at local midnight ([`maybe_reset_daily_counter`]); on a day whose
-/// midnight does not exist (a DST jump) the first valid time is named.
-pub(crate) fn budget_reached_message_at<Tz: chrono::TimeZone>(now: &chrono::DateTime<Tz>) -> String
+/// When the daily budget comes back: the next local midnight as `HH:MM`
+/// and the minutes until then. On a day whose midnight does not exist (a
+/// DST jump) the first valid time is named.
+pub(crate) fn next_budget_reset_at<Tz: chrono::TimeZone>(
+    now: &chrono::DateTime<Tz>,
+) -> Option<(String, i64)>
 where
     Tz::Offset: std::fmt::Display,
 {
@@ -233,18 +262,35 @@ where
                 tz.from_local_datetime(&(midnight + chrono::Duration::hours(1)))
                     .earliest()
             })
-        });
-    match reset {
-        Some(reset) => {
-            let minutes = (reset.clone() - now.clone()).num_minutes().max(1);
+        })?;
+    let minutes = (reset.clone() - now.clone()).num_minutes().max(1);
+    Some((reset.format("%H:%M").to_string(), minutes))
+}
+
+/// What a refused user-initiated call says: the budget is spent and when it
+/// comes back. Never "try again": nothing changes until the reset. Ends with
+/// a machine-readable `[budget_reset:HH:MM:MINUTES]` token the frontend
+/// parses to render the message in the user's language.
+pub(crate) fn daily_budget_reached_message() -> String {
+    budget_reached_message_at(&chrono::Local::now())
+}
+
+/// [`daily_budget_reached_message`] for a given moment. The counters reset
+/// at local midnight ([`maybe_reset_daily_counter`]).
+pub(crate) fn budget_reached_message_at<Tz: chrono::TimeZone>(now: &chrono::DateTime<Tz>) -> String
+where
+    Tz::Offset: std::fmt::Display,
+{
+    match next_budget_reset_at(now) {
+        Some((time, minutes)) => {
             let wait = if minutes >= 60 {
                 format!("{} h {} min", minutes / 60, minutes % 60)
             } else {
                 format!("{minutes} min")
             };
             format!(
-                "Daily AI budget reached \u{2014} resets at {} local time (in {wait})",
-                reset.format("%H:%M")
+                "Daily AI budget reached \u{2014} resets at {time} local time (in {wait}) \
+                 [budget_reset:{time}:{minutes}]"
             )
         }
         None => "Daily AI budget reached \u{2014} resets at midnight local time".to_string(),
@@ -617,15 +663,17 @@ mod tests {
         let msg = budget_reached_message_at(&now);
         assert_eq!(
             msg,
-            "Daily AI budget reached \u{2014} resets at 00:00 local time (in 3 h 12 min)"
+            "Daily AI budget reached \u{2014} resets at 00:00 local time (in 3 h 12 min) \
+             [budget_reset:00:00:192]"
         );
         assert!(!msg.to_lowercase().contains("try again"));
+        assert_eq!(next_budget_reset_at(&now), Some(("00:00".to_string(), 192)));
 
         let late = tz
             .with_ymd_and_hms(2026, 10, 16, 23, 55, 30)
             .single()
             .expect("time");
-        assert!(budget_reached_message_at(&late).ends_with("(in 4 min)"));
+        assert!(budget_reached_message_at(&late).ends_with("(in 4 min) [budget_reset:00:00:4]"));
     }
 
     #[test]

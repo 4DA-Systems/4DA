@@ -30,6 +30,7 @@ use tracing::{debug, info, warn};
 
 #[path = "adversarial_batch.rs"]
 mod batch;
+pub(crate) use batch::{BatchOutcome, BatchStats};
 #[path = "adversarial_cache.rs"]
 mod cache;
 
@@ -365,13 +366,13 @@ fn gate_escalation(item: &mut EvidenceItem) -> bool {
 ///   `adversarial_batch.rs`).
 ///
 /// Processing is sequential (budget-conscious -- one LLM call per item).
-pub(crate) async fn filter_batch(
-    items: Vec<EvidenceItem>,
-    user_context: &str,
-) -> Vec<EvidenceItem> {
+pub(crate) async fn filter_batch(items: Vec<EvidenceItem>, user_context: &str) -> BatchOutcome {
     let (items, demoted) = gate_batch(items);
     let Some(llm) = deliberation_provider(items.len(), demoted) else {
-        return items;
+        return BatchOutcome {
+            passed: items,
+            stats: BatchStats::default(),
+        };
     };
     let db = crate::get_database().ok();
     let mut cache = db
@@ -405,7 +406,7 @@ pub(crate) async fn filter_batch(
         passed = outcome.passed.len(),
         "Adversarial filter batch complete"
     );
-    outcome.passed
+    outcome
 }
 
 /// The no-model counterpart of [`filter_batch`] for the cache-miss fast
@@ -418,14 +419,16 @@ pub(crate) fn apply_stored_verdicts(items: Vec<EvidenceItem>) -> Vec<EvidenceIte
     let Some(llm) = deliberation_provider(items.len(), demoted) else {
         return items;
     };
-    let Ok(db) = crate::get_database() else {
-        return items;
-    };
-    let cache = cache::VerdictCache::load(db);
+    let db = crate::get_database().ok();
     let system_prompt = build_system_prompt();
     let keyer =
         |item: &EvidenceItem| cache::material_key(item, &system_prompt, &llm.provider, &llm.model);
-    let outcome = batch::settle_from_cache(items, &cache, keyer, chrono::Utc::now().timestamp());
+    let outcome = settle_stored(
+        items,
+        db.map(|db| &**db),
+        keyer,
+        chrono::Utc::now().timestamp(),
+    );
     if outcome.stats.filtered + outcome.stats.held_back > 0 {
         info!(
             target: "4da::adversarial",
@@ -436,6 +439,22 @@ pub(crate) fn apply_stored_verdicts(items: Vec<EvidenceItem>) -> Vec<EvidenceIte
         );
     }
     outcome.passed
+}
+
+/// Settle a batch from the stored verdicts in `db`. FAILS CLOSED: with no
+/// readable database there are no stored verdicts, so unvetted heuristics
+/// are held back exactly as if the model were unavailable, never passed.
+fn settle_stored<K>(
+    items: Vec<EvidenceItem>,
+    db: Option<&crate::db::Database>,
+    keyer: K,
+    now: i64,
+) -> BatchOutcome
+where
+    K: Fn(&EvidenceItem) -> String,
+{
+    let cache = db.map(cache::VerdictCache::load).unwrap_or_default();
+    batch::settle_from_cache(items, &cache, keyer, now)
 }
 
 /// The escalation gate over a batch. Runs FIRST — deterministic,
@@ -578,6 +597,10 @@ fn build_system_prompt() -> String {
     )
 }
 
+/// CACHE KEY: changing this template (its wording or which item fields it
+/// sends) requires bumping `cache::PROMPT_VERSION`. The verdict cache hashes
+/// the system prompt text but only the item FIELDS, not this template, so a
+/// template edit without a bump would reuse verdicts judged on the old one.
 fn build_user_message(item: &EvidenceItem, user_context: &str) -> String {
     let kind_str = serde_json::to_string(&item.kind).unwrap_or_else(|_| "unknown".to_string());
     let urgency_str =

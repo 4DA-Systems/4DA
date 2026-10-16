@@ -6,7 +6,7 @@
  * covering all 13 error pattern categories plus fallbacks.
  */
 import { describe, it, expect } from 'vitest';
-import { dailyBudgetMessage, translateError, translateErrorWithRaw } from '../error-messages';
+import { budgetResetVars, parseBudgetReset, translateError, translateErrorWithRaw } from '../error-messages';
 
 describe('translateError', () => {
   // --- Network errors ---
@@ -168,30 +168,33 @@ describe('translateErrorWithRaw', () => {
 });
 
 // Audit L2 (2026-10-12): a spent daily AI budget surfaced as
-// "Assessment failed — try again". The backend's sentence names the cause
-// and the local reset time; it must reach the user verbatim.
-describe('dailyBudgetMessage', () => {
+// "Assessment failed — try again". The backend appends a machine token
+// with the local reset time; the UI renders it in the user's language.
+describe('budget refusal', () => {
   const backend =
-    'AI assessment failed: Daily AI budget reached — resets at 00:00 local time (in 3 h 12 min). ' +
+    'AI assessment failed: Daily AI budget reached — resets at 00:00 local time (in 3 h 12 min) [budget_reset:00:00:192]. ' +
     'Daily LLM cost limit exceeded (used: 151c, limit: 150c / $1.50). Adjust in Settings > Intelligence, or wait until midnight reset.';
 
-  it('extracts the budget sentence with its reset time', () => {
-    expect(dailyBudgetMessage(backend)).toBe(
-      'Daily AI budget reached — resets at 00:00 local time (in 3 h 12 min)',
-    );
-    expect(dailyBudgetMessage(new Error(backend))).toBe(
-      'Daily AI budget reached — resets at 00:00 local time (in 3 h 12 min)',
-    );
+  it('parses the reset time from the backend token', () => {
+    expect(parseBudgetReset(backend)).toEqual({ time: '00:00', minutes: 192 });
+    expect(parseBudgetReset(new Error(backend))).toEqual({ time: '00:00', minutes: 192 });
   });
 
   it('is null for other failures', () => {
-    expect(dailyBudgetMessage('AI assessment failed: network error')).toBeNull();
-    expect(dailyBudgetMessage(null)).toBeNull();
+    expect(parseBudgetReset('AI assessment failed: network error')).toBeNull();
+    expect(parseBudgetReset('Daily AI budget reached — resets at midnight local time')).toBeNull();
+    expect(parseBudgetReset(null)).toBeNull();
+  });
+
+  it('localizes the wait', () => {
+    expect(budgetResetVars({ time: '00:00', minutes: 192 }, 'en')).toEqual({ time: '00:00', in: 'in 3 hours' });
+    expect(budgetResetVars({ time: '00:00', minutes: 4 }, 'en').in).toBe('in 4 minutes');
+    expect(budgetResetVars({ time: '00:00', minutes: 192 }, 'de').in).toBe('in 3 Stunden');
   });
 
   it('wins over the generic patterns in translateError (never "try again")', () => {
     const friendly = translateError(backend);
-    expect(friendly).toBe('Daily AI budget reached — resets at 00:00 local time (in 3 h 12 min)');
+    expect(friendly).toBe('Daily AI budget reached — resets at 00:00 (in 3 hours)');
     expect(friendly).not.toMatch(/try again/i);
   });
 });

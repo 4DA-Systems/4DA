@@ -211,6 +211,7 @@
   "blindspots.ai.assessedWith": "تم التقييم بواسطة {{model}}",
   "blindspots.ai.noModel": "أضف مفتاح API في الإعدادات لتفعيل التقييم بالذكاء الاصطناعي",
   "blindspots.ai.failed": "فشل التقييم — أعد المحاولة",
+  "blindspots.ai.budgetReached": "تم بلوغ ميزانية الذكاء الاصطناعي اليومية — يُعاد التعيين عند {{time}} ({{in}})",
   "blindspots.ai.tag": "AI",
   "blindspots.ai.worthReviewing": "تستحق المراجعة",
   "blindspots.ai.worthReviewingSubtitle_one": "أشار الذكاء الاصطناعي إلى {{count}}",
