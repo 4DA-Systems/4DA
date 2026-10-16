@@ -848,9 +848,9 @@ npm Packages (40)
 @fontsource-variable/jetbrains-mono 5.3.0 - OFL-1.1 - https://fontsource.org/fonts/jetbrains-mono
 @tanstack/react-virtual 3.14.13 - MIT - https://tanstack.com/virtual
 @tanstack/virtual-core 3.17.11 - MIT - https://tanstack.com/virtual
-@tauri-apps/api 2.11.1 - Apache-2.0 OR MIT - https://github.com/tauri-apps/tauri#readme
-@tauri-apps/plugin-opener 2.5.5 - MIT OR Apache-2.0 - https://github.com/tauri-apps/plugins-workspace#readme
-@tauri-apps/plugin-updater 2.12.0 - MIT OR Apache-2.0 - https://github.com/tauri-apps/plugins-workspace#readme
+@tauri-apps/api 2.12.3 - Apache-2.0 OR MIT - https://github.com/tauri-apps/tauri#readme
+@tauri-apps/plugin-opener 2.7.1 - MIT OR Apache-2.0 - https://github.com/tauri-apps/plugins-workspace#readme
+@tauri-apps/plugin-updater 2.13.3 - MIT OR Apache-2.0 - https://github.com/tauri-apps/plugins-workspace#readme
 @types/d3-color 3.1.3 - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/d3-color
 @types/d3-drag 3.0.7 - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/d3-drag
 @types/d3-interpolate 3.0.4 - MIT - https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/d3-interpolate
