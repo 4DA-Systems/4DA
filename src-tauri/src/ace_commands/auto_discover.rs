@@ -403,9 +403,19 @@ mod tests {
         assert_eq!(found.len(), 3, "{found:?}");
     }
 
+    /// A scratch root the system-folder filter accepts. macOS puts the
+    /// default temp dir under `/var/folders`, which it refuses by design.
+    fn scratch_root() -> tempfile::TempDir {
+        if cfg!(target_os = "macos") {
+            tempfile::tempdir_in(env!("CARGO_MANIFEST_DIR")).unwrap()
+        } else {
+            tempfile::tempdir().unwrap()
+        }
+    }
+
     #[test]
     fn confirmed_dirs_drop_missing_duplicates_and_drive_roots() {
-        let root = tempfile::tempdir().unwrap();
+        let root = scratch_root();
         let real = root.path().join("proj");
         std::fs::create_dir_all(&real).unwrap();
         let real_s = real.display().to_string();
@@ -427,7 +437,7 @@ mod tests {
     /// the problem so the picker can refuse it with a reason.
     #[test]
     fn a_typed_folder_is_checked_before_it_is_added() {
-        let root = tempfile::tempdir().unwrap();
+        let root = scratch_root();
         let real = root.path().join("proj");
         std::fs::create_dir_all(&real).unwrap();
         let file = root.path().join("notes.txt");
