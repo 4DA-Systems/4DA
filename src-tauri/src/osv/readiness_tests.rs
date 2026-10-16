@@ -133,6 +133,7 @@ fn state(s: AdvisorySyncState) -> AdvisorySync {
         error: None,
         in_flight: false,
         skipped_temp: 0,
+        not_covered: None,
     }
 }
 
@@ -216,4 +217,57 @@ fn no_inventory_carries_the_walks_temp_skips() {
     let r = advisory_sync(&db);
     assert_eq!(r.state, AdvisorySyncState::NoInventory);
     assert_eq!(r.skipped_temp, 2);
+}
+
+/// Audit A2/E4 (2026-10-12): a Maven-only project read as "no dependencies"
+/// and a mixed one as fully covered. The walk's unsupported files reach the
+/// readiness as `not_covered`, whatever the sync state.
+#[test]
+fn readiness_names_the_files_4da_does_not_read() {
+    let db = crate::test_utils::test_db();
+    db.set_kv(
+        crate::ace::lockfile::report::REPORT_KV_KEY,
+        r#"{"lockfiles_read":1,"unsupported_count":3,"unsupported":[
+            {"path":"C:/p/spring-petclinic/pom.xml","reason":"Maven (installed versions not resolved)"},
+            {"path":"C:/p/api/build.gradle.kts","reason":"Gradle (installed versions not resolved)"},
+            {"path":"C:/p/svc/packages.lock.json","reason":"NuGet lockfile"}],
+           "failed_count":1,"failed":[
+            {"path":"C:/p/web/package-lock.json","reason":"invalid JSON"}]}"#,
+    )
+    .unwrap();
+    db.store_dependency("/project", "serde", Some("1.0.200"), "rust", false, None)
+        .unwrap();
+    db.update_osv_sync_status("crates.io", 0, None).unwrap();
+
+    let r = advisory_sync(&db);
+    assert_eq!(
+        r.state,
+        AdvisorySyncState::Ready,
+        "the read part is checked"
+    );
+    let nc = r.not_covered.expect("unsupported files are named");
+    assert_eq!(nc.count, 3);
+    let ecosystems: Vec<&str> = nc.files.iter().map(|f| f.ecosystem.as_str()).collect();
+    assert_eq!(ecosystems, vec!["Maven", "Gradle", "NuGet lockfile"]);
+    assert!(nc.files[0].path.ends_with("pom.xml"));
+    // A lockfile that failed to read is not covered either: an all-clear
+    // would rest on whatever it pinned last time.
+    assert_eq!(nc.unreadable_count, 1);
+    assert_eq!(nc.unreadable[0].reason, "invalid JSON");
+}
+
+#[test]
+fn readiness_has_no_not_covered_when_every_file_was_read() {
+    let db = crate::test_utils::test_db();
+    db.set_kv(
+        crate::ace::lockfile::report::REPORT_KV_KEY,
+        r#"{"lockfiles_read":2,"unsupported_count":0,"unsupported":[]}"#,
+    )
+    .unwrap();
+    assert_eq!(advisory_sync(&db).not_covered, None);
+    // And an older binary's snapshot without the field still deserializes.
+    let old: AdvisorySync =
+        serde_json::from_str(r#"{"state":"ready","ecosystems":1,"synced_at":null,"error":null}"#)
+            .unwrap();
+    assert_eq!(old.not_covered, None);
 }

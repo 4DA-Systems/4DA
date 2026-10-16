@@ -75,6 +75,41 @@ pub struct AdvisorySync {
     /// be checked — not missing advisory coverage.
     #[serde(default)]
     pub skipped_temp: u32,
+    /// Dependency files 4DA saw but does not read installed versions from
+    /// (Maven, Gradle, NuGet ...): nothing in them was checked, so no state
+    /// here covers them (audit A2/E4). `None` when every file was read.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub not_covered: Option<NotCovered>,
+}
+
+/// Dependency files the lockfile walk does not read installed versions
+/// from. Same concept and shape as the MCP server's `not_covered`.
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
+#[ts(export, export_to = "bindings/")]
+pub struct NotCovered {
+    /// Every unsupported file found (`files` may list fewer).
+    pub count: u32,
+    pub files: Vec<NotCoveredFile>,
+    /// Lockfiles 4DA reads but could not read on the last walk: what they
+    /// pinned may be stale or missing, so they are not covered either.
+    pub unreadable_count: u32,
+    pub unreadable: Vec<UnreadableFile>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
+#[ts(export, export_to = "bindings/")]
+pub struct UnreadableFile {
+    pub path: String,
+    pub reason: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
+#[ts(export, export_to = "bindings/")]
+pub struct NotCoveredFile {
+    pub path: String,
+    /// What the file is, e.g. "Maven", "Gradle", "NuGet lockfile".
+    pub ecosystem: String,
 }
 
 const SYNC_TIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S";
@@ -98,6 +133,7 @@ pub(crate) fn classify(
         error: None,
         in_flight,
         skipped_temp: 0,
+        not_covered: None,
     };
     if required.is_empty() {
         out.state = AdvisorySyncState::NoInventory;
@@ -171,20 +207,80 @@ pub(crate) fn advisory_sync(db: &Database) -> AdvisorySync {
         chrono::Utc::now().naive_utc(),
         in_flight,
     );
+    let report = lockfile_report(db);
     if out.state == AdvisorySyncState::NoInventory {
-        out.skipped_temp = temp_skipped_projects(db);
+        out.skipped_temp = report
+            .as_ref()
+            .map_or(0, crate::ace::lockfile::report::skipped_temp_count);
     }
+    out.not_covered = report.as_ref().and_then(not_covered);
     out
 }
 
-/// Project folders the last lockfile walk skipped as temp copies.
-fn temp_skipped_projects(db: &Database) -> u32 {
+/// The last lockfile walk's saved report, if readable.
+fn lockfile_report(db: &Database) -> Option<serde_json::Value> {
     db.get_kv(crate::ace::lockfile::report::REPORT_KV_KEY)
         .ok()
         .flatten()
         .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
-        .map_or(0, |saved| {
-            crate::ace::lockfile::report::skipped_temp_count(&saved)
+}
+
+/// The walk's unsupported and unreadable dependency files as `not_covered`.
+/// The report keeps `{path, reason}` entries; for an unsupported file the
+/// reason reads like "Maven (installed versions not resolved)" and the
+/// ecosystem is its label before any parenthesis.
+pub(crate) fn not_covered(saved: &serde_json::Value) -> Option<NotCovered> {
+    let count = report_count(saved, "unsupported_count");
+    let unreadable_count = report_count(saved, "failed_count");
+    if count == 0 && unreadable_count == 0 {
+        return None;
+    }
+    let files = report_entries(saved, "unsupported")
+        .map(|(path, reason)| {
+            let label = reason.split(" (").next().unwrap_or(&reason).trim();
+            NotCoveredFile {
+                path,
+                ecosystem: label.to_string(),
+            }
+        })
+        .collect();
+    let unreadable = report_entries(saved, "failed")
+        .map(|(path, reason)| UnreadableFile { path, reason })
+        .collect();
+    Some(NotCovered {
+        count,
+        files,
+        unreadable_count,
+        unreadable,
+    })
+}
+
+fn report_count(saved: &serde_json::Value, key: &str) -> u32 {
+    saved
+        .get(key)
+        .and_then(serde_json::Value::as_u64)
+        .and_then(|n| u32::try_from(n).ok())
+        .unwrap_or(0)
+}
+
+/// `(path, reason)` of each entry in one of the report's lists.
+fn report_entries<'a>(
+    saved: &'a serde_json::Value,
+    key: &str,
+) -> impl Iterator<Item = (String, String)> + 'a {
+    saved
+        .get(key)
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|entry| {
+            let path = entry.get("path")?.as_str()?.to_string();
+            let reason = entry
+                .get("reason")
+                .and_then(serde_json::Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            Some((path, reason))
         })
 }
 
@@ -200,6 +296,7 @@ fn unreadable(in_flight: bool) -> AdvisorySync {
         error: None,
         in_flight,
         skipped_temp: 0,
+        not_covered: None,
     }
 }
 

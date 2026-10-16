@@ -156,6 +156,9 @@ struct DirectRuntimeDep {
     package_name: String,
     project_path: String,
     language: String,
+    /// The installed version, when a lockfile resolved one. `None` for a
+    /// manifest-only dependency or an ecosystem 4DA does not resolve.
+    version: Option<String>,
 }
 
 // ============================================================================
@@ -272,16 +275,33 @@ fn load_direct_runtime_deps(conn: &rusqlite::Connection) -> Result<Vec<DirectRun
     // `evidence::collapse_dormant_alerts` folds them into ONE Watch notice
     // per project.
     let mut stmt = conn.prepare(
-        "SELECT package_name, project_path, language
-         FROM project_dependencies
-         WHERE is_dev = 0
-           AND is_direct = 1",
+        // `project_dependencies.version` is a manifest range or NULL (NULL on
+        // every live row, 2026-10-16); the installed version is the same
+        // project's lockfile row in `user_dependencies` (cf.
+        // `temporal::get_inventory_dependencies`). Same project only: a
+        // workspace member resolved from a parent lockfile reads as
+        // unresolved here, which only costs a Tier 2 duplicate of what the
+        // version-confirmed Tier 1 already lists.
+        "SELECT pd.package_name, pd.project_path, pd.language,
+                COALESCE(pd.version,
+                  (SELECT ud.version FROM user_dependencies ud
+                    WHERE ud.project_path = pd.project_path
+                      AND LOWER(ud.package_name) = LOWER(pd.package_name)
+                      AND ud.version IS NOT NULL AND ud.version <> ''
+                    ORDER BY ud.is_direct DESC, ud.last_seen_at DESC
+                    LIMIT 1))
+         FROM project_dependencies pd
+         WHERE pd.is_dev = 0
+           AND pd.is_direct = 1",
     )?;
     let rows = stmt.query_map([], |row| {
         Ok(DirectRuntimeDep {
             package_name: row.get(0)?,
             project_path: row.get(1)?,
             language: row.get(2)?,
+            version: row
+                .get::<_, Option<String>>(3)?
+                .filter(|v| !v.trim().is_empty()),
         })
     })?;
     let deps = rows.collect::<rusqlite::Result<Vec<_>>>()?;
@@ -347,6 +367,13 @@ fn matched_direct_runtime_deps(
                 if dep_lang != advisory_eco {
                     return None;
                 }
+            }
+            // A registry advisory (cve / osv row) against a dependency with
+            // no known installed version cannot be confirmed: it is the
+            // Maven-manifest case of audit E4 (2026-10-12), never an alert.
+            // Preemption names the file as not covered instead.
+            if matches!(source_type, "cve" | "osv") && dep.version.is_none() {
+                return None;
             }
             Some(dep.clone())
         })
@@ -2255,6 +2282,7 @@ mod tests {
             error: None,
             in_flight: false,
             skipped_temp: 0,
+            not_covered: None,
         };
         let full = EvidenceFeed {
             tier_scope: Some(TierScope::Full),
@@ -3315,6 +3343,47 @@ mod tests {
         let deps = load_direct_runtime_deps(&conn).unwrap();
         assert_eq!(deps.len(), 1, "dev and transitive deps are still excluded");
         assert_eq!(deps[0].package_name, "axios");
+    }
+
+    /// Audit E4 (2026-10-12): a cve/osv item cannot become a Tier 2 alert
+    /// against a dependency whose installed version is unknown (a Maven
+    /// pom.xml); an editorial story still can, and a resolved version still
+    /// matches.
+    #[test]
+    fn tier2_never_matches_a_registry_advisory_to_an_unversioned_dep() {
+        let db = crate::test_utils::test_db();
+        let conn = db.conn.lock();
+        conn.execute(
+            "INSERT INTO project_dependencies
+                (project_path, manifest_type, package_name, version, is_dev, is_direct, language, project_relevance)
+             VALUES ('/home/dev/api', 'package.json', 'express', NULL, 0, 1, 'javascript', 1.0)",
+            [],
+        )
+        .unwrap();
+        let deps = load_direct_runtime_deps(&conn).unwrap();
+        assert_eq!(deps[0].version, None, "manifest only: no installed version");
+        let title = "[ghsa-xxxx] express: open redirect in express";
+        assert!(matched_direct_runtime_deps(&deps, title, "osv", None).is_empty());
+        assert!(matched_direct_runtime_deps(&deps, title, "cve", None).is_empty());
+        assert_eq!(
+            matched_direct_runtime_deps(&deps, title, "hackernews", None).len(),
+            1,
+            "editorial coverage keeps its name match"
+        );
+
+        // The lockfile row for the same project resolves the version.
+        conn.execute(
+            "INSERT INTO user_dependencies (project_path, package_name, version, ecosystem, is_dev, is_direct)
+             VALUES ('/home/dev/api', 'express', '4.17.1', 'javascript', 0, 1)",
+            [],
+        )
+        .unwrap();
+        let deps = load_direct_runtime_deps(&conn).unwrap();
+        assert_eq!(deps[0].version.as_deref(), Some("4.17.1"));
+        assert_eq!(
+            matched_direct_runtime_deps(&deps, title, "osv", None).len(),
+            1
+        );
     }
 
     #[test]

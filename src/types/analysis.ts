@@ -44,6 +44,7 @@ export interface SourceRelevance {
   /** Whether this item should display in critical alert banner (verified dependency match) */
   is_critical_alert?: boolean;
   /** Applicability assessment: affected | likely_affected | needs_verification | not_affected |
+   *  version_unknown (an advisory naming a dependency whose installed version 4DA does not know) |
    *  affected_inactive (affected, but only in dormant / scratch projects — never "Affects You") */
   applicability?: string;
   /** Advisory ID (e.g. "GHSA-xxxx-yyyy-zzzz" or "CVE-2025-1234") */

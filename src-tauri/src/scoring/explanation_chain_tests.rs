@@ -29,6 +29,7 @@ struct Fixture {
     installed_version: Option<String>,
     via_registry_subject: bool,
     registry_advisory: bool,
+    version_unknown: bool,
     dependency_event: bool,
     release_chain: Option<(String, String)>,
 }
@@ -61,6 +62,7 @@ impl Default for Fixture {
             installed_version: None,
             via_registry_subject: false,
             registry_advisory: false,
+            version_unknown: false,
             dependency_event: true,
             release_chain: None,
         }
@@ -95,6 +97,7 @@ impl Fixture {
             installed_version: self.installed_version.as_deref(),
             via_registry_subject: self.via_registry_subject,
             registry_advisory: self.registry_advisory,
+            version_unknown: self.version_unknown,
             dependency_event: self.dependency_event,
             release_chain: self.release_chain.clone(),
         }
@@ -834,6 +837,39 @@ fn security_factor_keeps_its_old_wording_when_provenance_is_unknown() {
         sec.display, "Security advisory affects your dependency lodash",
         "unknown provenance falls back cleanly"
     );
+}
+
+/// v42 (audit E4, 2026-10-12): a Maven project read from pom.xml only has no
+/// installed version, so "Security advisory affects com.h2database:h2 in
+/// projects/spring-petclinic" claimed what 4DA could not check.
+#[test]
+fn an_advisory_against_an_unknown_version_is_unconfirmed_not_affecting() {
+    let mut f = Fixture::default();
+    f.is_security = true;
+    f.registry_advisory = true;
+    f.version_unknown = true;
+    f.dependency_event = false;
+    f.necessity_score = 0.15;
+    f.advisory_id = Some("GHSA-7rpj-hg47-cx62".to_string());
+    f.display_deps = vec![dep_in("com.h2database:h2", "projects/spring-petclinic")];
+    f.dep_match_score = 0.75;
+
+    let chain = f.build();
+    let sec = chain
+        .iter()
+        .find(|c| c.kind == crate::FactorKind::SecurityAdvisory)
+        .expect("security factor must be emitted");
+    assert!(
+        sec.display
+            .starts_with("Advisory names com.h2database:h2 in ")
+            && sec
+                .display
+                .ends_with("unconfirmed: no installed version known"),
+        "got: {}",
+        sec.display
+    );
+    assert!(chain.iter().all(|c| !c.display.contains("affects")));
+    assert!(chain.iter().all(|c| !c.display.starts_with("Names your")));
 }
 
 // ---------------------------------------------------------------------------
