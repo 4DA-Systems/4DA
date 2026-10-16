@@ -44,13 +44,14 @@ use super::types::Vulnerability;
 /// same change that removes entries; it may never rise.
 const RUST_SKIP_BASELINE: usize = 28;
 
-const FILES: [&str; 6] = [
+const FILES: [&str; 7] = [
     "version_order",
     "osv_range",
     "fix_target",
     "refresh_verdict",
     "fix_command",
     "range_check",
+    "holding",
 ];
 
 fn conformance_dir() -> PathBuf {
@@ -153,6 +154,20 @@ fn check_osv_range(v: &Value, records: &mut Records) -> Result<(), String> {
         (got, true) if got == want => Ok(()),
         (got, true) => Err(format!("affected: got {got}, want {want}")),
         (_, false) => Err("unconfirmed (the engine could not decide the window)".into()),
+    }
+}
+
+/// npm's security holding placeholder (`osv/matching`): a `*-security`
+/// release of an npm name has no code, so no advisory applies to it, whatever
+/// database's id flags the name.
+fn check_holding(v: &Value) -> Result<(), String> {
+    let got =
+        fourda_depengine::matching::is_npm_security_holding(s(v, "eco"), Some(s(v, "version")));
+    let want = v.get("holding").and_then(Value::as_bool).unwrap_or(false);
+    if got == want {
+        Ok(())
+    } else {
+        Err(format!("holding: got {got}, want {want}"))
     }
 }
 
@@ -347,13 +362,39 @@ fn check_fix_command(v: &Value) -> Result<(), String> {
     for (name, body) in tool_files(s(v, "tool"), workspace_root) {
         std::fs::write(dir.path().join(name), body).map_err(|e| e.to_string())?;
     }
-    let command = Manager::detect(dir.path(), s(v, "eco"))
-        .and_then(|m| m.refresh_command(s(v, "pkg"), s(v, "installed"), s(v, "target")));
+    let command = if v.get("kind").and_then(Value::as_str) == Some("direct") {
+        direct_command(v, dir.path())
+    } else {
+        Manager::detect(dir.path(), s(v, "eco"))
+            .and_then(|m| m.refresh_command(s(v, "pkg"), s(v, "installed"), s(v, "target")))
+    };
     let want = opt_s(v, "command");
     if command.as_deref() == want {
         Ok(())
     } else {
         Err(format!("command: got {command:?}, want {want:?}"))
+    }
+}
+
+/// `kind: "direct"` (audit E8): the command that moves a DECLARED dependency,
+/// from its declared spec (npm family), its `Cargo.toml` (Cargo) or its
+/// `go.mod` (Go). An instruction (a workspace-inherited crate) is no command.
+fn direct_command(v: &Value, dir: &std::path::Path) -> Option<String> {
+    use crate::osv::direct_upgrade::{
+        cargo_declarations, cargo_direct, go_direct_command, npm_direct_command, DirectFix,
+    };
+    let (pkg, target) = (s(v, "pkg"), s(v, "target"));
+    match s(v, "eco") {
+        "crates.io" => match cargo_declarations(s(v, "manifest"), pkg).as_slice() {
+            [only] => match cargo_direct(only, pkg, target)? {
+                DirectFix::Command(c) => Some(c),
+                DirectFix::Instruction(_) => None,
+            },
+            _ => None,
+        },
+        "Go" => go_direct_command(s(v, "go_mod"), pkg, target),
+        eco => Manager::detect(dir, eco)
+            .and_then(|m| npm_direct_command(m, s(v, "declared"), pkg, target)),
     }
 }
 
@@ -394,6 +435,7 @@ fn rule_vectors_hold_and_the_skip_list_only_shrinks() {
             let outcome = match file {
                 "version_order" => check_version_order(v),
                 "osv_range" => check_osv_range(v, &mut records),
+                "holding" => check_holding(v),
                 "fix_target" => check_fix_target(v, &mut records),
                 "refresh_verdict" => check_refresh_verdict(v),
                 "fix_command" => check_fix_command(v),

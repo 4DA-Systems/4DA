@@ -31,8 +31,9 @@ specific enough to recheck).
 | `osv_range.jsonl` | `{record_id, eco, name, version, affected}` | OSV's own answer: `/v1/querybatch` at the exact version, recorded in `../expected/<case>.json` (records pinned 2026-10-10 in `../osv/`). `affected: true` is used only when the finding's alias group holds exactly one pinned record for that package, so OSV returned exactly that record. |
 | `fix_target.jsonl` | `{eco, name, installed, record_ids[], target, clears, evidence}`, optionally `published[]`, `excluded[]`, `withheld[]` | ft-001..ft-022: the 22 cases of the 2026-10-10 fix-path oracle (the action was applied, re-resolved and re-scanned, and the target checked minimal against OSV per published version), re-checked 2026-10-12 against the pinned ids. ft-023..: OSV `/v1/querybatch` per published stable release (2026-10-12), restricted to the pinned `record_ids`. `evidence` holds the OSV ids at `installed` and at `target`. |
 | `refresh_verdict.jsonl` | `{eco, name, installed, target, requirements[], verdict, via, inferred}` | The 16 transitive oracle cases (the refresh was applied: it reached the target, or it did not move the copy), each with its parents' requirements read from the case lockfile (`package-lock.json` `requires`, `yarn.lock` `dependencies`) or the parent's published manifest (npm registry for pnpm, crates.io for Cargo). Each case also appears with `requirements: []` to pin the semver fallback. The rest apply AD-055 ¶1 by hand. |
-| `fix_command.jsonl` | `{tool, eco, pkg, installed, target, workspace_root, command}` | The command text of AD-055 ¶4. Where the oracle applied that tool's refresh, the `source` names the case. |
+| `fix_command.jsonl` | `{tool, eco, pkg, installed, target, workspace_root, command}`; `kind: "direct"` lines add `declared` (npm family), `manifest` (Cargo) or `go_mod` (Go) | The command text of AD-055 ¶4 for a transitive copy's refresh. Where the oracle applied that tool's refresh, the `source` names the case. `kind: "direct"` lines pin the command that moves a DECLARED dependency while keeping how it is declared (audit E8), each run against its tool on 2026-10-15. |
 | `range_check.jsonl` | `{eco, name, constraint, from, releases[], record_ids[], expected}` | `@4da/mcp-server` 6.2.0 recorded fixtures (`src/__tests__/fixtures/dependency-check/recorded/`, origin/main `bae421b`): OSV's querybatch answer per release of ws, Jinja2 and golang.org/x/net. Constraint membership: node `semver` (npm, Go without `v`; `v0` is the v0 line), python `packaging` `SpecifierSet` (PyPI). |
+| `holding.jsonl` | `{eco, name, advisory_id, version, holding}` | npm's security holding placeholders (`*-security`): the registry's own description ("security holding package") and the advisories that flag the name. `holding: true` means no advisory applies to that release (audit L4 decision, 2026-10-16). |
 
 Field conventions:
 
@@ -183,6 +184,13 @@ form.
 - yarn 1, no command: fc-011, fc-012
 - Cargo: fc-013..fc-020
 - Tools no command is named for (pip, poetry, uv, pipenv, go, bundler, composer): fc-021..fc-027
+- A direct dependency (`kind: "direct"`, audit E8), with the declared operator kept:
+  - npm: `npm install x@v --save-exact` for an exact pin, or `npm install "x@^v"` / `"x@~v"` (quoted, because `^` is cmd.exe's escape character): fc-028..fc-031;
+  - pnpm: `pnpm up`: fc-032, fc-033;
+  - yarn 1 and berry: `yarn upgrade` / `yarn up` with the operator: fc-034, fc-035;
+  - no command for a spec whose operator cannot be carried: fc-036.
+- A direct Cargo dependency: `cargo add`, with `--dev` / `--build` / `--target` / `--rename` from the declaring table and the operator kept (fc-037..fc-042); none for a workspace-inherited crate, where `cargo add` replaced the inheritance with a local pin (fc-043).
+- A direct Go requirement: `go get mod@vX`; none for an indirect one: fc-044, fc-045.
 
 ### Constraint checks — `@4da/mcp-server` 6.2.0 CHANGELOG
 

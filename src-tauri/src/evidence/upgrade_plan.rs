@@ -119,6 +119,8 @@ pub fn build_upgrade_plan(db: &Database) -> BuiltPlan {
             // it (`osv::fix_path`; empty for a direct-only row).
             g.routes =
                 crate::osv::parent_hint::load_routes(db, &g.ecosystem_norm, &g.package, &g.lines);
+            // How each DIRECT copy moves where it is declared (audit E8).
+            g.direct_fixes = direct_fixes(&g.ecosystem_norm, &g.package, &g.lines);
             g.into_evidence_item(now)
         })
         .collect();
@@ -164,6 +166,10 @@ struct PackageGroup<'a> {
     any_confirmed: bool,
     /// At least one affected instance is a DIRECT dep — the user can bump it now.
     fixable_now: bool,
+    /// Per declaring project and target: the command or manifest edit that
+    /// moves the direct copy (`osv::direct_upgrade`); empty when none is
+    /// certain.
+    direct_fixes: Vec<(String, String, crate::osv::direct_upgrade::DirectFix)>,
     /// Every affected instance is a dev dependency (a labelled discount).
     all_dev: bool,
     urgency: Urgency,
@@ -304,6 +310,7 @@ fn package_group<'a>(
         informational,
         cohort_key,
         routes: crate::osv::parent_hint::TransitiveRoutes::default(),
+        direct_fixes: Vec::new(),
     }
 }
 
@@ -428,14 +435,15 @@ impl PackageGroup<'_> {
                 .lines
                 .iter()
                 .any(|l| l.target_version.is_some() && l.sites.iter().any(|s| !s.is_direct));
+            let how = direct_fix_note(&self.direct_fixes, m > 1);
             if transitive {
                 format!(
-                    "Fixable now via a direct dependency bump where it is declared. Elsewhere it is \
-                     transitive — {}",
+                    "Fixable now via a direct dependency bump where it is declared{how}. \
+                     Elsewhere it is transitive — {}",
                     super::upgrade_parent::upstream_note(&self.package, &self.routes, m > 1)
                 )
             } else {
-                "Fixable now via a direct dependency bump".to_string()
+                format!("Fixable now via a direct dependency bump{how}")
             }
         } else {
             super::upgrade_parent::upstream_note(&self.package, &self.routes, m > 1)
@@ -930,6 +938,69 @@ pub(crate) fn advisory_age_days(published: Option<&str>) -> f32 {
 #[cfg(test)]
 #[path = "upgrade_targets_tests.rs"]
 mod target_tests;
+/// Most declaring projects named in one step's direct-fix note.
+const MAX_DIRECT_FIXES: usize = 3;
+
+/// The direct copies' fixes, read from each declaring project's own manifest
+/// (`osv::direct_upgrade`): one per (project, target), in line order.
+fn direct_fixes(
+    ecosystem_norm: &str,
+    package: &str,
+    lines: &[LineTarget],
+) -> Vec<(String, String, crate::osv::direct_upgrade::DirectFix)> {
+    let mut out: Vec<(String, String, crate::osv::direct_upgrade::DirectFix)> = Vec::new();
+    for line in lines {
+        let Some(target) = line.target_version.as_deref() else {
+            continue;
+        };
+        for site in line.sites.iter().filter(|s| s.is_direct) {
+            if out
+                .iter()
+                .any(|(p, t, _)| *p == site.project_path && t == target)
+            {
+                continue;
+            }
+            if let Some(fix) = crate::osv::direct_upgrade::direct_fix(
+                std::path::Path::new(&site.project_path),
+                ecosystem_norm,
+                package,
+                target,
+            ) {
+                out.push((site.project_path.clone(), target.to_string(), fix));
+            }
+        }
+    }
+    out
+}
+
+/// ": `npm install ...`" for one project, or each fix with the project it runs in.
+fn direct_fix_note(
+    fixes: &[(String, String, crate::osv::direct_upgrade::DirectFix)],
+    multi_project: bool,
+) -> String {
+    if fixes.is_empty() {
+        return String::new();
+    }
+    let shown: Vec<String> = fixes
+        .iter()
+        .take(MAX_DIRECT_FIXES)
+        .map(|(project, _, fix)| {
+            if multi_project {
+                format!("{} in {project}", fix.render())
+            } else {
+                fix.render()
+            }
+        })
+        .collect();
+    let more = fixes.len().saturating_sub(MAX_DIRECT_FIXES);
+    let tail = if more > 0 {
+        format!(" (and {more} more)")
+    } else {
+        String::new()
+    };
+    format!(": {}{tail}", shown.join("; "))
+}
+
 #[cfg(test)]
 #[path = "upgrade_plan_tests.rs"]
 mod tests;
