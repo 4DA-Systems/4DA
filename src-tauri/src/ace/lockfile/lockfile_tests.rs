@@ -481,6 +481,32 @@ fn read_dir_reports_unsupported_and_orphan_go_sum() {
     assert_eq!(json["unsupported_count"], 2);
 }
 
+/// Audit A2 (2026-10-12): a .NET project with only a `.csproj` was never
+/// reported, so it read as having no dependencies at all.
+#[test]
+fn read_dir_reports_a_csproj_only_project_as_unsupported() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    std::fs::write(
+        dir.join("Api.csproj"),
+        "<Project Sdk=\"Microsoft.NET.Sdk\"/>",
+    )
+    .unwrap();
+    assert!(probe(dir).is_some(), "the walk must see the project");
+    let outcomes = read_dir(dir);
+    assert!(
+        matches!(
+            outcomes.as_slice(),
+            [LockfileOutcome::Unsupported { kind, .. }] if kind.starts_with("NuGet")
+        ),
+        "{outcomes:?}"
+    );
+
+    // With packages.lock.json present the lockfile entry stands alone.
+    std::fs::write(dir.join("packages.lock.json"), "{}").unwrap();
+    assert_eq!(read_dir(dir).len(), 1);
+}
+
 #[test]
 fn parse_lockfiles_under_flattens_every_directory() {
     let tmp = tempfile::tempdir().unwrap();

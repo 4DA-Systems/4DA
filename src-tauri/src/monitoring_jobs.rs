@@ -623,8 +623,14 @@ pub async fn run_cve_scan<R: Runtime>(app: &AppHandle<R>) {
 
         if !advisories.is_empty() {
             // 3. Cross-reference with semver version matching
+            // Only dependencies with a known installed version: the matcher
+            // "conservatively assumes affected" without one, which turned a
+            // Maven pom.xml (no versions resolved) into Critical/High
+            // security notifications that mostly did not apply (audit E4,
+            // 2026-10-12). Those files are reported as not covered instead.
             let dep_tuples: Vec<(String, String, Option<String>)> = user_deps
                 .iter()
+                .filter(|d| d.version.as_deref().is_some_and(|v| !v.trim().is_empty()))
                 .map(|d| {
                     (
                         d.package_name.clone(),

@@ -181,6 +181,11 @@ const SCOPED_EPOCHS: &[(i32, &str)] = &[
     // is ASCII case-insensitive, matching the classifier's lowercasing for
     // these ASCII terms.
     (41, "title LIKE '%breaking change%' OR title LIKE '%eol%'"),
+    // v42 — the unknown-installed-version tier. `version_unknown` requires
+    // `registry_advisory`, which is exactly `source_type IN ('osv','cve')`
+    // (`is_registry_advisory_source`); `source_type` is assigned at ingest
+    // and never re-derived (same reasoning as v18).
+    (42, "source_type IN ('osv','cve')"),
 ];
 
 /// Promote stale items that the registered epoch predicates prove unaffected,

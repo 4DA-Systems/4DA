@@ -12,6 +12,7 @@ import { URGENCY_ORDER, ItemCard } from './PreemptionCard';
 import { PreemptionTierSection } from './PreemptionTierSection';
 import { PreemptionFreeFloorNotice } from './PreemptionFreeFloorNotice';
 import { PreemptionAdvisoryNotice } from './PreemptionAdvisoryNotice';
+import { PreemptionNotCoveredNote } from './PreemptionNotCoveredNote';
 import { SignalUpgradeCTA } from '../SignalUpgradeCTA';
 import { ReportAge } from '../ReportAge';
 import { ScanProjectsPrompt } from '../blindspots/BlindSpotsFirstDay';
@@ -201,13 +202,19 @@ export const PreemptionWorklist = memo(function PreemptionWorklist() {
         <PreemptionAdvisoryNotice negative={negative} onRecheck={recheck} />
       )}
 
+      {/* Files whose versions 4DA does not read: never covered by an all-clear. */}
+      {feed && <PreemptionNotCoveredNote notCovered={feed.advisory_sync?.not_covered} />}
+
       {feed && totalAlerts === 0 && !noDependenciesKnown && negative.kind === 'assert' && (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mb-3">
             {/* eslint-disable-next-line i18next/no-literal-string */}
             <span className="text-emerald-400 text-lg">&#x2713;</span>
           </div>
-          <p className="text-sm font-medium text-text-primary mb-1">{t('preemption.empty.title')}</p>
+          {/* Not "your stack is clean" while files 4DA cannot read stand beside it. */}
+          <p className="text-sm font-medium text-text-primary mb-1">
+            {feed.advisory_sync?.not_covered ? t('preemption.empty.partialTitle') : t('preemption.empty.title')}
+          </p>
           <p className="text-xs text-text-muted">{t('preemption.empty.subtitle')}</p>
         </div>
       )}

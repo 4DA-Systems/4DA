@@ -566,3 +566,49 @@ fn an_advisory_exposing_only_a_scratch_project_is_affected_inactive() {
     assert_never_interrupts(&result);
     assert_eq!(result.signal_priority.as_deref(), Some("advisory"));
 }
+
+/// v42 (audit E4, 2026-10-12): a dependency read from a manifest with no
+/// lockfile (or an ecosystem 4DA does not resolve) has NO installed version.
+/// The same advisory that a pinned 4.13.5 confirms must then be neither
+/// grounded, a dependency event, feed-relevant nor an "affects" claim: the
+/// fresh-profile Maven project showed 15 such rows in "Affects You".
+#[test]
+fn advisory_against_an_unknown_installed_version_is_unconfirmed() {
+    let db = crate::test_utils::test_db();
+    let mut ctx = ctx_with_dep("hono", "javascript", "4.13.5", "d:/work/api");
+    for info in ctx.ace_ctx.dependency_info.values_mut() {
+        info.version = None; // manifest-only: no lockfile pin
+    }
+    let zero = vec![0.0_f32; crate::EMBEDDING_DIMS];
+    let classifier = signals::SignalClassifier::new();
+    let result = score_item(
+        &input(HONO_TITLE, HONO_URL, HONO_CONTENT, &zero),
+        &ctx,
+        &db,
+        &signal_options(),
+        Some(&classifier),
+    );
+    let bd = result.score_breakdown.as_ref().expect("breakdown");
+    assert_eq!(bd.is_version_affected, None);
+    assert_eq!(result.applicability.as_deref(), Some("version_unknown"));
+    assert!(!bd.strongly_grounded, "an unknown version never grounds");
+    assert!(!bd.dependency_event, "and is not an event in the stack");
+    assert!(!result.relevant, "it leaves Signal like a not-affected row");
+    assert_never_interrupts(&result);
+    assert_no_affects_claim(&result);
+    if let Some(reason) = bd.necessity_reason.as_deref() {
+        assert!(!reason.contains("affects"), "necessity reason: {reason}");
+    }
+
+    // Control: the same advisory with the version known still confirms.
+    let pinned = ctx_with_dep("hono", "javascript", "4.13.5", "d:/work/api");
+    let confirmed = score_item(
+        &input(HONO_TITLE, HONO_URL, HONO_CONTENT, &zero),
+        &pinned,
+        &db,
+        &signal_options(),
+        Some(&classifier),
+    );
+    assert_ne!(confirmed.applicability.as_deref(), Some("version_unknown"));
+    assert!(confirmed.relevant);
+}

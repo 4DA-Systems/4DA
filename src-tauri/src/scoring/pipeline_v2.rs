@@ -38,6 +38,10 @@ use super::*;
 /// title names several (a cve row may carry both its CVE and its GHSA id).
 const ADVISORY_ID_PREFIXES: &[&str] = &["GHSA-", "CVE-", "RUSTSEC-", "PYSEC-", "GO-", "OSV-"];
 
+/// Applicability of a registry advisory whose dependency has no known
+/// installed version (v42, audit E4): it cannot be confirmed either way.
+pub(crate) const VERSION_UNKNOWN: &str = "version_unknown";
+
 /// Extract the advisory id from a title — `GHSA-xxxx-yyyy-zzzz`, `CVE-2025-N`,
 /// `RUSTSEC-2026-N`, `PYSEC-2025-N`, `GO-2026-N` or `OSV-2026-N`.
 ///
@@ -3441,6 +3445,20 @@ pub(crate) fn score_item(
     // cve/osv rows extract ranges, so editorial coverage never carries a
     // version verdict and the persona guards are structurally untouched.
     let version_not_affected = registry_advisory && is_version_affected == Some(false);
+    // v42 (audit E4, 2026-10-12): a registry advisory naming a dependency
+    // whose installed version is UNKNOWN (a manifest with no lockfile, or an
+    // ecosystem 4DA does not resolve: Maven, Gradle, .NET) cannot be
+    // confirmed either way. A fresh profile with one pom.xml showed 15 such
+    // GHSA rows as grounded "Affects You" items, 14 of which did not apply.
+    // Accurate first: it takes the same tier as a confirmed not-affected
+    // row (no fast path, the registry-ungrounded ceiling, never
+    // feed-relevant, never grounded) and is labelled `version_unknown`.
+    // Preemption names the file as not covered instead.
+    let version_unknown = registry_advisory
+        && !security_confirmed
+        && is_version_affected.is_none()
+        && installed_version.is_none()
+        && !display_deps.is_empty();
 
     // ── Critical content fast-path ─────────────────────────────────────
     // Security advisories and breaking changes affecting user's actual
@@ -3467,8 +3485,10 @@ pub(crate) fn score_item(
         >= scoring_config::CRITICAL_FASTPATH_DEP_MATCH_THRESHOLD
         && (grounding.strong || security_confirmed);
     // v31: a confirmed not-affected advisory never takes the floor.
-    let critical_fast_path =
-        (is_security || is_breaking) && has_strong_dep_match && !version_not_affected;
+    let critical_fast_path = (is_security || is_breaking)
+        && has_strong_dep_match
+        && !version_not_affected
+        && !version_unknown;
 
     // A CVE confirmed against the user's DIRECT (non-dev) dependency is the
     // flagship preemption case and the highest-confidence security signal — it
@@ -3579,7 +3599,8 @@ pub(crate) fn score_item(
         // Confirmed not-affected registry advisory (v31): the registry-
         // ungrounded tier, applied at the EXIT because a GROUNDED advisory is
         // exempt from the Phase-8 commodity cap by design.
-        let not_affected = version_not_affected.then_some(
+        // v42: an unknown installed version takes the same tier.
+        let not_affected = (version_not_affected || version_unknown).then_some(
             scoring_config::COMMODITY_CEILING_SECURITY_ADVISORY_REGISTRY_UNGROUNDED
                 + scoring_config::SCORE_OFFSET_NEGATIVE_FLOOR,
         );
@@ -3676,6 +3697,7 @@ pub(crate) fn score_item(
         && !(ugc_capped && !judge_cleared)
         && !security_ungrounded
         && !version_not_affected
+        && !version_unknown
         && ((critical_fast_path && !lang_mismatch)  // Critical items always relevant
             || release_act // a breaking upgrade of a runtime dependency (v37)
             || (combined_score >= get_relevance_threshold()
@@ -3834,7 +3856,7 @@ pub(crate) fn score_item(
         matched_window_label: matched_window_label.clone(),
         age_hours,
         content_type: Some(content_type.slug().to_string()),
-        strongly_grounded: grounding.strong || security_confirmed,
+        strongly_grounded: (grounding.strong || security_confirmed) && !version_unknown,
         version_affected: is_version_affected,
         registry_advisory,
         release_grade: release_grade
@@ -3846,6 +3868,19 @@ pub(crate) fn score_item(
     // release in your stack" reason would contradict the gate above.
     if already_installed_release {
         necessity_result.score = 0.0;
+    }
+    // v42: an advisory against an unknown installed version is awareness
+    // at most, and the reason must not claim the dependency is affected.
+    if version_unknown
+        && necessity_result.category == necessity::NecessityCategory::SecurityVulnerability
+    {
+        let dep = display_deps
+            .first()
+            .map_or("your dependency", |d| d.package_name.as_str());
+        necessity_result.score = necessity_result.score.min(0.15);
+        necessity_result.reason =
+            format!("Advisory names {dep} \u{2014} unconfirmed: no installed version known");
+        necessity_result.urgency = necessity::Urgency::Awareness;
     }
 
     // ── Source authority weighting for necessity ───────────────────────
@@ -3868,6 +3903,9 @@ pub(crate) fn score_item(
     let tier_is_critical = sig_priority.as_deref() == Some("critical");
     let (applicability, is_critical_alert) = if version_negative {
         (Some("not_affected".to_string()), false)
+    } else if version_unknown {
+        // v42: named, never "Affects You" (the evidence pool reads this).
+        (Some(VERSION_UNKNOWN.to_string()), false)
     } else if sig_type.as_deref() == Some("security_alert") && security_confirmed {
         // The matcher placed an installed copy inside the range: affected.
         (Some("affected".to_string()), tier_is_critical)
@@ -3929,7 +3967,8 @@ pub(crate) fn score_item(
             already_installed_release,
             strongly_grounded: grounding.strong,
             deps: &raw.matched_deps,
-        }) && !inactive_only;
+        }) && !inactive_only
+            && !version_unknown;
 
     let sec_affected_project_count = if security_confirmed {
         security_lane.exposed_projects.len() as u32
@@ -3985,6 +4024,7 @@ pub(crate) fn score_item(
             installed_version: installed_version.as_deref(),
             via_registry_subject: grounding.via_registry_subject,
             registry_advisory,
+            version_unknown,
             dependency_event,
             release_chain: release_grade
                 .as_ref()
@@ -4013,7 +4053,9 @@ pub(crate) fn score_item(
         confirmation_mult,
         dep_match_score: raw.dep_match_score,
         matched_deps: matched_dep_names,
-        strongly_grounded: (grounding.strong || security_confirmed) && !inactive_only,
+        strongly_grounded: (grounding.strong || security_confirmed)
+            && !inactive_only
+            && !version_unknown,
         dependency_event,
         degraded_inputs,
         // Categorical ceiling for post-pipeline writers: a capped item
