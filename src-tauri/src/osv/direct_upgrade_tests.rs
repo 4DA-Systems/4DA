@@ -117,7 +117,7 @@ fn cargo_commands_follow_the_declaring_table() {
     assert_eq!(cmd("cc", "1.0.83"), "cargo add cc@1.0.83 --build");
     assert_eq!(
         cmd("winapi", "0.3.9"),
-        "cargo add winapi@0.3.9 --target 'cfg(windows)'"
+        "cargo add winapi@0.3.9 --target \"cfg(windows)\""
     );
     assert_eq!(cmd("regex", "1.5.6"), "cargo add regex@1.5.6");
 }
@@ -144,33 +144,122 @@ fn cargo_declared_twice_or_not_at_all_names_nothing() {
     assert_eq!(cargo_direct(&decls[0], "itoa", "1.0.11"), None);
 }
 
+/// `cargo add <crate>@<v>` on a git, path or alternate-registry dependency
+/// re-points it at crates.io: those name nothing.
+#[test]
+fn a_crate_from_another_source_names_nothing() {
+    let manifest = r#"
+[dependencies]
+a = { git = "https://example.com/a", version = "1.0.0" }
+b = { path = "../b", version = "1.0.0" }
+c = { version = "1.0.0", registry = "corp" }
+
+[dependencies.d]
+version = "1.0.0"
+git = "https://example.com/d"
+"#;
+    for package in ["a", "b", "c", "d"] {
+        let decls = cargo_declarations(manifest, package);
+        assert_eq!(decls.len(), 1, "{package}");
+        assert!(decls[0].other_source, "{package}");
+        assert_eq!(cargo_direct(&decls[0], package, "1.0.1"), None, "{package}");
+    }
+}
+
 #[test]
 fn go_get_only_for_a_direct_requirement() {
     let go_mod = "module example.com/m\n\ngo 1.22\n\nrequire golang.org/x/text v0.3.7\n\nrequire (\n\tgolang.org/x/net v0.20.0\n\tgolang.org/x/sys v0.16.0 // indirect\n)\n";
     assert_eq!(
-        go_direct_command(go_mod, "golang.org/x/text", "0.3.8").as_deref(),
+        go_direct_command(go_mod, "golang.org/x/text", "0.3.7", "0.3.8").as_deref(),
         Some("go get golang.org/x/text@v0.3.8")
     );
     assert_eq!(
-        go_direct_command(go_mod, "golang.org/x/net", "v0.23.0").as_deref(),
+        go_direct_command(go_mod, "golang.org/x/net", "v0.20.0", "v0.23.0").as_deref(),
         Some("go get golang.org/x/net@v0.23.0")
     );
     assert_eq!(
-        go_direct_command(go_mod, "golang.org/x/sys", "0.20.0"),
+        go_direct_command(go_mod, "golang.org/x/sys", "0.16.0", "0.20.0"),
         None
     );
+    // Required at another version than the one installed: nothing.
+    assert_eq!(
+        go_direct_command(go_mod, "golang.org/x/text", "0.3.6", "0.3.8"),
+        None
+    );
+}
+
+/// A `replace` points the module elsewhere: `go get` would not move what is built.
+#[test]
+fn a_replaced_go_module_names_nothing() {
+    let single =
+        "module m\n\nrequire golang.org/x/text v0.3.7\n\nreplace golang.org/x/text => ../text\n";
+    let block = "module m\n\nrequire golang.org/x/text v0.3.7\n\nreplace (\n\tgolang.org/x/text v0.3.7 => example.com/fork v0.3.9\n)\n";
+    for go_mod in [single, block] {
+        assert_eq!(
+            go_direct_command(go_mod, "golang.org/x/text", "0.3.7", "0.3.8"),
+            None,
+            "{go_mod}"
+        );
+    }
 }
 
 #[test]
 fn a_pinned_requirement_gets_an_exact_edit() {
     let req = "Django==4.2 # web\nrequests>=2.0\n";
     assert_eq!(
-        pypi_direct_instruction(req, "requirements.txt", "django", "5.2.17").as_deref(),
-        Some("change `Django==4.2` to `Django==5.2.17` in requirements.txt")
+        pypi_direct_instruction(req, "requirements.txt", "django", "4.2", "5.2.17").as_deref(),
+        Some("change `Django==4.2 # web` to `Django==5.2.17 # web` in requirements.txt")
     );
     // Not an == pin: no edit is invented.
     assert_eq!(
-        pypi_direct_instruction(req, "requirements.txt", "requests", "2.32.0"),
+        pypi_direct_instruction(req, "requirements.txt", "requests", "2.31.0", "2.32.0"),
+        None
+    );
+    // Pinned at another version than the one installed: nothing.
+    assert_eq!(
+        pypi_direct_instruction(req, "requirements.txt", "django", "4.1", "5.2.17"),
+        None
+    );
+}
+
+/// Only the version token changes: markers and extras stay.
+#[test]
+fn a_pin_keeps_its_markers_and_extras() {
+    let req = "requests[socks]==2.31.0 ; python_version >= \"3.8\"\nurllib3==1.26.5;python_version<\"3.12\"\n";
+    assert_eq!(
+        pypi_direct_instruction(req, "requirements.txt", "requests", "2.31.0", "2.32.4").as_deref(),
+        Some(
+            "change `requests[socks]==2.31.0 ; python_version >= \"3.8\"` to \
+             `requests[socks]==2.32.4 ; python_version >= \"3.8\"` in requirements.txt"
+        )
+    );
+    assert_eq!(
+        pypi_direct_instruction(req, "requirements.txt", "urllib3", "1.26.5", "1.26.19").as_deref(),
+        Some(
+            "change `urllib3==1.26.5;python_version<\"3.12\"` to \
+             `urllib3==1.26.19;python_version<\"3.12\"` in requirements.txt"
+        )
+    );
+}
+
+/// A hashed pin fails `--require-hashes` once the version alone changes, and
+/// pip-compile output is regenerated from its `.in` source: both name nothing.
+#[test]
+fn hashed_or_compiled_requirements_name_nothing() {
+    let continued = "django==4.2 \\\n    --hash=sha256:abc\n";
+    let inline = "django==4.2 --hash=sha256:abc\n";
+    let next_line = "django==4.2\n    --hash=sha256:abc\n";
+    for req in [continued, inline, next_line] {
+        assert_eq!(
+            pypi_direct_instruction(req, "requirements.txt", "django", "4.2", "4.2.17"),
+            None,
+            "{req}"
+        );
+    }
+    let compiled =
+        "#\n# This file is autogenerated by pip-compile with Python 3.12\n#\ndjango==4.2\n";
+    assert_eq!(
+        pypi_direct_instruction(compiled, "requirements.txt", "django", "4.2", "4.2.17"),
         None
     );
 }
@@ -189,10 +278,70 @@ fn the_reader_uses_the_projects_own_manifest() {
     )
     .unwrap();
     assert_eq!(
-        direct_fix(dir.path(), "npm", "minimist", "1.2.8"),
+        direct_fix(dir.path(), "npm", "minimist", "1.2.6", "1.2.8"),
         Some(DirectFix::Command(
             "npm install \"minimist@~1.2.8\"".to_string()
         ))
     );
-    assert_eq!(direct_fix(dir.path(), "PyPI", "django", "5.2.17"), None);
+    assert_eq!(
+        direct_fix(dir.path(), "PyPI", "django", "4.2", "5.2.17"),
+        None
+    );
+}
+
+/// The declaration must admit the copy that is installed: otherwise the row
+/// is about another copy than the one this manifest declares.
+#[test]
+fn a_declaration_that_does_not_admit_the_installed_copy_names_nothing() {
+    let dir = tempfile::tempdir().expect("tempdir");
+    std::fs::write(
+        dir.path().join("package.json"),
+        r#"{"dependencies": {"minimist": "~1.2.5"}}"#,
+    )
+    .unwrap();
+    std::fs::write(
+        dir.path().join("package-lock.json"),
+        r#"{"lockfileVersion": 3}"#,
+    )
+    .unwrap();
+    std::fs::write(
+        dir.path().join("Cargo.toml"),
+        "[dependencies]\nitoa = \"~1.0.5\"\n",
+    )
+    .unwrap();
+    assert_eq!(
+        direct_fix(dir.path(), "npm", "minimist", "0.0.8", "1.2.8"),
+        None
+    );
+    assert_eq!(
+        direct_fix(dir.path(), "crates.io", "itoa", "0.4.8", "1.0.11"),
+        None
+    );
+    assert_eq!(
+        direct_fix(dir.path(), "crates.io", "itoa", "1.0.6", "1.0.11"),
+        Some(DirectFix::Command("cargo add \"itoa@~1.0.11\"".to_string()))
+    );
+}
+
+/// `yarn up` / `yarn upgrade` act on the whole workspace, so a member (whose
+/// yarn.lock sits in the root) names nothing; the root itself does.
+#[test]
+fn a_yarn_workspace_member_names_nothing() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let member = root.path().join("packages").join("app");
+    std::fs::create_dir_all(&member).unwrap();
+    std::fs::write(root.path().join("yarn.lock"), "# yarn lockfile v1\n").unwrap();
+    let pkg = r#"{"dependencies": {"minimist": "^1.2.5"}}"#;
+    std::fs::write(root.path().join("package.json"), pkg).unwrap();
+    std::fs::write(member.join("package.json"), pkg).unwrap();
+    assert_eq!(
+        direct_fix(&member, "npm", "minimist", "1.2.6", "1.2.8"),
+        None
+    );
+    assert_eq!(
+        direct_fix(root.path(), "npm", "minimist", "1.2.6", "1.2.8"),
+        Some(DirectFix::Command(
+            "yarn upgrade \"minimist@^1.2.8\"".to_string()
+        ))
+    );
 }

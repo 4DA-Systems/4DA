@@ -425,10 +425,15 @@ pub fn normalize_project_path(path: &str) -> String {
 /// `fs@0.0.1-security` (MAL-, 2026-09-26), and crossenv `0.0.2-security`
 /// under GHSA-c2m4-w5hm-vqjw ("crossenv is malware", `last_affected 1.0.1`,
 /// 2026-10-16). The placeholder contains no code, so NO advisory applies to
-/// it, whichever database's id it carries.
+/// it, whichever database's id it carries. Only npm's own placeholder shape,
+/// `0.0.<n>-security`, counts: a publisher's `1.0.0-security` prerelease is
+/// real code and stays affected.
 pub fn is_npm_security_holding(ecosystem: &str, version: Option<&str>) -> bool {
     normalize_ecosystem(ecosystem) == "npm"
-        && version.is_some_and(|v| v.trim().ends_with("-security"))
+        && version
+            .and_then(|v| v.trim().strip_prefix("0.0."))
+            .and_then(|v| v.strip_suffix("-security"))
+            .is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
 }
 
 /// Highest semver among an advisory's listed fixes: the version that clears

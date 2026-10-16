@@ -3,10 +3,10 @@
 //! the manifest that declares it (audit E8: a direct row said only
 //! "4.2 -> 5.2.17").
 //!
-//! A command is named only where it was checked against the tool to move the
-//! dependency and keep it as declared (2026-10-15): npm 10.9.2, pnpm 10.34.6,
-//! yarn 1.22.22, yarn 4.9.1, cargo 1.95 and go 1.24. Several naive commands
-//! would have rewritten the declaration:
+//! A command is named only where it was run against the tool and moved the
+//! dependency while keeping it as declared (2026-10-15/16): npm 10.9.2, pnpm
+//! 10.34.6, yarn 1.22.22, yarn 4.9.1, cargo 1.95 and go 1.24. Several naive
+//! commands rewrote the declaration:
 //! - `npm install x@1.2.8` writes `^1.2.8` over an exact pin and over `~1.2.5`;
 //!   `--save-exact` or the declared operator keeps it;
 //! - `yarn upgrade x@1.2.8` (yarn 1) and `yarn up x@1.2.8` (berry) write an
@@ -16,13 +16,21 @@
 //! - `cargo add` on a dev or build dependency writes a second
 //!   `[dependencies]` entry unless given `--dev` / `--build`.
 //!
-//! Anything this cannot read with certainty (two declarations, a git or path
-//! spec, a `>=`/`||` range, an unknown tool) names nothing: the plan keeps
-//! its plain "bump it where it is declared".
+//! Anything this cannot read with certainty names nothing, and the plan keeps
+//! its plain "bump it where it is declared". That covers:
+//! - a dependency declared twice;
+//! - a declared spec that does not admit the installed copy;
+//! - a git, path or alternate-registry source;
+//! - a `>=`/`||` range;
+//! - a yarn workspace member (`yarn up` is project-wide);
+//! - a Go `replace`;
+//! - hashed or pip-compiled requirements;
+//! - an unknown tool.
 
 use std::path::Path;
 
-use super::fix_path::Manager;
+use super::fix_path::{requirement_admits, Manager, Requirement};
+use super::fix_target::LineTarget;
 
 /// What to tell the user, per declaring project.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -43,36 +51,46 @@ impl DirectFix {
     }
 }
 
-/// The fix for `package` declared in the project at `project_dir`, read from
-/// its own manifest. `None` when it cannot be named with certainty.
+/// The fix for `package` at `installed`, declared in the project at
+/// `project_dir`, read from its own manifest. `None` when it cannot be named
+/// with certainty.
 pub fn direct_fix(
     project_dir: &Path,
     ecosystem_norm: &str,
     package: &str,
+    installed: &str,
     target: &str,
 ) -> Option<DirectFix> {
     let read = |file: &str| std::fs::read_to_string(project_dir.join(file)).ok();
     match ecosystem_norm {
         "npm" => {
             let manager = Manager::detect(project_dir, "npm")?;
+            // yarn's `up`/`upgrade` act on the whole workspace: run from a
+            // member they rewrite siblings' declarations too.
+            let yarn = matches!(manager, Manager::YarnBerry | Manager::YarnClassic);
+            if yarn && !project_dir.join("yarn.lock").is_file() {
+                return None;
+            }
             let declared = npm_declared(&read("package.json")?, package)?;
+            if requirement_admits(&declared, installed) != Some(true) {
+                return None;
+            }
             npm_direct_command(manager, &declared, package, target).map(DirectFix::Command)
         }
-        "crates.io" => {
-            let decls = cargo_declarations(&read("Cargo.toml")?, package);
-            match decls.as_slice() {
-                [only] => cargo_direct(only, package, target),
-                _ => None,
-            }
+        "crates.io" => match cargo_declarations(&read("Cargo.toml")?, package).as_slice() {
+            [only] if cargo_admits(only, installed) => cargo_direct(only, package, target),
+            _ => None,
+        },
+        "Go" => {
+            go_direct_command(&read("go.mod")?, package, installed, target).map(DirectFix::Command)
         }
-        "Go" => go_direct_command(&read("go.mod")?, package, target).map(DirectFix::Command),
         "PyPI" => [
             "requirements.txt",
             "requirements-dev.txt",
             "requirements/base.txt",
         ]
         .iter()
-        .find_map(|f| pypi_direct_instruction(&read(f)?, f, package, target))
+        .find_map(|f| pypi_direct_instruction(&read(f)?, f, package, installed, target))
         .map(DirectFix::Instruction),
         _ => None,
     }
@@ -158,6 +176,40 @@ pub struct CargoDecl {
     pub req: Option<String>,
     /// `workspace = true`: the version lives in the workspace root.
     pub workspace: bool,
+    /// A `git`, `path` or `registry` source: `cargo add <crate>@<v>` would
+    /// re-point it at crates.io.
+    pub other_source: bool,
+}
+
+/// The fields of one declaration, folded in as they are read.
+#[derive(Default)]
+struct DeclFields {
+    req: Option<String>,
+    package: Option<String>,
+    workspace: bool,
+    other_source: bool,
+}
+
+impl DeclFields {
+    fn set(&mut self, field: &str, value: &str) {
+        match field {
+            "version" => self.req = Some(unquote(value).to_string()),
+            "package" => self.package = Some(unquote(value).to_string()),
+            "workspace" => self.workspace |= value.trim() == "true",
+            "git" | "path" | "registry" => self.other_source = true,
+            _ => {}
+        }
+    }
+
+    /// `{ version = "1", package = "x", ... }`.
+    fn set_inline(&mut self, table: &str) {
+        let body = table.trim().trim_start_matches('{').trim_end_matches('}');
+        for kv in body.split(',') {
+            if let Some((k, v)) = kv.split_once('=') {
+                self.set(k.trim(), v.trim());
+            }
+        }
+    }
 }
 
 /// Every declaration of `package` in a `Cargo.toml` (by crate name, so a
@@ -165,104 +217,60 @@ pub struct CargoDecl {
 /// `fix_path::cargo_requirements`: a manifest this cannot read yields nothing.
 pub fn cargo_declarations(manifest: &str, package: &str) -> Vec<CargoDecl> {
     let want = crate_key(package);
-    let mut out: Vec<CargoDecl> = Vec::new();
-    // (kind, target) of the current `[..dependencies]` table, or the same
-    // plus the key of a `[..dependencies.<key>]` table.
+    // (kind, target, key, fields) per declaration, merged by (kind, target, key).
+    let mut found: Vec<(CargoKind, Option<String>, String, DeclFields)> = Vec::new();
     let mut table: Option<(CargoKind, Option<String>, Option<String>)> = None;
-    let mut pending: Option<(CargoDecl, Option<String>)> = None;
-    let flush = |p: &mut Option<(CargoDecl, Option<String>)>, out: &mut Vec<CargoDecl>| {
-        if let Some((decl, crate_name)) = p.take() {
-            if crate_key(crate_name.as_deref().unwrap_or(&decl.key)) == want {
-                out.push(decl);
-            }
-        }
-    };
     for raw in manifest.lines() {
         let line = raw.split('#').next().unwrap_or("").trim();
         if line.starts_with('[') {
-            flush(&mut pending, &mut out);
             table = cargo_table(line);
-            if let Some((kind, target, Some(key))) = &table {
-                pending = Some((
-                    CargoDecl {
-                        kind: *kind,
-                        target: target.clone(),
-                        key: key.clone(),
-                        req: None,
-                        workspace: false,
-                    },
-                    None,
-                ));
-            }
             continue;
         }
-        let Some((k, v)) = line.split_once('=') else {
+        let (Some((kind, target, table_key)), Some((k, v))) = (&table, line.split_once('=')) else {
             continue;
         };
-        let (k, v) = (unquote(k.trim()), v.trim());
-        match (&table, pending.as_mut()) {
-            (Some(_), Some((decl, crate_name))) => match k {
-                "version" => decl.req = Some(unquote(v).to_string()),
-                "package" => *crate_name = Some(unquote(v).to_string()),
-                "workspace" => decl.workspace = v == "true",
-                _ => {}
+        let k = unquote(k.trim());
+        // `[..dependencies.<key>]` fields, `<key>.<field> = ...`, or `<key> = ...`.
+        let (key, field) = match table_key {
+            Some(key) => (key.as_str(), Some(k)),
+            None => match k.split_once('.') {
+                Some((key, field)) => (unquote(key), Some(field.trim())),
+                None => (k, None),
             },
-            (Some((kind, target, None)), None) => {
-                // `key = "1.0"`, `key = { ... }`, or dotted `key.workspace = true`.
-                let (key, field) = match k.split_once('.') {
-                    Some((key, field)) => (unquote(key), Some(field.trim())),
-                    None => (k, None),
-                };
-                let mut decl = CargoDecl {
-                    kind: *kind,
-                    target: target.clone(),
-                    key: key.to_string(),
-                    req: None,
-                    workspace: false,
-                };
-                let mut crate_name = None;
-                match field {
-                    Some("workspace") => decl.workspace = v == "true",
-                    Some("version") => decl.req = Some(unquote(v).to_string()),
-                    Some("package") => crate_name = Some(unquote(v).to_string()),
-                    Some(_) => continue,
-                    None if v.starts_with('{') => {
-                        let body = v.trim_start_matches('{').trim_end_matches('}');
-                        for kv in body.split(',') {
-                            let Some((fk, fv)) = kv.split_once('=') else {
-                                continue;
-                            };
-                            match fk.trim() {
-                                "version" => decl.req = Some(unquote(fv.trim()).to_string()),
-                                "package" => crate_name = Some(unquote(fv.trim()).to_string()),
-                                "workspace" => decl.workspace = fv.trim() == "true",
-                                _ => {}
-                            }
-                        }
-                    }
-                    None => decl.req = Some(unquote(v).to_string()),
-                }
-                if crate_key(crate_name.as_deref().unwrap_or(key)) != want {
-                    continue;
-                }
-                // A dotted key can repeat over lines (`foo.version`, `foo.features`).
-                if let Some(existing) = out
-                    .iter_mut()
-                    .find(|d| d.key == decl.key && d.kind == decl.kind && d.target == decl.target)
-                {
-                    existing.workspace |= decl.workspace;
-                    if decl.req.is_some() {
-                        existing.req = decl.req;
-                    }
-                } else {
-                    out.push(decl);
-                }
+        };
+        let slot = match found
+            .iter()
+            .position(|(kd, t, ky, _)| kd == kind && t == target && ky == key)
+        {
+            Some(i) => &mut found[i].3,
+            None => {
+                found.push((
+                    *kind,
+                    target.clone(),
+                    key.to_string(),
+                    DeclFields::default(),
+                ));
+                &mut found.last_mut().expect("just pushed").3
             }
-            _ => {}
+        };
+        match field {
+            Some(f) => slot.set(f, v),
+            None if v.trim_start().starts_with('{') => slot.set_inline(v),
+            None => slot.req = Some(unquote(v).to_string()),
         }
     }
-    flush(&mut pending, &mut out);
-    out
+    found
+        .into_iter()
+        .filter(|(_, _, key, f)| crate_key(f.package.as_deref().unwrap_or(key)) == want)
+        .map(|(kind, target, key, f)| CargoDecl {
+            kind,
+            target,
+            key,
+            req: f.req,
+            workspace: f.workspace,
+            other_source: f.other_source,
+        })
+        .collect()
 }
 
 /// `[dependencies]`, `[dev-dependencies.foo]`, `[target.'cfg(unix)'.build-dependencies]`, ...
@@ -293,8 +301,20 @@ fn cargo_table(header: &str) -> Option<(CargoKind, Option<String>, Option<String
     Some((kind, target, key))
 }
 
+/// The declaration admits the installed copy (a workspace-inherited one is
+/// judged at the root, so it passes here).
+fn cargo_admits(decl: &CargoDecl, installed: &str) -> bool {
+    match decl.req.as_deref() {
+        Some(r) => Requirement::cargo(r).admits(installed) == Some(true),
+        None => decl.workspace,
+    }
+}
+
 /// The fix for one Cargo declaration.
 pub fn cargo_direct(decl: &CargoDecl, package: &str, target: &str) -> Option<DirectFix> {
+    if decl.other_source {
+        return None;
+    }
     if decl.workspace {
         return Some(DirectFix::Instruction(format!(
             "bump {package} to {target} in the workspace root's [workspace.dependencies] \
@@ -303,12 +323,11 @@ pub fn cargo_direct(decl: &CargoDecl, package: &str, target: &str) -> Option<Dir
         )));
     }
     let op = match decl.req.as_deref().map(str::trim) {
-        None => "",
         Some(r) if r.starts_with('=') => "=",
         Some(r) if r.starts_with('~') => "~",
         Some(r) if r.starts_with('^') => "^",
         Some(r) if r.starts_with(|c: char| c.is_ascii_digit()) => "",
-        Some(_) => return None,
+        _ => return None,
     };
     let spec = if op.is_empty() {
         format!("{package}@{target}")
@@ -322,7 +341,8 @@ pub fn cargo_direct(decl: &CargoDecl, package: &str, target: &str) -> Option<Dir
         CargoKind::Build => cmd.push_str(" --build"),
     }
     if let Some(t) = &decl.target {
-        cmd.push_str(&format!(" --target '{t}'"));
+        // Double quotes: cmd.exe keeps single quotes as part of the argument.
+        cmd.push_str(&format!(" --target \"{t}\""));
     }
     if crate_key(&decl.key) != crate_key(package) {
         cmd.push_str(&format!(" --rename {}", decl.key));
@@ -330,55 +350,160 @@ pub fn cargo_direct(decl: &CargoDecl, package: &str, target: &str) -> Option<Dir
     Some(DirectFix::Command(cmd))
 }
 
-/// `go get <module>@v<target>` when `go.mod` requires the module directly
-/// (not `// indirect`).
-pub fn go_direct_command(go_mod: &str, module: &str, target: &str) -> Option<String> {
-    let mut in_block = false;
-    let direct = go_mod.lines().any(|raw| {
+/// `go get <module>@v<target>` when `go.mod` requires the module directly at
+/// `installed` (not `// indirect`), and no `replace` points it elsewhere.
+pub fn go_direct_command(
+    go_mod: &str,
+    module: &str,
+    installed: &str,
+    target: &str,
+) -> Option<String> {
+    let v = |s: &str| {
+        if s.starts_with('v') {
+            s.to_string()
+        } else {
+            format!("v{s}")
+        }
+    };
+    let (mut in_require, mut in_replace) = (false, false);
+    let mut required_at: Option<String> = None;
+    for raw in go_mod.lines() {
         let line = raw.trim();
-        if line.starts_with("require (") {
-            in_block = true;
-            return false;
+        match line {
+            "require (" => in_require = true,
+            "replace (" => in_replace = true,
+            ")" => (in_require, in_replace) = (false, false),
+            _ => {}
         }
-        if in_block && line.starts_with(')') {
-            in_block = false;
-            return false;
+        let replaced = if in_replace {
+            Some(line)
+        } else {
+            line.strip_prefix("replace ")
+        };
+        if replaced.is_some_and(|r| r.split_whitespace().next() == Some(module)) {
+            return None;
         }
-        let entry = if in_block {
+        let entry = if in_require {
             Some(line)
         } else {
             line.strip_prefix("require ")
         };
-        entry.is_some_and(|e| {
-            !e.contains("// indirect") && e.split_whitespace().next() == Some(module)
-        })
-    });
-    let version = if target.starts_with('v') {
-        target.to_string()
-    } else {
-        format!("v{target}")
-    };
-    direct.then(|| format!("go get {module}@{version}"))
+        if let Some(e) = entry.filter(|e| !e.contains("// indirect")) {
+            let mut parts = e.split_whitespace();
+            if parts.next() == Some(module) {
+                required_at = parts.next().map(str::to_string);
+            }
+        }
+    }
+    (required_at? == v(installed)).then(|| format!("go get {module}@{}", v(target)))
 }
 
-/// An exact edit for a `requirements.txt` line that pins the package with
-/// `==`: no single verified command changes the file (`pip install` changes
-/// only the environment).
+/// An edit of the `requirements.txt` line that pins the package with `==` at
+/// `installed`, replacing only the version (markers, extras and comments
+/// stay). No single verified command changes the file (`pip install` changes
+/// only the environment). Declined for hashed lines (`--require-hashes`
+/// would fail) and for pip-compile output (edit its `.in` source instead).
 pub fn pypi_direct_instruction(
     requirements: &str,
     file: &str,
     package: &str,
+    installed: &str,
     target: &str,
 ) -> Option<String> {
+    if requirements
+        .lines()
+        .take(8)
+        .any(|l| l.contains("autogenerated by pip-compile"))
+    {
+        return None;
+    }
     let norm = |s: &str| s.to_lowercase().replace(['_', '.'], "-");
     let want = norm(package);
-    requirements.lines().find_map(|raw| {
-        let line = raw.split('#').next().unwrap_or("").trim();
-        let (name, version) = line.split_once("==")?;
-        let name = name.split('[').next().unwrap_or(name).trim();
-        (norm(name) == want && !version.trim().is_empty())
-            .then(|| format!("change `{line}` to `{name}=={target}` in {file}"))
+    let lines: Vec<&str> = requirements.lines().collect();
+    lines.iter().enumerate().find_map(|(i, raw)| {
+        let line = raw.trim();
+        let (head, rest) = line.split_once("==")?;
+        let name = head.split('[').next().unwrap_or(head).trim();
+        if norm(name) != want {
+            return None;
+        }
+        let end = rest
+            .find(|c: char| c == ';' || c == '\\' || c == '#' || c.is_whitespace())
+            .unwrap_or(rest.len());
+        let (version, tail) = rest.split_at(end);
+        let continued = line.ends_with('\\')
+            || line.contains("--hash")
+            || lines
+                .get(i + 1)
+                .is_some_and(|n| n.trim_start().starts_with("--hash"));
+        if continued || version != installed {
+            return None;
+        }
+        Some(format!(
+            "change `{line}` to `{head}=={target}{tail}` in {file}"
+        ))
     })
+}
+
+/// Most declaring projects named in one step's direct-fix note.
+const MAX_DIRECT_FIXES: usize = 3;
+
+/// The direct copies' fixes, read from each declaring project's own manifest:
+/// one per (project, target), in line order.
+pub fn direct_fixes(
+    ecosystem_norm: &str,
+    package: &str,
+    lines: &[LineTarget],
+) -> Vec<(String, String, DirectFix)> {
+    let mut out: Vec<(String, String, DirectFix)> = Vec::new();
+    for line in lines {
+        let Some(target) = line.target_version.as_deref() else {
+            continue;
+        };
+        for site in line.sites.iter().filter(|s| s.is_direct) {
+            if out
+                .iter()
+                .any(|(p, t, _)| *p == site.project_path && t == target)
+            {
+                continue;
+            }
+            if let Some(fix) = direct_fix(
+                Path::new(&site.project_path),
+                ecosystem_norm,
+                package,
+                &line.installed_version,
+                target,
+            ) {
+                out.push((site.project_path.clone(), target.to_string(), fix));
+            }
+        }
+    }
+    out
+}
+
+/// ": `npm install ...`" for one project, or each fix with the project it runs in.
+pub fn direct_fix_note(fixes: &[(String, String, DirectFix)], multi_project: bool) -> String {
+    if fixes.is_empty() {
+        return String::new();
+    }
+    let shown: Vec<String> = fixes
+        .iter()
+        .take(MAX_DIRECT_FIXES)
+        .map(|(project, _, fix)| {
+            if multi_project {
+                format!("{} in {project}", fix.render())
+            } else {
+                fix.render()
+            }
+        })
+        .collect();
+    let more = fixes.len().saturating_sub(MAX_DIRECT_FIXES);
+    let tail = if more > 0 {
+        format!(" (and {more} more)")
+    } else {
+        String::new()
+    };
+    format!(": {}{tail}", shown.join("; "))
 }
 
 fn unquote(s: &str) -> &str {

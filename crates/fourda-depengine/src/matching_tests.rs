@@ -180,7 +180,12 @@ fn security_holding_placeholders_and_names() {
         Some("0.0.1-security")
     ));
     assert!(is_npm_security_holding("npm", Some("0.0.2-security")));
+    assert!(is_npm_security_holding("npm", Some("0.0.12-security")));
     assert!(!is_npm_security_holding("npm", Some("1.0.1")));
+    // A publisher's own `-security` prerelease is real code, not npm's placeholder.
+    assert!(!is_npm_security_holding("npm", Some("1.0.0-security")));
+    assert!(!is_npm_security_holding("npm", Some("0.0.-security")));
+    assert!(!is_npm_security_holding("npm", Some("0.0.1-security.2")));
     assert!(!is_npm_security_holding("PyPI", Some("0.0.1-security")));
     assert_eq!(pep503_name(" Typing__Extensions.x "), "typing-extensions-x");
     assert_eq!(package_key("Django", "pip"), "django");

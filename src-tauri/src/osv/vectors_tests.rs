@@ -362,12 +362,11 @@ fn check_fix_command(v: &Value) -> Result<(), String> {
     for (name, body) in tool_files(s(v, "tool"), workspace_root) {
         std::fs::write(dir.path().join(name), body).map_err(|e| e.to_string())?;
     }
-    let command = if v.get("kind").and_then(Value::as_str) == Some("direct") {
-        direct_command(v, dir.path())
-    } else {
-        Manager::detect(dir.path(), s(v, "eco"))
-            .and_then(|m| m.refresh_command(s(v, "pkg"), s(v, "installed"), s(v, "target")))
-    };
+    if v.get("kind").and_then(Value::as_str) == Some("direct") {
+        return check_direct(v, dir.path());
+    }
+    let command = Manager::detect(dir.path(), s(v, "eco"))
+        .and_then(|m| m.refresh_command(s(v, "pkg"), s(v, "installed"), s(v, "target")));
     let want = opt_s(v, "command");
     if command.as_deref() == want {
         Ok(())
@@ -376,25 +375,58 @@ fn check_fix_command(v: &Value) -> Result<(), String> {
     }
 }
 
-/// `kind: "direct"` (audit E8): the command that moves a DECLARED dependency,
-/// from its declared spec (npm family), its `Cargo.toml` (Cargo) or its
-/// `go.mod` (Go). An instruction (a workspace-inherited crate) is no command.
-fn direct_command(v: &Value, dir: &std::path::Path) -> Option<String> {
-    use crate::osv::direct_upgrade::{
-        cargo_declarations, cargo_direct, go_direct_command, npm_direct_command, DirectFix,
+/// `kind: "direct"` (audit E8): the fix for a DECLARED dependency, read by
+/// `direct_fix` from a project built out of the vector: its declared npm spec
+/// (`declared`), `Cargo.toml` (`manifest`), `go.mod` (`go_mod`) or
+/// `requirements.txt` (`requirements`). `member: true` puts the manifest one
+/// workspace level below the lockfile. A command is checked against
+/// `command`, an instruction against `instruction`.
+fn check_direct(v: &Value, root: &std::path::Path) -> Result<(), String> {
+    use crate::osv::direct_upgrade::{direct_fix, DirectFix};
+    let pkg = s(v, "pkg");
+    let project = if v.get("member").and_then(Value::as_bool) == Some(true) {
+        let member = root.join("packages").join("app");
+        std::fs::create_dir_all(&member).map_err(|e| e.to_string())?;
+        member
+    } else {
+        root.to_path_buf()
     };
-    let (pkg, target) = (s(v, "pkg"), s(v, "target"));
-    match s(v, "eco") {
-        "crates.io" => match cargo_declarations(s(v, "manifest"), pkg).as_slice() {
-            [only] => match cargo_direct(only, pkg, target)? {
-                DirectFix::Command(c) => Some(c),
-                DirectFix::Instruction(_) => None,
-            },
-            _ => None,
-        },
-        "Go" => go_direct_command(s(v, "go_mod"), pkg, target),
-        eco => Manager::detect(dir, eco)
-            .and_then(|m| npm_direct_command(m, s(v, "declared"), pkg, target)),
+    let mut files: Vec<(&str, String)> = Vec::new();
+    if let Some(declared) = opt_s(v, "declared") {
+        let pkg_json = serde_json::json!({ "dependencies": { pkg: declared } });
+        files.push(("package.json", pkg_json.to_string()));
+    }
+    for (field, file) in [
+        ("manifest", "Cargo.toml"),
+        ("go_mod", "go.mod"),
+        ("requirements", "requirements.txt"),
+    ] {
+        if let Some(body) = opt_s(v, field) {
+            files.push((file, body.to_string()));
+        }
+    }
+    for (file, body) in files {
+        std::fs::write(project.join(file), body).map_err(|e| e.to_string())?;
+    }
+    let fix = direct_fix(
+        &project,
+        s(v, "eco"),
+        pkg,
+        s(v, "installed"),
+        s(v, "target"),
+    );
+    let (command, instruction) = match &fix {
+        Some(DirectFix::Command(c)) => (Some(c.as_str()), None),
+        Some(DirectFix::Instruction(i)) => (None, Some(i.as_str())),
+        None => (None, None),
+    };
+    let (want_c, want_i) = (opt_s(v, "command"), opt_s(v, "instruction"));
+    if command == want_c && instruction == want_i {
+        Ok(())
+    } else {
+        Err(format!(
+            "direct: got {fix:?}, want command {want_c:?} / instruction {want_i:?}"
+        ))
     }
 }
 
