@@ -304,16 +304,27 @@ impl LLMClient {
             );
         }
         let started = std::time::Instant::now();
-        let result = match self.provider.provider.as_str() {
-            "anthropic" => self.complete_anthropic(system, messages.clone()).await,
-            "openai" | "openai-compatible" => self.complete_openai(system, messages.clone()).await,
-            "ollama" => self.complete_ollama(system, messages.clone()).await,
+        // A model load inside the call (another process unloaded it after this
+        // lane's warm-up) is Ollama's time, not a slow judge: it is subtracted.
+        let (result, load) = match self.provider.provider.as_str() {
+            "anthropic" => (
+                self.complete_anthropic(system, messages.clone()).await,
+                std::time::Duration::ZERO,
+            ),
+            "openai" | "openai-compatible" => (
+                self.complete_openai(system, messages.clone()).await,
+                std::time::Duration::ZERO,
+            ),
+            "ollama" => {
+                crate::local_judge::observe_load(self.complete_ollama(system, messages.clone()))
+                    .await
+            }
             _ => return Err(self.provider_error_message().into()),
         };
         if local_judge_call {
             crate::local_judge::record_call(
                 &self.provider.model,
-                started.elapsed(),
+                started.elapsed().saturating_sub(load),
                 result.is_ok(),
             );
         }
@@ -756,6 +767,7 @@ impl LLMClient {
             .json()
             .await
             .context("Failed to parse Ollama response")?;
+        crate::local_judge::note_load_duration(&data);
 
         let content = data["message"]["content"]
             .as_str()
@@ -1223,7 +1235,7 @@ pub(crate) const OLLAMA_KEEP_ALIVE: &str = "5m";
 /// per-request `keep_alive` overrides the server's setting, so a user who set
 /// one deliberately (say `24h`, or `0` to free VRAM at once) keeps it: 4DA only
 /// fills in its own value when the variable is unset or blank.
-fn ollama_keep_alive_for(env: Option<&str>) -> Option<&'static str> {
+pub(crate) fn ollama_keep_alive_for(env: Option<&str>) -> Option<&'static str> {
     match env {
         Some(v) if !v.trim().is_empty() => None,
         _ => Some(OLLAMA_KEEP_ALIVE),

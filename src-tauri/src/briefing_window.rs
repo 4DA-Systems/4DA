@@ -49,6 +49,14 @@ const WINDOW_HEIGHT: u32 = 780;
 /// because it vanished before they noticed it.
 const AUTO_DISMISS_MS: u64 = 300_000;
 
+/// The backend's own hide fires this long after a showing, as a FALLBACK only.
+/// The page ends a showing itself (`public/briefing.js`: same
+/// [`AUTO_DISMISS_MS`], paused on hover, exit animation, then `briefing-hidden`
+/// hides the window). Hiding on the same timer cut the exit animation and
+/// ignored hover, and the hidden webview (`webview_visibility`) kept that
+/// half-animated frame for the next show.
+const BACKEND_FALLBACK_MS: u64 = AUTO_DISMISS_MS + 60_000;
+
 /// Duration (ms) the briefing stays always-on-top before dropping to normal z-order.
 /// Must be long enough for async LLM synthesis to arrive (~5-10s) plus reading time.
 /// The window never steals focus, so "always-on-top" just means visible — the user
@@ -298,7 +306,7 @@ pub fn show_briefing_now<R: Runtime>(app: &AppHandle<R>, briefing: &BriefingNoti
 
     let app_handle = app.clone();
     tauri::async_runtime::spawn(async move {
-        tokio::time::sleep(std::time::Duration::from_millis(AUTO_DISMISS_MS)).await;
+        tokio::time::sleep(std::time::Duration::from_millis(BACKEND_FALLBACK_MS)).await;
         if !cancelled.load(Ordering::Relaxed) {
             hide_briefing(&app_handle);
         }
@@ -566,6 +574,16 @@ mod tests {
         assert_eq!(AUTO_DISMISS_MS, 300_000);
         assert_eq!(ALWAYS_ON_TOP_MS, 30_000);
         assert_eq!(WINDOW_LABEL, "briefing");
+    }
+
+    #[test]
+    fn the_backend_hide_is_only_a_fallback() {
+        let js = include_str!("../../public/briefing.js");
+        assert!(
+            js.contains(&format!("var AUTO_DISMISS_MS = {AUTO_DISMISS_MS};")),
+            "briefing.js must share AUTO_DISMISS_MS"
+        );
+        const { assert!(BACKEND_FALLBACK_MS > AUTO_DISMISS_MS + 400) };
     }
 
     #[test]

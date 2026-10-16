@@ -147,10 +147,12 @@ pub(crate) struct DrainSummary {
 /// It is the cycle's last judge lane (GUI scheduler and headless engine), so
 /// it releases the local judge's VRAM until the next cycle when it finishes.
 pub(crate) async fn run_pending_verdict_drain(db: &Database) -> DrainSummary {
-    crate::local_judge::refresh_if_stale().await;
+    let lane = crate::local_judge::refresh_if_stale().await;
     let provider = drain_provider();
     let blocked = crate::local_judge::budget_blocks(provider.as_ref());
     let summary = run_drain_with(db, blocked, provider).await;
+    // This lane is over; another lane still running keeps the judge loaded.
+    drop(lane);
     crate::local_judge::release_after_cycle().await;
     summary
 }

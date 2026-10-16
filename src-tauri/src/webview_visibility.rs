@@ -53,12 +53,14 @@ pub(crate) fn init<R: Runtime>() -> TauriPlugin<R> {
 /// What a host-window message means for the webview inside it: `Some(true)`
 /// to render, `Some(false)` to stop, `None` to leave it as it is.
 ///
-/// `window_visible` is whether the host window is visible when the message
-/// arrives.
+/// `window_visible` / `iconic`: whether the host window is visible / minimised
+/// when the message arrives.
 #[cfg_attr(not(windows), allow(dead_code))]
-fn desired_visibility(msg: Msg, window_visible: bool) -> Option<bool> {
+fn desired_visibility(msg: Msg, window_visible: bool, iconic: bool) -> Option<bool> {
     match msg {
-        Msg::Show(shown) => Some(shown),
+        // Showing a window that is minimised (e.g. restored from the tray into
+        // a minimised state) does not put it on screen yet.
+        Msg::Show(shown) => Some(shown && !iconic),
         Msg::Size(SizeKind::Minimized) => Some(false),
         // A restore or maximise of a window that is still hidden (a hidden
         // window can be resized) must not wake it, nor put to sleep a webview
@@ -93,13 +95,14 @@ mod windows_impl {
     use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
     use windows_sys::Win32::UI::Shell::{DefSubclassProc, RemoveWindowSubclass, SetWindowSubclass};
     use windows_sys::Win32::UI::WindowsAndMessaging::{
-        IsWindowVisible, SIZE_MAXIMIZED, SIZE_MINIMIZED, SIZE_RESTORED, WM_NCDESTROY,
+        IsIconic, IsWindowVisible, SIZE_MAXIMIZED, SIZE_MINIMIZED, SIZE_RESTORED, WM_NCDESTROY,
         WM_SHOWWINDOW, WM_SIZE,
     };
 
     use super::{desired_visibility, Msg, SizeKind};
 
     /// Subclass id ("4DAV"); distinct from wry's own subclass on the same window.
+    /// One webview per window in 4DA, so one subclass per host window.
     const SUBCLASS_ID: usize = 0x3444_4156;
 
     /// Owned by the subclass; freed on `WM_NCDESTROY`.
@@ -195,7 +198,8 @@ mod windows_impl {
             // SAFETY: `data` is the live `Tracker` installed in `track`.
             let tracker = unsafe { &*tracker };
             let visible = unsafe { IsWindowVisible(hwnd) } != 0;
-            if let Some(want) = desired_visibility(classify(msg, wparam), visible) {
+            let iconic = unsafe { IsIconic(hwnd) } != 0;
+            if let Some(want) = desired_visibility(classify(msg, wparam), visible, iconic) {
                 tracker.apply(want);
             }
         }
@@ -234,15 +238,29 @@ mod tests {
     use super::*;
 
     #[test]
+    fn showing_a_minimised_window_keeps_it_asleep() {
+        assert_eq!(
+            desired_visibility(Msg::Show(true), false, true),
+            Some(false)
+        );
+    }
+
+    #[test]
     fn hide_and_show_follow_the_window() {
-        assert_eq!(desired_visibility(Msg::Show(false), true), Some(false));
-        assert_eq!(desired_visibility(Msg::Show(true), false), Some(true));
+        assert_eq!(
+            desired_visibility(Msg::Show(false), true, false),
+            Some(false)
+        );
+        assert_eq!(
+            desired_visibility(Msg::Show(true), false, false),
+            Some(true)
+        );
     }
 
     #[test]
     fn minimise_stops_rendering() {
         assert_eq!(
-            desired_visibility(Msg::Size(SizeKind::Minimized), true),
+            desired_visibility(Msg::Size(SizeKind::Minimized), true, false),
             Some(false)
         );
     }
@@ -250,19 +268,22 @@ mod tests {
     #[test]
     fn restore_wakes_only_a_visible_window() {
         assert_eq!(
-            desired_visibility(Msg::Size(SizeKind::Restored), true),
+            desired_visibility(Msg::Size(SizeKind::Restored), true, false),
             Some(true)
         );
         // A hidden pre-warmed window can be resized; that changes nothing.
         assert_eq!(
-            desired_visibility(Msg::Size(SizeKind::Restored), false),
+            desired_visibility(Msg::Size(SizeKind::Restored), false, false),
             None
         );
     }
 
     #[test]
     fn unrelated_messages_change_nothing() {
-        assert_eq!(desired_visibility(Msg::Size(SizeKind::Other), true), None);
-        assert_eq!(desired_visibility(Msg::Other, false), None);
+        assert_eq!(
+            desired_visibility(Msg::Size(SizeKind::Other), true, false),
+            None
+        );
+        assert_eq!(desired_visibility(Msg::Other, false, false), None);
     }
 }

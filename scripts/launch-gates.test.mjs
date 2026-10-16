@@ -220,10 +220,18 @@ describe('G6', () => {
     assert.equal(g6DbVerdict(p(G6_DB_BUDGET_BYTES)), 'pass', 'the budget is inclusive');
     assert.equal(g6DbVerdict(p(G6_DB_BUDGET_BYTES + 1)), 'fail');
     assert.equal(g6DbVerdict(undefined), 'pending', 'no projection is never a pass');
+    assert.equal(
+      g6DbVerdict(p(1), true),
+      'pending',
+      'without dbstat the non-item tables count as 0, so a small projection is not proof',
+    );
     const db = { fileBytes: 1, walBytes: 0, freelistBytes: 0, items: 1, disabledItems: 0, path: 'x', projectionStack: p(400 * 1024 ** 2) };
     const g = evaluateG6({ db, idle: null, cold: null });
     assert.equal(g.details.dbSize, 'pass');
     assert.match(g.summary, /interests off at default retention .* against the 500 MiB budget \(pass\)/);
+    const noDbstat = evaluateG6({ db: { ...db, sizeIsUpperBound: true }, idle: null, cold: null });
+    assert.equal(noDbstat.details.dbSize, 'pending');
+    assert.match(noDbstat.summary, /undecided: dbstat unavailable/);
     const big = evaluateG6({ db: { ...db, projectionStack: p(900 * 1024 ** 2) }, idle: null, cold: null });
     assert.equal(big.status, 'fail');
   });

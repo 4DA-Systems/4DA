@@ -288,13 +288,15 @@ export const G6_IDLE_BAR_PCT = 2;
  * from items re-seen in the last 30 days, not only newly created), so a pass
  * holds for the busier reading of the corpus. The WAL is excluded: it is
  * truncated by the hourly checkpoint and is not steady-state storage. Without
- * dbstat every byte is charged to items, which only over-states the size, so a
- * pass there is still a pass.
+ * dbstat the size is NOT decided: every byte is then charged to items and the
+ * non-item tables count as 0, so a projection with few items (interests off)
+ * under-states the size and could pass falsely.
  */
 export const G6_DB_BUDGET_BYTES = 500 * 1024 ** 2;
 
-/** dbSize verdict from the stack-only projection; pending when it is missing. */
-export function g6DbVerdict(projectionStack) {
+/** dbSize verdict from the stack-only projection; pending when it is missing or dbstat was unavailable. */
+export function g6DbVerdict(projectionStack, sizeIsUpperBound = false) {
+  if (sizeIsUpperBound) return 'pending';
   if (!projectionStack || !Number.isFinite(projectionStack.bytesHigh)) return 'pending';
   return projectionStack.bytesHigh <= G6_DB_BUDGET_BYTES ? 'pass' : 'fail';
 }
@@ -310,13 +312,15 @@ export function evaluateG6({ db, idle, cold }) {
   const sub = {};
 
   if (db) {
-    sub.dbSize = g6DbVerdict(db.projectionStack);
+    sub.dbSize = g6DbVerdict(db.projectionStack, db.sizeIsUpperBound);
     const proj = (p) =>
       `~${mb(p.bytesLow)}-${mb(p.bytesHigh)} at ${p.retentionDays} days (${p.itemsLow}-${p.itemsHigh} items)`;
     const projections = [db.projectionDefault, db.projection]
       .filter(Boolean)
       .filter((p, i, a) => a.findIndex((q) => q.retentionDays === p.retentionDays) === i);
-    const budget = db.projectionStack
+    const budget = db.sizeIsUpperBound
+      ? `; budget ${mb(G6_DB_BUDGET_BYTES)} undecided: dbstat unavailable, so non-item tables are not measured`
+      : db.projectionStack
       ? `; interests off at default retention ${proj(db.projectionStack)} against the ${mb(G6_DB_BUDGET_BYTES)} budget (${sub.dbSize})`
       : `; stack-only projection unavailable, budget ${mb(G6_DB_BUDGET_BYTES)} undecided`;
     parts.push(

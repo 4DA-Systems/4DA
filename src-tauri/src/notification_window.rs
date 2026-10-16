@@ -433,14 +433,29 @@ fn cancel_dismiss_timer() {
     }
 }
 
-/// Map priority string to auto-dismiss duration in milliseconds.
-fn dismiss_duration_ms(priority: &str) -> u64 {
+/// How long the toast's own script shows it (`DISMISS_DURATIONS` in
+/// `public/notification.js`). The script, not this timer, ends a showing: it
+/// pauses on hover, plays the exit animation, then emits `notification-hidden`,
+/// which hides the window (`app_setup`).
+fn js_display_ms(priority: &str) -> u64 {
     match priority {
         "critical" => 8000,
         "alert" => 6000,
         "advisory" => 5000,
-        _ => 4000, // "watch" and fallback
+        _ => 6000, // "watch" and fallback
     }
+}
+
+/// Slack past the script's own timer before the backend hides the window
+/// anyway. Only a page that never answers (its script failed) reaches it, so it
+/// is generous: a user hovering the card keeps it, and the window is never
+/// hidden mid-animation. Hiding mid-animation froze that frame in the hidden
+/// webview (`webview_visibility`), and the next show could flash it.
+const FALLBACK_SLACK_MS: u64 = 60_000;
+
+/// The backend's fallback hide, in milliseconds after a show.
+fn dismiss_duration_ms(priority: &str) -> u64 {
+    js_display_ms(priority) + FALLBACK_SLACK_MS
 }
 
 // ============================================================================
@@ -493,12 +508,30 @@ mod tests {
 
     #[test]
     fn dismiss_duration_by_priority() {
-        assert_eq!(dismiss_duration_ms("critical"), 8000);
-        assert_eq!(dismiss_duration_ms("alert"), 6000);
-        assert_eq!(dismiss_duration_ms("advisory"), 5000);
-        assert_eq!(dismiss_duration_ms("watch"), 4000);
-        assert_eq!(dismiss_duration_ms("unknown"), 4000);
-        assert_eq!(dismiss_duration_ms(""), 4000);
+        // The script's own durations (public/notification.js DISMISS_DURATIONS).
+        assert_eq!(js_display_ms("critical"), 8000);
+        assert_eq!(js_display_ms("alert"), 6000);
+        assert_eq!(js_display_ms("advisory"), 5000);
+        assert_eq!(js_display_ms("watch"), 6000);
+        assert_eq!(js_display_ms("unknown"), 6000);
+    }
+
+    #[test]
+    fn the_backend_hide_is_only_a_fallback() {
+        let js = include_str!("../../public/notification.js");
+        for (p, ms) in [
+            ("critical", 8000),
+            ("alert", 6000),
+            ("advisory", 5000),
+            ("watch", 6000),
+        ] {
+            assert!(
+                js.contains(&format!("{p}: {ms}")),
+                "notification.js DISMISS_DURATIONS.{p} must stay {ms} ms"
+            );
+            // Never before the script's own hide and its 400 ms exit animation.
+            assert!(dismiss_duration_ms(p) >= js_display_ms(p) + 400);
+        }
     }
 
     // The two cancel_dismiss_timer tests mutate the process-global DISMISS_CANCEL
