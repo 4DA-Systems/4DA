@@ -35,8 +35,8 @@ use semver::Version;
 use crate::db::Database;
 
 use super::fix_path::{
-    installed_parent_requirements, refresh_verdict, requirement_admits, strip_spec, Dialect,
-    Manager, Refresh, Requirement,
+    installed_parent_requirements, is_bundled, npm_lock_resolutions, npm_lock_tree,
+    refresh_verdict, requirement_admits, strip_spec, Dialect, Manager, Refresh, Requirement,
 };
 use super::fix_target::LineTarget;
 use super::matching::{check_version_affected, parse_version};
@@ -296,7 +296,11 @@ fn annotate(
     // refresh-enough link needs neither the graph above it nor the registry.
     for link in links.iter_mut().filter(|l| !l.refresh.is_enough()) {
         link.standing = parent_standing(db, ecosystem_norm, &link.parent, &link.parent_version);
-        link.override_hint = super::fix_path::override_hint(manager(&link.project), ecosystem_norm);
+        link.override_hint = super::fix_path::override_hint(
+            manager(&link.project),
+            ecosystem_norm,
+            link.is_bundled(),
+        );
         if !link.parent_is_direct {
             link.through = direct_through(
                 db,
@@ -311,6 +315,14 @@ fn annotate(
                 version,
             });
         }
+    }
+}
+
+impl ParentLink {
+    /// The copy ships inside `parent`'s tarball (a bundled npm dependency):
+    /// no refresh and no override moves it, only a new `parent` release.
+    pub fn is_bundled(&self) -> bool {
+        self.requirement.as_deref().is_some_and(is_bundled)
     }
 }
 
@@ -340,6 +352,10 @@ pub struct Readers<'a> {
     pub manager: &'a dyn Fn(&str) -> Option<Manager>,
     /// `(project, manager, parent, parent_version, child)`.
     pub requirements: &'a dyn Fn(&str, Manager, &str, &str, &str) -> Vec<Requirement>,
+    /// `(project, parent, parent_version, child)`: the child versions that
+    /// installed parent resolves to, read from the lockfile tree where it
+    /// records one (npm v2/v3); `None` keeps the range-based attribution.
+    pub resolved_children: &'a dyn Fn(&str, &str, &str, &str) -> Option<Vec<String>>,
 }
 
 #[cfg(test)]
@@ -348,6 +364,7 @@ impl Readers<'_> {
     pub const NONE: Readers<'static> = Readers {
         manager: &|_| None,
         requirements: &|_, _, _, _, _| Vec::new(),
+        resolved_children: &|_, _, _, _| None,
     };
 }
 
@@ -418,9 +435,14 @@ pub fn load_routes(
     let requirements = |project: &str, m: Manager, parent: &str, version: &str, child: &str| {
         installed_parent_requirements(m, Path::new(&raw(project)), parent, version, child)
     };
+    let resolved_children = |project: &str, parent: &str, version: &str, child: &str| {
+        let tree = npm_lock_tree(Path::new(&raw(project)))?;
+        npm_lock_resolutions(&tree, parent, version, child)
+    };
     let readers = Readers {
         manager: &manager,
         requirements: &requirements,
+        resolved_children: &resolved_children,
     };
     let mut links = parent_links_with(package, lines, &edges, &installed, &is_clear, &readers);
     annotate(db, ecosystem_norm, &mut links, &manager);
@@ -496,9 +518,21 @@ pub fn parent_links_with(
                 if edge.parent == ROOT_PARENT || edge.parent.eq_ignore_ascii_case(package) {
                     continue;
                 }
-                let leads_here = match edge.child_spec.as_deref() {
-                    Some(spec) => requirement_admits(spec, &line.installed_version) == Some(true),
-                    None => child_copies.len() == 1,
+                // The lockfile tree, where it records one, says which copy this
+                // parent holds; a range only says which copies it could.
+                let resolved = match (edge.child_spec.as_deref(), edge.parent_version.as_deref()) {
+                    (Some(spec), _) if is_bundled(spec) => None,
+                    (_, Some(pv)) => {
+                        (readers.resolved_children)(&site.project_path, &edge.parent, pv, &child)
+                    }
+                    _ => None,
+                };
+                let leads_here = match (resolved, edge.child_spec.as_deref()) {
+                    (Some(versions), _) => versions.contains(&line.installed_version),
+                    (None, Some(spec)) => {
+                        requirement_admits(spec, &line.installed_version) == Some(true)
+                    }
+                    (None, None) => child_copies.len() == 1,
                 };
                 if !leads_here {
                     continue;
@@ -562,6 +596,8 @@ fn edge_requirements(
 ) -> Vec<Requirement> {
     let spec = edge.child_spec.as_deref().filter(|s| !s.trim().is_empty());
     match (spec, manager) {
+        // A bundled copy's pin is the owner's tarball itself, whatever the tool.
+        (Some(spec), _) if is_bundled(spec) => vec![Requirement::npm(spec)],
         (Some(spec), Some(m)) if m.records_requirements() => vec![Requirement::npm(spec)],
         (Some(spec), None) if is_range(spec) => vec![Requirement::npm(spec)],
         (_, Some(m)) => {

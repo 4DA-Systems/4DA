@@ -194,6 +194,15 @@ fn link_sentence(package: &str, l: &ParentLink, multi_project: bool) -> String {
     let Some(target) = l.target.as_deref() else {
         return head;
     };
+    if l.is_bundled() {
+        // The edge records the shipped version, not a requirement: say what
+        // it is, never print the internal marker.
+        return format!(
+            "{head}, which ships it bundled inside its own package, so neither a lockfile \
+             refresh nor an override can move it to {target} — {}",
+            link_move(package, target, l)
+        );
+    }
     let req = l.requirement.as_deref().unwrap_or("");
     match l.refresh {
         Refresh::Enough(Basis::Requirement) => format!(
@@ -423,6 +432,12 @@ pub(super) fn path_citations(package: &str, links: &[ParentLink]) -> Vec<Evidenc
 }
 
 fn requirement_note(l: &ParentLink) -> String {
+    if l.is_bundled() {
+        return format!(
+            "ships {} bundled inside its own package; only a new {} release moves it",
+            l.child_version, l.parent
+        );
+    }
     let req = l.requirement.as_deref();
     match (l.refresh, req, l.target.as_deref()) {
         (Refresh::Enough(Basis::Requirement), Some(r), Some(t)) => {

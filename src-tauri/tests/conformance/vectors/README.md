@@ -41,6 +41,7 @@ Field conventions:
   was read and the verdict comes from semver compatibility; `unknown` always
   has `inferred: true`. `via` lists the parents whose requirement was read
   and excludes the target, in input order.
+- `requirements[].bundled: true` marks a copy shipped inside its parent's tarball (package-lock `inBundle`): `text` is the exact version shipped. The optional top-level `override` says whether an override (npm `overrides`, pnpm `pnpm.overrides`, yarn `resolutions`) may be offered for the copy; lines without it do not check it.
 - `requirements[].dialect` is `npm` (a bare version is an exact pin, `||`
   unions, spaces AND) or `cargo` (a bare version is a caret, commas AND).
 - A `fix_target` `target` is compared as a version (build metadata ignored).
@@ -147,6 +148,7 @@ form.
 - Cargo requirement syntax (bare = caret, `=`, `~`, comma AND): rv-052..rv-059
 - The semver fallback, including the 0.0.z caret: rv-049, rv-050, rv-060..rv-064 (0.0.z: rv-046, rv-057, rv-063, rv-064)
 - Nothing readable at all, so no verdict: rv-065
+- A bundled copy (package-lock `inBundle`, requirement `bundled: true`) is pinned by its owner: the parent must move and no override is offered (`override: false`): rv-066, rv-067. An ordinary exact pin also needs its parent to move but does take an override: rv-068 (audit E8)
 
 ### Command — AD-055 ¶4
 

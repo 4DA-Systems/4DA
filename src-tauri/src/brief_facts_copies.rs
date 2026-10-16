@@ -105,6 +105,7 @@ pub(crate) fn with_parent_route(
     project: &str,
     eco_norm: Option<&str>,
     db: &Database,
+    installed: Option<&str>,
 ) -> FixPath {
     let FixPath::Parent {
         parent,
@@ -138,9 +139,19 @@ pub(crate) fn with_parent_route(
                     standing: standing_of(&t.name, &t.version),
                     ..t
                 }),
+                // No plan link names this parent (the Brief's immediate
+                // parent comes from its own edge walk). If the plan holds a
+                // blocking link for THIS copy through a bundle, no override
+                // reaches it; another copy's bundle says nothing about this one.
                 override_hint: crate::osv::fix_path::override_hint(
                     Manager::detect(std::path::Path::new(project), eco),
                     eco,
+                    links.iter().any(|l| {
+                        l.project == pnorm
+                            && installed.is_none_or(|v| l.child_version == v)
+                            && !l.refresh.is_enough()
+                            && l.is_bundled()
+                    }),
                 ),
             }
         }
@@ -153,5 +164,71 @@ pub(crate) fn with_parent_route(
         by_requirement,
         proven,
         route,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::osv::fix_path::{Basis, Refresh};
+    use crate::osv::parent_hint::{ParentLink, ParentStanding};
+
+    const P: &str = "d:/work/web";
+
+    fn link(parent: &str, requirement: &str) -> ParentLink {
+        ParentLink {
+            project: P.to_string(),
+            child_version: "4.1.1".to_string(),
+            target: Some("4.3.1".to_string()),
+            parent: parent.to_string(),
+            parent_version: "1.2.13".to_string(),
+            parent_is_direct: false,
+            requirement: Some(requirement.to_string()),
+            refresh: Refresh::ParentMustMove(Basis::Requirement),
+            command: None,
+            resolutions: Vec::new(),
+            through: None,
+            standing: ParentStanding::Unknown,
+            override_hint: None,
+        }
+    }
+
+    /// The Brief's parent for debug 4.1.1 is chokidar; the plan's link names
+    /// fsevents, the bundle owner. No plan link matches chokidar, so the route
+    /// is read directly — and must not offer an npm override for a bundled
+    /// copy (audit E8: `overrides` do not reach bundled dependencies).
+    fn route_with(links: &[ParentLink]) -> ParentRoute {
+        let path = FixPath::Parent {
+            parent: "chokidar".to_string(),
+            parent_version: "2.1.8".to_string(),
+            to: "4.3.1".to_string(),
+            by_requirement: true,
+            proven: None,
+            route: ParentRoute::default(),
+        };
+        let db = crate::test_utils::test_db();
+        match with_parent_route(path, links, P, P, Some("npm"), &db, Some("4.1.1")) {
+            FixPath::Parent { route, .. } => route,
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn a_bundled_copy_gets_no_override_on_the_brief_route() {
+        assert_eq!(
+            route_with(&[link("fsevents", "4.1.1 (bundled)")]).override_hint,
+            None
+        );
+        // An ordinary pin still gets the override.
+        assert!(route_with(&[link("needle", "4.1.1")])
+            .override_hint
+            .is_some());
+        // ANOTHER copy's bundle (debug 2.2.0 inside nyc) says nothing about
+        // 4.1.1: its override advice stays.
+        let other_copy = ParentLink {
+            child_version: "2.2.0".to_string(),
+            ..link("nyc", "2.2.0 (bundled)")
+        };
+        assert!(route_with(&[other_copy]).override_hint.is_some());
     }
 }
