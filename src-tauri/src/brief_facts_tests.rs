@@ -96,7 +96,8 @@ fn direct_unknown_and_missing_fixes() {
     assert_eq!(
         fix_path(Some("3.2.4"), Some("4.1.11"), Some(true), None),
         FixPath::Bump {
-            to: "4.1.11".into()
+            to: "4.1.11".into(),
+            fix: None
         }
     );
     assert_eq!(
@@ -389,7 +390,10 @@ fn a_proven_parent_release_is_named_with_its_evidence() {
 #[test]
 fn every_fix_clause_quoted_verbatim_passes_the_version_check() {
     let paths = [
-        FixPath::Bump { to: "2.1.0".into() },
+        FixPath::Bump {
+            to: "2.1.0".into(),
+            fix: None,
+        },
         FixPath::Refresh {
             to: "2.1.0".into(),
             inferred: false,
@@ -639,7 +643,7 @@ fn live_snapshot_brief_facts() {
 
 fn fix_target(path: &FixPath) -> Option<&str> {
     match path {
-        FixPath::Bump { to }
+        FixPath::Bump { to, .. }
         | FixPath::Refresh { to, .. }
         | FixPath::Parent { to, .. }
         | FixPath::ParentUnknown { to }

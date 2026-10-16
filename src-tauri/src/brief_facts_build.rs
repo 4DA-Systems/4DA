@@ -307,6 +307,13 @@ fn security_fact(
                             &package,
                             installed.as_deref(),
                         );
+                        let path = with_direct_fix(
+                            path,
+                            project,
+                            &ecosystem,
+                            &package,
+                            installed.as_deref(),
+                        );
                         let path = with_proven_parent(path, &parent_links, &pnorm, labels);
                         with_parent_route(
                             path,
@@ -364,6 +371,38 @@ fn security_fact(
     };
     fact.status = novelty.status(&fact.key, &security_signature(&fact), &local_today());
     Some(fact)
+}
+
+/// A copy the project declares: name how it moves where it is declared, read
+/// from the project's own manifest (`osv::direct_upgrade`, audit E8). The
+/// same rule the Upgrade Plan's direct rows use; nothing when it is not certain
+/// (including when the declaration does not admit the installed copy).
+fn with_direct_fix(
+    path: FixPath,
+    project: &str,
+    ecosystem: &str,
+    package: &str,
+    installed: Option<&str>,
+) -> FixPath {
+    let (FixPath::Bump { to, fix: None }, Some(installed)) = (&path, installed) else {
+        return path;
+    };
+    let to = to.clone();
+    let fix = crate::osv::exposure::canonical(ecosystem)
+        .and_then(|eco| {
+            crate::osv::direct_upgrade::direct_fix(
+                std::path::Path::new(project),
+                eco,
+                package,
+                installed,
+                &to,
+            )
+        })
+        .map(|f| match f {
+            crate::osv::direct_upgrade::DirectFix::Command(c) => format!("run `{c}`"),
+            crate::osv::direct_upgrade::DirectFix::Instruction(i) => i,
+        });
+    FixPath::Bump { to, fix }
 }
 
 /// Name the project tool's refresh command on a refresh path (`osv::fix_path`).
@@ -904,3 +943,7 @@ pub(crate) fn with_advisory_state(
         None => fingerprint.to_string(),
     }
 }
+
+#[cfg(test)]
+#[path = "brief_facts_build_tests.rs"]
+mod direct_fix_tests;
