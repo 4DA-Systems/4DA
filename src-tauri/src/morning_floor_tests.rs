@@ -655,7 +655,10 @@ fn the_floor_caps_act_now_itself_whatever_the_feed_holds() {
             dev_only: false,
             scratch: false,
             dormant_days: None,
-            fix_path: FixPath::Bump { to: "1.0.1".into() },
+            fix_path: FixPath::Bump {
+                to: "1.0.1".into(),
+                fix: None,
+            },
         }],
         not_compiled: vec![],
         first_seen: None,

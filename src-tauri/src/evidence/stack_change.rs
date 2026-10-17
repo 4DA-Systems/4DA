@@ -195,7 +195,7 @@ fn version_context(
 /// per-line path; none for no fix).
 fn fix_targets(path: &FixPath) -> Vec<&str> {
     match path {
-        FixPath::Bump { to }
+        FixPath::Bump { to, .. }
         | FixPath::Refresh { to, .. }
         | FixPath::Parent { to, .. }
         | FixPath::ParentUnknown { to }

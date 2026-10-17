@@ -83,7 +83,7 @@ pub(crate) fn fact_versions(facts: &BriefFacts) -> Vec<(String, String, &'static
                 push(&f.package, i, "installed");
             }
             match &s.fix_path {
-                FixPath::Bump { to }
+                FixPath::Bump { to, .. }
                 | FixPath::Refresh { to, .. }
                 | FixPath::ParentUnknown { to }
                 | FixPath::Reinstall { to }

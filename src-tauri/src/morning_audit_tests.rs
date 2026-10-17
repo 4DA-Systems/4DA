@@ -39,7 +39,10 @@ fn security(pkg: &str, installed: &str, to: &str) -> SecurityFact {
             dev_only: false,
             scratch: false,
             dormant_days: None,
-            fix_path: FixPath::Bump { to: to.into() },
+            fix_path: FixPath::Bump {
+                to: to.into(),
+                fix: None,
+            },
         }],
         not_compiled: vec![],
         first_seen: None,

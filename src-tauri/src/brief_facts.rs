@@ -73,8 +73,14 @@ const NOVELTY_RETENTION_DAYS: i64 = 45;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub(crate) enum FixPath {
-    /// The project declares the package: bump it.
-    Bump { to: String },
+    /// The project declares the package: bump it. `fix` is how, read from
+    /// the declaring manifest (`osv::direct_upgrade`): "run `npm install ...`"
+    /// or a manifest edit; absent when no way is certain (audit E8).
+    Bump {
+        to: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        fix: Option<String>,
+    },
     /// Transitive, and every requirement read for the parent admits the fix
     /// (`inferred: false`), or none could be read and the jump is
     /// semver-compatible (`inferred: true`): refreshing the lockfile reaches
@@ -287,7 +293,7 @@ pub(crate) fn fix_path(
         return FixPath::NoFix;
     };
     match is_direct {
-        Some(true) => FixPath::Bump { to },
+        Some(true) => FixPath::Bump { to, fix: None },
         None => FixPath::Update { to },
         Some(false) => {
             let requirements = parent.map_or(&[][..], |l| l.requirements.as_slice());
@@ -340,107 +346,6 @@ pub(crate) struct ParentLink {
     /// What the IMMEDIATE parent requires of the vulnerable package, where it
     /// could be read (`osv::fix_path`). Empty: not recorded, not on disk.
     pub requirements: Vec<Requirement>,
-}
-
-/// One line of fix advice, worded for both the prompt and the floor. Every
-/// version sits right after the name of the package it belongs to: the model
-/// copies this clause, and on 2026-10-03 the old wording ("transitive via
-/// victauri-plugin 0.8.4, ... the fix (>= 2.1.0)") put rmcp's fix after
-/// victauri-plugin's name, so the version check faulted the brief that quoted
-/// it faithfully.
-pub(crate) fn fix_clause(package: &str, path: &FixPath) -> String {
-    match path {
-        FixPath::Bump { to } => format!("bump {package} to >= {to}"),
-        FixPath::Refresh {
-            to,
-            inferred,
-            command,
-        } => {
-            let run = command
-                .as_deref()
-                .map(|c| format!(": run `{c}`"))
-                .unwrap_or_default();
-            if *inferred {
-                format!(
-                    "transitive; {package} >= {to} is semver-compatible with the installed copy, so \
-                     refreshing the lockfile should reach it (no manifest change; the parent's \
-                     requirement is not on disk){run}"
-                )
-            } else {
-                format!("transitive; refreshing the lockfile reaches {package} >= {to} (no manifest change){run}")
-            }
-        }
-        FixPath::Parent {
-            parent,
-            parent_version,
-            to,
-            by_requirement,
-            proven,
-            route,
-        } => {
-            let why = if *by_requirement {
-                format!(
-                    "{parent} {parent_version} requires a {package} line that excludes the fix \
-                     ({package} >= {to}), so a lockfile refresh will NOT fix it"
-                )
-            } else {
-                format!(
-                    "{parent} {parent_version} stays on an older {package} line, and the fix \
-                     ({package} >= {to}) is a semver-incompatible jump, so a lockfile refresh will \
-                     NOT fix it"
-                )
-            };
-            // A release proven on this machine is the move; otherwise only
-            // what the registry rows support (never "upgrade" a parent with
-            // no newer release on record as if one existed).
-            let action = match proven {
-                Some(p) => format!("upgrade {parent}{}", proven_clause(package, Some(p))),
-                None => crate::evidence::parent_move(
-                    package,
-                    to,
-                    parent,
-                    parent_version,
-                    &route.standing,
-                    route.through.as_ref(),
-                    route.override_hint.as_deref(),
-                ),
-            };
-            format!("transitive; {why}: {action}")
-        }
-        FixPath::ParentUnknown { to } => format!(
-            "transitive; the fix ({package} >= {to}) is a semver-incompatible jump, so a lockfile \
-             refresh will NOT reach it: the dependency that pulls {package} in must move to a \
-             release that admits it, or be replaced"
-        ),
-        FixPath::Reinstall { to } => format!(
-            "the lockfile already pins {package} {to} but node_modules still runs the old copy: reinstall"
-        ),
-        FixPath::PerLine { lines } => format!(
-            "fixed on each line: {}",
-            lines
-                .iter()
-                .map(|l| format!("{package} {} needs >= {}", l.installed, l.to))
-                .collect::<Vec<_>>()
-                .join("; ")
-        ),
-        FixPath::NoFix => "no fix published: pin, patch locally, replace, or accept the risk".to_string(),
-        FixPath::Update { to } => format!("update {package} to >= {to}"),
-    }
-}
-
-/// The evidence that names the parent release to move to. Live 2026-10-03
-/// (Screenshot_3845): "upgrade victauri-plugin to pull in rmcp >= 2.1.0" left
-/// the user to find the release, while 4da/src-tauri already ran
-/// victauri-plugin 0.9.0 against rmcp 3.4.1. It follows "upgrade {parent}",
-/// so each version sits after its own package, as the version check
-/// (`check_factual_claims`, nearest preceding package) requires.
-fn proven_clause(package: &str, proven: Option<&ProvenParent>) -> String {
-    proven.map_or_else(String::new, |p| {
-        format!(
-            " to {} ({} already runs it, resolved to {package} {})",
-            p.parent_version, p.label, p.child_version
-        )
-    })
 }
 
 /// Short project label that names the repository: `atlas/bridge/src-tauri`,
@@ -719,12 +624,15 @@ pub(crate) fn security_signature(f: &SecurityFact) -> String {
     }
     let mut parts: Vec<String> = vec![format!("{:?}", f.urgency), ids.join(",")];
     for s in &f.sites {
-        parts.push(format!(
-            "{}={}->{:?}",
-            s.label,
-            s.installed.as_deref().unwrap_or("?"),
-            s.fix_path
-        ));
+        // A bump's `fix` is wording read from the manifest, not state: it is
+        // rendered as the pre-`fix` `Bump { to }` so stored signatures still
+        // match and no fact reads as changed because its command was added.
+        let path = match &s.fix_path {
+            FixPath::Bump { to, .. } => format!("Bump {{ to: {to:?} }}"),
+            other => format!("{other:?}"),
+        };
+        let installed = s.installed.as_deref().unwrap_or("?");
+        parts.push(format!("{}={installed}->{path}", s.label));
     }
     parts.join("|")
 }
@@ -769,7 +677,7 @@ pub(crate) fn package_facts(facts: &BriefFacts) -> Vec<crate::briefing_groundedn
         for s in &f.sites {
             add(&f.package, s.installed.as_deref());
             match &s.fix_path {
-                FixPath::Bump { to }
+                FixPath::Bump { to, .. }
                 | FixPath::Refresh { to, .. }
                 | FixPath::ParentUnknown { to }
                 | FixPath::Reinstall { to }
@@ -991,6 +899,11 @@ pub(crate) use build::build_brief_facts;
 pub(crate) use build::with_advisory_state;
 #[cfg(test)]
 use build::{copy_fix, own_package_names, CopyFix};
+
+// The fix-advice wording lives in `brief_facts_clause.rs` (file-size gate).
+#[path = "brief_facts_clause.rs"]
+mod clause;
+pub(crate) use clause::fix_clause;
 
 #[cfg(test)]
 #[path = "brief_facts_tests.rs"]

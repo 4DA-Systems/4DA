@@ -96,7 +96,8 @@ fn direct_unknown_and_missing_fixes() {
     assert_eq!(
         fix_path(Some("3.2.4"), Some("4.1.11"), Some(true), None),
         FixPath::Bump {
-            to: "4.1.11".into()
+            to: "4.1.11".into(),
+            fix: None
         }
     );
     assert_eq!(
@@ -388,8 +389,22 @@ fn a_proven_parent_release_is_named_with_its_evidence() {
 /// sentence, must pass the checker.
 #[test]
 fn every_fix_clause_quoted_verbatim_passes_the_version_check() {
+    let bump = |fix: &str| FixPath::Bump {
+        to: "2.1.0".into(),
+        fix: Some(fix.to_string()),
+    };
     let paths = [
-        FixPath::Bump { to: "2.1.0".into() },
+        FixPath::Bump {
+            to: "2.1.0".into(),
+            fix: None,
+        },
+        // The commands osv::direct_upgrade names (audit E8), as the Brief
+        // renders them: npm, Cargo, Go, and the PyPI manifest edit.
+        bump("run `npm install \"rmcp@^2.1.0\"`"),
+        bump("run `npm install rmcp@2.1.0 --save-exact`"),
+        bump("run `cargo add \"rmcp@~2.1.0\" --dev`"),
+        bump("run `go get rmcp@v2.1.0`"),
+        bump("change `rmcp==1.7.0` to `rmcp==2.1.0` in requirements.txt"),
         FixPath::Refresh {
             to: "2.1.0".into(),
             inferred: false,
@@ -639,7 +654,7 @@ fn live_snapshot_brief_facts() {
 
 fn fix_target(path: &FixPath) -> Option<&str> {
     match path {
-        FixPath::Bump { to }
+        FixPath::Bump { to, .. }
         | FixPath::Refresh { to, .. }
         | FixPath::Parent { to, .. }
         | FixPath::ParentUnknown { to }
@@ -909,6 +924,37 @@ fn a_lower_severity_fix_path_change_keeps_the_fingerprint() {
         fingerprint(&[high_a], &[], &[]),
         fingerprint(&[high_b], &[], &[])
     );
+}
+
+/// The command a bump names (audit E8) is wording from the manifest, not
+/// state: adding it must not make an open act-now fact read as changed, and
+/// the signature stays the one stored before `fix` existed.
+#[test]
+fn a_bumps_command_does_not_change_its_signature() {
+    let bump = |fix: Option<&str>| {
+        let mut f = security("k", AlertUrgency::High, "1.0.0", "1.1.20");
+        f.sites[0].fix_path = FixPath::Bump {
+            to: "1.1.20".into(),
+            fix: fix.map(str::to_string),
+        };
+        f
+    };
+    let plain = bump(None);
+    let with_command = bump(Some("run `cargo add rmcp@1.1.20`"));
+    assert_eq!(
+        security_signature(&plain),
+        security_signature(&with_command)
+    );
+    assert_eq!(
+        security_signature(&plain),
+        "High||atlas/bridge/src-tauri=1.0.0->Bump { to: \"1.1.20\" }"
+    );
+    let mut moved = plain.clone();
+    moved.sites[0].fix_path = FixPath::Bump {
+        to: "1.1.21".into(),
+        fix: None,
+    };
+    assert_ne!(security_signature(&plain), security_signature(&moved));
 }
 
 #[test]
