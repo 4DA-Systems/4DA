@@ -174,21 +174,19 @@ fn a_version_less_row_is_a_conservative_match_and_a_repeat_row_reports_once() {
 
 #[test]
 fn security_holding_placeholders_and_names() {
+    // Any advisory id: the placeholder has no code (crossenv's GHSA-c2m4 too).
     assert!(is_npm_security_holding(
-        "MAL-2025-1",
         "javascript",
         Some("0.0.1-security")
     ));
-    assert!(!is_npm_security_holding(
-        "GHSA-1",
-        "npm",
-        Some("0.0.1-security")
-    ));
-    assert!(!is_npm_security_holding(
-        "MAL-2025-1",
-        "PyPI",
-        Some("0.0.1-security")
-    ));
+    assert!(is_npm_security_holding("npm", Some("0.0.2-security")));
+    assert!(is_npm_security_holding("npm", Some("0.0.12-security")));
+    assert!(!is_npm_security_holding("npm", Some("1.0.1")));
+    // A publisher's own `-security` prerelease is real code, not npm's placeholder.
+    assert!(!is_npm_security_holding("npm", Some("1.0.0-security")));
+    assert!(!is_npm_security_holding("npm", Some("0.0.-security")));
+    assert!(!is_npm_security_holding("npm", Some("0.0.1-security.2")));
+    assert!(!is_npm_security_holding("PyPI", Some("0.0.1-security")));
     assert_eq!(pep503_name(" Typing__Extensions.x "), "typing-extensions-x");
     assert_eq!(package_key("Django", "pip"), "django");
     assert_eq!(package_key("Foo_Bar", "rust"), "foo_bar");

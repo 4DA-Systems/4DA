@@ -552,3 +552,49 @@ fn the_plan_reads_the_lockfile_tree_on_disk() {
     assert!(!text.contains("npm update debug"), "{text}");
     assert!(!text.contains("(bundled)"), "{text}");
 }
+
+/// Audit E8, direct half: a direct row names the command that moves the
+/// dependency where it is declared, read from the project's own manifest. The
+/// tilde survives (plain `npm install x@v` wrote `^v` over `~1.2.5`, npm 10.9.2).
+#[test]
+fn a_direct_row_names_the_command_for_its_declaration() {
+    let dir = tempfile::Builder::new()
+        .prefix("direct-row-")
+        .tempdir_in(env!("CARGO_MANIFEST_DIR"))
+        .expect("tempdir");
+    let project = dir.path().to_string_lossy().replace('\\', "/");
+    if crate::project_inclusion::is_hard_excluded(&project) {
+        eprintln!("SKIPPED a_direct_row_names_the_command_for_its_declaration: {project} is excluded from DB writes here");
+        return;
+    }
+    std::fs::write(
+        dir.path().join("package.json"),
+        r#"{"name": "app", "dependencies": {"minimist": "~1.2.5"}}"#,
+    )
+    .unwrap();
+    std::fs::write(
+        dir.path().join("package-lock.json"),
+        r#"{"lockfileVersion": 3, "packages": {"": {"dependencies": {"minimist": "~1.2.5"}}, "node_modules/minimist": {"version": "1.2.5"}}}"#,
+    )
+    .unwrap();
+    let db = test_db();
+    db.store_dependency(&project, "minimist", Some("1.2.5"), "npm", false, None)
+        .unwrap();
+    db.store_dependency_instances(
+        &project,
+        "npm",
+        &[instance("minimist", "1.2.5", true, false)],
+    )
+    .unwrap();
+    advisory(&db, "GHSA-xvch-5gv4-984h", "minimist", "npm", "1.2.6", 9.8);
+    let plan = plan(&db);
+    let row = row(&plan, "minimist");
+    validate_item(row).expect("schema-valid");
+    assert!(
+        row.explanation.contains(
+            "Fixable now via a direct dependency bump: `npm install \"minimist@~1.2.6\"`"
+        ),
+        "{}",
+        row.explanation
+    );
+}

@@ -223,11 +223,7 @@ where
         let mut copies = Vec::new();
         for dep in dep_entries {
             for (version, is_direct, is_dev) in candidates(dep, &instance_index) {
-                if is_npm_security_holding(
-                    &record.advisory_id,
-                    &record.ecosystem,
-                    version.as_deref(),
-                ) {
+                if is_npm_security_holding(&record.ecosystem, version.as_deref()) {
                     continue;
                 }
                 let (is_affected, confirmed) = check_version_affected(
@@ -422,15 +418,22 @@ pub fn normalize_project_path(path: &str) -> String {
 }
 
 /// npm's "Security holding package": after a malicious package is taken
-/// down, npm republishes the name as an empty `0.0.1-security` placeholder.
-/// A malicious-package advisory (`MAL-`) covers every version ("introduced
-/// 0"), so the placeholder read as installed malware (4da-ledger's
-/// transitive `fs@0.0.1-security`, 2026-09-26). The placeholder contains no
-/// code, so no MAL advisory applies to it.
-pub fn is_npm_security_holding(advisory_id: &str, ecosystem: &str, version: Option<&str>) -> bool {
-    advisory_id.starts_with("MAL-")
-        && normalize_ecosystem(ecosystem) == "npm"
-        && version.is_some_and(|v| v.trim().ends_with("-security"))
+/// down, npm republishes the name as an empty `0.0.1-security` placeholder
+/// (the registry describes it as "security holding package"). The advisory
+/// that caused the takedown covers every version ("introduced 0"), so the
+/// placeholder read as installed malware: 4da-ledger's transitive
+/// `fs@0.0.1-security` (MAL-, 2026-09-26), and crossenv `0.0.2-security`
+/// under GHSA-c2m4-w5hm-vqjw ("crossenv is malware", `last_affected 1.0.1`,
+/// 2026-10-16). The placeholder contains no code, so NO advisory applies to
+/// it, whichever database's id it carries. Only npm's own placeholder shape,
+/// `0.0.<n>-security`, counts: a publisher's `1.0.0-security` prerelease is
+/// real code and stays affected.
+pub fn is_npm_security_holding(ecosystem: &str, version: Option<&str>) -> bool {
+    normalize_ecosystem(ecosystem) == "npm"
+        && version
+            .and_then(|v| v.trim().strip_prefix("0.0."))
+            .and_then(|v| v.strip_suffix("-security"))
+            .is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
 }
 
 /// Highest semver among an advisory's listed fixes: the version that clears

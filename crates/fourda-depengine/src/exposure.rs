@@ -78,7 +78,7 @@ pub fn exposure_for_record(record: &AdvisoryRecord, inventory: &[Package]) -> Ad
             candidates.push((dep.version.clone(), dep.is_direct, dep.is_dev));
         }
         for (version, is_direct, is_dev) in candidates {
-            if is_npm_security_holding(&record.advisory_id, &record.ecosystem, version.as_deref()) {
+            if is_npm_security_holding(&record.ecosystem, version.as_deref()) {
                 continue;
             }
             out.copies_checked += 1;

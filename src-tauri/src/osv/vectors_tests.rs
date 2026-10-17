@@ -44,13 +44,14 @@ use super::types::Vulnerability;
 /// same change that removes entries; it may never rise.
 const RUST_SKIP_BASELINE: usize = 28;
 
-const FILES: [&str; 6] = [
+const FILES: [&str; 7] = [
     "version_order",
     "osv_range",
     "fix_target",
     "refresh_verdict",
     "fix_command",
     "range_check",
+    "holding",
 ];
 
 fn conformance_dir() -> PathBuf {
@@ -153,6 +154,20 @@ fn check_osv_range(v: &Value, records: &mut Records) -> Result<(), String> {
         (got, true) if got == want => Ok(()),
         (got, true) => Err(format!("affected: got {got}, want {want}")),
         (_, false) => Err("unconfirmed (the engine could not decide the window)".into()),
+    }
+}
+
+/// npm's security holding placeholder (`osv/matching`): a `*-security`
+/// release of an npm name has no code, so no advisory applies to it, whatever
+/// database's id flags the name.
+fn check_holding(v: &Value) -> Result<(), String> {
+    let got =
+        fourda_depengine::matching::is_npm_security_holding(s(v, "eco"), Some(s(v, "version")));
+    let want = v.get("holding").and_then(Value::as_bool).unwrap_or(false);
+    if got == want {
+        Ok(())
+    } else {
+        Err(format!("holding: got {got}, want {want}"))
     }
 }
 
@@ -347,6 +362,9 @@ fn check_fix_command(v: &Value) -> Result<(), String> {
     for (name, body) in tool_files(s(v, "tool"), workspace_root) {
         std::fs::write(dir.path().join(name), body).map_err(|e| e.to_string())?;
     }
+    if v.get("kind").and_then(Value::as_str) == Some("direct") {
+        return check_direct(v, dir.path());
+    }
     let command = Manager::detect(dir.path(), s(v, "eco"))
         .and_then(|m| m.refresh_command(s(v, "pkg"), s(v, "installed"), s(v, "target")));
     let want = opt_s(v, "command");
@@ -354,6 +372,61 @@ fn check_fix_command(v: &Value) -> Result<(), String> {
         Ok(())
     } else {
         Err(format!("command: got {command:?}, want {want:?}"))
+    }
+}
+
+/// `kind: "direct"` (audit E8): the fix for a DECLARED dependency, read by
+/// `direct_fix` from a project built out of the vector: its declared npm spec
+/// (`declared`), `Cargo.toml` (`manifest`), `go.mod` (`go_mod`) or
+/// `requirements.txt` (`requirements`). `member: true` puts the manifest one
+/// workspace level below the lockfile. A command is checked against
+/// `command`, an instruction against `instruction`.
+fn check_direct(v: &Value, root: &std::path::Path) -> Result<(), String> {
+    use crate::osv::direct_upgrade::{direct_fix, DirectFix};
+    let pkg = s(v, "pkg");
+    let project = if v.get("member").and_then(Value::as_bool) == Some(true) {
+        let member = root.join("packages").join("app");
+        std::fs::create_dir_all(&member).map_err(|e| e.to_string())?;
+        member
+    } else {
+        root.to_path_buf()
+    };
+    let mut files: Vec<(&str, String)> = Vec::new();
+    if let Some(declared) = opt_s(v, "declared") {
+        let pkg_json = serde_json::json!({ "dependencies": { pkg: declared } });
+        files.push(("package.json", pkg_json.to_string()));
+    }
+    for (field, file) in [
+        ("manifest", "Cargo.toml"),
+        ("go_mod", "go.mod"),
+        ("requirements", "requirements.txt"),
+    ] {
+        if let Some(body) = opt_s(v, field) {
+            files.push((file, body.to_string()));
+        }
+    }
+    for (file, body) in files {
+        std::fs::write(project.join(file), body).map_err(|e| e.to_string())?;
+    }
+    let fix = direct_fix(
+        &project,
+        s(v, "eco"),
+        pkg,
+        s(v, "installed"),
+        s(v, "target"),
+    );
+    let (command, instruction) = match &fix {
+        Some(DirectFix::Command(c)) => (Some(c.as_str()), None),
+        Some(DirectFix::Instruction(i)) => (None, Some(i.as_str())),
+        None => (None, None),
+    };
+    let (want_c, want_i) = (opt_s(v, "command"), opt_s(v, "instruction"));
+    if command == want_c && instruction == want_i {
+        Ok(())
+    } else {
+        Err(format!(
+            "direct: got {fix:?}, want command {want_c:?} / instruction {want_i:?}"
+        ))
     }
 }
 
@@ -394,6 +467,7 @@ fn rule_vectors_hold_and_the_skip_list_only_shrinks() {
             let outcome = match file {
                 "version_order" => check_version_order(v),
                 "osv_range" => check_osv_range(v, &mut records),
+                "holding" => check_holding(v),
                 "fix_target" => check_fix_target(v, &mut records),
                 "refresh_verdict" => check_refresh_verdict(v),
                 "fix_command" => check_fix_command(v),

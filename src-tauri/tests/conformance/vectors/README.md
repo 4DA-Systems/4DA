@@ -31,8 +31,9 @@ specific enough to recheck).
 | `osv_range.jsonl` | `{record_id, eco, name, version, affected}` | OSV's own answer: `/v1/querybatch` at the exact version, recorded in `../expected/<case>.json` (records pinned 2026-10-10 in `../osv/`). `affected: true` is used only when the finding's alias group holds exactly one pinned record for that package, so OSV returned exactly that record. |
 | `fix_target.jsonl` | `{eco, name, installed, record_ids[], target, clears, evidence}`, optionally `published[]`, `excluded[]`, `withheld[]` | ft-001..ft-022: the 22 cases of the 2026-10-10 fix-path oracle (the action was applied, re-resolved and re-scanned, and the target checked minimal against OSV per published version), re-checked 2026-10-12 against the pinned ids. ft-023..: OSV `/v1/querybatch` per published stable release (2026-10-12), restricted to the pinned `record_ids`. `evidence` holds the OSV ids at `installed` and at `target`. |
 | `refresh_verdict.jsonl` | `{eco, name, installed, target, requirements[], verdict, via, inferred}` | The 16 transitive oracle cases (the refresh was applied: it reached the target, or it did not move the copy), each with its parents' requirements read from the case lockfile (`package-lock.json` `requires`, `yarn.lock` `dependencies`) or the parent's published manifest (npm registry for pnpm, crates.io for Cargo). Each case also appears with `requirements: []` to pin the semver fallback. The rest apply AD-055 ¶1 by hand. |
-| `fix_command.jsonl` | `{tool, eco, pkg, installed, target, workspace_root, command}` | The command text of AD-055 ¶4. Where the oracle applied that tool's refresh, the `source` names the case. |
+| `fix_command.jsonl` | `{tool, eco, pkg, installed, target, workspace_root, command}`; `kind: "direct"` lines add `declared` (npm family), `manifest` (Cargo), `go_mod` (Go) or `requirements` (PyPI), optionally `member: true` (the manifest sits one workspace level below the lockfile), and `instruction` | The command text of AD-055 ¶4 for a transitive copy's refresh. Where the oracle applied that tool's refresh, the `source` names the case. `kind: "direct"` lines pin the fix for a DECLARED dependency, read from the project's own manifest, that keeps how it is declared (audit E8): `command` when one command does it, `instruction` for a manifest edit, both null when nothing can be named with certainty. Each line's `source` says whether it was run against its tool (and which version) or is a rule with no tool run. |
 | `range_check.jsonl` | `{eco, name, constraint, from, releases[], record_ids[], expected}` | `@4da/mcp-server` 6.2.0 recorded fixtures (`src/__tests__/fixtures/dependency-check/recorded/`, origin/main `bae421b`): OSV's querybatch answer per release of ws, Jinja2 and golang.org/x/net. Constraint membership: node `semver` (npm, Go without `v`; `v0` is the v0 line), python `packaging` `SpecifierSet` (PyPI). |
+| `holding.jsonl` | `{eco, name, advisory_id, version, holding}` | npm's security holding placeholders (`0.0.<n>-security`; a publisher's `1.0.0-security` prerelease is not one: ho-006): the registry's own description ("security holding package") and the advisories that flag the name. `holding: true` means no advisory applies to that release (audit L4 decision, 2026-10-16). |
 
 Field conventions:
 
@@ -96,6 +97,7 @@ dated and judged"*.
 - Pre, post and dev phases (`rc`, `.post1`, `.dev`): vo-034..vo-040, vo-045
 - A PyPI version that is also valid semver must still order by PEP 440: vo-042 (`1.0.0-1` is a post release), vo-043 (`-post1`), vo-044 (`a10 > a9`)
 - SemVer §11 precedence list, for npm and crates.io: vo-047..vo-060
+- Packagist and RubyGems, including two-part OSV bounds (readiness audit H2: the TS engine could not order `6.4`): vo-086..vo-091. Truth: composer/semver and PHP `version_compare`, and Gem::Version. The Packagist pair `6.4.0` / `6.4` is deliberately unpinned, because composer/semver's normaliser calls them equal and its comparator does not.
 - SemVer numeric order, identifiers and pre-releases: vo-061..vo-066, vo-071, vo-072
 - Build metadata is not precedence (SemVer §10): vo-067..vo-070
 - Go: `v` prefix, pseudo-versions, `+incompatible`, pre-releases: vo-073..vo-085
@@ -136,6 +138,7 @@ form.
 
 - The 22 oracle cases: ft-001..ft-022 (openssl 0.10.80: ft-006; braces `last_affected`: ft-004)
 - OSV per published release, all four registries: ft-023..ft-061, ft-062, ft-063, ft-067, ft-068
+- Packagist and RubyGems same-line fixes below a two-part bound (readiness audit H2): ft-065 (symfony/process v5.1.0 -> v5.4.51), ft-066 (rack 2.0.6 -> 2.2.23 on the pinned records)
 - No clean version, so the target clears only the fixed advisories (`clears: false`): ft-004, ft-029, ft-041, ft-042, ft-055, ft-060, ft-061
 - A `last_affected` window that later releases leave (the walk steps past the bound and keeps checking every advisory): ft-043 (pyjwt), ft-052 (mistune)
 - A release the registry withdrew is never the target (FX-H5): npm deprecated, ft-007 (lodash 4.18.0, "Bad release", so 4.18.1) and ft-063 (brace-expansion 3.0.3, so 3.0.4); crates.io yanked, ft-062 (h2 0.3.17, so 0.3.18); every clearing release withdrawn, so no target and `withheld` names it, ft-064 (by hand)
@@ -183,6 +186,16 @@ form.
 - yarn 1, no command: fc-011, fc-012
 - Cargo: fc-013..fc-020
 - Tools no command is named for (pip, poetry, uv, pipenv, go, bundler, composer): fc-021..fc-027
+- A direct dependency (`kind: "direct"`, audit E8), with the declared operator kept:
+  - npm: `npm install x@v --save-exact` for an exact pin, or `npm install "x@^v"` / `"x@~v"` (quoted, because `^` is cmd.exe's escape character): fc-028..fc-031;
+  - pnpm: `pnpm up`: fc-032, fc-033;
+  - yarn 1 and berry: `yarn upgrade` / `yarn up` with the operator: fc-034, fc-035;
+  - no command for a spec whose operator cannot be carried: fc-036;
+  - no command when the declared spec does not admit the installed copy: fc-046 (npm), fc-047 (Cargo);
+  - no command for a yarn workspace member, because `yarn upgrade` / `yarn up` rewrite every workspace: fc-053.
+- A direct Cargo dependency: `cargo add`, with `--dev` / `--build` / `--target` / `--rename` from the declaring table and the operator kept (fc-037..fc-042; `--target` double-quoted, because cmd.exe passes single quotes through: fc-040); an instruction to edit the workspace root for a workspace-inherited crate, where `cargo add` replaced the inheritance with a local pin (fc-043); nothing for a git, path or alternate-registry source (fc-048).
+- A direct Go requirement: `go get mod@vX`; none for an indirect one or one under a `replace`: fc-044, fc-045, fc-049.
+- A direct PyPI `==` pin: an instruction that replaces only the version token and keeps extras and the environment marker (fc-050); nothing for a hashed pin (fc-051) or pip-compile output (fc-052).
 
 ### Constraint checks — `@4da/mcp-server` 6.2.0 CHANGELOG
 

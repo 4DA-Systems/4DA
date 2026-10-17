@@ -119,6 +119,9 @@ pub fn build_upgrade_plan(db: &Database) -> BuiltPlan {
             // it (`osv::fix_path`; empty for a direct-only row).
             g.routes =
                 crate::osv::parent_hint::load_routes(db, &g.ecosystem_norm, &g.package, &g.lines);
+            // How each DIRECT copy moves where it is declared (audit E8).
+            g.direct_fixes =
+                crate::osv::direct_upgrade::direct_fixes(&g.ecosystem_norm, &g.package, &g.lines);
             g.into_evidence_item(now)
         })
         .collect();
@@ -164,6 +167,10 @@ struct PackageGroup<'a> {
     any_confirmed: bool,
     /// At least one affected instance is a DIRECT dep — the user can bump it now.
     fixable_now: bool,
+    /// Per declaring project and target: the command or manifest edit that
+    /// moves the direct copy (`osv::direct_upgrade`); empty when none is
+    /// certain.
+    direct_fixes: Vec<(String, String, crate::osv::direct_upgrade::DirectFix)>,
     /// Every affected instance is a dev dependency (a labelled discount).
     all_dev: bool,
     urgency: Urgency,
@@ -304,6 +311,7 @@ fn package_group<'a>(
         informational,
         cohort_key,
         routes: crate::osv::parent_hint::TransitiveRoutes::default(),
+        direct_fixes: Vec::new(),
     }
 }
 
@@ -428,14 +436,15 @@ impl PackageGroup<'_> {
                 .lines
                 .iter()
                 .any(|l| l.target_version.is_some() && l.sites.iter().any(|s| !s.is_direct));
+            let how = crate::osv::direct_upgrade::direct_fix_note(&self.direct_fixes, m > 1);
             if transitive {
                 format!(
-                    "Fixable now via a direct dependency bump where it is declared. Elsewhere it is \
-                     transitive — {}",
+                    "Fixable now via a direct dependency bump where it is declared{how}. \
+                     Elsewhere it is transitive — {}",
                     super::upgrade_parent::upstream_note(&self.package, &self.routes, m > 1)
                 )
             } else {
-                "Fixable now via a direct dependency bump".to_string()
+                format!("Fixable now via a direct dependency bump{how}")
             }
         } else {
             super::upgrade_parent::upstream_note(&self.package, &self.routes, m > 1)
@@ -930,6 +939,7 @@ pub(crate) fn advisory_age_days(published: Option<&str>) -> f32 {
 #[cfg(test)]
 #[path = "upgrade_targets_tests.rs"]
 mod target_tests;
+
 #[cfg(test)]
 #[path = "upgrade_plan_tests.rs"]
 mod tests;
