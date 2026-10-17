@@ -766,8 +766,14 @@ fn build_upgrade_facts(
         }
     }
 
+    let checker = crate::osv::release_advisories::ReleaseChecker::load(db);
     let mut facts: Vec<UpgradeFact> = Vec::new();
     for ((_, pkg_key), (grade, id, url, published, source_type)) in best {
+        // Never an upgrade toward a release an advisory affects or its
+        // registry withdrew (`osv::release_advisories`).
+        if checker.advises_against(db, &source_type, &grade, published.as_deref()) {
+            continue;
+        }
         let concerned = grade.concerned_pins();
         let active: Vec<_> = concerned
             .iter()

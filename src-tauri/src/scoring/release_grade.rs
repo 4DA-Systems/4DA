@@ -20,7 +20,11 @@
 //! new minor is worth knowing; a patch is not news on its own (security fixes
 //! reach the user through the advisory lanes, not the release row), and
 //! neither is a registry prerelease row (the announcement reaches the user
-//! through editorial coverage). A pinned version that has been YANKED is
+//! through editorial coverage). The grade never asks whether the announced
+//! release is itself safe: the surfaces that announce a release or name a
+//! command toward it (the stack-change stream, the Brief's upgrade facts)
+//! check it against the stored advisories first
+//! (`osv::release_advisories`). A pinned version that has been YANKED is
 //! the strongest case of all: the project is running something the publisher
 //! withdrew.
 //!

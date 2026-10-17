@@ -9,6 +9,7 @@ use super::*;
 use crate::brief_facts::{FactStatus, NotCompiledNote};
 use crate::evidence::{validate_item, ProjectLiveness, ACTION_IDS};
 use crate::osv::fix_path::Requirement;
+use crate::osv::release_advisories::{AffectedRelease, ReleaseAdvisories, UnknownReason};
 use crate::preemption::AlertUrgency;
 use crate::scoring::release_grade::ReleaseGrade;
 
@@ -152,6 +153,7 @@ fn a_minor_inside_the_declared_range_names_the_refresh_command() {
         &g,
         &row("crates_io", "crates.io: serde v1.2.0"),
         &ProjectLiveness::default(),
+        ReleaseAdvisories::Clear,
     )
     .expect("a minor for a direct runtime dependency");
     assert_eq!(change.change, StackChange::Minor);
@@ -186,6 +188,7 @@ fn a_minor_outside_the_declared_range_names_no_command() {
         &g,
         &row("crates_io", "crates.io: serde v1.2.0"),
         &ProjectLiveness::default(),
+        ReleaseAdvisories::Clear,
     )
     .expect("still a change");
     assert_eq!(change.sites[0].admitted, Some(false));
@@ -217,6 +220,7 @@ fn a_breaking_release_never_names_a_refresh_command() {
         &g,
         &row("crates_io", "crates.io: tokio v2.0.0"),
         &ProjectLiveness::default(),
+        ReleaseAdvisories::Clear,
     )
     .expect("major");
     assert_eq!(change.change, StackChange::Major);
@@ -238,7 +242,8 @@ fn a_dev_tooling_minor_is_left_out_but_a_dev_breaking_release_stays_low() {
     assert!(release_change(
         &minor,
         &row("npm_registry", "npm: vitest v3.2.0"),
-        &liveness
+        &liveness,
+        ReleaseAdvisories::Clear
     )
     .is_none());
     let major = grade("vitest", "4.0.0", &[(p, "3.1.0", true, true)]);
@@ -246,10 +251,175 @@ fn a_dev_tooling_minor_is_left_out_but_a_dev_breaking_release_stays_low() {
         &major,
         &row("npm_registry", "npm: vitest v4.0.0"),
         &liveness,
+        ReleaseAdvisories::Clear,
     )
     .expect("a breaking dev release still changes something");
     assert!(change.dev_only);
     assert_eq!(release_item(&change, NOW).item.urgency, Urgency::Watch);
+}
+
+// ------------------------------------------- release advisories (defect A) --
+
+/// An npm project whose `^4.1.0` admits 4.2.0, with a package-lock.json.
+fn npm_project() -> (tempfile::TempDir, String) {
+    let dir = tempfile::tempdir().expect("tmp");
+    std::fs::write(
+        dir.path().join("package.json"),
+        r#"{"name":"app","dependencies":{"left-padder":"^4.1.0"}}"#,
+    )
+    .expect("manifest");
+    std::fs::write(dir.path().join("package-lock.json"), "{}").expect("lock");
+    let path = dir.path().to_string_lossy().into_owned();
+    (dir, path)
+}
+
+fn npm_minor(path: &str, advisories: ReleaseAdvisories) -> Option<ReleaseChange> {
+    let g = grade("left-padder", "4.2.0", &[(path, "4.1.3", true, false)]);
+    release_change(
+        &g,
+        &row("npm_registry", "npm: left-padder v4.2.0"),
+        &ProjectLiveness::default(),
+        advisories,
+    )
+}
+
+fn malicious(covered_by_installed: bool) -> ReleaseAdvisories {
+    ReleaseAdvisories::Affected(AffectedRelease {
+        ids: vec!["MAL-2026-1234".to_string()],
+        malware: true,
+        confirmed: true,
+        covered_by_installed,
+    })
+}
+
+fn has_run(item: &EvidenceItem) -> bool {
+    item.suggested_actions
+        .iter()
+        .any(|a| a.action_id == "run_command")
+}
+
+#[test]
+fn a_clean_minor_inside_the_range_keeps_its_refresh_command() {
+    let (_dir, path) = npm_project();
+    let change = npm_minor(&path, ReleaseAdvisories::Clear).expect("a minor");
+    assert_eq!(
+        change.sites[0].command.as_deref(),
+        Some("npm update left-padder")
+    );
+    let item = release_item(&change, NOW).item;
+    assert!(has_run(&item));
+    assert_eq!(item.urgency, Urgency::Watch);
+    assert!(item.title.contains("new minor"), "{}", item.title);
+    assert!(!item.explanation.contains("Advisory status"));
+}
+
+#[test]
+fn a_malicious_minor_names_no_command_and_says_do_not_install() {
+    let (_dir, path) = npm_project();
+    let change = npm_minor(&path, malicious(false)).expect("still announced, as a warning");
+    assert_eq!(change.sites[0].admitted, Some(true));
+    assert_eq!(
+        change.sites[0].command, None,
+        "never `npm update` toward malware"
+    );
+    let item = release_item(&change, NOW).item;
+    assert!(!has_run(&item), "{:?}", item.suggested_actions);
+    assert_eq!(item.urgency, Urgency::High);
+    assert!(
+        item.title.contains("malicious release, do not install"),
+        "{}",
+        item.title
+    );
+    assert!(
+        item.explanation.contains("MAL-2026-1234")
+            && item.explanation.contains("do not install it")
+            && item.explanation.contains("lockfile refresh"),
+        "{}",
+        item.explanation
+    );
+    assert!(
+        !item.explanation.contains("picks it up"),
+        "the upgrade advice is replaced: {}",
+        item.explanation
+    );
+    assert_eq!(item.suggested_actions[0].action_id, "review_security");
+    assert!(item
+        .evidence
+        .iter()
+        .any(|c| c.source == "osv" && c.title == "MAL-2026-1234"));
+    assert!(validate_item(&item).is_ok());
+}
+
+#[test]
+fn a_vulnerable_minor_names_its_advisories_and_no_command() {
+    let (_dir, path) = npm_project();
+    let verdict = ReleaseAdvisories::Affected(AffectedRelease {
+        ids: vec!["GHSA-aaaa-bbbb-cccc".to_string()],
+        malware: false,
+        confirmed: true,
+        covered_by_installed: false,
+    });
+    let item = release_item(&npm_minor(&path, verdict).expect("announced"), NOW).item;
+    assert!(!has_run(&item));
+    assert!(item.title.contains("affected by GHSA-aaaa-bbbb-cccc"));
+    assert!(item.explanation.contains("names no command"));
+    assert_eq!(item.urgency, Urgency::Watch);
+    assert!(validate_item(&item).is_ok());
+}
+
+#[test]
+fn a_release_whose_advisories_also_hit_the_installed_copy_is_the_advisory_lanes() {
+    let (_dir, path) = npm_project();
+    assert!(npm_minor(&path, malicious(true)).is_none());
+}
+
+#[test]
+fn an_unchecked_release_names_no_command_and_says_so() {
+    let (_dir, path) = npm_project();
+    let change = npm_minor(
+        &path,
+        ReleaseAdvisories::Unknown(UnknownReason::Stale {
+            synced_at: Some("2026-10-01 00:00:00".to_string()),
+        }),
+    )
+    .expect("announced");
+    assert_eq!(change.sites[0].command, None);
+    let item = release_item(&change, NOW).item;
+    assert!(!has_run(&item));
+    assert!(
+        item.explanation.contains("Advisory status unknown")
+            && item.explanation.contains("more than three days ago"),
+        "{}",
+        item.explanation
+    );
+    assert!(validate_item(&item).is_ok());
+}
+
+#[test]
+fn a_withdrawn_release_names_no_command() {
+    let (_dir, path) = npm_project();
+    let item = release_item(
+        &npm_minor(&path, ReleaseAdvisories::Withdrawn).expect("announced"),
+        NOW,
+    )
+    .item;
+    assert!(!has_run(&item));
+    assert!(item.explanation.contains("registry withdrew"));
+}
+
+#[test]
+fn an_npm_security_placeholder_is_still_never_announced() {
+    // npm replaces a removed malicious package with `0.0.N-security`: a
+    // prerelease, never a release row (`release_grade`'s rule), unchanged.
+    let p = "/dev/app";
+    assert_eq!(
+        change_of(&grade(
+            "evil",
+            "0.0.1-security",
+            &[(p, "0.0.0", true, false)]
+        )),
+        None
+    );
 }
 
 // --------------------------------------------------------------- security --
@@ -423,12 +593,14 @@ fn the_lane_orders_security_then_yanked_then_breaking_then_minor() {
         &grade("serde", "1.2.0", &[(p, "1.0.0", true, false)]),
         &row("crates_io", "crates.io: serde v1.2.0"),
         &liveness,
+        ReleaseAdvisories::Clear,
     )
     .expect("minor");
     let mut newer_major = release_change(
         &grade("tokio", "2.0.0", &[(p, "1.0.0", true, false)]),
         &row("crates_io", "crates.io: tokio v2.0.0"),
         &liveness,
+        ReleaseAdvisories::Clear,
     )
     .expect("major");
     newer_major.published = Some("2026-10-05".to_string());
@@ -436,12 +608,14 @@ fn the_lane_orders_security_then_yanked_then_breaking_then_minor() {
         &grade("lopdf", "0.45.0", &[(p, "0.42.0", true, false)]),
         &row("crates_io", "crates.io: lopdf v0.45.0"),
         &liveness,
+        ReleaseAdvisories::Clear,
     )
     .expect("breaking");
     let dev_major = release_change(
         &grade("vitest", "4.0.0", &[(p, "3.0.0", true, true)]),
         &row("npm_registry", "npm: vitest v4.0.0"),
         &liveness,
+        ReleaseAdvisories::Clear,
     )
     .expect("dev major");
     let yanked = release_change(
@@ -453,6 +627,7 @@ fn the_lane_orders_security_then_yanked_then_breaking_then_minor() {
         ),
         &row("crates_io", "crates.io: quux v1.4.2"),
         &liveness,
+        ReleaseAdvisories::Clear,
     )
     .expect("yanked");
     let medium = fact(
