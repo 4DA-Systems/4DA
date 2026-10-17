@@ -92,6 +92,110 @@ fn a_slow_or_failed_call_opens_the_breaker_for_the_cool_off() {
 }
 
 #[test]
+fn the_routed_judge_is_released_after_a_cycle_unless_the_user_set_keep_alive() {
+    let routed = State {
+        model: Some("gemma4:12b".into()),
+        base_url: DEFAULT_OLLAMA_URL.into(),
+        tripped_until: Some(Instant::now() + COOL_OFF),
+        ..State::default()
+    };
+    assert_eq!(
+        release_target(&routed, true, "claude-sonnet-5", None),
+        Some(("gemma4:12b".to_string(), DEFAULT_OLLAMA_URL.to_string())),
+        "released even while the breaker is open: the model may still be loaded"
+    );
+    assert_eq!(
+        release_target(&routed, true, "claude-sonnet-5", Some("  "))
+            .map(|t| t.0)
+            .as_deref(),
+        Some("gemma4:12b")
+    );
+    assert!(
+        release_target(&routed, true, "claude-sonnet-5", Some("24h")).is_none(),
+        "the user's residency policy stands"
+    );
+    assert!(release_target(&routed, true, "claude-sonnet-5", Some("0")).is_none());
+    assert!(
+        release_target(&State::default(), true, "claude-sonnet-5", None).is_none(),
+        "no routed judge (cloud sibling): nothing to release"
+    );
+}
+
+/// A user whose MAIN model is on Ollama (say gemma4:12b itself) still gets a
+/// detected judge in `STATE.model`, but the judge lanes run on their model.
+/// Unloading it would make their next brief or search pay a full reload.
+#[test]
+fn an_ollama_main_model_is_never_unloaded() {
+    let detected = State {
+        model: Some("gemma4:12b".into()),
+        base_url: DEFAULT_OLLAMA_URL.into(),
+        ..State::default()
+    };
+    let main = llm("ollama", "gemma4:12b", "");
+    assert!(!may_route_local(&main.provider, &main.api_key));
+    assert!(release_target(
+        &detected,
+        may_route_local(&main.provider, &main.api_key),
+        "", // the routing rule alone must refuse it
+        None
+    )
+    .is_none());
+}
+
+/// An `openai-compatible` (or any non-"ollama") provider pointed at the local
+/// Ollama: routing still picks a local judge, and when it is the same model as
+/// the user's own, unloading it would cost their next brief a reload.
+#[test]
+fn a_compatible_provider_on_the_same_local_model_is_never_unloaded() {
+    let routed = State {
+        model: Some("gemma4:12b".into()),
+        base_url: DEFAULT_OLLAMA_URL.into(),
+        ..State::default()
+    };
+    let compat = llm("openai-compatible", "gemma4:12b", "sk-local");
+    assert!(release_target(&routed, true, &compat.model, None).is_none());
+    assert!(
+        release_target(&routed, true, " gemma4:12b ", None).is_none(),
+        "trimmed"
+    );
+    let latest = State {
+        model: Some("qwen3:14b:latest".into()),
+        ..routed
+    };
+    assert!(
+        release_target(&latest, true, "qwen3:14b", None).is_none(),
+        ":latest is implicit"
+    );
+    assert!(
+        release_target(&latest, true, "gemma4:12b", None).is_some(),
+        "a different model is 4DA's"
+    );
+}
+
+#[test]
+fn a_running_lane_keeps_the_judge_loaded() {
+    let busy = State {
+        model: Some("gemma4:26b".into()),
+        base_url: DEFAULT_OLLAMA_URL.into(),
+        lanes_in_flight: 1,
+        ..State::default()
+    };
+    assert!(release_target(&busy, true, "claude-sonnet-5", None).is_none());
+}
+
+#[tokio::test]
+async fn a_reload_inside_a_judge_call_is_reported_not_timed() {
+    let reply =
+        serde_json::json!({ "message": { "content": "{}" }, "load_duration": 46_000_000_000u64 });
+    let ((), load) = observe_load(async { note_load_duration(&reply) }).await;
+    assert_eq!(load, Duration::from_secs(46));
+    // Outside an observing scope it records nothing and does not panic.
+    note_load_duration(&reply);
+    let ((), none) = observe_load(async {}).await;
+    assert_eq!(none, Duration::ZERO);
+}
+
+#[test]
 fn only_the_three_judge_lanes_route_locally() {
     for p in ["ingest_judge", "verdict_drain", "rerank_judge"] {
         assert!(is_judge_purpose(Some(p)));

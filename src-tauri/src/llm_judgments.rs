@@ -265,7 +265,7 @@ pub(crate) fn drain_reserve(pending_backlog: i64) -> usize {
 /// Called after ingestion when new items arrive (deep-scan path), and by
 /// [`run_post_cycle_llm_passes`] on the scheduled/headless cadence.
 pub(crate) async fn evaluate_pending_items(db: &Database) -> Result<usize> {
-    crate::local_judge::refresh_if_stale().await;
+    let _lane = crate::local_judge::refresh_if_stale().await;
     let Some(provider) = get_llm_settings() else {
         debug!(target: "4da::llm_judgments", "No LLM provider configured, skipping judgments");
         return Ok(0);
@@ -314,7 +314,7 @@ pub(crate) struct PostCycleLlmSummary {
 // REMOVE the allow when the app_setup/headless seams land (fix-queue item 25
 // wiring; the seam lines are in this function's doc above).
 pub(crate) async fn run_post_cycle_llm_passes(db: &Database) -> PostCycleLlmSummary {
-    crate::local_judge::refresh_if_stale().await;
+    let _lane = crate::local_judge::refresh_if_stale().await;
     let provider = get_llm_settings();
     let blocked = crate::local_judge::budget_blocks(provider.as_ref());
     run_post_cycle_with(db, blocked, provider).await

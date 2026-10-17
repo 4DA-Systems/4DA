@@ -47,6 +47,8 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 export const REPO = resolve(HERE, '..');
 const CONFORMANCE = join(REPO, 'src-tauri', 'tests', 'conformance');
 const STACK_RETENTION_DEFAULT_DAYS = 30; // settings/types.rs RETENTION_DEFAULT_DAYS
+/** The always-on stack sources; a test pins this to sources/source_class.rs STACK_SOURCES. */
+export const STACK_SOURCES = ['crates_io', 'npm_registry', 'pypi', 'go_modules', 'osv', 'cve'];
 
 function parseArgs(argv) {
   const a = { gh: true, dbstat: true, json: false };
@@ -245,7 +247,11 @@ export function collectDbFootprint(db, dbPath, { retentionDays, dbstat = true } 
   const freelist = one('PRAGMA freelist_count').freelist_count;
   const size = (p) => (existsSync(p) ? statSync(p).size : 0);
   const enabled = "source_type IN (SELECT source_type FROM sources WHERE enabled = 1)";
+  const stack = `source_type IN (${STACK_SOURCES.map((s) => `'${s}'`).join(', ')})`;
   const c = one(`SELECT COUNT(*) items,
+      SUM(CASE WHEN ${stack} AND created_at >= datetime('now','-30 days') THEN 1 ELSE 0 END) st_created30,
+      SUM(CASE WHEN ${stack} AND last_seen >= datetime('now','-30 days') THEN 1 ELSE 0 END) st_seen30,
+      SUM(CASE WHEN ${stack} AND created_at < datetime('now','-30 days') AND last_seen >= datetime('now','-3 days') THEN 1 ELSE 0 END) st_perennial,
       SUM(CASE WHEN ${enabled} THEN 0 ELSE 1 END) disabled,
       SUM(CASE WHEN ${enabled} AND created_at >= datetime('now','-30 days') THEN 1 ELSE 0 END) en_created30,
       SUM(CASE WHEN ${enabled} AND last_seen >= datetime('now','-30 days') THEN 1 ELSE 0 END) en_seen30,
@@ -292,6 +298,16 @@ export function collectDbFootprint(db, dbPath, { retentionDays, dbstat = true } 
     });
   const projection = project(retentionDays);
   const projectionDefault = project(STACK_RETENTION_DEFAULT_DAYS);
+  // The install G6's budget is set for: default retention, every interest off
+  // (AD-054: interests are off on a new install), so only the stack sources write.
+  const projectionStack = projectSteadyState({
+    retentionDays: STACK_RETENTION_DEFAULT_DAYS,
+    enabledCreated30: c.st_created30 || 0,
+    enabledSeen30: c.st_seen30 || 0,
+    perennial: c.st_perennial || 0,
+    bytesPerItem,
+    fixedBytes,
+  });
   return {
     path: dbPath,
     fileBytes: size(dbPath),
@@ -311,6 +327,7 @@ export function collectDbFootprint(db, dbPath, { retentionDays, dbstat = true } 
     vecChunks,
     projection,
     projectionDefault,
+    projectionStack,
   };
 }
 

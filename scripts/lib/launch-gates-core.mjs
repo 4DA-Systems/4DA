@@ -281,6 +281,27 @@ export function evaluateG5({ lane1Records, source, today }) {
 export const G6_IDLE_BAR_PCT = 2;
 
 /**
+ * The DB size budget: the projected steady-state main database file of an
+ * install at DEFAULT retention (30 days) with every interest OFF (AD-054: the
+ * new-install default, so only the always-on stack sources write) must stay at
+ * or under 500 MiB. Decided on the HIGH end of the projection (inflow counted
+ * from items re-seen in the last 30 days, not only newly created), so a pass
+ * holds for the busier reading of the corpus. The WAL is excluded: it is
+ * truncated by the hourly checkpoint and is not steady-state storage. Without
+ * dbstat the size is NOT decided: every byte is then charged to items and the
+ * non-item tables count as 0, so a projection with few items (interests off)
+ * under-states the size and could pass falsely.
+ */
+export const G6_DB_BUDGET_BYTES = 500 * 1024 ** 2;
+
+/** dbSize verdict from the stack-only projection; pending when it is missing or dbstat was unavailable. */
+export function g6DbVerdict(projectionStack, sizeIsUpperBound = false) {
+  if (sizeIsUpperBound) return 'pending';
+  if (!projectionStack || !Number.isFinite(projectionStack.bytesHigh)) return 'pending';
+  return projectionStack.bytesHigh <= G6_DB_BUDGET_BYTES ? 'pass' : 'fail';
+}
+
+/**
  * db: output of collectDbFootprint (or null); idle: summary from the idle sampler
  * (or null); cold: parsed startup timings (or null).
  */
@@ -291,17 +312,23 @@ export function evaluateG6({ db, idle, cold }) {
   const sub = {};
 
   if (db) {
-    sub.dbSize = 'pending';
+    sub.dbSize = g6DbVerdict(db.projectionStack, db.sizeIsUpperBound);
     const proj = (p) =>
       `~${mb(p.bytesLow)}-${mb(p.bytesHigh)} at ${p.retentionDays} days (${p.itemsLow}-${p.itemsHigh} items)`;
     const projections = [db.projectionDefault, db.projection]
       .filter(Boolean)
       .filter((p, i, a) => a.findIndex((q) => q.retentionDays === p.retentionDays) === i);
+    const budget = db.sizeIsUpperBound
+      ? `; budget ${mb(G6_DB_BUDGET_BYTES)} undecided: dbstat unavailable, so non-item tables are not measured`
+      : db.projectionStack
+      ? `; interests off at default retention ${proj(db.projectionStack)} against the ${mb(G6_DB_BUDGET_BYTES)} budget (${sub.dbSize})`
+      : `; stack-only projection unavailable, budget ${mb(G6_DB_BUDGET_BYTES)} undecided`;
     parts.push(
       `DB ${mb(db.fileBytes)} + WAL ${mb(db.walBytes)} (freelist ${mb(db.freelistBytes)}), ${db.items} items, ${db.disabledItems} from turned-off sources (pruned by last_seen retention, last seen ${db.disabledLastSeen || 'n/a'})` +
         (projections.length
-          ? `; projected steady state ${projections.map(proj).join(', ')}${db.sizeIsUpperBound ? ' (upper bound: dbstat unavailable)' : ''}; no numeric size budget is defined`
+          ? `; projected steady state with the sources now on ${projections.map(proj).join(', ')}${db.sizeIsUpperBound ? ' (upper bound: dbstat unavailable)' : ''}`
           : '') +
+        budget +
         (db.vecChunks
           ? `; source_vec ${db.vecChunks.chunks} chunks (~3 MiB each), ${db.vecChunks.pinned} still hold a turned-on item inside retention (a chunk is freed only when empty)`
           : ''),

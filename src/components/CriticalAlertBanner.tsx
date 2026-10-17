@@ -109,20 +109,6 @@ export function CriticalAlertBanner() {
     }
   }, [criticalAlerts, requestTranslation]);
 
-  // Trigger browser notification for new critical alerts when app is hidden
-  useEffect(() => {
-    if (criticalAlerts.length === 0 || !document.hidden) return;
-    const first = criticalAlerts[0];
-    if (first == null) return;
-    if ('Notification' in window && Notification.permission === 'granted') {
-      void new Notification('4DA — Attention', {
-        body: first.signal_action ?? first.title,
-        tag: `4da-critical-${String(first.id)}`,
-        requireInteraction: true,
-      });
-    }
-  }, [criticalAlerts]);
-
   if (criticalAlerts.length === 0) return null;
 
   return (

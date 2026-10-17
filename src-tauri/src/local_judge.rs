@@ -92,6 +92,8 @@ struct State {
     model: Option<String>,
     base_url: String,
     tripped_until: Option<Instant>,
+    /// Judge lanes running in this process ([`LaneGuard`]).
+    lanes_in_flight: usize,
 }
 
 static STATE: Lazy<Mutex<State>> = Lazy::new(|| Mutex::new(State::default()));
@@ -221,18 +223,40 @@ fn configured_llm() -> LLMProvider {
     settings.get().llm.clone()
 }
 
+/// A judge lane in progress. Held for the whole lane (bind it: `let _lane =
+/// refresh_if_stale().await;`) so [`release_after_cycle`] never unloads the
+/// judge between the timed calls of a pass that is still running.
+#[must_use = "bind the guard for the whole judge lane"]
+pub(crate) struct LaneGuard(());
+
+impl LaneGuard {
+    fn enter() -> Self {
+        STATE.lock().lanes_in_flight += 1;
+        Self(())
+    }
+}
+
+impl Drop for LaneGuard {
+    fn drop(&mut self) {
+        let mut s = STATE.lock();
+        s.lanes_in_flight = s.lanes_in_flight.saturating_sub(1);
+    }
+}
+
 /// Called at the top of each judge lane: re-detect the local judge when the
 /// cached answer is older than [`REFRESH_EVERY`], then make sure the model
 /// the lane will call is loaded. Cheap when fresh and warm. Does nothing at
-/// all (no probe, no load) for a user who configured no AI.
-pub(crate) async fn refresh_if_stale() {
+/// all (no probe, no load) for a user who configured no AI. The returned
+/// guard marks the lane as running until it is dropped.
+pub(crate) async fn refresh_if_stale() -> LaneGuard {
+    let lane = LaneGuard::enter();
     // Decide from the settings before any await: the provider struct is not
     // held across the probe and load (it bloated every caller's future past
     // clippy's large_futures bar).
     let (route_local, own_model) = {
         let llm = configured_llm();
         if !crate::llm_gate::compute_has_llm(&llm.provider, &llm.api_key) {
-            return;
+            return lane;
         }
         let route_local = may_route_local(&llm.provider, &llm.api_key);
         (route_local, warm_target(&llm, None))
@@ -250,6 +274,7 @@ pub(crate) async fn refresh_if_stale() {
             Box::pin(warm(model, base_url)).await;
         }
     }
+    lane
 }
 
 /// Load the judge model before the lane's first timed call, so a cold load
@@ -294,6 +319,124 @@ async fn load_model(base_url: &str, model: &str) -> bool {
         .await
         .and_then(reqwest::Response::error_for_status)
         .is_ok()
+}
+
+/// Unload the routed local judge once a cycle's judge lanes are done, so its
+/// VRAM (8.4 GB for gemma4:12b) is free between cycles. The next cycle's first
+/// lane reloads it through [`warm`], untimed by the breaker: 6.5–9.3 s from the
+/// OS file cache, 36 s cold (measured 2026-10-15).
+///
+/// Never unloads:
+/// - a model the user chose: when their main provider is Ollama the judge
+///   lanes run on THAT model (`may_route_local` is false), and it ages out on
+///   `OLLAMA_KEEP_ALIVE`, like every other 4DA request to Ollama;
+/// - while a judge lane of this process is still running ([`LaneGuard`]);
+/// - when the user set `OLLAMA_KEEP_ALIVE`: their residency policy stands.
+///
+/// A second process (the headless `fourda-engine`) cannot see this process's
+/// lanes, so an unload from one can land between another's warm-up and its
+/// timed calls. That reload is not charged to the breaker: [`observe_load`]
+/// subtracts Ollama's reported `load_duration` from the timed call.
+pub(crate) async fn release_after_cycle() {
+    let (route_local, own_model) = {
+        let llm = configured_llm();
+        (
+            may_route_local(&llm.provider, &llm.api_key),
+            llm.model.clone(),
+        )
+    };
+    let user_keep_alive = std::env::var("OLLAMA_KEEP_ALIVE").ok();
+    let Some((model, base_url)) = release_target(
+        &STATE.lock(),
+        route_local,
+        &own_model,
+        user_keep_alive.as_deref(),
+    ) else {
+        return;
+    };
+    let Ok(client) = reqwest::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .build()
+    else {
+        return;
+    };
+    // An empty prompt with keep_alive 0 is Ollama's unload request; it never
+    // loads a model that is not resident.
+    let body = serde_json::json!({ "model": model, "keep_alive": 0 });
+    match client
+        .post(format!("{base_url}/api/generate"))
+        .json(&body)
+        .send()
+        .await
+        .and_then(reqwest::Response::error_for_status)
+    {
+        Ok(_) => {
+            info!(target: "4da::local_judge", model, "Local judge unloaded until the next cycle")
+        }
+        Err(e) => {
+            warn!(target: "4da::local_judge", model, error = %e, "Local judge unload failed; it expires on keep_alive")
+        }
+    }
+}
+
+/// The model [`release_after_cycle`] unloads, if any (see its rules). A
+/// tripped breaker does not matter here: the model may still be loaded.
+/// `own_model` is the user's configured main model: a non-"ollama" provider
+/// (say `openai-compatible`) can point at the same local Ollama model the
+/// judge was routed to, and that model is the user's, not 4DA's to unload.
+fn release_target(
+    state: &State,
+    route_local: bool,
+    own_model: &str,
+    user_keep_alive: Option<&str>,
+) -> Option<(String, String)> {
+    if !route_local || state.lanes_in_flight > 0 {
+        return None;
+    }
+    // `None` from the keep-alive rule means the user configured their own.
+    crate::llm::ollama_keep_alive_for(user_keep_alive)?;
+    let model = state.model.as_deref()?;
+    if same_model(model, own_model) {
+        return None;
+    }
+    Some((model.to_string(), state.base_url.clone()))
+}
+
+/// Ollama names compare equal with or without the implicit `:latest` tag.
+fn same_model(a: &str, b: &str) -> bool {
+    let norm = |m: &str| {
+        let m = m.trim();
+        m.strip_suffix(":latest").unwrap_or(m).to_string()
+    };
+    !b.trim().is_empty() && norm(a) == norm(b)
+}
+
+tokio::task_local! {
+    static JUDGE_LOAD_NS: std::cell::Cell<u64>;
+}
+
+/// Record Ollama's `load_duration` (nanoseconds) for an observing judge call.
+pub(crate) fn note_load_duration(json: &serde_json::Value) {
+    if let Some(ns) = json
+        .get("load_duration")
+        .and_then(serde_json::Value::as_u64)
+    {
+        let _ = JUDGE_LOAD_NS.try_with(|c| c.set(c.get().saturating_add(ns)));
+    }
+}
+
+/// Run a judge call and return its output with the model load time Ollama
+/// reported inside it, so a reload is never timed as a slow call.
+pub(crate) async fn observe_load<F: std::future::Future>(fut: F) -> (F::Output, Duration) {
+    JUDGE_LOAD_NS
+        .scope(std::cell::Cell::new(0), async move {
+            let out = fut.await;
+            (
+                out,
+                Duration::from_nanos(JUDGE_LOAD_NS.with(std::cell::Cell::get)),
+            )
+        })
+        .await
 }
 
 async fn redetect_if_stale() {
