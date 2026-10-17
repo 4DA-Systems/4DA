@@ -32,7 +32,7 @@ aligned-vec 0.6.4 - MIT - https://github.com/sarah-ek/aligned-vec/
 alloc-no-stdlib 3.0.0 - BSD-3-Clause - https://github.com/dropbox/rust-alloc-no-stdlib
 alloc-stdlib 0.3.0 - BSD-3-Clause - https://github.com/dropbox/rust-alloc-no-stdlib
 allocator-api2 0.2.21 - MIT OR Apache-2.0 - https://github.com/zakarumych/allocator-api2
-ammonia 4.2.3 - MIT OR Apache-2.0 - https://github.com/rust-ammonia/ammonia
+ammonia 4.2.4 - MIT OR Apache-2.0 - https://github.com/rust-ammonia/ammonia
 android_system_properties 0.1.6 - MIT OR Apache-2.0 - https://github.com/nical/android_system_properties
 anyhow 1.0.104 - MIT OR Apache-2.0 - https://github.com/dtolnay/anyhow
 arbitrary 1.4.2 - MIT OR Apache-2.0 - https://github.com/rust-fuzz/arbitrary/
