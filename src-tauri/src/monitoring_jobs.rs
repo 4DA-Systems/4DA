@@ -639,6 +639,15 @@ pub async fn run_cve_scan<R: Runtime>(app: &AppHandle<R>) {
                     )
                 })
                 .collect();
+            let unversioned = user_deps.len() - dep_tuples.len();
+            if unversioned > 0 {
+                info!(
+                    target: "4da::jobs",
+                    unversioned,
+                    checked = dep_tuples.len(),
+                    "CVE scan: dependencies without an installed version are not matched (reported as not covered)"
+                );
+            }
 
             let matches = crate::sources::cve::cross_reference_advisories(&advisories, &dep_tuples);
 

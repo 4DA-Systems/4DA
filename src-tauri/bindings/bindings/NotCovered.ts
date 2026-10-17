@@ -4,7 +4,9 @@ import type { UnreadableFile } from "./UnreadableFile";
 
 /**
  * Dependency files the lockfile walk does not read installed versions
- * from. Same concept and shape as the MCP server's `not_covered`.
+ * from. The MCP server's `not_covered` shape (`files` as `{path,
+ * ecosystem}`, plus a count) with an addition the MCP side does not have
+ * yet: `unreadable`, the lockfiles the last walk failed to read.
  */
 export type NotCovered = { 
 /**

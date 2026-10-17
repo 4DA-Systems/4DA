@@ -3394,7 +3394,20 @@ pub(crate) fn score_item(
                 .as_ref()
                 .and_then(super::release_grade::ReleaseGrade::headline_installed)
         })
-        .or_else(|| display_deps.first().and_then(|d| d.version.clone()));
+        .or_else(|| display_deps.first().and_then(|d| d.version.clone()))
+        // v42: before an advisory is called `version_unknown`, a lockfile
+        // pin of the same package (same ecosystem family, same or enclosing
+        // project) counts: the grounding row may have come through without
+        // one. Only registry advisories ask; nothing else reads a version.
+        .or_else(|| {
+            let dep = display_deps.first().filter(|_| registry_advisory)?;
+            crate::temporal::installed_version_nearby(
+                &db.read_conn(),
+                &dep.package_name,
+                &dep.ecosystem,
+                &dep.project_paths,
+            )
+        });
     // v29: the OSV mirror's STRUCTURED ranges decide first (introduced/fixed/
     // last_affected, via the same matcher Preemption trusts); the text route
     // is the fallback for advisories the mirror does not hold. Before this

@@ -84,7 +84,9 @@ pub struct AdvisorySync {
 }
 
 /// Dependency files the lockfile walk does not read installed versions
-/// from. Same concept and shape as the MCP server's `not_covered`.
+/// from. The MCP server's `not_covered` shape (`files` as `{path,
+/// ecosystem}`, plus a count) with an addition the MCP side does not have
+/// yet: `unreadable`, the lockfiles the last walk failed to read.
 #[derive(Debug, Clone, Serialize, Deserialize, TS, PartialEq)]
 #[ts(export, export_to = "bindings/")]
 pub struct NotCovered {

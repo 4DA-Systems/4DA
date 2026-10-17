@@ -274,37 +274,25 @@ fn load_direct_runtime_deps(conn: &rusqlite::Connection) -> Result<Vec<DirectRun
     // `apply_liveness_policy` caps an all-dormant alert and
     // `evidence::collapse_dormant_alerts` folds them into ONE Watch notice
     // per project.
-    let mut stmt = conn.prepare(
-        // `project_dependencies.version` is a manifest range or NULL (NULL on
-        // every live row, 2026-10-16); the installed version is the same
-        // project's lockfile row in `user_dependencies` (cf.
-        // `temporal::get_inventory_dependencies`). Same project only: a
-        // workspace member resolved from a parent lockfile reads as
-        // unresolved here, which only costs a Tier 2 duplicate of what the
-        // version-confirmed Tier 1 already lists.
-        "SELECT pd.package_name, pd.project_path, pd.language,
-                COALESCE(pd.version,
-                  (SELECT ud.version FROM user_dependencies ud
-                    WHERE ud.project_path = pd.project_path
-                      AND LOWER(ud.package_name) = LOWER(pd.package_name)
-                      AND ud.version IS NOT NULL AND ud.version <> ''
-                    ORDER BY ud.is_direct DESC, ud.last_seen_at DESC
-                    LIMIT 1))
-         FROM project_dependencies pd
-         WHERE pd.is_dev = 0
-           AND pd.is_direct = 1",
-    )?;
-    let rows = stmt.query_map([], |row| {
-        Ok(DirectRuntimeDep {
-            package_name: row.get(0)?,
-            project_path: row.get(1)?,
-            language: row.get(2)?,
-            version: row
-                .get::<_, Option<String>>(3)?
-                .filter(|v| !v.trim().is_empty()),
-        })
-    })?;
-    let deps = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+    // The installed version comes from the ONE resolver every dependency
+    // reader shares (`temporal::included_dependencies_resolved`): the same
+    // project's lockfile row in the same ecosystem family, then the same
+    // active repo root. `project_dependencies.version` alone is a manifest
+    // range or NULL (NULL on every live row, 2026-10-16), and a name-only
+    // join let an npm row give a same-named Cargo package its "version".
+    // Not scoped to active roots: dormant projects are admitted (above).
+    let active_roots = crate::temporal::active_repo_roots(conn);
+    let deps: Vec<DirectRuntimeDep> =
+        crate::temporal::included_dependencies_resolved(conn, &active_roots)?
+            .into_iter()
+            .filter(|d| !d.is_dev && d.is_direct)
+            .map(|d| DirectRuntimeDep {
+                package_name: d.package_name,
+                project_path: d.project_path,
+                language: d.language,
+                version: d.version.filter(|v| !v.trim().is_empty()),
+            })
+            .collect();
     // Canonical project-inclusion policy: the Preemption Radar's grounding
     // set must not include deps from agent infra / scaffolding (tiers 1+2 —
     // defense in depth over the write guards + startup purge) or from
@@ -378,6 +366,38 @@ fn matched_direct_runtime_deps(
             Some(dep.clone())
         })
         .collect()
+}
+
+/// Whether a registry advisory row's stored version verdict lets it be a
+/// Tier 2 alert: the scorer saw an installed version and did not find it
+/// outside the affected range. Fails closed: an unscored row (no stored
+/// explanation) or an unreadable one is not an alert. Tier 1 lists every
+/// version-confirmed match independently.
+fn stored_version_verdict_allows(conn: &rusqlite::Connection, source_item_id: i64) -> bool {
+    conn.query_row(
+        "SELECT json_extract(breakdown, '$.breakdown.installed_version'),
+                json_extract(breakdown, '$.breakdown.is_version_affected')
+         FROM scoring_explanations
+         WHERE source_item_id = ?1 AND json_valid(breakdown)",
+        rusqlite::params![source_item_id],
+        |row| {
+            Ok((
+                row.get::<_, Option<String>>(0)?,
+                row.get::<_, Option<i64>>(1)?,
+            ))
+        },
+    )
+    .is_ok_and(|(installed, affected)| version_verdict_allows(installed.as_deref(), affected))
+}
+
+/// The pure rule: confirmed not affected (`false`) never; no installed
+/// version and no verdict (`version_unknown`) never; otherwise yes.
+fn version_verdict_allows(installed: Option<&str>, affected: Option<i64>) -> bool {
+    match affected {
+        Some(0) => false,
+        Some(_) => true,
+        None => installed.is_some_and(|v| !v.trim().is_empty()),
+    }
 }
 
 fn collapse_direct_dep_targets(matches: &[DirectRuntimeDep]) -> (Vec<String>, Vec<String>) {
@@ -952,6 +972,14 @@ fn llm_judged_to_alerts() -> Vec<PreemptionAlert> {
             continue;
         }
         if find_unmet_platform_scope(&combined_lower, &user_context_lower).is_some() {
+            continue;
+        }
+        // A registry advisory row carries the scorer's version verdict; Tier 2
+        // must not list one the scorer found not affected, or could not check
+        // (no installed version), as an alert (audit E4 review).
+        if matches!(source_type.as_str(), "cve" | "osv")
+            && !stored_version_verdict_allows(&conn, j.source_item_id)
+        {
             continue;
         }
         let matched = matched_direct_runtime_deps(
@@ -3384,6 +3412,83 @@ mod tests {
             matched_direct_runtime_deps(&deps, title, "osv", None).len(),
             1
         );
+    }
+
+    /// Review SF1: the version comes from the shared resolver, which keeps
+    /// ecosystem families apart. An npm `serde` row in the same folder must
+    /// not give the Cargo `serde` crate its "version".
+    #[test]
+    fn tier2_version_never_crosses_ecosystems() {
+        let db = crate::test_utils::test_db();
+        let conn = db.conn.lock();
+        conn.execute(
+            "INSERT INTO project_dependencies
+                (project_path, manifest_type, package_name, version, is_dev, is_direct, language, project_relevance)
+             VALUES ('/home/dev/app', 'Cargo.toml', 'serde', NULL, 0, 1, 'rust', 1.0)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO user_dependencies (project_path, package_name, version, ecosystem, is_dev, is_direct)
+             VALUES ('/home/dev/app', 'serde', '9.9.9', 'npm', 0, 1)",
+            [],
+        )
+        .unwrap();
+        let deps = load_direct_runtime_deps(&conn).unwrap();
+        assert_eq!(deps.len(), 1);
+        assert_eq!(
+            deps[0].version, None,
+            "an npm lockfile row is not the crate's version"
+        );
+    }
+
+    /// Review SF2: Tier 2 lists a registry row only when the scorer's stored
+    /// verdict did not find the installed version outside the range.
+    #[test]
+    fn tier2_respects_the_stored_version_verdict() {
+        assert!(
+            !version_verdict_allows(Some("4.17.21"), Some(0)),
+            "past the fix"
+        );
+        assert!(!version_verdict_allows(None, None), "version unknown");
+        assert!(
+            version_verdict_allows(Some("4.17.1"), Some(1)),
+            "confirmed affected"
+        );
+        assert!(
+            version_verdict_allows(Some("4.17.1"), None),
+            "installed, range unknown"
+        );
+
+        let db = crate::test_utils::test_db();
+        let id = crate::test_utils::insert_test_item(
+            &db,
+            "osv",
+            "GHSA-test-0001",
+            "lodash advisory",
+            "x",
+        );
+        let conn = db.conn.lock();
+        assert!(
+            !stored_version_verdict_allows(&conn, id),
+            "an unscored row is not an alert"
+        );
+        conn.execute(
+            "INSERT INTO scoring_explanations (source_item_id, pipeline_version, breakdown)
+             VALUES (?1, 42, ?2)",
+            rusqlite::params![id, r#"{"score":0.3,"breakdown":{"installed_version":"4.17.21","is_version_affected":false}}"#],
+        )
+        .unwrap();
+        assert!(
+            !stored_version_verdict_allows(&conn, id),
+            "installed version past the fix: never a Tier 2 alert"
+        );
+        conn.execute(
+            "UPDATE scoring_explanations SET breakdown = ?1 WHERE source_item_id = ?2",
+            rusqlite::params![r#"{"score":0.8,"breakdown":{"installed_version":"4.17.1","is_version_affected":true}}"#, id],
+        )
+        .unwrap();
+        assert!(stored_version_verdict_allows(&conn, id));
     }
 
     #[test]
