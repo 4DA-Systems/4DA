@@ -210,6 +210,7 @@
   "blindspots.ai.assessedWith": "{{model}} tarafından değerlendirildi",
   "blindspots.ai.noModel": "Yapay zeka değerlendirmesini etkinleştirmek için Ayarlar'a bir API anahtarı ekleyin",
   "blindspots.ai.failed": "Değerlendirme başarısız oldu — tekrar deneyin",
+  "blindspots.ai.budgetReached": "Günlük yapay zekâ bütçesine ulaşıldı — {{time}} itibarıyla sıfırlanır ({{in}})",
   "blindspots.ai.tag": "AI",
   "blindspots.ai.worthReviewing": "İncelenmeye değer",
   "blindspots.ai.worthReviewingSubtitle_one": "Yapay zeka {{count}} tanesini işaretledi",

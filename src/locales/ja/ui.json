@@ -2101,6 +2101,7 @@
   "blindspots.ai.assessedWith": "{{model}} が評価",
   "blindspots.ai.noModel": "AI評価を有効にするには設定でAPIキーを追加してください",
   "blindspots.ai.failed": "評価に失敗しました — もう一度お試しください",
+  "blindspots.ai.budgetReached": "1日のAI予算に達しました — {{time}}にリセットされます（{{in}}）",
   "blindspots.ai.tag": "AI",
   "blindspots.ai.worthReviewing": "要確認",
   "blindspots.ai.worthReviewingSubtitle_one": "AIが{{count}}件をフラグ",

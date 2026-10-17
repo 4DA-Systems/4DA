@@ -10,6 +10,7 @@ import { useAppStore } from '../../store';
 import { cmd } from '../../lib/commands';
 import { recordTrustEvent } from '../../lib/trust-feedback';
 import { sourceNewsReady } from '../../lib/negative-readiness';
+import { budgetResetVars, parseBudgetReset } from '../../utils/error-messages';
 import { useBlindSpotsData } from '../../hooks/use-blind-spots-data';
 
 import { BlindSpotsPaywall } from './BlindSpotsPaywall';
@@ -26,7 +27,12 @@ import type { BlindSpotAssessment } from '../../../src-tauri/bindings/bindings/B
 // ============================================================================
 
 const BlindSpotsView = memo(function BlindSpotsView() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  // A spent daily AI budget says when it resets, in the user's language.
+  const budgetText = (err: string): string | null => {
+    const reset = parseBudgetReset(err);
+    return reset ? t('blindspots.ai.budgetReached', budgetResetVars(reset, i18n.language ?? 'en')) : null;
+  };
   const { report, loading, error, paywalled } = useAppStore(
     useShallow((s) => ({
       report: s.blindSpotReport,
@@ -324,7 +330,7 @@ const BlindSpotsView = memo(function BlindSpotsView() {
             <span className="text-[10px] text-text-muted">{t('blindspots.ai.noModel')}</span>
           )}
           {aiError && aiError !== 'no_llm' && (
-            <span className="text-[10px] text-red-400">{t('blindspots.ai.failed')}</span>
+            <span className="text-[10px] text-red-400">{budgetText(aiError) ?? t('blindspots.ai.failed')}</span>
           )}
         </div>
       )}

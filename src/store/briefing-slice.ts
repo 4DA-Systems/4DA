@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import type { StateCreator } from 'zustand';
 import { cmd } from '../lib/commands';
-import { translateError } from '../utils/error-messages';
+import { budgetRefusalMessage, translateError } from '../utils/error-messages';
 import type { AppStore, BriefingSlice, BriefingState, BriefVerdicts, FreeBriefingData, InstantBriefingSnapshot } from './types';
 
 const initialBriefingState: BriefingState = {
@@ -163,7 +163,11 @@ export const createBriefingSlice: StateCreator<AppStore, [], [], BriefingSlice> 
           aiBriefing: {
             ...state.aiBriefing,
             loading: false,
-            error: result.error || 'Failed to generate briefing',
+            // The backend's own user-facing message, except a budget refusal,
+            // whose reset token is rendered localized (never verbatim).
+            error: result.error
+              ? budgetRefusalMessage(result.error) ?? result.error
+              : 'Failed to generate briefing',
           },
         }));
       }

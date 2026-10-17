@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 
 use super::*;
-use crate::evidence::{EvidenceCitation, EvidenceKind, LensHints};
+use crate::evidence::{Confidence, EvidenceCitation, EvidenceKind, LensHints};
 
 // ---- has_grounded_reasoning tests ----
 
@@ -171,11 +171,8 @@ fn make_test_item(urgency: Urgency, title: &str) -> EvidenceItem {
     }
 }
 
-// Note: filter_batch integration tests require an LLM and are not
-// run in unit tests. The bypass logic for Critical/High is verified
-// by the Urgency ordering -- Critical < High < Medium < Watch --
-// so the comparison `item.urgency == Urgency::Critical || item.urgency
-// == Urgency::High` is exercised.
+// filter_batch's per-item decisions (cache, fail-closed, safety floor) are
+// tested with an injected model in `adversarial_cache_tests.rs`.
 
 #[test]
 fn test_urgency_ordering_for_bypass() {

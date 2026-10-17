@@ -2299,6 +2299,7 @@
   "blindspots.ai.assessedWith": "Assessed by {{model}}",
   "blindspots.ai.noModel": "Add an API key in Settings to enable AI assessment",
   "blindspots.ai.failed": "Assessment failed — try again",
+  "blindspots.ai.budgetReached": "Daily AI budget reached — resets at {{time}} ({{in}})",
   "blindspots.ai.tag": "AI",
   "blindspots.ai.worthReviewing": "Worth reviewing",
   "blindspots.ai.worthReviewingSubtitle_one": "{{count}} flagged by AI",

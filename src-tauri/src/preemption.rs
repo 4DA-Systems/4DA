@@ -1963,24 +1963,29 @@ async fn compute_preemption_evidence_feed() -> std::result::Result<EvidenceFeed,
         "preemption feed recomputed"
     );
     // TitanCA-inspired adversarial deliberation — two-perspective signal/noise
-    // validation. Critical/High items bypass; Medium/Watch get deliberated.
-    // Gracefully degrades when LLM is unavailable (items pass through unchanged).
+    // validation, with verdicts cached by content (audit L2). It FAILS CLOSED:
+    // a rejected item stays out while its verdict is valid, and an unvetted
+    // heuristic item (a signal chain) is held back when the model cannot
+    // judge it (background budget share spent, provider error). OSV-verified,
+    // LLM-assessed and corroborated Critical/High items always pass; with no
+    // deliberation configured, items pass after the escalation gate.
     let user_context = crate::adversarial::build_user_context_summary();
     let before = items.len();
-    let items = crate::adversarial::filter_batch(items, &user_context).await;
+    let crate::adversarial::BatchOutcome {
+        passed: items,
+        stats,
+    } = crate::adversarial::filter_batch(items, &user_context).await;
     let dropped = before.saturating_sub(items.len());
     if dropped > 0 {
+        // Routine once the background share is spent: the held-back chains
+        // return when the model can vet them (or from cached verdicts).
         info!(
             target: "4da::preemption",
             dropped, before, after = items.len(),
+            filtered_by_verdict = stats.filtered,
+            held_back_unjudged = stats.held_back,
+            model_unavailable = ?stats.unavailable,
             "adversarial filter dropped preemption items"
-        );
-    }
-    if before > 0 && items.is_empty() {
-        warn!(
-            target: "4da::preemption",
-            before,
-            "adversarial filter dropped ALL preemption items - possible LLM failure"
         );
     }
 
@@ -1991,25 +1996,13 @@ async fn compute_preemption_evidence_feed() -> std::result::Result<EvidenceFeed,
 }
 
 fn compute_preemption_fast_full_feed() -> std::result::Result<EvidenceFeed, String> {
-    let mut items = validated_preemption_items()?;
-    // The fast path skips adversarial deliberation (a cache miss must not
-    // wait on an LLM), but the escalation-corroboration gate is
-    // deterministic — apply it here too, so an uncorroborated critical
-    // chain cannot flash in the fast feed and vanish when the deliberated
-    // recompute lands.
-    let mut demoted = 0usize;
-    for item in items.iter_mut() {
-        if crate::adversarial::gate_escalation(item) {
-            demoted += 1;
-        }
-    }
-    if demoted > 0 {
-        info!(
-            target: "4da::preemption",
-            demoted,
-            "fast-path escalation gate demoted uncorroborated critical/high items"
-        );
-    }
+    // The fast path makes no model call (a cache miss must not wait on an
+    // LLM), but the deterministic parts of deliberation apply here too: the
+    // escalation gate, so an uncorroborated critical chain cannot flash in
+    // the fast feed, and stored verdicts, so a chain the model rejected
+    // cannot either (audit L2). Unvetted heuristics wait for the deliberated
+    // refresh started beside this feed.
+    let mut items = crate::adversarial::apply_stored_verdicts(validated_preemption_items()?);
     append_upgrade_plan_items(&mut items);
     Ok(assemble_feed(items, TierScope::Full))
 }

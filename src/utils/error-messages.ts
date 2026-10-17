@@ -40,14 +40,14 @@ const FALLBACK_MESSAGE = 'Something went wrong. Please try again.';
 // Access i18n instance for translating error messages.
 // Uses the already-initialized singleton from ../i18n — no circular dep
 // because this module only reads from it at call time, never at import time.
-function t(key: string, fallback: string): string {
+function t(key: string, fallback: string, opts?: Record<string, unknown>): string {
   try {
     // i18n singleton is already initialized by the time errors are shown
     const i18n = (window as unknown as Record<string, unknown>).__4da_i18n as
-      | { t: (k: string, opts?: Record<string, unknown>) => string; isInitialized: boolean }
+      | { t: (k: string, opts?: Record<string, unknown>) => string; isInitialized: boolean; language?: string }
       | undefined;
     if (i18n?.isInitialized) {
-      return i18n.t(key, { defaultValue: fallback }) || fallback;
+      return i18n.t(key, { ...opts, defaultValue: fallback }) || fallback;
     }
   } catch {
     // i18n not available — use fallback
@@ -106,6 +106,13 @@ function parseStructuredError(error: unknown): StructuredError | null {
  * @returns A user-friendly error string
  */
 export function translateError(error: unknown): string {
+  // A spent daily AI budget is not a fault to retry: say so, and when it resets.
+  const reset = parseBudgetReset(error);
+  if (reset) {
+    const vars = budgetResetVars(reset, currentLanguage());
+    return t('errors:errorMsg.budgetReached', englishBudgetReached(vars), vars);
+  }
+
   // Try structured error first (new backend error framework)
   const structured = parseStructuredError(error);
   if (structured) {
@@ -156,6 +163,70 @@ export function translateError(error: unknown): string {
 export function isSignalGateError(error: unknown): boolean {
   const raw = error instanceof Error ? error.message : String(error ?? '');
   return /requires 4DA Signal/i.test(raw);
+}
+
+/** When a refused call's daily AI budget comes back (local time). */
+export interface BudgetReset {
+  /** Local reset time, `HH:MM`. */
+  time: string;
+  /** Minutes until the reset. */
+  minutes: number;
+}
+
+/**
+ * The reset carried by a budget refusal. The backend
+ * (`state_llm_limits::daily_budget_reached_message`) is the sole producer: its
+ * English sentence ends with a `[budget_reset:HH:MM:MINUTES]` token so the UI
+ * can say it in the user's language. A budget refusal used to surface as
+ * "Assessment failed — try again" although retrying could not succeed until
+ * the reset (audit L2, 2026-10-12).
+ */
+export function parseBudgetReset(error: unknown): BudgetReset | null {
+  const raw = error instanceof Error ? error.message : String(error ?? '');
+  const match = /\[budget_reset:(\d{2}:\d{2}):(\d+)\]/.exec(raw);
+  if (!match) return null;
+  return { time: match[1]!, minutes: Number(match[2]) };
+}
+
+/**
+ * The localized budget refusal when `error` is one, else null. For surfaces
+ * that otherwise show the backend's own (already user-facing) message: only
+ * the budget case is replaced, so the token never renders verbatim.
+ */
+export function budgetRefusalMessage(error: unknown): string | null {
+  const reset = parseBudgetReset(error);
+  if (!reset) return null;
+  const vars = budgetResetVars(reset, currentLanguage());
+  return t('errors:errorMsg.budgetReached', englishBudgetReached(vars), vars);
+}
+
+/** `{time, in}` for the budget keys; `in` is a localized "in 3 hours". */
+export function budgetResetVars(reset: BudgetReset, language: string): { time: string; in: string } {
+  let rtf: Intl.RelativeTimeFormat;
+  try {
+    rtf = new Intl.RelativeTimeFormat(language, { numeric: 'always' });
+  } catch {
+    rtf = new Intl.RelativeTimeFormat('en', { numeric: 'always' });
+  }
+  // Whole hours only when that is within 5 minutes of the truth ("in 3
+  // hours" for 3 h 2 min); otherwise exact minutes ("in 89 minutes", never
+  // "in 1 hour" for 1 h 29 min).
+  const minutes = Math.max(1, reset.minutes);
+  const remainder = minutes % 60;
+  const inText =
+    minutes >= 60 && (remainder < 5 || remainder > 55)
+      ? rtf.format(Math.round(minutes / 60), 'hour')
+      : rtf.format(minutes, 'minute');
+  return { time: reset.time, in: inText };
+}
+
+function englishBudgetReached(vars: { time: string; in: string }): string {
+  return `Daily AI budget reached — resets at ${vars.time} (${vars.in})`;
+}
+
+function currentLanguage(): string {
+  const i18n = (window as unknown as Record<string, unknown>).__4da_i18n as { language?: string } | undefined;
+  return i18n?.language ?? 'en';
 }
 
 /**

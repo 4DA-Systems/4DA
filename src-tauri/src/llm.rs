@@ -192,6 +192,25 @@ pub(crate) fn todays_persisted_usage() -> Option<(u64, u64)> {
 // LLM Client
 // ============================================================================
 
+/// LLM purposes no user is waiting on: background passes that run on the
+/// engine cycle. They stop at the background share of the daily budget.
+/// Everything else (Assess with AI, search synthesis, a channel render the
+/// user asked for, connection tests, translation) keeps the whole cap. The
+/// scheduled `monitoring_brief` deliberately keeps it too: it is the brief
+/// the user reads, one call per window, and starving it would hide the day's
+/// findings behind background reranking.
+const BACKGROUND_PURPOSES: &[&str] = &[
+    "adversarial",
+    "rerank_judge",
+    "ingest_judge",
+    "verdict_drain",
+    crate::channel_render::RENDER_PURPOSE_AUTO,
+];
+
+pub(crate) fn is_background_purpose(purpose: Option<&str>) -> bool {
+    purpose.is_some_and(|p| BACKGROUND_PURPOSES.contains(&p))
+}
+
 pub struct LLMClient {
     provider: LLMProvider,
     client: reqwest::Client,
@@ -263,6 +282,18 @@ impl LLMClient {
         self.provider.provider != "ollama"
     }
 
+    /// Whether a metered call is refused for budget before it is sent: the
+    /// whole daily cap for every caller, and the background share
+    /// ([`crate::state::BACKGROUND_BUDGET_SHARE_PERCENT`]) for the passes no
+    /// user is waiting on, so they cannot spend the headroom reserved for
+    /// user-initiated calls (audit L2).
+    fn budget_refused(&self) -> bool {
+        self.metered()
+            && (is_llm_limit_reached()
+                || (is_background_purpose(self.purpose)
+                    && crate::state::background_llm_budget_reached()))
+    }
+
     /// Send a completion request.
     /// Enforces daily token and cost limits — returns an error if the budget is exhausted.
     pub async fn complete(&self, system: &str, messages: Vec<Message>) -> Result<LLMResponse> {
@@ -270,7 +301,7 @@ impl LLMClient {
         let (system, messages) = crate::privacy_egress::scrub_prompt(system, messages);
         let system = system.as_str();
         // Hard cutoff: refuse to call the LLM if daily limit is already reached
-        if self.metered() && is_llm_limit_reached() {
+        if self.budget_refused() {
             let (tokens_used, tokens_limit) = crate::state::get_llm_token_usage();
             let (cost_used, cost_limit) = crate::state::get_llm_cost_usage();
             warn!(
@@ -386,7 +417,7 @@ impl LLMClient {
         // Egress boundary: the user's local paths never reach a provider.
         let (system, messages) = crate::privacy_egress::scrub_prompt(system, messages);
         let system = system.as_str();
-        if self.metered() && is_llm_limit_reached() {
+        if self.budget_refused() {
             let (tokens_used, tokens_limit) = crate::state::get_llm_token_usage();
             let (cost_used, cost_limit) = crate::state::get_llm_cost_usage();
             warn!(
@@ -993,7 +1024,7 @@ impl LLMClient {
         let (system, messages) = crate::privacy_egress::scrub_prompt(system, messages);
         let system = system.as_str();
         // Hard cutoff: refuse to call the LLM if daily limit is already reached
-        if self.metered() && is_llm_limit_reached() {
+        if self.budget_refused() {
             let (tokens_used, tokens_limit) = crate::state::get_llm_token_usage();
             let (cost_used, cost_limit) = crate::state::get_llm_cost_usage();
             warn!(
@@ -1085,7 +1116,9 @@ impl LLMClient {
         cost_used: u64,
         cost_limit: u64,
     ) -> String {
-        let mut parts = Vec::new();
+        // The headline names the cause and when it clears; the UI shows it
+        // instead of a generic "try again" (audit L2).
+        let mut parts = vec![crate::state::daily_budget_reached_message()];
 
         if tokens_limit > 0 && tokens_used >= tokens_limit {
             parts.push(format!(
@@ -1101,7 +1134,7 @@ impl LLMClient {
             ));
         }
 
-        if parts.is_empty() {
+        if parts.len() == 1 {
             // Fallback (shouldn't happen, but be defensive)
             parts.push("Daily LLM limit reached".to_string());
         }
@@ -1150,11 +1183,12 @@ impl LLMClient {
                 "LLM call skipped — estimated cost would cross the daily cap"
             );
             return Err(format!(
-                "Daily AI cost limit would be exceeded: this call is estimated at ~{:.1}c \
-                 with {cost_used}c of {cost_limit}c already spent today. The call was \
-                 skipped before spending anything. Raise the daily cost limit in Settings \
-                 or wait for the daily reset.",
-                estimated_millicents as f64 / 1000.0
+                "This call would exceed today's AI budget (estimated ~{:.1}c with \
+                 {cost_used}c of {cost_limit}c already spent), so it was skipped before \
+                 spending anything. {}. Raise the daily cost limit in Settings to continue \
+                 today.",
+                estimated_millicents as f64 / 1000.0,
+                crate::state::daily_budget_reached_message()
             )
             .into());
         }
@@ -1612,6 +1646,32 @@ mod tests {
     // ========================================================================
     // format_limit_error — pure formatting logic
     // ========================================================================
+
+    /// Audit L2: only passes no user waits on answer to the background
+    /// share; a user-initiated call keeps the whole cap.
+    #[test]
+    fn background_share_gates_only_background_purposes() {
+        for p in [
+            "adversarial",
+            "rerank_judge",
+            "ingest_judge",
+            "verdict_drain",
+            "channel_render_auto",
+        ] {
+            assert!(is_background_purpose(Some(p)), "{p}");
+        }
+        for p in [
+            "channel_render",
+            "blind_spots",
+            "search_synthesis",
+            "digest",
+            "monitoring_brief",
+            "connection_test",
+        ] {
+            assert!(!is_background_purpose(Some(p)), "{p}");
+        }
+        assert!(!is_background_purpose(None));
+    }
 
     #[test]
     fn test_format_limit_error_token_exceeded() {

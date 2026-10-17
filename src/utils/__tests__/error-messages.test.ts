@@ -6,7 +6,7 @@
  * covering all 13 error pattern categories plus fallbacks.
  */
 import { describe, it, expect } from 'vitest';
-import { translateError, translateErrorWithRaw } from '../error-messages';
+import { budgetRefusalMessage, budgetResetVars, parseBudgetReset, translateError, translateErrorWithRaw } from '../error-messages';
 
 describe('translateError', () => {
   // --- Network errors ---
@@ -164,5 +164,49 @@ describe('translateErrorWithRaw', () => {
     const [friendly, raw] = translateErrorWithRaw(null);
     expect(friendly).toBe('Something went wrong. Please try again.');
     expect(raw).toBe('');
+  });
+});
+
+// Audit L2 (2026-10-12): a spent daily AI budget surfaced as
+// "Assessment failed — try again". The backend appends a machine token
+// with the local reset time; the UI renders it in the user's language.
+describe('budget refusal', () => {
+  const backend =
+    'AI assessment failed: Daily AI budget reached — resets at 00:00 local time (in 3 h 12 min) [budget_reset:00:00:192]. ' +
+    'Daily LLM cost limit exceeded (used: 151c, limit: 150c / $1.50). Adjust in Settings > Intelligence, or wait until midnight reset.';
+
+  it('parses the reset time from the backend token', () => {
+    expect(parseBudgetReset(backend)).toEqual({ time: '00:00', minutes: 192 });
+    expect(parseBudgetReset(new Error(backend))).toEqual({ time: '00:00', minutes: 192 });
+  });
+
+  it('is null for other failures', () => {
+    expect(parseBudgetReset('AI assessment failed: network error')).toBeNull();
+    expect(parseBudgetReset('Daily AI budget reached — resets at midnight local time')).toBeNull();
+    expect(parseBudgetReset(null)).toBeNull();
+  });
+
+  it('localizes the wait', () => {
+    expect(budgetResetVars({ time: '00:00', minutes: 182 }, 'en')).toEqual({ time: '00:00', in: 'in 3 hours' });
+    // Never round 1 h 29 min to an hour: exact minutes instead.
+    expect(budgetResetVars({ time: '00:00', minutes: 89 }, 'en').in).toBe('in 89 minutes');
+    expect(budgetResetVars({ time: '00:00', minutes: 192 }, 'en').in).toBe('in 192 minutes');
+    expect(budgetResetVars({ time: '00:00', minutes: 4 }, 'en').in).toBe('in 4 minutes');
+    expect(budgetResetVars({ time: '00:00', minutes: 180 }, 'de').in).toBe('in 3 Stunden');
+  });
+
+  it('wins over the generic patterns in translateError (never "try again")', () => {
+    const friendly = translateError(backend);
+    expect(friendly).toBe('Daily AI budget reached — resets at 00:00 (in 192 minutes)');
+    expect(friendly).not.toMatch(/try again/i);
+  });
+
+  // Round-3 review: the briefing, the graph summary, channel renders and the
+  // model eval show the backend's own message; only a budget refusal is
+  // replaced, so its token never renders verbatim.
+  it('budgetRefusalMessage replaces only budget refusals', () => {
+    expect(budgetRefusalMessage(backend)).toBe('Daily AI budget reached — resets at 00:00 (in 192 minutes)');
+    expect(budgetRefusalMessage(backend)).not.toContain('[budget_reset');
+    expect(budgetRefusalMessage('Your API key was rejected by the provider')).toBeNull();
   });
 });

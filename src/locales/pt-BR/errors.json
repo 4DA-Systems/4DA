@@ -39,6 +39,7 @@
   "errorMsg.parse": "Erro no formato dos dados. Tente novamente ou reinicie o aplicativo.",
   "errorMsg.permission": "Permissão negada. Verifique as permissões dos arquivos.",
   "errorMsg.rateLimit": "Limite de requisições atingido. Aguarde um momento e tente novamente.",
+  "errorMsg.budgetReached": "Orçamento diário de IA atingido — redefine às {{time}} ({{in}})",
   "errorMsg.timeout": "A requisição expirou. Tente novamente em instantes.",
   "translation.noLlm": "LLM não configurado — configure sua chave API em Configurações para habilitar a tradução de conteúdo"
 }

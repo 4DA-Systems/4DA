@@ -8,19 +8,31 @@
 //!
 //! Design constraints:
 //! - Single LLM call per item (all three roles combined in one prompt).
-//! - Graceful degradation: returns `Ok(None)` when LLM is unavailable or limits
-//!   reached, allowing the item to pass through unmodified.
-//! - Critical/High urgency items bypass deliberation entirely.
+//! - One call per distinct material, not per refresh: verdicts are cached by
+//!   a content hash for a week (`adversarial_cache.rs`, audit L2).
+//! - Fail-closed: a rejected item stays suppressed while its verdict is
+//!   valid, and an unvetted heuristic item is held back when the model
+//!   cannot judge it (`adversarial_batch.rs` has the decision table).
+//! - Background share: the pass stops at
+//!   [`crate::state::BACKGROUND_BUDGET_SHARE_PERCENT`] of the daily AI
+//!   budget, so user-initiated calls keep the rest.
+//! - Critical/High items keep a safety floor: they always surface.
 //! - Escalation gate: Critical/High is only honored when corroborated (real
 //!   advisory linkage or non-empty affected deps; signal chains: OSV-verified
 //!   provenance or non-empty affected deps only). Uncorroborated escalations
 //!   are capped at Medium before the safety floor is computed.
 
-use crate::error::Result;
-use crate::evidence::{Confidence, EvidenceItem, Urgency};
+use crate::evidence::{EvidenceItem, Urgency};
 use crate::llm::{LLMClient, Message};
+use crate::settings::LLMProvider;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, info, warn};
+
+#[path = "adversarial_batch.rs"]
+mod batch;
+pub(crate) use batch::{BatchOutcome, BatchStats};
+#[path = "adversarial_cache.rs"]
+mod cache;
 
 // ============================================================================
 // Types
@@ -70,43 +82,65 @@ struct RawReasoningChain {
 // Core deliberation
 // ============================================================================
 
-/// Run adversarial deliberation on a single EvidenceItem.
-///
-/// Returns `Ok(None)` if the LLM is unavailable, limits are reached, or the
-/// API key is missing (graceful degradation -- the item passes through
-/// unmodified). Returns `Ok(Some(verdict))` with the deliberation result.
-pub(crate) async fn deliberate(
+/// Why a deliberation could not run although the configuration supports it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Unavailable {
+    /// The background share of the daily AI budget is spent.
+    Budget,
+    /// The provider call failed (network, provider error, cost wall).
+    LlmError,
+    /// The model answered, but not with a readable verdict.
+    Unparseable,
+}
+
+impl Unavailable {
+    /// Whether the rest of the batch should skip the model too. A budget
+    /// stop or a failing provider would fail the same way for every item;
+    /// one unreadable answer says nothing about the next.
+    fn stops_batch(self) -> bool {
+        matches!(self, Self::Budget | Self::LlmError)
+    }
+}
+
+/// What one deliberation attempt produced.
+#[derive(Debug, Clone)]
+pub(crate) enum DeliberationOutcome {
+    Verdict(DeliberationVerdict),
+    Unavailable(Unavailable),
+    /// No model is configured for this (a cloud provider without a key).
+    NotConfigured,
+}
+
+/// Run adversarial deliberation on a single EvidenceItem with `provider`.
+/// Never errors: every way it can fail is a [`DeliberationOutcome`] the
+/// batch settles fail-closed.
+async fn deliberate(
     item: &EvidenceItem,
     user_context: &str,
-) -> Result<Option<DeliberationVerdict>> {
-    // ---- Gate: daily limit check ----
-    if crate::state::is_llm_limit_reached() {
-        debug!(
-            target: "4da::adversarial",
-            item_id = %item.id,
-            "Skipping deliberation -- daily LLM limit reached"
-        );
-        return Ok(None);
-    }
-
-    let provider = {
-        let mgr = crate::get_settings_manager();
-        let mut guard = mgr.lock();
-        guard.ensure_keys_hydrated();
-        guard.get().llm.clone()
-    };
-
-    if provider.provider != "ollama" && provider.api_key.is_empty() {
+    provider: LLMProvider,
+) -> DeliberationOutcome {
+    let metered = provider.provider != "ollama";
+    if metered && provider.api_key.is_empty() {
         debug!(
             target: "4da::adversarial",
             item_id = %item.id,
             provider = %provider.provider,
             "Skipping deliberation -- no API key configured"
         );
-        return Ok(None);
+        return DeliberationOutcome::NotConfigured;
+    }
+    // The background pass stops at its share of the daily budget; the rest
+    // is reserved for calls the user asks for (audit L2: this pass spent the
+    // whole cap daily and user assessments were refused).
+    if metered && crate::state::background_llm_budget_reached() {
+        debug!(
+            target: "4da::adversarial",
+            item_id = %item.id,
+            "Skipping deliberation -- background share of the daily AI budget spent"
+        );
+        return DeliberationOutcome::Unavailable(Unavailable::Budget);
     }
 
-    // ---- Build the combined prompt ----
     let system_prompt = build_system_prompt();
     let user_message = build_user_message(item, user_context);
 
@@ -117,7 +151,6 @@ pub(crate) async fn deliberate(
         content: user_message,
     }];
 
-    // ---- Call LLM ----
     let response = match client.complete(&system_prompt, messages).await {
         Ok(resp) => resp,
         Err(e) => {
@@ -125,9 +158,9 @@ pub(crate) async fn deliberate(
                 target: "4da::adversarial",
                 item_id = %item.id,
                 error = %e,
-                "LLM call failed during deliberation -- item passes through"
+                "LLM call failed during deliberation -- item settled fail-closed"
             );
-            return Ok(None);
+            return DeliberationOutcome::Unavailable(Unavailable::LlmError);
         }
     };
 
@@ -139,7 +172,6 @@ pub(crate) async fn deliberate(
         "Deliberation LLM call complete"
     );
 
-    // ---- Parse response ----
     match parse_verdict(&response.content) {
         Some(verdict) => {
             info!(
@@ -149,16 +181,16 @@ pub(crate) async fn deliberate(
                 adjusted_confidence = verdict.adjusted_confidence,
                 "Deliberation verdict rendered"
             );
-            Ok(Some(verdict))
+            DeliberationOutcome::Verdict(verdict)
         }
         None => {
             warn!(
                 target: "4da::adversarial",
                 item_id = %item.id,
                 response_len = response.content.len(),
-                "Failed to parse deliberation verdict -- item passes through"
+                "Failed to parse deliberation verdict -- item settled fail-closed"
             );
-            Ok(None)
+            DeliberationOutcome::Unavailable(Unavailable::Unparseable)
         }
     }
 }
@@ -302,10 +334,10 @@ fn has_advisory_linkage(item: &EvidenceItem) -> bool {
 ///
 /// Returns `true` when the item was demoted (the caller logs the demotion).
 ///
-/// `pub(crate)`: the preemption fast path (cache-miss feed, no LLM) applies
-/// this same deterministic gate so phantom critical chains cannot flash
-/// there while the deliberated recompute is still running.
-pub(crate) fn gate_escalation(item: &mut EvidenceItem) -> bool {
+/// The preemption fast path (cache-miss feed, no LLM) applies this same
+/// deterministic gate through [`apply_stored_verdicts`], so phantom critical
+/// chains cannot flash there while the deliberated recompute is running.
+fn gate_escalation(item: &mut EvidenceItem) -> bool {
     let escalated = item.urgency == Urgency::Critical || item.urgency == Urgency::High;
     if !escalated {
         return false;
@@ -326,34 +358,120 @@ pub(crate) fn gate_escalation(item: &mut EvidenceItem) -> bool {
 ///   only granted to corroborated escalations (see [`gate_escalation`]):
 ///   an escalated item with no advisory linkage and no affected deps is
 ///   capped at Medium first and deliberated like any other Medium item.
-/// - Items that cannot be deliberated (LLM unavailable) pass through unchanged.
+/// - A stored verdict for the same material is reused with no model call.
 /// - Items where the verdict says "don't surface" are dropped.
 /// - Items where the verdict says "surface" get their explanation and confidence
 ///   updated with the grounded output.
+/// - Items the model cannot judge right now are settled fail-closed (see
+///   `adversarial_batch.rs`).
 ///
 /// Processing is sequential (budget-conscious -- one LLM call per item).
-pub(crate) async fn filter_batch(
+pub(crate) async fn filter_batch(items: Vec<EvidenceItem>, user_context: &str) -> BatchOutcome {
+    let (items, demoted) = gate_batch(items);
+    let Some(llm) = deliberation_provider(items.len(), demoted) else {
+        return BatchOutcome {
+            passed: items,
+            stats: BatchStats::default(),
+        };
+    };
+    let db = crate::get_database().ok();
+    let mut cache = db
+        .map(|db| cache::VerdictCache::load(db))
+        .unwrap_or_default();
+    let now = chrono::Utc::now().timestamp();
+    let system_prompt = build_system_prompt();
+    let keyer =
+        |item: &EvidenceItem| cache::material_key(item, &system_prompt, &llm.provider, &llm.model);
+    let total = items.len();
+    let outcome = batch::deliberate_batch(items, &mut cache, keyer, now, |item| {
+        let provider = llm.clone();
+        let context = user_context.to_string();
+        async move { deliberate(&item, &context, provider).await }
+    })
+    .await;
+    if let Some(db) = db {
+        cache.save(db, now);
+    }
+    let stats = &outcome.stats;
+    info!(
+        target: "4da::adversarial",
+        total,
+        demoted,
+        bypassed = stats.bypassed,
+        cache_hits = stats.cache_hits,
+        llm_calls = stats.llm_calls,
+        filtered = stats.filtered,
+        held_back = stats.held_back,
+        unavailable = ?stats.unavailable,
+        passed = outcome.passed.len(),
+        "Adversarial filter batch complete"
+    );
+    outcome
+}
+
+/// The no-model counterpart of [`filter_batch`] for the cache-miss fast
+/// feed: the escalation gate, then stored verdicts only. A rejected item
+/// cannot flash in the fast feed, and an unvetted heuristic waits for the
+/// deliberated refresh started beside it. With no deliberation configured,
+/// the gated items pass as [`filter_batch`] would pass them.
+pub(crate) fn apply_stored_verdicts(items: Vec<EvidenceItem>) -> Vec<EvidenceItem> {
+    let (items, demoted) = gate_batch(items);
+    let Some(llm) = deliberation_provider(items.len(), demoted) else {
+        return items;
+    };
+    let db = crate::get_database().ok();
+    let system_prompt = build_system_prompt();
+    let keyer =
+        |item: &EvidenceItem| cache::material_key(item, &system_prompt, &llm.provider, &llm.model);
+    let outcome = settle_stored(
+        items,
+        db.map(|db| &**db),
+        keyer,
+        chrono::Utc::now().timestamp(),
+    );
+    if outcome.stats.filtered + outcome.stats.held_back > 0 {
+        info!(
+            target: "4da::adversarial",
+            cache_hits = outcome.stats.cache_hits,
+            filtered = outcome.stats.filtered,
+            held_back = outcome.stats.held_back,
+            "fast feed settled from stored verdicts"
+        );
+    }
+    outcome.passed
+}
+
+/// Settle a batch from the stored verdicts in `db`. FAILS CLOSED: with no
+/// readable database there are no stored verdicts, so unvetted heuristics
+/// are held back exactly as if the model were unavailable, never passed.
+fn settle_stored<K>(
     items: Vec<EvidenceItem>,
-    user_context: &str,
-) -> Vec<EvidenceItem> {
-    // Escalation gate FIRST — deterministic, zero-cost, and it must run
-    // regardless of LLM availability: the Basic-tier early return below used
-    // to exit before the gate, so on a Basic-tier/no-LLM config phantom
-    // critical chains sailed through the deliberated path untouched (found
-    // live 2026-08-24 during post-activation verification). An uncorroborated
-    // Critical/High item (no advisory linkage, no affected deps) loses its
-    // escalation BEFORE the safety floor is computed. R3 fixed the
-    // explanation copy of phantom chain alerts ("No advisory issued"); this
-    // fixes the escalation itself.
-    let mut items = items;
-    let mut demoted_count: usize = 0;
+    db: Option<&crate::db::Database>,
+    keyer: K,
+    now: i64,
+) -> BatchOutcome
+where
+    K: Fn(&EvidenceItem) -> String,
+{
+    let cache = db.map(cache::VerdictCache::load).unwrap_or_default();
+    batch::settle_from_cache(items, &cache, keyer, now)
+}
+
+/// The escalation gate over a batch. Runs FIRST — deterministic,
+/// zero-cost, and regardless of LLM availability: the Basic-tier early
+/// return used to exit before the gate, so on a Basic-tier/no-LLM config
+/// phantom critical chains sailed through untouched (found live 2026-08-24).
+/// An uncorroborated Critical/High item (no advisory linkage, no affected
+/// deps) loses its escalation BEFORE the safety floor is computed.
+fn gate_batch(mut items: Vec<EvidenceItem>) -> (Vec<EvidenceItem>, usize) {
+    let mut demoted: usize = 0;
     for item in items.iter_mut() {
         if item.confidence.provenance == crate::evidence::ConfidenceProvenance::OsvVerified {
             continue;
         }
         let original_urgency = item.urgency;
         if gate_escalation(item) {
-            demoted_count += 1;
+            demoted += 1;
             warn!(
                 target: "4da::adversarial",
                 item_id = %item.id,
@@ -364,109 +482,31 @@ pub(crate) async fn filter_batch(
             );
         }
     }
+    (items, demoted)
+}
 
-    // Gate: skip adversarial deliberation for Basic-tier models. Small models
-    // produce unreliable verdicts that would incorrectly filter good items.
-    // (The escalation gate above has already run — this skips only the LLM.)
-    let llm_settings = {
+/// The configured provider when its model tier supports deliberation.
+/// Basic-tier models produce unreliable verdicts that would wrongly filter
+/// good items, so they skip deliberation (the escalation gate has run).
+fn deliberation_provider(count: usize, demoted: usize) -> Option<LLMProvider> {
+    let llm = {
         let mgr = crate::get_settings_manager();
-        let guard = mgr.lock();
+        let mut guard = mgr.lock();
+        guard.ensure_keys_hydrated();
         guard.get().llm.clone()
     };
-    let tier = crate::llm_capability::get_model_tier(&llm_settings);
-    if !tier.supports_adversarial() {
-        debug!(
-            target: "4da::adversarial",
-            tier = %tier,
-            count = items.len(),
-            demoted = demoted_count,
-            "LLM model tier does not support adversarial deliberation, passing gated items through"
-        );
-        return items;
+    let tier = crate::llm_capability::get_model_tier(&llm);
+    if tier.supports_adversarial() {
+        return Some(llm);
     }
-
-    let total = items.len();
-    let mut passed = Vec::with_capacity(total);
-    let mut filtered_count: usize = 0;
-    let mut bypass_count: usize = 0;
-    let mut delib_count: usize = 0;
-
-    for item in items {
-        // OSV-verified items are machine-confirmed (semver range check against
-        // installed version). No LLM deliberation needed — pass through as-is.
-        if item.confidence.provenance == crate::evidence::ConfidenceProvenance::OsvVerified {
-            bypass_count += 1;
-            passed.push(item);
-            continue;
-        }
-
-        let must_surface = item.urgency == Urgency::Critical || item.urgency == Urgency::High;
-
-        delib_count += 1;
-        if must_surface {
-            bypass_count += 1;
-        }
-
-        match deliberate(&item, user_context).await {
-            Ok(Some(verdict)) => match apply_verdict(must_surface, verdict.should_surface) {
-                VerdictApplication::SurfaceUpdated => {
-                    let mut updated = item;
-                    updated.explanation = verdict.grounded_explanation;
-                    updated.confidence =
-                        Confidence::llm_assessed(verdict.adjusted_confidence.clamp(0.0, 1.0));
-                    passed.push(updated);
-                }
-                VerdictApplication::SurfaceUnchanged => {
-                    // Surfaced by the safety floor over LLM dissent. Keep the
-                    // item's own explanation/confidence — the dissent is an
-                    // input to filtering, not a rewrite of the evidence.
-                    warn!(
-                        target: "4da::adversarial",
-                        item_id = %item.id,
-                        title = %item.title,
-                        adjusted_confidence = verdict.adjusted_confidence,
-                        "Critical/High item surfaced despite dissenting verdict; original explanation kept"
-                    );
-                    passed.push(item);
-                }
-                VerdictApplication::Filter => {
-                    filtered_count += 1;
-                    debug!(
-                        target: "4da::adversarial",
-                        item_id = %item.id,
-                        title = %item.title,
-                        "Item filtered by adversarial deliberation"
-                    );
-                }
-            },
-            Ok(None) => {
-                // LLM unavailable -- pass through unchanged
-                passed.push(item);
-            }
-            Err(e) => {
-                warn!(
-                    target: "4da::adversarial",
-                    item_id = %item.id,
-                    error = %e,
-                    "Deliberation error -- item passes through"
-                );
-                passed.push(item);
-            }
-        }
-    }
-
-    info!(
+    debug!(
         target: "4da::adversarial",
-        total,
-        bypassed = bypass_count,
-        deliberated = delib_count,
-        demoted = demoted_count,
-        filtered = filtered_count,
-        passed = passed.len(),
-        "Adversarial filter batch complete"
+        tier = %tier,
+        count,
+        demoted,
+        "LLM model tier does not support adversarial deliberation, passing gated items through"
     );
-
-    passed
+    None
 }
 
 // ============================================================================
@@ -557,6 +597,10 @@ fn build_system_prompt() -> String {
     )
 }
 
+/// CACHE KEY: changing this template (its wording or which item fields it
+/// sends) requires bumping `cache::PROMPT_VERSION`. The verdict cache hashes
+/// the system prompt text but only the item FIELDS, not this template, so a
+/// template edit without a bump would reuse verdicts judged on the old one.
 fn build_user_message(item: &EvidenceItem, user_context: &str) -> String {
     let kind_str = serde_json::to_string(&item.kind).unwrap_or_else(|_| "unknown".to_string());
     let urgency_str =
