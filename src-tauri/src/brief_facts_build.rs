@@ -307,12 +307,15 @@ fn security_fact(
                             &package,
                             installed.as_deref(),
                         );
+                        // Only a version-confirmed copy: without one the
+                        // version and target are the alert's fallbacks, which
+                        // the Upgrade Plan names no command for (review of #982).
                         let path = with_direct_fix(
                             path,
                             project,
                             &ecosystem,
                             &package,
-                            installed.as_deref(),
+                            copy.and_then(|d| d.installed_version.as_deref()),
                         );
                         let path = with_proven_parent(path, &parent_links, &pnorm, labels);
                         with_parent_route(
