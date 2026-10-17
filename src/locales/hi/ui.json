@@ -2692,5 +2692,14 @@
   "signals.stack.projects": "प्रोजेक्ट",
   "signals.stack.listLabel": "आपके स्टैक में बदलाव",
   "signals.stack.modeNote": "थीम और ग्राफ़ आपकी पढ़ने वाली फ़ीड दिखाते हैं। आपके स्टैक में जो बदला वह सूची में है: हर बदलाव एक पैकेज का है, इसलिए समूह बनाने को कुछ नहीं है।",
-  "signals.stack.feedOnlyStack": "फ़ीड में और कुछ नहीं: इसमें जो कुछ है वह आपके स्टैक का बदलाव है, जो ऊपर सूचीबद्ध है।"
+  "signals.stack.feedOnlyStack": "फ़ीड में और कुछ नहीं: इसमें जो कुछ है वह आपके स्टैक का बदलाव है, जो ऊपर सूचीबद्ध है।",
+  "results.versionUnknown": "अपुष्ट: इंस्टॉल किया गया संस्करण ज्ञात नहीं",
+  "preemption.empty.partialTitle": "जिन डिपेंडेंसी की 4DA जाँच कर सका, उनमें कोई ज्ञात भेद्यता नहीं",
+  "preemption.notCovered.title_one": "1 डिपेंडेंसी फ़ाइल कवर नहीं है",
+  "preemption.notCovered.title_other": "{{count}} डिपेंडेंसी फ़ाइलें कवर नहीं हैं",
+  "preemption.notCovered.body": "4DA इन फ़ाइलों से इंस्टॉल किए गए संस्करण नहीं पढ़ता, इसलिए वह इन्हें सुरक्षा सलाहों से नहीं मिला सकता और इन्हें सुरक्षित नहीं मानता। आज यह npm, pnpm, Yarn, Bun, Cargo, Python और Go की लॉकफ़ाइलें पढ़ता है, Ruby और PHP के लिए प्रारंभिक समर्थन के साथ; Maven, Gradle और .NET प्रोजेक्ट अभी कवर नहीं हैं।",
+  "preemption.notCovered.more": "और {{count}} अन्य",
+  "preemption.notCovered.unreadableTitle_one": "1 लॉकफ़ाइल पढ़ी नहीं जा सकी",
+  "preemption.notCovered.unreadableTitle_other": "{{count}} लॉकफ़ाइलें पढ़ी नहीं जा सकीं",
+  "preemption.notCovered.unreadableBody": "4DA पिछले स्कैन में इन फ़ाइलों को नहीं पढ़ सका, इसलिए इनमें तय किए गए संस्करणों को जाँचा हुआ नहीं मानता। फ़ाइल ठीक करें या फिर से स्कैन करें।"
 }

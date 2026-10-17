@@ -2733,5 +2733,14 @@
   "signals.stack.projects": "Projekte",
   "signals.stack.listLabel": "Änderungen in deinem Stack",
   "signals.stack.modeNote": "Themen und Graph bilden deinen Lese-Feed ab. Was sich in deinem Stack geändert hat, steht in der Liste: Jede Änderung betrifft ein Paket, es gibt also nichts zu gruppieren.",
-  "signals.stack.feedOnlyStack": "Sonst nichts im Feed: Alles darin ist eine Änderung in deinem Stack und steht oben."
+  "signals.stack.feedOnlyStack": "Sonst nichts im Feed: Alles darin ist eine Änderung in deinem Stack und steht oben.",
+  "results.versionUnknown": "Unbestätigt: keine installierte Version bekannt",
+  "preemption.empty.partialTitle": "Keine bekannten Schwachstellen in den Abhängigkeiten, die 4DA prüfen konnte",
+  "preemption.notCovered.title_one": "1 Abhängigkeitsdatei ist nicht abgedeckt",
+  "preemption.notCovered.title_other": "{{count}} Abhängigkeitsdateien sind nicht abgedeckt",
+  "preemption.notCovered.body": "4DA liest aus diesen Dateien keine installierten Versionen, kann sie also nicht mit Sicherheitshinweisen abgleichen und zählt sie nicht als sauber. Gelesen werden heute npm-, pnpm-, Yarn-, Bun-, Cargo-, Python- und Go-Lockfiles, mit früher Unterstützung für Ruby und PHP; Maven-, Gradle- und .NET-Projekte sind noch nicht abgedeckt.",
+  "preemption.notCovered.more": "und {{count}} weitere",
+  "preemption.notCovered.unreadableTitle_one": "1 Lockfile konnte nicht gelesen werden",
+  "preemption.notCovered.unreadableTitle_other": "{{count}} Lockfiles konnten nicht gelesen werden",
+  "preemption.notCovered.unreadableBody": "4DA konnte diese Dateien beim letzten Scan nicht lesen und zählt daher nicht als geprüft, was sie festlegen. Korrigiere die Datei oder scanne erneut."
 }

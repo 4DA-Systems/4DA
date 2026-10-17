@@ -286,11 +286,25 @@ fn load_direct_runtime_deps(conn: &rusqlite::Connection) -> Result<Vec<DirectRun
         crate::temporal::included_dependencies_resolved(conn, &active_roots)?
             .into_iter()
             .filter(|d| !d.is_dev && d.is_direct)
-            .map(|d| DirectRuntimeDep {
-                package_name: d.package_name,
-                project_path: d.project_path,
-                language: d.language,
-                version: d.version.filter(|v| !v.trim().is_empty()),
+            .map(|d| {
+                // Same bounded "nearby pin" lookup the scorer uses before it
+                // calls an advisory version-unknown, so Tier 2 and Signal agree.
+                let version = d.version.filter(|v| !v.trim().is_empty()).or_else(|| {
+                    crate::temporal::installed_versions_nearby(
+                        conn,
+                        &d.package_name,
+                        &d.language,
+                        std::slice::from_ref(&d.project_path),
+                    )
+                    .into_iter()
+                    .next()
+                });
+                DirectRuntimeDep {
+                    package_name: d.package_name,
+                    project_path: d.project_path,
+                    language: d.language,
+                    version,
+                }
             })
             .collect();
     // Canonical project-inclusion policy: the Preemption Radar's grounding
@@ -3440,6 +3454,44 @@ mod tests {
             deps[0].version, None,
             "an npm lockfile row is not the crate's version"
         );
+    }
+
+    /// Round-3 review SF2: Tier 2 and the scorer read installed versions
+    /// through the same bounded lookup. On one fixture (no own lockfile,
+    /// exactly one nested project pins the package) both see 4.17.1.
+    #[test]
+    fn tier2_and_the_scorer_agree_on_the_installed_version() {
+        let db = crate::test_utils::test_db();
+        db.store_dependency(
+            "/w/app/web",
+            "express",
+            Some("4.17.1"),
+            "javascript",
+            false,
+            None,
+        )
+        .unwrap();
+        let conn = db.conn.lock();
+        conn.execute(
+            "INSERT INTO project_dependencies
+                (project_path, manifest_type, package_name, version, is_dev, is_direct, language, project_relevance)
+             VALUES ('/w/app', 'package.json', 'express', NULL, 0, 1, 'javascript', 1.0)",
+            [],
+        )
+        .unwrap();
+        let tier2 = load_direct_runtime_deps(&conn).unwrap();
+        let scorer = crate::temporal::installed_versions_nearby(
+            &conn,
+            "express",
+            "javascript",
+            &["/w/app".to_string()],
+        );
+        let app = tier2
+            .iter()
+            .find(|d| d.project_path == "/w/app")
+            .expect("the manifest dep");
+        assert_eq!(app.version.as_deref(), Some("4.17.1"));
+        assert_eq!(scorer, vec!["4.17.1".to_string()]);
     }
 
     /// Review SF2: Tier 2 lists a registry row only when the scorer's stored

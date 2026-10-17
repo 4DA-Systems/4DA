@@ -583,56 +583,11 @@ fn resolve_versions_within_roots(
     }
 }
 
-/// An installed version of `package` (same ecosystem family) from any
-/// lockfile row for one of `project_paths`, or for a project nested in or
-/// enclosing one of them (a workspace member or its root). The scorer asks
-/// this before calling an advisory "version unknown", so a dependency whose
-/// grounding row came through without a version is not demoted when a
-/// lockfile does pin it (audit E4 review). Never across ecosystems.
-pub(crate) fn installed_version_nearby(
-    conn: &rusqlite::Connection,
-    package: &str,
-    ecosystem: &str,
-    project_paths: &[String],
-) -> Option<String> {
-    let family = ecosystem_family(ecosystem);
-    use crate::project_inclusion::comparison_form;
-    let wanted: Vec<String> = project_paths
-        .iter()
-        .map(String::as_str)
-        .map(comparison_form)
-        .collect();
-    let mut stmt = conn
-        .prepare_cached(
-            "SELECT ud.project_path, ud.ecosystem, ud.version FROM user_dependencies ud
-             WHERE LOWER(ud.package_name) = LOWER(?1)
-               AND ud.version IS NOT NULL AND ud.version <> ''
-             ORDER BY ud.is_direct DESC, ud.last_seen_at DESC",
-        )
-        .ok()?;
-    let rows = stmt
-        .query_map(params![package], |r| {
-            Ok((
-                r.get::<_, String>(0)?,
-                r.get::<_, String>(1)?,
-                r.get::<_, String>(2)?,
-            ))
-        })
-        .ok()?;
-    let candidates: Vec<(String, String, String)> = rows.flatten().collect();
-    candidates
-        .into_iter()
-        .find(|(path, eco, _)| {
-            let path = comparison_form(path);
-            ecosystem_family(eco) == family
-                && wanted.iter().any(|w| {
-                    *w == path
-                        || w.starts_with(&format!("{path}/"))
-                        || path.starts_with(&format!("{w}/"))
-                })
-        })
-        .map(|(_, _, version)| version)
-}
+// The bounded "installed versions near a project" lookup shared by the
+// scorer and Preemption Tier 2 (audit E4 review).
+#[path = "temporal_versions.rs"]
+mod versions;
+pub(crate) use versions::installed_versions_nearby;
 
 /// Do two project paths sit under one common active repo root?
 fn shares_active_root(a: &str, b: &str, active_roots: &[String]) -> bool {
