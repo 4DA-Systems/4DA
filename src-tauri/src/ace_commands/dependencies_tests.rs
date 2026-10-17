@@ -326,3 +326,138 @@ fn cargo_walk_skips_workspace_members_and_keeps_dev_flags() {
     assert_eq!(inst("serde").scope, "runtime");
     assert!(!inst("serde").is_dev);
 }
+
+// ------------------------------------------- npm-family workspaces (defect B)
+
+fn write_json(path: &Path, json: &str) {
+    std::fs::create_dir_all(path.parent().expect("parent")).unwrap();
+    std::fs::write(path, json).unwrap();
+}
+
+fn js_direct(dir: &Path) -> Vec<String> {
+    let scanner = crate::ace::scanner::ProjectScanner::new();
+    let mut names = direct_names(&scanner, &dir.to_path_buf(), "javascript", &[]);
+    names.sort();
+    names.dedup();
+    names
+}
+
+/// Two members: `web` (runtime + dev, and a plain-range reference to its
+/// sibling `@me/ui`) and `ui` (with a `workspace:` protocol spec).
+fn two_members(dir: &Path, parent: &str) {
+    write_json(
+        &dir.join(parent).join("web/package.json"),
+        r#"{"name":"@me/web","dependencies":{"react":"^18.2.0","@me/ui":"*"},
+            "devDependencies":{"vitest":"^2.0.0"}}"#,
+    );
+    write_json(
+        &dir.join(parent).join("ui/package.json"),
+        r#"{"name":"@me/ui","dependencies":{"lodash":"^4.17.0","shared":"workspace:*"}}"#,
+    );
+}
+
+/// A dependency only a workspace member declares used to be stored
+/// transitive (only the lockfile directory's own package.json was read), so
+/// the parent walk found no lever for anything under it.
+#[test]
+fn npm_workspace_members_declarations_are_direct() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    write_json(
+        &dir.join("package.json"),
+        r#"{"name":"root","private":true,"workspaces":["packages/*"],
+            "devDependencies":{"typescript":"^5.4.0"}}"#,
+    );
+    two_members(dir, "packages");
+    assert_eq!(
+        js_direct(dir),
+        vec!["lodash", "react", "typescript", "vitest"],
+        "runtime and dev declarations of every member; never a member itself"
+    );
+}
+
+#[test]
+fn yarn_workspaces_object_form_members_are_direct() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    write_json(
+        &dir.join("package.json"),
+        r#"{"name":"root","private":true,"workspaces":{"packages":["apps/*"],"nohoist":["**/x"]}}"#,
+    );
+    two_members(dir, "apps");
+    assert_eq!(js_direct(dir), vec!["lodash", "react", "vitest"]);
+}
+
+#[test]
+fn pnpm_workspace_yaml_members_are_direct() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    write_json(
+        &dir.join("package.json"),
+        r#"{"name":"root","private":true,"dependencies":{"zod":"^3.0.0"}}"#,
+    );
+    std::fs::write(
+        dir.join("pnpm-workspace.yaml"),
+        "packages:\n  - 'libs/*'\n  - '!libs/web'\n",
+    )
+    .unwrap();
+    two_members(dir, "libs");
+    assert_eq!(
+        js_direct(dir),
+        vec!["lodash", "zod"],
+        "a negated member is not a member"
+    );
+}
+
+/// A single-root project is unchanged: a nested package.json that no
+/// `workspaces` names is not read.
+#[test]
+fn a_single_root_project_reads_only_its_own_manifest() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    write_json(
+        &dir.join("package.json"),
+        r#"{"name":"app","dependencies":{"express":"^4.18.0"},"devDependencies":{"jest":"^29.0.0"}}"#,
+    );
+    two_members(dir, "examples");
+    assert_eq!(js_direct(dir), vec!["express", "jest"]);
+}
+
+/// End to end through the walk's store: a member's dependency lands as a
+/// direct row of the workspace's lockfile project; what it pulls in stays
+/// transitive.
+#[test]
+fn the_walk_stores_a_members_dependency_as_direct() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path().to_path_buf();
+    write_json(
+        &dir.join("package.json"),
+        r#"{"name":"root","private":true,"workspaces":["packages/*"]}"#,
+    );
+    write_json(
+        &dir.join("packages/ui/package.json"),
+        r#"{"name":"@me/ui","dependencies":{"express":"^4.18.0"}}"#,
+    );
+    write_json(
+        &dir.join("package-lock.json"),
+        r#"{"name":"root","lockfileVersion":3,"requires":true,"packages":{
+            "":{"name":"root","workspaces":["packages/*"]},
+            "node_modules/@me/ui":{"resolved":"packages/ui","link":true},
+            "packages/ui":{"name":"@me/ui","dependencies":{"express":"^4.18.0"}},
+            "node_modules/express":{"version":"4.18.2","dependencies":{"qs":"6.11.0"}},
+            "node_modules/qs":{"version":"6.11.0"}}}"#,
+    );
+    let db = crate::test_utils::test_db();
+    let project = "/ws/npm-workspace";
+    let scanner = crate::ace::scanner::ProjectScanner::new();
+    let mut report = LockfileReport::default();
+    process_lockfile_dir(&db, &scanner, &dir, project, &mut report);
+    let rows = db.get_project_dependencies(project).unwrap();
+    let row = |name: &str| {
+        rows.iter()
+            .find(|r| r.package_name == name)
+            .unwrap_or_else(|| panic!("{name} row in {rows:?}"))
+    };
+    assert!(row("express").is_direct, "declared by a workspace member");
+    assert!(!row("qs").is_direct, "reached only through express");
+}

@@ -130,6 +130,42 @@ fn expand_member_dirs(root: &Path, glob: &str) -> Vec<PathBuf> {
         .unwrap_or_default()
 }
 
+/// The member directories of the npm / yarn / pnpm workspace rooted at
+/// `root`: its `package.json` `workspaces` (array, or yarn's
+/// `{ packages: [...] }`) and its `pnpm-workspace.yaml` `packages:`, expanded
+/// as [`expand_member_dirs`] does, minus literal `!negations`. Only
+/// directories holding a `package.json`, never `root` itself, sorted. Empty
+/// for a project that is not a workspace root.
+pub(crate) fn workspace_member_dirs(root: &Path) -> Vec<PathBuf> {
+    let mut globs = read_json(&root.join("package.json"))
+        .map(|pkg| workspace_globs(&pkg))
+        .unwrap_or_default();
+    if let Ok(yaml) = fs::read_to_string(root.join("pnpm-workspace.yaml")) {
+        globs.extend(pnpm_workspace_globs(&yaml));
+    }
+    let negated: Vec<PathBuf> = globs
+        .iter()
+        .filter_map(|g| g.trim().strip_prefix('!'))
+        .map(|g| root.join(g.trim_start_matches("./")))
+        .collect();
+    let mut dirs: Vec<PathBuf> = globs
+        .iter()
+        .flat_map(|g| expand_member_dirs(root, g))
+        .filter(|d| d.join("package.json").is_file() && d != root && !negated.contains(d))
+        .collect();
+    dirs.sort();
+    dirs.dedup();
+    dirs
+}
+
+/// The `name` a member's `package.json` declares.
+pub(crate) fn package_name(dir: &Path) -> Option<String> {
+    read_json(&dir.join("package.json"))?
+        .get("name")?
+        .as_str()
+        .map(str::to_string)
+}
+
 /// Every local package name of one workspace root: the root package, every
 /// scanned manifest under it, and every member its globs name.
 fn workspace_member_names(root: &NpmManifestFacts, all: &[NpmManifestFacts]) -> HashSet<String> {
