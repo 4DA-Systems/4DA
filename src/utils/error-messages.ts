@@ -188,16 +188,35 @@ export function parseBudgetReset(error: unknown): BudgetReset | null {
   return { time: match[1]!, minutes: Number(match[2]) };
 }
 
+/**
+ * The localized budget refusal when `error` is one, else null. For surfaces
+ * that otherwise show the backend's own (already user-facing) message: only
+ * the budget case is replaced, so the token never renders verbatim.
+ */
+export function budgetRefusalMessage(error: unknown): string | null {
+  const reset = parseBudgetReset(error);
+  if (!reset) return null;
+  const vars = budgetResetVars(reset, currentLanguage());
+  return t('errors:errorMsg.budgetReached', englishBudgetReached(vars), vars);
+}
+
 /** `{time, in}` for the budget keys; `in` is a localized "in 3 hours". */
 export function budgetResetVars(reset: BudgetReset, language: string): { time: string; in: string } {
-  const hours = Math.round(reset.minutes / 60);
   let rtf: Intl.RelativeTimeFormat;
   try {
     rtf = new Intl.RelativeTimeFormat(language, { numeric: 'always' });
   } catch {
     rtf = new Intl.RelativeTimeFormat('en', { numeric: 'always' });
   }
-  const inText = reset.minutes >= 60 ? rtf.format(hours, 'hour') : rtf.format(Math.max(1, reset.minutes), 'minute');
+  // Whole hours only when that is within 5 minutes of the truth ("in 3
+  // hours" for 3 h 2 min); otherwise exact minutes ("in 89 minutes", never
+  // "in 1 hour" for 1 h 29 min).
+  const minutes = Math.max(1, reset.minutes);
+  const remainder = minutes % 60;
+  const inText =
+    minutes >= 60 && (remainder < 5 || remainder > 55)
+      ? rtf.format(Math.round(minutes / 60), 'hour')
+      : rtf.format(minutes, 'minute');
   return { time: reset.time, in: inText };
 }
 

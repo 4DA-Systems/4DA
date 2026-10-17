@@ -355,7 +355,12 @@ fn serve_deterministic(
 
 /// The user-facing message for a provider error.
 fn provider_error_message(e_str: &str) -> String {
-    if e_str.contains("Connection refused") || e_str.contains("connect") {
+    // A budget refusal passes through whole: it already names the cause and
+    // the reset, and its `[budget_reset:…]` token lets the UI say it in the
+    // user's language. It must never be re-classified by the checks below.
+    if e_str.contains("[budget_reset:") || e_str.contains("Daily AI budget reached") {
+        e_str.to_string()
+    } else if e_str.contains("Connection refused") || e_str.contains("connect") {
         "Ollama is not running. Start it with 'ollama serve' or check your LLM settings."
             .to_string()
     } else if e_str.contains("401")
@@ -434,6 +439,20 @@ pub async fn generate_ai_briefing(
 
 #[cfg(test)]
 mod tests {
+    /// Round-3 review: a budget refusal reaches the briefing slice whole, so
+    /// the UI can localize its reset token; it is never re-classified (it
+    /// mentions neither "connect" nor "model", but must not depend on that).
+    #[test]
+    fn a_budget_refusal_passes_through_whole() {
+        let refusal =
+            "Daily AI budget reached \u{2014} resets at 00:00 local time (in 3 h 12 min) \
+                       [budget_reset:00:00:192]. Daily LLM cost limit exceeded";
+        assert_eq!(super::provider_error_message(refusal), refusal);
+        let preflight = "This call would exceed today's AI budget (estimated ~1.0c), connect \
+                         [budget_reset:00:00:5]";
+        assert_eq!(super::provider_error_message(preflight), preflight);
+    }
+
     /// End-to-end on a REAL corpus snapshot with the user's configured model:
     /// facts -> prompt -> model -> version check -> persist -> novelty. Costs
     /// one model call; writes only to the snapshot. Run with

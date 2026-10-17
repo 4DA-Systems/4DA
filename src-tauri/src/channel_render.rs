@@ -256,6 +256,18 @@ pub(crate) fn generate_fallback_content(
 /// Flow: load channel -> gather sources -> check LLM -> build prompt -> call LLM
 ///       -> extract provenance -> save render -> compute changelog
 pub(crate) async fn render_channel(channel_id: i64) -> Result<ChannelRender> {
+    render_channel_as(channel_id, RENDER_PURPOSE_MANUAL).await
+}
+
+/// LLM purpose of a render the user asked for (open, create, "render now"):
+/// it keeps the whole daily cap.
+const RENDER_PURPOSE_MANUAL: &str = "channel_render";
+/// LLM purpose of the scheduled stale-channel pass after each monitoring
+/// cycle: a background pass, so it stops at the background share of the
+/// daily budget (`llm::BACKGROUND_PURPOSES`, audit L2).
+pub(crate) const RENDER_PURPOSE_AUTO: &str = "channel_render_auto";
+
+async fn render_channel_as(channel_id: i64, purpose: &'static str) -> Result<ChannelRender> {
     let db = crate::get_database()?;
 
     // Load channel
@@ -365,7 +377,7 @@ pub(crate) async fn render_channel(channel_id: i64) -> Result<ChannelRender> {
     );
 
     // Call LLM (async -- no locks held at this point)
-    let llm_client = crate::llm::LLMClient::with_purpose(llm_settings.clone(), "channel_render");
+    let llm_client = crate::llm::LLMClient::with_purpose(llm_settings.clone(), purpose);
     let messages = vec![crate::llm::Message {
         role: "user".to_string(),
         content: user_prompt,
@@ -499,7 +511,7 @@ pub(crate) async fn auto_render_stale_channels() -> Result<()> {
     use futures::StreamExt;
     let outcomes: Vec<bool> =
         futures::stream::iter(jobs.into_iter().map(|(id, slug)| async move {
-            match render_channel(id).await {
+            match render_channel_as(id, RENDER_PURPOSE_AUTO).await {
                 Ok(render) => {
                     info!(
                         target: "4da::channels",

@@ -6,7 +6,7 @@
  * covering all 13 error pattern categories plus fallbacks.
  */
 import { describe, it, expect } from 'vitest';
-import { budgetResetVars, parseBudgetReset, translateError, translateErrorWithRaw } from '../error-messages';
+import { budgetRefusalMessage, budgetResetVars, parseBudgetReset, translateError, translateErrorWithRaw } from '../error-messages';
 
 describe('translateError', () => {
   // --- Network errors ---
@@ -187,14 +187,26 @@ describe('budget refusal', () => {
   });
 
   it('localizes the wait', () => {
-    expect(budgetResetVars({ time: '00:00', minutes: 192 }, 'en')).toEqual({ time: '00:00', in: 'in 3 hours' });
+    expect(budgetResetVars({ time: '00:00', minutes: 182 }, 'en')).toEqual({ time: '00:00', in: 'in 3 hours' });
+    // Never round 1 h 29 min to an hour: exact minutes instead.
+    expect(budgetResetVars({ time: '00:00', minutes: 89 }, 'en').in).toBe('in 89 minutes');
+    expect(budgetResetVars({ time: '00:00', minutes: 192 }, 'en').in).toBe('in 192 minutes');
     expect(budgetResetVars({ time: '00:00', minutes: 4 }, 'en').in).toBe('in 4 minutes');
-    expect(budgetResetVars({ time: '00:00', minutes: 192 }, 'de').in).toBe('in 3 Stunden');
+    expect(budgetResetVars({ time: '00:00', minutes: 180 }, 'de').in).toBe('in 3 Stunden');
   });
 
   it('wins over the generic patterns in translateError (never "try again")', () => {
     const friendly = translateError(backend);
-    expect(friendly).toBe('Daily AI budget reached — resets at 00:00 (in 3 hours)');
+    expect(friendly).toBe('Daily AI budget reached — resets at 00:00 (in 192 minutes)');
     expect(friendly).not.toMatch(/try again/i);
+  });
+
+  // Round-3 review: the briefing, the graph summary, channel renders and the
+  // model eval show the backend's own message; only a budget refusal is
+  // replaced, so its token never renders verbatim.
+  it('budgetRefusalMessage replaces only budget refusals', () => {
+    expect(budgetRefusalMessage(backend)).toBe('Daily AI budget reached — resets at 00:00 (in 192 minutes)');
+    expect(budgetRefusalMessage(backend)).not.toContain('[budget_reset');
+    expect(budgetRefusalMessage('Your API key was rejected by the provider')).toBeNull();
   });
 });

@@ -8,6 +8,7 @@ import { recordTrustEvent } from '../../lib/trust-feedback';
 import { isSafeUrl } from '../../utils/sanitize-html';
 import { getSourceLabel } from '../../config/sources';
 import { getRelevancePresentation } from '../../utils/score';
+import { budgetRefusalMessage } from '../../utils/error-messages';
 import type { SourceRelevance } from '../../types';
 import type { GraphNode } from '../../types/graph';
 import { CategoryMark } from './graph-marks';
@@ -157,7 +158,7 @@ export default function GraphDetailPanel({ node, onClose }: GraphDetailPanelProp
     setSummaryError(null);
     cmd('generate_item_summary', { itemId: nodeId })
       .then((r) => setSummary(r.summary))
-      .catch((e) => setSummaryError(String(e)))
+      .catch((e) => setSummaryError(budgetRefusalMessage(e) ?? String(e)))
       .finally(() => setSummaryLoading(false));
   }, [nodeId]);
 

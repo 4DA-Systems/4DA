@@ -194,13 +194,17 @@ pub(crate) fn todays_persisted_usage() -> Option<(u64, u64)> {
 
 /// LLM purposes no user is waiting on: background passes that run on the
 /// engine cycle. They stop at the background share of the daily budget.
-/// Everything else (Assess with AI, search synthesis, briefs and digests the
-/// user reads, connection tests, translation) keeps the whole cap.
+/// Everything else (Assess with AI, search synthesis, a channel render the
+/// user asked for, connection tests, translation) keeps the whole cap. The
+/// scheduled `monitoring_brief` deliberately keeps it too: it is the brief
+/// the user reads, one call per window, and starving it would hide the day's
+/// findings behind background reranking.
 const BACKGROUND_PURPOSES: &[&str] = &[
     "adversarial",
     "rerank_judge",
     "ingest_judge",
     "verdict_drain",
+    crate::channel_render::RENDER_PURPOSE_AUTO,
 ];
 
 pub(crate) fn is_background_purpose(purpose: Option<&str>) -> bool {
@@ -1652,10 +1656,12 @@ mod tests {
             "rerank_judge",
             "ingest_judge",
             "verdict_drain",
+            "channel_render_auto",
         ] {
             assert!(is_background_purpose(Some(p)), "{p}");
         }
         for p in [
+            "channel_render",
             "blind_spots",
             "search_synthesis",
             "digest",
