@@ -268,7 +268,12 @@ fn direct_dep_cve_clears_the_direct_dep_floor() {
     fn mk_dep(name: &str) -> crate::scoring::dependencies::DepInfo {
         crate::scoring::dependencies::DepInfo {
             package_name: name.to_string(),
-            version: None,
+            // A direct dependency read from a lockfile carries its pin. Since
+            // v42 (audit E4) an advisory against an UNKNOWN installed version
+            // never takes the floor (`advisory_against_an_unknown_installed_
+            // version_is_unconfirmed` covers that case); this test is about
+            // the floor for a confirmed direct dependency.
+            version: Some("1.4.0".to_string()),
             is_dev: false,
             is_direct: true,
             search_terms: crate::scoring::dependencies::extract_search_terms(name),
