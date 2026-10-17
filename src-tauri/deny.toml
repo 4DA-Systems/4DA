@@ -85,6 +85,11 @@ ignore = [
     # -----------------------------------------------------------------------
     { id = "RUSTSEC-2023-0071", reason = "enterprise-only, signature verification not decryption, no fix upstream" },
     { id = "RUSTSEC-2026-0097", reason = "rand unsound only with custom global allocator + rand::rng(), neither applies to 4DA" },
+    # zip <9 extract() advisories: full reachability note in .cargo/audit.toml.
+    # REVISIT: drop when calamine, docx-rs and tauri-plugin-updater move to zip >=9.
+    { id = "RUSTSEC-2026-0367", reason = "zip extract() SUID bits: 4DA, calamine, docx-rs never call extract(); updater extracts only our signature-verified archive" },
+    { id = "RUSTSEC-2026-0368", reason = "zip extract() symlink escape: 4DA, calamine, docx-rs never call extract(); updater extracts only our signature-verified archive" },
+    { id = "RUSTSEC-2026-0369", reason = "zip extract() permissions via symlink: 4DA, calamine, docx-rs never call extract(); updater extracts only our signature-verified archive" },
 
     # RUSTSEC-2026-0194 / RUSTSEC-2026-0195 (quick-xml <0.41 DoS) were ignored
     # here until 2026-08-14. RESOLVED, not suppressed: calamine 0.36, docx-rs
