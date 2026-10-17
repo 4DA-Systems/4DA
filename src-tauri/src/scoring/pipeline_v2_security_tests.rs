@@ -612,3 +612,38 @@ fn advisory_against_an_unknown_installed_version_is_unconfirmed() {
     assert_ne!(confirmed.applicability.as_deref(), Some("version_unknown"));
     assert!(confirmed.relevant);
 }
+
+/// Review SF3: a grounding row without a version is not "version unknown"
+/// when the project's lockfile pins the package (same ecosystem family):
+/// the pin decides, so a real advisory is not demoted.
+#[test]
+fn a_lockfile_pin_rescues_a_versionless_grounding_row() {
+    let db = crate::test_utils::test_db();
+    db.store_dependency(
+        "d:/work/api",
+        "hono",
+        Some("4.13.5"),
+        "javascript",
+        false,
+        None,
+    )
+    .unwrap();
+    let mut ctx = ctx_with_dep("hono", "javascript", "4.13.5", "d:/work/api");
+    for info in ctx.ace_ctx.dependency_info.values_mut() {
+        info.version = None;
+    }
+    let zero = vec![0.0_f32; crate::EMBEDDING_DIMS];
+    let classifier = signals::SignalClassifier::new();
+    let result = score_item(
+        &input(HONO_TITLE, HONO_URL, HONO_CONTENT, &zero),
+        &ctx,
+        &db,
+        &signal_options(),
+        Some(&classifier),
+    );
+    let bd = result.score_breakdown.as_ref().expect("breakdown");
+    assert_eq!(bd.installed_version.as_deref(), Some("4.13.5"));
+    assert_eq!(bd.is_version_affected, Some(true));
+    assert_ne!(result.applicability.as_deref(), Some("version_unknown"));
+    assert!(result.relevant);
+}

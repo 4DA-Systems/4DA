@@ -189,7 +189,9 @@ export const PreemptionWorklist = memo(function PreemptionWorklist() {
           scan instead — the same local, click-is-consent flow as Blind Spots'
           day one (#888). `total_tracked` is null when the count could not be
           read; the no-threats copy is kept then. */}
-      {feed && totalAlerts === 0 && noDependenciesKnown && (
+      {/* A project 4DA cannot read (Maven, .NET …) is not "no dependencies":
+          the not-covered note below names it instead of asking for a scan. */}
+      {feed && totalAlerts === 0 && noDependenciesKnown && !feed.advisory_sync?.not_covered && (
         <ScanProjectsPrompt
           onScanned={rescan}
           titleKey="preemption.noDeps.title"
