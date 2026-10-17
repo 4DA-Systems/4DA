@@ -17,6 +17,10 @@ pub(crate) mod fix_target;
 pub(crate) mod identity;
 pub(crate) mod matching;
 pub(crate) mod parent_hint;
+pub(crate) mod parent_release;
+pub(crate) mod parent_release_load;
+#[cfg(test)]
+mod parent_release_vectors;
 pub(crate) mod reachability;
 pub(crate) mod readiness;
 pub(crate) mod release_facts;

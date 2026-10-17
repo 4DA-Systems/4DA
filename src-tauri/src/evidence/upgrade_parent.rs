@@ -234,7 +234,13 @@ fn link_sentence(package: &str, l: &ParentLink, multi_project: bool) -> String {
 /// ("Seen in your projects" follows); otherwise the registry rows decide
 /// what may be claimed ([`parent_move`]).
 fn link_move(package: &str, target: &str, l: &ParentLink) -> String {
-    if !l.resolutions.is_empty() {
+    // A release read from the registry's own requirements (audit H1) is the
+    // move itself; a newer parent seen on this machine only proves one exists.
+    let registry_read = matches!(
+        l.standing,
+        ParentStanding::Admits(_) | ParentStanding::NoneAdmits { .. }
+    );
+    if !l.resolutions.is_empty() && !registry_read {
         return format!("{} itself must be updated", l.parent);
     }
     parent_move(
@@ -274,6 +280,33 @@ pub(crate) fn parent_move(
     through: Option<&Through>,
     override_hint: Option<&str>,
 ) -> String {
+    let force = override_hint.map_or_else(String::new, |h| {
+        format!(", or force {package} >= {target} with {h}")
+    });
+    match standing {
+        ParentStanding::Admits(r) => {
+            return super::upgrade_parent_release::admits_move(package, target, parent, r, through)
+        }
+        ParentStanding::NoneAdmits { latest } => {
+            let upto = latest
+                .as_deref()
+                .map_or_else(|| "its latest".to_string(), |l| format!("{parent} {l}"));
+            let replace = through.map_or_else(
+                || format!("replace {parent}"),
+                |t| {
+                    format!(
+                        "{parent} arrives through {} {}, a direct dependency: replace {}",
+                        t.name, t.version, t.name
+                    )
+                },
+            );
+            return format!(
+                "no {parent} release up to {upto} admits a clean {package} (>= {target}) while clear of \
+                 {parent}'s own advisories, so no {parent} upgrade fixes it; {replace}{force}"
+            );
+        }
+        _ => {}
+    }
     let (lever, lever_version, lever_standing) = match through {
         Some(t) => (t.name.as_str(), t.version.as_str(), &t.standing),
         None => (parent, parent_version, standing),
@@ -291,9 +324,6 @@ pub(crate) fn parent_move(
         };
         format!("{own}arrives through {} {}, a direct dependency; ", t.name, t.version)
     });
-    let force = override_hint.map_or_else(String::new, |h| {
-        format!(", or force {package} >= {target} with {h}")
-    });
     match lever_standing {
         ParentStanding::Newer { latest } => format!(
             "{via}upgrade {lever} ({lever} {latest} is the newest release 4DA has seen; check \
@@ -309,10 +339,14 @@ pub(crate) fn parent_move(
         ParentStanding::Deprecated => {
             format!("{via}{lever} is deprecated: replace {lever}{force}")
         }
-        ParentStanding::Unknown => format!(
-            "{via}{lever} must move (4DA holds no record of a {lever} release that admits \
+        // A lever's registry read runs only under a parent release
+        // (`admits_move`); reaching here it says nothing more than Unknown.
+        ParentStanding::Unknown | ParentStanding::Admits(_) | ParentStanding::NoneAdmits { .. } => {
+            format!(
+                "{via}{lever} must move (4DA holds no record of a {lever} release that admits \
              {package} >= {target}): upgrade {lever} if one does, or replace it{force}"
-        ),
+            )
+        }
     }
 }
 
@@ -408,6 +442,15 @@ pub(super) fn path_citations(package: &str, links: &[ParentLink]) -> Vec<Evidenc
                 requirement_note(l)
             ),
         ));
+    }
+    // The registry fact behind each named parent release (audit H1).
+    for (title, note) in links
+        .iter()
+        .filter_map(|l| super::upgrade_parent_release::release_citation(package, l))
+    {
+        if !out.iter().any(|c| c.title == title) {
+            out.push(citation(title, note));
+        }
     }
     for l in links.iter().filter(|l| needs_parent_move(l)) {
         for r in &l.resolutions {

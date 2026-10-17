@@ -192,6 +192,7 @@ fn the_index_keys_like_the_matcher_and_drops_month_old_facts() {
             published: vec!["1.0.0".into()],
             excluded: vec![],
         },
+        parents: ParentFacts::default(),
     };
     let idx = index(vec![pkg("lodash", 1), pkg("old", 40)], now);
     assert!(idx.contains_key(&("lodash".to_string(), "npm".to_string())));
@@ -210,4 +211,72 @@ fn only_registries_with_release_facts_are_covered() {
     assert_eq!(covered("rust"), Some("crates.io"));
     assert_eq!(covered("pip"), Some("PyPI"));
     assert_eq!(covered("go"), None);
+}
+
+/// Audit H1: the same abbreviated document carries each release's
+/// requirement on the packages a parent was read for (registry.npmjs.org
+/// express and body-parser, 2026-10-18, cut down).
+#[test]
+fn npm_keeps_each_releases_requirement_on_the_packages_read_for() {
+    let doc = json!({
+        "dist-tags": {"latest": "5.3.0"},
+        "versions": {
+            "4.16.4": {"dependencies": {"path-to-regexp": "0.1.7", "qs": "6.5.2"}},
+            "4.22.0": {"dependencies": {"path-to-regexp": "~0.1.12", "qs": "~6.14.0"}},
+            "5.0.0": {"dependencies": {"qs": "6.13.0"}},
+            "5.3.0": {"peerDependencies": {"path-to-regexp": "^8.0.0"}}
+        }
+    });
+    let children: BTreeSet<String> = ["path-to-regexp".to_string()].into();
+    let p = parse_npm_parent(&doc, &children);
+    assert_eq!(p.latest.as_deref(), Some("5.3.0"));
+    assert!(!p.retired);
+    assert_eq!(p.requires.len(), 1, "only the packages asked for");
+    let h = &p.requires["path-to-regexp"];
+    assert_eq!(h["4.22.0"].reqs, ["~0.1.12"]);
+    assert!(h["5.0.0"].reqs.is_empty(), "5.0.0 does not depend on it");
+    assert!(h["5.3.0"].peer);
+    // Stored compactly and read back.
+    let text = serde_json::to_string(h).unwrap_or_default();
+    assert!(text.contains(r#""4.16.4":{"r":["0.1.7"]}"#), "{text}");
+    assert!(text.contains(r#""5.0.0":{}"#), "{text}");
+}
+
+#[test]
+fn a_retired_package_is_marked_and_a_fresh_package_missing_a_wanted_requirement_is_due() {
+    let doc = json!({
+        "dist-tags": {"latest": "2.88.2"},
+        "versions": {"2.88.2": {"deprecated": "request has been deprecated", "dependencies": {"qs": "~6.5.2"}}}
+    });
+    let children: BTreeSet<String> = ["qs".to_string()].into();
+    assert!(parse_npm_parent(&doc, &children).retired);
+
+    let now = Utc::now();
+    let stored: HashMap<(String, String), StoredPackage> = [(
+        ("express".to_string(), "npm".to_string()),
+        StoredPackage {
+            ecosystem: "npm".into(),
+            key: "express".into(),
+            name: "express".into(),
+            fetched_at: now,
+            releases: RegistryReleases::default(),
+            parents: parse_npm_parent(&json!({"versions": {}}), &["qs".to_string()].into()),
+        },
+    )]
+    .into();
+    let mut wanted: Wants = BTreeMap::new();
+    wanted.insert(("npm".into(), "express".into()), ["qs".to_string()].into());
+    assert!(
+        due(wanted.clone(), &stored, now).is_empty(),
+        "fresh, and qs was read"
+    );
+    wanted.insert(
+        ("npm".into(), "express".into()),
+        ["qs".to_string(), "path-to-regexp".to_string()].into(),
+    );
+    assert_eq!(
+        due(wanted, &stored, now).len(),
+        1,
+        "path-to-regexp was never read"
+    );
 }
