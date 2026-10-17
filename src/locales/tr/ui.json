@@ -2650,5 +2650,14 @@
   "signals.stack.projects": "Projeler",
   "signals.stack.listLabel": "Yığınınızdaki değişiklikler",
   "signals.stack.modeNote": "Temalar ve Grafik okuma akışınızı gösterir. Yığınınızda değişenler Liste’dedir: her değişiklik tek bir pakete aittir, gruplanacak bir şey yoktur.",
-  "signals.stack.feedOnlyStack": "Akışta başka bir şey yok: içindekilerin hepsi yığınınızdaki bir değişiklik ve yukarıda listeleniyor."
+  "signals.stack.feedOnlyStack": "Akışta başka bir şey yok: içindekilerin hepsi yığınınızdaki bir değişiklik ve yukarıda listeleniyor.",
+  "results.versionUnknown": "Doğrulanmadı: kurulu sürüm bilinmiyor",
+  "preemption.empty.partialTitle": "4DA’nın kontrol edebildiği bağımlılıklarda bilinen güvenlik açığı yok",
+  "preemption.notCovered.title_one": "1 bağımlılık dosyası kapsanmıyor",
+  "preemption.notCovered.title_other": "{{count}} bağımlılık dosyası kapsanmıyor",
+  "preemption.notCovered.body": "4DA bu dosyalardan kurulu sürümleri okumaz; bu yüzden onları güvenlik bildirimleriyle karşılaştıramaz ve temiz saymaz. Bugün npm, pnpm, Yarn, Bun, Cargo, Python ve Go kilit dosyalarını okur, Ruby ve PHP için erken destek vardır; Maven, Gradle ve .NET projeleri henüz kapsanmıyor.",
+  "preemption.notCovered.more": "ve {{count}} tane daha",
+  "preemption.notCovered.unreadableTitle_one": "1 kilit dosyası okunamadı",
+  "preemption.notCovered.unreadableTitle_other": "{{count}} kilit dosyası okunamadı",
+  "preemption.notCovered.unreadableBody": "4DA son taramada bu dosyaları okuyamadı, bu yüzden sabitledikleri sürümleri kontrol edilmiş saymaz. Dosyayı düzeltin veya yeniden tarayın."
 }

@@ -1926,6 +1926,22 @@ fn apply_final_adjustments(
 /// not evidence (live 2026-09-05: axios x5, Orval x3, Hubuum x3 in a feed with
 /// none of them installed, all at the identical 0.46). Editorial security
 /// coverage (HN, RSS, Reddit, dev.to, …) is content and is decided by score.
+/// One version and one verdict for several nearby installed copies: an
+/// affected copy wins (its version is shown); all copies confirmed safe is
+/// `Some(false)`; otherwise the first copy with no verdict (`None`).
+fn pick_nearby_copy(verdicts: Vec<(String, Option<bool>)>) -> (Option<String>, Option<bool>) {
+    if let Some((v, _)) = verdicts.iter().find(|(_, a)| *a == Some(true)) {
+        return (Some(v.clone()), Some(true));
+    }
+    if let Some((v, _)) = verdicts.iter().find(|(_, a)| a.is_none()) {
+        return (Some(v.clone()), None);
+    }
+    (
+        verdicts.first().map(|(v, _)| v.clone()),
+        verdicts.first().and(Some(false)),
+    )
+}
+
 fn is_registry_advisory_source(source_type: &str) -> bool {
     matches!(source_type, "osv" | "cve")
 }
@@ -3387,40 +3403,41 @@ pub(crate) fn score_item(
     // (the copy furthest behind), not whichever copy the dependency edge
     // happened to carry — "sha2 v0.11.0, installed v0.11.0" hid that two
     // sibling projects were on 0.10.9.
-    let installed_version = sec_exposed_copy
+    let edge_installed = sec_exposed_copy
         .map(|c| c.installed_version.clone())
         .or_else(|| {
             release_grade
                 .as_ref()
                 .and_then(super::release_grade::ReleaseGrade::headline_installed)
         })
-        .or_else(|| display_deps.first().and_then(|d| d.version.clone()))
-        // v42: before an advisory is called `version_unknown`, a lockfile
-        // pin of the same package (same ecosystem family, same or enclosing
-        // project) counts: the grounding row may have come through without
-        // one. Only registry advisories ask; nothing else reads a version.
-        .or_else(|| {
-            let dep = display_deps.first().filter(|_| registry_advisory)?;
-            crate::temporal::installed_version_nearby(
+        .or_else(|| display_deps.first().and_then(|d| d.version.clone()));
+    // v42: before an advisory is called `version_unknown`, the lockfile pins
+    // near the dependency's projects count (`temporal::installed_versions_nearby`:
+    // own lockfile, else the nearest ancestor inside the repo root, else a
+    // unique nested pin; same ecosystem family). Only registry advisories
+    // ask, and only when nothing above supplied a version. The SAME lookup
+    // decides Preemption Tier 2, so the two never disagree.
+    let nearby_versions: Vec<String> = match display_deps.first() {
+        Some(dep) if registry_advisory && edge_installed.is_none() && sec_verdict.is_none() => {
+            crate::temporal::installed_versions_nearby(
                 &db.read_conn(),
                 &dep.package_name,
                 &dep.ecosystem,
                 &dep.project_paths,
             )
-        });
+        }
+        _ => Vec::new(),
+    };
     // v29: the OSV mirror's STRUCTURED ranges decide first (introduced/fixed/
     // last_affected, via the same matcher Preemption trusts); the text route
     // is the fallback for advisories the mirror does not hold. Before this
     // `is_version_affected` was NULL on 746 of 746 live security breakdowns
     // (the cve source wrote no range and no fix), so a hono advisory fixed in
     // 4.12.34 paged as Critical against an installed 4.13.3.
-    // 2026-10-02: the matcher verdict over the WHOLE inventory is final when
-    // it evaluated any copy; the edge-scoped routes only run without one.
-    let is_version_affected = match &sec_verdict {
-        Some(verdict) => verdict.affected,
-        None => display_deps
+    let edge_verdict = |installed: Option<&str>| -> Option<bool> {
+        display_deps
             .first()
-            .zip(installed_version.as_deref())
+            .zip(installed)
             .and_then(|(dep, installed)| {
                 mirror_version_verdict(db, input, dep, installed, advisory_id.as_deref())
             })
@@ -3431,17 +3448,33 @@ pub(crate) fn score_item(
                 // multi-package advisory).
                 if package_ranges.is_empty() {
                     check_version_affected(
-                        installed_version.as_deref(),
+                        installed,
                         affected_versions.as_deref(),
                         fixed_version.as_deref(),
                     )
                 } else {
-                    super::security_verdict::ranges_verdict(
-                        installed_version.as_deref(),
-                        &package_ranges,
-                    )
+                    super::security_verdict::ranges_verdict(installed, &package_ranges)
                 }
-            }),
+            })
+    };
+    // Several nearby copies: affected if ANY copy is (fail toward alerting),
+    // and the version shown is the affected one.
+    let (installed_version, nearby_verdict) = match nearby_versions.as_slice() {
+        [] => (edge_installed, None),
+        copies => {
+            let verdicts: Vec<(String, Option<bool>)> = copies
+                .iter()
+                .map(|v| (v.clone(), edge_verdict(Some(v.as_str()))))
+                .collect();
+            pick_nearby_copy(verdicts)
+        }
+    };
+    // 2026-10-02: the matcher verdict over the WHOLE inventory is final when
+    // it evaluated any copy; the edge-scoped routes only run without one.
+    let is_version_affected = match &sec_verdict {
+        Some(verdict) => verdict.affected,
+        None if !nearby_versions.is_empty() => nearby_verdict,
+        None => edge_verdict(installed_version.as_deref()),
     };
     // A registry advisory the matcher CONFIRMED against an installed copy is
     // grounded by that fact, whatever the text-match confidence of its
