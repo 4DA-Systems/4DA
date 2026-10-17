@@ -624,12 +624,15 @@ pub(crate) fn security_signature(f: &SecurityFact) -> String {
     }
     let mut parts: Vec<String> = vec![format!("{:?}", f.urgency), ids.join(",")];
     for s in &f.sites {
-        parts.push(format!(
-            "{}={}->{:?}",
-            s.label,
-            s.installed.as_deref().unwrap_or("?"),
-            s.fix_path
-        ));
+        // A bump's `fix` is wording read from the manifest, not state: it is
+        // rendered as the pre-`fix` `Bump { to }` so stored signatures still
+        // match and no fact reads as changed because its command was added.
+        let path = match &s.fix_path {
+            FixPath::Bump { to, .. } => format!("Bump {{ to: {to:?} }}"),
+            other => format!("{other:?}"),
+        };
+        let installed = s.installed.as_deref().unwrap_or("?");
+        parts.push(format!("{}={installed}->{path}", s.label));
     }
     parts.join("|")
 }

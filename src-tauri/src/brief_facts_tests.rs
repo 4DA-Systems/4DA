@@ -915,6 +915,31 @@ fn a_lower_severity_fix_path_change_keeps_the_fingerprint() {
     );
 }
 
+/// The command a bump names (audit E8) is wording from the manifest, not
+/// state: adding it must not make an open act-now fact read as changed, and
+/// the signature stays the one stored before `fix` existed.
+#[test]
+fn a_bumps_command_does_not_change_its_signature() {
+    let bump = |fix: Option<&str>| {
+        let mut f = security("k", AlertUrgency::High, "1.0.0", "1.1.20");
+        f.sites[0].fix_path = FixPath::Bump {
+            to: "1.1.20".into(),
+            fix: fix.map(str::to_string),
+        };
+        f
+    };
+    let plain = bump(None);
+    let with_command = bump(Some("run `cargo add rmcp@1.1.20`"));
+    assert_eq!(
+        security_signature(&plain),
+        security_signature(&with_command)
+    );
+    assert_eq!(
+        security_signature(&plain),
+        "High||atlas/bridge/src-tauri=1.0.0->Bump { to: \"1.1.20\" }"
+    );
+}
+
 #[test]
 fn act_now_ids_name_each_advisory_of_each_act_now_fact() {
     let mut a = security("crates.io:rmcp:atlas", AlertUrgency::High, "1.7.0", "2.1.0");
