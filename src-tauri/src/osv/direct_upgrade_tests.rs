@@ -345,3 +345,46 @@ fn a_yarn_workspace_member_names_nothing() {
         ))
     );
 }
+
+/// Findings carry project paths lowercased (`normalize_project_path`). On a
+/// case-sensitive filesystem that path does not exist, so the manifest read
+/// failed and the row named no command (#972's Linux queue run): the
+/// directory on disk is resolved first, component by component.
+#[test]
+fn a_lowercased_project_path_reads_the_manifest_on_disk() {
+    let root = tempfile::tempdir().expect("tempdir");
+    let project = root.path().join("Work").join("MyApp");
+    std::fs::create_dir_all(&project).unwrap();
+    std::fs::write(
+        project.join("package.json"),
+        r#"{"dependencies": {"minimist": "~1.2.5"}}"#,
+    )
+    .unwrap();
+    std::fs::write(
+        project.join("package-lock.json"),
+        r#"{"lockfileVersion": 3}"#,
+    )
+    .unwrap();
+    let lowered = format!(
+        "{}/work/myapp",
+        root.path().to_string_lossy().replace('\\', "/")
+    );
+    let resolved = on_disk(std::path::Path::new(&lowered)).expect("resolves");
+    assert!(resolved.join("package.json").is_file(), "{resolved:?}");
+    assert_eq!(
+        direct_fix(
+            std::path::Path::new(&lowered),
+            "npm",
+            "minimist",
+            "1.2.5",
+            "1.2.6"
+        ),
+        Some(DirectFix::Command(
+            "npm install \"minimist@~1.2.6\"".to_string()
+        ))
+    );
+    assert_eq!(
+        on_disk(std::path::Path::new(&format!("{lowered}/absent"))),
+        None
+    );
+}

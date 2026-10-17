@@ -559,7 +559,7 @@ fn the_plan_reads_the_lockfile_tree_on_disk() {
 #[test]
 fn a_direct_row_names_the_command_for_its_declaration() {
     let dir = tempfile::Builder::new()
-        .prefix("c2-e2e-")
+        .prefix("direct-row-")
         .tempdir_in(env!("CARGO_MANIFEST_DIR"))
         .expect("tempdir");
     let project = dir.path().to_string_lossy().replace('\\', "/");

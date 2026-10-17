@@ -29,7 +29,7 @@
 
 use std::path::Path;
 
-use super::fix_path::{requirement_admits, Manager, Requirement};
+use super::fix_path::{on_disk, requirement_admits, Manager, Requirement};
 use super::fix_target::LineTarget;
 
 /// What to tell the user, per declaring project.
@@ -61,6 +61,8 @@ pub fn direct_fix(
     installed: &str,
     target: &str,
 ) -> Option<DirectFix> {
+    // Findings carry the path lowercased; read the directory that is on disk.
+    let project_dir = &on_disk(project_dir)?;
     let read = |file: &str| std::fs::read_to_string(project_dir.join(file)).ok();
     match ecosystem_norm {
         "npm" => {

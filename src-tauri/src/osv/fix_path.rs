@@ -147,12 +147,56 @@ pub enum Manager {
 /// How far up from a project directory a workspace lockfile is looked for.
 const MAX_LOCKFILE_ASCENT: usize = 6;
 
+/// The directory on disk that a project path names. Findings carry project
+/// paths lowercased (`fourda_depengine::matching::normalize_project_path`),
+/// which still opens on Windows and macOS but not on a case-sensitive
+/// filesystem: `/home/runner/work/4DA/4DA/...` lowercased does not exist, so
+/// every manifest read from it failed and no command was named (#972's queue
+/// run, 2026-10-17). Each missing component is matched case-insensitively
+/// against its parent's entries; two entries that differ only by case are
+/// ambiguous and resolve to nothing.
+pub(crate) fn on_disk(path: &Path) -> Option<std::path::PathBuf> {
+    use std::path::{Component, PathBuf};
+    if path.is_dir() {
+        return Some(path.to_path_buf());
+    }
+    let mut out = PathBuf::new();
+    for component in path.components() {
+        let Component::Normal(name) = component else {
+            out.push(component.as_os_str());
+            continue;
+        };
+        let exact = out.join(name);
+        if exact.exists() {
+            out = exact;
+            continue;
+        }
+        let want = name.to_string_lossy().to_lowercase();
+        let base = if out.as_os_str().is_empty() {
+            Path::new(".")
+        } else {
+            out.as_path()
+        };
+        let mut hits = std::fs::read_dir(base)
+            .ok()?
+            .filter_map(std::result::Result::ok)
+            .filter(|e| e.file_name().to_string_lossy().to_lowercase() == want);
+        let found = hits.next()?.path();
+        if hits.next().is_some() {
+            return None;
+        }
+        out = found;
+    }
+    out.is_dir().then_some(out)
+}
+
 impl Manager {
     /// The manager whose lockfile holds `ecosystem_norm` (OSV-canonical)
     /// packages for the project at `dir`, nearest directory first. `None`
     /// for an ecosystem this module names no command for, or no lockfile.
     pub fn detect(dir: &Path, ecosystem_norm: &str) -> Option<Self> {
-        let mut here = Some(dir);
+        let resolved = on_disk(dir);
+        let mut here = Some(resolved.as_deref().unwrap_or(dir));
         for _ in 0..=MAX_LOCKFILE_ASCENT {
             let d = here?;
             let found = match ecosystem_norm {
