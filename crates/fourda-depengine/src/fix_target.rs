@@ -18,6 +18,7 @@ use std::cmp::Ordering;
 use crate::range::{
     check_version_affected, is_unknown_bound, parse_version, Range, ENUMERATED_RANGE,
 };
+use crate::registry::{is_listed, RegistryReleases};
 use crate::version_order::{in_window, Lower, OrderedVersion, Upper};
 
 /// One affected window of a SEMVER/ECOSYSTEM range: from `lower` up to
@@ -116,12 +117,109 @@ pub struct WalkTarget {
     pub clears_all: bool,
 }
 
+/// Where [`walk_target_in`] lands, and what it had to step over.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct WalkOutcome {
+    /// As [`walk_target`]; never a release the registry withdrew.
+    pub target: Option<WalkTarget>,
+    /// Withdrawn releases (yanked, deprecated) a step would otherwise have
+    /// named. With no target, a non-empty list means a fix WAS published and
+    /// then withdrawn, so the honest answer is "no installable fix", not "no
+    /// fix". Empty when the walk could not evaluate an advisory.
+    pub withheld: Vec<String>,
+}
+
+/// A line fix as a release the registry still offers ([`installable_fix`]).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct LineFix {
+    pub fix: Option<String>,
+    /// The withdrawn releases passed over to reach `fix` (see
+    /// [`WalkOutcome::withheld`]).
+    pub withheld: Vec<String>,
+}
+
+/// The releases the walk can name, and the ones it must not.
+///
+/// `releases`: every stable release the advisory data names (every bound and
+/// every enumerated version) plus every release the registry lists, when the
+/// host supplied that list. Without it these are the only versions above a
+/// `last_affected` bound the walk can name; a release the data never mentions
+/// can only make the target higher than the true minimum, never vulnerable.
+///
+/// `excluded`: releases the registry withdrew. They stay in `releases` so a
+/// step can tell it passed one, but no step lands on them, exactly as no step
+/// lands on a pre-release.
+struct Known {
+    releases: Vec<Release>,
+    excluded: Vec<OrderedVersion>,
+}
+
+impl Known {
+    fn new(
+        ecosystem: &str,
+        advisories: &[Option<Vec<Range>>],
+        registry: &RegistryReleases,
+    ) -> Self {
+        let mut releases = advisory_releases(ecosystem, advisories);
+        releases.extend(registry.published.iter().filter_map(|v| {
+            OrderedVersion::parse_in(v, ecosystem)
+                .filter(|p| !p.is_prerelease())
+                .map(|p| (p, v.trim().to_string()))
+        }));
+        Known {
+            releases,
+            excluded: registry.excluded_in(ecosystem),
+        }
+    }
+
+    fn allowed(&self, version: &OrderedVersion) -> bool {
+        !is_listed(&self.excluded, version)
+    }
+
+    /// The lowest release above `bound` that `keep` accepts and the registry
+    /// has not withdrawn. Every withdrawn release `keep` accepts below it
+    /// (all of them, when there is none) goes into `withheld`.
+    fn next_above(
+        &self,
+        bound: &OrderedVersion,
+        keep: impl Fn(&OrderedVersion) -> bool,
+        withheld: &mut Vec<String>,
+    ) -> Option<Release> {
+        let next = first_above(&self.releases, bound, |r| keep(r) && self.allowed(r));
+        for (version, raw) in &self.releases {
+            let passed = version.compare(bound) == Some(Ordering::Greater)
+                && keep(version)
+                && !self.allowed(version)
+                && next
+                    .as_ref()
+                    .is_none_or(|(n, _)| version.compare(n) == Some(Ordering::Less));
+            if passed {
+                withhold(withheld, raw);
+            }
+        }
+        next
+    }
+
+    /// A `fixed` bound as a step: the bound itself, unless the registry
+    /// withdrew it; then the lowest allowed release above it.
+    fn fixed_step(&self, fix: Release, withheld: &mut Vec<String>) -> Option<Release> {
+        if self.allowed(&fix.0) {
+            return Some(fix);
+        }
+        withhold(withheld, &fix.1);
+        self.next_above(&fix.0, |_| true, withheld)
+    }
+}
+
+fn withhold(withheld: &mut Vec<String>, raw: &str) {
+    if !withheld.iter().any(|w| w == raw) {
+        withheld.push(raw.to_string());
+    }
+}
+
 /// The releases the advisory data names for this package (every bound and
-/// every enumerated version, pre-releases left out): the only versions above
-/// a `last_affected` bound the walk can name without a registry. Offline by
-/// design; a release the data never mentions can only make the target higher
-/// than the true minimum, never vulnerable.
-fn known_releases(ecosystem: &str, advisories: &[Option<Vec<Range>>]) -> Vec<Release> {
+/// every enumerated version, pre-releases left out).
+fn advisory_releases(ecosystem: &str, advisories: &[Option<Vec<Range>>]) -> Vec<Release> {
     let mut out: Vec<Release> = Vec::new();
     for range in advisories.iter().flatten().flatten() {
         for event in range.events.iter().flatten() {
@@ -200,34 +298,57 @@ enum Exit {
     Stuck,
 }
 
+/// The versions one enumerated `versions` list names.
+fn enumerated(ecosystem: &str, range: &Range) -> Vec<OrderedVersion> {
+    range
+        .events
+        .iter()
+        .flatten()
+        .filter_map(|v| v.as_str())
+        .filter_map(|v| OrderedVersion::parse_in(v, ecosystem))
+        .collect()
+}
+
+/// Whether one advisory's `ranges` hold `version` (a readable window, or an
+/// enumerated list naming it).
+fn affects(ecosystem: &str, ranges: &[Range], version: &OrderedVersion) -> bool {
+    windows(ecosystem, ranges)
+        .iter()
+        .any(|w| w.contains(version) == Some(true))
+        || ranges
+            .iter()
+            .filter(|r| r.range_type == ENUMERATED_RANGE)
+            .any(|r| is_listed(&enumerated(ecosystem, r), version))
+}
+
 /// The exit from every window of one advisory that holds `here`: a `fixed`
 /// bound; above a `last_affected` bound, the first known release past it; for
 /// an enumerated `versions` list, the first known release past `here` the list
-/// does not name. The highest exit wins, since every window must be left.
-fn exit(ecosystem: &str, here: &OrderedVersion, ranges: &[Range], releases: &[Release]) -> Exit {
+/// does not name. A release the registry withdrew is never an exit: the next
+/// allowed one is, and the withdrawn one goes into `withheld`. The highest
+/// exit wins, since every window must be left.
+fn exit(
+    ecosystem: &str,
+    here: &OrderedVersion,
+    ranges: &[Range],
+    known: &Known,
+    withheld: &mut Vec<String>,
+) -> Exit {
     let mut exits: Vec<Option<Release>> = Vec::new();
     for window in windows(ecosystem, ranges) {
         if window.contains(here) != Some(true) {
             continue;
         }
         exits.push(match window.end {
-            Some((fix, raw, true)) => Some((fix, raw)),
-            Some((last, _, false)) => first_above(releases, &last, |_| true),
+            Some((fix, raw, true)) => known.fixed_step((fix, raw), withheld),
+            Some((last, _, false)) => known.next_above(&last, |_| true, withheld),
             None => None,
         });
     }
     for range in ranges.iter().filter(|r| r.range_type == ENUMERATED_RANGE) {
-        let listed: Vec<OrderedVersion> = range
-            .events
-            .iter()
-            .flatten()
-            .filter_map(|v| v.as_str())
-            .filter_map(|v| OrderedVersion::parse_in(v, ecosystem))
-            .collect();
-        let named =
-            |v: &OrderedVersion| listed.iter().any(|l| v.compare(l) == Some(Ordering::Equal));
-        if named(here) {
-            exits.push(first_above(releases, here, |r| !named(r)));
+        let listed = enumerated(ecosystem, range);
+        if is_listed(&listed, here) {
+            exits.push(known.next_above(here, |r| !is_listed(&listed, r), withheld));
         }
     }
     let mut best: Option<Release> = None;
@@ -268,34 +389,67 @@ fn exit(ecosystem: &str, here: &OrderedVersion, ranges: &[Range], releases: &[Re
 /// nothing with a way out does, so there is nowhere to go), or an advisory
 /// cannot be evaluated against a version on the path (no range data,
 /// unparseable): no target is then a claim 4DA can stand behind.
+///
+/// No registry facts: [`walk_target_in`] with none.
 pub fn walk_target(
     ecosystem: &str,
     installed: &str,
     ranges: &[&Option<String>],
 ) -> Option<WalkTarget> {
+    walk_target_in(ecosystem, installed, ranges, &RegistryReleases::default()).target
+}
+
+/// [`walk_target`] with what the registry says about the package's releases:
+/// every release it lists can be a step, and none it withdrew (yanked,
+/// deprecated) can. A window whose every exit is withdrawn has no way out,
+/// like an open-ended one, and the outcome names the withdrawn releases.
+pub fn walk_target_in(
+    ecosystem: &str,
+    installed: &str,
+    ranges: &[&Option<String>],
+    registry: &RegistryReleases,
+) -> WalkOutcome {
+    let mut withheld = Vec::new();
+    match walk(ecosystem, installed, ranges, registry, &mut withheld) {
+        Ok(target) => WalkOutcome { target, withheld },
+        Err(Unreadable) => WalkOutcome::default(),
+    }
+}
+
+/// The walk met an advisory it cannot evaluate on its path.
+struct Unreadable;
+
+fn walk(
+    ecosystem: &str,
+    installed: &str,
+    ranges: &[&Option<String>],
+    registry: &RegistryReleases,
+    withheld: &mut Vec<String>,
+) -> Result<Option<WalkTarget>, Unreadable> {
     let parsed: Vec<Option<Vec<Range>>> = ranges
         .iter()
         .map(|r| r.as_deref().and_then(|j| serde_json::from_str(j).ok()))
         .collect();
-    let releases = known_releases(ecosystem, &parsed);
+    let known = Known::new(ecosystem, &parsed, registry);
     let start = installed.trim();
     let mut current = start.to_string();
     for _ in 0..MAX_HOPS {
-        let here = OrderedVersion::parse_in(&current, ecosystem)?;
+        let here = OrderedVersion::parse_in(&current, ecosystem).ok_or(Unreadable)?;
         let mut next: Option<Release> = None;
         let mut stuck = false;
         for (json, advisory) in ranges.iter().zip(&parsed) {
             match check_version_affected(ecosystem, Some(&current), json) {
                 (false, _) => continue,
-                (true, false) => return None,
+                (true, false) => return Err(Unreadable),
                 (true, true) => {}
             }
-            match exit(ecosystem, &here, advisory.as_deref()?, &releases) {
+            let advisory = advisory.as_deref().ok_or(Unreadable)?;
+            match exit(ecosystem, &here, advisory, &known, withheld) {
                 Exit::Stuck => stuck = true,
                 Exit::To(step) => {
                     let replace = match next.as_ref() {
                         None => true,
-                        Some(best) => outranks(&step, best)?,
+                        Some(best) => outranks(&step, best).ok_or(Unreadable)?,
                     };
                     if replace {
                         next = Some(step);
@@ -306,14 +460,58 @@ pub fn walk_target(
         match next {
             Some((_, raw)) => current = raw,
             None => {
-                return (current != start).then_some(WalkTarget {
+                return Ok((current != start).then_some(WalkTarget {
                     version: current,
                     clears_all: !stuck,
-                })
+                }))
             }
         }
     }
-    None
+    Err(Unreadable)
+}
+
+/// A fix bound (a line fix, or an advisory's listed fix) as a release the
+/// registry still offers: `fix` itself, or, when the registry withdrew it,
+/// the lowest allowed release above it that this advisory (`ranges_json`)
+/// does not affect. `fix: None` with `withheld` set: the fix was published
+/// and withdrawn, and no installable release past it is known.
+pub fn installable_fix(
+    ecosystem: &str,
+    fix: &str,
+    ranges_json: &Option<String>,
+    registry: &RegistryReleases,
+) -> LineFix {
+    let bound = OrderedVersion::parse_in(fix, ecosystem);
+    let Some(bound) = bound.filter(|b| is_listed(&registry.excluded_in(ecosystem), b)) else {
+        return LineFix {
+            fix: Some(fix.to_string()),
+            withheld: Vec::new(),
+        };
+    };
+    let parsed: [Option<Vec<Range>>; 1] = [ranges_json
+        .as_deref()
+        .and_then(|j| serde_json::from_str(j).ok())];
+    let ranges: &[Range] = parsed[0].as_deref().unwrap_or_default();
+    let known = Known::new(ecosystem, &parsed, registry);
+    let mut withheld = vec![fix.trim().to_string()];
+    let next = known.next_above(&bound, |v| !affects(ecosystem, ranges, v), &mut withheld);
+    LineFix {
+        fix: next.map(|(_, raw)| raw),
+        withheld,
+    }
+}
+
+/// [`fix_for_version`] through [`installable_fix`]. `None` fix and no
+/// `withheld`: the line has no fix at all.
+pub fn installable_line_fix(
+    ecosystem: &str,
+    user_version: &str,
+    affected_ranges_json: &Option<String>,
+    registry: &RegistryReleases,
+) -> LineFix {
+    fix_for_version(ecosystem, user_version, affected_ranges_json)
+        .map(|fix| installable_fix(ecosystem, &fix, affected_ranges_json, registry))
+        .unwrap_or_default()
 }
 
 /// The lowest version reachable from `installed` that NO known advisory
@@ -359,3 +557,7 @@ pub fn upgrade_type(installed: &str, target: &str) -> Option<UpgradeType> {
         UpgradeType::Patch
     })
 }
+
+#[cfg(test)]
+#[path = "fix_target_tests.rs"]
+mod tests;

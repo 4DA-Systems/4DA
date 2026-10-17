@@ -495,6 +495,7 @@ fn matched(cvss: f64, installs: &[(bool, bool, bool)]) -> crate::osv::types::Mat
                     fixed_version: None,
                     clean_version: None,
                     target_version: None,
+                    withheld: Vec::new(),
                 },
             )
             .collect(),
@@ -1261,4 +1262,65 @@ fn advisory_citation_age_comes_from_the_publish_date() {
     assert_eq!(advisory_age_days(None), UNKNOWN_AGE_DAYS);
     assert_eq!(advisory_age_days(Some("")), UNKNOWN_AGE_DAYS);
     assert_eq!(advisory_age_days(Some("not a date")), UNKNOWN_AGE_DAYS);
+}
+
+// ---------------------------------------------------------------------------
+// FX-H5 (2026-10-16): lodash 4.17.21 was told "Upgrade lodash to >= 4.18.0";
+// npm marks 4.18.0 deprecated ("Bad release"). Neither the title nor the work
+// order may name a release its registry withdrew.
+// ---------------------------------------------------------------------------
+
+fn registry_facts(db: &Database, eco: &str, name: &str, published: &str, excluded: &str) {
+    let fetched_at = chrono::Utc::now().to_rfc3339();
+    let doc = format!(
+        r#"[{{"ecosystem":"{eco}","key":"{name}","name":"{name}","fetched_at":"{fetched_at}","published":{published},"excluded":{excluded}}}]"#
+    );
+    db.set_kv("osv_registry_releases", &doc).unwrap();
+}
+
+#[test]
+fn a_deprecated_fix_release_is_never_the_plan_target() {
+    let db = test_db();
+    db.store_dependency("/proj/a", "lodash", Some("4.17.21"), "npm", false, None)
+        .unwrap();
+    advisory(&db, "GHSA-lodash-2", "lodash", "npm", "4.18.0", 7.5);
+    registry_facts(
+        &db,
+        "npm",
+        "lodash",
+        r#"["4.17.21","4.17.23","4.18.0","4.18.1"]"#,
+        r#"["4.18.0"]"#,
+    );
+    let built = super::build_upgrade_plan(&db);
+    assert_eq!(built.items.len(), 1);
+    assert!(
+        built.items[0].title.contains(">= 4.18.1"),
+        "title: {}",
+        built.items[0].title
+    );
+    let all = serde_json::to_string(&(&built.items, &built.steps)).unwrap();
+    assert!(!all.contains("4.18.0"), "a withdrawn release leaked: {all}");
+}
+
+#[test]
+fn every_fixing_release_withdrawn_reads_no_installable_fix() {
+    let db = test_db();
+    db.store_dependency("/proj/a", "h2", Some("0.3.16"), "rust", false, None)
+        .unwrap();
+    advisory(&db, "RUSTSEC-2023-0034", "h2", "crates.io", "0.3.17", 7.5);
+    registry_facts(
+        &db,
+        "crates.io",
+        "h2",
+        r#"["0.3.16","0.3.17"]"#,
+        r#"["0.3.17"]"#,
+    );
+    let built = super::build_upgrade_plan(&db);
+    assert_eq!(built.items.len(), 1);
+    let title = &built.items[0].title;
+    assert!(
+        title.starts_with("No installable fix for h2"),
+        "title: {title}"
+    );
+    assert!(!title.contains("0.3.17"), "title: {title}");
 }

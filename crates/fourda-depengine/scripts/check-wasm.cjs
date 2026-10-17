@@ -69,7 +69,18 @@ const checks = [
   [{ op: 'affected', eco: 'npm', version: '1.2.3', ranges }, { affected: true, confirmed: true }],
   [
     { op: 'fix_target', eco: 'npm', installed: '1.2.3', ranges: [ranges] },
-    { line_fixes: ['1.2.4'], walk: { version: '1.2.4', clears_all: true } },
+    { line_fixes: ['1.2.4'], walk: { version: '1.2.4', clears_all: true }, withheld: [] },
+  ],
+  // The registry withdrew the fix (yanked / deprecated): the next release it offers.
+  [
+    {
+      op: 'fix_target',
+      eco: 'npm',
+      installed: '1.2.3',
+      ranges: [ranges],
+      registry: { published: ['1.2.4', '1.2.5'], excluded: ['1.2.4'] },
+    },
+    { line_fixes: ['1.2.5'], walk: { version: '1.2.5', clears_all: true }, withheld: ['1.2.4'] },
   ],
 ];
 for (const [request, want] of checks) {

@@ -70,8 +70,87 @@ fn no_resolved_row_means_no_audit_and_the_hook_can_drop_copies() {
 
     let inventory = vec![pkg("npm", "/p", "a", Some("1.0.0"), true)];
     assert_eq!(match_inventory(&inventory, &records).len(), 1);
-    let dropped = match_inventory_with(&inventory, &records, |_, _, copies| copies.clear());
+    let dropped = match_inventory_with(
+        &inventory,
+        &records,
+        &RegistryIndex::new(),
+        |_, _, copies| copies.clear(),
+    );
     assert!(dropped.is_empty());
+}
+
+fn facts(published: &[&str], excluded: &[&str]) -> RegistryReleases {
+    RegistryReleases {
+        published: published.iter().map(ToString::to_string).collect(),
+        excluded: excluded.iter().map(ToString::to_string).collect(),
+    }
+}
+
+/// FX-H5: lodash 4.17.21's advisories are all fixed in 4.18.0, which npm
+/// marks deprecated ("Bad release"). No field may name it.
+#[test]
+fn a_withdrawn_fix_is_never_a_copy_target_or_a_finding_fix() {
+    let inventory = vec![pkg("npm", "/p", "lodash", Some("4.17.21"), true)];
+    let ranges = r#"[{"type":"SEMVER","events":[{"introduced":"0"},{"fixed":"4.18.0"}]}]"#;
+    let records = vec![record(
+        "GHSA-1",
+        "npm",
+        "lodash",
+        ranges,
+        Some(r#"["4.18.0"]"#),
+    )];
+    let mut registry = RegistryIndex::new();
+    registry.insert(
+        ("lodash".into(), "npm".into()),
+        facts(&["4.17.21", "4.17.23", "4.18.0", "4.18.1"], &["4.18.0"]),
+    );
+    let f = &match_inventory_with(&inventory, &records, &registry, |_, _, _| {})[0];
+    let copy = &f.dependency_instances[0];
+    assert_eq!(copy.fixed_version.as_deref(), Some("4.18.1"));
+    assert_eq!(copy.clean_version.as_deref(), Some("4.18.1"));
+    assert_eq!(copy.target_version.as_deref(), Some("4.18.1"));
+    assert_eq!(copy.withheld, ["4.18.0"]);
+    assert_eq!(f.fixed_version.as_deref(), Some("4.18.1"));
+
+    // Without registry facts: today's answer, unchanged.
+    let copy = &match_inventory(&inventory, &records)[0].dependency_instances[0];
+    assert_eq!(copy.target_version.as_deref(), Some("4.18.0"));
+    assert!(copy.withheld.is_empty());
+
+    // Every clearing release withdrawn: no target, and it says why.
+    registry.insert(
+        ("lodash".into(), "npm".into()),
+        facts(&["4.17.21", "4.18.0"], &["4.18.0"]),
+    );
+    let f = &match_inventory_with(&inventory, &records, &registry, |_, _, _| {})[0];
+    let copy = &f.dependency_instances[0];
+    assert_eq!(copy.fixed_version, None);
+    assert_eq!(copy.target_version, None);
+    assert_eq!(copy.clean_version, None);
+    assert_eq!(copy.withheld, ["4.18.0"]);
+    assert_eq!(f.fixed_version, None);
+}
+
+/// A copy no window could place still never reports a withdrawn listed fix.
+#[test]
+fn an_unconfirmed_finding_skips_a_withdrawn_listed_fix() {
+    let inventory = vec![pkg("npm", "/p", "lodash", None, true)];
+    let ranges = r#"[{"type":"SEMVER","events":[{"introduced":"0"},{"fixed":"4.18.0"}]}]"#;
+    let records = vec![record(
+        "GHSA-1",
+        "npm",
+        "lodash",
+        ranges,
+        Some(r#"["4.18.0"]"#),
+    )];
+    let mut registry = RegistryIndex::new();
+    registry.insert(
+        ("lodash".into(), "npm".into()),
+        facts(&["4.18.0", "4.18.1"], &["4.18.0"]),
+    );
+    let f = &match_inventory_with(&inventory, &records, &registry, |_, _, _| {})[0];
+    assert!(!f.is_version_confirmed);
+    assert_eq!(f.fixed_version.as_deref(), Some("4.18.1"));
 }
 
 #[test]

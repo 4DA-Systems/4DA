@@ -12,8 +12,10 @@
 //! enumerated `versions` as an `ENUMERATED` range):
 //! - `{"op":"version_cmp","eco":"PyPI","a":"1.0.post1","b":"1.0"}` → `"<" | "=" | ">" | null`
 //! - `{"op":"affected","eco":"npm","version":"1.2.3","ranges":[...]}` → `{"affected":bool,"confirmed":bool}`
-//! - `{"op":"fix_target","eco":"npm","installed":"1.2.3","ranges":[[...],[...]]}`
-//!   → `{"line_fixes":[..],"walk":{"version":"..","clears_all":bool}|null}`
+//! - `{"op":"fix_target","eco":"npm","installed":"1.2.3","ranges":[[...],[...]],
+//!   "registry":{"published":[..],"excluded":[..]}}` (`registry` optional: the
+//!   package's releases and the ones its registry withdrew, `RegistryReleases`)
+//!   → `{"line_fixes":[..],"walk":{"version":"..","clears_all":bool}|null,"withheld":[..]}`
 //! - `{"op":"match_inventory","inventory":[Package..],"osv":[verbatim OSV records],
 //!   "records":[AdvisoryRecord..]}` → `{"records":n,"findings":[{"advisory_id",
 //!   "package_name","ecosystem","installed_version","fixed_version",
@@ -25,17 +27,20 @@
 //!   (`ON CONFLICT DO UPDATE`), so there the LAST write of a row wins; give
 //!   the current rows as `records` to reproduce a mirror state.
 //!   Every `inventory` row must say `primary`; copies with no primary row
-//!   are an error, not an empty result.
+//!   are an error, not an empty result. Optional `registry`:
+//!   `[{"ecosystem","name","published":[..],"excluded":[..]}]`.
 
 use std::cmp::Ordering;
 
 use serde::Deserialize;
 use serde_json::{json, Value};
 
-use crate::fix_target::{fix_for_version, walk_target};
-use crate::matching::{inventory_problem, match_inventory, Package};
+use crate::ecosystem::normalize as normalize_ecosystem;
+use crate::fix_target::{installable_line_fix, walk_target_in};
+use crate::matching::{inventory_problem, match_inventory_with, package_key, Package};
 use crate::osv::{stored_records, AdvisoryRecord, OsvRecord};
 use crate::range::check_version_affected;
+use crate::registry::{RegistryIndex, RegistryReleases};
 use crate::version_order::OrderedVersion;
 
 /// The schema every response carries.
@@ -58,6 +63,8 @@ enum Request {
         eco: String,
         installed: String,
         ranges: Vec<Option<Value>>,
+        #[serde(default)]
+        registry: RegistryReleases,
     },
     MatchInventory {
         inventory: Vec<Package>,
@@ -65,7 +72,30 @@ enum Request {
         records: Vec<AdvisoryRecord>,
         #[serde(default)]
         osv: Vec<OsvRecord>,
+        #[serde(default)]
+        registry: Vec<PackageReleases>,
     },
+}
+
+/// One package's registry facts in a `match_inventory` request.
+#[derive(Deserialize)]
+struct PackageReleases {
+    ecosystem: String,
+    name: String,
+    #[serde(flatten)]
+    releases: RegistryReleases,
+}
+
+fn registry_index(rows: Vec<PackageReleases>) -> RegistryIndex {
+    rows.into_iter()
+        .map(|r| {
+            let key = (
+                package_key(&r.name, &r.ecosystem),
+                normalize_ecosystem(&r.ecosystem).to_string(),
+            );
+            (key, r.releases)
+        })
+        .collect()
 }
 
 /// The `match_inventory` op: stored rows plus verbatim records, matched. An
@@ -75,6 +105,7 @@ fn match_op(
     inventory: &[Package],
     mut records: Vec<AdvisoryRecord>,
     osv: &[OsvRecord],
+    registry: &RegistryIndex,
 ) -> Result<Value, String> {
     if let Some(problem) = inventory_problem(inventory) {
         return Err(problem);
@@ -93,7 +124,7 @@ fn match_op(
             records.push(row);
         }
     }
-    let findings: Vec<Value> = match_inventory(inventory, &records)
+    let findings: Vec<Value> = match_inventory_with(inventory, &records, registry, |_, _, _| {})
         .into_iter()
         .map(|f| {
             let r = &records[f.record];
@@ -143,22 +174,26 @@ fn answer(request: Request) -> Result<Value, String> {
             eco,
             installed,
             ranges,
+            registry,
         } => {
             let stored: Vec<Option<String>> = ranges.iter().map(|r| stored(r.as_ref())).collect();
             let line_fixes: Vec<String> = stored
                 .iter()
-                .filter_map(|r| fix_for_version(&eco, &installed, r))
+                .filter_map(|r| installable_line_fix(&eco, &installed, r, &registry).fix)
                 .collect();
             let refs: Vec<&Option<String>> = stored.iter().collect();
-            let walk = walk_target(&eco, &installed, &refs)
+            let outcome = walk_target_in(&eco, &installed, &refs, &registry);
+            let walk = outcome
+                .target
                 .map(|w| json!({ "version": w.version, "clears_all": w.clears_all }));
-            json!({ "line_fixes": line_fixes, "walk": walk })
+            json!({ "line_fixes": line_fixes, "walk": walk, "withheld": outcome.withheld })
         }
         Request::MatchInventory {
             inventory,
             records,
             osv,
-        } => match_op(&inventory, records, &osv)?,
+            registry,
+        } => match_op(&inventory, records, &osv, &registry_index(registry))?,
     })
 }
 
@@ -208,8 +243,31 @@ mod tests {
         ));
         assert_eq!(
             r,
-            json!({"line_fixes": ["1.2.4"], "walk": {"version": "1.2.4", "clears_all": true}})
+            json!({"line_fixes": ["1.2.4"], "walk": {"version": "1.2.4", "clears_all": true}, "withheld": []})
         );
+        // The registry withdrew 1.2.4: the next release it offers is the fix.
+        let r = result(&format!(
+            r#"{{"op":"fix_target","eco":"npm","installed":"1.2.3","ranges":[{ranges}],
+                "registry":{{"published":["1.2.3","1.2.4","1.2.5"],"excluded":["1.2.4"]}}}}"#
+        ));
+        assert_eq!(
+            r,
+            json!({"line_fixes": ["1.2.5"], "walk": {"version": "1.2.5", "clears_all": true}, "withheld": ["1.2.4"]})
+        );
+    }
+
+    #[test]
+    fn match_inventory_reads_registry_facts_per_package() {
+        let r = result(
+            r#"{"op":"match_inventory",
+                "inventory":[{"ecosystem":"rust","project":"/p","name":"h2","version":"0.3.16","primary":true}],
+                "osv":[{"id":"RUSTSEC-2023-0034","affected":[{"package":{"name":"h2","ecosystem":"crates.io"},
+                  "ranges":[{"type":"SEMVER","events":[{"introduced":"0"},{"fixed":"0.3.17"}]}]}]}],
+                "registry":[{"ecosystem":"crates.io","name":"H2","published":["0.3.16","0.3.17","0.3.18"],"excluded":["0.3.17"]}]}"#,
+        );
+        let copy = &r["findings"][0]["dependency_instances"][0];
+        assert_eq!(copy["target_version"], "0.3.18");
+        assert_eq!(copy["withheld"], json!(["0.3.17"]));
     }
 
     #[test]

@@ -355,6 +355,11 @@ pub async fn sync(db: &Database) -> Result<SyncResult> {
         info!(target: "4da::osv", resolved_alerts, "Retired patched dependency alerts");
     }
 
+    // Which releases the registries withdrew (yanked, deprecated), for the
+    // packages that now have a confirmed advisory: no fix target may name
+    // one. Best effort; without it targets come from the advisory data.
+    super::release_facts::refresh(db).await;
+
     // Count matched advisories
     result.advisories_matched = super::matching::count_matches(db).unwrap_or(0);
     result.duration_ms = start.elapsed().as_millis() as u64;

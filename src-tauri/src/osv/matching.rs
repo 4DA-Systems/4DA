@@ -116,7 +116,9 @@ pub(crate) fn get_matched_advisories_with_not_compiled(
 
     let records: Vec<AdvisoryRecord> = advisories.iter().map(advisory_record).collect();
     let mut reach = ReachFilter::default();
-    let findings = match_inventory_with(&inventory, &records, |index, _, copies| {
+    // Releases each package's registry withdrew (FX-H5): never a target.
+    let registry = super::release_facts::load(db);
+    let findings = match_inventory_with(&inventory, &records, &registry, |index, _, copies| {
         reach.retain_compiled(db, &advisories[index], copies);
     });
 

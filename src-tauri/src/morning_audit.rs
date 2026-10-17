@@ -55,7 +55,8 @@ impl MorningAudit {
 }
 
 /// Is `version` a real version of `package`: installed in some project, a
-/// fixed version OSV lists for it, or a release the registry feed carries?
+/// fixed version OSV lists for it, a release the registry feed carries, or a
+/// release the stored registry facts list (`osv::release_facts`)?
 /// The G4 replay's check, shared so the gate and the replay agree.
 pub(crate) fn version_is_true(conn: &Connection, package: &str, version: &str) -> bool {
     let q = |sql: &str| -> bool {
@@ -66,6 +67,8 @@ pub(crate) fn version_is_true(conn: &Connection, package: &str, version: &str) -
         || q("SELECT 1 FROM osv_advisories WHERE LOWER(package_name) = LOWER(?1)
                AND fixed_versions LIKE '%\"' || ?2 || '\"%' LIMIT 1")
         || q("SELECT 1 FROM source_items WHERE title LIKE '%' || ?1 || ' v' || ?2 || '%' LIMIT 1")
+        // A release the registry lists (FX-H5: a target past a withdrawn fix).
+        || crate::osv::release_facts::registry_lists(conn, package, version)
 }
 
 /// Every `(package, version, what)` the facts carry, in render order.

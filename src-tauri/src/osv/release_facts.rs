@@ -1,0 +1,404 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
+//! Registry release facts for the fix-target walk (FX-H5): which releases a
+//! package has, and which its registry withdrew. A fix target must never be
+//! one of those: lodash 4.17.21 was told "update to >= 4.18.0", a release npm
+//! marks deprecated ("Bad release"), and a yanked crate named by
+//! `cargo update --precise` fails outright.
+//!
+//! What counts as withdrawn, per registry:
+//! - **crates.io:** `yanked` on the version (`/api/v1/crates/{crate}`).
+//! - **PyPI:** a release whose every file is `yanked` (PEP 592; pip skips it
+//!   unless pinned exactly), from `/pypi/{package}/json`.
+//! - **npm:** `deprecated` on the version, from the abbreviated packument
+//!   (`GET /{package}`, `Accept: application/vnd.npm.install-v1+json`), but
+//!   only when a LATER, non-deprecated, stable release exists in the same
+//!   caret range (same major; same minor for `0.x`). npm's `deprecated` is
+//!   often a whole-major "please upgrade" notice, not a withdrawn release:
+//!   glob deprecates 160 of 168 versions ("Old versions of glob are not
+//!   supported"), 10.5.0 included, and 12.0.0 is its first clean release.
+//!   Excluding them all sent glob 10.4.5 (GHSA-5j98-mcp5-4vw2, fixed 10.5.0)
+//!   to 12.0.0, a major jump that turned "a lockfile refresh is enough" into
+//!   "the parent must upgrade" (review of #976, 2026-10-17). lodash 4.18.0 is
+//!   still excluded: 4.18.1 is clean in 4.x. A package whose `latest` is
+//!   deprecated (retired whole) excludes nothing.
+//! - Each ecosystem is read only while its registry source (`npm_registry`,
+//!   `crates_io`, `pypi`) is enabled: a disabled source makes no calls.
+//! - **Go:** not covered. A module's `retract` directives live in the
+//!   `go.mod` of its newest version, which 4DA does not read; Go targets are
+//!   computed from the advisory data alone, as before.
+//!
+//! Fetched only for packages with a version-confirmed advisory, after each
+//! OSV sync, from hosts the registry adapters already contact (NETWORK.md
+//! §2c). Kept in `kv_store` and refreshed when older than a day. Offline, or
+//! for a package never fetched, the engine gets no facts and behaves exactly
+//! as it did before this module: targets come from the advisory data.
+
+use std::collections::{BTreeSet, HashMap};
+
+use chrono::{DateTime, Duration, Utc};
+use fourda_depengine::registry::{RegistryIndex, RegistryReleases};
+use serde::{Deserialize, Serialize};
+use tracing::{debug, info, warn};
+
+use crate::db::Database;
+use crate::osv::matching::parse_version;
+
+/// `kv_store` key holding every package's facts as one JSON document.
+const KV_KEY: &str = "osv_registry_releases";
+/// Facts younger than this are not re-fetched.
+const FRESH_HOURS: i64 = 24;
+/// Facts older than this are dropped rather than used.
+const KEEP_DAYS: i64 = 30;
+/// Registry reads per sync, so a large vulnerable set spreads over syncs.
+const MAX_FETCHES_PER_SYNC: usize = 60;
+/// Consecutive failures that end a pass (offline, or a registry down).
+const MAX_FAILURES: usize = 3;
+/// Whole-request budget; see `fetch_all` for the document sizes behind it.
+const REQUEST_TIMEOUT_SECS: u64 = 90;
+/// Gap between two crates.io reads (its crawler policy: one per second).
+const CRATES_PAUSE_MS: u64 = 1100;
+const USER_AGENT: &str = "4DA-Developer-OS/1.0 (https://4da.ai)";
+const NPM_ABBREVIATED: &str = "application/vnd.npm.install-v1+json";
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+struct StoredPackage {
+    /// OSV ecosystem (`npm`, `crates.io`, `PyPI`).
+    ecosystem: String,
+    /// The matcher's package key.
+    key: String,
+    /// The registry's own spelling, used for the next fetch.
+    name: String,
+    fetched_at: DateTime<Utc>,
+    #[serde(flatten)]
+    releases: RegistryReleases,
+}
+
+fn read_stored(db: &Database) -> Vec<StoredPackage> {
+    db.get_kv(KV_KEY)
+        .ok()
+        .flatten()
+        .and_then(|text| serde_json::from_str(&text).ok())
+        .unwrap_or_default()
+}
+
+/// Every package's facts for the matcher, keyed as it groups advisories.
+/// Empty (and so exactly the advisory-data-only behaviour) when nothing was
+/// ever fetched.
+pub(crate) fn load(db: &Database) -> RegistryIndex {
+    index(read_stored(db), Utc::now())
+}
+
+fn index(stored: Vec<StoredPackage>, now: DateTime<Utc>) -> RegistryIndex {
+    stored
+        .into_iter()
+        .filter(|p| now - p.fetched_at < Duration::days(KEEP_DAYS))
+        .map(|p| ((p.key, p.ecosystem), p.releases))
+        .collect()
+}
+
+/// The OSV ecosystem this module reads a registry for, if any.
+fn covered(ecosystem: &str) -> Option<&'static str> {
+    match crate::ecosystem::Ecosystem::parse(ecosystem)?.osv_name() {
+        "npm" => Some("npm"),
+        "crates.io" => Some("crates.io"),
+        "PyPI" => Some("PyPI"),
+        _ => None,
+    }
+}
+
+/// The registry source whose toggle governs reads for an OSV ecosystem.
+fn source_type(ecosystem: &str) -> Option<&'static str> {
+    match ecosystem {
+        "npm" => Some("npm_registry"),
+        "crates.io" => Some("crates_io"),
+        "PyPI" => Some("pypi"),
+        _ => None,
+    }
+}
+
+/// (OSV ecosystem, name) of every covered package with a version-confirmed
+/// advisory whose registry source is enabled: the only packages whose
+/// targets the facts can change, and the only registries 4DA may contact.
+fn wanted(db: &Database) -> Vec<(String, String)> {
+    let matches = super::matching::get_matched_advisories(db).unwrap_or_default();
+    let mut out: BTreeSet<(String, String)> = BTreeSet::new();
+    for m in matches.iter().filter(|m| m.is_version_confirmed) {
+        if let Some(eco) = covered(&m.ecosystem) {
+            out.insert((eco.to_string(), m.package_name.clone()));
+        }
+    }
+    gate(out.into_iter().collect(), |source| {
+        db.is_source_enabled(source)
+    })
+}
+
+/// Drop the packages whose registry source is disabled.
+fn gate(wanted: Vec<(String, String)>, enabled: impl Fn(&str) -> bool) -> Vec<(String, String)> {
+    wanted
+        .into_iter()
+        .filter(|(eco, _)| source_type(eco).is_some_and(&enabled))
+        .collect()
+}
+
+/// Whether the stored registry facts list `version` as a published release
+/// of `package` (any covered ecosystem). Read straight from `kv_store` on
+/// `conn`, for the morning audit (G4): a target only the registry names,
+/// such as lodash 4.18.1, is a real version.
+pub(crate) fn registry_lists(conn: &rusqlite::Connection, package: &str, version: &str) -> bool {
+    let text: Option<String> = conn
+        .query_row(
+            "SELECT CAST(value AS TEXT) FROM kv_store WHERE key = ?1",
+            rusqlite::params![KV_KEY],
+            |row| row.get(0),
+        )
+        .ok();
+    let stored: Vec<StoredPackage> = text
+        .and_then(|t| serde_json::from_str(&t).ok())
+        .unwrap_or_default();
+    stored.iter().any(|p| {
+        (p.name.eq_ignore_ascii_case(package)
+            || p.key == super::matching::package_key(package, &p.ecosystem))
+            && p.releases
+                .published
+                .iter()
+                .any(|v| v.trim() == version.trim())
+    })
+}
+
+/// Fetch facts for the packages that need them (missing or older than a
+/// day), at most [`MAX_FETCHES_PER_SYNC`]. Best effort: a failed read keeps
+/// whatever was stored. Returns how many packages were refreshed.
+pub(crate) async fn refresh(db: &Database) -> usize {
+    let now = Utc::now();
+    let mut stored: HashMap<(String, String), StoredPackage> = read_stored(db)
+        .into_iter()
+        .filter(|p| now - p.fetched_at < Duration::days(KEEP_DAYS))
+        .map(|p| ((p.key.clone(), p.ecosystem.clone()), p))
+        .collect();
+    let due = due(wanted(db), &stored, now);
+    if due.is_empty() {
+        return 0;
+    }
+    let fetched = fetch_all(due, &mut stored).await;
+    save(db, stored);
+    info!(target: "4da::osv", fetched, "registry release facts refreshed");
+    fetched
+}
+
+/// The wanted packages with no facts, or facts older than a day, capped.
+fn due(
+    wanted: Vec<(String, String)>,
+    stored: &HashMap<(String, String), StoredPackage>,
+    now: DateTime<Utc>,
+) -> Vec<(String, String)> {
+    wanted
+        .into_iter()
+        .filter(|(eco, name)| {
+            let key = (super::matching::package_key(name, eco), eco.clone());
+            stored
+                .get(&key)
+                .is_none_or(|p| now - p.fetched_at >= Duration::hours(FRESH_HOURS))
+        })
+        .take(MAX_FETCHES_PER_SYNC)
+        .collect()
+}
+
+fn save(db: &Database, stored: HashMap<(String, String), StoredPackage>) {
+    let mut all: Vec<StoredPackage> = stored.into_values().collect();
+    all.sort_by(|a, b| (&a.ecosystem, &a.key).cmp(&(&b.ecosystem, &b.key)));
+    match serde_json::to_string(&all) {
+        Ok(text) => {
+            if let Err(e) = db.set_kv(KV_KEY, &text) {
+                warn!(target: "4da::osv", error = %e, "registry release facts: store failed");
+            }
+        }
+        Err(e) => warn!(target: "4da::osv", error = %e, "registry release facts: encode failed"),
+    }
+}
+
+/// Read each due package's registry; a success replaces its stored facts.
+async fn fetch_all(
+    due: Vec<(String, String)>,
+    stored: &mut HashMap<(String, String), StoredPackage>,
+) -> usize {
+    // Large documents are normal here: `next`'s abbreviated packument is
+    // ~26 MB and boto3's PyPI JSON ~3.3 MB (2026-10-17), so the budget is
+    // per-request generous rather than the 30 s the small reads use.
+    let client = match reqwest::Client::builder()
+        .user_agent(USER_AGENT)
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(REQUEST_TIMEOUT_SECS))
+        .redirect(crate::http_client::ssrf_guarded_redirect_policy())
+        .build()
+    {
+        Ok(client) => client,
+        Err(e) => {
+            warn!(target: "4da::osv", error = %e, "registry release facts: no HTTP client");
+            return 0;
+        }
+    };
+    let (mut fetched, mut failures) = (0usize, 0usize);
+    let mut crates_before = false;
+    for (eco, name) in due {
+        // crates.io asks for at most one request per second; npm and PyPI
+        // are not paced.
+        if eco == "crates.io" {
+            if crates_before {
+                tokio::time::sleep(std::time::Duration::from_millis(CRATES_PAUSE_MS)).await;
+            }
+            crates_before = true;
+        }
+        match fetch(&client, &eco, &name).await {
+            Ok(releases) => {
+                failures = 0;
+                fetched += 1;
+                let key = super::matching::package_key(&name, &eco);
+                stored.insert(
+                    (key.clone(), eco.clone()),
+                    StoredPackage {
+                        ecosystem: eco,
+                        key,
+                        name,
+                        fetched_at: Utc::now(),
+                        releases,
+                    },
+                );
+            }
+            Err(e) => {
+                debug!(target: "4da::osv", package = %name, error = %e, "registry release facts unavailable");
+                failures += 1;
+                if failures >= MAX_FAILURES {
+                    warn!(target: "4da::osv", "registry release facts: stopping after {failures} failures");
+                    break;
+                }
+            }
+        }
+    }
+    fetched
+}
+
+async fn fetch(
+    client: &reqwest::Client,
+    eco: &str,
+    name: &str,
+) -> Result<RegistryReleases, String> {
+    let (url, accept) = match eco {
+        "npm" => (
+            format!("https://registry.npmjs.org/{}", name.replace('/', "%2f")),
+            NPM_ABBREVIATED,
+        ),
+        "crates.io" => (
+            format!("https://crates.io/api/v1/crates/{name}"),
+            "application/json",
+        ),
+        "PyPI" => (
+            format!("https://pypi.org/pypi/{name}/json"),
+            "application/json",
+        ),
+        other => return Err(format!("no registry read for {other}")),
+    };
+    let reply = client
+        .get(&url)
+        .header(reqwest::header::ACCEPT, accept)
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    if !reply.status().is_success() {
+        return Err(format!("HTTP {}", reply.status()));
+    }
+    let doc: serde_json::Value = reply.json().await.map_err(|e| e.to_string())?;
+    let releases = match eco {
+        "npm" => parse_npm(&doc),
+        "crates.io" => parse_crates(&doc),
+        _ => parse_pypi(&doc),
+    };
+    releases.ok_or_else(|| "unreadable registry answer".to_string())
+}
+
+fn npm_deprecated(manifest: &serde_json::Value) -> bool {
+    manifest
+        .get("deprecated")
+        .is_some_and(|d| d.as_str().is_some_and(|s| !s.is_empty()) || d.as_bool() == Some(true))
+}
+
+/// Same caret range (`^a` admits `b`'s line): same major, and for `0.x` the
+/// same minor.
+fn same_caret_line(a: &semver::Version, b: &semver::Version) -> bool {
+    a.major == b.major && (a.major > 0 || a.minor == b.minor)
+}
+
+/// npm abbreviated packument: every version, and a deprecated one excluded
+/// only when a later, non-deprecated, stable release exists on its caret line
+/// (see the module notes). A package whose `latest` is deprecated (retired
+/// whole) excludes nothing.
+fn parse_npm(doc: &serde_json::Value) -> Option<RegistryReleases> {
+    let versions = doc.get("versions")?.as_object()?;
+    let retired = doc
+        .get("dist-tags")
+        .and_then(|t| t.get("latest"))
+        .and_then(|l| l.as_str())
+        .and_then(|l| versions.get(l))
+        .is_some_and(npm_deprecated);
+    let clean: Vec<semver::Version> = versions
+        .iter()
+        .filter(|(_, m)| !npm_deprecated(m))
+        .filter_map(|(v, _)| parse_version(v))
+        .filter(|v| v.pre.is_empty())
+        .collect();
+    let superseded = |v: &semver::Version| clean.iter().any(|c| same_caret_line(v, c) && c > v);
+    let excluded = if retired {
+        Vec::new()
+    } else {
+        versions
+            .iter()
+            .filter(|(_, m)| npm_deprecated(m))
+            .filter(|(v, _)| parse_version(v).is_some_and(|p| superseded(&p)))
+            .map(|(v, _)| v.clone())
+            .collect()
+    };
+    Some(RegistryReleases {
+        published: versions.keys().cloned().collect(),
+        excluded,
+    })
+}
+
+/// crates.io crate document: every version's `num`, the yanked ones excluded.
+fn parse_crates(doc: &serde_json::Value) -> Option<RegistryReleases> {
+    let versions = doc.get("versions")?.as_array()?;
+    let mut out = RegistryReleases::default();
+    for v in versions {
+        let Some(num) = v.get("num").and_then(|n| n.as_str()) else {
+            continue;
+        };
+        out.published.push(num.to_string());
+        if v.get("yanked").and_then(serde_json::Value::as_bool) == Some(true) {
+            out.excluded.push(num.to_string());
+        }
+    }
+    Some(out)
+}
+
+/// PyPI JSON API: every release; one whose files are all yanked is excluded.
+/// A release with no files at all cannot be installed and is not listed.
+fn parse_pypi(doc: &serde_json::Value) -> Option<RegistryReleases> {
+    let releases = doc.get("releases")?.as_object()?;
+    let mut out = RegistryReleases::default();
+    for (version, files) in releases {
+        let files = files.as_array().map(Vec::as_slice).unwrap_or_default();
+        if files.is_empty() {
+            continue;
+        }
+        out.published.push(version.clone());
+        if files
+            .iter()
+            .all(|f| f.get("yanked").and_then(serde_json::Value::as_bool) == Some(true))
+        {
+            out.excluded.push(version.clone());
+        }
+    }
+    Some(out)
+}
+
+#[cfg(test)]
+#[path = "release_facts_tests.rs"]
+mod tests;
