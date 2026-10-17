@@ -128,6 +128,76 @@ pub enum ParentStanding {
     Newest { deprecated: bool },
     /// The registry marks the package deprecated; no version was recorded.
     Deprecated,
+    /// The registry's per-release requirements name the release that admits
+    /// a clean copy (audit H1, `osv::parent_release`).
+    Admits(Box<ParentRelease>),
+    /// Every release was read, and none above the installed one admits a
+    /// clean copy while clear of this package's own advisories.
+    NoneAdmits { latest: Option<String> },
+}
+
+impl ParentStanding {
+    /// Every (package, version) the route sentence can name for this standing
+    /// of `own`: its release, the `parent` release a lever brings in, and the
+    /// version of `package` a fresh resolve picks (the Brief's version check
+    /// allows exactly these).
+    pub fn named_versions<'a>(
+        &'a self,
+        own: &'a str,
+        parent: &'a str,
+        package: &'a str,
+    ) -> Vec<(&'a str, &'a str)> {
+        match self {
+            Self::Newer { latest }
+            | Self::NoneAdmits {
+                latest: Some(latest),
+            } => vec![(own, latest.as_str())],
+            Self::Admits(r) => std::iter::once((own, r.to.as_str()))
+                .chain(
+                    r.smallest
+                        .iter()
+                        .chain(&r.brings)
+                        .map(|v| (parent, v.as_str())),
+                )
+                .chain(r.resolves_to.iter().map(|v| (package, v.as_str())))
+                .collect(),
+            _ => Vec::new(),
+        }
+    }
+}
+
+/// The release a parent (or the declared dependency it arrives through) must
+/// move to, read from the registry's own per-release requirements (audit H1).
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize)]
+pub struct ParentRelease {
+    pub to: String,
+    /// The smallest release that admits a clean copy, when `to` is higher
+    /// because this package's own upgrade needs `to`: one release serves both.
+    pub smallest: Option<String>,
+    /// `to` crosses a major version of the installed release.
+    pub breaking: bool,
+    /// `to`'s requirement on the vulnerable package; `None` when it no longer
+    /// depends on it.
+    pub requirement: Option<String>,
+    /// `requirement` is a peer requirement (npm 7+ installs a missing peer).
+    pub peer: bool,
+    /// What a fresh resolve of `requirement` picks.
+    pub resolves_to: Option<String>,
+    /// This package has advisories with a published fix, and none affects `to`.
+    pub own_checked: bool,
+    /// Moves the declared dependency to `to` in its project, the declared
+    /// operator kept (`osv::direct_upgrade`). `None`: no certain command, or
+    /// no declared dependency could be tied to it.
+    pub command: Option<String>,
+    /// The installed copy `requirement` still admits: an install keeps it,
+    /// so `refresh` must follow (npm 10.9.2).
+    pub kept: Option<String>,
+    pub refresh: Option<String>,
+    /// For the declared dependency a parent arrives through: the parent
+    /// release `to` brings in.
+    pub brings: Option<String>,
+    /// No dependency the project declares could be tied to this parent.
+    pub lever_unknown: bool,
 }
 
 /// A direct dependency a transitive parent arrives through.
@@ -387,6 +457,19 @@ pub fn load_routes(
     package: &str,
     lines: &[LineTarget],
 ) -> TransitiveRoutes {
+    load_routes_with(db, ecosystem_norm, package, lines, true)
+}
+
+/// [`load_routes`]; `releases: false` leaves out the registry-read parent
+/// releases (`osv::parent_release_load`), for the walk that decides which
+/// parents' requirements to read.
+pub(super) fn load_routes_with(
+    db: &Database,
+    ecosystem_norm: &str,
+    package: &str,
+    lines: &[LineTarget],
+    releases: bool,
+) -> TransitiveRoutes {
     let any_transitive = lines.iter().any(|l| l.sites.iter().any(|s| !s.is_direct));
     if !any_transitive {
         return TransitiveRoutes::default();
@@ -446,11 +529,18 @@ pub fn load_routes(
     };
     let mut links = parent_links_with(package, lines, &edges, &installed, &is_clear, &readers);
     annotate(db, ecosystem_norm, &mut links, &manager);
+    if releases {
+        super::parent_release_load::annotate(db, ecosystem_norm, package, &mut links, &raw);
+    }
     let unlinked = unlinked_sites(package, lines, &links, &manager);
     TransitiveRoutes { links, unlinked }
 }
 
-fn read_edges(db: &Database, ecosystem_norm: &str, package: &str) -> Option<Vec<EdgeObs>> {
+pub(super) fn read_edges(
+    db: &Database,
+    ecosystem_norm: &str,
+    package: &str,
+) -> Option<Vec<EdgeObs>> {
     let conn = db.conn.lock();
     let mut stmt = conn
         .prepare(
@@ -765,7 +855,7 @@ fn resolutions(
     found.into_values().take(MAX_RESOLUTIONS).collect()
 }
 
-fn normalize_path(path: &str) -> String {
+pub(super) fn normalize_path(path: &str) -> String {
     path.replace('\\', "/")
         .to_lowercase()
         .trim_end_matches('/')

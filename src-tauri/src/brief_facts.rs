@@ -696,14 +696,15 @@ pub(crate) fn package_facts(facts: &BriefFacts) -> Vec<crate::briefing_groundedn
                         add(parent, Some(&p.parent_version));
                         add(&f.package, Some(&p.child_version));
                     }
-                    if let ParentStanding::Newer { latest } = &route.standing {
-                        add(parent, Some(latest));
+                    // Every release the route sentence can name (audit H1).
+                    let named = route.through.iter().map(|t| (t.name.as_str(), &t.standing));
+                    for (name, st) in named.chain([(parent.as_str(), &route.standing)]) {
+                        for (n, v) in st.named_versions(name, parent, &f.package) {
+                            add(n, Some(v));
+                        }
                     }
                     if let Some(t) = &route.through {
                         add(&t.name, Some(&t.version));
-                        if let ParentStanding::Newer { latest } = &t.standing {
-                            add(&t.name, Some(latest));
-                        }
                     }
                 }
                 FixPath::PerLine { lines } => {
