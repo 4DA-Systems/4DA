@@ -33,6 +33,7 @@ specific enough to recheck).
 | `refresh_verdict.jsonl` | `{eco, name, installed, target, requirements[], verdict, via, inferred}` | The 16 transitive oracle cases (the refresh was applied: it reached the target, or it did not move the copy), each with its parents' requirements read from the case lockfile (`package-lock.json` `requires`, `yarn.lock` `dependencies`) or the parent's published manifest (npm registry for pnpm, crates.io for Cargo). Each case also appears with `requirements: []` to pin the semver fallback. The rest apply AD-055 ¶1 by hand. |
 | `fix_command.jsonl` | `{tool, eco, pkg, installed, target, workspace_root, command}`; `kind: "direct"` lines add `declared` (npm family), `manifest` (Cargo), `go_mod` (Go) or `requirements` (PyPI), optionally `member: true` (the manifest sits one workspace level below the lockfile), and `instruction` | The command text of AD-055 ¶4 for a transitive copy's refresh. Where the oracle applied that tool's refresh, the `source` names the case. `kind: "direct"` lines pin the fix for a DECLARED dependency, read from the project's own manifest, that keeps how it is declared (audit E8): `command` when one command does it, `instruction` for a manifest edit, both null when nothing can be named with certainty. Each line's `source` says whether it was run against its tool (and which version) or is a rule with no tool run. |
 | `range_check.jsonl` | `{eco, name, constraint, from, releases[], record_ids[], expected}` | `@4da/mcp-server` 6.2.0 recorded fixtures (`src/__tests__/fixtures/dependency-check/recorded/`, origin/main `bae421b`): OSV's querybatch answer per release of ws, Jinja2 and golang.org/x/net. Constraint membership: node `semver` (npm, Go without `v`; `v0` is the v0 line), python `packaging` `SpecifierSet` (PyPI). |
+| `parent_release.jsonl` | `{eco, tool, parent{...}, rows[], expect{parent_target, rows[]}}` (below) | pr-001..pr-006: registry.npmjs.org abbreviated documents and OSV.dev `/v1/query`, read 2026-10-18 (generated once, then the rule applied by hand); OWASP/NodeGoat's `package-lock.json`; npm 10.9.2 for the install-keeps-the-copy case. pr-001..pr-004 and pr-006 agree with `@4da/mcp-server` fix/planner-advice-625 `1840dab` run on the same projects. |
 | `holding.jsonl` | `{eco, name, advisory_id, version, holding}` | npm's security holding placeholders (`0.0.<n>-security`; a publisher's `1.0.0-security` prerelease is not one: ho-006): the registry's own description ("security holding package") and the advisories that flag the name. `holding: true` means no advisory applies to that release (audit L4 decision, 2026-10-16). |
 
 Field conventions:
@@ -65,6 +66,31 @@ Field conventions:
     pre-releases.
   - `withheld[]` (expected, checked only when present): the withdrawn
     releases the walk would otherwise have named, in the order met.
+- `parent_release` lines (audit H1) hold one parent and the transitive rows
+  it blocks, all read from the live registry and OSV on the `source` date
+  and cut to the releases the rule reads:
+  - `parent`: `name`, `installed`, `declared` (the spec the project's
+    manifest declares it with; `null` when `lever` is `unknown`), `lever`
+    (`direct`: the project declares the parent; `unknown`: no declared
+    dependency can be tied to it), `latest`, `deprecated` (the `latest`
+    release is deprecated), `releases[]` (its installable stable releases
+    from `installed` up), `advisories[]` and `own_target` (the target of the
+    parent's own plan row, from its own advisories; `null` when it has none).
+  - `rows[]`: `pkg`, `installed`, `target`, `releases[]` (the package's
+    installable stable releases), `advisories[]`, and `requires`
+    (parent release -> its requirement on `pkg`: a string, `null` when that
+    release does not depend on it, or `{"peer": "..."}`).
+  - `advisories[]`: `{id, ranges: [{introduced, fixed | last_affected}]}`,
+    one window per range (OSV's events, split).
+  - `expect.parent_target`: the parent's own row after the raise (`null`
+    without an own row). `expect.rows[]`, in row order: `outcome`
+    (`release`, `deprecated`, `latest`, `none_admits`, `unread`), `smallest`
+    (the smallest admitting release), `to` (the release named, lifted to
+    `parent_target` when that still admits a clean copy), `breaking`,
+    `requirement`, `peer`, `resolves_to` (what a fresh resolve of
+    `requirement` picks), `command` (the declared operator kept; `null` for
+    an unknown lever) and `refresh` (the command after the install, when
+    the new requirement still admits `installed`).
 - `range_check` `releases` are the stable releases that have a recorded OSV
   answer. `record_ids` are the pinned records in `../osv/`; they are the same
   set as the MCP's recorded `/v1/query` answer for each package. A release is
@@ -216,6 +242,30 @@ The release-age hold and withdrawn or deprecated releases are not part of
 these `range_check` vectors. They depend on the clock and on registry
 metadata. (Withdrawn releases as fix targets are pinned in `fix_target.jsonl`
 with the registry state written into the line, above.)
+
+### Parent release — readiness audit H1
+
+`@4da/mcp-server` fix/planner-advice-625 (`1840dab`,
+`src/tools/upgrade-planner-fixpaths.ts`): *"the smallest parent release whose
+own declared requirement admits a clean version, read from the registry, and
+that is itself clear of the parent's own advisories; then the dependency the
+project DECLARES that moves it ... A parent the walk cannot tie to a
+declaration names no lever and no command ... When the new requirement still
+admits the installed copy, an install keeps that copy (npm 10.9.2, checked
+2026-10-17: express 4.21.2 -> 4.22.0 kept path-to-regexp 0.1.12 under
+`~0.1.12`), so the step names the refresh that follows."* And
+`reconcileDirectTargets`: *"One dependency, one command ... a direct row and
+the parent upgrades that name it as their lever agree on its release."*
+
+- NodeGoat (express 4.16.4, path-to-regexp 0.1.7, qs 6.5.2): the express row
+  rises from 4.20.0 to 4.22.3 and both transitive rows name 4.22.3, with the
+  declared `^` kept: pr-001
+- The smallest admitting release, clear of the parent's own advisories, and
+  the parent's own row raised to it (express 4.22.0, exact pin kept): pr-002
+- The refresh after an install that keeps the vulnerable copy: pr-003
+- A move across a major version is flagged (mongodb-core 2.1.20 -> 3.1.2): pr-004
+- A parent no declared dependency can be tied to: its release, no command: pr-005
+- A parent whose latest release is deprecated names no release: pr-006
 
 ## `engines_skip.json` — the shrink-only gate
 

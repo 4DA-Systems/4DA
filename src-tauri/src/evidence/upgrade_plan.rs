@@ -114,6 +114,17 @@ pub fn build_upgrade_plan(db: &Database) -> BuiltPlan {
     let mut candidates: Vec<(EvidenceItem, Vec<UpgradeStep>)> = steps
         .into_iter()
         .map(|mut g| {
+            // One bump per dependency (audit H1): a declared package's target
+            // rises to the release that also clears the copies it pins.
+            g.raise_note = super::upgrade_row_raise::raise_declared_lines(
+                db,
+                &g.ecosystem_norm,
+                &g.package,
+                &mut g.lines,
+            );
+            if !g.raise_note.is_empty() {
+                g.targets = fix_target::distinct_targets(&g.lines);
+            }
             // How the fix reaches each transitive copy: its installed parent,
             // whether a lockfile refresh is enough and the command that does
             // it (`osv::fix_path`; empty for a direct-only row).
@@ -200,6 +211,9 @@ struct PackageGroup<'a> {
     /// The route of each transitive copy (`osv::parent_hint`,
     /// `osv::fix_path`). Filled after ranking; it never changes the rank.
     routes: crate::osv::parent_hint::TransitiveRoutes,
+    /// Why a declared line's target was raised above its own advisories' fix
+    /// (`upgrade_row_raise`); empty in the common case.
+    raise_note: String,
 }
 
 fn aggregate_by_package(matches: &[MatchedAdvisory]) -> Vec<PackageGroup<'_>> {
@@ -312,6 +326,7 @@ fn package_group<'a>(
         cohort_key,
         routes: crate::osv::parent_hint::TransitiveRoutes::default(),
         direct_fixes: Vec::new(),
+        raise_note: String::new(),
     }
 }
 
@@ -454,7 +469,11 @@ impl PackageGroup<'_> {
         } else {
             ""
         };
-        let target_detail = target_detail(&self.package, &self.lines, major);
+        let target_detail = format!(
+            "{}{}",
+            target_detail(&self.package, &self.lines, major),
+            self.raise_note
+        );
         let representatives = self.representatives();
         let ids: Vec<&str> = representatives
             .iter()
