@@ -283,16 +283,18 @@ module proxy (§1b, §1e) receive them too; §4 has the complete list.
 | `api.osv.dev` | `POST /v1/querybatch` | Your discovered package names + ecosystems, batched (≤1000/batch) |
 | `osv-vulnerabilities.storage.googleapis.com` | `GET /{ecosystem}/all.zip` | Plain `GET` — downloads the public advisory mirror (no user data) |
 | `registry.npmjs.org` | `GET /{package}` (abbreviated packument, `Accept: application/vnd.npm.install-v1+json`) | The package name only |
-| `crates.io` | `GET /api/v1/crates/{crate}` | The crate name only. User-Agent `4DA-Developer-OS/1.0 (https://4da.ai)`, 1.1 s apart |
+| `crates.io` | `GET /api/v1/crates/{crate}` | The crate name only. User-Agent `4DA-Developer-OS/1.0 (https://4da.ai)` |
 | `pypi.org` | `GET /pypi/{package}/json` | The package name only |
 
 - **Registry release check** (the last three rows, `src-tauri/src/osv/release_facts.rs`): after each
   sync, for packages that have a **version-confirmed advisory** only, 4DA reads which releases exist
   and which the registry withdrew (crates.io and PyPI *yanked*, npm *deprecated*), so a fix target
   never names one. At most 60 packages per sync, each re-read at most once a day; the answer is
-  kept in the local database. **Your installed version is never sent.** Go modules are not
-  checked (their `retract` directives are not read). Offline, targets come from the advisory data
-  alone, as before.
+  kept in the local database. **Your installed version is never sent.** Each registry is read only
+  while its source (npm / crates.io / PyPI, Settings → Sources) is enabled; a disabled source makes
+  no call here either. Requests to crates.io are spaced 1.1 s apart. Go modules are not checked
+  (their `retract` directives are not read). Offline, targets come from the advisory data alone,
+  as before.
 - **Trigger:** background, at startup, **only if dependencies exist** and the local mirror was last
   synced **> 6 hours ago** (`app_setup.rs`).
 - **Disable:** if 4DA has discovered no dependencies, nothing is sent. Removing/disabling ACE project

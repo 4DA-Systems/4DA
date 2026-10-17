@@ -137,7 +137,11 @@ async fn query_live_version_matched(
     let mut seen: std::collections::HashSet<(String, String, String)> =
         std::collections::HashSet::new();
     let mut items = Vec::new();
+    // Releases the registries withdrew (FX-H5), so "Fixed in" never reads as
+    // advice to take a yanked or deprecated release.
+    let registry = crate::osv::release_facts::load(db);
     for ((eco, name, ver), ids) in deps.iter().zip(per_dep_ids.iter()) {
+        let facts = registry.get(&(crate::osv::matching::package_key(name, eco), eco.clone()));
         for id in ids {
             let Some(vuln) = hydrated.get(id) else {
                 continue;
@@ -145,7 +149,11 @@ async fn query_live_version_matched(
             if !seen.insert((id.clone(), name.to_lowercase(), eco.clone())) {
                 continue;
             }
-            items.push(live_vuln_to_grounded_item(vuln, name, eco, ver));
+            let mut item = live_vuln_to_grounded_item(vuln, name, eco, ver);
+            if let Some(note) = withdrawn_note(vuln, name, eco, facts) {
+                item.content.push_str(&note);
+            }
+            items.push(item);
         }
     }
     Ok(items)
@@ -278,6 +286,41 @@ fn live_vuln_to_grounded_item(
         .with_url(Some(url))
         .with_content(content)
         .with_metadata(metadata)
+}
+
+/// When the registry withdrew the advisory's "Fixed in" release (yanked or
+/// deprecated, FX-H5), the note appended to that line: the release to take
+/// instead, or that none past it is known. `None` when it was not withdrawn
+/// or no registry facts are held.
+fn withdrawn_note(
+    vuln: &OsvVulnerability,
+    package: &str,
+    ecosystem: &str,
+    facts: Option<&fourda_depengine::registry::RegistryReleases>,
+) -> Option<String> {
+    let facts = facts?;
+    let fixed = fixed_version_for(vuln, package, ecosystem)?;
+    if !facts.excludes(ecosystem, &fixed) {
+        return None;
+    }
+    let ranges: Vec<&OsvRange> = vuln
+        .affected
+        .iter()
+        .flatten()
+        .filter(|a| {
+            a.package.as_ref().is_some_and(|p| {
+                p.name.eq_ignore_ascii_case(package) && p.ecosystem.eq_ignore_ascii_case(ecosystem)
+            })
+        })
+        .flat_map(|a| a.ranges.iter().flatten())
+        .collect();
+    let ranges_json = serde_json::to_string(&ranges).ok();
+    let next =
+        fourda_depengine::fix_target::installable_fix(ecosystem, &fixed, &ranges_json, facts).fix;
+    Some(match next {
+        Some(next) => format!(" (withdrawn by the registry; use {next})"),
+        None => " (withdrawn by the registry; no later release is known to fix it)".to_string(),
+    })
 }
 
 /// First concrete fixed version for `package` in this advisory (ECOSYSTEM/SEMVER ranges only;
@@ -491,6 +534,32 @@ mod tests {
             fj.contains("15.5.16") && fj.contains("16.2.5"),
             "both fixes present: {fj}"
         );
+    }
+
+    /// FX-H5: "Fixed in: 4.18.0" for lodash, a release npm deprecated.
+    #[test]
+    fn a_withdrawn_fixed_in_release_is_annotated() {
+        let v = vuln_with(vec![OsvAffected {
+            package: Some(pkg("lodash", "npm")),
+            ranges: Some(vec![semver("0", "4.18.0")]),
+        }]);
+        let facts = fourda_depengine::registry::RegistryReleases {
+            published: vec!["4.18.0".into(), "4.18.1".into()],
+            excluded: vec!["4.18.0".into()],
+        };
+        assert_eq!(
+            withdrawn_note(&v, "lodash", "npm", Some(&facts)).as_deref(),
+            Some(" (withdrawn by the registry; use 4.18.1)")
+        );
+        let only = fourda_depengine::registry::RegistryReleases {
+            published: vec!["4.18.0".into()],
+            excluded: vec!["4.18.0".into()],
+        };
+        assert!(withdrawn_note(&v, "lodash", "npm", Some(&only))
+            .is_some_and(|n| n.contains("no later release")));
+        let live = fourda_depengine::registry::RegistryReleases::default();
+        assert_eq!(withdrawn_note(&v, "lodash", "npm", Some(&live)), None);
+        assert_eq!(withdrawn_note(&v, "lodash", "npm", None), None);
     }
 
     #[test]

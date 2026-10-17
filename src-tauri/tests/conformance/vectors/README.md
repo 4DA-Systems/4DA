@@ -54,8 +54,12 @@ Field conventions:
     registry listed them on the date in `source`. They join the releases the
     advisory data names, so the walk can step to a release no advisory
     mentions.
-  - `excluded[]`: releases the registry withdrew (crates.io and PyPI
-    `yanked`; npm `deprecated` while the package's `latest` is not). No
+  - `excluded[]`: releases the registry withdrew. crates.io and PyPI:
+    `yanked`. npm: `deprecated`, but only when a later, non-deprecated,
+    stable release exists on the same caret line (same major; same minor for
+    `0.x`), and never when the package's `latest` is deprecated; a
+    whole-major "please upgrade" notice is not a withdrawal. The line holds
+    the app's rule applied to the live registry on the `source` date. No
     target may be one; the walk steps over them as it steps over
     pre-releases.
   - `withheld[]` (expected, checked only when present): the withdrawn
@@ -131,10 +135,11 @@ form.
 > fix").
 
 - The 22 oracle cases: ft-001..ft-022 (openssl 0.10.80: ft-006; braces `last_affected`: ft-004)
-- OSV per published release, all four registries: ft-023..ft-061, ft-062, ft-063
+- OSV per published release, all four registries: ft-023..ft-061, ft-062, ft-063, ft-065, ft-066
 - No clean version, so the target clears only the fixed advisories (`clears: false`): ft-004, ft-029, ft-041, ft-042, ft-055, ft-060, ft-061
 - A `last_affected` window that later releases leave (the walk steps past the bound and keeps checking every advisory): ft-043 (pyjwt), ft-052 (mistune)
 - A release the registry withdrew is never the target (FX-H5): npm deprecated, ft-007 (lodash 4.18.0, "Bad release", so 4.18.1) and ft-063 (brace-expansion 3.0.3, so 3.0.4); crates.io yanked, ft-062 (h2 0.3.17, so 0.3.18); every clearing release withdrawn, so no target and `withheld` names it, ft-064 (by hand)
+- A whole-major npm deprecation notice is not a withdrawal, so the target stays on the installed line (review of #976): ft-065 (glob 10.4.5 -> 10.5.0, not 12.0.0), ft-066 (tar 6.1.11 -> 6.2.1, while tar 7.0.0..7.5.7 are excluded because 7.5.8 is clean)
 
 ### Refresh verdict — AD-055 ¶1, ¶2, ¶3
 

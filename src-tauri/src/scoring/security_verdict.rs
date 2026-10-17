@@ -291,7 +291,10 @@ pub(crate) fn ranges_verdict(installed: Option<&str>, ranges: &[String]) -> Opti
 /// The advisory's highest listed fix, as a release its registry still offers
 /// (FX-H5): a yanked or deprecated fix gives way to the next allowed release
 /// the advisory does not affect, or to nothing.
-fn highest_fix(db: &Database, advisory: &StoredAdvisory) -> Option<String> {
+fn highest_fix(
+    registry: &fourda_depengine::registry::RegistryIndex,
+    advisory: &StoredAdvisory,
+) -> Option<String> {
     let versions: Vec<String> = serde_json::from_str(advisory.fixed_versions.as_deref()?).ok()?;
     let fix = versions
         .into_iter()
@@ -304,7 +307,7 @@ fn highest_fix(db: &Database, advisory: &StoredAdvisory) -> Option<String> {
         crate::osv::matching::package_key(&advisory.package_name, eco),
         eco.to_string(),
     );
-    match crate::osv::release_facts::load(db).get(&key) {
+    match registry.get(&key) {
         Some(facts) => {
             fourda_depengine::fix_target::installable_fix(
                 eco,
@@ -336,6 +339,8 @@ pub(crate) fn matcher_verdict(db: &Database, ids: &[String]) -> Option<SecurityV
     let mut verdict = SecurityVerdict::default();
     let mut deciding_tier: Option<&'static str> = None;
     let mut any_tier: Option<&'static str> = None;
+    // Registry facts, read at most once per verdict (FX-H5).
+    let mut registry: Option<fourda_depengine::registry::RegistryIndex> = None;
     for row in &rows {
         let exposure = exposure_for_advisory(db, row);
         if exposure.copies_checked == 0 {
@@ -352,7 +357,8 @@ pub(crate) fn matcher_verdict(db: &Database, ids: &[String]) -> Option<SecurityV
                 deciding_tier = tier;
             }
             if verdict.fixed_version.is_none() {
-                verdict.fixed_version = highest_fix(db, row);
+                let registry = registry.get_or_insert_with(|| crate::osv::release_facts::load(db));
+                verdict.fixed_version = highest_fix(registry, row);
             }
             verdict.exposed.extend(exposure.confirmed);
         }

@@ -11,10 +11,18 @@
 //!   unless pinned exactly), from `/pypi/{package}/json`.
 //! - **npm:** `deprecated` on the version, from the abbreviated packument
 //!   (`GET /{package}`, `Accept: application/vnd.npm.install-v1+json`), but
-//!   only while the package's `latest` release is NOT deprecated. When `latest`
-//!   is deprecated too, the whole package is retired ("no longer supported"),
-//!   not one release; excluding every release would hide the version that
-//!   clears the advisory, so nothing is excluded then.
+//!   only when a LATER, non-deprecated, stable release exists in the same
+//!   caret range (same major; same minor for `0.x`). npm's `deprecated` is
+//!   often a whole-major "please upgrade" notice, not a withdrawn release:
+//!   glob deprecates 160 of 168 versions ("Old versions of glob are not
+//!   supported"), 10.5.0 included, and 12.0.0 is its first clean release.
+//!   Excluding them all sent glob 10.4.5 (GHSA-5j98-mcp5-4vw2, fixed 10.5.0)
+//!   to 12.0.0, a major jump that turned "a lockfile refresh is enough" into
+//!   "the parent must upgrade" (review of #976, 2026-10-17). lodash 4.18.0 is
+//!   still excluded: 4.18.1 is clean in 4.x. A package whose `latest` is
+//!   deprecated (retired whole) excludes nothing.
+//! - Each ecosystem is read only while its registry source (`npm_registry`,
+//!   `crates_io`, `pypi`) is enabled: a disabled source makes no calls.
 //! - **Go:** not covered. A module's `retract` directives live in the
 //!   `go.mod` of its newest version, which 4DA does not read; Go targets are
 //!   computed from the advisory data alone, as before.
@@ -33,6 +41,7 @@ use serde::{Deserialize, Serialize};
 use tracing::{debug, info, warn};
 
 use crate::db::Database;
+use crate::osv::matching::parse_version;
 
 /// `kv_store` key holding every package's facts as one JSON document.
 const KV_KEY: &str = "osv_registry_releases";
@@ -44,6 +53,10 @@ const KEEP_DAYS: i64 = 30;
 const MAX_FETCHES_PER_SYNC: usize = 60;
 /// Consecutive failures that end a pass (offline, or a registry down).
 const MAX_FAILURES: usize = 3;
+/// Whole-request budget; see `fetch_all` for the document sizes behind it.
+const REQUEST_TIMEOUT_SECS: u64 = 90;
+/// Gap between two crates.io reads (its crawler policy: one per second).
+const CRATES_PAUSE_MS: u64 = 1100;
 const USER_AGENT: &str = "4DA-Developer-OS/1.0 (https://4da.ai)";
 const NPM_ABBREVIATED: &str = "application/vnd.npm.install-v1+json";
 
@@ -93,8 +106,19 @@ fn covered(ecosystem: &str) -> Option<&'static str> {
     }
 }
 
+/// The registry source whose toggle governs reads for an OSV ecosystem.
+fn source_type(ecosystem: &str) -> Option<&'static str> {
+    match ecosystem {
+        "npm" => Some("npm_registry"),
+        "crates.io" => Some("crates_io"),
+        "PyPI" => Some("pypi"),
+        _ => None,
+    }
+}
+
 /// (OSV ecosystem, name) of every covered package with a version-confirmed
-/// advisory: the only packages whose targets the facts can change.
+/// advisory whose registry source is enabled: the only packages whose
+/// targets the facts can change, and the only registries 4DA may contact.
 fn wanted(db: &Database) -> Vec<(String, String)> {
     let matches = super::matching::get_matched_advisories(db).unwrap_or_default();
     let mut out: BTreeSet<(String, String)> = BTreeSet::new();
@@ -103,7 +127,42 @@ fn wanted(db: &Database) -> Vec<(String, String)> {
             out.insert((eco.to_string(), m.package_name.clone()));
         }
     }
-    out.into_iter().collect()
+    gate(out.into_iter().collect(), |source| {
+        db.is_source_enabled(source)
+    })
+}
+
+/// Drop the packages whose registry source is disabled.
+fn gate(wanted: Vec<(String, String)>, enabled: impl Fn(&str) -> bool) -> Vec<(String, String)> {
+    wanted
+        .into_iter()
+        .filter(|(eco, _)| source_type(eco).is_some_and(&enabled))
+        .collect()
+}
+
+/// Whether the stored registry facts list `version` as a published release
+/// of `package` (any covered ecosystem). Read straight from `kv_store` on
+/// `conn`, for the morning audit (G4): a target only the registry names,
+/// such as lodash 4.18.1, is a real version.
+pub(crate) fn registry_lists(conn: &rusqlite::Connection, package: &str, version: &str) -> bool {
+    let text: Option<String> = conn
+        .query_row(
+            "SELECT CAST(value AS TEXT) FROM kv_store WHERE key = ?1",
+            rusqlite::params![KV_KEY],
+            |row| row.get(0),
+        )
+        .ok();
+    let stored: Vec<StoredPackage> = text
+        .and_then(|t| serde_json::from_str(&t).ok())
+        .unwrap_or_default();
+    stored.iter().any(|p| {
+        (p.name.eq_ignore_ascii_case(package)
+            || p.key == super::matching::package_key(package, &p.ecosystem))
+            && p.releases
+                .published
+                .iter()
+                .any(|v| v.trim() == version.trim())
+    })
 }
 
 /// Fetch facts for the packages that need them (missing or older than a
@@ -162,14 +221,33 @@ async fn fetch_all(
     due: Vec<(String, String)>,
     stored: &mut HashMap<(String, String), StoredPackage>,
 ) -> usize {
-    let client = reqwest::Client::builder()
+    // Large documents are normal here: `next`'s abbreviated packument is
+    // ~26 MB and boto3's PyPI JSON ~3.3 MB (2026-10-17), so the budget is
+    // per-request generous rather than the 30 s the small reads use.
+    let client = match reqwest::Client::builder()
         .user_agent(USER_AGENT)
-        .timeout(std::time::Duration::from_secs(30))
+        .connect_timeout(std::time::Duration::from_secs(10))
+        .timeout(std::time::Duration::from_secs(REQUEST_TIMEOUT_SECS))
         .redirect(crate::http_client::ssrf_guarded_redirect_policy())
         .build()
-        .unwrap_or_default();
+    {
+        Ok(client) => client,
+        Err(e) => {
+            warn!(target: "4da::osv", error = %e, "registry release facts: no HTTP client");
+            return 0;
+        }
+    };
     let (mut fetched, mut failures) = (0usize, 0usize);
+    let mut crates_before = false;
     for (eco, name) in due {
+        // crates.io asks for at most one request per second; npm and PyPI
+        // are not paced.
+        if eco == "crates.io" {
+            if crates_before {
+                tokio::time::sleep(std::time::Duration::from_millis(CRATES_PAUSE_MS)).await;
+            }
+            crates_before = true;
+        }
         match fetch(&client, &eco, &name).await {
             Ok(releases) => {
                 failures = 0;
@@ -195,8 +273,6 @@ async fn fetch_all(
                 }
             }
         }
-        // crates.io asks for at most one request per second.
-        tokio::time::sleep(std::time::Duration::from_millis(1100)).await;
     }
     fetched
 }
@@ -239,31 +315,50 @@ async fn fetch(
     releases.ok_or_else(|| "unreadable registry answer".to_string())
 }
 
-/// npm abbreviated packument: every version, and the deprecated ones unless
-/// `latest` is deprecated too (a retired package, see the module notes).
+fn npm_deprecated(manifest: &serde_json::Value) -> bool {
+    manifest
+        .get("deprecated")
+        .is_some_and(|d| d.as_str().is_some_and(|s| !s.is_empty()) || d.as_bool() == Some(true))
+}
+
+/// Same caret range (`^a` admits `b`'s line): same major, and for `0.x` the
+/// same minor.
+fn same_caret_line(a: &semver::Version, b: &semver::Version) -> bool {
+    a.major == b.major && (a.major > 0 || a.minor == b.minor)
+}
+
+/// npm abbreviated packument: every version, and a deprecated one excluded
+/// only when a later, non-deprecated, stable release exists on its caret line
+/// (see the module notes). A package whose `latest` is deprecated (retired
+/// whole) excludes nothing.
 fn parse_npm(doc: &serde_json::Value) -> Option<RegistryReleases> {
     let versions = doc.get("versions")?.as_object()?;
-    let deprecated = |v: &serde_json::Value| {
-        v.get("deprecated")
-            .is_some_and(|d| d.as_str().is_some_and(|s| !s.is_empty()) || d.as_bool() == Some(true))
-    };
     let retired = doc
         .get("dist-tags")
         .and_then(|t| t.get("latest"))
         .and_then(|l| l.as_str())
         .and_then(|l| versions.get(l))
-        .is_some_and(deprecated);
+        .is_some_and(npm_deprecated);
+    let clean: Vec<semver::Version> = versions
+        .iter()
+        .filter(|(_, m)| !npm_deprecated(m))
+        .filter_map(|(v, _)| parse_version(v))
+        .filter(|v| v.pre.is_empty())
+        .collect();
+    let superseded = |v: &semver::Version| clean.iter().any(|c| same_caret_line(v, c) && c > v);
+    let excluded = if retired {
+        Vec::new()
+    } else {
+        versions
+            .iter()
+            .filter(|(_, m)| npm_deprecated(m))
+            .filter(|(v, _)| parse_version(v).is_some_and(|p| superseded(&p)))
+            .map(|(v, _)| v.clone())
+            .collect()
+    };
     Some(RegistryReleases {
         published: versions.keys().cloned().collect(),
-        excluded: if retired {
-            Vec::new()
-        } else {
-            versions
-                .iter()
-                .filter(|(_, v)| deprecated(v))
-                .map(|(k, _)| k.clone())
-                .collect()
-        },
+        excluded,
     })
 }
 
