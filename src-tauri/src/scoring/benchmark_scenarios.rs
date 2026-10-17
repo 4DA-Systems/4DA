@@ -284,6 +284,12 @@ fn rust_developer_ctx() -> ScoringContext {
     // the v33 ceiling held it at 0.370 — correctly, but the control then
     // measured the wrong thing.
     set_bench_dep_version(&mut ace, "tokio", "1.46.1");
+    // v42 (audit E4): the security scenarios' targets carry lockfile pins
+    // inside each advisory's affected range (sec_hyper_vuln: < 1.4.2,
+    // reg_cve_reqwest: < 0.12.15), so they stay confirmed exposures instead
+    // of "version unknown".
+    set_bench_dep_version(&mut ace, "hyper", "1.4.0");
+    set_bench_dep_version(&mut ace, "reqwest", "0.12.10");
     // Lockfile-only family children of the direct deps above, exactly as a
     // real serde/tokio user's Cargo.lock carries them (family rule, item 15).
     install_bench_transitive_deps(
@@ -402,6 +408,11 @@ fn fullstack_js_ctx() -> ScoringContext {
             ("prisma", "javascript"),
         ],
     );
+    // v42 (audit E4): an advisory against an UNKNOWN installed version never
+    // grounds, so the dependency a security scenario targets carries its
+    // lockfile pin, inside the advisory's affected range: sec_react_xss
+    // (fixed in 19.1.2) is a confirmed exposure, as it was meant to be.
+    set_bench_dep_version(&mut ace, "react", "19.1.0");
 
     let domain = crate::domain_profile::DomainProfile {
         primary_stack: std::collections::HashSet::from_iter(
@@ -499,6 +510,10 @@ fn python_data_scientist_ctx() -> ScoringContext {
             ("pandas", "python"),
         ],
     );
+    // v42 (audit E4): sec_pytorch_rce (fixed in 2.4.1) needs a confirmed
+    // installed version inside the affected range to test the security path.
+    set_bench_dep_version(&mut ace, "pytorch", "2.4.0");
+    set_bench_dep_version(&mut ace, "torch", "2.4.0");
 
     let domain = crate::domain_profile::DomainProfile {
         primary_stack: std::collections::HashSet::from_iter(
