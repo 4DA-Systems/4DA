@@ -104,6 +104,25 @@ describe('computeEvidencePool', () => {
     expect(computeEvidencePool(r)).toBe('in_orbit');
   });
 
+  it('never grounds an advisory whose installed version is unknown (audit E4)', () => {
+    // Fresh profile 2026-10-12: a Maven project read from pom.xml only. 15
+    // GHSA rows for com.h2database:h2 & co. sat in Affects You; 14 of 15 did
+    // not apply to the (unknown) installed versions. Even a stale breakdown
+    // that still says strongly_grounded must not put one back.
+    const r = item({
+      source_type: 'osv',
+      applicability: 'version_unknown',
+      score_breakdown: {
+        strongly_grounded: true,
+        dependency_event: true,
+        matched_deps: ['com.h2database:h2'],
+        domain_relevance: 0.85,
+      } as never,
+    });
+    expect(isGrounded(r)).toBe(false);
+    expect(computeEvidencePool(r)).toBe('in_orbit');
+  });
+
   it('keeps a grounded tutorial with no dependency event out of Affects You', () => {
     // Live 2026-10-04: "Progressive Hydration in React" sat in Affects You as
     // "Names your dependency react". Grounded (it names react) but nothing is

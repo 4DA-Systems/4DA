@@ -2652,5 +2652,14 @@
   "signals.stack.projects": "プロジェクト",
   "signals.stack.listLabel": "スタックの変更",
   "signals.stack.modeNote": "テーマとグラフは閲覧フィードを表します。スタックの変更はリストにあります。変更は 1 パッケージごとなので、まとめるものはありません。",
-  "signals.stack.feedOnlyStack": "フィードには他に何もありません。すべてスタックの変更で、上に一覧表示されています。"
+  "signals.stack.feedOnlyStack": "フィードには他に何もありません。すべてスタックの変更で、上に一覧表示されています。",
+  "results.versionUnknown": "未確認：インストール済みバージョンが不明",
+  "preemption.empty.partialTitle": "4DA が確認できた依存関係に既知の脆弱性はありません",
+  "preemption.notCovered.title_one": "1 件の依存関係ファイルが対象外です",
+  "preemption.notCovered.title_other": "{{count}} 件の依存関係ファイルが対象外です",
+  "preemption.notCovered.body": "4DA はこれらのファイルからインストール済みバージョンを読み取らないため、セキュリティ勧告と照合できず、問題なしとは見なしません。現在は npm、pnpm、Yarn、Bun、Cargo、Python、Go のロックファイルを読み取り、Ruby と PHP は初期サポートです。Maven、Gradle、.NET のプロジェクトはまだ対象外です。",
+  "preemption.notCovered.more": "ほか {{count}} 件",
+  "preemption.notCovered.unreadableTitle_one": "1 件のロックファイルを読み取れませんでした",
+  "preemption.notCovered.unreadableTitle_other": "{{count}} 件のロックファイルを読み取れませんでした",
+  "preemption.notCovered.unreadableBody": "4DA は前回のスキャンでこれらのファイルを読み取れなかったため、固定されている内容を確認済みとは見なしません。ファイルを修正するか、もう一度スキャンしてください。"
 }

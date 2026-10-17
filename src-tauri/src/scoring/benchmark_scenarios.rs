@@ -290,6 +290,14 @@ fn rust_developer_ctx() -> ScoringContext {
         &mut ace,
         &[("serde_derive", "rust"), ("tokio-util", "rust")],
     );
+    // A lockfile-only dependency always carries the version its lockfile
+    // pins. Since v42 (audit E4) a registry advisory against a dependency
+    // with NO known version is "version unknown" and never grounds, so the
+    // fixture must say what Cargo.lock says: serde_derive 1.0.200 sits below
+    // the RUSTSEC-2026-0042 fix (1.0.205), i.e. the family-rule case is a
+    // confirmed exposure, exactly as for a real serde user.
+    set_bench_dep_version(&mut ace, "serde_derive", "1.0.200");
+    set_bench_dep_version(&mut ace, "tokio-util", "0.7.11");
 
     let primary_stack = std::collections::HashSet::from_iter(
         ["rust", "tauri", "sqlite"].iter().map(|s| s.to_string()),

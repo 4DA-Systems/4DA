@@ -2630,5 +2630,14 @@
   "signals.stack.projects": "项目",
   "signals.stack.listLabel": "技术栈中的变化",
   "signals.stack.modeNote": "主题和图谱展示的是您的阅读信息流。技术栈中的变化在“列表”中：每项变化只涉及一个软件包，因此无需归类。",
-  "signals.stack.feedOnlyStack": "信息流中没有其他内容：其中所有内容都是您技术栈的变化，已在上方列出。"
+  "signals.stack.feedOnlyStack": "信息流中没有其他内容：其中所有内容都是您技术栈的变化，已在上方列出。",
+  "results.versionUnknown": "未确认：未知已安装版本",
+  "preemption.empty.partialTitle": "在 4DA 能够检查的依赖中没有已知漏洞",
+  "preemption.notCovered.title_one": "1 个依赖文件未覆盖",
+  "preemption.notCovered.title_other": "{{count}} 个依赖文件未覆盖",
+  "preemption.notCovered.body": "4DA 不会从这些文件中读取已安装版本，因此无法将它们与安全公告比对，也不会将其视为安全。目前支持读取 npm、pnpm、Yarn、Bun、Cargo、Python 和 Go 的锁文件，Ruby 和 PHP 为早期支持；Maven、Gradle 和 .NET 项目尚未覆盖。",
+  "preemption.notCovered.more": "以及另外 {{count}} 个",
+  "preemption.notCovered.unreadableTitle_one": "1 个锁文件无法读取",
+  "preemption.notCovered.unreadableTitle_other": "{{count}} 个锁文件无法读取",
+  "preemption.notCovered.unreadableBody": "4DA 在上次扫描时无法读取这些文件，因此不会把其中锁定的内容视为已检查。请修复文件或重新扫描。"
 }

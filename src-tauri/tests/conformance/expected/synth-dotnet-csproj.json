@@ -1,0 +1,19 @@
+{
+ "schema": 1,
+ "case": "synth-dotnet-csproj",
+ "lockfiles": [
+  {
+   "path": "Api.csproj",
+   "dir": ".",
+   "format": "csproj",
+   "ecosystem": "NuGet",
+   "status": "unsupported",
+   "reason": "NuGet is not a supported lockfile ecosystem; a .csproj declares PackageReference ranges, not an installed set"
+  }
+ ],
+ "inventory": {
+  "count": 0,
+  "packages": []
+ },
+ "findings": []
+}

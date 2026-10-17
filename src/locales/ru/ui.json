@@ -2645,5 +2645,14 @@
   "signals.stack.projects": "Проекты",
   "signals.stack.listLabel": "Изменения в вашем стеке",
   "signals.stack.modeNote": "Темы и Граф отображают вашу ленту для чтения. Изменения в стеке — во вкладке «Список»: каждое касается одного пакета, группировать нечего.",
-  "signals.stack.feedOnlyStack": "В ленте больше ничего нет: всё в ней — изменения вашего стека, они перечислены выше."
+  "signals.stack.feedOnlyStack": "В ленте больше ничего нет: всё в ней — изменения вашего стека, они перечислены выше.",
+  "results.versionUnknown": "Не подтверждено: установленная версия неизвестна",
+  "preemption.empty.partialTitle": "Нет известных уязвимостей в зависимостях, которые 4DA смог проверить",
+  "preemption.notCovered.title_one": "1 файл зависимостей не охвачен",
+  "preemption.notCovered.title_other": "Не охвачено файлов зависимостей: {{count}}",
+  "preemption.notCovered.body": "4DA не считывает установленные версии из этих файлов, поэтому не может сверить их с бюллетенями безопасности и не считает их чистыми. Сейчас поддерживаются lock-файлы npm, pnpm, Yarn, Bun, Cargo, Python и Go, с ранней поддержкой Ruby и PHP; проекты Maven, Gradle и .NET пока не охвачены.",
+  "preemption.notCovered.more": "и ещё {{count}}",
+  "preemption.notCovered.unreadableTitle_one": "Не удалось прочитать 1 lock-файл",
+  "preemption.notCovered.unreadableTitle_other": "Не удалось прочитать lock-файлов: {{count}}",
+  "preemption.notCovered.unreadableBody": "4DA не смог прочитать эти файлы при последнем сканировании, поэтому не считает проверенным то, что в них зафиксировано. Исправьте файл или запустите сканирование снова."
 }

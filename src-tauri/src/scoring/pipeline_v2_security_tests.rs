@@ -566,3 +566,199 @@ fn an_advisory_exposing_only_a_scratch_project_is_affected_inactive() {
     assert_never_interrupts(&result);
     assert_eq!(result.signal_priority.as_deref(), Some("advisory"));
 }
+
+/// v42 (audit E4, 2026-10-12): a dependency read from a manifest with no
+/// lockfile (or an ecosystem 4DA does not resolve) has NO installed version.
+/// The same advisory that a pinned 4.13.5 confirms must then be neither
+/// grounded, a dependency event, feed-relevant nor an "affects" claim: the
+/// fresh-profile Maven project showed 15 such rows in "Affects You".
+#[test]
+fn advisory_against_an_unknown_installed_version_is_unconfirmed() {
+    let db = crate::test_utils::test_db();
+    let mut ctx = ctx_with_dep("hono", "javascript", "4.13.5", "d:/work/api");
+    for info in ctx.ace_ctx.dependency_info.values_mut() {
+        info.version = None; // manifest-only: no lockfile pin
+    }
+    let zero = vec![0.0_f32; crate::EMBEDDING_DIMS];
+    let classifier = signals::SignalClassifier::new();
+    let result = score_item(
+        &input(HONO_TITLE, HONO_URL, HONO_CONTENT, &zero),
+        &ctx,
+        &db,
+        &signal_options(),
+        Some(&classifier),
+    );
+    let bd = result.score_breakdown.as_ref().expect("breakdown");
+    assert_eq!(bd.is_version_affected, None);
+    assert_eq!(result.applicability.as_deref(), Some("version_unknown"));
+    assert!(!bd.strongly_grounded, "an unknown version never grounds");
+    assert!(!bd.dependency_event, "and is not an event in the stack");
+    assert!(!result.relevant, "it leaves Signal like a not-affected row");
+    assert_never_interrupts(&result);
+    assert_no_affects_claim(&result);
+    if let Some(reason) = bd.necessity_reason.as_deref() {
+        assert!(!reason.contains("affects"), "necessity reason: {reason}");
+    }
+
+    // Control: the same advisory with the version known still confirms.
+    let pinned = ctx_with_dep("hono", "javascript", "4.13.5", "d:/work/api");
+    let confirmed = score_item(
+        &input(HONO_TITLE, HONO_URL, HONO_CONTENT, &zero),
+        &pinned,
+        &db,
+        &signal_options(),
+        Some(&classifier),
+    );
+    assert_ne!(confirmed.applicability.as_deref(), Some("version_unknown"));
+    assert!(confirmed.relevant);
+}
+
+/// Review SF3: a grounding row without a version is not "version unknown"
+/// when the project's lockfile pins the package (same ecosystem family):
+/// the pin decides, so a real advisory is not demoted.
+#[test]
+fn a_lockfile_pin_rescues_a_versionless_grounding_row() {
+    let db = crate::test_utils::test_db();
+    db.store_dependency(
+        "d:/work/api",
+        "hono",
+        Some("4.13.5"),
+        "javascript",
+        false,
+        None,
+    )
+    .unwrap();
+    let mut ctx = ctx_with_dep("hono", "javascript", "4.13.5", "d:/work/api");
+    for info in ctx.ace_ctx.dependency_info.values_mut() {
+        info.version = None;
+    }
+    let zero = vec![0.0_f32; crate::EMBEDDING_DIMS];
+    let classifier = signals::SignalClassifier::new();
+    let result = score_item(
+        &input(HONO_TITLE, HONO_URL, HONO_CONTENT, &zero),
+        &ctx,
+        &db,
+        &signal_options(),
+        Some(&classifier),
+    );
+    let bd = result.score_breakdown.as_ref().expect("breakdown");
+    assert_eq!(bd.installed_version.as_deref(), Some("4.13.5"));
+    assert_eq!(bd.is_version_affected, Some(true));
+    assert_ne!(result.applicability.as_deref(), Some("version_unknown"));
+    assert!(result.relevant);
+}
+
+/// Score HONO against `db` with a versionless grounding row in `projects`.
+fn score_versionless(db: &Database, projects: &[&str]) -> SourceRelevance {
+    let mut ctx = ctx_with_dep("hono", "javascript", "0.0.0", projects[0]);
+    for info in ctx.ace_ctx.dependency_info.values_mut() {
+        info.version = None;
+        info.project_paths = projects.iter().map(|p| (*p).to_string()).collect();
+    }
+    let zero = vec![0.0_f32; crate::EMBEDDING_DIMS];
+    let classifier = signals::SignalClassifier::new();
+    score_item(
+        &input(HONO_TITLE, HONO_URL, HONO_CONTENT, &zero),
+        &ctx,
+        db,
+        &signal_options(),
+        Some(&classifier),
+    )
+}
+
+/// Round-3 review SF1: a stray lockfile in a parent folder (here a safe
+/// 4.13.9) must never answer for a project whose own lockfile pins a
+/// vulnerable 4.13.5: that would suppress a real advisory.
+#[test]
+fn a_stray_parent_lockfile_never_overrides_the_projects_own_pin() {
+    let db = crate::test_utils::test_db();
+    db.store_dependency("d:/work", "hono", Some("4.13.9"), "javascript", false, None)
+        .unwrap();
+    db.store_dependency(
+        "d:/work/api",
+        "hono",
+        Some("4.13.5"),
+        "javascript",
+        false,
+        None,
+    )
+    .unwrap();
+    let result = score_versionless(&db, &["d:/work/api"]);
+    let bd = result.score_breakdown.as_ref().expect("breakdown");
+    assert_eq!(bd.installed_version.as_deref(), Some("4.13.5"));
+    assert_eq!(bd.is_version_affected, Some(true));
+
+    // And with no own pin, the parent above any repo root does not answer.
+    let db = crate::test_utils::test_db();
+    db.store_dependency("d:/work", "hono", Some("4.13.9"), "javascript", false, None)
+        .unwrap();
+    let result = score_versionless(&db, &["d:/work/api"]);
+    assert_eq!(result.applicability.as_deref(), Some("version_unknown"));
+}
+
+/// Round-3 review SF1: a nested sub-project's pin never replaces the
+/// project's own (transitive) pin.
+#[test]
+fn a_nested_sub_project_pin_never_replaces_the_own_pin() {
+    let db = crate::test_utils::test_db();
+    db.store_dependency(
+        "d:/work/api",
+        "hono",
+        Some("4.13.5"),
+        "javascript",
+        false,
+        None,
+    )
+    .unwrap();
+    db.store_dependency(
+        "d:/work/api/tools",
+        "hono",
+        Some("4.13.9"),
+        "javascript",
+        false,
+        None,
+    )
+    .unwrap();
+    let bd_result = score_versionless(&db, &["d:/work/api"]);
+    let bd = bd_result.score_breakdown.as_ref().expect("breakdown");
+    assert_eq!(bd.installed_version.as_deref(), Some("4.13.5"));
+    assert_eq!(bd.is_version_affected, Some(true));
+}
+
+/// Round-3 review SF1: two copies in scope, one affected: affected.
+#[test]
+fn any_affected_copy_makes_the_advisory_affected() {
+    let db = crate::test_utils::test_db();
+    db.store_dependency(
+        "d:/work/api",
+        "hono",
+        Some("4.13.9"),
+        "javascript",
+        false,
+        None,
+    )
+    .unwrap();
+    db.store_dependency(
+        "d:/work/web",
+        "hono",
+        Some("4.13.5"),
+        "javascript",
+        false,
+        None,
+    )
+    .unwrap();
+    let result = score_versionless(&db, &["d:/work/api", "d:/work/web"]);
+    let bd = result.score_breakdown.as_ref().expect("breakdown");
+    assert_eq!(bd.is_version_affected, Some(true));
+    assert_eq!(
+        bd.installed_version.as_deref(),
+        Some("4.13.5"),
+        "the affected copy is shown"
+    );
+
+    let all_safe = super::pick_nearby_copy(vec![
+        ("4.13.8".to_string(), Some(false)),
+        ("4.13.9".to_string(), Some(false)),
+    ]);
+    assert_eq!(all_safe.1, Some(false));
+}

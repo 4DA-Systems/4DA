@@ -154,12 +154,13 @@ export function ResultItemExpanded({
               <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
                 item.applicability === 'affected' ? 'bg-red-500/20 text-red-400'
                 : item.applicability === 'likely_affected' ? 'bg-orange-500/20 text-orange-400'
-                : item.applicability === 'affected_inactive' ? 'bg-zinc-500/20 text-text-muted'
+                : item.applicability === 'affected_inactive' || item.applicability === 'version_unknown' ? 'bg-zinc-500/20 text-text-muted'
                 : 'bg-yellow-500/20 text-yellow-400'
               }`}>
                 {item.applicability === 'affected' ? t('results.affected', 'Affected')
                 : item.applicability === 'likely_affected' ? t('results.likelyAffected', 'Likely Affected')
                 : item.applicability === 'affected_inactive' ? t('results.affectedInactive')
+                : item.applicability === 'version_unknown' ? t('results.versionUnknown')
                 : t('results.needsVerification', 'Needs Verification')}
               </span>
             )}
