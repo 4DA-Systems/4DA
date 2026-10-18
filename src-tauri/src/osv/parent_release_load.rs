@@ -28,7 +28,7 @@ use crate::osv::types::MatchedAdvisory;
 use super::fix_path::{requirement_admits, Dialect, Manager};
 use super::parent_hint::{normalize_path, ParentLink, ParentRelease, ParentStanding};
 use super::parent_release::{
-    compare, decide, is_major, newest, Advisories, Child, Decision, Found, RowIn, RowOut, Standing,
+    compare, decide, is_major, Advisories, Child, Decision, Found, RowIn, RowOut, Standing,
 };
 use super::release_facts::ReleaseBook;
 
@@ -40,15 +40,11 @@ pub(super) const ECOSYSTEM: &str = "npm";
 const MAX_SIBLING_ROWS: usize = 12;
 
 pub(super) fn advisories(db: &Database, name: &str) -> Advisories<'static> {
-    Advisories {
-        ecosystem: ECOSYSTEM,
-        ranges: db
-            .get_osv_advisories_for_package(name, ECOSYSTEM)
-            .unwrap_or_default()
-            .into_iter()
-            .map(|a| a.affected_ranges)
-            .collect(),
-    }
+    Advisories::stored(
+        ECOSYSTEM,
+        db.get_osv_advisories_for_package(name, ECOSYSTEM)
+            .unwrap_or_default(),
+    )
 }
 
 /// The parents (and the declared dependencies they arrive through) whose
@@ -106,19 +102,31 @@ impl RowData {
         target: &str,
     ) -> Self {
         let releases = book.releases(ECOSYSTEM, package).unwrap_or_default();
+        let advisories = advisories(db, package);
         Self {
             package: package.to_string(),
             installed: installed.to_string(),
             target: target.to_string(),
-            newest: newest(&releases, ECOSYSTEM),
+            newest: advisories.newest(&releases),
             releases: releases.versions,
-            advisories: advisories(db, package),
+            advisories,
         }
     }
 
-    /// No advisory with a published fix affects the version.
+    /// The shared predicate (`Advisories::usable`): a release that can be named.
     pub(super) fn clean(&self) -> Box<dyn Fn(&str) -> bool + '_> {
-        Box::new(move |v: &str| self.advisories.clean_of_fixable(v, self.newest.as_deref()))
+        Box::new(move |v: &str| self.advisories.usable(v, self.newest.as_deref()))
+    }
+
+    /// Why nothing can be decided for this copy, when that is so.
+    pub(super) fn unknown(&self) -> Option<String> {
+        self.advisories.unreadable().map(|id| {
+            format!(
+                "the affected ranges of {id} ({}) cannot be read, so no {} release can be shown \
+                 clear of it",
+                self.package, self.package
+            )
+        })
     }
 
     pub(super) fn child<'a>(&'a self, clean: &'a dyn Fn(&str) -> bool) -> Child<'a> {
@@ -147,7 +155,7 @@ fn own_target(book: &ReleaseBook, parent: &ParentSide<'_>, own: &Advisories<'_>)
     if !parent.direct || !own.affect(parent.version) {
         return None;
     }
-    let refs: Vec<&Option<String>> = own.ranges.iter().collect();
+    let refs = own.ranges();
     walk_target_in(
         ECOSYSTEM,
         parent.version,
@@ -188,7 +196,7 @@ pub(super) fn sibling_rows(
             .collect();
         let own = advisories(db, &child);
         for installed in copies.into_iter().filter(|v| own.affect(v)) {
-            let refs: Vec<&Option<String>> = own.ranges.iter().collect();
+            let refs = own.ranges();
             let walk = walk_target_in(
                 ECOSYSTEM,
                 &installed,
@@ -242,6 +250,7 @@ fn decision_for(
         .map(|(r, clean)| RowIn {
             child: r.child(clean.as_ref()),
             history: book.history(ECOSYSTEM, parent.name, &r.package),
+            unknown: r.unknown(),
         })
         .collect();
     let decision = decide(
@@ -370,6 +379,14 @@ fn annotate_link(
         direct: link.parent_is_direct,
     };
     let first = RowData::new(book, db, package, &link.child_version, &target);
+    // A malicious copy is removed or replaced, never moved to (review of #981).
+    if let Some(id) = first.advisories.malware_at(&link.child_version) {
+        link.standing = ParentStanding::Malicious {
+            package: package.to_string(),
+            advisory: id.to_string(),
+        };
+        return;
+    }
     let Some((decision, rows)) = decision_for(db, book, &parent, Some(&first), None) else {
         return;
     };
@@ -378,8 +395,12 @@ fn annotate_link(
     };
     let own = advisories(db, &link.parent);
     let releases = book.releases(ECOSYSTEM, &link.parent).unwrap_or_default();
-    let own_checked = own.any_fixable(newest(&releases, ECOSYSTEM).as_deref());
+    let newest = own.newest(&releases);
+    let own_checked = own.any_fixable(newest.as_deref());
     link.standing = standing_of(out, link, row, dir, shared, own_checked);
+    if let ParentStanding::Admits(r) = &mut link.standing {
+        r.remains = own.unfixed_at(&r.to, newest.as_deref());
+    }
     let ParentStanding::Admits(found) = &link.standing else {
         return;
     };
@@ -444,6 +465,11 @@ fn standing_of(
         (Standing::NoneAdmits { latest }, _) => ParentStanding::NoneAdmits {
             latest: latest.clone(),
         },
+        (Standing::Undecided(why), _) => ParentStanding::Undecided { why: why.clone() },
+        (Standing::Malicious(id), _) => ParentStanding::Malicious {
+            package: link.parent.clone(),
+            advisory: id.clone(),
+        },
         _ => link.standing.clone(),
     }
 }
@@ -481,8 +507,8 @@ fn release(
         refresh: keeps
             .then(|| refresh_command(dir, &row.package, &row.installed, &row.target))
             .flatten(),
-        brings: None,
         lever_unknown,
+        ..ParentRelease::default()
     }
 }
 

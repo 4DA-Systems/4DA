@@ -138,6 +138,11 @@ pub enum ParentStanding {
     /// Every release was read, and none above the installed one admits a
     /// clean copy while clear of this package's own advisories.
     NoneAdmits { latest: Option<String> },
+    /// No release is named: an advisory's ranges cannot be read (the why).
+    Undecided { why: String },
+    /// A malicious-package record affects the installed `package` (this
+    /// package, or the vulnerable copy it pins): remove or replace it.
+    Malicious { package: String, advisory: String },
 }
 
 impl ParentStanding {
@@ -157,8 +162,9 @@ impl ParentStanding {
                 latest: Some(latest),
             } => vec![(own, latest.as_str())],
             Self::Admits(r) => std::iter::once((own, r.to.as_str()))
+                .chain(r.smallest.iter().map(|v| (own, v.as_str())))
                 .chain(
-                    r.smallest
+                    r.floor
                         .iter()
                         .chain(&r.brings)
                         .map(|v| (parent, v.as_str())),
@@ -175,9 +181,16 @@ impl ParentStanding {
 #[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize)]
 pub struct ParentRelease {
     pub to: String,
-    /// The smallest release that admits a clean copy, when `to` is higher
-    /// because this package's own upgrade needs `to`: one release serves both.
+    /// This package's smallest release that does the job (admits a clean
+    /// copy; for a lever, brings in a parent that does), when `to` is higher
+    /// because this package's own upgrade moves to `to`: one release serves
+    /// both.
     pub smallest: Option<String>,
+    /// For a lever: the smallest parent release that admits a clean copy,
+    /// when the parent `to` brings in is higher.
+    pub floor: Option<String>,
+    /// Advisories no release fixes that `to` remains affected by.
+    pub remains: Vec<String>,
     /// `to` crosses a major version of the installed release.
     pub breaking: bool,
     /// `to`'s requirement on the vulnerable package; `None` when it no longer
@@ -287,23 +300,21 @@ pub fn parent_standing(
             .unwrap_or_default()
     };
     // The newest release named is one a user can take: listed by the
-    // registry facts or the feed, not withdrawn, and clear of every advisory
-    // 4DA holds for the package (malware included). Review of #981.
+    // registry facts or the feed, not withdrawn, and passing the one
+    // predicate every reader shares (`parent_release::Advisories::usable`:
+    // never malware, never an advisory with a fix). Review of #981.
     let book = super::release_facts::book(db);
     let registry = book.registry(ecosystem_norm, name);
-    let advisories = db
-        .get_osv_advisories_for_package(name, ecosystem_norm)
-        .unwrap_or_default();
-    let usable = |v: &str| {
-        !registry.excludes(ecosystem_norm, v)
-            && advisories
-                .iter()
-                .all(|a| !check_version_affected(ecosystem_norm, Some(v), &a.affected_ranges).0)
-    };
-    let listed = book
-        .releases(ecosystem_norm, name)
-        .map(|r| r.versions)
-        .unwrap_or_default();
+    let advisories = super::parent_release::Advisories::stored(
+        ecosystem_norm,
+        db.get_osv_advisories_for_package(name, ecosystem_norm)
+            .unwrap_or_default(),
+    );
+    let releases = book.releases(ecosystem_norm, name).unwrap_or_default();
+    let newest = advisories.newest(&releases);
+    let usable =
+        |v: &str| !registry.excludes(ecosystem_norm, v) && advisories.usable(v, newest.as_deref());
+    let listed = releases.versions.clone();
     standing_from_with(&rows, name, installed, &listed, &usable)
 }
 

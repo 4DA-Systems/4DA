@@ -280,3 +280,27 @@ fn a_retired_package_is_marked_and_a_fresh_package_missing_a_wanted_requirement_
         "path-to-regexp was never read"
     );
 }
+
+/// Review of #981 (N8): one parse per build, reused for 60 s, re-read after a
+/// write in this process or once the copy is older; the clock is injected.
+#[test]
+fn the_parsed_document_is_reused_until_a_write_or_sixty_seconds() {
+    let db = crate::test_utils::test_db();
+    let cache = std::sync::Mutex::new(None);
+    let t0 = std::time::Instant::now();
+    store_for_tests(&db, vec![("npm", "a", vec!["1.0.0"], None, false, vec![])]);
+    let first = book_cached(&db, &cache, t0, 0);
+    assert!(first.releases("npm", "a").is_some());
+    // A write another process makes (straight to kv_store, no generation
+    // bump) is not seen inside the window...
+    db.set_kv(KV_KEY, "[]").unwrap();
+    let reused = book_cached(&db, &cache, t0 + std::time::Duration::from_secs(10), 0);
+    assert!(std::sync::Arc::ptr_eq(&first, &reused));
+    // ...and is past it.
+    let later = book_cached(&db, &cache, t0 + std::time::Duration::from_secs(61), 0);
+    assert!(later.releases("npm", "a").is_none());
+    // A write in this process is seen at once.
+    store_for_tests(&db, vec![("npm", "b", vec!["1.0.0"], None, false, vec![])]);
+    let after = book_cached(&db, &cache, t0 + std::time::Duration::from_secs(62), 1);
+    assert!(after.releases("npm", "b").is_some());
+}

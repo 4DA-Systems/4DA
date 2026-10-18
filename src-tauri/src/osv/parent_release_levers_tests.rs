@@ -215,3 +215,62 @@ fn the_newest_release_named_is_never_an_affected_one() {
         }
     );
 }
+
+/// Review of #981, B2c and B1: the release named says what unfixed advisory
+/// it still carries, and a lifted lever names its own smallest release
+/// apart from the parent release it brings in.
+#[test]
+fn the_named_release_states_what_it_still_carries_and_where_it_was_lifted_from() {
+    use crate::osv::parent_hint::{ParentRelease, Through};
+    let r = ParentRelease {
+        to: "2.0.0".into(),
+        requirement: Some("^1.1.0".into()),
+        remains: vec!["CVE-2026-0001".into()],
+        ..ParentRelease::default()
+    };
+    let text = crate::evidence::parent_move(
+        "leaf",
+        "1.1.0",
+        "par",
+        "1.0.0",
+        &ParentStanding::Admits(Box::new(r)),
+        None,
+        None,
+    );
+    assert!(
+        text.contains("though par 2.0.0 remains affected by CVE-2026-0001 (no fix published)"),
+        "{text}"
+    );
+    let lever = Through {
+        standing: ParentStanding::Admits(Box::new(ParentRelease {
+            to: "4.22.3".into(),
+            smallest: Some("4.21.0".into()),
+            floor: Some("1.16.1".into()),
+            brings: Some("1.16.3".into()),
+            ..ParentRelease::default()
+        })),
+        ..Through::declared("express", "4.16.4")
+    };
+    let parent = ParentRelease {
+        to: "1.16.1".into(),
+        requirement: Some("0.19.0".into()),
+        ..ParentRelease::default()
+    };
+    let text = crate::evidence::parent_move(
+        "send",
+        "0.19.0",
+        "serve-static",
+        "1.13.2",
+        &ParentStanding::Admits(Box::new(parent)),
+        Some(&lever),
+        None,
+    );
+    assert!(
+        text.contains(
+            "express 4.21.0 is the smallest express release that brings in a serve-static that \
+             admits it, and express 4.22.3, the release express's own upgrade moves to, also \
+             brings in serve-static 1.16.3 (>= serve-static 1.16.1): upgrade express to 4.22.3"
+        ),
+        "{text}"
+    );
+}

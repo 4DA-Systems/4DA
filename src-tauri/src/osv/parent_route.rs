@@ -87,19 +87,22 @@ pub(crate) fn declared_route(
         }
         if seen.len() >= MAX_NODES {
             return Route::Unknown(format!(
-                "the walk up the lockfile stopped after {MAX_NODES} entries before it reached \
-                 every declared dependency above {parent}"
+                "lever not determined (dependency graph too large: the walk up from {parent} \
+                 stopped after {MAX_NODES} entries)"
             ));
         }
         seen.push(key);
         let (parents, rooted) = parents_of(db, eco, project, &name, &version);
+        // The project's own requirement (the lockfile root edge) counts with
+        // the other parents: a package the project requires that no manifest
+        // declares is a path no declared lever covers.
+        if rooted {
+            return Route::Unknown(format!(
+                "{name} {version} is required by the project, but no manifest declares it"
+            ));
+        }
         if parents.is_empty() {
-            let why = if rooted {
-                format!("{name} {version} is required by the project, but no manifest declares it")
-            } else {
-                format!("{name} {version} leads to no declared dependency")
-            };
-            return Route::Unknown(why);
+            return Route::Unknown(format!("{name} {version} leads to no declared dependency"));
         }
         for p in parents {
             if p.is_direct {

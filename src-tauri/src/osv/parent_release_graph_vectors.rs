@@ -112,8 +112,10 @@ fn build(v: &Value, project: &str) -> Database {
 fn link_json(link: &ParentLink) -> Value {
     let release = |st: &ParentStanding| match st {
         ParentStanding::Admits(r) => {
-            json!({"to": r.to, "smallest": r.smallest, "brings": r.brings})
+            json!({"to": r.to, "smallest": r.smallest, "floor": r.floor, "brings": r.brings})
         }
+        ParentStanding::Malicious { .. } => json!("malicious"),
+        ParentStanding::Undecided { .. } => json!("undecided"),
         ParentStanding::NoneAdmits { .. } => json!("none_admits"),
         ParentStanding::Deprecated => json!("deprecated"),
         ParentStanding::Newest { .. } => json!("latest"),

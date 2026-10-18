@@ -101,11 +101,21 @@ Field conventions:
   applies its own withdrawn-release rule). `expect.rows[]` gives a declared
   package's own row (`own_target`, from its own advisories) and the release
   it rises `to`; `expect.copies[]` gives each vulnerable copy's `target` and,
-  per parent `links[]`, the `release` named (`{to, smallest, brings}`, or
-  `none_admits` / `deprecated` / `latest` / `unread`), the declared `levers`
-  it arrives through with theirs (`smallest` there is the parent release that
-  admits the copy, `brings` the one the lever's release brings in) and
-  `lever_unknown`. Commands are not part of graph lines.
+  per parent `links[]`, the `release` named (`{to, smallest, floor, brings}`,
+  or `none_admits` / `deprecated` / `latest` / `unread` / `undecided` /
+  `malicious`), the declared `levers` it arrives through with theirs, and
+  `lever_unknown`. `smallest` is always the package's OWN smallest release
+  that does the job, set only when `to` was lifted above it to agree with the
+  package's own row; on a lever, `floor` is the smallest parent release that
+  admits the copy and `brings` the parent release `to` brings in. Commands
+  are not part of graph lines.
+- One predicate decides whether a release can be named, everywhere (review
+  of #981, B2): a malicious-package advisory (`MAL-` id or alias) that
+  affects it rules it out, and it is never "the newest"; an advisory with a
+  published fix (it does not affect the newest non-malicious release) rules
+  it out; an advisory no release fixes does not, and the release named says
+  it remains affected by it. An advisory whose ranges cannot be read makes
+  the decision `undecided`: no release and no command.
 - `range_check` `releases` are the stable releases that have a recorded OSV
   answer. `record_ids` are the pinned records in `../osv/`; they are the same
   set as the MCP's recorded `/v1/query` answer for each package. A release is

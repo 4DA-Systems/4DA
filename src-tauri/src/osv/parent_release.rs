@@ -70,35 +70,129 @@ pub struct Releases {
     pub deprecated: bool,
 }
 
-/// One package's known advisories, as stored ranges JSON.
-pub struct Advisories<'a> {
-    pub ecosystem: &'a str,
-    pub ranges: Vec<Option<String>>,
+/// One advisory as the walk reads it.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Advisory {
+    pub id: String,
+    /// A malicious-package record (OSV `MAL-` id or alias): a release it
+    /// affects is never clean, never a target and never "the newest".
+    pub malware: bool,
+    /// Stored ranges JSON; `None` or unparseable makes every decision on the
+    /// package unknown.
+    pub ranges: Option<String>,
 }
 
-impl Advisories<'_> {
-    /// Some advisory affects `version`.
-    pub fn affect(&self, version: &str) -> bool {
-        self.ranges
-            .iter()
-            .any(|r| check_version_affected(self.ecosystem, Some(version), r).0)
+impl Advisory {
+    /// From a stored id, its aliases and its ranges.
+    pub fn new(id: &str, aliases: &[String], ranges: Option<String>) -> Self {
+        let mal = |s: &str| s.trim().to_ascii_uppercase().starts_with("MAL-");
+        Self {
+            id: id.to_string(),
+            malware: mal(id) || aliases.iter().any(|a| mal(a)),
+            ranges,
+        }
     }
 
-    /// No advisory WITH A WAY OUT affects `version`: one that also affects
-    /// `newest` has no published fix and cannot make any release unclean.
-    pub fn clean_of_fixable(&self, version: &str, newest: Option<&str>) -> bool {
-        self.ranges.iter().all(|r| {
-            let unfixed =
-                newest.is_some_and(|n| check_version_affected(self.ecosystem, Some(n), r).0);
-            unfixed || !check_version_affected(self.ecosystem, Some(version), r).0
+    /// The ranges cannot be read: no data, unparseable, or empty.
+    fn unreadable(&self) -> bool {
+        self.ranges
+            .as_deref()
+            .and_then(|j| serde_json::from_str::<Vec<serde_json::Value>>(j).ok())
+            .is_none_or(|r| r.is_empty())
+    }
+}
+
+/// One package's known advisories.
+pub struct Advisories<'a> {
+    pub ecosystem: &'a str,
+    pub list: Vec<Advisory>,
+}
+
+/// THE predicate every reader shares (review of #981, B2): whether a release
+/// can be named. A malicious-package record that affects it rules it out
+/// outright; an advisory with a published fix (it does not also affect the
+/// package's newest non-malicious release) rules it out; an advisory no
+/// release fixes does not (it cannot block a move that fixes the others),
+/// and the release named says it remains affected by it.
+impl<'a> Advisories<'a> {
+    /// From the advisories 4DA stores for one package.
+    pub fn stored(ecosystem: &'a str, stored: Vec<super::types::StoredAdvisory>) -> Self {
+        Self {
+            ecosystem,
+            list: stored
+                .into_iter()
+                .map(|a| Advisory::new(&a.advisory_id, &a.aliases, a.affected_ranges))
+                .collect(),
+        }
+    }
+
+    fn hits(&self, a: &Advisory, version: &str) -> bool {
+        check_version_affected(self.ecosystem, Some(version), &a.ranges).0
+    }
+
+    /// Every advisory's stored ranges, for the fix-target walk.
+    pub fn ranges(&self) -> Vec<&Option<String>> {
+        self.list.iter().map(|a| &a.ranges).collect()
+    }
+
+    /// Some advisory affects `version`.
+    pub fn affect(&self, version: &str) -> bool {
+        self.list.iter().any(|a| self.hits(a, version))
+    }
+
+    /// The malicious-package record that affects `version`, if any.
+    pub fn malware_at(&self, version: &str) -> Option<&str> {
+        self.list
+            .iter()
+            .find(|a| a.malware && self.hits(a, version))
+            .map(|a| a.id.as_str())
+    }
+
+    /// An advisory whose ranges cannot be read: then nothing can be claimed
+    /// clean, and no release is named.
+    pub fn unreadable(&self) -> Option<&str> {
+        self.list
+            .iter()
+            .find(|a| a.unreadable())
+            .map(|a| a.id.as_str())
+    }
+
+    /// The highest stable installable release no malicious-package record
+    /// affects: the release an advisory must also affect to count as having
+    /// no fix.
+    pub fn newest(&self, releases: &Releases) -> Option<String> {
+        ascending(&releases.versions, self.ecosystem)
+            .into_iter()
+            .rev()
+            .find(|v| self.malware_at(v).is_none())
+            .cloned()
+    }
+
+    /// Whether `version` can be named (see the predicate above).
+    pub fn usable(&self, version: &str, newest: Option<&str>) -> bool {
+        self.list.iter().all(|a| {
+            if !self.hits(a, version) {
+                return true;
+            }
+            !a.malware && newest.is_some_and(|n| self.hits(a, n))
         })
+    }
+
+    /// The advisories no release fixes that still affect `version`.
+    pub fn unfixed_at(&self, version: &str, newest: Option<&str>) -> Vec<String> {
+        self.list
+            .iter()
+            .filter(|a| !a.malware && self.hits(a, version))
+            .filter(|a| newest.is_some_and(|n| self.hits(a, n)))
+            .map(|a| a.id.clone())
+            .collect()
     }
 
     /// Some advisory has a way out (does not affect `newest`).
     pub fn any_fixable(&self, newest: Option<&str>) -> bool {
-        self.ranges
+        self.list
             .iter()
-            .any(|r| !newest.is_some_and(|n| check_version_affected(self.ecosystem, Some(n), r).0))
+            .any(|a| !newest.is_some_and(|n| self.hits(a, n)))
     }
 }
 
@@ -145,6 +239,11 @@ pub enum Standing {
     NoneAdmits { latest: Option<String> },
     /// The parent's per-release requirements were not read.
     Unread,
+    /// Nothing can be named: an advisory's ranges cannot be read (the why).
+    Undecided(String),
+    /// The installed parent is a release a malicious-package record affects
+    /// (its id): it is removed or replaced, never moved.
+    Malicious(String),
 }
 
 fn parse(v: &str, eco: &str) -> Option<OrderedVersion> {
@@ -170,7 +269,7 @@ fn ascending<'a>(versions: &'a [String], eco: &str) -> Vec<&'a String> {
 /// The highest stable installable release (the MCP's `newestOf`): the release
 /// an advisory must also affect to count as having no fix. The `latest` tag
 /// is not used here; a registry can tag an older line `latest`.
-pub fn newest(releases: &Releases, eco: &str) -> Option<String> {
+pub fn highest(releases: &Releases, eco: &str) -> Option<String> {
     ascending(&releases.versions, eco)
         .last()
         .map(|v| (*v).clone())
@@ -179,7 +278,7 @@ pub fn newest(releases: &Releases, eco: &str) -> Option<String> {
 /// The release "already its latest" is judged against: the `latest` tag,
 /// else the highest stable installable release.
 fn latest_of(releases: &Releases, eco: &str) -> Option<String> {
-    releases.latest.clone().or_else(|| newest(releases, eco))
+    releases.latest.clone().or_else(|| highest(releases, eco))
 }
 
 /// A move from `from` to `to` crosses a major version (a `0.x` minor counts).
@@ -347,6 +446,9 @@ pub fn lift(
 pub struct RowIn<'a> {
     pub child: Child<'a>,
     pub history: Option<&'a RequirementHistory>,
+    /// Why nothing can be decided for this copy (its advisories cannot be
+    /// read), when that is so.
+    pub unknown: Option<String>,
 }
 
 /// What one row gets.
@@ -389,11 +491,16 @@ pub fn decide(
     dialect: Dialect,
 ) -> Decision {
     let eco = parent_advisories.ecosystem;
-    let latest = newest(parent, eco);
-    let own_clean = |v: &str| parent_advisories.clean_of_fixable(v, latest.as_deref());
+    let latest = parent_advisories.newest(parent);
+    let own_clean = |v: &str| parent_advisories.usable(v, latest.as_deref());
+    let blocked = parent_blocked(parent_advisories, from);
     let standings: Vec<Standing> = rows
         .iter()
-        .map(|r| standing(&r.child, parent, from, r.history, &own_clean, dialect))
+        .map(|r| match (&blocked, &r.unknown) {
+            (Some(b), _) => b.clone(),
+            (None, Some(why)) => Standing::Undecided(why.clone()),
+            (None, None) => standing(&r.child, parent, from, r.history, &own_clean, dialect),
+        })
         .collect();
     let needs: Vec<&str> = standings
         .iter()
@@ -422,6 +529,19 @@ pub fn decide(
         row_target: target,
         rows,
     }
+}
+
+/// Why no release of the parent can be named for any row: the installed
+/// parent is malicious, or one of its advisories cannot be read.
+fn parent_blocked(advisories: &Advisories<'_>, from: &str) -> Option<Standing> {
+    if let Some(id) = advisories.malware_at(from) {
+        return Some(Standing::Malicious(id.to_string()));
+    }
+    advisories.unreadable().map(|id| {
+        Standing::Undecided(format!(
+            "the affected ranges of {id} cannot be read, so no release can be shown clear of it"
+        ))
+    })
 }
 
 /// A lever that is not the parent: the declared dependency the parent

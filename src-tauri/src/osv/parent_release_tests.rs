@@ -24,6 +24,10 @@ fn hist(pairs: &[(&str, Option<&str>)]) -> RequirementHistory {
         .collect()
 }
 
+fn adv(id: &str, ranges: Option<String>) -> Advisory {
+    Advisory::new(id, &[], ranges)
+}
+
 fn range(intro: &str, fixed: &str) -> Option<String> {
     Some(format!(
         r#"[{{"type":"SEMVER","events":[{{"introduced":"{intro}"}},{{"fixed":"{fixed}"}}]}}]"#
@@ -35,9 +39,12 @@ const PTR: &[&str] = &["0.1.7", "0.1.10", "0.1.12", "0.1.13", "8.4.2"];
 fn ptr_clean(v: &str) -> bool {
     let a = Advisories {
         ecosystem: "npm",
-        ranges: vec![range("0", "0.1.13"), range("8.0.0", "8.4.0")],
+        list: vec![
+            adv("GHSA-37ch", range("0", "0.1.13")),
+            adv("GHSA-27v5", range("8.0.0", "8.4.0")),
+        ],
     };
-    a.clean_of_fixable(v, Some("8.4.2"))
+    a.usable(v, Some("8.4.2"))
 }
 
 fn express() -> Releases {
@@ -309,6 +316,7 @@ fn decide_agrees_every_row_with_the_parents_own_row() {
         RowIn {
             child: ptr_child("0.1.7", &ptr_releases, &ptr_clean),
             history: Some(&ptr_hist),
+            unknown: None,
         },
         RowIn {
             child: Child {
@@ -319,11 +327,12 @@ fn decide_agrees_every_row_with_the_parents_own_row() {
                 clean: &qs_clean,
             },
             history: Some(&qs_hist),
+            unknown: None,
         },
     ];
     let own = Advisories {
         ecosystem: "npm",
-        ranges: vec![range("0", "4.20.0")],
+        list: vec![adv("GHSA-qw6h", range("0", "4.20.0"))],
     };
     let d = decide(
         &express(),
@@ -431,4 +440,107 @@ fn a_lever_names_the_release_that_brings_in_a_fixed_parent() {
         ),
         Hop::Deprecated
     );
+}
+
+/// Review of #981, B2: the one predicate. `par` 1.0.0 pins leaf 1.0.0
+/// (fixed 1.1.0); par 1.1.0 still pins it; par 2.0.0 requires ^1.1.0.
+fn par_case(par_advisories: Vec<Advisory>) -> Decision {
+    let leaf = v(&["1.0.0", "1.1.0"]);
+    let leaf_clean = |ver: &str| ver != "1.0.0";
+    let history = hist(&[
+        ("1.0.0", Some("1.0.0")),
+        ("1.1.0", Some("1.0.0")),
+        ("2.0.0", Some("^1.1.0")),
+    ]);
+    let par = Releases {
+        versions: v(&["1.0.0", "1.1.0", "2.0.0"]),
+        latest: Some("2.0.0".into()),
+        deprecated: false,
+    };
+    let rows = [RowIn {
+        child: Child {
+            ecosystem: "npm",
+            installed: "1.0.0",
+            target: "1.1.0",
+            releases: &leaf,
+            clean: &leaf_clean,
+        },
+        history: Some(&history),
+        unknown: None,
+    }];
+    let own = Advisories {
+        ecosystem: "npm",
+        list: par_advisories,
+    };
+    decide(&par, "1.0.0", None, &own, &rows, &[], Dialect::Npm)
+}
+
+#[test]
+fn a_malicious_release_is_never_named_nor_the_newest() {
+    let mal = || vec![adv("MAL-2026-0001", range("2.0.0", "2.0.1"))];
+    let d = par_case(mal());
+    assert_eq!(
+        d.rows[0].standing,
+        Standing::NoneAdmits {
+            latest: Some("2.0.0".into())
+        },
+        "par 2.0.0 is malicious: never Admits"
+    );
+    let own = Advisories {
+        ecosystem: "npm",
+        list: mal(),
+    };
+    let par = Releases {
+        versions: v(&["1.0.0", "1.1.0", "2.0.0"]),
+        ..Releases::default()
+    };
+    assert_eq!(own.newest(&par).as_deref(), Some("1.1.0"));
+    assert!(!own.usable("2.0.0", Some("1.1.0")));
+    // An alias counts too.
+    let aliased = Advisory::new(
+        "GHSA-xxxx",
+        &["MAL-2026-0002".to_string()],
+        range("0", "9.0.0"),
+    );
+    assert!(aliased.malware);
+    // An installed malicious parent is removed or replaced, never moved.
+    let d = par_case(vec![adv("MAL-2026-0003", range("1.0.0", "1.0.1"))]);
+    assert_eq!(
+        d.rows[0].standing,
+        Standing::Malicious("MAL-2026-0003".into())
+    );
+}
+
+#[test]
+fn an_advisory_whose_ranges_cannot_be_read_names_nothing() {
+    for ranges in [None, Some("[]".to_string()), Some("not json".to_string())] {
+        let d = par_case(vec![adv("GHSA-norange", ranges)]);
+        assert!(
+            matches!(&d.rows[0].standing, Standing::Undecided(why) if why.contains("GHSA-norange")),
+            "{:?}",
+            d.rows[0].standing
+        );
+        assert_eq!(d.rows[0].to, None);
+    }
+}
+
+#[test]
+fn an_unfixed_advisory_does_not_block_the_move_and_is_reported() {
+    // CVE-unfixed affects every par release (no fix published).
+    let unfixed = || {
+        vec![adv(
+            "CVE-2026-0001",
+            Some(r#"[{"type":"SEMVER","events":[{"introduced":"0"}]}]"#.into()),
+        )]
+    };
+    let d = par_case(unfixed());
+    assert_eq!(
+        d.rows[0].to.as_ref().map(|f| f.version.as_str()),
+        Some("2.0.0")
+    );
+    let own = Advisories {
+        ecosystem: "npm",
+        list: unfixed(),
+    };
+    assert_eq!(own.unfixed_at("2.0.0", Some("2.0.0")), ["CVE-2026-0001"]);
 }

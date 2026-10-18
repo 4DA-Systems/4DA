@@ -16,11 +16,7 @@ use crate::osv::parent_hint::{ParentLink, ParentRelease, ParentStanding, Through
 /// "~0.1.12" admits path-to-regexp 0.1.13 (a fresh resolve picks
 /// path-to-regexp 0.1.13), and no advisory of express affects it".
 fn release_clause(package: &str, target: &str, parent: &str, r: &ParentRelease) -> String {
-    let own = if r.own_checked {
-        format!(", and no advisory of {parent} affects it")
-    } else {
-        String::new()
-    };
+    let own = own_clause(parent, r);
     let resolves = r.resolves_to.as_deref().map_or_else(String::new, |v| {
         format!(" (a fresh resolve picks {package} {v})")
     });
@@ -58,6 +54,23 @@ fn release_clause(package: &str, target: &str, parent: &str, r: &ParentRelease) 
              {package} {target}{peer}{resolves}{own}",
             to = r.to
         ),
+    }
+}
+
+/// ", and no advisory of express affects it", or which unfixed advisories
+/// the release still carries (review of #981, B2c).
+fn own_clause(name: &str, r: &ParentRelease) -> String {
+    if !r.remains.is_empty() {
+        return format!(
+            ", though {name} {} remains affected by {} (no fix published)",
+            r.to,
+            r.remains.join(", ")
+        );
+    }
+    if r.own_checked {
+        format!(", and no advisory of {name} affects it")
+    } else {
+        String::new()
     }
 }
 
@@ -172,18 +185,38 @@ fn lever_move(parent: &str, to: &str, l: &Through, force: &str) -> String {
         ParentStanding::Admits(h) => {
             let brings = h.brings.as_deref().unwrap_or(to);
             let floor = h
-                .smallest
+                .floor
                 .as_deref()
                 .map_or_else(String::new, |s| format!(" (>= {parent} {s})"));
+            let why = match h.smallest.as_deref() {
+                // Lifted to the lever's own row (review of #981, B1).
+                Some(smallest) => format!(
+                    "{lever} {smallest} is the smallest {lever} release that brings in a {parent} \
+                     that admits it, and {lever} {}, the release {lever}'s own upgrade moves to, \
+                     also brings in {parent} {brings}{floor}",
+                    h.to
+                ),
+                None => format!(
+                    "{lever} {} is the smallest {lever} release that brings in {parent} \
+                     {brings}{floor}",
+                    h.to
+                ),
+            };
             format!(
-                "{lever} {} is the smallest {lever} release that brings in {parent} \
-                 {brings}{floor}: upgrade {lever} to {}{}{}{}",
-                h.to,
+                "{why}{}: upgrade {lever} to {}{}{}{}",
+                own_clause(lever, h),
                 h.to,
                 major(h),
                 command(h),
                 keeps(parent, h)
             )
+        }
+        ParentStanding::Malicious { package, advisory } => format!(
+            "{package} is flagged malicious ({advisory}): remove {package} or replace {lever}; \
+             no {lever} upgrade is named"
+        ),
+        ParentStanding::Undecided { why } => {
+            format!("no {lever} release is named ({why}), so no command is named")
         }
         ParentStanding::NoneAdmits { .. } => format!(
             "no {lever} release up to its newest brings in a {parent} that admits it: replace \

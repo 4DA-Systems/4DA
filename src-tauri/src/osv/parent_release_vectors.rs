@@ -10,7 +10,8 @@ use serde_json::{json, Value};
 use super::direct_upgrade::{direct_fix, DirectFix};
 use super::fix_path::{Dialect, Manager};
 use super::parent_release::{
-    decide, is_major, Advisories, Child, ReleaseReq, Releases, RequirementHistory, RowIn, Standing,
+    decide, is_major, Advisories, Advisory, Child, ReleaseReq, Releases, RequirementHistory, RowIn,
+    Standing,
 };
 
 fn s<'a>(v: &'a Value, key: &str) -> &'a str {
@@ -32,7 +33,7 @@ fn strings(v: Option<&Value>) -> Vec<String> {
 
 /// `[{id, ranges: [{introduced, fixed | last_affected}]}]` as stored ranges
 /// JSON, one OSV SEMVER range per window.
-fn advisories(v: Option<&Value>) -> Vec<Option<String>> {
+fn advisories(v: Option<&Value>) -> Vec<Advisory> {
     v.and_then(Value::as_array)
         .into_iter()
         .flatten()
@@ -52,7 +53,7 @@ fn advisories(v: Option<&Value>) -> Vec<Option<String>> {
                     json!({"type": "SEMVER", "events": events})
                 })
                 .collect();
-            Some(Value::Array(ranges).to_string())
+            Advisory::new(s(a, "id"), &[], Some(Value::Array(ranges).to_string()))
         })
         .collect()
 }
@@ -88,7 +89,7 @@ struct Row {
     installed: String,
     target: String,
     releases: Vec<String>,
-    advisories: Vec<Option<String>>,
+    advisories: Vec<Advisory>,
     history: RequirementHistory,
 }
 
@@ -99,6 +100,8 @@ fn outcome(standing: &Standing) -> &'static str {
         Standing::Latest => "latest",
         Standing::NoneAdmits { .. } => "none_admits",
         Standing::Unread => "unread",
+        Standing::Undecided(_) => "undecided",
+        Standing::Malicious(_) => "malicious",
     }
 }
 
@@ -151,7 +154,7 @@ pub(super) fn check_parent_release(v: &Value) -> Result<(), String> {
     };
     let parent_advisories = Advisories {
         ecosystem: eco,
-        ranges: advisories(p.get("advisories")),
+        list: advisories(p.get("advisories")),
     };
     let rows: Vec<Row> = v
         .get("rows")
@@ -171,27 +174,24 @@ pub(super) fn check_parent_release(v: &Value) -> Result<(), String> {
         .iter()
         .map(|r| Advisories {
             ecosystem: eco,
-            ranges: r.advisories.clone(),
+            list: r.advisories.clone(),
         })
         .collect();
     let newest: Vec<Option<String>> = rows
         .iter()
-        .map(|r| {
-            super::parent_release::newest(
-                &Releases {
-                    versions: r.releases.clone(),
-                    ..Releases::default()
-                },
-                eco,
-            )
+        .zip(&ads)
+        .map(|(r, a)| {
+            a.newest(&Releases {
+                versions: r.releases.clone(),
+                ..Releases::default()
+            })
         })
         .collect();
     let cleans: Vec<Box<dyn Fn(&str) -> bool + '_>> = ads
         .iter()
         .zip(&newest)
         .map(|(a, n)| {
-            Box::new(move |x: &str| a.clean_of_fixable(x, n.as_deref()))
-                as Box<dyn Fn(&str) -> bool>
+            Box::new(move |x: &str| a.usable(x, n.as_deref())) as Box<dyn Fn(&str) -> bool>
         })
         .collect();
     let inputs: Vec<RowIn<'_>> = rows
@@ -206,6 +206,7 @@ pub(super) fn check_parent_release(v: &Value) -> Result<(), String> {
                 clean: clean.as_ref(),
             },
             history: Some(&r.history),
+            unknown: None,
         })
         .collect();
     let own_target = p.get("own_target").and_then(Value::as_str);

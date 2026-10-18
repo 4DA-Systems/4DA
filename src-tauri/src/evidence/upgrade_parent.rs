@@ -287,6 +287,13 @@ pub(crate) fn parent_move(
         ParentStanding::Admits(r) => {
             super::upgrade_parent_release::admits_move(package, target, parent, r, through, &force)
         }
+        ParentStanding::Malicious { package, advisory } => format!(
+            "{package} is flagged malicious ({advisory}): remove or replace {package}; no \
+             {parent} release is named as the fix"
+        ),
+        ParentStanding::Undecided { why } => {
+            format!("no {parent} release is named because {why}, so no command is named{force}")
+        }
         ParentStanding::NoneAdmits { .. } => {
             // No release is named here, not even the newest: the parent's own
             // row (and its other rows) name the one release it moves to.
@@ -392,7 +399,11 @@ fn row_move(
         }
         // A lever's registry read runs only under a parent release
         // (`admits_move`); reaching here it says nothing more than Unknown.
-        ParentStanding::Unknown | ParentStanding::Admits(_) | ParentStanding::NoneAdmits { .. } => {
+        ParentStanding::Unknown
+        | ParentStanding::Admits(_)
+        | ParentStanding::NoneAdmits { .. }
+        | ParentStanding::Undecided { .. }
+        | ParentStanding::Malicious { .. } => {
             format!(
                 "{via}{lever} must move (4DA holds no record of a {lever} release that admits \
              {package} >= {target}): upgrade {lever} if one does, or replace it{force}"

@@ -341,6 +341,7 @@ pub(crate) fn matcher_verdict(db: &Database, ids: &[String]) -> Option<SecurityV
     let mut any_tier: Option<&'static str> = None;
     // Registry facts, read at most once per verdict (FX-H5).
     let mut registry: Option<fourda_depengine::registry::RegistryIndex> = None;
+    let mut fix_row: Option<&StoredAdvisory> = None;
     for row in &rows {
         let exposure = exposure_for_advisory(db, row);
         if exposure.copies_checked == 0 {
@@ -359,6 +360,7 @@ pub(crate) fn matcher_verdict(db: &Database, ids: &[String]) -> Option<SecurityV
             if verdict.fixed_version.is_none() {
                 let registry = registry.get_or_insert_with(|| crate::osv::release_facts::load(db));
                 verdict.fixed_version = highest_fix(registry, row);
+                fix_row = Some(row);
             }
             verdict.exposed.extend(exposure.confirmed);
         }
@@ -385,7 +387,36 @@ pub(crate) fn matcher_verdict(db: &Database, ids: &[String]) -> Option<SecurityV
     } else {
         deciding_tier.or(any_tier)
     };
+    raise_fix(db, &mut verdict, fix_row);
     Some(verdict)
+}
+
+/// The fix the Signal item shows agrees with the Upgrade Plan (review of
+/// #981): a declared package whose own fix still pins a vulnerable copy is
+/// shown the release that also clears it (express 4.20.0 -> 4.22.3).
+fn raise_fix(db: &Database, verdict: &mut SecurityVerdict, row: Option<&StoredAdvisory>) {
+    let (Some(row), Some(fix), Some(copy)) = (
+        row,
+        verdict.fixed_version.clone(),
+        verdict.worst_copy().cloned(),
+    ) else {
+        return;
+    };
+    let eco = crate::ecosystem::Ecosystem::parse(&row.ecosystem)
+        .map_or(row.ecosystem.as_str(), |e| e.osv_name());
+    if !copy.is_direct {
+        return;
+    }
+    if let Some((to, _)) = crate::osv::parent_release_load::raised_row_target(
+        db,
+        eco,
+        &copy.project_path,
+        &row.package_name,
+        &copy.installed_version,
+        &fix,
+    ) {
+        verdict.fixed_version = Some(to);
+    }
 }
 
 /// An advisory-registry row (cve / osv) IS a security alert, whatever words

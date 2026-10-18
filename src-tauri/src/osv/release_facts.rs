@@ -253,7 +253,6 @@ fn due(
 }
 
 fn save(db: &Database, stored: HashMap<(String, String), StoredPackage>) {
-    GENERATION.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
     let mut all: Vec<StoredPackage> = stored.into_values().collect();
     all.sort_by(|a, b| (&a.ecosystem, &a.key).cmp(&(&b.ecosystem, &b.key)));
     match serde_json::to_string(&all) {
@@ -264,6 +263,9 @@ fn save(db: &Database, stored: HashMap<(String, String), StoredPackage>) {
         }
         Err(e) => warn!(target: "4da::osv", error = %e, "registry release facts: encode failed"),
     }
+    // After the write: a reader that sees the new generation reads the new
+    // document (review of #981).
+    GENERATION.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
 }
 
 /// Read each due package's registry; a success replaces its stored facts.
@@ -447,23 +449,35 @@ pub(crate) fn book(db: &Database) -> std::sync::Arc<ReleaseBook> {
     static CACHE: std::sync::Mutex<Option<CachedBook>> = std::sync::Mutex::new(None);
     if cfg!(test) {
         // Tests run many short-lived databases in parallel; an address can
-        // be reused, so they always read.
+        // be reused, so they always read (the cache itself is tested through
+        // `book_cached`).
         return std::sync::Arc::new(book_from(read_stored(db), Utc::now()));
     }
-    let at = std::ptr::from_ref(db) as usize;
     let generation = GENERATION.load(std::sync::atomic::Ordering::SeqCst);
-    if let Ok(cache) = CACHE.lock() {
+    book_cached(db, &CACHE, std::time::Instant::now(), generation)
+}
+
+/// [`book`] with its cache, clock and write generation passed in.
+fn book_cached(
+    db: &Database,
+    cache: &std::sync::Mutex<Option<CachedBook>>,
+    now: std::time::Instant,
+    generation: u64,
+) -> std::sync::Arc<ReleaseBook> {
+    let at = std::ptr::from_ref(db) as usize;
+    if let Ok(cache) = cache.lock() {
         let reusable = cache.as_ref().filter(|(addr, g, when, _)| {
-            *addr == at && *g == generation && when.elapsed().as_secs() < BOOK_REUSE_SECS
+            *addr == at
+                && *g == generation
+                && now.saturating_duration_since(*when).as_secs() < BOOK_REUSE_SECS
         });
         if let Some((.., b)) = reusable {
             return b.clone();
         }
     }
-    let stored = read_stored(db);
-    let fresh = std::sync::Arc::new(book_from(stored, Utc::now()));
-    if let Ok(mut cache) = CACHE.lock() {
-        *cache = Some((at, generation, std::time::Instant::now(), fresh.clone()));
+    let fresh = std::sync::Arc::new(book_from(read_stored(db), Utc::now()));
+    if let Ok(mut cache) = cache.lock() {
+        *cache = Some((at, generation, now, fresh.clone()));
     }
     fresh
 }
@@ -533,85 +547,11 @@ impl ReleaseBook {
     }
 }
 
-/// One package's stored facts, for tests: (ecosystem, name, published,
-/// latest, retired, requirement history per child).
 #[cfg(test)]
-pub(crate) type TestFacts<'a> = (
-    &'a str,
-    &'a str,
-    Vec<&'a str>,
-    Option<&'a str>,
-    bool,
-    Vec<(&'a str, RequirementHistory)>,
-);
-
-/// Store npm abbreviated documents as a fetch would, through the same
-/// parsers (withdrawn releases and requirements read from the raw document),
-/// for tests and the graph rule vectors. Each document's requirements are
-/// kept for every dependency it names.
+#[path = "release_facts_test_support.rs"]
+mod test_support;
 #[cfg(test)]
-pub(crate) fn store_docs_for_tests(db: &Database, docs: &[(String, serde_json::Value)]) {
-    let stored: HashMap<(String, String), StoredPackage> = docs
-        .iter()
-        .map(|(name, doc)| {
-            let children: BTreeSet<String> = doc
-                .get("versions")
-                .and_then(|v| v.as_object())
-                .into_iter()
-                .flat_map(|vs| vs.values())
-                .flat_map(|m| {
-                    ["dependencies", "optionalDependencies", "peerDependencies"]
-                        .into_iter()
-                        .filter_map(|s| m.get(s).and_then(|d| d.as_object()))
-                        .flat_map(|d| d.keys().cloned())
-                        .collect::<Vec<_>>()
-                })
-                .collect();
-            let key = super::matching::package_key(name, "npm");
-            let p = StoredPackage {
-                ecosystem: "npm".to_string(),
-                key: key.clone(),
-                name: name.clone(),
-                fetched_at: Utc::now(),
-                releases: parse_npm(doc).unwrap_or_default(),
-                parents: parse_npm_parent(doc, &children),
-            };
-            ((key, "npm".to_string()), p)
-        })
-        .collect();
-    save(db, stored);
-}
-
-/// Store facts as a fetch would, for tests.
-#[cfg(test)]
-pub(crate) fn store_for_tests(db: &Database, packages: Vec<TestFacts<'_>>) {
-    let stored: HashMap<(String, String), StoredPackage> = packages
-        .into_iter()
-        .map(|(eco, name, published, latest, retired, requires)| {
-            let key = super::matching::package_key(name, eco);
-            let p = StoredPackage {
-                ecosystem: eco.to_string(),
-                key: key.clone(),
-                name: name.to_string(),
-                fetched_at: Utc::now(),
-                releases: RegistryReleases {
-                    published: published.into_iter().map(str::to_string).collect(),
-                    excluded: Vec::new(),
-                },
-                parents: ParentFacts {
-                    latest: latest.map(str::to_string),
-                    retired,
-                    requires: requires
-                        .into_iter()
-                        .map(|(c, h)| (c.to_string(), h))
-                        .collect(),
-                },
-            };
-            ((key, eco.to_string()), p)
-        })
-        .collect();
-    save(db, stored);
-}
+pub(crate) use test_support::{store_docs_for_tests, store_for_tests};
 
 fn npm_deprecated(manifest: &serde_json::Value) -> bool {
     manifest

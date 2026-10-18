@@ -15,7 +15,7 @@ use crate::db::Database;
 use super::fix_path::{requirement_admits, Dialect};
 use super::parent_hint::{normalize_path, ParentRelease, ParentStanding, Through};
 use super::parent_release::{
-    compare, hop_at, is_major, newest, through_release, Advisories, Hop, HopParent, Releases,
+    compare, hop_at, is_major, through_release, Advisories, Hop, HopParent, Releases,
     RequirementHistory,
 };
 use super::parent_release_load::{
@@ -54,30 +54,32 @@ fn parent_facts<'a>(
 ) -> Option<ParentFacts<'a>> {
     let releases = book.releases(ECOSYSTEM, parent)?;
     let history = book.history(ECOSYSTEM, parent, child)?;
+    let own = advisories(db, parent);
     Some(ParentFacts {
-        newest: newest(&releases, ECOSYSTEM),
-        own: advisories(db, parent),
+        newest: own.newest(&releases),
+        own,
         releases,
         history,
     })
 }
 
 /// The lever's release that brings in a fixed parent: the smallest, then
-/// lifted to the lever's own row target when that brings one in too.
+/// lifted to the lever's own row target when that brings one in too (with
+/// the smallest it was lifted from).
 fn lever_hop(
     hop: &HopCtx<'_>,
     through: &Through,
     lever_history: &RequirementHistory,
     parent: &ParentFacts<'_>,
-) -> Hop {
+) -> (Hop, Option<String>) {
     let lever = hop
         .book
         .releases(ECOSYSTEM, &through.name)
         .unwrap_or_default();
     let lever_own = advisories(hop.db, &through.name);
-    let lever_newest = newest(&lever, ECOSYSTEM);
-    let lever_clean = |v: &str| lever_own.clean_of_fixable(v, lever_newest.as_deref());
-    let parent_clean = |v: &str| parent.own.clean_of_fixable(v, parent.newest.as_deref());
+    let lever_newest = lever_own.newest(&lever);
+    let lever_clean = |v: &str| lever_own.usable(v, lever_newest.as_deref());
+    let parent_clean = |v: &str| parent.own.usable(v, parent.newest.as_deref());
     let clean = hop.child.clean();
     let child = hop.child.child(clean.as_ref());
     let hp = HopParent {
@@ -96,7 +98,7 @@ fn lever_hop(
         Dialect::Npm,
     );
     let Hop::Found { version, .. } = &found else {
-        return found;
+        return (found, None);
     };
     // One release per declared dependency: its own row's, when that also
     // brings a fixed parent in and stays in the same major (rule b).
@@ -107,14 +109,15 @@ fn lever_hop(
         &through.name,
         &through.version,
     ) else {
-        return found;
+        return (found, None);
     };
     let lift =
         compare(version, &row, ECOSYSTEM) == Some(Ordering::Less) && !is_major(version, &row);
-    if !lift {
-        return found;
+    let smallest = version.clone();
+    match hop_at(&child, &hp, lever_history, &lever_clean, &row, Dialect::Npm) {
+        Some(lifted) if lift => (lifted, Some(smallest)),
+        _ => (found, None),
     }
-    hop_at(&child, &hp, lever_history, &lever_clean, &row, Dialect::Npm).unwrap_or(found)
 }
 
 impl HopCtx<'_> {
@@ -132,14 +135,29 @@ impl HopCtx<'_> {
         let (true, Some(facts)) = (adjacent, facts) else {
             return;
         };
-        through.standing = match lever_hop(self, through, lever_history, &facts) {
+        let own = advisories(self.db, &through.name);
+        if let Some(id) = own.malware_at(&through.version) {
+            through.standing = ParentStanding::Malicious {
+                package: through.name.clone(),
+                advisory: id.to_string(),
+            };
+            return;
+        }
+        if let Some(id) = own.unreadable().or(facts.own.unreadable()) {
+            through.standing = ParentStanding::Undecided {
+                why: format!("the affected ranges of {id} cannot be read"),
+            };
+            return;
+        }
+        let (hop, smallest) = lever_hop(self, through, lever_history, &facts);
+        through.standing = match hop {
             Hop::Found {
                 version,
                 brings,
                 keeps_parent,
             } => ParentStanding::Admits(Box::new(self.release(
                 through,
-                version,
+                (version, smallest),
                 brings,
                 keeps_parent,
             ))),
@@ -149,10 +167,11 @@ impl HopCtx<'_> {
         };
     }
 
+    /// The lever's release; `smallest` when it was lifted to its own row.
     fn release(
         &self,
         through: &Through,
-        version: String,
+        (version, smallest): (String, Option<String>),
         brings: String,
         keeps: bool,
     ) -> ParentRelease {
@@ -162,6 +181,7 @@ impl HopCtx<'_> {
             .releases(ECOSYSTEM, &through.name)
             .unwrap_or_default();
         let lever_own = advisories(self.db, &through.name);
+        let lever_newest = lever_own.newest(&lever_releases);
         ParentRelease {
             breaking: is_major(&through.version, &version),
             command: lever_command(self.dir, &through.name, &through.version, &version),
@@ -169,8 +189,10 @@ impl HopCtx<'_> {
             refresh: keeps
                 .then(|| refresh_command(self.dir, parent, parent_version, &brings))
                 .flatten(),
-            own_checked: lever_own.any_fixable(newest(&lever_releases, ECOSYSTEM).as_deref()),
-            smallest: (brings != self.parent_to).then(|| self.parent_to.to_string()),
+            own_checked: lever_own.any_fixable(lever_newest.as_deref()),
+            remains: lever_own.unfixed_at(&version, lever_newest.as_deref()),
+            smallest,
+            floor: (brings != self.parent_to).then(|| self.parent_to.to_string()),
             brings: Some(brings),
             to: version,
             ..ParentRelease::default()
@@ -232,8 +254,8 @@ pub(super) fn lever_needs(
         return needs;
     };
     let lever_own = advisories(db, lever.name);
-    let lever_newest = newest(&lever_releases, ECOSYSTEM);
-    let lever_clean = |v: &str| lever_own.clean_of_fixable(v, lever_newest.as_deref());
+    let lever_newest = lever_own.newest(&lever_releases);
+    let lever_clean = |v: &str| lever_own.usable(v, lever_newest.as_deref());
     for (parent, version) in pinned_parents(db, book, lever) {
         let side = ParentSide {
             project: lever.project,
@@ -248,7 +270,7 @@ pub(super) fn lever_needs(
             let Some(facts) = parent_facts(db, book, &parent, &row.package) else {
                 continue;
             };
-            let parent_clean = |v: &str| facts.own.clean_of_fixable(v, facts.newest.as_deref());
+            let parent_clean = |v: &str| facts.own.usable(v, facts.newest.as_deref());
             let clean = row.clean();
             let hp = HopParent {
                 installed: &version,
