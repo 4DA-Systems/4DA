@@ -39,6 +39,7 @@
   "errorMsg.parse": "Error de formato de datos. Inténtalo de nuevo o reinicia la aplicación.",
   "errorMsg.permission": "Permiso denegado. Comprueba los permisos de los archivos.",
   "errorMsg.rateLimit": "Límite de solicitudes alcanzado. Espera un momento e inténtalo de nuevo.",
+  "errorMsg.inventoryRefreshing": "Tus proyectos se están volviendo a analizar. El resumen se escribirá en cuanto termine el análisis.",
   "errorMsg.budgetReached": "Presupuesto diario de IA alcanzado: se restablece a las {{time}} ({{in}})",
   "errorMsg.timeout": "La solicitud expiró. Inténtalo de nuevo en un momento.",
   "translation.noLlm": "LLM no configurado — configura tu clave API en Ajustes para habilitar la traducción de contenido"

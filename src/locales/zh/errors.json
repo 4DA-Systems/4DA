@@ -39,6 +39,7 @@
   "errorMsg.parse": "数据格式错误。请重试或重新启动应用。",
   "errorMsg.permission": "权限被拒绝。请检查文件权限。",
   "errorMsg.rateLimit": "已达到请求频率限制。请稍等片刻后重试。",
+  "errorMsg.inventoryRefreshing": "正在重新扫描你的项目。扫描完成后将立即生成简报。",
   "errorMsg.budgetReached": "已达到每日 AI 预算 — 将于 {{time}} 重置（{{in}}）",
   "errorMsg.timeout": "请求超时。请稍后重试。",
   "translation.noLlm": "LLM 未配置——请在设置中配置 API 密钥以启用内容翻译"

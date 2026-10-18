@@ -32,6 +32,17 @@ fn prompt_carries_the_rejects_trailer_contract() {
     assert!(prompt.contains("Output `[]` inside the block if you filtered nothing"));
 }
 
+/// Live 2026-10-18 (brief #421): "listed under Also Open rather than
+/// critical, noting it here since it's NEW". The prompt forbids writing about
+/// the brief's own structure and keeps ALSO OPEN in the lower-severity line;
+/// `briefing_meta::strip_meta_commentary` removes what slips through.
+#[test]
+fn prompt_forbids_talking_about_the_briefs_own_structure() {
+    let prompt = briefing_system_prompt();
+    assert!(prompt.contains("Never write about the brief itself"));
+    assert!(prompt.contains("An ALSO OPEN fact goes only in the \"Lower severity\" line"));
+}
+
 #[test]
 fn prompt_scopes_verdict_indices_to_the_numbered_slate() {
     let prompt = briefing_system_prompt();

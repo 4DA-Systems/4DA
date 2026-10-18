@@ -1,8 +1,34 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import type { StateCreator } from 'zustand';
 import { cmd } from '../lib/commands';
-import { budgetRefusalMessage, translateError } from '../utils/error-messages';
+import { safeListen } from '../lib/tauri-events';
+import { budgetRefusalMessage, inventoryRefreshingMessage, translateError } from '../utils/error-messages';
 import type { AppStore, BriefingSlice, BriefingState, BriefVerdicts, FreeBriefingData, InstantBriefingSnapshot } from './types';
+
+/** Backend event: the startup dependency-inventory rescan finished. */
+export const INVENTORY_FRESH_EVENT = 'inventory-fresh';
+
+let inventoryRetryArmed = false;
+
+/**
+ * Generate the brief once, when the inventory refresh finishes. One armed
+ * listener at most, removed after it fires.
+ */
+export function retryBriefingWhenInventoryFresh(generate: () => Promise<void>): void {
+  if (inventoryRetryArmed) return;
+  inventoryRetryArmed = true;
+  let unlisten: (() => void) | null = null;
+  void safeListen(INVENTORY_FRESH_EVENT, () => {
+    if (!inventoryRetryArmed) return;
+    inventoryRetryArmed = false;
+    unlisten?.();
+    void generate();
+  }).then((fn) => {
+    unlisten = fn;
+    // Fired before registration completed: drop the listener now.
+    if (!inventoryRetryArmed) fn();
+  });
+}
 
 const initialBriefingState: BriefingState = {
   content: null,
@@ -158,6 +184,14 @@ export const createBriefingSlice: StateCreator<AppStore, [], [], BriefingSlice> 
         // on already honors them. Fire-and-forget: verdicts are supplementary
         // and must never delay or fail the briefing itself.
         void get().loadBriefVerdicts();
+      } else if (result.inventory_refreshing) {
+        // The backend defers a brief while the startup lockfile rescan runs
+        // (it would state dependency facts from the previous session).
+        // Say so, and write it once the inventory is fresh.
+        set(state => ({
+          aiBriefing: { ...state.aiBriefing, loading: false, error: inventoryRefreshingMessage() },
+        }));
+        retryBriefingWhenInventoryFresh(() => get().generateBriefing({ auto: true }));
       } else {
         set(state => ({
           aiBriefing: {

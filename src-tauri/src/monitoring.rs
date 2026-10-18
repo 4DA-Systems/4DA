@@ -1432,6 +1432,14 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                 }
             }
 
+            // The briefing states dependency facts: never from the previous
+            // session's inventory while the startup lockfile rescan runs. The
+            // next tick (60 s) asks again; the briefing is not marked sent.
+            if !skip_briefing && !crate::inventory_freshness::is_fresh() {
+                info!(target: "4da::monitor", "Morning briefing waits: the dependency inventory is being refreshed");
+                skip_briefing = true;
+            }
+
             if !skip_briefing {
                 if let Some(mut briefing) =
                     crate::monitoring_notifications::check_morning_briefing(&state)

@@ -39,6 +39,7 @@
   "errorMsg.parse": "Erreur de format de données. Réessayez ou redémarrez l'application.",
   "errorMsg.permission": "Permission refusée. Vérifiez les permissions des fichiers.",
   "errorMsg.rateLimit": "Limite de requêtes atteinte. Veuillez patienter et réessayer.",
+  "errorMsg.inventoryRefreshing": "Vos projets sont en cours de réanalyse. Le briefing sera rédigé dès la fin de l’analyse.",
   "errorMsg.budgetReached": "Budget IA quotidien atteint — réinitialisation à {{time}} ({{in}})",
   "errorMsg.timeout": "La requête a expiré. Réessayez dans un instant.",
   "translation.noLlm": "LLM non configuré — configurez votre clé API dans les Paramètres pour activer la traduction du contenu"

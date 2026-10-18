@@ -154,6 +154,27 @@ describe('briefing-slice', () => {
       ]);
     });
 
+    // Live 2026-10-18: a brief written before the startup lockfile rescan
+    // stated a bump the lockfile already carried. The backend now defers it;
+    // the UI says the projects are being rescanned (not an error to retry).
+    it('says the inventory is being refreshed when the backend defers the brief', async () => {
+      vi.mocked(invoke).mockResolvedValueOnce({
+        success: false,
+        error: 'inventory_refreshing',
+        inventory_refreshing: true,
+        briefing: null,
+      });
+
+      await useAppStore.getState().generateBriefing({ auto: true });
+
+      const { aiBriefing } = useAppStore.getState();
+      expect(aiBriefing.loading).toBe(false);
+      expect(aiBriefing.content).toBeNull();
+      expect(aiBriefing.error).toBe(
+        'Your projects are being rescanned. The brief will be written as soon as the scan finishes.',
+      );
+    });
+
     it('sets user-friendly error on invoke rejection', async () => {
       vi.mocked(invoke).mockRejectedValueOnce(new Error('Connection refused'));
 

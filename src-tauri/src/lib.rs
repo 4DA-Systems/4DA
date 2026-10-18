@@ -253,6 +253,7 @@ mod achievement_engine;
 mod briefing_dedupe;
 mod briefing_dev_tags;
 mod briefing_groundedness;
+mod briefing_meta;
 #[cfg(test)]
 mod briefing_pipeline_tests;
 mod briefing_quality;
@@ -282,6 +283,7 @@ mod integrity;
 mod intelligence_core;
 mod intelligence_history;
 mod intelligence_metrics;
+mod inventory_freshness;
 mod ipc_blocking;
 mod ipc_guard;
 mod ipc_rate_limit;
