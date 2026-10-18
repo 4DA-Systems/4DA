@@ -30,10 +30,16 @@
 //! the truth, which the frontend's motion gate (`src/lib/motion-gate.ts`)
 //! already assumed.
 //!
-//! The initial state is left alone: a window created hidden keeps loading and
-//! running its scripts as before, and only a real show or hide changes the
-//! controller. macOS and Linux need nothing here (WKWebView and WebKitGTK follow
-//! their window's occlusion), so the plugin is inert there.
+//! A window created hidden (the pre-warmed toast and brief windows, the main
+//! window before first light) never receives a show or hide message until it is
+//! first shown, so the controller kept wry's creation-time `IsVisible = true`:
+//! measured 2026-10-18 on the operator app, the never-shown brief window read
+//! `visibilityState "visible"` with `requestAnimationFrame` at ~240 fps. Its
+//! real state is therefore applied once its page has FINISHED loading (Tauri's
+//! page-load event), never earlier, so loading is never throttled; from then on
+//! the window messages keep it in step. macOS and Linux need nothing here
+//! (WKWebView and WebKitGTK follow their window's occlusion), so the plugin is
+//! inert there.
 
 use tauri::plugin::{Builder, TauriPlugin};
 use tauri::Runtime;
@@ -44,6 +50,14 @@ pub(crate) fn init<R: Runtime>() -> TauriPlugin<R> {
         .on_webview_ready(|webview| {
             #[cfg(windows)]
             windows_impl::track(&webview);
+            #[cfg(not(windows))]
+            let _ = webview;
+        })
+        .on_page_load(|webview, payload| {
+            if payload.event() == tauri::webview::PageLoadEvent::Finished {
+                #[cfg(windows)]
+                windows_impl::sync_after_load(webview);
+            }
             #[cfg(not(windows))]
             let _ = webview;
         })
@@ -66,6 +80,10 @@ fn desired_visibility(msg: Msg, window_visible: bool, iconic: bool) -> Option<bo
         // window can be resized) must not wake it, nor put to sleep a webview
         // that has not been shown yet.
         Msg::Size(SizeKind::Restored) => window_visible.then_some(true),
+        // The page finished loading: apply the window's real state, so a
+        // window created hidden stops rendering instead of keeping wry's
+        // creation-time `IsVisible = true` until it is first shown.
+        Msg::PageLoaded => Some(window_visible && !iconic),
         Msg::Size(SizeKind::Other) | Msg::Other => None,
     }
 }
@@ -83,6 +101,7 @@ enum SizeKind {
 enum Msg {
     Show(bool),
     Size(SizeKind),
+    PageLoaded,
     Other,
 }
 
@@ -93,7 +112,9 @@ mod windows_impl {
     use tauri::Runtime;
     use tracing::{debug, warn};
     use windows_sys::Win32::Foundation::{HWND, LPARAM, LRESULT, WPARAM};
-    use windows_sys::Win32::UI::Shell::{DefSubclassProc, RemoveWindowSubclass, SetWindowSubclass};
+    use windows_sys::Win32::UI::Shell::{
+        DefSubclassProc, GetWindowSubclass, RemoveWindowSubclass, SetWindowSubclass,
+    };
     use windows_sys::Win32::UI::WindowsAndMessaging::{
         IsIconic, IsWindowVisible, SIZE_MAXIMIZED, SIZE_MINIMIZED, SIZE_RESTORED, WM_NCDESTROY,
         WM_SHOWWINDOW, WM_SIZE,
@@ -108,8 +129,8 @@ mod windows_impl {
     /// Owned by the subclass; freed on `WM_NCDESTROY`.
     struct Tracker {
         set_visible: Box<dyn Fn(bool)>,
-        /// Last value written. `None` until the first transition: the
-        /// controller's creation-time state is wry's, not ours.
+        /// Last value written. `None` until the page loads or the window
+        /// first changes state: until then the controller is wry's.
         current: Cell<Option<bool>>,
     }
 
@@ -161,6 +182,43 @@ mod windows_impl {
         });
         if let Err(e) = result {
             warn!(target: "4da::webview", error = %e, "with_webview failed; webview visibility not tracked");
+        }
+    }
+
+    /// Apply the host window's real state once the page has loaded (see the
+    /// module docs). Runs on the UI thread via `with_webview`, after the
+    /// subclass installed by [`track`] (queued earlier, at webview creation).
+    pub(super) fn sync_after_load<R: Runtime>(webview: &tauri::Webview<R>) {
+        let label = webview.label().to_string();
+        let Ok(hwnd) = webview.window().hwnd() else {
+            return;
+        };
+        let hwnd = hwnd.0 as isize;
+        let result = webview.with_webview(move |_| {
+            let hwnd = hwnd as HWND;
+            let mut data = 0usize;
+            // SAFETY: querying our own subclass on the window's own thread.
+            #[allow(unsafe_code)]
+            let found =
+                unsafe { GetWindowSubclass(hwnd, Some(subclass_proc), SUBCLASS_ID, &mut data) };
+            if found == 0 || data == 0 {
+                debug!(target: "4da::webview", label, "Page loaded before visibility tracking; left as is");
+                return;
+            }
+            // SAFETY: `data` is the live `Tracker` installed in `track`; it is
+            // freed only on `WM_NCDESTROY`, on this same thread.
+            #[allow(unsafe_code)]
+            let tracker = unsafe { &*(data as *const Tracker) };
+            #[allow(unsafe_code)]
+            let (visible, iconic) =
+                unsafe { (IsWindowVisible(hwnd) != 0, IsIconic(hwnd) != 0) };
+            if let Some(want) = desired_visibility(Msg::PageLoaded, visible, iconic) {
+                tracker.apply(want);
+                debug!(target: "4da::webview", label, visible = want, "Initial webview visibility applied after page load");
+            }
+        });
+        if let Err(e) = result {
+            warn!(target: "4da::webview", error = %e, "with_webview failed; initial visibility not applied");
         }
     }
 
@@ -276,6 +334,19 @@ mod tests {
             desired_visibility(Msg::Size(SizeKind::Restored), false, false),
             None
         );
+    }
+
+    #[test]
+    fn a_page_that_loads_in_a_hidden_window_stops_rendering() {
+        // The never-shown brief and toast windows, the main window before first light.
+        assert_eq!(
+            desired_visibility(Msg::PageLoaded, false, false),
+            Some(false)
+        );
+        // Loaded in a minimised window: still off screen.
+        assert_eq!(desired_visibility(Msg::PageLoaded, true, true), Some(false));
+        // Loaded in a visible window (a reload of the shown main window): renders.
+        assert_eq!(desired_visibility(Msg::PageLoaded, true, false), Some(true));
     }
 
     #[test]
