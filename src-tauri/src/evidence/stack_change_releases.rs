@@ -153,11 +153,12 @@ fn site_for(
     let dir = Path::new(&pin.project_path);
     let installed = pin.installed.to_string();
     let announced = grade.announced.to_string();
-    // A breaking release always needs a manifest edit; only a minor can land
-    // by refreshing inside the range the project (or a workspace member)
-    // declares. Read for dev pins too: install scripts run for them, so a
-    // malicious dev release inside the range is as close to installed.
-    let admitted = (change == StackChange::Minor).then(|| {
+    // A breaking release always needs a manifest edit; only a minor (or, for
+    // an affected release, any size) can land by refreshing inside the range
+    // the project (or a workspace member) declares. Read for dev pins too:
+    // install scripts run for them, so a malicious dev release inside the
+    // range is as close to installed.
+    let admitted = matches!(change, StackChange::Minor | StackChange::Security).then(|| {
         requirements_admit(
             &workspace_requirements(dir, ecosystem, &grade.package),
             &announced,
@@ -187,24 +188,34 @@ fn site_for(
     }
 }
 
-/// The concerned pins of working projects: scratch and dormant projects are
-/// not working projects (the Brief's rule).
-pub(crate) fn active_pins<'a>(
-    grade: &'a ReleaseGrade,
-    liveness: &ProjectLiveness,
-) -> Vec<&'a ProjectPin> {
+/// The grade over WORKING projects only: scratch and dormant projects are
+/// not working projects (the Brief's rule). Narrowed BEFORE grading
+/// (`ReleaseGrade::retain_projects`), so the largest gap is the largest an
+/// active project has, not one a scratch tree has.
+pub(crate) fn active_grade(grade: &ReleaseGrade, liveness: &ProjectLiveness) -> ReleaseGrade {
     grade
+        .clone()
+        .retain_projects(|p| !liveness.is_scratch(p) && !liveness.is_dormant(p))
+}
+
+/// The projects an active grade concerns that declare the package directly
+/// (the only copies a release row can ask something of).
+pub(crate) fn active_pins(active: &ReleaseGrade) -> Vec<&ProjectPin> {
+    active
         .concerned_pins()
         .into_iter()
-        .filter(|p| !liveness.is_scratch(&p.project_path) && !liveness.is_dormant(&p.project_path))
+        .filter(|p| p.is_direct)
         .collect()
 }
 
 /// Build the change for one graded release, or `None` when it asks nothing of
-/// an active project. A minor that only dev tooling carries is tooling news,
-/// unless an advisory affects it. A release whose every affecting advisory
-/// already hits every active copy is the advisory lane's (it names the
-/// target that clears them) — never a malicious one, which is always said.
+/// an active project. Graded over the active projects alone ([`active_grade`]).
+/// A minor that only dev tooling carries is tooling news, unless an advisory
+/// affects it. An affected release is a SECURITY change whatever its size: a
+/// malicious patch inside a caret range is the one a refresh installs first,
+/// and "patches are not news" must not hide it. A release whose every
+/// affecting advisory already hits every active copy is the advisory lane's
+/// (it names the target that clears them), never a malicious one.
 /// `advisories` must be checked against the [`active_pins`]' copies.
 pub(crate) fn release_change(
     grade: &ReleaseGrade,
@@ -212,7 +223,6 @@ pub(crate) fn release_change(
     liveness: &ProjectLiveness,
     advisories: ReleaseAdvisories,
 ) -> Option<ReleaseChange> {
-    let change = change_of(grade)?;
     let affected = match &advisories {
         ReleaseAdvisories::Affected(hit) if hit.covered_by_installed && !hit.malware => {
             return None
@@ -220,8 +230,14 @@ pub(crate) fn release_change(
         ReleaseAdvisories::Affected(_) => true,
         _ => false,
     };
+    let grade = &active_grade(grade, liveness);
+    let change = if affected {
+        StackChange::Security
+    } else {
+        change_of(grade)?
+    };
     let ecosystem = crate::osv::exposure::registry_source_ecosystem(&row.source_type)?;
-    let active = active_pins(grade, liveness);
+    let active = active_pins(grade);
     if active.is_empty() {
         return None;
     }
@@ -471,17 +487,22 @@ pub(crate) fn collect_release_changes(
     let checker = ReleaseChecker::load(db);
     best.into_values()
         .filter_map(|(_, grade, row)| {
-            change_of(&grade)?;
-            // Judged on the copies the WORKING projects run: a scratch copy
-            // the advisory lane reports must not stand in for an active one.
-            let installed: Vec<String> = active_pins(&grade, &liveness)
+            // Graded and judged on the WORKING projects alone: a scratch copy
+            // must neither set the class nor stand in for an active copy.
+            // Every release an active project is behind on is checked, a
+            // patch included: an affected one surfaces whatever its size.
+            let active = active_grade(&grade, &liveness);
+            let installed: Vec<String> = active_pins(&active)
                 .iter()
                 .map(|p| p.installed.to_string())
                 .collect();
+            if installed.is_empty() {
+                return None;
+            }
             let verdict = checker.check_grade(
                 db,
                 &row.source_type,
-                &grade,
+                &active,
                 &installed,
                 row.published.as_deref(),
             );

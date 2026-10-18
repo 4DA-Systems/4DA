@@ -450,7 +450,8 @@ fn a_scratch_copy_never_covers_malware_for_an_active_project() {
         ],
     );
     let liveness = ProjectLiveness::default().with_scratch(&[scratch]);
-    let installed: Vec<String> = super::releases::active_pins(&g, &liveness)
+    let active_grade = super::releases::active_grade(&g, &liveness);
+    let installed: Vec<String> = super::releases::active_pins(&active_grade)
         .iter()
         .map(|p| p.installed.to_string())
         .collect();
@@ -555,6 +556,118 @@ fn a_member_declared_range_is_read_for_the_refresh_warning() {
     );
     let clean = npm_minor(&path, ReleaseAdvisories::Clear).expect("a minor");
     assert_eq!(clean.sites[0].command, None, "the root does not declare it");
+}
+
+// ------------------------------------------ active pins graded first (#983 follow-up)
+
+/// A scratch tree a MAJOR behind used to set the class ("major") and be the
+/// only concerned project; the scratch filter then dropped it and the
+/// release said nothing to the active project a minor behind. Graded over
+/// the active projects first, it is that project's minor.
+#[test]
+fn a_scratch_project_a_major_behind_no_longer_hides_an_active_minor() {
+    let (_dir, active) = npm_project();
+    let scratch = "/scratch/old";
+    let g = grade(
+        "left-padder",
+        "4.2.0",
+        &[
+            (scratch, "3.0.0", true, false),
+            (&active, "4.1.3", true, false),
+        ],
+    );
+    // Before: the class over every project is the scratch tree's major.
+    assert_eq!(change_of(&g), Some(StackChange::Major));
+    let liveness = ProjectLiveness::default().with_scratch(&[scratch]);
+    let change = release_change(
+        &g,
+        &row("npm_registry", "npm: left-padder v4.2.0"),
+        &liveness,
+        ReleaseAdvisories::Clear,
+    )
+    .expect("after: the active project's minor");
+    assert_eq!(change.change, StackChange::Minor);
+    assert_eq!(change.sites.len(), 1);
+    assert_eq!(change.sites[0].installed, "4.1.3");
+    assert_eq!(
+        change.sites[0].command.as_deref(),
+        Some("npm update left-padder")
+    );
+}
+
+/// Same shape, malicious release: the active project is warned.
+#[test]
+fn a_scratch_project_a_major_behind_never_hides_malware_from_an_active_one() {
+    let (_dir, active) = npm_project();
+    let scratch = "/scratch/old";
+    let g = grade(
+        "left-padder",
+        "4.2.0",
+        &[
+            (scratch, "3.0.0", true, false),
+            (&active, "4.1.3", true, false),
+        ],
+    );
+    let liveness = ProjectLiveness::default().with_scratch(&[scratch]);
+    let change = release_change(
+        &g,
+        &row("npm_registry", "npm: left-padder v4.2.0"),
+        &liveness,
+        malicious(false),
+    )
+    .expect("warned");
+    assert_eq!(change.change, StackChange::Security);
+    let item = release_item(&change, NOW).item;
+    assert!(!has_run(&item));
+    assert!(item.title.contains("malicious release"), "{}", item.title);
+    assert_eq!(item.urgency, Urgency::High);
+    assert!(item
+        .id
+        .starts_with("stack-change:security:npm:left-padder@4.2.0"));
+}
+
+/// "Patches are not news" must not hide a malicious patch: a caret range
+/// admits it, so it is the first thing a refresh installs.
+#[test]
+fn a_malicious_patch_for_an_active_project_surfaces_as_security() {
+    let (_dir, path) = npm_project();
+    let g = grade("left-padder", "4.1.4", &[(&path, "4.1.3", true, false)]);
+    let r = row("npm_registry", "npm: left-padder v4.1.4");
+    let liveness = ProjectLiveness::default();
+    assert!(
+        release_change(&g, &r, &liveness, ReleaseAdvisories::Clear).is_none(),
+        "a clean patch is still not news"
+    );
+    let change = release_change(&g, &r, &liveness, malicious(false)).expect("surfaced");
+    assert_eq!(change.change, StackChange::Security);
+    assert_eq!(change.sites[0].admitted, Some(true));
+    assert_eq!(change.sites[0].command, None);
+    let item = release_item(&change, NOW).item;
+    assert!(!has_run(&item));
+    assert!(
+        item.explanation.contains("lockfile refresh"),
+        "{}",
+        item.explanation
+    );
+    assert!(validate_item(&item).is_ok());
+}
+
+/// Only projects that declare the package can be asked to act: an active
+/// project that carries the release only transitively is not a site.
+#[test]
+fn an_affected_release_with_only_transitive_active_copies_is_not_a_release_row() {
+    let g = grade(
+        "left-padder",
+        "4.1.4",
+        &[("/dev/app", "4.1.3", false, false)],
+    );
+    assert!(release_change(
+        &g,
+        &row("npm_registry", "npm: left-padder v4.1.4"),
+        &ProjectLiveness::default(),
+        malicious(false),
+    )
+    .is_none());
 }
 
 #[test]

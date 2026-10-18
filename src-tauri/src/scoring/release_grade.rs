@@ -181,6 +181,20 @@ impl ReleaseGrade {
         }
     }
 
+    /// The grade restricted to the projects `keep` admits (by path).
+    ///
+    /// The class and the concerned projects are computed from the pins, so
+    /// a caller that only reports on WORKING projects must narrow the pins
+    /// BEFORE asking for them. Narrowing after picked the largest gap among
+    /// every project first: a scratch tree a major behind made the release
+    /// "breaking" for the scratch tree alone, and the active project a minor
+    /// behind was then filtered out with it — the release said nothing to the
+    /// one project that works on it, a malicious one included.
+    pub(crate) fn retain_projects(mut self, keep: impl Fn(&str) -> bool) -> Self {
+        self.pins.retain(|p| keep(&p.project_path));
+        self
+    }
+
     /// Every project already runs the announced version or newer (the v33
     /// already-installed rule). An empty pin set is "cannot tell" → false.
     pub(crate) fn all_installed(&self) -> bool {

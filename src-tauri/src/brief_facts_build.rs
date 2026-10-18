@@ -751,6 +751,9 @@ fn build_upgrade_facts(
         else {
             continue;
         };
+        // Graded over working projects only: a scratch tree's gap must not
+        // set the class for (and then hide) an active project's.
+        let grade = grade.retain_projects(|p| !liveness.is_scratch(p) && !liveness.is_dormant(p));
         if !matches!(
             grade.class(),
             Some(ReleaseClass::Breaking | ReleaseClass::Yanked)
