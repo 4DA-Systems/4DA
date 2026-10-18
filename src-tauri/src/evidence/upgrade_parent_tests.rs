@@ -570,12 +570,12 @@ fn a_direct_row_names_the_command_for_its_declaration() {
     }
     std::fs::write(
         dir.path().join("package.json"),
-        r#"{"name": "app", "dependencies": {"minimist": "~1.2.5"}}"#,
+        r#"{"name": "app", "dependencies": {"minimist": "1.2.5"}}"#,
     )
     .unwrap();
     std::fs::write(
         dir.path().join("package-lock.json"),
-        r#"{"lockfileVersion": 3, "packages": {"": {"dependencies": {"minimist": "~1.2.5"}}, "node_modules/minimist": {"version": "1.2.5"}}}"#,
+        r#"{"lockfileVersion": 3, "packages": {"": {"dependencies": {"minimist": "1.2.5"}}, "node_modules/minimist": {"version": "1.2.5"}}}"#,
     )
     .unwrap();
     let db = test_db();
@@ -593,7 +593,53 @@ fn a_direct_row_names_the_command_for_its_declaration() {
     validate_item(row).expect("schema-valid");
     assert!(
         row.explanation.contains(
-            "Fixable now via a direct dependency bump: `npm install \"minimist@~1.2.6\"`"
+            "Fixable now via a direct dependency bump: `npm install minimist@1.2.6 --save-exact`"
+        ),
+        "{}",
+        row.explanation
+    );
+}
+
+/// Live 2026-10-18 (navcal sharp, next, vite): a declared `~1.2.5` already admits the
+/// fix 1.2.6, so the row names the in-range refresh, not an install that
+/// rewrites the manifest.
+#[test]
+fn a_direct_row_whose_range_admits_the_fix_names_the_refresh() {
+    let dir = tempfile::Builder::new()
+        .prefix("direct-refresh-")
+        .tempdir_in(env!("CARGO_MANIFEST_DIR"))
+        .expect("tempdir");
+    let project = dir.path().to_string_lossy().replace('\\', "/");
+    if crate::project_inclusion::is_hard_excluded(&project) {
+        eprintln!("SKIPPED a_direct_row_whose_range_admits_the_fix_names_the_refresh: {project} is excluded from DB writes here");
+        return;
+    }
+    std::fs::write(
+        dir.path().join("package.json"),
+        r#"{"name": "app", "dependencies": {"minimist": "~1.2.5"}}"#,
+    )
+    .unwrap();
+    std::fs::write(
+        dir.path().join("package-lock.json"),
+        r#"{"lockfileVersion": 3, "packages": {"": {"dependencies": {"minimist": "1.2.5"}}, "node_modules/minimist": {"version": "1.2.5"}}}"#,
+    )
+    .unwrap();
+    let db = test_db();
+    db.store_dependency(&project, "minimist", Some("1.2.5"), "npm", false, None)
+        .unwrap();
+    db.store_dependency_instances(
+        &project,
+        "npm",
+        &[instance("minimist", "1.2.5", true, false)],
+    )
+    .unwrap();
+    advisory(&db, "GHSA-xvch-5gv4-984h", "minimist", "npm", "1.2.6", 9.8);
+    let plan = plan(&db);
+    let row = row(&plan, "minimist");
+    validate_item(row).expect("schema-valid");
+    assert!(
+        row.explanation.contains(
+            "Fixable now with a lockfile refresh (the declared range already admits the fix): `npm update minimist`"
         ),
         "{}",
         row.explanation

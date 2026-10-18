@@ -452,14 +452,19 @@ impl PackageGroup<'_> {
                 .iter()
                 .any(|l| l.target_version.is_some() && l.sites.iter().any(|s| !s.is_direct));
             let how = crate::osv::direct_upgrade::direct_fix_note(&self.direct_fixes, m > 1);
+            // The declared range already admits the fix: a refresh, not a bump.
+            let lead = if crate::osv::direct_upgrade::all_refresh(&self.direct_fixes, &self.lines) {
+                "Fixable now with a lockfile refresh (the declared range already admits the fix)"
+            } else {
+                "Fixable now via a direct dependency bump"
+            };
             if transitive {
                 format!(
-                    "Fixable now via a direct dependency bump where it is declared{how}. \
-                     Elsewhere it is transitive — {}",
+                    "{lead} where it is declared{how}. Elsewhere it is transitive — {}",
                     super::upgrade_parent::upstream_note(&self.package, &self.routes, m > 1)
                 )
             } else {
-                format!("Fixable now via a direct dependency bump{how}")
+                format!("{lead}{how}")
             }
         } else {
             super::upgrade_parent::upstream_note(&self.package, &self.routes, m > 1)

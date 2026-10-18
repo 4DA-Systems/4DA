@@ -416,13 +416,15 @@ fn check_direct(v: &Value, root: &std::path::Path) -> Result<(), String> {
         s(v, "installed"),
         s(v, "target"),
     );
-    let (command, instruction) = match &fix {
-        Some(DirectFix::Command(c)) => (Some(c.as_str()), None),
-        Some(DirectFix::Instruction(i)) => (None, Some(i.as_str())),
-        None => (None, None),
+    let (command, instruction, refresh) = match &fix {
+        Some(DirectFix::Command(c)) => (Some(c.as_str()), None, false),
+        Some(DirectFix::Refresh(c)) => (Some(c.as_str()), None, true),
+        Some(DirectFix::Instruction(i)) => (None, Some(i.as_str()), false),
+        None => (None, None, false),
     };
     let (want_c, want_i) = (opt_s(v, "command"), opt_s(v, "instruction"));
-    if command == want_c && instruction == want_i {
+    let want_refresh = v.get("refresh").and_then(Value::as_bool).unwrap_or(false);
+    if command == want_c && instruction == want_i && refresh == want_refresh {
         Ok(())
     } else {
         Err(format!(

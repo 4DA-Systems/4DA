@@ -32,7 +32,7 @@ fn a_bump_names_the_command_for_its_declaration() {
     );
     assert_eq!(
         crate::brief_facts::fix_clause("minimist", &path),
-        "bump minimist to >= 1.2.6: run `npm install \"minimist@~1.2.6\"`"
+        "bump minimist to >= 1.2.6: within its declared range, run `npm update minimist`"
     );
     // Not declared here: plain "bump", nothing invented.
     let plain = with_direct_fix(
@@ -108,7 +108,10 @@ fn a_bump_without_a_confirmed_copy_or_known_ecosystem_names_nothing() {
 /// One fixture project, seeded the way the scanner seeds it: the Brief's
 /// direct row and the Upgrade Plan's direct row must name the SAME command
 /// (review of #982, SF3) — the property audit E8's two halves share.
-fn seeded_project(tag: &str) -> Option<(tempfile::TempDir, String, crate::db::Database)> {
+fn seeded_project(
+    tag: &str,
+    declared: &str,
+) -> Option<(tempfile::TempDir, String, crate::db::Database)> {
     let dir = tempfile::Builder::new()
         .prefix(&format!("brief-{tag}-"))
         .tempdir_in(env!("CARGO_MANIFEST_DIR"))
@@ -118,14 +121,22 @@ fn seeded_project(tag: &str) -> Option<(tempfile::TempDir, String, crate::db::Da
         eprintln!("SKIPPED brief/plan parity: {project} is excluded from DB writes here");
         return None;
     }
+    let deps = serde_json::json!({ "minimist": declared });
     std::fs::write(
         dir.path().join("package.json"),
-        r#"{"name": "app", "dependencies": {"minimist": "~1.2.5"}}"#,
+        serde_json::json!({ "name": "app", "dependencies": deps }).to_string(),
     )
     .unwrap();
     std::fs::write(
         dir.path().join("package-lock.json"),
-        r#"{"lockfileVersion": 3, "packages": {"": {"dependencies": {"minimist": "~1.2.5"}}, "node_modules/minimist": {"version": "1.2.5"}}}"#,
+        serde_json::json!({
+            "lockfileVersion": 3,
+            "packages": {
+                "": { "dependencies": deps },
+                "node_modules/minimist": { "version": "1.2.5" }
+            }
+        })
+        .to_string(),
     )
     .unwrap();
     let db = crate::test_utils::test_db();
@@ -210,23 +221,33 @@ fn brief_clause(db: &crate::db::Database, project: &str) -> String {
 
 #[test]
 fn the_brief_and_the_plan_name_the_same_command() {
-    let Some((_dir, project, db)) = seeded_project("parity") else {
-        return;
-    };
-    seed_copy(&db, &project);
-    let plan = crate::evidence::build_upgrade_plan(&db).items;
-    let row = plan
-        .iter()
-        .find(|i| i.title.contains("minimist"))
-        .expect("a minimist row");
-    let command = "`npm install \"minimist@~1.2.6\"`";
-    assert!(
-        row.explanation.contains(command),
-        "plan: {}",
-        row.explanation
-    );
-    let clause = brief_clause(&db, &project);
-    assert!(clause.contains(command), "brief: {clause}");
+    // An exact pin moves by the install that keeps it exact; a tilde that
+    // already admits the fix moves by the in-range refresh (#993).
+    for (tag, declared, command) in [
+        (
+            "parity",
+            "1.2.5",
+            "`npm install minimist@1.2.6 --save-exact`",
+        ),
+        ("parity-tilde", "~1.2.5", "`npm update minimist`"),
+    ] {
+        let Some((_dir, project, db)) = seeded_project(tag, declared) else {
+            return;
+        };
+        seed_copy(&db, &project);
+        let plan = crate::evidence::build_upgrade_plan(&db).items;
+        let row = plan
+            .iter()
+            .find(|i| i.title.contains("minimist"))
+            .expect("a minimist row");
+        assert!(
+            row.explanation.contains(command),
+            "{declared} plan: {}",
+            row.explanation
+        );
+        let clause = brief_clause(&db, &project);
+        assert!(clause.contains(command), "{declared} brief: {clause}");
+    }
 }
 
 /// SF1: with no version-confirmed copy the version and target are the
@@ -234,7 +255,7 @@ fn the_brief_and_the_plan_name_the_same_command() {
 /// release rule); the plan names no command there, and neither does the Brief.
 #[test]
 fn without_a_confirmed_copy_the_brief_names_no_command() {
-    let Some((_dir, project, db)) = seeded_project("noconfirm") else {
+    let Some((_dir, project, db)) = seeded_project("noconfirm", "1.2.5") else {
         return;
     };
     let clause = brief_clause(&db, &project);

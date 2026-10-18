@@ -16,12 +16,19 @@
 //! - `cargo add` on a dev or build dependency writes a second
 //!   `[dependencies]` entry unless given `--dev` / `--build`.
 //!
+//! When the declared range already admits the target, the fix is the tool's
+//! in-range lockfile refresh, which leaves the manifest as it is
+//! ([`DirectFix::Refresh`], each form run 2026-10-18). Only a range bounded
+//! below the next major (`^`, `~`, or a Cargo requirement) is refreshed: a
+//! refresh installs the NEWEST release in range, which for `>=`, `||`, `*` or
+//! an x-range could jump a major or land on a withdrawn or held release.
+//!
 //! Anything this cannot read with certainty names nothing, and the plan keeps
 //! its plain "bump it where it is declared". That covers:
 //! - a dependency declared twice;
 //! - a declared spec that does not admit the installed copy;
 //! - a git, path or alternate-registry source;
-//! - a `>=`/`||` range;
+//! - a `>=`/`||`/`*`/x-range (neither a refresh nor an operator it can carry);
 //! - a yarn workspace member (`yarn up` is project-wide);
 //! - a Go `replace`;
 //! - hashed or pip-compiled requirements;
@@ -35,8 +42,13 @@ use super::fix_target::LineTarget;
 /// What to tell the user, per declaring project.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum DirectFix {
-    /// One command, run in the project's directory.
+    /// One command, run in the project's directory, that moves the declaration.
     Command(String),
+    /// The declared range already admits the target: a lockfile refresh,
+    /// run in the project's directory, moves the copy and leaves the
+    /// manifest as it is (live 2026-10-18: navcal's sharp, next and vite were
+    /// told to `npm install "x@^v"` though `^` already admitted the fix).
+    Refresh(String),
     /// A manifest edit no single verified command makes.
     Instruction(String),
 }
@@ -45,9 +57,39 @@ impl DirectFix {
     /// The text shown in the plan: a command in backticks, an instruction as is.
     pub fn render(&self) -> String {
         match self {
-            Self::Command(c) => format!("`{c}`"),
+            Self::Command(c) | Self::Refresh(c) => format!("`{c}`"),
             Self::Instruction(i) => i.clone(),
         }
+    }
+
+    /// The text the Brief appends to "bump <pkg> to >= <to>: ".
+    pub fn brief_clause(&self) -> String {
+        match self {
+            Self::Command(c) => format!("run `{c}`"),
+            Self::Refresh(c) => format!("within its declared range, run `{c}`"),
+            Self::Instruction(i) => i.clone(),
+        }
+    }
+}
+
+/// The in-range refresh of a DIRECT dependency, per tool: each was run on
+/// 2026-10-18 against a project declaring `ms ^2.1.1` locked at 2.1.1 and
+/// moved the lock to 2.1.3 with package.json unchanged (npm 10.9.2, pnpm
+/// 10.34.6 also inside a workspace member, yarn 1.22.22, yarn 4.9.1; cargo
+/// 1.97 kept `itoa = "1.0.5"` and locked 1.0.11). Plain `pnpm update x`
+/// rewrote `^2.1.1` to `^2.1.3`, so pnpm needs `--no-save`.
+fn direct_refresh_command(
+    manager: Manager,
+    package: &str,
+    installed: &str,
+    target: &str,
+) -> String {
+    match manager {
+        Manager::Npm => format!("npm update {package}"),
+        Manager::Pnpm | Manager::PnpmWorkspace => format!("pnpm update {package} --no-save"),
+        Manager::YarnClassic => format!("yarn upgrade {package}"),
+        Manager::YarnBerry => format!("yarn up -R {package}"),
+        Manager::Cargo => format!("cargo update -p {package}@{installed} --precise {target}"),
     }
 }
 
@@ -65,24 +107,14 @@ pub fn direct_fix(
     let project_dir = &on_disk(project_dir)?;
     let read = |file: &str| std::fs::read_to_string(project_dir.join(file)).ok();
     match ecosystem_norm {
-        "npm" => {
-            let manager = Manager::detect(project_dir, "npm")?;
-            // yarn's `up`/`upgrade` act on the whole workspace: run from a
-            // member they rewrite siblings' declarations too.
-            let yarn = matches!(manager, Manager::YarnBerry | Manager::YarnClassic);
-            if yarn && !project_dir.join("yarn.lock").is_file() {
-                return None;
-            }
-            let declared = npm_declared(&read("package.json")?, package)?;
-            if requirement_admits(&declared, installed) != Some(true) {
-                return None;
-            }
-            npm_direct_command(manager, &declared, package, target).map(DirectFix::Command)
-        }
-        "crates.io" => match cargo_declarations(&read("Cargo.toml")?, package).as_slice() {
-            [only] if cargo_admits(only, installed) => cargo_direct(only, package, target),
-            _ => None,
-        },
+        "npm" => npm_direct_fix(
+            project_dir,
+            &read("package.json")?,
+            package,
+            installed,
+            target,
+        ),
+        "crates.io" => cargo_direct_fix(&read("Cargo.toml")?, package, installed, target),
         "Go" => {
             go_direct_command(&read("go.mod")?, package, installed, target).map(DirectFix::Command)
         }
@@ -95,6 +127,70 @@ pub fn direct_fix(
         .find_map(|f| pypi_direct_instruction(&read(f)?, f, package, installed, target))
         .map(DirectFix::Instruction),
         _ => None,
+    }
+}
+
+/// The npm-family fix. A declaration that admits the target with an upper
+/// bound below the next major (`^`, `~`) gets the refresh; one whose range
+/// excludes the target gets the install that keeps its operator.
+fn npm_direct_fix(
+    project_dir: &Path,
+    package_json: &str,
+    package: &str,
+    installed: &str,
+    target: &str,
+) -> Option<DirectFix> {
+    let manager = Manager::detect(project_dir, "npm")?;
+    // yarn's `up`/`upgrade` act on the whole workspace: run from a member
+    // they rewrite siblings' declarations too.
+    let yarn = matches!(manager, Manager::YarnBerry | Manager::YarnClassic);
+    if yarn && !project_dir.join("yarn.lock").is_file() {
+        return None;
+    }
+    let declared = npm_declared(package_json, package)?;
+    if requirement_admits(&declared, installed) != Some(true) {
+        return None;
+    }
+    let bounded = matches!(npm_operator(&declared), Some("^" | "~"));
+    if bounded && requirement_admits(&declared, target) == Some(true) {
+        return Some(DirectFix::Refresh(direct_refresh_command(
+            manager, package, installed, target,
+        )));
+    }
+    npm_direct_command(manager, &declared, package, target).map(DirectFix::Command)
+}
+
+/// The Cargo fix for the one declaration of `package`. A requirement that
+/// admits the target gets `cargo update --precise`, which pins the exact
+/// target; a workspace-inherited, git, path or registry entry never does.
+fn cargo_direct_fix(
+    manifest: &str,
+    package: &str,
+    installed: &str,
+    target: &str,
+) -> Option<DirectFix> {
+    let decls = cargo_declarations(manifest, package);
+    let [only] = decls.as_slice() else {
+        return None;
+    };
+    if !cargo_admits(only, installed) {
+        return None;
+    }
+    let admits_target = !only.workspace
+        && !only.other_source
+        && only
+            .req
+            .as_deref()
+            .is_some_and(|r| Requirement::cargo(r).admits(target) == Some(true));
+    if admits_target {
+        Some(DirectFix::Refresh(direct_refresh_command(
+            Manager::Cargo,
+            package,
+            installed,
+            target,
+        )))
+    } else {
+        cargo_direct(only, package, target)
     }
 }
 
@@ -483,19 +579,54 @@ pub fn direct_fixes(
     out
 }
 
-/// ": `npm install ...`" for one project, or each fix with the project it runs in.
+/// Every DIRECT site of the row got an in-range lockfile refresh: the row is
+/// worded as a refresh, not a bump. A site whose fix could not be named
+/// (it needs an unnamed bump) keeps the bump wording (#993 review S2).
+pub fn all_refresh(fixes: &[(String, String, DirectFix)], lines: &[LineTarget]) -> bool {
+    let mut sites: Vec<(&str, &str)> = Vec::new();
+    for line in lines {
+        let Some(target) = line.target_version.as_deref() else {
+            continue;
+        };
+        for site in line.sites.iter().filter(|s| s.is_direct) {
+            if !sites.contains(&(site.project_path.as_str(), target)) {
+                sites.push((site.project_path.as_str(), target));
+            }
+        }
+    }
+    !sites.is_empty()
+        && sites.len() == fixes.len()
+        && fixes
+            .iter()
+            .all(|(_, _, f)| matches!(f, DirectFix::Refresh(_)))
+}
+
+/// ": `npm install ...`" for one project, or each fix with the project it runs
+/// in. In a row that mixes bumps and refreshes, a refresh says what it is.
 pub fn direct_fix_note(fixes: &[(String, String, DirectFix)], multi_project: bool) -> String {
     if fixes.is_empty() {
         return String::new();
     }
+    let mixed = !fixes
+        .iter()
+        .all(|(_, _, f)| matches!(f, DirectFix::Refresh(_)));
     let shown: Vec<String> = fixes
         .iter()
         .take(MAX_DIRECT_FIXES)
         .map(|(project, _, fix)| {
+            let text = match fix {
+                DirectFix::Refresh(_) if mixed => {
+                    format!(
+                        "{} (a lockfile refresh: the declared range already admits it)",
+                        fix.render()
+                    )
+                }
+                _ => fix.render(),
+            };
             if multi_project {
-                format!("{} in {project}", fix.render())
+                format!("{text} in {project}")
             } else {
-                fix.render()
+                text
             }
         })
         .collect();
