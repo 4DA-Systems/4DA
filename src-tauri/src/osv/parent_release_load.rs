@@ -474,6 +474,7 @@ fn standing_of(
         (Standing::Undecided(why), _) => ParentStanding::Undecided { why: why.clone() },
         (Standing::Introduces(ids), _) => ParentStanding::Introduces {
             advisories: ids.clone(),
+            deprecated: false,
         },
         (Standing::Malicious(id), _) => ParentStanding::Malicious {
             package: link.parent.clone(),

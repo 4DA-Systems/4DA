@@ -144,8 +144,12 @@ pub enum ParentStanding {
     /// package, or the vulnerable copy it pins): remove or replace it.
     Malicious { package: String, advisory: String },
     /// A release admits a clean copy, but every one brings in an advisory
-    /// the installed release does not have (parity decision 2).
-    Introduces { advisories: Vec<String> },
+    /// the installed release does not have (parity decision 2); `deprecated`
+    /// keeps the registry's deprecation of the package in the words.
+    Introduces {
+        advisories: Vec<String>,
+        deprecated: bool,
+    },
 }
 
 impl ParentStanding {
@@ -321,12 +325,15 @@ pub fn parent_standing(
     };
     let listed = releases.versions.clone();
     let standing = standing_from_with(&rows, name, installed, &listed, &usable);
-    // Review of #994, B3: "already the newest release" is false when newer
-    // releases exist and only advisories the installed version lacks rule
-    // them out; then that is what is said (parity decision 2).
-    if standing != (ParentStanding::Newest { deprecated: false }) {
-        return standing;
-    }
+    // Review of #994, B3: "already the newest release" (deprecated or not),
+    // or nothing known at all, is false when newer releases exist and only
+    // advisories the installed version lacks rule them out; then that is what
+    // is said (parity decision 2), the deprecation kept.
+    let deprecated = match standing {
+        ParentStanding::Newest { deprecated } => deprecated,
+        ParentStanding::Unknown => false,
+        _ => return standing,
+    };
     let newer = super::parent_release::ascending(&releases.versions, ecosystem_norm)
         .into_iter()
         .filter(|v| !registry.excludes(ecosystem_norm, v))
@@ -339,7 +346,10 @@ pub fn parent_standing(
     if ids.is_empty() {
         standing
     } else {
-        ParentStanding::Introduces { advisories: ids }
+        ParentStanding::Introduces {
+            advisories: ids,
+            deprecated,
+        }
     }
 }
 

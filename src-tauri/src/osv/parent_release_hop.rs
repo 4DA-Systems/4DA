@@ -215,7 +215,10 @@ impl HopCtx<'_> {
                 if ids.is_empty() {
                     ParentStanding::NoneAdmits { latest }
                 } else {
-                    ParentStanding::Introduces { advisories: ids }
+                    ParentStanding::Introduces {
+                        advisories: ids,
+                        deprecated: false,
+                    }
                 }
             }
         };

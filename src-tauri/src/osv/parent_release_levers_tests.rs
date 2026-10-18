@@ -317,6 +317,7 @@ fn every_fixing_release_bringing_in_an_advisory_names_none() {
         "1.0.0",
         &ParentStanding::Introduces {
             advisories: vec!["GHSA-synt-0000-0002".into()],
+            deprecated: false,
         },
         None,
         None,
