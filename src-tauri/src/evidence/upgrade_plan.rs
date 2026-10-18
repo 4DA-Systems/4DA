@@ -453,7 +453,7 @@ impl PackageGroup<'_> {
                 .any(|l| l.target_version.is_some() && l.sites.iter().any(|s| !s.is_direct));
             let how = crate::osv::direct_upgrade::direct_fix_note(&self.direct_fixes, m > 1);
             // The declared range already admits the fix: a refresh, not a bump.
-            let lead = if crate::osv::direct_upgrade::all_refresh(&self.direct_fixes) {
+            let lead = if crate::osv::direct_upgrade::all_refresh(&self.direct_fixes, &self.lines) {
                 "Fixable now with a lockfile refresh (the declared range already admits the fix)"
             } else {
                 "Fixable now via a direct dependency bump"

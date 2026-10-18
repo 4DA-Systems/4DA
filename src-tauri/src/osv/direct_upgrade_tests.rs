@@ -441,8 +441,9 @@ fn a_declaration_that_admits_the_target_gets_a_refresh_not_a_bump() {
             "{lockfile}"
         );
     }
-    // A `>=` range has no operator a command can carry, but it admits the
-    // target: the refresh is named.
+    // A `>=` range admits the target but has no upper bound: a refresh would
+    // install the NEWEST release in range (a major jump, or a withdrawn or held
+    // release), and there is no operator to carry, so it names nothing (#993 S3).
     let dir = tempfile::tempdir().expect("tempdir");
     std::fs::write(
         dir.path().join("package.json"),
@@ -454,16 +455,29 @@ fn a_declaration_that_admits_the_target_gets_a_refresh_not_a_bump() {
         "{\"lockfileVersion\": 3}",
     )
     .unwrap();
-    assert_eq!(
-        direct_fix(dir.path(), "npm", "ms", "2.1.1", "2.1.3"),
-        Some(DirectFix::Refresh("npm update ms".to_string()))
-    );
+    assert_eq!(direct_fix(dir.path(), "npm", "ms", "2.1.1", "2.1.3"), None);
 }
 
 /// The row wording follows: all refreshes read as a refresh; in a mixed row
-/// the refresh says what it is.
+/// the refresh says what it is; a direct site whose fix could not be named
+/// keeps the bump wording (#993 review S2).
 #[test]
 fn the_note_words_a_refresh_as_one() {
+    use crate::osv::fix_target::{InstallSite, LineTarget};
+    let line = |projects: &[&str]| LineTarget {
+        installed_version: "1.2.5".into(),
+        target_version: Some("1.2.8".into()),
+        clears_all_known: true,
+        upgrade_type: None,
+        sites: projects
+            .iter()
+            .map(|p| InstallSite {
+                project_path: (*p).to_string(),
+                is_direct: true,
+                is_dev: false,
+            })
+            .collect(),
+    };
     let refresh = (
         "/a".to_string(),
         "1.2.8".to_string(),
@@ -474,14 +488,24 @@ fn the_note_words_a_refresh_as_one() {
         "1.2.8".to_string(),
         DirectFix::Command("npm install minimist@1.2.8 --save-exact".to_string()),
     );
-    assert!(all_refresh(std::slice::from_ref(&refresh)));
+    assert!(all_refresh(
+        std::slice::from_ref(&refresh),
+        &[line(&["/a"])]
+    ));
+    // /b is declared too, but its fix could not be named: still a bump row.
+    assert!(!all_refresh(
+        std::slice::from_ref(&refresh),
+        &[line(&["/a", "/b"])]
+    ));
     assert_eq!(
         direct_fix_note(std::slice::from_ref(&refresh), false),
         ": `npm update minimist`"
     );
     let mixed = direct_fix_note(&[refresh, bump], true);
     assert!(
-        mixed.contains("`npm update minimist` (a lockfile refresh: the declared range already admits it) in /a"),
+        mixed.contains(
+            "`npm update minimist` (a lockfile refresh: the declared range already admits it) in /a"
+        ),
         "{mixed}"
     );
     assert!(

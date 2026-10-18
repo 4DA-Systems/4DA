@@ -611,7 +611,7 @@ fn a_direct_row_whose_range_admits_the_fix_names_the_refresh() {
         .expect("tempdir");
     let project = dir.path().to_string_lossy().replace('\\', "/");
     if crate::project_inclusion::is_hard_excluded(&project) {
-        eprintln!("SKIPPED a_direct_row_names_the_command_for_its_declaration: {project} is excluded from DB writes here");
+        eprintln!("SKIPPED a_direct_row_whose_range_admits_the_fix_names_the_refresh: {project} is excluded from DB writes here");
         return;
     }
     std::fs::write(
