@@ -50,24 +50,6 @@ impl Database {
         )
     }
 
-    /// Store an advisory row's CWE ids (Phase 128), after its upsert. `None`
-    /// clears them (the source no longer lists any).
-    pub fn set_osv_advisory_cwe_ids(
-        &self,
-        advisory_id: &str,
-        package_name: &str,
-        ecosystem: &str,
-        cwe_ids_json: Option<&str>,
-    ) -> SqliteResult<()> {
-        let conn = self.conn.lock();
-        conn.execute(
-            "UPDATE osv_advisories SET cwe_ids = ?4
-             WHERE advisory_id = ?1 AND package_name = ?2 AND ecosystem = ?3",
-            params![advisory_id, package_name, ecosystem, cwe_ids_json],
-        )?;
-        Ok(())
-    }
-
     /// Upsert an advisory into the local mirror, including the alias set and
     /// the normalised severity label (Phase 120). `COALESCE` on conflict keeps
     /// metadata a later sync omits.
@@ -90,12 +72,56 @@ impl Database {
         aliases_json: Option<&str>,
         severity_label: Option<&str>,
     ) -> SqliteResult<()> {
+        self.upsert_osv_advisory_record(
+            advisory_id,
+            summary,
+            details,
+            package_name,
+            ecosystem,
+            affected_ranges,
+            fixed_versions,
+            severity_type,
+            cvss_score,
+            source_url,
+            published_at,
+            modified_at,
+            withdrawn_at,
+            aliases_json,
+            severity_label,
+            None,
+        )
+    }
+
+    /// The sync's upsert: everything [`Self::upsert_osv_advisory_with_meta`]
+    /// stores plus the record's `database_specific.cwe_ids` (Phase 128), in
+    /// the same statement. Like the aliases, a later upsert without CWE ids
+    /// keeps the stored ones.
+    #[allow(clippy::too_many_arguments)]
+    pub fn upsert_osv_advisory_record(
+        &self,
+        advisory_id: &str,
+        summary: &str,
+        details: Option<&str>,
+        package_name: &str,
+        ecosystem: &str,
+        affected_ranges: Option<&str>,
+        fixed_versions: Option<&str>,
+        severity_type: Option<&str>,
+        cvss_score: Option<f64>,
+        source_url: Option<&str>,
+        published_at: Option<&str>,
+        modified_at: Option<&str>,
+        withdrawn_at: Option<&str>,
+        aliases_json: Option<&str>,
+        severity_label: Option<&str>,
+        cwe_ids_json: Option<&str>,
+    ) -> SqliteResult<()> {
         let conn = self.conn.lock();
         conn.execute(
             "INSERT INTO osv_advisories (advisory_id, summary, details, package_name, ecosystem,
                 affected_ranges, fixed_versions, severity_type, cvss_score, source_url,
-                published_at, modified_at, withdrawn_at, aliases, severity_label, synced_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, datetime('now'))
+                published_at, modified_at, withdrawn_at, aliases, severity_label, cwe_ids, synced_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, datetime('now'))
              ON CONFLICT(advisory_id, package_name, ecosystem) DO UPDATE SET
                 summary = ?2,
                 details = COALESCE(?3, osv_advisories.details),
@@ -109,6 +135,7 @@ impl Database {
                 withdrawn_at = ?13,
                 aliases = COALESCE(?14, osv_advisories.aliases),
                 severity_label = COALESCE(?15, osv_advisories.severity_label),
+                cwe_ids = COALESCE(?16, osv_advisories.cwe_ids),
                 synced_at = datetime('now')",
             params![
                 advisory_id,
@@ -126,6 +153,7 @@ impl Database {
                 withdrawn_at,
                 aliases_json,
                 severity_label,
+                cwe_ids_json,
             ],
         )?;
         Ok(())

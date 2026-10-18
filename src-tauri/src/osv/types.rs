@@ -125,7 +125,12 @@ pub struct StoredAdvisory {
 impl StoredAdvisory {
     /// A malicious-package record (`fourda_depengine::is_malware`).
     pub fn is_malware(&self) -> bool {
-        fourda_depengine::is_malware(&self.advisory_id, &self.aliases, &self.cwe_ids)
+        fourda_depengine::is_malware(
+            &self.advisory_id,
+            &self.aliases,
+            &self.cwe_ids,
+            &self.summary,
+        )
     }
 }
 
@@ -178,6 +183,18 @@ pub struct MatchedAdvisory {
     /// See [`StoredAdvisory::cwe_ids`].
     #[serde(default)]
     pub cwe_ids: Vec<String>,
+}
+
+impl MatchedAdvisory {
+    /// A malicious-package record (`fourda_depengine::is_malware`).
+    pub fn is_malware(&self) -> bool {
+        fourda_depengine::is_malware(
+            &self.advisory_id,
+            &self.aliases,
+            &self.cwe_ids,
+            &self.summary,
+        )
+    }
 }
 
 /// Normalise a source severity label to the four-tier vocabulary every

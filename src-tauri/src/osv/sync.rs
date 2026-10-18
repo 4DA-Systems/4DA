@@ -539,7 +539,7 @@ pub(super) fn store_vulnerability(
         let ranges_json = serialize_ranges(&affected);
         let fixed_json = extract_fixed_versions(&affected);
 
-        db.upsert_osv_advisory_with_meta(
+        db.upsert_osv_advisory_record(
             &vuln.id,
             summary,
             vuln.details.as_deref(),
@@ -555,10 +555,9 @@ pub(super) fn store_vulnerability(
             vuln.withdrawn.as_deref(),
             vuln.aliases_json().as_deref(),
             vuln.severity_label().as_deref(),
+            vuln.cwe_ids_json().as_deref(),
         )
         .map_err(|e| FourDaError::Internal(format!("Failed to store advisory: {e}")))?;
-        db.set_osv_advisory_cwe_ids(&vuln.id, &key.0, &key.1, vuln.cwe_ids_json().as_deref())
-            .map_err(|e| FourDaError::Internal(format!("Failed to store advisory CWEs: {e}")))?;
 
         stored += 1;
     }
@@ -839,7 +838,9 @@ mod tests {
         // As stored before Phase 128: the row exists, its CWE ids do not.
         let mut seen = std::collections::HashSet::new();
         store_vulnerability(&db, &vuln, &mut seen).unwrap();
-        db.set_osv_advisory_cwe_ids("GHSA-c2m4-w5hm-vqjw", "crossenv", "npm", None)
+        db.conn
+            .lock()
+            .execute("UPDATE osv_advisories SET cwe_ids = NULL", [])
             .unwrap();
         db.update_osv_sync_status("npm", 1, None).unwrap();
         let stored = || {

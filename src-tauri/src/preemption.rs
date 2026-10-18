@@ -532,7 +532,7 @@ fn most_urgent_tier(group: &[&crate::osv::types::MatchedAdvisory]) -> AlertUrgen
                 Some("low") => AlertUrgency::Watch,
                 _ => {
                     let rep = cluster[0];
-                    infer_urgency_from_summary(&rep.summary, &rep.advisory_id)
+                    infer_urgency_from_summary(rep)
                 }
             },
         )
@@ -1463,10 +1463,14 @@ fn dormancy_labeled_project(path: &str, liveness: &crate::evidence::ProjectLiven
     label
 }
 
-/// Infer urgency from advisory summary text when CVSS score is absent.
-fn infer_urgency_from_summary(summary: &str, advisory_id: &str) -> AlertUrgency {
-    let s = summary.to_lowercase();
-    let id = advisory_id.to_lowercase();
+/// Infer urgency from advisory summary text when CVSS score is absent. A
+/// malicious-package record (the shared `fourda_depengine::is_malware`: a
+/// `MAL-` id or alias, CWE-506, or GitHub's malware title) is High first.
+fn infer_urgency_from_summary(rep: &crate::osv::types::MatchedAdvisory) -> AlertUrgency {
+    if rep.is_malware() {
+        return AlertUrgency::High;
+    }
+    let s = rep.summary.to_lowercase();
     let has_critical_keyword = s.contains("remote code execution")
         || s.contains("rce")
         || s.contains("arbitrary code")
@@ -1486,9 +1490,6 @@ fn infer_urgency_from_summary(summary: &str, advisory_id: &str) -> AlertUrgency 
         || s.contains("timing sidechannel");
     if has_high_keyword {
         return AlertUrgency::Medium;
-    }
-    if id.starts_with("mal-") {
-        return AlertUrgency::High;
     }
     AlertUrgency::Watch
 }
@@ -3155,6 +3156,52 @@ mod tests {
         );
 
         assert_eq!(alert_subject("vitest", &set(&[])), "vitest");
+    }
+
+    /// Review of #992: with no severity, a malicious-package record is High
+    /// by the shared predicate, not only a `MAL-` id: GHSA-28f8-hqmc-7ph8
+    /// (title only) and crossenv GHSA-c2m4-w5hm-vqjw (CWE-506 only).
+    #[test]
+    fn an_unrated_malware_record_is_high_by_the_shared_predicate() {
+        let rec = |id: &str, summary: &str, cwe: &[&str]| crate::osv::types::MatchedAdvisory {
+            advisory_id: id.into(),
+            summary: summary.into(),
+            details: None,
+            package_name: "pkg".into(),
+            ecosystem: "npm".into(),
+            installed_version: Some("1.0.0".into()),
+            fixed_version: None,
+            severity_type: None,
+            cvss_score: None,
+            source_url: None,
+            is_version_confirmed: true,
+            project_paths: vec![],
+            published_at: None,
+            aliases: vec![],
+            severity_label: None,
+            cwe_ids: cwe.iter().map(ToString::to_string).collect(),
+            dependency_instances: vec![],
+        };
+        for m in [
+            rec(
+                "GHSA-28f8-hqmc-7ph8",
+                "Malicious Package in ember-power-timepicker",
+                &[],
+            ),
+            rec("GHSA-c2m4-w5hm-vqjw", "crossenv is malware", &["CWE-506"]),
+            rec("MAL-2026-0001", "x", &[]),
+        ] {
+            assert!(
+                matches!(infer_urgency_from_summary(&m), AlertUrgency::High),
+                "{}",
+                m.advisory_id
+            );
+        }
+        let plain = rec("GHSA-xxxx", "Malicious-looking prose", &[]);
+        assert!(matches!(
+            infer_urgency_from_summary(&plain),
+            AlertUrgency::Watch
+        ));
     }
 
     #[test]

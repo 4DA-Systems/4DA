@@ -57,6 +57,7 @@ fn advisories(v: Option<&Value>) -> Vec<Advisory> {
                 s(a, "id"),
                 &strings(a.get("aliases")),
                 &strings(a.get("cwe_ids")),
+                &opt(a, "summary").unwrap_or_default(),
                 Some(Value::Array(ranges).to_string()),
             )
         })

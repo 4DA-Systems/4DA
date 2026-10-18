@@ -5927,16 +5927,7 @@ impl Database {
                     128,
                     "Phase 128: osv_advisories.cwe_ids; mirror re-sync due",
                     |c| {
-                        let has_column: bool = c
-                            .query_row(
-                                "SELECT COUNT(*) FROM pragma_table_info('osv_advisories') WHERE name='cwe_ids'",
-                                [],
-                                |row| row.get::<_, i64>(0).map(|n| n > 0),
-                            )
-                            .unwrap_or(false);
-                        if !has_column {
-                            c.execute("ALTER TABLE osv_advisories ADD COLUMN cwe_ids TEXT", [])?;
-                        }
+                        Self::add_column_if_missing(c, "osv_advisories", "cwe_ids", "TEXT")?;
                         let due = Self::make_osv_sync_due(c)?;
                         info!(
                             target: "4da::db",
@@ -5956,13 +5947,19 @@ impl Database {
         Ok(())
     }
 
-    /// Phase 128: make every ecosystem's advisory sync due on the next cycle
-    /// (`osv::sync::needs_sync` reads `last_synced_at`), so the mirror is
-    /// re-upserted with the new column. Returns rows changed.
+    /// Phase 128: make every ecosystem's advisory sync due on the next cycle,
+    /// so the mirror is re-upserted with the new column. `osv::sync::needs_sync`
+    /// is due once `last_synced_at` is the max age old, so the status is set
+    /// back by exactly that: due now, and every surface that shows the last
+    /// sync still shows a plausible time (not 1970). Returns rows changed.
     pub(crate) fn make_osv_sync_due(c: &Connection) -> SqliteResult<usize> {
+        let hours = crate::osv::sync::osv_sync_max_age_hours();
         c.execute(
-            "UPDATE osv_sync_status SET last_synced_at = '1970-01-01 00:00:00'",
-            [],
+            "UPDATE osv_sync_status
+             SET last_synced_at = datetime('now', '-' || ?1 || ' hours')
+             WHERE last_synced_at IS NOT NULL
+               AND last_synced_at > datetime('now', '-' || ?1 || ' hours')",
+            [hours],
         )
     }
 

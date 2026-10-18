@@ -25,7 +25,7 @@ fn hist(pairs: &[(&str, Option<&str>)]) -> RequirementHistory {
 }
 
 fn adv(id: &str, ranges: Option<String>) -> Advisory {
-    Advisory::new(id, &[], &[], ranges)
+    Advisory::new(id, &[], &[], "", ranges)
 }
 
 fn range(intro: &str, fixed: &str) -> Option<String> {
@@ -482,6 +482,7 @@ fn a_cwe_506_record_with_no_mal_alias_is_malware_too() {
         "GHSA-c2m4-w5hm-vqjw",
         &["CVE-2017-16074".to_string()],
         &["CWE-506".to_string()],
+        "crossenv is malware",
         Some(r#"[{"type":"SEMVER","events":[{"introduced":"0"}]}]"#.into()),
     );
     assert!(crossenv.malware);
@@ -521,6 +522,7 @@ fn a_malicious_release_is_never_named_nor_the_newest() {
         "GHSA-xxxx",
         &["MAL-2026-0002".to_string()],
         &[],
+        "",
         range("0", "9.0.0"),
     );
     assert!(aliased.malware);

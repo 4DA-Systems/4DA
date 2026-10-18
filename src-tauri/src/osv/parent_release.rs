@@ -83,12 +83,18 @@ pub struct Advisory {
 }
 
 impl Advisory {
-    /// From a stored id, its aliases, its CWE ids and its ranges; malware per
-    /// `fourda_depengine::is_malware`.
-    pub fn new(id: &str, aliases: &[String], cwe_ids: &[String], ranges: Option<String>) -> Self {
+    /// From a stored id, its aliases, its CWE ids, its summary and its
+    /// ranges; malware per `fourda_depengine::is_malware`.
+    pub fn new(
+        id: &str,
+        aliases: &[String],
+        cwe_ids: &[String],
+        summary: &str,
+        ranges: Option<String>,
+    ) -> Self {
         Self {
             id: id.to_string(),
-            malware: fourda_depengine::is_malware(id, aliases, cwe_ids),
+            malware: fourda_depengine::is_malware(id, aliases, cwe_ids, summary),
             ranges,
         }
     }
@@ -121,7 +127,15 @@ impl<'a> Advisories<'a> {
             ecosystem,
             list: stored
                 .into_iter()
-                .map(|a| Advisory::new(&a.advisory_id, &a.aliases, &a.cwe_ids, a.affected_ranges))
+                .map(|a| {
+                    Advisory::new(
+                        &a.advisory_id,
+                        &a.aliases,
+                        &a.cwe_ids,
+                        &a.summary,
+                        a.affected_ranges,
+                    )
+                })
                 .collect(),
         }
     }
