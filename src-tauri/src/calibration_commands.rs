@@ -430,29 +430,52 @@ pub struct CurveFitReport {
 ///
 /// Invoked manually from the UI today. A scheduled cadence (daily) is
 /// Phase 5b.3 work (not in this commit).
+///
+/// The whole run is synchronous SQLite, so it runs on the blocking pool, and
+/// only the per-pair fit (which marks samples processed) takes the writer
+/// lock. Run on a runtime worker it froze the whole app: the scheduled
+/// first fit, 5 min after launch, held the writer lock for ~160 s inside the
+/// candidate query below (then a self-join, 28k samples x 28k provenance
+/// rows); every task that wanted the writer parked its worker on that lock
+/// until no tokio worker was left, and Victauri's `/health` stopped
+/// answering for ~100 s (operator soak 2026-10-19, 01:23:58 local).
 #[tauri::command]
 pub async fn fit_calibration_curves_now() -> Result<CurveFitReport> {
-    let db = crate::get_database()?;
+    crate::ipc_blocking::off_ui_thread(
+        "fit_calibration_curves_now",
+        fit_calibration_curves_blocking,
+    )
+    .await
+}
 
-    // Discover candidate (identity_hash, task) pairs from samples.
-    // A pair is a candidate if there's at least one unprocessed sample
-    // older than MIN_AGE_HOURS — otherwise even an optimistic fit would
-    // skip it. Deriving the list from samples rather than from a static
-    // config is load-bearing: a user who swaps models gets an immediate
-    // new pair to fit against without code changes.
-    let candidates: Vec<(String, String, String, String)> = {
-        let conn = db.conn.lock();
+/// Unprocessed (model, task) pairs old enough to fit. Reads only
+/// `calibration_samples` (served by `idx_cal_samples_unfit`): joining
+/// `provenance` here matched every sample against every provenance row of
+/// the same task, which is quadratic in the corpus.
+pub(crate) const FIT_CANDIDATE_PAIRS_SQL: &str = "SELECT DISTINCT model_identity_hash, task
+     FROM calibration_samples
+     WHERE processed_at IS NULL
+       AND created_at <= datetime('now', ?1)";
+
+/// Display provider/model for one pair. Any row will do: every provenance
+/// row of a model identity names the same provider and model.
+pub(crate) const FIT_PAIR_PROVENANCE_SQL: &str = "SELECT provider, model
+     FROM provenance
+     WHERE model_identity_hash = ?1 AND task = ?2
+     LIMIT 1";
+
+/// Discover candidate (identity_hash, task, provider, model) pairs from
+/// samples. A pair is a candidate if there's at least one unprocessed
+/// sample older than MIN_AGE_HOURS — otherwise even an optimistic fit would
+/// skip it. Deriving the list from samples rather than from a static
+/// config is load-bearing: a user who swaps models gets an immediate
+/// new pair to fit against without code changes.
+pub(crate) fn discover_fit_candidates(
+    conn: &rusqlite::Connection,
+) -> Result<Vec<(String, String, String, String)>> {
+    let pairs: Vec<(String, String)> = {
         let mut stmt = conn
-            .prepare(
-                "SELECT DISTINCT cs.model_identity_hash, cs.task, p.provider, p.model
-                 FROM calibration_samples cs
-                 LEFT JOIN provenance p
-                   ON p.model_identity_hash = cs.model_identity_hash
-                   AND p.task = cs.task
-                 WHERE cs.processed_at IS NULL
-                   AND cs.created_at <= datetime('now', ?1)
-                 GROUP BY cs.model_identity_hash, cs.task",
-            )
+            .prepare(FIT_CANDIDATE_PAIRS_SQL)
             .context("Failed to prepare candidate-pairs query")?;
         let rows = stmt
             .query_map(
@@ -460,17 +483,36 @@ pub async fn fit_calibration_curves_now() -> Result<CurveFitReport> {
                     "-{} hours",
                     crate::calibration_fitter::MIN_AGE_HOURS
                 )],
-                |r| {
-                    Ok((
-                        r.get::<_, String>(0)?,
-                        r.get::<_, String>(1)?,
-                        r.get::<_, Option<String>>(2)?.unwrap_or_default(),
-                        r.get::<_, Option<String>>(3)?.unwrap_or_default(),
-                    ))
-                },
+                |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?)),
             )
             .context("Failed to execute candidate-pairs query")?;
         rows.filter_map(std::result::Result::ok).collect()
+    };
+    let mut stmt = conn
+        .prepare(FIT_PAIR_PROVENANCE_SQL)
+        .context("Failed to prepare pair-provenance query")?;
+    Ok(pairs
+        .into_iter()
+        .map(|(identity_hash, task)| {
+            let (provider, model) = stmt
+                .query_row(rusqlite::params![identity_hash, task], |r| {
+                    Ok((
+                        r.get::<_, Option<String>>(0)?.unwrap_or_default(),
+                        r.get::<_, Option<String>>(1)?.unwrap_or_default(),
+                    ))
+                })
+                .unwrap_or_default();
+            (identity_hash, task, provider, model)
+        })
+        .collect())
+}
+
+fn fit_calibration_curves_blocking() -> Result<CurveFitReport> {
+    let db = crate::get_database()?;
+
+    let candidates = {
+        let conn = db.read_conn();
+        discover_fit_candidates(&conn)?
     };
 
     let total_candidates = candidates.len() as u32;
@@ -489,7 +531,7 @@ pub async fn fit_calibration_curves_now() -> Result<CurveFitReport> {
         // load_current_curve will (correctly) reject this curve and
         // the next fit run (over newer samples) produces a current one.
         let prompt_version: String = {
-            let conn = db.conn.lock();
+            let conn = db.read_conn();
             conn.query_row(
                 "SELECT prompt_version FROM calibration_samples
                  WHERE model_identity_hash = ?1 AND task = ?2
@@ -614,3 +656,7 @@ pub async fn get_calibration_curve_status(
         is_stale,
     }))
 }
+
+#[cfg(test)]
+#[path = "calibration_commands_tests.rs"]
+mod tests;
