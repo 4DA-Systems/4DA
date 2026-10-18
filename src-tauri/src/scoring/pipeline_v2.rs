@@ -2574,25 +2574,30 @@ fn mirror_affected_projects(
 }
 
 /// The shared severity tier of the advisory this item is about, from the
-/// mirror (CVSS band, else the source's curated label). `None` when the
-/// mirror holds no graded row for it.
+/// mirror: its alias group graded by `osv::severity::rows_grade` (the most
+/// severe own grade, else its GHSA aliases'). `None` when nothing grades it.
 fn mirror_severity_tier(
     db: &Database,
     input: &ScoringInput,
     dep: &DepMatch,
     title_id: Option<&str>,
 ) -> Option<&'static str> {
-    let advisory = mirror_advisory_for_item(db, input, dep, title_id)?;
-    if let Some(score) = advisory.cvss_score {
-        return Some(crate::osv::types::cvss_band(score));
+    // Every row of the advisory's alias group for this package (the item's
+    // ids, aliases count), graded as one group: the single first row read
+    // GHSA-76w9 (medium) for the nix group whose GHSA-wgrg is high.
+    let raw_name = dep.raw_name.as_deref().unwrap_or(&dep.package_name);
+    let mut rows: Vec<crate::osv::types::StoredAdvisory> = Vec::new();
+    for id in item_advisory_ids(input, title_id) {
+        for row in db.get_osv_advisories_by_id(&id).unwrap_or_default() {
+            let names_dep = crate::dep_linker::registry_names_equal(&row.package_name, raw_name)
+                || crate::dep_linker::registry_names_equal(&row.package_name, &dep.package_name);
+            if names_dep && !rows.iter().any(|r| r.id == row.id) {
+                rows.push(row);
+            }
+        }
     }
-    match advisory.severity_label.as_deref() {
-        Some("critical") => Some("critical"),
-        Some("high") => Some("high"),
-        Some("medium") => Some("medium"),
-        Some("low") => Some("low"),
-        _ => None,
-    }
+    let refs: Vec<&crate::osv::types::StoredAdvisory> = rows.iter().collect();
+    crate::osv::severity::rows_grade(&refs, &db.alias_grades()).map(|g| g.tier)
 }
 
 /// Freshness gate for ToolDiscovery: "New tool" framing is a claim about NOW.
@@ -3859,6 +3864,40 @@ pub(crate) fn score_item(
         }
     }
 
+    // A maintenance notice is not a vulnerability (#986): never ranked above
+    // Watch, never worded as one, never "Affects You". The one predicate
+    // (`osv::severity`): every mirror row the matcher checked, or, with no
+    // mirror row, the item's own text (no fix, no CVSS, maintenance words).
+    let maintenance_notice = is_security_source
+        && sec_verdict.as_ref().map_or_else(
+            || {
+                crate::osv::severity::maintenance_text(
+                    extract_fixed_version(input.content).is_none(),
+                    input
+                        .content
+                        .lines()
+                        .any(|l| l.trim_start().starts_with("CVSS:"))
+                        .then_some(1.0),
+                    input.title,
+                    Some(input.content),
+                )
+            },
+            |v| v.maintenance_only,
+        );
+    let notice_line = maintenance_notice.then(|| {
+        let package = display_deps
+            .first()
+            .map_or("this package", |d| d.package_name.as_str());
+        let ids: Vec<&str> = advisory_id.as_deref().into_iter().collect();
+        crate::osv::severity::notice_wording(package, &ids)
+    });
+    if let Some(line) = &notice_line {
+        if sig_type.as_deref() == Some("security_alert") {
+            sig_priority = Some(signals::SignalPriority::Watch.label().to_string());
+            sig_action = Some(line.clone());
+        }
+    }
+
     // ── Necessity scoring ─────────────────────────────────────────────
     let age_hours = input.created_at.map_or(0.0, |ts| {
         (chrono::Utc::now() - *ts).num_minutes().max(0) as f64 / 60.0
@@ -3929,6 +3968,14 @@ pub(crate) fn score_item(
         necessity_result.urgency = necessity::Urgency::Awareness;
     }
 
+    if let Some(line) = &notice_line {
+        if necessity_result.category == necessity::NecessityCategory::SecurityVulnerability {
+            necessity_result.score = necessity_result.score.min(0.15);
+            necessity_result.reason.clone_from(line);
+            necessity_result.urgency = necessity::Urgency::Awareness;
+        }
+    }
+
     // ── Source authority weighting for necessity ───────────────────────
     // Security items are NOT penalized — a CVE is critical regardless of source.
     // All other necessity categories are modulated by source authority.
@@ -3947,7 +3994,10 @@ pub(crate) fn score_item(
     // 2026-10-02: a critical alert is a CRITICAL-tier signal — the "Affects
     // You" pool and notifications must never disagree with the tier shown.
     let tier_is_critical = sig_priority.as_deref() == Some("critical");
-    let (applicability, is_critical_alert) = if version_negative {
+    let (applicability, is_critical_alert) = if maintenance_notice {
+        // Not a vulnerability: no applicability verdict, never "Affects You".
+        (None, false)
+    } else if version_negative {
         (Some("not_affected".to_string()), false)
     } else if version_unknown {
         // v42: named, never "Affects You" (the evidence pool reads this).
@@ -7286,3 +7336,7 @@ mod release_grade_tests;
 #[cfg(test)]
 #[path = "pipeline_v2_security_tests.rs"]
 mod security_tests;
+
+#[cfg(test)]
+#[path = "severity_surfaces_tests.rs"]
+mod severity_surfaces_tests;

@@ -108,23 +108,41 @@ fn render_security(n: usize, f: &SecurityFact) -> String {
     let worst = f
         .worst_tier
         .as_deref()
-        .map(|t| format!(", worst advisory severity {}", t.to_uppercase()))
+        .map(|t| {
+            let from = f
+                .worst_tier_from
+                .as_deref()
+                .map(|id| format!(" (from {id}; the advisory has no grade of its own)"))
+                .unwrap_or_default();
+            format!(", worst advisory severity {}{from}", t.to_uppercase())
+        })
         .unwrap_or_default();
     let ids = if f.advisory_ids.is_empty() {
         String::new()
     } else {
         format!(" ({})", f.advisory_ids.join(", "))
     };
-    let mut out = format!(
-        "{n}. [{}] {} ({}) — {} advisor{}{ids}{worst}. Status: {}.\n   Advisory: {}\n",
-        urgency_label(&f.urgency),
-        f.package,
-        f.ecosystem,
-        f.advisory_count,
-        if f.advisory_count == 1 { "y" } else { "ies" },
-        status_label(&f.status),
-        f.title,
-    );
+    let mut out = if f.advisory_count == 0 {
+        // Maintenance notices only (#986): not a vulnerability, no severity.
+        format!(
+            "{n}. [NOTICE] {} ({}){ids}: {}. Status: {}.\n",
+            f.package,
+            f.ecosystem,
+            f.title,
+            status_label(&f.status),
+        )
+    } else {
+        format!(
+            "{n}. [{}] {} ({}) — {} advisor{}{ids}{worst}. Status: {}.\n   Advisory: {}\n",
+            urgency_label(&f.urgency),
+            f.package,
+            f.ecosystem,
+            f.advisory_count,
+            if f.advisory_count == 1 { "y" } else { "ies" },
+            status_label(&f.status),
+            f.title,
+        )
+    };
     for s in &f.sites {
         let installed = s
             .installed

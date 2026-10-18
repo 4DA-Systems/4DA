@@ -268,11 +268,18 @@ pub(crate) fn security_item(fact: &SecurityFact, now_ms: i64) -> Ranked {
     let target = target_span.as_deref();
     let installed = installed_span(fact.sites.iter().filter_map(|s| s.installed.as_deref()));
     let urgency = crate::preemption::alert_urgency_to_canonical(&fact.urgency);
-    let tier = fact
-        .worst_tier
-        .clone()
-        .unwrap_or_else(|| format!("{urgency:?}").to_lowercase());
+    let tier = match (&fact.worst_tier, &fact.worst_tier_from) {
+        (Some(t), Some(from)) => format!("{t}, from {from}"),
+        (Some(t), None) => t.clone(),
+        (None, _) => format!("{urgency:?}").to_lowercase(),
+    };
+    // Maintenance notices only (#986): worded as what they are, no severity.
+    let notice_only = fact.advisory_count == 0;
     let title = match (installed.as_deref(), target) {
+        _ if notice_only => match installed.as_deref() {
+            Some(i) => format!("{pkg} {i}: {}", fact.title),
+            None => fact.title.clone(),
+        },
         (Some(i), Some(t)) => format!("{pkg} {i} \u{2192} {t}: security fix ({tier})"),
         (Some(i), None) => format!("{pkg} {i}: {tier} advisory, no fix published"),
         (None, Some(t)) => format!("{pkg} \u{2192} {t}: security fix ({tier})"),
@@ -282,15 +289,15 @@ pub(crate) fn security_item(fact: &SecurityFact, now_ms: i64) -> Ranked {
     let ids = &fact.advisory_ids;
     let shown: Vec<&str> = ids.iter().take(4).map(String::as_str).collect();
     let more = ids.len().saturating_sub(shown.len());
-    let mut explanation = vec![
-        sentence(&fact.title),
-        format!(
+    let mut explanation = vec![sentence(&fact.title)];
+    if !notice_only {
+        explanation.push(format!(
             "Version-confirmed, because the installed copy is inside the affected range of {} {}{}.",
             if fact.advisory_count == 1 { "advisory" } else { "advisories" },
             shown.join(", "),
             if more > 0 { format!(" and {more} more") } else { String::new() }
-        ),
-    ];
+        ));
+    }
     for s in &fact.sites {
         // A project holding copies on several lines gets one sentence per
         // copy, each naming the copy it is about.
@@ -305,6 +312,12 @@ pub(crate) fn security_item(fact: &SecurityFact, now_ms: i64) -> Ranked {
             site_qualifiers(s),
             fix_clause(pkg, &s.fix_path)
         )));
+    }
+    if let (Some(t), Some(from)) = (&fact.worst_tier, &fact.worst_tier_from) {
+        explanation.push(format!(
+            "Severity {}: the advisory carries no grade of its own, so the grade is that GHSA alias's.",
+            crate::osv::severity::labelled(t, Some(from))
+        ));
     }
     if !fact.not_compiled.is_empty() {
         let nc: Vec<&str> = fact

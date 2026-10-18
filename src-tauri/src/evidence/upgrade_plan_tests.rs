@@ -502,6 +502,7 @@ fn matched(cvss: f64, installs: &[(bool, bool, bool)]) -> crate::osv::types::Mat
         aliases: vec![],
         severity_label: None,
         cwe_ids: Vec::new(),
+        severity_from: None,
     }
 }
 
@@ -514,6 +515,26 @@ fn both_grades(advisory: &crate::osv::types::MatchedAdvisory) -> (Urgency, Urgen
         &crate::preemption::osv_alert_urgency(&advisories, &projects),
     );
     (plan, alert)
+}
+
+/// Installed malware (a `MAL-` record on the installed version) is Critical on
+/// both surfaces in every scope: a dev-only or transitive malicious package
+/// still runs its code on the developer's machine, so the scope rule does not
+/// discount it (recovery-lead, 2026-10-18).
+#[test]
+fn installed_malware_is_critical_on_both_surfaces_in_every_scope() {
+    for (direct, dev) in [(true, false), (false, false), (true, true), (false, true)] {
+        let mut m = matched(0.0, &[(direct, dev, true)]);
+        m.advisory_id = "MAL-2026-2307".to_string();
+        m.cvss_score = None;
+        m.severity_type = None;
+        m.severity_label = Some("low".to_string());
+        assert_eq!(
+            both_grades(&m),
+            (Urgency::Critical, Urgency::Critical),
+            "direct={direct} dev={dev}"
+        );
+    }
 }
 
 #[test]

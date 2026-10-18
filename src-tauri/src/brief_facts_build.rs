@@ -120,16 +120,6 @@ fn urgency_rank(u: &AlertUrgency) -> u8 {
     }
 }
 
-fn tier_rank(t: &str) -> u8 {
-    match t {
-        "critical" => 0,
-        "high" => 1,
-        "medium" => 2,
-        "low" => 3,
-        _ => 4,
-    }
-}
-
 fn build_security_facts(
     db: &Database,
     novelty: &Novelty,
@@ -231,22 +221,42 @@ fn security_fact(
         .first()
         .map(|m| m.ecosystem.clone())
         .unwrap_or_else(|| "npm".to_string());
-    let clusters = crate::osv::identity::cluster_by_vulnerability(&group);
-    let worst_tier = clusters
-        .iter()
-        .filter_map(|c| crate::osv::identity::cluster_severity_tier(c))
-        .min_by_key(|t| tier_rank(t))
-        .map(str::to_string);
-    let advisory_ids: Vec<String> = clusters.iter().map(|c| c[0].advisory_id.clone()).collect();
+    // Maintenance notices (#986) are never counted or graded as vulnerabilities.
+    let (clusters, notices): (Vec<_>, Vec<_>) =
+        crate::osv::identity::cluster_by_vulnerability(&group)
+            .into_iter()
+            .partition(|c| !crate::osv::severity::is_notice_group(c));
+    let notice_ids: Vec<&str> = notices.iter().map(|c| c[0].advisory_id.as_str()).collect();
+    let notice_only = clusters.is_empty() && !notice_ids.is_empty();
+    // The worst grade, and the GHSA alias an inherited one came from.
+    let worst = crate::osv::severity::worst(
+        clusters
+            .iter()
+            .filter_map(|c| crate::osv::severity::cluster_severity(c)),
+    );
+    let worst_tier = worst.as_ref().map(|g| g.tier.to_string());
+    let worst_tier_from = worst.and_then(|g| g.from);
+    let advisory_ids: Vec<String> = if notice_only {
+        notice_ids.iter().map(|id| (*id).to_string()).collect()
+    } else {
+        clusters.iter().map(|c| c[0].advisory_id.clone()).collect()
+    };
     let is_drift = alert.id.starts_with("install-drift:");
     // "rmcp@1.7.0: 3 known vulnerabilities" says nothing a reader can weigh;
     // the worst advisory's own summary says what the bug IS.
     let worst_summary = clusters
         .iter()
-        .min_by_key(|c| crate::osv::identity::cluster_severity_tier(c).map_or(4, tier_rank))
+        // The first most severe (the one shared rank, `osv::severity::tier_rank`).
+        .min_by_key(|c| {
+            std::cmp::Reverse(
+                crate::osv::identity::cluster_severity_tier(c)
+                    .map_or(0, crate::osv::severity::tier_rank),
+            )
+        })
         .map(|c| c[0].summary.trim().to_string())
         .filter(|s| !s.is_empty());
     let title = match worst_summary {
+        _ if notice_only => crate::osv::severity::notice_wording(&package, &notice_ids),
         Some(summary) if alert.title.contains("known vulnerabilit") => {
             if clusters.len() > 1 {
                 format!("{summary} (worst of {})", clusters.len())
@@ -378,7 +388,12 @@ fn security_fact(
         ecosystem,
         urgency: alert.urgency.clone(),
         worst_tier,
-        advisory_count: clusters.len().max(1),
+        worst_tier_from,
+        advisory_count: if notice_only {
+            0
+        } else {
+            clusters.len().max(1)
+        },
         advisory_ids,
         title,
         sites,

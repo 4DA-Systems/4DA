@@ -5,7 +5,8 @@
 //! Runs every line of `src-tauri/tests/conformance/vectors/*.jsonl` against the
 //! REAL functions: `version_order`, the matcher's window check and the
 //! fix-target walk (all in `crates/fourda-depengine`), then
-//! `fix_path::refresh_verdict` and the refresh commands. The TypeScript
+//! `fix_path::refresh_verdict`, the refresh commands and the severity rule
+//! (`osv::severity`). The TypeScript
 //! MCP engine runs the same files. Expected values come from stated truth
 //! (OSV's own answers, the 2026-10-10 fix-path oracle, PEP 440 / SemVer / Go
 //! spec examples, AD-055), never from this engine; `vectors/README.md` maps
@@ -38,13 +39,13 @@ use fourda_depengine::version_order::OrderedVersion;
 
 use super::fix_path::{refresh_verdict, Basis, Manager, Refresh, Requirement};
 use super::matching::package_key;
-use super::types::Vulnerability;
+use super::types::{MatchedAdvisory, StoredAdvisory, Vulnerability};
 
 /// The committed size of the `rust` skip list. Shrink-only: lower it in the
 /// same change that removes entries; it may never rise.
 const RUST_SKIP_BASELINE: usize = 28;
 
-const FILES: [&str; 8] = [
+const FILES: [&str; 9] = [
     "version_order",
     "osv_range",
     "fix_target",
@@ -53,6 +54,7 @@ const FILES: [&str; 8] = [
     "range_check",
     "holding",
     "parent_release",
+    "severity",
 ];
 
 fn conformance_dir() -> PathBuf {
@@ -433,6 +435,141 @@ fn check_direct(v: &Value, root: &std::path::Path) -> Result<(), String> {
     }
 }
 
+/// One record of a `severity` line as the matcher carries it: its own grade
+/// read exactly as `osv::sync` stores it (best CVSS score, then the curated
+/// label or the CVSS band), and the line's optional `fixed_version` (the
+/// copy's fix, which tells a maintenance notice from a vulnerability).
+fn severity_match(vuln: &Vulnerability, fixed_version: Option<&str>) -> MatchedAdvisory {
+    let (severity_type, cvss_score) = vuln.best_cvss();
+    MatchedAdvisory {
+        advisory_id: vuln.id.clone(),
+        summary: vuln.summary.clone().unwrap_or_default(),
+        details: None,
+        package_name: "pkg".into(),
+        ecosystem: "crates.io".into(),
+        installed_version: Some("1.0.0".into()),
+        fixed_version: fixed_version.map(str::to_string),
+        severity_type,
+        cvss_score,
+        source_url: None,
+        is_version_confirmed: true,
+        project_paths: vec!["/p".into()],
+        published_at: None,
+        dependency_instances: Vec::new(),
+        aliases: vuln.aliases.clone().unwrap_or_default(),
+        severity_label: vuln.severity_label(),
+        severity_from: None,
+        // `database_specific.cwe_ids`, as `osv::sync` stores it (CWE-506 is
+        // how a GHSA malware advisory with no MAL- alias says so).
+        cwe_ids: vuln
+            .cwe_ids_json()
+            .and_then(|j| serde_json::from_str(&j).ok())
+            .unwrap_or_default(),
+    }
+}
+
+/// A mirror row for one `aliases_available` entry: its grade, or none.
+fn mirror_row(id: &str, label: Option<&str>) -> StoredAdvisory {
+    StoredAdvisory {
+        id: 0,
+        advisory_id: id.to_string(),
+        summary: String::new(),
+        details: None,
+        package_name: "other".into(),
+        ecosystem: "npm".into(),
+        affected_ranges: None,
+        fixed_versions: None,
+        severity_type: None,
+        cvss_score: None,
+        source_url: None,
+        published_at: None,
+        modified_at: None,
+        withdrawn_at: None,
+        synced_at: String::new(),
+        aliases: Vec::new(),
+        severity_label: label.and_then(super::types::normalize_severity_label),
+        cwe_ids: Vec::new(),
+    }
+}
+
+/// `severity`: the grade one advisory (or one alias group, `records`) carries
+/// on every surface, where it came from, and the base urgency both the
+/// Upgrade Plan and the alerts give it (`osv::severity`).
+fn check_severity(v: &Value) -> Result<(), String> {
+    use super::severity::{cluster_severity, cluster_urgency, grade_unrated};
+    let records: Vec<Value> = match v.get("record") {
+        Some(r) => vec![r.clone()],
+        None => v
+            .get("records")
+            .and_then(Value::as_array)
+            .cloned()
+            .unwrap_or_default(),
+    };
+    let mut matches = Vec::new();
+    for r in records {
+        let vuln: Vulnerability = serde_json::from_value(r).map_err(|e| format!("record: {e}"))?;
+        matches.push(severity_match(&vuln, opt_s(v, "fixed_version")));
+    }
+    // The same records as mirror rows, for the path Knowledge Gaps and the
+    // scorer grade by (`rows_grade`), before the matcher stores anything.
+    let stored: Vec<StoredAdvisory> = matches
+        .iter()
+        .map(|m| StoredAdvisory {
+            advisory_id: m.advisory_id.clone(),
+            summary: m.summary.clone(),
+            cvss_score: m.cvss_score,
+            severity_label: m.severity_label.clone(),
+            aliases: m.aliases.clone(),
+            fixed_versions: m.fixed_version.as_ref().map(|f| format!("[\"{f}\"]")),
+            ..mirror_row(&m.advisory_id, None)
+        })
+        .collect();
+    let mirror: Vec<StoredAdvisory> = v
+        .get("aliases_available")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flatten()
+        .map(|(id, label)| mirror_row(id, label.as_str()))
+        .collect();
+    grade_unrated(&mut matches, &mirror);
+    let refs: Vec<&MatchedAdvisory> = matches.iter().collect();
+    if super::identity::cluster_by_vulnerability(&refs).len() != 1 {
+        return Err("the records are not one alias group".into());
+    }
+    let graded = cluster_severity(&refs);
+    let got = (
+        graded.as_ref().map(|g| g.tier.to_string()),
+        graded.and_then(|g| g.from),
+        format!("{:?}", cluster_urgency(&refs)).to_lowercase(),
+    );
+    let expect = v.get("expect").ok_or("no `expect`")?;
+    let want = (
+        opt_s(expect, "severity").map(str::to_string),
+        opt_s(expect, "severity_from").map(str::to_string),
+        s(expect, "urgency").to_string(),
+    );
+    if got != want {
+        return Err(format!(
+            "got (severity, from, urgency) {got:?}, want {want:?}"
+        ));
+    }
+    let rows: Vec<&StoredAdvisory> = stored.iter().collect();
+    let by_rows =
+        super::severity::rows_grade(&rows, &super::severity::AliasGrades::from_rows(&mirror));
+    let got_rows = (
+        by_rows.as_ref().map(|g| g.tier.to_string()),
+        by_rows.and_then(|g| g.from),
+    );
+    if got_rows == (want.0.clone(), want.1.clone()) {
+        Ok(())
+    } else {
+        Err(format!(
+            "mirror-row path: got (severity, from) {got_rows:?}, want ({:?}, {:?})",
+            want.0, want.1
+        ))
+    }
+}
+
 /// No Rust equivalent of the MCP's `range_check` (a `dependency_check` surface): every
 /// `range_check` vector stays in the skip list until one exists.
 fn check_range_check(_: &Value) -> Result<(), String> {
@@ -471,6 +608,7 @@ fn rule_vectors_hold_and_the_skip_list_only_shrinks() {
                 "version_order" => check_version_order(v),
                 "osv_range" => check_osv_range(v, &mut records),
                 "holding" => check_holding(v),
+                "severity" => check_severity(v),
                 "fix_target" => check_fix_target(v, &mut records),
                 "refresh_verdict" => check_refresh_verdict(v),
                 "fix_command" => check_fix_command(v),

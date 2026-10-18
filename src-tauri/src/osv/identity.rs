@@ -131,23 +131,11 @@ fn normalize_summary(summary: &str) -> String {
 
 /// The four-tier severity every surface shares, for one vulnerability
 /// cluster: the highest CVSS band across the cluster's rows when any row is
-/// scored, else the most severe curated label. `None` when the source gives
-/// neither (RustSec maintenance notices) — the caller decides the fallback.
+/// scored, else the most severe label — the record's own, or for a record its
+/// source never graded, its GHSA alias's (`osv::severity`, which also says
+/// where an inherited grade came from). `None` when nothing grades it.
 pub fn cluster_severity_tier(cluster: &[&MatchedAdvisory]) -> Option<&'static str> {
-    let max_cvss = cluster
-        .iter()
-        .filter_map(|m| m.cvss_score)
-        .fold(None, |acc: Option<f64>, s| {
-            Some(acc.map_or(s, |a| a.max(s)))
-        });
-    if let Some(score) = max_cvss {
-        return Some(crate::osv::types::cvss_band(score));
-    }
-    cluster
-        .iter()
-        .filter_map(|m| m.severity_label.as_deref())
-        .filter_map(canonical_tier)
-        .min_by_key(|t| tier_rank(t))
+    super::severity::cluster_severity(cluster).map(|g| g.tier)
 }
 
 // ============================================================================
@@ -357,26 +345,6 @@ impl ExposureScope {
     }
 }
 
-fn canonical_tier(label: &str) -> Option<&'static str> {
-    match label {
-        "critical" => Some("critical"),
-        "high" => Some("high"),
-        "medium" => Some("medium"),
-        "low" => Some("low"),
-        _ => None,
-    }
-}
-
-fn tier_rank(tier: &str) -> u8 {
-    match tier {
-        "critical" => 0,
-        "high" => 1,
-        "medium" => 2,
-        "low" => 3,
-        _ => 4,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -408,6 +376,7 @@ mod tests {
             aliases: aliases.iter().map(|s| s.to_string()).collect(),
             severity_label: label.map(str::to_string),
             cwe_ids: Vec::new(),
+            severity_from: None,
         }
     }
 
@@ -662,12 +631,15 @@ mod tests {
         assert_eq!(cluster_by_vulnerability(&[&a, &b, &c]).len(), 3);
     }
 
-    /// CVSS decides the tier when present; the curated label decides when the
-    /// CVSS block is unscorable (GHSA-h395-gr6q-cpjc: a v4 vector the mirror
-    /// cannot score, labelled MODERATE by GitHub → medium, not critical).
+    /// The curated label decides; the CVSS band only when there is no label
+    /// (`osv::severity::row_grade`, `vectors/severity.jsonl` sv-015..sv-017).
+    /// GHSA-h395-gr6q-cpjc: a v4 vector the mirror cannot score, labelled
+    /// MODERATE by GitHub → medium, not critical.
     #[test]
-    fn severity_tier_prefers_cvss_then_curated_label() {
-        let scored = adv("GHSA-s", "x", None, "s", &[], Some(9.1), Some("low"));
+    fn severity_tier_prefers_the_curated_label_then_cvss() {
+        let both = adv("GHSA-s", "x", None, "s", &[], Some(9.1), Some("low"));
+        assert_eq!(cluster_severity_tier(&[&both]), Some("low"));
+        let scored = adv("GHSA-c", "x", None, "s", &[], Some(9.1), None);
         assert_eq!(cluster_severity_tier(&[&scored]), Some("critical"));
         let labelled = adv(
             "GHSA-l",

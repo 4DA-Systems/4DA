@@ -26,6 +26,9 @@
 //! - [`registry`]: the registry's releases and the ones it withdrew (yanked
 //!   or deprecated), which no target may name.
 //!
+//! [`severity`]: the grade of an advisory its source never graded, read from
+//! its GHSA aliases (the rule `@4da/mcp-server` shares).
+//!
 //! The app (`src-tauri`) keeps the DB and network halves and re-exports these
 //! under their old `crate::osv::...` paths.
 
@@ -39,6 +42,7 @@ pub mod matching;
 pub mod osv;
 pub mod range;
 pub mod registry;
+pub mod severity;
 pub mod version_order;
 
 pub use malware::is_malware;

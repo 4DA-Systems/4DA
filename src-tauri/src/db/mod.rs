@@ -182,6 +182,10 @@ pub struct Database {
     read_pool: Vec<Mutex<Connection>>,
     /// One more read-only connection that only user-facing queries take.
     interactive_reader: Option<Mutex<Connection>>,
+    /// The mirror's GHSA grades (`osv::severity::AliasGrades`), read once and
+    /// kept until the mirror is written (`db::osv_advisories`).
+    /// The `u64` counts mirror writes, so a load that raced one is not kept.
+    pub(crate) alias_grades: Mutex<(u64, Option<Arc<crate::osv::severity::AliasGrades>>)>,
 }
 
 /// Open one read-only connection configured like every pooled reader.
@@ -350,6 +354,7 @@ impl Database {
             db_path: db_path.to_path_buf(),
             read_pool,
             interactive_reader,
+            alias_grades: Mutex::new((0, None)),
         };
 
         db.migrate()?;

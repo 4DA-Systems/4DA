@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! OSV Advisory storage — CRUD operations for the local OSV mirror.
 
+use std::sync::Arc;
+
 use rusqlite::{params, Result as SqliteResult};
 
 use super::Database;
@@ -116,6 +118,7 @@ impl Database {
         severity_label: Option<&str>,
         cwe_ids_json: Option<&str>,
     ) -> SqliteResult<()> {
+        self.invalidate_alias_grades();
         let conn = self.conn.lock();
         conn.execute(
             "INSERT INTO osv_advisories (advisory_id, summary, details, package_name, ecosystem,
@@ -156,6 +159,8 @@ impl Database {
                 cwe_ids_json,
             ],
         )?;
+        drop(conn);
+        self.invalidate_alias_grades();
         Ok(())
     }
 
@@ -324,11 +329,14 @@ impl Database {
         ecosystem: &str,
         before_synced_at: &str,
     ) -> SqliteResult<usize> {
+        self.invalidate_alias_grades();
         let conn = self.conn.lock();
         let count = conn.execute(
             "DELETE FROM osv_advisories WHERE ecosystem = ?1 AND synced_at < ?2",
             params![ecosystem, before_synced_at],
         )?;
+        drop(conn);
+        self.invalidate_alias_grades();
         Ok(count)
     }
 
@@ -346,11 +354,42 @@ impl Database {
         if keep_ecosystems.is_empty() {
             return Ok(0);
         }
+        self.invalidate_alias_grades();
         let conn = self.conn.lock();
         let placeholders = vec!["?"; keep_ecosystems.len()].join(",");
         let sql = format!("DELETE FROM osv_advisories WHERE ecosystem NOT IN ({placeholders})");
         let count = conn.execute(&sql, rusqlite::params_from_iter(keep_ecosystems.iter()))?;
+        drop(conn);
+        self.invalidate_alias_grades();
         Ok(count)
+    }
+
+    /// The mirror's GHSA grades for the alias rule (`osv::severity`): ONE
+    /// query the first time, then the kept copy until the mirror is written.
+    /// The scorer grades every advisory item from it without a lookup per item.
+    pub(crate) fn alias_grades(&self) -> Arc<crate::osv::severity::AliasGrades> {
+        let generation = {
+            let kept = self.alias_grades.lock();
+            if let Some(grades) = &kept.1 {
+                return Arc::clone(grades);
+            }
+            kept.0
+        };
+        let loaded = Arc::new(crate::osv::severity::AliasGrades::load(&self.conn.lock()));
+        let mut kept = self.alias_grades.lock();
+        // A write since the read began: hand this copy out, but do not keep it.
+        if kept.0 == generation {
+            kept.1 = Some(Arc::clone(&loaded));
+        }
+        loaded
+    }
+
+    /// Drop the kept grades: every write to `osv_advisories` goes through
+    /// here, before and after the statement runs.
+    fn invalidate_alias_grades(&self) {
+        let mut kept = self.alias_grades.lock();
+        kept.0 = kept.0.wrapping_add(1);
+        kept.1 = None;
     }
 }
 

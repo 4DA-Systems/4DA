@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Tests for the deterministic brief floor (pure rendering — no feed/DB needed).
 
-use super::{build_deterministic_brief, escape_markdown, FloorReason, NO_LOCKFILES_LINE};
+use super::{
+    build_deterministic_brief, escape_markdown, security_line, FloorReason, NO_LOCKFILES_LINE,
+};
 use crate::brief_facts::{
     BriefFacts, FactStatus, FixPath, SecurityFact, SecuritySite, UpgradeFact, UpgradeSite,
     WorthKnowingCandidate,
@@ -15,6 +17,7 @@ fn rmcp(status: FactStatus) -> SecurityFact {
         ecosystem: "crates.io".into(),
         urgency: AlertUrgency::High,
         worst_tier: Some("high".into()),
+        worst_tier_from: None,
         advisory_count: 3,
         advisory_ids: vec![],
         title: "Unauthenticated session leak".into(),
@@ -564,4 +567,25 @@ fn scoping_the_all_clear_keeps_the_rest_of_the_line() {
         out.contains("- Nothing new touches the code 4DA checked today, and Vite 7.1 shipped."),
         "{out}"
     );
+}
+
+/// #986: a fact of maintenance notices only names no severity and counts no
+/// vulnerability; its title says what it is.
+#[test]
+fn a_maintenance_notice_fact_is_worded_as_unmaintained() {
+    let mut f = rmcp(FactStatus::New);
+    f.package = "zvariant".into();
+    f.urgency = AlertUrgency::Watch;
+    f.worst_tier = None;
+    f.advisory_count = 0;
+    f.advisory_ids = vec!["RUSTSEC-2026-0370".into()];
+    f.title = crate::osv::severity::notice_wording("zvariant", &["RUSTSEC-2026-0370"]);
+    let line = security_line(&f);
+    assert!(
+        line.starts_with(
+            "- **zvariant** (crates.io): unmaintained: zvariant (RUSTSEC-2026-0370), no exploitable vulnerability"
+        ),
+        "{line}"
+    );
+    assert!(!line.contains("Low") && !line.contains("advisor"), "{line}");
 }

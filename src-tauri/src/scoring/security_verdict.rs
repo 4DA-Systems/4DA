@@ -34,12 +34,15 @@ pub(crate) struct SecurityVerdict {
     /// Copies confirmed affected, worst first (runtime before dev, direct
     /// before transitive), across every mirror row for the advisory.
     pub exposed: Vec<ExposedCopy>,
-    /// The advisory's own severity tier (`critical` / `high` / `medium` /
-    /// `low`) from the deciding mirror row — CVSS band first, curated label
-    /// otherwise. `None` when the mirror grades it neither way.
+    /// The advisory's severity tier (`critical` / `high` / `medium` / `low`):
+    /// its alias group graded by `osv::severity::rows_grade`. `None` when
+    /// nothing grades it.
     pub tier: Option<&'static str>,
     /// The fix for the exposed copy's package (highest listed fix).
     pub fixed_version: Option<String>,
+    /// Every row the matcher checked is a maintenance notice
+    /// (`osv::severity`'s one predicate): not a vulnerability (#986).
+    pub maintenance_only: bool,
 }
 
 impl SecurityVerdict {
@@ -188,64 +191,31 @@ pub(crate) fn security_signal_admitted(
     is_registry_advisory || *content_type == crate::content_dna::ContentType::SecurityAdvisory
 }
 
-/// The severity tier of one mirror row.
-pub(crate) fn advisory_tier(advisory: &StoredAdvisory) -> Option<&'static str> {
-    if let Some(score) = advisory.cvss_score.filter(|s| *s > 0.0) {
-        return Some(crate::osv::types::cvss_band(score));
-    }
-    normalize_tier(advisory.severity_label.as_deref()?)
-}
-
-fn normalize_tier(label: &str) -> Option<&'static str> {
-    match label.trim().to_ascii_lowercase().as_str() {
-        "critical" => Some("critical"),
-        "high" => Some("high"),
-        "medium" | "moderate" => Some("medium"),
-        "low" => Some("low"),
-        _ => None,
-    }
-}
-
-fn tier_rank(tier: Option<&str>) -> u8 {
-    match tier {
-        Some("critical") => 4,
-        Some("high") => 3,
-        Some("medium") => 2,
-        Some("low") => 1,
-        _ => 0,
-    }
-}
-
-/// The severity tier an advisory item carries in its OWN text: the numeric
-/// `CVSS:` line (banded), else the curated `Severity:` label (GitHub writes
-/// `MODERATE` for medium). The cve source writes both; this is the fallback
+/// The severity tier an advisory item carries in its OWN text, by the one
+/// per-record rule (`osv::severity::row_grade`): the curated `Severity:`
+/// label (GitHub writes `MODERATE` for medium) first, else the numeric
+/// `CVSS:` line (banded). The cve source writes both; this is the fallback
 /// when the mirror does not hold the advisory yet — severity must come from
 /// the advisory, never a default.
 pub(crate) fn content_severity_tier(content: &str) -> Option<&'static str> {
     let mut label: Option<&'static str> = None;
+    let mut score: Option<f64> = None;
     for line in content.lines() {
         let trimmed = line.trim();
         if let Some(rest) = trimmed.strip_prefix("CVSS:") {
-            if let Ok(score) = rest.trim().parse::<f64>() {
-                if score > 0.0 && score <= 10.0 {
-                    return Some(crate::osv::types::cvss_band(score));
-                }
-            }
+            score = score.or_else(|| rest.trim().parse::<f64>().ok());
         } else if let Some(rest) = trimmed.strip_prefix("Severity:") {
             // `Severity: CVSS_V3: 9.8` (osv source) carries a score, not a label.
             let rest = rest.trim();
-            if let Some((_, score)) = rest.split_once(':') {
-                if let Some(score) = super::cvss::parse_cvss_score(score.trim()) {
-                    if score > 0.0 && score <= 10.0 {
-                        return Some(crate::osv::types::cvss_band(score));
-                    }
-                }
+            if let Some((_, value)) = rest.split_once(':') {
+                score = score.or_else(|| super::cvss::parse_cvss_score(value.trim()));
             } else if label.is_none() {
-                label = normalize_tier(rest);
+                label = crate::osv::severity::canonical_tier(rest);
             }
         }
     }
-    label
+    let score = score.filter(|s| *s > 0.0 && *s <= 10.0);
+    label.or_else(|| score.map(crate::osv::types::cvss_band))
 }
 
 /// The `Affected range:` entries the cve source writes for ONE package —
@@ -337,8 +307,12 @@ pub(crate) fn matcher_verdict(db: &Database, ids: &[String]) -> Option<SecurityV
     let mut checked = 0usize;
     let mut undecided = 0usize;
     let mut verdict = SecurityVerdict::default();
-    let mut deciding_tier: Option<&'static str> = None;
-    let mut any_tier: Option<&'static str> = None;
+    // The rows the matcher checked, and those it confirmed an installed copy
+    // inside: graded together below by the ONE alias-group rule
+    // (`osv::severity::rows_grade`), the GHSA alias grades read from the
+    // database's kept copy, never per item.
+    let mut checked_rows: Vec<&StoredAdvisory> = Vec::new();
+    let mut exposed_rows: Vec<&StoredAdvisory> = Vec::new();
     // Registry facts, read at most once per verdict (FX-H5).
     let mut registry: Option<fourda_depengine::registry::RegistryIndex> = None;
     let mut fix_row: Option<&StoredAdvisory> = None;
@@ -349,14 +323,9 @@ pub(crate) fn matcher_verdict(db: &Database, ids: &[String]) -> Option<SecurityV
         }
         checked += exposure.copies_checked;
         undecided += exposure.unconfirmed;
-        let tier = advisory_tier(row);
-        if tier_rank(tier) > tier_rank(any_tier) {
-            any_tier = tier;
-        }
+        checked_rows.push(row);
         if !exposure.confirmed.is_empty() {
-            if tier_rank(tier) > tier_rank(deciding_tier) {
-                deciding_tier = tier;
-            }
+            exposed_rows.push(row);
             if verdict.fixed_version.is_none() {
                 let registry = registry.get_or_insert_with(|| crate::osv::release_facts::load(db));
                 verdict.fixed_version = highest_fix(registry, row);
@@ -382,10 +351,18 @@ pub(crate) fn matcher_verdict(db: &Database, ids: &[String]) -> Option<SecurityV
     } else {
         None
     };
+    let grades = db.alias_grades();
+    let grade =
+        |rows: &[&StoredAdvisory]| crate::osv::severity::rows_grade(rows, &grades).map(|g| g.tier);
+    let any_tier = grade(&checked_rows);
+    verdict.maintenance_only = !checked_rows.is_empty()
+        && checked_rows
+            .iter()
+            .all(|r| crate::osv::severity::SeverityRecord::is_informational(*r));
     verdict.tier = if verdict.exposed.is_empty() {
         any_tier
     } else {
-        deciding_tier.or(any_tier)
+        grade(&exposed_rows).or(any_tier)
     };
     raise_fix(db, &mut verdict, fix_row);
     Some(verdict)
