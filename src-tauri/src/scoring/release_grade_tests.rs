@@ -669,3 +669,42 @@ fn a_yanked_current_pin_is_still_news() {
         "Your pinned rusqlite 0.26.1 was yanked (4da/src-tauri)"
     );
 }
+
+/// The Brief's shape, before and after narrowing to working projects:
+/// a scratch tree pins a yanked 1.4.1 and an active project is a major
+/// behind. Graded over every project the class was Yanked and the only
+/// concerned project the scratch tree, so the Brief's active-project filter
+/// left nothing; graded over the active project it is a breaking upgrade
+/// for that project.
+#[test]
+fn narrowing_to_working_projects_before_grading_changes_the_class() {
+    let all = ReleaseGrade::from_pins(
+        "quux",
+        v("2.0.0"),
+        vec![
+            pin("/scratch/old", "1.4.1", true),
+            pin("/dev/app", "1.9.0", true),
+        ],
+        &["1.4.1".to_string()],
+    );
+    // Before.
+    assert_eq!(all.class(), Some(ReleaseClass::Yanked));
+    let concerned: Vec<&str> = all
+        .concerned_pins()
+        .iter()
+        .map(|p| p.project_path.as_str())
+        .collect();
+    assert_eq!(concerned, vec!["/scratch/old"]);
+    // After.
+    let active = all.clone().retain_projects(|p| p != "/scratch/old");
+    assert_eq!(active.class(), Some(ReleaseClass::Breaking));
+    let concerned: Vec<&str> = active
+        .concerned_pins()
+        .iter()
+        .map(|p| p.project_path.as_str())
+        .collect();
+    assert_eq!(concerned, vec!["/dev/app"]);
+    assert!(active.necessity_reason().is_some_and(|r| r
+        .starts_with("Breaking upgrade: quux 2.0.0 for ")
+        && r.ends_with("1.9.0")));
+}

@@ -693,6 +693,22 @@ pub(super) fn own_package_names() -> HashSet<String> {
         .unwrap_or_default()
 }
 
+/// A release grade as an upgrade-fact candidate: graded over working
+/// projects only (a scratch tree's gap must not set the class, then take
+/// the package's single slot and be filtered out, hiding an active
+/// project's), and only when that is Breaking or Yanked.
+fn upgrade_grade(
+    grade: release_grade::ReleaseGrade,
+    liveness: &crate::evidence::ProjectLiveness,
+) -> Option<release_grade::ReleaseGrade> {
+    let grade = grade.retain_projects(|p| !liveness.is_scratch(p) && !liveness.is_dormant(p));
+    matches!(
+        grade.class(),
+        Some(ReleaseClass::Breaking | ReleaseClass::Yanked)
+    )
+    .then_some(grade)
+}
+
 fn build_upgrade_facts(
     db: &Database,
     novelty: &Novelty,
@@ -748,15 +764,10 @@ fn build_upgrade_facts(
     > = BTreeMap::new();
     for (id, source_type, title, content, url, published) in rows {
         let Some(grade) = release_grade::grade_registry_release(db, &source_type, &title, &content)
+            .and_then(|g| upgrade_grade(g, liveness))
         else {
             continue;
         };
-        if !matches!(
-            grade.class(),
-            Some(ReleaseClass::Breaking | ReleaseClass::Yanked)
-        ) {
-            continue;
-        }
         if is_own_package(&grade.package, &own) {
             continue;
         }
