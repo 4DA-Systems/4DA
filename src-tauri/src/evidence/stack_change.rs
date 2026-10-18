@@ -202,7 +202,7 @@ fn fix_targets(path: &FixPath) -> Vec<&str> {
         | FixPath::Reinstall { to }
         | FixPath::Update { to } => vec![to.as_str()],
         FixPath::PerLine { lines } => lines.iter().map(|l| l.to.as_str()).collect(),
-        FixPath::NoFix => Vec::new(),
+        FixPath::NoFix | FixPath::Introduces { .. } => Vec::new(),
     }
 }
 

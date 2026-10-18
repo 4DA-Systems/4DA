@@ -36,6 +36,10 @@ pub struct LineTarget {
     pub clears_all_known: bool,
     pub upgrade_type: Option<UpgradeType>,
     pub sites: Vec<InstallSite>,
+    /// Parity decision 2: every fixing release brings in these advisories,
+    /// which the installed version does not have, so `target_version` is
+    /// `None` (no line fix is offered in its place either). Sorted, deduped.
+    pub introduces: Vec<String>,
 }
 
 impl LineTarget {
@@ -57,6 +61,7 @@ where
         walked: Option<String>,
         partial: Option<(Version, String)>,
         sites: BTreeMap<String, InstallSite>,
+        introduces: Vec<String>,
     }
     let mut by_version: BTreeMap<String, Acc> = BTreeMap::new();
     let instances = copies
@@ -74,6 +79,7 @@ where
                 walked: None,
                 partial: None,
                 sites: BTreeMap::new(),
+                introduces: Vec::new(),
             });
         if acc.clean.is_none() {
             acc.clean.clone_from(&d.clean_version);
@@ -81,6 +87,7 @@ where
         if acc.walked.is_none() {
             acc.walked.clone_from(&d.target_version);
         }
+        acc.introduces.extend(d.introduces.iter().cloned());
         if let Some(fix) = d
             .fixed_version
             .as_deref()
@@ -110,7 +117,15 @@ where
             // Clean; else where the walk landed (past every window that has
             // a way out); else, when the walk could not run, the highest
             // own-line fix.
-            let target_version = acc.clean.or(acc.walked).or(acc.partial.map(|(_, f)| f));
+            // A target never brings an advisory in (parity decision 2).
+            let mut introduces = acc.introduces;
+            introduces.sort();
+            introduces.dedup();
+            let target_version = if introduces.is_empty() {
+                acc.clean.or(acc.walked).or(acc.partial.map(|(_, f)| f))
+            } else {
+                None
+            };
             let upgrade_type = target_version
                 .as_deref()
                 .and_then(|t| upgrade_type(&installed, t));
@@ -120,6 +135,7 @@ where
                 clears_all_known,
                 upgrade_type,
                 sites: acc.sites.into_values().collect(),
+                introduces,
             }
         })
         .collect();
@@ -188,6 +204,7 @@ mod tests {
             clean_version: clean.map(str::to_string),
             target_version: walked.map(str::to_string),
             withheld: Vec::new(),
+            introduces: Vec::new(),
         }
     }
 
@@ -269,5 +286,19 @@ mod tests {
         assert!(!lines[0].clears_all_known);
         assert!(lines[0].is_major());
         assert_eq!(describe_lines(&lines), "1.0.0 -> 2.0.1 (major)");
+    }
+
+    /// Parity decision 2: a copy whose every fixing release brings in an
+    /// advisory gets no target, not even its line fix.
+    #[test]
+    fn a_line_whose_fixes_bring_in_an_advisory_has_no_target() {
+        let copies = [MatchedDependency {
+            introduces: vec!["B".to_string()],
+            ..copy("/a", "1.0.0", Some("1.2.0"), None, None, true, false)
+        }];
+        let lines = line_targets(&copies, &["/a".to_string()]);
+        assert_eq!(lines[0].target_version, None);
+        assert_eq!(lines[0].introduces, ["B"]);
+        assert!(distinct_targets(&lines).is_empty());
     }
 }

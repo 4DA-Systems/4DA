@@ -14,6 +14,7 @@ fn line(installed: &str, target: &str, project: &str) -> Vec<LineTarget> {
         installed_version: installed.into(),
         target_version: Some(target.into()),
         clears_all_known: true,
+        introduces: Vec::new(),
         upgrade_type: Some(UpgradeType::Minor),
         sites: vec![InstallSite {
             project_path: project.to_string(),

@@ -121,6 +121,9 @@ pub(crate) enum FixPath {
     /// No advisory on this copy has a way out on its line: no `fixed` bound,
     /// and no release past a `last_affected` one (`osv::fix_target`).
     NoFix,
+    /// Every fixing release brings in these advisories, which the installed
+    /// copy does not have (parity decision 2): no release is named.
+    Introduces { advisories: Vec<String> },
     /// A fix exists, scope unknown.
     Update { to: String },
 }
@@ -716,7 +719,7 @@ pub(crate) fn package_facts(facts: &BriefFacts) -> Vec<crate::briefing_groundedn
                         add(&f.package, Some(&l.to));
                     }
                 }
-                FixPath::NoFix => {}
+                FixPath::NoFix | FixPath::Introduces { .. } => {}
             }
         }
     }

@@ -272,8 +272,8 @@ fn decision_for(
 
 /// The plan row of a DECLARED vulnerable package, raised so one bump also
 /// clears the transitive copies it pins (rule b): the highest release any of
-/// them needs from it, when that stays in its major and no advisory of it
-/// affects that release. `Some((to, packages))` only when it rises above
+/// them needs from it, across a major too (flagged; parity decision 3), when
+/// no advisory of it affects that release. `Some((to, packages))` only when it rises above
 /// `current`; `packages` are the ones that needed more than `current`.
 pub(crate) fn raised_row_target(
     db: &Database,

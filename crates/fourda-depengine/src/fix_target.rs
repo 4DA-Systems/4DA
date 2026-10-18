@@ -127,6 +127,11 @@ pub struct WalkOutcome {
     /// then withdrawn, so the honest answer is "no installable fix", not "no
     /// fix". Empty when the walk could not evaluate an advisory.
     pub withheld: Vec<String>,
+    /// Parity decision 2 (a target never brings in an advisory): indices
+    /// into the walk's `ranges` of the advisories with no way out that affect
+    /// where the walk lands but NOT the installed version. Non-empty means
+    /// every fixing release brings them in, and `target` is `None`.
+    pub introduces: Vec<usize>,
 }
 
 /// A line fix as a release the registry still offers ([`installable_fix`]).
@@ -411,7 +416,16 @@ pub fn walk_target_in(
 ) -> WalkOutcome {
     let mut withheld = Vec::new();
     match walk(ecosystem, installed, ranges, registry, &mut withheld) {
-        Ok(target) => WalkOutcome { target, withheld },
+        Ok(Landing::At(target)) => WalkOutcome {
+            target,
+            withheld,
+            introduces: Vec::new(),
+        },
+        Ok(Landing::Introduces(introduces)) => WalkOutcome {
+            target: None,
+            withheld,
+            introduces,
+        },
         Err(Unreadable) => WalkOutcome::default(),
     }
 }
@@ -419,13 +433,21 @@ pub fn walk_target_in(
 /// The walk met an advisory it cannot evaluate on its path.
 struct Unreadable;
 
+/// Where the walk ends.
+enum Landing {
+    At(Option<WalkTarget>),
+    /// It lands inside advisories with no way out that the installed version
+    /// does not have (these indices): every fixing release brings them in.
+    Introduces(Vec<usize>),
+}
+
 fn walk(
     ecosystem: &str,
     installed: &str,
     ranges: &[&Option<String>],
     registry: &RegistryReleases,
     withheld: &mut Vec<String>,
-) -> Result<Option<WalkTarget>, Unreadable> {
+) -> Result<Landing, Unreadable> {
     let parsed: Vec<Option<Vec<Range>>> = ranges
         .iter()
         .map(|r| r.as_deref().and_then(|j| serde_json::from_str(j).ok()))
@@ -436,8 +458,8 @@ fn walk(
     for _ in 0..MAX_HOPS {
         let here = OrderedVersion::parse_in(&current, ecosystem).ok_or(Unreadable)?;
         let mut next: Option<Release> = None;
-        let mut stuck = false;
-        for (json, advisory) in ranges.iter().zip(&parsed) {
+        let mut stuck: Vec<usize> = Vec::new();
+        for (index, (json, advisory)) in ranges.iter().zip(&parsed).enumerate() {
             match check_version_affected(ecosystem, Some(&current), json) {
                 (false, _) => continue,
                 (true, false) => return Err(Unreadable),
@@ -445,7 +467,7 @@ fn walk(
             }
             let advisory = advisory.as_deref().ok_or(Unreadable)?;
             match exit(ecosystem, &here, advisory, &known, withheld) {
-                Exit::Stuck => stuck = true,
+                Exit::Stuck => stuck.push(index),
                 Exit::To(step) => {
                     let replace = match next.as_ref() {
                         None => true,
@@ -459,11 +481,23 @@ fn walk(
         }
         match next {
             Some((_, raw)) => current = raw,
+            None if current == start => return Ok(Landing::At(None)),
             None => {
-                return Ok((current != start).then_some(WalkTarget {
+                // Never bring an advisory in (parity decision 2): one with no
+                // way out that the installed version does not have blocks the
+                // target; the MCP's `smallestCleanVersion(installed)` agrees.
+                let introduced: Vec<usize> = stuck
+                    .iter()
+                    .copied()
+                    .filter(|&i| !check_version_affected(ecosystem, Some(start), ranges[i]).0)
+                    .collect();
+                if !introduced.is_empty() {
+                    return Ok(Landing::Introduces(introduced));
+                }
+                return Ok(Landing::At(Some(WalkTarget {
                     version: current,
-                    clears_all: !stuck,
-                }))
+                    clears_all: stuck.is_empty(),
+                })));
             }
         }
     }

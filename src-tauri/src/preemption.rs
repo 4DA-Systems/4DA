@@ -588,8 +588,14 @@ pub(crate) fn alert_fix_target(
     } else {
         ""
     };
+    let introduced = crate::osv::fix_target::introduced_by(lines);
     let sentence = match (best_fix.as_deref(), targets.len()) {
         (Some(f), _) => format!(" Update to >= {f}.{major}"),
+        // Parity decision 2: say why nothing is named.
+        (None, 0) if !introduced.is_empty() => format!(
+            " No release is named: {}.",
+            crate::osv::fix_target::introduces_text(&introduced)
+        ),
         (None, 0) => String::new(),
         (None, _) => format!(
             " Update each copy on its own line: {}.{major}",
@@ -3235,6 +3241,7 @@ mod tests {
                     clean_version: None,
                     target_version: None,
                     withheld: Vec::new(),
+                    introduces: Vec::new(),
                 },
                 crate::osv::types::MatchedDependency {
                     project_path: "/direct".into(),
@@ -3246,6 +3253,7 @@ mod tests {
                     clean_version: None,
                     target_version: None,
                     withheld: Vec::new(),
+                    introduces: Vec::new(),
                 },
             ],
         };
@@ -3288,6 +3296,7 @@ mod tests {
             clean_version: Some(fix.into()),
             target_version: Some(fix.into()),
             withheld: Vec::new(),
+            introduces: Vec::new(),
         };
         let advisory = crate::osv::types::MatchedAdvisory {
             advisory_id: "GHSA-q2hr-2g5m-vwhr".into(),
@@ -3378,6 +3387,7 @@ mod tests {
                 clean_version: None,
                 target_version: None,
                 withheld: Vec::new(),
+                introduces: Vec::new(),
             }],
         };
         let projects = vec!["/paddle-webhook".to_string()];

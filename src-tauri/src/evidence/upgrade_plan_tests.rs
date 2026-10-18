@@ -496,6 +496,7 @@ fn matched(cvss: f64, installs: &[(bool, bool, bool)]) -> crate::osv::types::Mat
                     clean_version: None,
                     target_version: None,
                     withheld: Vec::new(),
+                    introduces: Vec::new(),
                 },
             )
             .collect(),

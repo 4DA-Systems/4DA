@@ -20,6 +20,26 @@ pub use fourda_depengine::fix_target::{upgrade_type, UpgradeType};
 pub use fourda_depengine::lines::InstallSite;
 pub use fourda_depengine::lines::{describe_lines, distinct_targets, LineTarget};
 
+/// Parity decision 2, the MCP's words: why no target is named for a copy.
+pub fn introduces_text(advisories: &[String]) -> String {
+    format!(
+        "every fixing release brings in {}, which the installed version does not have",
+        advisories.join(", ")
+    )
+}
+
+/// The advisories every fixing release of these lines brings in, sorted and
+/// deduped; empty when any line has a target.
+pub fn introduced_by(lines: &[LineTarget]) -> Vec<String> {
+    if lines.iter().any(|l| l.target_version.is_some()) {
+        return Vec::new();
+    }
+    let mut out: Vec<String> = lines.iter().flat_map(|l| l.introduces.clone()).collect();
+    out.sort();
+    out.dedup();
+    out
+}
+
 /// Per-line targets for the version-confirmed copies of a package in
 /// `projects`, sorted by installed version. A copy in a project the caller
 /// does not speak for can neither set nor raise a target here (AD-044).

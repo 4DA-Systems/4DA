@@ -201,6 +201,8 @@ struct PackageGroup<'a> {
     /// (yanked, deprecated; FX-H5). Non-empty means "no installable fix",
     /// never "no fix published".
     withheld: Vec<String>,
+    /// With no fix: every fixing release brings in these (parity decision 2).
+    introduces: Vec<String>,
     /// Every advisory is a maintenance notice (unmaintained / deprecated: no
     /// fix, no CVSS). Folded into ONE Watch item, never an upgrade step.
     informational: bool,
@@ -279,8 +281,10 @@ fn package_group<'a>(
             }
         }
     }
+    let introduces = fix_target::introduced_by(&lines);
     let informational = !has_fix
         && withheld.is_empty()
+        && introduces.is_empty()
         && advisories
             .iter()
             .all(|a| crate::osv::severity::is_informational(a));
@@ -329,6 +333,7 @@ fn package_group<'a>(
         targets,
         has_fix,
         withheld,
+        introduces,
         informational,
         cohort_key,
         routes: crate::osv::parent_hint::TransitiveRoutes::default(),
@@ -428,7 +433,9 @@ impl PackageGroup<'_> {
         } else {
             format!(
                 "{none} for {pkg} — {n} {adv} across {m} {proj}",
-                none = if self.withheld.is_empty() {
+                none = if !self.introduces.is_empty() {
+                    "No clean fix"
+                } else if self.withheld.is_empty() {
                     "No fix published"
                 } else {
                     "No installable fix"
@@ -441,7 +448,10 @@ impl PackageGroup<'_> {
             )
         });
 
-        let scope_note = if !self.has_fix && !self.withheld.is_empty() {
+        let scope_note = if !self.has_fix && !self.introduces.is_empty() {
+            let why = fix_target::introduces_text(&self.introduces);
+            format!("No release is named: {why} — pin, patch, or replace")
+        } else if !self.has_fix && !self.withheld.is_empty() {
             format!(
                 "The release that fixes it ({}) was withdrawn by its registry (yanked or \
                  deprecated), and no later release is known to clear it — pin, patch, or replace",
@@ -646,7 +656,12 @@ fn line_citations(lines: &[LineTarget]) -> Vec<EvidenceCitation> {
     lines
         .iter()
         .map(|l| {
-            let target = l.target_version.as_deref().unwrap_or("no fix published");
+            let none = if l.introduces.is_empty() {
+                "no fix published"
+            } else {
+                "no clean fix"
+            };
+            let target = l.target_version.as_deref().unwrap_or(none);
             let kind = match l.upgrade_type {
                 Some(fix_target::UpgradeType::Patch) => "patch",
                 Some(fix_target::UpgradeType::Minor) => "minor",

@@ -89,6 +89,10 @@ pub(crate) fn fix_clause(package: &str, path: &FixPath) -> String {
                 .join("; ")
         ),
         FixPath::NoFix => "no fix published: pin, patch locally, replace, or accept the risk".to_string(),
+        FixPath::Introduces { advisories } => format!(
+            "no {package} release is named: {}; pin, patch locally, replace, or accept the risk",
+            crate::osv::fix_target::introduces_text(advisories)
+        ),
         FixPath::Update { to } => format!("update {package} to >= {to}"),
     }
 }
@@ -106,4 +110,58 @@ fn proven_clause(package: &str, proven: Option<&ProvenParent>) -> String {
             p.parent_version, p.label, p.child_version
         )
     })
+}
+
+/// A copy the project declares: name how it moves where it is declared, read
+/// from the project's own manifest (`osv::direct_upgrade`, audit E8). The
+/// same rule the Upgrade Plan's direct rows use; nothing when it is not certain
+/// (including when the declaration does not admit the installed copy).
+pub(super) fn with_direct_fix(
+    path: FixPath,
+    project: &str,
+    ecosystem: &str,
+    package: &str,
+    installed: Option<&str>,
+) -> FixPath {
+    let (FixPath::Bump { to, fix: None }, Some(installed)) = (&path, installed) else {
+        return path;
+    };
+    let to = to.clone();
+    let fix = crate::osv::exposure::canonical(ecosystem)
+        .and_then(|eco| {
+            crate::osv::direct_upgrade::direct_fix(
+                std::path::Path::new(project),
+                eco,
+                package,
+                installed,
+                &to,
+            )
+        })
+        .map(|f| f.brief_clause());
+    let fix = with_major(installed, &to, fix);
+    FixPath::Bump { to, fix }
+}
+
+/// A raise across a major (parity decision 3) is never silent: the bump
+/// clause says so, before any command.
+fn with_major(installed: &str, to: &str, fix: Option<String>) -> Option<String> {
+    if !crate::osv::parent_release::is_major(installed, to) {
+        return fix;
+    }
+    Some(fix.map_or_else(
+        || "a major upgrade".to_string(),
+        |f| format!("a major upgrade; {f}"),
+    ))
+}
+
+/// A copy whose line has no target because every fixing release brings in
+/// an advisory it does not have (parity decision 2) says so, with the same
+/// ids the Upgrade Plan and Preemption name, instead of "no fix published".
+pub(super) fn with_introduces(path: FixPath, introduces: &[String]) -> FixPath {
+    if path != FixPath::NoFix || introduces.is_empty() {
+        return path;
+    }
+    FixPath::Introduces {
+        advisories: introduces.to_vec(),
+    }
 }

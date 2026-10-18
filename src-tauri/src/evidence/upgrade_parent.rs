@@ -402,13 +402,16 @@ fn row_move(
         ParentStanding::Deprecated => {
             format!("{via}{lever} is deprecated: replace {lever}{force}")
         }
+        ParentStanding::Introduces { advisories } => format!(
+            "{via}no {lever} release is named: {}{force}",
+            crate::osv::fix_target::introduces_text(advisories)
+        ),
         // A lever's registry read runs only under a parent release
         // (`admits_move`); reaching here it says nothing more than Unknown.
         ParentStanding::Unknown
         | ParentStanding::Admits(_)
         | ParentStanding::NoneAdmits { .. }
         | ParentStanding::Undecided { .. }
-        | ParentStanding::Introduces { .. }
         | ParentStanding::Malicious { .. } => {
             format!(
                 "{via}{lever} must move (4DA holds no record of a {lever} release that admits \

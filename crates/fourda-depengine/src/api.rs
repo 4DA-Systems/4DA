@@ -186,7 +186,13 @@ fn answer(request: Request) -> Result<Value, String> {
             let walk = outcome
                 .target
                 .map(|w| json!({ "version": w.version, "clears_all": w.clears_all }));
-            json!({ "line_fixes": line_fixes, "walk": walk, "withheld": outcome.withheld })
+            let mut out =
+                json!({ "line_fixes": line_fixes, "walk": walk, "withheld": outcome.withheld });
+            // Only when set, so every earlier answer keeps its exact shape.
+            if !outcome.introduces.is_empty() {
+                out["introduces"] = json!(outcome.introduces);
+            }
+            out
         }
         Request::MatchInventory {
             inventory,
