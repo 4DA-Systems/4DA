@@ -221,14 +221,17 @@ pub(crate) fn render_facts_for_prompt(facts: &BriefFacts) -> String {
             .to_string();
     }
     let advisory_gap = crate::briefing_deterministic::advisory_gap_line(facts).is_some();
+    let not_covered = crate::briefing_deterministic::not_covered_line(facts)
+        .map(|line| format!("NOT CHECKED: {line}\n\n"))
+        .unwrap_or_default();
     let mut out = if advisory_gap {
         // The security lanes below are empty because advisories were not (all)
         // checked, not because nothing applies (audit E3).
-        String::from(
+        format!(
             "ADVISORY CHECK NOT COMPLETE: the user's dependencies have not been fully checked \
              against published vulnerability advisories yet. An empty ACT NOW or ALSO OPEN does \
              NOT mean they are unaffected. Never say nothing touches their code or that they are \
-             unaffected; the software appends the status line itself.\n\n\
+             unaffected; the software appends the status line itself.\n\n{not_covered}\
              FACTS (computed by 4DA from the user's lockfiles and package registries):\n\n",
         )
     } else if let Some(line) = crate::briefing_deterministic::not_covered_line(facts) {

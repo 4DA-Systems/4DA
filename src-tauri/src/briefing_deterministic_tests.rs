@@ -295,7 +295,7 @@ fn no_all_clear_until_the_advisory_check_is_ready() {
         (S::Matching, "downloading vulnerability advisories"),
         (S::Failed, "check failed"),
         (S::Stale, "more than three days old"),
-        (S::NoInventory, "can check against vulnerability advisories"),
+        (S::NoInventory, "read no installed versions"),
     ];
     for (state, phrase) in cases {
         let facts = BriefFacts {
@@ -506,4 +506,62 @@ fn with_everything_read_the_all_clear_is_unchanged() {
     assert!(!out.contains("Not checked:"), "{out}");
     let draft = "Nothing new touches your code today.\n";
     assert_eq!(super::honest_without_lockfiles(draft, &facts), draft);
+}
+
+/// #987 review B1: a Maven-only project is NoInventory, so a narrated brief
+/// takes the gap branch. It must still name the pom.xml, and so must the
+/// prompt the model writes from.
+#[test]
+fn a_narrated_maven_only_brief_names_the_pom() {
+    let facts = BriefFacts {
+        advisories: Some(crate::osv::readiness::AdvisorySyncState::NoInventory),
+        not_covered: Some(not_covered(
+            &[("C:/p/spring-petclinic/pom.xml", "Maven")],
+            &[],
+        )),
+        ..BriefFacts::default()
+    };
+    let draft = "Nothing new touches your code today.\n";
+    let out = super::honest_without_lockfiles(draft, &facts);
+    assert!(!out.contains("Nothing new touches your code"), "{out}");
+    assert!(out.contains("read no installed versions"), "{out}");
+    assert!(out.contains("spring-petclinic/pom.xml (Maven)"), "{out}");
+    assert_eq!(super::honest_without_lockfiles(&out, &facts), out);
+    let prompt = crate::digest_commands::render_facts_for_prompt(&facts);
+    assert!(
+        prompt.contains("NOT CHECKED: Not checked: 1 dependency file"),
+        "{prompt}"
+    );
+    let floor = build_deterministic_brief(&facts, FloorReason::NoCapableModel);
+    assert!(
+        floor.contains("spring-petclinic/pom.xml (Maven)"),
+        "{floor}"
+    );
+}
+
+/// #987 review B2: NoInventory means no installed version was read (OSV covers
+/// Maven; a package.json with no lockfile is npm), not "no ecosystem it can
+/// check".
+#[test]
+fn no_inventory_says_no_installed_versions_were_read() {
+    let facts = BriefFacts {
+        advisories: Some(crate::osv::readiness::AdvisorySyncState::NoInventory),
+        ..BriefFacts::default()
+    };
+    let out = build_deterministic_brief(&facts, FloorReason::NoCapableModel);
+    assert!(out.contains("read no installed versions"), "{out}");
+    assert!(out.contains("a manifest without a lockfile"), "{out}");
+    assert!(!out.contains("ecosystem it can check"), "{out}");
+}
+
+/// #987 review S5: only the claim is scoped; the rest of the line survives.
+#[test]
+fn scoping_the_all_clear_keeps_the_rest_of_the_line() {
+    let facts = ready_with_gaps(not_covered(&[("C:/p/a/pom.xml", "Maven")], &[]));
+    let draft = "- Nothing new touches your code today, and Vite 7.1 shipped.\n";
+    let out = super::honest_without_lockfiles(draft, &facts);
+    assert!(
+        out.contains("- Nothing new touches the code 4DA checked today, and Vite 7.1 shipped."),
+        "{out}"
+    );
 }

@@ -335,3 +335,23 @@ fn npm_and_maven_read_ready_for_npm_and_name_the_maven_files() {
     let nc = r.not_covered.expect("the pom.xml is named");
     assert_eq!(nc.files[0].ecosystem, "Maven");
 }
+
+/// #987 review S3 (cold start): the manifest scan registers dependencies with
+/// no version before the first lockfile walk reports. That is "not read yet":
+/// never "nothing checkable" to a first-run user.
+#[test]
+fn before_the_first_lockfile_walk_versionless_rows_are_not_started() {
+    let db = crate::test_utils::test_db();
+    db.store_dependency("/web", "minimist", None, "javascript", false, None)
+        .unwrap();
+    let r = advisory_sync(&db);
+    assert_eq!(r.state, AdvisorySyncState::NotStarted, "no walk report yet");
+    // Once the walk has reported, the same rows are what was read: nothing
+    // versioned, so nothing to check.
+    db.set_kv(
+        crate::ace::lockfile::report::REPORT_KV_KEY,
+        r#"{"lockfiles_read":0}"#,
+    )
+    .unwrap();
+    assert_eq!(advisory_sync(&db).state, AdvisorySyncState::NoInventory);
+}

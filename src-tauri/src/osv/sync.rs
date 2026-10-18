@@ -128,14 +128,24 @@ fn auditable_packages_by_ecosystem(db: &Database) -> Result<HashMap<String, Vec<
     Ok(by_ecosystem)
 }
 
-/// The OSV ecosystems the advisory check can speak for: those with at least
-/// one auditable row that carries an installed version, sorted. A manifest
-/// row has none until a lockfile pins it, and a versionless dependency is
-/// never matched (#974). A Maven-only project made "Maven" required, the sync
-/// succeeded, and readiness said Ready while nothing was checked (W5a). The
-/// sync itself still covers every auditable ecosystem ([`sync`],
-/// [`needs_sync`]).
-pub(crate) fn auditable_ecosystems(db: &Database) -> Result<Vec<String>> {
+/// What the auditable inventory holds, by OSV ecosystem.
+pub(crate) struct AuditableCoverage {
+    /// The ecosystems the advisory check can speak for: those with at least
+    /// one auditable row that carries an installed version, sorted. A
+    /// manifest row has none until a lockfile pins it, and a versionless
+    /// dependency is never matched (#974). A Maven-only project made "Maven"
+    /// required, the sync succeeded, and readiness said Ready while nothing
+    /// was checked (W5a). The sync itself still covers every auditable
+    /// ecosystem ([`sync`], [`needs_sync`]).
+    pub versioned: Vec<String>,
+    /// Some auditable row is in an ecosystem OSV covers, versioned or not.
+    pub any_checkable: bool,
+}
+
+/// The auditable inventory's coverage, read once for readiness: which
+/// ecosystems are checkable now, and whether any checkable row exists at all
+/// (readiness tells "not read yet" from "nothing checkable" with it).
+pub(crate) fn auditable_coverage(db: &Database) -> Result<AuditableCoverage> {
     let mut deps = db
         .get_auditable_user_dependencies()
         .map_err(|e| FourDaError::Internal(format!("Failed to read dependencies: {e}")))?;
@@ -144,15 +154,21 @@ pub(crate) fn auditable_ecosystems(db: &Database) -> Result<Vec<String>> {
             FourDaError::Internal(format!("Failed to read scanned dependencies: {e}"))
         })?,
     );
-    let mut ecosystems: Vec<String> = deps
+    let any_checkable = deps
+        .iter()
+        .any(|d| normalize_supported_to_osv(&d.ecosystem).is_some());
+    let mut versioned: Vec<String> = deps
         .iter()
         .filter(|d| d.version.as_deref().is_some_and(|v| !v.trim().is_empty()))
         .filter_map(|d| normalize_supported_to_osv(&d.ecosystem))
         .map(str::to_string)
         .collect();
-    ecosystems.sort();
-    ecosystems.dedup();
-    Ok(ecosystems)
+    versioned.sort();
+    versioned.dedup();
+    Ok(AuditableCoverage {
+        versioned,
+        any_checkable,
+    })
 }
 
 /// Whether any dependency ecosystem is missing a successful recent sync.

@@ -37,6 +37,15 @@ pub(crate) fn build_brief_facts(db: &Database) -> BriefFacts {
         &fingerprint(&security, &also_open, &upgrades),
         Some(readiness.state),
     );
+    // What was not covered is part of the brief (W5a): a newly unread file
+    // must not reuse yesterday's text (#987 review S4).
+    let fingerprint = match &readiness.not_covered {
+        Some(nc) => format!(
+            "{fingerprint}:not_covered={}/{}",
+            nc.count, nc.unreadable_count
+        ),
+        None => fingerprint,
+    };
     // A failed read keeps the old behaviour (dependencies assumed known)
     // rather than telling a scanned user to scan.
     let no_dependencies_known = crate::open_db_connection()
