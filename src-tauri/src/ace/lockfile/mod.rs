@@ -217,6 +217,7 @@ pub(crate) fn probe(dir: &Path) -> Option<PathBuf> {
         .map(|name| dir.join(name))
         .find(|p| p.is_file())
         .or_else(|| requirements_files(dir).into_iter().next())
+        .or_else(|| dotnet_project_files(dir).into_iter().next())
 }
 
 /// Read every dependency file in `dir`. Never fails: a file that cannot be
@@ -247,7 +248,41 @@ pub(crate) fn read_dir(dir: &Path) -> Vec<LockfileOutcome> {
             out.push(LockfileOutcome::Unsupported { path, kind });
         }
     }
+    // A .NET project is a `*.csproj` / `*.fsproj` / `*.vbproj`; without
+    // `packages.lock.json` (already listed above) it was never reported at
+    // all, so it read as having no dependencies (audit A2, 2026-10-12).
+    if !dir.join("packages.lock.json").is_file() {
+        out.extend(dotnet_project_files(dir).into_iter().map(|path| {
+            LockfileOutcome::Unsupported {
+                path,
+                kind: DOTNET_PROJECT_KIND,
+            }
+        }));
+    }
     out
+}
+
+const DOTNET_PROJECT_KIND: &str = "NuGet (.NET project, installed versions not resolved)";
+
+/// The .NET project files directly in `dir`, sorted for a stable report.
+fn dotnet_project_files(dir: &Path) -> Vec<PathBuf> {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    let mut files: Vec<PathBuf> = entries
+        .filter_map(|e| e.ok().map(|e| e.path()))
+        .filter(|p| {
+            p.is_file()
+                && p.extension().and_then(|e| e.to_str()).is_some_and(|e| {
+                    matches!(
+                        e.to_ascii_lowercase().as_str(),
+                        "csproj" | "fsproj" | "vbproj"
+                    )
+                })
+        })
+        .collect();
+    files.sort();
+    files
 }
 
 fn read_file(path: &Path, format: LockFormat) -> LockfileOutcome {

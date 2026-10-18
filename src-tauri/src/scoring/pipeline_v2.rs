@@ -38,6 +38,10 @@ use super::*;
 /// title names several (a cve row may carry both its CVE and its GHSA id).
 const ADVISORY_ID_PREFIXES: &[&str] = &["GHSA-", "CVE-", "RUSTSEC-", "PYSEC-", "GO-", "OSV-"];
 
+/// Applicability of a registry advisory whose dependency has no known
+/// installed version (v42, audit E4): it cannot be confirmed either way.
+pub(crate) const VERSION_UNKNOWN: &str = "version_unknown";
+
 /// Extract the advisory id from a title — `GHSA-xxxx-yyyy-zzzz`, `CVE-2025-N`,
 /// `RUSTSEC-2026-N`, `PYSEC-2025-N`, `GO-2026-N` or `OSV-2026-N`.
 ///
@@ -1922,6 +1926,22 @@ fn apply_final_adjustments(
 /// not evidence (live 2026-09-05: axios x5, Orval x3, Hubuum x3 in a feed with
 /// none of them installed, all at the identical 0.46). Editorial security
 /// coverage (HN, RSS, Reddit, dev.to, …) is content and is decided by score.
+/// One version and one verdict for several nearby installed copies: an
+/// affected copy wins (its version is shown); all copies confirmed safe is
+/// `Some(false)`; otherwise the first copy with no verdict (`None`).
+fn pick_nearby_copy(verdicts: Vec<(String, Option<bool>)>) -> (Option<String>, Option<bool>) {
+    if let Some((v, _)) = verdicts.iter().find(|(_, a)| *a == Some(true)) {
+        return (Some(v.clone()), Some(true));
+    }
+    if let Some((v, _)) = verdicts.iter().find(|(_, a)| a.is_none()) {
+        return (Some(v.clone()), None);
+    }
+    (
+        verdicts.first().map(|(v, _)| v.clone()),
+        verdicts.first().and(Some(false)),
+    )
+}
+
 fn is_registry_advisory_source(source_type: &str) -> bool {
     matches!(source_type, "osv" | "cve")
 }
@@ -3383,7 +3403,7 @@ pub(crate) fn score_item(
     // (the copy furthest behind), not whichever copy the dependency edge
     // happened to carry — "sha2 v0.11.0, installed v0.11.0" hid that two
     // sibling projects were on 0.10.9.
-    let installed_version = sec_exposed_copy
+    let edge_installed = sec_exposed_copy
         .map(|c| c.installed_version.clone())
         .or_else(|| {
             release_grade
@@ -3391,19 +3411,33 @@ pub(crate) fn score_item(
                 .and_then(super::release_grade::ReleaseGrade::headline_installed)
         })
         .or_else(|| display_deps.first().and_then(|d| d.version.clone()));
+    // v42: before an advisory is called `version_unknown`, the lockfile pins
+    // near the dependency's projects count (`temporal::installed_versions_nearby`:
+    // own lockfile, else the nearest ancestor inside the repo root, else a
+    // unique nested pin; same ecosystem family). Only registry advisories
+    // ask, and only when nothing above supplied a version. The SAME lookup
+    // decides Preemption Tier 2, so the two never disagree.
+    let nearby_versions: Vec<String> = match display_deps.first() {
+        Some(dep) if registry_advisory && edge_installed.is_none() && sec_verdict.is_none() => {
+            crate::temporal::installed_versions_nearby(
+                &db.read_conn(),
+                &dep.package_name,
+                &dep.ecosystem,
+                &dep.project_paths,
+            )
+        }
+        _ => Vec::new(),
+    };
     // v29: the OSV mirror's STRUCTURED ranges decide first (introduced/fixed/
     // last_affected, via the same matcher Preemption trusts); the text route
     // is the fallback for advisories the mirror does not hold. Before this
     // `is_version_affected` was NULL on 746 of 746 live security breakdowns
     // (the cve source wrote no range and no fix), so a hono advisory fixed in
     // 4.12.34 paged as Critical against an installed 4.13.3.
-    // 2026-10-02: the matcher verdict over the WHOLE inventory is final when
-    // it evaluated any copy; the edge-scoped routes only run without one.
-    let is_version_affected = match &sec_verdict {
-        Some(verdict) => verdict.affected,
-        None => display_deps
+    let edge_verdict = |installed: Option<&str>| -> Option<bool> {
+        display_deps
             .first()
-            .zip(installed_version.as_deref())
+            .zip(installed)
             .and_then(|(dep, installed)| {
                 mirror_version_verdict(db, input, dep, installed, advisory_id.as_deref())
             })
@@ -3414,17 +3448,33 @@ pub(crate) fn score_item(
                 // multi-package advisory).
                 if package_ranges.is_empty() {
                     check_version_affected(
-                        installed_version.as_deref(),
+                        installed,
                         affected_versions.as_deref(),
                         fixed_version.as_deref(),
                     )
                 } else {
-                    super::security_verdict::ranges_verdict(
-                        installed_version.as_deref(),
-                        &package_ranges,
-                    )
+                    super::security_verdict::ranges_verdict(installed, &package_ranges)
                 }
-            }),
+            })
+    };
+    // Several nearby copies: affected if ANY copy is (fail toward alerting),
+    // and the version shown is the affected one.
+    let (installed_version, nearby_verdict) = match nearby_versions.as_slice() {
+        [] => (edge_installed, None),
+        copies => {
+            let verdicts: Vec<(String, Option<bool>)> = copies
+                .iter()
+                .map(|v| (v.clone(), edge_verdict(Some(v.as_str()))))
+                .collect();
+            pick_nearby_copy(verdicts)
+        }
+    };
+    // 2026-10-02: the matcher verdict over the WHOLE inventory is final when
+    // it evaluated any copy; the edge-scoped routes only run without one.
+    let is_version_affected = match &sec_verdict {
+        Some(verdict) => verdict.affected,
+        None if !nearby_versions.is_empty() => nearby_verdict,
+        None => edge_verdict(installed_version.as_deref()),
     };
     // A registry advisory the matcher CONFIRMED against an installed copy is
     // grounded by that fact, whatever the text-match confidence of its
@@ -3441,6 +3491,20 @@ pub(crate) fn score_item(
     // cve/osv rows extract ranges, so editorial coverage never carries a
     // version verdict and the persona guards are structurally untouched.
     let version_not_affected = registry_advisory && is_version_affected == Some(false);
+    // v42 (audit E4, 2026-10-12): a registry advisory naming a dependency
+    // whose installed version is UNKNOWN (a manifest with no lockfile, or an
+    // ecosystem 4DA does not resolve: Maven, Gradle, .NET) cannot be
+    // confirmed either way. A fresh profile with one pom.xml showed 15 such
+    // GHSA rows as grounded "Affects You" items, 14 of which did not apply.
+    // Accurate first: it takes the same tier as a confirmed not-affected
+    // row (no fast path, the registry-ungrounded ceiling, never
+    // feed-relevant, never grounded) and is labelled `version_unknown`.
+    // Preemption names the file as not covered instead.
+    let version_unknown = registry_advisory
+        && !security_confirmed
+        && is_version_affected.is_none()
+        && installed_version.is_none()
+        && !display_deps.is_empty();
 
     // ── Critical content fast-path ─────────────────────────────────────
     // Security advisories and breaking changes affecting user's actual
@@ -3467,8 +3531,10 @@ pub(crate) fn score_item(
         >= scoring_config::CRITICAL_FASTPATH_DEP_MATCH_THRESHOLD
         && (grounding.strong || security_confirmed);
     // v31: a confirmed not-affected advisory never takes the floor.
-    let critical_fast_path =
-        (is_security || is_breaking) && has_strong_dep_match && !version_not_affected;
+    let critical_fast_path = (is_security || is_breaking)
+        && has_strong_dep_match
+        && !version_not_affected
+        && !version_unknown;
 
     // A CVE confirmed against the user's DIRECT (non-dev) dependency is the
     // flagship preemption case and the highest-confidence security signal — it
@@ -3579,7 +3645,8 @@ pub(crate) fn score_item(
         // Confirmed not-affected registry advisory (v31): the registry-
         // ungrounded tier, applied at the EXIT because a GROUNDED advisory is
         // exempt from the Phase-8 commodity cap by design.
-        let not_affected = version_not_affected.then_some(
+        // v42: an unknown installed version takes the same tier.
+        let not_affected = (version_not_affected || version_unknown).then_some(
             scoring_config::COMMODITY_CEILING_SECURITY_ADVISORY_REGISTRY_UNGROUNDED
                 + scoring_config::SCORE_OFFSET_NEGATIVE_FLOOR,
         );
@@ -3676,6 +3743,7 @@ pub(crate) fn score_item(
         && !(ugc_capped && !judge_cleared)
         && !security_ungrounded
         && !version_not_affected
+        && !version_unknown
         && ((critical_fast_path && !lang_mismatch)  // Critical items always relevant
             || release_act // a breaking upgrade of a runtime dependency (v37)
             || (combined_score >= get_relevance_threshold()
@@ -3834,7 +3902,7 @@ pub(crate) fn score_item(
         matched_window_label: matched_window_label.clone(),
         age_hours,
         content_type: Some(content_type.slug().to_string()),
-        strongly_grounded: grounding.strong || security_confirmed,
+        strongly_grounded: (grounding.strong || security_confirmed) && !version_unknown,
         version_affected: is_version_affected,
         registry_advisory,
         release_grade: release_grade
@@ -3846,6 +3914,19 @@ pub(crate) fn score_item(
     // release in your stack" reason would contradict the gate above.
     if already_installed_release {
         necessity_result.score = 0.0;
+    }
+    // v42: an advisory against an unknown installed version is awareness
+    // at most, and the reason must not claim the dependency is affected.
+    if version_unknown
+        && necessity_result.category == necessity::NecessityCategory::SecurityVulnerability
+    {
+        let dep = display_deps
+            .first()
+            .map_or("your dependency", |d| d.package_name.as_str());
+        necessity_result.score = necessity_result.score.min(0.15);
+        necessity_result.reason =
+            format!("Advisory names {dep} \u{2014} unconfirmed: no installed version known");
+        necessity_result.urgency = necessity::Urgency::Awareness;
     }
 
     // ── Source authority weighting for necessity ───────────────────────
@@ -3868,6 +3949,9 @@ pub(crate) fn score_item(
     let tier_is_critical = sig_priority.as_deref() == Some("critical");
     let (applicability, is_critical_alert) = if version_negative {
         (Some("not_affected".to_string()), false)
+    } else if version_unknown {
+        // v42: named, never "Affects You" (the evidence pool reads this).
+        (Some(VERSION_UNKNOWN.to_string()), false)
     } else if sig_type.as_deref() == Some("security_alert") && security_confirmed {
         // The matcher placed an installed copy inside the range: affected.
         (Some("affected".to_string()), tier_is_critical)
@@ -3929,7 +4013,8 @@ pub(crate) fn score_item(
             already_installed_release,
             strongly_grounded: grounding.strong,
             deps: &raw.matched_deps,
-        }) && !inactive_only;
+        }) && !inactive_only
+            && !version_unknown;
 
     let sec_affected_project_count = if security_confirmed {
         security_lane.exposed_projects.len() as u32
@@ -3985,6 +4070,7 @@ pub(crate) fn score_item(
             installed_version: installed_version.as_deref(),
             via_registry_subject: grounding.via_registry_subject,
             registry_advisory,
+            version_unknown,
             dependency_event,
             release_chain: release_grade
                 .as_ref()
@@ -4013,7 +4099,9 @@ pub(crate) fn score_item(
         confirmation_mult,
         dep_match_score: raw.dep_match_score,
         matched_deps: matched_dep_names,
-        strongly_grounded: (grounding.strong || security_confirmed) && !inactive_only,
+        strongly_grounded: (grounding.strong || security_confirmed)
+            && !inactive_only
+            && !version_unknown,
         dependency_event,
         degraded_inputs,
         // Categorical ceiling for post-pipeline writers: a capped item

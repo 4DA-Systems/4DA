@@ -2746,5 +2746,14 @@
   "signals.stack.projects": "Progetti",
   "signals.stack.listLabel": "Modifiche nel tuo stack",
   "signals.stack.modeNote": "Temi e Grafo mappano il tuo feed di lettura. Ciò che è cambiato nel tuo stack è in Elenco: ogni modifica riguarda un solo pacchetto, quindi non c’è nulla da raggruppare.",
-  "signals.stack.feedOnlyStack": "Nient’altro nel feed: tutto ciò che contiene è una modifica del tuo stack, elencata sopra."
+  "signals.stack.feedOnlyStack": "Nient’altro nel feed: tutto ciò che contiene è una modifica del tuo stack, elencata sopra.",
+  "results.versionUnknown": "Non confermato: nessuna versione installata nota",
+  "preemption.empty.partialTitle": "Nessuna vulnerabilità nota nelle dipendenze che 4DA ha potuto verificare",
+  "preemption.notCovered.title_one": "1 file di dipendenze non è coperto",
+  "preemption.notCovered.title_other": "{{count}} file di dipendenze non sono coperti",
+  "preemption.notCovered.body": "4DA non legge le versioni installate da questi file, quindi non può confrontarli con gli avvisi di sicurezza e non li considera puliti. Oggi legge i lockfile di npm, pnpm, Yarn, Bun, Cargo, Python e Go, con supporto iniziale per Ruby e PHP; i progetti Maven, Gradle e .NET non sono ancora coperti.",
+  "preemption.notCovered.more": "e altri {{count}}",
+  "preemption.notCovered.unreadableTitle_one": "Impossibile leggere 1 lockfile",
+  "preemption.notCovered.unreadableTitle_other": "Impossibile leggere {{count}} lockfile",
+  "preemption.notCovered.unreadableBody": "4DA non è riuscito a leggere questi file nell’ultima scansione, quindi non considera verificato ciò che fissano. Correggi il file o esegui di nuovo la scansione."
 }

@@ -178,6 +178,9 @@ fn is_lockfile_like(rel: &str) -> bool {
     let base = rel.rsplit('/').next().unwrap_or(rel);
     let lower = base.to_ascii_lowercase();
     NAMES.contains(&base)
+        || lower.ends_with(".csproj")
+        || lower.ends_with(".fsproj")
+        || lower.ends_with(".vbproj")
         || (lower.starts_with("requirements") && lower.ends_with(".txt"))
         || (lower.ends_with(".txt") && rel.to_ascii_lowercase().contains("requirements/"))
 }
@@ -961,6 +964,41 @@ fn corpus_is_complete_and_every_lockfile_is_declared() {
     assert!(
         formats.len() >= 8,
         "G1 needs >= 8 lockfile formats, corpus has {formats:?}"
+    );
+}
+
+/// Audit A2/E4 (2026-10-12): a declared-unsupported file (Maven pom.xml,
+/// a .NET .csproj, a binary bun.lockb) must come back from the walk's reader
+/// as an explicit `Unsupported` outcome, which is what the app reports as
+/// "not covered". Zero findings alone would read as a clean project.
+#[test]
+fn every_declared_unsupported_file_is_reported_not_covered() {
+    use crate::ace::lockfile::{read_dir, LockfileOutcome};
+    let mut checked = 0;
+    for case in load_cases() {
+        for row in case
+            .expected
+            .lockfiles
+            .iter()
+            .filter(|l| l.status == "unsupported")
+        {
+            let path = case.dir.join(&row.path);
+            let dir = path.parent().unwrap_or(&case.dir);
+            let reported = read_dir(dir).into_iter().any(|o| {
+                matches!(&o, LockfileOutcome::Unsupported { path: p, .. }
+                    if p.file_name() == path.file_name())
+            });
+            assert!(
+                reported,
+                "{}/{} is declared unsupported but the reader does not report it",
+                case.meta.id, row.path
+            );
+            checked += 1;
+        }
+    }
+    assert!(
+        checked >= 2,
+        "the corpus must keep its Maven and .NET cases ({checked})"
     );
 }
 

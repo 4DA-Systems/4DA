@@ -29,6 +29,10 @@ const loadUserContext = vi.fn(() => Promise.resolve());
 type Sync = {
   state: string; ecosystems: number; synced_at: string | null; error: string | null;
   in_flight?: boolean; skipped_temp?: number;
+  not_covered?: { count: number; files: { path: string; ecosystem: string }[]; unreadable_count: number; unreadable: { path: string; reason: string }[] };
+};
+const NOT_COVERED = {
+  count: 1, files: [{ path: 'svc/Api.fsproj', ecosystem: 'NuGet' }], unreadable_count: 0, unreadable: [],
 };
 const READY: Sync = { state: 'ready', ecosystems: 2, synced_at: '2026-10-12 06:00:00', error: null };
 
@@ -94,6 +98,23 @@ describe('PreemptionWorklist — empty state', () => {
     render(<PreemptionWorklist />);
     expect(screen.getByText('preemption.empty.title')).toBeInTheDocument();
     expect(screen.queryByTestId('preemption-scan-prompt')).toBeNull();
+  });
+
+  // Audit E4 review: files 4DA cannot read stand beside the all-clear, so it
+  // claims only what was checked, and names the files.
+  it('with not-covered files, the all-clear is partial, never "your stack is clean"', () => {
+    setFeed(166, { ...READY, not_covered: NOT_COVERED });
+    render(<PreemptionWorklist />);
+    expect(screen.getByText('preemption.empty.partialTitle')).toBeInTheDocument();
+    expect(screen.queryByText('preemption.empty.title')).toBeNull();
+    expect(screen.getByTestId('preemption-not-covered')).toBeInTheDocument();
+  });
+
+  it('a .NET-only project is named as not covered, not "scan your projects"', () => {
+    setFeed(0, { state: 'no_inventory', ecosystems: 0, synced_at: null, error: null, not_covered: NOT_COVERED });
+    render(<PreemptionWorklist />);
+    expect(screen.queryByTestId('preemption-scan-prompt')).toBeNull();
+    expect(screen.getByTestId('preemption-not-covered')).toBeInTheDocument();
   });
 
   it('keeps the no-threats copy when the dependency count could not be read', () => {

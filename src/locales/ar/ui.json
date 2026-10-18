@@ -2641,5 +2641,14 @@
   "signals.stack.projects": "المشاريع",
   "signals.stack.listLabel": "التغييرات في حزمتك التقنية",
   "signals.stack.modeNote": "تعرض المواضيع والرسم البياني خلاصة قراءتك. ما تغيّر في حزمتك التقنية موجود في القائمة: كل تغيير يخص حزمة واحدة، فلا يوجد ما يُجمَّع.",
-  "signals.stack.feedOnlyStack": "لا شيء آخر في الخلاصة: كل ما فيها تغيير في حزمتك التقنية، مدرج أعلاه."
+  "signals.stack.feedOnlyStack": "لا شيء آخر في الخلاصة: كل ما فيها تغيير في حزمتك التقنية، مدرج أعلاه.",
+  "results.versionUnknown": "غير مؤكد: لا يُعرف الإصدار المثبّت",
+  "preemption.empty.partialTitle": "لا توجد ثغرات معروفة في التبعيات التي تمكّن 4DA من فحصها",
+  "preemption.notCovered.title_one": "ملف تبعيات واحد غير مشمول",
+  "preemption.notCovered.title_other": "{{count}} ملفات تبعيات غير مشمولة",
+  "preemption.notCovered.body": "لا يقرأ 4DA الإصدارات المثبّتة من هذه الملفات، لذا لا يمكنه مطابقتها مع التنبيهات الأمنية ولا يعدّها سليمة. يقرأ اليوم ملفات القفل الخاصة بـ npm وpnpm وYarn وBun وCargo وPython وGo، مع دعم أولي لـ Ruby وPHP؛ ولا تشمل التغطية مشاريع Maven وGradle و.NET بعد.",
+  "preemption.notCovered.more": "و{{count}} أخرى",
+  "preemption.notCovered.unreadableTitle_one": "تعذّرت قراءة ملف قفل واحد",
+  "preemption.notCovered.unreadableTitle_other": "تعذّرت قراءة {{count}} ملفات قفل",
+  "preemption.notCovered.unreadableBody": "تعذّر على 4DA قراءة هذه الملفات في آخر فحص، لذا لا يعدّ ما تثبّته مفحوصًا. أصلح الملف أو أعد الفحص."
 }

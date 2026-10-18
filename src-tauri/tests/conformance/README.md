@@ -29,7 +29,7 @@ never source code. Text files are normalised to LF.
 
 ## The cases
 
-35 cases: 32 from public repositories at a pinned commit, 3 synthetic.
+36 cases: 32 from public repositories at a pinned commit, 4 synthetic.
 Every repository case is permissively licensed (MIT, Apache-2.0, BSD-3-Clause,
 ISC, Unlicense); `case.json` records the licence. Three cases used in the
 2026-10-09 fixture audit were NOT vendored because their repositories are AGPL
@@ -70,6 +70,7 @@ the same formats (Tauri app, pnpm v6, npm v1).
 | `rs-nushell-workspace` | nushell/nushell@0.60.0 | MIT | Cargo.lock, npm-v1 | 157 | 552 | 128 |
 | `rs-pake-tauri-app` | tw93/Pake@V2.3.0 | MIT | Cargo.lock | 114 | 457 | 46 |
 | `rs-ripgrep-12` | BurntSushi/ripgrep@12.0.0 | Unlicense OR MIT | Cargo.lock | 37 | 55 | 7 |
+| `synth-dotnet-csproj` | synthetic | CC0-1.0 | Api.csproj (unsupported) | 1 | 0 | 0 |
 | `synth-go-replace` | synthetic | CC0-1.0 | go.mod-go1.21, go.sum | 2 | 8 | 34 |
 | `synth-npm-edges` | synthetic | CC0-1.0 | npm-v3 | 4 | 9 | 14 |
 | `synth-python-requirements` | synthetic | CC0-1.0 | requirements | 1 | 8 | 101 |

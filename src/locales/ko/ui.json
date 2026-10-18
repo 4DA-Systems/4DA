@@ -2646,5 +2646,14 @@
   "signals.stack.projects": "프로젝트",
   "signals.stack.listLabel": "스택의 변경 사항",
   "signals.stack.modeNote": "테마와 그래프는 읽기 피드를 보여 줍니다. 스택에서 바뀐 내용은 목록에 있습니다. 변경은 패키지 하나 단위이므로 묶을 것이 없습니다.",
-  "signals.stack.feedOnlyStack": "피드에 다른 항목이 없습니다. 모두 스택의 변경 사항이며 위에 나와 있습니다."
+  "signals.stack.feedOnlyStack": "피드에 다른 항목이 없습니다. 모두 스택의 변경 사항이며 위에 나와 있습니다.",
+  "results.versionUnknown": "미확인: 설치된 버전을 알 수 없음",
+  "preemption.empty.partialTitle": "4DA가 확인할 수 있었던 의존성에서 알려진 취약점이 없습니다",
+  "preemption.notCovered.title_one": "의존성 파일 1개가 지원되지 않습니다",
+  "preemption.notCovered.title_other": "의존성 파일 {{count}}개가 지원되지 않습니다",
+  "preemption.notCovered.body": "4DA는 이 파일들에서 설치된 버전을 읽지 않으므로 보안 권고와 비교할 수 없고 안전하다고 보지 않습니다. 현재 npm, pnpm, Yarn, Bun, Cargo, Python, Go 잠금 파일을 읽으며 Ruby와 PHP는 초기 지원 단계입니다. Maven, Gradle, .NET 프로젝트는 아직 지원되지 않습니다.",
+  "preemption.notCovered.more": "외 {{count}}개",
+  "preemption.notCovered.unreadableTitle_one": "잠금 파일 1개를 읽을 수 없습니다",
+  "preemption.notCovered.unreadableTitle_other": "잠금 파일 {{count}}개를 읽을 수 없습니다",
+  "preemption.notCovered.unreadableBody": "4DA가 마지막 스캔에서 이 파일들을 읽지 못했으므로 여기에 고정된 버전을 확인된 것으로 보지 않습니다. 파일을 수정하거나 다시 스캔하세요."
 }

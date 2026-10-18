@@ -52,6 +52,7 @@ const ONLY = opt("only", null)?.split(",");
 export function isLockfileLike(relPath) {
   const base = posix.basename(relPath);
   if (/^(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?|Cargo\.lock|poetry\.lock|uv\.lock|Pipfile\.lock|go\.mod|go\.sum|Gemfile\.lock|composer\.lock|pom\.xml|gradle\.lockfile)$/.test(base)) return true;
+  if (/\.(cs|fs|vb)proj$/i.test(base)) return true;
   if (/requirements.*\.txt$/i.test(base)) return true;
   return /(^|\/)requirements\/[^/]+\.txt$/i.test(relPath);
 }
@@ -64,6 +65,7 @@ const ECOSYSTEM_OF = [
   [/^Gemfile\.lock$/, "RubyGems"],
   [/^composer\.lock$/, "Packagist"],
   [/^(pom\.xml|gradle\.lockfile)$/, "Maven"],
+  [/\.(cs|fs|vb)proj$/i, "NuGet"],
 ];
 export const ecosystemOf = (relPath) => ECOSYSTEM_OF.find(([re]) => re.test(posix.basename(relPath)))?.[1] ?? "unknown";
 

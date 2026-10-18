@@ -700,7 +700,17 @@ pub(crate) use types::{ScoringInput, ScoringOptions};
 // "breaking change" or "eol" can change, so the bump IS registered in
 // `epochs::SCOPED_EPOCHS` on the title. (The paired dependency-event
 // enumeration rule is a display claim — AD-034, no bump.)
-pub(crate) const PIPELINE_VERSION: i32 = 41;
+// v42 (2026-10-12 adversarial audit E4: a fresh profile with one Maven
+// pom.xml showed 15 GHSA rows as grounded "Affects You" items, 14 of which did
+// not apply): a registry advisory (cve / osv) naming a dependency whose
+// installed version is unknown — manifest-only, no lockfile, or an ecosystem
+// 4DA does not resolve — takes the confirmed-not-affected tier: no critical
+// fast path, the registry-ungrounded ceiling, never feed-relevant, never
+// strongly grounded or a dependency event, applicability `version_unknown`,
+// and its reason says "unconfirmed" instead of "affects". Only cve / osv rows
+// can change, so the bump IS registered in `epochs::SCOPED_EPOCHS` on
+// `source_type` (assigned at ingest, never re-derived).
+pub(crate) const PIPELINE_VERSION: i32 = 42;
 
 /// Parse the topic tags carried in the `source_items.tags` column.
 ///

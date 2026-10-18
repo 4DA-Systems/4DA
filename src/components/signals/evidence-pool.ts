@@ -45,6 +45,11 @@ export function isGrounded(r: SourceRelevance): boolean {
   // must never occupy the highest-trust pool, even though the dep-name match
   // is real and strong.
   if (r.applicability === 'not_affected') return false;
+  // No installed version known (manifest-only, no lockfile, or an ecosystem
+  // 4DA does not resolve: Maven, Gradle, .NET): the advisory names the
+  // dependency but whether it applies cannot be checked (audit E4,
+  // 2026-10-12: 14 of 15 such Maven advisories did not apply).
+  if (r.applicability === 'version_unknown') return false;
   // Affects ONLY inactive projects (dormant >90 days or a scratch tree its
   // repository gitignores — audit 2026-10-07, AD-043 amended): the advisory is
   // true and stays named on the item and under Preemption's "Dormant

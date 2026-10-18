@@ -84,6 +84,10 @@ pub(crate) struct ChainInputs<'a> {
     /// rendered for an npm-worm story whose only link to react was the words
     /// "React Query Codegen" in its title.
     pub registry_advisory: bool,
+    /// v42 (audit E4): a registry advisory whose dependency has no known
+    /// installed version. It names the dependency; it cannot claim to
+    /// affect it.
+    pub version_unknown: bool,
     /// The item is a dependency EVENT (`scoring::dependency_event`). An
     /// editorial item that names the dependency without one is an article
     /// that USES it ("Progressive Hydration in React"), and must not read as
@@ -217,6 +221,12 @@ pub(crate) fn build_explanation_chain(inp: &ChainInputs<'_>) -> Vec<ExplanationF
             // The verb is evidence: a registry advisory AFFECTS the
             // dependency it is about; an editorial story merely NAMES it.
             let display = match (named_dep, dep_location.as_deref(), inp.registry_advisory) {
+                (Some(dep), Some(location), true) if inp.version_unknown => format!(
+                    "Advisory names {dep} in {location} \u{2014} unconfirmed: no installed version known"
+                ),
+                (Some(dep), None, true) if inp.version_unknown => format!(
+                    "Advisory names your dependency {dep} \u{2014} unconfirmed: no installed version known"
+                ),
                 (Some(dep), Some(location), true) => {
                     format!("Security advisory affects {dep} in {location}")
                 }
