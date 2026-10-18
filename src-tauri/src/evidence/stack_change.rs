@@ -499,13 +499,18 @@ fn release_explanation(r: &ReleaseChange) -> String {
 /// the release.
 fn release_citations(r: &ReleaseChange, installed: Option<&str>) -> Vec<EvidenceCitation> {
     let pkg = &r.package;
-    let mut evidence = vec![version_context(
-        &r.ecosystem,
-        pkg,
-        installed,
-        Some(&r.announced),
-        r.change,
-    )];
+    // Under a security badge "installed -> announced" would read as the fix
+    // (the advisory lane's arrow); an affected release is named, not aimed at.
+    let (from, to) = if r.change == StackChange::Security {
+        (None, None)
+    } else {
+        (installed, Some(r.announced.as_str()))
+    };
+    let mut context = version_context(&r.ecosystem, pkg, from, to, r.change);
+    if r.change == StackChange::Security {
+        context.title = format!("{} \u{b7} {pkg} {} (affected)", r.ecosystem, r.announced);
+    }
+    let mut evidence = vec![context];
     evidence.push(EvidenceCitation {
         source: r.source_type.clone(),
         title: r.row_title.clone(),
@@ -575,7 +580,10 @@ pub(crate) fn release_item(r: &ReleaseChange, now_ms: i64) -> Ranked {
         (None, Some(i)) => format!("{pkg} {i} \u{2192} {}: {}", r.announced, change_label(r)),
         (None, None) => format!("{pkg} {}: {}", r.announced, change_label(r)),
     };
-    let urgency = match r.change {
+    // A non-malicious affected release keeps the rank and urgency its grade
+    // gives it (`rank_change`); a malicious one is High, first.
+    let rank = releases::rank_change(r);
+    let urgency = match rank {
         _ if releases::is_malicious(r) => Urgency::High,
         StackChange::Yanked => Urgency::High,
         StackChange::Major | StackChange::Breaking if !r.dev_only => Urgency::Medium,
@@ -606,7 +614,7 @@ pub(crate) fn release_item(r: &ReleaseChange, now_ms: i64) -> Ranked {
             created_at: now_ms,
             expires_at: None,
         },
-        change: r.change,
+        change: rank,
         dev_only: r.dev_only,
         published: r.published.clone(),
         package: pkg.clone(),

@@ -240,3 +240,40 @@ fn without_a_confirmed_copy_the_brief_names_no_command() {
     let clause = brief_clause(&db, &project);
     assert_eq!(clause, "bump minimist to >= 1.2.6", "brief: {clause}");
 }
+
+/// #988: an upgrade fact is graded over working projects only. A release
+/// that only a scratch tree is behind on (here it pins the yanked 1.4.1
+/// while the active project already runs 3.0.0) is no candidate, so it can
+/// never take the package's single slot from a release the active project
+/// needs; and a scratch tree's yanked pin no longer masks the active
+/// project's breaking upgrade.
+#[test]
+fn a_scratch_tree_never_sets_the_class_of_an_upgrade_fact() {
+    let grade = |announced: &str, active: &str| {
+        release_grade::ReleaseGrade::from_pins(
+            "quux",
+            semver::Version::parse(announced).expect("version"),
+            vec![
+                ("/scratch/old".into(), "1.4.1".into(), true, false),
+                ("/dev/app".into(), active.into(), true, false),
+            ],
+            &["1.4.1".to_string()],
+        )
+    };
+    let liveness = crate::evidence::ProjectLiveness::default().with_scratch(&["/scratch/old"]);
+
+    // Only the scratch tree is behind: graded over every project this was
+    // a Yanked candidate (and took the slot); now it is none.
+    assert!(grade("3.0.0", "3.0.0").class().is_some());
+    assert!(upgrade_grade(grade("3.0.0", "3.0.0"), &liveness).is_none());
+
+    // The active project a major behind: Breaking, for that project.
+    let up = upgrade_grade(grade("2.0.0", "1.9.0"), &liveness).expect("a candidate");
+    assert_eq!(up.class(), Some(ReleaseClass::Breaking));
+    let concerned: Vec<&str> = up
+        .concerned_pins()
+        .iter()
+        .map(|p| p.project_path.as_str())
+        .collect();
+    assert_eq!(concerned, vec!["/dev/app"]);
+}

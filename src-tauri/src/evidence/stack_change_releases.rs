@@ -4,7 +4,7 @@
 
 //! Registry releases graded against what is installed, for the stack-change
 //! stream. The grading is `scoring::release_grade` (the rules the feed scorer,
-//! the Brief and knowledge gaps share); this module only picks the latest
+//! the Brief and knowledge gaps share); this module only picks the newest
 //! stable release per package inside the Brief's window, keeps the grades that
 //! ask something of a project, and reads whether a minor release is inside
 //! the range the project already declares.
@@ -57,6 +57,10 @@ pub(crate) struct ReleaseChange {
     /// OSV-canonical ecosystem name ("crates.io", "npm", "PyPI", "Go").
     pub ecosystem: String,
     pub change: StackChange,
+    /// The change the release's grade alone asks for (`None` for a patch).
+    /// Differs from `change` only for an affected release, which is a
+    /// `Security` change whatever its size; it ranks a non-malicious one.
+    pub graded: Option<StackChange>,
     pub announced: String,
     /// `YYYY-MM-DD`, when the registry row carries a date.
     pub published: Option<String>,
@@ -199,7 +203,8 @@ pub(crate) fn active_grade(grade: &ReleaseGrade, liveness: &ProjectLiveness) -> 
 }
 
 /// The projects an active grade concerns that declare the package directly
-/// (the only copies a release row can ask something of).
+/// (the only copies a release row can ask something of): for an unaffected
+/// release, the ones with the largest gap, which set its class.
 pub(crate) fn active_pins(active: &ReleaseGrade) -> Vec<&ProjectPin> {
     active
         .concerned_pins()
@@ -208,19 +213,47 @@ pub(crate) fn active_pins(active: &ReleaseGrade) -> Vec<&ProjectPin> {
         .collect()
 }
 
+/// EVERY active project that declares the package directly and is behind
+/// the release: the sites of an AFFECTED release, and the copies its
+/// coverage is judged on. Not the largest-gap set: for 4.2.1 with A on
+/// 4.1.0 and B on 4.2.0 that set is A alone, so a malicious 4.2.1 never
+/// named B (whose caret range is the closest to pulling it in), and an
+/// advisory hitting 4.2.1 and A's copy counted as covered and dropped the
+/// warning B needed.
+pub(crate) fn behind_pins(active: &ReleaseGrade) -> Vec<&ProjectPin> {
+    active
+        .pins
+        .iter()
+        .filter(|p| p.is_direct && p.gap.is_some())
+        .collect()
+}
+
 /// Build the change for one graded release, or `None` when it asks nothing of
-/// an active project. Graded over the active projects alone ([`active_grade`]).
-/// A minor that only dev tooling carries is tooling news, unless an advisory
-/// affects it. An affected release is a SECURITY change whatever its size: a
-/// malicious patch inside a caret range is the one a refresh installs first,
-/// and "patches are not news" must not hide it. A release whose every
-/// affecting advisory already hits every active copy is the advisory lane's
-/// (it names the target that clears them), never a malicious one.
-/// `advisories` must be checked against the [`active_pins`]' copies.
+/// an active project. Graded over the active projects alone ([`active_grade`]);
+/// see [`release_change_active`]. The collector narrows once and calls that
+/// directly; this is the tests' entry point.
+#[cfg(test)]
 pub(crate) fn release_change(
     grade: &ReleaseGrade,
     row: &RegistryRow,
     liveness: &ProjectLiveness,
+    advisories: ReleaseAdvisories,
+) -> Option<ReleaseChange> {
+    release_change_active(&active_grade(grade, liveness), row, advisories)
+}
+
+/// [`release_change`] for a grade already narrowed to working projects.
+/// A minor that only dev tooling carries is tooling news, unless an advisory
+/// affects it. An affected release is a SECURITY change whatever its size: a
+/// malicious patch inside a caret range is the one a refresh installs first,
+/// and "patches are not news" must not hide it; its sites are every active
+/// project behind it ([`behind_pins`]). A release whose every affecting
+/// advisory already hits every such copy is the advisory lane's (it names
+/// the target that clears them), never a malicious one. `advisories` must be
+/// checked against the [`behind_pins`]' copies.
+pub(crate) fn release_change_active(
+    grade: &ReleaseGrade,
+    row: &RegistryRow,
     advisories: ReleaseAdvisories,
 ) -> Option<ReleaseChange> {
     let affected = match &advisories {
@@ -230,14 +263,18 @@ pub(crate) fn release_change(
         ReleaseAdvisories::Affected(_) => true,
         _ => false,
     };
-    let grade = &active_grade(grade, liveness);
+    let graded = change_of(grade);
     let change = if affected {
         StackChange::Security
     } else {
-        change_of(grade)?
+        graded?
     };
     let ecosystem = crate::osv::exposure::registry_source_ecosystem(&row.source_type)?;
-    let active = active_pins(grade);
+    let active = if affected {
+        behind_pins(grade)
+    } else {
+        active_pins(grade)
+    };
     if active.is_empty() {
         return None;
     }
@@ -255,6 +292,7 @@ pub(crate) fn release_change(
         package: grade.package.clone(),
         ecosystem: ecosystem.to_string(),
         change,
+        graded,
         announced: grade.announced.to_string(),
         published: row.published.as_ref().map(|p| p.chars().take(10).collect()),
         url: row.url.clone(),
@@ -390,6 +428,17 @@ pub(crate) fn is_malicious(r: &ReleaseChange) -> bool {
     matches!(&r.advisories, ReleaseAdvisories::Affected(hit) if hit.malware)
 }
 
+/// The change that ranks the item and sets its base urgency. A malicious
+/// release is security news first; any other affected release ranks where
+/// its grade puts it (a patch with the minors), so it never outranks a
+/// yanked pin or loses a major's urgency by being badged `security`.
+pub(crate) fn rank_change(r: &ReleaseChange) -> StackChange {
+    match r.change {
+        StackChange::Security if !is_malicious(r) => r.graded.unwrap_or(StackChange::Minor),
+        change => change,
+    }
+}
+
 /// One registry release row.
 #[derive(Debug, Clone, PartialEq)]
 pub(crate) struct RegistryRow {
@@ -449,8 +498,8 @@ fn own_package_names(conn: &rusqlite::Connection) -> HashSet<String> {
 }
 
 /// Every registry release from the Brief's window that changes something for
-/// an active project: the latest stable release per package, graded against
-/// each project's pin.
+/// an active project: the newest stable release per package, graded against
+/// each working project's pin.
 pub(crate) fn collect_release_changes(
     db: &Database,
     conn: &rusqlite::Connection,
@@ -492,7 +541,7 @@ pub(crate) fn collect_release_changes(
             // Every release an active project is behind on is checked, a
             // patch included: an affected one surfaces whatever its size.
             let active = active_grade(&grade, &liveness);
-            let installed: Vec<String> = active_pins(&active)
+            let installed: Vec<String> = behind_pins(&active)
                 .iter()
                 .map(|p| p.installed.to_string())
                 .collect();
@@ -506,7 +555,7 @@ pub(crate) fn collect_release_changes(
                 &installed,
                 row.published.as_deref(),
             );
-            release_change(&grade, &row, &liveness, verdict)
+            release_change_active(&active, &row, verdict)
         })
         .collect()
 }

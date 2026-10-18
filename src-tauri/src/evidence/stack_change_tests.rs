@@ -652,22 +652,152 @@ fn a_malicious_patch_for_an_active_project_surfaces_as_security() {
     assert!(validate_item(&item).is_ok());
 }
 
-/// Only projects that declare the package can be asked to act: an active
-/// project that carries the release only transitively is not a site.
+/// An npm project declaring `left-padder` with `spec`.
+fn npm_project_with(spec: &str) -> (tempfile::TempDir, String) {
+    let dir = tempfile::tempdir().expect("tmp");
+    std::fs::write(
+        dir.path().join("package.json"),
+        format!(r#"{{"name":"app","dependencies":{{"left-padder":"{spec}"}}}}"#),
+    )
+    .expect("manifest");
+    std::fs::write(dir.path().join("package-lock.json"), "{}").expect("lock");
+    let path = dir.path().to_string_lossy().into_owned();
+    (dir, path)
+}
+
+/// Review of #988, B1: release 4.2.1, A on 4.1.0, B on 4.2.0. The
+/// largest-gap set is A alone; an affected release names EVERY active
+/// project behind it, and its coverage is judged on all of them.
 #[test]
-fn an_affected_release_with_only_transitive_active_copies_is_not_a_release_row() {
+fn an_affected_release_names_every_active_project_behind_it() {
+    let (_a_dir, a) = npm_project_with("^4.1.0");
+    let (_b_dir, b) = npm_project_with("^4.2.0");
     let g = grade(
         "left-padder",
-        "4.1.4",
-        &[("/dev/app", "4.1.3", false, false)],
+        "4.2.1",
+        &[(&a, "4.1.0", true, false), (&b, "4.2.0", true, false)],
     );
-    assert!(release_change(
+    let liveness = ProjectLiveness::default();
+    let active = super::releases::active_grade(&g, &liveness);
+    let largest: Vec<String> = super::releases::active_pins(&active)
+        .iter()
+        .map(|p| p.installed.to_string())
+        .collect();
+    assert_eq!(largest, vec!["4.1.0"], "the largest-gap set is A alone");
+    let r = row("npm_registry", "npm: left-padder v4.2.1");
+    let check = |advisory: &str| {
+        let installed: Vec<String> = super::releases::behind_pins(&active)
+            .iter()
+            .map(|p| p.installed.to_string())
+            .collect();
+        let window = crate::osv::release_advisories::AdvisoryWindow {
+            advisory_id: advisory.to_string(),
+            summary: "ReDoS".to_string(),
+            aliases: Vec::new(),
+            affected_ranges: Some(
+                r#"[{"type":"ENUMERATED","events":["4.1.0","4.2.1"]}]"#.to_string(),
+            ),
+        };
+        crate::osv::release_advisories::assess(
+            "npm",
+            "4.2.1",
+            &installed,
+            &[window],
+            false,
+            &[],
+            chrono::Utc::now().naive_utc(),
+            false,
+            None,
+        )
+    };
+    // An advisory hitting 4.2.1 and A's 4.1.0 but not B's 4.2.0: not
+    // covered, so the item stays, for both.
+    let verdict = check("GHSA-aaaa-bbbb-cccc");
+    assert!(
+        matches!(&verdict, ReleaseAdvisories::Affected(h) if !h.covered_by_installed),
+        "{verdict:?}"
+    );
+    let change = release_change(&g, &r, &liveness, verdict).expect("kept for B");
+    let installed: Vec<&str> = change.sites.iter().map(|s| s.installed.as_str()).collect();
+    assert!(installed.contains(&"4.2.0"), "{installed:?}");
+
+    // Malware: both named.
+    let change = release_change(&g, &r, &liveness, malicious(false)).expect("warned");
+    assert_eq!(change.sites.len(), 2);
+}
+
+/// The sets differ when the gaps do: B a patch behind, A a minor behind.
+/// The unaffected minor concerns A only; the malicious release names both.
+#[test]
+fn a_patch_behind_project_is_named_for_malware_but_not_for_the_minor() {
+    let (_a_dir, a) = npm_project_with("^4.1.0");
+    let (_b_dir, b) = npm_project_with("^4.2.0");
+    let g = grade(
+        "left-padder",
+        "4.2.1",
+        &[(&a, "4.1.0", true, false), (&b, "4.2.0", true, false)],
+    );
+    let liveness = ProjectLiveness::default();
+    let r = row("npm_registry", "npm: left-padder v4.2.1");
+    let clean = release_change(&g, &r, &liveness, ReleaseAdvisories::Clear).expect("minor");
+    assert_eq!(clean.sites.len(), 1, "the minor concerns A");
+    let bad = release_change(&g, &r, &liveness, malicious(false)).expect("warned");
+    let mut installed: Vec<&str> = bad.sites.iter().map(|s| s.installed.as_str()).collect();
+    installed.sort_unstable();
+    assert_eq!(installed, vec!["4.1.0", "4.2.0"]);
+    assert!(bad.sites.iter().all(|s| s.admitted == Some(true)));
+}
+
+/// Review S2/S3: a non-malicious affected release ranks and keeps the
+/// urgency its grade gives it (a runtime major stays Medium, behind a
+/// yanked pin), and its version line names the release as affected, with
+/// no "installed -> announced" arrow that would read as the fix.
+#[test]
+fn an_affected_major_keeps_its_rank_and_names_the_release_as_affected() {
+    let (_dir, path) = npm_project();
+    let g = grade("left-padder", "5.0.0", &[(&path, "4.1.3", true, false)]);
+    let verdict = ReleaseAdvisories::Affected(AffectedRelease {
+        ids: vec!["GHSA-aaaa-bbbb-cccc".to_string()],
+        malware: false,
+        confirmed: true,
+        covered_by_installed: false,
+    });
+    let change = release_change(
         &g,
-        &row("npm_registry", "npm: left-padder v4.1.4"),
+        &row("npm_registry", "npm: left-padder v5.0.0"),
         &ProjectLiveness::default(),
-        malicious(false),
+        verdict,
     )
-    .is_none());
+    .expect("kept");
+    assert_eq!(change.change, StackChange::Security);
+    let ranked = release_item(&change, NOW);
+    assert_eq!(ranked.change, StackChange::Major, "ranked as its grade");
+    assert_eq!(ranked.item.urgency, Urgency::Medium);
+    assert!(ranked.item.id.starts_with("stack-change:security:"));
+    assert_eq!(
+        ranked.item.evidence[0].title,
+        "npm \u{b7} left-padder 5.0.0 (affected)"
+    );
+
+    let yanked = ReleaseGrade::from_pins(
+        "quux",
+        v("1.4.2"),
+        vec![("/dev/app".to_string(), "1.4.1".to_string(), true, false)],
+        &["1.4.1".to_string()],
+    );
+    let yanked = release_item(
+        &release_change(
+            &yanked,
+            &row("crates_io", "crates.io: quux v1.4.2"),
+            &ProjectLiveness::default(),
+            ReleaseAdvisories::Clear,
+        )
+        .expect("yanked"),
+        NOW,
+    );
+    let mut ranked_list = vec![ranked, yanked];
+    order(&mut ranked_list);
+    assert_eq!(ranked_list[0].change, StackChange::Yanked);
 }
 
 #[test]
