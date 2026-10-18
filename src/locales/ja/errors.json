@@ -39,6 +39,7 @@
   "errorMsg.parse": "データフォーマットエラー。再試行するか、アプリを再起動してください。",
   "errorMsg.permission": "アクセスが拒否されました。ファイルの権限を確認してください。",
   "errorMsg.rateLimit": "レート制限に達しました。しばらく待ってから再試行してください。",
+  "errorMsg.inventoryRefreshing": "プロジェクトを再スキャンしています。スキャンが終わり次第、ブリーフィングを作成します。",
   "errorMsg.budgetReached": "1日のAI予算に達しました — {{time}}にリセットされます（{{in}}）",
   "errorMsg.timeout": "リクエストがタイムアウトしました。しばらくしてから再試行してください。",
   "translation.noLlm": "LLM が設定されていません — コンテンツ翻訳を有効にするには設定で API キーを設定してください"

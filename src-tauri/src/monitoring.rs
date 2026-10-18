@@ -13,7 +13,7 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder},
     AppHandle, Emitter, Manager, Runtime,
 };
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 use crate::error::Result;
 
@@ -1423,6 +1423,16 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                     } else {
                         info!(target: "4da::monitor", "Pre-briefing analysis timeout after 5 ticks — proceeding with available data");
                     }
+                }
+                // The briefing states dependency facts: never from the
+                // previous session's inventory while the startup lockfile
+                // rescan runs (the gate reopens at the scan's end or its
+                // deadline). Checked before the reset below, so the
+                // stale-results wait is not restarted every tick meanwhile.
+                // Not marked sent: the next tick (60 s) asks again.
+                if !skip_briefing && !crate::inventory_freshness::is_fresh() {
+                    debug!(target: "4da::monitor", "Morning briefing waits: the dependency inventory is being refreshed");
+                    skip_briefing = true;
                 }
                 if !skip_briefing {
                     state

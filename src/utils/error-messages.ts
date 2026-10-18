@@ -189,6 +189,17 @@ export function parseBudgetReset(error: unknown): BudgetReset | null {
 }
 
 /**
+ * A brief deferred while the startup dependency rescan runs: it would have
+ * stated facts from the previous session's inventory (live 2026-10-18).
+ */
+export function inventoryRefreshingMessage(): string {
+  return t(
+    'errors:errorMsg.inventoryRefreshing',
+    'Your projects are being rescanned. The brief will be written as soon as the scan finishes.',
+  );
+}
+
+/**
  * The localized budget refusal when `error` is one, else null. For surfaces
  * that otherwise show the backend's own (already user-facing) message: only
  * the budget case is replaced, so the token never renders verbatim.

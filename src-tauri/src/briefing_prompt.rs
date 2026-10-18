@@ -343,6 +343,7 @@ Rules:
 - An item published more than 7 days ago is not news. Do not present a release the user already runs as news.
 - If no fact is NEW and no candidate qualifies, the whole brief is one sentence, "Nothing new touches your code today.", followed by Still open.
 - Refer to items by title, never by index number. Never write meta-commentary about 4DA, its data, freshness or pipeline.
+- Never write about the brief itself: not where a line is listed, why it is or is not in a section, or the FACTS block's labels (ACT NOW, ALSO OPEN, NEW, UNCHANGED). An ALSO OPEN fact goes only in the "Lower severity" line, even when it is NEW.
 - Plain sentences, no hype, at most 350 words.
 
 MACHINE TRAILER (required — parsed by software and stripped before the user sees the briefing):

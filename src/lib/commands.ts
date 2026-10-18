@@ -468,7 +468,7 @@ interface CommandMap {
 
   // -- Briefing --
   get_latest_briefing: { params: Record<string, never>; result: { content: string; model: string | null; item_count: number; created_at: string } | null };
-  generate_ai_briefing: { params: { auto?: boolean }; result: { success: boolean; briefing: string | null; error?: string; model?: string; item_count?: number; latency_ms?: number; cached?: boolean; briefing_created_at?: string } };
+  generate_ai_briefing: { params: { auto?: boolean }; result: { success: boolean; briefing: string | null; error?: string; inventory_refreshing?: boolean; model?: string; item_count?: number; latency_ms?: number; cached?: boolean; briefing_created_at?: string } };
   get_brief_display_verdicts: { params: Record<string, never>; result: { filtered: Array<{ id: number; reason: string }>; expires_in_seconds: number } };
   generate_free_briefing: { params: Record<string, never>; result: { content: string; item_count: number; created_at: string } };
   get_source_health_status: { params: Record<string, never>; result: SourceHealthStatus[] };

@@ -624,6 +624,15 @@ async fn warm_preemption_cache_after_first_light(reason: &'static str) {
     crate::blind_spots::warm_blind_spot_cache_after_startup().await;
 }
 
+/// How long the startup catch-up briefing waits for the startup lockfile
+/// rescan. The scan waits for first light plus a grace period and then walks
+/// every project (about 8 minutes on the operator's 19-lockfile machine,
+/// 2026-10-18). One minute past the gate's own hard deadline, so the gate
+/// decides; past it the scheduler tick takes over.
+const STARTUP_BRIEFING_INVENTORY_WAIT: std::time::Duration =
+    crate::inventory_freshness::STARTUP_SCAN_DEADLINE
+        .saturating_add(std::time::Duration::from_mins(1));
+
 /// Tauri `setup()` callback body.
 ///
 /// Handles tray, monitoring, event listeners, background tasks, and ACE initialization.
@@ -1896,6 +1905,16 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
             // Short delay: let briefing window JS register its listener
             tokio::time::sleep(std::time::Duration::from_secs(3)).await;
 
+            // The catch-up briefing states dependency facts built from the
+            // Preemption feed: wait for the startup lockfile rescan (bounded).
+            // Still pending past the bound: skip; the scheduler tick delivers
+            // the briefing once the inventory is fresh.
+            if !crate::inventory_freshness::wait_until_fresh(STARTUP_BRIEFING_INVENTORY_WAIT).await
+            {
+                warn!(target: "4da::briefing", "Immediate morning briefing skipped: the dependency inventory is still being refreshed");
+                return;
+            }
+
             if let Some(briefing) =
                 crate::monitoring_notifications::check_morning_briefing(&briefing_state)
             {
@@ -2719,8 +2738,22 @@ fn initialize_ace_on_startup(app_handle: tauri::AppHandle) {
 
     info!(target: "4da::startup", dirs = context_dirs.len(), "Initializing ACE");
 
+    // From here until the scan below has re-read the lockfiles, the stored
+    // inventory is the previous session's: the brief and the morning
+    // briefing wait for it (`inventory_freshness`). The guard moves into the
+    // scan task and reopens the gate when it drops (scan done or failed, or a
+    // panic) or at the deadline if the scan hangs. On reopening: rebuild the
+    // Preemption feed against the inventory and tell the UI, so a brief it
+    // deferred is written now.
+    let refresh_handle = app_handle.clone();
+    let inventory_refresh = crate::inventory_freshness::begin_startup_refresh(move || {
+        crate::preemption::refresh_preemption_cache_after_cycle();
+        let _ = refresh_handle.emit(crate::inventory_freshness::INVENTORY_FRESH_EVENT, ());
+    });
+
     // Spawn async task for ACE initialization
     tauri::async_runtime::spawn(async move {
+        let inventory_refresh = inventory_refresh;
         // ACE full scans are valuable but expensive. Give the hidden webview
         // the first chance to load and report readiness before walking project
         // trees, parsing lockfiles, and analyzing git history.
@@ -2752,6 +2785,9 @@ fn initialize_ace_on_startup(app_handle: tauri::AppHandle) {
                 error!(target: "4da::startup", error = %e, "ACE scan failed");
             }
         }
+        // The lockfiles have been re-read (or the scan failed and nothing
+        // newer is coming this session): reopen the dependency-fact gate.
+        drop(inventory_refresh);
 
         // AUTO-SEED: Populate interests from ACE-detected tech if interests are empty
         // This provides immediate value without requiring manual configuration
