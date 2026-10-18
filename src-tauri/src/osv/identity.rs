@@ -407,6 +407,7 @@ mod tests {
             dependency_instances: vec![],
             aliases: aliases.iter().map(|s| s.to_string()).collect(),
             severity_label: label.map(str::to_string),
+            cwe_ids: Vec::new(),
         }
     }
 

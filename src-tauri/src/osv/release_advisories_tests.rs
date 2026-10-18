@@ -21,6 +21,7 @@ fn window(id: &str, summary: &str, ranges: &str) -> AdvisoryWindow {
         advisory_id: id.to_string(),
         summary: summary.to_string(),
         aliases: Vec::new(),
+        cwe_ids: Vec::new(),
         affected_ranges: Some(ranges.to_string()),
     }
 }
@@ -122,6 +123,35 @@ fn a_ghsa_malware_summary_counts_as_malware() {
     aliased.aliases = vec!["MAL-2026-1".to_string()];
     assert!(aliased.is_malware());
     assert!(!window("GHSA-b", "Prototype pollution", "[]").is_malware());
+    // The title template is anchored: prose that mentions malice is not it.
+    assert!(!window("GHSA-c", "Malicious-looking prose", "[]").is_malware());
+}
+
+/// GHSA-28f8-hqmc-7ph8 as OSV serves it: no `MAL-` alias and no CWE, only
+/// GitHub's malware title. It stays malware (review of #992, B1).
+#[test]
+fn a_ghsa_malware_record_with_no_alias_and_no_cwe_counts_by_its_title() {
+    let w = window(
+        "GHSA-28f8-hqmc-7ph8",
+        "Malicious Package in ember-power-timepicker",
+        r#"[{"type":"SEMVER","events":[{"introduced":"0"}]}]"#,
+    );
+    assert!(w.aliases.is_empty() && w.cwe_ids.is_empty());
+    assert!(w.is_malware());
+}
+
+/// crossenv GHSA-c2m4-w5hm-vqjw: CWE-506, no `MAL-` alias, and a summary
+/// outside the title template. Malware by its CWE.
+#[test]
+fn a_ghsa_malware_record_counts_by_its_cwe() {
+    let mut crossenv = window(
+        "GHSA-c2m4-w5hm-vqjw",
+        "crossenv is malware",
+        r#"[{"type":"SEMVER","events":[{"introduced":"0"}]}]"#,
+    );
+    crossenv.aliases = vec!["CVE-2017-16074".to_string()];
+    crossenv.cwe_ids = vec!["CWE-506".to_string()];
+    assert!(crossenv.is_malware());
 }
 
 fn fixed_before() -> AdvisoryWindow {

@@ -539,7 +539,7 @@ pub(super) fn store_vulnerability(
         let ranges_json = serialize_ranges(&affected);
         let fixed_json = extract_fixed_versions(&affected);
 
-        db.upsert_osv_advisory_with_meta(
+        db.upsert_osv_advisory_record(
             &vuln.id,
             summary,
             vuln.details.as_deref(),
@@ -555,6 +555,7 @@ pub(super) fn store_vulnerability(
             vuln.withdrawn.as_deref(),
             vuln.aliases_json().as_deref(),
             vuln.severity_label().as_deref(),
+            vuln.cwe_ids_json().as_deref(),
         )
         .map_err(|e| FourDaError::Internal(format!("Failed to store advisory: {e}")))?;
 
@@ -813,5 +814,52 @@ mod tests {
             needs_sync(&db, DEFAULT_SYNC_MAX_AGE_HOURS).unwrap(),
             "an old ecosystem status must make the dependency mirror stale"
         );
+    }
+
+    /// Phase 128 backfill: a row stored before `cwe_ids` existed is re-synced
+    /// with it. The migration makes every ecosystem due (a fresh status would
+    /// otherwise skip the sync for up to 6 h), and the next sync's upsert of
+    /// the same record writes its CWE ids, so crossenv GHSA-c2m4-w5hm-vqjw
+    /// (CWE-506, no `MAL-` alias) reads as malware.
+    #[test]
+    fn a_pre_migration_row_gets_its_cwe_ids_on_the_next_sync() {
+        let db = crate::test_utils::test_db();
+        db.store_dependency("/project", "crossenv", Some("1.0.0"), "npm", false, None)
+            .unwrap();
+        let record = serde_json::json!({
+            "id": "GHSA-c2m4-w5hm-vqjw",
+            "summary": "crossenv is malware",
+            "aliases": ["CVE-2017-16074"],
+            "affected": [{"package": {"ecosystem": "npm", "name": "crossenv"},
+                          "ranges": [{"type": "SEMVER", "events": [{"introduced": "0"}]}]}],
+            "database_specific": {"cwe_ids": ["CWE-506"], "severity": "CRITICAL"}
+        });
+        let vuln: Vulnerability = serde_json::from_value(record).unwrap();
+        // As stored before Phase 128: the row exists, its CWE ids do not.
+        let mut seen = std::collections::HashSet::new();
+        store_vulnerability(&db, &vuln, &mut seen).unwrap();
+        db.conn
+            .lock()
+            .execute("UPDATE osv_advisories SET cwe_ids = NULL", [])
+            .unwrap();
+        db.update_osv_sync_status("npm", 1, None).unwrap();
+        let stored = || {
+            db.get_osv_advisories_for_package("crossenv", "npm")
+                .unwrap()
+        };
+        assert!(!stored()[0].is_malware());
+        assert!(!needs_sync(&db, DEFAULT_SYNC_MAX_AGE_HOURS).unwrap());
+
+        // The migration's step makes the sync due ...
+        {
+            let conn = db.conn.lock();
+            crate::db::Database::make_osv_sync_due(&conn).unwrap();
+        }
+        assert!(needs_sync(&db, DEFAULT_SYNC_MAX_AGE_HOURS).unwrap());
+        // ... and the sync's re-upsert fills the column.
+        let mut seen = std::collections::HashSet::new();
+        store_vulnerability(&db, &vuln, &mut seen).unwrap();
+        assert_eq!(stored()[0].cwe_ids, ["CWE-506"]);
+        assert!(stored()[0].is_malware());
     }
 }

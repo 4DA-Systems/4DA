@@ -25,7 +25,7 @@ fn hist(pairs: &[(&str, Option<&str>)]) -> RequirementHistory {
 }
 
 fn adv(id: &str, ranges: Option<String>) -> Advisory {
-    Advisory::new(id, &[], ranges)
+    Advisory::new(id, &[], &[], "", ranges)
 }
 
 fn range(intro: &str, fixed: &str) -> Option<String> {
@@ -476,6 +476,27 @@ fn par_case(par_advisories: Vec<Advisory>) -> Decision {
 }
 
 #[test]
+fn a_cwe_506_record_with_no_mal_alias_is_malware_too() {
+    // crossenv GHSA-c2m4-w5hm-vqjw as OSV serves it (2026-10-18).
+    let crossenv = Advisory::new(
+        "GHSA-c2m4-w5hm-vqjw",
+        &["CVE-2017-16074".to_string()],
+        &["CWE-506".to_string()],
+        "crossenv is malware",
+        Some(r#"[{"type":"SEMVER","events":[{"introduced":"0"}]}]"#.into()),
+    );
+    assert!(crossenv.malware);
+    // An installed malicious parent is removed or replaced, never moved, and
+    // never "remains affected (no fix published)".
+    let d = par_case(vec![crossenv]);
+    assert_eq!(
+        d.rows[0].standing,
+        Standing::Malicious("GHSA-c2m4-w5hm-vqjw".into())
+    );
+    assert_eq!(d.rows[0].to, None);
+}
+
+#[test]
 fn a_malicious_release_is_never_named_nor_the_newest() {
     let mal = || vec![adv("MAL-2026-0001", range("2.0.0", "2.0.1"))];
     let d = par_case(mal());
@@ -500,6 +521,8 @@ fn a_malicious_release_is_never_named_nor_the_newest() {
     let aliased = Advisory::new(
         "GHSA-xxxx",
         &["MAL-2026-0002".to_string()],
+        &[],
+        "",
         range("0", "9.0.0"),
     );
     assert!(aliased.malware);

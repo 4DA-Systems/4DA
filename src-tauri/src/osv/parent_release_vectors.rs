@@ -53,7 +53,13 @@ fn advisories(v: Option<&Value>) -> Vec<Advisory> {
                     json!({"type": "SEMVER", "events": events})
                 })
                 .collect();
-            Advisory::new(s(a, "id"), &[], Some(Value::Array(ranges).to_string()))
+            Advisory::new(
+                s(a, "id"),
+                &strings(a.get("aliases")),
+                &strings(a.get("cwe_ids")),
+                &opt(a, "summary").unwrap_or_default(),
+                Some(Value::Array(ranges).to_string()),
+            )
         })
         .collect()
 }

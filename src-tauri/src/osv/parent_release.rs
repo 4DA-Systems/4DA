@@ -74,7 +74,7 @@ pub struct Releases {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Advisory {
     pub id: String,
-    /// A malicious-package record (OSV `MAL-` id or alias): a release it
+    /// A malicious-package record (`fourda_depengine::is_malware`): a release it
     /// affects is never clean, never a target and never "the newest".
     pub malware: bool,
     /// Stored ranges JSON; `None` or unparseable makes every decision on the
@@ -83,12 +83,18 @@ pub struct Advisory {
 }
 
 impl Advisory {
-    /// From a stored id, its aliases and its ranges.
-    pub fn new(id: &str, aliases: &[String], ranges: Option<String>) -> Self {
-        let mal = |s: &str| s.trim().to_ascii_uppercase().starts_with("MAL-");
+    /// From a stored id, its aliases, its CWE ids, its summary and its
+    /// ranges; malware per `fourda_depengine::is_malware`.
+    pub fn new(
+        id: &str,
+        aliases: &[String],
+        cwe_ids: &[String],
+        summary: &str,
+        ranges: Option<String>,
+    ) -> Self {
         Self {
             id: id.to_string(),
-            malware: mal(id) || aliases.iter().any(|a| mal(a)),
+            malware: fourda_depengine::is_malware(id, aliases, cwe_ids, summary),
             ranges,
         }
     }
@@ -121,7 +127,15 @@ impl<'a> Advisories<'a> {
             ecosystem,
             list: stored
                 .into_iter()
-                .map(|a| Advisory::new(&a.advisory_id, &a.aliases, a.affected_ranges))
+                .map(|a| {
+                    Advisory::new(
+                        &a.advisory_id,
+                        &a.aliases,
+                        &a.cwe_ids,
+                        &a.summary,
+                        a.affected_ranges,
+                    )
+                })
                 .collect(),
         }
     }

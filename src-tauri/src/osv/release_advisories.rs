@@ -53,22 +53,23 @@ pub(crate) struct AdvisoryWindow {
     pub advisory_id: String,
     pub summary: String,
     pub aliases: Vec<String>,
+    /// `database_specific.cwe_ids` (Phase 128).
+    pub cwe_ids: Vec<String>,
     /// The stored OSV ranges JSON (`osv_advisories.affected_ranges`).
     pub affected_ranges: Option<String>,
 }
 
 impl AdvisoryWindow {
-    /// A malicious-package record: an OSV `MAL-` id (or alias), or a GitHub
-    /// malware advisory, whose summary OSV writes as "Malicious code in …".
+    /// A malicious-package record (`fourda_depengine::is_malware`: an OSV
+    /// `MAL-` id or alias, CWE-506, or GitHub's anchored malware title
+    /// template "Malicious Package in " / "Malicious code in ").
     pub(crate) fn is_malware(&self) -> bool {
-        let mal = |id: &str| id.trim().to_ascii_uppercase().starts_with("MAL-");
-        mal(&self.advisory_id)
-            || self.aliases.iter().any(|a| mal(a))
-            || self
-                .summary
-                .trim()
-                .to_ascii_lowercase()
-                .starts_with("malicious")
+        fourda_depengine::is_malware(
+            &self.advisory_id,
+            &self.aliases,
+            &self.cwe_ids,
+            &self.summary,
+        )
     }
 
     /// (inside the window, placed by a readable bound) for `version`.
@@ -398,7 +399,7 @@ fn stored_advisories(db: &Database, ecosystem: &str, package: &str) -> Option<Ve
     let conn = db.conn.lock();
     let mut stmt = conn
         .prepare_cached(
-            "SELECT advisory_id, summary, aliases, affected_ranges, package_name
+            "SELECT advisory_id, summary, aliases, affected_ranges, package_name, cwe_ids
              FROM osv_advisories
              WHERE ecosystem = ?1 AND withdrawn_at IS NULL
                AND REPLACE(REPLACE(LOWER(package_name), '_', '-'), '.', '-') = ?2
@@ -416,6 +417,10 @@ fn stored_advisories(db: &Database, ecosystem: &str, package: &str) -> Option<Ve
                         .and_then(|s| serde_json::from_str::<Vec<String>>(&s).ok())
                         .unwrap_or_default(),
                     affected_ranges: r.get(3)?,
+                    cwe_ids: r
+                        .get::<_, Option<String>>(5)?
+                        .and_then(|s| serde_json::from_str::<Vec<String>>(&s).ok())
+                        .unwrap_or_default(),
                 },
                 r.get::<_, String>(4)?,
             ))

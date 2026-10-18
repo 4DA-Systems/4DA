@@ -143,6 +143,7 @@ pub(crate) fn get_matched_advisories_with_not_compiled(
                 dependency_instances: f.dependency_instances,
                 aliases: advisory.aliases.clone(),
                 severity_label: advisory.severity_label.clone(),
+                cwe_ids: advisory.cwe_ids.clone(),
             }
         })
         .collect();

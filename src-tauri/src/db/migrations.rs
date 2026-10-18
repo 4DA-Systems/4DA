@@ -1488,7 +1488,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 127;
+        const TARGET_VERSION: i64 = 128;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -5914,12 +5914,53 @@ impl Database {
                 )?;
             }
 
+            // Phase 128 (review of #981, parity decision 1): an advisory's
+            // CWE ids, so a GitHub malware advisory with no `MAL-` alias
+            // (crossenv GHSA-c2m4-w5hm-vqjw: CWE-506 only) reads as malware
+            // (`fourda_depengine::is_malware`). The column fills on the next
+            // sync; every ecosystem's sync is made due now, so rows stored
+            // before it do not stay NULL until a 6-hour window passes.
+            if current_version < 128 {
+                Self::run_versioned_migration(
+                    &conn,
+                    127,
+                    128,
+                    "Phase 128: osv_advisories.cwe_ids; mirror re-sync due",
+                    |c| {
+                        Self::add_column_if_missing(c, "osv_advisories", "cwe_ids", "TEXT")?;
+                        let due = Self::make_osv_sync_due(c)?;
+                        info!(
+                            target: "4da::db",
+                            due,
+                            "Phase 128: cwe_ids added; every advisory ecosystem re-syncs next cycle"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }
 
         info!(target: "4da::db", "Database schema initialized with sqlite-vec");
         Ok(())
+    }
+
+    /// Phase 128: make every ecosystem's advisory sync due on the next cycle,
+    /// so the mirror is re-upserted with the new column. `osv::sync::needs_sync`
+    /// is due once `last_synced_at` is the max age old, so the status is set
+    /// back by exactly that: due now, and every surface that shows the last
+    /// sync still shows a plausible time (not 1970). Returns rows changed.
+    pub(crate) fn make_osv_sync_due(c: &Connection) -> SqliteResult<usize> {
+        let hours = crate::osv::sync::osv_sync_max_age_hours();
+        c.execute(
+            "UPDATE osv_sync_status
+             SET last_synced_at = datetime('now', '-' || ?1 || ' hours')
+             WHERE last_synced_at IS NOT NULL
+               AND last_synced_at > datetime('now', '-' || ?1 || ' hours')",
+            [hours],
+        )
     }
 
     /// Phase 126 (a): turn every interest off (AD-054). Returns rows changed.

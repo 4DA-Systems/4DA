@@ -51,9 +51,13 @@ fn store_advisories(db: &Database, advisories: &[&Value]) {
                 json!({"type": "SEMVER", "events": events})
             })
             .collect();
+        let summary = a
+            .get("summary")
+            .and_then(Value::as_str)
+            .unwrap_or(s(a, "id"));
         let _ = db.upsert_osv_advisory(
             s(a, "id"),
-            s(a, "id"),
+            summary,
             None,
             s(a, "package"),
             "npm",
@@ -66,6 +70,20 @@ fn store_advisories(db: &Database, advisories: &[&Value]) {
             None,
             None,
         );
+        // Optional `summary` / `aliases` / `cwe_ids`, stored as a sync
+        // stores them.
+        let list = |key: &str| {
+            let items: Vec<&str> = arr(a, key).into_iter().filter_map(Value::as_str).collect();
+            (!items.is_empty()).then(|| json!(items).to_string())
+        };
+        for column in ["aliases", "cwe_ids"] {
+            if let Some(json) = list(column) {
+                let _ = db.conn.lock().execute(
+                    &format!("UPDATE osv_advisories SET {column} = ?2 WHERE advisory_id = ?1"),
+                    rusqlite::params![s(a, "id"), json],
+                );
+            }
+        }
     }
 }
 
