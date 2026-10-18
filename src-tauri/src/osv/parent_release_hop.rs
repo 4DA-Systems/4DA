@@ -78,8 +78,13 @@ fn lever_hop(
         .unwrap_or_default();
     let lever_own = advisories(hop.db, &through.name);
     let lever_newest = lever_own.newest(&lever);
-    let lever_clean = |v: &str| lever_own.usable(v, lever_newest.as_deref());
-    let parent_clean = |v: &str| parent.own.usable(v, parent.newest.as_deref());
+    let lever_clean =
+        |v: &str| lever_own.usable(v, lever_newest.as_deref(), Some(&through.version));
+    let parent_clean = |v: &str| {
+        parent
+            .own
+            .usable(v, parent.newest.as_deref(), Some(&hop.parent.1))
+    };
     let clean = hop.child.clean();
     let child = hop.child.child(clean.as_ref());
     let hp = HopParent {
@@ -111,8 +116,9 @@ fn lever_hop(
     ) else {
         return (found, None);
     };
-    let lift =
-        compare(version, &row, ECOSYSTEM) == Some(Ordering::Less) && !is_major(version, &row);
+    // A major step included: the lever's own row moves there anyway
+    // (parity decision 3), and the release says it is a major upgrade.
+    let lift = compare(version, &row, ECOSYSTEM) == Some(Ordering::Less);
     let smallest = version.clone();
     match hop_at(&child, &hp, lever_history, &lever_clean, &row, Dialect::Npm) {
         Some(lifted) if lift => (lifted, Some(smallest)),
@@ -255,7 +261,7 @@ pub(super) fn lever_needs(
     };
     let lever_own = advisories(db, lever.name);
     let lever_newest = lever_own.newest(&lever_releases);
-    let lever_clean = |v: &str| lever_own.usable(v, lever_newest.as_deref());
+    let lever_clean = |v: &str| lever_own.usable(v, lever_newest.as_deref(), Some(lever.version));
     for (parent, version) in pinned_parents(db, book, lever) {
         let side = ParentSide {
             project: lever.project,
@@ -270,7 +276,8 @@ pub(super) fn lever_needs(
             let Some(facts) = parent_facts(db, book, &parent, &row.package) else {
                 continue;
             };
-            let parent_clean = |v: &str| facts.own.usable(v, facts.newest.as_deref());
+            let parent_clean =
+                |v: &str| facts.own.usable(v, facts.newest.as_deref(), Some(&version));
             let clean = row.clean();
             let hp = HopParent {
                 installed: &version,

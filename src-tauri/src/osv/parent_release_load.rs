@@ -115,7 +115,10 @@ impl RowData {
 
     /// The shared predicate (`Advisories::usable`): a release that can be named.
     pub(super) fn clean(&self) -> Box<dyn Fn(&str) -> bool + '_> {
-        Box::new(move |v: &str| self.advisories.usable(v, self.newest.as_deref()))
+        Box::new(move |v: &str| {
+            self.advisories
+                .usable(v, self.newest.as_deref(), Some(&self.installed))
+        })
     }
 
     /// Why nothing can be decided for this copy, when that is so.
@@ -469,6 +472,9 @@ fn standing_of(
             latest: latest.clone(),
         },
         (Standing::Undecided(why), _) => ParentStanding::Undecided { why: why.clone() },
+        (Standing::Introduces(ids), _) => ParentStanding::Introduces {
+            advisories: ids.clone(),
+        },
         (Standing::Malicious(id), _) => ParentStanding::Malicious {
             package: link.parent.clone(),
             advisory: id.clone(),

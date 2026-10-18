@@ -291,6 +291,11 @@ pub(crate) fn parent_move(
             "{package} is flagged malicious ({advisory}): remove or replace {package}; no \
              {parent} release is named as the fix"
         ),
+        ParentStanding::Introduces { advisories } => format!(
+            "no {parent} release is named: every fixing release brings in {}, which the \
+             installed version does not have{force}",
+            advisories.join(", ")
+        ),
         ParentStanding::Undecided { why } => {
             format!("no {parent} release is named because {why}, so no command is named{force}")
         }
@@ -403,6 +408,7 @@ fn row_move(
         | ParentStanding::Admits(_)
         | ParentStanding::NoneAdmits { .. }
         | ParentStanding::Undecided { .. }
+        | ParentStanding::Introduces { .. }
         | ParentStanding::Malicious { .. } => {
             format!(
                 "{via}{lever} must move (4DA holds no record of a {lever} release that admits \

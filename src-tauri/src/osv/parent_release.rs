@@ -114,12 +114,15 @@ pub struct Advisories<'a> {
     pub list: Vec<Advisory>,
 }
 
-/// THE predicate every reader shares (review of #981, B2): whether a release
-/// can be named. A malicious-package record that affects it rules it out
-/// outright; an advisory with a published fix (it does not also affect the
-/// package's newest non-malicious release) rules it out; an advisory no
-/// release fixes does not (it cannot block a move that fixes the others),
-/// and the release named says it remains affected by it.
+/// THE predicate every reader shares (review of #981, B2; parity decision
+/// 2): whether a release can be named. A malicious-package record that
+/// affects it rules it out outright; so does ANY advisory the installed
+/// version does not have (a move never introduces one, fixed or not); an
+/// advisory the installed version already has rules it out when it has a
+/// published fix (it does not also affect the package's newest
+/// non-malicious release); one no release fixes does not (it cannot block a
+/// move that fixes the others), and the release named says it remains
+/// affected by it.
 impl<'a> Advisories<'a> {
     /// From the advisories 4DA stores for one package.
     pub fn stored(ecosystem: &'a str, stored: Vec<super::types::StoredAdvisory>) -> Self {
@@ -183,13 +186,29 @@ impl<'a> Advisories<'a> {
     }
 
     /// Whether `version` can be named (see the predicate above).
-    pub fn usable(&self, version: &str, newest: Option<&str>) -> bool {
+    pub fn usable(&self, version: &str, newest: Option<&str>, installed: Option<&str>) -> bool {
         self.list.iter().all(|a| {
             if !self.hits(a, version) {
                 return true;
             }
+            // Never introduce an advisory (parity decision 2): one the
+            // installed version does not have rules the release out, fixed
+            // or not.
+            if installed.is_some_and(|i| !self.hits(a, i)) {
+                return false;
+            }
             !a.malware && newest.is_some_and(|n| self.hits(a, n))
         })
+    }
+
+    /// The advisories that affect `version` but not `installed`: what a move
+    /// to it would bring in.
+    pub fn introduced_at(&self, version: &str, installed: &str) -> Vec<String> {
+        self.list
+            .iter()
+            .filter(|a| self.hits(a, version) && !self.hits(a, installed))
+            .map(|a| a.id.clone())
+            .collect()
     }
 
     /// The advisories no release fixes that still affect `version`.
@@ -258,6 +277,9 @@ pub enum Standing {
     /// The installed parent is a release a malicious-package record affects
     /// (its id): it is removed or replaced, never moved.
     Malicious(String),
+    /// A release admits a clean copy, but every such release brings in an
+    /// advisory the installed parent does not have (these ids): none is named.
+    Introduces(Vec<String>),
 }
 
 fn parse(v: &str, eco: &str) -> Option<OrderedVersion> {
@@ -430,15 +452,16 @@ pub fn row_target(
         .chain(std::iter::once(own))
         .max_by(|a, b| compare(a, b, eco).unwrap_or(Ordering::Equal))
         .unwrap_or(own);
-    let raise = compare(highest, own, eco) == Some(Ordering::Greater)
-        && !is_major(own, highest)
-        && !parent_affected(highest);
+    // Across a major too (parity decision 3): the plan flags it breaking and
+    // says why; refusing left the parent's row on a release that does not
+    // fix the copy it pins.
+    let raise = compare(highest, own, eco) == Some(Ordering::Greater) && !parent_affected(highest);
     Some(if raise { highest } else { own }.to_string())
 }
 
 /// Rule (b), a transitive row: a smallest release below the parent's own
-/// row target moves up to it when that target also admits a clean copy and
-/// the step does not cross a major.
+/// row target moves up to it when that target also admits a clean copy (a
+/// major step included: the parent's row moves there anyway).
 pub fn lift(
     found: &Found,
     row_target: Option<&str>,
@@ -449,7 +472,7 @@ pub fn lift(
 ) -> Option<Found> {
     let target = row_target?;
     let below = compare(&found.version, target, child.ecosystem) == Some(Ordering::Less);
-    if !below || is_major(&found.version, target) {
+    if !below {
         return None;
     }
     admits_at(child, history, own_clean, target, dialect)
@@ -506,14 +529,25 @@ pub fn decide(
 ) -> Decision {
     let eco = parent_advisories.ecosystem;
     let latest = parent_advisories.newest(parent);
-    let own_clean = |v: &str| parent_advisories.usable(v, latest.as_deref());
+    let own_clean = |v: &str| parent_advisories.usable(v, latest.as_deref(), Some(from));
     let blocked = parent_blocked(parent_advisories, from);
     let standings: Vec<Standing> = rows
         .iter()
         .map(|r| match (&blocked, &r.unknown) {
             (Some(b), _) => b.clone(),
             (None, Some(why)) => Standing::Undecided(why.clone()),
-            (None, None) => standing(&r.child, parent, from, r.history, &own_clean, dialect),
+            (None, None) => {
+                let s = standing(&r.child, parent, from, r.history, &own_clean, dialect);
+                introduces(
+                    s,
+                    r,
+                    parent,
+                    from,
+                    parent_advisories,
+                    latest.as_deref(),
+                    dialect,
+                )
+            }
         })
         .collect();
     let needs: Vec<&str> = standings
@@ -542,6 +576,34 @@ pub fn decide(
     Decision {
         row_target: target,
         rows,
+    }
+}
+
+/// Parity decision 2: when no release qualifies, but one would if it could
+/// bring in an advisory the installed parent lacks, say which ones.
+fn introduces(
+    found: Standing,
+    row: &RowIn<'_>,
+    parent: &Releases,
+    from: &str,
+    advisories: &Advisories<'_>,
+    latest: Option<&str>,
+    dialect: Dialect,
+) -> Standing {
+    let (Standing::NoneAdmits { .. }, Some(history)) = (&found, row.history) else {
+        return found;
+    };
+    let relaxed = |v: &str| advisories.usable(v, latest, None);
+    match smallest_admitting(&row.child, parent, from, history, &relaxed, dialect) {
+        Some(f) => {
+            let ids = advisories.introduced_at(&f.version, from);
+            if ids.is_empty() {
+                found
+            } else {
+                Standing::Introduces(ids)
+            }
+        }
+        None => found,
     }
 }
 

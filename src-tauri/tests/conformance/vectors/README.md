@@ -34,7 +34,7 @@ specific enough to recheck).
 | `refresh_verdict.jsonl` | `{eco, name, installed, target, requirements[], verdict, via, inferred}` | The 16 transitive oracle cases (the refresh was applied: it reached the target, or it did not move the copy), each with its parents' requirements read from the case lockfile (`package-lock.json` `requires`, `yarn.lock` `dependencies`) or the parent's published manifest (npm registry for pnpm, crates.io for Cargo). Each case also appears with `requirements: []` to pin the semver fallback. The rest apply AD-055 ¶1 by hand. |
 | `fix_command.jsonl` | `{tool, eco, pkg, installed, target, workspace_root, command}`; `kind: "direct"` lines add `declared` (npm family), `manifest` (Cargo), `go_mod` (Go) or `requirements` (PyPI), optionally `member: true` (the manifest sits one workspace level below the lockfile), and `instruction` | The command text of AD-055 ¶4 for a transitive copy's refresh. Where the oracle applied that tool's refresh, the `source` names the case. `kind: "direct"` lines pin the fix for a DECLARED dependency, read from the project's own manifest, that keeps how it is declared (audit E8): `command` when one command does it, `instruction` for a manifest edit, both null when nothing can be named with certainty. Each line's `source` says whether it was run against its tool (and which version) or is a rule with no tool run. |
 | `range_check.jsonl` | `{eco, name, constraint, from, releases[], record_ids[], expected}` | `@4da/mcp-server` 6.2.0 recorded fixtures (`src/__tests__/fixtures/dependency-check/recorded/`, origin/main `bae421b`): OSV's querybatch answer per release of ws, Jinja2 and golang.org/x/net. Constraint membership: node `semver` (npm, Go without `v`; `v0` is the v0 line), python `packaging` `SpecifierSet` (PyPI). |
-| `parent_release.jsonl` | `{eco, tool, parent{...}, rows[], expect{parent_target, rows[]}}` (below) | pr-001..pr-008: registry.npmjs.org abbreviated documents and OSV.dev `/v1/query`, read 2026-10-18 (generated once, then the rule applied by hand); OWASP/NodeGoat's `package-lock.json`; npm 10.9.2 for the install-keeps-the-copy case. pr-001..pr-004 and pr-006 agree with `@4da/mcp-server` fix/planner-advice-625 `1840dab` run on the same projects. |
+| `parent_release.jsonl` | `{eco, tool, parent{...}, rows[], expect{parent_target, rows[]}}` (below) | pr-001..pr-008: registry.npmjs.org abbreviated documents and OSV.dev `/v1/query`, read 2026-10-18 (generated once, then the rule applied by hand); pr-009: index.crates.io sparse records and OSV, 2026-10-18 (the MCP terminal's line, verbatim; `tool: cargo`, Cargo requirement dialect); pr-010: SYNTHETIC (marked in its source); OWASP/NodeGoat's `package-lock.json`; npm 10.9.2 for the install-keeps-the-copy case. pr-001..pr-004 and pr-006 agree with `@4da/mcp-server` fix/planner-advice-625 `1840dab` run on the same projects. |
 | `holding.jsonl` | `{eco, name, advisory_id, version, holding}` | npm's security holding placeholders (`0.0.<n>-security`; a publisher's `1.0.0-security` prerelease is not one: ho-006): the registry's own description ("security holding package") and the advisories that flag the name. `holding: true` means no advisory applies to that release (audit L4 decision, 2026-10-16). |
 | `severity.jsonl` | `{record \| records[], fixed_version?, aliases_available, expect: {severity, severity_from, urgency}}`; a `record` is `{id, summary, severity?, database_specific?: {severity?, cwe_ids?}, aliases[]}` as OSV gives it | api.osv.dev `/v1/vulns/<id>` and the app's local mirror (`osv_advisories`, read-only), both read on the date in `source`; by-hand lines say so. `aliases_available` maps each GHSA id the mirror holds to its grade (`null`: held, no grade); an id absent from it cannot be read. |
 
@@ -86,7 +86,7 @@ Field conventions:
     one window per range (OSV's events, split).
   - `expect.parent_target`: the parent's own row after the raise (`null`
     without an own row). `expect.rows[]`, in row order: `outcome`
-    (`release`, `deprecated`, `latest`, `none_admits`, `unread`), `smallest`
+    (`release`, `deprecated`, `latest`, `none_admits`, `unread`, `undecided`, `malicious`, `introduces`), `smallest`
     (the smallest admitting release), `to` (the release named, lifted to
     `parent_target` when that still admits a clean copy), `breaking`,
     `requirement`, `peer`, `resolves_to` (what a fresh resolve of
@@ -302,6 +302,18 @@ the parent upgrades that name it as their lever agree on its release."*
 - A whole old major deprecated with one notice is not withdrawn (the decided
   FX-H5 rule; the engines must agree): glob 11.0.3's target stays 11.1.0,
   and @nestjs/cli 11.0.11 is the release that admits it: pr-008
+- The only fix across a major raises the parent's own row, flagged breaking
+  (parity decision 3, 2026-10-18; Cargo, from live crates.io sparse records
+  and OSV): xsv's crossbeam-channel 0.2.4, own row 0.4.4, raised to 0.5.0 for
+  crossbeam-utils; the reason "the only release of crossbeam-channel that
+  fixes crossbeam-utils is 0.5.0, a major upgrade" is pinned in
+  `osv::raised_lines` tests (the line format has no field for it): pr-009
+  (written by the MCP terminal, copied verbatim)
+- A move never introduces an advisory (parity decision 2): no release is
+  named when every fixing one is affected by an advisory the installed
+  version does not have, outcome `introduces` (text "every fixing release
+  brings in <id>, which the installed version does not have", pinned in the
+  app's tests); a SYNTHETIC rule line, no clean live case exists: pr-010
 
 ### Severity — one grade per advisory (2026-10-18)
 

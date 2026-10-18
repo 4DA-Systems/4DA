@@ -44,7 +44,7 @@ fn ptr_clean(v: &str) -> bool {
             adv("GHSA-27v5", range("8.0.0", "8.4.0")),
         ],
     };
-    a.usable(v, Some("8.4.2"))
+    a.usable(v, Some("8.4.2"), None)
 }
 
 fn express() -> Releases {
@@ -235,10 +235,11 @@ fn the_own_row_rises_within_its_major_and_only_to_a_clean_release() {
         row_target(Some("4.20.0"), &["4.19.0"], &none, "npm").as_deref(),
         Some("4.20.0")
     );
-    // A major the own target does not cross stays a row of its own.
+    // Parity decision 3: the only fix across a major raises the row too
+    // (flagged breaking where it is worded, `osv::raised_lines`).
     assert_eq!(
         row_target(Some("2.1.20"), &["3.1.2"], &none, "npm").as_deref(),
-        Some("2.1.20")
+        Some("3.1.2")
     );
     // An advisory of the parent affects the higher release.
     assert_eq!(
@@ -283,17 +284,46 @@ fn a_lower_release_lifts_to_the_own_row_target_when_that_still_admits_it() {
         ),
         None
     );
-    assert_eq!(
-        lift(
-            &found,
-            Some("5.0.0"),
-            &child,
-            &express_ptr(),
-            &|_| true,
-            Dialect::Npm
-        ),
-        None
+    // Parity decision 3: across a major too (express 5.0.0 no longer depends
+    // on path-to-regexp at all).
+    let major = lift(
+        &found,
+        Some("5.0.0"),
+        &child,
+        &express_ptr(),
+        &|_| true,
+        Dialect::Npm,
+    )
+    .expect("lifts across the major");
+    assert_eq!((major.version.as_str(), major.requirement), ("5.0.0", None));
+}
+
+/// Parity decision 2: a release affected by an advisory the installed
+/// version does not have is never named, fixed or not; one the installed
+/// version already has and no release fixes does not block it.
+#[test]
+fn a_release_never_introduces_an_advisory() {
+    let own = Advisories {
+        ecosystem: "npm",
+        list: vec![
+            adv("GHSA-new", range("1.1.0", "1.2.0")),
+            adv(
+                "GHSA-old-unfixed",
+                Some(r#"[{"type":"SEMVER","events":[{"introduced":"0"}]}]"#.into()),
+            ),
+        ],
+    };
+    let newest = Some("1.2.0");
+    assert!(
+        !own.usable("1.1.0", newest, Some("1.0.0")),
+        "brings in GHSA-new"
     );
+    assert!(
+        own.usable("1.2.0", newest, Some("1.0.0")),
+        "keeps only what 1.0.0 has"
+    );
+    assert_eq!(own.introduced_at("1.1.0", "1.0.0"), ["GHSA-new"]);
+    assert_eq!(own.unfixed_at("1.2.0", newest), ["GHSA-old-unfixed"]);
 }
 
 #[test]
@@ -516,7 +546,7 @@ fn a_malicious_release_is_never_named_nor_the_newest() {
         ..Releases::default()
     };
     assert_eq!(own.newest(&par).as_deref(), Some("1.1.0"));
-    assert!(!own.usable("2.0.0", Some("1.1.0")));
+    assert!(!own.usable("2.0.0", Some("1.1.0"), None));
     // An alias counts too.
     let aliased = Advisory::new(
         "GHSA-xxxx",

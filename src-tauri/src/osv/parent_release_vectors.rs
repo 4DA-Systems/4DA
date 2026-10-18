@@ -108,6 +108,7 @@ fn outcome(standing: &Standing) -> &'static str {
         Standing::Unread => "unread",
         Standing::Undecided(_) => "undecided",
         Standing::Malicious(_) => "malicious",
+        Standing::Introduces(_) => "introduces",
     }
 }
 
@@ -123,22 +124,36 @@ fn command(
     let Some(declared) = declared else {
         return Ok(None);
     };
-    if tool != "npm" {
-        return Err(format!("no project shape for tool {tool}"));
-    }
     let dir = tempfile::tempdir().map_err(|e| e.to_string())?;
-    let pkg_json = json!({ "dependencies": { name: declared } });
-    std::fs::write(dir.path().join("package.json"), pkg_json.to_string())
-        .map_err(|e| e.to_string())?;
-    std::fs::write(
-        dir.path().join("package-lock.json"),
-        "{\"lockfileVersion\": 3}\n",
-    )
-    .map_err(|e| e.to_string())?;
+    let write = |file: &str, body: String| {
+        std::fs::write(dir.path().join(file), body).map_err(|e| e.to_string())
+    };
+    let eco = match tool {
+        "npm" => {
+            write(
+                "package.json",
+                json!({ "dependencies": { name: declared } }).to_string(),
+            )?;
+            write(
+                "package-lock.json",
+                "{\"lockfileVersion\": 3}\n".to_string(),
+            )?;
+            "npm"
+        }
+        "cargo" => {
+            write(
+                "Cargo.toml",
+                format!("[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\n{name} = \"{declared}\"\n"),
+            )?;
+            write("Cargo.lock", "version = 3\n".to_string())?;
+            "crates.io"
+        }
+        other => return Err(format!("no project shape for tool {other}")),
+    };
     // The command the lever names: the in-range refresh when the declaration
     // already admits the release (pr-001), else the install that keeps the
     // operator; exhaustive so a new kind of fix cannot drop out silently.
-    Ok(match direct_fix(dir.path(), "npm", name, installed, to) {
+    Ok(match direct_fix(dir.path(), eco, name, installed, to) {
         Some(DirectFix::Command(c) | DirectFix::Refresh(c)) => Some(c),
         Some(DirectFix::Instruction(_)) | None => None,
     })
@@ -199,8 +214,10 @@ pub(super) fn check_parent_release(v: &Value) -> Result<(), String> {
     let cleans: Vec<Box<dyn Fn(&str) -> bool + '_>> = ads
         .iter()
         .zip(&newest)
-        .map(|(a, n)| {
-            Box::new(move |x: &str| a.usable(x, n.as_deref())) as Box<dyn Fn(&str) -> bool>
+        .zip(&rows)
+        .map(|((a, n), r)| {
+            Box::new(move |x: &str| a.usable(x, n.as_deref(), Some(&r.installed)))
+                as Box<dyn Fn(&str) -> bool>
         })
         .collect();
     let inputs: Vec<RowIn<'_>> = rows
@@ -226,7 +243,11 @@ pub(super) fn check_parent_release(v: &Value) -> Result<(), String> {
         &parent_advisories,
         &inputs,
         &[],
-        Dialect::Npm,
+        if eco == "crates.io" {
+            Dialect::Cargo
+        } else {
+            Dialect::Npm
+        },
     );
 
     let expect = v.get("expect").ok_or("no expect")?;
@@ -269,7 +290,7 @@ pub(super) fn check_parent_release(v: &Value) -> Result<(), String> {
             },
             "refresh": to
                 .filter(|f| f.keeps_installed)
-                .and_then(|_| Manager::Npm.refresh_command(&row.pkg, &row.installed, &row.target)),
+                .and_then(|_| if eco == "crates.io" { Manager::Cargo } else { Manager::Npm }.refresh_command(&row.pkg, &row.installed, &row.target)),
         });
         if &got != want {
             return Err(format!("{}: got {got}, want {want}", row.pkg));

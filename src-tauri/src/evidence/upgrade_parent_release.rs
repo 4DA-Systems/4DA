@@ -215,6 +215,11 @@ fn lever_move(parent: &str, to: &str, l: &Through, force: &str) -> String {
             "{package} is flagged malicious ({advisory}): remove {package} or replace {lever}; \
              no {lever} upgrade is named"
         ),
+        ParentStanding::Introduces { advisories } => format!(
+            "no {lever} release is named: every fixing release brings in {}, which the installed \
+             version does not have{force}",
+            advisories.join(", ")
+        ),
         ParentStanding::Undecided { why } => {
             format!("no {lever} release is named ({why}), so no command is named")
         }

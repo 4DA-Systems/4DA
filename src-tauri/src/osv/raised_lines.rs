@@ -98,8 +98,41 @@ fn note(package: &str, old: &str, to: &str, packages: &[String]) -> String {
     } else {
         format!("{package} {to} is the highest of the {package} releases they need")
     };
+    // Across a major (parity decision 3): flagged, never silent.
+    let breaking = if crate::osv::parent_release::is_major(old, to) {
+        format!(
+            " BREAKING: the only release of {package} that fixes {which} is {to}, a major \
+             upgrade."
+        )
+    } else {
+        String::new()
+    };
     format!(
         " Upgrade to {package} {to}, not {old}: {package} {old} still requires a vulnerable \
-         {which}; {why}, and no advisory of {package} affects it."
+         {which}; {why}, and no advisory of {package} affects it.{breaking}"
     )
+}
+
+#[cfg(test)]
+mod tests {
+    /// Parity decision 3 (pr-009's case, xsv, 2026-10-18): the raise across a
+    /// major is flagged with its reason.
+    #[test]
+    fn a_raise_across_a_major_says_why() {
+        let text = super::note(
+            "crossbeam-channel",
+            "0.4.4",
+            "0.5.0",
+            &["crossbeam-utils".to_string()],
+        );
+        assert!(
+            text.contains(
+                "BREAKING: the only release of crossbeam-channel that fixes crossbeam-utils is \
+                 0.5.0, a major upgrade."
+            ),
+            "{text}"
+        );
+        let minor = super::note("express", "4.20.0", "4.22.3", &["qs".to_string()]);
+        assert!(!minor.contains("BREAKING"), "{minor}");
+    }
 }

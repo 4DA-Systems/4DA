@@ -274,3 +274,28 @@ fn the_named_release_states_what_it_still_carries_and_where_it_was_lifted_from()
         "{text}"
     );
 }
+
+/// Parity decision 2: the MCP's exact words when every fixing release
+/// brings in an advisory the installed version does not have.
+#[test]
+fn every_fixing_release_bringing_in_an_advisory_names_none() {
+    let text = crate::evidence::parent_move(
+        "leaf",
+        "1.1.0",
+        "par",
+        "1.0.0",
+        &ParentStanding::Introduces {
+            advisories: vec!["GHSA-synt-0000-0002".into()],
+        },
+        None,
+        None,
+    );
+    assert!(
+        text.contains(
+            "every fixing release brings in GHSA-synt-0000-0002, which the installed version does \
+             not have"
+        ),
+        "{text}"
+    );
+    assert!(!text.contains("upgrade par to"), "{text}");
+}

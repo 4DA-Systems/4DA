@@ -431,6 +431,15 @@ fn with_direct_fix(
             )
         })
         .map(|f| f.brief_clause());
+    // A raise across a major (parity decision 3) is never silent.
+    let fix = if crate::osv::parent_release::is_major(installed, &to) {
+        Some(fix.map_or_else(
+            || "a major upgrade".to_string(),
+            |f| format!("a major upgrade; {f}"),
+        ))
+    } else {
+        fix
+    };
     FixPath::Bump { to, fix }
 }
 

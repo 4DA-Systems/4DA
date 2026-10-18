@@ -143,6 +143,9 @@ pub enum ParentStanding {
     /// A malicious-package record affects the installed `package` (this
     /// package, or the vulnerable copy it pins): remove or replace it.
     Malicious { package: String, advisory: String },
+    /// A release admits a clean copy, but every one brings in an advisory
+    /// the installed release does not have (parity decision 2).
+    Introduces { advisories: Vec<String> },
 }
 
 impl ParentStanding {
@@ -312,8 +315,10 @@ pub fn parent_standing(
     );
     let releases = book.releases(ecosystem_norm, name).unwrap_or_default();
     let newest = advisories.newest(&releases);
-    let usable =
-        |v: &str| !registry.excludes(ecosystem_norm, v) && advisories.usable(v, newest.as_deref());
+    let usable = |v: &str| {
+        !registry.excludes(ecosystem_norm, v)
+            && advisories.usable(v, newest.as_deref(), Some(installed))
+    };
     let listed = releases.versions.clone();
     standing_from_with(&rows, name, installed, &listed, &usable)
 }
