@@ -108,18 +108,24 @@ impl Advisory {
     }
 }
 
+#[cfg(test)]
+use super::parent_release_hop::{through_release, Hop, HopParent};
+
 /// One package's known advisories.
 pub struct Advisories<'a> {
     pub ecosystem: &'a str,
     pub list: Vec<Advisory>,
 }
 
-/// THE predicate every reader shares (review of #981, B2): whether a release
-/// can be named. A malicious-package record that affects it rules it out
-/// outright; an advisory with a published fix (it does not also affect the
-/// package's newest non-malicious release) rules it out; an advisory no
-/// release fixes does not (it cannot block a move that fixes the others),
-/// and the release named says it remains affected by it.
+/// THE predicate every reader shares (review of #981, B2; parity decision
+/// 2): whether a release can be named. A malicious-package record that
+/// affects it rules it out outright; so does ANY advisory the installed
+/// version does not have (a move never introduces one, fixed or not); an
+/// advisory the installed version already has rules it out when it has a
+/// published fix (it does not also affect the package's newest
+/// non-malicious release); one no release fixes does not (it cannot block a
+/// move that fixes the others), and the release named says it remains
+/// affected by it.
 impl<'a> Advisories<'a> {
     /// From the advisories 4DA stores for one package.
     pub fn stored(ecosystem: &'a str, stored: Vec<super::types::StoredAdvisory>) -> Self {
@@ -183,13 +189,66 @@ impl<'a> Advisories<'a> {
     }
 
     /// Whether `version` can be named (see the predicate above).
-    pub fn usable(&self, version: &str, newest: Option<&str>) -> bool {
+    pub fn usable(&self, version: &str, newest: Option<&str>, installed: Option<&str>) -> bool {
         self.list.iter().all(|a| {
             if !self.hits(a, version) {
                 return true;
             }
+            // Never introduce an advisory (parity decision 2): one the
+            // installed version does not have rules the release out, fixed
+            // or not.
+            if installed.is_some_and(|i| !self.hits(a, i)) {
+                return false;
+            }
             !a.malware && newest.is_some_and(|n| self.hits(a, n))
         })
+    }
+
+    /// The non-malicious advisories that affect `version` but not
+    /// `installed`: what a move to it would bring in (the MCP's
+    /// `introducedAt`).
+    pub fn introduced_at(&self, version: &str, installed: &str) -> Vec<String> {
+        self.list
+            .iter()
+            .filter(|a| !a.malware && self.hits(a, version) && !self.hits(a, installed))
+            .map(|a| a.id.clone())
+            .collect()
+    }
+
+    /// [`Self::usable`], except that advisories `installed` does not have are
+    /// ignored, fixed or not (the MCP's `cleanButIntroduced`): whether only
+    /// those block `version`. A malicious record affecting it still does.
+    pub fn clean_but_introduced(
+        &self,
+        version: &str,
+        newest: Option<&str>,
+        installed: &str,
+    ) -> bool {
+        self.malware_at(version).is_none()
+            && self.list.iter().all(|a| {
+                !self.hits(a, version)
+                    || !self.hits(a, installed)
+                    || newest.is_some_and(|n| self.hits(a, n))
+            })
+    }
+
+    /// Of `candidates`, the ones only advisories `installed` lacks block:
+    /// the union of what they bring in, sorted and deduped (review of #994,
+    /// S4). Empty when none.
+    pub fn introduced_union<'v>(
+        &self,
+        candidates: impl Iterator<Item = &'v str>,
+        newest: Option<&str>,
+        installed: &str,
+    ) -> Vec<String> {
+        let mut out: Vec<String> = candidates
+            .filter(|v| !self.usable(v, newest, Some(installed)))
+            .filter(|v| self.clean_but_introduced(v, newest, installed))
+            .flat_map(|v| self.introduced_at(v, installed))
+            .collect();
+        out.sort();
+        out.dedup();
+        out
     }
 
     /// The advisories no release fixes that still affect `version`.
@@ -258,6 +317,9 @@ pub enum Standing {
     /// The installed parent is a release a malicious-package record affects
     /// (its id): it is removed or replaced, never moved.
     Malicious(String),
+    /// A release admits a clean copy, but every such release brings in an
+    /// advisory the installed parent does not have (these ids): none is named.
+    Introduces(Vec<String>),
 }
 
 fn parse(v: &str, eco: &str) -> Option<OrderedVersion> {
@@ -274,7 +336,7 @@ fn stable(v: &str, eco: &str) -> bool {
 }
 
 /// Sorted ascending, stable releases only.
-fn ascending<'a>(versions: &'a [String], eco: &str) -> Vec<&'a String> {
+pub(super) fn ascending<'a>(versions: &'a [String], eco: &str) -> Vec<&'a String> {
     let mut out: Vec<&String> = versions.iter().filter(|v| stable(v, eco)).collect();
     out.sort_by(|a, b| compare(a, b, eco).unwrap_or(Ordering::Equal));
     out
@@ -291,7 +353,7 @@ pub fn highest(releases: &Releases, eco: &str) -> Option<String> {
 
 /// The release "already its latest" is judged against: the `latest` tag,
 /// else the highest stable installable release.
-fn latest_of(releases: &Releases, eco: &str) -> Option<String> {
+pub(super) fn latest_of(releases: &Releases, eco: &str) -> Option<String> {
     releases.latest.clone().or_else(|| highest(releases, eco))
 }
 
@@ -300,7 +362,7 @@ pub fn is_major(from: &str, to: &str) -> bool {
     super::fix_target::upgrade_type(from, to) == Some(super::fix_target::UpgradeType::Major)
 }
 
-fn admits(req: &str, version: &str, dialect: Dialect) -> Option<bool> {
+pub(super) fn admits(req: &str, version: &str, dialect: Dialect) -> Option<bool> {
     match dialect {
         Dialect::Npm => requirement_admits(req, version),
         Dialect::Cargo => Requirement::cargo(req).admits(version),
@@ -414,9 +476,9 @@ pub fn standing(
 }
 
 /// Rule (b), the parent's own row: its target raised to the highest release
-/// the transitive rows need from it, unless that crosses a major its own
-/// target does not or one of its advisories affects it. `None` when the
-/// parent has no row of its own.
+/// the transitive rows need from it (across a major too: parity decision 3),
+/// unless one of its advisories affects that release. `None` when the parent
+/// has no row of its own.
 pub fn row_target(
     own_target: Option<&str>,
     needs: &[&str],
@@ -430,15 +492,16 @@ pub fn row_target(
         .chain(std::iter::once(own))
         .max_by(|a, b| compare(a, b, eco).unwrap_or(Ordering::Equal))
         .unwrap_or(own);
-    let raise = compare(highest, own, eco) == Some(Ordering::Greater)
-        && !is_major(own, highest)
-        && !parent_affected(highest);
+    // Across a major too (parity decision 3): the plan flags it breaking and
+    // says why; refusing left the parent's row on a release that does not
+    // fix the copy it pins.
+    let raise = compare(highest, own, eco) == Some(Ordering::Greater) && !parent_affected(highest);
     Some(if raise { highest } else { own }.to_string())
 }
 
 /// Rule (b), a transitive row: a smallest release below the parent's own
-/// row target moves up to it when that target also admits a clean copy and
-/// the step does not cross a major.
+/// row target moves up to it when that target also admits a clean copy (a
+/// major step included: the parent's row moves there anyway).
 pub fn lift(
     found: &Found,
     row_target: Option<&str>,
@@ -449,7 +512,7 @@ pub fn lift(
 ) -> Option<Found> {
     let target = row_target?;
     let below = compare(&found.version, target, child.ecosystem) == Some(Ordering::Less);
-    if !below || is_major(&found.version, target) {
+    if !below {
         return None;
     }
     admits_at(child, history, own_clean, target, dialect)
@@ -506,14 +569,25 @@ pub fn decide(
 ) -> Decision {
     let eco = parent_advisories.ecosystem;
     let latest = parent_advisories.newest(parent);
-    let own_clean = |v: &str| parent_advisories.usable(v, latest.as_deref());
+    let own_clean = |v: &str| parent_advisories.usable(v, latest.as_deref(), Some(from));
     let blocked = parent_blocked(parent_advisories, from);
     let standings: Vec<Standing> = rows
         .iter()
         .map(|r| match (&blocked, &r.unknown) {
             (Some(b), _) => b.clone(),
             (None, Some(why)) => Standing::Undecided(why.clone()),
-            (None, None) => standing(&r.child, parent, from, r.history, &own_clean, dialect),
+            (None, None) => {
+                let s = standing(&r.child, parent, from, r.history, &own_clean, dialect);
+                introduces(
+                    s,
+                    r,
+                    parent,
+                    from,
+                    parent_advisories,
+                    latest.as_deref(),
+                    dialect,
+                )
+            }
         })
         .collect();
     let needs: Vec<&str> = standings
@@ -545,6 +619,38 @@ pub fn decide(
     }
 }
 
+/// Parity decision 2: when no release qualifies, but one would if it could
+/// bring in an advisory the installed parent lacks, say which ones.
+fn introduces(
+    found: Standing,
+    row: &RowIn<'_>,
+    parent: &Releases,
+    from: &str,
+    advisories: &Advisories<'_>,
+    latest: Option<&str>,
+    dialect: Dialect,
+) -> Standing {
+    let (Standing::NoneAdmits { .. }, Some(history)) = (&found, row.history) else {
+        return found;
+    };
+    // Every release above the installed one that admits a clean copy once
+    // advisories the installed parent lacks are set aside, fixed or not
+    // (review of #994, S2): what they bring in, unioned (S4).
+    let relaxed = |v: &str| advisories.clean_but_introduced(v, latest, from);
+    let eco = advisories.ecosystem;
+    let admitting = ascending(&parent.versions, eco)
+        .into_iter()
+        .filter(|v| compare(v, from, eco) == Some(Ordering::Greater))
+        .filter(|v| admits_at(&row.child, history, &relaxed, v, dialect).is_some())
+        .map(String::as_str);
+    let ids = advisories.introduced_union(admitting, latest, from);
+    if ids.is_empty() {
+        found
+    } else {
+        Standing::Introduces(ids)
+    }
+}
+
 /// Why no release of the parent can be named for any row: the installed
 /// parent is malicious, or one of its advisories cannot be read.
 fn parent_blocked(advisories: &Advisories<'_>, from: &str) -> Option<Standing> {
@@ -555,101 +661,6 @@ fn parent_blocked(advisories: &Advisories<'_>, from: &str) -> Option<Standing> {
         Standing::Undecided(format!(
             "the affected ranges of {id} cannot be read, so no release can be shown clear of it"
         ))
-    })
-}
-
-/// A lever that is not the parent: the declared dependency the parent
-/// arrives through.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Hop {
-    /// `version` of the lever brings in parent `brings`, a release that
-    /// admits a clean copy; `keeps_parent` when the lever's requirement still
-    /// admits the installed parent (an install keeps it; a refresh of the
-    /// parent follows).
-    Found {
-        version: String,
-        brings: String,
-        keeps_parent: bool,
-    },
-    Deprecated,
-    Latest,
-    /// Every release was read and none brings in a parent that admits it.
-    NoneBrings {
-        latest: Option<String>,
-    },
-}
-
-/// The parent side of a hop.
-pub struct HopParent<'a> {
-    pub installed: &'a str,
-    pub releases: &'a Releases,
-    pub history: &'a RequirementHistory,
-    pub own_clean: &'a dyn Fn(&str) -> bool,
-}
-
-/// The smallest release of the lever, clear of its own advisories, whose one
-/// requirement on the parent resolves to a parent release above the
-/// installed one, clear of the parent's advisories, that admits a clean
-/// copy. `lever_history` is the lever's requirement on the parent.
-pub fn through_release(
-    child: &Child<'_>,
-    parent: &HopParent<'_>,
-    lever: &Releases,
-    lever_from: &str,
-    lever_history: &RequirementHistory,
-    lever_clean: &dyn Fn(&str) -> bool,
-    dialect: Dialect,
-) -> Hop {
-    let eco = child.ecosystem;
-    if lever.deprecated {
-        return Hop::Deprecated;
-    }
-    let latest = latest_of(lever, eco);
-    if latest
-        .as_deref()
-        .is_some_and(|l| compare(lever_from, l, eco).is_some_and(|o| o != Ordering::Less))
-    {
-        return Hop::Latest;
-    }
-    ascending(&lever.versions, eco)
-        .into_iter()
-        .filter(|v| compare(v, lever_from, eco) == Some(Ordering::Greater))
-        .find_map(|v| hop_at(child, parent, lever_history, lever_clean, v, dialect))
-        .unwrap_or(Hop::NoneBrings { latest })
-}
-
-/// Lever release `version`, clear of the lever's own advisories, brings in
-/// (its one requirement on the parent resolves to) a parent release above the
-/// installed one, clear of the parent's advisories, that admits a clean copy.
-pub fn hop_at(
-    child: &Child<'_>,
-    parent: &HopParent<'_>,
-    lever_history: &RequirementHistory,
-    lever_clean: &dyn Fn(&str) -> bool,
-    version: &str,
-    dialect: Dialect,
-) -> Option<Hop> {
-    let eco = child.ecosystem;
-    let entry = lever_history.get(version)?;
-    let [req] = entry.reqs.as_slice() else {
-        return None;
-    };
-    if !lever_clean(version) {
-        return None;
-    }
-    let brings = ascending(&parent.releases.versions, eco)
-        .into_iter()
-        .rev()
-        .find(|p| admits(req, p, dialect) == Some(true))?;
-    let above = compare(brings, parent.installed, eco) == Some(Ordering::Greater);
-    if !above || !(parent.own_clean)(brings) {
-        return None;
-    }
-    admits_clean(child, &parent.history.get(brings.as_str())?.reqs, dialect)?;
-    Some(Hop::Found {
-        version: version.to_string(),
-        brings: brings.clone(),
-        keeps_parent: admits(req, parent.installed, dialect) == Some(true),
     })
 }
 

@@ -126,3 +126,28 @@ fn installable_fix_skips_a_release_the_same_advisory_still_affects() {
         LineFix::default()
     );
 }
+
+/// Parity decision 2 (review of #994, B2): A is fixed at 1.2.0, B opens at
+/// 1.1.0 with no fix. From 1.0.0 every fixing release brings B in, so no
+/// target is named (the MCP's `smallestCleanVersion(installed)` agrees);
+/// from 1.1.5, which already has B, 1.2.0 clears A and B remains.
+#[test]
+fn a_target_never_brings_in_an_advisory_the_installed_version_lacks() {
+    let ab = [
+        ranges(r#"[{"introduced":"0"},{"fixed":"1.2.0"}]"#),
+        ranges(r#"[{"introduced":"1.1.0"}]"#),
+    ];
+    let out = walk_in("1.0.0", &ab, &RegistryReleases::default());
+    assert_eq!(out.target, None);
+    assert_eq!(out.introduces, [1]);
+
+    let has_b = walk_in("1.1.5", &ab, &RegistryReleases::default());
+    assert_eq!(
+        has_b.target,
+        Some(WalkTarget {
+            version: "1.2.0".into(),
+            clears_all: false
+        })
+    );
+    assert!(has_b.introduces.is_empty());
+}

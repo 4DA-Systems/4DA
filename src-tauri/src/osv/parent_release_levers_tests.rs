@@ -14,6 +14,7 @@ fn line(installed: &str, target: &str, project: &str) -> Vec<LineTarget> {
         installed_version: installed.into(),
         target_version: Some(target.into()),
         clears_all_known: true,
+        introduces: Vec::new(),
         upgrade_type: Some(UpgradeType::Minor),
         sites: vec![InstallSite {
             project_path: project.to_string(),
@@ -216,6 +217,36 @@ fn the_newest_release_named_is_never_an_affected_one() {
     );
 }
 
+/// Review of #994, B3: newer releases exist, and only an advisory the
+/// installed parent does not have rules them out. That is said, never
+/// "already the newest release".
+#[test]
+fn newer_releases_that_bring_in_an_advisory_are_not_the_newest() {
+    let db = graph(
+        "d:/work/introduces",
+        &[("par", "1.0.0", true)],
+        &[],
+        &[("GHSA-synt-b3", "par", "1.1.0", "9.0.0")],
+    );
+    crate::osv::release_facts::store_for_tests(
+        &db,
+        vec![(
+            "npm",
+            "par",
+            vec!["1.0.0", "1.1.0"],
+            Some("1.1.0"),
+            false,
+            vec![],
+        )],
+    );
+    assert_eq!(
+        crate::osv::parent_hint::parent_standing(&db, "npm", "par", "1.0.0"),
+        ParentStanding::Introduces {
+            advisories: vec!["GHSA-synt-b3".into()]
+        }
+    );
+}
+
 /// Review of #981, B2c and B1: the release named says what unfixed advisory
 /// it still carries, and a lifted lever names its own smallest release
 /// apart from the parent release it brings in.
@@ -273,4 +304,29 @@ fn the_named_release_states_what_it_still_carries_and_where_it_was_lifted_from()
         ),
         "{text}"
     );
+}
+
+/// Parity decision 2: the MCP's exact words when every fixing release
+/// brings in an advisory the installed version does not have.
+#[test]
+fn every_fixing_release_bringing_in_an_advisory_names_none() {
+    let text = crate::evidence::parent_move(
+        "leaf",
+        "1.1.0",
+        "par",
+        "1.0.0",
+        &ParentStanding::Introduces {
+            advisories: vec!["GHSA-synt-0000-0002".into()],
+        },
+        None,
+        None,
+    );
+    assert!(
+        text.contains(
+            "every fixing release brings in GHSA-synt-0000-0002, which the installed version does \
+             not have"
+        ),
+        "{text}"
+    );
+    assert!(!text.contains("upgrade par to"), "{text}");
 }

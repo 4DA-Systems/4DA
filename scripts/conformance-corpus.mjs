@@ -566,8 +566,14 @@ async function stepPin(cases, adjud) {
   const ids = [...new Set(idLists.flat())].sort();
   console.log(`pin: ${list.length} package names -> ${ids.length} advisories`);
   const osvDir = join(CORPUS, "osv");
+  // SYNTHETIC records (SYNT-*.json) pin rule vectors no live case shows
+  // (fix_target ft-069); a re-pin keeps them, it never fetches them.
+  const synthetic = existsSync(osvDir)
+    ? readdirSync(osvDir).filter((f) => f.startsWith("SYNT-")).map((f) => [f, readFileSync(join(osvDir, f))])
+    : [];
   rmSync(osvDir, { recursive: true, force: true });
   mkdirSync(osvDir, { recursive: true });
+  for (const [f, body] of synthetic) writeFileSync(join(osvDir, f), body);
   await pool(ids, 16, async (id) => {
     const rec = await fetchJson(`https://api.osv.dev/v1/vulns/${encodeURIComponent(id)}`, null, join(CACHE, "vulns", `${id}.json`));
     if (rec) writeFileSync(join(osvDir, `${id}.json`), `${JSON.stringify(rec)}\n`);

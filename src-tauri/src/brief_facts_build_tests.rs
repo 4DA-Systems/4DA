@@ -45,9 +45,10 @@ fn a_bump_names_the_command_for_its_declaration() {
         "absent",
         Some("1.0.0"),
     );
+    // (1.0.0 -> 2.0.0 crosses a major, which is said: parity decision 3.)
     assert_eq!(
         crate::brief_facts::fix_clause("absent", &plain),
-        "bump absent to >= 2.0.0"
+        "bump absent to >= 2.0.0: a major upgrade"
     );
     // A copy the declaration does not admit is another copy: nothing named.
     let other = with_direct_fix(
@@ -62,7 +63,7 @@ fn a_bump_names_the_command_for_its_declaration() {
     );
     assert_eq!(
         crate::brief_facts::fix_clause("minimist", &other),
-        "bump minimist to >= 1.2.6"
+        "bump minimist to >= 1.2.6: a major upgrade"
     );
     let refresh = FixPath::Refresh {
         to: "1.2.6".into(),

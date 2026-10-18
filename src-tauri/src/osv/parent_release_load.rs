@@ -115,7 +115,10 @@ impl RowData {
 
     /// The shared predicate (`Advisories::usable`): a release that can be named.
     pub(super) fn clean(&self) -> Box<dyn Fn(&str) -> bool + '_> {
-        Box::new(move |v: &str| self.advisories.usable(v, self.newest.as_deref()))
+        Box::new(move |v: &str| {
+            self.advisories
+                .usable(v, self.newest.as_deref(), Some(&self.installed))
+        })
     }
 
     /// Why nothing can be decided for this copy, when that is so.
@@ -269,8 +272,8 @@ fn decision_for(
 
 /// The plan row of a DECLARED vulnerable package, raised so one bump also
 /// clears the transitive copies it pins (rule b): the highest release any of
-/// them needs from it, when that stays in its major and no advisory of it
-/// affects that release. `Some((to, packages))` only when it rises above
+/// them needs from it, across a major too (flagged; parity decision 3), when
+/// no advisory of it affects that release. `Some((to, packages))` only when it rises above
 /// `current`; `packages` are the ones that needed more than `current`.
 pub(crate) fn raised_row_target(
     db: &Database,
@@ -469,6 +472,9 @@ fn standing_of(
             latest: latest.clone(),
         },
         (Standing::Undecided(why), _) => ParentStanding::Undecided { why: why.clone() },
+        (Standing::Introduces(ids), _) => ParentStanding::Introduces {
+            advisories: ids.clone(),
+        },
         (Standing::Malicious(id), _) => ParentStanding::Malicious {
             package: link.parent.clone(),
             advisory: id.clone(),

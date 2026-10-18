@@ -134,6 +134,7 @@ fn link_json(link: &ParentLink) -> Value {
         }
         ParentStanding::Malicious { .. } => json!("malicious"),
         ParentStanding::Undecided { .. } => json!("undecided"),
+        ParentStanding::Introduces { .. } => json!("introduces"),
         ParentStanding::NoneAdmits { .. } => json!("none_admits"),
         ParentStanding::Deprecated => json!("deprecated"),
         ParentStanding::Newest { .. } => json!("latest"),

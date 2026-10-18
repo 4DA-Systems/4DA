@@ -661,7 +661,7 @@ fn fix_target(path: &FixPath) -> Option<&str> {
         | FixPath::ParentUnknown { to }
         | FixPath::Reinstall { to }
         | FixPath::Update { to } => Some(to),
-        FixPath::PerLine { .. } | FixPath::NoFix => None,
+        FixPath::PerLine { .. } | FixPath::NoFix | FixPath::Introduces { .. } => None,
     }
 }
 
@@ -989,6 +989,7 @@ fn line_in(project: &str, installed: &str, target: Option<&str>) -> LineTarget {
         installed_version: installed.into(),
         target_version: target.map(str::to_string),
         clears_all_known: target.is_some(),
+        introduces: Vec::new(),
         upgrade_type: None,
         sites: vec![InstallSite {
             project_path: project.into(),

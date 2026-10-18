@@ -16,6 +16,7 @@ use super::*;
 // Per-copy targets and parent routes (file-size gate).
 #[path = "brief_facts_copies.rs"]
 mod copies;
+use super::clause::with_direct_fix;
 pub(crate) use copies::{copy_fix, CopyFix};
 use copies::{project_copies, with_parent_route};
 
@@ -355,6 +356,12 @@ fn security_fact(
                     CopyFix::PerLine(lines) => FixPath::PerLine { lines },
                 }
             };
+            let line = lines.iter().find(|l| {
+                installed.as_deref() == Some(l.installed_version.as_str())
+                    && l.sites.iter().any(|s| norm_path(&s.project_path) == pnorm)
+            });
+            let introduced = line.map_or(&[][..], |l| l.introduces.as_slice());
+            let fix_path = super::clause::with_introduces(fix_path, introduced);
             sites.push(SecuritySite {
                 label: labels.label(project),
                 installed,
@@ -403,35 +410,6 @@ fn security_fact(
     };
     fact.status = novelty.status(&fact.key, &security_signature(&fact), &local_today());
     Some(fact)
-}
-
-/// A copy the project declares: name how it moves where it is declared, read
-/// from the project's own manifest (`osv::direct_upgrade`, audit E8). The
-/// same rule the Upgrade Plan's direct rows use; nothing when it is not certain
-/// (including when the declaration does not admit the installed copy).
-fn with_direct_fix(
-    path: FixPath,
-    project: &str,
-    ecosystem: &str,
-    package: &str,
-    installed: Option<&str>,
-) -> FixPath {
-    let (FixPath::Bump { to, fix: None }, Some(installed)) = (&path, installed) else {
-        return path;
-    };
-    let to = to.clone();
-    let fix = crate::osv::exposure::canonical(ecosystem)
-        .and_then(|eco| {
-            crate::osv::direct_upgrade::direct_fix(
-                std::path::Path::new(project),
-                eco,
-                package,
-                installed,
-                &to,
-            )
-        })
-        .map(|f| f.brief_clause());
-    FixPath::Bump { to, fix }
 }
 
 /// Name the project tool's refresh command on a refresh path (`osv::fix_path`).

@@ -195,17 +195,27 @@ fn same_version(eco: &str, a: Option<&str>, b: Option<&str>) -> bool {
 /// lands (`clears_all_known` when it clears everything), else, when the walk
 /// cannot run, the highest own-line fix among the advisories that affect the
 /// copy. Neither is ever a release `registry` withdrew; the third value names
-/// the withdrawn ones the walk stepped over.
+/// the withdrawn ones the walk stepped over; the fourth, the indices of the
+/// advisories every fixing release brings in (then there is no target, not
+/// even a line fix: parity decision 2).
 fn engine_target(
     eco: &str,
     installed: &str,
     ranges: &[Option<String>],
     registry: &RegistryReleases,
-) -> (Option<String>, bool, Vec<String>) {
+) -> (Option<String>, bool, Vec<String>, Vec<usize>) {
     let refs: Vec<&Option<String>> = ranges.iter().collect();
     let outcome = walk_target_in(eco, installed, &refs, registry);
     if let Some(walk) = outcome.target {
-        return (Some(walk.version), walk.clears_all, outcome.withheld);
+        return (
+            Some(walk.version),
+            walk.clears_all,
+            outcome.withheld,
+            Vec::new(),
+        );
+    }
+    if !outcome.introduces.is_empty() {
+        return (None, false, outcome.withheld, outcome.introduces);
     }
     let partial = ranges
         .iter()
@@ -214,7 +224,7 @@ fn engine_target(
         .filter_map(|f| parse_version(&f).map(|p| (p, f)))
         .max_by(|a, b| a.0.cmp(&b.0))
         .map(|(_, f)| f);
-    (partial, false, outcome.withheld)
+    (partial, false, outcome.withheld, Vec::new())
 }
 
 /// A string-array field of a vector line (absent reads as empty).
@@ -230,6 +240,7 @@ fn strings(v: &Value, key: &str) -> Vec<String> {
 fn check_fix_target(v: &Value, records: &mut Records) -> Result<(), String> {
     let (eco, name, installed) = (s(v, "eco"), s(v, "name"), s(v, "installed"));
     let mut ranges = Vec::new();
+    let ids = strings(v, "record_ids");
     for id in v
         .get("record_ids")
         .and_then(Value::as_array)
@@ -242,7 +253,21 @@ fn check_fix_target(v: &Value, records: &mut Records) -> Result<(), String> {
         published: strings(v, "published"),
         excluded: strings(v, "excluded"),
     };
-    let (target, clears, withheld) = engine_target(eco, installed, &ranges, &registry);
+    let (target, clears, withheld, introduced) = engine_target(eco, installed, &ranges, &registry);
+    // `introduces` (record ids) is checked only on lines that state it.
+    // Sorted and deduped, as both engines name them.
+    let mut introduced: Vec<String> = introduced
+        .iter()
+        .filter_map(|&i| ids.get(i).cloned())
+        .collect();
+    introduced.sort();
+    introduced.dedup();
+    if v.get("introduces").is_some() && introduced != strings(v, "introduces") {
+        return Err(format!(
+            "introduces: got {introduced:?}, want {:?}",
+            strings(v, "introduces")
+        ));
+    }
     let want_target = opt_s(v, "target");
     let want_clears = v.get("clears").and_then(Value::as_bool).unwrap_or(false);
     if !same_version(eco, target.as_deref(), want_target) {

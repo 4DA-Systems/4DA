@@ -91,6 +91,12 @@ pub struct MatchedDependency {
     /// but was withdrawn ("no installable fix", not "no fix published").
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub withheld: Vec<String>,
+    /// Parity decision 2: the advisories every fixing release of this copy
+    /// brings in (no way out, and the installed version does not have them).
+    /// Sorted and deduped. Non-empty means no target is named: neither `target_version` nor the
+    /// line fix (`fourda_depengine::fix_target::WalkOutcome::introduces`).
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub introduces: Vec<String>,
 }
 
 /// One advisory row that affects at least one installed copy.
@@ -195,7 +201,15 @@ where
     // Every known advisory's ranges per package: a copy's clean version must
     // clear ALL of them, not only the ones it matched today.
     let mut package_ranges: HashMap<(String, String), Vec<&Option<String>>> = HashMap::new();
+    let mut package_ids: HashMap<(String, String), Vec<&str>> = HashMap::new();
     for record in records {
+        package_ids
+            .entry((
+                package_key(&record.package_name, &record.ecosystem),
+                normalize_ecosystem(&record.ecosystem).to_string(),
+            ))
+            .or_default()
+            .push(&record.advisory_id);
         package_ranges
             .entry((
                 package_key(&record.package_name, &record.ecosystem),
@@ -250,7 +264,8 @@ where
                                     .unwrap_or_default()
                             })
                             .clone();
-                        CopyTargets::new(record, v, walk, facts)
+                        let ids = package_ids.get(&key).map_or(&[][..], Vec::as_slice);
+                        CopyTargets::new(record, v, walk, facts, ids)
                     }
                     _ => CopyTargets::default(),
                 };
@@ -264,6 +279,7 @@ where
                     clean_version: targets.clean,
                     target_version: targets.target,
                     withheld: targets.withheld,
+                    introduces: targets.introduces,
                 });
             }
         }
@@ -348,14 +364,17 @@ struct CopyTargets {
     clean: Option<String>,
     target: Option<String>,
     withheld: Vec<String>,
+    introduces: Vec<String>,
 }
 
 impl CopyTargets {
+    /// `ids`: the package's advisory ids, parallel to the walk's ranges.
     fn new(
         record: &AdvisoryRecord,
         installed: &str,
         walk: WalkOutcome,
         facts: &RegistryReleases,
+        ids: &[&str],
     ) -> Self {
         let line =
             installable_line_fix(&record.ecosystem, installed, &record.affected_ranges, facts);
@@ -374,8 +393,22 @@ impl CopyTargets {
                 .map(|w| w.version.clone()),
             target: walk.target.map(|w| w.version),
             withheld,
+            introduces: introduced_ids(&walk.introduces, ids),
         }
     }
+}
+
+/// The ids at `indices` of `ids`, sorted and deduped (the order both
+/// engines name them in).
+fn introduced_ids(indices: &[usize], ids: &[&str]) -> Vec<String> {
+    let mut out: Vec<String> = indices
+        .iter()
+        .filter_map(|&i| ids.get(i))
+        .map(|id| (*id).to_string())
+        .collect();
+    out.sort();
+    out.dedup();
+    out
 }
 
 /// The versions checked for one resolved row: every installed copy of that

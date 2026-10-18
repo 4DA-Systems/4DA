@@ -143,6 +143,9 @@ pub enum ParentStanding {
     /// A malicious-package record affects the installed `package` (this
     /// package, or the vulnerable copy it pins): remove or replace it.
     Malicious { package: String, advisory: String },
+    /// A release admits a clean copy, but every one brings in an advisory
+    /// the installed release does not have (parity decision 2).
+    Introduces { advisories: Vec<String> },
 }
 
 impl ParentStanding {
@@ -312,10 +315,32 @@ pub fn parent_standing(
     );
     let releases = book.releases(ecosystem_norm, name).unwrap_or_default();
     let newest = advisories.newest(&releases);
-    let usable =
-        |v: &str| !registry.excludes(ecosystem_norm, v) && advisories.usable(v, newest.as_deref());
+    let usable = |v: &str| {
+        !registry.excludes(ecosystem_norm, v)
+            && advisories.usable(v, newest.as_deref(), Some(installed))
+    };
     let listed = releases.versions.clone();
-    standing_from_with(&rows, name, installed, &listed, &usable)
+    let standing = standing_from_with(&rows, name, installed, &listed, &usable);
+    // Review of #994, B3: "already the newest release" is false when newer
+    // releases exist and only advisories the installed version lacks rule
+    // them out; then that is what is said (parity decision 2).
+    if standing != (ParentStanding::Newest { deprecated: false }) {
+        return standing;
+    }
+    let newer = super::parent_release::ascending(&releases.versions, ecosystem_norm)
+        .into_iter()
+        .filter(|v| !registry.excludes(ecosystem_norm, v))
+        .filter(|v| {
+            super::parent_release::compare(v, installed, ecosystem_norm)
+                == Some(std::cmp::Ordering::Greater)
+        })
+        .map(String::as_str);
+    let ids = advisories.introduced_union(newer, newest.as_deref(), installed);
+    if ids.is_empty() {
+        standing
+    } else {
+        ParentStanding::Introduces { advisories: ids }
+    }
 }
 
 /// The pure core of [`parent_standing`]: `rows` are `(id, title)` registry

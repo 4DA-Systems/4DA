@@ -468,6 +468,7 @@ fn the_note_words_a_refresh_as_one() {
         installed_version: "1.2.5".into(),
         target_version: Some("1.2.8".into()),
         clears_all_known: true,
+        introduces: Vec::new(),
         upgrade_type: None,
         sites: projects
             .iter()

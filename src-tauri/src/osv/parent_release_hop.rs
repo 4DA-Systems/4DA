@@ -15,7 +15,7 @@ use crate::db::Database;
 use super::fix_path::{requirement_admits, Dialect};
 use super::parent_hint::{normalize_path, ParentRelease, ParentStanding, Through};
 use super::parent_release::{
-    compare, hop_at, is_major, through_release, Advisories, Hop, HopParent, Releases,
+    admits, admits_clean, ascending, compare, is_major, latest_of, Advisories, Child, Releases,
     RequirementHistory,
 };
 use super::parent_release_load::{
@@ -78,8 +78,13 @@ fn lever_hop(
         .unwrap_or_default();
     let lever_own = advisories(hop.db, &through.name);
     let lever_newest = lever_own.newest(&lever);
-    let lever_clean = |v: &str| lever_own.usable(v, lever_newest.as_deref());
-    let parent_clean = |v: &str| parent.own.usable(v, parent.newest.as_deref());
+    let lever_clean =
+        |v: &str| lever_own.usable(v, lever_newest.as_deref(), Some(&through.version));
+    let parent_clean = |v: &str| {
+        parent
+            .own
+            .usable(v, parent.newest.as_deref(), Some(&hop.parent.1))
+    };
     let clean = hop.child.clean();
     let child = hop.child.child(clean.as_ref());
     let hp = HopParent {
@@ -111,13 +116,52 @@ fn lever_hop(
     ) else {
         return (found, None);
     };
-    let lift =
-        compare(version, &row, ECOSYSTEM) == Some(Ordering::Less) && !is_major(version, &row);
+    // A major step included: the lever's own row moves there anyway
+    // (parity decision 3), and the release says it is a major upgrade.
+    let lift = compare(version, &row, ECOSYSTEM) == Some(Ordering::Less);
     let smallest = version.clone();
     match hop_at(&child, &hp, lever_history, &lever_clean, &row, Dialect::Npm) {
         Some(lifted) if lift => (lifted, Some(smallest)),
         _ => (found, None),
     }
+}
+
+/// The advisories the lever releases that would bring a fixed parent in
+/// bring in, when only advisories the installed lever lacks (fixed or not)
+/// block them: sorted, deduped, unioned over every such release (review of
+/// #994, S3/S4). Empty when no release is blocked only so.
+fn lever_introduces(
+    hop: &HopCtx<'_>,
+    through: &Through,
+    lever_history: &RequirementHistory,
+    parent: &ParentFacts<'_>,
+) -> Vec<String> {
+    let lever = hop
+        .book
+        .releases(ECOSYSTEM, &through.name)
+        .unwrap_or_default();
+    let lever_own = advisories(hop.db, &through.name);
+    let newest = lever_own.newest(&lever);
+    let relaxed = |v: &str| lever_own.clean_but_introduced(v, newest.as_deref(), &through.version);
+    let parent_clean = |v: &str| {
+        parent
+            .own
+            .usable(v, parent.newest.as_deref(), Some(&hop.parent.1))
+    };
+    let clean = hop.child.clean();
+    let child = hop.child.child(clean.as_ref());
+    let hp = HopParent {
+        installed: &hop.parent.1,
+        releases: &parent.releases,
+        history: parent.history,
+        own_clean: &parent_clean,
+    };
+    let candidates = ascending(&lever.versions, ECOSYSTEM)
+        .into_iter()
+        .filter(|v| compare(v, &through.version, ECOSYSTEM) == Some(Ordering::Greater))
+        .filter(|v| hop_at(&child, &hp, lever_history, &relaxed, v, Dialect::Npm).is_some())
+        .map(String::as_str);
+    lever_own.introduced_union(candidates, newest.as_deref(), &through.version)
 }
 
 impl HopCtx<'_> {
@@ -163,7 +207,17 @@ impl HopCtx<'_> {
             ))),
             Hop::Deprecated => ParentStanding::Deprecated,
             Hop::Latest => ParentStanding::Newest { deprecated: false },
-            Hop::NoneBrings { latest } => ParentStanding::NoneAdmits { latest },
+            Hop::NoneBrings { latest } => {
+                // Parity decision 2 for levers (the MCP's stuck lever,
+                // "introduces"): a release would bring a fixed parent in, but
+                // only advisories the installed lever lacks block it.
+                let ids = lever_introduces(self, through, lever_history, &facts);
+                if ids.is_empty() {
+                    ParentStanding::NoneAdmits { latest }
+                } else {
+                    ParentStanding::Introduces { advisories: ids }
+                }
+            }
         };
     }
 
@@ -255,7 +309,7 @@ pub(super) fn lever_needs(
     };
     let lever_own = advisories(db, lever.name);
     let lever_newest = lever_own.newest(&lever_releases);
-    let lever_clean = |v: &str| lever_own.usable(v, lever_newest.as_deref());
+    let lever_clean = |v: &str| lever_own.usable(v, lever_newest.as_deref(), Some(lever.version));
     for (parent, version) in pinned_parents(db, book, lever) {
         let side = ParentSide {
             project: lever.project,
@@ -270,7 +324,8 @@ pub(super) fn lever_needs(
             let Some(facts) = parent_facts(db, book, &parent, &row.package) else {
                 continue;
             };
-            let parent_clean = |v: &str| facts.own.usable(v, facts.newest.as_deref());
+            let parent_clean =
+                |v: &str| facts.own.usable(v, facts.newest.as_deref(), Some(&version));
             let clean = row.clean();
             let hp = HopParent {
                 installed: &version,
@@ -306,4 +361,99 @@ pub(super) fn lever_children(book: &ReleaseBook, lever: &ParentSide<'_>) -> Vec<
     out.sort();
     out.dedup();
     out
+}
+
+/// A lever that is not the parent: the declared dependency the parent
+/// arrives through.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Hop {
+    /// `version` of the lever brings in parent `brings`, a release that
+    /// admits a clean copy; `keeps_parent` when the lever's requirement still
+    /// admits the installed parent (an install keeps it; a refresh of the
+    /// parent follows).
+    Found {
+        version: String,
+        brings: String,
+        keeps_parent: bool,
+    },
+    Deprecated,
+    Latest,
+    /// Every release was read and none brings in a parent that admits it.
+    NoneBrings {
+        latest: Option<String>,
+    },
+}
+
+/// The parent side of a hop.
+pub struct HopParent<'a> {
+    pub installed: &'a str,
+    pub releases: &'a Releases,
+    pub history: &'a RequirementHistory,
+    pub own_clean: &'a dyn Fn(&str) -> bool,
+}
+
+/// The smallest release of the lever, clear of its own advisories, whose one
+/// requirement on the parent resolves to a parent release above the
+/// installed one, clear of the parent's advisories, that admits a clean
+/// copy. `lever_history` is the lever's requirement on the parent.
+pub fn through_release(
+    child: &Child<'_>,
+    parent: &HopParent<'_>,
+    lever: &Releases,
+    lever_from: &str,
+    lever_history: &RequirementHistory,
+    lever_clean: &dyn Fn(&str) -> bool,
+    dialect: Dialect,
+) -> Hop {
+    let eco = child.ecosystem;
+    if lever.deprecated {
+        return Hop::Deprecated;
+    }
+    let latest = latest_of(lever, eco);
+    if latest
+        .as_deref()
+        .is_some_and(|l| compare(lever_from, l, eco).is_some_and(|o| o != Ordering::Less))
+    {
+        return Hop::Latest;
+    }
+    ascending(&lever.versions, eco)
+        .into_iter()
+        .filter(|v| compare(v, lever_from, eco) == Some(Ordering::Greater))
+        .find_map(|v| hop_at(child, parent, lever_history, lever_clean, v, dialect))
+        .unwrap_or(Hop::NoneBrings { latest })
+}
+
+/// Lever release `version`, clear of the lever's own advisories, brings in
+/// (its one requirement on the parent resolves to) a parent release above the
+/// installed one, clear of the parent's advisories, that admits a clean copy.
+pub fn hop_at(
+    child: &Child<'_>,
+    parent: &HopParent<'_>,
+    lever_history: &RequirementHistory,
+    lever_clean: &dyn Fn(&str) -> bool,
+    version: &str,
+    dialect: Dialect,
+) -> Option<Hop> {
+    let eco = child.ecosystem;
+    let entry = lever_history.get(version)?;
+    let [req] = entry.reqs.as_slice() else {
+        return None;
+    };
+    if !lever_clean(version) {
+        return None;
+    }
+    let brings = ascending(&parent.releases.versions, eco)
+        .into_iter()
+        .rev()
+        .find(|p| admits(req, p, dialect) == Some(true))?;
+    let above = compare(brings, parent.installed, eco) == Some(Ordering::Greater);
+    if !above || !(parent.own_clean)(brings) {
+        return None;
+    }
+    admits_clean(child, &parent.history.get(brings.as_str())?.reqs, dialect)?;
+    Some(Hop::Found {
+        version: version.to_string(),
+        brings: brings.clone(),
+        keeps_parent: admits(req, parent.installed, dialect) == Some(true),
+    })
 }

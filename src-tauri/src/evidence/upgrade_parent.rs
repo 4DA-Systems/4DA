@@ -291,6 +291,11 @@ pub(crate) fn parent_move(
             "{package} is flagged malicious ({advisory}): remove or replace {package}; no \
              {parent} release is named as the fix"
         ),
+        ParentStanding::Introduces { advisories } => format!(
+            "no {parent} release is named: every fixing release brings in {}, which the \
+             installed version does not have{force}",
+            advisories.join(", ")
+        ),
         ParentStanding::Undecided { why } => {
             format!("no {parent} release is named because {why}, so no command is named{force}")
         }
@@ -397,6 +402,10 @@ fn row_move(
         ParentStanding::Deprecated => {
             format!("{via}{lever} is deprecated: replace {lever}{force}")
         }
+        ParentStanding::Introduces { advisories } => format!(
+            "{via}no {lever} release is named: {}{force}",
+            crate::osv::fix_target::introduces_text(advisories)
+        ),
         // A lever's registry read runs only under a parent release
         // (`admits_move`); reaching here it says nothing more than Unknown.
         ParentStanding::Unknown
