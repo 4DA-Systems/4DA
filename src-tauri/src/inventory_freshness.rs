@@ -229,6 +229,14 @@ mod tests {
         let (count, on_finish) = counter();
         let guard = begin_refresh_on(gate.clone(), Duration::from_millis(30), on_finish);
         assert!(gate.wait_until_fresh(Duration::from_secs(5)).await);
+        // `release` opens the gate BEFORE it runs `on_finish` (the
+        // inventory-fresh emit must find the gate open), and the watchdog
+        // runs on another runtime, so wait for the callback rather than
+        // reading the count the instant the gate opens.
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while count.load(Ordering::SeqCst) == 0 && std::time::Instant::now() < deadline {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
         assert_eq!(count.load(Ordering::SeqCst), 1);
         drop(guard); // the late finish is a no-op
         assert_eq!(count.load(Ordering::SeqCst), 1);
