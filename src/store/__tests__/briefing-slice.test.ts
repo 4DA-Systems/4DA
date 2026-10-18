@@ -170,7 +170,9 @@ describe('briefing-slice', () => {
       const { aiBriefing } = useAppStore.getState();
       expect(aiBriefing.loading).toBe(false);
       expect(aiBriefing.content).toBeNull();
-      expect(aiBriefing.error).toBe(
+      // A neutral pending state, not an error with Retry (review S5).
+      expect(aiBriefing.error).toBeNull();
+      expect(aiBriefing.pending).toBe(
         'Your projects are being rescanned. The brief will be written as soon as the scan finishes.',
       );
     });

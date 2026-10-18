@@ -54,6 +54,39 @@ pub async fn maybe_auto_briefing<R: Runtime>(app: &AppHandle<R>) {
     };
 
     match crate::digest_commands::generate_briefing_internal(true, anomalies).await {
+        Ok(result) if is_inventory_deferral(&result) => {
+            // The startup lockfile rescan is running: generate once it ends
+            // (the gate reopens at the scan's end or its hard deadline)
+            // instead of waiting for the next scheduler pass.
+            info!(target: "4da::jobs", "Auto-briefing deferred until the dependency inventory refresh finishes");
+            let app = app.clone();
+            tauri::async_runtime::spawn(async move {
+                let wait = crate::inventory_freshness::STARTUP_SCAN_DEADLINE
+                    .saturating_add(std::time::Duration::from_secs(60));
+                if crate::inventory_freshness::wait_until_fresh(wait).await {
+                    emit_auto_briefing(
+                        &app,
+                        crate::digest_commands::generate_briefing_internal(true, None).await,
+                    );
+                }
+            });
+        }
+        result => emit_auto_briefing(app, result),
+    }
+}
+
+fn is_inventory_deferral(result: &serde_json::Value) -> bool {
+    result
+        .get("inventory_refreshing")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false)
+}
+
+fn emit_auto_briefing<R: Runtime>(
+    app: &AppHandle<R>,
+    result: crate::error::Result<serde_json::Value>,
+) {
+    match result {
         Ok(result) => {
             if result
                 .get("success")

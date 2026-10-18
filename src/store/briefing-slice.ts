@@ -12,22 +12,44 @@ let inventoryRetryArmed = false;
 
 /**
  * Generate the brief once, when the inventory refresh finishes. One armed
- * listener at most, removed after it fires.
+ * listener at most; it removes itself after firing.
+ *
+ * The event can fire between the backend's deferral and the listener
+ * registering, so once registered it asks once more at once (the backend
+ * answers immediately either way). If that ask is no longer deferred
+ * (`stillPending()` false) the listener is removed; otherwise it waits.
  */
-export function retryBriefingWhenInventoryFresh(generate: () => Promise<void>): void {
+export function retryBriefingWhenInventoryFresh(
+  generate: () => Promise<void>,
+  stillPending: () => boolean,
+): void {
   if (inventoryRetryArmed) return;
   inventoryRetryArmed = true;
   let unlisten: (() => void) | null = null;
-  void safeListen(INVENTORY_FRESH_EVENT, () => {
-    if (!inventoryRetryArmed) return;
+  const disarm = () => {
     inventoryRetryArmed = false;
     unlisten?.();
+    unlisten = null;
+  };
+  void safeListen(INVENTORY_FRESH_EVENT, () => {
+    if (!inventoryRetryArmed) return;
+    disarm();
     void generate();
   }).then((fn) => {
+    if (!inventoryRetryArmed) {
+      fn();
+      return;
+    }
     unlisten = fn;
-    // Fired before registration completed: drop the listener now.
-    if (!inventoryRetryArmed) fn();
+    void generate().then(() => {
+      if (inventoryRetryArmed && !stillPending()) disarm();
+    });
   });
+}
+
+/** Test seam: forget an armed retry between tests. */
+export function resetInventoryRetryForTests(): void {
+  inventoryRetryArmed = false;
 }
 
 const initialBriefingState: BriefingState = {
@@ -158,7 +180,7 @@ export const createBriefingSlice: StateCreator<AppStore, [], [], BriefingSlice> 
 
   generateBriefing: async (options) => {
     set(state => ({
-      aiBriefing: { ...state.aiBriefing, loading: true, error: null },
+      aiBriefing: { ...state.aiBriefing, loading: true, error: null, pending: null },
     }));
     try {
       // Until 2026-10-02 no caller passed `auto`, so every app-initiated
@@ -188,10 +210,14 @@ export const createBriefingSlice: StateCreator<AppStore, [], [], BriefingSlice> 
         // The backend defers a brief while the startup lockfile rescan runs
         // (it would state dependency facts from the previous session).
         // Say so, and write it once the inventory is fresh.
+        // A neutral pending state, not an error (no Retry).
         set(state => ({
-          aiBriefing: { ...state.aiBriefing, loading: false, error: inventoryRefreshingMessage() },
+          aiBriefing: { ...state.aiBriefing, loading: false, error: null, pending: inventoryRefreshingMessage() },
         }));
-        retryBriefingWhenInventoryFresh(() => get().generateBriefing({ auto: true }));
+        retryBriefingWhenInventoryFresh(
+          () => get().generateBriefing({ auto: true }),
+          () => Boolean(get().aiBriefing.pending),
+        );
       } else {
         set(state => ({
           aiBriefing: {

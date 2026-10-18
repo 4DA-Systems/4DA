@@ -57,6 +57,7 @@ export function BriefingReadyState() {
   const startTrial = useAppStore(s => s.startTrial);
   const isLoading = useAppStore(s => s.aiBriefing.loading);
   const briefingError = useAppStore(s => s.aiBriefing.error);
+  const briefingPending = useAppStore(s => s.aiBriefing.pending);
   const { isPro, trialStatus } = useLicense();
   // Covers the gap between the click and the store flipping to loading; reset
   // when the request settles, so a failed generation can be retried here.
@@ -102,6 +103,11 @@ export function BriefingReadyState() {
         <p className="text-sm text-text-muted text-center max-w-md mb-6">
           {t('briefing.resultsAnalyzed', { count: results.length })}
         </p>
+        {briefingPending && !briefingError && !busy && (
+          <p role="status" className="text-xs text-text-secondary text-center max-w-md mb-4">
+            {briefingPending}
+          </p>
+        )}
         {briefingError && !busy && (
           <p role="alert" className="text-xs text-red-400 text-center max-w-md mb-4">
             {t('briefing.generateFailed', { error: briefingError })}

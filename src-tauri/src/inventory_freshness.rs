@@ -7,22 +7,32 @@
 //! brief and the startup morning-brief notification used to run before it.
 //! Live 2026-10-18: brief #421 (09:51:10) told the user to bump ammonia to
 //! 4.2.4 although Cargo.lock had carried 4.2.4 for a day; the lockfile rows
-//! were only re-read at 09:51:49.
+//! were only re-read at 09:51:40 and the scan finished at 09:54:16.
 //!
-//! This module is the one signal those readers gate on: `begin_refresh` when
-//! the startup scan is scheduled, `finish_refresh` when it has written the
-//! inventory, and `wait_until_fresh` (bounded, event-driven, no polling) for
-//! anything that states dependency facts. With no scan scheduled (no context
-//! directories) the inventory is what it is and reads as fresh.
+//! This module is the one signal those readers gate on. [`begin_startup_refresh`]
+//! shuts the gate and returns a [`RefreshGuard`] that the scan task owns: the
+//! gate reopens when the guard drops (scan done, failed, or the task
+//! PANICKED), or at a hard deadline if the scan hangs (an unreachable network
+//! share), whichever comes first. A shut gate can therefore never outlive the
+//! session's scan. With no scan scheduled the inventory reads as fresh.
 
+use std::sync::Arc;
 use std::time::Duration;
 
 use once_cell::sync::Lazy;
+use parking_lot::Mutex;
 use tokio::sync::watch;
 
 /// Event emitted when the startup inventory refresh finishes, so a brief the
 /// UI was told to wait for can be generated then.
 pub(crate) const INVENTORY_FRESH_EVENT: &str = "inventory-fresh";
+
+/// Hard deadline for the startup scan to release the gate. Measured
+/// 2026-10-18: ~8 minutes on the operator's 19-lockfile machine.
+pub(crate) const STARTUP_SCAN_DEADLINE: Duration = Duration::from_secs(15 * 60);
+
+/// Machine-readable error of a brief refused while the inventory refreshes.
+pub(crate) const INVENTORY_REFRESHING: &str = "inventory_refreshing";
 
 /// One refresh gate. The process uses [`GLOBAL`]; tests make their own.
 pub(crate) struct Gate {
@@ -36,11 +46,11 @@ impl Gate {
         Self { tx }
     }
 
-    pub(crate) fn begin_refresh(&self) {
+    fn shut(&self) {
         self.tx.send_replace(false);
     }
 
-    pub(crate) fn finish_refresh(&self) {
+    fn open(&self) {
         self.tx.send_replace(true);
     }
 
@@ -59,22 +69,84 @@ impl Gate {
     }
 }
 
-static GLOBAL: Lazy<Gate> = Lazy::new(Gate::new);
+static GLOBAL: Lazy<Arc<Gate>> = Lazy::new(|| Arc::new(Gate::new()));
 
-/// How long a brief request waits for the startup rescan before answering
-/// "the inventory is being refreshed". Below the UI's 120 s command timeout
-/// with room for the model call that follows a successful wait.
-pub(crate) const BRIEF_INVENTORY_WAIT: Duration = Duration::from_secs(45);
+type OnFinish = Box<dyn FnOnce() + Send>;
 
-/// Machine-readable error of a brief refused while the inventory refreshes.
-pub(crate) const INVENTORY_REFRESHING: &str = "inventory_refreshing";
+/// The shared state of one refresh: reopening happens exactly once.
+struct Refresh {
+    gate: Arc<Gate>,
+    on_finish: Mutex<Option<OnFinish>>,
+}
 
-/// The brief's gate: `None` when the inventory is fresh (already, or within
-/// `timeout`); otherwise the response that tells the UI to wait for
-/// [`INVENTORY_FRESH_EVENT`]. No dependency fact is built or stated from a
-/// stale inventory.
-pub(crate) async fn brief_gate(gate: &Gate, timeout: Duration) -> Option<serde_json::Value> {
-    if gate.wait_until_fresh(timeout).await {
+impl Refresh {
+    fn release(&self, deadline_hit: bool) {
+        let Some(on_finish) = self.on_finish.lock().take() else {
+            return;
+        };
+        self.gate.open();
+        if deadline_hit {
+            tracing::warn!(target: "4da::startup", "Dependency inventory refresh hit its deadline: dependency facts are released on the stored inventory");
+        } else {
+            tracing::info!(target: "4da::startup", "Dependency inventory refresh finished");
+        }
+        on_finish();
+    }
+}
+
+/// Owned by the scan task; reopens the gate when dropped (including during
+/// a panic's unwind).
+pub(crate) struct RefreshGuard(Arc<Refresh>);
+
+impl Drop for RefreshGuard {
+    fn drop(&mut self) {
+        self.0.release(false);
+    }
+}
+
+/// Shut `gate` until the returned guard drops or `deadline` passes.
+/// `on_finish` runs once, on whichever comes first.
+fn begin_refresh_on(
+    gate: Arc<Gate>,
+    deadline: Duration,
+    on_finish: impl FnOnce() + Send + 'static,
+) -> RefreshGuard {
+    gate.shut();
+    let refresh = Arc::new(Refresh {
+        gate,
+        on_finish: Mutex::new(Some(Box::new(on_finish))),
+    });
+    let watchdog = Arc::downgrade(&refresh);
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(deadline).await;
+        if let Some(refresh) = watchdog.upgrade() {
+            refresh.release(true);
+        }
+    });
+    RefreshGuard(refresh)
+}
+
+/// The startup scan is scheduled: dependency facts wait for the returned
+/// guard (move it into the scan task) or [`STARTUP_SCAN_DEADLINE`].
+pub(crate) fn begin_startup_refresh(on_finish: impl FnOnce() + Send + 'static) -> RefreshGuard {
+    tracing::info!(target: "4da::startup", "Dependency inventory refresh scheduled: dependency facts wait for it");
+    begin_refresh_on(GLOBAL.clone(), STARTUP_SCAN_DEADLINE, on_finish)
+}
+
+pub(crate) fn is_fresh() -> bool {
+    GLOBAL.is_fresh()
+}
+
+pub(crate) async fn wait_until_fresh(timeout: Duration) -> bool {
+    GLOBAL.wait_until_fresh(timeout).await
+}
+
+/// The brief's gate: `None` when the inventory is fresh; otherwise, at once,
+/// the response that tells the UI to generate on [`INVENTORY_FRESH_EVENT`].
+/// No dependency fact is built or stated from a stale inventory, and no time
+/// is taken from the model call's share of the UI's command timeout.
+pub(crate) fn brief_gate(gate: &Gate) -> Option<serde_json::Value> {
+    if gate.is_fresh() {
         return None;
     }
     tracing::info!(target: "4da::briefing", "Brief deferred: the dependency inventory is being refreshed");
@@ -87,33 +159,22 @@ pub(crate) async fn brief_gate(gate: &Gate, timeout: Duration) -> Option<serde_j
 }
 
 /// [`brief_gate`] on the process gate.
-pub(crate) async fn brief_gate_global() -> Option<serde_json::Value> {
-    brief_gate(&GLOBAL, BRIEF_INVENTORY_WAIT).await
-}
-
-/// The startup scan has been scheduled: the stored inventory may be stale.
-pub(crate) fn begin_refresh() {
-    tracing::info!(target: "4da::startup", "Dependency inventory refresh scheduled: dependency facts wait for it");
-    GLOBAL.begin_refresh();
-}
-
-/// The startup scan has written the inventory (or ended without one).
-pub(crate) fn finish_refresh() {
-    GLOBAL.finish_refresh();
-    tracing::info!(target: "4da::startup", "Dependency inventory refresh finished");
-}
-
-pub(crate) fn is_fresh() -> bool {
-    GLOBAL.is_fresh()
-}
-
-pub(crate) async fn wait_until_fresh(timeout: Duration) -> bool {
-    GLOBAL.wait_until_fresh(timeout).await
+pub(crate) fn brief_gate_global() -> Option<serde_json::Value> {
+    brief_gate(&GLOBAL)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    fn counter() -> (Arc<AtomicUsize>, impl FnOnce() + Send + 'static) {
+        let count = Arc::new(AtomicUsize::new(0));
+        let c = count.clone();
+        (count, move || {
+            c.fetch_add(1, Ordering::SeqCst);
+        })
+    }
 
     #[tokio::test]
     async fn a_fresh_gate_never_waits() {
@@ -123,41 +184,67 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn a_pending_refresh_times_out_as_not_fresh() {
-        let gate = Gate::new();
-        gate.begin_refresh();
+    async fn a_pending_refresh_times_out_as_not_fresh_and_reopens_on_drop() {
+        let gate = Arc::new(Gate::new());
+        let (count, on_finish) = counter();
+        let guard = begin_refresh_on(gate.clone(), Duration::from_secs(3600), on_finish);
         assert!(!gate.wait_until_fresh(Duration::from_millis(20)).await);
+        drop(guard);
+        assert!(gate.is_fresh());
+        assert_eq!(count.load(Ordering::SeqCst), 1, "finish runs once");
     }
 
     #[tokio::test]
     async fn a_waiter_wakes_when_the_refresh_finishes() {
-        let gate = std::sync::Arc::new(Gate::new());
-        gate.begin_refresh();
+        let gate = Arc::new(Gate::new());
+        let guard = begin_refresh_on(gate.clone(), Duration::from_secs(3600), || {});
         let waiter = {
             let gate = gate.clone();
             tokio::spawn(async move { gate.wait_until_fresh(Duration::from_secs(10)).await })
         };
         tokio::task::yield_now().await;
-        gate.finish_refresh();
+        drop(guard);
         assert!(waiter.await.expect("waiter"));
     }
 
-    /// Live 2026-10-18 (brief #421): a brief built while the startup rescan
-    /// was pending stated a bump the lockfile already carried. While the
-    /// refresh is pending the brief is refused with `inventory_refreshing`
-    /// (no facts built); once it finishes the brief proceeds.
+    /// Review B1: a panicking scan task must not leave the gate shut.
+    #[test]
+    fn a_guard_dropped_by_a_panic_reopens_the_gate() {
+        let gate = Arc::new(Gate::new());
+        let (count, on_finish) = counter();
+        let guard = begin_refresh_on(gate.clone(), Duration::from_secs(3600), on_finish);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
+            let _owned = guard;
+            panic!("scan task panicked");
+        }));
+        assert!(result.is_err());
+        assert!(gate.is_fresh(), "the unwind dropped the guard");
+        assert_eq!(count.load(Ordering::SeqCst), 1);
+    }
+
+    /// Review B1: a hung scan releases the gate at the deadline, once.
     #[tokio::test]
-    async fn a_brief_requested_during_the_rescan_states_no_facts() {
-        let gate = Gate::new();
-        gate.begin_refresh();
-        let refused = brief_gate(&gate, Duration::from_millis(20))
-            .await
-            .expect("refused while refreshing");
+    async fn a_hung_scan_releases_the_gate_at_the_deadline() {
+        let gate = Arc::new(Gate::new());
+        let (count, on_finish) = counter();
+        let guard = begin_refresh_on(gate.clone(), Duration::from_millis(30), on_finish);
+        assert!(gate.wait_until_fresh(Duration::from_secs(5)).await);
+        assert_eq!(count.load(Ordering::SeqCst), 1);
+        drop(guard); // the late finish is a no-op
+        assert_eq!(count.load(Ordering::SeqCst), 1);
+    }
+
+    /// Live 2026-10-18 (brief #421): a brief requested while the startup
+    /// rescan is pending states no facts; it is deferred at once.
+    #[test]
+    fn a_brief_requested_during_the_rescan_states_no_facts() {
+        let gate = Arc::new(Gate::new());
+        let guard = begin_refresh_on(gate.clone(), Duration::from_secs(3600), || {});
+        let refused = brief_gate(&gate).expect("refused while refreshing");
         assert_eq!(refused["success"], false);
         assert_eq!(refused["error"], INVENTORY_REFRESHING);
         assert!(refused["briefing"].is_null(), "no brief text, so no facts");
-
-        gate.finish_refresh();
-        assert!(brief_gate(&gate, Duration::from_millis(20)).await.is_none());
+        drop(guard);
+        assert!(brief_gate(&gate).is_none());
     }
 }

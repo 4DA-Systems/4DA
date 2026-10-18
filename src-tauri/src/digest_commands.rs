@@ -109,10 +109,9 @@ pub(crate) async fn generate_briefing_internal(
 
     // Dependency facts come from the stored inventory: while the startup
     // lockfile rescan runs it is the previous session's (brief #421 told the
-    // user to bump an ammonia the lockfile already carried). Wait for the
-    // rescan, bounded; still pending, defer and let the UI retry on
-    // `inventory-fresh`.
-    if let Some(deferred) = crate::inventory_freshness::brief_gate_global().await {
+    // user to bump an ammonia the lockfile already carried). While it runs,
+    // defer at once (no facts built); the UI re-requests on `inventory-fresh`.
+    if let Some(deferred) = crate::inventory_freshness::brief_gate_global() {
         return Ok(deferred);
     }
 
@@ -233,7 +232,8 @@ pub(crate) async fn generate_briefing_internal(
         let content = crate::brief_facts::drop_sections_without_news(&content, &facts);
         let content = crate::briefing_dev_tags::strip_unfounded_dev_tags(&content, &package_facts);
         // Never the model's notes about where it put a line (brief #421).
-        let content = crate::briefing_meta::strip_meta_commentary(&content);
+        let fact_packages: Vec<String> = package_facts.iter().map(|p| p.name.clone()).collect();
+        let content = crate::briefing_meta::strip_meta_commentary(&content, &fact_packages);
         let content = crate::briefing_deterministic::honest_without_lockfiles(&content, &facts);
         let violations =
             crate::briefing_groundedness::check_factual_claims(&content, &package_facts);
