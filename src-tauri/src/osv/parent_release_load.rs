@@ -424,10 +424,13 @@ fn annotate_link(
     }
 }
 
-/// The command that moves a declared npm dependency, the operator kept.
+/// The command that moves a declared npm dependency: the in-range refresh when
+/// its declared range already admits the release (pr-001: `npm update
+/// express`), else the install that keeps the operator.
 pub(super) fn lever_command(dir: &str, name: &str, installed: &str, to: &str) -> Option<String> {
     match super::direct_upgrade::direct_fix(Path::new(dir), ECOSYSTEM, name, installed, to)? {
-        super::direct_upgrade::DirectFix::Command(c) => Some(c),
+        super::direct_upgrade::DirectFix::Command(c)
+        | super::direct_upgrade::DirectFix::Refresh(c) => Some(c),
         super::direct_upgrade::DirectFix::Instruction(_) => None,
     }
 }

@@ -129,9 +129,12 @@ fn command(
         "{\"lockfileVersion\": 3}\n",
     )
     .map_err(|e| e.to_string())?;
+    // The command the lever names: the in-range refresh when the declaration
+    // already admits the release (pr-001), else the install that keeps the
+    // operator; exhaustive so a new kind of fix cannot drop out silently.
     Ok(match direct_fix(dir.path(), "npm", name, installed, to) {
-        Some(DirectFix::Command(c)) => Some(c),
-        _ => None,
+        Some(DirectFix::Command(c) | DirectFix::Refresh(c)) => Some(c),
+        Some(DirectFix::Instruction(_)) | None => None,
     })
 }
 
