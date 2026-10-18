@@ -695,6 +695,7 @@ fn an_affected_release_names_every_active_project_behind_it() {
             advisory_id: advisory.to_string(),
             summary: "ReDoS".to_string(),
             aliases: Vec::new(),
+            cwe_ids: Vec::new(),
             affected_ranges: Some(
                 r#"[{"type":"ENUMERATED","events":["4.1.0","4.2.1"]}]"#.to_string(),
             ),
