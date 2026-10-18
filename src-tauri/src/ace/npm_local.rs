@@ -67,7 +67,8 @@ fn workspace_globs(pkg: &serde_json::Value) -> Vec<String> {
     .unwrap_or_default()
 }
 
-/// The `packages:` list of a `pnpm-workspace.yaml` (`  - 'packages/*'`).
+/// The `packages:` list of a `pnpm-workspace.yaml`, in block style
+/// (`  - 'packages/*'`) or flow style (`packages: ['a/*', "b"]`).
 pub(crate) fn pnpm_workspace_globs(content: &str) -> Vec<String> {
     let mut globs = Vec::new();
     let mut in_packages = false;
@@ -75,6 +76,20 @@ pub(crate) fn pnpm_workspace_globs(content: &str) -> Vec<String> {
         let trimmed = line.trim();
         if !line.starts_with(' ') && !line.starts_with('\t') && !trimmed.is_empty() {
             in_packages = trimmed.starts_with("packages:");
+            if let Some(flow) = trimmed
+                .strip_prefix("packages:")
+                .map(|v| v.split('#').next().unwrap_or("").trim())
+                .and_then(|v| v.strip_prefix('['))
+                .and_then(|v| v.strip_suffix(']'))
+            {
+                globs.extend(
+                    flow.split(',')
+                        .map(|g| g.trim().trim_matches(|c| c == '\'' || c == '"'))
+                        .filter(|g| !g.is_empty())
+                        .map(str::to_string),
+                );
+                in_packages = false;
+            }
             continue;
         }
         if in_packages {
@@ -106,7 +121,9 @@ fn read_facts(manifest_path: &Path) -> Option<NpmManifestFacts> {
 
 /// Member directories a workspace glob names. Supports the forms workspaces
 /// use in practice: a literal path, `dir/*`, and `dir/**` (one level deep is
-/// enough to find a member's `package.json`). Negations (`!x`) are ignored.
+/// enough to find a member's `package.json`; deeper members are not
+/// expanded). Negations (`!x`) expand to nothing here; `workspace_member_dirs`
+/// applies them.
 fn expand_member_dirs(root: &Path, glob: &str) -> Vec<PathBuf> {
     let glob = glob.trim().trim_start_matches("./");
     if glob.starts_with('!') || glob.is_empty() {
@@ -133,7 +150,8 @@ fn expand_member_dirs(root: &Path, glob: &str) -> Vec<PathBuf> {
 /// The member directories of the npm / yarn / pnpm workspace rooted at
 /// `root`: its `package.json` `workspaces` (array, or yarn's
 /// `{ packages: [...] }`) and its `pnpm-workspace.yaml` `packages:`, expanded
-/// as [`expand_member_dirs`] does, minus literal `!negations`. Only
+/// as [`expand_member_dirs`] does, minus every directory a `!negation`
+/// matches ([`glob_matches`]). Only
 /// directories holding a `package.json`, never `root` itself, sorted. Empty
 /// for a project that is not a workspace root.
 pub(crate) fn workspace_member_dirs(root: &Path) -> Vec<PathBuf> {
@@ -143,19 +161,81 @@ pub(crate) fn workspace_member_dirs(root: &Path) -> Vec<PathBuf> {
     if let Ok(yaml) = fs::read_to_string(root.join("pnpm-workspace.yaml")) {
         globs.extend(pnpm_workspace_globs(&yaml));
     }
-    let negated: Vec<PathBuf> = globs
+    let negated: Vec<Vec<&str>> = globs
         .iter()
         .filter_map(|g| g.trim().strip_prefix('!'))
-        .map(|g| root.join(g.trim_start_matches("./")))
+        .map(glob_segments)
         .collect();
+    let excluded = |dir: &Path| {
+        let Ok(rel) = dir.strip_prefix(root) else {
+            return false;
+        };
+        let rel: Vec<String> = rel
+            .components()
+            .map(|c| c.as_os_str().to_string_lossy().into_owned())
+            .collect();
+        let rel: Vec<&str> = rel.iter().map(String::as_str).collect();
+        negated.iter().any(|pattern| glob_matches(pattern, &rel))
+    };
     let mut dirs: Vec<PathBuf> = globs
         .iter()
         .flat_map(|g| expand_member_dirs(root, g))
-        .filter(|d| d.join("package.json").is_file() && d != root && !negated.contains(d))
+        .filter(|d| d.join("package.json").is_file() && d != root && !excluded(d))
         .collect();
     dirs.sort();
     dirs.dedup();
     dirs
+}
+
+/// A workspace glob's path segments (`./` and empty segments dropped).
+fn glob_segments(glob: &str) -> Vec<&str> {
+    glob.trim()
+        .trim_start_matches("./")
+        .split('/')
+        .filter(|s| !s.is_empty() && *s != ".")
+        .collect()
+}
+
+/// Whether `path` (segments relative to the workspace root) matches a glob:
+/// `**` spans any number of segments, `*` any run of characters within one.
+/// A negation such as `!**/test/**` must exclude `packages/test`: a package
+/// the workspace excludes is not a member, so its declarations are not the
+/// workspace's direct dependencies.
+fn glob_matches(pattern: &[&str], path: &[&str]) -> bool {
+    match (pattern.split_first(), path.split_first()) {
+        (None, None) => true,
+        (Some((&"**", rest)), _) => {
+            glob_matches(rest, path)
+                || path
+                    .split_first()
+                    .is_some_and(|(_, tail)| glob_matches(pattern, tail))
+        }
+        (Some((seg, rest)), Some((head, tail))) => {
+            segment_matches(seg, head) && glob_matches(rest, tail)
+        }
+        _ => false,
+    }
+}
+
+/// One glob segment against one path segment (`*` wildcards only).
+fn segment_matches(pattern: &str, name: &str) -> bool {
+    let Some((first, rest)) = pattern.split_once('*') else {
+        return pattern == name;
+    };
+    let Some(mut remaining) = name.strip_prefix(first) else {
+        return false;
+    };
+    let parts: Vec<&str> = rest.split('*').collect();
+    for (i, part) in parts.iter().enumerate() {
+        if i == parts.len() - 1 {
+            return remaining.ends_with(part);
+        }
+        match remaining.find(part) {
+            Some(at) => remaining = &remaining[at + part.len()..],
+            None => return false,
+        }
+    }
+    true
 }
 
 /// The `name` a member's `package.json` declares.

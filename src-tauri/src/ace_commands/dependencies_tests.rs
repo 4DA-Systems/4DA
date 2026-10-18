@@ -409,6 +409,39 @@ fn pnpm_workspace_yaml_members_are_direct() {
     );
 }
 
+/// A wildcard negation excludes the member it matches: an excluded package
+/// is not a member, so its declarations are not direct. And pnpm's
+/// flow-style `packages: [...]` is read.
+#[test]
+fn wildcard_negations_and_pnpm_flow_style_are_honoured() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    write_json(
+        &dir.join("package.json"),
+        r#"{"name":"root","private":true,"workspaces":["packages/*","!**/w*b/**"]}"#,
+    );
+    two_members(dir, "packages");
+    assert_eq!(js_direct(dir), vec!["lodash"], "packages/web is negated");
+
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    write_json(
+        &dir.join("package.json"),
+        r#"{"name":"root","private":true}"#,
+    );
+    std::fs::write(
+        dir.join("pnpm-workspace.yaml"),
+        "packages: ['libs/*', \"!libs/ui\"]\nonlyBuiltDependencies: []\n",
+    )
+    .unwrap();
+    two_members(dir, "libs");
+    assert_eq!(
+        js_direct(dir),
+        vec!["@me/ui", "react", "vitest"],
+        "libs/ui is excluded, so `@me/ui` is not a member: the registry resolves it"
+    );
+}
+
 /// A single-root project is unchanged: a nested package.json that no
 /// `workspaces` names is not read.
 #[test]
