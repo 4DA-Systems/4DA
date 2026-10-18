@@ -178,3 +178,12 @@ fn a_mal_alias_is_installed_malware_too() {
     let plain = matched("GHSA-plain", &["CVE-1"], None, Some("low"));
     assert!(!contains_malware(&[&plain]));
 }
+
+/// GitHub's malware title alone (GHSA-28f8-hqmc-7ph8: no MAL- id, no CWE)
+/// is installed malware by the shared predicate, even beside a low grade.
+#[test]
+fn a_malware_title_alone_is_installed_malware() {
+    let mut m = matched("GHSA-28f8-hqmc-7ph8", &[], None, Some("low"));
+    m.summary = "Malicious Package in ember-power-timepicker".into();
+    assert_eq!(cluster_urgency(&[&m]), Urgency::Critical);
+}

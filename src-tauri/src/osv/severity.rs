@@ -421,13 +421,12 @@ pub fn cluster_urgency(cluster: &[&MatchedAdvisory]) -> Urgency {
 /// package still runs its code (install scripts, the build, the test run) on
 /// the developer's machine, so it is not the milder exposure the scope rule
 /// discounts for vulnerabilities. Malware is the ONE shared predicate,
-/// `fourda_depengine::is_malware`: a `MAL-` id or alias, or CWE-506 in
-/// `database_specific.cwe_ids` (GHSA-c2m4-w5hm-vqjw, crossenv, has no MAL
-/// alias).
+/// `fourda_depengine::is_malware` (via `MatchedAdvisory::is_malware`): a
+/// `MAL-` id or alias, CWE-506 in `database_specific.cwe_ids` (crossenv
+/// GHSA-c2m4-w5hm-vqjw has no MAL alias), or GitHub's malware title
+/// ("Malicious Package in …", GHSA-28f8-hqmc-7ph8).
 pub fn contains_malware(group: &[&MatchedAdvisory]) -> bool {
-    group
-        .iter()
-        .any(|m| fourda_depengine::is_malware(&m.advisory_id, &m.aliases, &m.cwe_ids))
+    group.iter().any(|m| m.is_malware())
 }
 
 /// A maintenance notice (the Upgrade Plan's informational fold).

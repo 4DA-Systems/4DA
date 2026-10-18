@@ -3159,11 +3159,12 @@ mod tests {
         assert_eq!(alert_subject("vitest", &set(&[])), "vitest");
     }
 
-    /// Review of #992: with no severity, a malicious-package record is High
-    /// by the shared predicate, not only a `MAL-` id: GHSA-28f8-hqmc-7ph8
-    /// (title only) and crossenv GHSA-c2m4-w5hm-vqjw (CWE-506 only).
+    /// Review of #992 and #986: a malicious-package record on the installed
+    /// version is Critical by the shared predicate, not only a `MAL-` id:
+    /// GHSA-28f8-hqmc-7ph8 (title only) and crossenv GHSA-c2m4-w5hm-vqjw
+    /// (CWE-506 only). An unrated record that is not malware is Medium.
     #[test]
-    fn an_unrated_malware_record_is_high_by_the_shared_predicate() {
+    fn an_unrated_malware_record_is_critical_by_the_shared_predicate() {
         let rec = |id: &str, summary: &str, cwe: &[&str]| crate::osv::types::MatchedAdvisory {
             advisory_id: id.into(),
             summary: summary.into(),
@@ -3181,6 +3182,7 @@ mod tests {
             aliases: vec![],
             severity_label: None,
             cwe_ids: cwe.iter().map(ToString::to_string).collect(),
+            severity_from: None,
             dependency_instances: vec![],
         };
         for m in [
@@ -3193,16 +3195,13 @@ mod tests {
             rec("MAL-2026-0001", "x", &[]),
         ] {
             assert!(
-                matches!(infer_urgency_from_summary(&m), AlertUrgency::High),
+                matches!(most_urgent_tier(&[&m]), AlertUrgency::Critical),
                 "{}",
                 m.advisory_id
             );
         }
         let plain = rec("GHSA-xxxx", "Malicious-looking prose", &[]);
-        assert!(matches!(
-            infer_urgency_from_summary(&plain),
-            AlertUrgency::Watch
-        ));
+        assert!(matches!(most_urgent_tier(&[&plain]), AlertUrgency::Medium));
     }
 
     #[test]

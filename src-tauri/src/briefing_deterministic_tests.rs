@@ -567,6 +567,7 @@ fn scoping_the_all_clear_keeps_the_rest_of_the_line() {
         out.contains("- Nothing new touches the code 4DA checked today, and Vite 7.1 shipped."),
         "{out}"
     );
+}
 
 /// #986: a fact of maintenance notices only names no severity and counts no
 /// vulnerability; its title says what it is.

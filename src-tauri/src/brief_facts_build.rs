@@ -221,16 +221,14 @@ fn security_fact(
         .first()
         .map(|m| m.ecosystem.clone())
         .unwrap_or_else(|| "npm".to_string());
-    // Maintenance notices are not vulnerabilities (#986): never counted or
-    // graded as one; a fact of notices only is worded as what it is.
+    // Maintenance notices (#986) are never counted or graded as vulnerabilities.
     let (clusters, notices): (Vec<_>, Vec<_>) =
         crate::osv::identity::cluster_by_vulnerability(&group)
             .into_iter()
             .partition(|c| !crate::osv::severity::is_notice_group(c));
     let notice_ids: Vec<&str> = notices.iter().map(|c| c[0].advisory_id.as_str()).collect();
     let notice_only = clusters.is_empty() && !notice_ids.is_empty();
-    // The worst grade, and the GHSA alias it came from when the record has
-    // none of its own (`osv::severity`): never presented as the record's own.
+    // The worst grade, and the GHSA alias an inherited one came from.
     let worst = crate::osv::severity::worst(
         clusters
             .iter()
