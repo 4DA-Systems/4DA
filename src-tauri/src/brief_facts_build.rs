@@ -415,10 +415,7 @@ fn with_direct_fix(
                 &to,
             )
         })
-        .map(|f| match f {
-            crate::osv::direct_upgrade::DirectFix::Command(c) => format!("run `{c}`"),
-            crate::osv::direct_upgrade::DirectFix::Instruction(i) => i,
-        });
+        .map(|f| f.brief_clause());
     FixPath::Bump { to, fix }
 }
 

@@ -32,7 +32,7 @@ fn a_bump_names_the_command_for_its_declaration() {
     );
     assert_eq!(
         crate::brief_facts::fix_clause("minimist", &path),
-        "bump minimist to >= 1.2.6: run `npm install \"minimist@~1.2.6\"`"
+        "bump minimist to >= 1.2.6: within its declared range, run `npm update minimist`"
     );
     // Not declared here: plain "bump", nothing invented.
     let plain = with_direct_fix(
@@ -120,12 +120,12 @@ fn seeded_project(tag: &str) -> Option<(tempfile::TempDir, String, crate::db::Da
     }
     std::fs::write(
         dir.path().join("package.json"),
-        r#"{"name": "app", "dependencies": {"minimist": "~1.2.5"}}"#,
+        r#"{"name": "app", "dependencies": {"minimist": "1.2.5"}}"#,
     )
     .unwrap();
     std::fs::write(
         dir.path().join("package-lock.json"),
-        r#"{"lockfileVersion": 3, "packages": {"": {"dependencies": {"minimist": "~1.2.5"}}, "node_modules/minimist": {"version": "1.2.5"}}}"#,
+        r#"{"lockfileVersion": 3, "packages": {"": {"dependencies": {"minimist": "1.2.5"}}, "node_modules/minimist": {"version": "1.2.5"}}}"#,
     )
     .unwrap();
     let db = crate::test_utils::test_db();
@@ -219,7 +219,7 @@ fn the_brief_and_the_plan_name_the_same_command() {
         .iter()
         .find(|i| i.title.contains("minimist"))
         .expect("a minimist row");
-    let command = "`npm install \"minimist@~1.2.6\"`";
+    let command = "`npm install minimist@1.2.6 --save-exact`";
     assert!(
         row.explanation.contains(command),
         "plan: {}",
