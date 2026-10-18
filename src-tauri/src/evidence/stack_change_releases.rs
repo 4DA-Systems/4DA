@@ -8,6 +8,15 @@
 //! stable release per package inside the Brief's window, keeps the grades that
 //! ask something of a project, and reads whether a minor release is inside
 //! the range the project already declares.
+//!
+//! Before any command toward a release is named, the release itself is
+//! checked against the package's stored advisories
+//! (`osv::release_advisories`): a malicious or advisory-affected release is
+//! announced as such with no command, and a release whose advisory status is
+//! unknown (the mirror is stale, failed, or older than the release) gets no
+//! command either. A release affected only by advisories that already hit the
+//! copies the projects run is left to the advisory lane, which reports those
+//! advisories with a target that clears them.
 
 use std::collections::{BTreeMap, HashSet};
 use std::path::Path;
@@ -17,7 +26,8 @@ use semver::Version;
 use crate::brief_facts::{is_own_package, UPGRADE_WINDOW_DAYS};
 use crate::db::Database;
 use crate::evidence::ProjectLiveness;
-use crate::osv::fix_path::{cargo_requirements, npm_requirement, Manager, Requirement};
+use crate::osv::fix_path::{cargo_requirements, Manager, Requirement};
+use crate::osv::release_advisories::{ReleaseAdvisories, ReleaseChecker, RELEASE_HOLD_DAYS};
 use crate::scoring::release_grade::{self, ProjectPin, ReleaseClass, ReleaseGrade};
 
 use super::StackChange;
@@ -58,6 +68,9 @@ pub(crate) struct ReleaseChange {
     pub current: Option<String>,
     /// Every concerned project declares it as a dev dependency.
     pub dev_only: bool,
+    /// What the stored advisories say about the announced release itself.
+    /// Commands are named only when it is `Clear`.
+    pub advisories: ReleaseAdvisories,
 }
 
 /// The change a grade asks for, or `None` when it asks nothing of a project.
@@ -100,14 +113,34 @@ fn own_manifest_requirements(dir: &Path, ecosystem: &str, package: &str) -> Vec<
                     .collect()
             })
             .unwrap_or_default(),
-        "npm" => std::fs::read_to_string(dir.join("package.json"))
-            .ok()
-            .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
-            .and_then(|pkg| npm_requirement(&pkg, package))
-            .map(|r| vec![Requirement::npm(&r)])
-            .unwrap_or_default(),
+        "npm" => npm_manifest_requirement(dir, package).into_iter().collect(),
         _ => Vec::new(),
     }
+}
+
+/// The spec a project's own `package.json` declares `package` with, in any
+/// section the project installs (`dependencies`, `devDependencies`,
+/// `optionalDependencies`; `direct_upgrade::npm_declared`): a project's own
+/// dev dependencies resolve, and their install scripts run.
+fn npm_manifest_requirement(dir: &Path, package: &str) -> Option<Requirement> {
+    let text = std::fs::read_to_string(dir.join("package.json")).ok()?;
+    crate::osv::direct_upgrade::npm_declared(&text, package).map(|r| Requirement::npm(&r))
+}
+
+/// What the project's own manifest AND, for an npm-family workspace root,
+/// its members' manifests declare on `package`: the workspace's one
+/// lockfile resolves every member's requirement, so a refresh there pulls
+/// in a release any of them admits.
+fn workspace_requirements(dir: &Path, ecosystem: &str, package: &str) -> Vec<Requirement> {
+    let mut out = own_manifest_requirements(dir, ecosystem, package);
+    if ecosystem == "npm" {
+        out.extend(
+            crate::ace::npm_local::workspace_member_dirs(dir)
+                .iter()
+                .filter_map(|m| npm_manifest_requirement(m, package)),
+        );
+    }
+    out
 }
 
 fn site_for(
@@ -115,21 +148,31 @@ fn site_for(
     change: StackChange,
     ecosystem: &str,
     grade: &ReleaseGrade,
+    clear: bool,
 ) -> ReleaseSite {
     let dir = Path::new(&pin.project_path);
     let installed = pin.installed.to_string();
     let announced = grade.announced.to_string();
     // A breaking release always needs a manifest edit; only a minor can land
-    // by refreshing inside the range the project already declares.
-    let admitted = if change == StackChange::Minor && !pin.is_dev {
+    // by refreshing inside the range the project (or a workspace member)
+    // declares. Read for dev pins too: install scripts run for them, so a
+    // malicious dev release inside the range is as close to installed.
+    let admitted = (change == StackChange::Minor).then(|| {
         requirements_admit(
-            &own_manifest_requirements(dir, ecosystem, &grade.package),
+            &workspace_requirements(dir, ecosystem, &grade.package),
             &announced,
         )
-    } else {
-        None
-    };
-    let command = (admitted == Some(true))
+    });
+    let admitted = admitted.flatten();
+    // A command only for a runtime pin whose OWN manifest admits a release
+    // checked clear: the refresh that "picks it up" is the one that would
+    // install a malicious build, and the root's refresh command is only
+    // known to act on the root's own declaration.
+    let own_admits = requirements_admit(
+        &own_manifest_requirements(dir, ecosystem, &grade.package),
+        &announced,
+    ) == Some(true);
+    let command = (admitted == Some(true) && own_admits && clear && !pin.is_dev)
         .then(|| Manager::detect(dir, ecosystem))
         .flatten()
         .and_then(|m| m.refresh_command(&grade.package, &installed, &announced));
@@ -144,31 +187,51 @@ fn site_for(
     }
 }
 
+/// The concerned pins of working projects: scratch and dormant projects are
+/// not working projects (the Brief's rule).
+pub(crate) fn active_pins<'a>(
+    grade: &'a ReleaseGrade,
+    liveness: &ProjectLiveness,
+) -> Vec<&'a ProjectPin> {
+    grade
+        .concerned_pins()
+        .into_iter()
+        .filter(|p| !liveness.is_scratch(&p.project_path) && !liveness.is_dormant(&p.project_path))
+        .collect()
+}
+
 /// Build the change for one graded release, or `None` when it asks nothing of
-/// an active project. Scratch and dormant projects are not working projects
-/// (the Brief's rule); a minor that only dev tooling carries is tooling news.
+/// an active project. A minor that only dev tooling carries is tooling news,
+/// unless an advisory affects it. A release whose every affecting advisory
+/// already hits every active copy is the advisory lane's (it names the
+/// target that clears them) — never a malicious one, which is always said.
+/// `advisories` must be checked against the [`active_pins`]' copies.
 pub(crate) fn release_change(
     grade: &ReleaseGrade,
     row: &RegistryRow,
     liveness: &ProjectLiveness,
+    advisories: ReleaseAdvisories,
 ) -> Option<ReleaseChange> {
     let change = change_of(grade)?;
+    let affected = match &advisories {
+        ReleaseAdvisories::Affected(hit) if hit.covered_by_installed && !hit.malware => {
+            return None
+        }
+        ReleaseAdvisories::Affected(_) => true,
+        _ => false,
+    };
     let ecosystem = crate::osv::exposure::registry_source_ecosystem(&row.source_type)?;
-    let active: Vec<&ProjectPin> = grade
-        .concerned_pins()
-        .into_iter()
-        .filter(|p| !liveness.is_scratch(&p.project_path) && !liveness.is_dormant(&p.project_path))
-        .collect();
+    let active = active_pins(grade, liveness);
     if active.is_empty() {
         return None;
     }
     let dev_only = active.iter().all(|p| p.is_dev);
-    if dev_only && change == StackChange::Minor {
+    if dev_only && change == StackChange::Minor && !affected {
         return None;
     }
     let mut sites: Vec<ReleaseSite> = active
         .iter()
-        .map(|p| site_for(p, change, ecosystem, grade))
+        .map(|p| site_for(p, change, ecosystem, grade, advisories.is_clear()))
         .collect();
     sites.sort_by(|a, b| a.label.cmp(&b.label).then(a.installed.cmp(&b.installed)));
     sites.dedup_by(|a, b| a.project_path == b.project_path);
@@ -184,7 +247,131 @@ pub(crate) fn release_change(
         sites,
         current: grade.current_label(),
         dev_only,
+        advisories,
     })
+}
+
+// ---------------------------------------------------------------------------
+// What the advisory check adds to a release item (`stack_change::release_item`)
+// ---------------------------------------------------------------------------
+
+/// "MAL-2026-1 and GHSA-x", "A, B and 2 more".
+fn id_list(ids: &[String]) -> String {
+    let shown: Vec<&str> = ids.iter().take(3).map(String::as_str).collect();
+    let more = ids.len() - shown.len();
+    match (shown.as_slice(), more) {
+        ([one], 0) => (*one).to_string(),
+        (_, 0) => {
+            let (last, head) = shown.split_last().unwrap_or((&"", &[]));
+            format!("{} and {last}", head.join(", "))
+        }
+        _ => format!("{} and {more} more", shown.join(", ")),
+    }
+}
+
+/// The projects whose declared requirement admits the release: a lockfile
+/// refresh there (or an install without the lockfile) would resolve to it.
+fn admitting(r: &ReleaseChange) -> Vec<&str> {
+    r.sites
+        .iter()
+        .filter(|s| s.admitted == Some(true))
+        .map(|s| s.label.as_str())
+        .collect()
+}
+
+/// The title for a release the advisories speak against, replacing the
+/// "new minor" one.
+pub(crate) fn advisory_title(r: &ReleaseChange) -> Option<String> {
+    let ReleaseAdvisories::Affected(hit) = &r.advisories else {
+        return None;
+    };
+    let (pkg, new) = (&r.package, &r.announced);
+    Some(if hit.malware {
+        format!("{pkg} {new}: malicious release, do not install")
+    } else {
+        format!("{pkg} {new}: affected by {}", id_list(&hit.ids))
+    })
+}
+
+/// What to do about a release the advisories speak against or the registry
+/// withdrew, replacing the upgrade advice. `None` for a clear or unchecked
+/// release.
+pub(crate) fn advisory_action(r: &ReleaseChange) -> Option<String> {
+    let (pkg, new) = (&r.package, &r.announced);
+    let admitting = admitting(r);
+    let pulled_in = (!admitting.is_empty()).then(|| {
+        format!(
+            " {} declare{} a requirement that admits {new}, so a lockfile refresh, or an install \
+             without the lockfile, would pull it in: keep the version the lockfile pins and do not \
+             update {pkg} until a release no advisory affects is out.",
+            admitting.join(", "),
+            if admitting.len() == 1 { "s" } else { "" }
+        )
+    });
+    let text = match &r.advisories {
+        ReleaseAdvisories::Affected(hit) if hit.malware => format!(
+            "OSV lists {pkg} {new} as a malicious release ({}): do not install it.",
+            id_list(&hit.ids)
+        ),
+        ReleaseAdvisories::Affected(hit) => format!(
+            "{pkg} {new} is {} by {}, so 4DA names no command toward it: stay on the installed \
+             version, or move to a release no advisory affects.",
+            if hit.confirmed {
+                "affected"
+            } else {
+                "possibly affected (4DA could not place it outside the affected range)"
+            },
+            id_list(&hit.ids)
+        ),
+        ReleaseAdvisories::Withdrawn => format!(
+            "The registry withdrew {pkg} {new} (yanked, or deprecated in favour of a later \
+             release), so 4DA names no command toward it."
+        ),
+        ReleaseAdvisories::Clear
+        | ReleaseAdvisories::Unknown(_)
+        | ReleaseAdvisories::Held { .. } => return None,
+    };
+    Some(format!("{text}{}", pulled_in.unwrap_or_default()))
+}
+
+/// The sentence for a release 4DA could not check, or one too new to
+/// trust: never presented as clear.
+pub(crate) fn unchecked_note(r: &ReleaseChange) -> Option<String> {
+    match &r.advisories {
+        ReleaseAdvisories::Unknown(reason) => Some(format!(
+            "Advisory status unknown: 4DA has not checked {} {} against vulnerability \
+             advisories, because {}, so it names no command toward it.",
+            r.package,
+            r.announced,
+            reason.words()
+        )),
+        ReleaseAdvisories::Held { published, days } => Some(format!(
+            "{} {} was published {} ({published}); 4DA names no command for a release younger \
+             than {RELEASE_HOLD_DAYS} days, so a compromised publish can be caught and pulled first.",
+            r.package,
+            r.announced,
+            match days {
+                0 => "today".to_string(),
+                1 => "1 day ago".to_string(),
+                n => format!("{n} days ago"),
+            }
+        )),
+        _ => None,
+    }
+}
+
+/// The advisory ids to cite for an affected release.
+pub(crate) fn advisory_ids(r: &ReleaseChange) -> &[String] {
+    match &r.advisories {
+        ReleaseAdvisories::Affected(hit) => &hit.ids,
+        _ => &[],
+    }
+}
+
+/// The release is a malicious build: as urgent as a yanked pin, because
+/// inside a declared range it is one lockfile refresh away from installed.
+pub(crate) fn is_malicious(r: &ReleaseChange) -> bool {
+    matches!(&r.advisories, ReleaseAdvisories::Affected(hit) if hit.malware)
 }
 
 /// One registry release row.
@@ -281,8 +468,25 @@ pub(crate) fn collect_release_changes(
             best.insert(key, (grade.announced.clone(), grade, row));
         }
     }
+    let checker = ReleaseChecker::load(db);
     best.into_values()
-        .filter_map(|(_, grade, row)| release_change(&grade, &row, &liveness))
+        .filter_map(|(_, grade, row)| {
+            change_of(&grade)?;
+            // Judged on the copies the WORKING projects run: a scratch copy
+            // the advisory lane reports must not stand in for an active one.
+            let installed: Vec<String> = active_pins(&grade, &liveness)
+                .iter()
+                .map(|p| p.installed.to_string())
+                .collect();
+            let verdict = checker.check_grade(
+                db,
+                &row.source_type,
+                &grade,
+                &installed,
+                row.published.as_deref(),
+            );
+            release_change(&grade, &row, &liveness, verdict)
+        })
         .collect()
 }
 

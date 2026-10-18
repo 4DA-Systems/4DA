@@ -457,14 +457,10 @@ fn change_label(r: &ReleaseChange) -> &'static str {
     }
 }
 
-/// One graded registry release as a stream item.
-pub(crate) fn release_item(r: &ReleaseChange, now_ms: i64) -> Ranked {
+/// The release's explanation: what was published, whom it concerns, and
+/// what to do (the advisory's advice when one speaks against the release).
+fn release_explanation(r: &ReleaseChange) -> String {
     let pkg = &r.package;
-    let installed = installed_span(r.sites.iter().map(|s| s.installed.as_str()));
-    let title = match installed.as_deref() {
-        Some(i) => format!("{pkg} {i} \u{2192} {}: {}", r.announced, change_label(r)),
-        None => format!("{pkg} {}: {}", r.announced, change_label(r)),
-    };
     let who: Vec<String> = r
         .sites
         .iter()
@@ -492,12 +488,21 @@ pub(crate) fn release_item(r: &ReleaseChange, now_ms: i64) -> Ranked {
     if let Some(current) = &r.current {
         explanation.push(format!("Already current: {current}."));
     }
-    explanation.push(release_action(r));
+    // An affected or withdrawn release gets the advisory's advice, never the
+    // upgrade's; an unchecked or held one keeps it, said to be unchecked.
+    explanation.push(releases::advisory_action(r).unwrap_or_else(|| release_action(r)));
+    explanation.extend(releases::unchecked_note(r));
+    explanation.join(" ")
+}
 
+/// The version context, the registry row, and the advisories that affect
+/// the release.
+fn release_citations(r: &ReleaseChange, installed: Option<&str>) -> Vec<EvidenceCitation> {
+    let pkg = &r.package;
     let mut evidence = vec![version_context(
         &r.ecosystem,
         pkg,
-        installed.as_deref(),
+        installed,
         Some(&r.announced),
         r.change,
     )];
@@ -514,8 +519,28 @@ pub(crate) fn release_item(r: &ReleaseChange, now_ms: i64) -> Ranked {
             }),
         relevance_note: String::new(),
     });
+    evidence.extend(
+        releases::advisory_ids(r)
+            .iter()
+            .take(MAX_ADVISORY_CITATIONS)
+            .map(|id| EvidenceCitation {
+                source: "osv".to_string(),
+                title: id.clone(),
+                url: Some(format!("https://osv.dev/vulnerability/{id}")),
+                freshness_days: 0.0,
+                relevance_note: format!("affects {pkg} {}", r.announced),
+            }),
+    );
+    evidence
+}
 
+/// The review action (the advisory, when one affects the release), then the
+/// refresh commands the sites carry (only ever toward a release checked
+/// clear and past the hold).
+fn release_actions(r: &ReleaseChange) -> Vec<Action> {
+    let advisory_ids = releases::advisory_ids(r);
     let (action_id, label) = match r.change {
+        _ if !advisory_ids.is_empty() => ("review_security", "Read the advisory"),
         StackChange::Minor | StackChange::Security => ("review_updates", "Review the release"),
         StackChange::Yanked | StackChange::Major | StackChange::Breaking => {
             ("check_breaking", "Read the release notes")
@@ -524,7 +549,10 @@ pub(crate) fn release_item(r: &ReleaseChange, now_ms: i64) -> Ranked {
     let mut actions = vec![Action {
         action_id: action_id.to_string(),
         label: label.to_string(),
-        description: format!("Open {pkg} {} on its registry", r.announced),
+        description: advisory_ids.first().map_or_else(
+            || format!("Open {} {} on its registry", r.package, r.announced),
+            |id| format!("Open {id} on osv.dev"),
+        ),
     }];
     let mut seen: Vec<&str> = Vec::new();
     for s in &r.sites {
@@ -535,8 +563,20 @@ pub(crate) fn release_item(r: &ReleaseChange, now_ms: i64) -> Ranked {
             }
         }
     }
+    actions
+}
 
+/// One graded registry release as a stream item.
+pub(crate) fn release_item(r: &ReleaseChange, now_ms: i64) -> Ranked {
+    let pkg = &r.package;
+    let installed = installed_span(r.sites.iter().map(|s| s.installed.as_str()));
+    let title = match (releases::advisory_title(r), installed.as_deref()) {
+        (Some(warning), _) => warning,
+        (None, Some(i)) => format!("{pkg} {i} \u{2192} {}: {}", r.announced, change_label(r)),
+        (None, None) => format!("{pkg} {}: {}", r.announced, change_label(r)),
+    };
     let urgency = match r.change {
+        _ if releases::is_malicious(r) => Urgency::High,
         StackChange::Yanked => Urgency::High,
         StackChange::Major | StackChange::Breaking if !r.dev_only => Urgency::Medium,
         _ => Urgency::Watch,
@@ -551,15 +591,15 @@ pub(crate) fn release_item(r: &ReleaseChange, now_ms: i64) -> Ranked {
             ),
             kind: EvidenceKind::Alert,
             title: fit_title(title),
-            explanation: explanation.join(" "),
+            explanation: release_explanation(r),
             confidence: Confidence::checklist(0.9),
             urgency,
             reversibility: None,
-            evidence,
+            evidence: release_citations(r, installed.as_deref()),
             evidence_total: None,
             affected_projects: r.sites.iter().map(|s| s.project_path.clone()).collect(),
             affected_deps: vec![pkg.clone()],
-            suggested_actions: actions,
+            suggested_actions: release_actions(r),
             precedents: Vec::new(),
             refutation_condition: None,
             lens_hints: LensHints::default(),

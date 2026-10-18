@@ -17,7 +17,11 @@ pub(super) fn direct_names(
     reads: &[&LockfileRead],
 ) -> Vec<String> {
     match ecosystem {
-        "javascript" => read_package_json_deps(scanner, dir),
+        "javascript" => {
+            let mut names = read_package_json_deps(scanner, dir);
+            names.extend(workspace_member_deps(scanner, dir));
+            names
+        }
         "python" => {
             let mut names = read_pyproject_deps(scanner, dir);
             names.extend(read_pipfile_deps(dir));
@@ -123,6 +127,31 @@ fn read_package_json_deps(
     } else {
         Vec::new()
     }
+}
+
+/// What the members of the workspace rooted at `dir` declare, runtime and
+/// dev: the workspace's one lockfile (here, at the root) resolves them, so
+/// they are as direct as the root's own. Without them a dependency only a
+/// member declared was stored transitive, and the parent walk
+/// (`osv::parent_hint`, which stops at the first direct copy) found no lever
+/// for it. The members' own packages are local code, never dependencies.
+/// Empty for a single-root project.
+fn workspace_member_deps(scanner: &crate::ace::scanner::ProjectScanner, dir: &Path) -> Vec<String> {
+    let members = crate::ace::npm_local::workspace_member_dirs(dir);
+    if members.is_empty() {
+        return Vec::new();
+    }
+    let local: Vec<String> = members
+        .iter()
+        .map(PathBuf::as_path)
+        .chain(std::iter::once(dir))
+        .filter_map(crate::ace::npm_local::package_name)
+        .collect();
+    members
+        .iter()
+        .flat_map(|m| read_package_json_deps(scanner, m))
+        .filter(|name| !local.contains(name))
+        .collect()
 }
 
 /// Shared: read direct deps from pyproject.toml for poetry.lock processing.
