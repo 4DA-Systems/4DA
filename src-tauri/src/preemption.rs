@@ -516,26 +516,16 @@ pub(crate) fn osv_alert_urgency(
     )
 }
 
-/// Most urgent vulnerability for this package: the shared tier (CVSS band,
-/// else the source's curated label — the same tier Blind Spots, the banner and
-/// the MCP read) before the summary heuristic, so a MODERATE type-confusion
-/// bug is medium here and medium everywhere, not "authorization bypass → High"
-/// on one surface and Critical on the next.
+/// Most urgent vulnerability for this package: each cluster's base urgency by
+/// the ONE rule the Upgrade Plan grades by too (`osv::severity::
+/// cluster_urgency`): the shared tier, its GHSA alias's grade for a record
+/// the source never graded, and Medium for one still unknown. The alert path
+/// used to guess an unknown cluster's urgency from its summary words (Watch
+/// unless it said "rce" or "xss"), while the plan said Medium.
 fn most_urgent_tier(group: &[&crate::osv::types::MatchedAdvisory]) -> AlertUrgency {
     crate::osv::identity::cluster_by_vulnerability(group)
         .iter()
-        .map(
-            |cluster| match crate::osv::identity::cluster_severity_tier(cluster) {
-                Some("critical") => AlertUrgency::Critical,
-                Some("high") => AlertUrgency::High,
-                Some("medium") => AlertUrgency::Medium,
-                Some("low") => AlertUrgency::Watch,
-                _ => {
-                    let rep = cluster[0];
-                    infer_urgency_from_summary(rep)
-                }
-            },
-        )
+        .map(|cluster| canonical_to_alert_urgency(crate::osv::severity::cluster_urgency(cluster)))
         .min_by_key(urgency_rank)
         .unwrap_or(AlertUrgency::Watch)
 }
@@ -807,8 +797,16 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
             } else {
                 ""
             };
+            // An inherited grade names the GHSA alias it came from.
+            let severity_note = crate::osv::severity::inherited_note(
+                crate::osv::severity::group_severity(&group).as_ref(),
+                &group,
+            )
+            .map(|note| format!(" {note}"))
+            .unwrap_or_default();
             let explanation = format!(
-                "{ids} ({count} {vuln_word}) affect {subject} in {projects}. Scope: {scope}.{fix}{reach}",
+                "{ids} ({count} {vuln_word}) affect {subject} in {projects}.{sev} Scope: {scope}.{fix}{reach}",
+                sev = severity_note,
                 ids = ids_display,
                 count = advisory_count,
                 vuln_word = vuln_word,
@@ -1461,37 +1459,6 @@ fn dormancy_labeled_project(path: &str, liveness: &crate::evidence::ProjectLiven
         label = format!("{label} {}", crate::ace::scratch::scratch_label());
     }
     label
-}
-
-/// Infer urgency from advisory summary text when CVSS score is absent. A
-/// malicious-package record (the shared `fourda_depengine::is_malware`: a
-/// `MAL-` id or alias, CWE-506, or GitHub's malware title) is High first.
-fn infer_urgency_from_summary(rep: &crate::osv::types::MatchedAdvisory) -> AlertUrgency {
-    if rep.is_malware() {
-        return AlertUrgency::High;
-    }
-    let s = rep.summary.to_lowercase();
-    let has_critical_keyword = s.contains("remote code execution")
-        || s.contains("rce")
-        || s.contains("arbitrary code")
-        || s.contains("sandbox escape")
-        || s.contains("authentication bypass")
-        || s.contains("authorization bypass");
-    if has_critical_keyword {
-        return AlertUrgency::High;
-    }
-    let has_high_keyword = s.contains("prototype pollution")
-        || s.contains("ssrf")
-        || s.contains("xss")
-        || s.contains("cross-site scripting")
-        || s.contains("injection")
-        || s.contains("exfiltration")
-        || s.contains("credential")
-        || s.contains("timing sidechannel");
-    if has_high_keyword {
-        return AlertUrgency::Medium;
-    }
-    AlertUrgency::Watch
 }
 
 /// Build a normalized dedup key for cross-tier duplicate detection.
@@ -3223,6 +3190,7 @@ mod tests {
             aliases: vec![],
             severity_label: None,
             cwe_ids: Vec::new(),
+            severity_from: None,
             dependency_instances: vec![
                 crate::osv::types::MatchedDependency {
                     project_path: "/transitive".into(),
@@ -3306,6 +3274,7 @@ mod tests {
             aliases: vec![],
             severity_label: None,
             cwe_ids: Vec::new(),
+            severity_from: None,
             dependency_instances: vec![
                 copy("/navcal", "1.1.12", "1.1.21"),
                 copy("/webhook", "1.1.18", "1.1.21"),
@@ -3365,6 +3334,7 @@ mod tests {
             aliases: vec![],
             severity_label: Some("critical".into()),
             cwe_ids: Vec::new(),
+            severity_from: None,
             dependency_instances: vec![crate::osv::types::MatchedDependency {
                 project_path: "/paddle-webhook".into(),
                 installed_version: Some("3.1.2".into()),

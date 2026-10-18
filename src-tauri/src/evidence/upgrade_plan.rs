@@ -279,8 +279,11 @@ fn package_group<'a>(
             }
         }
     }
-    let informational =
-        !has_fix && withheld.is_empty() && advisories.iter().all(|a| is_informational(a));
+    let informational = !has_fix
+        && withheld.is_empty()
+        && advisories
+            .iter()
+            .all(|a| crate::osv::severity::is_informational(a));
     // The inputs of the ONE scope rule (AD-046): version-confirmed installs in
     // the projects this row names — the set the alert path reads too.
     let scope = crate::osv::identity::ExposureScope::of(&advisories, &projects);
@@ -299,7 +302,7 @@ fn package_group<'a>(
     // Critical on the other. One function, one input set.
     let base_urgency = crate::osv::identity::cluster_by_vulnerability(&advisories)
         .iter()
-        .map(|cluster| cluster_urgency(cluster))
+        .map(|cluster| crate::osv::severity::cluster_urgency(cluster))
         .min()
         .unwrap_or(Urgency::Medium);
     let urgency = crate::osv::identity::scope_adjusted_urgency(
@@ -491,9 +494,16 @@ impl PackageGroup<'_> {
         } else {
             String::new()
         };
+        // An inherited grade is never presented as the record's own: the
+        // sentence names the GHSA alias it came from (`osv::severity`).
+        let graded = crate::osv::severity::group_severity(&self.advisories);
+        let severity_note = crate::osv::severity::inherited_note(graded.as_ref(), &self.advisories)
+            .map(|note| format!(" {note}"))
+            .unwrap_or_default();
         let explanation = format!(
-            "{pkg} has {n} version-confirmed {adv} matching installed versions across {m} {proj}. \
+            "{pkg} has {n} version-confirmed {adv} matching installed versions across {m} {proj}.{sev} \
              {scope}.{dev}{targets} Advisories: {ids}{more}.",
+            sev = severity_note,
             pkg = self.package,
             n = n,
             adv = plural(n, "advisory", "advisories"),
@@ -520,10 +530,7 @@ impl PackageGroup<'_> {
                 relevance_note: truncate(
                     &format!(
                         "{sev}affects installed {ver}",
-                        sev = a
-                            .cvss_score
-                            .map(|c| format!("CVSS {c:.1}; "))
-                            .unwrap_or_default(),
+                        sev = citation_severity(a),
                         ver = installed_in(a, &self.projects),
                     ),
                     200,
@@ -608,6 +615,22 @@ impl PackageGroup<'_> {
             expires_at: None,
         };
         (item, vec![step])
+    }
+}
+
+/// The severity a citation's note leads with: the CVSS score, or a grade the
+/// record inherited from its GHSA alias, named as such. Empty otherwise.
+fn citation_severity(a: &MatchedAdvisory) -> String {
+    match (
+        a.cvss_score,
+        a.severity_from.as_deref(),
+        a.severity_label.as_deref(),
+    ) {
+        (Some(c), _, _) => format!("CVSS {c:.1}; "),
+        (None, Some(from), Some(tier)) => {
+            format!("{}; ", crate::osv::severity::labelled(tier, Some(from)))
+        }
+        _ => String::new(),
     }
 }
 
@@ -847,56 +870,11 @@ fn plan_actions(review_description: String) -> Vec<Action> {
     ]
 }
 
-/// Maintenance-notice vocabulary (RustSec INFO advisories, npm deprecations).
-const UNMAINTAINED_MARKERS: &[&str] = &[
-    "unmaintained",
-    "no longer maintained",
-    "not maintained",
-    "is deprecated",
-    "has been deprecated",
-    "deprecated crate",
-    "abandoned",
-    "archived",
-];
-
-/// A maintenance notice, not a vulnerability: no fixed version, no CVSS, and
-/// the advisory text says so. An unsound-code or no-fix VULNERABILITY (rsa's
-/// Marvin attack: CVSS 5.9, no fix) is NOT informational — it stays a step
-/// that reads "No fix published".
-fn is_informational(a: &MatchedAdvisory) -> bool {
-    let no_fix = a
-        .fixed_version
-        .as_deref()
-        .is_none_or(|v| v.trim().is_empty());
-    if !no_fix || a.cvss_score.is_some() {
-        return false;
-    }
-    let text = format!("{} {}", a.summary, a.details.as_deref().unwrap_or("")).to_lowercase();
-    UNMAINTAINED_MARKERS.iter().any(|m| text.contains(m))
-}
-
 // ---- helpers ----
 
 fn normalize_ecosystem(eco: &str) -> String {
     crate::ecosystem::Ecosystem::parse(eco)
         .map_or_else(|| eco.to_string(), |e| e.osv_name().to_string())
-}
-
-/// CVSS-driven urgency. OSV `severity_type` is the scoring *system*
-/// ("CVSS_V3"), NOT the level — so the level comes from `cvss_score`. A
-/// confirmed match with no score defaults to `Medium` (a real advisory, but no
-/// evidence to call it Critical or dismiss it to Watch).
-/// Urgency of one vulnerability cluster from the shared severity tier (CVSS
-/// band, else the source's curated label). A cluster the source never graded
-/// stays Medium — the pre-Phase-120 default for an unscored advisory.
-fn cluster_urgency(cluster: &[&MatchedAdvisory]) -> Urgency {
-    match crate::osv::identity::cluster_severity_tier(cluster) {
-        Some("critical") => Urgency::Critical,
-        Some("high") => Urgency::High,
-        Some("medium") => Urgency::Medium,
-        Some("low") => Urgency::Watch,
-        _ => Urgency::Medium,
-    }
 }
 
 fn plural(n: usize, one: &'static str, many: &'static str) -> &'static str {

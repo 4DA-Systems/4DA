@@ -186,6 +186,11 @@ const SCOPED_EPOCHS: &[(i32, &str)] = &[
     // (`is_registry_advisory_source`); `source_type` is assigned at ingest
     // and never re-derived (same reasoning as v18).
     (42, "source_type IN ('osv','cve')"),
+    // v43 — the security lane's per-record severity rule (label first). The
+    // tier is read only when `is_security_source` (`source_type` cve / osv),
+    // and `source_type` is assigned at ingest and never re-derived (same
+    // reasoning as v18).
+    (43, "source_type IN ('cve','osv')"),
 ];
 
 /// Promote stale items that the registered epoch predicates prove unaffected,

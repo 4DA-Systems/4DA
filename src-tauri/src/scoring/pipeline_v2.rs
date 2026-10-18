@@ -2574,8 +2574,8 @@ fn mirror_affected_projects(
 }
 
 /// The shared severity tier of the advisory this item is about, from the
-/// mirror (CVSS band, else the source's curated label). `None` when the
-/// mirror holds no graded row for it.
+/// mirror (`osv::severity::row_grade`: the curated label, else the CVSS
+/// band). `None` when the mirror holds no graded row for it.
 fn mirror_severity_tier(
     db: &Database,
     input: &ScoringInput,
@@ -2583,16 +2583,7 @@ fn mirror_severity_tier(
     title_id: Option<&str>,
 ) -> Option<&'static str> {
     let advisory = mirror_advisory_for_item(db, input, dep, title_id)?;
-    if let Some(score) = advisory.cvss_score {
-        return Some(crate::osv::types::cvss_band(score));
-    }
-    match advisory.severity_label.as_deref() {
-        Some("critical") => Some("critical"),
-        Some("high") => Some("high"),
-        Some("medium") => Some("medium"),
-        Some("low") => Some("low"),
-        _ => None,
-    }
+    crate::osv::severity::row_grade(advisory.cvss_score, advisory.severity_label.as_deref())
 }
 
 /// Freshness gate for ToolDiscovery: "New tool" framing is a claim about NOW.

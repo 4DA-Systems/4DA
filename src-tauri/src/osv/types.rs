@@ -177,12 +177,19 @@ pub struct MatchedAdvisory {
     /// See [`StoredAdvisory::aliases`].
     #[serde(default)]
     pub aliases: Vec<String>,
-    /// See [`StoredAdvisory::severity_label`].
+    /// See [`StoredAdvisory::severity_label`]. For a record its source never
+    /// graded, the grade of its highest GHSA alias in the mirror
+    /// (`osv::alias_severity`); [`Self::severity_from`] then names that alias.
     #[serde(default)]
     pub severity_label: Option<String>,
     /// See [`StoredAdvisory::cwe_ids`].
     #[serde(default)]
     pub cwe_ids: Vec<String>,
+    /// The GHSA id `severity_label` was read from, when the record carries no
+    /// grade of its own. `None` means the label is the record's own. Every
+    /// surface that shows an inherited grade names this id beside it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub severity_from: Option<String>,
 }
 
 impl MatchedAdvisory {

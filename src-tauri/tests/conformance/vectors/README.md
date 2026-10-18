@@ -4,7 +4,8 @@ Stage B of the single-engine plan (AD-054 decision 4: *"the corpus is the
 contract"*). The conformance corpus one directory up checks **what** each
 engine finds (inventory and findings). These vectors check **which fix it
 recommends and why**: version order, OSV range evaluation, the fix target,
-the refresh-or-parent verdict, the command, and the MCP's `range_check`.
+the refresh-or-parent verdict, the command, the MCP's `range_check`, and
+the severity an advisory carries when its source gave it none.
 
 **The vectors, not prose, are the contract.** Every rule below is quoted from
 its source and followed by the vector ids that pin it. When the prose and a
@@ -35,6 +36,7 @@ specific enough to recheck).
 | `range_check.jsonl` | `{eco, name, constraint, from, releases[], record_ids[], expected}` | `@4da/mcp-server` 6.2.0 recorded fixtures (`src/__tests__/fixtures/dependency-check/recorded/`, origin/main `bae421b`): OSV's querybatch answer per release of ws, Jinja2 and golang.org/x/net. Constraint membership: node `semver` (npm, Go without `v`; `v0` is the v0 line), python `packaging` `SpecifierSet` (PyPI). |
 | `parent_release.jsonl` | `{eco, tool, parent{...}, rows[], expect{parent_target, rows[]}}` (below) | pr-001..pr-008: registry.npmjs.org abbreviated documents and OSV.dev `/v1/query`, read 2026-10-18 (generated once, then the rule applied by hand); OWASP/NodeGoat's `package-lock.json`; npm 10.9.2 for the install-keeps-the-copy case. pr-001..pr-004 and pr-006 agree with `@4da/mcp-server` fix/planner-advice-625 `1840dab` run on the same projects. |
 | `holding.jsonl` | `{eco, name, advisory_id, version, holding}` | npm's security holding placeholders (`0.0.<n>-security`; a publisher's `1.0.0-security` prerelease is not one: ho-006): the registry's own description ("security holding package") and the advisories that flag the name. `holding: true` means no advisory applies to that release (audit L4 decision, 2026-10-16). |
+| `severity.jsonl` | `{record \| records[], fixed_version?, aliases_available, expect: {severity, severity_from, urgency}}`; a `record` is `{id, summary, severity?, database_specific?, aliases[]}` as OSV gives it | api.osv.dev `/v1/vulns/<id>` and the app's local mirror (`osv_advisories`, read-only), both read on the date in `source`; by-hand lines say so. `aliases_available` maps each GHSA id the mirror holds to its grade (`null`: held, no grade); an id absent from it cannot be read. |
 
 Field conventions:
 
@@ -300,6 +302,44 @@ the parent upgrades that name it as their lever agree on its release."*
 - A whole old major deprecated with one notice is not withdrawn (the decided
   FX-H5 rule; the engines must agree): glob 11.0.3's target stays 11.1.0,
   and @nestjs/cli 11.0.11 is the release that admits it: pr-008
+
+### Severity — one grade per advisory (2026-10-18)
+
+The rule both engines share (the app's `osv::severity` over the engine
+crate's `fourda_depengine::severity`; the MCP's `gradeFromAliases`):
+
+> An unrated record (no `database_specific.severity` label and no scorable
+> CVSS) takes the HIGHEST grade among ALL its GHSA aliases that can be read
+> (the app reads the local mirror, any package or ecosystem; no network). The
+> lexicographically smallest GHSA id names it on a tie. An unreadable alias
+> never lowers the grade. If none can be read it is unknown. The inherited
+> grade is never presented as the record's own: `severity_from` names the
+> alias on every surface.
+
+A record's own grade is its curated label first, the band of a scorable CVSS
+score second (4DA lead, 2026-10-18). On the pinned corpus 123 of 3,923
+records carry a label and a CVSS v3 band that disagree, all GHSA, 113 of them
+beside a CVSS v4 vector that neither engine scores and that the label
+follows. The records of one alias group take the most severe OWN grade
+among them; an inherited grade applies only when no record in the group has
+one. An unmaintained-package notice is never graded from an alias.
+`expect.urgency` is the base urgency (before the AD-046 scope rule) the
+Upgrade Plan and the alerts both give: the tier, `low` reading `watch`; a
+group still unknown is `medium`, a group of maintenance notices only (no fix,
+no CVSS, "unmaintained" / "deprecated" text) `watch`, and a malicious-package
+record (`MAL-`) `high`. The optional `fixed_version` is the copy's fix (none
+when absent), which tells a maintenance notice from a vulnerability.
+
+- Every GHSA alias consulted, highest wins: sv-001 (RUSTSEC-2020-0014, 8 aliases: critical from GHSA-28ph-f7gx-fqj8), sv-002 (GO-2024-3333: high from GHSA-w32m-9786-jp63)
+- An alias missing from the mirror, or held with no grade: sv-003, sv-005
+- All unknown, so Medium: sv-004 (GO-2024-3333 with no Go rows in the mirror)
+- A tie names the smallest id: sv-006, sv-013
+- A record's own grade wins over a higher alias: sv-007 (GHSA-rjh8-p66p-jrh5, own high)
+- One alias group, most severe own grade: sv-008 (label LOW + CVSS 9.8), sv-009 (CVE-2026-4277: GHSA-pwjp-ccjc-ghwg LOW, PYSEC-2026-52 9.8), sv-012 (an own low beats an inherited critical)
+- Still unknown: Medium (sv-004, sv-005, sv-019: anyhow's unsoundness, which the alert path used to guess Watch), maintenance notices Watch (sv-011, sv-018), `MAL-` High (sv-010)
+- A maintenance notice is not graded from an alias: sv-011
+- The `nix` group (CVE-2021-45707: CVSS medium, label high, one unrated): high, its own: sv-014
+- A label that disagrees with the CVSS v3 band decides: sv-015 (label CRITICAL over 7.5), sv-016 (MODERATE under 7.3), sv-017 (LOW over 4.5)
 
 ## `engines_skip.json` — the shrink-only gate
 

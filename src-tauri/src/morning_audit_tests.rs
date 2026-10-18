@@ -30,6 +30,7 @@ fn security(pkg: &str, installed: &str, to: &str) -> SecurityFact {
         ecosystem: "npm".into(),
         urgency: AlertUrgency::High,
         worst_tier: Some("high".into()),
+        worst_tier_from: None,
         advisory_count: 1,
         advisory_ids: vec!["GHSA-aaaa-bbbb-cccc".into()],
         title: format!("{pkg} advisory"),

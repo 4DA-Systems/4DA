@@ -163,6 +163,7 @@ fn rmcp_fact(status: FactStatus) -> SecurityFact {
         ecosystem: "crates.io".into(),
         urgency: AlertUrgency::High,
         worst_tier: Some("high".into()),
+        worst_tier_from: None,
         advisory_count: 3,
         advisory_ids: vec!["GHSA-9pj6-vhgr-3mwh".into()],
         title: "rmcp: session leak".into(),

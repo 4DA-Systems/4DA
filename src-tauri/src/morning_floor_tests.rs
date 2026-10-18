@@ -646,6 +646,7 @@ fn the_floor_caps_act_now_itself_whatever_the_feed_holds() {
         ecosystem: "npm".into(),
         urgency: crate::preemption::AlertUrgency::High,
         worst_tier: Some("high".into()),
+        worst_tier_from: None,
         advisory_count: 1,
         advisory_ids: vec![format!("GHSA-{i}")],
         title: "A bug".into(),

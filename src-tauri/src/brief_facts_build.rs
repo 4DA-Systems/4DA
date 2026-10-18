@@ -232,11 +232,15 @@ fn security_fact(
         .map(|m| m.ecosystem.clone())
         .unwrap_or_else(|| "npm".to_string());
     let clusters = crate::osv::identity::cluster_by_vulnerability(&group);
-    let worst_tier = clusters
-        .iter()
-        .filter_map(|c| crate::osv::identity::cluster_severity_tier(c))
-        .min_by_key(|t| tier_rank(t))
-        .map(str::to_string);
+    // The worst grade, and the GHSA alias it came from when the record has
+    // none of its own (`osv::severity`): never presented as the record's own.
+    let worst = crate::osv::severity::worst(
+        clusters
+            .iter()
+            .filter_map(|c| crate::osv::severity::cluster_severity(c)),
+    );
+    let worst_tier = worst.as_ref().map(|g| g.tier.to_string());
+    let worst_tier_from = worst.and_then(|g| g.from);
     let advisory_ids: Vec<String> = clusters.iter().map(|c| c[0].advisory_id.clone()).collect();
     let is_drift = alert.id.starts_with("install-drift:");
     // "rmcp@1.7.0: 3 known vulnerabilities" says nothing a reader can weigh;
@@ -378,6 +382,7 @@ fn security_fact(
         ecosystem,
         urgency: alert.urgency.clone(),
         worst_tier,
+        worst_tier_from,
         advisory_count: clusters.len().max(1),
         advisory_ids,
         title,

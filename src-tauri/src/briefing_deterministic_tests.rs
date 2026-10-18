@@ -15,6 +15,7 @@ fn rmcp(status: FactStatus) -> SecurityFact {
         ecosystem: "crates.io".into(),
         urgency: AlertUrgency::High,
         worst_tier: Some("high".into()),
+        worst_tier_from: None,
         advisory_count: 3,
         advisory_ids: vec![],
         title: "Unauthenticated session leak".into(),

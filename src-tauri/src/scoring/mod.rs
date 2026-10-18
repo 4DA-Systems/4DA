@@ -710,7 +710,17 @@ pub(crate) use types::{ScoringInput, ScoringOptions};
 // and its reason says "unconfirmed" instead of "affects". Only cve / osv rows
 // can change, so the bump IS registered in `epochs::SCOPED_EPOCHS` on
 // `source_type` (assigned at ingest, never re-derived).
-pub(crate) const PIPELINE_VERSION: i32 = 42;
+// v43 (2026-10-18, severity parity with `@4da/mcp-server`): ONE per-record
+// grade rule for every grader (`osv::severity::row_grade`): the curated label
+// first, the CVSS band second. The security lane's tier
+// (`security_verdict::advisory_tier`, `mirror_severity_tier`,
+// `content_severity_tier`) read the CVSS band first, so the 123 pinned GHSA
+// records whose label and v3 band disagree (113 beside a v4 vector the
+// engines cannot score) could carry another persisted `signal_priority` /
+// critical-alert flag than the Preemption tab gives. The tier is computed
+// only for `source_type IN ('cve','osv')` (`is_security_source`), so the bump
+// IS registered in `epochs::SCOPED_EPOCHS` on that set.
+pub(crate) const PIPELINE_VERSION: i32 = 43;
 
 /// Parse the topic tags carried in the `source_items.tags` column.
 ///

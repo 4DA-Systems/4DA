@@ -108,7 +108,14 @@ fn render_security(n: usize, f: &SecurityFact) -> String {
     let worst = f
         .worst_tier
         .as_deref()
-        .map(|t| format!(", worst advisory severity {}", t.to_uppercase()))
+        .map(|t| {
+            let from = f
+                .worst_tier_from
+                .as_deref()
+                .map(|id| format!(" (from {id}; the advisory has no grade of its own)"))
+                .unwrap_or_default();
+            format!(", worst advisory severity {}{from}", t.to_uppercase())
+        })
         .unwrap_or_default();
     let ids = if f.advisory_ids.is_empty() {
         String::new()

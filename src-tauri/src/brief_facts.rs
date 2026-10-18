@@ -184,6 +184,8 @@ pub(crate) struct SecurityFact {
     /// Worst advisory tier BEFORE the scope rule ("critical" for vitest's
     /// GHSA-5xrq even though a dev-only install ranks it High).
     pub worst_tier: Option<String>,
+    /// The GHSA alias an ungraded advisory's `worst_tier` came from.
+    pub worst_tier_from: Option<String>,
     pub advisory_count: usize,
     pub advisory_ids: Vec<String>,
     pub title: String,

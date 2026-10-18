@@ -1042,10 +1042,10 @@ fn classify_severity(
 }
 
 /// The severity tier of the most severe stored advisory that still affects
-/// one of `versions` — CVSS band first, the source's curated label second
-/// (`None` when nothing affecting is graded). Mirrors
-/// `osv::identity::cluster_severity_tier` for rows read straight from the
-/// mirror.
+/// one of `versions`, each row graded by `osv::severity::row_grade` (the
+/// curated label first, the CVSS band second; `None` when nothing affecting
+/// is graded): the most-severe-own-grade rule of
+/// `osv::severity::cluster_severity`, for rows read straight from the mirror.
 fn advisory_tier_for(
     conn: &rusqlite::Connection,
     package: &str,
@@ -1096,14 +1096,8 @@ fn advisory_tier_for(
         if !affects {
             continue;
         }
-        let tier: Option<&'static str> = match (cvss, label.as_deref()) {
-            (Some(score), _) => Some(crate::osv::types::cvss_band(score)),
-            (None, Some("critical")) => Some("critical"),
-            (None, Some("high")) => Some("high"),
-            (None, Some("medium")) => Some("medium"),
-            (None, Some("low")) => Some("low"),
-            _ => None,
-        };
+        // The one per-record rule every grader reads (`osv::severity`).
+        let tier = crate::osv::severity::row_grade(cvss, label.as_deref());
         if let Some(t) = tier {
             if best.is_none_or(|b| rank(t) < rank(b)) {
                 best = Some(t);

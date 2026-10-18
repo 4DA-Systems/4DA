@@ -58,6 +58,7 @@ fn fact(package: &str, urgency: AlertUrgency, sites: Vec<SecuritySite>) -> Secur
         ecosystem: "crates.io".to_string(),
         urgency,
         worst_tier: Some("high".to_string()),
+        worst_tier_from: None,
         advisory_count: 1,
         advisory_ids: vec!["GHSA-aaaa-bbbb-cccc".to_string()],
         title: "Session table grows without bound".to_string(),

@@ -144,9 +144,13 @@ pub(crate) fn get_matched_advisories_with_not_compiled(
                 aliases: advisory.aliases.clone(),
                 severity_label: advisory.severity_label.clone(),
                 cwe_ids: advisory.cwe_ids.clone(),
+                severity_from: None,
             }
         })
         .collect();
+    // An unrated record takes its GHSA aliases' grade, from the rows already
+    // read above: no further query, and none per advisory.
+    super::severity::grade_unrated(&mut matches, &advisories);
 
     // Sort: confirmed first, then by CVSS score descending
     matches.sort_by(|a, b| {

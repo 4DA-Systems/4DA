@@ -268,10 +268,11 @@ pub(crate) fn security_item(fact: &SecurityFact, now_ms: i64) -> Ranked {
     let target = target_span.as_deref();
     let installed = installed_span(fact.sites.iter().filter_map(|s| s.installed.as_deref()));
     let urgency = crate::preemption::alert_urgency_to_canonical(&fact.urgency);
-    let tier = fact
-        .worst_tier
-        .clone()
-        .unwrap_or_else(|| format!("{urgency:?}").to_lowercase());
+    let tier = match (&fact.worst_tier, &fact.worst_tier_from) {
+        (Some(t), Some(from)) => format!("{t}, from {from}"),
+        (Some(t), None) => t.clone(),
+        (None, _) => format!("{urgency:?}").to_lowercase(),
+    };
     let title = match (installed.as_deref(), target) {
         (Some(i), Some(t)) => format!("{pkg} {i} \u{2192} {t}: security fix ({tier})"),
         (Some(i), None) => format!("{pkg} {i}: {tier} advisory, no fix published"),
@@ -305,6 +306,12 @@ pub(crate) fn security_item(fact: &SecurityFact, now_ms: i64) -> Ranked {
             site_qualifiers(s),
             fix_clause(pkg, &s.fix_path)
         )));
+    }
+    if let (Some(t), Some(from)) = (&fact.worst_tier, &fact.worst_tier_from) {
+        explanation.push(format!(
+            "Severity {}: the advisory carries no grade of its own, so the grade is that GHSA alias's.",
+            crate::osv::severity::labelled(t, Some(from))
+        ));
     }
     if !fact.not_compiled.is_empty() {
         let nc: Vec<&str> = fact

@@ -445,6 +445,7 @@ fn security_line(f: &SecurityFact) -> String {
     );
     if let Some(tier) = &f.worst_tier {
         if !tier.eq_ignore_ascii_case(urgency_word(&f.urgency)) {
+            let tier = crate::osv::severity::labelled(tier, f.worst_tier_from.as_deref());
             line.push_str(&format!("; worst advisory {tier}"));
         }
     }

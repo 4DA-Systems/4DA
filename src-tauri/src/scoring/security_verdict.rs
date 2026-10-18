@@ -188,12 +188,10 @@ pub(crate) fn security_signal_admitted(
     is_registry_advisory || *content_type == crate::content_dna::ContentType::SecurityAdvisory
 }
 
-/// The severity tier of one mirror row.
+/// The severity tier of one mirror row: the one per-record rule every
+/// grader reads (`osv::severity::row_grade`, label first).
 pub(crate) fn advisory_tier(advisory: &StoredAdvisory) -> Option<&'static str> {
-    if let Some(score) = advisory.cvss_score.filter(|s| *s > 0.0) {
-        return Some(crate::osv::types::cvss_band(score));
-    }
-    normalize_tier(advisory.severity_label.as_deref()?)
+    crate::osv::severity::row_grade(advisory.cvss_score, advisory.severity_label.as_deref())
 }
 
 fn normalize_tier(label: &str) -> Option<&'static str> {
@@ -216,36 +214,31 @@ fn tier_rank(tier: Option<&str>) -> u8 {
     }
 }
 
-/// The severity tier an advisory item carries in its OWN text: the numeric
-/// `CVSS:` line (banded), else the curated `Severity:` label (GitHub writes
-/// `MODERATE` for medium). The cve source writes both; this is the fallback
+/// The severity tier an advisory item carries in its OWN text, by the one
+/// per-record rule (`osv::severity::row_grade`): the curated `Severity:`
+/// label (GitHub writes `MODERATE` for medium) first, else the numeric
+/// `CVSS:` line (banded). The cve source writes both; this is the fallback
 /// when the mirror does not hold the advisory yet — severity must come from
 /// the advisory, never a default.
 pub(crate) fn content_severity_tier(content: &str) -> Option<&'static str> {
     let mut label: Option<&'static str> = None;
+    let mut score: Option<f64> = None;
     for line in content.lines() {
         let trimmed = line.trim();
         if let Some(rest) = trimmed.strip_prefix("CVSS:") {
-            if let Ok(score) = rest.trim().parse::<f64>() {
-                if score > 0.0 && score <= 10.0 {
-                    return Some(crate::osv::types::cvss_band(score));
-                }
-            }
+            score = score.or_else(|| rest.trim().parse::<f64>().ok());
         } else if let Some(rest) = trimmed.strip_prefix("Severity:") {
             // `Severity: CVSS_V3: 9.8` (osv source) carries a score, not a label.
             let rest = rest.trim();
-            if let Some((_, score)) = rest.split_once(':') {
-                if let Some(score) = super::cvss::parse_cvss_score(score.trim()) {
-                    if score > 0.0 && score <= 10.0 {
-                        return Some(crate::osv::types::cvss_band(score));
-                    }
-                }
+            if let Some((_, value)) = rest.split_once(':') {
+                score = score.or_else(|| super::cvss::parse_cvss_score(value.trim()));
             } else if label.is_none() {
                 label = normalize_tier(rest);
             }
         }
     }
-    label
+    let score = score.filter(|s| *s > 0.0 && *s <= 10.0);
+    label.or_else(|| score.map(crate::osv::types::cvss_band))
 }
 
 /// The `Affected range:` entries the cve source writes for ONE package —

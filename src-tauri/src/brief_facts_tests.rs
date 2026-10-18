@@ -672,6 +672,7 @@ fn security(key: &str, urgency: AlertUrgency, installed: &str, to: &str) -> Secu
         ecosystem: "crates.io".into(),
         urgency,
         worst_tier: Some("high".into()),
+        worst_tier_from: None,
         advisory_count: 3,
         advisory_ids: vec![],
         title: "t".into(),
