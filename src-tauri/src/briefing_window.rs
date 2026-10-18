@@ -77,6 +77,12 @@ static DISMISS_CANCEL: std::sync::LazyLock<parking_lot::Mutex<Option<Arc<AtomicB
 /// Whether the briefing window's JS listener is registered and ready.
 static WINDOW_READY: AtomicBool = AtomicBool::new(false);
 
+/// Whether the briefing page has finished loading (Tauri page-load event).
+static PAGE_LOADED: AtomicBool = AtomicBool::new(false);
+
+/// The event the page answers with `briefing-ready` (`public/briefing.js`).
+const PING_READY_EVENT: &str = "briefing-ping-ready";
+
 /// Whether the briefing window is currently visible (shown and not hidden).
 static WINDOW_VISIBLE: AtomicBool = AtomicBool::new(false);
 
@@ -89,6 +95,7 @@ static WINDOW_VISIBLE: AtomicBool = AtomicBool::new(false);
 /// Called once during app startup so the window is warm and can be shown
 /// instantly when a morning briefing fires.
 pub fn init_briefing_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
+    PAGE_LOADED.store(false, Ordering::Relaxed);
     let _window = tauri::webview::WebviewWindowBuilder::new(
         app,
         WINDOW_LABEL,
@@ -104,6 +111,11 @@ pub fn init_briefing_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()>
     .resizable(false)
     .visible(false)
     .inner_size(f64::from(WINDOW_WIDTH), f64::from(WINDOW_HEIGHT))
+    .on_page_load(|_, payload| {
+        if payload.event() == tauri::webview::PageLoadEvent::Finished {
+            PAGE_LOADED.store(true, Ordering::Relaxed);
+        }
+    })
     .build()?;
 
     info!(target: "4da::briefing", "Briefing window pre-warmed");
@@ -145,6 +157,26 @@ pub fn show_briefing_now<R: Runtime>(app: &AppHandle<R>, briefing: &BriefingNoti
     // Cancel any existing dismiss timer.
     cancel_dismiss_timer();
 
+    // A page that loaded but whose ready event was lost is asked again before
+    // the window is recreated (`page_ready`).
+    let exists = app.get_webview_window(WINDOW_LABEL).is_some();
+    let ready = WINDOW_READY.load(Ordering::Relaxed);
+    let loaded = PAGE_LOADED.load(Ordering::Relaxed);
+    if crate::page_ready::recovery(ready, loaded, exists) == crate::page_ready::Recovery::Ping {
+        let app = app.clone();
+        let briefing = briefing.clone();
+        tauri::async_runtime::spawn(async move {
+            crate::page_ready::ping_and_wait(&app, WINDOW_LABEL, PING_READY_EVENT, &WINDOW_READY)
+                .await;
+            present_briefing(&app, &briefing);
+        });
+        return;
+    }
+    present_briefing(app, briefing);
+}
+
+/// The show itself, once readiness is settled (see [`show_briefing_now`]).
+fn present_briefing<R: Runtime>(app: &AppHandle<R>, briefing: &BriefingNotification) {
     // Corner coordination: the small signal toast anchors to the same bottom-right
     // corner. The briefing (larger, always-on-top) would cover it, so slide any
     // toast that's currently showing up to the top-right. New toasts raised while

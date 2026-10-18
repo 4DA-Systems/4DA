@@ -57,6 +57,12 @@ static DISMISS_CANCEL: std::sync::LazyLock<parking_lot::Mutex<Option<Arc<AtomicB
 /// Whether the notification window's JS listener is registered and ready.
 static WINDOW_READY: AtomicBool = AtomicBool::new(false);
 
+/// Whether the notification page has finished loading (Tauri page-load event).
+static PAGE_LOADED: AtomicBool = AtomicBool::new(false);
+
+/// The event the page answers with `notification-ready` (`public/notification.js`).
+const PING_READY_EVENT: &str = "notification-ping-ready";
+
 // ============================================================================
 // Data Types
 // ============================================================================
@@ -149,6 +155,7 @@ pub(crate) fn notification_style() -> String {
 /// instantly when a notification arrives. The window is transparent,
 /// borderless, always-on-top, and excluded from the taskbar.
 pub fn init_notification_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
+    PAGE_LOADED.store(false, Ordering::Relaxed);
     let _window = tauri::webview::WebviewWindowBuilder::new(
         app,
         WINDOW_LABEL,
@@ -163,6 +170,11 @@ pub fn init_notification_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result
     .resizable(false)
     .visible(false)
     .inner_size(f64::from(WINDOW_WIDTH), f64::from(WINDOW_HEIGHT))
+    .on_page_load(|_, payload| {
+        if payload.event() == tauri::webview::PageLoadEvent::Finished {
+            PAGE_LOADED.store(true, Ordering::Relaxed);
+        }
+    })
     .build()?;
 
     info!(target: "4da::notify", "Notification window pre-warmed");
@@ -293,6 +305,25 @@ pub fn show_notification_now<R: Runtime>(app: &AppHandle<R>, data: NotificationD
     // Cancel any existing dismiss timer before doing anything else.
     cancel_dismiss_timer();
 
+    // A page that loaded but whose ready event was lost is asked again before
+    // the window is recreated (`page_ready`).
+    let exists = app.get_webview_window(WINDOW_LABEL).is_some();
+    let ready = WINDOW_READY.load(Ordering::Relaxed);
+    let loaded = PAGE_LOADED.load(Ordering::Relaxed);
+    if crate::page_ready::recovery(ready, loaded, exists) == crate::page_ready::Recovery::Ping {
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move {
+            crate::page_ready::ping_and_wait(&app, WINDOW_LABEL, PING_READY_EVENT, &WINDOW_READY)
+                .await;
+            present_notification(&app, data);
+        });
+        return;
+    }
+    present_notification(app, data);
+}
+
+/// The show itself, once readiness is settled (see [`show_notification_now`]).
+fn present_notification<R: Runtime>(app: &AppHandle<R>, data: NotificationData) {
     // Recovery: if the window's JS never loaded (dev server race condition on
     // startup), destroy the stale window so it gets recreated with a fresh load.
     //

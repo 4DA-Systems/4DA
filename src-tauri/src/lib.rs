@@ -316,6 +316,7 @@ mod ollama;
 mod onboarding_save_commands;
 mod osv;
 mod package_ambiguity;
+mod page_ready;
 mod platform_filter;
 pub mod plugins;
 mod preemption;
