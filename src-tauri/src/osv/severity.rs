@@ -402,7 +402,7 @@ pub fn group_severity(group: &[&MatchedAdvisory]) -> Option<Graded> {
 /// `0.0.<n>-security` holding placeholders never reach here; they are not
 /// affected (`is_npm_security_holding`, audit L4).
 pub fn cluster_urgency(cluster: &[&MatchedAdvisory]) -> Urgency {
-    if cluster.iter().any(|m| is_malware(&m.advisory_id)) {
+    if contains_malware(cluster) {
         return Urgency::Critical;
     }
     match cluster_severity(cluster).map(|g| g.tier) {
@@ -420,11 +420,18 @@ pub fn cluster_urgency(cluster: &[&MatchedAdvisory]) -> Urgency {
 /// package still runs its code (install scripts, the build, the test run) on
 /// the developer's machine, so it is not the milder exposure the scope rule
 /// discounts for vulnerabilities.
+///
+/// TEMPORARY rule: a `MAL-` id or a `MAL-` alias. The shared
+/// `fourda_depengine` predicate (adding `database_specific.cwe_ids`
+/// CWE-506, which GHSA-c2m4-w5hm-vqjw carries with no MAL alias) lands with
+/// fix/malware-cwe and replaces this.
 pub fn contains_malware(group: &[&MatchedAdvisory]) -> bool {
-    group.iter().any(|m| is_malware(&m.advisory_id))
+    group
+        .iter()
+        .any(|m| is_malware(&m.advisory_id) || m.aliases.iter().any(|a| is_malware(a)))
 }
 
-/// A malicious-package record (OpenSSF `MAL-` id).
+/// A malicious-package id (OpenSSF `MAL-`).
 pub fn is_malware(advisory_id: &str) -> bool {
     advisory_id
         .trim()

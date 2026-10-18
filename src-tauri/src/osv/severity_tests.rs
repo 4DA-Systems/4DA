@@ -165,3 +165,14 @@ fn mirror_rows_group_by_alias_then_the_worst_group_decides() {
         Some("medium".to_string())
     );
 }
+
+/// The temporary malware rule: a `MAL-` id OR a `MAL-` alias (a GHSA
+/// malware advisory listing its OpenSSF record).
+#[test]
+fn a_mal_alias_is_installed_malware_too() {
+    let ghsa = matched("GHSA-mal1", &["MAL-2025-46969"], None, Some("low"));
+    assert!(contains_malware(&[&ghsa]));
+    assert_eq!(cluster_urgency(&[&ghsa]), Urgency::Critical);
+    let plain = matched("GHSA-plain", &["CVE-1"], None, Some("low"));
+    assert!(!contains_malware(&[&plain]));
+}
