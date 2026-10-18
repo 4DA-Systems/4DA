@@ -66,6 +66,23 @@ fn store_advisories(db: &Database, advisories: &[&Value]) {
             None,
             None,
         );
+        // Optional `aliases` / `cwe_ids`, stored as a sync stores them.
+        let list = |key: &str| {
+            let items: Vec<&str> = arr(a, key).into_iter().filter_map(Value::as_str).collect();
+            (!items.is_empty()).then(|| json!(items).to_string())
+        };
+        if let Some(aliases) = list("aliases") {
+            let _ = db.conn.lock().execute(
+                "UPDATE osv_advisories SET aliases = ?2 WHERE advisory_id = ?1",
+                rusqlite::params![s(a, "id"), aliases],
+            );
+        }
+        let _ = db.set_osv_advisory_cwe_ids(
+            s(a, "id"),
+            s(a, "package"),
+            "npm",
+            list("cwe_ids").as_deref(),
+        );
     }
 }
 

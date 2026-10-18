@@ -501,6 +501,7 @@ fn matched(cvss: f64, installs: &[(bool, bool, bool)]) -> crate::osv::types::Mat
             .collect(),
         aliases: vec![],
         severity_label: None,
+        cwe_ids: Vec::new(),
     }
 }
 

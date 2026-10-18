@@ -116,6 +116,17 @@ pub struct StoredAdvisory {
     /// `None` when the source gives neither (RustSec maintenance notices).
     #[serde(default)]
     pub severity_label: Option<String>,
+    /// `database_specific.cwe_ids` (Phase 128). Empty on rows synced before
+    /// the column existed, until the next sync (made due by the migration).
+    #[serde(default)]
+    pub cwe_ids: Vec<String>,
+}
+
+impl StoredAdvisory {
+    /// A malicious-package record (`fourda_depengine::is_malware`).
+    pub fn is_malware(&self) -> bool {
+        fourda_depengine::is_malware(&self.advisory_id, &self.aliases, &self.cwe_ids)
+    }
 }
 
 /// A version-confirmed copy an advisory does NOT apply to: every source file
@@ -164,6 +175,9 @@ pub struct MatchedAdvisory {
     /// See [`StoredAdvisory::severity_label`].
     #[serde(default)]
     pub severity_label: Option<String>,
+    /// See [`StoredAdvisory::cwe_ids`].
+    #[serde(default)]
+    pub cwe_ids: Vec<String>,
 }
 
 /// Normalise a source severity label to the four-tier vocabulary every
@@ -266,6 +280,22 @@ impl Vulnerability {
             .and_then(|v| v.as_str())
             .and_then(normalize_severity_label);
         curated.or_else(|| self.best_cvss().1.map(|s| cvss_band(s).to_string()))
+    }
+
+    /// JSON array of `database_specific.cwe_ids`, or `None` when the source
+    /// lists none.
+    pub(crate) fn cwe_ids_json(&self) -> Option<String> {
+        let ids: Vec<&str> = self
+            .database_specific
+            .as_ref()?
+            .get("cwe_ids")?
+            .as_array()?
+            .iter()
+            .filter_map(|v| v.as_str())
+            .collect();
+        (!ids.is_empty())
+            .then(|| serde_json::to_string(&ids).ok())
+            .flatten()
     }
 
     /// JSON array of alias ids, or `None` when the source lists none.

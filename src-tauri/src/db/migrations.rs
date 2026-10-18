@@ -1488,7 +1488,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 127;
+        const TARGET_VERSION: i64 = 128;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -5914,12 +5914,56 @@ impl Database {
                 )?;
             }
 
+            // Phase 128 (review of #981, parity decision 1): an advisory's
+            // CWE ids, so a GitHub malware advisory with no `MAL-` alias
+            // (crossenv GHSA-c2m4-w5hm-vqjw: CWE-506 only) reads as malware
+            // (`fourda_depengine::is_malware`). The column fills on the next
+            // sync; every ecosystem's sync is made due now, so rows stored
+            // before it do not stay NULL until a 6-hour window passes.
+            if current_version < 128 {
+                Self::run_versioned_migration(
+                    &conn,
+                    127,
+                    128,
+                    "Phase 128: osv_advisories.cwe_ids; mirror re-sync due",
+                    |c| {
+                        let has_column: bool = c
+                            .query_row(
+                                "SELECT COUNT(*) FROM pragma_table_info('osv_advisories') WHERE name='cwe_ids'",
+                                [],
+                                |row| row.get::<_, i64>(0).map(|n| n > 0),
+                            )
+                            .unwrap_or(false);
+                        if !has_column {
+                            c.execute("ALTER TABLE osv_advisories ADD COLUMN cwe_ids TEXT", [])?;
+                        }
+                        let due = Self::make_osv_sync_due(c)?;
+                        info!(
+                            target: "4da::db",
+                            due,
+                            "Phase 128: cwe_ids added; every advisory ecosystem re-syncs next cycle"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }
 
         info!(target: "4da::db", "Database schema initialized with sqlite-vec");
         Ok(())
+    }
+
+    /// Phase 128: make every ecosystem's advisory sync due on the next cycle
+    /// (`osv::sync::needs_sync` reads `last_synced_at`), so the mirror is
+    /// re-upserted with the new column. Returns rows changed.
+    pub(crate) fn make_osv_sync_due(c: &Connection) -> SqliteResult<usize> {
+        c.execute(
+            "UPDATE osv_sync_status SET last_synced_at = '1970-01-01 00:00:00'",
+            [],
+        )
     }
 
     /// Phase 126 (a): turn every interest off (AD-054). Returns rows changed.

@@ -460,6 +460,7 @@ fn a_scratch_copy_never_covers_malware_for_an_active_project() {
         advisory_id: "MAL-2026-77".to_string(),
         summary: "Malicious code in x (npm)".to_string(),
         aliases: Vec::new(),
+        cwe_ids: Vec::new(),
         affected_ranges: Some(r#"[{"type":"ENUMERATED","events":["2.0.5","2.1.0"]}]"#.into()),
     };
     let verdict = crate::osv::release_advisories::assess(

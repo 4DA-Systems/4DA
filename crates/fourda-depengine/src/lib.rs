@@ -21,6 +21,8 @@
 //!   findings per installed copy with each copy's fix targets;
 //! - [`exposure`]: the same check for one advisory (the scorer's verdict);
 //! - [`lines`]: the per-project, per-release-line upgrade targets;
+//! - [`malware`]: whether an advisory is a malicious-package record (`MAL-`
+//!   id or alias, or CWE-506);
 //! - [`registry`]: the registry's releases and the ones it withdrew (yanked
 //!   or deprecated), which no target may name.
 //!
@@ -32,11 +34,14 @@ pub mod ecosystem;
 pub mod exposure;
 pub mod fix_target;
 pub mod lines;
+pub mod malware;
 pub mod matching;
 pub mod osv;
 pub mod range;
 pub mod registry;
 pub mod version_order;
+
+pub use malware::is_malware;
 
 #[cfg(target_arch = "wasm32")]
 mod wasm;

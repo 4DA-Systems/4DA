@@ -157,6 +157,7 @@ fn matched(id: &str, instances: Vec<MatchedDependency>) -> MatchedAdvisory {
         dependency_instances: instances,
         aliases: vec![],
         severity_label: None,
+        cwe_ids: Vec::new(),
     }
 }
 

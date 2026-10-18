@@ -21,6 +21,7 @@ fn window(id: &str, summary: &str, ranges: &str) -> AdvisoryWindow {
         advisory_id: id.to_string(),
         summary: summary.to_string(),
         aliases: Vec::new(),
+        cwe_ids: Vec::new(),
         affected_ranges: Some(ranges.to_string()),
     }
 }
@@ -110,18 +111,24 @@ fn a_whole_package_advisory_that_already_hits_the_installed_copy_is_covered() {
     assert!(hit.covered_by_installed);
 }
 
+/// Malware is the shared predicate (`fourda_depengine::is_malware`): a
+/// `MAL-` id or alias, or CWE-506, never a summary keyword. crossenv
+/// GHSA-c2m4-w5hm-vqjw carries CWE-506 and no `MAL-` alias.
 #[test]
-fn a_ghsa_malware_summary_counts_as_malware() {
-    let w = window(
-        "GHSA-xxxx-yyyy-zzzz",
-        "Malicious code in foo",
+fn a_ghsa_malware_record_counts_by_its_cwe_not_its_summary() {
+    let mut crossenv = window(
+        "GHSA-c2m4-w5hm-vqjw",
+        "crossenv is malware",
         r#"[{"type":"SEMVER","events":[{"introduced":"0"}]}]"#,
     );
-    assert!(w.is_malware());
+    crossenv.aliases = vec!["CVE-2017-16074".to_string()];
+    assert!(!crossenv.is_malware(), "no CWE stored yet");
+    crossenv.cwe_ids = vec!["CWE-506".to_string()];
+    assert!(crossenv.is_malware());
     let mut aliased = window("GHSA-a", "Something", "[]");
     aliased.aliases = vec!["MAL-2026-1".to_string()];
     assert!(aliased.is_malware());
-    assert!(!window("GHSA-b", "Prototype pollution", "[]").is_malware());
+    assert!(!window("GHSA-b", "Malicious-looking prose", "[]").is_malware());
 }
 
 fn fixed_before() -> AdvisoryWindow {

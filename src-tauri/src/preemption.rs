@@ -3175,6 +3175,7 @@ mod tests {
             published_at: None,
             aliases: vec![],
             severity_label: None,
+            cwe_ids: Vec::new(),
             dependency_instances: vec![
                 crate::osv::types::MatchedDependency {
                     project_path: "/transitive".into(),
@@ -3257,6 +3258,7 @@ mod tests {
             published_at: None,
             aliases: vec![],
             severity_label: None,
+            cwe_ids: Vec::new(),
             dependency_instances: vec![
                 copy("/navcal", "1.1.12", "1.1.21"),
                 copy("/webhook", "1.1.18", "1.1.21"),
@@ -3315,6 +3317,7 @@ mod tests {
             published_at: None,
             aliases: vec![],
             severity_label: Some("critical".into()),
+            cwe_ids: Vec::new(),
             dependency_instances: vec![crate::osv::types::MatchedDependency {
                 project_path: "/paddle-webhook".into(),
                 installed_version: Some("3.1.2".into()),
