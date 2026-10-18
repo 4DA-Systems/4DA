@@ -435,14 +435,19 @@ fn urgency_word(u: &AlertUrgency) -> &'static str {
 }
 
 fn security_line(f: &SecurityFact) -> String {
-    let mut line = format!(
-        "- **{}** ({}, {} — {} advisor{})",
-        f.package,
-        f.ecosystem,
-        urgency_word(&f.urgency),
-        f.advisory_count,
-        if f.advisory_count == 1 { "y" } else { "ies" }
-    );
+    // Maintenance notices only (#986): no severity, no vulnerability count.
+    let mut line = if f.advisory_count == 0 {
+        format!("- **{}** ({})", f.package, f.ecosystem)
+    } else {
+        format!(
+            "- **{}** ({}, {} — {} advisor{})",
+            f.package,
+            f.ecosystem,
+            urgency_word(&f.urgency),
+            f.advisory_count,
+            if f.advisory_count == 1 { "y" } else { "ies" }
+        )
+    };
     if let Some(tier) = &f.worst_tier {
         if !tier.eq_ignore_ascii_case(urgency_word(&f.urgency)) {
             let tier = crate::osv::severity::labelled(tier, f.worst_tier_from.as_deref());

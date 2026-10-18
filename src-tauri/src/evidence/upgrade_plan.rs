@@ -305,11 +305,15 @@ fn package_group<'a>(
         .map(|cluster| crate::osv::severity::cluster_urgency(cluster))
         .min()
         .unwrap_or(Urgency::Medium);
-    let urgency = crate::osv::identity::scope_adjusted_urgency(
-        base_urgency,
-        scope.all_transitive(),
-        scope.all_dev(),
-    );
+    let urgency = if crate::osv::severity::contains_malware(&advisories) {
+        Urgency::Critical
+    } else {
+        crate::osv::identity::scope_adjusted_urgency(
+            base_urgency,
+            scope.all_transitive(),
+            scope.all_dev(),
+        )
+    };
 
     PackageGroup {
         package,
@@ -781,12 +785,25 @@ fn informational_item(
         dep = plural(k, "dependency", "dependencies"),
         list = listed.join(", "),
     ));
+    // Each named as what it is (#986): `unmaintained: <crate> (<id>), no
+    // exploitable vulnerability` (`osv::severity::notice_wording`).
+    let notices: Vec<String> = names
+        .iter()
+        .map(|name| {
+            let mut ids: Vec<&str> = groups
+                .iter()
+                .filter(|g| &g.package == name)
+                .flat_map(|g| g.advisories.iter().map(|a| a.advisory_id.as_str()))
+                .collect();
+            ids.sort_unstable();
+            ids.dedup();
+            crate::osv::severity::notice_wording(name, &ids)
+        })
+        .collect();
     let explanation = format!(
-        "{list} {carry} maintenance notices (unmaintained or deprecated), not vulnerabilities \
-         with a published fix. There is nothing to upgrade to; replace {them} when convenient. \
+        "{list}. There is nothing to upgrade to; replace {them} when convenient. \
          Installed across {m} {proj}.",
-        list = names.join(", "),
-        carry = if k == 1 { "carries" } else { "carry" },
+        list = notices.join("; "),
         them = if k == 1 { "it" } else { "them" },
         proj = plural(m, "project", "projects"),
     );

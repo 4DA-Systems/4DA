@@ -122,16 +122,27 @@ fn render_security(n: usize, f: &SecurityFact) -> String {
     } else {
         format!(" ({})", f.advisory_ids.join(", "))
     };
-    let mut out = format!(
-        "{n}. [{}] {} ({}) — {} advisor{}{ids}{worst}. Status: {}.\n   Advisory: {}\n",
-        urgency_label(&f.urgency),
-        f.package,
-        f.ecosystem,
-        f.advisory_count,
-        if f.advisory_count == 1 { "y" } else { "ies" },
-        status_label(&f.status),
-        f.title,
-    );
+    let mut out = if f.advisory_count == 0 {
+        // Maintenance notices only (#986): not a vulnerability, no severity.
+        format!(
+            "{n}. [NOTICE] {} ({}){ids}: {}. Status: {}.\n",
+            f.package,
+            f.ecosystem,
+            f.title,
+            status_label(&f.status),
+        )
+    } else {
+        format!(
+            "{n}. [{}] {} ({}) — {} advisor{}{ids}{worst}. Status: {}.\n   Advisory: {}\n",
+            urgency_label(&f.urgency),
+            f.package,
+            f.ecosystem,
+            f.advisory_count,
+            if f.advisory_count == 1 { "y" } else { "ies" },
+            status_label(&f.status),
+            f.title,
+        )
+    };
     for s in &f.sites {
         let installed = s
             .installed

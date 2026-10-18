@@ -104,11 +104,64 @@ fn an_inherited_grade_is_labelled_and_explained() {
 }
 
 #[test]
-fn a_still_unknown_cluster_is_medium_and_malware_high() {
+fn a_still_unknown_cluster_is_medium_and_installed_malware_critical() {
     let unknown = matched("GO-1", &[], None, None);
     assert_eq!(cluster_urgency(&[&unknown]), Urgency::Medium);
     let malware = matched("MAL-2026-2307", &[], None, None);
-    assert_eq!(cluster_urgency(&[&malware]), Urgency::High);
+    assert_eq!(cluster_urgency(&[&malware]), Urgency::Critical);
+    // Malware is Critical whatever else grades it.
+    let graded_malware = matched("MAL-2099-0001", &[], None, Some("low"));
+    assert_eq!(cluster_urgency(&[&graded_malware]), Urgency::Critical);
     let low = matched("GHSA-low", &[], None, Some("low"));
     assert_eq!(cluster_urgency(&[&low]), Urgency::Watch);
+}
+
+/// S2 of the #986 review: ONE maintenance predicate. A "has been deprecated"
+/// notice (no fix, no CVSS) with a graded GHSA alias never inherits a
+/// vulnerability grade, whichever table the record comes from; a real bug
+/// with the same alias and a fix does.
+#[test]
+fn a_deprecation_notice_never_inherits_a_vulnerability_grade() {
+    let mirror = vec![row("GHSA-dep1", "other", None, Some("critical"))];
+    let mut notice = matched("RUSTSEC-9", &["GHSA-dep1"], None, None);
+    notice.summary = "foo has been deprecated".into();
+    let mut bug = matched("RUSTSEC-10", &["GHSA-dep1"], None, None);
+    bug.summary = "Out-of-bounds write".into();
+    bug.fixed_version = Some("2.0.0".into());
+    let mut matches = vec![notice, bug];
+    grade_unrated(&mut matches, &mirror);
+    assert_eq!(matches[0].severity_label, None);
+    assert_eq!(matches[1].severity_from.as_deref(), Some("GHSA-dep1"));
+
+    let grades = AliasGrades::from_rows(&mirror);
+    let mut stored = row("RUSTSEC-9", "foo", None, None);
+    stored.summary = "foo has been deprecated".into();
+    stored.aliases = vec!["GHSA-dep1".into()];
+    assert!(!takes_alias_grade(&stored));
+    assert_eq!(rows_grade(&[&stored], &grades), None);
+    stored.fixed_versions = Some(r#"["2.0.0"]"#.into());
+    assert_eq!(
+        rows_grade(&[&stored], &grades).map(|g| g.label()),
+        Some("critical (from GHSA-dep1)".to_string())
+    );
+}
+
+/// Mirror rows are grouped by alias before grading: two advisories of one
+/// package stay two groups, and the worst group decides.
+#[test]
+fn mirror_rows_group_by_alias_then_the_worst_group_decides() {
+    let mut a = row("GHSA-a", "p", None, Some("low"));
+    a.aliases = vec!["RUSTSEC-a".into()];
+    let mut a2 = row("RUSTSEC-a", "p", None, None);
+    a2.aliases = vec!["GHSA-a".into(), "GHSA-up".into()];
+    a2.fixed_versions = Some(r#"["1.0.1"]"#.into());
+    let b = row("GHSA-b", "p", Some(5.0), None);
+    let grades = AliasGrades::from_rows(&[row("GHSA-up", "q", None, Some("critical"))]);
+    let rows = [&a, &a2, &b];
+    assert_eq!(alias_groups(&rows).len(), 2);
+    // Group a: own low beats the inherited critical; group b: medium.
+    assert_eq!(
+        rows_grade(&rows, &grades).map(|g| g.label()),
+        Some("medium".to_string())
+    );
 }

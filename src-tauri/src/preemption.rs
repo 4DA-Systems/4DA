@@ -508,6 +508,9 @@ pub(crate) fn osv_alert_urgency(
     group: &[&crate::osv::types::MatchedAdvisory],
     projects: &[String],
 ) -> AlertUrgency {
+    if crate::osv::severity::contains_malware(group) {
+        return AlertUrgency::Critical;
+    }
     let scope = crate::osv::identity::ExposureScope::of(group, projects);
     rank_osv_urgency(
         most_urgent_tier(group),
@@ -659,9 +662,26 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
             // bug on every surface (2026-09-07). Everything below that counts,
             // cites or grades reads the cluster representatives.
             let clusters = crate::osv::identity::cluster_by_vulnerability(&group);
+            // A maintenance notice is not a vulnerability (#986): it is never
+            // counted as one, and an alert of notices only says what it is.
+            let (vuln_clusters, notice_clusters): (Vec<_>, Vec<_>) = clusters
+                .iter()
+                .partition(|c| !crate::osv::severity::is_notice_group(c));
+            let notice_ids: Vec<&str> = notice_clusters
+                .iter()
+                .map(|c| c[0].advisory_id.as_str())
+                .collect();
+            let notice_only = vuln_clusters.is_empty();
+            let counted = if notice_only {
+                &notice_clusters
+            } else {
+                &vuln_clusters
+            };
             let representatives: Vec<&crate::osv::types::MatchedAdvisory> =
-                clusters.iter().map(|c| c[0]).collect();
-            let advisory_count = clusters.len();
+                counted.iter().map(|c| c[0]).collect();
+            let advisory_count = counted.len();
+            let notice_line = (!notice_ids.is_empty())
+                .then(|| crate::osv::severity::notice_wording(&first.package_name, &notice_ids));
 
             // Most urgent vulnerability, then the ONE scope rule every
             // surface grades by (AD-046) — see `osv_alert_urgency`.
@@ -761,8 +781,10 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
                 "vulnerabilities"
             };
 
-            let title = if advisory_count == 1 {
-                truncate(&first.summary, 120).to_string()
+            let title = if let (true, Some(line)) = (notice_only, &notice_line) {
+                line.clone()
+            } else if advisory_count == 1 {
+                truncate(&representatives[0].summary, 120).to_string()
             } else {
                 format!(
                     "{subject}: {count} known {vuln_word}",
@@ -804,18 +826,30 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
             )
             .map(|note| format!(" {note}"))
             .unwrap_or_default();
-            let explanation = format!(
-                "{ids} ({count} {vuln_word}) affect {subject} in {projects}.{sev} Scope: {scope}.{fix}{reach}",
-                sev = severity_note,
-                ids = ids_display,
-                count = advisory_count,
-                vuln_word = vuln_word,
-                subject = subject,
-                projects = project_display,
-                scope = scope_label,
-                fix = fix_str,
-                reach = reachability,
-            );
+            let explanation = match (notice_only, &notice_line) {
+                (true, Some(line)) => format!(
+                    "{line}. Installed in {projects}. Scope: {scope}.{reach}",
+                    projects = project_display,
+                    scope = scope_label,
+                    reach = reachability,
+                ),
+                _ => format!(
+                    "{ids} ({count} {vuln_word}) affect {subject} in {projects}.{sev} Scope: {scope}.{fix}{reach}{also}",
+                    sev = severity_note,
+                    ids = ids_display,
+                    count = advisory_count,
+                    vuln_word = vuln_word,
+                    subject = subject,
+                    projects = project_display,
+                    scope = scope_label,
+                    fix = fix_str,
+                    reach = reachability,
+                    also = notice_line
+                        .as_deref()
+                        .map(|l| format!(" Also {l}."))
+                        .unwrap_or_default(),
+                ),
+            };
 
             // 4DA is read-only local intelligence: it surfaces the advisory and
             // the fix version (shown in the version_context chip and explanation),

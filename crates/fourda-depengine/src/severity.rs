@@ -15,9 +15,6 @@
 //! the first alias made the grade depend on the order OSV lists them in.
 
 use std::collections::BTreeSet;
-use std::sync::LazyLock;
-
-use regex::Regex;
 
 /// The four tiers, most severe first rank highest.
 #[must_use]
@@ -48,7 +45,9 @@ pub fn ghsa_aliases(record_id: &str, aliases: &[String]) -> Vec<String> {
     let mut out: Vec<String> = aliases
         .iter()
         .map(|a| a.trim())
-        .filter(|a| a.len() > 5 && a[..5].eq_ignore_ascii_case("GHSA-"))
+        // `get`, never a byte slice: alias text is untrusted, and a multi-byte
+        // character across index 5 would end a slice mid-char and panic.
+        .filter(|a| a.get(..5).is_some_and(|p| p.eq_ignore_ascii_case("GHSA-")) && a.len() > 5)
         .filter(|a| !a.eq_ignore_ascii_case(record_id.trim()))
         .filter(|a| seen.insert(a.to_ascii_uppercase()))
         .map(str::to_string)
@@ -83,16 +82,6 @@ pub fn grade_from_aliases<'a>(
         }
     }
     best
-}
-
-static MAINTENANCE: LazyLock<Option<Regex>> =
-    LazyLock::new(|| Regex::new(r"(?i)\b(unmaintained|no longer maintained)\b").ok());
-
-/// An unmaintained-package notice, not a vulnerability (the MCP's
-/// `isMaintenanceNotice`): such a record is never graded from an alias.
-#[must_use]
-pub fn is_maintenance_notice(summary: &str) -> bool {
-    MAINTENANCE.as_ref().is_some_and(|re| re.is_match(summary))
 }
 
 #[cfg(test)]
@@ -154,9 +143,15 @@ mod tests {
     }
 
     #[test]
-    fn maintenance_notices_are_recognised() {
-        assert!(is_maintenance_notice("`instant` is unmaintained"));
-        assert!(is_maintenance_notice("This crate is No Longer Maintained"));
-        assert!(!is_maintenance_notice("Use-after-free in unmaintainedness"));
+    fn a_multi_byte_alias_never_panics_and_is_not_a_ghsa_id() {
+        // A 2-byte char across index 5, a 3-byte char starting at index 4, a
+        // short multi-byte id, and one real GHSA id.
+        let odd = ids(&["GHS\u{c5}-x", "GHSA\u{20ac}abc", "GH\u{20ac}", "GHSA-ok"]);
+        assert_eq!(ghsa_aliases("R-1", &odd), ids(&["GHSA-ok"]));
+        assert_eq!(
+            grade_from_aliases("R-1", &odd, |id| (id == "GHSA-ok").then_some("high"))
+                .map(|g| g.from),
+            Some("GHSA-ok".to_string())
+        );
     }
 }

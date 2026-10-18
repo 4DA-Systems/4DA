@@ -503,6 +503,20 @@ fn check_severity(v: &Value) -> Result<(), String> {
         let vuln: Vulnerability = serde_json::from_value(r).map_err(|e| format!("record: {e}"))?;
         matches.push(severity_match(&vuln, opt_s(v, "fixed_version")));
     }
+    // The same records as mirror rows, for the path Knowledge Gaps and the
+    // scorer grade by (`rows_grade`), before the matcher stores anything.
+    let stored: Vec<StoredAdvisory> = matches
+        .iter()
+        .map(|m| StoredAdvisory {
+            advisory_id: m.advisory_id.clone(),
+            summary: m.summary.clone(),
+            cvss_score: m.cvss_score,
+            severity_label: m.severity_label.clone(),
+            aliases: m.aliases.clone(),
+            fixed_versions: m.fixed_version.as_ref().map(|f| format!("[\"{f}\"]")),
+            ..mirror_row(&m.advisory_id, None)
+        })
+        .collect();
     let mirror: Vec<StoredAdvisory> = v
         .get("aliases_available")
         .and_then(Value::as_object)
@@ -527,11 +541,24 @@ fn check_severity(v: &Value) -> Result<(), String> {
         opt_s(expect, "severity_from").map(str::to_string),
         s(expect, "urgency").to_string(),
     );
-    if got == want {
+    if got != want {
+        return Err(format!(
+            "got (severity, from, urgency) {got:?}, want {want:?}"
+        ));
+    }
+    let rows: Vec<&StoredAdvisory> = stored.iter().collect();
+    let by_rows =
+        super::severity::rows_grade(&rows, &super::severity::AliasGrades::from_rows(&mirror));
+    let got_rows = (
+        by_rows.as_ref().map(|g| g.tier.to_string()),
+        by_rows.and_then(|g| g.from),
+    );
+    if got_rows == (want.0.clone(), want.1.clone()) {
         Ok(())
     } else {
         Err(format!(
-            "got (severity, from, urgency) {got:?}, want {want:?}"
+            "mirror-row path: got (severity, from) {got_rows:?}, want ({:?}, {:?})",
+            want.0, want.1
         ))
     }
 }

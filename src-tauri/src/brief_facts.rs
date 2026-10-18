@@ -186,6 +186,7 @@ pub(crate) struct SecurityFact {
     pub worst_tier: Option<String>,
     /// The GHSA alias an ungraded advisory's `worst_tier` came from.
     pub worst_tier_from: Option<String>,
+    /// Vulnerabilities (alias clusters); 0 when it holds maintenance notices only.
     pub advisory_count: usize,
     pub advisory_ids: Vec<String>,
     pub title: String,
