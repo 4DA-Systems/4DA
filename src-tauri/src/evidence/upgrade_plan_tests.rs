@@ -256,6 +256,53 @@ fn a_fixed_and_an_unfixed_advisory_on_one_package_still_upgrade() {
     );
 }
 
+/// Review of #994, B2 (parity decision 2): A is fixed at 1.2.0, B opens at
+/// 1.1.0 with no fix and the installed 1.0.0 does not have it. Every fixing
+/// release brings B in, so the row names no target (not even A's line fix)
+/// and says why; Preemption's sentence agrees.
+#[test]
+fn a_fix_that_brings_in_an_advisory_is_not_named() {
+    let db = test_db();
+    db.store_dependency("/proj/a", "foo", Some("1.0.0"), "npm", false, None)
+        .unwrap();
+    advisory(&db, "GHSA-foo-a", "foo", "npm", "1.2.0", 7.5);
+    db.upsert_osv_advisory(
+        "GHSA-foo-b",
+        "Unfixed issue in foo",
+        None,
+        "foo",
+        "npm",
+        Some(r#"[{"type":"SEMVER","events":[{"introduced":"1.1.0"}]}]"#),
+        None,
+        Some("CVSS_V3"),
+        Some(5.0),
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    let plan = build_upgrade_plan(&db);
+    assert_eq!(plan.len(), 1);
+    let step = &plan[0];
+    assert!(
+        step.title.starts_with("No clean fix for foo"),
+        "{}",
+        step.title
+    );
+    let why =
+        "every fixing release brings in GHSA-foo-b, which the installed version does not have";
+    assert!(step.explanation.contains(why), "{}", step.explanation);
+    assert!(!step.title.contains("1.2.0"), "{}", step.title);
+
+    let matches = crate::osv::matching::get_matched_advisories(&db).unwrap();
+    let group: Vec<_> = matches.iter().collect();
+    let lines = crate::osv::fix_target::line_targets(&group, &["/proj/a".to_string()]);
+    let (fix, sentence) = crate::preemption::alert_fix_target(&group, &lines);
+    assert_eq!(fix, None);
+    assert!(sentence.contains(why), "{sentence}");
+}
+
 #[test]
 fn every_emitted_item_is_schema_valid_across_a_mixed_plan() {
     let db = test_db();

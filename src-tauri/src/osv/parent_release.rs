@@ -108,7 +108,8 @@ impl Advisory {
     }
 }
 
-pub use super::parent_release_hop::{through_release, Hop, HopParent};
+#[cfg(test)]
+use super::parent_release_hop::{through_release, Hop, HopParent};
 
 /// One package's known advisories.
 pub struct Advisories<'a> {

@@ -30,11 +30,11 @@ specific enough to recheck).
 |---|---|---|
 | `version_order.jsonl` | `{eco, a, b, cmp}`, `cmp` one of `<` `=` `>` | PEP 440, SemVer 2.0.0 and the Go Modules Reference spec examples. Every line is cross-checked when written: PyPI lines with python `packaging` 25.0, the others with node `semver` 7 (Go with the `v` stripped). |
 | `osv_range.jsonl` | `{record_id, eco, name, version, affected}` | OSV's own answer: `/v1/querybatch` at the exact version, recorded in `../expected/<case>.json` (records pinned 2026-10-10 in `../osv/`). `affected: true` is used only when the finding's alias group holds exactly one pinned record for that package, so OSV returned exactly that record. |
-| `fix_target.jsonl` | `{eco, name, installed, record_ids[], target, clears, evidence}`, optionally `published[]`, `excluded[]`, `withheld[]` | ft-001..ft-022: the 22 cases of the 2026-10-10 fix-path oracle (the action was applied, re-resolved and re-scanned, and the target checked minimal against OSV per published version), re-checked 2026-10-12 against the pinned ids. ft-023..: OSV `/v1/querybatch` per published stable release (2026-10-12), restricted to the pinned `record_ids`. `evidence` holds the OSV ids at `installed` and at `target`. |
+| `fix_target.jsonl` | `{eco, name, installed, record_ids[], target, clears, evidence}`, optionally `published[]`, `excluded[]`, `withheld[]`, `introduces[]` | ft-001..ft-022: the 22 cases of the 2026-10-10 fix-path oracle (the action was applied, re-resolved and re-scanned, and the target checked minimal against OSV per published version), re-checked 2026-10-12 against the pinned ids. ft-023..: OSV `/v1/querybatch` per published stable release (2026-10-12), restricted to the pinned `record_ids`. `evidence` holds the OSV ids at `installed` and at `target`. |
 | `refresh_verdict.jsonl` | `{eco, name, installed, target, requirements[], verdict, via, inferred}` | The 16 transitive oracle cases (the refresh was applied: it reached the target, or it did not move the copy), each with its parents' requirements read from the case lockfile (`package-lock.json` `requires`, `yarn.lock` `dependencies`) or the parent's published manifest (npm registry for pnpm, crates.io for Cargo). Each case also appears with `requirements: []` to pin the semver fallback. The rest apply AD-055 ¶1 by hand. |
 | `fix_command.jsonl` | `{tool, eco, pkg, installed, target, workspace_root, command}`; `kind: "direct"` lines add `declared` (npm family), `manifest` (Cargo), `go_mod` (Go) or `requirements` (PyPI), optionally `member: true` (the manifest sits one workspace level below the lockfile), and `instruction` | The command text of AD-055 ¶4 for a transitive copy's refresh. Where the oracle applied that tool's refresh, the `source` names the case. `kind: "direct"` lines pin the fix for a DECLARED dependency, read from the project's own manifest, that keeps how it is declared (audit E8): `command` when one command does it, `instruction` for a manifest edit, both null when nothing can be named with certainty. Each line's `source` says whether it was run against its tool (and which version) or is a rule with no tool run. |
 | `range_check.jsonl` | `{eco, name, constraint, from, releases[], record_ids[], expected}` | `@4da/mcp-server` 6.2.0 recorded fixtures (`src/__tests__/fixtures/dependency-check/recorded/`, origin/main `bae421b`): OSV's querybatch answer per release of ws, Jinja2 and golang.org/x/net. Constraint membership: node `semver` (npm, Go without `v`; `v0` is the v0 line), python `packaging` `SpecifierSet` (PyPI). |
-| `parent_release.jsonl` | `{eco, tool, parent{...}, rows[], expect{parent_target, rows[]}}` (below) | pr-001..pr-008: registry.npmjs.org abbreviated documents and OSV.dev `/v1/query`, read 2026-10-18 (generated once, then the rule applied by hand); pr-009: index.crates.io sparse records and OSV, 2026-10-18 (the MCP terminal's line, verbatim; `tool: cargo`, Cargo requirement dialect); pr-010: SYNTHETIC (marked in its source); OWASP/NodeGoat's `package-lock.json`; npm 10.9.2 for the install-keeps-the-copy case. pr-001..pr-004 and pr-006 agree with `@4da/mcp-server` fix/planner-advice-625 `1840dab` run on the same projects. |
+| `parent_release.jsonl` | `{eco, tool, parent{...}, rows[], expect{parent_target, rows[]}}` (below) | pr-001..pr-008: registry.npmjs.org abbreviated documents and OSV.dev `/v1/query`, read 2026-10-18 (generated once, then the rule applied by hand); pr-009: index.crates.io sparse records and OSV, 2026-10-18 (the MCP terminal's line, verbatim; `tool: cargo`, Cargo requirement dialect); pr-010..pr-012 and ft-069: SYNTHETIC (marked in their source); OWASP/NodeGoat's `package-lock.json`; npm 10.9.2 for the install-keeps-the-copy case. pr-001..pr-004 and pr-006 agree with `@4da/mcp-server` fix/planner-advice-625 `1840dab` run on the same projects. |
 | `holding.jsonl` | `{eco, name, advisory_id, version, holding}` | npm's security holding placeholders (`0.0.<n>-security`; a publisher's `1.0.0-security` prerelease is not one: ho-006): the registry's own description ("security holding package") and the advisories that flag the name. `holding: true` means no advisory applies to that release (audit L4 decision, 2026-10-16). |
 | `severity.jsonl` | `{record \| records[], fixed_version?, aliases_available, expect: {severity, severity_from, urgency}}`; a `record` is `{id, summary, severity?, database_specific?: {severity?, cwe_ids?}, aliases[]}` as OSV gives it | api.osv.dev `/v1/vulns/<id>` and the app's local mirror (`osv_advisories`, read-only), both read on the date in `source`; by-hand lines say so. `aliases_available` maps each GHSA id the mirror holds to its grade (`null`: held, no grade); an id absent from it cannot be read. |
 
@@ -51,7 +51,16 @@ Field conventions:
 - A `fix_target` `target` is compared as a version (build metadata ignored).
   `clears: false` means the target clears only the advisories that have a
   fix. `target: null` means no advisory on the copy has one, or (with
-  `excluded`) every release that has one was withdrawn.
+  `excluded`) every release that has one was withdrawn, or (with
+  `introduces`) every fixing release brings in an advisory the installed
+  version does not have.
+- Optional `fix_target` `introduces[]` (parity decision 2, 2026-10-19;
+  expected, checked only when present): the record ids of the advisories
+  with no way out that affect where the walk lands but not `installed`,
+  sorted and deduped. Non-empty means no target AND no line fix in its
+  place. Records whose file names start `SYNT-` under `osv/` are SYNTHETIC
+  (marked in their `details`); `scripts/conformance-corpus.mjs` keeps them
+  on a re-pin and never fetches them.
 - Optional `fix_target` registry fields (FX-H5, 2026-10-16). Lines without
   them run on the advisory data alone, as before:
   - `published[]`: the registry's releases above `installed`, as the
@@ -196,6 +205,7 @@ form.
 - A `last_affected` window that later releases leave (the walk steps past the bound and keeps checking every advisory): ft-043 (pyjwt), ft-052 (mistune)
 - A release the registry withdrew is never the target (FX-H5): npm deprecated, ft-007 (lodash 4.18.0, "Bad release", so 4.18.1) and ft-063 (brace-expansion 3.0.3, so 3.0.4); crates.io yanked, ft-062 (h2 0.3.17, so 0.3.18); every clearing release withdrawn, so no target and `withheld` names it, ft-064 (by hand)
 - A whole-major npm deprecation notice is not a withdrawal, so the target stays on the installed line (review of #976): ft-067 (glob 10.4.5 -> 10.5.0, not 12.0.0), ft-068 (tar 6.1.11 -> 6.2.1, while tar 7.0.0..7.5.7 are excluded because 7.5.8 is clean)
+- A target never brings in an advisory (parity decision 2, review of #994 B2): an advisory with no way out that the installed version does not have blocks every fixing release, so no target and no line fix; SYNTHETIC records, no live case across the 11 audit projects: ft-069
 
 ### Refresh verdict — AD-055 ¶1, ¶2, ¶3
 
@@ -314,6 +324,19 @@ the parent upgrades that name it as their lever agree on its release."*
   version does not have, outcome `introduces` (text "every fixing release
   brings in <id>, which the installed version does not have", pinned in the
   app's tests); a SYNTHETIC rule line, no clean live case exists: pr-010
+- The same for a declared lever (review of #994, S3): a lever release that
+  would bring a fixed parent in, blocked only by an advisory the installed
+  lever does not have, makes the lever `release: "introduces"` in a graph
+  line; SYNTHETIC: pr-011
+- A release blocked ONLY by advisories the installed version lacks
+  introduces them whether they are fixed or not (review of #994, S2; the
+  MCP's `cleanButIntroduced`), and the ids are the union over every such
+  release, sorted (S4); SYNTHETIC: pr-012
+- Scope of the cross-major raise (review of #994, S1): the app raises a row
+  across a major in production for **npm only** (`parent_release_load`
+  reads npm registry facts); Cargo is pinned at the rule level only
+  (pr-009 runs `decide()`), and wiring it needs per-version crates.io
+  dependency records (follow-up).
 
 ### Severity — one grade per advisory (2026-10-18)
 
