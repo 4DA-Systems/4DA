@@ -62,7 +62,7 @@ pub async fn maybe_auto_briefing<R: Runtime>(app: &AppHandle<R>) {
             let app = app.clone();
             tauri::async_runtime::spawn(async move {
                 let wait = crate::inventory_freshness::STARTUP_SCAN_DEADLINE
-                    .saturating_add(std::time::Duration::from_secs(60));
+                    .saturating_add(std::time::Duration::from_mins(1));
                 if crate::inventory_freshness::wait_until_fresh(wait).await {
                     emit_auto_briefing(
                         &app,

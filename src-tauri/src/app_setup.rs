@@ -631,7 +631,7 @@ async fn warm_preemption_cache_after_first_light(reason: &'static str) {
 /// decides; past it the scheduler tick takes over.
 const STARTUP_BRIEFING_INVENTORY_WAIT: std::time::Duration =
     crate::inventory_freshness::STARTUP_SCAN_DEADLINE
-        .saturating_add(std::time::Duration::from_secs(60));
+        .saturating_add(std::time::Duration::from_mins(1));
 
 /// Tauri `setup()` callback body.
 ///

@@ -29,7 +29,7 @@ pub(crate) const INVENTORY_FRESH_EVENT: &str = "inventory-fresh";
 
 /// Hard deadline for the startup scan to release the gate. Measured
 /// 2026-10-18: ~8 minutes on the operator's 19-lockfile machine.
-pub(crate) const STARTUP_SCAN_DEADLINE: Duration = Duration::from_secs(15 * 60);
+pub(crate) const STARTUP_SCAN_DEADLINE: Duration = Duration::from_mins(15);
 
 /// Machine-readable error of a brief refused while the inventory refreshes.
 pub(crate) const INVENTORY_REFRESHING: &str = "inventory_refreshing";
