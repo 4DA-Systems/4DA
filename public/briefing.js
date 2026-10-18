@@ -765,6 +765,12 @@ async function init() {
       }
     });
 
+    // Rust re-requests readiness when it never saw this page's ready event
+    // (it was emitted before Rust listened); answer with it again.
+    await listen('briefing-ping-ready', function () {
+      emitTauri('briefing-ready');
+    });
+
     emitTauri('briefing-ready');
     console.log('[4DA Briefing] Ready');
   } catch (e) {

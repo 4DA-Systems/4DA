@@ -1693,6 +1693,22 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
         crate::osv::readiness::refresh::enable_gui_triggers();
         tauri::async_runtime::spawn(startup_advisory_sync());
     }
+    // The ready listeners are registered BEFORE either window is created.
+    // Creating a WebView2 pumps window messages, so the toast page could load
+    // and emit `notification-ready` while the brief window was being created,
+    // before anyone listened: measured 2026-10-18, 8 of 16 cold starts lost it,
+    // and the first toast then destroyed and recreated the window. A ready
+    // event that is still lost is re-requested at the first show
+    // (`notification_window::show_notification_now`, `page_ready`).
+    app.listen("notification-ready", move |_| {
+        crate::notification_window::mark_ready();
+        info!(target: "4da::notify", "Notification window JS listener registered");
+    });
+    app.listen("briefing-ready", move |_| {
+        crate::briefing_window::mark_ready();
+        info!(target: "4da::briefing", "Briefing window JS listener registered");
+    });
+
     // Pre-warm the custom notification window (hidden, ready for instant show)
     if let Err(e) = crate::notification_window::init_notification_window(app.handle()) {
         warn!(target: "4da::notify", error = %e, "Notification window pre-warm failed (will retry on first notification)");
@@ -1702,18 +1718,6 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
     if let Err(e) = crate::briefing_window::init_briefing_window(app.handle()) {
         warn!(target: "4da::briefing", error = %e, "Briefing window pre-warm failed (will retry on first briefing)");
     }
-
-    // Listen for notification-ready from the notification frontend
-    app.listen("notification-ready", move |_| {
-        crate::notification_window::mark_ready();
-        info!(target: "4da::notify", "Notification window JS listener registered");
-    });
-
-    // Listen for briefing-ready from the briefing frontend
-    app.listen("briefing-ready", move |_| {
-        crate::briefing_window::mark_ready();
-        info!(target: "4da::briefing", "Briefing window JS listener registered");
-    });
 
     // Listen for notification-hidden from the notification frontend
     let app_handle_notif = app_handle.clone();

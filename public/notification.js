@@ -311,6 +311,12 @@ async function init() {
       showNotification(event.payload);
     });
 
+    // Rust re-requests readiness when it never saw this page's ready event
+    // (it was emitted before Rust listened); answer with it again.
+    await listen('notification-ping-ready', function () {
+      emitTauri('notification-ready');
+    });
+
     // Signal readiness to Rust — safe to emit data now
     emitTauri('notification-ready');
     console.log('[4DA Notification] Ready');
