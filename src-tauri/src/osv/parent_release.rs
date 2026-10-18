@@ -167,13 +167,19 @@ fn ascending<'a>(versions: &'a [String], eco: &str) -> Vec<&'a String> {
     out
 }
 
-/// The newest stable release of `releases`, or `latest` when it names one.
+/// The highest stable installable release (the MCP's `newestOf`): the release
+/// an advisory must also affect to count as having no fix. The `latest` tag
+/// is not used here; a registry can tag an older line `latest`.
 pub fn newest(releases: &Releases, eco: &str) -> Option<String> {
-    releases.latest.clone().or_else(|| {
-        ascending(&releases.versions, eco)
-            .last()
-            .map(|v| (*v).clone())
-    })
+    ascending(&releases.versions, eco)
+        .last()
+        .map(|v| (*v).clone())
+}
+
+/// The release "already its latest" is judged against: the `latest` tag,
+/// else the highest stable installable release.
+fn latest_of(releases: &Releases, eco: &str) -> Option<String> {
+    releases.latest.clone().or_else(|| newest(releases, eco))
 }
 
 /// A move from `from` to `to` crosses a major version (a `0.x` minor counts).
@@ -278,7 +284,7 @@ pub fn standing(
     if parent.deprecated {
         return Standing::Deprecated;
     }
-    let latest = newest(parent, eco);
+    let latest = latest_of(parent, eco);
     if latest
         .as_deref()
         .is_some_and(|l| compare(from, l, eco).is_some_and(|o| o != Ordering::Less))
@@ -379,6 +385,7 @@ pub fn decide(
     own_target: Option<&str>,
     parent_advisories: &Advisories<'_>,
     rows: &[RowIn<'_>],
+    extra_needs: &[String],
     dialect: Dialect,
 ) -> Decision {
     let eco = parent_advisories.ecosystem;
@@ -394,6 +401,7 @@ pub fn decide(
             Standing::Release(f) => Some(f.version.as_str()),
             _ => None,
         })
+        .chain(extra_needs.iter().map(String::as_str))
         .collect();
     let target = row_target(own_target, &needs, &|v| parent_advisories.affect(v), eco);
     let rows = rows
@@ -462,47 +470,53 @@ pub fn through_release(
     if lever.deprecated {
         return Hop::Deprecated;
     }
-    let latest = newest(lever, eco);
+    let latest = latest_of(lever, eco);
     if latest
         .as_deref()
         .is_some_and(|l| compare(lever_from, l, eco).is_some_and(|o| o != Ordering::Less))
     {
         return Hop::Latest;
     }
-    let parent_versions = ascending(&parent.releases.versions, eco);
-    let brought = |v: &str| -> Option<(String, bool)> {
-        let entry = lever_history.get(v)?;
-        let [req] = entry.reqs.as_slice() else {
-            return None;
-        };
-        if !lever_clean(v) {
-            return None;
-        }
-        let brings = parent_versions
-            .iter()
-            .rev()
-            .find(|p| admits(req, p, dialect) == Some(true))?;
-        let above = compare(brings, parent.installed, eco) == Some(Ordering::Greater);
-        if !above || !(parent.own_clean)(brings) {
-            return None;
-        }
-        admits_clean(child, &parent.history.get(brings.as_str())?.reqs, dialect)?;
-        Some((
-            (*brings).clone(),
-            admits(req, parent.installed, dialect) == Some(true),
-        ))
-    };
     ascending(&lever.versions, eco)
         .into_iter()
         .filter(|v| compare(v, lever_from, eco) == Some(Ordering::Greater))
-        .find_map(|v| {
-            brought(v).map(|(brings, keeps_parent)| Hop::Found {
-                version: v.clone(),
-                brings,
-                keeps_parent,
-            })
-        })
+        .find_map(|v| hop_at(child, parent, lever_history, lever_clean, v, dialect))
         .unwrap_or(Hop::NoneBrings { latest })
+}
+
+/// Lever release `version`, clear of the lever's own advisories, brings in
+/// (its one requirement on the parent resolves to) a parent release above the
+/// installed one, clear of the parent's advisories, that admits a clean copy.
+pub fn hop_at(
+    child: &Child<'_>,
+    parent: &HopParent<'_>,
+    lever_history: &RequirementHistory,
+    lever_clean: &dyn Fn(&str) -> bool,
+    version: &str,
+    dialect: Dialect,
+) -> Option<Hop> {
+    let eco = child.ecosystem;
+    let entry = lever_history.get(version)?;
+    let [req] = entry.reqs.as_slice() else {
+        return None;
+    };
+    if !lever_clean(version) {
+        return None;
+    }
+    let brings = ascending(&parent.releases.versions, eco)
+        .into_iter()
+        .rev()
+        .find(|p| admits(req, p, dialect) == Some(true))?;
+    let above = compare(brings, parent.installed, eco) == Some(Ordering::Greater);
+    if !above || !(parent.own_clean)(brings) {
+        return None;
+    }
+    admits_clean(child, &parent.history.get(brings.as_str())?.reqs, dialect)?;
+    Some(Hop::Found {
+        version: version.to_string(),
+        brings: brings.clone(),
+        keeps_parent: admits(req, parent.installed, dialect) == Some(true),
+    })
 }
 
 #[cfg(test)]

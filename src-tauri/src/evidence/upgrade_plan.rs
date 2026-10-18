@@ -116,7 +116,7 @@ pub fn build_upgrade_plan(db: &Database) -> BuiltPlan {
         .map(|mut g| {
             // One bump per dependency (audit H1): a declared package's target
             // rises to the release that also clears the copies it pins.
-            g.raise_note = super::upgrade_row_raise::raise_declared_lines(
+            g.raise_note = crate::osv::raised_lines::raise_declared_lines(
                 db,
                 &g.ecosystem_norm,
                 &g.package,
@@ -212,7 +212,7 @@ struct PackageGroup<'a> {
     /// `osv::fix_path`). Filled after ranking; it never changes the rank.
     routes: crate::osv::parent_hint::TransitiveRoutes,
     /// Why a declared line's target was raised above its own advisories' fix
-    /// (`upgrade_row_raise`); empty in the common case.
+    /// (`osv::raised_lines`); empty in the common case.
     raise_note: String,
 }
 

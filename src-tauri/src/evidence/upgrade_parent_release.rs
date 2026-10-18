@@ -95,23 +95,26 @@ fn keeps(package: &str, r: &ParentRelease) -> String {
 }
 
 /// The move when the registry named `parent`'s release: upgrade the parent
-/// itself, the declared dependency it arrives through, or (when neither can
-/// be tied to a declaration) name the release and no command.
+/// itself, every declared dependency it arrives through, or (when none can be
+/// tied to a declaration) name the release and no command. `force` is the
+/// override clause (", or force ... with ..."), offered wherever a lever
+/// cannot move.
 pub(super) fn admits_move(
     package: &str,
     target: &str,
     parent: &str,
     r: &ParentRelease,
     through: Option<&Through>,
+    force: &str,
 ) -> String {
     let why = release_clause(package, target, parent, r);
     let to = &r.to;
     let Some(t) = through else {
-        if r.lever_unknown {
+        if let Some(reason) = r.lever_unknown.as_deref() {
             return format!(
                 "{why}. Which of this project's dependencies brings {parent} in could not be \
-                 worked out, so no command is named: bump the one that does to a release that \
-                 brings in {parent} >= {to}{}",
+                 worked out ({reason}), so no command is named: bump the one that does to a \
+                 release that brings in {parent} >= {to}{}{force}",
                 keeps(package, r)
             );
         }
@@ -122,50 +125,85 @@ pub(super) fn admits_move(
             keeps(package, r)
         );
     };
-    let arrives = format!(
-        "{parent} arrives through {} {}, a direct dependency",
-        t.name, t.version
-    );
-    let lever = &t.name;
-    let tail = match &t.standing {
+    let levers: Vec<String> = t.all().map(|l| lever_move(parent, to, l, force)).collect();
+    let more = match t.more {
+        0 => String::new(),
+        1 => "; 1 more declared dependency brings it in and must move the same way".to_string(),
+        n => format!("; {n} more declared dependencies bring it in and must move the same way"),
+    };
+    format!(
+        "{why}. {}: {}{more}{}",
+        arrives(parent, t),
+        levers.join("; "),
+        keeps(package, r)
+    )
+}
+
+/// "express arrives through a 1.0.0 and b 1.0.0, direct dependencies, each
+/// of which must move".
+fn arrives(parent: &str, t: &Through) -> String {
+    let names: Vec<String> = t
+        .all()
+        .map(|l| format!("{} {}", l.name, l.version))
+        .collect();
+    let total = names.len() + t.more;
+    let list = match names.split_last() {
+        Some((last, rest)) if !rest.is_empty() => format!("{} and {last}", rest.join(", ")),
+        _ => names.concat(),
+    };
+    let more = if t.more > 0 {
+        format!(" (and {} more)", t.more)
+    } else {
+        String::new()
+    };
+    if total == 1 {
+        format!("{parent} arrives through {list}, a direct dependency")
+    } else {
+        format!(
+            "{parent} arrives through {list}{more}, direct dependencies, each of which must move"
+        )
+    }
+}
+
+/// What one declared dependency the parent arrives through can do.
+fn lever_move(parent: &str, to: &str, l: &Through, force: &str) -> String {
+    let lever = &l.name;
+    match &l.standing {
         ParentStanding::Admits(h) => {
             let brings = h.brings.as_deref().unwrap_or(to);
             let floor = h
                 .smallest
                 .as_deref()
                 .map_or_else(String::new, |s| format!(" (>= {parent} {s})"));
-            let parent_keeps = keeps(parent, h);
             format!(
-                ": {lever} {} is the smallest {lever} release that brings in {parent} \
-                 {brings}{floor}: upgrade {lever} to {}{}{}{parent_keeps}",
+                "{lever} {} is the smallest {lever} release that brings in {parent} \
+                 {brings}{floor}: upgrade {lever} to {}{}{}{}",
                 h.to,
                 h.to,
                 major(h),
-                command(h)
+                command(h),
+                keeps(parent, h)
             )
         }
-        ParentStanding::NoneAdmits { latest } => format!(
-            ", and no {lever} release up to {} brings in a {parent} that admits it: replace {lever}",
-            latest
-                .as_deref()
-                .map_or_else(|| "its latest".to_string(), |l| format!("{lever} {l}"))
+        ParentStanding::NoneAdmits { .. } => format!(
+            "no {lever} release up to its newest brings in a {parent} that admits it: replace \
+             {lever}{force}"
         ),
         ParentStanding::Deprecated | ParentStanding::Newest { deprecated: true } => {
-            format!(", and {lever} is deprecated: replace {lever}")
+            format!("{lever} is deprecated: replace {lever}{force}")
         }
         ParentStanding::Newest { deprecated: false } => format!(
-            ", and {lever} {} is already its latest release: replace {lever}",
-            t.version
+            "{lever} {} is already its latest release: replace {lever}{force}",
+            l.version
         ),
         ParentStanding::Newer { latest } => format!(
-            ": upgrade {lever} to a release that brings in {parent} >= {to} ({lever} {latest} \
-             is the newest release 4DA has seen; check that it does)"
+            "upgrade {lever} to a release that brings in {parent} >= {to} ({lever} {latest} is \
+             the newest release 4DA has seen; check that it does)"
         ),
         ParentStanding::Unknown => format!(
-            ": upgrade {lever} to a release that brings in {parent} >= {to}, and check that it does"
+            "upgrade {lever} to a release that brings in {parent} >= {to}, and check that it does"
         ),
-    };
-    format!("{why}. {arrives}{tail}{}", keeps(package, r))
+    }
 }
 
 /// The registry fact behind a named release, as a `dependency-path`

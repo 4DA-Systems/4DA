@@ -253,6 +253,7 @@ fn due(
 }
 
 fn save(db: &Database, stored: HashMap<(String, String), StoredPackage>) {
+    GENERATION.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
     let mut all: Vec<StoredPackage> = stored.into_values().collect();
     all.sort_by(|a, b| (&a.ecosystem, &a.key).cmp(&(&b.ecosystem, &b.key)));
     match serde_json::to_string(&all) {
@@ -396,6 +397,8 @@ fn parse_npm_parent(doc: &serde_json::Value, children: &BTreeSet<String>) -> Par
         .map(|child| {
             let history: RequirementHistory = versions
                 .iter()
+                // Pre-releases are never a parent release to name.
+                .filter(|(v, _)| parse_version(v).is_some_and(|p| p.pre.is_empty()))
                 .map(|(v, m)| {
                     let direct = field(m, "dependencies", child)
                         .or_else(|| field(m, "optionalDependencies", child));
@@ -428,26 +431,39 @@ pub(crate) struct ReleaseBook {
     by_key: HashMap<(String, String), StoredPackage>,
 }
 
-/// Every package's facts. Parsed once per stored document: the plan reads it
-/// once per row, and the document can run to a few hundred kilobytes.
-/// Empty when nothing was fetched.
+/// Bumped by every write of the stored document in this process.
+static GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+/// How long a parsed document is reused without re-reading it: one plan or
+/// feed build reads it once (review of #981, N8). A write from another
+/// process (the headless engine) is seen within this long.
+const BOOK_REUSE_SECS: u64 = 60;
+
+type CachedBook = (usize, u64, std::time::Instant, std::sync::Arc<ReleaseBook>);
+
+/// Every package's facts, parsed once per build: reused while the same
+/// database has seen no write here and the copy is younger than
+/// [`BOOK_REUSE_SECS`]. Empty when nothing was fetched.
 pub(crate) fn book(db: &Database) -> std::sync::Arc<ReleaseBook> {
-    use std::hash::{Hash, Hasher};
-    static CACHE: std::sync::Mutex<Option<(u64, std::sync::Arc<ReleaseBook>)>> =
-        std::sync::Mutex::new(None);
-    let text = db.get_kv(KV_KEY).ok().flatten().unwrap_or_default();
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    text.hash(&mut hasher);
-    let stamp = hasher.finish();
+    static CACHE: std::sync::Mutex<Option<CachedBook>> = std::sync::Mutex::new(None);
+    if cfg!(test) {
+        // Tests run many short-lived databases in parallel; an address can
+        // be reused, so they always read.
+        return std::sync::Arc::new(book_from(read_stored(db), Utc::now()));
+    }
+    let at = std::ptr::from_ref(db) as usize;
+    let generation = GENERATION.load(std::sync::atomic::Ordering::SeqCst);
     if let Ok(cache) = CACHE.lock() {
-        if let Some((_, b)) = cache.as_ref().filter(|(s, _)| *s == stamp) {
+        let reusable = cache.as_ref().filter(|(addr, g, when, _)| {
+            *addr == at && *g == generation && when.elapsed().as_secs() < BOOK_REUSE_SECS
+        });
+        if let Some((.., b)) = reusable {
             return b.clone();
         }
     }
-    let stored: Vec<StoredPackage> = serde_json::from_str(&text).unwrap_or_default();
+    let stored = read_stored(db);
     let fresh = std::sync::Arc::new(book_from(stored, Utc::now()));
     if let Ok(mut cache) = CACHE.lock() {
-        *cache = Some((stamp, fresh.clone()));
+        *cache = Some((at, generation, std::time::Instant::now(), fresh.clone()));
     }
     fresh
 }
@@ -528,6 +544,43 @@ pub(crate) type TestFacts<'a> = (
     bool,
     Vec<(&'a str, RequirementHistory)>,
 );
+
+/// Store npm abbreviated documents as a fetch would, through the same
+/// parsers (withdrawn releases and requirements read from the raw document),
+/// for tests and the graph rule vectors. Each document's requirements are
+/// kept for every dependency it names.
+#[cfg(test)]
+pub(crate) fn store_docs_for_tests(db: &Database, docs: &[(String, serde_json::Value)]) {
+    let stored: HashMap<(String, String), StoredPackage> = docs
+        .iter()
+        .map(|(name, doc)| {
+            let children: BTreeSet<String> = doc
+                .get("versions")
+                .and_then(|v| v.as_object())
+                .into_iter()
+                .flat_map(|vs| vs.values())
+                .flat_map(|m| {
+                    ["dependencies", "optionalDependencies", "peerDependencies"]
+                        .into_iter()
+                        .filter_map(|s| m.get(s).and_then(|d| d.as_object()))
+                        .flat_map(|d| d.keys().cloned())
+                        .collect::<Vec<_>>()
+                })
+                .collect();
+            let key = super::matching::package_key(name, "npm");
+            let p = StoredPackage {
+                ecosystem: "npm".to_string(),
+                key: key.clone(),
+                name: name.clone(),
+                fetched_at: Utc::now(),
+                releases: parse_npm(doc).unwrap_or_default(),
+                parents: parse_npm_parent(doc, &children),
+            };
+            ((key, "npm".to_string()), p)
+        })
+        .collect();
+    save(db, stored);
+}
 
 /// Store facts as a fetch would, for tests.
 #[cfg(test)]

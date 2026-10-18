@@ -565,13 +565,16 @@ fn rank_osv_urgency(
 /// none, and the sentence says where each line goes. With no version-confirmed
 /// copy at all (a conservative, name-only match) there is no line to scope
 /// to, so the fix that clears every listed range is kept.
-fn alert_fix_target(
+///
+/// `lines` are the copies' raised targets (`osv::raised_lines`): the route
+/// sentences name the parent release that also clears what it pins, and the
+/// parent's own alert names the same one (audit H1).
+pub(crate) fn alert_fix_target(
     group: &[&crate::osv::types::MatchedAdvisory],
-    projects: &[String],
+    lines: &[crate::osv::fix_target::LineTarget],
 ) -> (Option<String>, String) {
-    use crate::osv::fix_target::{describe_lines, distinct_targets, line_targets};
-    let lines = line_targets(group, projects);
-    let targets = distinct_targets(&lines);
+    use crate::osv::fix_target::{describe_lines, distinct_targets};
+    let targets = distinct_targets(lines);
     let best_fix: Option<String> = match targets.as_slice() {
         [only] => Some(only.clone()),
         [] if lines.is_empty() => group
@@ -597,7 +600,7 @@ fn alert_fix_target(
         (None, 0) => String::new(),
         (None, _) => format!(
             " Update each copy on its own line: {}.{major}",
-            describe_lines(&lines)
+            describe_lines(lines)
         ),
     };
     (best_fix, sentence)
@@ -713,13 +716,15 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
                 (base + cvss_bonus).min(0.99)
             };
 
-            let (best_fix, fix_str) = alert_fix_target(&group, &all_projects);
+            let raised = crate::osv::raised_lines::raised_line_targets(db, &group, &all_projects);
+            let lines = raised.lines;
+            let (best_fix, fix_str) = alert_fix_target(&group, &lines);
+            let fix_str = format!("{fix_str}{}", raised.note);
             // A copy no project declares is not fixed by "update to >= X":
             // the plan's route sentence says whether a lockfile refresh is
             // enough (and the command) or which parent must move.
             let route = crate::osv::exposure::canonical(&first.ecosystem)
                 .and_then(|eco| {
-                    let lines = crate::osv::fix_target::line_targets(&group, &all_projects);
                     crate::evidence::transitive_route_note(
                         db,
                         eco,
@@ -3259,11 +3264,17 @@ mod tests {
             ],
         };
 
-        let (fix, sentence) = alert_fix_target(&[&advisory], &["/navcal".to_string()]);
+        let (fix, sentence) = alert_fix_target(
+            &[&advisory],
+            &crate::osv::fix_target::line_targets(&[&advisory], &["/navcal".to_string()]),
+        );
         assert_eq!(fix.as_deref(), Some("1.1.21"));
         assert_eq!(sentence, " Update to >= 1.1.21.");
 
-        let (fix, sentence) = alert_fix_target(&[&advisory], &["/webhook".to_string()]);
+        let (fix, sentence) = alert_fix_target(
+            &[&advisory],
+            &crate::osv::fix_target::line_targets(&[&advisory], &["/webhook".to_string()]),
+        );
         assert_eq!(fix, None, "two lines have no single target");
         assert_eq!(
             sentence,
@@ -3275,7 +3286,10 @@ mod tests {
         for d in &mut unconfirmed.dependency_instances {
             d.is_version_confirmed = false;
         }
-        let (fix, _) = alert_fix_target(&[&unconfirmed], &["/navcal".to_string()]);
+        let (fix, _) = alert_fix_target(
+            &[&unconfirmed],
+            &crate::osv::fix_target::line_targets(&[&unconfirmed], &["/navcal".to_string()]),
+        );
         assert_eq!(fix.as_deref(), Some("5.0.12"));
     }
 

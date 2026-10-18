@@ -16,6 +16,7 @@
 //! name the same release. The parent's own plan row is raised to agree
 //! ([`raised_row_target`]).
 
+use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::path::Path;
 
@@ -25,21 +26,20 @@ use crate::db::Database;
 use crate::osv::types::MatchedAdvisory;
 
 use super::fix_path::{requirement_admits, Dialect, Manager};
-use super::parent_hint::{normalize_path, ParentLink, ParentRelease, ParentStanding, Through};
+use super::parent_hint::{normalize_path, ParentLink, ParentRelease, ParentStanding};
 use super::parent_release::{
-    decide, is_major, newest, through_release, Advisories, Child, Decision, Found, Hop, HopParent,
-    RowIn, RowOut, Standing,
+    compare, decide, is_major, newest, Advisories, Child, Decision, Found, RowIn, RowOut, Standing,
 };
 use super::release_facts::ReleaseBook;
 
 /// The only ecosystem whose parent releases are read.
-const ECOSYSTEM: &str = "npm";
+pub(super) const ECOSYSTEM: &str = "npm";
 
 /// Most other vulnerable children of one parent weighed when agreeing its
 /// release with its own row.
 const MAX_SIBLING_ROWS: usize = 12;
 
-fn advisories(db: &Database, name: &str) -> Advisories<'static> {
+pub(super) fn advisories(db: &Database, name: &str) -> Advisories<'static> {
     Advisories {
         ecosystem: ECOSYSTEM,
         ranges: db
@@ -79,7 +79,7 @@ pub(crate) fn wanted_parents(db: &Database, matches: &[MatchedAdvisory]) -> Vec<
         let routes = super::parent_hint::load_routes_with(db, ECOSYSTEM, &package, &lines, false);
         for link in routes.links.iter().filter(|l| !l.refresh.is_enough()) {
             out.insert((link.parent.clone(), package.clone()));
-            if let Some(t) = &link.through {
+            for t in link.through.iter().flat_map(|t| t.all()) {
                 out.insert((t.name.clone(), link.parent.clone()));
             }
         }
@@ -88,8 +88,8 @@ pub(crate) fn wanted_parents(db: &Database, matches: &[MatchedAdvisory]) -> Vec<
 }
 
 /// A row's inputs, owned, so [`Child`] can borrow them.
-struct RowData {
-    package: String,
+pub(super) struct RowData {
+    pub(super) package: String,
     installed: String,
     target: String,
     releases: Vec<String>,
@@ -115,15 +115,30 @@ impl RowData {
             advisories: advisories(db, package),
         }
     }
+
+    /// No advisory with a published fix affects the version.
+    pub(super) fn clean(&self) -> Box<dyn Fn(&str) -> bool + '_> {
+        Box::new(move |v: &str| self.advisories.clean_of_fixable(v, self.newest.as_deref()))
+    }
+
+    pub(super) fn child<'a>(&'a self, clean: &'a dyn Fn(&str) -> bool) -> Child<'a> {
+        Child {
+            ecosystem: ECOSYSTEM,
+            installed: &self.installed,
+            target: &self.target,
+            releases: &self.releases,
+            clean,
+        }
+    }
 }
 
 /// The parent side of one decision.
-struct ParentSide<'a> {
-    project: &'a str,
-    name: &'a str,
-    version: &'a str,
+pub(super) struct ParentSide<'a> {
+    pub(super) project: &'a str,
+    pub(super) name: &'a str,
+    pub(super) version: &'a str,
     /// Declared by the project: it can have a plan row of its own.
-    direct: bool,
+    pub(super) direct: bool,
 }
 
 /// The target of the parent's own row: the walk past its own advisories
@@ -146,7 +161,7 @@ fn own_target(book: &ReleaseBook, parent: &ParentSide<'_>, own: &Advisories<'_>)
 /// The other vulnerable copies `parent` pins in its project: each child its
 /// requirements were read for, at the installed version its edge leads to,
 /// with a target that requirement excludes.
-fn sibling_rows(
+pub(super) fn sibling_rows(
     db: &Database,
     book: &ReleaseBook,
     parent: &ParentSide<'_>,
@@ -194,7 +209,9 @@ fn sibling_rows(
 
 /// One parent's decision over `first` (the row asked about) and its
 /// siblings, with the parent's own row target. `None` when the parent's
-/// releases were never read.
+/// releases were never read. When the parent has a row of its own, the
+/// releases of it the other rows need come in too: the copies it pins
+/// itself, and (as a declared lever) the copies a parent it requires pins.
 fn decision_for(
     db: &Database,
     book: &ReleaseBook,
@@ -207,33 +224,23 @@ fn decision_for(
     let target = row_target
         .map(str::to_string)
         .or_else(|| own_target(book, parent, &own));
-    let mut rows: Vec<RowData> = Vec::new();
-    if let Some(f) = first {
-        rows.push(RowData::new(book, db, &f.package, &f.installed, &f.target));
-    }
+    let mut rows: Vec<RowData> = first
+        .map(|f| RowData::new(book, db, &f.package, &f.installed, &f.target))
+        .into_iter()
+        .collect();
+    let mut extra: Vec<String> = Vec::new();
     // Siblings matter only when the parent has its own row to agree with.
     if target.is_some() {
         let skip = first.map_or("", |f| f.package.as_str());
         rows.extend(sibling_rows(db, book, parent, skip));
+        extra = super::parent_release_hop::lever_needs(db, book, parent);
     }
-    let cleans: Vec<Box<dyn Fn(&str) -> bool + '_>> = rows
-        .iter()
-        .map(|r| {
-            Box::new(move |v: &str| r.advisories.clean_of_fixable(v, r.newest.as_deref()))
-                as Box<dyn Fn(&str) -> bool>
-        })
-        .collect();
+    let cleans: Vec<Box<dyn Fn(&str) -> bool + '_>> = rows.iter().map(RowData::clean).collect();
     let inputs: Vec<RowIn<'_>> = rows
         .iter()
         .zip(&cleans)
         .map(|(r, clean)| RowIn {
-            child: Child {
-                ecosystem: ECOSYSTEM,
-                installed: &r.installed,
-                target: &r.target,
-                releases: &r.releases,
-                clean: clean.as_ref(),
-            },
+            child: r.child(clean.as_ref()),
             history: book.history(ECOSYSTEM, parent.name, &r.package),
         })
         .collect();
@@ -243,6 +250,7 @@ fn decision_for(
         target.as_deref(),
         &own,
         &inputs,
+        &extra,
         Dialect::Npm,
     );
     drop(inputs);
@@ -276,23 +284,39 @@ pub(crate) fn raised_row_target(
     };
     let (decision, rows) = decision_for(db, &book, &parent, None, Some(current))?;
     let to = decision.row_target?;
-    let rises = super::parent_release::compare(&to, current, ECOSYSTEM)
-        == Some(std::cmp::Ordering::Greater);
-    if !rises {
+    let above = |v: &str| compare(v, current, ECOSYSTEM) == Some(Ordering::Greater);
+    if !above(&to) {
         return None;
     }
-    let packages: Vec<String> = rows
+    let mut packages: Vec<String> = rows
         .iter()
         .zip(&decision.rows)
-        .filter(|(_, out)| {
-            out.smallest().is_some_and(|f| {
-                super::parent_release::compare(&f.version, current, ECOSYSTEM)
-                    == Some(std::cmp::Ordering::Greater)
-            })
-        })
+        .filter(|(_, out)| out.smallest().is_some_and(|f| above(&f.version)))
         .map(|(r, _)| r.package.clone())
         .collect();
+    if packages.is_empty() {
+        // Only a parent it requires pins the copies (a declared lever).
+        packages = super::parent_release_hop::lever_children(&book, &parent);
+    }
     Some((to, packages))
+}
+
+/// The row target of a declared package `name` `version` in `project`, when
+/// it has a row of its own (rule b), as [`raised_row_target`] works it out.
+pub(super) fn own_row_target(
+    db: &Database,
+    book: &ReleaseBook,
+    project: &str,
+    name: &str,
+    version: &str,
+) -> Option<String> {
+    let lever = ParentSide {
+        project,
+        name,
+        version,
+        direct: true,
+    };
+    decision_for(db, book, &lever, None, None)?.0.row_target
 }
 
 /// Write the registry-read release into every link whose parent must move.
@@ -316,52 +340,83 @@ pub(crate) fn annotate(
         .iter_mut()
         .filter(|l| !l.refresh.is_enough() && !l.is_bundled())
     {
-        let Some(target) = link.target.clone() else {
-            continue;
-        };
-        let parent = ParentSide {
-            project: &link.project,
-            name: &link.parent,
-            version: &link.parent_version,
-            direct: link.parent_is_direct,
-        };
-        let first = RowData::new(&book, db, package, &link.child_version, &target);
-        let Some((decision, rows)) = decision_for(db, &book, &parent, Some(&first), None) else {
-            continue;
-        };
-        let (Some(out), Some(row)) = (decision.rows.first(), rows.first()) else {
-            continue;
-        };
         let shared = others.iter().any(|(p, v, parent)| {
             *p == link.project
                 && *v == link.child_version
                 && !parent.eq_ignore_ascii_case(&link.parent)
         });
         let dir = raw_path(&link.project);
-        let own = advisories(db, &link.parent);
-        let releases = book.releases(ECOSYSTEM, &link.parent).unwrap_or_default();
-        let own_checked = own.any_fixable(newest(&releases, ECOSYSTEM).as_deref());
-        link.standing = standing_of(out, link, row, &dir, shared, own_checked);
-        let parent_to = match &link.standing {
-            ParentStanding::Admits(found) => Some(found.to.clone()),
-            _ => None,
+        annotate_link(db, &book, package, link, &dir, shared);
+    }
+}
+
+/// One link: its parent's release, then (when the parent arrives through
+/// declared dependencies) each of theirs.
+fn annotate_link(
+    db: &Database,
+    book: &ReleaseBook,
+    package: &str,
+    link: &mut ParentLink,
+    dir: &str,
+    shared: bool,
+) {
+    let Some(target) = link.target.clone() else {
+        return;
+    };
+    let parent = ParentSide {
+        project: &link.project,
+        name: &link.parent,
+        version: &link.parent_version,
+        direct: link.parent_is_direct,
+    };
+    let first = RowData::new(book, db, package, &link.child_version, &target);
+    let Some((decision, rows)) = decision_for(db, book, &parent, Some(&first), None) else {
+        return;
+    };
+    let (Some(out), Some(row)) = (decision.rows.first(), rows.first()) else {
+        return;
+    };
+    let own = advisories(db, &link.parent);
+    let releases = book.releases(ECOSYSTEM, &link.parent).unwrap_or_default();
+    let own_checked = own.any_fixable(newest(&releases, ECOSYSTEM).as_deref());
+    link.standing = standing_of(out, link, row, dir, shared, own_checked);
+    let ParentStanding::Admits(found) = &link.standing else {
+        return;
+    };
+    let parent_to = found.to.clone();
+    let installed_parent = (link.parent.clone(), link.parent_version.clone());
+    let project = link.project.clone();
+    if let Some(t) = link.through.as_mut() {
+        let hop = super::parent_release_hop::HopCtx {
+            db,
+            book,
+            project: &project,
+            parent: &installed_parent,
+            child: &first,
+            parent_to: &parent_to,
+            dir,
         };
-        let installed_parent = (link.parent.clone(), link.parent_version.clone());
-        if let (Some(t), Some(to)) = (link.through.as_mut(), parent_to) {
-            hop(db, &book, t, installed_parent, &first, &to, &dir);
+        hop.annotate(t);
+        for also in &mut t.also {
+            hop.annotate(also);
         }
     }
 }
 
 /// The command that moves a declared npm dependency, the operator kept.
-fn lever_command(dir: &str, name: &str, installed: &str, to: &str) -> Option<String> {
+pub(super) fn lever_command(dir: &str, name: &str, installed: &str, to: &str) -> Option<String> {
     match super::direct_upgrade::direct_fix(Path::new(dir), ECOSYSTEM, name, installed, to)? {
         super::direct_upgrade::DirectFix::Command(c) => Some(c),
         super::direct_upgrade::DirectFix::Instruction(_) => None,
     }
 }
 
-fn refresh_command(dir: &str, package: &str, installed: &str, target: &str) -> Option<String> {
+pub(super) fn refresh_command(
+    dir: &str,
+    package: &str,
+    installed: &str,
+    target: &str,
+) -> Option<String> {
     Manager::detect(Path::new(dir), ECOSYSTEM)?.refresh_command(package, installed, target)
 }
 
@@ -405,7 +460,11 @@ fn release(
     // An install keeps a copy the new requirement still admits (npm 10.9.2);
     // with no requirement left, another parent may still hold it.
     let keeps = to.keeps_installed || (to.requirement.is_none() && shared);
-    let lever_unknown = !link.parent_is_direct && link.through.is_none();
+    let lever_unknown = (!link.parent_is_direct && link.through.is_none()).then(|| {
+        link.lever_unknown.clone().unwrap_or_else(|| {
+            format!("no declared dependency above {} could be read", link.parent)
+        })
+    });
     ParentRelease {
         to: to.version.clone(),
         smallest: (smallest.version != to.version).then(|| smallest.version.clone()),
@@ -427,89 +486,10 @@ fn release(
     }
 }
 
-/// The declared dependency the parent arrives through: when it requires the
-/// parent directly, the smallest release of it that brings in a parent
-/// release admitting a clean copy.
-fn hop(
-    db: &Database,
-    book: &ReleaseBook,
-    through: &mut Through,
-    (parent, parent_version): (String, String),
-    child: &RowData,
-    parent_to: &str,
-    dir: &str,
-) {
-    let (Some(lever), Some(lever_history), Some(parent_releases), Some(parent_history)) = (
-        book.releases(ECOSYSTEM, &through.name),
-        book.history(ECOSYSTEM, &through.name, &parent),
-        book.releases(ECOSYSTEM, &parent),
-        book.history(ECOSYSTEM, &parent, &child.package),
-    ) else {
-        return;
-    };
-    // Adjacent only: the installed lever requires the parent itself.
-    let adjacent = lever_history
-        .get(&through.version)
-        .is_some_and(|r| !r.reqs.is_empty());
-    if !adjacent {
-        return;
-    }
-    let parent_own = advisories(db, &parent);
-    let parent_newest = newest(&parent_releases, ECOSYSTEM);
-    let parent_clean = |v: &str| parent_own.clean_of_fixable(v, parent_newest.as_deref());
-    let lever_own = advisories(db, &through.name);
-    let lever_newest = newest(&lever, ECOSYSTEM);
-    let lever_clean = |v: &str| lever_own.clean_of_fixable(v, lever_newest.as_deref());
-    let clean = |v: &str| {
-        child
-            .advisories
-            .clean_of_fixable(v, child.newest.as_deref())
-    };
-    let c = Child {
-        ecosystem: ECOSYSTEM,
-        installed: &child.installed,
-        target: &child.target,
-        releases: &child.releases,
-        clean: &clean,
-    };
-    let hp = HopParent {
-        installed: &parent_version,
-        releases: &parent_releases,
-        history: parent_history,
-        own_clean: &parent_clean,
-    };
-    through.standing = match through_release(
-        &c,
-        &hp,
-        &lever,
-        &through.version,
-        lever_history,
-        &lever_clean,
-        Dialect::Npm,
-    ) {
-        Hop::Found {
-            version,
-            brings,
-            keeps_parent,
-        } => ParentStanding::Admits(Box::new(ParentRelease {
-            breaking: is_major(&through.version, &version),
-            command: lever_command(dir, &through.name, &through.version, &version),
-            kept: keeps_parent.then(|| parent_version.clone()),
-            refresh: keeps_parent
-                .then(|| refresh_command(dir, &parent, &parent_version, &brings))
-                .flatten(),
-            own_checked: lever_own.any_fixable(lever_newest.as_deref()),
-            smallest: (brings != parent_to).then(|| parent_to.to_string()),
-            brings: Some(brings),
-            to: version,
-            ..ParentRelease::default()
-        })),
-        Hop::Deprecated => ParentStanding::Deprecated,
-        Hop::Latest => ParentStanding::Newest { deprecated: false },
-        Hop::NoneBrings { latest } => ParentStanding::NoneAdmits { latest },
-    };
-}
-
 #[cfg(test)]
 #[path = "parent_release_load_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "parent_release_levers_tests.rs"]
+mod levers_tests;

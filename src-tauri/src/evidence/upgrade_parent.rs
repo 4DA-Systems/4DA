@@ -285,28 +285,74 @@ pub(crate) fn parent_move(
     });
     match standing {
         ParentStanding::Admits(r) => {
-            return super::upgrade_parent_release::admits_move(package, target, parent, r, through)
+            super::upgrade_parent_release::admits_move(package, target, parent, r, through, &force)
         }
-        ParentStanding::NoneAdmits { latest } => {
-            let upto = latest
-                .as_deref()
-                .map_or_else(|| "its latest".to_string(), |l| format!("{parent} {l}"));
-            let replace = through.map_or_else(
-                || format!("replace {parent}"),
-                |t| {
-                    format!(
-                        "{parent} arrives through {} {}, a direct dependency: replace {}",
-                        t.name, t.version, t.name
-                    )
-                },
-            );
-            return format!(
-                "no {parent} release up to {upto} admits a clean {package} (>= {target}) while clear of \
-                 {parent}'s own advisories, so no {parent} upgrade fixes it; {replace}{force}"
-            );
+        ParentStanding::NoneAdmits { .. } => {
+            // No release is named here, not even the newest: the parent's own
+            // row (and its other rows) name the one release it moves to.
+            none_admits_move(package, target, parent, through, &force)
         }
-        _ => {}
+        _ => row_move(
+            package,
+            target,
+            parent,
+            parent_version,
+            standing,
+            through,
+            &force,
+        ),
     }
+}
+
+/// Every release of the parent was read and none admits a clean copy.
+fn none_admits_move(
+    package: &str,
+    target: &str,
+    parent: &str,
+    through: Option<&Through>,
+    force: &str,
+) -> String {
+    let replace = through.map_or_else(
+        || format!("replace {parent}"),
+        |t| {
+            let names: Vec<&str> = t.all().map(|l| l.name.as_str()).collect();
+            format!(
+                "{parent} arrives through {}, so replace {}",
+                lever_names(t),
+                names.join(" or ")
+            )
+        },
+    );
+    format!(
+        "no {parent} release up to its newest admits a clean {package} (>= {target}) while clear of \
+         {parent}'s own advisories, so no {parent} upgrade fixes it; {replace}{force}"
+    )
+}
+
+/// "a 1.0.0 and b 1.0.0" (and N more).
+fn lever_names(t: &Through) -> String {
+    let names: Vec<String> = t
+        .all()
+        .map(|l| format!("{} {}", l.name, l.version))
+        .collect();
+    let more = if t.more > 0 {
+        format!(" (and {} more)", t.more)
+    } else {
+        String::new()
+    };
+    format!("{}{more}", names.join(" and "))
+}
+
+/// The move from the registry rows alone (no per-release requirements read).
+fn row_move(
+    package: &str,
+    target: &str,
+    parent: &str,
+    parent_version: &str,
+    standing: &ParentStanding,
+    through: Option<&Through>,
+    force: &str,
+) -> String {
     let (lever, lever_version, lever_standing) = match through {
         Some(t) => (t.name.as_str(), t.version.as_str(), &t.standing),
         None => (parent, parent_version, standing),
@@ -322,7 +368,12 @@ pub(crate) fn parent_move(
             ParentStanding::Deprecated => format!("{parent} is deprecated, and it "),
             _ => format!("{parent} "),
         };
-        format!("{own}arrives through {} {}, a direct dependency; ", t.name, t.version)
+        let kind = if t.also.is_empty() && t.more == 0 {
+            "a direct dependency"
+        } else {
+            "direct dependencies, each of which must move"
+        };
+        format!("{own}arrives through {}, {kind}; ", lever_names(t))
     });
     match lever_standing {
         ParentStanding::Newer { latest } => format!(

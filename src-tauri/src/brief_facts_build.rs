@@ -256,7 +256,11 @@ fn security_fact(
     // every one fixed) and brace-expansion had no fix published (2026-10-12).
     // The alert's project paths as the matcher wrote them (the matcher's
     // copies compare by exact path), as Preemption passes them.
-    let lines = crate::osv::fix_target::line_targets(&group, &alert.affected_projects);
+    // Raised like the plan's and the alert's (audit H1): a declared parent's
+    // target also clears the copies it pins.
+    let lines =
+        crate::osv::raised_lines::raised_line_targets(ctx.db, &group, &alert.affected_projects)
+            .lines;
     let eco_norm = crate::osv::exposure::canonical(&ecosystem);
     let parent_links = eco_norm
         .map(|eco| crate::osv::parent_hint::load_parent_links(ctx.db, eco, &package, &lines))
@@ -950,3 +954,7 @@ pub(crate) fn with_advisory_state(
 #[cfg(test)]
 #[path = "brief_facts_build_tests.rs"]
 mod direct_fix_tests;
+
+#[cfg(test)]
+#[path = "brief_facts_h1_tests.rs"]
+mod h1_tests;

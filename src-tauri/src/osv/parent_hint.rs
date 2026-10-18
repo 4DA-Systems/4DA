@@ -105,6 +105,10 @@ pub struct ParentLink {
     /// How this project's tool forces the copy past the parent's
     /// requirement (`fix_path::override_hint`), worded to follow "with".
     pub override_hint: Option<String>,
+    /// Why no declared dependency could be tied to a transitive `parent`
+    /// (a path up the graph ends at one no manifest declares, or the walk
+    /// stopped): then no command is named for it.
+    pub lever_unknown: Option<String>,
 }
 
 /// What the registry rows 4DA already holds say about releases of a parent
@@ -197,16 +201,46 @@ pub struct ParentRelease {
     /// release `to` brings in.
     pub brings: Option<String>,
     /// No dependency the project declares could be tied to this parent.
-    pub lever_unknown: bool,
+    pub lever_unknown: Option<String>,
 }
 
 /// A direct dependency a transitive parent arrives through.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, serde::Serialize)]
 pub struct Through {
     pub name: String,
     pub version: String,
     pub standing: ParentStanding,
+    /// The other declared dependencies the parent also arrives through, each
+    /// of which must move too (at most [`MAX_LEVERS`] named in all).
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub also: Vec<Through>,
+    /// How many more declared dependencies bring it in, past those named.
+    #[serde(skip_serializing_if = "is_zero")]
+    pub more: usize,
 }
+
+fn is_zero(n: &usize) -> bool {
+    *n == 0
+}
+
+impl Through {
+    /// A declared dependency with nothing yet known of its releases.
+    pub fn declared(name: &str, version: &str) -> Self {
+        Self {
+            name: name.to_string(),
+            version: version.to_string(),
+            ..Self::default()
+        }
+    }
+
+    /// This lever and the others, in order.
+    pub fn all(&self) -> impl Iterator<Item = &Through> {
+        std::iter::once(self).chain(self.also.iter())
+    }
+}
+
+/// Declared dependencies named per parent ("and N more" past it).
+pub const MAX_LEVERS: usize = 3;
 
 /// The registry `source_type`s and title prefix for an OSV-canonical
 /// ecosystem (the adapters' own title shapes, `dep_linker::registry_release_identity`).
@@ -252,13 +286,45 @@ pub fn parent_standing(
             })
             .unwrap_or_default()
     };
-    standing_from(&rows, name, installed)
+    // The newest release named is one a user can take: listed by the
+    // registry facts or the feed, not withdrawn, and clear of every advisory
+    // 4DA holds for the package (malware included). Review of #981.
+    let book = super::release_facts::book(db);
+    let registry = book.registry(ecosystem_norm, name);
+    let advisories = db
+        .get_osv_advisories_for_package(name, ecosystem_norm)
+        .unwrap_or_default();
+    let usable = |v: &str| {
+        !registry.excludes(ecosystem_norm, v)
+            && advisories
+                .iter()
+                .all(|a| !check_version_affected(ecosystem_norm, Some(v), &a.affected_ranges).0)
+    };
+    let listed = book
+        .releases(ecosystem_norm, name)
+        .map(|r| r.versions)
+        .unwrap_or_default();
+    standing_from_with(&rows, name, installed, &listed, &usable)
 }
 
 /// The pure core of [`parent_standing`]: `rows` are `(id, title)` registry
 /// rows, oldest first. The newest row decides deprecation (a package can be
 /// un-deprecated); the highest version recorded decides the rest.
+#[cfg(test)]
 pub fn standing_from(rows: &[(i64, String)], name: &str, installed: &str) -> ParentStanding {
+    standing_from_with(rows, name, installed, &[], &|_| true)
+}
+
+/// [`standing_from`] with the registry's own release list (`listed`) joined
+/// to the feed rows, and only the releases `usable` accepts counted as the
+/// newest (not withdrawn, clear of the package's advisories).
+pub fn standing_from_with(
+    rows: &[(i64, String)],
+    name: &str,
+    installed: &str,
+    listed: &[String],
+    usable: &dyn Fn(&str) -> bool,
+) -> ParentStanding {
     let deprecated_title = format!("[DEPRECATED] {name}");
     let mine: Vec<&(i64, String)> = rows
         .iter()
@@ -275,6 +341,8 @@ pub fn standing_from(rows: &[(i64, String)], name: &str, installed: &str) -> Par
     let newest = mine
         .iter()
         .filter_map(|(_, t)| crate::dep_linker::registry_release_identity(t)?.1)
+        .chain(listed.iter().cloned())
+        .filter(|v| usable(v))
         .filter_map(|v| {
             parse_version(&v)
                 .filter(|p| p.pre.is_empty())
@@ -287,71 +355,6 @@ pub fn standing_from(rows: &[(i64, String)], name: &str, installed: &str) -> Par
         _ if deprecated => ParentStanding::Deprecated,
         _ => ParentStanding::Unknown,
     }
-}
-
-/// How far up the lockfile graph [`direct_through`] climbs.
-const MAX_THROUGH_DEPTH: usize = 6;
-
-/// The direct dependency `parent` `parent_version` reaches `project`
-/// through: walk `dependency_edges` up, keeping only edges backed by an
-/// installed copy, lowest name first at each level (deterministic). `None`
-/// when no direct ancestor can be read.
-fn direct_through(
-    db: &Database,
-    ecosystem_norm: &str,
-    project: &str,
-    parent: &str,
-    parent_version: &str,
-) -> Option<(String, String)> {
-    let mut frontier: Vec<(String, String)> =
-        vec![(parent.to_string(), parent_version.to_string())];
-    let mut seen: Vec<String> = vec![parent.to_lowercase()];
-    for _ in 0..MAX_THROUGH_DEPTH {
-        let mut next: Vec<(String, String)> = Vec::new();
-        for (child, child_version) in &frontier {
-            let mut edges: Vec<EdgeObs> = read_edges(db, ecosystem_norm, child)
-                .unwrap_or_default()
-                .into_iter()
-                .filter(|e| e.project == project && e.parent != ROOT_PARENT)
-                .filter(|e| {
-                    e.child_spec
-                        .as_deref()
-                        .is_none_or(|s| requirement_admits(s, child_version) != Some(false))
-                })
-                .collect();
-            edges.sort_by(|a, b| a.parent.cmp(&b.parent));
-            for edge in edges {
-                let name = edge.parent.to_lowercase();
-                if seen.contains(&name) {
-                    continue;
-                }
-                let installed: Vec<InstalledObs> = db
-                    .get_package_instances(ecosystem_norm, &edge.parent)
-                    .unwrap_or_default()
-                    .into_iter()
-                    .map(|r| InstalledObs {
-                        project: normalize_path(&r.project_path),
-                        package: r.package_name.to_lowercase(),
-                        version: r.version,
-                        is_direct: r.is_direct,
-                    })
-                    .collect();
-                let Some(copy) = installed_parent(&installed, &edge) else {
-                    continue;
-                };
-                seen.push(name);
-                if copy.is_direct {
-                    return Some((edge.parent.clone(), copy.version.clone()));
-                }
-                next.push((edge.parent.clone(), copy.version.clone()));
-            }
-        }
-        if next.is_empty() {
-            return None;
-        }
-        frontier = next;
-    }
-    None
 }
 
 /// Fill what the registry rows and the graph above the parent say: its
@@ -372,20 +375,44 @@ fn annotate(
             link.is_bundled(),
         );
         if !link.parent_is_direct {
-            link.through = direct_through(
+            let route = super::parent_route::declared_route(
                 db,
                 ecosystem_norm,
                 &link.project,
                 &link.parent,
                 &link.parent_version,
-            )
-            .map(|(name, version)| Through {
-                standing: parent_standing(db, ecosystem_norm, &name, &version),
-                name,
-                version,
-            });
+            );
+            (link.through, link.lever_unknown) = levers(db, ecosystem_norm, route);
         }
     }
+}
+
+/// Every declared dependency the parent arrives through (the first carries
+/// the others), each with its registry-row standing; or why none can be named.
+fn levers(
+    db: &Database,
+    ecosystem_norm: &str,
+    route: super::parent_route::Route,
+) -> (Option<Through>, Option<String>) {
+    let all = match route {
+        super::parent_route::Route::Levers(all) => all,
+        super::parent_route::Route::Unknown(why) => return (None, Some(why)),
+    };
+    let mut named: Vec<Through> = all
+        .iter()
+        .take(MAX_LEVERS)
+        .map(|(name, version)| Through {
+            standing: parent_standing(db, ecosystem_norm, name, version),
+            ..Through::declared(name, version)
+        })
+        .collect();
+    if named.is_empty() {
+        return (None, None);
+    }
+    let mut first = named.remove(0);
+    first.also = named;
+    first.more = all.len().saturating_sub(MAX_LEVERS);
+    (Some(first), None)
 }
 
 impl ParentLink {
@@ -663,6 +690,7 @@ pub fn parent_links_with(
                     through: None,
                     standing: ParentStanding::Unknown,
                     override_hint: None,
+                    lever_unknown: None,
                 };
                 if !out.iter().any(|l| same_link(l, &link)) {
                     out.push(link);
@@ -772,7 +800,10 @@ fn same_link(a: &ParentLink, b: &ParentLink) -> bool {
 
 /// The installed instance backing an edge's parent in the edge's project:
 /// its recorded version, or the only installed version when none is recorded.
-fn installed_parent<'a>(installed: &'a [InstalledObs], edge: &EdgeObs) -> Option<&'a InstalledObs> {
+pub(super) fn installed_parent<'a>(
+    installed: &'a [InstalledObs],
+    edge: &EdgeObs,
+) -> Option<&'a InstalledObs> {
     let parent = edge.parent.to_lowercase();
     let mut copies = installed
         .iter()

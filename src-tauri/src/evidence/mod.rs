@@ -35,7 +35,6 @@ mod types;
 mod upgrade_parent;
 mod upgrade_parent_release;
 mod upgrade_plan;
-mod upgrade_row_raise;
 mod upgrade_steps;
 mod validate;
 

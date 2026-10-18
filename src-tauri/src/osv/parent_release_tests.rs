@@ -331,6 +331,7 @@ fn decide_agrees_every_row_with_the_parents_own_row() {
         Some("4.20.0"),
         &own,
         &rows,
+        &[],
         Dialect::Npm,
     );
     assert_eq!(d.row_target.as_deref(), Some("4.22.3"));
@@ -352,7 +353,7 @@ fn decide_agrees_every_row_with_the_parents_own_row() {
         ]
     );
     // No own row: each row keeps its own smallest release.
-    let d = decide(&express(), "4.16.4", None, &own, &rows, Dialect::Npm);
+    let d = decide(&express(), "4.16.4", None, &own, &rows, &[], Dialect::Npm);
     assert_eq!(d.row_target, None);
     assert_eq!(
         d.rows[0].to.as_ref().map(|f| f.version.as_str()),

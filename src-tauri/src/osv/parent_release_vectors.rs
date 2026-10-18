@@ -133,6 +133,9 @@ fn command(
 }
 
 pub(super) fn check_parent_release(v: &Value) -> Result<(), String> {
+    if s(v, "mode") == "graph" {
+        return super::parent_release_graph_vectors::check(v);
+    }
     let eco = s(v, "eco");
     let tool = s(v, "tool");
     let p = v.get("parent").ok_or("no parent")?;
@@ -212,6 +215,7 @@ pub(super) fn check_parent_release(v: &Value) -> Result<(), String> {
         own_target,
         &parent_advisories,
         &inputs,
+        &[],
         Dialect::Npm,
     );
 

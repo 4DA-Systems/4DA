@@ -36,7 +36,7 @@ use serde::{Deserialize, Serialize};
 use crate::brief_cadence::{same_state, upgrade_signature};
 use crate::db::Database;
 use crate::osv::fix_path::{refresh_verdict, Basis, Refresh, Requirement};
-use crate::osv::parent_hint::ParentStanding;
+use crate::osv::parent_hint::Through;
 use crate::preemption::AlertUrgency;
 use crate::scoring::release_version::lenient_semver;
 
@@ -311,13 +311,8 @@ pub(crate) fn fix_path(
                         by_requirement: basis == Basis::Requirement,
                         proven: None,
                         route: ParentRoute {
-                            through: (!link.immediate.eq_ignore_ascii_case(&link.direct)).then(
-                                || crate::osv::parent_hint::Through {
-                                    name: link.direct.clone(),
-                                    version: link.direct_version.clone(),
-                                    standing: ParentStanding::default(),
-                                },
-                            ),
+                            through: (!link.immediate.eq_ignore_ascii_case(&link.direct))
+                                .then(|| Through::declared(&link.direct, &link.direct_version)),
                             ..ParentRoute::default()
                         },
                     },
