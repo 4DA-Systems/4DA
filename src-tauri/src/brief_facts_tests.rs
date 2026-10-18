@@ -447,6 +447,7 @@ fn every_fix_clause_quoted_verbatim_passes_the_version_check() {
                     standing: ParentStanding::Newer {
                         latest: "0.4.1".into(),
                     },
+                    ..Through::default()
                 }),
                 standing: ParentStanding::Newest { deprecated: true },
                 override_hint: None,
@@ -978,7 +979,7 @@ fn act_now_ids_name_each_advisory_of_each_act_now_fact() {
 // ============================================================================
 
 use crate::osv::fix_target::{InstallSite, LineTarget};
-use crate::osv::parent_hint::Through;
+use crate::osv::parent_hint::{ParentStanding, Through};
 
 const NAVCAL: &str = "d:/runyourempire/navcal";
 
@@ -1140,6 +1141,7 @@ fn uuid_path(standing: ParentStanding, through_standing: ParentStanding) -> FixP
                 name: "javascript-opentimestamps".into(),
                 version: "0.4.5".into(),
                 standing: through_standing,
+                ..Through::default()
             }),
             standing,
             override_hint: Some("an `overrides` entry in package.json (npm)".into()),

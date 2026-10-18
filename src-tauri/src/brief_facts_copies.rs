@@ -190,6 +190,7 @@ mod tests {
             through: None,
             standing: ParentStanding::Unknown,
             override_hint: None,
+            lever_unknown: None,
         }
     }
 

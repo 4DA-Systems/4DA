@@ -32,8 +32,15 @@
 //! §2c). Kept in `kv_store` and refreshed when older than a day. Offline, or
 //! for a package never fetched, the engine gets no facts and behaves exactly
 //! as it did before this module: targets come from the advisory data.
+//!
+//! The same npm document also carries each release's `dependencies` (audit
+//! H1, `osv::parent_release`): for the installed npm packages that pin a
+//! vulnerable copy (and the declared dependency such a parent arrives
+//! through), the read keeps, per release, its requirement on that one
+//! package, and the `latest` tag. No other request is made for it: one
+//! abbreviated document per package, as before, still name only.
 
-use std::collections::{BTreeSet, HashMap};
+use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use chrono::{DateTime, Duration, Utc};
 use fourda_depengine::registry::{RegistryIndex, RegistryReleases};
@@ -42,6 +49,7 @@ use tracing::{debug, info, warn};
 
 use crate::db::Database;
 use crate::osv::matching::parse_version;
+use crate::osv::parent_release::{ReleaseReq, Releases, RequirementHistory};
 
 /// `kv_store` key holding every package's facts as one JSON document.
 const KV_KEY: &str = "osv_registry_releases";
@@ -71,6 +79,23 @@ struct StoredPackage {
     fetched_at: DateTime<Utc>,
     #[serde(flatten)]
     releases: RegistryReleases,
+    #[serde(flatten)]
+    parents: ParentFacts,
+}
+
+/// What the parent-release walk (H1) reads from an npm document beyond the
+/// release list. Empty for the other registries.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
+struct ParentFacts {
+    /// The `latest` dist-tag.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    latest: Option<String>,
+    /// The `latest` release is deprecated: the package is retired whole.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    retired: bool,
+    /// Per package this one was read for: what each release requires of it.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    requires: BTreeMap<String, RequirementHistory>,
 }
 
 fn read_stored(db: &Database) -> Vec<StoredPackage> {
@@ -116,20 +141,36 @@ fn source_type(ecosystem: &str) -> Option<&'static str> {
     }
 }
 
-/// (OSV ecosystem, name) of every covered package with a version-confirmed
-/// advisory whose registry source is enabled: the only packages whose
-/// targets the facts can change, and the only registries 4DA may contact.
-fn wanted(db: &Database) -> Vec<(String, String)> {
+/// Per (OSV ecosystem, name): the packages whose per-release requirement is
+/// wanted from its document (empty: the release list only).
+type Wants = BTreeMap<(String, String), BTreeSet<String>>;
+
+/// Every covered package with a version-confirmed advisory, plus (npm, H1)
+/// each installed package that pins such a package's vulnerable copy and the
+/// declared dependency it arrives through, keeping only those whose registry
+/// source is enabled: the only packages whose advice the facts can change,
+/// and the only registries 4DA may contact.
+fn wanted(db: &Database) -> Wants {
     let matches = super::matching::get_matched_advisories(db).unwrap_or_default();
-    let mut out: BTreeSet<(String, String)> = BTreeSet::new();
+    let mut out: Wants = BTreeMap::new();
     for m in matches.iter().filter(|m| m.is_version_confirmed) {
         if let Some(eco) = covered(&m.ecosystem) {
-            out.insert((eco.to_string(), m.package_name.clone()));
+            out.entry((eco.to_string(), m.package_name.clone()))
+                .or_default();
         }
     }
-    gate(out.into_iter().collect(), |source| {
+    for (parent, child) in super::parent_release_load::wanted_parents(db, &matches) {
+        out.entry(("npm".to_string(), parent))
+            .or_default()
+            .insert(child);
+    }
+    let kept: BTreeSet<(String, String)> = gate(out.keys().cloned().collect(), |source| {
         db.is_source_enabled(source)
     })
+    .into_iter()
+    .collect();
+    out.retain(|k, _| kept.contains(k));
+    out
 }
 
 /// Drop the packages whose registry source is disabled.
@@ -185,22 +226,30 @@ pub(crate) async fn refresh(db: &Database) -> usize {
     fetched
 }
 
-/// The wanted packages with no facts, or facts older than a day, capped.
+/// One package to read, and the packages whose requirement it is read for.
+type Due = ((String, String), BTreeSet<String>);
+
+/// The wanted packages with no facts, facts older than a day, or facts that
+/// lack a requirement now wanted, capped; the vulnerable packages themselves
+/// before the parents read for them.
 fn due(
-    wanted: Vec<(String, String)>,
+    wanted: Wants,
     stored: &HashMap<(String, String), StoredPackage>,
     now: DateTime<Utc>,
-) -> Vec<(String, String)> {
-    wanted
+) -> Vec<Due> {
+    let mut out: Vec<Due> = wanted
         .into_iter()
-        .filter(|(eco, name)| {
+        .filter(|((eco, name), children)| {
             let key = (super::matching::package_key(name, eco), eco.clone());
-            stored
-                .get(&key)
-                .is_none_or(|p| now - p.fetched_at >= Duration::hours(FRESH_HOURS))
+            stored.get(&key).is_none_or(|p| {
+                now - p.fetched_at >= Duration::hours(FRESH_HOURS)
+                    || children.iter().any(|c| !p.parents.requires.contains_key(c))
+            })
         })
-        .take(MAX_FETCHES_PER_SYNC)
-        .collect()
+        .collect();
+    out.sort_by_key(|(_, children)| !children.is_empty());
+    out.truncate(MAX_FETCHES_PER_SYNC);
+    out
 }
 
 fn save(db: &Database, stored: HashMap<(String, String), StoredPackage>) {
@@ -214,13 +263,13 @@ fn save(db: &Database, stored: HashMap<(String, String), StoredPackage>) {
         }
         Err(e) => warn!(target: "4da::osv", error = %e, "registry release facts: encode failed"),
     }
+    // After the write: a reader that sees the new generation reads the new
+    // document (review of #981).
+    GENERATION.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
 }
 
 /// Read each due package's registry; a success replaces its stored facts.
-async fn fetch_all(
-    due: Vec<(String, String)>,
-    stored: &mut HashMap<(String, String), StoredPackage>,
-) -> usize {
+async fn fetch_all(due: Vec<Due>, stored: &mut HashMap<(String, String), StoredPackage>) -> usize {
     // Large documents are normal here: `next`'s abbreviated packument is
     // ~26 MB and boto3's PyPI JSON ~3.3 MB (2026-10-17), so the budget is
     // per-request generous rather than the 30 s the small reads use.
@@ -239,7 +288,7 @@ async fn fetch_all(
     };
     let (mut fetched, mut failures) = (0usize, 0usize);
     let mut crates_before = false;
-    for (eco, name) in due {
+    for ((eco, name), children) in due {
         // crates.io asks for at most one request per second; npm and PyPI
         // are not paced.
         if eco == "crates.io" {
@@ -248,8 +297,8 @@ async fn fetch_all(
             }
             crates_before = true;
         }
-        match fetch(&client, &eco, &name).await {
-            Ok(releases) => {
+        match fetch(&client, &eco, &name, &children).await {
+            Ok((releases, parents)) => {
                 failures = 0;
                 fetched += 1;
                 let key = super::matching::package_key(&name, &eco);
@@ -261,6 +310,7 @@ async fn fetch_all(
                         name,
                         fetched_at: Utc::now(),
                         releases,
+                        parents,
                     },
                 );
             }
@@ -281,7 +331,8 @@ async fn fetch(
     client: &reqwest::Client,
     eco: &str,
     name: &str,
-) -> Result<RegistryReleases, String> {
+    children: &BTreeSet<String>,
+) -> Result<(RegistryReleases, ParentFacts), String> {
     let (url, accept) = match eco {
         "npm" => (
             format!("https://registry.npmjs.org/{}", name.replace('/', "%2f")),
@@ -312,8 +363,195 @@ async fn fetch(
         "crates.io" => parse_crates(&doc),
         _ => parse_pypi(&doc),
     };
-    releases.ok_or_else(|| "unreadable registry answer".to_string())
+    let parents = if eco == "npm" {
+        parse_npm_parent(&doc, children)
+    } else {
+        ParentFacts::default()
+    };
+    releases
+        .map(|r| (r, parents))
+        .ok_or_else(|| "unreadable registry answer".to_string())
 }
+
+/// npm abbreviated packument, for H1: the `latest` tag, whether it is
+/// deprecated, and per release its requirement on each of `children`, from
+/// `dependencies` / `optionalDependencies`, else `peerDependencies` (flagged:
+/// npm 7+ installs a missing peer). A release that names none of them gets an
+/// empty entry: it does not depend on the package.
+fn parse_npm_parent(doc: &serde_json::Value, children: &BTreeSet<String>) -> ParentFacts {
+    let Some(versions) = doc.get("versions").and_then(|v| v.as_object()) else {
+        return ParentFacts::default();
+    };
+    let latest = doc
+        .get("dist-tags")
+        .and_then(|t| t.get("latest"))
+        .and_then(|l| l.as_str())
+        .map(str::to_string);
+    let retired = latest
+        .as_deref()
+        .and_then(|l| versions.get(l))
+        .is_some_and(npm_deprecated);
+    let field = |m: &serde_json::Value, section: &str, child: &str| {
+        m.get(section)?.get(child)?.as_str().map(str::to_string)
+    };
+    let requires = children
+        .iter()
+        .map(|child| {
+            let history: RequirementHistory = versions
+                .iter()
+                // Pre-releases are never a parent release to name.
+                .filter(|(v, _)| parse_version(v).is_some_and(|p| p.pre.is_empty()))
+                .map(|(v, m)| {
+                    let direct = field(m, "dependencies", child)
+                        .or_else(|| field(m, "optionalDependencies", child));
+                    let req = match (direct, field(m, "peerDependencies", child)) {
+                        (Some(r), _) => ReleaseReq {
+                            reqs: vec![r],
+                            peer: false,
+                        },
+                        (None, Some(p)) => ReleaseReq {
+                            reqs: vec![p],
+                            peer: true,
+                        },
+                        (None, None) => ReleaseReq::default(),
+                    };
+                    (v.clone(), req)
+                })
+                .collect();
+            (child.clone(), history)
+        })
+        .collect();
+    ParentFacts {
+        latest,
+        retired,
+        requires,
+    }
+}
+
+/// The stored registry facts, parsed once, for the parent-release walk (H1).
+pub(crate) struct ReleaseBook {
+    by_key: HashMap<(String, String), StoredPackage>,
+}
+
+/// Bumped by every write of the stored document in this process.
+static GENERATION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+/// How long a parsed document is reused without re-reading it: one plan or
+/// feed build reads it once (review of #981, N8). A write from another
+/// process (the headless engine) is seen within this long.
+const BOOK_REUSE_SECS: u64 = 60;
+
+type CachedBook = (usize, u64, std::time::Instant, std::sync::Arc<ReleaseBook>);
+
+/// Every package's facts, parsed once per build: reused while the same
+/// database has seen no write here and the copy is younger than
+/// [`BOOK_REUSE_SECS`]. Empty when nothing was fetched.
+pub(crate) fn book(db: &Database) -> std::sync::Arc<ReleaseBook> {
+    static CACHE: std::sync::Mutex<Option<CachedBook>> = std::sync::Mutex::new(None);
+    if cfg!(test) {
+        // Tests run many short-lived databases in parallel; an address can
+        // be reused, so they always read (the cache itself is tested through
+        // `book_cached`).
+        return std::sync::Arc::new(book_from(read_stored(db), Utc::now()));
+    }
+    let generation = GENERATION.load(std::sync::atomic::Ordering::SeqCst);
+    book_cached(db, &CACHE, std::time::Instant::now(), generation)
+}
+
+/// [`book`] with its cache, clock and write generation passed in.
+fn book_cached(
+    db: &Database,
+    cache: &std::sync::Mutex<Option<CachedBook>>,
+    now: std::time::Instant,
+    generation: u64,
+) -> std::sync::Arc<ReleaseBook> {
+    let at = std::ptr::from_ref(db) as usize;
+    if let Ok(cache) = cache.lock() {
+        let reusable = cache.as_ref().filter(|(addr, g, when, _)| {
+            *addr == at
+                && *g == generation
+                && now.saturating_duration_since(*when).as_secs() < BOOK_REUSE_SECS
+        });
+        if let Some((.., b)) = reusable {
+            return b.clone();
+        }
+    }
+    let fresh = std::sync::Arc::new(book_from(read_stored(db), Utc::now()));
+    if let Ok(mut cache) = cache.lock() {
+        *cache = Some((at, generation, now, fresh.clone()));
+    }
+    fresh
+}
+
+fn book_from(stored: Vec<StoredPackage>, now: DateTime<Utc>) -> ReleaseBook {
+    ReleaseBook {
+        by_key: stored
+            .into_iter()
+            .filter(|p| now - p.fetched_at < Duration::days(KEEP_DAYS))
+            .map(|p| ((p.key.clone(), p.ecosystem.clone()), p))
+            .collect(),
+    }
+}
+
+impl ReleaseBook {
+    fn get(&self, eco: &str, name: &str) -> Option<&StoredPackage> {
+        self.by_key
+            .get(&(super::matching::package_key(name, eco), eco.to_string()))
+    }
+
+    /// The installable releases (listed, not withdrawn), `latest` and
+    /// whether it is deprecated. `None` when never read.
+    pub(crate) fn releases(&self, eco: &str, name: &str) -> Option<Releases> {
+        let p = self.get(eco, name)?;
+        let withdrawn = |v: &String| p.releases.excluded.iter().any(|e| e == v);
+        Some(Releases {
+            versions: p
+                .releases
+                .published
+                .iter()
+                .filter(|v| !withdrawn(v))
+                .cloned()
+                .collect(),
+            latest: p.parents.latest.clone(),
+            deprecated: p.parents.retired,
+        })
+    }
+
+    /// What each release of `parent` requires of `child`, when read.
+    pub(crate) fn history(
+        &self,
+        eco: &str,
+        parent: &str,
+        child: &str,
+    ) -> Option<&RequirementHistory> {
+        let requires = &self.get(eco, parent)?.parents.requires;
+        requires.get(child).or_else(|| {
+            requires
+                .iter()
+                .find(|(c, _)| c.eq_ignore_ascii_case(child))
+                .map(|(_, h)| h)
+        })
+    }
+
+    /// The packages `parent`'s requirements were read for.
+    pub(crate) fn children(&self, eco: &str, parent: &str) -> Vec<String> {
+        self.get(eco, parent)
+            .map(|p| p.parents.requires.keys().cloned().collect())
+            .unwrap_or_default()
+    }
+
+    /// The release facts the fix-target walk reads for `name`.
+    pub(crate) fn registry(&self, eco: &str, name: &str) -> RegistryReleases {
+        self.get(eco, name)
+            .map(|p| p.releases.clone())
+            .unwrap_or_default()
+    }
+}
+
+#[cfg(test)]
+#[path = "release_facts_test_support.rs"]
+mod test_support;
+#[cfg(test)]
+pub(crate) use test_support::{store_docs_for_tests, store_for_tests};
 
 fn npm_deprecated(manifest: &serde_json::Value) -> bool {
     manifest

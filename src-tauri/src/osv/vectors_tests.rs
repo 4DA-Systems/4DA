@@ -44,7 +44,7 @@ use super::types::Vulnerability;
 /// same change that removes entries; it may never rise.
 const RUST_SKIP_BASELINE: usize = 28;
 
-const FILES: [&str; 7] = [
+const FILES: [&str; 8] = [
     "version_order",
     "osv_range",
     "fix_target",
@@ -52,6 +52,7 @@ const FILES: [&str; 7] = [
     "fix_command",
     "range_check",
     "holding",
+    "parent_release",
 ];
 
 fn conformance_dir() -> PathBuf {
@@ -471,6 +472,7 @@ fn rule_vectors_hold_and_the_skip_list_only_shrinks() {
                 "fix_target" => check_fix_target(v, &mut records),
                 "refresh_verdict" => check_refresh_verdict(v),
                 "fix_command" => check_fix_command(v),
+                "parent_release" => super::parent_release_vectors::check_parent_release(v),
                 _ => check_range_check(v),
             };
             match (outcome, skips.contains_key(&id)) {

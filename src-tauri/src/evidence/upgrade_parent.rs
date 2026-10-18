@@ -234,7 +234,13 @@ fn link_sentence(package: &str, l: &ParentLink, multi_project: bool) -> String {
 /// ("Seen in your projects" follows); otherwise the registry rows decide
 /// what may be claimed ([`parent_move`]).
 fn link_move(package: &str, target: &str, l: &ParentLink) -> String {
-    if !l.resolutions.is_empty() {
+    // A release read from the registry's own requirements (audit H1) is the
+    // move itself; a newer parent seen on this machine only proves one exists.
+    let registry_read = matches!(
+        l.standing,
+        ParentStanding::Admits(_) | ParentStanding::NoneAdmits { .. }
+    );
+    if !l.resolutions.is_empty() && !registry_read {
         return format!("{} itself must be updated", l.parent);
     }
     parent_move(
@@ -274,6 +280,86 @@ pub(crate) fn parent_move(
     through: Option<&Through>,
     override_hint: Option<&str>,
 ) -> String {
+    let force = override_hint.map_or_else(String::new, |h| {
+        format!(", or force {package} >= {target} with {h}")
+    });
+    match standing {
+        ParentStanding::Admits(r) => {
+            super::upgrade_parent_release::admits_move(package, target, parent, r, through, &force)
+        }
+        ParentStanding::Malicious { package, advisory } => format!(
+            "{package} is flagged malicious ({advisory}): remove or replace {package}; no \
+             {parent} release is named as the fix"
+        ),
+        ParentStanding::Undecided { why } => {
+            format!("no {parent} release is named because {why}, so no command is named{force}")
+        }
+        ParentStanding::NoneAdmits { .. } => {
+            // No release is named here, not even the newest: the parent's own
+            // row (and its other rows) name the one release it moves to.
+            none_admits_move(package, target, parent, through, &force)
+        }
+        _ => row_move(
+            package,
+            target,
+            parent,
+            parent_version,
+            standing,
+            through,
+            &force,
+        ),
+    }
+}
+
+/// Every release of the parent was read and none admits a clean copy.
+fn none_admits_move(
+    package: &str,
+    target: &str,
+    parent: &str,
+    through: Option<&Through>,
+    force: &str,
+) -> String {
+    let replace = through.map_or_else(
+        || format!("replace {parent}"),
+        |t| {
+            let names: Vec<&str> = t.all().map(|l| l.name.as_str()).collect();
+            format!(
+                "{parent} arrives through {}, so replace {}",
+                lever_names(t),
+                names.join(" or ")
+            )
+        },
+    );
+    format!(
+        "no {parent} release up to its newest admits a clean {package} (>= {target}) while clear of \
+         {parent}'s own advisories, so no {parent} upgrade fixes it; {replace}{force}"
+    )
+}
+
+/// "a 1.0.0 and b 1.0.0" (and N more).
+fn lever_names(t: &Through) -> String {
+    let names: Vec<String> = t
+        .all()
+        .map(|l| format!("{} {}", l.name, l.version))
+        .collect();
+    let more = if t.more > 0 {
+        format!(" (and {} more)", t.more)
+    } else {
+        String::new()
+    };
+    format!("{}{more}", names.join(" and "))
+}
+
+/// The move from the registry rows alone (no per-release requirements read).
+fn row_move(
+    package: &str,
+    target: &str,
+    parent: &str,
+    parent_version: &str,
+    standing: &ParentStanding,
+    through: Option<&Through>,
+    force: &str,
+) -> String {
     let (lever, lever_version, lever_standing) = match through {
         Some(t) => (t.name.as_str(), t.version.as_str(), &t.standing),
         None => (parent, parent_version, standing),
@@ -289,10 +375,12 @@ pub(crate) fn parent_move(
             ParentStanding::Deprecated => format!("{parent} is deprecated, and it "),
             _ => format!("{parent} "),
         };
-        format!("{own}arrives through {} {}, a direct dependency; ", t.name, t.version)
-    });
-    let force = override_hint.map_or_else(String::new, |h| {
-        format!(", or force {package} >= {target} with {h}")
+        let kind = if t.also.is_empty() && t.more == 0 {
+            "a direct dependency"
+        } else {
+            "direct dependencies, each of which must move"
+        };
+        format!("{own}arrives through {}, {kind}; ", lever_names(t))
     });
     match lever_standing {
         ParentStanding::Newer { latest } => format!(
@@ -309,10 +397,18 @@ pub(crate) fn parent_move(
         ParentStanding::Deprecated => {
             format!("{via}{lever} is deprecated: replace {lever}{force}")
         }
-        ParentStanding::Unknown => format!(
-            "{via}{lever} must move (4DA holds no record of a {lever} release that admits \
+        // A lever's registry read runs only under a parent release
+        // (`admits_move`); reaching here it says nothing more than Unknown.
+        ParentStanding::Unknown
+        | ParentStanding::Admits(_)
+        | ParentStanding::NoneAdmits { .. }
+        | ParentStanding::Undecided { .. }
+        | ParentStanding::Malicious { .. } => {
+            format!(
+                "{via}{lever} must move (4DA holds no record of a {lever} release that admits \
              {package} >= {target}): upgrade {lever} if one does, or replace it{force}"
-        ),
+            )
+        }
     }
 }
 
@@ -408,6 +504,15 @@ pub(super) fn path_citations(package: &str, links: &[ParentLink]) -> Vec<Evidenc
                 requirement_note(l)
             ),
         ));
+    }
+    // The registry fact behind each named parent release (audit H1).
+    for (title, note) in links
+        .iter()
+        .filter_map(|l| super::upgrade_parent_release::release_citation(package, l))
+    {
+        if !out.iter().any(|c| c.title == title) {
+            out.push(citation(title, note));
+        }
     }
     for l in links.iter().filter(|l| needs_parent_move(l)) {
         for r in &l.resolutions {

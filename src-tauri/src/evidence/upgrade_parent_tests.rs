@@ -289,6 +289,7 @@ fn a_refresh_is_enough_so_no_newer_parent_is_offered() {
         through: None,
         standing: Default::default(),
         override_hint: None,
+        lever_unknown: None,
     };
     let links = std::slice::from_ref(&link);
     let routes = TransitiveRoutes {

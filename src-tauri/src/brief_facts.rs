@@ -36,7 +36,7 @@ use serde::{Deserialize, Serialize};
 use crate::brief_cadence::{same_state, upgrade_signature};
 use crate::db::Database;
 use crate::osv::fix_path::{refresh_verdict, Basis, Refresh, Requirement};
-use crate::osv::parent_hint::ParentStanding;
+use crate::osv::parent_hint::Through;
 use crate::preemption::AlertUrgency;
 use crate::scoring::release_version::lenient_semver;
 
@@ -311,13 +311,8 @@ pub(crate) fn fix_path(
                         by_requirement: basis == Basis::Requirement,
                         proven: None,
                         route: ParentRoute {
-                            through: (!link.immediate.eq_ignore_ascii_case(&link.direct)).then(
-                                || crate::osv::parent_hint::Through {
-                                    name: link.direct.clone(),
-                                    version: link.direct_version.clone(),
-                                    standing: ParentStanding::default(),
-                                },
-                            ),
+                            through: (!link.immediate.eq_ignore_ascii_case(&link.direct))
+                                .then(|| Through::declared(&link.direct, &link.direct_version)),
                             ..ParentRoute::default()
                         },
                     },
@@ -696,14 +691,15 @@ pub(crate) fn package_facts(facts: &BriefFacts) -> Vec<crate::briefing_groundedn
                         add(parent, Some(&p.parent_version));
                         add(&f.package, Some(&p.child_version));
                     }
-                    if let ParentStanding::Newer { latest } = &route.standing {
-                        add(parent, Some(latest));
+                    // Every release the route sentence can name (audit H1).
+                    let named = route.through.iter().map(|t| (t.name.as_str(), &t.standing));
+                    for (name, st) in named.chain([(parent.as_str(), &route.standing)]) {
+                        for (n, v) in st.named_versions(name, parent, &f.package) {
+                            add(n, Some(v));
+                        }
                     }
                     if let Some(t) = &route.through {
                         add(&t.name, Some(&t.version));
-                        if let ParentStanding::Newer { latest } = &t.standing {
-                            add(&t.name, Some(latest));
-                        }
                     }
                 }
                 FixPath::PerLine { lines } => {
