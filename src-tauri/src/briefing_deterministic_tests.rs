@@ -366,3 +366,144 @@ fn a_narration_before_the_advisory_check_drops_its_all_clear() {
     assert!(prompt.contains("ADVISORY CHECK NOT COMPLETE"), "{prompt}");
     assert!(!prompt.contains("none — no confirmed advisory"), "{prompt}");
 }
+
+fn not_covered(
+    files: &[(&str, &str)],
+    unreadable: &[(&str, &str)],
+) -> crate::osv::readiness::NotCovered {
+    crate::osv::readiness::NotCovered {
+        count: files.len() as u32,
+        files: files
+            .iter()
+            .map(|(path, eco)| crate::osv::readiness::NotCoveredFile {
+                path: (*path).to_string(),
+                ecosystem: (*eco).to_string(),
+            })
+            .collect(),
+        unreadable_count: unreadable.len() as u32,
+        unreadable: unreadable
+            .iter()
+            .map(|(path, reason)| crate::osv::readiness::UnreadableFile {
+                path: (*path).to_string(),
+                reason: (*reason).to_string(),
+            })
+            .collect(),
+    }
+}
+
+fn ready_with_gaps(nc: crate::osv::readiness::NotCovered) -> BriefFacts {
+    BriefFacts {
+        advisories: Some(crate::osv::readiness::AdvisorySyncState::Ready),
+        not_covered: Some(nc),
+        ..BriefFacts::default()
+    }
+}
+
+/// W5a: with a pom.xml 4DA does not read, "Nothing new touches your code
+/// today" claimed code it never checked. The all-clear is scoped to what was
+/// checked, and the files it did not check are named.
+#[test]
+fn the_all_clear_names_what_was_not_checked() {
+    let facts = ready_with_gaps(not_covered(
+        &[("C:/p/spring-petclinic/pom.xml", "Maven")],
+        &[],
+    ));
+    let out = build_deterministic_brief(&facts, FloorReason::NoCapableModel);
+    assert!(!out.contains("Nothing new touches your code"), "{out}");
+    assert!(
+        out.contains("Nothing new touches the code 4DA checked today."),
+        "{out}"
+    );
+    assert!(
+        out.contains(
+            "Not checked: 1 dependency file 4DA does not read installed versions from: \
+             spring-petclinic/pom.xml (Maven)."
+        ),
+        "{out}"
+    );
+}
+
+#[test]
+fn the_not_checked_line_counts_the_rest_and_names_unreadable_lockfiles() {
+    let facts = ready_with_gaps(not_covered(
+        &[
+            ("C:/p/a/pom.xml", "Maven"),
+            ("C:/p/b/build.gradle", "Gradle"),
+            ("C:/p/c/build.gradle.kts", "Gradle"),
+            ("C:/p/d/packages.lock.json", "NuGet lockfile"),
+        ],
+        &[("C:/p/web/package-lock.json", "invalid JSON")],
+    ));
+    let line = super::not_covered_line(&facts).expect("a line");
+    assert!(line.contains("4 dependency files"), "{line}");
+    assert!(
+        line.contains("c/build.gradle.kts (Gradle), and 1 more."),
+        "{line}"
+    );
+    assert!(
+        !line.contains("packages.lock.json"),
+        "only three are named: {line}"
+    );
+    assert!(
+        line.contains(
+            "1 lockfile could not be read, so what it pinned was not checked: \
+             web/package-lock.json (invalid JSON)."
+        ),
+        "{line}"
+    );
+}
+
+/// A narrated brief: the model's all-clear is scoped and the not-checked line
+/// appended; running it twice changes nothing.
+#[test]
+fn a_narrated_all_clear_is_scoped_to_what_was_checked() {
+    let facts = ready_with_gaps(not_covered(
+        &[("C:/p/spring-petclinic/pom.xml", "Maven")],
+        &[],
+    ));
+    let draft = "## Worth knowing\n- Vite 7.1\n\nNothing new touches your code today.\n";
+    let out = super::honest_without_lockfiles(draft, &facts);
+    assert!(!out.contains("Nothing new touches your code"), "{out}");
+    assert!(
+        out.contains("Nothing new touches the code 4DA checked today."),
+        "{out}"
+    );
+    assert!(out.contains("spring-petclinic/pom.xml (Maven)"), "{out}");
+    assert_eq!(super::honest_without_lockfiles(&out, &facts), out);
+}
+
+/// The model is told before it writes: complete only for what was read.
+#[test]
+fn the_prompt_says_not_everything_was_checked() {
+    let facts = ready_with_gaps(not_covered(
+        &[("C:/p/spring-petclinic/pom.xml", "Maven")],
+        &[],
+    ));
+    let prompt = crate::digest_commands::render_facts_for_prompt(&facts);
+    assert!(
+        prompt.starts_with("NOT EVERYTHING WAS CHECKED:"),
+        "{prompt}"
+    );
+    assert!(
+        prompt.contains("spring-petclinic/pom.xml (Maven)"),
+        "{prompt}"
+    );
+    assert!(!prompt.contains("authoritative and complete"), "{prompt}");
+}
+
+/// Every file read: the brief is as before.
+#[test]
+fn with_everything_read_the_all_clear_is_unchanged() {
+    let facts = BriefFacts {
+        advisories: Some(crate::osv::readiness::AdvisorySyncState::Ready),
+        ..BriefFacts::default()
+    };
+    let out = build_deterministic_brief(&facts, FloorReason::NoCapableModel);
+    assert!(
+        out.contains("Nothing new touches your code today."),
+        "{out}"
+    );
+    assert!(!out.contains("Not checked:"), "{out}");
+    let draft = "Nothing new touches your code today.\n";
+    assert_eq!(super::honest_without_lockfiles(draft, &facts), draft);
+}

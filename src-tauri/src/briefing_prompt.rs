@@ -231,6 +231,15 @@ pub(crate) fn render_facts_for_prompt(facts: &BriefFacts) -> String {
              unaffected; the software appends the status line itself.\n\n\
              FACTS (computed by 4DA from the user's lockfiles and package registries):\n\n",
         )
+    } else if let Some(line) = crate::briefing_deterministic::not_covered_line(facts) {
+        // Complete for what was read, not for the files 4DA does not read (W5a).
+        format!(
+            "NOT EVERYTHING WAS CHECKED: {line} Say \"the code 4DA checked\", never \"your code\", \
+             for any all-clear, and never call the user's whole codebase unaffected; the software \
+             appends the not-checked line itself.\n\n\
+             FACTS (computed by 4DA from the user's lockfiles, OSV advisories and package \
+             registries; authoritative for the files it read):\n\n"
+        )
     } else {
         String::from(
             "FACTS (computed by 4DA from the user's lockfiles, OSV advisories and package \

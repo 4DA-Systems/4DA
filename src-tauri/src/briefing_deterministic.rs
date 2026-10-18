@@ -138,7 +138,12 @@ pub(crate) fn build_deterministic_brief(facts: &BriefFacts, reason: FloorReason)
         out.push_str(line);
         out.push_str("\n\n");
     } else if new_security.is_empty() && new_upgrades.is_empty() && facts.worth_knowing.is_empty() {
-        out.push_str("Nothing new touches your code today.\n\n");
+        out.push_str(all_clear_line(facts));
+        out.push_str("\n\n");
+    }
+    if let Some(line) = not_covered_line(facts) {
+        out.push_str(&line);
+        out.push_str("\n\n");
     }
 
     let still: Vec<String> = facts
@@ -244,6 +249,79 @@ pub(crate) fn advisory_gap_line(facts: &BriefFacts) -> Option<&'static str> {
     })
 }
 
+/// The all-clear, scoped to what was checked: with files 4DA did not read,
+/// "your code" would claim the parts it never looked at (W5a).
+pub(crate) fn all_clear_line(facts: &BriefFacts) -> &'static str {
+    if facts.not_covered.is_some() {
+        "Nothing new touches the code 4DA checked today."
+    } else {
+        "Nothing new touches your code today."
+    }
+}
+
+/// Most dependency files named in the not-covered line.
+const NOT_COVERED_SHOWN: usize = 3;
+
+/// The project-relative tail of a path: `spring-petclinic/pom.xml`.
+fn short_path(path: &str) -> String {
+    let parts: Vec<&str> = path.split(['/', '\\']).filter(|p| !p.is_empty()).collect();
+    parts[parts.len().saturating_sub(2)..].join("/")
+}
+
+/// What 4DA did not check, by name (#974's not-covered report): the files it
+/// does not read installed versions from, and the lockfiles it could not
+/// read. `None` when every file was read.
+pub(crate) fn not_covered_line(facts: &BriefFacts) -> Option<String> {
+    let nc = facts.not_covered.as_ref()?;
+    let mut parts: Vec<String> = Vec::new();
+    if nc.count > 0 {
+        let named: Vec<String> = nc
+            .files
+            .iter()
+            .take(NOT_COVERED_SHOWN)
+            .map(|f| format!("{} ({})", short_path(&f.path), f.ecosystem))
+            .collect();
+        let more = (nc.count as usize).saturating_sub(named.len());
+        let tail = if more > 0 {
+            format!(", and {more} more")
+        } else {
+            String::new()
+        };
+        parts.push(format!(
+            "Not checked: {} dependency file{} 4DA does not read installed versions from: {}{tail}.",
+            nc.count,
+            if nc.count == 1 { "" } else { "s" },
+            named.join(", ")
+        ));
+    }
+    if nc.unreadable_count > 0 {
+        let named: Vec<String> = nc
+            .unreadable
+            .iter()
+            .take(NOT_COVERED_SHOWN)
+            .map(|f| format!("{} ({})", short_path(&f.path), f.reason))
+            .collect();
+        let more = (nc.unreadable_count as usize).saturating_sub(named.len());
+        let tail = if more > 0 {
+            format!(", and {more} more")
+        } else {
+            String::new()
+        };
+        parts.push(format!(
+            "{} lockfile{} could not be read, so what {} pinned was not checked: {}{tail}.",
+            nc.unreadable_count,
+            if nc.unreadable_count == 1 { "" } else { "s" },
+            if nc.unreadable_count == 1 {
+                "it"
+            } else {
+                "they"
+            },
+            named.join(", ")
+        ));
+    }
+    (!parts.is_empty()).then(|| parts.join(" "))
+}
+
 /// A footer that names "OSV advisories" as a source only when the advisory
 /// check actually completed.
 fn with_honest_sources(footer: &str, facts: &BriefFacts) -> String {
@@ -273,7 +351,7 @@ pub(crate) fn honest_without_lockfiles(content: &str, facts: &BriefFacts) -> Str
     } else {
         match advisory_gap_line(facts) {
             Some(line) => line,
-            None => return content.to_string(),
+            None => return with_not_covered(content, facts),
         }
     };
     let kept: Vec<&str> = content
@@ -286,6 +364,34 @@ pub(crate) fn honest_without_lockfiles(content: &str, facts: &BriefFacts) -> Str
             out.push_str("\n\n");
         }
         out.push_str(line);
+    }
+    out.push('\n');
+    out
+}
+
+/// A narrated brief while some files were not read (W5a): an all-clear the
+/// model wrote is scoped to what was checked, and the brief ends on the line
+/// that names what was not. Idempotent.
+fn with_not_covered(content: &str, facts: &BriefFacts) -> String {
+    let Some(line) = not_covered_line(facts) else {
+        return content.to_string();
+    };
+    let kept: Vec<String> = content
+        .lines()
+        .map(|l| {
+            if l.contains("Nothing new touches your code") {
+                all_clear_line(facts).to_string()
+            } else {
+                l.to_string()
+            }
+        })
+        .collect();
+    let mut out = kept.join("\n").trim_end().to_string();
+    if !out.contains(&line) {
+        if !out.is_empty() {
+            out.push_str("\n\n");
+        }
+        out.push_str(&line);
     }
     out.push('\n');
     out

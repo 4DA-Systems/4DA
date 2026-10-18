@@ -51,6 +51,7 @@ pub(crate) fn build_brief_facts(db: &Database) -> BriefFacts {
         no_dependencies_known,
         advisories: Some(readiness.state),
         advisory_temp_skipped: readiness.skipped_temp,
+        not_covered: readiness.not_covered,
     }
 }
 

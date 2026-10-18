@@ -270,6 +270,11 @@ pub(crate) struct BriefFacts {
     /// OS temp directory. With `NoInventory` that, not coverage, is why
     /// nothing was checked.
     pub advisory_temp_skipped: u32,
+    /// Dependency files the walk found but does not read installed versions
+    /// from (Maven, Gradle, NuGet ...), and lockfiles it could not read
+    /// (#974). Nothing in them was checked, so the brief never calls the
+    /// whole codebase clear while any exist (W5a).
+    pub not_covered: Option<crate::osv::readiness::NotCovered>,
 }
 
 // ============================================================================
