@@ -24,6 +24,7 @@ fn matched(id: &str, aliases: &[&str], cvss: Option<f64>, label: Option<&str>) -
         aliases: aliases.iter().map(|s| s.to_string()).collect(),
         severity_label: label.map(str::to_string),
         severity_from: None,
+        cwe_ids: Vec::new(),
     }
 }
 
@@ -46,6 +47,7 @@ fn row(id: &str, package: &str, cvss: Option<f64>, label: Option<&str>) -> Store
         synced_at: String::new(),
         aliases: Vec::new(),
         severity_label: label.map(str::to_string),
+        cwe_ids: Vec::new(),
     }
 }
 

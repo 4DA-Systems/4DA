@@ -459,6 +459,12 @@ fn severity_match(vuln: &Vulnerability, fixed_version: Option<&str>) -> MatchedA
         aliases: vuln.aliases.clone().unwrap_or_default(),
         severity_label: vuln.severity_label(),
         severity_from: None,
+        // `database_specific.cwe_ids`, as `osv::sync` stores it (CWE-506 is
+        // how a GHSA malware advisory with no MAL- alias says so).
+        cwe_ids: vuln
+            .cwe_ids_json()
+            .and_then(|j| serde_json::from_str(&j).ok())
+            .unwrap_or_default(),
     }
 }
 
@@ -482,6 +488,7 @@ fn mirror_row(id: &str, label: Option<&str>) -> StoredAdvisory {
         synced_at: String::new(),
         aliases: Vec::new(),
         severity_label: label.and_then(super::types::normalize_severity_label),
+        cwe_ids: Vec::new(),
     }
 }
 

@@ -36,7 +36,7 @@ specific enough to recheck).
 | `range_check.jsonl` | `{eco, name, constraint, from, releases[], record_ids[], expected}` | `@4da/mcp-server` 6.2.0 recorded fixtures (`src/__tests__/fixtures/dependency-check/recorded/`, origin/main `bae421b`): OSV's querybatch answer per release of ws, Jinja2 and golang.org/x/net. Constraint membership: node `semver` (npm, Go without `v`; `v0` is the v0 line), python `packaging` `SpecifierSet` (PyPI). |
 | `parent_release.jsonl` | `{eco, tool, parent{...}, rows[], expect{parent_target, rows[]}}` (below) | pr-001..pr-008: registry.npmjs.org abbreviated documents and OSV.dev `/v1/query`, read 2026-10-18 (generated once, then the rule applied by hand); OWASP/NodeGoat's `package-lock.json`; npm 10.9.2 for the install-keeps-the-copy case. pr-001..pr-004 and pr-006 agree with `@4da/mcp-server` fix/planner-advice-625 `1840dab` run on the same projects. |
 | `holding.jsonl` | `{eco, name, advisory_id, version, holding}` | npm's security holding placeholders (`0.0.<n>-security`; a publisher's `1.0.0-security` prerelease is not one: ho-006): the registry's own description ("security holding package") and the advisories that flag the name. `holding: true` means no advisory applies to that release (audit L4 decision, 2026-10-16). |
-| `severity.jsonl` | `{record \| records[], fixed_version?, aliases_available, expect: {severity, severity_from, urgency}}`; a `record` is `{id, summary, severity?, database_specific?, aliases[]}` as OSV gives it | api.osv.dev `/v1/vulns/<id>` and the app's local mirror (`osv_advisories`, read-only), both read on the date in `source`; by-hand lines say so. `aliases_available` maps each GHSA id the mirror holds to its grade (`null`: held, no grade); an id absent from it cannot be read. |
+| `severity.jsonl` | `{record \| records[], fixed_version?, aliases_available, expect: {severity, severity_from, urgency}}`; a `record` is `{id, summary, severity?, database_specific?: {severity?, cwe_ids?}, aliases[]}` as OSV gives it | api.osv.dev `/v1/vulns/<id>` and the app's local mirror (`osv_advisories`, read-only), both read on the date in `source`; by-hand lines say so. `aliases_available` maps each GHSA id the mirror holds to its grade (`null`: held, no grade); an id absent from it cannot be read. |
 
 Field conventions:
 
@@ -327,7 +327,8 @@ one. An unmaintained-package notice is never graded from an alias.
 Upgrade Plan and the alerts both give: the tier, `low` reading `watch`; a
 group still unknown is `medium`, a group of maintenance notices only (no fix,
 no CVSS, "unmaintained" / "deprecated" text) `watch`, and a malicious-package
-record (`MAL-`) on the installed version `critical` whatever else grades it
+record on the installed version (`fourda_depengine::is_malware`: a `MAL-` id or
+alias, or CWE-506 in `database_specific.cwe_ids`) `critical` whatever else grades it
 (malware is installed; npm's `0.0.<n>-security` holding placeholder is never
 matched, see `holding.jsonl`). The optional `fixed_version` is the copy's fix (none
 when absent), which tells a maintenance notice from a vulnerability.
@@ -338,7 +339,7 @@ when absent), which tells a maintenance notice from a vulnerability.
 - A tie names the smallest id: sv-006, sv-013
 - A record's own grade wins over a higher alias: sv-007 (GHSA-rjh8-p66p-jrh5, own high)
 - One alias group, most severe own grade: sv-008 (label LOW + CVSS 9.8), sv-009 (CVE-2026-4277: GHSA-pwjp-ccjc-ghwg LOW, PYSEC-2026-52 9.8), sv-012 (an own low beats an inherited critical)
-- Still unknown: Medium (sv-004, sv-005, sv-019: anyhow's unsoundness, which the alert path used to guess Watch), maintenance notices Watch (sv-011, sv-018), installed `MAL-` Critical (sv-010, and sv-020 where the record grades itself low)
+- Still unknown: Medium (sv-004, sv-005, sv-019: anyhow's unsoundness, which the alert path used to guess Watch), maintenance notices Watch (sv-011, sv-018), installed malware Critical (sv-010, sv-020 where the record grades itself low, and sv-021: crossenv GHSA-c2m4-w5hm-vqjw, malware by CWE-506 alone, no MAL- alias)
 - A maintenance notice is not graded from an alias: sv-011
 - The `nix` group (CVE-2021-45707: CVSS medium, label high, one unrated): high, its own: sv-014
 - A label that disagrees with the CVSS v3 band decides: sv-015 (label CRITICAL over 7.5), sv-016 (MODERATE under 7.3), sv-017 (LOW over 4.5)

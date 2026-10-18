@@ -411,7 +411,8 @@ pub fn cluster_urgency(cluster: &[&MatchedAdvisory]) -> Urgency {
         Some("medium") => Urgency::Medium,
         Some(_) => Urgency::Watch,
         None if cluster.iter().all(|m| m.is_informational()) => Urgency::Watch,
-        None => unknown_urgency(cluster.iter().map(|m| m.advisory_id.as_str())),
+        // Installed malware returned Critical above.
+        None => Urgency::Medium,
     }
 }
 
@@ -419,34 +420,14 @@ pub fn cluster_urgency(cluster: &[&MatchedAdvisory]) -> Urgency {
 /// AD-046 scope rule does not lower it. A dev-only or transitive malicious
 /// package still runs its code (install scripts, the build, the test run) on
 /// the developer's machine, so it is not the milder exposure the scope rule
-/// discounts for vulnerabilities.
-///
-/// TEMPORARY rule: a `MAL-` id or a `MAL-` alias. The shared
-/// `fourda_depengine` predicate (adding `database_specific.cwe_ids`
-/// CWE-506, which GHSA-c2m4-w5hm-vqjw carries with no MAL alias) lands with
-/// fix/malware-cwe and replaces this.
+/// discounts for vulnerabilities. Malware is the ONE shared predicate,
+/// `fourda_depengine::is_malware`: a `MAL-` id or alias, or CWE-506 in
+/// `database_specific.cwe_ids` (GHSA-c2m4-w5hm-vqjw, crossenv, has no MAL
+/// alias).
 pub fn contains_malware(group: &[&MatchedAdvisory]) -> bool {
     group
         .iter()
-        .any(|m| is_malware(&m.advisory_id) || m.aliases.iter().any(|a| is_malware(a)))
-}
-
-/// A malicious-package id (OpenSSF `MAL-`).
-pub fn is_malware(advisory_id: &str) -> bool {
-    advisory_id
-        .trim()
-        .get(..4)
-        .is_some_and(|p| p.eq_ignore_ascii_case("MAL-"))
-}
-
-/// The still-unknown arm of [`cluster_urgency`], by the cluster's ids:
-/// Critical for installed malware, else Medium.
-pub fn unknown_urgency<'a>(mut ids: impl Iterator<Item = &'a str>) -> Urgency {
-    if ids.any(is_malware) {
-        Urgency::Critical
-    } else {
-        Urgency::Medium
-    }
+        .any(|m| fourda_depengine::is_malware(&m.advisory_id, &m.aliases, &m.cwe_ids))
 }
 
 /// A maintenance notice (the Upgrade Plan's informational fold).
