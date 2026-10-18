@@ -138,7 +138,12 @@ pub(crate) fn build_deterministic_brief(facts: &BriefFacts, reason: FloorReason)
         out.push_str(line);
         out.push_str("\n\n");
     } else if new_security.is_empty() && new_upgrades.is_empty() && facts.worth_knowing.is_empty() {
-        out.push_str("Nothing new touches your code today.\n\n");
+        out.push_str(all_clear_line(facts));
+        out.push_str("\n\n");
+    }
+    if let Some(line) = not_covered_line(facts) {
+        out.push_str(&line);
+        out.push_str("\n\n");
     }
 
     let still: Vec<String> = facts
@@ -237,11 +242,91 @@ pub(crate) fn advisory_gap_line(facts: &BriefFacts) -> Option<&'static str> {
              copies and does not check against vulnerability advisories, so nothing here means \
              they are clear. Move them out of the temp folder and scan again to check them."
         }
+        // No installed version was read (#987 review B2): OSV covers Maven, and
+        // a package.json with no lockfile is npm, so "no ecosystem it can
+        // check" was false for what reaches this arm. The not-covered line
+        // that follows names the files.
         S::NoInventory => {
-            "None of the dependencies 4DA read are in an ecosystem it can check against \
-             vulnerability advisories, so nothing here means they are clear."
+            "4DA found dependencies but read no installed versions for them (a manifest without a \
+             lockfile, or a format it does not read such as Maven or Gradle), so nothing was \
+             checked against vulnerability advisories and nothing here means they are clear."
         }
     })
+}
+
+/// The all-clear, scoped to what was checked: with files 4DA did not read,
+/// "your code" would claim the parts it never looked at (W5a).
+pub(crate) fn all_clear_line(facts: &BriefFacts) -> &'static str {
+    if facts.not_covered.is_some() {
+        "Nothing new touches the code 4DA checked today."
+    } else {
+        "Nothing new touches your code today."
+    }
+}
+
+/// Most dependency files named in the not-covered line.
+const NOT_COVERED_SHOWN: usize = 3;
+
+/// The project-relative tail of a path: `spring-petclinic/pom.xml`.
+fn short_path(path: &str) -> String {
+    let parts: Vec<&str> = path.split(['/', '\\']).filter(|p| !p.is_empty()).collect();
+    parts[parts.len().saturating_sub(2)..].join("/")
+}
+
+/// `a (x), b (y), c (z), and N more` for `total` entries of which `named` are
+/// shown (at most [`NOT_COVERED_SHOWN`]).
+fn name_list<'a>(named: impl Iterator<Item = (&'a str, &'a str)>, total: u32) -> String {
+    let shown: Vec<String> = named
+        .take(NOT_COVERED_SHOWN)
+        .map(|(path, what)| format!("{} ({what})", short_path(path)))
+        .collect();
+    let more = (total as usize).saturating_sub(shown.len());
+    let tail = if more > 0 {
+        format!(", and {more} more")
+    } else {
+        String::new()
+    };
+    format!("{}{tail}", shown.join(", "))
+}
+
+/// What 4DA did not check, by name (#974's not-covered report): the files it
+/// does not read installed versions from, and the lockfiles it could not
+/// read. `None` when every file was read.
+pub(crate) fn not_covered_line(facts: &BriefFacts) -> Option<String> {
+    let nc = facts.not_covered.as_ref()?;
+    let mut parts: Vec<String> = Vec::new();
+    if nc.count > 0 {
+        let named = name_list(
+            nc.files
+                .iter()
+                .map(|f| (f.path.as_str(), f.ecosystem.as_str())),
+            nc.count,
+        );
+        parts.push(format!(
+            "Not checked: {} dependency file{} 4DA does not read installed versions from: {named}.",
+            nc.count,
+            if nc.count == 1 { "" } else { "s" },
+        ));
+    }
+    if nc.unreadable_count > 0 {
+        let named = name_list(
+            nc.unreadable
+                .iter()
+                .map(|f| (f.path.as_str(), f.reason.as_str())),
+            nc.unreadable_count,
+        );
+        parts.push(format!(
+            "{} lockfile{} could not be read, so what {} pinned was not checked: {named}.",
+            nc.unreadable_count,
+            if nc.unreadable_count == 1 { "" } else { "s" },
+            if nc.unreadable_count == 1 {
+                "it"
+            } else {
+                "they"
+            },
+        ));
+    }
+    (!parts.is_empty()).then(|| parts.join(" "))
 }
 
 /// A footer that names "OSV advisories" as a source only when the advisory
@@ -273,7 +358,7 @@ pub(crate) fn honest_without_lockfiles(content: &str, facts: &BriefFacts) -> Str
     } else {
         match advisory_gap_line(facts) {
             Some(line) => line,
-            None => return content.to_string(),
+            None => return with_not_covered(content, facts),
         }
     };
     let kept: Vec<&str> = content
@@ -286,6 +371,39 @@ pub(crate) fn honest_without_lockfiles(content: &str, facts: &BriefFacts) -> Str
             out.push_str("\n\n");
         }
         out.push_str(line);
+    }
+    // A Maven-only project is NoInventory: the gap line says nothing was
+    // checked, and this names the files (#987 review B1).
+    if let Some(files) = not_covered_line(facts).filter(|f| !out.contains(f.as_str())) {
+        out.push_str("\n\n");
+        out.push_str(&files);
+    }
+    out.push('\n');
+    out
+}
+
+/// A narrated brief while some files were not read (W5a): an all-clear the
+/// model wrote is scoped to what was checked, and the brief ends on the line
+/// that names what was not. Idempotent.
+fn with_not_covered(content: &str, facts: &BriefFacts) -> String {
+    let Some(line) = not_covered_line(facts) else {
+        return content.to_string();
+    };
+    let kept: Vec<String> = content
+        .lines()
+        .map(|l| {
+            l.replace(
+                "Nothing new touches your code",
+                "Nothing new touches the code 4DA checked",
+            )
+        })
+        .collect();
+    let mut out = kept.join("\n").trim_end().to_string();
+    if !out.contains(&line) {
+        if !out.is_empty() {
+            out.push_str("\n\n");
+        }
+        out.push_str(&line);
     }
     out.push('\n');
     out

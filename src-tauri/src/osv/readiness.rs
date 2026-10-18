@@ -189,8 +189,8 @@ pub(crate) fn classify(
 /// as `Ready`.
 pub(crate) fn advisory_sync(db: &Database) -> AdvisorySync {
     let in_flight = refresh::sync_in_flight();
-    let required: Vec<String> = match super::sync::auditable_ecosystems(db) {
-        Ok(r) => r,
+    let coverage = match super::sync::auditable_coverage(db) {
+        Ok(c) => c,
         Err(e) => {
             tracing::warn!(target: "4da::osv", error = %e, "advisory readiness: inventory unreadable");
             return unreadable(in_flight);
@@ -204,12 +204,23 @@ pub(crate) fn advisory_sync(db: &Database) -> AdvisorySync {
         }
     };
     let mut out = classify(
-        &required,
+        &coverage.versioned,
         &statuses,
         chrono::Utc::now().naive_utc(),
         in_flight,
     );
     let report = lockfile_report(db);
+    // Cold start (#987 review S3): the manifest scan registers dependencies
+    // with no version before the first lockfile walk reports. That is "not
+    // read yet", never "nothing checkable": the doctrine forbids telling a
+    // first-run user there is nothing to check.
+    if out.state == AdvisorySyncState::NoInventory && report.is_none() && coverage.any_checkable {
+        out.state = if in_flight {
+            AdvisorySyncState::Syncing
+        } else {
+            AdvisorySyncState::NotStarted
+        };
+    }
     if out.state == AdvisorySyncState::NoInventory {
         out.skipped_temp = report
             .as_ref()

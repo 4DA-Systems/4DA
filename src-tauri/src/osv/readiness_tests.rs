@@ -271,3 +271,87 @@ fn readiness_has_no_not_covered_when_every_file_was_read() {
             .unwrap();
     assert_eq!(old.not_covered, None);
 }
+
+const MAVEN_REPORT: &str = r#"{"lockfiles_read":0,"unsupported_count":1,"unsupported":[
+    {"path":"C:/p/spring-petclinic/pom.xml","reason":"Maven (installed versions not resolved)"}]}"#;
+
+/// W5a: the manifest scanner registers a pom.xml's dependencies with no
+/// version, and a versionless dependency is never matched (#974). They made
+/// "Maven" a required ecosystem, its sync succeeded, and readiness said Ready
+/// for a project nothing was checked in. Only a VERSIONED row makes an
+/// ecosystem required: a Maven-only project has no inventory, and the
+/// not-covered list names its pom.xml.
+#[test]
+fn a_maven_only_project_has_nothing_checked_and_names_its_pom() {
+    let db = crate::test_utils::test_db();
+    db.set_kv(crate::ace::lockfile::report::REPORT_KV_KEY, MAVEN_REPORT)
+        .unwrap();
+    db.store_dependency(
+        "/spring-petclinic",
+        "org.springframework.boot:spring-boot-starter-web",
+        None,
+        "java",
+        false,
+        None,
+    )
+    .unwrap();
+    db.update_osv_sync_status("Maven", 0, None).unwrap();
+
+    let r = advisory_sync(&db);
+    assert_eq!(
+        r.state,
+        AdvisorySyncState::NoInventory,
+        "nothing was checked"
+    );
+    assert_eq!(r.ecosystems, 0);
+    let nc = r.not_covered.expect("the pom.xml is named");
+    assert_eq!(nc.files[0].ecosystem, "Maven");
+    assert!(nc.files[0].path.ends_with("pom.xml"));
+}
+
+/// The read part of a mixed machine is still Ready, and the Maven part is
+/// named, not counted as covered.
+#[test]
+fn npm_and_maven_read_ready_for_npm_and_name_the_maven_files() {
+    let db = crate::test_utils::test_db();
+    db.set_kv(crate::ace::lockfile::report::REPORT_KV_KEY, MAVEN_REPORT)
+        .unwrap();
+    db.store_dependency("/web", "minimist", Some("1.2.5"), "javascript", false, None)
+        .unwrap();
+    db.store_dependency(
+        "/spring-petclinic",
+        "org.springframework.boot:spring-boot-starter-web",
+        None,
+        "java",
+        false,
+        None,
+    )
+    .unwrap();
+    db.update_osv_sync_status("npm", 0, None).unwrap();
+
+    let r = advisory_sync(&db);
+    assert_eq!(r.state, AdvisorySyncState::Ready);
+    assert_eq!(r.ecosystems, 1, "only npm is required: {r:?}");
+    let nc = r.not_covered.expect("the pom.xml is named");
+    assert_eq!(nc.files[0].ecosystem, "Maven");
+}
+
+/// #987 review S3 (cold start): the manifest scan registers dependencies with
+/// no version before the first lockfile walk reports. That is "not read yet":
+/// never "nothing checkable" to a first-run user.
+#[test]
+fn before_the_first_lockfile_walk_versionless_rows_are_not_started() {
+    let db = crate::test_utils::test_db();
+    db.store_dependency("/web", "minimist", None, "javascript", false, None)
+        .unwrap();
+    let r = advisory_sync(&db);
+    assert_eq!(r.state, AdvisorySyncState::NotStarted, "no walk report yet");
+    // Once the walk has reported, the same rows are what was read: nothing
+    // versioned, so nothing to check.
+    db.set_kv(
+        crate::ace::lockfile::report::REPORT_KV_KEY,
+        r#"{"lockfiles_read":0}"#,
+    )
+    .unwrap();
+    assert_eq!(advisory_sync(&db).state, AdvisorySyncState::NoInventory);
+}

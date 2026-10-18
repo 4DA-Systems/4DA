@@ -221,15 +221,27 @@ pub(crate) fn render_facts_for_prompt(facts: &BriefFacts) -> String {
             .to_string();
     }
     let advisory_gap = crate::briefing_deterministic::advisory_gap_line(facts).is_some();
+    let not_covered = crate::briefing_deterministic::not_covered_line(facts)
+        .map(|line| format!("NOT CHECKED: {line}\n\n"))
+        .unwrap_or_default();
     let mut out = if advisory_gap {
         // The security lanes below are empty because advisories were not (all)
         // checked, not because nothing applies (audit E3).
-        String::from(
+        format!(
             "ADVISORY CHECK NOT COMPLETE: the user's dependencies have not been fully checked \
              against published vulnerability advisories yet. An empty ACT NOW or ALSO OPEN does \
              NOT mean they are unaffected. Never say nothing touches their code or that they are \
-             unaffected; the software appends the status line itself.\n\n\
+             unaffected; the software appends the status line itself.\n\n{not_covered}\
              FACTS (computed by 4DA from the user's lockfiles and package registries):\n\n",
+        )
+    } else if let Some(line) = crate::briefing_deterministic::not_covered_line(facts) {
+        // Complete for what was read, not for the files 4DA does not read (W5a).
+        format!(
+            "NOT EVERYTHING WAS CHECKED: {line} Say \"the code 4DA checked\", never \"your code\", \
+             for any all-clear, and never call the user's whole codebase unaffected; the software \
+             appends the not-checked line itself.\n\n\
+             FACTS (computed by 4DA from the user's lockfiles, OSV advisories and package \
+             registries; authoritative for the files it read):\n\n"
         )
     } else {
         String::from(
