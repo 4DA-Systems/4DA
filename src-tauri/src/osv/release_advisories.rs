@@ -21,9 +21,18 @@
 //! "No advisory affects it" is only a claim when the advisory data was read
 //! after the release existed: the mirror for the ecosystem must have a
 //! successful sync inside the trust horizon (`osv::readiness`, the rule
-//! behind Preemption's all-clear) and, when the registry dated the release,
-//! that sync must be newer than the release. Otherwise the status is
-//! unknown, and unknown is never presented as clear.
+//! behind Preemption's all-clear). Otherwise the status is unknown, and
+//! unknown is never presented as clear.
+//!
+//! A clean release is also HELD for [`RELEASE_HOLD_DAYS`] after it was
+//! published: malware advisories trail a compromised publish by hours to
+//! days, so "no advisory yet" minutes after a publish says nothing. The hold
+//! is the one this repository applies to itself (`pnpm-workspace.yaml`
+//! `minimumReleaseAge`) and the MCP server's `dependency_check` applies
+//! (`WAIT_DAYS`). Since the hold is never shorter than the trust horizon, a
+//! release past it always predates the ready sync it was checked against. A
+//! release the registry did not date cannot be aged, so it is unknown, never
+//! clear.
 
 use chrono::NaiveDateTime;
 
@@ -33,6 +42,10 @@ use fourda_depengine::registry::RegistryIndex;
 use super::matching::{check_version_affected, package_key};
 use super::readiness::{self, AdvisorySyncState};
 use super::types::SyncStatus;
+
+/// Days a release must have been public before 4DA names a command toward
+/// it (the hold `pnpm-workspace.yaml`'s `minimumReleaseAge` applies here).
+pub(crate) const RELEASE_HOLD_DAYS: i64 = 3;
 
 /// One stored advisory, as the release check reads it.
 #[derive(Debug, Clone, PartialEq)]
@@ -74,8 +87,10 @@ pub(crate) struct AffectedRelease {
     /// At least one places the release inside a window it could read; when
     /// false every match is the conservative "could not place it" answer.
     pub confirmed: bool,
-    /// Every one of them also affects a copy the concerned projects already
-    /// run, so the advisory lane already reports it (with a clear target).
+    /// Every one of them also affects (version-confirmed) EVERY copy the
+    /// active concerned projects run, so the advisory lane already reports
+    /// each of them there, with a target that clears it. False when no
+    /// active copy was supplied.
     pub covered_by_installed: bool,
 }
 
@@ -88,10 +103,12 @@ pub(crate) enum UnknownReason {
     Syncing,
     /// The latest download failed.
     Failed,
+    /// The stored advisory data could not be read.
+    Unreadable,
+    /// The registry gave no publish date, so the release cannot be aged.
+    Undated,
     /// The last successful download is past the trust horizon.
     Stale { synced_at: Option<String> },
-    /// The last download predates the release.
-    SyncedBeforeRelease { synced_at: String },
 }
 
 impl UnknownReason {
@@ -101,15 +118,18 @@ impl UnknownReason {
             Self::NeverSynced => "vulnerability advisories have not been downloaded yet".into(),
             Self::Syncing => "vulnerability advisories are still downloading".into(),
             Self::Failed => "the last vulnerability-advisory download failed".into(),
-            Self::Stale { synced_at: Some(at) } => {
+            Self::Unreadable => "the stored advisory data could not be read".into(),
+            Self::Undated => {
+                "the registry gave no publish date, so 4DA cannot tell how new it is".into()
+            }
+            Self::Stale {
+                synced_at: Some(at),
+            } => {
                 format!("the advisory data was last downloaded {at} UTC, more than three days ago")
             }
             Self::Stale { synced_at: None } => {
                 "the advisory data is more than three days old".into()
             }
-            Self::SyncedBeforeRelease { synced_at } => format!(
-                "the advisory data was last downloaded {synced_at} UTC, before this release was published"
-            ),
         }
     }
 }
@@ -126,6 +146,14 @@ pub(crate) enum ReleaseAdvisories {
     Withdrawn,
     /// No advisory on record affects it, but the record cannot be trusted.
     Unknown(UnknownReason),
+    /// Checked and clean, but published fewer than [`RELEASE_HOLD_DAYS`]
+    /// days ago: too new for a malware report to exist yet.
+    Held {
+        /// The registry's publish date, `YYYY-MM-DD`.
+        published: String,
+        /// Whole days since it was published.
+        days: i64,
+    },
 }
 
 impl ReleaseAdvisories {
@@ -150,9 +178,11 @@ fn parse_utc(s: &str) -> Option<NaiveDateTime> {
             return Some(t);
         }
     }
+    // A bare date is read as its LAST second: a release dated today must not
+    // age (or predate a sync) from midnight.
     chrono::NaiveDate::parse_from_str(s.get(..10)?, "%Y-%m-%d")
         .ok()
-        .and_then(|d| d.and_hms_opt(0, 0, 0))
+        .and_then(|d| d.and_hms_opt(23, 59, 59))
 }
 
 /// The advisories that affect `release`, as one verdict. Pure.
@@ -182,11 +212,12 @@ fn affected(
     Some(AffectedRelease {
         malware: hits.iter().any(|(a, _)| a.is_malware()),
         confirmed: hits.iter().any(|(_, c)| *c),
-        covered_by_installed: hits.iter().all(|(a, _)| {
-            installed
-                .iter()
-                .any(|v| a.affects(ecosystem, v) == (true, true))
-        }),
+        covered_by_installed: !installed.is_empty()
+            && hits.iter().all(|(a, _)| {
+                installed
+                    .iter()
+                    .all(|v| a.affects(ecosystem, v) == (true, true))
+            }),
         ids,
     })
 }
@@ -232,18 +263,24 @@ pub(crate) fn assess(
     if let Some(reason) = reason {
         return ReleaseAdvisories::Unknown(reason);
     }
-    let synced = sync.synced_at.as_deref().and_then(parse_utc);
-    let released = published.and_then(parse_utc);
-    match (synced, released) {
-        (Some(s), Some(r)) if s < r => {
-            ReleaseAdvisories::Unknown(UnknownReason::SyncedBeforeRelease {
-                synced_at: sync.synced_at.unwrap_or_default(),
-            })
-        }
-        // A ready state always carries a sync time; without one, trust nothing.
-        (None, _) => ReleaseAdvisories::Unknown(UnknownReason::NeverSynced),
-        _ => ReleaseAdvisories::Clear,
+    // A ready state always carries a sync time; without one, trust nothing.
+    if sync.synced_at.as_deref().and_then(parse_utc).is_none() {
+        return ReleaseAdvisories::Unknown(UnknownReason::NeverSynced);
     }
+    let Some(released) = published.and_then(parse_utc) else {
+        return ReleaseAdvisories::Unknown(UnknownReason::Undated);
+    };
+    let age = now.signed_duration_since(released);
+    if age < chrono::Duration::days(RELEASE_HOLD_DAYS) {
+        return ReleaseAdvisories::Held {
+            published: released.format("%Y-%m-%d").to_string(),
+            days: age.num_days().max(0),
+        };
+    }
+    // Past the hold, a ready mirror's sync (younger than the trust horizon,
+    // which the hold is never shorter than; pinned by a test) is newer than
+    // the release, so the data checked was read after the release existed.
+    ReleaseAdvisories::Clear
 }
 
 /// The name equality the matcher uses (`package_key`), plus crates.io's
@@ -297,7 +334,7 @@ impl ReleaseChecker {
             .is_some_and(|r| r.excludes(ecosystem, release));
         let advisories = match stored_advisories(db, ecosystem, package) {
             Some(a) => a,
-            None => return ReleaseAdvisories::Unknown(UnknownReason::Failed),
+            None => return ReleaseAdvisories::Unknown(UnknownReason::Unreadable),
         };
         assess(
             ecosystem,
@@ -313,28 +350,25 @@ impl ReleaseChecker {
     }
 
     /// The verdict for a graded registry release (`source_type` is the
-    /// registry row's), against the copies its concerned projects run.
+    /// registry row's), against `installed`: the copies the ACTIVE concerned
+    /// projects run (coverage by the advisory lane is judged on them alone).
     pub(crate) fn check_grade(
         &self,
         db: &Database,
         source_type: &str,
         grade: &crate::scoring::release_grade::ReleaseGrade,
+        installed: &[String],
         published: Option<&str>,
     ) -> ReleaseAdvisories {
         let Some(ecosystem) = super::exposure::registry_source_ecosystem(source_type) else {
             return ReleaseAdvisories::Unknown(UnknownReason::NeverSynced);
         };
-        let installed: Vec<String> = grade
-            .concerned_pins()
-            .iter()
-            .map(|p| p.installed.to_string())
-            .collect();
         self.check(
             db,
             ecosystem,
             &grade.package,
             &grade.announced.to_string(),
-            &installed,
+            installed,
             published,
         )
     }
@@ -351,7 +385,7 @@ impl ReleaseChecker {
         published: Option<&str>,
     ) -> bool {
         matches!(
-            self.check_grade(db, source_type, grade, published),
+            self.check_grade(db, source_type, grade, &[], published),
             ReleaseAdvisories::Affected(_) | ReleaseAdvisories::Withdrawn
         )
     }
@@ -371,7 +405,7 @@ fn stored_advisories(db: &Database, ecosystem: &str, package: &str) -> Option<Ve
              ORDER BY cvss_score DESC NULLS LAST, advisory_id",
         )
         .ok()?;
-    let rows = stmt
+    let rows: Vec<(AdvisoryWindow, String)> = stmt
         .query_map(rusqlite::params![ecosystem, folded], |r| {
             Ok((
                 AdvisoryWindow {
@@ -386,9 +420,13 @@ fn stored_advisories(db: &Database, ecosystem: &str, package: &str) -> Option<Ve
                 r.get::<_, String>(4)?,
             ))
         })
+        .ok()?
+        // One undecodable row would otherwise vanish and could leave a false
+        // all-clear: any row error makes the whole read unknown.
+        .collect::<rusqlite::Result<_>>()
         .ok()?;
     Some(
-        rows.flatten()
+        rows.into_iter()
             .filter(|(_, name)| same_package(ecosystem, name, package))
             .map(|(a, _)| a)
             .collect(),

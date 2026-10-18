@@ -368,12 +368,6 @@ fn a_vulnerable_minor_names_its_advisories_and_no_command() {
 }
 
 #[test]
-fn a_release_whose_advisories_also_hit_the_installed_copy_is_the_advisory_lanes() {
-    let (_dir, path) = npm_project();
-    assert!(npm_minor(&path, malicious(true)).is_none());
-}
-
-#[test]
 fn an_unchecked_release_names_no_command_and_says_so() {
     let (_dir, path) = npm_project();
     let change = npm_minor(
@@ -405,6 +399,162 @@ fn a_withdrawn_release_names_no_command() {
     .item;
     assert!(!has_run(&item));
     assert!(item.explanation.contains("registry withdrew"));
+}
+
+#[test]
+fn a_clean_release_inside_the_hold_names_no_command_and_says_why() {
+    let (_dir, path) = npm_project();
+    let change = npm_minor(
+        &path,
+        ReleaseAdvisories::Held {
+            published: "2026-10-17".to_string(),
+            days: 1,
+        },
+    )
+    .expect("announced");
+    assert_eq!(change.sites[0].command, None);
+    let item = release_item(&change, NOW).item;
+    assert!(!has_run(&item));
+    assert!(
+        item.explanation
+            .contains("published 1 day ago (2026-10-17)")
+            && item.explanation.contains("younger than 3 days")
+            && item.explanation.contains("caught and pulled first"),
+        "{}",
+        item.explanation
+    );
+    assert!(validate_item(&item).is_ok());
+}
+
+/// Review B2: coverage by the advisory lane is judged on ACTIVE copies. A
+/// scratch project's 2.0.5 (hit by the MAL- record) used to "cover" the
+/// release for an active project on 2.0.0 whose `^2.0.0` admits the
+/// malicious 2.1.0 — and the item was dropped.
+#[test]
+fn a_scratch_copy_never_covers_malware_for_an_active_project() {
+    let dir = tempfile::tempdir().expect("tmp");
+    std::fs::write(
+        dir.path().join("package.json"),
+        r#"{"name":"app","dependencies":{"x":"^2.0.0"}}"#,
+    )
+    .expect("manifest");
+    std::fs::write(dir.path().join("package-lock.json"), "{}").expect("lock");
+    let active = dir.path().to_string_lossy().into_owned();
+    let scratch = "/scratch/old";
+    let g = grade(
+        "x",
+        "2.1.0",
+        &[
+            (scratch, "2.0.5", true, false),
+            (&active, "2.0.0", true, false),
+        ],
+    );
+    let liveness = ProjectLiveness::default().with_scratch(&[scratch]);
+    let installed: Vec<String> = super::releases::active_pins(&g, &liveness)
+        .iter()
+        .map(|p| p.installed.to_string())
+        .collect();
+    assert_eq!(installed, vec!["2.0.0".to_string()]);
+    let mal = crate::osv::release_advisories::AdvisoryWindow {
+        advisory_id: "MAL-2026-77".to_string(),
+        summary: "Malicious code in x (npm)".to_string(),
+        aliases: Vec::new(),
+        affected_ranges: Some(r#"[{"type":"ENUMERATED","events":["2.0.5","2.1.0"]}]"#.into()),
+    };
+    let verdict = crate::osv::release_advisories::assess(
+        "npm",
+        "2.1.0",
+        &installed,
+        &[mal],
+        false,
+        &[],
+        chrono::Utc::now().naive_utc(),
+        false,
+        None,
+    );
+    let change = release_change(
+        &g,
+        &row("npm_registry", "npm: x v2.1.0"),
+        &liveness,
+        verdict,
+    )
+    .expect("the active project is warned");
+    let item = release_item(&change, NOW).item;
+    assert!(!has_run(&item));
+    assert!(item.title.contains("malicious release"), "{}", item.title);
+    assert!(
+        item.explanation.contains("lockfile refresh"),
+        "{}",
+        item.explanation
+    );
+}
+
+#[test]
+fn malware_is_never_left_to_the_advisory_lane() {
+    let (_dir, path) = npm_project();
+    assert!(
+        npm_minor(&path, malicious(true)).is_some(),
+        "even when every active copy is hit too"
+    );
+    let vuln = ReleaseAdvisories::Affected(AffectedRelease {
+        ids: vec!["GHSA-aaaa-bbbb-cccc".to_string()],
+        malware: false,
+        confirmed: true,
+        covered_by_installed: true,
+    });
+    assert!(npm_minor(&path, vuln).is_none());
+}
+
+/// Review S3: install scripts run for dev dependencies too, so a malicious
+/// minor of a dev-only dependency is said, with its range read.
+#[test]
+fn a_malicious_dev_only_minor_is_still_announced() {
+    let dir = tempfile::tempdir().expect("tmp");
+    std::fs::write(
+        dir.path().join("package.json"),
+        r#"{"name":"app","devDependencies":{"left-padder":"^4.1.0"}}"#,
+    )
+    .expect("manifest");
+    std::fs::write(dir.path().join("package-lock.json"), "{}").expect("lock");
+    let path = dir.path().to_string_lossy().into_owned();
+    let g = grade("left-padder", "4.2.0", &[(&path, "4.1.3", true, true)]);
+    let r = row("npm_registry", "npm: left-padder v4.2.0");
+    let liveness = ProjectLiveness::default();
+    assert!(release_change(&g, &r, &liveness, ReleaseAdvisories::Clear).is_none());
+    let change = release_change(&g, &r, &liveness, malicious(false)).expect("said");
+    assert_eq!(change.sites[0].admitted, Some(true));
+    assert!(!has_run(&release_item(&change, NOW).item));
+}
+
+/// Review S4: a dependency only a workspace member declares is admitted by
+/// the member's range: the refresh warning appears; no command, since the
+/// root's own manifest does not declare it.
+#[test]
+fn a_member_declared_range_is_read_for_the_refresh_warning() {
+    let dir = tempfile::tempdir().expect("tmp");
+    std::fs::write(
+        dir.path().join("package.json"),
+        r#"{"name":"root","private":true,"workspaces":["packages/*"]}"#,
+    )
+    .expect("root manifest");
+    std::fs::create_dir_all(dir.path().join("packages/ui")).expect("member dir");
+    std::fs::write(
+        dir.path().join("packages/ui/package.json"),
+        r#"{"name":"@me/ui","dependencies":{"left-padder":"^4.1.0"}}"#,
+    )
+    .expect("member manifest");
+    std::fs::write(dir.path().join("package-lock.json"), "{}").expect("lock");
+    let path = dir.path().to_string_lossy().into_owned();
+    let change = npm_minor(&path, malicious(false)).expect("said");
+    assert_eq!(change.sites[0].admitted, Some(true));
+    let item = release_item(&change, NOW).item;
+    assert!(
+        item.explanation.contains("lockfile refresh"),
+        "{}",
+        item.explanation
+    );
+    let clean = npm_minor(&path, ReleaseAdvisories::Clear).expect("a minor");
+    assert_eq!(clean.sites[0].command, None, "the root does not declare it");
 }
 
 #[test]

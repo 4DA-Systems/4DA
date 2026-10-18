@@ -26,8 +26,8 @@ use semver::Version;
 use crate::brief_facts::{is_own_package, UPGRADE_WINDOW_DAYS};
 use crate::db::Database;
 use crate::evidence::ProjectLiveness;
-use crate::osv::fix_path::{cargo_requirements, npm_requirement, Manager, Requirement};
-use crate::osv::release_advisories::{ReleaseAdvisories, ReleaseChecker};
+use crate::osv::fix_path::{cargo_requirements, Manager, Requirement};
+use crate::osv::release_advisories::{ReleaseAdvisories, ReleaseChecker, RELEASE_HOLD_DAYS};
 use crate::scoring::release_grade::{self, ProjectPin, ReleaseClass, ReleaseGrade};
 
 use super::StackChange;
@@ -113,14 +113,34 @@ fn own_manifest_requirements(dir: &Path, ecosystem: &str, package: &str) -> Vec<
                     .collect()
             })
             .unwrap_or_default(),
-        "npm" => std::fs::read_to_string(dir.join("package.json"))
-            .ok()
-            .and_then(|text| serde_json::from_str::<serde_json::Value>(&text).ok())
-            .and_then(|pkg| npm_requirement(&pkg, package))
-            .map(|r| vec![Requirement::npm(&r)])
-            .unwrap_or_default(),
+        "npm" => npm_manifest_requirement(dir, package).into_iter().collect(),
         _ => Vec::new(),
     }
+}
+
+/// The spec a project's own `package.json` declares `package` with, in any
+/// section the project installs (`dependencies`, `devDependencies`,
+/// `optionalDependencies`; `direct_upgrade::npm_declared`): a project's own
+/// dev dependencies resolve, and their install scripts run.
+fn npm_manifest_requirement(dir: &Path, package: &str) -> Option<Requirement> {
+    let text = std::fs::read_to_string(dir.join("package.json")).ok()?;
+    crate::osv::direct_upgrade::npm_declared(&text, package).map(|r| Requirement::npm(&r))
+}
+
+/// What the project's own manifest AND, for an npm-family workspace root,
+/// its members' manifests declare on `package`: the workspace's one
+/// lockfile resolves every member's requirement, so a refresh there pulls
+/// in a release any of them admits.
+fn workspace_requirements(dir: &Path, ecosystem: &str, package: &str) -> Vec<Requirement> {
+    let mut out = own_manifest_requirements(dir, ecosystem, package);
+    if ecosystem == "npm" {
+        out.extend(
+            crate::ace::npm_local::workspace_member_dirs(dir)
+                .iter()
+                .filter_map(|m| npm_manifest_requirement(m, package)),
+        );
+    }
+    out
 }
 
 fn site_for(
@@ -134,18 +154,25 @@ fn site_for(
     let installed = pin.installed.to_string();
     let announced = grade.announced.to_string();
     // A breaking release always needs a manifest edit; only a minor can land
-    // by refreshing inside the range the project already declares.
-    let admitted = if change == StackChange::Minor && !pin.is_dev {
+    // by refreshing inside the range the project (or a workspace member)
+    // declares. Read for dev pins too: install scripts run for them, so a
+    // malicious dev release inside the range is as close to installed.
+    let admitted = (change == StackChange::Minor).then(|| {
         requirements_admit(
-            &own_manifest_requirements(dir, ecosystem, &grade.package),
+            &workspace_requirements(dir, ecosystem, &grade.package),
             &announced,
         )
-    } else {
-        None
-    };
-    // Never a command toward a release that is not checked clear: the
-    // refresh that "picks it up" is the one that installs a malicious build.
-    let command = (admitted == Some(true) && clear)
+    });
+    let admitted = admitted.flatten();
+    // A command only for a runtime pin whose OWN manifest admits a release
+    // checked clear: the refresh that "picks it up" is the one that would
+    // install a malicious build, and the root's refresh command is only
+    // known to act on the root's own declaration.
+    let own_admits = requirements_admit(
+        &own_manifest_requirements(dir, ecosystem, &grade.package),
+        &announced,
+    ) == Some(true);
+    let command = (admitted == Some(true) && own_admits && clear && !pin.is_dev)
         .then(|| Manager::detect(dir, ecosystem))
         .flatten()
         .and_then(|m| m.refresh_command(&grade.package, &installed, &announced));
@@ -160,11 +187,25 @@ fn site_for(
     }
 }
 
+/// The concerned pins of working projects: scratch and dormant projects are
+/// not working projects (the Brief's rule).
+pub(crate) fn active_pins<'a>(
+    grade: &'a ReleaseGrade,
+    liveness: &ProjectLiveness,
+) -> Vec<&'a ProjectPin> {
+    grade
+        .concerned_pins()
+        .into_iter()
+        .filter(|p| !liveness.is_scratch(&p.project_path) && !liveness.is_dormant(&p.project_path))
+        .collect()
+}
+
 /// Build the change for one graded release, or `None` when it asks nothing of
-/// an active project. Scratch and dormant projects are not working projects
-/// (the Brief's rule); a minor that only dev tooling carries is tooling news.
-/// A release whose every affecting advisory already hits an installed copy is
-/// the advisory lane's (it names the target that clears them).
+/// an active project. A minor that only dev tooling carries is tooling news,
+/// unless an advisory affects it. A release whose every affecting advisory
+/// already hits every active copy is the advisory lane's (it names the
+/// target that clears them) — never a malicious one, which is always said.
+/// `advisories` must be checked against the [`active_pins`]' copies.
 pub(crate) fn release_change(
     grade: &ReleaseGrade,
     row: &RegistryRow,
@@ -172,20 +213,20 @@ pub(crate) fn release_change(
     advisories: ReleaseAdvisories,
 ) -> Option<ReleaseChange> {
     let change = change_of(grade)?;
-    if matches!(&advisories, ReleaseAdvisories::Affected(hit) if hit.covered_by_installed) {
-        return None;
-    }
+    let affected = match &advisories {
+        ReleaseAdvisories::Affected(hit) if hit.covered_by_installed && !hit.malware => {
+            return None
+        }
+        ReleaseAdvisories::Affected(_) => true,
+        _ => false,
+    };
     let ecosystem = crate::osv::exposure::registry_source_ecosystem(&row.source_type)?;
-    let active: Vec<&ProjectPin> = grade
-        .concerned_pins()
-        .into_iter()
-        .filter(|p| !liveness.is_scratch(&p.project_path) && !liveness.is_dormant(&p.project_path))
-        .collect();
+    let active = active_pins(grade, liveness);
     if active.is_empty() {
         return None;
     }
     let dev_only = active.iter().all(|p| p.is_dev);
-    if dev_only && change == StackChange::Minor {
+    if dev_only && change == StackChange::Minor && !affected {
         return None;
     }
     let mut sites: Vec<ReleaseSite> = active
@@ -286,23 +327,37 @@ pub(crate) fn advisory_action(r: &ReleaseChange) -> Option<String> {
             "The registry withdrew {pkg} {new} (yanked, or deprecated in favour of a later \
              release), so 4DA names no command toward it."
         ),
-        ReleaseAdvisories::Clear | ReleaseAdvisories::Unknown(_) => return None,
+        ReleaseAdvisories::Clear
+        | ReleaseAdvisories::Unknown(_)
+        | ReleaseAdvisories::Held { .. } => return None,
     };
     Some(format!("{text}{}", pulled_in.unwrap_or_default()))
 }
 
-/// The sentence for a release 4DA could not check: never presented as clear.
+/// The sentence for a release 4DA could not check, or one too new to
+/// trust: never presented as clear.
 pub(crate) fn unchecked_note(r: &ReleaseChange) -> Option<String> {
-    let ReleaseAdvisories::Unknown(reason) = &r.advisories else {
-        return None;
-    };
-    Some(format!(
-        "Advisory status unknown: 4DA has not checked {} {} against vulnerability advisories, \
-         because {}, so it names no command toward it.",
-        r.package,
-        r.announced,
-        reason.words()
-    ))
+    match &r.advisories {
+        ReleaseAdvisories::Unknown(reason) => Some(format!(
+            "Advisory status unknown: 4DA has not checked {} {} against vulnerability \
+             advisories, because {}, so it names no command toward it.",
+            r.package,
+            r.announced,
+            reason.words()
+        )),
+        ReleaseAdvisories::Held { published, days } => Some(format!(
+            "{} {} was published {} ({published}); 4DA names no command for a release younger \
+             than {RELEASE_HOLD_DAYS} days, so a compromised publish can be caught and pulled first.",
+            r.package,
+            r.announced,
+            match days {
+                0 => "today".to_string(),
+                1 => "1 day ago".to_string(),
+                n => format!("{n} days ago"),
+            }
+        )),
+        _ => None,
+    }
 }
 
 /// The advisory ids to cite for an affected release.
@@ -417,8 +472,19 @@ pub(crate) fn collect_release_changes(
     best.into_values()
         .filter_map(|(_, grade, row)| {
             change_of(&grade)?;
-            let verdict =
-                checker.check_grade(db, &row.source_type, &grade, row.published.as_deref());
+            // Judged on the copies the WORKING projects run: a scratch copy
+            // the advisory lane reports must not stand in for an active one.
+            let installed: Vec<String> = active_pins(&grade, &liveness)
+                .iter()
+                .map(|p| p.installed.to_string())
+                .collect();
+            let verdict = checker.check_grade(
+                db,
+                &row.source_type,
+                &grade,
+                &installed,
+                row.published.as_deref(),
+            );
             release_change(&grade, &row, &liveness, verdict)
         })
         .collect()
