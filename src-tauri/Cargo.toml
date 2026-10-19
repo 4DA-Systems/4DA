@@ -156,7 +156,11 @@ sysinfo = { version = "0.39", default-features = false, features = ["system"] }
 # 2026-09-30: bumped 0.8 -> 0.9 (0.9.0 is the hardening release from four audit
 # rounds, and a one-time semver break: its data types became #[non_exhaustive].
 # 4DA only builds CommandInfo, through CommandInfo::new, so no code changed).
-victauri-plugin = "0.9"
+# 2026-10-19: bumped 0.9 -> 0.10 (0.10.0: Tauri 3 support, postMessage IPC capture,
+# honest IPC log under route mocks, adversarial-audit fixes; the plugin no longer
+# enables tauri's `wry` feature, which 4DA's default-features tauri already has, so
+# no code changed).
+victauri-plugin = "0.10"
 
 # Compile-time scoring macros
 fourda-macros = { path = "fourda-macros" }
@@ -233,7 +237,7 @@ tempfile = "3"
 # Test builds only; the shipped binary keeps the plain `bundled` feature set.
 rusqlite = { version = "0.32", features = ["bundled", "trace", "blob"] }
 criterion = { version = "0.8", features = ["html_reports"] }
-victauri-test = "0.9"
+victauri-test = "0.10"
 # `test-util` gives tests tokio's virtual clock (`#[tokio::test(start_paused)]`),
 # so retry/backoff tests assert exact elapsed time without real sleeps. Test
 # builds only — it is deliberately NOT on the main tokio dependency.
