@@ -169,7 +169,13 @@ fn malware_is_named_as_malware_and_a_notice_never_blocks() {
         },
     ];
     let refs: Vec<&Option<String>> = am.iter().collect();
-    let out = walk_target_kinds("crates.io", "1.0.0", &refs, &mal, &RegistryReleases::default());
+    let out = walk_target_kinds(
+        "crates.io",
+        "1.0.0",
+        &refs,
+        &mal,
+        &RegistryReleases::default(),
+    );
     assert_eq!(out.target, None);
     assert!(out.introduces.is_empty());
     assert_eq!(out.malware, [1]);
@@ -182,7 +188,13 @@ fn malware_is_named_as_malware_and_a_notice_never_blocks() {
             informational: true,
         },
     ];
-    let out = walk_target_kinds("crates.io", "1.0.0", &refs, &notice, &RegistryReleases::default());
+    let out = walk_target_kinds(
+        "crates.io",
+        "1.0.0",
+        &refs,
+        &notice,
+        &RegistryReleases::default(),
+    );
     assert_eq!(
         out.target,
         Some(WalkTarget {

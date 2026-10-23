@@ -453,7 +453,10 @@ impl PackageGroup<'_> {
 
         let malicious = fix_target::malicious_of(&self.lines);
         let scope_note = if let (false, Some(m)) = (self.has_fix, malicious) {
-            format!("No release is named: {}", fix_target::malicious_text(&self.package, m))
+            format!(
+                "No release is named: {}",
+                fix_target::malicious_text(&self.package, m)
+            )
         } else if !self.has_fix && !self.introduces.is_empty() {
             let why = fix_target::introduces_text(&self.introduces);
             format!("No release is named: {why} — pin, patch, or replace")

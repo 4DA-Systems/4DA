@@ -515,3 +515,27 @@ fn the_note_words_a_refresh_as_one() {
         "{mixed}"
     );
 }
+
+/// A pre-release base keeps `^` / `~` bounded (decided for both engines,
+/// 2026-10-24; NodeGoat's async `^2.0.0-rc.4`). The admission check agrees in
+/// both dialects: npm reads `>=2.0.0-rc.4 <3.0.0-0`, Cargo the same caret.
+#[test]
+fn a_prerelease_base_is_bounded_and_admits_like_its_release() {
+    assert_eq!(npm_operator("^2.0.0-rc.4"), Some("^"));
+    assert_eq!(npm_operator("~2.0.0-rc.4"), Some("~"));
+    assert_eq!(requirement_admits("^2.0.0-rc.4", "2.6.4"), Some(true));
+    assert_eq!(requirement_admits("^2.0.0-rc.4", "3.0.0"), Some(false));
+    assert_eq!(requirement_admits("^1.0.0-rc.1", "2.0.1"), Some(false));
+    assert_eq!(
+        Requirement::cargo("^2.0.0-rc.4").admits("2.6.4"),
+        Some(true)
+    );
+    assert_eq!(
+        Requirement::cargo("^2.0.0-rc.4").admits("3.0.0"),
+        Some(false)
+    );
+    assert_eq!(
+        npm_direct_command(Manager::Npm, "^1.0.0-rc.1", "pkg", "2.0.1").as_deref(),
+        Some("npm install \"pkg@^2.0.1\"")
+    );
+}

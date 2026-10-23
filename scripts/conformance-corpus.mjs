@@ -578,7 +578,7 @@ async function stepPin(cases, adjud) {
     const rec = await fetchJson(`https://api.osv.dev/v1/vulns/${encodeURIComponent(id)}`, null, join(CACHE, "vulns", `${id}.json`));
     if (rec) writeFileSync(join(osvDir, `${id}.json`), `${JSON.stringify(rec)}\n`);
   });
-  writeJson(join(CORPUS, "osv-snapshot.json"), { fetched_at: new Date().toISOString().slice(0, 10), source: "https://api.osv.dev/v1/vulns/<id>", package_names: list.length, records: ids.length });
+  writeJson(join(CORPUS, "osv-snapshot.json"), { fetched_at: new Date().toISOString().slice(0, 10), source: "https://api.osv.dev/v1/vulns/<id>", package_names: list.length, records: ids.length, synthetic: synthetic.length, note: "records counts the live OSV records fetched; synthetic counts the SYNT-*.json rule records (not from OSV), kept on a re-pin. Files under osv/ = records + synthetic." });
 }
 
 // ---------------------------------------------------------------------------

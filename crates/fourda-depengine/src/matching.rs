@@ -17,7 +17,9 @@ use std::collections::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 
 use crate::ecosystem::normalize as normalize_ecosystem;
-use crate::fix_target::{installable_fix, installable_line_fix, walk_target_kinds, AdvisoryKind, WalkOutcome};
+use crate::fix_target::{
+    installable_fix, installable_line_fix, walk_target_kinds, AdvisoryKind, WalkOutcome,
+};
 use crate::osv::AdvisoryRecord;
 use crate::range::{check_version_affected, parse_version};
 use crate::registry::{RegistryIndex, RegistryReleases};
@@ -283,7 +285,13 @@ where
                                     .map(|ranges| {
                                         let kinds =
                                             package_kinds.get(&key).map_or(&[][..], Vec::as_slice);
-                                        walk_target_kinds(&record.ecosystem, v, ranges, kinds, facts)
+                                        walk_target_kinds(
+                                            &record.ecosystem,
+                                            v,
+                                            ranges,
+                                            kinds,
+                                            facts,
+                                        )
                                     })
                                     .unwrap_or_default()
                             })

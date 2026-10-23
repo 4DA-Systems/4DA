@@ -219,11 +219,15 @@ fn npm_operator(declared: &str) -> Option<&'static str> {
                 .iter()
                 .all(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()))
     };
+    // A pre-release base is bounded too (decided for both engines): npm reads
+    // `^2.0.0-rc.4` as `>=2.0.0-rc.4 <3.0.0-0`, exactly like `^2.0.0` above it
+    // (NodeGoat's async 2.6.1, declared `^2.0.0-rc.4`).
+    let base = |s: &str| digits(s) || semver::Version::parse(s.trim_start_matches('v')).is_ok();
     if let Some(rest) = d.strip_prefix('^') {
-        return digits(rest).then_some("^");
+        return base(rest).then_some("^");
     }
     if let Some(rest) = d.strip_prefix('~') {
-        return digits(rest).then_some("~");
+        return base(rest).then_some("~");
     }
     let exact = d.strip_prefix('=').unwrap_or(d).trim_start_matches('v');
     semver::Version::parse(exact).is_ok().then_some("")

@@ -303,6 +303,59 @@ fn a_fix_that_brings_in_an_advisory_is_not_named() {
     assert!(sentence.contains(why), "{sentence}");
 }
 
+/// Follow-up of #994: a malicious record every fixing release falls in is
+/// named as malware (the MCP's words), never "brought in"; an unmaintained
+/// notice in the same place never blocks the target.
+#[test]
+fn a_malicious_landing_is_named_and_a_notice_never_blocks() {
+    let open_from = |db: &Database, id: &str, summary: &str, cvss: Option<f64>| {
+        db.upsert_osv_advisory(
+            id,
+            summary,
+            None,
+            "foo",
+            "npm",
+            Some(r#"[{"type":"SEMVER","events":[{"introduced":"1.1.0"}]}]"#),
+            None,
+            cvss.map(|_| "CVSS_V3"),
+            cvss,
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+    };
+    let db = test_db();
+    db.store_dependency("/proj/a", "foo", Some("1.0.0"), "npm", false, None)
+        .unwrap();
+    advisory(&db, "GHSA-foo-a", "foo", "npm", "1.2.0", 7.5);
+    open_from(&db, "GHSA-foo-m", "Malicious Package in foo", None);
+    let plan = build_upgrade_plan(&db);
+    let step = &plan[0];
+    let want = "every fixing release of foo, from foo 1.2.0, is flagged malicious (GHSA-foo-m): \
+                remove or replace foo";
+    assert!(step.explanation.contains(want), "{}", step.explanation);
+    assert!(
+        !step.explanation.contains("brings in"),
+        "{}",
+        step.explanation
+    );
+
+    let db = test_db();
+    db.store_dependency("/proj/a", "foo", Some("1.0.0"), "npm", false, None)
+        .unwrap();
+    advisory(&db, "GHSA-foo-a", "foo", "npm", "1.2.0", 7.5);
+    open_from(&db, "RUSTSEC-foo-n", "foo is unmaintained", None);
+    let plan = build_upgrade_plan(&db);
+    assert!(
+        plan.iter()
+            .any(|i| i.title.starts_with("Upgrade foo to >= 1.2.0")),
+        "{:?}",
+        plan.iter().map(|i| &i.title).collect::<Vec<_>>()
+    );
+}
+
 #[test]
 fn every_emitted_item_is_schema_valid_across_a_mixed_plan() {
     let db = test_db();

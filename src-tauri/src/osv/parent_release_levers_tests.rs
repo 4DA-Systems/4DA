@@ -249,8 +249,15 @@ fn newer_releases_that_bring_in_an_advisory_are_not_the_newest() {
     );
     // A deprecated package keeps its deprecation in the words (follow-up of
     // #994, B3): never "already the newest release ... and is deprecated".
-    db.upsert_source_item("npm", "dep-par", None, "[DEPRECATED] par", "", &[])
-        .expect("deprecation row");
+    db.upsert_source_item(
+        "npm",
+        "dep-par",
+        None,
+        "[DEPRECATED] par",
+        "",
+        &crate::test_utils::seed_embedding("dep-par"),
+    )
+    .expect("deprecation row");
     let standing = crate::osv::parent_hint::parent_standing(&db, "npm", "par", "1.0.0");
     assert_eq!(
         standing,
@@ -259,8 +266,7 @@ fn newer_releases_that_bring_in_an_advisory_are_not_the_newest() {
             deprecated: true,
         }
     );
-    let text =
-        crate::evidence::parent_move("leaf", "1.1.0", "par", "1.0.0", &standing, None, None);
+    let text = crate::evidence::parent_move("leaf", "1.1.0", "par", "1.0.0", &standing, None, None);
     assert!(
         text.contains("which the installed version does not have, and par is deprecated"),
         "{text}"
