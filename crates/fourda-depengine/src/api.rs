@@ -36,7 +36,7 @@ use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::ecosystem::normalize as normalize_ecosystem;
-use crate::fix_target::{installable_line_fix, walk_target_in};
+use crate::fix_target::{installable_line_fix, walk_target_kinds, AdvisoryKind};
 use crate::matching::{inventory_problem, match_inventory_with, package_key, Package};
 use crate::osv::{stored_records, AdvisoryRecord, OsvRecord};
 use crate::range::check_version_affected;
@@ -65,6 +65,9 @@ enum Request {
         ranges: Vec<Option<Value>>,
         #[serde(default)]
         registry: RegistryReleases,
+        /// Parallel to `ranges`: malware / maintenance-notice records.
+        #[serde(default)]
+        kinds: Vec<AdvisoryKind>,
     },
     MatchInventory {
         inventory: Vec<Package>,
@@ -175,6 +178,7 @@ fn answer(request: Request) -> Result<Value, String> {
             installed,
             ranges,
             registry,
+            kinds,
         } => {
             let stored: Vec<Option<String>> = ranges.iter().map(|r| stored(r.as_ref())).collect();
             let line_fixes: Vec<String> = stored
@@ -182,7 +186,7 @@ fn answer(request: Request) -> Result<Value, String> {
                 .filter_map(|r| installable_line_fix(&eco, &installed, r, &registry).fix)
                 .collect();
             let refs: Vec<&Option<String>> = stored.iter().collect();
-            let outcome = walk_target_in(&eco, &installed, &refs, &registry);
+            let outcome = walk_target_kinds(&eco, &installed, &refs, &kinds, &registry);
             let walk = outcome
                 .target
                 .map(|w| json!({ "version": w.version, "clears_all": w.clears_all }));
@@ -191,6 +195,9 @@ fn answer(request: Request) -> Result<Value, String> {
             // Only when set, so every earlier answer keeps its exact shape.
             if !outcome.introduces.is_empty() {
                 out["introduces"] = json!(outcome.introduces);
+            }
+            if !outcome.malware.is_empty() {
+                out["malware"] = json!({ "from": outcome.malware_from, "indices": outcome.malware });
             }
             out
         }

@@ -40,6 +40,9 @@ pub struct LineTarget {
     /// which the installed version does not have, so `target_version` is
     /// `None` (no line fix is offered in its place either). Sorted, deduped.
     pub introduces: Vec<String>,
+    /// Every fixing release is flagged malicious: `target_version` is `None`
+    /// (no line fix either), and these records are named as malware.
+    pub malicious: Option<crate::matching::Malicious>,
 }
 
 impl LineTarget {
@@ -62,6 +65,7 @@ where
         partial: Option<(Version, String)>,
         sites: BTreeMap<String, InstallSite>,
         introduces: Vec<String>,
+        malicious: Option<crate::matching::Malicious>,
     }
     let mut by_version: BTreeMap<String, Acc> = BTreeMap::new();
     let instances = copies
@@ -80,6 +84,7 @@ where
                 partial: None,
                 sites: BTreeMap::new(),
                 introduces: Vec::new(),
+                malicious: None,
             });
         if acc.clean.is_none() {
             acc.clean.clone_from(&d.clean_version);
@@ -88,6 +93,9 @@ where
             acc.walked.clone_from(&d.target_version);
         }
         acc.introduces.extend(d.introduces.iter().cloned());
+        if acc.malicious.is_none() {
+            acc.malicious.clone_from(&d.malicious);
+        }
         if let Some(fix) = d
             .fixed_version
             .as_deref()
@@ -121,7 +129,7 @@ where
             let mut introduces = acc.introduces;
             introduces.sort();
             introduces.dedup();
-            let target_version = if introduces.is_empty() {
+            let target_version = if introduces.is_empty() && acc.malicious.is_none() {
                 acc.clean.or(acc.walked).or(acc.partial.map(|(_, f)| f))
             } else {
                 None
@@ -136,6 +144,7 @@ where
                 upgrade_type,
                 sites: acc.sites.into_values().collect(),
                 introduces,
+                malicious: acc.malicious,
             }
         })
         .collect();
@@ -205,6 +214,7 @@ mod tests {
             target_version: walked.map(str::to_string),
             withheld: Vec::new(),
             introduces: Vec::new(),
+            malicious: None,
         }
     }
 

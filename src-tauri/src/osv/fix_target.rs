@@ -28,6 +28,25 @@ pub fn introduces_text(advisories: &[String]) -> String {
     )
 }
 
+/// Every fixing release is flagged malicious (the MCP's `malware`, never
+/// "brings in"): no release is named, and the first one is.
+pub fn malicious_text(package: &str, m: &fourda_depengine::matching::Malicious) -> String {
+    format!(
+        "every fixing release of {package}, from {package} {}, is flagged malicious ({}): remove \
+         or replace {package}",
+        m.from,
+        m.advisories.join(", ")
+    )
+}
+
+/// The lines' malware block, when no line has a target.
+pub fn malicious_of(lines: &[LineTarget]) -> Option<&fourda_depengine::matching::Malicious> {
+    if lines.iter().any(|l| l.target_version.is_some()) {
+        return None;
+    }
+    lines.iter().find_map(|l| l.malicious.as_ref())
+}
+
 /// The advisories every fixing release of these lines brings in, sorted and
 /// deduped; empty when any line has a target.
 pub fn introduced_by(lines: &[LineTarget]) -> Vec<String> {

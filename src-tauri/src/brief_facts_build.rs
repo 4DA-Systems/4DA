@@ -360,8 +360,7 @@ fn security_fact(
                 installed.as_deref() == Some(l.installed_version.as_str())
                     && l.sites.iter().any(|s| norm_path(&s.project_path) == pnorm)
             });
-            let introduced = line.map_or(&[][..], |l| l.introduces.as_slice());
-            let fix_path = super::clause::with_introduces(fix_path, introduced);
+            let fix_path = super::clause::with_introduces(fix_path, line);
             sites.push(SecuritySite {
                 label: labels.label(project),
                 installed,

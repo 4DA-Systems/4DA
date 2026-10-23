@@ -37,6 +37,8 @@ fn advisories(v: Option<&Value>) -> Vec<Advisory> {
     v.and_then(Value::as_array)
         .into_iter()
         .flatten()
+        // A maintenance notice never blocks a release (both engines).
+        .filter(|a| a.get("informational").and_then(Value::as_bool) != Some(true))
         .map(|a| {
             let ranges: Vec<Value> = a
                 .get("ranges")

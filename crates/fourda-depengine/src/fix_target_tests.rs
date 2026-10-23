@@ -151,3 +151,44 @@ fn a_target_never_brings_in_an_advisory_the_installed_version_lacks() {
     );
     assert!(has_b.introduces.is_empty());
 }
+
+/// Review of #994 follow-up: landing inside a malicious-package record with
+/// no way out names the malware (and where it starts), never "brings in"; a
+/// maintenance notice never blocks a target at all.
+#[test]
+fn malware_is_named_as_malware_and_a_notice_never_blocks() {
+    let am = [
+        ranges(r#"[{"introduced":"0"},{"fixed":"1.2.0"}]"#),
+        ranges(r#"[{"introduced":"1.1.0"}]"#),
+    ];
+    let mal = [
+        AdvisoryKind::default(),
+        AdvisoryKind {
+            malware: true,
+            informational: false,
+        },
+    ];
+    let refs: Vec<&Option<String>> = am.iter().collect();
+    let out = walk_target_kinds("crates.io", "1.0.0", &refs, &mal, &RegistryReleases::default());
+    assert_eq!(out.target, None);
+    assert!(out.introduces.is_empty());
+    assert_eq!(out.malware, [1]);
+    assert_eq!(out.malware_from.as_deref(), Some("1.2.0"));
+
+    let notice = [
+        AdvisoryKind::default(),
+        AdvisoryKind {
+            malware: false,
+            informational: true,
+        },
+    ];
+    let out = walk_target_kinds("crates.io", "1.0.0", &refs, &notice, &RegistryReleases::default());
+    assert_eq!(
+        out.target,
+        Some(WalkTarget {
+            version: "1.2.0".into(),
+            clears_all: true
+        })
+    );
+    assert!(out.introduces.is_empty() && out.malware.is_empty());
+}

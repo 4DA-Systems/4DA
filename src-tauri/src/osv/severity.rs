@@ -54,18 +54,6 @@ pub(crate) fn row_grade(cvss_score: Option<f64>, label: Option<&str>) -> Option<
         .or_else(|| cvss_score.filter(|s| *s > 0.0).map(cvss_band))
 }
 
-/// Maintenance-notice vocabulary (RustSec INFO advisories, npm deprecations).
-const UNMAINTAINED_MARKERS: &[&str] = &[
-    "unmaintained",
-    "no longer maintained",
-    "not maintained",
-    "is deprecated",
-    "has been deprecated",
-    "deprecated crate",
-    "abandoned",
-    "archived",
-];
-
 /// THE maintenance-notice predicate: no fixed version, no CVSS, and the
 /// advisory text says so. An unsound-code or no-fix VULNERABILITY (rsa's
 /// Marvin attack: CVSS 5.9, no fix) is not one. A notice is never graded
@@ -77,11 +65,9 @@ pub(crate) fn maintenance_text(
     summary: &str,
     details: Option<&str>,
 ) -> bool {
-    if !no_fix || cvss.is_some() {
-        return false;
-    }
-    let text = format!("{summary} {}", details.unwrap_or("")).to_lowercase();
-    UNMAINTAINED_MARKERS.iter().any(|m| text.contains(m))
+    // The pure crate holds the rule, so the matcher's fix-target walk (which
+    // never lets a notice block a target) reads the same one.
+    fourda_depengine::severity::is_maintenance_notice(no_fix, cvss.is_some(), summary, details)
 }
 
 /// What a grader reads from one advisory record, whichever table it came from.

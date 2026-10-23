@@ -990,6 +990,7 @@ fn line_in(project: &str, installed: &str, target: Option<&str>) -> LineTarget {
         target_version: target.map(str::to_string),
         clears_all_known: target.is_some(),
         introduces: Vec::new(),
+        malicious: None,
         upgrade_type: None,
         sites: vec![InstallSite {
             project_path: project.into(),

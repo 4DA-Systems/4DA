@@ -135,6 +135,8 @@ mod tests {
                     .to_string(),
             ),
             fixed_versions: Some(r#"["7.5.10"]"#.to_string()),
+            malware: false,
+            informational: false,
         }
     }
 

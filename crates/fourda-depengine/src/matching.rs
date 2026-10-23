@@ -17,7 +17,7 @@ use std::collections::{HashMap, HashSet};
 use serde::{Deserialize, Serialize};
 
 use crate::ecosystem::normalize as normalize_ecosystem;
-use crate::fix_target::{installable_fix, installable_line_fix, walk_target_in, WalkOutcome};
+use crate::fix_target::{installable_fix, installable_line_fix, walk_target_kinds, AdvisoryKind, WalkOutcome};
 use crate::osv::AdvisoryRecord;
 use crate::range::{check_version_affected, parse_version};
 use crate::registry::{RegistryIndex, RegistryReleases};
@@ -97,6 +97,20 @@ pub struct MatchedDependency {
     /// line fix (`fourda_depengine::fix_target::WalkOutcome::introduces`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub introduces: Vec<String>,
+    /// Every fixing release of this copy, from `from` on, is flagged
+    /// malicious (these records, no way out): no target is named, and these
+    /// are never reported as `introduces`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub malicious: Option<Malicious>,
+}
+
+/// Malicious-package records every fixing release of a copy falls in.
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+pub struct Malicious {
+    /// The first release the walk would have named (it is malicious).
+    pub from: String,
+    /// The records, sorted and deduped.
+    pub advisories: Vec<String>,
 }
 
 /// One advisory row that affects at least one installed copy.
@@ -202,7 +216,15 @@ where
     // clear ALL of them, not only the ones it matched today.
     let mut package_ranges: HashMap<(String, String), Vec<&Option<String>>> = HashMap::new();
     let mut package_ids: HashMap<(String, String), Vec<&str>> = HashMap::new();
+    let mut package_kinds: HashMap<(String, String), Vec<AdvisoryKind>> = HashMap::new();
     for record in records {
+        package_kinds
+            .entry((
+                package_key(&record.package_name, &record.ecosystem),
+                normalize_ecosystem(&record.ecosystem).to_string(),
+            ))
+            .or_default()
+            .push(record.kind());
         package_ids
             .entry((
                 package_key(&record.package_name, &record.ecosystem),
@@ -259,7 +281,9 @@ where
                                 package_ranges
                                     .get(&key)
                                     .map(|ranges| {
-                                        walk_target_in(&record.ecosystem, v, ranges, facts)
+                                        let kinds =
+                                            package_kinds.get(&key).map_or(&[][..], Vec::as_slice);
+                                        walk_target_kinds(&record.ecosystem, v, ranges, kinds, facts)
                                     })
                                     .unwrap_or_default()
                             })
@@ -280,6 +304,7 @@ where
                     target_version: targets.target,
                     withheld: targets.withheld,
                     introduces: targets.introduces,
+                    malicious: targets.malicious,
                 });
             }
         }
@@ -365,6 +390,7 @@ struct CopyTargets {
     target: Option<String>,
     withheld: Vec<String>,
     introduces: Vec<String>,
+    malicious: Option<Malicious>,
 }
 
 impl CopyTargets {
@@ -394,6 +420,10 @@ impl CopyTargets {
             target: walk.target.map(|w| w.version),
             withheld,
             introduces: introduced_ids(&walk.introduces, ids),
+            malicious: walk.malware_from.map(|from| Malicious {
+                from,
+                advisories: introduced_ids(&walk.malware, ids),
+            }),
         }
     }
 }

@@ -591,6 +591,16 @@ pub(crate) fn alert_fix_target(
     let introduced = crate::osv::fix_target::introduced_by(lines);
     let sentence = match (best_fix.as_deref(), targets.len()) {
         (Some(f), _) => format!(" Update to >= {f}.{major}"),
+        // A malicious release is named as malware, never "brought in".
+        (None, 0) if crate::osv::fix_target::malicious_of(lines).is_some() => {
+            let package = group.first().map_or("", |m| m.package_name.as_str());
+            crate::osv::fix_target::malicious_of(lines).map_or_else(String::new, |m| {
+                format!(
+                    " No release is named: {}.",
+                    crate::osv::fix_target::malicious_text(package, m)
+                )
+            })
+        }
         // Parity decision 2: say why nothing is named.
         (None, 0) if !introduced.is_empty() => format!(
             " No release is named: {}.",
@@ -3242,6 +3252,7 @@ mod tests {
                     target_version: None,
                     withheld: Vec::new(),
                     introduces: Vec::new(),
+                    malicious: None,
                 },
                 crate::osv::types::MatchedDependency {
                     project_path: "/direct".into(),
@@ -3254,6 +3265,7 @@ mod tests {
                     target_version: None,
                     withheld: Vec::new(),
                     introduces: Vec::new(),
+                    malicious: None,
                 },
             ],
         };
@@ -3297,6 +3309,7 @@ mod tests {
             target_version: Some(fix.into()),
             withheld: Vec::new(),
             introduces: Vec::new(),
+            malicious: None,
         };
         let advisory = crate::osv::types::MatchedAdvisory {
             advisory_id: "GHSA-q2hr-2g5m-vwhr".into(),
@@ -3388,6 +3401,7 @@ mod tests {
                 target_version: None,
                 withheld: Vec::new(),
                 introduces: Vec::new(),
+                malicious: None,
             }],
         };
         let projects = vec!["/paddle-webhook".to_string()];

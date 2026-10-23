@@ -16,6 +16,35 @@
 
 use std::collections::BTreeSet;
 
+/// Maintenance-notice vocabulary (RustSec INFO advisories, npm deprecations).
+const UNMAINTAINED_MARKERS: &[&str] = &[
+    "unmaintained",
+    "no longer maintained",
+    "not maintained",
+    "is deprecated",
+    "has been deprecated",
+    "deprecated crate",
+    "abandoned",
+    "archived",
+];
+
+/// THE maintenance-notice predicate (the app's `osv::severity` reads it, and
+/// the matcher's fix-target walk leaves such records out): no fixed version,
+/// no CVSS, and the advisory text says so. An unsound-code or no-fix
+/// VULNERABILITY (rsa's Marvin attack: CVSS 5.9, no fix) is not one.
+pub fn is_maintenance_notice(
+    no_fix: bool,
+    has_cvss: bool,
+    summary: &str,
+    details: Option<&str>,
+) -> bool {
+    if !no_fix || has_cvss {
+        return false;
+    }
+    let text = format!("{summary} {}", details.unwrap_or("")).to_lowercase();
+    UNMAINTAINED_MARKERS.iter().any(|m| text.contains(m))
+}
+
 /// The four tiers, most severe first rank highest.
 #[must_use]
 pub fn tier_rank(tier: &str) -> u8 {

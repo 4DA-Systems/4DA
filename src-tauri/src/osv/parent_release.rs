@@ -127,12 +127,15 @@ pub struct Advisories<'a> {
 /// move that fixes the others), and the release named says it remains
 /// affected by it.
 impl<'a> Advisories<'a> {
-    /// From the advisories 4DA stores for one package.
+    /// From the advisories 4DA stores for one package. A maintenance notice
+    /// never blocks a release (decided for both engines, 2026-10-19).
     pub fn stored(ecosystem: &'a str, stored: Vec<super::types::StoredAdvisory>) -> Self {
+        use super::severity::SeverityRecord;
         Self {
             ecosystem,
             list: stored
                 .into_iter()
+                .filter(|a| !a.is_informational())
                 .map(|a| {
                     Advisory::new(
                         &a.advisory_id,
@@ -153,6 +156,18 @@ impl<'a> Advisories<'a> {
     /// Every advisory's stored ranges, for the fix-target walk.
     pub fn ranges(&self) -> Vec<&Option<String>> {
         self.list.iter().map(|a| &a.ranges).collect()
+    }
+
+    /// Parallel to [`Self::ranges`]: which records are malware (notices are
+    /// already left out).
+    pub fn kinds(&self) -> Vec<fourda_depengine::fix_target::AdvisoryKind> {
+        self.list
+            .iter()
+            .map(|a| fourda_depengine::fix_target::AdvisoryKind {
+                malware: a.malware,
+                informational: false,
+            })
+            .collect()
     }
 
     /// Some advisory affects `version`.

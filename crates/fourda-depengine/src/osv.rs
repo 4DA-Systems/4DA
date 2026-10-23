@@ -31,12 +31,22 @@ pub struct Affected {
 }
 
 /// The part of a verbatim OSV record the matcher needs. Every other field
-/// (severity, references, `database_specific`, ...) is ignored when parsing.
+/// (references, ...) is ignored when parsing.
 #[derive(Debug, Deserialize, Clone)]
 pub struct OsvRecord {
     pub id: String,
     #[serde(default)]
     pub aliases: Option<Vec<String>>,
+    /// For the malware and maintenance-notice classifications only.
+    #[serde(default)]
+    pub summary: Option<String>,
+    #[serde(default)]
+    pub details: Option<String>,
+    /// OSV `severity[]` (CVSS vectors); present = the record is scored.
+    #[serde(default)]
+    pub severity: Option<Vec<serde_json::Value>>,
+    #[serde(default)]
+    pub database_specific: Option<serde_json::Value>,
     #[serde(default)]
     pub affected: Option<Vec<Affected>>,
     /// Set when the source withdrew the advisory.
@@ -57,6 +67,24 @@ pub struct AdvisoryRecord {
     /// Every `fixed` event, as a stored JSON array ([`fixed_versions_json`]).
     #[serde(default)]
     pub fixed_versions: Option<String>,
+    /// A malicious-package record ([`crate::is_malware`]): a release it
+    /// affects is never a fix target.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub malware: bool,
+    /// A maintenance notice ([`crate::severity::is_maintenance_notice`]): it
+    /// never blocks a fix target.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub informational: bool,
+}
+
+impl AdvisoryRecord {
+    /// How the fix-target walk treats this record.
+    pub fn kind(&self) -> crate::fix_target::AdvisoryKind {
+        crate::fix_target::AdvisoryKind {
+            malware: self.malware,
+            informational: self.informational,
+        }
+    }
 }
 
 /// One advisory's affected entries grouped by (package, ecosystem), in first
@@ -154,14 +182,43 @@ pub fn stored_records(record: &OsvRecord) -> Vec<AdvisoryRecord> {
     }
     merge_affected(record.affected.as_deref().unwrap_or(&[]))
         .into_iter()
-        .map(|((package_name, ecosystem), affected)| AdvisoryRecord {
-            advisory_id: record.id.clone(),
-            package_name,
-            ecosystem,
-            affected_ranges: serialize_ranges(&affected),
-            fixed_versions: fixed_versions_json(&affected),
+        .map(|((package_name, ecosystem), affected)| {
+            let fixed_versions = fixed_versions_json(&affected);
+            AdvisoryRecord {
+                advisory_id: record.id.clone(),
+                package_name,
+                ecosystem,
+                affected_ranges: serialize_ranges(&affected),
+                malware: record_is_malware(record),
+                informational: crate::severity::is_maintenance_notice(
+                    fixed_versions.is_none(),
+                    record.severity.as_ref().is_some_and(|s| !s.is_empty()),
+                    record.summary.as_deref().unwrap_or(""),
+                    record.details.as_deref(),
+                ),
+                fixed_versions,
+            }
         })
         .collect()
+}
+
+/// [`crate::is_malware`] over a verbatim record.
+fn record_is_malware(record: &OsvRecord) -> bool {
+    let cwe_ids: Vec<String> = record
+        .database_specific
+        .as_ref()
+        .and_then(|d| d.get("cwe_ids"))
+        .and_then(serde_json::Value::as_array)
+        .into_iter()
+        .flatten()
+        .filter_map(|c| c.as_str().map(str::to_string))
+        .collect();
+    crate::is_malware(
+        &record.id,
+        record.aliases.as_deref().unwrap_or(&[]),
+        &cwe_ids,
+        record.summary.as_deref().unwrap_or(""),
+    )
 }
 
 #[cfg(test)]
