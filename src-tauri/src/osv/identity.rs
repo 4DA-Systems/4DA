@@ -707,7 +707,7 @@ mod tests {
             target_version: None,
             withheld: Vec::new(),
             introduces: Vec::new(),
-            malicious: None,
+            malicious: Vec::new(),
         };
         let mut sandbox = adv("GHSA-s", "sandbox", None, "s", &[], Some(9.8), None);
         sandbox.dependency_instances = vec![

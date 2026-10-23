@@ -214,8 +214,8 @@ fn same_version(eco: &str, a: Option<&str>, b: Option<&str>) -> bool {
 /// copy. Neither is ever a release `registry` withdrew; the third value names
 /// the withdrawn ones the walk stepped over; the fourth, the indices of the
 /// advisories every fixing release brings in (then there is no target, not
-/// even a line fix: parity decision 2). A malware landing is the fifth value
-/// (from, indices); then there is no target either.
+/// even a line fix: parity decision 2); the fifth, with no target, the
+/// malicious records a fixing release falls in (the MCP's `maliciousLanding`).
 fn engine_target(
     eco: &str,
     installed: &str,
@@ -231,39 +231,39 @@ fn engine_target(
             walk.clears_all,
             outcome.withheld,
             Vec::new(),
-            None,
+            Vec::new(),
         );
     }
-    if let Some(from) = outcome.malware_from {
+    if !outcome.introduces.is_empty() || !outcome.malware.is_empty() {
         return (
             None,
             false,
             outcome.withheld,
-            Vec::new(),
-            Some((from, outcome.malware)),
+            outcome.introduces,
+            outcome.malware,
         );
     }
-    if !outcome.introduces.is_empty() {
-        return (None, false, outcome.withheld, outcome.introduces, None);
-    }
+    // A maintenance notice is never a target, not even its own line fix.
     let partial = ranges
         .iter()
+        .zip(
+            kinds
+                .iter()
+                .copied()
+                .chain(std::iter::repeat(AdvisoryKind::default())),
+        )
+        .filter(|(_, k)| !k.informational)
+        .map(|(r, _)| r)
         .filter(|r| check_version_affected(eco, Some(installed), r) == (true, true))
         .filter_map(|r| installable_line_fix(eco, installed, r, registry).fix)
         .filter_map(|f| parse_version(&f).map(|p| (p, f)))
         .max_by(|a, b| a.0.cmp(&b.0))
         .map(|(_, f)| f);
-    (partial, false, outcome.withheld, Vec::new(), None)
+    (partial, false, outcome.withheld, Vec::new(), Vec::new())
 }
 
-/// (target, clears, withheld, introduced indices, malware (from, indices)).
-type EngineTarget = (
-    Option<String>,
-    bool,
-    Vec<String>,
-    Vec<usize>,
-    Option<(String, Vec<usize>)>,
-);
+/// (target, clears, withheld, introduced indices, malicious indices).
+type EngineTarget = (Option<String>, bool, Vec<String>, Vec<usize>, Vec<usize>);
 
 /// A string-array field of a vector line (absent reads as empty).
 fn strings(v: &Value, key: &str) -> Vec<String> {
@@ -297,17 +297,18 @@ fn check_fix_target(v: &Value, records: &mut Records) -> Result<(), String> {
     };
     let (target, clears, withheld, introduced, malware) =
         engine_target(eco, installed, &ranges, &kinds, &registry);
-    // `malware` ({from, ids}) is checked only on lines that state it.
-    if let Some(want) = v.get("malware") {
-        let got = malware.map(|(from, idx)| {
-            let mut ids: Vec<String> = idx.iter().filter_map(|&i| ids.get(i).cloned()).collect();
-            ids.sort();
-            ids.dedup();
-            serde_json::json!({ "from": from, "ids": ids })
-        });
-        if got.as_ref() != Some(want) {
-            return Err(format!("malware: got {got:?}, want {want}"));
-        }
+    // `malicious` (record ids, sorted) is checked only on lines that state it.
+    let mut malicious: Vec<String> = malware
+        .iter()
+        .filter_map(|&i| ids.get(i).cloned())
+        .collect();
+    malicious.sort();
+    malicious.dedup();
+    if v.get("malicious").is_some() && malicious != strings(v, "malicious") {
+        return Err(format!(
+            "malicious: got {malicious:?}, want {:?}",
+            strings(v, "malicious")
+        ));
     }
     // `introduces` (record ids) is checked only on lines that state it.
     // Sorted and deduped, as both engines name them.

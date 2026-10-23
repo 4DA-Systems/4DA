@@ -215,12 +215,9 @@ fn lever_move(parent: &str, to: &str, l: &Through, force: &str) -> String {
             "{package} is flagged malicious ({advisory}): remove {package} or replace {lever}; \
              no {lever} upgrade is named"
         ),
-        ParentStanding::Introduces {
-            advisories,
-            deprecated,
-        } => format!(
+        ParentStanding::Introduces { advisories } => format!(
             "{}{force}",
-            super::upgrade_parent::introduces_clause(lever, advisories, *deprecated)
+            super::upgrade_parent::introduces_clause(lever, advisories)
         ),
         ParentStanding::Undecided { why } => {
             format!("no {lever} release is named ({why}), so no command is named")

@@ -41,11 +41,6 @@ pub struct OsvRecord {
     #[serde(default)]
     pub summary: Option<String>,
     #[serde(default)]
-    pub details: Option<String>,
-    /// OSV `severity[]` (CVSS vectors); present = the record is scored.
-    #[serde(default)]
-    pub severity: Option<Vec<serde_json::Value>>,
-    #[serde(default)]
     pub database_specific: Option<serde_json::Value>,
     #[serde(default)]
     pub affected: Option<Vec<Affected>>,
@@ -191,10 +186,12 @@ pub fn stored_records(record: &OsvRecord) -> Vec<AdvisoryRecord> {
                 affected_ranges: serialize_ranges(&affected),
                 malware: record_is_malware(record),
                 informational: crate::severity::is_maintenance_notice(
-                    fixed_versions.is_none(),
-                    record.severity.as_ref().is_some_and(|s| !s.is_empty()),
                     record.summary.as_deref().unwrap_or(""),
-                    record.details.as_deref(),
+                    record
+                        .database_specific
+                        .as_ref()
+                        .and_then(|d| d.get("informational"))
+                        .and_then(serde_json::Value::as_str),
                 ),
                 fixed_versions,
             }

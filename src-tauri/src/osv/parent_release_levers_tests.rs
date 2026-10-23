@@ -15,7 +15,7 @@ fn line(installed: &str, target: &str, project: &str) -> Vec<LineTarget> {
         target_version: Some(target.into()),
         clears_all_known: true,
         introduces: Vec::new(),
-        malicious: None,
+        malicious: Vec::new(),
         upgrade_type: Some(UpgradeType::Minor),
         sites: vec![InstallSite {
             project_path: project.to_string(),
@@ -244,11 +244,10 @@ fn newer_releases_that_bring_in_an_advisory_are_not_the_newest() {
         crate::osv::parent_hint::parent_standing(&db, "npm", "par", "1.0.0"),
         ParentStanding::Introduces {
             advisories: vec!["GHSA-synt-b3".into()],
-            deprecated: false,
         }
     );
-    // A deprecated package keeps its deprecation in the words (follow-up of
-    // #994, B3): never "already the newest release ... and is deprecated".
+    // A deprecated package keeps its deprecated outcome first, as the MCP
+    // decides (review of #1008, S3): never Introduces.
     db.upsert_source_item(
         "npm",
         "dep-par",
@@ -258,20 +257,10 @@ fn newer_releases_that_bring_in_an_advisory_are_not_the_newest() {
         &crate::test_utils::seed_embedding("dep-par"),
     )
     .expect("deprecation row");
-    let standing = crate::osv::parent_hint::parent_standing(&db, "npm", "par", "1.0.0");
     assert_eq!(
-        standing,
-        ParentStanding::Introduces {
-            advisories: vec!["GHSA-synt-b3".into()],
-            deprecated: true,
-        }
+        crate::osv::parent_hint::parent_standing(&db, "npm", "par", "1.0.0"),
+        ParentStanding::Newest { deprecated: true }
     );
-    let text = crate::evidence::parent_move("leaf", "1.1.0", "par", "1.0.0", &standing, None, None);
-    assert!(
-        text.contains("which the installed version does not have, and par is deprecated"),
-        "{text}"
-    );
-    assert!(!text.contains("already the newest"), "{text}");
 }
 
 /// Follow-up of #994, B3: with no usable release up to the installed one
@@ -303,7 +292,6 @@ fn nothing_usable_with_newer_releases_that_bring_one_in_is_introduces() {
         crate::osv::parent_hint::parent_standing(&db, "npm", "par", "1.0.0"),
         ParentStanding::Introduces {
             advisories: vec!["GHSA-synt-new".into()],
-            deprecated: false,
         }
     );
 }
@@ -378,7 +366,6 @@ fn every_fixing_release_bringing_in_an_advisory_names_none() {
         "1.0.0",
         &ParentStanding::Introduces {
             advisories: vec!["GHSA-synt-0000-0002".into()],
-            deprecated: false,
         },
         None,
         None,

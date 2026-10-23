@@ -13,7 +13,7 @@ fn ptr_line(project: &str) -> Vec<LineTarget> {
         target_version: Some("0.1.13".into()),
         clears_all_known: true,
         introduces: Vec::new(),
-        malicious: None,
+        malicious: Vec::new(),
         upgrade_type: Some(UpgradeType::Patch),
         sites: vec![InstallSite {
             project_path: project.to_string(),

@@ -89,20 +89,24 @@ pub(crate) fn fix_clause(package: &str, path: &FixPath) -> String {
                 .join("; ")
         ),
         FixPath::NoFix => "no fix published: pin, patch locally, replace, or accept the risk".to_string(),
-        FixPath::Introduces {
+        FixPath::Malicious {
             advisories,
-            malicious_from: Some(from),
-        } => crate::osv::fix_target::malicious_text(
-            package,
-            &fourda_depengine::matching::Malicious {
-                from: from.clone(),
-                advisories: advisories.clone(),
-            },
-        ),
-        FixPath::Introduces {
-            advisories,
-            malicious_from: None,
-        } => format!(
+            introduces,
+        } => {
+            let also = if introduces.is_empty() {
+                String::new()
+            } else {
+                format!(
+                    "; it also cannot move: {}",
+                    crate::osv::fix_target::introduces_text(introduces)
+                )
+            };
+            format!(
+                "no {package} release is named: {}{also}",
+                crate::osv::fix_target::malicious_text(package, advisories)
+            )
+        }
+        FixPath::Introduces { advisories } => format!(
             "no {package} release is named: {}; pin, patch locally, replace, or accept the risk",
             crate::osv::fix_target::introduces_text(advisories)
         ),
@@ -177,10 +181,10 @@ pub(super) fn with_introduces(
     let Some(line) = line.filter(|_| path == FixPath::NoFix) else {
         return path;
     };
-    if let Some(m) = &line.malicious {
-        return FixPath::Introduces {
-            advisories: m.advisories.clone(),
-            malicious_from: Some(m.from.clone()),
+    if !line.malicious.is_empty() {
+        return FixPath::Malicious {
+            advisories: line.malicious.clone(),
+            introduces: line.introduces.clone(),
         };
     }
     if line.introduces.is_empty() {
@@ -188,6 +192,5 @@ pub(super) fn with_introduces(
     }
     FixPath::Introduces {
         advisories: line.introduces.clone(),
-        malicious_from: None,
     }
 }

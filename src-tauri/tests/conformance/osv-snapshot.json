@@ -3,6 +3,6 @@
  "source": "https://api.osv.dev/v1/vulns/<id>",
  "package_names": 7242,
  "records": 3923,
- "synthetic": 4,
+ "synthetic": 6,
  "note": "records counts the live OSV records fetched; synthetic counts the SYNT-*.json rule records (not from OSV), kept on a re-pin. Files under osv/ = records + synthetic."
 }

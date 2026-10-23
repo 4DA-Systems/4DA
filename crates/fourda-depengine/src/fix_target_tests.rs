@@ -179,7 +179,31 @@ fn malware_is_named_as_malware_and_a_notice_never_blocks() {
     assert_eq!(out.target, None);
     assert!(out.introduces.is_empty());
     assert_eq!(out.malware, [1]);
-    assert_eq!(out.malware_from.as_deref(), Some("1.2.0"));
+
+    // The MCP's shape (review of #1008, S2): A fixed 1.2.0, benign B open
+    // from 1.2.0, malware M open from 1.3.0: B is introduced AND M is named.
+    let abm = [
+        ranges(r#"[{"introduced":"0"},{"fixed":"1.2.0"}]"#),
+        ranges(r#"[{"introduced":"1.2.0"}]"#),
+        ranges(r#"[{"introduced":"1.3.0"}]"#),
+    ];
+    let kinds = [
+        AdvisoryKind::default(),
+        AdvisoryKind::default(),
+        AdvisoryKind {
+            malware: true,
+            informational: false,
+        },
+    ];
+    let refs: Vec<&Option<String>> = abm.iter().collect();
+    let registry = RegistryReleases {
+        published: vec!["1.0.0".into(), "1.2.0".into(), "1.3.0".into()],
+        excluded: Vec::new(),
+    };
+    let out = walk_target_kinds("crates.io", "1.0.0", &refs, &kinds, &registry);
+    assert_eq!(out.target, None);
+    assert_eq!(out.introduces, [1]);
+    assert_eq!(out.malware, [2]);
 
     let notice = [
         AdvisoryKind::default(),

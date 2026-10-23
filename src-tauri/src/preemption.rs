@@ -589,17 +589,24 @@ pub(crate) fn alert_fix_target(
         ""
     };
     let introduced = crate::osv::fix_target::introduced_by(lines);
+    let malicious = crate::osv::fix_target::malicious_of(lines);
     let sentence = match (best_fix.as_deref(), targets.len()) {
         (Some(f), _) => format!(" Update to >= {f}.{major}"),
         // A malicious release is named as malware, never "brought in".
-        (None, 0) if crate::osv::fix_target::malicious_of(lines).is_some() => {
+        (None, 0) if !malicious.is_empty() => {
             let package = group.first().map_or("", |m| m.package_name.as_str());
-            crate::osv::fix_target::malicious_of(lines).map_or_else(String::new, |m| {
+            let also = if introduced.is_empty() {
+                String::new()
+            } else {
                 format!(
-                    " No release is named: {}.",
-                    crate::osv::fix_target::malicious_text(package, m)
+                    " It also cannot move: {}.",
+                    crate::osv::fix_target::introduces_text(&introduced)
                 )
-            })
+            };
+            format!(
+                " No release is named: {}.{also}",
+                crate::osv::fix_target::malicious_text(package, &malicious)
+            )
         }
         // Parity decision 2: say why nothing is named.
         (None, 0) if !introduced.is_empty() => format!(
@@ -3252,7 +3259,7 @@ mod tests {
                     target_version: None,
                     withheld: Vec::new(),
                     introduces: Vec::new(),
-                    malicious: None,
+                    malicious: Vec::new(),
                 },
                 crate::osv::types::MatchedDependency {
                     project_path: "/direct".into(),
@@ -3265,7 +3272,7 @@ mod tests {
                     target_version: None,
                     withheld: Vec::new(),
                     introduces: Vec::new(),
-                    malicious: None,
+                    malicious: Vec::new(),
                 },
             ],
         };
@@ -3309,7 +3316,7 @@ mod tests {
             target_version: Some(fix.into()),
             withheld: Vec::new(),
             introduces: Vec::new(),
-            malicious: None,
+            malicious: Vec::new(),
         };
         let advisory = crate::osv::types::MatchedAdvisory {
             advisory_id: "GHSA-q2hr-2g5m-vwhr".into(),
@@ -3401,7 +3408,7 @@ mod tests {
                 target_version: None,
                 withheld: Vec::new(),
                 introduces: Vec::new(),
-                malicious: None,
+                malicious: Vec::new(),
             }],
         };
         let projects = vec!["/paddle-webhook".to_string()];

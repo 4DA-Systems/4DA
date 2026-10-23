@@ -118,30 +118,38 @@ fn a_still_unknown_cluster_is_medium_and_installed_malware_critical() {
     assert_eq!(cluster_urgency(&[&low]), Urgency::Watch);
 }
 
-/// S2 of the #986 review: ONE maintenance predicate. A "has been deprecated"
-/// notice (no fix, no CVSS) with a graded GHSA alias never inherits a
-/// vulnerability grade, whichever table the record comes from; a real bug
-/// with the same alias and a fix does.
+/// S2 of the #986 review: ONE maintenance predicate, the MCP's since the
+/// #1008 review (B1): the summary says "unmaintained" / "no longer
+/// maintained" as words; a fix does not stop it being a notice, and
+/// "deprecated" alone does not make one. A notice with a graded GHSA alias
+/// never inherits a vulnerability grade, whichever table the record comes
+/// from; a real bug with the same alias does.
 #[test]
 fn a_deprecation_notice_never_inherits_a_vulnerability_grade() {
     let mirror = vec![row("GHSA-dep1", "other", None, Some("critical"))];
     let mut notice = matched("RUSTSEC-9", &["GHSA-dep1"], None, None);
-    notice.summary = "foo has been deprecated".into();
+    notice.summary = "foo is unmaintained".into();
     let mut bug = matched("RUSTSEC-10", &["GHSA-dep1"], None, None);
     bug.summary = "Out-of-bounds write".into();
     bug.fixed_version = Some("2.0.0".into());
-    let mut matches = vec![notice, bug];
+    let mut deprecated = matched("RUSTSEC-11", &["GHSA-dep1"], None, None);
+    deprecated.summary = "foo has been deprecated".into();
+    let mut matches = vec![notice, bug, deprecated];
     grade_unrated(&mut matches, &mirror);
     assert_eq!(matches[0].severity_label, None);
     assert_eq!(matches[1].severity_from.as_deref(), Some("GHSA-dep1"));
+    assert_eq!(matches[2].severity_from.as_deref(), Some("GHSA-dep1"));
 
     let grades = AliasGrades::from_rows(&mirror);
     let mut stored = row("RUSTSEC-9", "foo", None, None);
-    stored.summary = "foo has been deprecated".into();
+    stored.summary = "foo is unmaintained".into();
     stored.aliases = vec!["GHSA-dep1".into()];
     assert!(!takes_alias_grade(&stored));
     assert_eq!(rows_grade(&[&stored], &grades), None);
+    // ring's RUSTSEC-2025-0010 shape: a published fix, still a notice.
     stored.fixed_versions = Some(r#"["2.0.0"]"#.into());
+    assert_eq!(rows_grade(&[&stored], &grades), None);
+    stored.summary = "Out-of-bounds write".into();
     assert_eq!(
         rows_grade(&[&stored], &grades).map(|g| g.label()),
         Some("critical (from GHSA-dep1)".to_string())

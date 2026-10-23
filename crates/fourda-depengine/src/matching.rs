@@ -99,20 +99,11 @@ pub struct MatchedDependency {
     /// line fix (`fourda_depengine::fix_target::WalkOutcome::introduces`).
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub introduces: Vec<String>,
-    /// Every fixing release of this copy, from `from` on, is flagged
-    /// malicious (these records, no way out): no target is named, and these
-    /// are never reported as `introduces`.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub malicious: Option<Malicious>,
-}
-
-/// Malicious-package records every fixing release of a copy falls in.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct Malicious {
-    /// The first release the walk would have named (it is malicious).
-    pub from: String,
-    /// The records, sorted and deduped.
-    pub advisories: Vec<String>,
+    /// With no target: the malicious-package records a release this copy
+    /// could move to falls in (the MCP's `maliciousLanding`), sorted and
+    /// deduped. Named as malware, never as `introduces`; both can be set.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub malicious: Vec<String>,
 }
 
 /// One advisory row that affects at least one installed copy.
@@ -216,31 +207,17 @@ where
 
     // Every known advisory's ranges per package: a copy's clean version must
     // clear ALL of them, not only the ones it matched today.
-    let mut package_ranges: HashMap<(String, String), Vec<&Option<String>>> = HashMap::new();
-    let mut package_ids: HashMap<(String, String), Vec<&str>> = HashMap::new();
-    let mut package_kinds: HashMap<(String, String), Vec<AdvisoryKind>> = HashMap::new();
+    let mut package_advisories: HashMap<(String, String), PackageAdvisories<'_>> = HashMap::new();
     for record in records {
-        package_kinds
+        let all = package_advisories
             .entry((
                 package_key(&record.package_name, &record.ecosystem),
                 normalize_ecosystem(&record.ecosystem).to_string(),
             ))
-            .or_default()
-            .push(record.kind());
-        package_ids
-            .entry((
-                package_key(&record.package_name, &record.ecosystem),
-                normalize_ecosystem(&record.ecosystem).to_string(),
-            ))
-            .or_default()
-            .push(&record.advisory_id);
-        package_ranges
-            .entry((
-                package_key(&record.package_name, &record.ecosystem),
-                normalize_ecosystem(&record.ecosystem).to_string(),
-            ))
-            .or_default()
-            .push(&record.affected_ranges);
+            .or_default();
+        all.ranges.push(&record.affected_ranges);
+        all.ids.push(&record.advisory_id);
+        all.kinds.push(record.kind());
     }
     let mut walk_cache: HashMap<(String, String, String), WalkOutcome> = HashMap::new();
     let no_facts = RegistryReleases::default();
@@ -280,23 +257,23 @@ where
                         let walk = walk_cache
                             .entry((key.0.clone(), key.1.clone(), v.to_string()))
                             .or_insert_with(|| {
-                                package_ranges
+                                package_advisories
                                     .get(&key)
-                                    .map(|ranges| {
-                                        let kinds =
-                                            package_kinds.get(&key).map_or(&[][..], Vec::as_slice);
+                                    .map(|all| {
                                         walk_target_kinds(
                                             &record.ecosystem,
                                             v,
-                                            ranges,
-                                            kinds,
+                                            &all.ranges,
+                                            &all.kinds,
                                             facts,
                                         )
                                     })
                                     .unwrap_or_default()
                             })
                             .clone();
-                        let ids = package_ids.get(&key).map_or(&[][..], Vec::as_slice);
+                        let ids = package_advisories
+                            .get(&key)
+                            .map_or(&[][..], |all| all.ids.as_slice());
                         CopyTargets::new(record, v, walk, facts, ids)
                     }
                     _ => CopyTargets::default(),
@@ -389,6 +366,15 @@ where
     findings
 }
 
+/// Every known advisory of one package, in one order: its ranges, ids and
+/// kinds (a copy's clean version must clear all of them).
+#[derive(Default)]
+struct PackageAdvisories<'a> {
+    ranges: Vec<&'a Option<String>>,
+    ids: Vec<&'a str>,
+    kinds: Vec<AdvisoryKind>,
+}
+
 /// One confirmed copy's targets, none of them a release the registry
 /// withdrew.
 #[derive(Default)]
@@ -398,7 +384,7 @@ struct CopyTargets {
     target: Option<String>,
     withheld: Vec<String>,
     introduces: Vec<String>,
-    malicious: Option<Malicious>,
+    malicious: Vec<String>,
 }
 
 impl CopyTargets {
@@ -419,7 +405,10 @@ impl CopyTargets {
             }
         }
         CopyTargets {
-            fixed: line.fix,
+            // A maintenance notice is never a fix target, not even its own
+            // line's (the MCP's rule; ring's RUSTSEC-2025-0010 is fixed at
+            // 0.17.0 and is still only a notice).
+            fixed: line.fix.filter(|_| !record.informational),
             clean: walk
                 .target
                 .as_ref()
@@ -428,10 +417,7 @@ impl CopyTargets {
             target: walk.target.map(|w| w.version),
             withheld,
             introduces: introduced_ids(&walk.introduces, ids),
-            malicious: walk.malware_from.map(|from| Malicious {
-                from,
-                advisories: introduced_ids(&walk.malware, ids),
-            }),
+            malicious: introduced_ids(&walk.malware, ids),
         }
     }
 }

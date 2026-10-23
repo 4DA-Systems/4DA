@@ -16,33 +16,35 @@
 
 use std::collections::BTreeSet;
 
-/// Maintenance-notice vocabulary (RustSec INFO advisories, npm deprecations).
-const UNMAINTAINED_MARKERS: &[&str] = &[
-    "unmaintained",
-    "no longer maintained",
-    "not maintained",
-    "is deprecated",
-    "has been deprecated",
-    "deprecated crate",
-    "abandoned",
-    "archived",
-];
-
-/// THE maintenance-notice predicate (the app's `osv::severity` reads it, and
-/// the matcher's fix-target walk leaves such records out): no fixed version,
-/// no CVSS, and the advisory text says so. An unsound-code or no-fix
-/// VULNERABILITY (rsa's Marvin attack: CVSS 5.9, no fix) is not one.
-pub fn is_maintenance_notice(
-    no_fix: bool,
-    has_cvss: bool,
-    summary: &str,
-    details: Option<&str>,
-) -> bool {
-    if !no_fix || has_cvss {
-        return false;
+/// THE maintenance-notice predicate, the MCP's rule exactly
+/// (`osv-ranges.ts` / `maintenance.ts`, canonical since the #1008 review): a
+/// record is a notice when OSV's `database_specific.informational` is
+/// `unmaintained` or `notice`, or its summary says `unmaintained` or `no
+/// longer maintained` as words (case-insensitive). Nothing else: not
+/// "deprecated" (it appears in plenty of real vulnerability summaries), and
+/// a published fix does not stop a notice being one (ring's
+/// RUSTSEC-2025-0010, "prior to 0.17 are unmaintained", fixed 0.17.0). A
+/// notice never blocks a fix target, never is one, and is never graded as a
+/// vulnerability.
+pub fn is_maintenance_notice(summary: &str, informational: Option<&str>) -> bool {
+    if matches!(informational, Some("unmaintained" | "notice")) {
+        return true;
     }
-    let text = format!("{summary} {}", details.unwrap_or("")).to_lowercase();
-    UNMAINTAINED_MARKERS.iter().any(|m| text.contains(m))
+    let text = summary.to_ascii_lowercase();
+    ["unmaintained", "no longer maintained"]
+        .iter()
+        .any(|word| has_word(&text, word))
+}
+
+/// `phrase` occurs in `text` with a word boundary on each side (regex `\b`:
+/// the neighbours are not `[A-Za-z0-9_]`).
+fn has_word(text: &str, phrase: &str) -> bool {
+    let is_word = |c: char| c.is_ascii_alphanumeric() || c == '_';
+    text.match_indices(phrase).any(|(at, _)| {
+        let before = text[..at].chars().next_back();
+        let after = text[at + phrase.len()..].chars().next();
+        !before.is_some_and(is_word) && !after.is_some_and(is_word)
+    })
 }
 
 /// The four tiers, most severe first rank highest.
@@ -116,6 +118,23 @@ pub fn grade_from_aliases<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_notice_is_the_mcps_rule() {
+        // ring RUSTSEC-2025-0010: a fix is published and it is still a notice.
+        assert!(is_maintenance_notice(
+            "Versions of *ring* prior to 0.17 are unmaintained.",
+            None
+        ));
+        assert!(is_maintenance_notice("foo is no longer maintained", None));
+        assert!(is_maintenance_notice("anything", Some("unmaintained")));
+        assert!(is_maintenance_notice("anything", Some("notice")));
+        assert!(!is_maintenance_notice("anything", Some("unsound")));
+        // Words only, and never "deprecated" / "abandoned" / "archived".
+        assert!(!is_maintenance_notice("UnmaintainedFoo crate", None));
+        assert!(!is_maintenance_notice("foo has been deprecated", None));
+        assert!(!is_maintenance_notice("Prototype pollution in bar", None));
+    }
 
     fn ids(list: &[&str]) -> Vec<String> {
         list.iter().map(|s| (*s).to_string()).collect()

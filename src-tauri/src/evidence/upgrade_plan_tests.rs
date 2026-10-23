@@ -333,8 +333,7 @@ fn a_malicious_landing_is_named_and_a_notice_never_blocks() {
     open_from(&db, "GHSA-foo-m", "Malicious Package in foo", None);
     let plan = build_upgrade_plan(&db);
     let step = &plan[0];
-    let want = "every fixing release of foo, from foo 1.2.0, is flagged malicious (GHSA-foo-m): \
-                remove or replace foo";
+    let want = "foo is flagged malicious (GHSA-foo-m): remove or replace foo";
     assert!(step.explanation.contains(want), "{}", step.explanation);
     assert!(
         !step.explanation.contains("brings in"),
@@ -597,7 +596,7 @@ fn matched(cvss: f64, installs: &[(bool, bool, bool)]) -> crate::osv::types::Mat
                     target_version: None,
                     withheld: Vec::new(),
                     introduces: Vec::new(),
-                    malicious: None,
+                    malicious: Vec::new(),
                 },
             )
             .collect(),

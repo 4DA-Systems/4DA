@@ -661,7 +661,10 @@ fn fix_target(path: &FixPath) -> Option<&str> {
         | FixPath::ParentUnknown { to }
         | FixPath::Reinstall { to }
         | FixPath::Update { to } => Some(to),
-        FixPath::PerLine { .. } | FixPath::NoFix | FixPath::Introduces { .. } => None,
+        FixPath::PerLine { .. }
+        | FixPath::NoFix
+        | FixPath::Introduces { .. }
+        | FixPath::Malicious { .. } => None,
     }
 }
 
@@ -990,7 +993,7 @@ fn line_in(project: &str, installed: &str, target: Option<&str>) -> LineTarget {
         target_version: target.map(str::to_string),
         clears_all_known: target.is_some(),
         introduces: Vec::new(),
-        malicious: None,
+        malicious: Vec::new(),
         upgrade_type: None,
         sites: vec![InstallSite {
             project_path: project.into(),
@@ -1219,5 +1222,41 @@ fn a_lever_with_a_newer_release_on_record_is_upgraded_with_a_check() {
              javascript-opentimestamps release that admits uuid >= 11.1.1)"
         ),
         "{unknown}"
+    );
+}
+
+/// Review of #1008, S4: the malware clause names no version (the MCP's
+/// words), so the version check never faults the brief that quotes it.
+#[test]
+fn the_malicious_clause_passes_the_version_check() {
+    let mut facts = parent_rmcp_facts();
+    facts.security[0].sites[0].fix_path = FixPath::Malicious {
+        advisories: vec!["MAL-2026-0001".into()],
+        introduces: vec!["GHSA-synt-b".into()],
+    };
+    let clause = fix_clause("rmcp", &facts.security[0].sites[0].fix_path);
+    assert!(
+        clause.contains("rmcp is flagged malicious (MAL-2026-0001): remove or replace rmcp"),
+        "{clause}"
+    );
+    let pf = package_facts(&facts);
+    let prose = format!("- **rmcp** (atlas/bridge/src-tauri): {clause}.");
+    assert!(
+        crate::briefing_groundedness::check_factual_claims(&prose, &pf).is_empty(),
+        "{:?}",
+        crate::briefing_groundedness::check_factual_claims(&prose, &pf)
+    );
+}
+
+/// Review of #1008 (nit): the Brief's Debug-based signatures of existing
+/// `Introduces` facts are unchanged by the malware variant.
+#[test]
+fn an_introduces_fact_keeps_its_signature_shape() {
+    let path = FixPath::Introduces {
+        advisories: vec!["GHSA-x".into()],
+    };
+    assert_eq!(
+        format!("{path:?}"),
+        r#"Introduces { advisories: ["GHSA-x"] }"#
     );
 }

@@ -197,8 +197,7 @@ fn answer(request: Request) -> Result<Value, String> {
                 out["introduces"] = json!(outcome.introduces);
             }
             if !outcome.malware.is_empty() {
-                out["malware"] =
-                    json!({ "from": outcome.malware_from, "indices": outcome.malware });
+                out["malware"] = json!(outcome.malware);
             }
             out
         }
