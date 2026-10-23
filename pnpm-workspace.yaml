@@ -24,7 +24,11 @@ trustPolicy: no-downgrade
 # line) is listed here with the reason in a comment, never by switching the
 # policy off:
 #   - "package@1.2.3"   # why it is trusted
-trustPolicyExclude: []
+trustPolicyExclude:
+  # npm's own 6.x backport of the CVE-2022-25883 ReDoS fix, hand-published
+  # 2023-07-10 after 7.5.2+ began carrying provenance. Already in the lockfile
+  # (via @babel/core); re-resolution of eslint-plugin-react-hooks trips the check.
+  - "semver@6.3.1"
 
 # A dependency may run install scripts only when listed here. With
 # strictDepBuilds a new, unreviewed install script fails the install instead
