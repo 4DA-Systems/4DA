@@ -247,6 +247,13 @@ updates:
       time: "06:00"
       timezone: "Etc/UTC"
     open-pull-requests-limit: 5
+    # @types/vscode must match engines.vscode (the oldest VS Code the
+    # extension supports): vsce refuses to package when the types are newer,
+    # and newer types let code use APIs older editors lack. #838 bumped it to
+    # 1.140 and packaging failed from then on. Raise both together, by hand.
+    ignore:
+      - dependency-name: "@types/vscode"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
     groups:
       minor-and-patch:
         update-types: ["minor", "patch"]
