@@ -20,7 +20,7 @@ use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::path::Path;
 
-use fourda_depengine::fix_target::walk_target_in;
+use fourda_depengine::fix_target::walk_target_kinds;
 
 use crate::db::Database;
 use crate::osv::types::MatchedAdvisory;
@@ -159,10 +159,11 @@ fn own_target(book: &ReleaseBook, parent: &ParentSide<'_>, own: &Advisories<'_>)
         return None;
     }
     let refs = own.ranges();
-    walk_target_in(
+    walk_target_kinds(
         ECOSYSTEM,
         parent.version,
         &refs,
+        &own.kinds(),
         &book.registry(ECOSYSTEM, parent.name),
     )
     .target
@@ -200,10 +201,11 @@ pub(super) fn sibling_rows(
         let own = advisories(db, &child);
         for installed in copies.into_iter().filter(|v| own.affect(v)) {
             let refs = own.ranges();
-            let walk = walk_target_in(
+            let walk = walk_target_kinds(
                 ECOSYSTEM,
                 &installed,
                 &refs,
+                &own.kinds(),
                 &book.registry(ECOSYSTEM, &child),
             );
             let Some(target) = walk.target.map(|w| w.version) else {

@@ -23,6 +23,8 @@ fn record(id: &str, eco: &str, name: &str, ranges: &str, fixed: Option<&str>) ->
         ecosystem: eco.to_string(),
         affected_ranges: Some(ranges.to_string()),
         fixed_versions: fixed.map(str::to_string),
+        malware: false,
+        informational: false,
     }
 }
 

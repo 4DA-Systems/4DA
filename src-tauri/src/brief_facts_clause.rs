@@ -89,6 +89,23 @@ pub(crate) fn fix_clause(package: &str, path: &FixPath) -> String {
                 .join("; ")
         ),
         FixPath::NoFix => "no fix published: pin, patch locally, replace, or accept the risk".to_string(),
+        FixPath::Malicious {
+            advisories,
+            introduces,
+        } => {
+            let also = if introduces.is_empty() {
+                String::new()
+            } else {
+                format!(
+                    "; it also cannot move: {}",
+                    crate::osv::fix_target::introduces_text(introduces)
+                )
+            };
+            format!(
+                "no {package} release is named: {}{also}",
+                crate::osv::fix_target::malicious_text(package, advisories)
+            )
+        }
         FixPath::Introduces { advisories } => format!(
             "no {package} release is named: {}; pin, patch locally, replace, or accept the risk",
             crate::osv::fix_target::introduces_text(advisories)
@@ -157,11 +174,23 @@ fn with_major(installed: &str, to: &str, fix: Option<String>) -> Option<String> 
 /// A copy whose line has no target because every fixing release brings in
 /// an advisory it does not have (parity decision 2) says so, with the same
 /// ids the Upgrade Plan and Preemption name, instead of "no fix published".
-pub(super) fn with_introduces(path: FixPath, introduces: &[String]) -> FixPath {
-    if path != FixPath::NoFix || introduces.is_empty() {
+pub(super) fn with_introduces(
+    path: FixPath,
+    line: Option<&crate::osv::fix_target::LineTarget>,
+) -> FixPath {
+    let Some(line) = line.filter(|_| path == FixPath::NoFix) else {
+        return path;
+    };
+    if !line.malicious.is_empty() {
+        return FixPath::Malicious {
+            advisories: line.malicious.clone(),
+            introduces: line.introduces.clone(),
+        };
+    }
+    if line.introduces.is_empty() {
         return path;
     }
     FixPath::Introduces {
-        advisories: introduces.to_vec(),
+        advisories: line.introduces.clone(),
     }
 }

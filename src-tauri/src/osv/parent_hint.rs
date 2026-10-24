@@ -321,10 +321,15 @@ pub fn parent_standing(
     };
     let listed = releases.versions.clone();
     let standing = standing_from_with(&rows, name, installed, &listed, &usable);
-    // Review of #994, B3: "already the newest release" is false when newer
-    // releases exist and only advisories the installed version lacks rule
-    // them out; then that is what is said (parity decision 2).
-    if standing != (ParentStanding::Newest { deprecated: false }) {
+    // Review of #994, B3: "already the newest release", or nothing known at
+    // all, is false when newer releases exist and only advisories the
+    // installed version lacks rule them out; then that is what is said
+    // (parity decision 2). A deprecated package keeps its deprecated outcome
+    // first, as the MCP decides (#1008 review, S3).
+    if !matches!(
+        standing,
+        ParentStanding::Newest { deprecated: false } | ParentStanding::Unknown
+    ) {
         return standing;
     }
     let newer = super::parent_release::ascending(&releases.versions, ecosystem_norm)

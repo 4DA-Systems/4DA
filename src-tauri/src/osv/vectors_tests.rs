@@ -32,7 +32,7 @@ use serde_json::Value;
 // version_order, osv_range and fix_target run against the pure engine crate
 // directly (single-engine C0.1); refresh_verdict and fix_command are still the
 // app's `fix_path` (C0.4), and records are merged by the app's `osv::sync`.
-use fourda_depengine::fix_target::{installable_line_fix, walk_target_in};
+use fourda_depengine::fix_target::{installable_line_fix, walk_target_kinds, AdvisoryKind};
 use fourda_depengine::range::{check_version_affected, parse_version};
 use fourda_depengine::registry::RegistryReleases;
 use fourda_depengine::version_order::OrderedVersion;
@@ -148,6 +148,23 @@ impl Records {
             .ok_or_else(|| format!("record {id} names no {eco} {name}"))?;
         Ok(super::sync::serialize_ranges(&hit.1))
     }
+
+    /// How the walk treats the record for one package (malware, maintenance
+    /// notice), classified by the pure crate exactly as the conformance path
+    /// stores it (`fourda_depengine::osv::stored_records`).
+    fn kind(id: &str, eco: &str, name: &str) -> Result<AdvisoryKind, String> {
+        let path = conformance_dir().join("osv").join(format!("{id}.json"));
+        let text =
+            std::fs::read_to_string(&path).map_err(|e| format!("record {id} not pinned: {e}"))?;
+        let rec: fourda_depengine::osv::OsvRecord =
+            serde_json::from_str(&text).map_err(|e| format!("record {id}: {e}"))?;
+        let want = package_key(name, eco);
+        fourda_depengine::osv::stored_records(&rec)
+            .into_iter()
+            .find(|r| r.ecosystem == eco && package_key(&r.package_name, &r.ecosystem) == want)
+            .map(|r| r.kind())
+            .ok_or_else(|| format!("record {id} names no {eco} {name}"))
+    }
 }
 
 fn check_osv_range(v: &Value, records: &mut Records) -> Result<(), String> {
@@ -197,35 +214,56 @@ fn same_version(eco: &str, a: Option<&str>, b: Option<&str>) -> bool {
 /// copy. Neither is ever a release `registry` withdrew; the third value names
 /// the withdrawn ones the walk stepped over; the fourth, the indices of the
 /// advisories every fixing release brings in (then there is no target, not
-/// even a line fix: parity decision 2).
+/// even a line fix: parity decision 2); the fifth, with no target, the
+/// malicious records a fixing release falls in (the MCP's `maliciousLanding`).
 fn engine_target(
     eco: &str,
     installed: &str,
     ranges: &[Option<String>],
+    kinds: &[AdvisoryKind],
     registry: &RegistryReleases,
-) -> (Option<String>, bool, Vec<String>, Vec<usize>) {
+) -> EngineTarget {
     let refs: Vec<&Option<String>> = ranges.iter().collect();
-    let outcome = walk_target_in(eco, installed, &refs, registry);
+    let outcome = walk_target_kinds(eco, installed, &refs, kinds, registry);
     if let Some(walk) = outcome.target {
         return (
             Some(walk.version),
             walk.clears_all,
             outcome.withheld,
             Vec::new(),
+            Vec::new(),
         );
     }
-    if !outcome.introduces.is_empty() {
-        return (None, false, outcome.withheld, outcome.introduces);
+    if !outcome.introduces.is_empty() || !outcome.malware.is_empty() {
+        return (
+            None,
+            false,
+            outcome.withheld,
+            outcome.introduces,
+            outcome.malware,
+        );
     }
+    // A maintenance notice is never a target, not even its own line fix.
     let partial = ranges
         .iter()
+        .zip(
+            kinds
+                .iter()
+                .copied()
+                .chain(std::iter::repeat(AdvisoryKind::default())),
+        )
+        .filter(|(_, k)| !k.informational)
+        .map(|(r, _)| r)
         .filter(|r| check_version_affected(eco, Some(installed), r) == (true, true))
         .filter_map(|r| installable_line_fix(eco, installed, r, registry).fix)
         .filter_map(|f| parse_version(&f).map(|p| (p, f)))
         .max_by(|a, b| a.0.cmp(&b.0))
         .map(|(_, f)| f);
-    (partial, false, outcome.withheld, Vec::new())
+    (partial, false, outcome.withheld, Vec::new(), Vec::new())
 }
+
+/// (target, clears, withheld, introduced indices, malicious indices).
+type EngineTarget = (Option<String>, bool, Vec<String>, Vec<usize>, Vec<usize>);
 
 /// A string-array field of a vector line (absent reads as empty).
 fn strings(v: &Value, key: &str) -> Vec<String> {
@@ -240,7 +278,11 @@ fn strings(v: &Value, key: &str) -> Vec<String> {
 fn check_fix_target(v: &Value, records: &mut Records) -> Result<(), String> {
     let (eco, name, installed) = (s(v, "eco"), s(v, "name"), s(v, "installed"));
     let mut ranges = Vec::new();
+    let mut kinds = Vec::new();
     let ids = strings(v, "record_ids");
+    for id in &ids {
+        kinds.push(Records::kind(id, eco, name)?);
+    }
     for id in v
         .get("record_ids")
         .and_then(Value::as_array)
@@ -253,7 +295,21 @@ fn check_fix_target(v: &Value, records: &mut Records) -> Result<(), String> {
         published: strings(v, "published"),
         excluded: strings(v, "excluded"),
     };
-    let (target, clears, withheld, introduced) = engine_target(eco, installed, &ranges, &registry);
+    let (target, clears, withheld, introduced, malware) =
+        engine_target(eco, installed, &ranges, &kinds, &registry);
+    // `malicious` (record ids, sorted) is checked only on lines that state it.
+    let mut malicious: Vec<String> = malware
+        .iter()
+        .filter_map(|&i| ids.get(i).cloned())
+        .collect();
+    malicious.sort();
+    malicious.dedup();
+    if v.get("malicious").is_some() && malicious != strings(v, "malicious") {
+        return Err(format!(
+            "malicious: got {malicious:?}, want {:?}",
+            strings(v, "malicious")
+        ));
+    }
     // `introduces` (record ids) is checked only on lines that state it.
     // Sorted and deduped, as both engines name them.
     let mut introduced: Vec<String> = introduced

@@ -107,7 +107,7 @@ pub(crate) fn fact_versions(facts: &BriefFacts) -> Vec<(String, String, &'static
                         push(&f.package, &l.to, "line fix");
                     }
                 }
-                FixPath::NoFix | FixPath::Introduces { .. } => {}
+                FixPath::NoFix | FixPath::Introduces { .. } | FixPath::Malicious { .. } => {}
             }
         }
     }

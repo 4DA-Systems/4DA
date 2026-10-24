@@ -208,6 +208,8 @@ pub(crate) fn advisory_record(advisory: &StoredAdvisory) -> AdvisoryRecord {
         ecosystem: advisory.ecosystem.clone(),
         affected_ranges: advisory.affected_ranges.clone(),
         fixed_versions: advisory.fixed_versions.clone(),
+        malware: advisory.is_malware(),
+        informational: crate::osv::severity::SeverityRecord::is_informational(advisory),
     }
 }
 

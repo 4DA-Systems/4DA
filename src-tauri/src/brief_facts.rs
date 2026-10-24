@@ -124,6 +124,13 @@ pub(crate) enum FixPath {
     /// Every fixing release brings in these advisories, which the installed
     /// copy does not have (parity decision 2): no release is named.
     Introduces { advisories: Vec<String> },
+    /// A fixing release falls in these malicious records (the MCP's
+    /// `maliciousLanding`): no release is named; `introduces` when other
+    /// advisories also block (both engines name both).
+    Malicious {
+        advisories: Vec<String>,
+        introduces: Vec<String>,
+    },
     /// A fix exists, scope unknown.
     Update { to: String },
 }
@@ -719,7 +726,7 @@ pub(crate) fn package_facts(facts: &BriefFacts) -> Vec<crate::briefing_groundedn
                         add(&f.package, Some(&l.to));
                     }
                 }
-                FixPath::NoFix | FixPath::Introduces { .. } => {}
+                FixPath::NoFix | FixPath::Introduces { .. } | FixPath::Malicious { .. } => {}
             }
         }
     }

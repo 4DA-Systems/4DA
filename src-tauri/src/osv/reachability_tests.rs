@@ -194,6 +194,7 @@ fn instance(project: &str, version: &str, confirmed: bool) -> MatchedDependency 
         target_version: None,
         withheld: Vec::new(),
         introduces: Vec::new(),
+        malicious: Vec::new(),
     }
 }
 

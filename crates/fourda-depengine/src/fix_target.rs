@@ -117,6 +117,18 @@ pub struct WalkTarget {
     pub clears_all: bool,
 }
 
+/// How the walk treats one advisory (the host classifies; the crate stays
+/// pure): a maintenance notice never blocks a target and is left out; a
+/// malicious-package record with no way out is never "brought in", it makes
+/// every fixing release a malicious one.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub struct AdvisoryKind {
+    #[serde(default)]
+    pub malware: bool,
+    #[serde(default)]
+    pub informational: bool,
+}
+
 /// Where [`walk_target_in`] lands, and what it had to step over.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct WalkOutcome {
@@ -132,6 +144,11 @@ pub struct WalkOutcome {
     /// where the walk lands but NOT the installed version. Non-empty means
     /// every fixing release brings them in, and `target` is `None`.
     pub introduces: Vec<usize>,
+    /// With no target: indices of the malicious-package records that affect
+    /// any release at or above where the walk lands (the MCP's
+    /// `maliciousLanding`). Named as malware, never as `introduces`; set
+    /// alongside `introduces` when both hold.
+    pub malware: Vec<usize>,
 }
 
 /// A line fix as a release the registry still offers ([`installable_fix`]).
@@ -414,17 +431,35 @@ pub fn walk_target_in(
     ranges: &[&Option<String>],
     registry: &RegistryReleases,
 ) -> WalkOutcome {
+    walk_target_kinds(ecosystem, installed, ranges, &[], registry)
+}
+
+/// [`walk_target_in`] with each advisory's [`AdvisoryKind`] (parallel to
+/// `ranges`; a missing entry is an ordinary advisory). Indices in the outcome
+/// are into `ranges`.
+pub fn walk_target_kinds(
+    ecosystem: &str,
+    installed: &str,
+    ranges: &[&Option<String>],
+    kinds: &[AdvisoryKind],
+    registry: &RegistryReleases,
+) -> WalkOutcome {
     let mut withheld = Vec::new();
-    match walk(ecosystem, installed, ranges, registry, &mut withheld) {
+    let kind = |i: usize| kinds.get(i).copied().unwrap_or_default();
+    match walk(ecosystem, installed, ranges, &kind, registry, &mut withheld) {
         Ok(Landing::At(target)) => WalkOutcome {
             target,
             withheld,
-            introduces: Vec::new(),
+            ..WalkOutcome::default()
         },
-        Ok(Landing::Introduces(introduces)) => WalkOutcome {
+        Ok(Landing::Blocked {
+            introduces,
+            malware,
+        }) => WalkOutcome {
             target: None,
             withheld,
             introduces,
+            malware,
         },
         Err(Unreadable) => WalkOutcome::default(),
     }
@@ -436,15 +471,21 @@ struct Unreadable;
 /// Where the walk ends.
 enum Landing {
     At(Option<WalkTarget>),
-    /// It lands inside advisories with no way out that the installed version
-    /// does not have (these indices): every fixing release brings them in.
-    Introduces(Vec<usize>),
+    /// No target: it lands inside advisories with no way out that the
+    /// installed version does not have (`introduces`), or inside a malicious
+    /// record; `malware` names every malicious record any release from the
+    /// landing on falls in.
+    Blocked {
+        introduces: Vec<usize>,
+        malware: Vec<usize>,
+    },
 }
 
 fn walk(
     ecosystem: &str,
     installed: &str,
     ranges: &[&Option<String>],
+    kind: &dyn Fn(usize) -> AdvisoryKind,
     registry: &RegistryReleases,
     withheld: &mut Vec<String>,
 ) -> Result<Landing, Unreadable> {
@@ -460,6 +501,11 @@ fn walk(
         let mut next: Option<Release> = None;
         let mut stuck: Vec<usize> = Vec::new();
         for (index, (json, advisory)) in ranges.iter().zip(&parsed).enumerate() {
+            // A maintenance notice never blocks a target (decided for both
+            // engines, 2026-10-19).
+            if kind(index).informational {
+                continue;
+            }
             match check_version_affected(ecosystem, Some(&current), json) {
                 (false, _) => continue,
                 (true, false) => return Err(Unreadable),
@@ -483,25 +529,59 @@ fn walk(
             Some((_, raw)) => current = raw,
             None if current == start => return Ok(Landing::At(None)),
             None => {
-                // Never bring an advisory in (parity decision 2): one with no
-                // way out that the installed version does not have blocks the
-                // target; the MCP's `smallestCleanVersion(installed)` agrees.
+                // Never bring an advisory in (parity decision 2): a benign one
+                // with no way out that the installed version does not have
+                // blocks the target. A malicious record is never "brought
+                // in": it blocks too, and is named as malware. The MCP's
+                // `smallestCleanVersion(installed)` agrees.
+                let blocks_malware = stuck.iter().any(|&i| kind(i).malware);
                 let introduced: Vec<usize> = stuck
                     .iter()
                     .copied()
+                    .filter(|&i| !kind(i).malware)
                     .filter(|&i| !check_version_affected(ecosystem, Some(start), ranges[i]).0)
                     .collect();
-                if !introduced.is_empty() {
-                    return Ok(Landing::Introduces(introduced));
+                if !blocks_malware && introduced.is_empty() {
+                    return Ok(Landing::At(Some(WalkTarget {
+                        version: current,
+                        clears_all: stuck.is_empty(),
+                    })));
                 }
-                return Ok(Landing::At(Some(WalkTarget {
-                    version: current,
-                    clears_all: stuck.is_empty(),
-                })));
+                let malware = malicious_landing(ecosystem, &here, ranges, kind, &known);
+                return Ok(Landing::Blocked {
+                    introduces: introduced,
+                    malware,
+                });
             }
         }
     }
     Err(Unreadable)
+}
+
+/// The malicious records (by index) that affect any release the walk could
+/// name from `from` on: known, not withdrawn, not a pre-release (the MCP's
+/// `maliciousLanding` over its candidates).
+fn malicious_landing(
+    ecosystem: &str,
+    from: &OrderedVersion,
+    ranges: &[&Option<String>],
+    kind: &dyn Fn(usize) -> AdvisoryKind,
+    known: &Known,
+) -> Vec<usize> {
+    let candidates: Vec<&str> = known
+        .releases
+        .iter()
+        .filter(|(v, _)| v.compare(from) != Some(Ordering::Less) && known.allowed(v))
+        .map(|(_, raw)| raw.as_str())
+        .collect();
+    (0..ranges.len())
+        .filter(|&i| kind(i).malware && !kind(i).informational)
+        .filter(|&i| {
+            candidates
+                .iter()
+                .any(|v| check_version_affected(ecosystem, Some(v), ranges[i]).0)
+        })
+        .collect()
 }
 
 /// A fix bound (a line fix, or an advisory's listed fix) as a release the

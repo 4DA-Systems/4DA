@@ -28,6 +28,28 @@ pub fn introduces_text(advisories: &[String]) -> String {
     )
 }
 
+/// A malicious landing, in the MCP's words (`malwareText`, fix-paths.ts):
+/// "<pkg> is flagged malicious (<ids>): remove or replace <pkg>". No version
+/// is named, so the Brief's version check has nothing to fault.
+pub fn malicious_text(package: &str, advisories: &[String]) -> String {
+    format!(
+        "{package} is flagged malicious ({}): remove or replace {package}",
+        advisories.join(", ")
+    )
+}
+
+/// The malicious records a fixing release of these lines falls in, sorted
+/// and deduped; empty when any line has a target.
+pub fn malicious_of(lines: &[LineTarget]) -> Vec<String> {
+    if lines.iter().any(|l| l.target_version.is_some()) {
+        return Vec::new();
+    }
+    let mut out: Vec<String> = lines.iter().flat_map(|l| l.malicious.clone()).collect();
+    out.sort();
+    out.dedup();
+    out
+}
+
 /// The advisories every fixing release of these lines brings in, sorted and
 /// deduped; empty when any line has a target.
 pub fn introduced_by(lines: &[LineTarget]) -> Vec<String> {

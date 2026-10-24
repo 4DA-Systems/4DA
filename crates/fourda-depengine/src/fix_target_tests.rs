@@ -151,3 +151,80 @@ fn a_target_never_brings_in_an_advisory_the_installed_version_lacks() {
     );
     assert!(has_b.introduces.is_empty());
 }
+
+/// Review of #994 follow-up: landing inside a malicious-package record with
+/// no way out names the malware (and where it starts), never "brings in"; a
+/// maintenance notice never blocks a target at all.
+#[test]
+fn malware_is_named_as_malware_and_a_notice_never_blocks() {
+    let am = [
+        ranges(r#"[{"introduced":"0"},{"fixed":"1.2.0"}]"#),
+        ranges(r#"[{"introduced":"1.1.0"}]"#),
+    ];
+    let mal = [
+        AdvisoryKind::default(),
+        AdvisoryKind {
+            malware: true,
+            informational: false,
+        },
+    ];
+    let refs: Vec<&Option<String>> = am.iter().collect();
+    let out = walk_target_kinds(
+        "crates.io",
+        "1.0.0",
+        &refs,
+        &mal,
+        &RegistryReleases::default(),
+    );
+    assert_eq!(out.target, None);
+    assert!(out.introduces.is_empty());
+    assert_eq!(out.malware, [1]);
+
+    // The MCP's shape (review of #1008, S2): A fixed 1.2.0, benign B open
+    // from 1.2.0, malware M open from 1.3.0: B is introduced AND M is named.
+    let abm = [
+        ranges(r#"[{"introduced":"0"},{"fixed":"1.2.0"}]"#),
+        ranges(r#"[{"introduced":"1.2.0"}]"#),
+        ranges(r#"[{"introduced":"1.3.0"}]"#),
+    ];
+    let kinds = [
+        AdvisoryKind::default(),
+        AdvisoryKind::default(),
+        AdvisoryKind {
+            malware: true,
+            informational: false,
+        },
+    ];
+    let refs: Vec<&Option<String>> = abm.iter().collect();
+    let registry = RegistryReleases {
+        published: vec!["1.0.0".into(), "1.2.0".into(), "1.3.0".into()],
+        excluded: Vec::new(),
+    };
+    let out = walk_target_kinds("crates.io", "1.0.0", &refs, &kinds, &registry);
+    assert_eq!(out.target, None);
+    assert_eq!(out.introduces, [1]);
+    assert_eq!(out.malware, [2]);
+
+    let notice = [
+        AdvisoryKind::default(),
+        AdvisoryKind {
+            malware: false,
+            informational: true,
+        },
+    ];
+    let out = walk_target_kinds(
+        "crates.io",
+        "1.0.0",
+        &refs,
+        &notice,
+        &RegistryReleases::default(),
+    );
+    assert_eq!(
+        out.target,
+        Some(WalkTarget {
+            version: "1.2.0".into(),
+            clears_all: true
+        })
+    );
+    assert!(out.introduces.is_empty() && out.malware.is_empty());
+}

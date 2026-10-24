@@ -54,34 +54,15 @@ pub(crate) fn row_grade(cvss_score: Option<f64>, label: Option<&str>) -> Option<
         .or_else(|| cvss_score.filter(|s| *s > 0.0).map(cvss_band))
 }
 
-/// Maintenance-notice vocabulary (RustSec INFO advisories, npm deprecations).
-const UNMAINTAINED_MARKERS: &[&str] = &[
-    "unmaintained",
-    "no longer maintained",
-    "not maintained",
-    "is deprecated",
-    "has been deprecated",
-    "deprecated crate",
-    "abandoned",
-    "archived",
-];
-
-/// THE maintenance-notice predicate: no fixed version, no CVSS, and the
-/// advisory text says so. An unsound-code or no-fix VULNERABILITY (rsa's
-/// Marvin attack: CVSS 5.9, no fix) is not one. A notice is never graded
-/// from an alias, the Upgrade Plan folds it into one Watch item, and
-/// [`cluster_urgency`] grades it Watch on the alert path.
-pub(crate) fn maintenance_text(
-    no_fix: bool,
-    cvss: Option<f64>,
-    summary: &str,
-    details: Option<&str>,
-) -> bool {
-    if !no_fix || cvss.is_some() {
-        return false;
-    }
-    let text = format!("{summary} {}", details.unwrap_or("")).to_lowercase();
-    UNMAINTAINED_MARKERS.iter().any(|m| text.contains(m))
+/// THE maintenance-notice predicate (`fourda_depengine::severity::
+/// is_maintenance_notice`, the MCP's rule): the summary says `unmaintained`
+/// or `no longer maintained` as words. The mirror does not store OSV's
+/// `database_specific.informational`, so the summary is what the app reads.
+/// A notice is never graded from an alias, the Upgrade Plan folds it into one
+/// Watch item, [`cluster_urgency`] grades it Watch on the alert path, and the
+/// fix-target walk never lets it block or be a target.
+pub(crate) fn maintenance_text(summary: &str) -> bool {
+    fourda_depengine::severity::is_maintenance_notice(summary, None)
 }
 
 /// What a grader reads from one advisory record, whichever table it came from.
@@ -114,16 +95,7 @@ impl SeverityRecord for MatchedAdvisory {
             .flatten()
     }
     fn is_informational(&self) -> bool {
-        let no_fix = self
-            .fixed_version
-            .as_deref()
-            .is_none_or(|v| v.trim().is_empty());
-        maintenance_text(
-            no_fix,
-            self.cvss_score,
-            &self.summary,
-            self.details.as_deref(),
-        )
+        maintenance_text(&self.summary)
     }
     fn inherited(&self) -> Option<Graded> {
         Some(Graded {
@@ -144,17 +116,7 @@ impl SeverityRecord for StoredAdvisory {
         row_grade(self.cvss_score, self.severity_label.as_deref())
     }
     fn is_informational(&self) -> bool {
-        let no_fix = self
-            .fixed_versions
-            .as_deref()
-            .and_then(|j| serde_json::from_str::<Vec<String>>(j).ok())
-            .is_none_or(|v| v.iter().all(|f| f.trim().is_empty()));
-        maintenance_text(
-            no_fix,
-            self.cvss_score,
-            &self.summary,
-            self.details.as_deref(),
-        )
+        maintenance_text(&self.summary)
     }
 }
 

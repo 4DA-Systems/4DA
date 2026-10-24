@@ -291,11 +291,9 @@ pub(crate) fn parent_move(
             "{package} is flagged malicious ({advisory}): remove or replace {package}; no \
              {parent} release is named as the fix"
         ),
-        ParentStanding::Introduces { advisories } => format!(
-            "no {parent} release is named: every fixing release brings in {}, which the \
-             installed version does not have{force}",
-            advisories.join(", ")
-        ),
+        ParentStanding::Introduces { advisories } => {
+            format!("{}{force}", introduces_clause(parent, advisories))
+        }
         ParentStanding::Undecided { why } => {
             format!("no {parent} release is named because {why}, so no command is named{force}")
         }
@@ -314,6 +312,16 @@ pub(crate) fn parent_move(
             &force,
         ),
     }
+}
+
+/// No `name` release is named because every fixing one brings in an
+/// advisory the installed version lacks (parity decision 2; the MCP's lever
+/// words, upgrade-planner-fixpaths.ts).
+pub(super) fn introduces_clause(name: &str, advisories: &[String]) -> String {
+    format!(
+        "no {name} release is named: {}",
+        crate::osv::fix_target::introduces_text(advisories)
+    )
 }
 
 /// Every release of the parent was read and none admits a clean copy.
@@ -402,10 +410,9 @@ fn row_move(
         ParentStanding::Deprecated => {
             format!("{via}{lever} is deprecated: replace {lever}{force}")
         }
-        ParentStanding::Introduces { advisories } => format!(
-            "{via}no {lever} release is named: {}{force}",
-            crate::osv::fix_target::introduces_text(advisories)
-        ),
+        ParentStanding::Introduces { advisories } => {
+            format!("{via}{}{force}", introduces_clause(lever, advisories))
+        }
         // A lever's registry read runs only under a parent release
         // (`admits_move`); reaching here it says nothing more than Unknown.
         ParentStanding::Unknown

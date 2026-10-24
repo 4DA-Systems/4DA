@@ -469,6 +469,7 @@ fn the_note_words_a_refresh_as_one() {
         target_version: Some("1.2.8".into()),
         clears_all_known: true,
         introduces: Vec::new(),
+        malicious: Vec::new(),
         upgrade_type: None,
         sites: projects
             .iter()
@@ -513,4 +514,39 @@ fn the_note_words_a_refresh_as_one() {
         mixed.contains("`npm install minimist@1.2.8 --save-exact` in /b"),
         "{mixed}"
     );
+}
+
+/// A pre-release base keeps `^` / `~` bounded (decided for both engines,
+/// 2026-10-24; NodeGoat's async `^2.0.0-rc.4`). The admission check agrees in
+/// both dialects: npm reads `>=2.0.0-rc.4 <3.0.0-0`, Cargo the same caret.
+#[test]
+fn a_prerelease_base_is_bounded_and_admits_like_its_release() {
+    assert_eq!(npm_operator("^2.0.0-rc.4"), Some("^"));
+    assert_eq!(npm_operator("~2.0.0-rc.4"), Some("~"));
+    assert_eq!(requirement_admits("^2.0.0-rc.4", "2.6.4"), Some(true));
+    assert_eq!(requirement_admits("^2.0.0-rc.4", "3.0.0"), Some(false));
+    assert_eq!(requirement_admits("^1.0.0-rc.1", "2.0.1"), Some(false));
+    assert_eq!(
+        Requirement::cargo("^2.0.0-rc.4").admits("2.6.4"),
+        Some(true)
+    );
+    assert_eq!(
+        Requirement::cargo("^2.0.0-rc.4").admits("3.0.0"),
+        Some(false)
+    );
+    assert_eq!(
+        npm_direct_command(Manager::Npm, "^1.0.0-rc.1", "pkg", "2.0.1").as_deref(),
+        Some("npm install \"pkg@^2.0.1\"")
+    );
+}
+
+/// Review of #1008, S5: the MCP's `PRERELEASE_BASE` exactly: no `v`, no
+/// `+build` after a caret or tilde.
+#[test]
+fn a_build_or_v_prefixed_base_is_not_bounded() {
+    assert_eq!(npm_operator("^1.2.3+build"), None);
+    assert_eq!(npm_operator("^v1.2.3"), None);
+    assert_eq!(npm_operator("~1.2.3-rc.1+b"), None);
+    assert_eq!(npm_operator("^1.2.3-rc-1.x"), Some("^"));
+    assert_eq!(npm_operator("^1.2"), Some("^"));
 }
