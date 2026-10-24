@@ -85,4 +85,25 @@ ignore = [
     "RUSTSEC-2026-0367", # zip SUID/SGID on extract
     "RUSTSEC-2026-0368", # zip symlink escape on extract
     "RUSTSEC-2026-0369", # zip permissions through symlinks on extract
+
+    # -----------------------------------------------------------------------
+    # crypto-bigint timing variability (RUSTSEC-2026-0387, 2026-10-23): secret-
+    # dependent branches in sub / zero counting / division / Montgomery mul,
+    # early-exit UintRef eq, BoxedMontyForm::invert. Fixed only in >=0.7.6.
+    # - crypto-bigint 0.7.x (via rsa 0.10.0-rc): BUMPED to 0.7.6. Not covered
+    #   by this ignore in practice; it no longer matches.
+    # - crypto-bigint 0.5.5: NO 0.5.x fix exists. Chain: jsonwebtoken 10.4
+    #   (feature rust_crypto) -> p256/p384 0.13 -> ecdsa 0.16 / primeorder ->
+    #   elliptic-curve 0.13 -> crypto-bigint 0.5. jsonwebtoken 11.1 (newest)
+    #   still requires p256 ^0.13, so no compatible parent upgrade removes it.
+    #   Only compiled under the dormant `enterprise` feature (sso_crypto.rs).
+    #   The only EC operation there is ES256/ES384 signature VERIFICATION of an
+    #   IdP id_token against the IdP's published JWKS key: every input
+    #   (token, signature, public key) is public, so a timing leak reveals no
+    #   secret. No EC private key exists anywhere in 4DA. Checked 2026-10-24.
+    # Note: cargo-audit ignores by id, not version; `cargo tree -i
+    # crypto-bigint@0.7.5 --features enterprise` must stay empty.
+    # REVISIT: drop when jsonwebtoken moves to p256/elliptic-curve 0.14
+    # (crypto-bigint 0.7), or if 4DA ever holds an EC private key.
+    "RUSTSEC-2026-0387", # crypto-bigint 0.5.5 via elliptic-curve 0.13 (enterprise SSO verify only)
 ]

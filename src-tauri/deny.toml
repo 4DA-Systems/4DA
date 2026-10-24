@@ -90,6 +90,11 @@ ignore = [
     { id = "RUSTSEC-2026-0367", reason = "zip extract() SUID bits: 4DA, calamine, docx-rs never call extract(); updater extracts only our signature-verified archive" },
     { id = "RUSTSEC-2026-0368", reason = "zip extract() symlink escape: 4DA, calamine, docx-rs never call extract(); updater extracts only our signature-verified archive" },
     { id = "RUSTSEC-2026-0369", reason = "zip extract() permissions via symlink: 4DA, calamine, docx-rs never call extract(); updater extracts only our signature-verified archive" },
+    # crypto-bigint timing (2026-10-24): 0.7.x bumped to the fixed 0.7.6; 0.5.5 has
+    # no fix and is reached only via jsonwebtoken -> p256/p384 0.13 -> elliptic-curve
+    # 0.13 under `enterprise`, for ES256/ES384 VERIFY of public data. Full note in
+    # .cargo/audit.toml. REVISIT: drop when jsonwebtoken moves to elliptic-curve 0.14.
+    { id = "RUSTSEC-2026-0387", reason = "crypto-bigint 0.5.5 (no fix): enterprise-only ECDSA signature verification on public inputs, no EC secret key in 4DA; 0.7.x bumped to 0.7.6" },
 
     # RUSTSEC-2026-0194 / RUSTSEC-2026-0195 (quick-xml <0.41 DoS) were ignored
     # here until 2026-08-14. RESOLVED, not suppressed: calamine 0.36, docx-rs
