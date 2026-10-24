@@ -24,7 +24,11 @@ trustPolicy: no-downgrade
 # line) is listed here with the reason in a comment, never by switching the
 # policy off:
 #   - "package@1.2.3"   # why it is trusted
-trustPolicyExclude: []
+trustPolicyExclude:
+  # Hand-published 6.x backport of the ReDoS fix (CVE-2022-25883), released
+  # 2023-07-10, three days after 7.5.4 shipped with provenance. Already in the
+  # lockfile; flagged once an override change makes pnpm re-resolve the tree.
+  - "semver@6.3.1"
 
 # A dependency may run install scripts only when listed here. With
 # strictDepBuilds a new, unreviewed install script fails the install instead
