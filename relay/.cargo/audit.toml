@@ -20,4 +20,13 @@ ignore = [
     # REVISIT: drop this ignore if sqlx ever stops vendoring the mysql backend
     # into the resolve, or if rsa ships a constant-time fix.
     "RUSTSEC-2023-0071",
+
+    # crypto-bigint 0.5.5 (RUSTSEC-2026-0387) timing variability; fixed only
+    # in >=0.7.6. It reaches the relay through jsonwebtoken 11.1 (newest) ->
+    # p256/p384 0.13, compiled because the rust_crypto backend builds every
+    # curve. The relay signs and verifies HS256 only (Header::default,
+    # Validation::default, from_secret in src/auth.rs), so no elliptic-curve
+    # operation ever runs. Checked 2026-10-25.
+    # REVISIT: drop when jsonwebtoken moves to p256/p384 0.14 (crypto-bigint 0.7).
+    "RUSTSEC-2026-0387",
 ]

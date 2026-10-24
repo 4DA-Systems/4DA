@@ -137,7 +137,7 @@ cssparser 0.37.0 - MPL-2.0 - https://github.com/servo/rust-cssparser
 cssparser 0.38.0 - MPL-2.0 - https://github.com/servo/rust-cssparser
 cssparser-macros 0.7.1 - MPL-2.0 - https://github.com/servo/rust-cssparser
 ctor 1.0.13 - Apache-2.0 OR MIT - https://github.com/mmastrac/linktime
-ctutils 0.4.4 - Apache-2.0 OR MIT - https://github.com/RustCrypto/utils
+ctutils 0.4.5 - Apache-2.0 OR MIT - https://github.com/RustCrypto/utils
 curve25519-dalek 5.0.0 - BSD-3-Clause - https://github.com/dalek-cryptography/curve25519-dalek/tree/main/curve25519-dalek
 curve25519-dalek-derive 0.1.1 - MIT/Apache-2.0 - https://github.com/dalek-cryptography/curve25519-dalek
 daachorse 3.0.3 - MIT OR Apache-2.0 - https://github.com/daac-tools/daachorse
