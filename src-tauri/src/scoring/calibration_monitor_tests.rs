@@ -336,3 +336,90 @@ fn threshold_cliffs_count_items_perched_on_a_confirmation_threshold() {
         0.0
     );
 }
+
+/// The cliff probe samples the NEWEST items (by id), so it never needs to
+/// read and sort every explanation in the corpus.
+#[test]
+fn threshold_cliffs_sample_the_newest_items() {
+    use crate::scoring_config::CONTEXT_THRESHOLD;
+    let db = test_db();
+    // Oldest item perched, the two newest far from both thresholds.
+    for (i, c) in [CONTEXT_THRESHOLD, 0.05, 0.06].iter().enumerate() {
+        let id = insert_test_item(&db, "hn", &format!("new-{i}"), &format!("item {i}"), "");
+        store_breakdown(
+            &db,
+            id,
+            &format!(r#"{{"breakdown":{{"context_score":{c},"interest_score":0.0}}}}"#),
+        );
+    }
+    let cliffs = super::compute_threshold_cliffs(&db, 2).unwrap();
+    assert_eq!(cliffs.sampled, 2);
+    assert_eq!(
+        cliffs.near_context, 0,
+        "the oldest item is outside a 2-item sample"
+    );
+}
+
+/// A buried advisory is reported with its scope and its id, so the alarm names
+/// rows to inspect (2026-10-24: 34 of the 53 live misses were dev-only copies).
+#[test]
+fn high_stakes_recall_reports_dev_only_misses_and_sample_ids() {
+    let db = test_db();
+    let mut ids = Vec::new();
+    for (i, path) in ["direct", "dev-only", "dev-only"].iter().enumerate() {
+        let id = insert_test_item(
+            &db,
+            "cve",
+            &format!("CVE-2026-{i}"),
+            &format!("[CVE-2026-{i}] undici: request smuggling"),
+            "Affected: undici (npm)",
+        );
+        set_score(&db, id, 0.10, Some("security_advisory"), Some("CVE-2026-0"));
+        store_breakdown(
+            &db,
+            id,
+            &format!(
+                r#"{{"breakdown":{{"strongly_grounded":true,"is_version_affected":true,"dependency_path":"{path}"}}}}"#
+            ),
+        );
+        ids.push(id);
+    }
+    let hs = compute_high_stakes_recall(&db, &ctx_with_dep("undici"), 0.4).unwrap();
+    assert_eq!((hs.dep_matched_total, hs.misscored), (3, 3));
+    assert_eq!(hs.misscored_dev_only, 2);
+    let mut sampled = hs.missed_sample_ids.clone();
+    sampled.sort_unstable();
+    assert_eq!(sampled, ids);
+    assert!(hs.missed_sample_ids.len() <= super::MISSED_SAMPLE_LIMIT);
+}
+
+/// The 2026-10-23 launch stall, the case the review found `read_conn` blind to:
+/// a scoring drain holds every pooled reader while another writer holds the
+/// writer connection. The calibration walk must wait for a reader, not queue on
+/// the writer (where it would then hold the writer for tens of seconds).
+#[test]
+fn background_reads_wait_for_a_pooled_reader_never_the_writer() {
+    crate::register_sqlite_vec_extension();
+    let dir = tempfile::tempdir().expect("tempdir");
+    let db = crate::db::Database::new(&dir.path().join("4da.db")).expect("file db");
+    assert!(db.read_pool_len() > 0, "a file database has a reader pool");
+    let id = insert_test_item(&db, "cve", "c1", "advisory affecting tokio", "x");
+    set_score(&db, id, 0.02, Some("security_advisory"), Some("CVE-2026-1"));
+
+    let writer = db.conn.lock(); // a long write elsewhere
+    let drain: Vec<_> = (0..db.read_pool_len()).map(|_| db.read_conn()).collect();
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::scope(|s| {
+        s.spawn(|| {
+            let _ = tx.send(db.get_scored_high_stakes_items(10).map(|r| r.len()));
+        });
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        let waited = rx.try_recv().is_err();
+        drop(drain); // the drain hands its readers back; the writer stays held
+        let got = rx.recv_timeout(std::time::Duration::from_secs(20));
+        drop(writer); // never leave the spawned reader blocked on a failed assert
+        assert!(waited, "with every reader busy the walk waits");
+        let rows = got.expect("completes on a pooled reader while the writer is still held");
+        assert_eq!(rows.expect("query"), 1);
+    });
+}

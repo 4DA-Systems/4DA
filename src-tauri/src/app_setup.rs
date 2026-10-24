@@ -1126,7 +1126,8 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
     if crate::startup_frontend::victauri_e2e_active() {
         info!(target: "4da::startup", "Victauri E2E active - skipping startup data cleanup");
     } else {
-        tauri::async_runtime::spawn(async {
+        // Blocking pool: the body is synchronous SQL with no await point.
+        tauri::async_runtime::spawn_blocking(|| {
             if let Ok(conn) = crate::open_db_connection() {
                 let mut total_deleted: usize = 0;
 
@@ -1476,15 +1477,15 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
 
                 if total_deleted > 0 {
                     info!(target: "4da::startup", total_deleted, "Startup data cleanup complete");
-                    // Checkpoint WAL to reclaim space. TRUNCATE for substantial deletes,
-                    // PASSIVE (non-blocking) for small cleanups. Previous threshold of 1000
-                    // was too high — even 100 deleted rows can produce meaningful WAL bloat.
-                    if total_deleted > 100 {
-                        let _ = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
-                        info!(target: "4da::startup", "WAL TRUNCATE checkpoint after startup cleanup");
-                    } else {
-                        let _ = conn.execute_batch("PRAGMA wal_checkpoint(PASSIVE);");
-                    }
+                    // PASSIVE only. A TRUNCATE checkpoint waits for every reader
+                    // to leave the WAL while it holds the write lock, and at
+                    // startup the first analysis pass is reading: every other
+                    // writer then sat in its 5 s busy handler, many of them on
+                    // runtime workers (isolated run, 2026-10-24: a 65 s
+                    // whole-app stall that ended as this checkpoint returned).
+                    // The hourly maintenance truncates a WAL that is actually
+                    // large (`Database::run_scheduled_maintenance`).
+                    let _ = conn.execute_batch("PRAGMA wal_checkpoint(PASSIVE);");
                 }
             }
         });

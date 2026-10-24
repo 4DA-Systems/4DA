@@ -70,8 +70,7 @@ pub(crate) use ace_context::{get_ace_context, primary_project_dirs, ACEContext};
 pub(crate) use analyzer::{run_post_analysis_hooks, score_items_full};
 pub(crate) use calibration::calibrate_score;
 pub(crate) use calibration_monitor::{
-    compute_calibration_snapshot, compute_high_stakes_recall, compute_threshold_cliffs,
-    CalibrationSnapshot, HighStakesRecall,
+    compute_calibration_snapshot, compute_high_stakes_recall, CalibrationSnapshot, HighStakesRecall,
 };
 pub(crate) use composition::{enforce_composition_floors, FloorConfig};
 pub(crate) use context::{
