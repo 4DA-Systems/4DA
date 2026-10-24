@@ -336,3 +336,104 @@ fn threshold_cliffs_count_items_perched_on_a_confirmation_threshold() {
         0.0
     );
 }
+
+/// The cliff probe samples the NEWEST items (by id), so it never needs to
+/// read and sort every explanation in the corpus.
+#[test]
+fn threshold_cliffs_sample_the_newest_items() {
+    use crate::scoring_config::CONTEXT_THRESHOLD;
+    let db = test_db();
+    // Oldest item perched, the two newest far from both thresholds.
+    for (i, c) in [CONTEXT_THRESHOLD, 0.05, 0.06].iter().enumerate() {
+        let id = insert_test_item(&db, "hn", &format!("new-{i}"), &format!("item {i}"), "");
+        store_breakdown(
+            &db,
+            id,
+            &format!(r#"{{"breakdown":{{"context_score":{c},"interest_score":0.0}}}}"#),
+        );
+    }
+    let cliffs = super::compute_threshold_cliffs(&db, 2).unwrap();
+    assert_eq!(cliffs.sampled, 2);
+    assert_eq!(
+        cliffs.near_context, 0,
+        "the oldest item is outside a 2-item sample"
+    );
+}
+
+/// A buried advisory is reported with its scope and its id, so the alarm names
+/// rows to inspect (2026-10-24: 34 of the 53 live misses were dev-only copies).
+#[test]
+fn high_stakes_recall_reports_dev_only_misses_and_sample_ids() {
+    let db = test_db();
+    let mut ids = Vec::new();
+    for (i, path) in ["direct", "dev-only", "dev-only"].iter().enumerate() {
+        let id = insert_test_item(
+            &db,
+            "cve",
+            &format!("CVE-2026-{i}"),
+            &format!("[CVE-2026-{i}] undici: request smuggling"),
+            "Affected: undici (npm)",
+        );
+        set_score(&db, id, 0.10, Some("security_advisory"), Some("CVE-2026-0"));
+        store_breakdown(
+            &db,
+            id,
+            &format!(
+                r#"{{"breakdown":{{"strongly_grounded":true,"is_version_affected":true,"dependency_path":"{path}"}}}}"#
+            ),
+        );
+        ids.push(id);
+    }
+    let hs = compute_high_stakes_recall(&db, &ctx_with_dep("undici"), 0.4).unwrap();
+    assert_eq!((hs.dep_matched_total, hs.misscored), (3, 3));
+    assert_eq!(hs.misscored_dev_only, 2);
+    let mut sampled = hs.missed_sample_ids.clone();
+    sampled.sort_unstable();
+    assert_eq!(sampled, ids);
+    assert!(hs.missed_sample_ids.len() <= super::MISSED_SAMPLE_LIMIT);
+}
+
+/// The 2026-10-23 launch stall: the scheduled job ran its corpus walks inline
+/// on a tokio worker, every read on the writer connection.
+#[test]
+fn the_scheduled_job_runs_on_the_blocking_pool_with_pooled_readers() {
+    let monitor = include_str!("../monitoring.rs");
+    let start = monitor
+        .find("CALIBRATION_CHECK_INTERVAL)")
+        .and_then(|i| monitor[i..].find("mark_job_complete").map(|j| i + j))
+        .expect("calibration job present");
+    let job = &monitor[start..start + monitor[start..].find("REEXAMINATION").expect("next job")];
+    assert!(
+        job.contains("off_ui_thread_infallible(") && job.contains("run_scheduled_checks("),
+        "the calibration job must hand its body to the blocking pool:\n{job}"
+    );
+    assert!(
+        !job.contains("conn.lock()"),
+        "no writer lock in the scheduler task"
+    );
+
+    let module = include_str!("calibration_monitor.rs");
+    let module = &module[..module.find("#[cfg(test)]").unwrap_or(module.len())];
+    assert!(
+        !module.contains("conn.lock()"),
+        "the calibration monitor only reads: pooled readers, never the writer"
+    );
+
+    let queries = include_str!("../db/scoring_queries.rs");
+    for f in [
+        "fn get_scored_high_stakes_items",
+        "fn get_recent_axis_scores",
+        "fn get_reexaminable_candidates",
+    ] {
+        let at = queries.find(f).expect(f);
+        let body = &queries[at..at + queries[at..].find("\n    }\n").expect("end")];
+        assert!(
+            body.contains("self.read_conn()") && !body.contains("self.conn.lock()"),
+            "{f} must read on a pooled reader"
+        );
+    }
+    assert!(
+        !queries.contains("ORDER BY scored_at DESC"),
+        "scored_at has no index: ordering by it reads and sorts the whole table"
+    );
+}
