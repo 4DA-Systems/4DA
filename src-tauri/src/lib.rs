@@ -220,6 +220,7 @@ mod delegation;
 #[path = "delegation_stub.rs"]
 mod delegation;
 pub(crate) mod dep_linker;
+mod dep_rescan;
 mod dependency_commands;
 mod dependency_health;
 mod developer_dna;

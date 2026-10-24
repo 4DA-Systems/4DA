@@ -51,6 +51,7 @@ const fresh = (over: Partial<DataFreshness>): DataFreshness => ({
   newest_source_check_age_hours: 0.5, source_checks_last_24h: 6, source_checks_last_72h: 6,
   failing_sources: 0, stale_sources: 0, total_sources: 6, is_stale: false, no_recent_fetches: false,
   last_run_items_scored: 4, last_run_sources_succeeded: 6, last_run_sources_failed: 0,
+  last_run_sources_skipped: 0,
   last_run_age_minutes: 12, computed_at: null, ...over,
 });
 

@@ -278,6 +278,13 @@ function formatAgo(minutes) {
  * receipt ("Scanned 421 · 20/20 sources · 4m ago"); falls back to the raw item
  * watermark ("Freshest item 4m ago") when no receipt exists — so the line always
  * shows real freshness even with the headless engine / external verifier disabled.
+ *
+ * A cycle that fetched nothing because every enabled source was fetched minutes
+ * earlier (0 ok, 0 failed, N skipped) is a healthy no-op: it reads "sources fresh
+ * (cached)", not "0 sources", which looked like a dead engine (live 2026-10-24).
+ * Skipped also counts disabled and circuit-open sources, so the cached wording
+ * needs a real source success shortly before that run; otherwise the plain count
+ * stands.
  */
 function buildFreshnessLine(df) {
   if (!df) return '';
@@ -287,12 +294,26 @@ function buildFreshnessLine(df) {
     var failed = df.last_run_sources_failed != null ? df.last_run_sources_failed : 0;
     var total = ok + failed;
     var srcPart = total > 0 ? (ok + '/' + total + ' sources') : (ok + ' sources');
+    if (total === 0 && skippedForFreshness(df)) {
+      srcPart = 'sources fresh (cached)';
+    }
     return 'Scanned ' + scanned + ' · ' + srcPart + ' · ' + formatAgo(df.last_run_age_minutes);
   }
   if (df.newest_item_age_hours != null) {
     return 'Freshest item ' + formatAgo(df.newest_item_age_hours * 60);
   }
   return '';
+}
+
+// True when the last run skipped sources AND some source succeeded within a few
+// minutes before that run, i.e. the skip was the recent-fetch cache, not only
+// disabled or circuit-open sources. The processor's recent-fetch window is 5
+// minutes; 10 leaves room for the cycle's own duration.
+function skippedForFreshness(df) {
+  var skipped = df.last_run_sources_skipped != null ? df.last_run_sources_skipped : 0;
+  if (skipped <= 0 || df.newest_source_check_age_hours == null) return false;
+  var runAge = df.last_run_age_minutes != null ? df.last_run_age_minutes : 0;
+  return df.newest_source_check_age_hours * 60 <= runAge + 10;
 }
 
 function renderFreshnessLine(df) {
@@ -352,9 +373,14 @@ function buildPersistentStrip(alerts) {
       earliest = a.first_seen_date;
     }
   }
-  var since = earliest ? ' since ' + escapeHtml(formatShortDate(earliest)) : '';
+  // The earliest first_seen of the group is when the OLDEST was first seen,
+  // not a date since which every one of them has been unchanged.
+  var oldest = earliest
+    ? (alerts.length === 1 ? ', first seen ' : ', oldest first seen ')
+      + escapeHtml(formatShortDate(earliest))
+    : '';
   var label = alerts.length + ' known advisor' + (alerts.length === 1 ? 'y' : 'ies')
-    + ' still open, unchanged' + since;
+    + ' still open' + oldest;
   return '<div class="preemption-persistent">'
     + '<span class="preemption-persistent-label">' + label + '</span>'
     + '<span class="preemption-persistent-pkgs">' + names.join(' &middot; ') + '</span>'
