@@ -80,7 +80,7 @@ pub(crate) fn compute_calibration_snapshot(
     threshold: f32,
 ) -> SqliteResult<CalibrationSnapshot> {
     // Pure reads: a pooled reader, never the writer (see `run_scheduled_checks`).
-    let conn = db.read_conn();
+    let conn = db.read_conn_blocking();
     let t = threshold as f64;
 
     // ── Engagement-derived metrics (join feedback → source_items) ──
@@ -318,47 +318,20 @@ pub(crate) fn compute_threshold_cliffs(
 /// over 170k explanations takes 22 s with a cold page cache, and the same
 /// scheduler tick then went straight into the suns, so the worker did not
 /// yield for about a minute while Victauri `/health` sat blocked for 30 s.
-/// Every read here now uses a pooled reader.
+/// Every read here now waits for a pooled reader (`read_conn_blocking`), never
+/// falling back to the writer while a scoring drain holds the pool.
 pub(crate) fn run_scheduled_checks(
     db: &Database,
     threshold: f32,
     ctx: Option<&ScoringContext>,
 ) -> Option<String> {
-    let mut snapshot_error = None;
-    match compute_calibration_snapshot(db, threshold) {
-        Ok(snap) if snap.has_sufficient_feedback => {
-            let health = snap.health().unwrap_or(1.0);
-            tracing::info!(
-                target: "4da::calibration",
-                feedback = snap.feedback_count,
-                precision_miss = snap.precision_miss_rate,
-                recall_miss = snap.recall_miss_rate,
-                discrimination = snap.discrimination,
-                health,
-                "Per-developer calibration snapshot"
-            );
-            // Recall misses (relevant items buried) are the worst failure —
-            // surface drift loudly so it can't degrade silently.
-            if health < 0.7 {
-                tracing::warn!(
-                    target: "4da::calibration",
-                    health,
-                    recall_miss = snap.recall_miss_rate,
-                    precision_miss = snap.precision_miss_rate,
-                    "Calibration drift detected for this developer — scoring may need recalibration"
-                );
-            }
-        }
-        Ok(snap) => tracing::debug!(
-            target: "4da::calibration",
-            feedback = snap.feedback_count,
-            "Calibration: insufficient feedback yet (cold start) — staying silent"
-        ),
-        Err(e) => {
+    let snapshot_error = compute_calibration_snapshot(db, threshold)
+        .map(|snap| log_snapshot(&snap))
+        .map_err(|e| {
             tracing::debug!(target: "4da::calibration", error = %e, "Calibration snapshot failed");
-            snapshot_error = Some(e.to_string());
-        }
-    }
+            e.to_string()
+        })
+        .err();
 
     // Phase 5c: threshold cliffs — how many of the newest scored items sit within
     // ±0.03 of an embedding axis's confirmation threshold. The 2-signal gate
@@ -390,6 +363,38 @@ pub(crate) fn run_scheduled_checks(
         }
     }
     snapshot_error
+}
+
+fn log_snapshot(snap: &CalibrationSnapshot) {
+    if !snap.has_sufficient_feedback {
+        tracing::debug!(
+            target: "4da::calibration",
+            feedback = snap.feedback_count,
+            "Calibration: insufficient feedback yet (cold start) — staying silent"
+        );
+        return;
+    }
+    let health = snap.health().unwrap_or(1.0);
+    tracing::info!(
+        target: "4da::calibration",
+        feedback = snap.feedback_count,
+        precision_miss = snap.precision_miss_rate,
+        recall_miss = snap.recall_miss_rate,
+        discrimination = snap.discrimination,
+        health,
+        "Per-developer calibration snapshot"
+    );
+    // Recall misses (relevant items buried) are the worst failure — surface
+    // drift loudly so it can't degrade silently.
+    if health < 0.7 {
+        tracing::warn!(
+            target: "4da::calibration",
+            health,
+            recall_miss = snap.recall_miss_rate,
+            precision_miss = snap.precision_miss_rate,
+            "Calibration drift detected for this developer — scoring may need recalibration"
+        );
+    }
 }
 
 fn log_high_stakes_recall(hs: &HighStakesRecall) {

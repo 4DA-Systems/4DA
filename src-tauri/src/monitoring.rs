@@ -1473,7 +1473,10 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                     crate::suns_commands::get_sun_registry().tick()
                 })
                 .await
-                .unwrap_or_default();
+                .unwrap_or_else(|e| {
+                    warn!(target: "4da::suns", error = %e, "Sun tick failed");
+                    Vec::new()
+                });
                 for (sun_id, result) in &results {
                     if result.success {
                         tracing::debug!(target: "4da::suns", sun = %sun_id, msg = %result.message, "Sun completed");

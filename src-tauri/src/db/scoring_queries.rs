@@ -248,7 +248,7 @@ impl Database {
     ) -> SqliteResult<Vec<(i64, String, String)>> {
         // A walk of the whole corpus by `created_at`: a pooled reader, never
         // the writer.
-        let conn = self.read_conn();
+        let conn = self.read_conn_blocking();
         let mut stmt = conn.prepare_cached(&format!(
             "SELECT id, title, content
              FROM source_items
@@ -339,7 +339,7 @@ impl Database {
     /// cannot fan out. Read-only, on a pooled reader: on a cold page cache this
     /// walk takes tens of seconds, and it must never hold the writer.
     pub fn get_scored_high_stakes_items(&self, limit: usize) -> SqliteResult<Vec<HighStakesRow>> {
-        let conn = self.read_conn();
+        let conn = self.read_conn_blocking();
         let mut stmt = conn.prepare_cached(
             "SELECT s.id, s.title, s.content, s.relevance_score,
                     json_extract(e.breakdown, '$.breakdown.strongly_grounded'),
@@ -379,19 +379,29 @@ impl Database {
     /// 2026-10-24: 22 s with a cold page cache, 0.4 s warm, against 0.03 s
     /// for the rowid walk). After a version drain re-stamps every row,
     /// "most recently scored" was an arbitrary slice anyway.
+    ///
+    /// Only explanations written by the CURRENT pipeline version count: the
+    /// axes are calibrated per version, so a stale row's distance to today's
+    /// thresholds means nothing. Readings from this sample are not directly
+    /// comparable with the 2026-09-05 baselines (context 2.7%, interest
+    /// 12.7%), which sampled by `scored_at` across versions.
     pub fn get_recent_axis_scores(
         &self,
         limit: usize,
     ) -> SqliteResult<Vec<(Option<f64>, Option<f64>)>> {
-        let conn = self.read_conn();
+        let conn = self.read_conn_blocking();
         let mut stmt = conn.prepare_cached(
             "SELECT json_extract(breakdown, '$.breakdown.context_score'),
                     json_extract(breakdown, '$.breakdown.interest_score')
              FROM scoring_explanations
+             WHERE pipeline_version = ?2
              ORDER BY source_item_id DESC
              LIMIT ?1",
         )?;
-        let rows = stmt.query_map(params![limit as i64], |row| Ok((row.get(0)?, row.get(1)?)))?;
+        let rows = stmt.query_map(
+            params![limit as i64, crate::scoring::PIPELINE_VERSION],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
         rows.collect()
     }
 

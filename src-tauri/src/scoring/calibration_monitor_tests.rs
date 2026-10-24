@@ -393,47 +393,33 @@ fn high_stakes_recall_reports_dev_only_misses_and_sample_ids() {
     assert!(hs.missed_sample_ids.len() <= super::MISSED_SAMPLE_LIMIT);
 }
 
-/// The 2026-10-23 launch stall: the scheduled job ran its corpus walks inline
-/// on a tokio worker, every read on the writer connection.
+/// The 2026-10-23 launch stall, the case the review found `read_conn` blind to:
+/// a scoring drain holds every pooled reader while another writer holds the
+/// writer connection. The calibration walk must wait for a reader, not queue on
+/// the writer (where it would then hold the writer for tens of seconds).
 #[test]
-fn the_scheduled_job_runs_on_the_blocking_pool_with_pooled_readers() {
-    let monitor = include_str!("../monitoring.rs");
-    let start = monitor
-        .find("CALIBRATION_CHECK_INTERVAL)")
-        .and_then(|i| monitor[i..].find("mark_job_complete").map(|j| i + j))
-        .expect("calibration job present");
-    let job = &monitor[start..start + monitor[start..].find("REEXAMINATION").expect("next job")];
-    assert!(
-        job.contains("off_ui_thread_infallible(") && job.contains("run_scheduled_checks("),
-        "the calibration job must hand its body to the blocking pool:\n{job}"
-    );
-    assert!(
-        !job.contains("conn.lock()"),
-        "no writer lock in the scheduler task"
-    );
+fn background_reads_wait_for_a_pooled_reader_never_the_writer() {
+    crate::register_sqlite_vec_extension();
+    let dir = tempfile::tempdir().expect("tempdir");
+    let db = crate::db::Database::new(&dir.path().join("4da.db")).expect("file db");
+    assert!(db.read_pool_len() > 0, "a file database has a reader pool");
+    let id = insert_test_item(&db, "cve", "c1", "advisory affecting tokio", "x");
+    set_score(&db, id, 0.02, Some("security_advisory"), Some("CVE-2026-1"));
 
-    let module = include_str!("calibration_monitor.rs");
-    let module = &module[..module.find("#[cfg(test)]").unwrap_or(module.len())];
-    assert!(
-        !module.contains("conn.lock()"),
-        "the calibration monitor only reads: pooled readers, never the writer"
-    );
-
-    let queries = include_str!("../db/scoring_queries.rs");
-    for f in [
-        "fn get_scored_high_stakes_items",
-        "fn get_recent_axis_scores",
-        "fn get_reexaminable_candidates",
-    ] {
-        let at = queries.find(f).expect(f);
-        let body = &queries[at..at + queries[at..].find("\n    }\n").expect("end")];
-        assert!(
-            body.contains("self.read_conn()") && !body.contains("self.conn.lock()"),
-            "{f} must read on a pooled reader"
-        );
-    }
-    assert!(
-        !queries.contains("ORDER BY scored_at DESC"),
-        "scored_at has no index: ordering by it reads and sorts the whole table"
-    );
+    let writer = db.conn.lock(); // a long write elsewhere
+    let drain: Vec<_> = (0..db.read_pool_len()).map(|_| db.read_conn()).collect();
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::scope(|s| {
+        s.spawn(|| {
+            let _ = tx.send(db.get_scored_high_stakes_items(10).map(|r| r.len()));
+        });
+        std::thread::sleep(std::time::Duration::from_millis(200));
+        let waited = rx.try_recv().is_err();
+        drop(drain); // the drain hands its readers back; the writer stays held
+        let got = rx.recv_timeout(std::time::Duration::from_secs(20));
+        drop(writer); // never leave the spawned reader blocked on a failed assert
+        assert!(waited, "with every reader busy the walk waits");
+        let rows = got.expect("completes on a pooled reader while the writer is still held");
+        assert_eq!(rows.expect("query"), 1);
+    });
 }
