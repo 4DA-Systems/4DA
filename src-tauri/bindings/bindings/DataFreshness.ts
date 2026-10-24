@@ -69,6 +69,13 @@ last_run_sources_succeeded: number | null,
  */
 last_run_sources_failed: number | null, 
 /**
+ * Source adapters the most recent recorded cycle did not fetch: disabled,
+ * circuit open, or fetched within the last few minutes (cache fresh). A
+ * cycle with 0 succeeded / 0 failed / N skipped is a healthy no-op, not a
+ * dead engine.
+ */
+last_run_sources_skipped: number | null, 
+/**
  * Minutes since the most recent recorded cycle completed. None with no receipt.
  */
 last_run_age_minutes: number | null, 

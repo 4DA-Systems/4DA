@@ -2431,6 +2431,12 @@ async fn run_scheduled_analysis(handle: tauri::AppHandle) {
     let started = std::time::Instant::now();
     let mut receipt = crate::engine_runs::RunReceipt::begin("scheduled");
 
+    // Step 0: re-read the lockfiles when they changed since the last scan
+    // (live 2026-10-24: a merged bump left the startup-scanned inventory
+    // stale for hours and the brief named advisories already fixed). One
+    // mtime walk when nothing changed; skipped while the startup scan runs.
+    crate::dep_rescan::rescan_if_due(&handle).await;
+
     // Step 1: Fill cache with deep fetch (background, no UI blocking)
     info!(target: "4da::monitor", "Step 1: Filling cache with deep fetch...");
     match fill_cache_background(&handle).await {
