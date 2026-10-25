@@ -385,6 +385,7 @@ mod url_validation;
 mod void_commands;
 mod void_engine;
 mod waitlist;
+mod webview_profile;
 mod webview_visibility;
 mod weekly_digest;
 
@@ -815,6 +816,10 @@ pub fn run() {
     // identifier (a test profile may run under a non-default one) — and only
     // from the GUI entry point, after the single-instance lock above.
     let context = app_context();
+    // A previous instance's WebView2 can hold the shared profile for a while
+    // after the app exits; creating the window then panics with 0x800700AA.
+    // Wait for it first (and before the dev purge touches the profile).
+    webview_profile::wait_for_webview_profile(&context.config().identifier);
     app_setup::purge_dev_webview_service_worker_cache(&context.config().identifier);
     startup_watchdog::mark_pre_tauri_complete();
     // Spans `Builder::build` (plugins, window + WebView2 creation, then the
