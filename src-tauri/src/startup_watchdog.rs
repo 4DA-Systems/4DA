@@ -209,6 +209,20 @@ pub fn mark_phase0_complete() {
     }
 }
 
+/// Leave `waited` out of the startup phases: time spent waiting on something
+/// outside the app (a previous instance's WebView2 releasing the profile) is
+/// not a stall of ours, so it must not trip the budgets or the `.stalled`
+/// marker. Moves the startup clock forward. Call during single-threaded
+/// startup, before Phase 0 or Phase 1 is marked.
+pub fn exclude_from_startup_clock(waited: Duration) {
+    // Safety: as for `begin_startup_watch`, this runs on the startup thread
+    // before the phase marks read the clock, with no concurrent readers.
+    #[allow(unsafe_code)]
+    unsafe {
+        STARTUP_BEGAN = STARTUP_BEGAN.map(|t| t + waited);
+    }
+}
+
 /// Pre-Tauri init is done; `Builder::build` starts next. GUI only.
 pub fn mark_pre_tauri_complete() {
     let _ = PRE_TAURI_DONE.set(Instant::now());
