@@ -1488,7 +1488,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 128;
+        const TARGET_VERSION: i64 = 129;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -5933,6 +5933,38 @@ impl Database {
                             target: "4da::db",
                             due,
                             "Phase 128: cwe_ids added; every advisory ecosystem re-syncs next cycle"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
+            // Phase 129 (parity with @4da/mcp-server): whether a row is a
+            // maintenance notice by OSV's own flag. RustSec keeps
+            // `database_specific.informational` per affected entry, never at
+            // the record level, so a notice whose summary lacks the word
+            // ("`tempdir` crate has been deprecated", RUSTSEC-2018-0017) read
+            // as a vulnerability. The column is the engine crate's
+            // `osv::is_notice_for`, written by the sync; like Phase 128 every
+            // ecosystem's sync is made due, so existing rows fill next cycle.
+            if current_version < 129 {
+                Self::run_versioned_migration(
+                    &conn,
+                    128,
+                    129,
+                    "Phase 129: osv_advisories.informational; mirror re-sync due",
+                    |c| {
+                        Self::add_column_if_missing(
+                            c,
+                            "osv_advisories",
+                            "informational",
+                            "INTEGER NOT NULL DEFAULT 0",
+                        )?;
+                        let due = Self::make_osv_sync_due(c)?;
+                        info!(
+                            target: "4da::db",
+                            due,
+                            "Phase 129: informational added; every advisory ecosystem re-syncs next cycle"
                         );
                         Ok(())
                     },

@@ -523,6 +523,7 @@ fn check_direct(v: &Value, root: &std::path::Path) -> Result<(), String> {
 fn severity_match(vuln: &Vulnerability, fixed_version: Option<&str>) -> MatchedAdvisory {
     let (severity_type, cvss_score) = vuln.best_cvss();
     MatchedAdvisory {
+        informational: stored_notice(vuln),
         advisory_id: vuln.id.clone(),
         summary: vuln.summary.clone().unwrap_or_default(),
         details: None,
@@ -549,6 +550,23 @@ fn severity_match(vuln: &Vulnerability, fixed_version: Option<&str>) -> MatchedA
     }
 }
 
+/// The notice flag `osv::sync` stores for a `severity` line's record: for
+/// the package of its FIRST affected entry (`Vulnerability::is_notice_for`:
+/// summary, record-level or that entry's `database_specific.informational`),
+/// or, when the line gives no `affected`, by the summary and the record-level
+/// flag alone.
+fn stored_notice(vuln: &Vulnerability) -> bool {
+    match super::sync::merge_affected(vuln).first() {
+        Some((_, merged)) => vuln.is_notice_for(merged),
+        None => vuln.is_notice_for(&super::types::Affected {
+            package: None,
+            ranges: None,
+            versions: None,
+            database_specific: None,
+        }),
+    }
+}
+
 /// A mirror row for one `aliases_available` entry: its grade, or none.
 fn mirror_row(id: &str, label: Option<&str>) -> StoredAdvisory {
     StoredAdvisory {
@@ -570,6 +588,7 @@ fn mirror_row(id: &str, label: Option<&str>) -> StoredAdvisory {
         aliases: Vec::new(),
         severity_label: label.and_then(super::types::normalize_severity_label),
         cwe_ids: Vec::new(),
+        informational: false,
     }
 }
 
@@ -602,6 +621,7 @@ fn check_severity(v: &Value) -> Result<(), String> {
             severity_label: m.severity_label.clone(),
             aliases: m.aliases.clone(),
             fixed_versions: m.fixed_version.as_ref().map(|f| format!("[\"{f}\"]")),
+            informational: m.informational,
             ..mirror_row(&m.advisory_id, None)
         })
         .collect();

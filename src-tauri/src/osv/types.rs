@@ -120,6 +120,13 @@ pub struct StoredAdvisory {
     /// the column existed, until the next sync (made due by the migration).
     #[serde(default)]
     pub cwe_ids: Vec<String>,
+    /// A maintenance notice by OSV's own flag (Phase 129): the engine crate's
+    /// `osv::is_notice_for` at sync, which reads RustSec's per-affected
+    /// `database_specific.informational`. `false` on rows synced before the
+    /// column existed, until the next sync (made due by the migration); the
+    /// summary rule still applies to them (`osv::severity`).
+    #[serde(default)]
+    pub informational: bool,
 }
 
 impl StoredAdvisory {
@@ -192,6 +199,9 @@ pub struct MatchedAdvisory {
     /// `severity_label` can never take an inherited grade for the record's own.
     #[serde(default)]
     pub severity_from: Option<String>,
+    /// See [`StoredAdvisory::informational`].
+    #[serde(default)]
+    pub informational: bool,
 }
 
 impl MatchedAdvisory {
@@ -331,6 +341,17 @@ impl Vulnerability {
             return None;
         }
         serde_json::to_string(aliases).ok()
+    }
+
+    /// Whether this record is a maintenance notice for the package of
+    /// `merged` (one entry of `osv::sync::merge_affected`): the engine
+    /// crate's `osv::is_notice_for`, the MCP's rule.
+    pub(crate) fn is_notice_for(&self, merged: &Affected) -> bool {
+        fourda_depengine::osv::is_notice_for(
+            self.summary.as_deref().unwrap_or(""),
+            self.database_specific.as_ref(),
+            merged,
+        )
     }
 
     pub(crate) fn best_url(&self) -> Option<String> {

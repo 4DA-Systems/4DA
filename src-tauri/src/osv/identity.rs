@@ -377,6 +377,7 @@ mod tests {
             severity_label: label.map(str::to_string),
             cwe_ids: Vec::new(),
             severity_from: None,
+            informational: false,
         }
     }
 

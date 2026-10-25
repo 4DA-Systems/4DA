@@ -28,6 +28,72 @@ pub struct Affected {
     /// [`ENUMERATED_RANGE`] range so every ranges reader sees it.
     #[serde(default)]
     pub versions: Option<Vec<String>>,
+    /// `affected[].database_specific`. RustSec keeps `informational`
+    /// (`unmaintained` / `unsound` / `notice`) HERE, never at the record
+    /// level: 90 per-affected entries across the pinned conformance corpus,
+    /// 0 record-level ones. [`merge_affected`] keeps a notice class any of
+    /// the merged entries carries; [`is_notice_for`] reads it.
+    #[serde(default)]
+    pub database_specific: Option<serde_json::Value>,
+}
+
+/// `informational` of a `database_specific` block.
+fn informational(database_specific: Option<&serde_json::Value>) -> Option<&str> {
+    database_specific
+        .and_then(|d| d.get("informational"))
+        .and_then(serde_json::Value::as_str)
+}
+
+/// The informational classes that make a record a maintenance notice.
+/// `unsound` is NOT one: unsound records carry real fixes, and a notice's fix
+/// is dropped (`matching`).
+fn is_notice_class(value: Option<&str>) -> bool {
+    matches!(value, Some("unmaintained" | "notice"))
+}
+
+/// Fold one more entry's `database_specific` into the merged entry's: the
+/// first entry's block is kept, and a notice class a later entry carries
+/// replaces an `informational` that is not one. A merged entry is therefore a
+/// notice when ANY of its source entries is.
+fn merge_database_specific(
+    merged: &mut Option<serde_json::Value>,
+    incoming: Option<&serde_json::Value>,
+) {
+    let Some(incoming) = incoming else {
+        return;
+    };
+    let Some(current) = merged.as_mut() else {
+        *merged = Some(incoming.clone());
+        return;
+    };
+    let class = informational(Some(incoming));
+    if !is_notice_class(class) || is_notice_class(informational(Some(current))) {
+        return;
+    }
+    match current.as_object_mut() {
+        Some(obj) => {
+            obj.insert(
+                "informational".to_string(),
+                serde_json::Value::from(class.unwrap_or_default()),
+            );
+        }
+        None => *current = incoming.clone(),
+    }
+}
+
+/// THE maintenance-notice rule for one package of a record, the MCP's
+/// exactly: the summary says `unmaintained` / `no longer maintained` as words,
+/// OR the record-level `database_specific.informational` is `unmaintained` /
+/// `notice`, OR the package's affected entry (`merged`, from
+/// [`merge_affected`], so ANY of its entries) carries one of those in its own
+/// `database_specific.informational`. `unsound` stays a vulnerability.
+pub fn is_notice_for(
+    summary: &str,
+    record_database_specific: Option<&serde_json::Value>,
+    merged: &Affected,
+) -> bool {
+    crate::severity::is_maintenance_notice(summary, informational(record_database_specific))
+        || is_notice_class(informational(merged.database_specific.as_ref()))
 }
 
 /// The part of a verbatim OSV record the matcher needs. Every other field
@@ -66,8 +132,8 @@ pub struct AdvisoryRecord {
     /// affects is never a fix target.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub malware: bool,
-    /// A maintenance notice ([`crate::severity::is_maintenance_notice`]): it
-    /// never blocks a fix target.
+    /// A maintenance notice ([`is_notice_for`]): it never blocks a fix
+    /// target.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub informational: bool,
 }
@@ -105,8 +171,13 @@ pub fn merge_affected(affected_list: &[Affected]) -> Vec<((String, String), Affe
                 package: Some(pkg.clone()),
                 ranges: Some(Vec::new()),
                 versions: None,
+                database_specific: None,
             }
         });
+        merge_database_specific(
+            &mut merged.database_specific,
+            affected.database_specific.as_ref(),
+        );
         if let Some(ranges) = &affected.ranges {
             merged
                 .ranges
@@ -185,13 +256,10 @@ pub fn stored_records(record: &OsvRecord) -> Vec<AdvisoryRecord> {
                 ecosystem,
                 affected_ranges: serialize_ranges(&affected),
                 malware: record_is_malware(record),
-                informational: crate::severity::is_maintenance_notice(
+                informational: is_notice_for(
                     record.summary.as_deref().unwrap_or(""),
-                    record
-                        .database_specific
-                        .as_ref()
-                        .and_then(|d| d.get("informational"))
-                        .and_then(serde_json::Value::as_str),
+                    record.database_specific.as_ref(),
+                    &affected,
                 ),
                 fixed_versions,
             }
@@ -249,6 +317,96 @@ mod tests {
         );
         assert_eq!(rows[1].affected_ranges.as_deref(), Some("[]"));
         assert_eq!(rows[1].fixed_versions, None);
+    }
+
+    /// RUSTSEC-2018-0017 as pinned: `informational: unmaintained` sits in
+    /// `affected[].database_specific` and the summary never says the word.
+    #[test]
+    fn a_per_affected_unmaintained_flag_makes_a_notice() {
+        let r = record(
+            r#"{"id":"RUSTSEC-2018-0017",
+              "summary":"`tempdir` crate has been deprecated; use `tempfile` instead",
+              "database_specific":{"license":"CC0-1.0"},
+              "affected":[{"package":{"name":"tempdir","ecosystem":"crates.io"},
+                "ranges":[{"type":"SEMVER","events":[{"introduced":"0.0.0-0"}]}],
+                "database_specific":{"categories":[],"cvss":null,"informational":"unmaintained"}}]}"#,
+        );
+        let rows = stored_records(&r);
+        assert_eq!(rows.len(), 1);
+        assert!(rows[0].informational);
+        assert!(rows[0].kind().informational);
+    }
+
+    /// RUSTSEC-2018-0018 (smallvec) as pinned: `informational: unsound`
+    /// with a fix is a vulnerability, not a notice.
+    #[test]
+    fn a_per_affected_unsound_flag_stays_a_vulnerability() {
+        let r = record(
+            r#"{"id":"RUSTSEC-2018-0018",
+              "summary":"smallvec creates uninitialized value of any type",
+              "affected":[{"package":{"name":"smallvec","ecosystem":"crates.io"},
+                "ranges":[{"type":"SEMVER","events":[{"introduced":"0.0.0-0"},{"fixed":"0.6.13"}]}],
+                "database_specific":{"informational":"unsound"}}]}"#,
+        );
+        let rows = stored_records(&r);
+        assert!(!rows[0].informational);
+        assert_eq!(rows[0].fixed_versions.as_deref(), Some(r#"["0.6.13"]"#));
+    }
+
+    /// The flag is per package: a notice entry for one package does not make
+    /// the record's other package a notice, and merging two entries of one
+    /// package keeps the notice class whichever entry carries it.
+    #[test]
+    fn the_notice_flag_is_per_package_and_survives_the_merge() {
+        let r = record(
+            r#"{"id":"RUSTSEC-2099-0100","summary":"something happened",
+              "affected":[
+                {"package":{"name":"a","ecosystem":"crates.io"},
+                 "database_specific":{"informational":"unsound","source":"x"}},
+                {"package":{"name":"a","ecosystem":"crates.io"},
+                 "database_specific":{"informational":"unmaintained"}},
+                {"package":{"name":"b","ecosystem":"crates.io"},
+                 "database_specific":{"informational":"unsound"}},
+                {"package":{"name":"c","ecosystem":"crates.io"}}]}"#,
+        );
+        let rows = stored_records(&r);
+        let flag = |name: &str| {
+            rows.iter()
+                .find(|row| row.package_name == name)
+                .map(|row| row.informational)
+        };
+        assert_eq!(flag("a"), Some(true));
+        assert_eq!(flag("b"), Some(false));
+        assert_eq!(flag("c"), Some(false));
+        let merged = merge_affected(r.affected.as_deref().unwrap_or_default());
+        let a = &merged[0].1;
+        assert_eq!(
+            a.database_specific.as_ref().and_then(|d| d.get("source")),
+            Some(&serde_json::Value::from("x")),
+            "the first entry's block is kept"
+        );
+    }
+
+    /// The record-level flag and the summary still make a notice on their
+    /// own; a `notice` class counts like `unmaintained`.
+    #[test]
+    fn record_level_flag_summary_and_notice_class_each_suffice() {
+        let at_record = record(
+            r#"{"id":"X-1","summary":"s","database_specific":{"informational":"unmaintained"},
+              "affected":[{"package":{"name":"a","ecosystem":"crates.io"}}]}"#,
+        );
+        let by_summary = record(
+            r#"{"id":"X-2","summary":"a is no longer maintained",
+              "affected":[{"package":{"name":"a","ecosystem":"crates.io"}}]}"#,
+        );
+        let notice = record(
+            r#"{"id":"X-3","summary":"s",
+              "affected":[{"package":{"name":"a","ecosystem":"crates.io"},
+                "database_specific":{"informational":"notice"}}]}"#,
+        );
+        for r in [at_record, by_summary, notice] {
+            assert!(stored_records(&r)[0].informational, "{}", r.id);
+        }
     }
 
     #[test]

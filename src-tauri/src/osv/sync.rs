@@ -538,6 +538,10 @@ pub(super) fn store_vulnerability(
         }
         let ranges_json = serialize_ranges(&affected);
         let fixed_json = extract_fixed_versions(&affected);
+        // THE notice rule for this package (`fourda_depengine::osv::
+        // is_notice_for`): the summary, the record-level flag, or this
+        // package's own `affected[].database_specific.informational`.
+        let informational = vuln.is_notice_for(&affected);
 
         db.upsert_osv_advisory_record(
             &vuln.id,
@@ -556,6 +560,7 @@ pub(super) fn store_vulnerability(
             vuln.aliases_json().as_deref(),
             vuln.severity_label().as_deref(),
             vuln.cwe_ids_json().as_deref(),
+            Some(informational),
         )
         .map_err(|e| FourDaError::Internal(format!("Failed to store advisory: {e}")))?;
 
@@ -653,6 +658,7 @@ mod tests {
                 ]),
             }]),
             versions: None,
+            database_specific: None,
         };
 
         let fixed = extract_fixed_versions(&affected).unwrap();
@@ -675,6 +681,7 @@ mod tests {
                 ]),
             }]),
             versions: None,
+            database_specific: None,
         };
 
         let fixed = extract_fixed_versions(&affected).unwrap();
@@ -693,6 +700,7 @@ mod tests {
                 events: Some(vec![serde_json::json!({"introduced": "0"})]),
             }]),
             versions: None,
+            database_specific: None,
         };
 
         assert!(extract_fixed_versions(&affected).is_none());
@@ -720,6 +728,7 @@ mod tests {
                 }),
                 ranges: None,
                 versions: None,
+                database_specific: None,
             }]),
             references: None,
             published: None,

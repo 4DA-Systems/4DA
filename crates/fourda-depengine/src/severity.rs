@@ -25,7 +25,9 @@ use std::collections::BTreeSet;
 /// a published fix does not stop a notice being one (ring's
 /// RUSTSEC-2025-0010, "prior to 0.17 are unmaintained", fixed 0.17.0). A
 /// notice never blocks a fix target, never is one, and is never graded as a
-/// vulnerability.
+/// vulnerability. `informational` here is ONE block's flag; RustSec puts it
+/// in `affected[].database_specific`, so a stored record is classified per
+/// package by [`crate::osv::is_notice_for`], which calls this.
 pub fn is_maintenance_notice(summary: &str, informational: Option<&str>) -> bool {
     if matches!(informational, Some("unmaintained" | "notice")) {
         return true;
