@@ -64,6 +64,39 @@ impl SecurityVerdict {
         paths
     }
 
+    /// v44: the worst copy the matcher confirmed affected that ships in a
+    /// RUNTIME build (direct or transitive, never dev-only) of a project that
+    /// counts toward the user's stack (`project_inclusion::counts_toward_stack`,
+    /// the v40 rule). This is dependency evidence in its own right: the
+    /// scorer's text dependency match is 0 for an ambiguous package name
+    /// (`next`, `zip`) and for every transitive copy, so before v44 a
+    /// confirmed Next.js RCE against the installed 16.3.6 took the
+    /// security no-match penalty and the registry-ungrounded 0.37 cap.
+    ///
+    /// `None` for a dev-only exposure (whether those belong in the feed is
+    /// an open product decision; until it is made they score exactly as
+    /// before), for maintenance notices (#986: not a vulnerability), and
+    /// when every runtime copy sits in a dormant, scratch or excluded
+    /// project. Loads the stack membership only when a runtime copy exists,
+    /// so the cost lands on the handful of exposed advisories.
+    pub(crate) fn confirmed_runtime_copy(&self, db: &Database) -> Option<&ExposedCopy> {
+        if self.maintenance_only || self.affected != Some(true) {
+            return None;
+        }
+        // `exposed` is worst-first (runtime before dev, direct before
+        // transitive), so runtime copies form a prefix.
+        if !self.exposed.first().is_some_and(|c| !c.is_dev) {
+            return None;
+        }
+        let conn = db.conn.lock();
+        let membership = crate::project_inclusion::StackMembership::load(&conn);
+        drop(conn);
+        self.exposed
+            .iter()
+            .take_while(|c| !c.is_dev)
+            .find(|c| crate::project_inclusion::counts_toward_stack(&c.project_path, &membership))
+    }
+
     /// The dependency path label of the worst exposed copy.
     pub(crate) fn path_label(&self) -> Option<&'static str> {
         self.worst_copy().map(|c| {

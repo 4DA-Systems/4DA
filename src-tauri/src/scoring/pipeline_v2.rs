@@ -1143,7 +1143,7 @@ fn stale_published_multiplier(
 ///          content_dna_mult, content_type, novelty_mult, ecosystem_shift_mult, stack_competing_mult,
 ///          sophistication_mult, content_analysis_mult, negative_stack_prior, sophistication_raw,
 ///          community_signal)
-#[allow(clippy::type_complexity)]
+#[allow(clippy::type_complexity, clippy::too_many_arguments)]
 fn compute_quality_composite(
     relevance_score: f32,
     input: &ScoringInput,
@@ -1152,6 +1152,7 @@ fn compute_quality_composite(
     options: &ScoringOptions,
     db: &Database,
     grounding: &dependencies::GroundingVerdict,
+    confirmed_runtime_copy: Option<&crate::osv::advisory_match::ExposedCopy>,
 ) -> (
     f32,
     f32,
@@ -1529,9 +1530,21 @@ fn compute_quality_composite(
     // Applies to both explicit CVE source items and any other source whose
     // title/content matches the security classifier — so future security
     // sources are governed by the same gate automatically.
+    //
+    // v44: a matcher-CONFIRMED runtime exposure decides the tier from the
+    // exposed copy's own reach, not from the text match (which is 0 for an
+    // ambiguous name like `next` and for every transitive copy): direct →
+    // unchanged, transitive → the mild tier, exactly as a text-matched edge
+    // of the same reach. Dev-only exposures are not passed here.
     let all_transitive =
         !raw.matched_deps.is_empty() && raw.matched_deps.iter().all(|d| !d.is_direct);
-    let quality_score = if novelty.is_security
+    let quality_score = if let Some(copy) = confirmed_runtime_copy.filter(|_| novelty.is_security) {
+        if copy.is_direct {
+            quality_score
+        } else {
+            quality_score * scoring_config::SECURITY_DEP_VALIDATION_WEAK_MATCH_PENALTY
+        }
+    } else if novelty.is_security
         && raw.dep_match_score < scoring_config::SECURITY_DEP_VALIDATION_DEP_CONFIDENCE_THRESHOLD
         && !raw.matched_deps.is_empty()
     {
@@ -3085,6 +3098,40 @@ pub(crate) fn score_item(
         &ctx.ace_ctx,
     );
 
+    // ── Security matcher verdict (hoisted before Phase 5 in v44) ───────
+    // 2026-10-02 (one security truth): the advisory is judged by the SAME
+    // version-confirmed matcher Preemption uses — every installed copy of its
+    // package, direct, transitive and dev, in every auditable project. `None`
+    // when the mirror does not hold the advisory (yet) or the package is not
+    // in the inventory; the text routes further down then decide.
+    let is_security_source = matches!(input.source_type, "cve" | "osv");
+    let advisory_id = if is_security_source {
+        extract_advisory_id(input.title)
+    } else {
+        None
+    };
+    let sec_verdict = if is_security_source {
+        super::security_verdict::matcher_verdict(
+            db,
+            &item_advisory_ids(input, advisory_id.as_deref()),
+        )
+    } else {
+        None
+    };
+    let sec_exposed_copy = sec_verdict
+        .as_ref()
+        .and_then(super::security_verdict::SecurityVerdict::worst_copy);
+    // v44: a matcher-CONFIRMED runtime exposure (direct or transitive, live
+    // project) is dependency evidence for the three gates that used to read
+    // only the TEXT dependency match — the security no-match penalty, the
+    // registry-ungrounded ceiling and the critical fast path. Only a cve/osv
+    // row can carry one, so editorial coverage that merely MENTIONS a
+    // package (a "next" in a news headline) is structurally untouched.
+    // Dev-only exposures are deliberately left on the old path.
+    let confirmed_runtime_copy = sec_verdict
+        .as_ref()
+        .and_then(|v| v.confirmed_runtime_copy(db));
+
     // ── Phase 5: Quality composite ────────────────────────────────────
     let (
         quality_score,
@@ -3102,7 +3149,16 @@ pub(crate) fn score_item(
         negative_stack_prior,
         sophistication_raw,
         community_signal,
-    ) = compute_quality_composite(relevance_score, input, ctx, &raw, options, db, &grounding);
+    ) = compute_quality_composite(
+        relevance_score,
+        input,
+        ctx,
+        &raw,
+        options,
+        db,
+        &grounding,
+        confirmed_runtime_copy,
+    );
 
     // ── Phase 6: Boosts ───────────────────────────────────────────────
     let (
@@ -3285,8 +3341,10 @@ pub(crate) fn score_item(
         sophistication_raw,
         community_signal,
         // Same grounding evidence the gate consumes — lets a dep-grounded
-        // academic paper bypass its commodity ceiling.
-        grounding.strong,
+        // academic paper bypass its commodity ceiling. v44: a confirmed
+        // runtime exposure grounds a registry advisory here too (it sat at
+        // the registry-ungrounded 0.35 + 0.02 = 0.37 ceiling before).
+        grounding.strong || confirmed_runtime_copy.is_some(),
         registry_advisory,
         ungrounded_registry_release,
         stack_tool_listing,
@@ -3320,28 +3378,8 @@ pub(crate) fn score_item(
     // not-affected advisory could be demoted to "watch" priority while its
     // relevance stayed at 0.88 (live 2026-09-06: two Hono advisories fixed
     // below the installed 4.13.3 ranked above grounded, AFFECTED items).
-    let is_security_source = matches!(input.source_type, "cve" | "osv");
-    let advisory_id = if is_security_source {
-        extract_advisory_id(input.title)
-    } else {
-        None
-    };
-    // 2026-10-02 (one security truth): the advisory is judged by the SAME
-    // version-confirmed matcher Preemption uses — every installed copy of its
-    // package, direct, transitive and dev, in every auditable project. `None`
-    // when the mirror does not hold the advisory (yet) or the package is not
-    // in the inventory; the routes below then decide.
-    let sec_verdict = if is_security_source {
-        super::security_verdict::matcher_verdict(
-            db,
-            &item_advisory_ids(input, advisory_id.as_deref()),
-        )
-    } else {
-        None
-    };
-    let sec_exposed_copy = sec_verdict
-        .as_ref()
-        .and_then(super::security_verdict::SecurityVerdict::worst_copy);
+    // (`is_security_source`, `advisory_id`, `sec_verdict` and
+    // `sec_exposed_copy` are computed before Phase 5 since v44.)
     let fixed_version = if is_security_source {
         extract_fixed_version(input.content).or_else(|| {
             sec_exposed_copy
@@ -3532,9 +3570,15 @@ pub(crate) fn score_item(
     // independent of this floor and unaffected.
     let is_security = content_type == crate::content_dna::ContentType::SecurityAdvisory;
     let is_breaking = content_type == crate::content_dna::ContentType::BreakingChange;
-    let has_strong_dep_match = raw.dep_match_score
+    // v44: a matcher-confirmed RUNTIME exposure is the strongest dependency
+    // evidence there is (an installed direct/transitive copy inside the
+    // range), so it no longer also needs a text match >= 0.25 — that text
+    // match is 0 for `next` / `zip` and for every transitive copy, and the
+    // v38 direct floor below was unreachable for exactly those rows.
+    let has_strong_dep_match = (raw.dep_match_score
         >= scoring_config::CRITICAL_FASTPATH_DEP_MATCH_THRESHOLD
-        && (grounding.strong || security_confirmed);
+        && (grounding.strong || security_confirmed))
+        || confirmed_runtime_copy.is_some();
     // v31: a confirmed not-affected advisory never takes the floor.
     let critical_fast_path = (is_security || is_breaking)
         && has_strong_dep_match
@@ -7329,3 +7373,7 @@ mod security_tests;
 #[cfg(test)]
 #[path = "severity_surfaces_tests.rs"]
 mod severity_surfaces_tests;
+
+#[cfg(test)]
+#[path = "pipeline_v2_confirmed_exposure_tests.rs"]
+mod confirmed_exposure_tests;
