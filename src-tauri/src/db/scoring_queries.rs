@@ -28,6 +28,12 @@ use super::{Database, StoredSourceItem};
 /// [`Database::persist_analysis_scores`].
 pub const SCORE_WRITE_HYSTERESIS: f64 = 0.05;
 
+/// Rows per writer transaction in a re-examination re-queue: milliseconds of
+/// writer time on a warm cache, a few seconds at the worst contention measured
+/// (46 ms a row while the startup scan wrote, 2026-10-25), so no other writer
+/// waits behind a whole re-queue (see [`Database::requeue_and_clear_score_verdicts`]).
+pub const REQUEUE_BATCH: usize = 100;
+
 /// THE shared ranked-read ORDER BY expression (audit 2026-08-23 §3.5, items
 /// 12+26): rank when a batch layer has ranked the item, evidence otherwise.
 ///
@@ -301,10 +307,24 @@ impl Database {
     /// `superseded_release`, `pending_retries_exhausted`, serendipity picks —
     /// are left alone. A withdrawn row gets its first verdict again from the
     /// risen sweep (score at or above the line) or stays out of the feed.
+    ///
+    /// Written in transactions of at most [`REQUEUE_BATCH`] rows, with the writer
+    /// released between them. One transaction for all of them (1,891 rows, two
+    /// UPDATEs each) held the writer for 87 s while the startup scan wrote to the
+    /// same file, and every task that wanted the writer meanwhile, many on async
+    /// runtime workers, blocked its thread: an 82 s `/health` stall in an
+    /// isolated run (2026-10-25). A crash between batches leaves the earlier ones
+    /// applied, which is the state the drain converges from anyway.
     pub fn requeue_and_clear_score_verdicts(&self, ids: &[i64]) -> SqliteResult<usize> {
-        if ids.is_empty() {
-            return Ok(0);
+        let mut count = 0;
+        for batch in ids.chunks(REQUEUE_BATCH) {
+            count += self.requeue_batch(batch)?;
         }
+        Ok(count)
+    }
+
+    /// One transaction of [`Self::requeue_and_clear_score_verdicts`].
+    fn requeue_batch(&self, ids: &[i64]) -> SqliteResult<usize> {
         let conn = self.conn.lock();
         let tx = conn.unchecked_transaction()?;
         let mut count = 0;
@@ -486,7 +506,16 @@ impl Database {
         const TOP_OFFENDERS_CAP: usize = 10;
 
         let conn = self.conn.lock();
-        let tx = conn.unchecked_transaction()?;
+        // IMMEDIATE: this transaction reads each row's old score and then
+        // writes. A deferred one has to upgrade its lock, and when another
+        // connection (the ACE scan's, an `open_db_connection` job's) committed
+        // in between, SQLite fails the upgrade with SQLITE_BUSY_SNAPSHOT at once,
+        // without the busy handler: a whole chunk of re-scored values was lost
+        // that way in every isolated run where a re-examination overlapped the
+        // startup scan (2026-10-25). Taking the write lock up front makes that a
+        // bounded busy wait instead (see `hygiene::prune_orphaned_project_dependencies`).
+        let tx =
+            rusqlite::Transaction::new_unchecked(&conn, rusqlite::TransactionBehavior::Immediate)?;
         let mut count = 0;
         let mut rescored: i64 = 0;
         let mut moved_up: i64 = 0;

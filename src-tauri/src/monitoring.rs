@@ -825,6 +825,10 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
             if now - last_reexam
                 >= crate::scheduler_gate::effective_interval(REEXAMINATION_CHECK_INTERVAL)
                 && gate_policy.allows_job(crate::scheduler_gate::JobPriority::Low)
+                // Not against the previous session's pins while the startup
+                // lockfile rescan rewrites them: unstamped, so the first tick
+                // after the scan runs it.
+                && crate::inventory_freshness::is_fresh()
             {
                 state.last_reexamination.store(now, Ordering::Relaxed);
                 if let Ok(db) = crate::get_database() {
