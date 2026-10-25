@@ -219,14 +219,34 @@ fn npm_operator(declared: &str) -> Option<&'static str> {
                 .iter()
                 .all(|p| !p.is_empty() && p.chars().all(|c| c.is_ascii_digit()))
     };
+    // A pre-release base is bounded too (decided for both engines): npm reads
+    // `^2.0.0-rc.4` as `>=2.0.0-rc.4 <3.0.0-0`, exactly like `^2.0.0` above it
+    // (NodeGoat's async 2.6.1, declared `^2.0.0-rc.4`).
+    let base = |s: &str| digits(s) || prerelease_base(s);
     if let Some(rest) = d.strip_prefix('^') {
-        return digits(rest).then_some("^");
+        return base(rest).then_some("^");
     }
     if let Some(rest) = d.strip_prefix('~') {
-        return digits(rest).then_some("~");
+        return base(rest).then_some("~");
     }
     let exact = d.strip_prefix('=').unwrap_or(d).trim_start_matches('v');
     semver::Version::parse(exact).is_ok().then_some("")
+}
+
+/// The MCP's `PRERELEASE_BASE` (fix-paths.ts): `N.N.N-` and dot-separated
+/// `[0-9A-Za-z-]+` identifiers. No `v`, no `+build`.
+fn prerelease_base(s: &str) -> bool {
+    let Some((core, pre)) = s.split_once('-') else {
+        return false;
+    };
+    let nums: Vec<&str> = core.split('.').collect();
+    nums.len() == 3
+        && nums
+            .iter()
+            .all(|n| !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()))
+        && pre
+            .split('.')
+            .all(|id| !id.is_empty() && id.chars().all(|c| c.is_ascii_alphanumeric() || c == '-'))
 }
 
 /// The command that moves a declared npm-family dependency to `target`,

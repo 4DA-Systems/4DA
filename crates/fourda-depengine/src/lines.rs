@@ -40,6 +40,9 @@ pub struct LineTarget {
     /// which the installed version does not have, so `target_version` is
     /// `None` (no line fix is offered in its place either). Sorted, deduped.
     pub introduces: Vec<String>,
+    /// With no target: the malicious records a fixing release falls in
+    /// (sorted, deduped); `target_version` is `None` (no line fix either).
+    pub malicious: Vec<String>,
 }
 
 impl LineTarget {
@@ -62,6 +65,7 @@ where
         partial: Option<(Version, String)>,
         sites: BTreeMap<String, InstallSite>,
         introduces: Vec<String>,
+        malicious: Vec<String>,
     }
     let mut by_version: BTreeMap<String, Acc> = BTreeMap::new();
     let instances = copies
@@ -80,6 +84,7 @@ where
                 partial: None,
                 sites: BTreeMap::new(),
                 introduces: Vec::new(),
+                malicious: Vec::new(),
             });
         if acc.clean.is_none() {
             acc.clean.clone_from(&d.clean_version);
@@ -88,6 +93,7 @@ where
             acc.walked.clone_from(&d.target_version);
         }
         acc.introduces.extend(d.introduces.iter().cloned());
+        acc.malicious.extend(d.malicious.iter().cloned());
         if let Some(fix) = d
             .fixed_version
             .as_deref()
@@ -121,7 +127,10 @@ where
             let mut introduces = acc.introduces;
             introduces.sort();
             introduces.dedup();
-            let target_version = if introduces.is_empty() {
+            let mut malicious = acc.malicious;
+            malicious.sort();
+            malicious.dedup();
+            let target_version = if introduces.is_empty() && malicious.is_empty() {
                 acc.clean.or(acc.walked).or(acc.partial.map(|(_, f)| f))
             } else {
                 None
@@ -136,6 +145,7 @@ where
                 upgrade_type,
                 sites: acc.sites.into_values().collect(),
                 introduces,
+                malicious,
             }
         })
         .collect();
@@ -205,6 +215,7 @@ mod tests {
             target_version: walked.map(str::to_string),
             withheld: Vec::new(),
             introduces: Vec::new(),
+            malicious: Vec::new(),
         }
     }
 

@@ -3867,21 +3867,10 @@ pub(crate) fn score_item(
     // A maintenance notice is not a vulnerability (#986): never ranked above
     // Watch, never worded as one, never "Affects You". The one predicate
     // (`osv::severity`): every mirror row the matcher checked, or, with no
-    // mirror row, the item's own text (no fix, no CVSS, maintenance words).
+    // mirror row, the item's own title (the summary the rule reads).
     let maintenance_notice = is_security_source
         && sec_verdict.as_ref().map_or_else(
-            || {
-                crate::osv::severity::maintenance_text(
-                    extract_fixed_version(input.content).is_none(),
-                    input
-                        .content
-                        .lines()
-                        .any(|l| l.trim_start().starts_with("CVSS:"))
-                        .then_some(1.0),
-                    input.title,
-                    Some(input.content),
-                )
-            },
+            || crate::osv::severity::maintenance_text(input.title),
             |v| v.maintenance_only,
         );
     let notice_line = maintenance_notice.then(|| {

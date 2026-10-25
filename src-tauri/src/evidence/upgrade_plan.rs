@@ -285,6 +285,7 @@ fn package_group<'a>(
     let informational = !has_fix
         && withheld.is_empty()
         && introduces.is_empty()
+        && fix_target::malicious_of(&lines).is_empty()
         && advisories
             .iter()
             .all(|a| crate::osv::severity::is_informational(a));
@@ -433,7 +434,9 @@ impl PackageGroup<'_> {
         } else {
             format!(
                 "{none} for {pkg} — {n} {adv} across {m} {proj}",
-                none = if !self.introduces.is_empty() {
+                none = if !self.introduces.is_empty()
+                    || !fix_target::malicious_of(&self.lines).is_empty()
+                {
                     "No clean fix"
                 } else if self.withheld.is_empty() {
                     "No fix published"
@@ -448,7 +451,22 @@ impl PackageGroup<'_> {
             )
         });
 
-        let scope_note = if !self.has_fix && !self.introduces.is_empty() {
+        let malicious = fix_target::malicious_of(&self.lines);
+        let scope_note = if !self.has_fix && !malicious.is_empty() {
+            // The MCP's order: the malware first, then what else blocks.
+            let also = if self.introduces.is_empty() {
+                String::new()
+            } else {
+                format!(
+                    ". It also cannot move: {}",
+                    fix_target::introduces_text(&self.introduces)
+                )
+            };
+            format!(
+                "No release is named: {}{also}",
+                fix_target::malicious_text(&self.package, &malicious)
+            )
+        } else if !self.has_fix && !self.introduces.is_empty() {
             let why = fix_target::introduces_text(&self.introduces);
             format!("No release is named: {why} — pin, patch, or replace")
         } else if !self.has_fix && !self.withheld.is_empty() {
