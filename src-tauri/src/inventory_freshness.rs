@@ -15,7 +15,17 @@
 //! PANICKED), or at a hard deadline if the scan hangs (an unreachable network
 //! share), whichever comes first. A shut gate can therefore never outlive the
 //! session's scan. With no scan scheduled the inventory reads as fresh.
+//!
+//! The same gate covers a MID-SESSION rescan (`dep_rescan`): live 2026-10-24,
+//! a merged bump changed lockfiles hours after the startup scan and the GUI's
+//! scheduled cycle never re-read them, so the brief kept naming advisories
+//! the lockfiles had already cleared. [`try_begin_session_refresh`] begins a
+//! refresh only when no other scan is in flight, so a rescan never overlaps
+//! the startup scan or another rescan. The gate counts its holders: it reads
+//! fresh only once every refresh holding it has released, so overlapping
+//! refreshes can never reopen it early for one another.
 
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -36,35 +46,49 @@ pub(crate) const INVENTORY_REFRESHING: &str = "inventory_refreshing";
 
 /// One refresh gate. The process uses [`GLOBAL`]; tests make their own.
 pub(crate) struct Gate {
-    tx: watch::Sender<bool>,
+    /// Refreshes currently holding the gate shut. Fresh at zero.
+    tx: watch::Sender<usize>,
+    /// Scans in flight. Released only when a [`RefreshGuard`] drops, never at
+    /// the deadline, so a hung scan still blocks a second one from starting.
+    scans: AtomicUsize,
 }
 
 impl Gate {
     /// A gate that starts fresh (nothing scheduled).
     pub(crate) fn new() -> Self {
-        let (tx, _rx) = watch::channel(true);
-        Self { tx }
+        let (tx, _rx) = watch::channel(0);
+        Self {
+            tx,
+            scans: AtomicUsize::new(0),
+        }
     }
 
     fn shut(&self) {
-        self.tx.send_replace(false);
+        self.tx.send_modify(|holders| *holders += 1);
     }
 
     fn open(&self) {
-        self.tx.send_replace(true);
+        self.tx
+            .send_modify(|holders| *holders = holders.saturating_sub(1));
     }
 
     pub(crate) fn is_fresh(&self) -> bool {
-        *self.tx.borrow()
+        *self.tx.borrow() == 0
+    }
+
+    /// True while any scan (startup or mid-session) is still running.
+    pub(crate) fn scan_in_flight(&self) -> bool {
+        self.scans.load(Ordering::SeqCst) > 0
     }
 
     /// Wait for the refresh to finish, at most `timeout`. True when the
     /// inventory is fresh (already, or within the timeout).
     pub(crate) async fn wait_until_fresh(&self, timeout: Duration) -> bool {
         let mut rx = self.tx.subscribe();
-        let waited =
-            tokio::time::timeout(timeout, async { rx.wait_for(|fresh| *fresh).await.is_ok() })
-                .await;
+        let waited = tokio::time::timeout(timeout, async {
+            rx.wait_for(|holders| *holders == 0).await.is_ok()
+        })
+        .await;
         waited.unwrap_or(false)
     }
 }
@@ -101,12 +125,38 @@ pub(crate) struct RefreshGuard(Arc<Refresh>);
 impl Drop for RefreshGuard {
     fn drop(&mut self) {
         self.0.release(false);
+        self.0.gate.scans.fetch_sub(1, Ordering::SeqCst);
     }
 }
 
 /// Shut `gate` until the returned guard drops or `deadline` passes.
 /// `on_finish` runs once, on whichever comes first.
 fn begin_refresh_on(
+    gate: Arc<Gate>,
+    deadline: Duration,
+    on_finish: impl FnOnce() + Send + 'static,
+) -> RefreshGuard {
+    gate.scans.fetch_add(1, Ordering::SeqCst);
+    start_refresh(gate, deadline, on_finish)
+}
+
+/// [`begin_refresh_on`], but only when no scan is in flight on `gate` (the
+/// startup scan, or another rescan, even one past its deadline). `None`
+/// means: skip, a scan is already re-reading the lockfiles.
+pub(crate) fn try_begin_refresh_on(
+    gate: Arc<Gate>,
+    deadline: Duration,
+    on_finish: impl FnOnce() + Send + 'static,
+) -> Option<RefreshGuard> {
+    gate.scans
+        .compare_exchange(0, 1, Ordering::SeqCst, Ordering::SeqCst)
+        .ok()?;
+    Some(start_refresh(gate, deadline, on_finish))
+}
+
+/// Shut the gate and arm the deadline watchdog; the caller has already
+/// counted the scan in `gate.scans`.
+fn start_refresh(
     gate: Arc<Gate>,
     deadline: Duration,
     on_finish: impl FnOnce() + Send + 'static,
@@ -131,6 +181,21 @@ fn begin_refresh_on(
 pub(crate) fn begin_startup_refresh(on_finish: impl FnOnce() + Send + 'static) -> RefreshGuard {
     tracing::info!(target: "4da::startup", "Dependency inventory refresh scheduled: dependency facts wait for it");
     begin_refresh_on(GLOBAL.clone(), STARTUP_SCAN_DEADLINE, on_finish)
+}
+
+/// A mid-session rescan: dependency facts wait for the returned guard or
+/// [`STARTUP_SCAN_DEADLINE`]. `None` when a scan is already in flight.
+pub(crate) fn try_begin_session_refresh(
+    on_finish: impl FnOnce() + Send + 'static,
+) -> Option<RefreshGuard> {
+    let guard = try_begin_refresh_on(GLOBAL.clone(), STARTUP_SCAN_DEADLINE, on_finish)?;
+    tracing::info!(target: "4da::inventory", "Dependency inventory rescan started: dependency facts wait for it");
+    Some(guard)
+}
+
+/// [`Gate::scan_in_flight`] on the process gate.
+pub(crate) fn scan_in_flight() -> bool {
+    GLOBAL.scan_in_flight()
 }
 
 pub(crate) fn is_fresh() -> bool {
@@ -187,7 +252,7 @@ mod tests {
     async fn a_pending_refresh_times_out_as_not_fresh_and_reopens_on_drop() {
         let gate = Arc::new(Gate::new());
         let (count, on_finish) = counter();
-        let guard = begin_refresh_on(gate.clone(), Duration::from_secs(3600), on_finish);
+        let guard = begin_refresh_on(gate.clone(), Duration::from_hours(1), on_finish);
         assert!(!gate.wait_until_fresh(Duration::from_millis(20)).await);
         drop(guard);
         assert!(gate.is_fresh());
@@ -197,7 +262,7 @@ mod tests {
     #[tokio::test]
     async fn a_waiter_wakes_when_the_refresh_finishes() {
         let gate = Arc::new(Gate::new());
-        let guard = begin_refresh_on(gate.clone(), Duration::from_secs(3600), || {});
+        let guard = begin_refresh_on(gate.clone(), Duration::from_hours(1), || {});
         let waiter = {
             let gate = gate.clone();
             tokio::spawn(async move { gate.wait_until_fresh(Duration::from_secs(10)).await })
@@ -212,7 +277,7 @@ mod tests {
     fn a_guard_dropped_by_a_panic_reopens_the_gate() {
         let gate = Arc::new(Gate::new());
         let (count, on_finish) = counter();
-        let guard = begin_refresh_on(gate.clone(), Duration::from_secs(3600), on_finish);
+        let guard = begin_refresh_on(gate.clone(), Duration::from_hours(1), on_finish);
         let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
             let _owned = guard;
             panic!("scan task panicked");
@@ -247,12 +312,55 @@ mod tests {
     #[test]
     fn a_brief_requested_during_the_rescan_states_no_facts() {
         let gate = Arc::new(Gate::new());
-        let guard = begin_refresh_on(gate.clone(), Duration::from_secs(3600), || {});
+        let guard = begin_refresh_on(gate.clone(), Duration::from_hours(1), || {});
         let refused = brief_gate(&gate).expect("refused while refreshing");
         assert_eq!(refused["success"], false);
         assert_eq!(refused["error"], INVENTORY_REFRESHING);
         assert!(refused["briefing"].is_null(), "no brief text, so no facts");
         drop(guard);
         assert!(brief_gate(&gate).is_none());
+    }
+
+    /// A mid-session rescan never starts while the startup scan holds the gate.
+    #[test]
+    fn a_session_refresh_is_refused_while_the_startup_scan_runs() {
+        let gate = Arc::new(Gate::new());
+        let startup = begin_refresh_on(gate.clone(), Duration::from_hours(1), || {});
+        assert!(gate.scan_in_flight());
+        assert!(try_begin_refresh_on(gate.clone(), Duration::from_hours(1), || {}).is_none());
+        drop(startup);
+        assert!(!gate.scan_in_flight());
+        let session = try_begin_refresh_on(gate.clone(), Duration::from_hours(1), || {});
+        assert!(session.is_some(), "free once the startup scan finished");
+        assert!(!gate.is_fresh(), "the rescan shuts the gate");
+        drop(session);
+        assert!(gate.is_fresh());
+    }
+
+    /// Two rescans never overlap, even when the first is past its deadline
+    /// (the gate reopened, but the scan itself still runs).
+    #[tokio::test]
+    async fn a_hung_rescan_past_its_deadline_still_blocks_a_second_one() {
+        let gate = Arc::new(Gate::new());
+        let first = try_begin_refresh_on(gate.clone(), Duration::from_millis(20), || {})
+            .expect("first rescan");
+        assert!(gate.wait_until_fresh(Duration::from_secs(5)).await);
+        assert!(try_begin_refresh_on(gate.clone(), Duration::from_hours(1), || {}).is_none());
+        drop(first);
+        assert!(try_begin_refresh_on(gate.clone(), Duration::from_hours(1), || {}).is_some());
+    }
+
+    /// Overlapping holders: the gate reads fresh only once BOTH released.
+    #[test]
+    fn overlapping_refreshes_never_reopen_the_gate_for_each_other() {
+        let gate = Arc::new(Gate::new());
+        let a = begin_refresh_on(gate.clone(), Duration::from_hours(1), || {});
+        let b = begin_refresh_on(gate.clone(), Duration::from_hours(1), || {});
+        drop(a);
+        assert!(!gate.is_fresh(), "b still holds the gate");
+        assert!(brief_gate(&gate).is_some());
+        drop(b);
+        assert!(gate.is_fresh());
+        assert!(!gate.scan_in_flight());
     }
 }
