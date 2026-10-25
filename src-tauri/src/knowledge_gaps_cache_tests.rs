@@ -240,7 +240,8 @@ fn the_feed_carries_the_freshness_of_the_news_it_read() {
         "CREATE TABLE source_items (created_at TEXT);
          CREATE TABLE feed_health (last_success_at TEXT, consecutive_failures INTEGER, circuit_open INTEGER);
          CREATE TABLE engine_runs (id INTEGER PRIMARY KEY, items_scored INTEGER, sources_succeeded INTEGER,
-                                   sources_failed INTEGER, completed_at TEXT);
+                                   sources_failed INTEGER, sources_skipped INTEGER NOT NULL DEFAULT 0,
+                                   completed_at TEXT);
          INSERT INTO source_items VALUES (datetime('now', '-2 hours'));
          INSERT INTO feed_health VALUES (datetime('now', '-1 hours'), 0, 0);
          INSERT INTO engine_runs (items_scored, sources_succeeded, sources_failed, completed_at)
