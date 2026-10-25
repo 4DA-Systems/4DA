@@ -79,7 +79,8 @@ pub(crate) fn compute_calibration_snapshot(
     db: &Database,
     threshold: f32,
 ) -> SqliteResult<CalibrationSnapshot> {
-    let conn = db.conn.lock();
+    // Pure reads: a pooled reader, never the writer (see `run_scheduled_checks`).
+    let conn = db.read_conn_blocking();
     let t = threshold as f64;
 
     // ── Engagement-derived metrics (join feedback → source_items) ──
@@ -159,7 +160,18 @@ pub(crate) struct HighStakesRecall {
     /// consumers should alarm on. This metric is a regression monitor, not a
     /// permanent scare number: a healthy pipeline reads ~0% and never alerts.
     pub alert: bool,
+    /// ...of `misscored`, how many reach the stack only through a dev-only
+    /// copy (the breakdown's `dependency_path`). Reported apart because a
+    /// dev-only exposure is graded down everywhere else (Preemption severity,
+    /// the Critical trust gate), so "buried" means something different there.
+    pub misscored_dev_only: usize,
+    /// Up to [`MISSED_SAMPLE_LIMIT`] ids of buried advisories, newest first,
+    /// so the alarm names rows that can be inspected instead of a bare ratio.
+    pub missed_sample_ids: Vec<i64>,
 }
+
+/// How many buried advisory ids [`HighStakesRecall::missed_sample_ids`] keeps.
+pub(crate) const MISSED_SAMPLE_LIMIT: usize = 8;
 
 /// Alert floor for the dep-scoped high-stakes miss rate. A healthy pipeline sits at
 /// ~0%; readings above 5% mean stack advisories are being buried — a recall
@@ -178,6 +190,8 @@ pub(crate) fn compute_high_stakes_recall(
     let t = threshold as f64;
     let mut dep_matched_total = 0usize;
     let mut misscored = 0usize;
+    let mut misscored_dev_only = 0usize;
+    let mut missed_sample_ids = Vec::new();
     for row in &items {
         // The pipeline's own grounding verdict when a breakdown is stored; the
         // text matcher only for rows scored before breakdowns carried it.
@@ -210,6 +224,12 @@ pub(crate) fn compute_high_stakes_recall(
         dep_matched_total += 1;
         if row.relevance < t {
             misscored += 1;
+            if row.dependency_path.as_deref() == Some("dev-only") {
+                misscored_dev_only += 1;
+            }
+            if missed_sample_ids.len() < MISSED_SAMPLE_LIMIT {
+                missed_sample_ids.push(row.id);
+            }
         }
     }
     let miss_rate = if dep_matched_total > 0 {
@@ -222,6 +242,8 @@ pub(crate) fn compute_high_stakes_recall(
         misscored,
         miss_rate,
         alert: miss_rate > HIGH_STAKES_MISS_ALERT_RATE,
+        misscored_dev_only,
+        missed_sample_ids,
     })
 }
 
@@ -260,7 +282,7 @@ fn share(n: usize, total: usize) -> f32 {
 pub(crate) const CLIFF_MARGIN: f32 = 0.03;
 
 /// Count the recent explanations perched on the context / interest thresholds.
-/// Bounded scan of the most recent `sample` explanations; read-only.
+/// Bounded scan of the explanations of the newest `sample` items; read-only.
 pub(crate) fn compute_threshold_cliffs(
     db: &Database,
     sample: usize,
@@ -281,6 +303,129 @@ pub(crate) fn compute_threshold_cliffs(
         }
     }
     Ok(out)
+}
+
+/// The scheduled calibration job (every 6 h, the scheduler's LOW lane): the
+/// per-developer snapshot, the threshold-cliff probe and the dep-scoped
+/// recall check, each logged. Returns the snapshot's error, if any, for the
+/// job's recorded outcome.
+///
+/// Synchronous on purpose, and the scheduler runs it on the blocking pool
+/// (`ipc_blocking::off_ui_thread_infallible`). It used to run inline on a
+/// tokio worker with every read on the writer connection: on the operator's
+/// launch of 2026-10-23 (15:09:10Z) the snapshot and the cliff probe alone
+/// held the writer for about 4 s, the probe's unindexed `ORDER BY scored_at`
+/// over 170k explanations takes 22 s with a cold page cache, and the same
+/// scheduler tick then went straight into the suns, so the worker did not
+/// yield for about a minute while Victauri `/health` sat blocked for 30 s.
+/// Every read here now waits for a pooled reader (`read_conn_blocking`), never
+/// falling back to the writer while a scoring drain holds the pool.
+pub(crate) fn run_scheduled_checks(
+    db: &Database,
+    threshold: f32,
+    ctx: Option<&ScoringContext>,
+) -> Option<String> {
+    let snapshot_error = compute_calibration_snapshot(db, threshold)
+        .map(|snap| log_snapshot(&snap))
+        .map_err(|e| {
+            tracing::debug!(target: "4da::calibration", error = %e, "Calibration snapshot failed");
+            e.to_string()
+        })
+        .err();
+
+    // Phase 5c: threshold cliffs — how many of the newest scored items sit within
+    // ±0.03 of an embedding axis's confirmation threshold. The 2-signal gate
+    // is a cliff, so this is the pipeline's exposure to embedding jitter.
+    // Logged so a threshold re-tune is measured before it is attempted.
+    match compute_threshold_cliffs(db, 5000) {
+        Ok(c) if c.sampled > 0 => tracing::info!(
+            target: "4da::calibration",
+            sampled = c.sampled,
+            near_context = c.near_context,
+            near_interest = c.near_interest,
+            context_share = c.share_context(),
+            interest_share = c.share_interest(),
+            "Threshold cliffs: items perched within 0.03 of a confirmation threshold"
+        ),
+        Ok(_) => {}
+        Err(e) => tracing::debug!(
+            target: "4da::calibration",
+            error = %e,
+            "Threshold cliff probe failed"
+        ),
+    }
+
+    // Phase 5b: dep-scoped high-stakes recall. Works at cold start — it needs
+    // the dependency graph, not feedback.
+    if let Some(ctx) = ctx {
+        if let Ok(hs) = compute_high_stakes_recall(db, ctx, threshold) {
+            log_high_stakes_recall(&hs);
+        }
+    }
+    snapshot_error
+}
+
+fn log_snapshot(snap: &CalibrationSnapshot) {
+    if !snap.has_sufficient_feedback {
+        tracing::debug!(
+            target: "4da::calibration",
+            feedback = snap.feedback_count,
+            "Calibration: insufficient feedback yet (cold start) — staying silent"
+        );
+        return;
+    }
+    let health = snap.health().unwrap_or(1.0);
+    tracing::info!(
+        target: "4da::calibration",
+        feedback = snap.feedback_count,
+        precision_miss = snap.precision_miss_rate,
+        recall_miss = snap.recall_miss_rate,
+        discrimination = snap.discrimination,
+        health,
+        "Per-developer calibration snapshot"
+    );
+    // Recall misses (relevant items buried) are the worst failure — surface
+    // drift loudly so it can't degrade silently.
+    if health < 0.7 {
+        tracing::warn!(
+            target: "4da::calibration",
+            health,
+            recall_miss = snap.recall_miss_rate,
+            precision_miss = snap.precision_miss_rate,
+            "Calibration drift detected for this developer — scoring may need recalibration"
+        );
+    }
+}
+
+fn log_high_stakes_recall(hs: &HighStakesRecall) {
+    if hs.alert {
+        tracing::warn!(
+            target: "4da::calibration",
+            misscored = hs.misscored,
+            misscored_dev_only = hs.misscored_dev_only,
+            dep_matched = hs.dep_matched_total,
+            miss_rate = hs.miss_rate,
+            sample_ids = ?hs.missed_sample_ids,
+            "Security/breaking advisories affecting your stack scored as noise — recall bug"
+        );
+    } else if hs.misscored > 0 {
+        // Below the alert threshold: note it, don't page.
+        tracing::info!(
+            target: "4da::calibration",
+            misscored = hs.misscored,
+            misscored_dev_only = hs.misscored_dev_only,
+            dep_matched = hs.dep_matched_total,
+            miss_rate = hs.miss_rate,
+            sample_ids = ?hs.missed_sample_ids,
+            "High-stakes recall: isolated misses below alert threshold"
+        );
+    } else if hs.dep_matched_total > 0 {
+        tracing::info!(
+            target: "4da::calibration",
+            dep_matched = hs.dep_matched_total,
+            "High-stakes recall clean — all stack advisories surfaced"
+        );
+    }
 }
 
 #[cfg(test)]

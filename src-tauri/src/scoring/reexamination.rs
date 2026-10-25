@@ -161,7 +161,12 @@ pub(crate) async fn reexamine_if_pins_changed(db: &Database) -> Option<usize> {
             return None;
         }
     };
-    let requeued = requeue_reexaminable_items(db, &ctx, crate::get_relevance_threshold());
+    // Up to 5,000 candidate rows through the dependency matcher plus a batched
+    // write: seconds of synchronous work. `cpu_bound` hands this worker's queued
+    // tasks to another worker first, so nothing waits behind it.
+    let threshold = crate::get_relevance_threshold();
+    let requeued =
+        crate::ipc_blocking::cpu_bound(|| requeue_reexaminable_items(db, &ctx, threshold));
     crate::scheduler_state::persist_dep_epoch_hash(epoch);
     if requeued > 0 {
         converge(requeued).await;

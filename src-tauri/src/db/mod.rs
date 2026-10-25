@@ -389,6 +389,30 @@ impl Database {
         self.conn.lock()
     }
 
+    /// A pooled reader for background work on the blocking pool: waits for a
+    /// reader instead of falling back to the writer.
+    ///
+    /// [`Self::read_conn`] takes the writer when every reader is busy, and a
+    /// scoring drain borrows every reader — the drain that runs about 90 s after
+    /// launch, exactly when the scheduled calibration walk (tens of seconds on a
+    /// cold page cache) runs. Through `read_conn` that walk could hold the writer
+    /// for its whole run, the stall #1018 removes. Waiting here costs only this
+    /// background job. Only a database without a pool (in-memory tests) uses the
+    /// writer.
+    pub(crate) fn read_conn_blocking(&self) -> parking_lot::MutexGuard<'_, Connection> {
+        if self.read_pool.is_empty() {
+            return self.conn.lock();
+        }
+        for reader in &self.read_pool {
+            if let Some(guard) = reader.try_lock() {
+                return guard;
+            }
+        }
+        static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let i = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed) % self.read_pool.len();
+        self.read_pool[i].lock()
+    }
+
     /// A read-only connection for a query a person is waiting on (the search box).
     ///
     /// A scoring drain borrows every pooled reader, one per thread, so `read_conn`
