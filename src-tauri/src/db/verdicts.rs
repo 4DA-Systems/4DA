@@ -405,7 +405,13 @@ impl Database {
         // Read before the connection lock: it takes the settings lock.
         let gate = crate::judge_gate::active();
         let conn = self.conn.lock();
-        let tx = conn.unchecked_transaction()?;
+        // IMMEDIATE: each row is read, then written. A deferred transaction
+        // fails its lock upgrade with SQLITE_BUSY_SNAPSHOT, bypassing the busy
+        // handler, whenever another connection committed in between — the
+        // risen sweep and the release-train pass failed that way whenever a
+        // re-examination overlapped the startup scan (2026-10-25).
+        let tx =
+            rusqlite::Transaction::new_unchecked(&conn, rusqlite::TransactionBehavior::Immediate)?;
         let mut count = 0;
         let mut deferred = 0usize;
         let mut confirmed_flips = 0usize;

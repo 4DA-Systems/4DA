@@ -126,9 +126,25 @@ const RISEN_PROMOTE_BUDGET: usize = 200;
 /// the current version is demoted with reason `score_sunk_in_version` — the
 /// version-scoped working set alone left that class immortal (2026-08-23
 /// audit).
+///
+/// Every step but the context build is synchronous SQL on the writer (seconds
+/// of it after a version bump or a pin change) or a sequential re-score, so
+/// each runs through `ipc_blocking::cpu_bound` and never pins an async runtime
+/// worker while it holds, or waits for, the writer.
 pub(crate) async fn reconcile_stale_verdicts_cycle(budget: usize) -> Result<VerdictReconciliation> {
     let db = get_database()?;
+    let base = crate::ipc_blocking::cpu_bound(|| sweep_verdicts(db))?;
+    let Some(items) = crate::ipc_blocking::cpu_bound(|| load_stale_verdicts(db, budget))? else {
+        return Ok(base);
+    };
+    let ctx = scoring::build_scoring_context_with_timeout(db, "reconcile_verdicts").await?;
+    crate::ipc_blocking::cpu_bound(|| rejudge_stale_verdicts(db, &ctx, base, items))
+}
 
+/// The fact-based demotions: rows that leave the feed for what they ARE
+/// (score sunk in-version, source cut, stale on arrival), before any lane
+/// that promotes. Returns (sunk, source_cut, stale_news).
+fn demote_by_fact(db: &crate::db::Database) -> Result<(usize, usize, usize)> {
     // In-version sunk sweep FIRST, and before the stale early-return below:
     // once every verdict is version-current the stale probe reads 0 forever,
     // which is precisely the state in which same-version score churn is the
@@ -181,6 +197,13 @@ pub(crate) async fn reconcile_stale_verdicts_cycle(budget: usize) -> Result<Verd
         );
     }
 
+    Ok((sunk, source_cut, stale_news))
+}
+
+/// Every pure-SQL sweep of one reconciliation, in order; their counts form the
+/// base of the cycle's [`VerdictReconciliation`].
+fn sweep_verdicts(db: &crate::db::Database) -> Result<VerdictReconciliation> {
+    let (sunk, source_cut, stale_news) = demote_by_fact(db)?;
     // v32: the lane in the OTHER direction. Every pass in this file could only
     // remove; the drain persists scores only; the cycle re-verdicts only what
     // it selects. So a row the current brain scores above the line with no
@@ -274,24 +297,38 @@ pub(crate) async fn reconcile_stale_verdicts_cycle(budget: usize) -> Result<Verd
         twin_demoted: twins + risen.twins,
         ..VerdictReconciliation::default()
     };
+    Ok(base)
+}
 
+/// The stale-verdict batch to re-judge with its backlog size, or `None` when
+/// there is none.
+fn load_stale_verdicts(
+    db: &crate::db::Database,
+    budget: usize,
+) -> Result<Option<(i64, Vec<crate::db::StoredSourceItem>)>> {
     // Cheap indexed probe next: this runs on EVERY analysis cycle forever, so
     // the idle path must cost ~0 and must not build a scoring context.
     let stale = db
         .count_stale_verdicts(scoring::PIPELINE_VERSION)
         .map_err(|e| format!("Failed to probe stale verdicts: {e}"))?;
     if stale == 0 {
-        return Ok(base);
+        return Ok(None);
     }
 
     let items = db
         .get_stale_verdict_items(scoring::PIPELINE_VERSION, budget)
         .map_err(|e| format!("Failed to load stale-verdict items: {e}"))?;
-    if items.is_empty() {
-        return Ok(base);
-    }
+    Ok((!items.is_empty()).then_some((stale, items)))
+}
 
-    let ctx = scoring::build_scoring_context_with_timeout(db, "reconcile_verdicts").await?;
+/// Re-score the stale-verdict batch against the current pipeline and demote
+/// what it rejects (see [`reconcile_stale_verdicts_cycle`]).
+fn rejudge_stale_verdicts(
+    db: &crate::db::Database,
+    ctx: &scoring::ScoringContext,
+    base: VerdictReconciliation,
+    (stale, items): (i64, Vec<crate::db::StoredSourceItem>),
+) -> Result<VerdictReconciliation> {
     let trend_topics = crate::detect_trend_topics(
         items
             .iter()

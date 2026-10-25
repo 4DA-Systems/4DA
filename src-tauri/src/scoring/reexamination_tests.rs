@@ -249,3 +249,64 @@ fn a_pin_change_withdraws_score_verdicts_on_dependency_releases_only() {
         (Some(0), Some("llm_reject".to_string()))
     );
 }
+
+thread_local! {
+    /// Statements the writer ran on this test's thread. `Connection::trace`
+    /// takes a plain `fn`, so the sink is a static; thread-local keeps
+    /// parallel tests out of each other's record.
+    static TRACED: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+fn record(sql: &str) {
+    TRACED.with(|t| t.borrow_mut().push(sql.to_lowercase()));
+}
+
+/// Live 2026-10-25 (isolated A/B): a pin change at launch re-queued ~1,900
+/// rows in ONE writer transaction while the startup ACE scan ran, and the
+/// runtime stalled behind the writer. The re-queue now commits every
+/// `REQUEUE_BATCH` rows, so no transaction (and no writer hold) spans more
+/// than one batch, and every row is still re-queued.
+#[test]
+fn requeue_never_writes_more_than_one_batch_per_transaction() {
+    use crate::db::REQUEUE_BATCH;
+    let db = test_db();
+    let n = REQUEUE_BATCH * 2 + 37;
+    let ids: Vec<i64> = (0..n)
+        .map(|i| {
+            let id = insert_test_item(&db, "crates_io", &format!("r{i}"), "x", "");
+            set_scored(&db, id, 0.02, "release_notes");
+            id
+        })
+        .collect();
+
+    db.conn.lock().trace(Some(record));
+    let requeued = db.requeue_and_clear_score_verdicts(&ids).unwrap();
+    db.conn.lock().trace(None);
+
+    assert_eq!(requeued, n, "every row is re-queued");
+    for id in [ids[0], ids[REQUEUE_BATCH], ids[n - 1]] {
+        assert_eq!(version_of(&db, id), 0);
+    }
+    let traced = TRACED.with(|t| t.borrow().clone());
+    let mut per_tx = Vec::new();
+    let mut open: Option<usize> = None;
+    for sql in &traced {
+        if sql.starts_with("begin") {
+            open = Some(0);
+        } else if sql.starts_with("commit") {
+            per_tx.push(open.take().expect("COMMIT without BEGIN"));
+        } else if sql.contains("set scored_pipeline_version = 0") {
+            *open.as_mut().expect("re-queue write outside a transaction") += 1;
+        }
+    }
+    assert_eq!(
+        per_tx.iter().sum::<usize>(),
+        n,
+        "trace saw every write: {per_tx:?}"
+    );
+    assert_eq!(per_tx.len(), n.div_ceil(REQUEUE_BATCH), "{per_tx:?}");
+    assert!(
+        per_tx.iter().all(|&rows| rows <= REQUEUE_BATCH),
+        "a transaction spanned more than one batch: {per_tx:?}"
+    );
+}
