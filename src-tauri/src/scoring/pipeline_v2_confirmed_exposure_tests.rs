@@ -407,3 +407,64 @@ fn confirmed_runtime_copy_reads_scope_liveness_and_notices() {
         "an exposure only in a scratch project does not ground"
     );
 }
+
+/// The floor tier follows the CONFIRMED runtime copy's reach, not the worst
+/// copy's: a direct copy in a scratch project must not lift a live
+/// transitive exposure to the direct floor.
+#[test]
+fn scratch_direct_copy_does_not_lift_a_live_transitive_exposure_to_the_direct_floor() {
+    let db = crate::test_utils::test_db();
+    {
+        let conn = db.conn.lock();
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS detected_projects (
+                path TEXT NOT NULL UNIQUE, name TEXT NOT NULL,
+                last_activity TEXT, scratch INTEGER NOT NULL DEFAULT 0);",
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO detected_projects (path, name, last_activity, scratch)
+             VALUES ('d:/work/scratch', 'scratch', '2026-04-28T19:28:43Z', 1),
+                    ('d:/work/app/src-tauri', 'app', strftime('%Y-%m-%dT%H:%M:%SZ','now'), 0)",
+            [],
+        )
+        .unwrap();
+    }
+    seed_copy(
+        &db,
+        "d:/work/scratch",
+        "rustls",
+        "0.23.39",
+        "rust",
+        "crates.io",
+        true,
+        false,
+    );
+    seed_copy(
+        &db,
+        "d:/work/app/src-tauri",
+        "rustls",
+        "0.23.39",
+        "rust",
+        "crates.io",
+        false,
+        false,
+    );
+    seed_advisory(&db, "GHSA-2mjx-qc3c-rqvc", "rustls", "crates.io", "0.23.45");
+    let zero = vec![0.0_f32; crate::EMBEDDING_DIMS];
+    let result = score(
+        &db,
+        &web_ctx(),
+        &registry_input("cve", RUSTLS_TITLE, RUSTLS_URL, RUSTLS_CONTENT, &zero),
+    );
+    assert!(
+        result.top_score >= scoring_config::CRITICAL_FASTPATH_SCORE_FLOOR - 1e-6,
+        "the live transitive exposure still passes the line (score {})",
+        result.top_score
+    );
+    assert!(
+        result.top_score < scoring_config::CRITICAL_FASTPATH_DIRECT_DEP_FLOOR - 1e-6,
+        "a scratch-project direct copy must not pick the direct floor (score {})",
+        result.top_score
+    );
+}

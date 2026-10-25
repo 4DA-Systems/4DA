@@ -88,7 +88,9 @@ impl SecurityVerdict {
         if !self.exposed.first().is_some_and(|c| !c.is_dev) {
             return None;
         }
-        let conn = db.conn.lock();
+        // A pooled reader, not the writer: this runs on the scoring path
+        // (the #1018 stall class).
+        let conn = db.read_conn();
         let membership = crate::project_inclusion::StackMembership::load(&conn);
         drop(conn);
         self.exposed

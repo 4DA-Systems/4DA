@@ -3592,8 +3592,14 @@ pub(crate) fn score_item(
     // sitting at the bare 0.50 floor. The higher tier requires the direct dep
     // itself to be the strongly grounded edge (canonical predicate), not just
     // any direct dep riding alongside a grounded transitive match.
+    // v44: when a confirmed runtime copy exists, ITS reach picks the tier —
+    // the worst copy can be a direct one in a scratch project while the live
+    // exposure is transitive.
     let has_direct_dep = grounding.strong_direct
-        || (security_confirmed && sec_exposed_copy.is_some_and(|c| c.is_direct && !c.is_dev));
+        || confirmed_runtime_copy.map_or_else(
+            || security_confirmed && sec_exposed_copy.is_some_and(|c| c.is_direct && !c.is_dev),
+            |c| c.is_direct,
+        );
     let fast_path_floor = if has_direct_dep {
         scoring_config::CRITICAL_FASTPATH_DIRECT_DEP_FLOOR
     } else {
