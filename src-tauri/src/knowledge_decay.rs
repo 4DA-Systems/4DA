@@ -1080,7 +1080,7 @@ fn affecting_advisories(
 ) -> Vec<crate::osv::types::StoredAdvisory> {
     let Ok(mut stmt) = conn.prepare(
         "SELECT affected_ranges, cvss_score, severity_label, ecosystem, advisory_id,
-                aliases, summary, details, fixed_versions, cwe_ids
+                aliases, summary, details, fixed_versions, cwe_ids, informational
          FROM osv_advisories
          WHERE lower(package_name) = lower(?1) AND withdrawn_at IS NULL",
     ) else {
@@ -1112,6 +1112,7 @@ fn affecting_advisories(
                 .get::<_, Option<String>>(9)?
                 .and_then(|c| serde_json::from_str(&c).ok())
                 .unwrap_or_default(),
+            informational: row.get::<_, Option<bool>>(10)?.unwrap_or(false),
         })
     }) else {
         return Vec::new();

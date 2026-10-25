@@ -3207,6 +3207,7 @@ mod tests {
             cwe_ids: cwe.iter().map(ToString::to_string).collect(),
             severity_from: None,
             dependency_instances: vec![],
+            informational: false,
         };
         for m in [
             rec(
@@ -3275,6 +3276,7 @@ mod tests {
                     malicious: Vec::new(),
                 },
             ],
+            informational: false,
         };
 
         let both = vec!["/direct".to_string(), "/transitive".to_string()];
@@ -3342,6 +3344,7 @@ mod tests {
                 copy("/webhook", "1.1.18", "1.1.21"),
                 copy("/webhook", "5.0.9", "5.0.12"),
             ],
+            informational: false,
         };
 
         let (fix, sentence) = alert_fix_target(
@@ -3410,6 +3413,7 @@ mod tests {
                 introduces: Vec::new(),
                 malicious: Vec::new(),
             }],
+            informational: false,
         };
         let projects = vec!["/paddle-webhook".to_string()];
         assert_eq!(

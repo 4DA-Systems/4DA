@@ -54,15 +54,24 @@ pub(crate) fn row_grade(cvss_score: Option<f64>, label: Option<&str>) -> Option<
         .or_else(|| cvss_score.filter(|s| *s > 0.0).map(cvss_band))
 }
 
-/// THE maintenance-notice predicate (`fourda_depengine::severity::
-/// is_maintenance_notice`, the MCP's rule): the summary says `unmaintained`
-/// or `no longer maintained` as words. The mirror does not store OSV's
-/// `database_specific.informational`, so the summary is what the app reads.
-/// A notice is never graded from an alias, the Upgrade Plan folds it into one
-/// Watch item, [`cluster_urgency`] grades it Watch on the alert path, and the
-/// fix-target walk never lets it block or be a target.
+/// The summary half of the maintenance-notice predicate
+/// (`fourda_depengine::severity::is_maintenance_notice`, the MCP's rule): the
+/// summary says `unmaintained` or `no longer maintained` as words. The scorer
+/// reads it over item titles; an advisory row reads [`is_notice`].
 pub(crate) fn maintenance_text(summary: &str) -> bool {
     fourda_depengine::severity::is_maintenance_notice(summary, None)
+}
+
+/// THE maintenance-notice predicate for a mirror row or a match: OSV's own
+/// flag as the sync stored it (`stored_flag`, the engine crate's
+/// `osv::is_notice_for`: the record-level or the package's per-affected
+/// `database_specific.informational` is `unmaintained` / `notice`), or the
+/// summary ([`maintenance_text`], which also covers rows synced before the
+/// flag was stored). A notice is never graded from an alias, the Upgrade Plan
+/// folds it into one Watch item, [`cluster_urgency`] grades it Watch on the
+/// alert path, and the fix-target walk never lets it block or be a target.
+pub(crate) fn is_notice(stored_flag: bool, summary: &str) -> bool {
+    stored_flag || maintenance_text(summary)
 }
 
 /// What a grader reads from one advisory record, whichever table it came from.
@@ -71,7 +80,7 @@ pub trait SeverityRecord {
     fn record_aliases(&self) -> &[String];
     /// The record's own grade ([`row_grade`]); `None` when it has none.
     fn own_grade(&self) -> Option<&'static str>;
-    /// A maintenance notice ([`maintenance_text`]).
+    /// A maintenance notice ([`is_notice`]).
     fn is_informational(&self) -> bool;
     /// A grade already inherited for this record (the matcher stores it on
     /// the match so every surface can name it); `None` otherwise.
@@ -95,7 +104,7 @@ impl SeverityRecord for MatchedAdvisory {
             .flatten()
     }
     fn is_informational(&self) -> bool {
-        maintenance_text(&self.summary)
+        is_notice(self.informational, &self.summary)
     }
     fn inherited(&self) -> Option<Graded> {
         Some(Graded {
@@ -116,7 +125,7 @@ impl SeverityRecord for StoredAdvisory {
         row_grade(self.cvss_score, self.severity_label.as_deref())
     }
     fn is_informational(&self) -> bool {
-        maintenance_text(&self.summary)
+        is_notice(self.informational, &self.summary)
     }
 }
 

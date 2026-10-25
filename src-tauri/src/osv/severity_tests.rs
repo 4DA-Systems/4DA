@@ -25,6 +25,7 @@ fn matched(id: &str, aliases: &[&str], cvss: Option<f64>, label: Option<&str>) -
         severity_label: label.map(str::to_string),
         severity_from: None,
         cwe_ids: Vec::new(),
+        informational: false,
     }
 }
 
@@ -48,6 +49,7 @@ fn row(id: &str, package: &str, cvss: Option<f64>, label: Option<&str>) -> Store
         aliases: Vec::new(),
         severity_label: label.map(str::to_string),
         cwe_ids: Vec::new(),
+        informational: false,
     }
 }
 
@@ -194,4 +196,107 @@ fn a_malware_title_alone_is_installed_malware() {
     let mut m = matched("GHSA-28f8-hqmc-7ph8", &[], None, Some("low"));
     m.summary = "Malicious Package in ember-power-timepicker".into();
     assert_eq!(cluster_urgency(&[&m]), Urgency::Critical);
+}
+
+/// A pinned conformance record, parsed as the sync parses OSV's.
+fn pinned(id: &str) -> super::super::types::Vulnerability {
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/conformance/osv")
+        .join(format!("{id}.json"));
+    let text = std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{id}: {e}"));
+    serde_json::from_str(&text).unwrap_or_else(|e| panic!("{id}: {e}"))
+}
+
+/// The mirror end to end (sync -> row -> match -> urgency): RustSec's
+/// per-affected `informational: unmaintained` makes tempdir's
+/// RUSTSEC-2018-0017 a notice although its summary only says "deprecated",
+/// so it is Watch with no fix target; smallvec's per-affected `unsound`
+/// RUSTSEC-2018-0018 stays a vulnerability and keeps its fix 0.6.13.
+#[test]
+fn the_per_affected_informational_flag_reaches_the_mirror_and_the_match() {
+    let db = crate::test_utils::test_db();
+    db.store_dependency("/p", "tempdir", Some("0.3.7"), "crates.io", false, None)
+        .unwrap();
+    db.store_dependency("/p", "smallvec", Some("0.6.10"), "crates.io", false, None)
+        .unwrap();
+    let mut seen = std::collections::HashSet::new();
+    for id in ["RUSTSEC-2018-0017", "RUSTSEC-2018-0018"] {
+        super::super::sync::store_vulnerability(&db, &pinned(id), &mut seen).unwrap();
+    }
+    let row = |pkg: &str| db.get_osv_advisories_for_package(pkg, "crates.io").unwrap();
+    assert!(row("tempdir")[0].informational);
+    assert!(
+        !maintenance_text(&row("tempdir")[0].summary),
+        "the summary alone misses it"
+    );
+    assert!(row("tempdir")[0].is_informational());
+    assert!(!row("smallvec")[0].informational);
+
+    let matches = super::super::matching::get_matched_advisories(&db).unwrap();
+    let by_pkg = |pkg: &str| {
+        matches
+            .iter()
+            .find(|m| m.package_name == pkg)
+            .unwrap_or_else(|| panic!("{pkg} matched"))
+    };
+    let tempdir = by_pkg("tempdir");
+    assert!(tempdir.is_informational());
+    assert_eq!(cluster_urgency(&[tempdir]), Urgency::Watch);
+    assert!(tempdir
+        .dependency_instances
+        .iter()
+        .all(|d| d.fixed_version.is_none()));
+    let smallvec = by_pkg("smallvec");
+    assert!(!smallvec.is_informational());
+    assert_eq!(cluster_urgency(&[smallvec]), Urgency::Medium);
+    assert_eq!(smallvec.fixed_version.as_deref(), Some("0.6.13"));
+}
+
+/// Phase 129 backfill: a row stored before the `informational` column (it
+/// reads 0) gets the flag on the next sync, which the migration makes due;
+/// an upsert that does not carry the flag keeps the stored one.
+#[test]
+fn a_pre_migration_row_gets_its_notice_flag_on_the_next_sync() {
+    let db = crate::test_utils::test_db();
+    db.store_dependency("/p", "tempdir", Some("0.3.7"), "crates.io", false, None)
+        .unwrap();
+    let vuln = pinned("RUSTSEC-2018-0017");
+    super::super::sync::store_vulnerability(&db, &vuln, &mut Default::default()).unwrap();
+    db.conn
+        .lock()
+        .execute("UPDATE osv_advisories SET informational = 0", [])
+        .unwrap();
+    db.update_osv_sync_status("crates.io", 1, None).unwrap();
+    let stored = || {
+        db.get_osv_advisories_for_package("tempdir", "crates.io")
+            .unwrap()
+    };
+    assert!(
+        !stored()[0].is_informational(),
+        "as a pre-129 binary left it"
+    );
+    let max_age = super::super::sync::osv_sync_max_age_hours();
+    assert!(!super::super::sync::needs_sync(&db, max_age).unwrap());
+    crate::db::Database::make_osv_sync_due(&db.conn.lock()).unwrap();
+    assert!(super::super::sync::needs_sync(&db, max_age).unwrap());
+    super::super::sync::store_vulnerability(&db, &vuln, &mut Default::default()).unwrap();
+    assert!(stored()[0].informational);
+    // The legacy upsert (no flag) leaves it alone.
+    db.upsert_osv_advisory(
+        "RUSTSEC-2018-0017",
+        "s",
+        None,
+        "tempdir",
+        "crates.io",
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    assert!(stored()[0].informational);
 }

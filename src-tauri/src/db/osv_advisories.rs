@@ -91,13 +91,17 @@ impl Database {
             aliases_json,
             severity_label,
             None,
+            None,
         )
     }
 
     /// The sync's upsert: everything [`Self::upsert_osv_advisory_with_meta`]
-    /// stores plus the record's `database_specific.cwe_ids` (Phase 128), in
-    /// the same statement. Like the aliases, a later upsert without CWE ids
-    /// keeps the stored ones.
+    /// stores plus the record's `database_specific.cwe_ids` (Phase 128) and
+    /// whether the row is a maintenance notice by the engine crate's
+    /// `osv::is_notice_for` (Phase 129), in the same statement. Like the
+    /// aliases, a later upsert without CWE ids keeps the stored ones; an
+    /// upsert with `informational: None` keeps the stored flag, and the sync
+    /// always passes it, so a record that stops being a notice is cleared.
     #[allow(clippy::too_many_arguments)]
     pub fn upsert_osv_advisory_record(
         &self,
@@ -117,14 +121,17 @@ impl Database {
         aliases_json: Option<&str>,
         severity_label: Option<&str>,
         cwe_ids_json: Option<&str>,
+        informational: Option<bool>,
     ) -> SqliteResult<()> {
         self.invalidate_alias_grades();
         let conn = self.conn.lock();
         conn.execute(
             "INSERT INTO osv_advisories (advisory_id, summary, details, package_name, ecosystem,
                 affected_ranges, fixed_versions, severity_type, cvss_score, source_url,
-                published_at, modified_at, withdrawn_at, aliases, severity_label, cwe_ids, synced_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, datetime('now'))
+                published_at, modified_at, withdrawn_at, aliases, severity_label, cwe_ids,
+                informational, synced_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16,
+                COALESCE(?17, 0), datetime('now'))
              ON CONFLICT(advisory_id, package_name, ecosystem) DO UPDATE SET
                 summary = ?2,
                 details = COALESCE(?3, osv_advisories.details),
@@ -139,6 +146,7 @@ impl Database {
                 aliases = COALESCE(?14, osv_advisories.aliases),
                 severity_label = COALESCE(?15, osv_advisories.severity_label),
                 cwe_ids = COALESCE(?16, osv_advisories.cwe_ids),
+                informational = COALESCE(?17, osv_advisories.informational),
                 synced_at = datetime('now')",
             params![
                 advisory_id,
@@ -157,6 +165,7 @@ impl Database {
                 aliases_json,
                 severity_label,
                 cwe_ids_json,
+                informational,
             ],
         )?;
         drop(conn);
@@ -175,7 +184,7 @@ impl Database {
             "SELECT id, advisory_id, summary, details, package_name, ecosystem,
                     affected_ranges, fixed_versions, severity_type, cvss_score,
                     source_url, published_at, modified_at, withdrawn_at, synced_at,
-                    aliases, severity_label, cwe_ids
+                    aliases, severity_label, cwe_ids, informational
              FROM osv_advisories
              WHERE package_name = ?1 AND ecosystem = ?2 AND withdrawn_at IS NULL
              ORDER BY cvss_score DESC NULLS LAST, published_at DESC",
@@ -203,7 +212,7 @@ impl Database {
             "SELECT id, advisory_id, summary, details, package_name, ecosystem,
                     affected_ranges, fixed_versions, severity_type, cvss_score,
                     source_url, published_at, modified_at, withdrawn_at, synced_at,
-                    aliases, severity_label, cwe_ids
+                    aliases, severity_label, cwe_ids, informational
              FROM osv_advisories
              WHERE withdrawn_at IS NULL
                AND (advisory_id = ?1 COLLATE NOCASE
@@ -226,7 +235,7 @@ impl Database {
             "SELECT id, advisory_id, summary, details, package_name, ecosystem,
                     affected_ranges, fixed_versions, severity_type, cvss_score,
                     source_url, published_at, modified_at, withdrawn_at, synced_at,
-                    aliases, severity_label, cwe_ids
+                    aliases, severity_label, cwe_ids, informational
              FROM osv_advisories
              WHERE withdrawn_at IS NULL
                AND (advisory_id = ?1 COLLATE NOCASE
@@ -244,7 +253,7 @@ impl Database {
             "SELECT id, advisory_id, summary, details, package_name, ecosystem,
                     affected_ranges, fixed_versions, severity_type, cvss_score,
                     source_url, published_at, modified_at, withdrawn_at, synced_at,
-                    aliases, severity_label, cwe_ids
+                    aliases, severity_label, cwe_ids, informational
              FROM osv_advisories
              WHERE withdrawn_at IS NULL
              ORDER BY cvss_score DESC NULLS LAST, published_at DESC",
@@ -261,7 +270,7 @@ impl Database {
             "SELECT id, advisory_id, summary, details, package_name, ecosystem,
                     affected_ranges, fixed_versions, severity_type, cvss_score,
                     source_url, published_at, modified_at, withdrawn_at, synced_at,
-                    aliases, severity_label, cwe_ids
+                    aliases, severity_label, cwe_ids, informational
              FROM osv_advisories
              ORDER BY cvss_score DESC NULLS LAST, published_at DESC",
         )?;
@@ -423,6 +432,7 @@ fn map_advisory_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<StoredAdvisory>
             .get::<_, Option<String>>(17)?
             .and_then(|s| serde_json::from_str::<Vec<String>>(&s).ok())
             .unwrap_or_default(),
+        informational: row.get::<_, Option<bool>>(18)?.unwrap_or(false),
     })
 }
 

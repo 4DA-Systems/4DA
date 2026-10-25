@@ -25,6 +25,7 @@ fn test_matched_advisory_title_is_grounding_compatible() {
         severity_label: None,
         cwe_ids: Vec::new(),
         severity_from: None,
+        informational: false,
     };
 
     let item = matched_advisory_to_source_item(&m);
