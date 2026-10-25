@@ -191,6 +191,11 @@ const SCOPED_EPOCHS: &[(i32, &str)] = &[
     // and `source_type` is assigned at ingest and never re-derived (same
     // reasoning as v18).
     (43, "source_type IN ('cve','osv')"),
+    // v44 — a matcher-confirmed runtime exposure counts as dependency
+    // evidence. The matcher verdict is computed only when
+    // `is_security_source` (`source_type` cve / osv); `source_type` is
+    // assigned at ingest and never re-derived (same reasoning as v18).
+    (44, "source_type IN ('cve','osv')"),
 ];
 
 /// Promote stale items that the registered epoch predicates prove unaffected,

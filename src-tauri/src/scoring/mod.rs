@@ -719,7 +719,21 @@ pub(crate) use types::{ScoringInput, ScoringOptions};
 // critical-alert flag than the Preemption tab gives. The tier is computed
 // only for `source_type IN ('cve','osv')` (`is_security_source`), so the bump
 // IS registered in `epochs::SCOPED_EPOCHS` on that set.
-pub(crate) const PIPELINE_VERSION: i32 = 43;
+// v44 (2026-10-25, calibration monitor "recall bug misscored=53/62"): v38 let
+// the OSV matcher's confirmation GROUND an advisory, but three earlier gates
+// still read only the TEXT dependency match — 0 for an ambiguous name (`next`,
+// `zip`) and for every transitive copy: the security no-match penalty (×0.35),
+// the registry-ungrounded ceiling (0.35 + 0.02 = 0.37, where 12 confirmed
+// Next.js rows sat) and the critical fast path (text match >= 0.25), so the
+// v38 0.65 direct floor never fired for a confirmed direct exposure. A
+// matcher-confirmed RUNTIME copy (direct or transitive, in a project that
+// counts toward the stack, not a maintenance notice —
+// `SecurityVerdict::confirmed_runtime_copy`) now counts as dependency evidence
+// for all three. Dev-only exposures score exactly as before (whether they
+// belong in the feed is an open product decision). The matcher only runs for
+// `source_type IN ('cve','osv')`, so the bump IS registered in
+// `epochs::SCOPED_EPOCHS` on that set.
+pub(crate) const PIPELINE_VERSION: i32 = 44;
 
 /// Parse the topic tags carried in the `source_items.tags` column.
 ///
