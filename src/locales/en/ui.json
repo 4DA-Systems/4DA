@@ -1842,9 +1842,6 @@
   "health.circuitReset": "{{source}} has been reset and will be retried",
   "health.sourceMissed": "Items from {{source}} may have been missed while it was unavailable",
   "health.openSettings": "Open Settings",
-  "missed.title": "What you would have missed",
-  "missed.clearTitle": "Nothing critical in your stack today",
-  "missed.clearBody": "No security, breaking change, or dependency alert needs your attention. The {{relevant}} signals below are worth a look — none are urgent.",
   "profile.loadFailed": "Failed to load your developer profile.",
   "profile.copyProfile": "Copy Profile",
   "profile.exportJson": "Export JSON",
@@ -2444,9 +2441,6 @@
   "firstRun.insightSkillGap_other": "{{count}} items about dependencies you haven't explored yet",
   "firstRun.analyzingNoProfile": "Ranking what's new...",
   "firstRun.scanningDescriptionNoProfile": "Sources including Hacker News, GitHub, arXiv, CVE databases, and package registries — ranked by freshness and quality until you add your stack or interests.",
-  "missed.stackReviewTitle": "Updates in your stack to review",
-  "missed.stackReviewBody": "Security or breaking-change items for packages you use are listed under Your stack below.",
-  "missed.clearBodyUpdates": "No security advisory or breaking change touches your stack. Releases for packages you use are listed below.",
   "results.contextFiles": "Context Files",
   "results.contextFilesCount_one": "Context Files ({{count}} file)",
   "results.contextFilesCount_other": "Context Files ({{count}} files)",
@@ -2491,5 +2485,7 @@
   "signals.stack.projects": "Projects",
   "signals.stack.listLabel": "Changes in your stack",
   "signals.stack.modeNote": "Themes and Graph map your reading feed. What changed in your stack is in List: each change is one package, so there is nothing to cluster.",
-  "signals.stack.feedOnlyStack": "Nothing else in the feed: everything it holds is a change in your stack, listed above."
+  "signals.interestsOff": "Reading is off, so Signal shows what changed in your stack. Turn on interests to also follow news and discussion about it.",
+  "signals.interestsOffAction": "Choose interests",
+  "signals.interestsPending": "Nothing from your interests yet. They are fetched on the next refresh."
 }

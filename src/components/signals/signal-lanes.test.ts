@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   STACK_FACT_SOURCES, WORTH_LANE_SIZE, flattenVisible, isStackFactRow, laneScore, locateInLanes,
-  orderByStackTier, partitionLanes, stackTier, visibleLaneItems,
+  partitionLanes, visibleLaneItems,
 } from './signal-lanes';
 import type { SourceRelevance } from '../../types';
 
@@ -99,34 +99,6 @@ describe('partitionLanes — Lane 2 ordering', () => {
     const b = orbit(0.9);
     const c = orbit(0.9);
     expect(partitionLanes([b, c, a]).worth).toEqual([b, c, a]);
-  });
-});
-
-describe('orderByStackTier — the hero of "What you would have missed"', () => {
-  it('orders security, then breaking, then other — regardless of incoming score order', () => {
-    const minor = stackItem({ necessity_category: 'ecosystem_shift' });
-    const breaking = stackItem({ necessity_category: 'breaking_change' });
-    const security = stackItem({}, { signal_type: 'security_alert' });
-    expect(orderByStackTier([minor, breaking, security])).toEqual([security, breaking, minor]);
-  });
-
-  it('orders by urgency inside a tier, then keeps the incoming (score) order', () => {
-    const aware = stackItem({ necessity_category: 'breaking_change', necessity_urgency: 'awareness' });
-    const weekA = stackItem({ necessity_category: 'breaking_change', necessity_urgency: 'this_week' });
-    const weekB = stackItem({ necessity_category: 'breaking_change', necessity_urgency: 'this_week' });
-    const now = stackItem({ necessity_category: 'breaking_change', necessity_urgency: 'immediate' });
-    expect(orderByStackTier([aware, weekA, weekB, now])).toEqual([now, weekA, weekB, aware]);
-  });
-
-  it('classifies tiers from every security / breaking signal on the result', () => {
-    expect(stackTier(item({ is_critical_alert: true }))).toBe(0);
-    expect(stackTier(item({ applicability: 'likely_affected' }))).toBe(0);
-    expect(stackTier(item({ sb: { necessity_category: 'security_vulnerability' } }))).toBe(0);
-    expect(stackTier(item({ sb: { content_type: 'security_advisory' } }))).toBe(0);
-    expect(stackTier(item({ signal_type: 'breaking_change' }))).toBe(1);
-    expect(stackTier(item({ sb: { necessity_category: 'deprecation_notice' } }))).toBe(1);
-    expect(stackTier(item({ sb: { necessity_category: 'ecosystem_shift' } }))).toBe(2);
-    expect(stackTier(item())).toBe(2);
   });
 });
 

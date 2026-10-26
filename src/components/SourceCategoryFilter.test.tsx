@@ -1,14 +1,17 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 /**
- * The Signal source chips list only the sources the user reads (AD-054):
- * stack sources plus the interests turned on in Settings. Turning an interest
- * on or off in Settings → Sources updates the chips with no reload.
+ * The Signal source chips list only the interests the user reads (AD-054):
+ * registry and advisory rows belong to the "Your stack" lane and never reach
+ * the reading feed, so stack sources are not chips. Turning an interest on or
+ * off in Settings → Sources updates the chips with no reload.
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { SourceCategoryFilter } from './SourceCategoryFilter';
 import { SourceToggles } from './settings/SourceToggles';
-import { ENABLED_SOURCE_IDS, getSourcesByCategory, isSourceTurnedOff, loadSourceMeta } from '../config/sources';
+import {
+  ENABLED_SOURCE_IDS, getSourcesByCategory, interestsEnabledCount, isSourceTurnedOff, loadSourceMeta,
+} from '../config/sources';
 import { useAppStore } from '../store';
 import { makeItem } from '../test/factories';
 import type { SourceRelevance } from '../types';
@@ -88,17 +91,36 @@ describe('source metadata', () => {
     expect(isSourceTurnedOff('osv')).toBe(false);
     // Unknown to the cache: not claimed to be off (fail open).
     expect(isSourceTurnedOff('never_registered')).toBe(false);
+    expect(getSourcesByCategory({ interestsOnly: true }).size).toBe(0);
+  });
+
+  it('counts the interests turned on, following Settings toggles', async () => {
+    await boot(ALL_INTERESTS_OFF);
+    expect(interestsEnabledCount()).toBe(0);
+    act(() => { useAppStore.getState().applySourceEnabled('reddit', true); });
+    expect(interestsEnabledCount()).toBe(1);
+    act(() => { useAppStore.getState().applySourceEnabled('reddit', false); });
+    expect(interestsEnabledCount()).toBe(0);
   });
 });
 
 describe('SourceCategoryFilter', () => {
-  it('lists only stack sources when every interest is off', async () => {
+  it('offers no stack-source chips: registry and advisory rows never reach the reading feed', async () => {
     await boot(ALL_INTERESTS_OFF);
+    const { container } = render(<Chips />);
+    expect(container).toBeEmptyDOMElement();
+  });
+
+  it('lists only the interests turned on', async () => {
+    await boot([
+      ...ALL_INTERESTS_OFF,
+      { type: 'lobsters', name: 'Lobsters', category: 'community', class: 'interest', enabled: true },
+    ]);
     render(<Chips />);
-    expect(screen.getByRole('button', { name: /Security/ })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /Packages/ })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Community/ })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Security/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /Packages/ })).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /News/ })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /Community/ })).not.toBeInTheDocument();
     // Nothing filtered out of what the user reads: no Reset offered.
     expect(screen.queryByRole('button', { name: /Reset/ })).not.toBeInTheDocument();
   });
