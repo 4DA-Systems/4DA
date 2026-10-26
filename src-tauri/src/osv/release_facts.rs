@@ -57,9 +57,18 @@ const KV_KEY: &str = "osv_registry_releases";
 const FRESH_HOURS: i64 = 24;
 /// Facts older than this are dropped rather than used.
 const KEEP_DAYS: i64 = 30;
-/// Registry reads per sync, so a large vulnerable set spreads over syncs.
-const MAX_FETCHES_PER_SYNC: usize = 60;
-/// Consecutive failures that end a pass (offline, or a registry down).
+/// Registry reads per sync. It was 60, read one at a time, so a first sync
+/// over a large vulnerable set left most packages without facts and their
+/// targets came from the advisory data alone, which named withdrawn releases
+/// (audit A-2: lodash 4.18.0, get-func-name 2.0.1, express-fileupload
+/// 1.1.9). The reads are now bounded by [`MAX_IN_FLIGHT`] and
+/// [`SYNC_BUDGET_SECS`] as well, and missing facts go first (`due`).
+const MAX_FETCHES_PER_SYNC: usize = 300;
+/// npm and PyPI reads in flight at once (crates.io stays one per second).
+const MAX_IN_FLIGHT: usize = 4;
+/// No new read starts after this long; what is left waits for the next sync.
+const SYNC_BUDGET_SECS: u64 = 150;
+/// Failed batches in a row that end a lane (offline, or a registry down).
 const MAX_FAILURES: usize = 3;
 /// Whole-request budget; see `fetch_all` for the document sizes behind it.
 const REQUEST_TIMEOUT_SECS: u64 = 90;
@@ -207,7 +216,7 @@ pub(crate) fn registry_lists(conn: &rusqlite::Connection, package: &str, version
 }
 
 /// Fetch facts for the packages that need them (missing or older than a
-/// day), at most [`MAX_FETCHES_PER_SYNC`]. Best effort: a failed read keeps
+/// day), at most [`MAX_FETCHES_PER_SYNC`] within [`SYNC_BUDGET_SECS`]. Best effort: a failed read keeps
 /// whatever was stored. Returns how many packages were refreshed.
 pub(crate) async fn refresh(db: &Database) -> usize {
     let now = Utc::now();
@@ -230,26 +239,33 @@ pub(crate) async fn refresh(db: &Database) -> usize {
 type Due = ((String, String), BTreeSet<String>);
 
 /// The wanted packages with no facts, facts older than a day, or facts that
-/// lack a requirement now wanted, capped; the vulnerable packages themselves
-/// before the parents read for them.
+/// lack a requirement now wanted, capped. Order (audit A-2): the vulnerable
+/// packages themselves before the parents read for them; within each, a
+/// package with NO facts first (its target is otherwise read from the
+/// advisory data alone, which can name a withdrawn release: lodash 4.18.0),
+/// then the oldest facts first, so a large set never starves the same tail
+/// of the alphabet sync after sync.
 fn due(
     wanted: Wants,
     stored: &HashMap<(String, String), StoredPackage>,
     now: DateTime<Utc>,
 ) -> Vec<Due> {
-    let mut out: Vec<Due> = wanted
+    let mut out: Vec<(Option<DateTime<Utc>>, Due)> = wanted
         .into_iter()
-        .filter(|((eco, name), children)| {
-            let key = (super::matching::package_key(name, eco), eco.clone());
-            stored.get(&key).is_none_or(|p| {
+        .filter_map(|((eco, name), children)| {
+            let key = (super::matching::package_key(&name, &eco), eco.clone());
+            let held = stored.get(&key);
+            let is_due = held.is_none_or(|p| {
                 now - p.fetched_at >= Duration::hours(FRESH_HOURS)
                     || children.iter().any(|c| !p.parents.requires.contains_key(c))
-            })
+            });
+            is_due.then(|| (held.map(|p| p.fetched_at), ((eco, name), children)))
         })
         .collect();
-    out.sort_by_key(|(_, children)| !children.is_empty());
+    // `None` (never fetched) sorts before any fetch time.
+    out.sort_by_key(|(fetched, (_, children))| (!children.is_empty(), *fetched));
     out.truncate(MAX_FETCHES_PER_SYNC);
-    out
+    out.into_iter().map(|(_, due)| due).collect()
 }
 
 fn save(db: &Database, stored: HashMap<(String, String), StoredPackage>) {
@@ -286,45 +302,80 @@ async fn fetch_all(due: Vec<Due>, stored: &mut HashMap<(String, String), StoredP
             return 0;
         }
     };
-    let (mut fetched, mut failures) = (0usize, 0usize);
-    let mut crates_before = false;
-    for ((eco, name), children) in due {
-        // crates.io asks for at most one request per second; npm and PyPI
-        // are not paced.
-        if eco == "crates.io" {
-            if crates_before {
-                tokio::time::sleep(std::time::Duration::from_millis(CRATES_PAUSE_MS)).await;
-            }
-            crates_before = true;
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(SYNC_BUDGET_SECS);
+    // crates.io asks for at most one request per second, so it is a paced
+    // lane of its own; npm and PyPI run beside it, a few at a time.
+    let (crates, others): (Vec<Due>, Vec<Due>) = due
+        .into_iter()
+        .partition(|((eco, _), _)| eco == "crates.io");
+    let (paced, parallel) = futures::join!(
+        lane(&client, crates, 1, CRATES_PAUSE_MS, deadline),
+        lane(&client, others, MAX_IN_FLIGHT, 0, deadline),
+    );
+    let mut fetched = 0;
+    for ((eco, name), (releases, parents)) in paced.into_iter().chain(parallel) {
+        fetched += 1;
+        let key = super::matching::package_key(&name, &eco);
+        stored.insert(
+            (key.clone(), eco.clone()),
+            StoredPackage {
+                ecosystem: eco,
+                key,
+                name,
+                fetched_at: Utc::now(),
+                releases,
+                parents,
+            },
+        );
+    }
+    fetched
+}
+
+/// One package's read facts, keyed (OSV ecosystem, registry name).
+type Fetched = ((String, String), (RegistryReleases, ParentFacts));
+
+/// Read `due` in order, `width` at a time with `pause_ms` between batches,
+/// starting no batch after `deadline`; [`MAX_FAILURES`] failed batches in a
+/// row (offline, or the registry down) end the lane.
+async fn lane(
+    client: &reqwest::Client,
+    due: Vec<Due>,
+    width: usize,
+    pause_ms: u64,
+    deadline: tokio::time::Instant,
+) -> Vec<Fetched> {
+    let mut out = Vec::new();
+    let mut failures = 0usize;
+    for (i, batch) in due.chunks(width.max(1)).enumerate() {
+        if tokio::time::Instant::now() >= deadline {
+            info!(target: "4da::osv", left = due.len() - i * width.max(1), "registry release facts: sync budget spent, the rest next sync");
+            break;
         }
-        match fetch(&client, &eco, &name, &children).await {
-            Ok((releases, parents)) => {
-                failures = 0;
-                fetched += 1;
-                let key = super::matching::package_key(&name, &eco);
-                stored.insert(
-                    (key.clone(), eco.clone()),
-                    StoredPackage {
-                        ecosystem: eco,
-                        key,
-                        name,
-                        fetched_at: Utc::now(),
-                        releases,
-                        parents,
-                    },
-                );
-            }
-            Err(e) => {
-                debug!(target: "4da::osv", package = %name, error = %e, "registry release facts unavailable");
-                failures += 1;
-                if failures >= MAX_FAILURES {
-                    warn!(target: "4da::osv", "registry release facts: stopping after {failures} failures");
-                    break;
+        if i > 0 && pause_ms > 0 {
+            tokio::time::sleep(std::time::Duration::from_millis(pause_ms)).await;
+        }
+        let reads = batch
+            .iter()
+            .map(|((eco, name), children)| fetch(client, eco, name, children));
+        let mut any = false;
+        for (((eco, name), _), result) in batch.iter().zip(futures::future::join_all(reads).await) {
+            match result {
+                Ok(facts) => {
+                    any = true;
+                    out.push(((eco.clone(), name.clone()), facts));
+                }
+                Err(e) => {
+                    debug!(target: "4da::osv", package = %name, error = %e, "registry release facts unavailable");
                 }
             }
         }
+        failures = if any { 0 } else { failures + 1 };
+        if failures >= MAX_FAILURES {
+            warn!(target: "4da::osv", "registry release facts: stopping a lane after {failures} failed batches");
+            break;
+        }
     }
-    fetched
+    out
 }
 
 async fn fetch(

@@ -289,7 +289,9 @@ module proxy (§1b, §1e) receive them too; §4 has the complete list.
 - **Registry release check** (the last three rows, `src-tauri/src/osv/release_facts.rs`): after each
   sync, for packages that have a **version-confirmed advisory** only, 4DA reads which releases exist
   and which the registry withdrew (crates.io and PyPI *yanked*, npm *deprecated*), so a fix target
-  never names one. At most 60 packages per sync, each re-read at most once a day; the answer is
+  never names one. At most 300 packages per sync (packages with no answer yet first, then the
+  oldest), at most 4 npm/PyPI requests at a time, none started after 150 s; each re-read at most
+  once a day; the answer is
   kept in the local database. **Your installed version is never sent.** Each registry is read only
   while its source (npm / crates.io / PyPI, Settings → Sources) is enabled; a disabled source makes
   no call here either. Requests to crates.io are spaced 1.1 s apart. Go modules are not checked

@@ -199,11 +199,13 @@ form.
 > fix").
 
 - The 22 oracle cases: ft-001..ft-022 (openssl 0.10.80: ft-006; braces `last_affected`: ft-004)
-- OSV per published release, all four registries: ft-023..ft-061, ft-062, ft-063, ft-067, ft-068
+- OSV per published release, all four registries: ft-023..ft-061, ft-062, ft-063, ft-067, ft-068, ft-076
 - Packagist and RubyGems same-line fixes below a two-part bound (readiness audit H2): ft-065 (symfony/process v5.1.0 -> v5.4.51), ft-066 (rack 2.0.6 -> 2.2.23 on the pinned records)
 - No clean version, so the target clears only the fixed advisories (`clears: false`): ft-004, ft-029, ft-041, ft-042, ft-055, ft-060, ft-061
 - A `last_affected` window that later releases leave (the walk steps past the bound and keeps checking every advisory): ft-043 (pyjwt), ft-052 (mistune)
+- A `last_affected` window only the registry leaves (audit A6): no advisory names a release above the bound, so the first release the registry publishes above it, not withdrawn and not a pre-release, is the exit: ft-076 (web3 0.18.4 -> 1.5.3, live, while latest is 4.16.0); without registry facts no target is claimed: ft-077
 - A release the registry withdrew is never the target (FX-H5): npm deprecated, ft-007 (lodash 4.18.0, "Bad release", so 4.18.1) and ft-063 (brace-expansion 3.0.3, so 3.0.4); crates.io yanked, ft-062 (h2 0.3.17, so 0.3.18); every clearing release withdrawn, so no target and `withheld` names it, ft-064 (by hand)
+- A fix the registry does not list (below a release it does list) is never a step (audit A-1): node-ipc's GHSA-97m3-w2cp-4xx6 "fixed" 10.1.3, which npm does not serve, so 10.1.1 -> 12.0.0 past GHSA-3mpp-xfvh-qh37, and `withheld` names 10.1.3: ft-078
 - A whole-major npm deprecation notice is not a withdrawal, so the target stays on the installed line (review of #976): ft-067 (glob 10.4.5 -> 10.5.0, not 12.0.0), ft-068 (tar 6.1.11 -> 6.2.1, while tar 7.0.0..7.5.7 are excluded because 7.5.8 is clean)
 - A target never brings in an advisory (parity decision 2, review of #994 B2): an advisory with no way out that the installed version does not have blocks every fixing release, so no target and no line fix; SYNTHETIC records, no live case across the 11 audit projects: ft-069
 - A malicious-package record is never brought in: with no target, `malicious[]` (record ids, sorted; checked only when present) names every malicious record a release from the landing on falls in, the MCP's `maliciousLanding`, worded "X is flagged malicious (<id>): remove or replace X"; SYNTHETIC: ft-070; beside `introduces` when a benign advisory also blocks (review of #1008, S2): ft-072

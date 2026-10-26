@@ -133,6 +133,45 @@ fn a_withdrawn_fix_is_never_a_copy_target_or_a_finding_fix() {
     assert_eq!(f.fixed_version, None);
 }
 
+/// Audit A6 (live web3 0.18.4, 2026-10-26): the only advisory ends at
+/// `last_affected` 1.5.2 and names no release above it. With registry facts
+/// the copy's target is the first published, non-withdrawn release above the
+/// bound (1.5.3, not latest 4.16.0), and its line is a major step; without
+/// facts nothing is claimed. Rule vectors ft-076 / ft-077.
+#[test]
+fn a_last_affected_only_advisory_exits_at_the_first_published_release() {
+    let inventory = vec![pkg("npm", "/p", "web3", Some("0.18.4"), true)];
+    let ranges = r#"[{"type":"SEMVER","events":[{"introduced":"0"},{"last_affected":"1.5.2"}]}]"#;
+    let records = vec![record("GHSA-27v7-qhfv-rqq8", "npm", "web3", ranges, None)];
+    let mut registry = RegistryIndex::new();
+    registry.insert(
+        ("web3".into(), "npm".into()),
+        facts(
+            &["0.20.7", "1.2.10", "1.5.2", "1.5.3-rc.0", "1.5.3", "4.16.0"],
+            &["1.2.10"],
+        ),
+    );
+    let f = &match_inventory_with(&inventory, &records, &registry, |_, _, _| {})[0];
+    let copy = &f.dependency_instances[0];
+    assert_eq!(copy.fixed_version, None, "the advisory names no line fix");
+    assert_eq!(copy.clean_version.as_deref(), Some("1.5.3"));
+    assert_eq!(copy.target_version.as_deref(), Some("1.5.3"));
+    assert!(copy.withheld.is_empty());
+    assert_eq!(f.fixed_version, None);
+    let lines = crate::lines::line_targets(&f.dependency_instances, &["/p".to_string()]);
+    assert_eq!(lines[0].target_version.as_deref(), Some("1.5.3"));
+    assert!(lines[0].clears_all_known);
+    assert!(lines[0].is_major());
+
+    // No registry facts (offline, never fetched): no target is invented.
+    let f = &match_inventory(&inventory, &records)[0];
+    let copy = &f.dependency_instances[0];
+    assert_eq!(copy.clean_version, None);
+    assert_eq!(copy.target_version, None);
+    let lines = crate::lines::line_targets(&f.dependency_instances, &["/p".to_string()]);
+    assert_eq!(lines[0].target_version, None);
+}
+
 /// A copy no window could place still never reports a withdrawn listed fix.
 #[test]
 fn an_unconfirmed_finding_skips_a_withdrawn_listed_fix() {

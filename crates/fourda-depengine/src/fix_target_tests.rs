@@ -228,3 +228,39 @@ fn malware_is_named_as_malware_and_a_notice_never_blocks() {
     );
     assert!(out.introduces.is_empty() && out.malware.is_empty());
 }
+
+/// Audit A-1 (node-ipc): GHSA-97m3-w2cp-4xx6 is "fixed" at 10.1.3, a version
+/// npm does not serve (10.1.0, then 11.0.0); GHSA-3mpp-xfvh-qh37 holds
+/// 11.0.0..12.0.0. With the registry's list the target is 12.0.0, and the
+/// unlisted fix is named as withheld; a fix above every listed release (it
+/// may be newer than the facts) stays the advisory's word. Rule vector ft-078.
+#[test]
+fn a_fix_the_registry_does_not_list_is_never_a_target() {
+    let all = [
+        ranges(r#"[{"introduced":"10.1.1"},{"fixed":"10.1.3"}]"#),
+        ranges(r#"[{"introduced":"11.0.0"},{"fixed":"12.0.0"}]"#),
+    ];
+    let refs: Vec<&Option<String>> = all.iter().collect();
+    let none = walk_target_in("npm", "10.1.1", &refs, &RegistryReleases::default());
+    assert_eq!(none.target.map(|t| t.version).as_deref(), Some("10.1.3"));
+
+    let registry = facts(&["10.1.0", "11.0.0", "11.1.0", "12.0.0", "14.0.0"], &[]);
+    let out = walk_target_in("npm", "10.1.1", &refs, &registry);
+    assert_eq!(
+        out.target,
+        Some(WalkTarget {
+            version: "12.0.0".into(),
+            clears_all: true
+        })
+    );
+    assert_eq!(out.withheld, ["10.1.3"]);
+    let line = installable_line_fix("npm", "10.1.1", &all[0], &registry);
+    assert_eq!(line.fix.as_deref(), Some("11.0.0"));
+    assert_eq!(line.withheld, ["10.1.3"]);
+
+    // Facts older than the fix: the registry lists nothing at or above it.
+    let stale = facts(&["10.1.0"], &[]);
+    let out = walk_target_in("npm", "10.1.1", &refs, &stale);
+    assert_eq!(out.target.map(|t| t.version).as_deref(), Some("10.1.3"));
+    assert!(out.withheld.is_empty());
+}

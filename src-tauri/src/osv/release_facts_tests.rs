@@ -304,3 +304,39 @@ fn the_parsed_document_is_reused_until_a_write_or_sixty_seconds() {
     let after = book_cached(&db, &cache, t0 + std::time::Duration::from_secs(62), 1);
     assert!(after.releases("npm", "b").is_some());
 }
+
+/// Audit A-2: a first sync must read the packages with no facts before it
+/// refreshes old ones, oldest first, and the parents last; the alphabet
+/// does not decide who waits.
+#[test]
+fn missing_facts_go_first_then_the_oldest_then_the_parents() {
+    let now = Utc::now();
+    let held = |name: &str, hours: i64| {
+        (
+            (name.to_string(), "npm".to_string()),
+            StoredPackage {
+                ecosystem: "npm".into(),
+                key: name.into(),
+                name: name.into(),
+                fetched_at: now - Duration::hours(hours),
+                releases: RegistryReleases::default(),
+                parents: ParentFacts::default(),
+            },
+        )
+    };
+    let stored: HashMap<(String, String), StoredPackage> =
+        [held("aaa", 30), held("bbb", 90), held("fresh", 1)].into();
+    let mut wanted: Wants = BTreeMap::new();
+    for name in ["aaa", "bbb", "fresh", "zzz-never-read"] {
+        wanted.insert(("npm".into(), name.into()), BTreeSet::new());
+    }
+    wanted.insert(
+        ("npm".into(), "a-parent".into()),
+        ["zzz-never-read".to_string()].into(),
+    );
+    let order: Vec<String> = due(wanted, &stored, now)
+        .into_iter()
+        .map(|((_, name), _)| name)
+        .collect();
+    assert_eq!(order, ["zzz-never-read", "bbb", "aaa", "a-parent"]);
+}
