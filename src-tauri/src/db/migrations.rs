@@ -1488,7 +1488,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 129;
+        const TARGET_VERSION: i64 = 130;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -5965,6 +5965,35 @@ impl Database {
                             target: "4da::db",
                             due,
                             "Phase 129: informational added; every advisory ecosystem re-syncs next cycle"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
+            // Phase 130 (the 6.2.5 audit, F-7): a class OSV states beats the
+            // summary's wording. RUSTSEC-2025-0068 (serde_yml) states
+            // `unsound` and its summary says "unsound and unmaintained", so
+            // Phase 129's rule stored it as a notice and it was never counted.
+            // `osv_advisories.informational` now holds the sync's verdict as
+            // 1 (notice) or 2 (not a notice); 0 is "no verdict stored" and the
+            // summary decides (`db::osv_advisories::notice_from_column`). A
+            // row cannot be re-judged without its record, so, like Phases 128
+            // and 129, every ecosystem's sync is made due and rewrites every
+            // row's verdict next cycle. Until then a 0 row reads exactly as
+            // under Phase 129 and a 1 row stays a notice.
+            if current_version < 130 {
+                Self::run_versioned_migration(
+                    &conn,
+                    129,
+                    130,
+                    "Phase 130: notice verdict beats wording; mirror re-sync due",
+                    |c| {
+                        let due = Self::make_osv_sync_due(c)?;
+                        info!(
+                            target: "4da::db",
+                            due,
+                            "Phase 130: every advisory ecosystem re-syncs next cycle to store the notice verdict"
                         );
                         Ok(())
                     },

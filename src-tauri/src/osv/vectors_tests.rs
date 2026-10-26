@@ -523,7 +523,7 @@ fn check_direct(v: &Value, root: &std::path::Path) -> Result<(), String> {
 fn severity_match(vuln: &Vulnerability, fixed_version: Option<&str>) -> MatchedAdvisory {
     let (severity_type, cvss_score) = vuln.best_cvss();
     MatchedAdvisory {
-        informational: stored_notice(vuln),
+        informational: Some(stored_notice(vuln)),
         advisory_id: vuln.id.clone(),
         summary: vuln.summary.clone().unwrap_or_default(),
         details: None,
@@ -588,7 +588,7 @@ fn mirror_row(id: &str, label: Option<&str>) -> StoredAdvisory {
         aliases: Vec::new(),
         severity_label: label.and_then(super::types::normalize_severity_label),
         cwe_ids: Vec::new(),
-        informational: false,
+        informational: None,
     }
 }
 
@@ -596,7 +596,7 @@ fn mirror_row(id: &str, label: Option<&str>) -> StoredAdvisory {
 /// on every surface, where it came from, and the base urgency both the
 /// Upgrade Plan and the alerts give it (`osv::severity`).
 fn check_severity(v: &Value) -> Result<(), String> {
-    use super::severity::{cluster_severity, cluster_urgency, grade_unrated};
+    use super::severity::{cluster_severity, cluster_urgency, grade_unrated, SeverityRecord};
     let records: Vec<Value> = match v.get("record") {
         Some(r) => vec![r.clone()],
         None => v
@@ -610,6 +610,8 @@ fn check_severity(v: &Value) -> Result<(), String> {
         let vuln: Vulnerability = serde_json::from_value(r).map_err(|e| format!("record: {e}"))?;
         matches.push(severity_match(&vuln, opt_s(v, "fixed_version")));
     }
+    // The alias-group notice rule, as every mirror read applies it.
+    super::severity::settle_group_notices(&mut matches);
     // The same records as mirror rows, for the path Knowledge Gaps and the
     // scorer grade by (`rows_grade`), before the matcher stores anything.
     let stored: Vec<StoredAdvisory> = matches
@@ -653,6 +655,13 @@ fn check_severity(v: &Value) -> Result<(), String> {
         return Err(format!(
             "got (severity, from, urgency) {got:?}, want {want:?}"
         ));
+    }
+    // Optional: how many of the group's records read as notices.
+    if let Some(want_notices) = expect.get("notices").and_then(Value::as_u64) {
+        let notices = matches.iter().filter(|m| m.is_informational()).count() as u64;
+        if notices != want_notices {
+            return Err(format!("notices: got {notices}, want {want_notices}"));
+        }
     }
     let rows: Vec<&StoredAdvisory> = stored.iter().collect();
     let by_rows =

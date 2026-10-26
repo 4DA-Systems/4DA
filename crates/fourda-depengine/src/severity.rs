@@ -16,21 +16,25 @@
 
 use std::collections::BTreeSet;
 
-/// THE maintenance-notice predicate, the MCP's rule exactly
-/// (`osv-ranges.ts` / `maintenance.ts`, canonical since the #1008 review): a
-/// record is a notice when OSV's `database_specific.informational` is
-/// `unmaintained` or `notice`, or its summary says `unmaintained` or `no
-/// longer maintained` as words (case-insensitive). Nothing else: not
-/// "deprecated" (it appears in plenty of real vulnerability summaries), and
-/// a published fix does not stop a notice being one (ring's
-/// RUSTSEC-2025-0010, "prior to 0.17 are unmaintained", fixed 0.17.0). A
-/// notice never blocks a fix target, never is one, and is never graded as a
-/// vulnerability. `informational` here is ONE block's flag; RustSec puts it
-/// in `affected[].database_specific`, so a stored record is classified per
-/// package by [`crate::osv::is_notice_for`], which calls this.
+/// THE maintenance-notice predicate, both engines' rule (the MCP's
+/// `osv-ranges.ts` / `maintenance.ts`). Structured data beats wording: when
+/// OSV states an `informational` class for the record (`informational`, the
+/// class that applies to the package, see [`crate::osv::is_notice_for`]),
+/// that class alone decides: `unmaintained` / `notice` is a notice, `unsound`
+/// or any other stated class is not, whatever the summary says
+/// (RUSTSEC-2025-0068, serde_yml: class `unsound`, summary "serde_yml crate
+/// is unsound and unmaintained", a vulnerability). Only when no class is
+/// stated does the summary decide: it says `unmaintained` or `no longer
+/// maintained` as words (case-insensitive). Nothing else: not "deprecated"
+/// (it appears in plenty of real vulnerability summaries), and a published
+/// fix does not stop a notice being one (ring's RUSTSEC-2025-0010, "prior to
+/// 0.17 are unmaintained", fixed 0.17.0). A notice never blocks a fix target,
+/// never is one, and is never graded as a vulnerability. RustSec puts the
+/// class in `affected[].database_specific`, so a stored record is classified
+/// per package by [`crate::osv::is_notice_for`], which calls this.
 pub fn is_maintenance_notice(summary: &str, informational: Option<&str>) -> bool {
-    if matches!(informational, Some("unmaintained" | "notice")) {
-        return true;
+    if let Some(class) = informational {
+        return matches!(class, "unmaintained" | "notice");
     }
     let text = summary.to_ascii_lowercase();
     ["unmaintained", "no longer maintained"]
@@ -132,6 +136,12 @@ mod tests {
         assert!(is_maintenance_notice("anything", Some("unmaintained")));
         assert!(is_maintenance_notice("anything", Some("notice")));
         assert!(!is_maintenance_notice("anything", Some("unsound")));
+        // A stated class beats the summary's wording (RUSTSEC-2025-0068).
+        assert!(!is_maintenance_notice(
+            "serde_yml crate is unsound and unmaintained",
+            Some("unsound")
+        ));
+        assert!(is_maintenance_notice("crate is fine", Some("unmaintained")));
         // Words only, and never "deprecated" / "abandoned" / "archived".
         assert!(!is_maintenance_notice("UnmaintainedFoo crate", None));
         assert!(!is_maintenance_notice("foo has been deprecated", None));

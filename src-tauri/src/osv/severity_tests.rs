@@ -25,7 +25,7 @@ fn matched(id: &str, aliases: &[&str], cvss: Option<f64>, label: Option<&str>) -
         severity_label: label.map(str::to_string),
         severity_from: None,
         cwe_ids: Vec::new(),
-        informational: false,
+        informational: None,
     }
 }
 
@@ -49,7 +49,7 @@ fn row(id: &str, package: &str, cvss: Option<f64>, label: Option<&str>) -> Store
         aliases: Vec::new(),
         severity_label: label.map(str::to_string),
         cwe_ids: Vec::new(),
-        informational: false,
+        informational: None,
     }
 }
 
@@ -224,13 +224,13 @@ fn the_per_affected_informational_flag_reaches_the_mirror_and_the_match() {
         super::super::sync::store_vulnerability(&db, &pinned(id), &mut seen).unwrap();
     }
     let row = |pkg: &str| db.get_osv_advisories_for_package(pkg, "crates.io").unwrap();
-    assert!(row("tempdir")[0].informational);
+    assert_eq!(row("tempdir")[0].informational, Some(true));
     assert!(
         !maintenance_text(&row("tempdir")[0].summary),
         "the summary alone misses it"
     );
     assert!(row("tempdir")[0].is_informational());
-    assert!(!row("smallvec")[0].informational);
+    assert_eq!(row("smallvec")[0].informational, Some(false));
 
     let matches = super::super::matching::get_matched_advisories(&db).unwrap();
     let by_pkg = |pkg: &str| {
@@ -252,9 +252,9 @@ fn the_per_affected_informational_flag_reaches_the_mirror_and_the_match() {
     assert_eq!(smallvec.fixed_version.as_deref(), Some("0.6.13"));
 }
 
-/// Phase 129 backfill: a row stored before the `informational` column (it
-/// reads 0) gets the flag on the next sync, which the migration makes due;
-/// an upsert that does not carry the flag keeps the stored one.
+/// Phase 129/130 backfill: a row stored before a verdict was (it reads 0)
+/// gets one on the next sync, which the migration makes due; an upsert that
+/// does not carry a verdict keeps the stored one.
 #[test]
 fn a_pre_migration_row_gets_its_notice_flag_on_the_next_sync() {
     let db = crate::test_utils::test_db();
@@ -280,7 +280,7 @@ fn a_pre_migration_row_gets_its_notice_flag_on_the_next_sync() {
     crate::db::Database::make_osv_sync_due(&db.conn.lock()).unwrap();
     assert!(super::super::sync::needs_sync(&db, max_age).unwrap());
     super::super::sync::store_vulnerability(&db, &vuln, &mut Default::default()).unwrap();
-    assert!(stored()[0].informational);
+    assert_eq!(stored()[0].informational, Some(true));
     // The legacy upsert (no flag) leaves it alone.
     db.upsert_osv_advisory(
         "RUSTSEC-2018-0017",
@@ -298,5 +298,166 @@ fn a_pre_migration_row_gets_its_notice_flag_on_the_next_sync() {
         None,
     )
     .unwrap();
-    assert!(stored()[0].informational);
+    assert_eq!(stored()[0].informational, Some(true));
+}
+
+/// RUSTSEC-2025-0068 (serde_yml) as api.osv.dev serves it (2026-10-26): the
+/// per-affected class is `unsound` and the summary says "unsound and
+/// unmaintained". The stated class decides (F-7): a vulnerability, never a
+/// notice, so it is counted (Medium, nothing grades it) instead of folded
+/// into Watch. A Phase-129 row stored it as a notice (1); the re-sync Phase
+/// 130 makes due rewrites the verdict. A row with no verdict (0) still lets
+/// the summary decide, as Phase 129 did.
+#[test]
+fn a_stated_unsound_class_beats_unmaintained_wording_end_to_end() {
+    let vuln: super::super::types::Vulnerability = serde_json::from_str(
+        r#"{"id":"RUSTSEC-2025-0068","summary":"serde_yml crate is unsound and unmaintained",
+          "aliases":["GHSA-hhw4-xg65-fp2x"],"modified":"2025-10-28T06:29:25.168149Z",
+          "published":"2025-09-11T12:00:00Z","database_specific":{"license":"CC0-1.0"},
+          "affected":[{"package":{"name":"serde_yml","ecosystem":"crates.io","purl":"pkg:cargo/serde_yml"},
+            "ranges":[{"type":"SEMVER","events":[{"introduced":"0.0.0-0"}]}],
+            "database_specific":{"categories":[],"cvss":null,"informational":"unsound"}}]}"#,
+    )
+    .unwrap();
+    let db = crate::test_utils::test_db();
+    db.store_dependency("/p", "serde_yml", Some("0.0.12"), "crates.io", false, None)
+        .unwrap();
+    super::super::sync::store_vulnerability(&db, &vuln, &mut Default::default()).unwrap();
+    let stored = || {
+        db.get_osv_advisories_for_package("serde_yml", "crates.io")
+            .unwrap()
+    };
+    assert_eq!(stored()[0].informational, Some(false));
+    assert!(
+        maintenance_text(&stored()[0].summary),
+        "the wording alone would say notice"
+    );
+    assert!(!stored()[0].is_informational());
+    let matches = super::super::matching::get_matched_advisories(&db).unwrap();
+    let m = matches
+        .iter()
+        .find(|m| m.package_name == "serde_yml")
+        .expect("serde_yml matched");
+    assert!(!m.is_informational());
+    assert_eq!(cluster_urgency(&[m]), Urgency::Medium);
+
+    let set = |v: i64| {
+        db.conn
+            .lock()
+            .execute("UPDATE osv_advisories SET informational = ?1", [v])
+            .unwrap();
+    };
+    set(1);
+    assert!(stored()[0].is_informational(), "as Phase 129 left it");
+    super::super::sync::store_vulnerability(&db, &vuln, &mut Default::default()).unwrap();
+    assert_eq!(
+        stored()[0].informational,
+        Some(false),
+        "the re-sync rewrites it"
+    );
+    set(0);
+    assert_eq!(stored()[0].informational, None);
+    assert!(
+        stored()[0].is_informational(),
+        "no verdict: the summary decides"
+    );
+}
+
+/// The alias-group notice rule (F-7): a record that is a notice only by its
+/// wording, aliased to a record whose stated class is `unsound`, is part of a
+/// vulnerability; two notice records stay a notice group.
+#[test]
+fn an_alias_group_is_a_notice_only_when_every_record_is() {
+    let mut worded = matched("GHSA-w", &["RUSTSEC-u"], None, None);
+    worded.summary = "x crate is unsound and unmaintained".into();
+    let mut unsound = matched("RUSTSEC-u", &["GHSA-w"], None, None);
+    unsound.summary = worded.summary.clone();
+    unsound.informational = Some(false);
+    let mut group = vec![worded.clone(), unsound];
+    assert!(
+        group[0].is_informational(),
+        "a notice on its own, by wording"
+    );
+    settle_group_notices(&mut group);
+    assert!(group.iter().all(|m| !m.is_informational()));
+    let refs: Vec<&MatchedAdvisory> = group.iter().collect();
+    assert!(!is_notice_group(&refs));
+    assert_eq!(cluster_urgency(&refs), Urgency::Medium);
+
+    let mut other = matched("RUSTSEC-n", &["GHSA-w"], None, None);
+    other.informational = Some(true);
+    let mut notices = vec![worded, other];
+    settle_group_notices(&mut notices);
+    assert!(notices.iter().all(|m| m.is_informational()));
+    let refs: Vec<&MatchedAdvisory> = notices.iter().collect();
+    assert!(is_notice_group(&refs));
+    assert_eq!(cluster_urgency(&refs), Urgency::Watch);
+
+    // Unlinked records are separate groups: a vulnerability elsewhere does
+    // not touch a notice.
+    let mut apart = vec![
+        matched("A-1", &[], None, None),
+        matched("B-1", &[], None, None),
+    ];
+    apart[0].informational = Some(true);
+    apart[1].informational = Some(false);
+    settle_group_notices(&mut apart);
+    assert!(apart[0].is_informational());
+}
+
+/// The mirror read applies the group rule: serde_yml's GHSA (no class,
+/// worded "unmaintained") and its RUSTSEC alias (class `unsound`) both read
+/// as vulnerabilities from every list read and from the single-id read.
+#[test]
+fn the_mirror_reads_apply_the_alias_group_rule() {
+    let parse =
+        |json: &str| -> super::super::types::Vulnerability { serde_json::from_str(json).unwrap() };
+    let ghsa = parse(
+        r#"{"id":"GHSA-hhw4-xg65-fp2x","summary":"serde_yml crate is unsound and unmaintained",
+          "aliases":["RUSTSEC-2025-0068"],"database_specific":{"severity":"MODERATE","cwe_ids":["CWE-787"]},
+          "affected":[{"package":{"name":"serde_yml","ecosystem":"crates.io"},
+            "ranges":[{"type":"SEMVER","events":[{"introduced":"0"},{"last_affected":"0.0.12"}]}]}]}"#,
+    );
+    let rustsec = parse(
+        r#"{"id":"RUSTSEC-2025-0068","summary":"serde_yml crate is unsound and unmaintained",
+          "aliases":["GHSA-hhw4-xg65-fp2x"],"database_specific":{"license":"CC0-1.0"},
+          "affected":[{"package":{"name":"serde_yml","ecosystem":"crates.io"},
+            "ranges":[{"type":"SEMVER","events":[{"introduced":"0.0.0-0"}]}],
+            "database_specific":{"categories":[],"cvss":null,"informational":"unsound"}}]}"#,
+    );
+    let db = crate::test_utils::test_db();
+    db.store_dependency("/p", "serde_yml", Some("0.0.12"), "crates.io", false, None)
+        .unwrap();
+    for v in [&ghsa, &rustsec] {
+        super::super::sync::store_vulnerability(&db, v, &mut Default::default()).unwrap();
+    }
+    let rows = db
+        .get_osv_advisories_for_package("serde_yml", "crates.io")
+        .unwrap();
+    assert_eq!(rows.len(), 2);
+    assert!(rows.iter().all(|r| !r.is_informational()));
+    assert!(db
+        .get_all_osv_advisories()
+        .unwrap()
+        .iter()
+        .all(|r| !r.is_informational()));
+    let one = db
+        .get_osv_advisory_by_id("GHSA-hhw4-xg65-fp2x")
+        .unwrap()
+        .expect("the GHSA row");
+    assert_eq!(one.advisory_id, "GHSA-hhw4-xg65-fp2x");
+    assert!(!one.is_informational());
+    let matches = super::super::matching::get_matched_advisories(&db).unwrap();
+    let refs: Vec<&MatchedAdvisory> = matches
+        .iter()
+        .filter(|m| m.package_name == "serde_yml")
+        .collect();
+    assert_eq!(refs.len(), 2);
+    assert!(refs.iter().all(|m| !m.is_informational()), "0 notices");
+    assert_eq!(
+        super::super::identity::cluster_by_vulnerability(&refs).len(),
+        1,
+        "1 vulnerability"
+    );
+    assert_eq!(cluster_urgency(&refs), Urgency::Medium);
 }

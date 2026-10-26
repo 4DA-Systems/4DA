@@ -37,11 +37,13 @@ pub struct Affected {
     pub database_specific: Option<serde_json::Value>,
 }
 
-/// `informational` of a `database_specific` block.
+/// `informational` of a `database_specific` block: the class OSV states,
+/// `None` when the block states none (absent, not a string, or empty).
 fn informational(database_specific: Option<&serde_json::Value>) -> Option<&str> {
     database_specific
         .and_then(|d| d.get("informational"))
         .and_then(serde_json::Value::as_str)
+        .filter(|class| !class.is_empty())
 }
 
 /// The informational classes that make a record a maintenance notice.
@@ -52,9 +54,10 @@ fn is_notice_class(value: Option<&str>) -> bool {
 }
 
 /// Fold one more entry's `database_specific` into the merged entry's: the
-/// first entry's block is kept, and a notice class a later entry carries
-/// replaces an `informational` that is not one. A merged entry is therefore a
-/// notice when ANY of its source entries is.
+/// first entry's block is kept, a class a later entry states fills an
+/// `informational` the block lacks, and a notice class replaces one that is
+/// not. A merged entry is therefore a notice when ANY of its source entries
+/// is, and states a class when any of them does.
 fn merge_database_specific(
     merged: &mut Option<serde_json::Value>,
     incoming: Option<&serde_json::Value>,
@@ -67,7 +70,10 @@ fn merge_database_specific(
         return;
     };
     let class = informational(Some(incoming));
-    if !is_notice_class(class) || is_notice_class(informational(Some(current))) {
+    let held = informational(Some(current));
+    let adopt =
+        class.is_some() && (held.is_none() || (is_notice_class(class) && !is_notice_class(held)));
+    if !adopt {
         return;
     }
     match current.as_object_mut() {
@@ -81,19 +87,23 @@ fn merge_database_specific(
     }
 }
 
-/// THE maintenance-notice rule for one package of a record, the MCP's
-/// exactly: the summary says `unmaintained` / `no longer maintained` as words,
-/// OR the record-level `database_specific.informational` is `unmaintained` /
-/// `notice`, OR the package's affected entry (`merged`, from
-/// [`merge_affected`], so ANY of its entries) carries one of those in its own
-/// `database_specific.informational`. `unsound` stays a vulnerability.
+/// THE maintenance-notice rule for one package of a record, both engines'.
+/// Structured data beats wording: the class OSV states for this package
+/// decides on its own, the package's affected entry first (`merged`, from
+/// [`merge_affected`], so ANY of its entries), else the record-level
+/// `database_specific.informational`. `unmaintained` / `notice` is a notice;
+/// `unsound` or any other stated class is not, whatever the summary says
+/// (RUSTSEC-2025-0068, serde_yml: `unsound`, summary "unsound and
+/// unmaintained"). Another package's entry is never read. Only when no class
+/// is stated does the summary decide ([`crate::severity::is_maintenance_notice`]).
 pub fn is_notice_for(
     summary: &str,
     record_database_specific: Option<&serde_json::Value>,
     merged: &Affected,
 ) -> bool {
-    crate::severity::is_maintenance_notice(summary, informational(record_database_specific))
-        || is_notice_class(informational(merged.database_specific.as_ref()))
+    let class = informational(merged.database_specific.as_ref())
+        .or_else(|| informational(record_database_specific));
+    crate::severity::is_maintenance_notice(summary, class)
 }
 
 /// The part of a verbatim OSV record the matcher needs. Every other field
@@ -407,6 +417,83 @@ mod tests {
         for r in [at_record, by_summary, notice] {
             assert!(stored_records(&r)[0].informational, "{}", r.id);
         }
+    }
+
+    fn flags(r: &OsvRecord) -> Vec<(String, bool)> {
+        stored_records(r)
+            .into_iter()
+            .map(|row| (row.package_name, row.informational))
+            .collect()
+    }
+
+    /// RUSTSEC-2025-0068 (serde_yml) as OSV serves it: the per-affected
+    /// class `unsound` decides, though the summary says "unmaintained".
+    #[test]
+    fn a_stated_unsound_class_beats_unmaintained_wording() {
+        let r = record(
+            r#"{"id":"RUSTSEC-2025-0068","summary":"serde_yml crate is unsound and unmaintained",
+              "database_specific":{"license":"CC0-1.0"},
+              "affected":[{"package":{"name":"serde_yml","ecosystem":"crates.io"},
+                "ranges":[{"type":"SEMVER","events":[{"introduced":"0.0.0-0"}]}],
+                "database_specific":{"categories":[],"cvss":null,"informational":"unsound"}}]}"#,
+        );
+        assert!(!stored_records(&r)[0].informational);
+        // The record-level class decides the same way when no entry states one.
+        let at_record = record(
+            r#"{"id":"X-4","summary":"a is unmaintained","database_specific":{"informational":"unsound"},
+              "affected":[{"package":{"name":"a","ecosystem":"crates.io"}}]}"#,
+        );
+        assert!(!stored_records(&at_record)[0].informational);
+        // The package's own class comes before the record-level one.
+        let both = record(
+            r#"{"id":"X-5","summary":"s","database_specific":{"informational":"unsound"},
+              "affected":[{"package":{"name":"a","ecosystem":"crates.io"},
+                "database_specific":{"informational":"unmaintained"}}]}"#,
+        );
+        assert!(stored_records(&both)[0].informational);
+    }
+
+    /// Another package's per-affected class is never borrowed, in either
+    /// direction: a package that states no class is decided by the summary.
+    #[test]
+    fn another_packages_class_is_not_borrowed() {
+        let r = record(
+            r#"{"id":"X-6","summary":"memory corruption in a",
+              "affected":[
+                {"package":{"name":"a","ecosystem":"crates.io"},
+                 "database_specific":{"informational":"unmaintained"}},
+                {"package":{"name":"b","ecosystem":"crates.io"}}]}"#,
+        );
+        assert_eq!(
+            flags(&r),
+            vec![("a".to_string(), true), ("b".to_string(), false)]
+        );
+        let worded = record(
+            r#"{"id":"X-7","summary":"b is unmaintained",
+              "affected":[
+                {"package":{"name":"a","ecosystem":"crates.io"},
+                 "database_specific":{"informational":"unsound"}},
+                {"package":{"name":"b","ecosystem":"crates.io"}}]}"#,
+        );
+        assert_eq!(
+            flags(&worded),
+            vec![("a".to_string(), false), ("b".to_string(), true)],
+            "a's own unsound class decides; b states none, so its wording does"
+        );
+    }
+
+    /// A class a later entry of the same package states fills a first entry
+    /// that states none.
+    #[test]
+    fn a_later_entrys_class_fills_the_merge() {
+        let r = record(
+            r#"{"id":"X-8","summary":"a is unmaintained",
+              "affected":[
+                {"package":{"name":"a","ecosystem":"crates.io"},"database_specific":{"source":"x"}},
+                {"package":{"name":"a","ecosystem":"crates.io"},
+                 "database_specific":{"informational":"unsound"}}]}"#,
+        );
+        assert!(!stored_records(&r)[0].informational);
     }
 
     #[test]

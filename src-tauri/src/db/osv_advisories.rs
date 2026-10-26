@@ -100,8 +100,9 @@ impl Database {
     /// whether the row is a maintenance notice by the engine crate's
     /// `osv::is_notice_for` (Phase 129), in the same statement. Like the
     /// aliases, a later upsert without CWE ids keeps the stored ones; an
-    /// upsert with `informational: None` keeps the stored flag, and the sync
-    /// always passes it, so a record that stops being a notice is cleared.
+    /// upsert with `informational: None` keeps the stored verdict, and the
+    /// sync always passes one, so a record that stops being a notice is
+    /// cleared. Stored as [`notice_column`] (Phase 130).
     #[allow(clippy::too_many_arguments)]
     pub fn upsert_osv_advisory_record(
         &self,
@@ -165,7 +166,7 @@ impl Database {
                 aliases_json,
                 severity_label,
                 cwe_ids_json,
-                informational,
+                informational.map(notice_column),
             ],
         )?;
         drop(conn);
@@ -191,7 +192,7 @@ impl Database {
         )?;
 
         let rows = stmt.query_map(params![package_name, ecosystem], map_advisory_row)?;
-        Ok(rows.filter_map(|r| r.ok()).collect())
+        Ok(settled(rows.filter_map(|r| r.ok()).collect()))
     }
 
     /// The active advisory carrying `advisory_id` — as its own id or as an
@@ -207,21 +208,12 @@ impl Database {
         &self,
         advisory_id: &str,
     ) -> SqliteResult<Option<StoredAdvisory>> {
-        let conn = self.conn.lock();
-        let mut stmt = conn.prepare(
-            "SELECT id, advisory_id, summary, details, package_name, ecosystem,
-                    affected_ranges, fixed_versions, severity_type, cvss_score,
-                    source_url, published_at, modified_at, withdrawn_at, synced_at,
-                    aliases, severity_label, cwe_ids, informational
-             FROM osv_advisories
-             WHERE withdrawn_at IS NULL
-               AND (advisory_id = ?1 COLLATE NOCASE
-                    OR aliases LIKE '%\"' || ?1 || '\"%')
-             ORDER BY (advisory_id LIKE 'GHSA-%') DESC, cvss_score DESC NULLS LAST
-             LIMIT 1",
-        )?;
-        let mut rows = stmt.query_map(params![advisory_id], map_advisory_row)?;
-        rows.next().transpose()
+        // The same rows and order as before (GHSA-led first), read whole so
+        // the alias-group notice rule sees the record's twins.
+        Ok(self
+            .get_osv_advisories_by_id(advisory_id)?
+            .into_iter()
+            .next())
     }
 
     /// EVERY active mirror row for an advisory id (aliases count) — one per
@@ -243,7 +235,7 @@ impl Database {
              ORDER BY (advisory_id LIKE 'GHSA-%') DESC, cvss_score DESC NULLS LAST",
         )?;
         let rows = stmt.query_map(params![advisory_id], map_advisory_row)?;
-        rows.collect()
+        Ok(settled(rows.collect::<SqliteResult<Vec<_>>>()?))
     }
 
     /// Get all active (non-withdrawn) stored advisories.
@@ -260,7 +252,7 @@ impl Database {
         )?;
 
         let rows = stmt.query_map([], map_advisory_row)?;
-        Ok(rows.filter_map(|r| r.ok()).collect())
+        Ok(settled(rows.filter_map(|r| r.ok()).collect()))
     }
 
     /// Get all stored advisories including withdrawn ones (for audit/diagnostics).
@@ -432,8 +424,37 @@ fn map_advisory_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<StoredAdvisory>
             .get::<_, Option<String>>(17)?
             .and_then(|s| serde_json::from_str::<Vec<String>>(&s).ok())
             .unwrap_or_default(),
-        informational: row.get::<_, Option<bool>>(18)?.unwrap_or(false),
+        informational: notice_from_column(row.get(18)?),
     })
+}
+
+/// Rows as every surface reads them: the alias-group notice rule
+/// (`osv::severity::settle_group_notices`) applied.
+fn settled(mut rows: Vec<StoredAdvisory>) -> Vec<StoredAdvisory> {
+    crate::osv::severity::settle_group_notices(&mut rows);
+    rows
+}
+
+/// `osv_advisories.informational` (Phase 130) for the sync's notice verdict
+/// (the engine crate's `osv::is_notice_for`): 1 a notice, 2 not one. 0, the
+/// column default, means no verdict was stored.
+pub(crate) fn notice_column(notice: bool) -> i64 {
+    if notice {
+        1
+    } else {
+        2
+    }
+}
+
+/// The stored verdict, `None` for a row written before Phase 130 stored one
+/// (0, or NULL from an older select): `osv::severity::is_notice` then lets the
+/// summary decide, as Phase 129 did.
+pub(crate) fn notice_from_column(value: Option<i64>) -> Option<bool> {
+    match value {
+        Some(1) => Some(true),
+        Some(2) => Some(false),
+        _ => None,
+    }
 }
 
 // ============================================================================

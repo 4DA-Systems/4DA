@@ -1112,12 +1112,16 @@ fn affecting_advisories(
                 .get::<_, Option<String>>(9)?
                 .and_then(|c| serde_json::from_str(&c).ok())
                 .unwrap_or_default(),
-            informational: row.get::<_, Option<bool>>(10)?.unwrap_or(false),
+            informational: crate::db::notice_from_column(row.get(10)?),
         })
     }) else {
         return Vec::new();
     };
-    rows.flatten()
+    // The alias-group notice rule over the package's rows, before the range
+    // filter: a vulnerability twin keeps a worded GHSA from reading as a notice.
+    let mut all: Vec<_> = rows.flatten().collect();
+    crate::osv::severity::settle_group_notices(&mut all);
+    all.into_iter()
         .filter(|row| {
             // Only an advisory for an install's OWN ecosystem can grade it (AD-045).
             let advisory_ecosystem = crate::osv::exposure::canonical(&row.ecosystem);
