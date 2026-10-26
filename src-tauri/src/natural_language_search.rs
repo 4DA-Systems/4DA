@@ -41,6 +41,14 @@ pub struct QueryResultItem {
     /// Title contains the query as a whole word/phrase; pinned above every other hit.
     #[serde(default)]
     pub exact_match: bool,
+    /// The installed package this advisory affects, when the query named it.
+    /// Ranked above every result that is not an exact-title match.
+    #[serde(default)]
+    pub affects_package: Option<String>,
+    /// The query named an installed package and this advisory affects only
+    /// ecosystems the user has no dependencies in. Demoted.
+    #[serde(default)]
+    pub foreign_ecosystem: bool,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -299,6 +307,10 @@ fn build_stack_context(conn: &rusqlite::Connection, keywords: &[String]) -> Vec<
 
 const NON_EXACT_RELEVANCE_CAP: f64 = 0.99;
 
+fn mentions_word(haystack: &str, word: &str) -> bool {
+    crate::db::hybrid_search::title_has_exact_phrase(haystack, &[word.to_string()])
+}
+
 fn boost_for_stack(items: &mut [QueryResultItem], stack: &[StackContextEntry]) {
     let stack_names: Vec<String> = stack.iter().map(|s| s.name.to_lowercase()).collect();
     if stack_names.is_empty() {
@@ -309,9 +321,11 @@ fn boost_for_stack(items: &mut [QueryResultItem], stack: &[StackContextEntry]) {
     for item in items.iter_mut().filter(|i| !i.exact_match) {
         let title_lower = item.file_name.as_deref().unwrap_or("").to_lowercase();
         let preview_lower = item.preview.to_lowercase();
+        // Whole words only: a substring test let the stack entry "rust" boost
+        // every "RUSTSEC-..." advisory and crates like "rustyroad" (audit L8).
         let stack_matches: usize = stack_names
             .iter()
-            .filter(|s| title_lower.contains(s.as_str()) || preview_lower.contains(s.as_str()))
+            .filter(|s| mentions_word(&title_lower, s) || mentions_word(&preview_lower, s))
             .count();
         if stack_matches > 0 {
             item.relevance += 0.15 * (stack_matches as f64).min(3.0);
@@ -492,6 +506,7 @@ pub(crate) async fn run_search(
         .unwrap_or_default();
     clock.lap();
     boost_for_stack(&mut all_items, &stack_context);
+    rank_named_packages(&mut all_items);
     sort_items(&mut all_items);
     timings.rank_ms = clock.lap();
 
@@ -536,6 +551,10 @@ pub(crate) async fn run_search(
 }
 
 #[cfg(test)]
+#[path = "natural_language_search_rank_tests.rs"]
+mod rank_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -550,6 +569,8 @@ mod tests {
             timestamp: None,
             match_reason: String::new(),
             exact_match: exact,
+            affects_package: None,
+            foreign_ecosystem: false,
         }
     }
 
