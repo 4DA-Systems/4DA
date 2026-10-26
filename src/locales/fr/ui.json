@@ -394,8 +394,10 @@
   "preemption.urgency.high": "Élevé",
   "preemption.urgency.medium": "Moyen",
   "preemption.urgency.watch": "Surveiller",
-  "preemption.alert_one": "{{count}} alerte",
-  "preemption.alert_other": "{{count}} alertes",
+  "preemption.header.onList_one": "{{count}} sur cette liste",
+  "preemption.header.onList_other": "{{count}} sur cette liste",
+  "preemption.header.setAside_one": "{{count}} mis de côté ci-dessous",
+  "preemption.header.setAside_other": "{{count}} mis de côté ci-dessous",
   "preemption.dismissed": "Élément rejeté",
   "preemption.action.undo": "Annuler",
   "preemption.freshness.today": "aujourd'hui",
@@ -2116,7 +2118,9 @@
   "briefing.empty_state": "Votre stack est calme. Rien de nouveau.",
   "blindspots.ai.assess": "Évaluer avec l'IA",
   "blindspots.ai.assessing": "Évaluation…",
-  "blindspots.ai.assessedWith": "Évalué par {{model}}",
+  "blindspots.ai.assessedAgo": "Évalué par {{model}} · {{age}}",
+  "blindspots.ai.earlier": "Affichage de l'évaluation précédente de {{model}} · {{age}}",
+  "blindspots.ai.earlierChanged": "Évaluation précédente de {{model}} · {{age}} — vos dépendances ont changé depuis",
   "blindspots.ai.noModel": "Ajoutez une clé API dans les Paramètres pour activer l'évaluation par IA",
   "blindspots.ai.failed": "Échec de l'évaluation — réessayer",
   "blindspots.ai.budgetReached": "Budget IA quotidien atteint — réinitialisation à {{time}} ({{in}})",
@@ -2477,5 +2481,7 @@
   "preemption.notCovered.more": "et {{count}} autres",
   "preemption.notCovered.unreadableTitle_one": "1 lockfile n’a pas pu être lu",
   "preemption.notCovered.unreadableTitle_other": "{{count}} lockfiles n’ont pas pu être lus",
-  "preemption.notCovered.unreadableBody": "4DA n’a pas pu lire ces fichiers lors de sa dernière analyse et ne considère donc pas comme vérifié ce qu’ils fixent. Corrigez le fichier ou relancez l’analyse."
+  "preemption.notCovered.unreadableBody": "4DA n’a pas pu lire ces fichiers lors de sa dernière analyse et ne considère donc pas comme vérifié ce qu’ils fixent. Corrigez le fichier ou relancez l’analyse.",
+  "settings.context.excludedInStack": "exclu dans Your Stack",
+  "settings.context.excludedInStackHint": "Your Stack exclut ce dossier : ses projets ne sont pas vérifiés pour les dépendances ni les avis de sécurité. Modifiez-le dans Intelligence > Your Stack."
 }

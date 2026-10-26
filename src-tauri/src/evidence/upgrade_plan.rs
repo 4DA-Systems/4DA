@@ -185,6 +185,8 @@ struct PackageGroup<'a> {
     /// Every affected instance is a dev dependency (a labelled discount).
     all_dev: bool,
     urgency: Urgency,
+    /// Why `urgency` differs from the advisory's own grade (audit L5).
+    grade_note: Option<String>,
     max_cvss: f64,
     /// The target of each installed version in THIS row's projects (Phase
     /// 1.1). Never the machine-wide maximum: a copy in another project can
@@ -310,13 +312,14 @@ fn package_group<'a>(
         .map(|cluster| crate::osv::severity::cluster_urgency(cluster))
         .min()
         .unwrap_or(Urgency::Medium);
-    let urgency = if crate::osv::severity::contains_malware(&advisories) {
-        Urgency::Critical
+    let (transitive, dev) = (scope.all_transitive(), scope.all_dev());
+    let (urgency, grade_note) = if crate::osv::severity::contains_malware(&advisories) {
+        (Urgency::Critical, None)
     } else {
-        crate::osv::identity::scope_adjusted_urgency(
-            base_urgency,
-            scope.all_transitive(),
-            scope.all_dev(),
+        (
+            crate::osv::identity::scope_adjusted_urgency(base_urgency, transitive, dev),
+            // Said up front, so the list transport's 360-byte cap keeps it.
+            crate::osv::identity::scope_grade_note(base_urgency, transitive, dev),
         )
     };
 
@@ -329,6 +332,7 @@ fn package_group<'a>(
         fixable_now,
         all_dev,
         urgency,
+        grade_note,
         max_cvss,
         lines,
         targets,
@@ -533,8 +537,9 @@ impl PackageGroup<'_> {
             .map(|note| format!(" {note}"))
             .unwrap_or_default();
         let explanation = format!(
-            "{pkg} has {n} version-confirmed {adv} matching installed versions across {m} {proj}.{sev} \
+            "{pkg} has {n} version-confirmed {adv} matching installed versions across {m} {proj}.{grade}{sev} \
              {scope}.{dev}{targets} Advisories: {ids}{more}.",
+            grade = self.grade_note.as_deref().map(|g| format!(" Graded {g}.")).unwrap_or_default(),
             sev = severity_note,
             pkg = self.package,
             n = n,
@@ -562,7 +567,7 @@ impl PackageGroup<'_> {
                 relevance_note: truncate(
                     &format!(
                         "{sev}affects installed {ver}",
-                        sev = citation_severity(a),
+                        sev = crate::osv::severity::citation_lead(a),
                         ver = installed_in(a, &self.projects),
                     ),
                     200,
@@ -647,22 +652,6 @@ impl PackageGroup<'_> {
             expires_at: None,
         };
         (item, vec![step])
-    }
-}
-
-/// The severity a citation's note leads with: the CVSS score, or a grade the
-/// record inherited from its GHSA alias, named as such. Empty otherwise.
-fn citation_severity(a: &MatchedAdvisory) -> String {
-    match (
-        a.cvss_score,
-        a.severity_from.as_deref(),
-        a.severity_label.as_deref(),
-    ) {
-        (Some(c), _, _) => format!("CVSS {c:.1}; "),
-        (None, Some(from), Some(tier)) => {
-            format!("{}; ", crate::osv::severity::labelled(tier, Some(from)))
-        }
-        _ => String::new(),
     }
 }
 

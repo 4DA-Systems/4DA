@@ -209,7 +209,9 @@
   "blindspots.tier.stackSubtitle_other": "{{count}} dependências sem cobertura",
   "blindspots.ai.assess": "Avaliar com IA",
   "blindspots.ai.assessing": "Avaliando…",
-  "blindspots.ai.assessedWith": "Avaliado por {{model}}",
+  "blindspots.ai.assessedAgo": "Avaliado por {{model}} · {{age}}",
+  "blindspots.ai.earlier": "Mostrando a avaliação anterior de {{model}} · {{age}}",
+  "blindspots.ai.earlierChanged": "Avaliação anterior de {{model}} · {{age}} — suas dependências mudaram desde então",
   "blindspots.ai.noModel": "Adicione uma chave de API em Configurações para habilitar a avaliação com IA",
   "blindspots.ai.failed": "Falha na avaliação — tente novamente",
   "blindspots.ai.budgetReached": "Orçamento diário de IA atingido — redefine às {{time}} ({{in}})",
@@ -1389,8 +1391,10 @@
   "preemption.action.undo": "Desfazer",
   "preemption.affected.deps": "Dependências afetadas",
   "preemption.affected.projects": "Projetos afetados",
-  "preemption.alert_one": "{{count}} alerta",
-  "preemption.alert_other": "{{count}} alertas",
+  "preemption.header.onList_one": "{{count}} nesta lista",
+  "preemption.header.onList_other": "{{count}} nesta lista",
+  "preemption.header.setAside_one": "{{count}} separados abaixo",
+  "preemption.header.setAside_other": "{{count}} separados abaixo",
   "preemption.badge.ai": "AI",
   "preemption.badge.verified": "VERIFICADO",
   "preemption.confidence": "Confiança: {{value}}%",
@@ -2708,5 +2712,7 @@
   "preemption.notCovered.more": "e mais {{count}}",
   "preemption.notCovered.unreadableTitle_one": "Não foi possível ler 1 lockfile",
   "preemption.notCovered.unreadableTitle_other": "Não foi possível ler {{count}} lockfiles",
-  "preemption.notCovered.unreadableBody": "O 4DA não conseguiu ler esses arquivos na última verificação, então não considera verificado o que eles fixam. Corrija o arquivo ou verifique novamente."
+  "preemption.notCovered.unreadableBody": "O 4DA não conseguiu ler esses arquivos na última verificação, então não considera verificado o que eles fixam. Corrija o arquivo ou verifique novamente.",
+  "settings.context.excludedInStack": "excluído em Your Stack",
+  "settings.context.excludedInStackHint": "Your Stack exclui esta pasta: seus projetos não são verificados quanto a dependências ou alertas. Altere em Inteligência > Your Stack."
 }

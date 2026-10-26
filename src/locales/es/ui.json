@@ -394,8 +394,10 @@
   "preemption.urgency.high": "Alto",
   "preemption.urgency.medium": "Medio",
   "preemption.urgency.watch": "Vigilar",
-  "preemption.alert_one": "{{count}} alerta",
-  "preemption.alert_other": "{{count}} alertas",
+  "preemption.header.onList_one": "{{count}} en esta lista",
+  "preemption.header.onList_other": "{{count}} en esta lista",
+  "preemption.header.setAside_one": "{{count}} apartados abajo",
+  "preemption.header.setAside_other": "{{count}} apartados abajo",
   "preemption.dismissed": "Elemento descartado",
   "preemption.action.undo": "Deshacer",
   "preemption.freshness.today": "hoy",
@@ -2116,7 +2118,9 @@
   "briefing.empty_state": "Tu stack está tranquilo. Sin novedades.",
   "blindspots.ai.assess": "Evaluar con IA",
   "blindspots.ai.assessing": "Evaluando…",
-  "blindspots.ai.assessedWith": "Evaluado por {{model}}",
+  "blindspots.ai.assessedAgo": "Evaluado por {{model}} · {{age}}",
+  "blindspots.ai.earlier": "Mostrando la evaluación anterior de {{model}} · {{age}}",
+  "blindspots.ai.earlierChanged": "Evaluación anterior de {{model}} · {{age}} — tus dependencias han cambiado desde entonces",
   "blindspots.ai.noModel": "Añade una clave de API en Ajustes para habilitar la evaluación con IA",
   "blindspots.ai.failed": "La evaluación falló: inténtalo de nuevo",
   "blindspots.ai.budgetReached": "Presupuesto diario de IA alcanzado: se restablece a las {{time}} ({{in}})",
@@ -2705,5 +2709,7 @@
   "preemption.notCovered.more": "y {{count}} más",
   "preemption.notCovered.unreadableTitle_one": "No se pudo leer 1 lockfile",
   "preemption.notCovered.unreadableTitle_other": "No se pudieron leer {{count}} lockfiles",
-  "preemption.notCovered.unreadableBody": "4DA no pudo leer estos archivos en su último análisis, así que no da por comprobado lo que fijan. Corrige el archivo o vuelve a analizar."
+  "preemption.notCovered.unreadableBody": "4DA no pudo leer estos archivos en su último análisis, así que no da por comprobado lo que fijan. Corrige el archivo o vuelve a analizar.",
+  "settings.context.excludedInStack": "excluido en Your Stack",
+  "settings.context.excludedInStackHint": "Your Stack excluye esta carpeta: sus proyectos no se revisan en busca de dependencias ni avisos. Cámbialo en Inteligencia > Your Stack."
 }

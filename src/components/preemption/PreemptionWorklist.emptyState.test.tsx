@@ -268,7 +268,7 @@ describe('PreemptionWorklist — the all-clear follows advisory readiness', () =
     const feed = mockState.preemptionFeed as Record<string, unknown>;
     mockState.preemptionFeed = { ...feed, total: 1, high_count: 1, items: [finding()] };
     render(<PreemptionWorklist />);
-    expect(screen.getByText('preemption.alert')).toBeInTheDocument();
+    expect(screen.getByText('preemption.header.onList')).toBeInTheDocument();
     expect(screen.queryByTestId(/preemption-advisories-/)).toBeNull();
   });
 });

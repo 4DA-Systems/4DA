@@ -968,6 +968,51 @@ fn a_fact_with_no_published_fix_says_so() {
     assert!(validate_item(&item).is_ok());
 }
 
+/// Audit L5: the title keeps the advisory's own grade; when Preemption ranks
+/// the same fact lower by scope, the explanation says by how much and why.
+#[test]
+fn a_scope_adjusted_grade_is_explained_beside_the_advisorys_own() {
+    let mut dev_site = site("4da", "4.1.0", FixPath::NoFix);
+    dev_site.dev_only = true;
+    let mut vitest = fact("vitest", AlertUrgency::High, vec![dev_site]);
+    vitest.worst_tier = Some("critical".to_string());
+    let item = security_item(&vitest, NOW).item;
+    assert!(item.title.contains("critical advisory"), "{}", item.title);
+    assert!(
+        item.explanation.contains(
+            "Preemption grades it high, not the advisory's own critical: every affected copy is dev-only."
+        ),
+        "{}",
+        item.explanation
+    );
+
+    // A runtime Critical clamped to High is transitive, not dev-only.
+    let mut transitive = fact(
+        "rmcp",
+        AlertUrgency::High,
+        vec![site("app", "1.0.0", FixPath::NoFix)],
+    );
+    transitive.worst_tier = Some("critical".to_string());
+    let item = security_item(&transitive, NOW).item;
+    assert!(
+        item.explanation
+            .contains("every affected copy is transitive"),
+        "{}",
+        item.explanation
+    );
+
+    // Same grade on both surfaces: nothing to explain.
+    let same = fact(
+        "rmcp",
+        AlertUrgency::High,
+        vec![site("app", "1.0.0", FixPath::NoFix)],
+    );
+    assert!(!security_item(&same, NOW)
+        .item
+        .explanation
+        .contains("Preemption grades it"));
+}
+
 #[test]
 fn a_long_title_is_cut_on_a_char_boundary_under_the_limit() {
     let long = format!(

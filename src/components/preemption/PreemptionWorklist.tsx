@@ -138,6 +138,10 @@ export const PreemptionWorklist = memo(function PreemptionWorklist() {
   // held-back step count (pinned by plan_cap_holds_back_the_collapsed_tail
   // in list_transport_tests.rs).
   const planHeldBack = feed ? Math.max(0, feed.total - feed.items.length) : 0;
+  // Rows rendered at the foot, outside the worklist sections: collapsed
+  // other-build-target advisories and the dormant-project footer.
+  const setAsideCount = otherTargetItems.length + dormantNoticeItems.length;
+  const onListCount = Math.max(0, totalAlerts - setAsideCount);
 
   // Free security floor: the backend served Tier 1 (OSV-verified) only.
   // Render the floor normally plus a compact locked-tiers notice — never a
@@ -225,12 +229,6 @@ export const PreemptionWorklist = memo(function PreemptionWorklist() {
         <>
           <div className="flex items-center gap-4 px-4 py-3 rounded-lg bg-bg-secondary border border-border">
             <div className="flex items-center gap-3 text-xs">
-              {verifiedItems.length > 0 && (
-                <span className="inline-flex items-center gap-1.5 text-emerald-400 font-medium">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                  {verifiedItems.length} {t('preemption.badge.verified').toLowerCase()}
-                </span>
-              )}
               {criticalCount > 0 && (
                 <span className="inline-flex items-center gap-1.5 text-red-400 font-medium">
                   <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
@@ -244,8 +242,14 @@ export const PreemptionWorklist = memo(function PreemptionWorklist() {
                 </span>
               )}
             </div>
-            <span className="ms-auto text-xs text-text-muted tabular-nums">
-              {t('preemption.alert', { count: totalAlerts })}
+            {/* Audit L6: "61 alerts" beside "49 ranked upgrades" beside 37 cards
+                reconciled with nothing. The total now splits into what this
+                list asks the reader to work through (every section subtitle
+                below sums to it, "Show N more" included) and what is set
+                aside at the foot (other build targets + dormant projects). */}
+            <span className="ms-auto flex items-center gap-3 text-xs text-text-muted tabular-nums" data-testid="preemption-header-counts">
+              <span>{t('preemption.header.onList', { count: onListCount })}</span>
+              {setAsideCount > 0 && <span>{t('preemption.header.setAside', { count: setAsideCount })}</span>}
             </span>
           </div>
 

@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useId } from 'react';
 import { cmd } from '../../lib/commands';
 import { useTranslation } from 'react-i18next';
 import { TranslationEditor } from './TranslationEditor';
@@ -15,6 +15,14 @@ import {
 
 export function LocaleSection() {
   const { t, i18n } = useTranslation();
+  // Each select is named by its visible label (WCAG 1.3.1 / 4.1.2): the
+  // label/control pair is tied by id, not just placed side by side.
+  const fieldId = useId();
+  const countryId = `${fieldId}-country`;
+  const languageId = `${fieldId}-language`;
+  const currencyId = `${fieldId}-currency`;
+  const providerId = `${fieldId}-provider`;
+  const apiKeyId = `${fieldId}-api-key`;
   const [country, setCountry] = useState('US');
   const [language, setLanguage] = useState('en');
   const [currency, setCurrency] = useState('USD');
@@ -113,10 +121,11 @@ export function LocaleSection() {
       {loaded ? (
         <div className="space-y-3">
           <div>
-            <label className="block text-xs text-text-muted uppercase tracking-wider mb-1.5">
+            <label htmlFor={countryId} className="block text-xs text-text-muted uppercase tracking-wider mb-1.5">
               {t('settings.locale.country')}
             </label>
             <select
+              id={countryId}
               value={country}
               onChange={(e) => handleCountryChange(e.target.value)}
               className="w-full bg-bg-secondary border border-border rounded-lg px-3 py-2 text-text-primary text-sm focus:border-orange-500 focus:outline-none"
@@ -129,10 +138,11 @@ export function LocaleSection() {
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs text-text-muted uppercase tracking-wider mb-1.5">
+              <label htmlFor={languageId} className="block text-xs text-text-muted uppercase tracking-wider mb-1.5">
                 {t('settings.locale.language')}
               </label>
               <select
+                id={languageId}
                 value={language}
                 onChange={(e) => handleLanguageChange(e.target.value)}
                 className="w-full bg-bg-secondary border border-border rounded-lg px-3 py-2 text-text-primary text-sm focus:border-orange-500 focus:outline-none"
@@ -143,10 +153,11 @@ export function LocaleSection() {
               </select>
             </div>
             <div>
-              <label className="block text-xs text-text-muted uppercase tracking-wider mb-1.5">
+              <label htmlFor={currencyId} className="block text-xs text-text-muted uppercase tracking-wider mb-1.5">
                 {t('settings.locale.currency')}
               </label>
               <select
+                id={currencyId}
                 value={currency}
                 onChange={(e) => handleCurrencyChange(e.target.value)}
                 className="w-full bg-bg-secondary border border-border rounded-lg px-3 py-2 text-text-primary text-sm focus:border-orange-500 focus:outline-none"
@@ -226,10 +237,11 @@ export function LocaleSection() {
               <h4 className="text-sm text-text-primary font-medium">{t('settings.translation.title')}</h4>
 
               <div>
-                <label className="block text-xs text-text-muted uppercase tracking-wider mb-1.5">
+                <label htmlFor={providerId} className="block text-xs text-text-muted uppercase tracking-wider mb-1.5">
                   {t('settings.translation.provider')}
                 </label>
                 <select
+                  id={providerId}
                   value={txConfig.provider}
                   onChange={(e) => { void saveTxConfig({ ...txConfig, provider: e.target.value }); }}
                   className="w-full bg-bg-secondary border border-border rounded-lg px-3 py-2 text-text-primary text-sm focus:border-orange-500 focus:outline-none"
@@ -242,10 +254,11 @@ export function LocaleSection() {
 
               {PROVIDERS_REQUIRING_KEY.has(txConfig.provider) && (
                 <div>
-                  <label className="block text-xs text-text-muted uppercase tracking-wider mb-1.5">
+                  <label htmlFor={apiKeyId} className="block text-xs text-text-muted uppercase tracking-wider mb-1.5">
                     {t('settings.translation.apiKey')}
                   </label>
                   <input
+                    id={apiKeyId}
                     type="password"
                     value={txConfig.api_key}
                     onChange={(e) => setTxConfig({ ...txConfig, api_key: e.target.value })}

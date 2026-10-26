@@ -10,7 +10,6 @@ import { useAppStore } from '../../store';
 import { cmd } from '../../lib/commands';
 import { recordTrustEvent } from '../../lib/trust-feedback';
 import { sourceNewsReady } from '../../lib/negative-readiness';
-import { budgetResetVars, parseBudgetReset } from '../../utils/error-messages';
 import { useBlindSpotsData } from '../../hooks/use-blind-spots-data';
 
 import { BlindSpotsPaywall } from './BlindSpotsPaywall';
@@ -19,6 +18,8 @@ import { TierSection, EmergingSignals } from './StackCoverageMap';
 import { CoveredSection, NoCoverageSection, OtherBuildTargetsSection, ProbablyFineSection } from './CollapsedSections';
 import { AssessingNotice, ScanProjectsPrompt } from './BlindSpotsFirstDay';
 import { ReportAge } from '../ReportAge';
+import { AiAssessmentStatus } from './AiAssessmentStatus';
+import type { ShownAssessment } from './AiAssessmentStatus';
 import type { DepAssessment } from '../../../src-tauri/bindings/bindings/DepAssessment';
 import type { BlindSpotAssessment } from '../../../src-tauri/bindings/bindings/BlindSpotAssessment';
 
@@ -27,12 +28,7 @@ import type { BlindSpotAssessment } from '../../../src-tauri/bindings/bindings/B
 // ============================================================================
 
 const BlindSpotsView = memo(function BlindSpotsView() {
-  const { t, i18n } = useTranslation();
-  // A spent daily AI budget says when it resets, in the user's language.
-  const budgetText = (err: string): string | null => {
-    const reset = parseBudgetReset(err);
-    return reset ? t('blindspots.ai.budgetReached', budgetResetVars(reset, i18n.language ?? 'en')) : null;
-  };
+  const { t } = useTranslation();
   const { report, loading, error, paywalled } = useAppStore(
     useShallow((s) => ({
       report: s.blindSpotReport,
@@ -87,7 +83,7 @@ const BlindSpotsView = memo(function BlindSpotsView() {
   // Phase B: on-demand AI triage of the surfaced blind spots. One batched,
   // cached call; verdicts keyed by dep display name. `no_llm_configured` →
   // a graceful "add a key" hint rather than an error.
-  const [ai, setAi] = useState<{ map: Map<string, DepAssessment>; model: string } | null>(null);
+  const [ai, setAi] = useState<({ map: Map<string, DepAssessment> } & ShownAssessment) | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
 
@@ -95,7 +91,7 @@ const BlindSpotsView = memo(function BlindSpotsView() {
     if (!a || a.assessments.length === 0) return;
     const map = new Map<string, DepAssessment>();
     for (const item of a.assessments) map.set(item.dep_name, item);
-    setAi({ map, model: a.model });
+    setAi({ map, model: a.model, assessedAt: a.assessed_at, stale: a.stale === true });
   }, []);
 
   // `manual` distinguishes a user click (records an "acted-on" trust event)
@@ -323,15 +319,7 @@ const BlindSpotsView = memo(function BlindSpotsView() {
           >
             {aiLoading ? t('blindspots.ai.assessing') : t('blindspots.ai.assess')}
           </button>
-          {ai && !aiLoading && (
-            <span className="text-[10px] text-text-muted">{t('blindspots.ai.assessedWith', { model: ai.model })}</span>
-          )}
-          {aiError === 'no_llm' && (
-            <span className="text-[10px] text-text-muted">{t('blindspots.ai.noModel')}</span>
-          )}
-          {aiError && aiError !== 'no_llm' && (
-            <span className="text-[10px] text-red-400">{budgetText(aiError) ?? t('blindspots.ai.failed')}</span>
-          )}
+          <AiAssessmentStatus shown={ai} loading={aiLoading} error={aiError} />
         </div>
       )}
       {dataFreshness?.is_stale && (

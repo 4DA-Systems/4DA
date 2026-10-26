@@ -454,7 +454,7 @@ interface CommandMap {
   get_preference_evidence: { params: { facetId: string }; result: { facet_id: string; evidence: Array<{ cue_family: string; evidence_type: string; confidence: number; observed_at: number }>; count: number } };
 
   // -- Context Directories --
-  get_context_dirs: { params: Record<string, never>; result: Array<{ path: string; exists: boolean }> };
+  get_context_dirs: { params: Record<string, never>; result: Array<{ path: string; exists: boolean; excluded: boolean }> };
   set_context_dirs: { params: { dirs: string[] }; result: void };
 
   // -- Monitoring --
@@ -576,7 +576,7 @@ interface CommandMap {
   get_blind_spot_teaser: { params: Record<string, never>; result: BlindSpotTeaser };
   assess_blind_spots_with_ai: { params: { force?: boolean }; result: BlindSpotAssessment };
   get_cached_blind_spot_assessment: { params: Record<string, never>; result: BlindSpotAssessment | null };
-  get_source_health: { params: Record<string, never>; result: { adapters: Array<{ source_type: string; feed_origin: string; status: string; consecutive_failures: number; last_success_at: string | null; last_failure_at: string | null; last_error: string | null }>; total_active: number; total_failing: number; total_disabled: number } };
+  get_source_health: { params: Record<string, never>; result: { adapters: Array<{ source_type: string; feed_origin: string; status: string; consecutive_failures: number; last_success_at: string | null; last_failure_at: string | null; last_error: string | null }>; total_active: number; total_failing: number; total_disabled: number; total_stale: number } };
 
   // -- OSV Local Mirror (Tier 1 verified intelligence) --
   osv_sync_now: { params: Record<string, never>; result: { ecosystems_synced: string[]; advisories_stored: number; advisories_matched: number; duration_ms: number; errors: string[] } };

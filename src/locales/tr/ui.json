@@ -207,7 +207,9 @@
   "blindspots.tier.stackSubtitle_other": "{{count}} kapsanmamış bağımlılık",
   "blindspots.ai.assess": "Yapay zeka ile değerlendir",
   "blindspots.ai.assessing": "Değerlendiriliyor…",
-  "blindspots.ai.assessedWith": "{{model}} tarafından değerlendirildi",
+  "blindspots.ai.assessedAgo": "{{model}} tarafından değerlendirildi · {{age}}",
+  "blindspots.ai.earlier": "{{model}} tarafından yapılan önceki değerlendirme gösteriliyor · {{age}}",
+  "blindspots.ai.earlierChanged": "{{model}} tarafından yapılan önceki değerlendirme · {{age}} — bağımlılıklarınız o zamandan beri değişti",
   "blindspots.ai.noModel": "Yapay zeka değerlendirmesini etkinleştirmek için Ayarlar'a bir API anahtarı ekleyin",
   "blindspots.ai.failed": "Değerlendirme başarısız oldu — tekrar deneyin",
   "blindspots.ai.budgetReached": "Günlük yapay zekâ bütçesine ulaşıldı — {{time}} itibarıyla sıfırlanır ({{in}})",
@@ -1358,8 +1360,10 @@
   "preemption.action.undo": "Geri al",
   "preemption.affected.deps": "Etkilenen bağımlılıklar",
   "preemption.affected.projects": "Etkilenen projeler",
-  "preemption.alert_one": "{{count}} uyarı",
-  "preemption.alert_other": "{{count}} uyarı",
+  "preemption.header.onList_one": "Bu listede {{count}}",
+  "preemption.header.onList_other": "Bu listede {{count}}",
+  "preemption.header.setAside_one": "{{count}} aşağıda ayrıldı",
+  "preemption.header.setAside_other": "{{count}} aşağıda ayrıldı",
   "preemption.badge.ai": "AI",
   "preemption.badge.verified": "DOĞRULANMIŞ",
   "preemption.confidence": "Güven: %{{value}}",
@@ -2659,5 +2663,7 @@
   "preemption.notCovered.more": "ve {{count}} tane daha",
   "preemption.notCovered.unreadableTitle_one": "1 kilit dosyası okunamadı",
   "preemption.notCovered.unreadableTitle_other": "{{count}} kilit dosyası okunamadı",
-  "preemption.notCovered.unreadableBody": "4DA son taramada bu dosyaları okuyamadı, bu yüzden sabitledikleri sürümleri kontrol edilmiş saymaz. Dosyayı düzeltin veya yeniden tarayın."
+  "preemption.notCovered.unreadableBody": "4DA son taramada bu dosyaları okuyamadı, bu yüzden sabitledikleri sürümleri kontrol edilmiş saymaz. Dosyayı düzeltin veya yeniden tarayın.",
+  "settings.context.excludedInStack": "Your Stack'te hariç tutuldu",
+  "settings.context.excludedInStackHint": "Your Stack bu klasörü hariç tutuyor: projeleri bağımlılıklar veya güvenlik uyarıları için denetlenmiyor. Zeka > Your Stack altında değiştirin."
 }

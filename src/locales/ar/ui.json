@@ -208,7 +208,9 @@
   "blindspots.tier.stackSubtitle_other": "{{count}} تبعيات غير مغطاة",
   "blindspots.ai.assess": "تقييم بالذكاء الاصطناعي",
   "blindspots.ai.assessing": "جارٍ التقييم…",
-  "blindspots.ai.assessedWith": "تم التقييم بواسطة {{model}}",
+  "blindspots.ai.assessedAgo": "قيّمه {{model}} · {{age}}",
+  "blindspots.ai.earlier": "يُعرض التقييم السابق من {{model}} · {{age}}",
+  "blindspots.ai.earlierChanged": "تقييم سابق من {{model}} · {{age}} — تغيّرت تبعياتك منذ ذلك الحين",
   "blindspots.ai.noModel": "أضف مفتاح API في الإعدادات لتفعيل التقييم بالذكاء الاصطناعي",
   "blindspots.ai.failed": "فشل التقييم — أعد المحاولة",
   "blindspots.ai.budgetReached": "تم بلوغ ميزانية الذكاء الاصطناعي اليومية — يُعاد التعيين عند {{time}} ({{in}})",
@@ -1328,8 +1330,10 @@
   "preemption.action.undo": "تراجع",
   "preemption.affected.deps": "الاعتماديات المتأثرة",
   "preemption.affected.projects": "المشاريع المتأثرة",
-  "preemption.alert_one": "{{count}} تنبيه",
-  "preemption.alert_other": "{{count}} تنبيهات",
+  "preemption.header.onList_one": "{{count}} في هذه القائمة",
+  "preemption.header.onList_other": "{{count}} في هذه القائمة",
+  "preemption.header.setAside_one": "{{count}} مستبعدة أدناه",
+  "preemption.header.setAside_other": "{{count}} مستبعدة أدناه",
   "preemption.badge.ai": "AI",
   "preemption.badge.verified": "موثّق",
   "preemption.confidence": "الثقة: {{value}}%",
@@ -2650,5 +2654,7 @@
   "preemption.notCovered.more": "و{{count}} أخرى",
   "preemption.notCovered.unreadableTitle_one": "تعذّرت قراءة ملف قفل واحد",
   "preemption.notCovered.unreadableTitle_other": "تعذّرت قراءة {{count}} ملفات قفل",
-  "preemption.notCovered.unreadableBody": "تعذّر على 4DA قراءة هذه الملفات في آخر فحص، لذا لا يعدّ ما تثبّته مفحوصًا. أصلح الملف أو أعد الفحص."
+  "preemption.notCovered.unreadableBody": "تعذّر على 4DA قراءة هذه الملفات في آخر فحص، لذا لا يعدّ ما تثبّته مفحوصًا. أصلح الملف أو أعد الفحص.",
+  "settings.context.excludedInStack": "مستبعد في Your Stack",
+  "settings.context.excludedInStackHint": "يستبعد Your Stack هذا المجلد: لا تُفحص مشاريعه بحثًا عن التبعيات أو التنبيهات الأمنية. غيّر ذلك من الذكاء > Your Stack."
 }

@@ -207,7 +207,9 @@
   "blindspots.tier.stackSubtitle_other": "{{count}} अनकवर्ड निर्भरताएं",
   "blindspots.ai.assess": "AI से आकलन करें",
   "blindspots.ai.assessing": "आकलन हो रहा है…",
-  "blindspots.ai.assessedWith": "{{model}} द्वारा आकलित",
+  "blindspots.ai.assessedAgo": "{{model}} द्वारा आकलित · {{age}}",
+  "blindspots.ai.earlier": "{{model}} का पिछला आकलन दिखाया जा रहा है · {{age}}",
+  "blindspots.ai.earlierChanged": "{{model}} का पिछला आकलन · {{age}} — तब से आपकी निर्भरताएँ बदल गई हैं",
   "blindspots.ai.noModel": "AI आकलन सक्षम करने के लिए सेटिंग्स में एक API कुंजी जोड़ें",
   "blindspots.ai.failed": "आकलन विफल — फिर से प्रयास करें",
   "blindspots.ai.budgetReached": "दैनिक AI बजट समाप्त — {{time}} पर रीसेट होगा ({{in}})",
@@ -1385,8 +1387,10 @@
   "preemption.action.undo": "पूर्ववत करें",
   "preemption.affected.deps": "प्रभावित डिपेंडेंसी",
   "preemption.affected.projects": "प्रभावित प्रोजेक्ट",
-  "preemption.alert_one": "{{count}} अलर्ट",
-  "preemption.alert_other": "{{count}} अलर्ट",
+  "preemption.header.onList_one": "इस सूची में {{count}}",
+  "preemption.header.onList_other": "इस सूची में {{count}}",
+  "preemption.header.setAside_one": "{{count}} नीचे अलग रखे गए",
+  "preemption.header.setAside_other": "{{count}} नीचे अलग रखे गए",
   "preemption.badge.ai": "AI",
   "preemption.badge.verified": "सत्यापित",
   "preemption.confidence": "विश्वसनीयता: {{value}}%",
@@ -2701,5 +2705,7 @@
   "preemption.notCovered.more": "और {{count}} अन्य",
   "preemption.notCovered.unreadableTitle_one": "1 लॉकफ़ाइल पढ़ी नहीं जा सकी",
   "preemption.notCovered.unreadableTitle_other": "{{count}} लॉकफ़ाइलें पढ़ी नहीं जा सकीं",
-  "preemption.notCovered.unreadableBody": "4DA पिछले स्कैन में इन फ़ाइलों को नहीं पढ़ सका, इसलिए इनमें तय किए गए संस्करणों को जाँचा हुआ नहीं मानता। फ़ाइल ठीक करें या फिर से स्कैन करें।"
+  "preemption.notCovered.unreadableBody": "4DA पिछले स्कैन में इन फ़ाइलों को नहीं पढ़ सका, इसलिए इनमें तय किए गए संस्करणों को जाँचा हुआ नहीं मानता। फ़ाइल ठीक करें या फिर से स्कैन करें।",
+  "settings.context.excludedInStack": "Your Stack में बाहर रखा गया",
+  "settings.context.excludedInStackHint": "Your Stack इस फ़ोल्डर को बाहर रखता है: इसकी परियोजनाओं की निर्भरताओं या सुरक्षा सलाहों के लिए जाँच नहीं होती। बुद्धिमत्ता > Your Stack में बदलें।"
 }

@@ -295,6 +295,38 @@ pub fn scope_adjusted_urgency(
     }
 }
 
+/// Why a grade [`scope_adjusted_urgency`] moved differs from the advisory's
+/// own, as a clause every surface showing the adjusted grade can carry:
+/// "medium, not the advisory's own high: every affected copy is dev-only".
+/// `None` when the scope rule changed nothing.
+///
+/// Audit L5 (2026-10-12): Signal said "vitest ... security fix (critical)"
+/// (the advisory's grade) while Preemption said HIGH (dev-only), and nothing
+/// on either surface said why. The fix is honesty, not one number.
+pub fn scope_grade_note(
+    base: Urgency,
+    all_transitive: Option<bool>,
+    all_dev: Option<bool>,
+) -> Option<String> {
+    let adjusted = scope_adjusted_urgency(base, all_transitive, all_dev);
+    if adjusted == base {
+        return None;
+    }
+    let clamped = all_transitive == Some(true) && base == Urgency::Critical;
+    let dev = all_dev == Some(true);
+    let why = match (clamped, dev) {
+        (true, true) => "every affected copy is a transitive dev dependency",
+        (true, false) => "every affected copy is transitive (reached only through another package)",
+        _ => "every affected copy is dev-only",
+    };
+    let name = |u: Urgency| format!("{u:?}").to_lowercase();
+    Some(format!(
+        "{}, not the advisory's own {}: {why}",
+        name(adjusted),
+        name(base)
+    ))
+}
+
 /// Which kinds of install an aggregate row speaks for: the version-CONFIRMED
 /// instances in the projects it names (AD-044). Both aggregators — the
 /// upgrade plan and the alert path — read the inputs of
@@ -689,6 +721,34 @@ mod tests {
                 "{base:?} all_transitive={transitive:?} all_dev={dev:?}"
             );
         }
+    }
+
+    /// Audit L5: an adjusted grade always carries the advisory's own grade and
+    /// the scope that moved it; an unmoved grade carries nothing.
+    #[test]
+    fn scope_grade_note_names_both_grades_and_the_reason() {
+        use crate::evidence::Urgency::{Critical, High, Medium};
+        assert_eq!(
+            scope_grade_note(Critical, Some(false), Some(true)).as_deref(),
+            Some("high, not the advisory's own critical: every affected copy is dev-only")
+        );
+        assert_eq!(
+            scope_grade_note(High, Some(true), Some(true)).as_deref(),
+            Some("medium, not the advisory's own high: every affected copy is dev-only")
+        );
+        assert_eq!(
+            scope_grade_note(Critical, Some(true), Some(false)).as_deref(),
+            Some(concat!(
+                "high, not the advisory's own critical: every affected copy is transitive ",
+                "(reached only through another package)"
+            ))
+        );
+        assert_eq!(
+            scope_grade_note(Critical, Some(true), Some(true)).as_deref(),
+            Some("medium, not the advisory's own critical: every affected copy is a transitive dev dependency")
+        );
+        assert_eq!(scope_grade_note(High, Some(true), Some(false)), None);
+        assert_eq!(scope_grade_note(Medium, None, None), None);
     }
 
     /// The inputs come from version-confirmed installs in the NAMED projects
