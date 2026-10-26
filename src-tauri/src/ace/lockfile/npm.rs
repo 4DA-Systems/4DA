@@ -37,6 +37,24 @@ fn install_name(key: &str) -> Option<&str> {
     key.rsplit_once("node_modules/").map(|(_, name)| name)
 }
 
+/// Whether a v2/v3 key is where a manifest declaration resolves: the hoisted
+/// `node_modules/<name>` (the root's, and any member's that npm hoisted) or a
+/// workspace member's own `<member>/node_modules/<name>`. A copy under
+/// another package's `node_modules` (`node_modules/foo/node_modules/<name>`)
+/// is `foo`'s dependency, not the project's.
+fn declared_slot(key: &str, installed_as: &str) -> bool {
+    let owner_len = key.len() - installed_as.len() - "node_modules/".len();
+    !key[..owner_len].contains("node_modules/")
+}
+
+/// The workspace member whose own `node_modules` holds a declared-slot key
+/// (`packages/ui/node_modules/x` -> `packages/ui`); `None` when hoisted.
+fn slot_owner(key: &str, installed_as: &str) -> Option<String> {
+    let owner_len = key.len() - installed_as.len() - "node_modules/".len();
+    let owner = key[..owner_len].trim_end_matches('/');
+    (!owner.is_empty()).then(|| owner.to_string())
+}
+
 pub(super) fn read_package_lock(content: &str, format: LockFormat) -> Result<LockfileRead, String> {
     let lock: Value = serde_json::from_str(content).map_err(|e| format!("invalid JSON: {e}"))?;
     let mut read = LockfileRead {
@@ -89,7 +107,9 @@ fn read_v2_packages(packages: &Map<String, Value>, scope: &DevScope, read: &mut 
                 read.packages.push(
                     LockedPackage::new(name, version)
                         .scoped(scope_of(scope, installed_as, version))
-                        .primary(primary),
+                        .primary(primary)
+                        .top_level(declared_slot(key, installed_as))
+                        .owned_by(slot_owner(key, installed_as)),
                 );
             }
             _ => read.non_registry_entries += 1,
@@ -114,7 +134,8 @@ fn read_v1_tree(
                 read.packages.push(
                     LockedPackage::new(real_name, real_version)
                         .scoped(scope_of(scope, name, version))
-                        .primary(top_level),
+                        .primary(top_level)
+                        .top_level(top_level),
                 );
             } else {
                 read.non_registry_entries += 1;
@@ -130,6 +151,9 @@ fn read_v1_tree(
 /// scope from the importer graph (AD-046) and the snapshot edges.
 pub(super) fn read_pnpm_lock(content: &str) -> LockfileRead {
     let scope = DevScope::from_pnpm_lock(content);
+    // pnpm keys copies by identity, not position: the declared copy is the
+    // version an importer pins (`importers:` -> `<dir>:` -> `dependencies:`).
+    let pins = crate::ace::dep_scope::pnpm_importer_pins(content);
     let mut seen = std::collections::HashSet::new();
     let packages = ProjectScanner::parse_pnpm_lock_yaml(content)
         .into_iter()
@@ -140,7 +164,10 @@ pub(super) fn read_pnpm_lock(content: &str) -> LockfileRead {
                 "dev" => DepScope::Dev,
                 _ => DepScope::Unknown,
             };
-            LockedPackage::new(name, version).scoped(label)
+            let pinned = pins.contains(&(name.to_ascii_lowercase(), version.trim().to_string()));
+            LockedPackage::new(name, version)
+                .scoped(label)
+                .top_level(pinned)
         })
         .collect();
     LockfileRead {

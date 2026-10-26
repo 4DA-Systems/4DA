@@ -94,6 +94,51 @@ pub(crate) fn local_packages(content: &str) -> HashSet<(String, String)> {
         .collect()
 }
 
+/// `(name, version)` of every registry copy one of the project's OWN crates
+/// (a package with no `source`: the root, a workspace member, a path crate)
+/// lists in its Cargo.lock `dependencies` — the copies a manifest declaration
+/// resolves to, `[dependencies]`, `[dev-dependencies]` and
+/// `[build-dependencies]` alike, a workspace member's included. Cargo writes
+/// a bare name when the lockfile holds one version of it and `name version`
+/// when it holds several, so a second copy (`rand 0.7.3` under `tempfile`
+/// beside the project's `rand 0.8.5`) is never one of these.
+pub(crate) fn declared_copies(content: &str) -> HashSet<(String, String)> {
+    let packages = parse_lock_packages(content);
+    let local: HashSet<(String, String)> = packages
+        .iter()
+        .filter(|p| !p.has_source)
+        .map(|p| (p.name.clone(), p.version.clone()))
+        .collect();
+    let mut versions: HashMap<String, Vec<String>> = HashMap::new();
+    for p in packages.iter().filter(|p| p.has_source) {
+        versions
+            .entry(p.name.clone())
+            .or_default()
+            .push(p.version.clone());
+    }
+    let mut out = HashSet::new();
+    for edge in ProjectScanner::parse_cargo_lock_edges(content) {
+        let parent = (
+            edge.parent.clone(),
+            edge.parent_version.clone().unwrap_or_default(),
+        );
+        if !local.contains(&parent) {
+            continue;
+        }
+        let Some(candidates) = versions.get(&edge.child) else {
+            continue; // another local crate
+        };
+        match edge.child_version {
+            Some(v) if candidates.contains(&v) => {
+                out.insert((edge.child.clone(), v));
+            }
+            Some(_) => {}
+            None => out.extend(candidates.iter().map(|v| (edge.child.clone(), v.clone()))),
+        }
+    }
+    out
+}
+
 /// Normalised names that exist in the lockfile ONLY as local packages. A name
 /// that also resolves from a registry (a `[patch]` override next to the
 /// published crate, or two copies at different versions) is not local.

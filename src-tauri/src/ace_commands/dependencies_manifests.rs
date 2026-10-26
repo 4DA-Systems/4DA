@@ -40,6 +40,104 @@ pub(super) fn direct_names(
     }
 }
 
+/// A JavaScript workspace's declarations split by owner: the root
+/// manifest's own names, and each member's with the keys a lockfile writes
+/// for its slot (its `/`-separated directory relative to `dir`, and its
+/// package name). `(vec![], vec![])` for a single-root project or another
+/// ecosystem.
+pub(super) fn workspace_declarations(
+    scanner: &crate::ace::scanner::ProjectScanner,
+    dir: &Path,
+    ecosystem: &str,
+) -> (Vec<String>, Vec<super::store::MemberDeclarations>) {
+    if ecosystem != "javascript" {
+        return (Vec::new(), Vec::new());
+    }
+    let members = crate::ace::npm_local::workspace_member_dirs(dir);
+    if members.is_empty() {
+        return (Vec::new(), Vec::new());
+    }
+    let declared = members
+        .iter()
+        .map(|m| {
+            let mut keys: Vec<String> = Vec::new();
+            if let Ok(rel) = m.strip_prefix(dir) {
+                let rel: Vec<String> = rel
+                    .components()
+                    .map(|c| c.as_os_str().to_string_lossy().into_owned())
+                    .collect();
+                keys.push(rel.join("/"));
+            }
+            keys.extend(crate::ace::npm_local::package_name(m));
+            super::store::MemberDeclarations {
+                keys,
+                names: read_package_json_deps(scanner, &m.to_path_buf()),
+            }
+        })
+        .collect();
+    (
+        read_package_json_deps(scanner, &dir.to_path_buf()),
+        declared,
+    )
+}
+
+/// The names the directory's manifest declares ONLY for development, for the
+/// ecosystems whose lockfiles record no scope of their own. Python: the
+/// pyproject's PEP 735 groups and uv / PDM / Poetry dev tables, minus every
+/// runtime requirement (A-4). Elsewhere the lockfile carries the verdict
+/// (npm/pnpm/bun graphs, Cargo roots, Pipfile.lock `develop`).
+pub(super) fn dev_only_names(dir: &Path, ecosystem: &str) -> Vec<String> {
+    if ecosystem != "python" {
+        return Vec::new();
+    }
+    let Ok(content) = std::fs::read_to_string(dir.join("pyproject.toml")) else {
+        return Vec::new();
+    };
+    let runtime: Vec<String> = crate::ace::scanner::parse_pyproject_dependencies(&content)
+        .iter()
+        .map(|n| crate::osv::matching::pep503_name(n))
+        .collect();
+    crate::ace::pyproject_dev::parse_pyproject_dev_dependencies(&content)
+        .into_iter()
+        .filter(|n| !runtime.contains(&crate::osv::matching::pep503_name(n)))
+        .collect()
+}
+
+/// Every `name@range` the directory's manifests declare for `ecosystem`, in
+/// [`crate::ace::lockfile::normalize_descriptor`]'s spelling — how a
+/// yarn.lock copy, which records no install position, is matched to the
+/// declaration it resolves. JavaScript only (the root `package.json` and its
+/// workspace members); empty elsewhere.
+pub(super) fn declared_specs(dir: &Path, ecosystem: &str) -> Vec<String> {
+    if ecosystem != "javascript" {
+        return Vec::new();
+    }
+    std::iter::once(dir.to_path_buf())
+        .chain(crate::ace::npm_local::workspace_member_dirs(dir))
+        .flat_map(|d| package_json_specs(&d))
+        .collect()
+}
+
+fn package_json_specs(dir: &Path) -> Vec<String> {
+    let Ok(content) = std::fs::read_to_string(dir.join("package.json")) else {
+        return Vec::new();
+    };
+    let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&content) else {
+        return Vec::new();
+    };
+    ["dependencies", "devDependencies", "optionalDependencies"]
+        .iter()
+        .filter_map(|field| parsed.get(*field).and_then(|v| v.as_object()))
+        .flat_map(|map| map.iter())
+        .filter_map(|(name, range)| {
+            let range = range.as_str()?;
+            Some(crate::ace::lockfile::normalize_descriptor(&format!(
+                "{name}@{range}"
+            )))
+        })
+        .collect()
+}
+
 /// Rows the prune must keep beyond the lockfiles' packages: the go.mod
 /// `go`/`toolchain` directives become synthetic "stdlib" / "toolchain" rows
 /// (store_go_directive_dependencies) — keep them, or every scan would delete

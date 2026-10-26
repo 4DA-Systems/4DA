@@ -153,6 +153,30 @@ fn workspace_roots(lock: &Value) -> (HashSet<String>, HashSet<String>) {
     (runtime, dev)
 }
 
+/// The `name` of every workspace member (`workspaces` -> `"packages/a"` ->
+/// `name`). The root (`""`) has none that a key could start with.
+fn workspace_names(lock: &Value) -> HashSet<String> {
+    lock.get("workspaces")
+        .and_then(Value::as_object)
+        .into_iter()
+        .flat_map(|w| w.iter())
+        .filter(|(path, _)| !path.is_empty())
+        .filter_map(|(_, ws)| ws.get("name").and_then(Value::as_str))
+        .map(str::to_string)
+        .collect()
+}
+
+/// Whether a `packages` key is where a manifest declaration resolves: the
+/// hoisted copy (key = name) or a workspace member's own copy
+/// (`<member name>/<name>`). `next/postcss` is `next`'s dependency.
+fn declared_slot(key: &str, name: &str, members: &HashSet<String>) -> bool {
+    if key == name {
+        return true;
+    }
+    let segments = key_segments(key);
+    segments.len() == 2 && members.contains(&segments[0]) && segments[1] == name
+}
+
 pub(super) fn read_bun_lock(content: &str) -> Result<LockfileRead, String> {
     let lock: Value = serde_json::from_str(&strip_trailing_commas(content))
         .map_err(|e| format!("invalid bun.lock JSONC: {e}"))?;
@@ -171,6 +195,7 @@ pub(super) fn read_bun_lock(content: &str) -> Result<LockfileRead, String> {
         }
     }
     let (runtime_roots, dev_roots) = workspace_roots(&lock);
+    let members = workspace_names(&lock);
     let runtime = reach(&entries, &runtime_roots);
     let dev = reach(&entries, &dev_roots);
     let mut keys: Vec<&String> = entries.keys().collect();
@@ -189,7 +214,13 @@ pub(super) fn read_bun_lock(content: &str) -> Result<LockfileRead, String> {
             Some(
                 LockedPackage::new(e.name.clone(), e.version.clone())
                     .scoped(scope)
-                    .primary(*key == e.name),
+                    .primary(*key == e.name)
+                    .top_level(declared_slot(key, &e.name, &members))
+                    .owned_by(
+                        (*key != e.name && declared_slot(key, &e.name, &members))
+                            .then(|| key_segments(key).into_iter().next())
+                            .flatten(),
+                    ),
             )
         })
         .collect();

@@ -746,6 +746,16 @@ impl ProjectScanner {
                 signal.dependencies.push(dep);
             }
         }
+        // Development declarations (PEP 735 groups, uv/PDM/Poetry dev
+        // tables) — dev only when not also a runtime requirement (A-4).
+        for dep in crate::ace::pyproject_dev::parse_pyproject_dev_dependencies(content) {
+            let runtime = signal.dependencies.iter().any(|d| {
+                crate::osv::matching::pep503_name(d) == crate::osv::matching::pep503_name(&dep)
+            });
+            if !runtime && !signal.dev_dependencies.contains(&dep) {
+                signal.dev_dependencies.push(dep);
+            }
+        }
 
         // Framework detection from PARSED dependency names only.
         // Only actual web frameworks — ML libraries, ORMs, and task queues
@@ -2154,7 +2164,7 @@ fn extract_toml_value(content: &str, key: &str) -> Option<String> {
 
 /// Strip a PEP 508 requirement spec down to its package name:
 /// `"requests[security]>=2.31,<3 ; python_version >= '3.8'"` -> `requests`.
-fn pep508_package_name(spec: &str) -> Option<String> {
+pub(crate) fn pep508_package_name(spec: &str) -> Option<String> {
     let name = spec
         .split(&['=', '>', '<', '~', '!', '[', ';', '@', ' '][..])
         .next()
@@ -2276,7 +2286,7 @@ pub(crate) fn parse_pyproject_dependencies(content: &str) -> Vec<String> {
 /// (both `"basic"` and `'literal'` quoting). Escaped quotes inside basic
 /// strings are not modeled — PEP 508 specs don't contain them, and this is a
 /// dependency-name extractor, not a TOML validator.
-fn strip_toml_comment(line: &str) -> &str {
+pub(crate) fn strip_toml_comment(line: &str) -> &str {
     let mut in_double = false;
     let mut in_single = false;
     for (i, c) in line.char_indices() {
@@ -2293,7 +2303,7 @@ fn strip_toml_comment(line: &str) -> &str {
 /// True when a `]` appears on the line OUTSIDE string literals — i.e. the
 /// line actually closes a TOML array (a `]` inside a spec like
 /// `"uvicorn[standard]>=0.29"` or `'pydantic[email]'` does not count).
-fn closes_toml_array(line: &str) -> bool {
+pub(crate) fn closes_toml_array(line: &str) -> bool {
     let mut in_double = false;
     let mut in_single = false;
     for c in line.chars() {
