@@ -218,7 +218,7 @@ fn advisory(eco: &str, details: &str) -> StoredAdvisory {
         aliases: Vec::new(),
         severity_label: Some("high".to_string()),
         cwe_ids: Vec::new(),
-        informational: false,
+        informational: None,
     }
 }
 

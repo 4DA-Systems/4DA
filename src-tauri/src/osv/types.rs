@@ -120,13 +120,14 @@ pub struct StoredAdvisory {
     /// the column existed, until the next sync (made due by the migration).
     #[serde(default)]
     pub cwe_ids: Vec<String>,
-    /// A maintenance notice by OSV's own flag (Phase 129): the engine crate's
-    /// `osv::is_notice_for` at sync, which reads RustSec's per-affected
-    /// `database_specific.informational`. `false` on rows synced before the
-    /// column existed, until the next sync (made due by the migration); the
-    /// summary rule still applies to them (`osv::severity`).
+    /// Whether the row is a maintenance notice, as the sync judged it
+    /// (Phase 130): the engine crate's `osv::is_notice_for`, where a class
+    /// OSV states (RustSec's per-affected `database_specific.informational`)
+    /// beats the summary's wording. `None` on rows synced before the verdict
+    /// was stored, until the next sync (made due by the migration); the
+    /// summary rule decides for them (`osv::severity::is_notice`).
     #[serde(default)]
-    pub informational: bool,
+    pub informational: Option<bool>,
 }
 
 impl StoredAdvisory {
@@ -201,7 +202,7 @@ pub struct MatchedAdvisory {
     pub severity_from: Option<String>,
     /// See [`StoredAdvisory::informational`].
     #[serde(default)]
-    pub informational: bool,
+    pub informational: Option<bool>,
 }
 
 impl MatchedAdvisory {

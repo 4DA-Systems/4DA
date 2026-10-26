@@ -62,16 +62,56 @@ pub(crate) fn maintenance_text(summary: &str) -> bool {
     fourda_depengine::severity::is_maintenance_notice(summary, None)
 }
 
-/// THE maintenance-notice predicate for a mirror row or a match: OSV's own
-/// flag as the sync stored it (`stored_flag`, the engine crate's
-/// `osv::is_notice_for`: the record-level or the package's per-affected
-/// `database_specific.informational` is `unmaintained` / `notice`), or the
-/// summary ([`maintenance_text`], which also covers rows synced before the
-/// flag was stored). A notice is never graded from an alias, the Upgrade Plan
+/// THE maintenance-notice predicate for a mirror row or a match: the verdict
+/// the sync stored (`stored`, the engine crate's `osv::is_notice_for`, where
+/// a class OSV states decides on its own: `unmaintained` / `notice` is a
+/// notice, `unsound` is not, whatever the summary says), else, for a row
+/// synced before the verdict was stored, the summary ([`maintenance_text`]). A notice is never graded from an alias, the Upgrade Plan
 /// folds it into one Watch item, [`cluster_urgency`] grades it Watch on the
 /// alert path, and the fix-target walk never lets it block or be a target.
-pub(crate) fn is_notice(stored_flag: bool, summary: &str) -> bool {
-    stored_flag || maintenance_text(summary)
+pub(crate) fn is_notice(stored: Option<bool>, summary: &str) -> bool {
+    stored.unwrap_or_else(|| maintenance_text(summary))
+}
+
+/// A record whose notice verdict the alias-group rule can settle.
+pub trait NoticeVerdict: SeverityRecord {
+    fn settle_not_notice(&mut self);
+}
+
+impl NoticeVerdict for MatchedAdvisory {
+    fn settle_not_notice(&mut self) {
+        self.informational = Some(false);
+    }
+}
+
+impl NoticeVerdict for StoredAdvisory {
+    fn settle_not_notice(&mut self) {
+        self.informational = Some(false);
+    }
+}
+
+/// THE alias-group notice rule, both engines' (6.2.5 audit F-7, with the
+/// MCP's `advisory-groups.ts`): records linked by id or alias
+/// ([`alias_groups`]) are one bug, and the group is a maintenance notice ONLY
+/// when every record in it is. One vulnerability record makes every record of
+/// its group a vulnerability, so no surface reads a member as a notice:
+/// serde_yml's GHSA-hhw4-xg65-fp2x states no class and its summary says
+/// "unsound and unmaintained" (a notice by wording), while its alias
+/// RUSTSEC-2025-0068 states `unsound`. Every mirror read that returns rows
+/// applies this to the rows it returns.
+pub fn settle_group_notices<R: NoticeVerdict>(rows: &mut [R]) {
+    let mixed: Vec<usize> = {
+        let refs: Vec<&R> = rows.iter().collect();
+        alias_group_indices(&refs)
+            .into_iter()
+            .filter(|g| g.iter().any(|&i| !refs[i].is_informational()))
+            .flatten()
+            .filter(|&i| refs[i].is_informational())
+            .collect()
+    };
+    for i in mixed {
+        rows[i].settle_not_notice();
+    }
 }
 
 /// What a grader reads from one advisory record, whichever table it came from.
@@ -280,9 +320,17 @@ pub fn cluster_severity(cluster: &[&MatchedAdvisory]) -> Option<Graded> {
 
 /// Mirror rows grouped by alias (union of ids and aliases), first-seen order.
 pub fn alias_groups<'a, R: SeverityRecord>(rows: &[&'a R]) -> Vec<Vec<&'a R>> {
+    alias_group_indices(rows)
+        .into_iter()
+        .map(|g| g.into_iter().map(|i| rows[i]).collect())
+        .collect()
+}
+
+/// [`alias_groups`] as indices into `rows`.
+fn alias_group_indices<R: SeverityRecord>(rows: &[&R]) -> Vec<Vec<usize>> {
     let mut group_of: HashMap<String, usize> = HashMap::new();
-    let mut groups: Vec<Vec<&'a R>> = Vec::new();
-    for row in rows {
+    let mut groups: Vec<Vec<usize>> = Vec::new();
+    for (index, row) in rows.iter().enumerate() {
         let keys: Vec<String> = std::iter::once(row.record_id())
             .chain(row.record_aliases().iter().map(String::as_str))
             .map(|k| k.trim().to_ascii_uppercase())
@@ -308,8 +356,8 @@ pub fn alias_groups<'a, R: SeverityRecord>(rows: &[&'a R]) -> Vec<Vec<&'a R>> {
                 groups.len() - 1
             }
         };
-        groups[target].push(row);
-        for g in &groups[target] {
+        groups[target].push(index);
+        for g in groups[target].iter().map(|&i| rows[i]) {
             for k in
                 std::iter::once(g.record_id()).chain(g.record_aliases().iter().map(String::as_str))
             {

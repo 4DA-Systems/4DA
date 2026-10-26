@@ -47,6 +47,7 @@ pub use cache::*;
 pub use dep_snapshots::*;
 pub use dependencies::*;
 pub(crate) use enrichment::{EnrichmentCandidate, EnrichmentOutcome};
+pub(crate) use osv_advisories::notice_from_column;
 // Flat re-export so every existing `crate::db::parse_datetime` /
 // `super::blob_to_embedding` path keeps working after the helpers extraction.
 pub(crate) use helpers::*;
