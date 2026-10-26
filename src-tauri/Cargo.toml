@@ -115,7 +115,12 @@ image = "0.25"                                    # Image analysis (OCR + file e
 ocrs = { version = "0.13", optional = true }     # Pure Rust OCR engine
 rten = { version = "0.26", optional = true }     # Model loading for ocrs (text-detection.rten, text-recognition.rten)
 # whisper-rs = "0.14"       # DISABLED: Requires vcpkg/system deps - audio.rs stubbed
-zip = "8.6"                                        # ZIP archive extraction (OSV cache + extractors)
+# ZIP archive extraction (OSV cache + extractors). zip's defaults minus `zstd`:
+# zstd 0.13 / zstd-safe 7.3 carry RUSTSEC-2026-0391/0398/0403/0410 (+ unsound
+# notices) with no fix on the 0.13 line zip 8 requires. A zstd-compressed entry
+# in a user's archive is reported unsupported instead. Restore with zip >= 9.1
+# (zstd ^0.14.2) once calamine and docx-rs allow zip 9.
+zip = { version = "8.6", default-features = false, features = ["aes-crypto", "bzip2", "deflate64", "deflate", "lzma", "ppmd", "time", "xz"] }
 tar = { version = "0.4.45", optional = true }        # TAR archive extraction
 # Gzip decompression. Not optional: the release-changelog lane reads registry
 # package archives (.crate / .tgz) in every build (release_changelog/archive.rs).

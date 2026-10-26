@@ -92,6 +92,12 @@ ignore = [
     { id = "RUSTSEC-2026-0369", reason = "zip extract() permissions via symlink: 4DA, calamine, docx-rs never call extract(); updater extracts only our signature-verified archive" },
     # crypto-bigint 0.5.5 (no fix): full note in .cargo/audit.toml. REVISIT when jsonwebtoken moves to p256 0.14.
     { id = "RUSTSEC-2026-0387", reason = "crypto-bigint 0.5 timing: only via optional enterprise jsonwebtoken, used to verify public ES256/ES384 signatures; 0.7 copy bumped to 0.7.6" },
+    # crypto-bigint 0.7.6 was yanked 2026-10-25 with 0.7.0-0.7.8, for an API break
+    # (RustCrypto/crypto-bigint#1373, "[BREAKING]" in 0.7.9), not for a defect: no
+    # advisory names 0.7.6. Its only replacements, 0.7.9 and 0.7.10, are under the
+    # 3-day release-age hold. REVISIT 2026-10-29: bump to the newest 0.7.x that
+    # dependency_check passes, and drop this line.
+    { crate = "crypto-bigint@0.7.6", reason = "yanked for a semver break (#1373), not a defect; no advisory; replacements still inside the 3-day release-age hold" },
 
     # RUSTSEC-2026-0194 / RUSTSEC-2026-0195 (quick-xml <0.41 DoS) were ignored
     # here until 2026-08-14. RESOLVED, not suppressed: calamine 0.36, docx-rs
