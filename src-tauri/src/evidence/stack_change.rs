@@ -310,7 +310,10 @@ pub(crate) fn security_item(fact: &SecurityFact, now_ms: i64) -> Ranked {
     let shown: Vec<&str> = ids.iter().take(4).map(String::as_str).collect();
     let more = ids.len().saturating_sub(shown.len());
     let mut explanation = vec![sentence(&fact.title)];
-    if !notice_only {
+    // An install-drift fact is confirmed by the drift read, not the lockfile
+    // matcher, so it can arrive with no advisory id: the sentence would name
+    // none ("the affected range of advisory .", live 2026-10-27).
+    if !notice_only && !shown.is_empty() {
         explanation.push(format!(
             "Version-confirmed, because the installed copy is inside the affected range of {} {}{}.",
             if fact.advisory_count == 1 { "advisory" } else { "advisories" },
