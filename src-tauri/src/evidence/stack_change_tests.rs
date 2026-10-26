@@ -969,6 +969,30 @@ fn a_fact_with_no_published_fix_says_so() {
 }
 
 #[test]
+fn a_fact_with_no_advisory_id_never_names_an_empty_one() {
+    let mut f = fact(
+        "@modelcontextprotocol/server",
+        AlertUrgency::High,
+        vec![site(
+            "4da/mcp-memory-server",
+            "2.0.0",
+            FixPath::Reinstall {
+                to: "2.3.1".to_string(),
+            },
+        )],
+    );
+    f.advisory_ids = Vec::new();
+    let item = security_item(&f, NOW).item;
+    assert!(
+        !item.explanation.contains("affected range"),
+        "{}",
+        item.explanation
+    );
+    assert!(!item.explanation.contains(" ."), "{}", item.explanation);
+    assert!(validate_item(&item).is_ok());
+}
+
+#[test]
 fn a_long_title_is_cut_on_a_char_boundary_under_the_limit() {
     let long = format!(
         "{} \u{2192} 2.0.0: security fix (critical)",
