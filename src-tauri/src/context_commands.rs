@@ -531,6 +531,11 @@ pub struct ContextDirEntry {
     /// unplugged drive, or a path from another OS left in settings.json —
     /// live 2026-10-07: `/home/antony/projects/4da` on a Windows instance).
     pub exists: bool,
+    /// True when the user excluded this root in Settings > Your Stack: it is
+    /// still listed here, but no lockfile under it feeds the dependency or
+    /// advisory surfaces (the lockfile walk reports it "excluded by the
+    /// user"). Audit L7 (2026-10-12): three such roots read as active.
+    pub excluded: bool,
 }
 
 #[tauri::command]
@@ -542,14 +547,25 @@ pub async fn get_context_dirs() -> Result<Vec<ContextDirEntry>> {
     // skips (and warns about) roots that do not exist on this machine.
     // (`crate::state::` path: lib.rs's explicit re-export list is owned by a
     // concurrent worktree right now; the module path is equivalent.)
-    Ok(context_dir_entries(crate::state::configured_context_dirs()))
+    Ok(context_dir_entries(
+        crate::state::configured_context_dirs(),
+        &crate::project_inclusion::user_excluded_paths(),
+    ))
 }
 
-fn context_dir_entries(dirs: Vec<std::path::PathBuf>) -> Vec<ContextDirEntry> {
+fn context_dir_entries(
+    dirs: Vec<std::path::PathBuf>,
+    user_excluded: &[String],
+) -> Vec<ContextDirEntry> {
     dirs.into_iter()
-        .map(|p| ContextDirEntry {
-            exists: p.is_dir(),
-            path: p.to_string_lossy().to_string(),
+        .map(|p| {
+            let path = p.to_string_lossy().to_string();
+            ContextDirEntry {
+                exists: p.is_dir(),
+                // The same predicate the lockfile walk skips a directory by.
+                excluded: crate::project_inclusion::is_user_excluded(&path, user_excluded),
+                path,
+            }
         })
         .collect()
 }
@@ -568,15 +584,46 @@ mod tests {
     fn context_dir_entries_flag_dirs_not_on_this_machine() {
         let here = std::env::temp_dir();
         let gone = here.join("4da-surely-not-here-7f3a9c").join("projects");
-        let entries = context_dir_entries(vec![here.clone(), gone.clone()]);
+        let entries = context_dir_entries(vec![here.clone(), gone.clone()], &[]);
         assert_eq!(entries.len(), 2);
         assert!(entries[0].exists);
         assert_eq!(entries[1].path, gone.to_string_lossy());
         assert!(!entries[1].exists);
-        let foreign = context_dir_entries(vec![PathBuf::from("/home/antony/projects/4da")]);
+        let foreign = context_dir_entries(vec![PathBuf::from("/home/antony/projects/4da")], &[]);
         if !Path::new("/home/antony/projects/4da").is_dir() {
             assert!(!foreign[0].exists);
         }
+    }
+
+    /// Audit L7: a root the user excluded in Your Stack is flagged, so the
+    /// Settings list can say so; a root merely CONTAINING an excluded
+    /// project is not (only part of it is excluded).
+    #[test]
+    fn context_dir_entries_flag_roots_excluded_in_your_stack() {
+        let root = std::env::temp_dir().join("4da-l7-roots");
+        let excluded_root = root.join("kairos-mvp");
+        let parent_of_excluded = root.join("projects");
+        let user_excluded = vec![
+            excluded_root.to_string_lossy().to_string(),
+            parent_of_excluded
+                .join("old-app")
+                .to_string_lossy()
+                .to_string(),
+        ];
+        let entries = context_dir_entries(
+            vec![
+                excluded_root.clone(),
+                parent_of_excluded.clone(),
+                root.join("live"),
+            ],
+            &user_excluded,
+        );
+        assert!(entries[0].excluded, "the excluded root itself");
+        assert!(
+            !entries[1].excluded,
+            "a root that only holds an excluded project"
+        );
+        assert!(!entries[2].excluded);
     }
 
     #[test]

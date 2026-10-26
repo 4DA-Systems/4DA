@@ -24,7 +24,8 @@ use crate::error::Result;
 pub struct AdapterStatus {
     pub source_type: String,
     pub feed_origin: String,
-    /// One of: "healthy", "failing", "circuit_open", "stale", "never_fetched"
+    /// One of: "disabled", "healthy", "failing", "circuit_open", "stale",
+    /// "never_fetched". "disabled" = the user turned the source off.
     pub status: String,
     pub consecutive_failures: i64,
     pub last_success_at: Option<String>,
@@ -39,7 +40,10 @@ pub struct SourceHealthSummary {
     pub adapters: Vec<AdapterStatus>,
     pub total_active: usize,
     pub total_failing: usize,
+    /// Adapters of sources the user turned off.
     pub total_disabled: usize,
+    /// Adapters of enabled sources with no success in 7 days, or none ever.
+    pub total_stale: usize,
 }
 
 // ============================================================================
@@ -108,8 +112,25 @@ fn is_stale(iso_timestamp: &str) -> bool {
 // Query
 // ============================================================================
 
+/// Source types the user turned off (`sources.enabled = 0`); empty when the
+/// table cannot be read.
+fn disabled_source_types(conn: &Connection) -> std::collections::HashSet<String> {
+    conn.prepare("SELECT source_type FROM sources WHERE enabled = 0")
+        .and_then(|mut stmt| {
+            stmt.query_map([], |row| row.get::<_, String>(0))?
+                .collect::<rusqlite::Result<std::collections::HashSet<String>>>()
+        })
+        .unwrap_or_default()
+}
+
 /// Query all `feed_health` rows and produce a `SourceHealthSummary`.
+///
+/// A source the user turned off is "disabled", whatever its last fetch
+/// says. Audit L10 (2026-10-12): the turned-off github/reddit/rss adapters
+/// reported "healthy" for a week after their last fetch, then "stale" —
+/// neither is what they are.
 pub fn get_source_health_summary(conn: &Connection) -> Result<SourceHealthSummary> {
+    let disabled = disabled_source_types(conn);
     let mut stmt = conn.prepare(
         "SELECT feed_origin, source_type, consecutive_failures, \
                 last_success_at, last_failure_at, last_error, circuit_open, \
@@ -129,12 +150,16 @@ pub fn get_source_health_summary(conn: &Connection) -> Result<SourceHealthSummar
             let circuit_open = circuit_open_int != 0;
             let created_at: Option<String> = row.get(7)?;
 
-            let status = classify_adapter_status(
-                circuit_open,
-                consecutive_failures,
-                last_success_at.as_deref(),
-                created_at.as_deref(),
-            )
+            let status = if disabled.contains(&source_type) {
+                "disabled"
+            } else {
+                classify_adapter_status(
+                    circuit_open,
+                    consecutive_failures,
+                    last_success_at.as_deref(),
+                    created_at.as_deref(),
+                )
+            }
             .to_string();
 
             Ok(AdapterStatus {
@@ -155,7 +180,8 @@ pub fn get_source_health_summary(conn: &Connection) -> Result<SourceHealthSummar
         .iter()
         .filter(|a| a.status == "failing" || a.status == "circuit_open")
         .count();
-    let total_disabled = adapters
+    let total_disabled = adapters.iter().filter(|a| a.status == "disabled").count();
+    let total_stale = adapters
         .iter()
         .filter(|a| a.status == "stale" || a.status == "never_fetched")
         .count();
@@ -165,6 +191,7 @@ pub fn get_source_health_summary(conn: &Connection) -> Result<SourceHealthSummar
         total_active,
         total_failing,
         total_disabled,
+        total_stale,
     })
 }
 
@@ -209,6 +236,10 @@ mod tests {
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 updated_at TEXT NOT NULL DEFAULT (datetime('now')),
                 PRIMARY KEY (feed_origin, source_type)
+            );
+            CREATE TABLE sources (
+                source_type TEXT PRIMARY KEY,
+                enabled INTEGER NOT NULL DEFAULT 1
             );",
         )
         .unwrap();
@@ -269,6 +300,66 @@ mod tests {
         assert_eq!(summary.total_active, 0);
         assert_eq!(summary.total_failing, 0);
         assert_eq!(summary.total_disabled, 0);
+        assert_eq!(summary.total_stale, 0);
+    }
+
+    /// Audit L10: a turned-off source's adapters are "disabled" — not
+    /// "healthy" from a recent last fetch, not "stale" — and are not active.
+    #[test]
+    fn a_turned_off_source_reports_disabled_whatever_its_last_fetch() {
+        let conn = setup_test_db();
+        let now = chrono::Utc::now()
+            .naive_utc()
+            .format("%Y-%m-%d %H:%M:%S")
+            .to_string();
+        conn.execute_batch(
+            "INSERT INTO sources (source_type, enabled) VALUES ('github', 0), ('rss', 0), ('npm_registry', 1);",
+        )
+        .unwrap();
+        for (origin, source, last) in [
+            ("Rust", "github", now.as_str()),
+            (
+                "https://blog.rust-lang.org/feed.xml",
+                "rss",
+                "2020-01-01 00:00:00",
+            ),
+            ("npm", "npm_registry", now.as_str()),
+        ] {
+            conn.execute(
+                "INSERT INTO feed_health (feed_origin, source_type, consecutive_failures, last_success_at, circuit_open)                  VALUES (?1, ?2, 0, ?3, 0)",
+                params![origin, source, last],
+            )
+            .unwrap();
+        }
+        let summary = get_source_health_summary(&conn).unwrap();
+        let status = |s: &str| {
+            summary
+                .adapters
+                .iter()
+                .find(|a| a.source_type == s)
+                .unwrap()
+                .status
+                .clone()
+        };
+        assert_eq!(
+            status("github"),
+            "disabled",
+            "a recent fetch does not make it healthy"
+        );
+        assert_eq!(
+            status("rss"),
+            "disabled",
+            "an old fetch does not make it stale"
+        );
+        assert_eq!(status("npm_registry"), "healthy");
+        assert_eq!(
+            (
+                summary.total_active,
+                summary.total_disabled,
+                summary.total_stale
+            ),
+            (1, 2, 0)
+        );
     }
 
     #[test]
@@ -333,7 +424,8 @@ mod tests {
         assert_eq!(summary.adapters.len(), 5);
         assert_eq!(summary.total_active, 1, "one healthy");
         assert_eq!(summary.total_failing, 2, "one failing + one circuit_open");
-        assert_eq!(summary.total_disabled, 2, "one stale + one never_fetched");
+        assert_eq!(summary.total_disabled, 0, "no source is turned off");
+        assert_eq!(summary.total_stale, 2, "one stale + one never_fetched");
 
         // Verify individual statuses
         let hn = summary

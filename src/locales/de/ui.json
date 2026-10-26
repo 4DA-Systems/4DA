@@ -394,8 +394,10 @@
   "preemption.urgency.high": "Hoch",
   "preemption.urgency.medium": "Mittel",
   "preemption.urgency.watch": "Beobachten",
-  "preemption.alert_one": "{{count}} Warnung",
-  "preemption.alert_other": "{{count}} Warnungen",
+  "preemption.header.onList_one": "{{count}} auf dieser Liste",
+  "preemption.header.onList_other": "{{count}} auf dieser Liste",
+  "preemption.header.setAside_one": "{{count}} unten zurückgestellt",
+  "preemption.header.setAside_other": "{{count}} unten zurückgestellt",
   "preemption.dismissed": "Element verworfen",
   "preemption.action.undo": "Rückgängig",
   "preemption.freshness.today": "heute",
@@ -2116,7 +2118,9 @@
   "briefing.empty_state": "Ihr Stack ist ruhig. Nichts Neues.",
   "blindspots.ai.assess": "Mit KI bewerten",
   "blindspots.ai.assessing": "Bewertung läuft…",
-  "blindspots.ai.assessedWith": "Bewertet von {{model}}",
+  "blindspots.ai.assessedAgo": "Bewertet von {{model}} · {{age}}",
+  "blindspots.ai.earlier": "Frühere Bewertung von {{model}} wird angezeigt · {{age}}",
+  "blindspots.ai.earlierChanged": "Frühere Bewertung von {{model}} · {{age}} — Ihre Abhängigkeiten haben sich seitdem geändert",
   "blindspots.ai.noModel": "API-Schlüssel in den Einstellungen hinzufügen, um die KI-Bewertung zu aktivieren",
   "blindspots.ai.failed": "Bewertung fehlgeschlagen – erneut versuchen",
   "blindspots.ai.budgetReached": "Tägliches KI-Budget erreicht – wird um {{time}} zurückgesetzt ({{in}})",
@@ -2742,5 +2746,7 @@
   "preemption.notCovered.more": "und {{count}} weitere",
   "preemption.notCovered.unreadableTitle_one": "1 Lockfile konnte nicht gelesen werden",
   "preemption.notCovered.unreadableTitle_other": "{{count}} Lockfiles konnten nicht gelesen werden",
-  "preemption.notCovered.unreadableBody": "4DA konnte diese Dateien beim letzten Scan nicht lesen und zählt daher nicht als geprüft, was sie festlegen. Korrigiere die Datei oder scanne erneut."
+  "preemption.notCovered.unreadableBody": "4DA konnte diese Dateien beim letzten Scan nicht lesen und zählt daher nicht als geprüft, was sie festlegen. Korrigiere die Datei oder scanne erneut.",
+  "settings.context.excludedInStack": "in Your Stack ausgeschlossen",
+  "settings.context.excludedInStackHint": "Your Stack schließt diesen Ordner aus: Seine Projekte werden nicht auf Abhängigkeiten oder Sicherheitshinweise geprüft. Ändern unter Intelligenz > Your Stack."
 }

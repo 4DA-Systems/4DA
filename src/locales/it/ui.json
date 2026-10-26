@@ -387,8 +387,10 @@
   "preemption.urgency.high": "Alto",
   "preemption.urgency.medium": "Medio",
   "preemption.urgency.watch": "Osservare",
-  "preemption.alert_one": "{{count}} avviso",
-  "preemption.alert_other": "{{count}} avvisi",
+  "preemption.header.onList_one": "{{count}} in questa lista",
+  "preemption.header.onList_other": "{{count}} in questa lista",
+  "preemption.header.setAside_one": "{{count}} messi da parte qui sotto",
+  "preemption.header.setAside_other": "{{count}} messi da parte qui sotto",
   "preemption.dismissed": "Elemento eliminato",
   "preemption.action.undo": "Annulla",
   "preemption.freshness.today": "oggi",
@@ -2116,7 +2118,9 @@
   "briefing.empty_state": "Il tuo stack è tranquillo. Nessuna novità.",
   "blindspots.ai.assess": "Valuta con l'IA",
   "blindspots.ai.assessing": "Valutazione…",
-  "blindspots.ai.assessedWith": "Valutato da {{model}}",
+  "blindspots.ai.assessedAgo": "Valutato da {{model}} · {{age}}",
+  "blindspots.ai.earlier": "Mostra la valutazione precedente di {{model}} · {{age}}",
+  "blindspots.ai.earlierChanged": "Valutazione precedente di {{model}} · {{age}} — le tue dipendenze sono cambiate da allora",
   "blindspots.ai.noModel": "Aggiungi una chiave API nelle Impostazioni per abilitare la valutazione con IA",
   "blindspots.ai.failed": "Valutazione non riuscita — riprova",
   "blindspots.ai.budgetReached": "Budget IA giornaliero raggiunto — si azzera alle {{time}} ({{in}})",
@@ -2755,5 +2759,7 @@
   "preemption.notCovered.more": "e altri {{count}}",
   "preemption.notCovered.unreadableTitle_one": "Impossibile leggere 1 lockfile",
   "preemption.notCovered.unreadableTitle_other": "Impossibile leggere {{count}} lockfile",
-  "preemption.notCovered.unreadableBody": "4DA non è riuscito a leggere questi file nell’ultima scansione, quindi non considera verificato ciò che fissano. Correggi il file o esegui di nuovo la scansione."
+  "preemption.notCovered.unreadableBody": "4DA non è riuscito a leggere questi file nell’ultima scansione, quindi non considera verificato ciò che fissano. Correggi il file o esegui di nuovo la scansione.",
+  "settings.context.excludedInStack": "escluso in Your Stack",
+  "settings.context.excludedInStackHint": "Your Stack esclude questa cartella: i suoi progetti non vengono controllati per dipendenze o avvisi. Modificalo in Intelligenza > Your Stack."
 }

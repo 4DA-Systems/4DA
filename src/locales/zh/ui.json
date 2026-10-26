@@ -387,8 +387,10 @@
   "preemption.urgency.high": "高",
   "preemption.urgency.medium": "中",
   "preemption.urgency.watch": "关注",
-  "preemption.alert_one": "{{count}} 个警报",
-  "preemption.alert_other": "{{count}} 个警报",
+  "preemption.header.onList_one": "此列表中 {{count}} 项",
+  "preemption.header.onList_other": "此列表中 {{count}} 项",
+  "preemption.header.setAside_one": "{{count}} 项另列于下方",
+  "preemption.header.setAside_other": "{{count}} 项另列于下方",
   "preemption.dismissed": "已忽略项目",
   "preemption.action.undo": "撤销",
   "preemption.freshness.today": "今天",
@@ -2098,7 +2100,9 @@
   "briefing.empty_state": "技术栈平静。没有新内容。",
   "blindspots.ai.assess": "用 AI 评估",
   "blindspots.ai.assessing": "评估中…",
-  "blindspots.ai.assessedWith": "由 {{model}} 评估",
+  "blindspots.ai.assessedAgo": "由 {{model}} 评估 · {{age}}",
+  "blindspots.ai.earlier": "显示 {{model}} 的较早评估 · {{age}}",
+  "blindspots.ai.earlierChanged": "{{model}} 的较早评估 · {{age}} — 此后您的依赖项已发生变化",
   "blindspots.ai.noModel": "在设置中添加 API 密钥以启用 AI 评估",
   "blindspots.ai.failed": "评估失败 — 请重试",
   "blindspots.ai.budgetReached": "已达到每日 AI 预算 — 将于 {{time}} 重置（{{in}}）",
@@ -2639,5 +2643,7 @@
   "preemption.notCovered.more": "以及另外 {{count}} 个",
   "preemption.notCovered.unreadableTitle_one": "1 个锁文件无法读取",
   "preemption.notCovered.unreadableTitle_other": "{{count}} 个锁文件无法读取",
-  "preemption.notCovered.unreadableBody": "4DA 在上次扫描时无法读取这些文件，因此不会把其中锁定的内容视为已检查。请修复文件或重新扫描。"
+  "preemption.notCovered.unreadableBody": "4DA 在上次扫描时无法读取这些文件，因此不会把其中锁定的内容视为已检查。请修复文件或重新扫描。",
+  "settings.context.excludedInStack": "已在 Your Stack 中排除",
+  "settings.context.excludedInStackHint": "Your Stack 已排除此文件夹：其中的项目不会检查依赖项或安全公告。可在 智能 > Your Stack 中更改。"
 }

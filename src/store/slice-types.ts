@@ -362,6 +362,8 @@ export interface ContextDiscoverySlice {
   scanDirectories: string[];
   /** Configured directories that do not exist on this machine. */
   missingScanDirectories: string[];
+  /** Configured directories the user excluded in Settings > Your Stack. */
+  excludedScanDirectories: string[];
   newScanDir: string;
   isScanning: boolean;
   discoveredContext: DiscoveredContext;

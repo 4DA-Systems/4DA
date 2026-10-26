@@ -261,6 +261,26 @@ fn site_qualifiers(s: &SecuritySite) -> String {
     }
 }
 
+/// The title carries the advisory's own grade; Preemption ranks the same
+/// fact by the scope rule (AD-046). When the two differ, say so and why
+/// (audit L5: "vitest ... security fix (critical)" here, HIGH there). The
+/// reason is the scope that reproduces Preemption's grade from the sites;
+/// with none that does, nothing is claimed.
+fn preemption_grade_note(fact: &SecurityFact, adjusted: Urgency) -> Option<String> {
+    let base = match fact.worst_tier.as_deref()? {
+        "critical" => Urgency::Critical,
+        "high" => Urgency::High,
+        "medium" | "moderate" => Urgency::Medium,
+        _ => return None,
+    };
+    let all_dev = Some(!fact.sites.is_empty() && fact.sites.iter().all(|s| s.dev_only));
+    let transitive = [Some(false), Some(true)]
+        .into_iter()
+        .find(|t| crate::osv::identity::scope_adjusted_urgency(base, *t, all_dev) == adjusted)?;
+    crate::osv::identity::scope_grade_note(base, transitive, all_dev)
+        .map(|g| format!("Preemption grades it {g}."))
+}
+
 /// One advisory fact from the Brief as a stream item.
 pub(crate) fn security_item(fact: &SecurityFact, now_ms: i64) -> Ranked {
     let pkg = &fact.package;
@@ -312,6 +332,9 @@ pub(crate) fn security_item(fact: &SecurityFact, now_ms: i64) -> Ranked {
             site_qualifiers(s),
             fix_clause(pkg, &s.fix_path)
         )));
+    }
+    if let Some(note) = preemption_grade_note(fact, urgency) {
+        explanation.push(note);
     }
     if let (Some(t), Some(from)) = (&fact.worst_tier, &fact.worst_tier_from) {
         explanation.push(format!(

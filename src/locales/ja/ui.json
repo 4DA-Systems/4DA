@@ -387,8 +387,10 @@
   "preemption.urgency.high": "高",
   "preemption.urgency.medium": "中",
   "preemption.urgency.watch": "監視",
-  "preemption.alert_one": "{{count}} 件のアラート",
-  "preemption.alert_other": "{{count}} 件のアラート",
+  "preemption.header.onList_one": "このリストに {{count}} 件",
+  "preemption.header.onList_other": "このリストに {{count}} 件",
+  "preemption.header.setAside_one": "{{count}} 件は下に別置き",
+  "preemption.header.setAside_other": "{{count}} 件は下に別置き",
   "preemption.dismissed": "アイテムを非表示にしました",
   "preemption.action.undo": "元に戻す",
   "preemption.freshness.today": "今日",
@@ -2098,7 +2100,9 @@
   "briefing.empty_state": "スタックは静かです。新着はありません。",
   "blindspots.ai.assess": "AIで評価",
   "blindspots.ai.assessing": "評価中…",
-  "blindspots.ai.assessedWith": "{{model}} が評価",
+  "blindspots.ai.assessedAgo": "{{model}} が評価 · {{age}}",
+  "blindspots.ai.earlier": "{{model}} による以前の評価を表示中 · {{age}}",
+  "blindspots.ai.earlierChanged": "{{model}} による以前の評価 · {{age}} — その後、依存関係が変更されています",
   "blindspots.ai.noModel": "AI評価を有効にするには設定でAPIキーを追加してください",
   "blindspots.ai.failed": "評価に失敗しました — もう一度お試しください",
   "blindspots.ai.budgetReached": "1日のAI予算に達しました — {{time}}にリセットされます（{{in}}）",
@@ -2661,5 +2665,7 @@
   "preemption.notCovered.more": "ほか {{count}} 件",
   "preemption.notCovered.unreadableTitle_one": "1 件のロックファイルを読み取れませんでした",
   "preemption.notCovered.unreadableTitle_other": "{{count}} 件のロックファイルを読み取れませんでした",
-  "preemption.notCovered.unreadableBody": "4DA は前回のスキャンでこれらのファイルを読み取れなかったため、固定されている内容を確認済みとは見なしません。ファイルを修正するか、もう一度スキャンしてください。"
+  "preemption.notCovered.unreadableBody": "4DA は前回のスキャンでこれらのファイルを読み取れなかったため、固定されている内容を確認済みとは見なしません。ファイルを修正するか、もう一度スキャンしてください。",
+  "settings.context.excludedInStack": "Your Stack で除外",
+  "settings.context.excludedInStackHint": "Your Stack がこのフォルダーを除外しています。そのプロジェクトは依存関係やアドバイザリの確認対象外です。インテリジェンス > Your Stack で変更できます。"
 }

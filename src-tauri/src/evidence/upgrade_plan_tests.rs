@@ -517,6 +517,11 @@ fn dev_only_package_is_downranked_but_still_present() {
         plan[0].explanation.contains("dev-only"),
         "the discount is labelled in the explanation"
     );
+    // Audit L5: the advisory's own grade is named beside the adjusted one,
+    // in the first sentences (the list transport keeps 360 bytes).
+    let graded = "Graded medium, not the advisory's own high: every affected copy is dev-only.";
+    let at = plan[0].explanation.find(graded);
+    assert!(at.is_some_and(|i| i < 200), "{}", plan[0].explanation);
 }
 
 /// Live 2026-09-08: the plan graded sandbox (transitive in paddle-webhook,
@@ -803,6 +808,19 @@ fn a_dev_only_transitive_critical_ranks_below_a_fixable_direct_medium() {
         sandbox.explanation.contains("dev-only"),
         "the discount is labelled: {}",
         sandbox.explanation
+    );
+    assert!(
+        sandbox.explanation.contains(
+            "Graded medium, not the advisory's own critical: every affected copy is a transitive dev dependency."
+        ),
+        "{}",
+        sandbox.explanation
+    );
+    assert!(
+        !plan[position("jsonwebtoken")]
+            .explanation
+            .contains("Graded"),
+        "an unmoved grade carries no note"
     );
     assert_eq!(plan[position("jsonwebtoken")].urgency, Urgency::Medium);
     assert!(

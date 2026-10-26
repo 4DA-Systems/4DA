@@ -519,6 +519,26 @@ pub(crate) fn osv_alert_urgency(
     )
 }
 
+/// Why [`osv_alert_urgency`] differs from the advisory's own grade, as a
+/// sentence for the explanation (audit L5: Signal said "critical", this tab
+/// said HIGH, and neither said why). Empty when the scope rule moved nothing.
+fn osv_grade_sentence(
+    group: &[&crate::osv::types::MatchedAdvisory],
+    projects: &[String],
+) -> String {
+    if crate::osv::severity::contains_malware(group) {
+        return String::new();
+    }
+    let scope = crate::osv::identity::ExposureScope::of(group, projects);
+    crate::osv::identity::scope_grade_note(
+        alert_urgency_to_canonical(&most_urgent_tier(group)),
+        scope.all_transitive(),
+        scope.all_dev(),
+    )
+    .map(|g| format!(" Graded {g}."))
+    .unwrap_or_default()
+}
+
 /// Most urgent vulnerability for this package: each cluster's base urgency by
 /// the ONE rule the Upgrade Plan grades by too (`osv::severity::
 /// cluster_urgency`): the shared tier, its GHSA alias's grade for a record
@@ -849,6 +869,12 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
             )
             .map(|note| format!(" {note}"))
             .unwrap_or_default();
+            // A platform-inactive row is capped to Watch and says why itself.
+            let grade_note = if platform_inactive {
+                String::new()
+            } else {
+                osv_grade_sentence(&group, &all_projects)
+            };
             let explanation = match (notice_only, &notice_line) {
                 (true, Some(line)) => format!(
                     "{line}. Installed in {projects}. Scope: {scope}.{reach}",
@@ -857,7 +883,8 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
                     reach = reachability,
                 ),
                 _ => format!(
-                    "{ids} ({count} {vuln_word}) affect {subject} in {projects}.{sev} Scope: {scope}.{fix}{reach}{also}",
+                    "{ids} ({count} {vuln_word}) affect {subject} in {projects}.{grade}{sev} Scope: {scope}.{fix}{reach}{also}",
+                    grade = grade_note,
                     sev = severity_note,
                     ids = ids_display,
                     count = advisory_count,
@@ -3428,6 +3455,13 @@ mod tests {
             osv_alert_urgency(&[&sandbox], &projects),
             AlertUrgency::Medium
         ));
+        // Audit L5: the explanation names the advisory's own grade and why
+        // this tab ranks it lower.
+        assert_eq!(
+            osv_grade_sentence(&[&sandbox], &projects),
+            " Graded medium, not the advisory's own critical: every affected copy is a \
+             transitive dev dependency."
+        );
     }
 
     /// Insert one direct runtime dep at a given relevance.

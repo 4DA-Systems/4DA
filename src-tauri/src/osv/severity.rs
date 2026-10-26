@@ -256,6 +256,20 @@ pub fn labelled(tier: &str, from: Option<&str>) -> String {
     }
 }
 
+/// The severity a citation's note leads with: the CVSS score, or a grade the
+/// record inherited from its GHSA alias, named as such. Empty otherwise.
+pub(crate) fn citation_lead(a: &MatchedAdvisory) -> String {
+    match (
+        a.cvss_score,
+        a.severity_from.as_deref(),
+        a.severity_label.as_deref(),
+    ) {
+        (Some(c), _, _) => format!("CVSS {c:.1}; "),
+        (None, Some(from), Some(tier)) => format!("{}; ", labelled(tier, Some(from))),
+        _ => String::new(),
+    }
+}
+
 /// THE grade of one alias group, for every surface: the MOST SEVERE own
 /// grade among its records ([`row_grade`]). GHSA-pwjp-ccjc-ghwg (label LOW)
 /// and PYSEC-2026-52 (CVSS 9.8) are one bug, CVE-2026-4277: critical. Only
