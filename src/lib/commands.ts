@@ -1368,6 +1368,10 @@ interface NlqQueryItem {
   match_reason: string;
   /** Title contains the query as a whole word/phrase; pinned first, relevance ~1.0. */
   exact_match: boolean;
+  /** Installed package this advisory affects, when the query named it; ranked next after exact matches. */
+  affects_package?: string | null;
+  /** Query named an installed package and this advisory only affects ecosystems with no installed deps; demoted. */
+  foreign_ecosystem?: boolean;
 }
 
 /** Free-tier ghost preview (mirrors Rust `GhostPreview`). */
