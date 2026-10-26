@@ -552,6 +552,20 @@ function engineInventory(id) {
   return readJson(join(ENGINE_DUMP, `${id}.json`), { inventory: [] }).inventory;
 }
 
+/** Every live (non-SYNT-) record id a rule vector names in `record_ids`. */
+function vectorRecordIds() {
+  const dir = join(CORPUS, "vectors");
+  if (!existsSync(dir)) return [];
+  const out = [];
+  for (const f of readdirSync(dir).filter((n) => n.endsWith(".jsonl"))) {
+    for (const line of readFileSync(join(dir, f), "utf8").split(/\r?\n/)) {
+      if (!line.trim()) continue;
+      for (const id of JSON.parse(line).record_ids ?? []) if (!id.startsWith("SYNT-")) out.push(id);
+    }
+  }
+  return out;
+}
+
 async function stepPin(cases, adjud) {
   const names = new Map();
   for (const c of cases) {
@@ -563,7 +577,9 @@ async function stepPin(cases, adjud) {
   }
   const list = [...names.values()].sort((a, b) => `${a.eco}|${a.name}`.localeCompare(`${b.eco}|${b.name}`));
   const idLists = await querybatch(list.map((p) => ({ package: { ecosystem: p.eco, name: p.name } })), "names");
-  const ids = [...new Set(idLists.flat())].sort();
+  // A rule vector may pin a live record no case inventories (fix_target
+  // ft-076, web3): a re-pin fetches it too, so the vector keeps its record.
+  const ids = [...new Set([...idLists.flat(), ...vectorRecordIds()])].sort();
   console.log(`pin: ${list.length} package names -> ${ids.length} advisories`);
   const osvDir = join(CORPUS, "osv");
   // SYNTHETIC records (SYNT-*.json) pin rule vectors no live case shows

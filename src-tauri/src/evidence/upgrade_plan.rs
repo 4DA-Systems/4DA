@@ -471,8 +471,9 @@ impl PackageGroup<'_> {
             format!("No release is named: {why} — pin, patch, or replace")
         } else if !self.has_fix && !self.withheld.is_empty() {
             format!(
-                "The release that fixes it ({}) was withdrawn by its registry (yanked or \
-                 deprecated), and no later release is known to clear it — pin, patch, or replace",
+                "The release that fixes it ({}) is not installable from its registry (yanked, \
+                 deprecated or not published), and no later release is known to clear it — pin, \
+                 patch, or replace",
                 self.withheld.join(", ")
             )
         } else if !self.has_fix {

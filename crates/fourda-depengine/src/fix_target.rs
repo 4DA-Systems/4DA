@@ -174,6 +174,10 @@ pub struct LineFix {
 struct Known {
     releases: Vec<Release>,
     excluded: Vec<OrderedVersion>,
+    /// Every release the registry lists (pre-releases included), and the
+    /// highest of them. Empty: no registry facts.
+    published: Vec<OrderedVersion>,
+    ceiling: Option<OrderedVersion>,
 }
 
 impl Known {
@@ -183,19 +187,52 @@ impl Known {
         registry: &RegistryReleases,
     ) -> Self {
         let mut releases = advisory_releases(ecosystem, advisories);
+        let published: Vec<OrderedVersion> = registry
+            .published
+            .iter()
+            .filter_map(|v| OrderedVersion::parse_in(v, ecosystem))
+            .collect();
         releases.extend(registry.published.iter().filter_map(|v| {
             OrderedVersion::parse_in(v, ecosystem)
                 .filter(|p| !p.is_prerelease())
                 .map(|p| (p, v.trim().to_string()))
         }));
-        Known {
-            releases,
+        let ceiling = published
+            .iter()
+            .fold(None, |top: Option<&OrderedVersion>, v| match top {
+                Some(t) if v.compare(t) != Some(Ordering::Greater) => Some(t),
+                _ => Some(v),
+            })
+            .cloned();
+        let mut known = Known {
+            releases: Vec::new(),
             excluded: registry.excluded_in(ecosystem),
-        }
+            published,
+            ceiling,
+        };
+        // A bound the registry does not serve is no release at all: only a
+        // `fixed` step that names one reports it (as withheld).
+        releases.retain(|(v, _)| !known.unlisted(v));
+        known.releases = releases;
+        known
     }
 
+    /// The advisory data names `version`, the registry lists a later release
+    /// and not this one.
+    fn unlisted(&self, version: &OrderedVersion) -> bool {
+        self.ceiling.as_ref().is_some_and(|top| {
+            version.compare(top) != Some(Ordering::Greater) && !is_listed(&self.published, version)
+        })
+    }
+
+    /// Never a step: a release the registry withdrew, or (audit A-1) a
+    /// version the advisory data names that the registry does not list
+    /// although it lists a later one. node-ipc's GHSA-97m3-w2cp-4xx6 is
+    /// "fixed" at 10.1.3, which npm does not serve (10.1.0, then 11.0.0). A
+    /// version above every listed release may be newer than the facts, so
+    /// the advisory's word stands for it.
     fn allowed(&self, version: &OrderedVersion) -> bool {
-        !is_listed(&self.excluded, version)
+        !self.unlisted(version) && !is_listed(&self.excluded, version)
     }
 
     /// The lowest release above `bound` that `keep` accepts and the registry
@@ -585,28 +622,29 @@ fn malicious_landing(
 }
 
 /// A fix bound (a line fix, or an advisory's listed fix) as a release the
-/// registry still offers: `fix` itself, or, when the registry withdrew it,
-/// the lowest allowed release above it that this advisory (`ranges_json`)
-/// does not affect. `fix: None` with `withheld` set: the fix was published
-/// and withdrawn, and no installable release past it is known.
+/// registry still offers: `fix` itself, or, when the registry withdrew it or
+/// does not list it below a release it does list, the lowest allowed release
+/// above it that this advisory (`ranges_json`) does not affect. `fix: None`
+/// with `withheld` set: the fix is not installable, and no installable
+/// release past it is known.
 pub fn installable_fix(
     ecosystem: &str,
     fix: &str,
     ranges_json: &Option<String>,
     registry: &RegistryReleases,
 ) -> LineFix {
+    let parsed: [Option<Vec<Range>>; 1] = [ranges_json
+        .as_deref()
+        .and_then(|j| serde_json::from_str(j).ok())];
+    let known = Known::new(ecosystem, &parsed, registry);
     let bound = OrderedVersion::parse_in(fix, ecosystem);
-    let Some(bound) = bound.filter(|b| is_listed(&registry.excluded_in(ecosystem), b)) else {
+    let Some(bound) = bound.filter(|b| !known.allowed(b)) else {
         return LineFix {
             fix: Some(fix.to_string()),
             withheld: Vec::new(),
         };
     };
-    let parsed: [Option<Vec<Range>>; 1] = [ranges_json
-        .as_deref()
-        .and_then(|j| serde_json::from_str(j).ok())];
     let ranges: &[Range] = parsed[0].as_deref().unwrap_or_default();
-    let known = Known::new(ecosystem, &parsed, registry);
     let mut withheld = vec![fix.trim().to_string()];
     let next = known.next_above(&bound, |v| !affects(ecosystem, ranges, v), &mut withheld);
     LineFix {
