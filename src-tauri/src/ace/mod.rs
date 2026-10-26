@@ -25,6 +25,7 @@ pub mod git;
 pub(crate) mod lockfile;
 pub(crate) mod npm_local;
 pub(crate) mod platform_cfg;
+pub(crate) mod pyproject_dev;
 pub(crate) mod readme_indexing;
 pub(crate) mod repo_identity;
 pub mod scanner;

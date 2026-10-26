@@ -223,6 +223,14 @@ fn pnpm_roots(content: &str) -> Roots {
     roots
 }
 
+/// Every `(lowercased name, version)` an importer pins, runtime or dev — the
+/// copies a manifest declaration resolves to (every importer: the walk
+/// attributes a workspace's whole lockfile to the directory that holds it).
+pub(crate) fn pnpm_importer_pins(content: &str) -> HashSet<Node> {
+    let roots = pnpm_roots(content);
+    roots.runtime.into_iter().chain(roots.dev).collect()
+}
+
 /// Parent -> children, from the same edges the walk stores, minus the edges
 /// that only satisfy an OPTIONAL peer.
 ///

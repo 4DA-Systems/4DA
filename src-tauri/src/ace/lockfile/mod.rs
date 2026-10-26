@@ -33,6 +33,7 @@ mod yarn;
 
 pub(crate) use python::requirements_files;
 pub(crate) use report::LockfileReport;
+pub(crate) use yarn::normalize_descriptor;
 
 /// A lockfile format this module reads.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
@@ -111,6 +112,23 @@ pub(crate) struct LockedPackage {
     /// The copy the project itself resolves the name to (the hoisted npm
     /// copy, the go.mod requirement). The collapsed per-name row keeps it.
     pub primary: bool,
+    /// The copy sits where a manifest declaration of its name resolves: the
+    /// hoisted `node_modules/<name>`, a workspace member's own
+    /// `<member>/node_modules/<name>`, a pnpm importer's pin, a package the
+    /// project's own crates list in Cargo.lock. Only such a copy can be
+    /// DIRECT; a nested copy of a declared name is some dependency's
+    /// transitive. True by default: formats that hold one version per name
+    /// (Python, Go, Ruby, Composer) resolve every copy. yarn.lock records no
+    /// position, so its copies start false and carry [`Self::specs`].
+    pub top_level: bool,
+    /// The workspace member whose OWN slot holds a [`Self::top_level`] copy
+    /// (npm: its directory, `packages/ui`; bun: its package name) — only
+    /// that member's declarations resolve to it. `None` for the hoisted /
+    /// root slot, which any workspace package may resolve to.
+    pub owner: Option<String>,
+    /// yarn.lock only: the descriptors (`name@range`) the entry resolves,
+    /// `npm:` protocol removed, for matching a manifest's declared ranges.
+    pub specs: Vec<String>,
 }
 
 impl LockedPackage {
@@ -120,6 +138,9 @@ impl LockedPackage {
             version: version.into(),
             scope: DepScope::Unknown,
             primary: false,
+            top_level: true,
+            owner: None,
+            specs: Vec::new(),
         }
     }
 
@@ -130,6 +151,16 @@ impl LockedPackage {
 
     pub(crate) fn primary(mut self, primary: bool) -> Self {
         self.primary = primary;
+        self
+    }
+
+    pub(crate) fn top_level(mut self, top_level: bool) -> Self {
+        self.top_level = top_level;
+        self
+    }
+
+    pub(crate) fn owned_by(mut self, owner: Option<String>) -> Self {
+        self.owner = owner;
         self
     }
 }

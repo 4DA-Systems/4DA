@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! ACE dependency storage: direct and transitive dependency discovery from lockfiles.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::path::{Path, PathBuf};
 
 use tracing::info;
@@ -17,7 +17,7 @@ mod manifests;
 #[path = "dependencies_store.rs"]
 mod store;
 
-use manifests::{direct_names, keep_names};
+use manifests::{declared_specs, dev_only_names, direct_names, keep_names, workspace_declarations};
 
 /// Build the multi-version instance list (`dependency_instances`, Phase 92)
 /// from a parsed lockfile's `(name, version)` pairs, classifying `is_direct`
@@ -268,9 +268,16 @@ fn process_lockfile_dir(
         }
     }
     for (ecosystem, reads) in by_ecosystem {
-        let direct = direct_names(scanner, dir, ecosystem, &reads);
+        let (root, members) = workspace_declarations(scanner, dir, ecosystem);
+        let declared = store::Declarations {
+            names: direct_names(scanner, dir, ecosystem, &reads),
+            specs: declared_specs(dir, ecosystem),
+            dev_only: dev_only_names(dir, ecosystem),
+            root,
+            members,
+        };
         let keep = keep_names(dir, ecosystem);
-        count += store::store_ecosystem(db, project_path, ecosystem, &reads, &direct, &keep);
+        count += store::store_ecosystem(db, project_path, ecosystem, &reads, &declared, &keep);
     }
     store_go_directive_dependencies(db, dir, project_path);
     count
@@ -445,19 +452,30 @@ fn store_cargo_lock(
             .filter(|key| !local.contains(key))
             .collect();
     let scope = CargoDevScope::new(content, &roots.runtime, &roots.dev);
+    let direct_copy = cargo_direct_copies(content, &packages, &direct_deps);
 
     let mut instances = instances_from_packages(&packages, &direct_deps, false);
     for instance in &mut instances {
+        instance.is_direct =
+            direct_copy.contains(&(instance.package_name.clone(), instance.version.clone()));
         instance.is_dev = scope.is_dev_only(&instance.package_name);
         instance.scope = scope.label(&instance.package_name).to_string();
     }
     db.store_dependency_instances(project_path, "rust", &instances)
         .ok();
 
+    // The collapsed per-name row: direct when any copy is, at that copy's
+    // version (another copy of the name is a dependency's, and its version
+    // must not overwrite the declared one).
+    let direct_names: HashSet<&str> = direct_copy.iter().map(|(n, _)| n.as_str()).collect();
     let mut count = 0u32;
     for (name, version) in &packages {
         let is_dev = scope.is_dev_only(name);
-        if direct_deps.is_empty() || !direct_deps.iter().any(|d| d == name) {
+        let declared = direct_copy.contains(&(name.clone(), version.clone()));
+        if direct_names.contains(name.as_str()) && !declared {
+            continue;
+        }
+        if !declared {
             db.store_transitive_dependency(
                 project_path,
                 name,
@@ -481,6 +499,27 @@ fn store_cargo_lock(
     }
     prune_stale_rows(db, project_path, "rust", &packages, &direct_deps);
     (count, packages)
+}
+
+/// The copies the project's own crates declare (A-3): what Cargo.lock's local
+/// packages list, so a member's `[dependencies]` and a `[build-dependencies]`
+/// entry are direct and a second, older copy of a declared name is not. A
+/// manifest-declared name the lockfile places nowhere (a lockfile with no
+/// local packages) keeps every copy, as before: unknown is not transitive.
+fn cargo_direct_copies(
+    content: &str,
+    packages: &[(String, String)],
+    direct_deps: &[String],
+) -> HashSet<(String, String)> {
+    let mut out = crate::ace::cargo_lock_facts::declared_copies(content);
+    let placed: HashSet<String> = out.iter().map(|(n, _)| n.clone()).collect();
+    out.extend(
+        packages
+            .iter()
+            .filter(|(n, _)| !placed.contains(n) && direct_deps.iter().any(|d| d == n))
+            .cloned(),
+    );
+    out
 }
 
 /// The roots a `Cargo.toml` declares, minus the project's own crates.
@@ -544,3 +583,7 @@ mod tests;
 #[cfg(test)]
 #[path = "dependencies_fixture_audit.rs"]
 mod fixture_audit;
+
+#[cfg(test)]
+#[path = "dependencies_scope_tests.rs"]
+mod scope_tests;

@@ -33,6 +33,13 @@ pub(super) fn merge_reads(reads: &[&LockfileRead]) -> Vec<LockedPackage> {
             Some(&i) => {
                 merged[i].scope = merged[i].scope.merge(pkg.scope);
                 merged[i].primary |= pkg.primary;
+                // A version held in the root slot AND a member's is the root
+                // slot's copy: any workspace package resolves to it.
+                if pkg.top_level && (pkg.owner.is_none() || !merged[i].top_level) {
+                    merged[i].owner.clone_from(&pkg.owner);
+                }
+                merged[i].top_level |= pkg.top_level;
+                merged[i].specs.extend(pkg.specs.iter().cloned());
             }
             None => {
                 index.insert(key, merged.len());
@@ -41,6 +48,138 @@ pub(super) fn merge_reads(reads: &[&LockfileRead]) -> Vec<LockedPackage> {
         }
     }
     merged
+}
+
+/// What one directory's manifests declare for an ecosystem.
+#[derive(Debug, Default)]
+pub(super) struct Declarations {
+    /// Every declared name, runtime and dev: what makes a placed copy direct.
+    pub names: Vec<String>,
+    /// `name@range` declarations (JavaScript), for placing yarn.lock copies.
+    pub specs: Vec<String>,
+    /// Names the manifest declares ONLY for development (PEP 735
+    /// `[dependency-groups]`, uv `dev-dependencies`, Poetry dev groups).
+    pub dev_only: Vec<String>,
+    /// JavaScript workspaces: what the root manifest itself declares...
+    pub root: Vec<String>,
+    /// ...and what each member declares. Empty for a single-root project,
+    /// where `names` is the root's own list.
+    pub members: Vec<MemberDeclarations>,
+}
+
+/// One workspace member's declarations, and the spellings a lockfile uses
+/// for its slot (npm: its directory relative to the root, `packages/ui`;
+/// bun: its package name).
+#[derive(Debug, Default)]
+pub(super) struct MemberDeclarations {
+    pub keys: Vec<String>,
+    pub names: Vec<String>,
+}
+
+/// Whether each copy is DIRECT (A-3): it sits where a declaration of its
+/// name resolves. A member's own copy is direct when THAT member declares
+/// the name. A root-slot copy is direct when the root declares it, or a
+/// member does that has no copy of its own (npm and bun hoist a member's
+/// dependency to the root; a member with its own nested copy resolves to
+/// that one instead). A copy in no declared slot is a dependency's.
+fn direct_copies(
+    packages: &[LockedPackage],
+    ecosystem: &str,
+    declared: &Declarations,
+) -> Vec<bool> {
+    let keys = |names: &[String]| -> HashSet<String> {
+        names.iter().map(|n| name_key(ecosystem, n)).collect()
+    };
+    let all = keys(&declared.names);
+    if declared.members.is_empty() {
+        return packages
+            .iter()
+            .map(|p| p.top_level && all.contains(&name_key(ecosystem, &p.name)))
+            .collect();
+    }
+    let root = keys(&declared.root);
+    let members: Vec<(&[String], HashSet<String>)> = declared
+        .members
+        .iter()
+        .map(|m| (m.keys.as_slice(), keys(&m.names)))
+        .collect();
+    let has_own_copy = |member_keys: &[String], name: &str| {
+        packages.iter().any(|q| {
+            q.top_level
+                && name_key(ecosystem, &q.name) == name
+                && q.owner.as_ref().is_some_and(|o| member_keys.contains(o))
+        })
+    };
+    packages
+        .iter()
+        .map(|p| {
+            let name = name_key(ecosystem, &p.name);
+            if !p.top_level {
+                return false;
+            }
+            match &p.owner {
+                Some(owner) => members
+                    .iter()
+                    .find(|(k, _)| k.contains(owner))
+                    .map_or(all.contains(&name), |(_, names)| names.contains(&name)),
+                None => {
+                    root.contains(&name)
+                        || members
+                            .iter()
+                            .any(|(k, names)| names.contains(&name) && !has_own_copy(k, &name))
+                }
+            }
+        })
+        .collect()
+}
+
+/// A declared copy whose lockfile records no scope (uv.lock, pdm.lock, a
+/// requirements pin) takes the manifest's: declared only in a development
+/// group, it is dev (A-4). A lockfile that recorded a scope keeps it
+/// (AD-046), and a copy that is not the declared one is not touched.
+fn mark_manifest_dev(packages: &mut [LockedPackage], ecosystem: &str, dev_only: &[String]) {
+    let dev: HashSet<String> = dev_only.iter().map(|d| name_key(ecosystem, d)).collect();
+    for p in packages
+        .iter_mut()
+        .filter(|p| p.top_level && p.scope == DepScope::Unknown)
+    {
+        if dev.contains(&name_key(ecosystem, &p.name)) {
+            p.scope = DepScope::Dev;
+        }
+    }
+}
+
+/// Place the copies whose lockfile records no position (yarn.lock): a copy
+/// one of whose descriptors is a manifest's declared `name@range` is where
+/// that declaration resolves, so it is the declared copy (and the collapsed
+/// row's version). Then a declared name with NO placed copy at all keeps
+/// every copy placed: the lockfile could not say which one the manifest
+/// resolves to, and understating directness is not the safe failure.
+pub(super) fn place_declared_copies(
+    packages: &mut [LockedPackage],
+    ecosystem: &str,
+    direct: &[String],
+    declared_specs: &[String],
+) {
+    let specs: HashSet<&str> = declared_specs.iter().map(String::as_str).collect();
+    for p in packages.iter_mut().filter(|p| !p.top_level) {
+        if p.specs.iter().any(|s| specs.contains(s.as_str())) {
+            p.top_level = true;
+            p.primary = true;
+        }
+    }
+    let placed: HashSet<String> = packages
+        .iter()
+        .filter(|p| p.top_level)
+        .map(|p| name_key(ecosystem, &p.name))
+        .collect();
+    let declared: HashSet<String> = direct.iter().map(|d| name_key(ecosystem, d)).collect();
+    for p in packages.iter_mut() {
+        let key = name_key(ecosystem, &p.name);
+        if declared.contains(&key) && !placed.contains(&key) {
+            p.top_level = true;
+        }
+    }
 }
 
 /// How the ecosystem compares a package name with a manifest's declaration.
@@ -96,19 +235,28 @@ pub(super) fn store_ecosystem(
     project_path: &str,
     ecosystem: &str,
     reads: &[&LockfileRead],
-    direct: &[String],
+    declared: &Declarations,
     keep: &[String],
 ) -> u32 {
-    let packages = merge_reads(reads);
+    let direct = declared.names.as_slice();
+    let mut packages = merge_reads(reads);
+    place_declared_copies(&mut packages, ecosystem, direct, &declared.specs);
+    mark_manifest_dev(&mut packages, ecosystem, &declared.dev_only);
     let direct_keys: HashSet<String> = direct.iter().map(|d| name_key(ecosystem, d)).collect();
     let is_direct = |name: &str| direct_keys.contains(&name_key(ecosystem, name));
 
+    // A copy is direct only where the declaration resolves: a nested copy of
+    // a declared name (`node_modules/foo/node_modules/debug`) is `foo`'s
+    // transitive, and grading it direct lifted the transitive severity cap
+    // and offered it a direct-upgrade command it does not have (A-3).
+    let direct_flags = direct_copies(&packages, ecosystem, declared);
     let instances: Vec<DependencyInstanceInput> = packages
         .iter()
-        .map(|p| DependencyInstanceInput {
+        .zip(&direct_flags)
+        .map(|(p, &is_direct)| DependencyInstanceInput {
             package_name: p.name.clone(),
             version: p.version.clone(),
-            is_direct: is_direct(&p.name),
+            is_direct,
             is_dev: p.scope == DepScope::Dev,
             scope: p.scope.as_str().to_string(),
         })

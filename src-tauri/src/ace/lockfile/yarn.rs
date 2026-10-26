@@ -8,7 +8,7 @@
 //! workspace itself (`0.0.0-use.local`) and patched copies of registry
 //! packages, which are told apart by the `resolution:` protocol.
 
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::path::PathBuf;
 
 use super::npm::{is_registry_version, split_name_at_version};
@@ -30,10 +30,50 @@ pub(super) fn read_yarn_lock(content: &str) -> Result<LockfileRead, String> {
             "{entries} entries but no version could be read (unrecognised yarn.lock layout)"
         ));
     }
-    let mut seen = HashSet::new();
-    read.packages
-        .retain(|p| seen.insert((p.name.clone(), p.version.clone())));
+    // One copy per (name, version); a version locked by two entries keeps
+    // the descriptors of both.
+    let mut index: HashMap<(String, String), usize> = HashMap::new();
+    let mut packages: Vec<LockedPackage> = Vec::new();
+    for pkg in std::mem::take(&mut read.packages) {
+        match index.get(&(pkg.name.clone(), pkg.version.clone())) {
+            Some(&i) => packages[i].specs.extend(pkg.specs),
+            None => {
+                index.insert((pkg.name.clone(), pkg.version.clone()), packages.len());
+                packages.push(pkg);
+            }
+        }
+    }
+    read.packages = packages;
     Ok(read)
+}
+
+/// A descriptor in the one spelling both the lockfile and a manifest are
+/// compared in: `name@range`, with berry's `npm:` protocol dropped from a
+/// plain range (`lodash@npm:^4.17.21` -> `lodash@^4.17.21`). An alias
+/// (`x-cjs@npm:x@^4`) keeps it: the range names another package.
+pub(crate) fn normalize_descriptor(descriptor: &str) -> String {
+    let descriptor = descriptor.trim().trim_matches('"');
+    match split_name_at_version(descriptor) {
+        Some((name, range)) => match range.strip_prefix("npm:") {
+            Some(plain) if !plain.contains('@') => format!("{name}@{plain}"),
+            _ => descriptor.to_string(),
+        },
+        None => descriptor.to_string(),
+    }
+}
+
+/// Every descriptor of an entry key: `"a@^1, a@^1.2":` -> `[a@^1, a@^1.2]`.
+fn descriptors(line: &str) -> Vec<String> {
+    let key = line.trim_end().trim_end_matches(':');
+    key.split(',').map(normalize_descriptor).collect()
+}
+
+/// yarn.lock records no install position: a copy is placed only when a
+/// manifest's declared range matches one of its descriptors.
+fn unplaced(pkg: LockedPackage, specs: Vec<String>) -> LockedPackage {
+    let mut pkg = pkg.top_level(false);
+    pkg.specs = specs;
+    pkg
 }
 
 fn empty(format: LockFormat) -> LockfileRead {
@@ -63,9 +103,11 @@ fn first_descriptor(line: &str) -> String {
 fn read_classic(content: &str) -> LockfileRead {
     let mut read = empty(LockFormat::YarnClassic);
     let mut current: Option<(String, bool)> = None;
+    let mut specs: Vec<String> = Vec::new();
     for line in content.lines() {
         if is_entry_key(line) {
             current = classic_name(&first_descriptor(line));
+            specs = descriptors(line);
             if current.is_none() {
                 read.non_registry_entries += 1;
             }
@@ -77,7 +119,10 @@ fn read_classic(content: &str) -> LockfileRead {
         if let Some((name, registry)) = current.take() {
             let version = rest.trim().trim_matches('"');
             if registry && is_registry_version(version) {
-                read.packages.push(LockedPackage::new(name, version));
+                read.packages.push(unplaced(
+                    LockedPackage::new(name, version),
+                    std::mem::take(&mut specs),
+                ));
             } else {
                 read.non_registry_entries += 1;
             }
@@ -117,19 +162,22 @@ fn read_berry(content: &str) -> LockfileRead {
     let mut read = empty(LockFormat::YarnBerry);
     let mut version: Option<String> = None;
     let mut resolution: Option<String> = None;
+    let mut specs: Vec<String> = Vec::new();
     let mut in_entry = false;
-    let mut flush = |version: &mut Option<String>, resolution: &mut Option<String>| {
-        if let (Some(v), Some(r)) = (version.take(), resolution.take()) {
-            match berry_package(&r, &v) {
-                Some(pkg) => read.packages.push(pkg),
-                None => read.non_registry_entries += 1,
+    let mut flush =
+        |version: &mut Option<String>, resolution: &mut Option<String>, specs: &mut Vec<String>| {
+            if let (Some(v), Some(r)) = (version.take(), resolution.take()) {
+                match berry_package(&r, &v) {
+                    Some(pkg) => read.packages.push(unplaced(pkg, std::mem::take(specs))),
+                    None => read.non_registry_entries += 1,
+                }
             }
-        }
-    };
+        };
     for line in content.lines() {
         if is_entry_key(line) {
-            flush(&mut version, &mut resolution);
+            flush(&mut version, &mut resolution, &mut specs);
             in_entry = line.trim_end() != "__metadata:";
+            specs = descriptors(line);
             continue;
         }
         let indent = line.len() - line.trim_start().len();
@@ -143,7 +191,7 @@ fn read_berry(content: &str) -> LockfileRead {
             resolution = Some(r.trim().trim_matches('"').to_string());
         }
     }
-    flush(&mut version, &mut resolution);
+    flush(&mut version, &mut resolution, &mut specs);
     read
 }
 
