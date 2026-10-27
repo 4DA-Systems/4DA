@@ -2700,5 +2700,5 @@
   "preemption.notCovered.unreadableTitle_other": "{{count}} लॉकफ़ाइलें पढ़ी नहीं जा सकीं",
   "preemption.notCovered.unreadableBody": "4DA पिछले स्कैन में इन फ़ाइलों को नहीं पढ़ सका, इसलिए इनमें तय किए गए संस्करणों को जाँचा हुआ नहीं मानता। फ़ाइल ठीक करें या फिर से स्कैन करें।",
   "settings.context.excludedInStack": "Your Stack में बाहर रखा गया",
-  "settings.context.excludedInStackHint": "Your Stack इस फ़ोल्डर को बाहर रखता है: इसकी परियोजनाओं की निर्भरताओं या सुरक्षा सलाहों के लिए जाँच नहीं होती। बुद्धिमत्ता > Your Stack में बदलें।"
+  "settings.context.excludedInStackHint": "Your Stack इस फ़ोल्डर को बाहर रखता है: इसके प्रोजेक्ट्स की निर्भरताओं या सुरक्षा सलाहों के लिए जाँच नहीं होती। बुद्धिमत्ता > Your Stack में बदलें।"
 }

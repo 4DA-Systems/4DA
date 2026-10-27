@@ -396,7 +396,7 @@
   "preemption.urgency.watch": "Vigilar",
   "preemption.header.onList_one": "{{count}} en esta lista",
   "preemption.header.onList_other": "{{count}} en esta lista",
-  "preemption.header.setAside_one": "{{count}} apartados abajo",
+  "preemption.header.setAside_one": "{{count}} apartado abajo",
   "preemption.header.setAside_other": "{{count}} apartados abajo",
   "preemption.dismissed": "Elemento descartado",
   "preemption.action.undo": "Deshacer",

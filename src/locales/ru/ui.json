@@ -2099,9 +2099,9 @@
   "briefing.empty_state": "Ваш стек тих. Ничего нового.",
   "blindspots.ai.assess": "Оценить с помощью ИИ",
   "blindspots.ai.assessing": "Оценка…",
-  "blindspots.ai.assessedAgo": "Оценено {{model}} · {{age}}",
-  "blindspots.ai.earlier": "Показана прежняя оценка {{model}} · {{age}}",
-  "blindspots.ai.earlierChanged": "Прежняя оценка {{model}} · {{age}} — с тех пор ваши зависимости изменились",
+  "blindspots.ai.assessedAgo": "Оценено моделью {{model}} · {{age}}",
+  "blindspots.ai.earlier": "Показана прежняя оценка модели {{model}} · {{age}}",
+  "blindspots.ai.earlierChanged": "Прежняя оценка модели {{model}} · {{age}} — с тех пор ваши зависимости изменились",
   "blindspots.ai.noModel": "Добавьте ключ API в настройках, чтобы включить оценку ИИ",
   "blindspots.ai.failed": "Не удалось выполнить оценку — повторите попытку",
   "blindspots.ai.budgetReached": "Дневной бюджет ИИ исчерпан — сброс в {{time}} ({{in}})",
@@ -2653,5 +2653,5 @@
   "preemption.notCovered.unreadableTitle_other": "Не удалось прочитать lock-файлов: {{count}}",
   "preemption.notCovered.unreadableBody": "4DA не смог прочитать эти файлы при последнем сканировании, поэтому не считает проверенным то, что в них зафиксировано. Исправьте файл или запустите сканирование снова.",
   "settings.context.excludedInStack": "исключено в Your Stack",
-  "settings.context.excludedInStackHint": "Your Stack исключает эту папку: её проекты не проверяются на зависимости и уязвимости. Изменить: Интеллект > Your Stack."
+  "settings.context.excludedInStackHint": "Your Stack исключает эту папку: её проекты не проверяются на зависимости и бюллетени безопасности. Изменить: Интеллект > Your Stack."
 }
