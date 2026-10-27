@@ -1392,7 +1392,7 @@
   "preemption.affected.projects": "Projetos afetados",
   "preemption.header.onList_one": "{{count}} nesta lista",
   "preemption.header.onList_other": "{{count}} nesta lista",
-  "preemption.header.setAside_one": "{{count}} separados abaixo",
+  "preemption.header.setAside_one": "{{count}} separado abaixo",
   "preemption.header.setAside_other": "{{count}} separados abaixo",
   "preemption.badge.ai": "AI",
   "preemption.badge.verified": "VERIFICADO",
@@ -2707,5 +2707,5 @@
   "preemption.notCovered.unreadableTitle_other": "Não foi possível ler {{count}} lockfiles",
   "preemption.notCovered.unreadableBody": "O 4DA não conseguiu ler esses arquivos na última verificação, então não considera verificado o que eles fixam. Corrija o arquivo ou verifique novamente.",
   "settings.context.excludedInStack": "excluído em Your Stack",
-  "settings.context.excludedInStackHint": "Your Stack exclui esta pasta: seus projetos não são verificados quanto a dependências ou alertas. Altere em Inteligência > Your Stack."
+  "settings.context.excludedInStackHint": "Your Stack exclui esta pasta: seus projetos não são verificados quanto a dependências ou avisos. Altere em Inteligência > Your Stack."
 }

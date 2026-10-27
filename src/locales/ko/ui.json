@@ -209,7 +209,7 @@
   "blindspots.ai.assessing": "평가 중…",
   "blindspots.ai.assessedAgo": "{{model}}이(가) 평가 · {{age}}",
   "blindspots.ai.earlier": "{{model}}의 이전 평가 표시 중 · {{age}}",
-  "blindspots.ai.earlierChanged": "{{model}}의 이전 평가 · {{age}} — 이후 종속성이 변경됨",
+  "blindspots.ai.earlierChanged": "{{model}}의 이전 평가 · {{age}} — 이후 의존성이 변경됨",
   "blindspots.ai.noModel": "AI 평가를 사용하려면 설정에서 API 키를 추가하세요",
   "blindspots.ai.failed": "평가 실패 — 다시 시도하세요",
   "blindspots.ai.budgetReached": "일일 AI 예산에 도달했습니다 — {{time}}에 초기화됩니다 ({{in}})",
@@ -2654,5 +2654,5 @@
   "preemption.notCovered.unreadableTitle_other": "잠금 파일 {{count}}개를 읽을 수 없습니다",
   "preemption.notCovered.unreadableBody": "4DA가 마지막 스캔에서 이 파일들을 읽지 못했으므로 여기에 고정된 버전을 확인된 것으로 보지 않습니다. 파일을 수정하거나 다시 스캔하세요.",
   "settings.context.excludedInStack": "Your Stack에서 제외됨",
-  "settings.context.excludedInStackHint": "Your Stack에서 이 폴더를 제외했습니다. 이 폴더의 프로젝트는 종속성이나 보안 권고를 검사하지 않습니다. 인텔리전스 > Your Stack에서 변경하세요."
+  "settings.context.excludedInStackHint": "Your Stack에서 이 폴더를 제외했습니다. 이 폴더의 프로젝트는 의존성이나 보안 권고를 검사하지 않습니다. 인텔리전스 > Your Stack에서 변경하세요."
 }
