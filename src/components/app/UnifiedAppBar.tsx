@@ -75,10 +75,12 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
       ? 'bg-orange-400 animate-pulse'
       : 'bg-gray-500';
 
-  // Compact status text
+  // Compact status text. Keyed on completion alone: the summary badge counts
+  // reading rows and is absent with every interest off, which is a finished
+  // analysis too, not "Ready to analyze".
   const statusText = isLoading
     ? t('action.analyzing')
-    : isComplete && summaryBadges
+    : isComplete
       ? t('action.analysisComplete')
       : t('action.ready');
 
