@@ -91,9 +91,11 @@ test.describe('4DA Smoke Tests', () => {
     const resultsTab = tablist.getByRole('tab', { name: 'Signal', exact: true });
     await resultsTab.click();
     await expect(resultsTab).toHaveAttribute('aria-selected', 'true');
-    const resultsRegion = page.getByRole('tabpanel', { name: 'Signal' }).getByRole('region', { name: 'Analysis Results' });
-    await expect(resultsRegion).toBeVisible();
-    await expect(resultsRegion.getByRole('heading', { name: 'Analysis Results' })).toBeVisible();
+    // "Your stack" always leads Signal (AD-054). The reading feed's "Analysis
+    // Results" appears only once an interest is on or reading rows exist;
+    // this browser run has no backend, so neither is known.
+    const signalPanel = page.getByRole('tabpanel', { name: 'Signal' });
+    await expect(signalPanel.getByRole('heading', { name: 'Your stack' })).toBeVisible();
 
     await page.screenshot({ path: SCREENSHOT_DIR + '/03-results-view.png', fullPage: true });
 
