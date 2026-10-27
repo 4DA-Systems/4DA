@@ -43,7 +43,7 @@ use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
 
-use crate::brief_facts::{fix_clause, FixPath, SecurityFact, SecuritySite};
+use crate::brief_facts::{site_fix_clause, FixPath, SecurityFact, SecuritySite};
 use crate::db::Database;
 use crate::error::{FourDaError, Result};
 
@@ -333,7 +333,7 @@ pub(crate) fn security_item(fact: &SecurityFact, now_ms: i64) -> Ranked {
             "{}{copy}{}: {}",
             s.label,
             site_qualifiers(s),
-            fix_clause(pkg, &s.fix_path)
+            site_fix_clause(pkg, s)
         )));
     }
     if let Some(note) = preemption_grade_note(fact, urgency) {

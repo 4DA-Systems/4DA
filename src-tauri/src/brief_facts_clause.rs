@@ -2,7 +2,45 @@
 //! The one line of fix advice per copy, worded for both the prompt and the
 //! floor (`fix_clause`).
 
-use super::{FixPath, ProvenParent};
+use fourda_depengine::held::HeldOutcome;
+
+use super::{FixPath, ProvenParent, SecuritySite};
+
+/// [`fix_clause`] for one site, with the site's held-dependency caveat
+/// (npm, audit 6.2.5 D-4) after it, so no surface quotes a target as a clean
+/// fix that the rule could not stand behind.
+pub(crate) fn site_fix_clause(package: &str, site: &SecuritySite) -> String {
+    let clause = fix_clause(package, &site.fix_path);
+    match site.held.as_deref() {
+        Some(caveat) => format!("{clause} ({caveat})"),
+        None => clause,
+    }
+}
+
+/// The caveat a site's target carries: `None` when the target is clean as
+/// far as what it holds goes. Every version follows its own package's name
+/// (the Brief's version check reads them that way).
+pub(crate) fn held_caveat(package: &str, held: &HeldOutcome) -> Option<String> {
+    match held {
+        HeldOutcome::Moved { .. } => None,
+        HeldOutcome::Blocked {
+            target, affected, ..
+        } => {
+            let deps: Vec<String> = affected
+                .iter()
+                .take(3)
+                .map(|d| format!("{} {}", d.name, d.version))
+                .collect();
+            Some(format!(
+                "{package} {target} is NOT a clean fix: it installs an affected {}",
+                deps.join(", ")
+            ))
+        }
+        HeldOutcome::Unchecked { target, .. } => Some(format!(
+            "whether what {package} {target} pins or narrowly ranges is affected was NOT CHECKED"
+        )),
+    }
+}
 
 /// One line of fix advice, worded for both the prompt and the floor. Every
 /// version sits right after the name of the package it belongs to: the model

@@ -180,6 +180,14 @@ fn pypi_excludes_a_release_whose_every_file_is_yanked() {
     assert_eq!(r.excluded, ["1.0.1"]);
 }
 
+/// A want for the release list plus the requirements on `children`.
+fn want(children: &[&str]) -> Want {
+    Want {
+        children: children.iter().map(|c| (*c).to_string()).collect(),
+        held_from: None,
+    }
+}
+
 #[test]
 fn the_index_keys_like_the_matcher_and_drops_month_old_facts() {
     let now = Utc::now();
@@ -193,6 +201,7 @@ fn the_index_keys_like_the_matcher_and_drops_month_old_facts() {
             excluded: vec![],
         },
         parents: ParentFacts::default(),
+        held: HeldSpecs::default(),
     };
     let idx = index(vec![pkg("lodash", 1), pkg("old", 40)], now);
     assert!(idx.contains_key(&("lodash".to_string(), "npm".to_string())));
@@ -261,18 +270,19 @@ fn a_retired_package_is_marked_and_a_fresh_package_missing_a_wanted_requirement_
             fetched_at: now,
             releases: RegistryReleases::default(),
             parents: parse_npm_parent(&json!({"versions": {}}), &["qs".to_string()].into()),
+            held: HeldSpecs::default(),
         },
     )]
     .into();
     let mut wanted: Wants = BTreeMap::new();
-    wanted.insert(("npm".into(), "express".into()), ["qs".to_string()].into());
+    wanted.insert(("npm".into(), "express".into()), want(&["qs"]));
     assert!(
         due(wanted.clone(), &stored, now).is_empty(),
         "fresh, and qs was read"
     );
     wanted.insert(
         ("npm".into(), "express".into()),
-        ["qs".to_string(), "path-to-regexp".to_string()].into(),
+        want(&["qs", "path-to-regexp"]),
     );
     assert_eq!(
         due(wanted, &stored, now).len(),
@@ -321,6 +331,7 @@ fn missing_facts_go_first_then_the_oldest_then_the_parents() {
                 fetched_at: now - Duration::hours(hours),
                 releases: RegistryReleases::default(),
                 parents: ParentFacts::default(),
+                held: HeldSpecs::default(),
             },
         )
     };
@@ -328,15 +339,74 @@ fn missing_facts_go_first_then_the_oldest_then_the_parents() {
         [held("aaa", 30), held("bbb", 90), held("fresh", 1)].into();
     let mut wanted: Wants = BTreeMap::new();
     for name in ["aaa", "bbb", "fresh", "zzz-never-read"] {
-        wanted.insert(("npm".into(), name.into()), BTreeSet::new());
+        wanted.insert(("npm".into(), name.into()), want(&[]));
     }
-    wanted.insert(
-        ("npm".into(), "a-parent".into()),
-        ["zzz-never-read".to_string()].into(),
-    );
+    wanted.insert(("npm".into(), "a-parent".into()), want(&["zzz-never-read"]));
     let order: Vec<String> = due(wanted, &stored, now)
         .into_iter()
         .map(|((_, name), _)| name)
         .collect();
     assert_eq!(order, ["zzz-never-read", "bbb", "aaa", "a-parent"]);
+}
+
+/// Audit 6.2.5 D-4: a vulnerable npm package's document keeps what each
+/// stable release, from the lowest installed copy up, exact-pins or narrowly
+/// ranges; a lower copy installed since makes it due again.
+#[test]
+fn npm_keeps_what_each_release_holds_from_the_installed_copy_up() {
+    let doc = json!({"dist-tags": {"latest": "4.22.3"}, "versions": {
+        "4.16.4": {"dependencies": {"qs": "6.5.2"}},
+        "4.20.0": {"dependencies": {"qs": "6.11.0", "debug": "^2.6.9"}, "devDependencies": {"x": "1.0.0"}},
+        "4.22.3": {"dependencies": {"qs": "~6.16.0"}},
+        "5.0.0-beta.1": {"dependencies": {"qs": "6.13.0"}}
+    }});
+    let held = held::parse_npm_held(&doc, Some("4.20.0"));
+    assert!(held.read);
+    assert_eq!(held.specs.keys().collect::<Vec<_>>(), ["4.20.0", "4.22.3"]);
+    assert_eq!(
+        held.specs["4.20.0"].len(),
+        1,
+        "a wide caret and a dev dependency are not held"
+    );
+    assert!(held.covers("4.20.0") && held.covers("4.22.0") && !held.covers("4.16.4"));
+
+    let now = Utc::now();
+    let stored: HashMap<(String, String), StoredPackage> = [(
+        ("express".to_string(), "npm".to_string()),
+        StoredPackage {
+            ecosystem: "npm".into(),
+            key: "express".into(),
+            name: "express".into(),
+            fetched_at: now,
+            releases: RegistryReleases::default(),
+            parents: ParentFacts::default(),
+            held,
+        },
+    )]
+    .into();
+    let floor = |f: &str| Want {
+        children: BTreeSet::new(),
+        held_from: Some(f.to_string()),
+    };
+    let mut wanted: Wants = BTreeMap::new();
+    wanted.insert(("npm".into(), "express".into()), floor("4.20.0"));
+    assert!(due(wanted.clone(), &stored, now).is_empty());
+    wanted.insert(("npm".into(), "express".into()), floor("4.16.4"));
+    assert_eq!(
+        due(wanted, &stored, now).len(),
+        1,
+        "a lower copy was installed since"
+    );
+
+    let (all, ranged) = held::held_names(&stored);
+    assert_eq!(all.into_iter().collect::<Vec<_>>(), ["qs"]);
+    assert_eq!(
+        ranged.into_iter().collect::<Vec<_>>(),
+        ["qs"],
+        "qs ~6.16.0 is a narrow range"
+    );
+    assert!(
+        held_wants(&stored, |_| false).is_empty(),
+        "npm source off: no read"
+    );
 }

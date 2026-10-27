@@ -37,7 +37,7 @@ fn as_range(req: &str) -> String {
     }
 }
 
-fn store_advisories(db: &Database, advisories: &[&Value]) {
+pub(super) fn store_advisories(db: &Database, advisories: &[&Value]) {
     for a in advisories {
         let ranges: Vec<Value> = arr(a, "ranges")
             .into_iter()

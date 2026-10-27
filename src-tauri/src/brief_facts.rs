@@ -181,6 +181,10 @@ pub(crate) struct SecuritySite {
     pub scratch: bool,
     pub dormant_days: Option<i64>,
     pub fix_path: FixPath,
+    /// npm (audit 6.2.5 D-4): the target is NOT a clean fix, or what it
+    /// holds was NOT CHECKED (`clause::held_caveat`); quoted after the fix.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub held: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -917,7 +921,9 @@ use build::{copy_fix, own_package_names, CopyFix};
 // The fix-advice wording lives in `brief_facts_clause.rs` (file-size gate).
 #[path = "brief_facts_clause.rs"]
 mod clause;
+#[cfg(test)]
 pub(crate) use clause::fix_clause;
+pub(crate) use clause::site_fix_clause;
 
 #[cfg(test)]
 #[path = "brief_facts_tests.rs"]

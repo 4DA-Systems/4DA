@@ -14,6 +14,9 @@ mod engine_snapshot_tests;
 pub(crate) mod exposure;
 pub(crate) mod fix_path;
 pub(crate) mod fix_target;
+pub(crate) mod held_targets;
+#[cfg(test)]
+mod held_vectors;
 pub(crate) mod identity;
 pub(crate) mod matching;
 pub(crate) mod parent_hint;

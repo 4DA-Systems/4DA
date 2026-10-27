@@ -43,6 +43,10 @@ pub struct LineTarget {
     /// With no target: the malicious records a fixing release falls in
     /// (sorted, deduped); `target_version` is `None` (no line fix either).
     pub malicious: Vec<String>,
+    /// npm (audit 6.2.5 D-4): what the held-dependency rule said about this
+    /// line's target (the first copy's that carries one). `Blocked` /
+    /// `Unchecked`: the target must not be called a clean fix.
+    pub held: Option<crate::held::HeldOutcome>,
 }
 
 impl LineTarget {
@@ -66,6 +70,7 @@ where
         sites: BTreeMap<String, InstallSite>,
         introduces: Vec<String>,
         malicious: Vec<String>,
+        held: Option<crate::held::HeldOutcome>,
     }
     let mut by_version: BTreeMap<String, Acc> = BTreeMap::new();
     let instances = copies
@@ -85,12 +90,16 @@ where
                 sites: BTreeMap::new(),
                 introduces: Vec::new(),
                 malicious: Vec::new(),
+                held: None,
             });
         if acc.clean.is_none() {
             acc.clean.clone_from(&d.clean_version);
         }
         if acc.walked.is_none() {
             acc.walked.clone_from(&d.target_version);
+        }
+        if acc.held.is_none() {
+            acc.held.clone_from(&d.held);
         }
         acc.introduces.extend(d.introduces.iter().cloned());
         acc.malicious.extend(d.malicious.iter().cloned());
@@ -146,6 +155,7 @@ where
                 sites: acc.sites.into_values().collect(),
                 introduces,
                 malicious,
+                held: acc.held,
             }
         })
         .collect();
@@ -216,6 +226,7 @@ mod tests {
             withheld: Vec::new(),
             introduces: Vec::new(),
             malicious: Vec::new(),
+            held: None,
         }
     }
 

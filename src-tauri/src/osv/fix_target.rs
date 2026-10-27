@@ -62,6 +62,28 @@ pub fn introduced_by(lines: &[LineTarget]) -> Vec<String> {
     out
 }
 
+/// npm (audit 6.2.5 D-4): the target of `line` may be called a clean fix as
+/// far as the dependencies it holds go (judged clean, or nothing to judge).
+pub fn held_clean(line: &LineTarget) -> bool {
+    line.held
+        .as_ref()
+        .is_none_or(fourda_depengine::held::HeldOutcome::is_clean)
+}
+
+/// What the held-dependency rule said about each line's target, one sentence
+/// per line that has something to say, each starting with a space:
+/// " express 4.16.4: 4.20.0 exact-pins qs 6.11.0 (GHSA-...); so 4.22.3, ...".
+/// Empty when no line has a note.
+pub fn held_sentences(package: &str, lines: &[LineTarget]) -> String {
+    lines
+        .iter()
+        .filter_map(|l| {
+            let note = fourda_depengine::held::held_note(l.held.as_ref()?);
+            (!note.is_empty()).then(|| format!(" {package} {}: {note}.", l.installed_version))
+        })
+        .collect()
+}
+
 /// Per-line targets for the version-confirmed copies of a package in
 /// `projects`, sorted by installed version. A copy in a project the caller
 /// does not speak for can neither set nor raise a target here (AD-044).

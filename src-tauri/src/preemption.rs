@@ -3288,6 +3288,7 @@ mod tests {
                     withheld: Vec::new(),
                     introduces: Vec::new(),
                     malicious: Vec::new(),
+                    held: None,
                 },
                 crate::osv::types::MatchedDependency {
                     project_path: "/direct".into(),
@@ -3301,6 +3302,7 @@ mod tests {
                     withheld: Vec::new(),
                     introduces: Vec::new(),
                     malicious: Vec::new(),
+                    held: None,
                 },
             ],
             informational: None,
@@ -3346,6 +3348,7 @@ mod tests {
             withheld: Vec::new(),
             introduces: Vec::new(),
             malicious: Vec::new(),
+            held: None,
         };
         let advisory = crate::osv::types::MatchedAdvisory {
             advisory_id: "GHSA-q2hr-2g5m-vwhr".into(),
@@ -3439,6 +3442,7 @@ mod tests {
                 withheld: Vec::new(),
                 introduces: Vec::new(),
                 malicious: Vec::new(),
+                held: None,
             }],
             informational: None,
         };

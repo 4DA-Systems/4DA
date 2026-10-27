@@ -27,7 +27,7 @@
 //! item. There is now no second chain to fall out of sync.
 
 use crate::brief_facts::{
-    fix_clause, BriefFacts, FactStatus, SecurityFact, UpgradeFact, WorthKnowingCandidate,
+    site_fix_clause, BriefFacts, FactStatus, SecurityFact, UpgradeFact, WorthKnowingCandidate,
 };
 use crate::preemption::AlertUrgency;
 use crate::prompt_safety::{
@@ -153,7 +153,7 @@ fn render_security(n: usize, f: &SecurityFact) -> String {
             "   - {}: {installed}{} — fix: {}\n",
             s.label,
             site_notes(s.dev_only, s.scratch, s.dormant_days),
-            fix_clause(&f.package, &s.fix_path)
+            site_fix_clause(&f.package, s)
         ));
     }
     if !f.not_compiled.is_empty() {
@@ -180,7 +180,7 @@ fn render_security(n: usize, f: &SecurityFact) -> String {
 fn also_open_fix(f: &SecurityFact) -> String {
     let mut clauses: Vec<(Option<&str>, String)> = Vec::new();
     for s in &f.sites {
-        let clause = fix_clause(&f.package, &s.fix_path);
+        let clause = site_fix_clause(&f.package, s);
         if !clauses.iter().any(|(_, c)| *c == clause) {
             clauses.push((s.installed.as_deref(), clause));
         }

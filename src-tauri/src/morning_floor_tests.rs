@@ -660,6 +660,7 @@ fn the_floor_caps_act_now_itself_whatever_the_feed_holds() {
                 to: "1.0.1".into(),
                 fix: None,
             },
+            held: None,
         }],
         not_compiled: vec![],
         first_seen: None,

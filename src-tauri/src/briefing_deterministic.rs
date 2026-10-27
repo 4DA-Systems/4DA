@@ -13,7 +13,7 @@
 //! states a version the facts do not hold. Works offline, stays private,
 //! cannot fabricate.
 
-use crate::brief_facts::{fix_clause, BriefFacts, FactStatus, SecurityFact, UpgradeFact};
+use crate::brief_facts::{site_fix_clause, BriefFacts, FactStatus, SecurityFact, UpgradeFact};
 use crate::preemption::AlertUrgency;
 
 /// Articles the floor lists (its caller records them as featured).
@@ -461,7 +461,7 @@ fn security_line(f: &SecurityFact) -> String {
         line.push_str(&format!(
             "  - {} on {installed}{dev}: {}\n",
             s.label,
-            fix_clause(&f.package, &s.fix_path)
+            site_fix_clause(&f.package, s)
         ));
     }
     if !f.not_compiled.is_empty() {

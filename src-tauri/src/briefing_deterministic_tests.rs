@@ -35,6 +35,7 @@ fn rmcp(status: FactStatus) -> SecurityFact {
                 proven: None,
                 route: Default::default(),
             },
+            held: None,
         }],
         not_compiled: vec![],
         first_seen: Some("2026-09-16".into()),

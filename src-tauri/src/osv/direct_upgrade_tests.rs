@@ -470,6 +470,7 @@ fn the_note_words_a_refresh_as_one() {
         clears_all_known: true,
         introduces: Vec::new(),
         malicious: Vec::new(),
+        held: None,
         upgrade_type: None,
         sites: projects
             .iter()

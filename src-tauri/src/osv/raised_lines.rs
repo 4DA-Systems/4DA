@@ -32,7 +32,15 @@ pub(crate) fn raised_line_targets(
         .first()
         .and_then(|m| crate::osv::exposure::canonical(&m.ecosystem).map(|e| (e, m)))
     {
-        Some((eco, m)) => raise_declared_lines(db, eco, &m.package_name, &mut lines),
+        Some((eco, m)) => {
+            let raised = raise_declared_lines(db, eco, &m.package_name, &mut lines);
+            // What each target holds (npm, audit 6.2.5 D-4): never a silent
+            // clean-fix claim.
+            format!(
+                "{raised}{}",
+                crate::osv::fix_target::held_sentences(&m.package_name, &lines)
+            )
+        }
         None => String::new(),
     };
     RaisedLines { lines, note }
@@ -80,6 +88,16 @@ pub(crate) fn raise_declared_lines(
         }
         notes.push(note(package, &current, &to, &packages));
         line.upgrade_type = upgrade_type(&line.installed_version, &to);
+        // The held-dependency rule judged `current`, not the raised release:
+        // what that one holds was not checked here (D-4).
+        if line.held.is_some() && to != current {
+            line.held = Some(fourda_depengine::held::HeldOutcome::Unchecked {
+                target: to.clone(),
+                reason: format!(
+                    "{to} was raised for the copies {package} pins, after the check judged {current}"
+                ),
+            });
+        }
         line.target_version = Some(to);
     }
     notes.concat()

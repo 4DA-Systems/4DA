@@ -44,6 +44,7 @@ fn security(pkg: &str, installed: &str, to: &str) -> SecurityFact {
                 to: to.into(),
                 fix: None,
             },
+            held: None,
         }],
         not_compiled: vec![],
         first_seen: None,

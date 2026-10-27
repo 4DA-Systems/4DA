@@ -276,6 +276,11 @@ fn strings(v: &Value, key: &str) -> Vec<String> {
 }
 
 fn check_fix_target(v: &Value, records: &mut Records) -> Result<(), String> {
+    // A `held` line (audit 6.2.5 D-4) carries its own advisories and RAW
+    // registry documents and runs the app's whole pipeline.
+    if v.get("held").is_some() {
+        return super::held_vectors::check(v);
+    }
     let (eco, name, installed) = (s(v, "eco"), s(v, "name"), s(v, "installed"));
     let mut ranges = Vec::new();
     let mut kinds = Vec::new();

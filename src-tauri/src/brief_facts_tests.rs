@@ -690,6 +690,7 @@ fn security(key: &str, urgency: AlertUrgency, installed: &str, to: &str) -> Secu
                 inferred: false,
                 command: None,
             },
+            held: None,
         }],
         not_compiled: vec![],
         first_seen: None,
@@ -994,6 +995,7 @@ fn line_in(project: &str, installed: &str, target: Option<&str>) -> LineTarget {
         clears_all_known: target.is_some(),
         introduces: Vec::new(),
         malicious: Vec::new(),
+        held: None,
         upgrade_type: None,
         sites: vec![InstallSite {
             project_path: project.into(),
@@ -1258,5 +1260,60 @@ fn an_introduces_fact_keeps_its_signature_shape() {
     assert_eq!(
         format!("{path:?}"),
         r#"Introduces { advisories: ["GHSA-x"] }"#
+    );
+}
+
+/// Audit 6.2.5 D-4: a target the held-dependency rule could not call clean
+/// carries its caveat into every fix clause; a moved target needs none.
+#[test]
+fn a_held_caveat_follows_the_fix_clause() {
+    use fourda_depengine::held::{HeldDependency, HeldOutcome};
+    let qs = HeldDependency {
+        name: "qs".into(),
+        spec: "6.11.0".into(),
+        exact: true,
+        version: "6.11.0".into(),
+        ids: vec!["GHSA-4mjr-xmp4-gh2g".into()],
+    };
+    let blocked = HeldOutcome::Blocked {
+        target: "4.20.0".into(),
+        affected: vec![qs.clone()],
+        searched: vec!["4.20.0".into()],
+    };
+    assert_eq!(
+        clause::held_caveat("express", &blocked).as_deref(),
+        Some("express 4.20.0 is NOT a clean fix: it installs an affected qs 6.11.0")
+    );
+    let unchecked = HeldOutcome::Unchecked {
+        target: "4.20.0".into(),
+        reason: "offline".into(),
+    };
+    let caveat = clause::held_caveat("express", &unchecked);
+    assert_eq!(
+        caveat.as_deref(),
+        Some("whether what express 4.20.0 pins or narrowly ranges is affected was NOT CHECKED")
+    );
+    let moved = HeldOutcome::Moved {
+        from: "4.20.0".into(),
+        to: "4.22.3".into(),
+        past: vec![],
+    };
+    assert_eq!(clause::held_caveat("express", &moved), None);
+    let site = SecuritySite {
+        label: "nodegoat".into(),
+        installed: Some("4.16.4".into()),
+        dev_only: false,
+        scratch: false,
+        dormant_days: None,
+        fix_path: FixPath::Bump {
+            to: "4.20.0".into(),
+            fix: None,
+        },
+        held: caveat,
+    };
+    assert_eq!(
+        site_fix_clause("express", &site),
+        "bump express to >= 4.20.0 (whether what express 4.20.0 pins or narrowly ranges is \
+         affected was NOT CHECKED)"
     );
 }

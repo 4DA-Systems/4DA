@@ -602,6 +602,7 @@ fn matched(cvss: f64, installs: &[(bool, bool, bool)]) -> crate::osv::types::Mat
                     withheld: Vec::new(),
                     introduces: Vec::new(),
                     malicious: Vec::new(),
+                    held: None,
                 },
             )
             .collect(),

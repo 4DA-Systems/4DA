@@ -85,6 +85,15 @@ fn brace_fixture() -> Database {
         BRACE_F886,
         6.5,
     );
+    // The registry was read (D-4) and these releases hold nothing: their
+    // targets are clean as far as what they install goes.
+    crate::osv::release_facts::store_docs_for_tests(
+        &db,
+        &[(
+            "brace-expansion".to_string(),
+            serde_json::json!({"versions": {}}),
+        )],
+    );
     db
 }
 

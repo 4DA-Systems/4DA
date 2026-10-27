@@ -280,7 +280,7 @@ module proxy (§1b, §1e) receive them too; §4 has the complete list.
 
 | Host | Endpoint | Data sent |
 |---|---|---|
-| `api.osv.dev` | `POST /v1/querybatch` | Your discovered package names + ecosystems, batched (≤1000/batch) |
+| `api.osv.dev` | `POST /v1/querybatch` | Your discovered package names + ecosystems, batched (≤1000/batch); for npm, also the names of the dependencies a vulnerable package's releases hold (held dependencies, below) |
 | `osv-vulnerabilities.storage.googleapis.com` | `GET /{ecosystem}/all.zip` | Plain `GET` — downloads the public advisory mirror (no user data) |
 | `registry.npmjs.org` | `GET /{package}` (abbreviated packument, `Accept: application/vnd.npm.install-v1+json`) | The package name only |
 | `crates.io` | `GET /api/v1/crates/{crate}` | The crate name only. User-Agent `4DA-Developer-OS/1.0 (https://4da.ai)` |
@@ -302,9 +302,22 @@ module proxy (§1b, §1e) receive them too; §4 has the complete list.
   abbreviated document (`GET /{package}`, name only) is also read for that **parent** — and for the
   declared dependency the parent arrives through — so the plan can name the parent release whose
   own requirement admits a fixed copy. These are packages already installed in your projects; only
-  their names are sent, never a version. Same 60-per-sync cap, daily re-read, local cache and
+  their names are sent, never a version. Same 300-per-sync cap, daily re-read, local cache and
   npm-source toggle as above; the per-release requirements kept are only those on the vulnerable
   package.
+- **Held dependencies (npm, audit 6.2.5 D-4, `src-tauri/src/osv/release_facts_held.rs`,
+  `osv/held_targets.rs`):** a fix target is also judged by what it installs at a fixed version. The
+  vulnerable package's own abbreviated document (already read above, no new request) is kept per
+  release for the dependencies it exact-pins or narrowly ranges (`~1.2.3`, `^0.x`, `1.2.x`, a `<`
+  bound, a hyphen range), from the lowest installed copy up. **New requests:** (1) for each
+  dependency held through a narrow range, its abbreviated document (`GET /{package}` on
+  `registry.npmjs.org`, name only) is read in a second round of the same release check, under the
+  same 300-per-sync cap, 4-at-a-time limit, 150 s budget, daily re-read and npm-source toggle;
+  (2) the names of the held dependencies are added to the npm package names the OSV mirror sync
+  sends to `api.osv.dev` (`POST /v1/querybatch`, names only) and matches in the downloaded npm
+  archive, so their advisories are known locally. These are public package names read from the
+  public registry documents of packages already sent; no version is sent. Offline, or with the npm
+  source off, nothing extra is read and every npm fix target says what it holds was NOT CHECKED.
 - **Trigger:** background, at startup, **only if dependencies exist** and the local mirror was last
   synced **> 6 hours ago** (`app_setup.rs`).
 - **Disable:** if 4DA has discovered no dependencies, nothing is sent. Removing/disabling ACE project
@@ -547,7 +560,7 @@ so it is fetched **once, on demand** (`src-tauri/src/embeddings_providers/model_
   | `crates.io` | your crate names | as above |
   | `static.crates.io` / `registry.npmjs.org` (§1e) | the crate / package name and the new public version of a graded release — never your installed version | the release card's "what changed" |
   | `api.github.com/repos/{owner}/{repo}/releases` (§2m) — **only with `github_release_notes = true`** (off by default) | the GitHub repository of a dependency whose package shipped no usable changelog for a graded release | the release card's "what changed" |
-  | `registry.npmjs.org` / `crates.io` / `pypi.org` registry release check (§2c) | the name of each package with a version-confirmed advisory, and (npm) of each installed package that pins such a copy — name only | no fix target names a yanked or deprecated release; the parent release that fixes a nested advisory is named |
+  | `registry.npmjs.org` / `crates.io` / `pypi.org` registry release check (§2c) | the name of each package with a version-confirmed advisory, (npm) of each installed package that pins such a copy, and (npm) of each dependency a vulnerable package's releases hold through a narrow range — name only | no fix target names a yanked or deprecated release; the parent release that fixes a nested advisory is named; an npm fix target is judged by what it installs (D-4) |
   | `registry.npmjs.org` full packument (MCP `dependency_check`, §2j) | the npm package name being checked — name only | release vetting |
   | `crates.io/api/v1/crates/{crate}/versions` (MCP `dependency_check`, §2j) | the crate name being checked — name only | release vetting |
   | `proxy.golang.org` | your **full Go module paths** | as above |

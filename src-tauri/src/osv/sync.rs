@@ -128,6 +128,24 @@ fn auditable_packages_by_ecosystem(db: &Database) -> Result<HashMap<String, Vec<
     Ok(by_ecosystem)
 }
 
+/// Add the held dependency names to the npm set (when the user has npm
+/// dependencies at all); returns the names added or already present.
+fn with_held_names(
+    by_ecosystem: &mut HashMap<String, Vec<String>>,
+    held: Vec<String>,
+) -> Vec<String> {
+    let Some(npm) = by_ecosystem.get_mut("npm") else {
+        return Vec::new();
+    };
+    if held.is_empty() {
+        return held;
+    }
+    npm.extend(held.iter().cloned());
+    npm.sort_by_key(|name| name.to_lowercase());
+    npm.dedup_by(|a, b| a.eq_ignore_ascii_case(b));
+    held
+}
+
 /// What the auditable inventory holds, by OSV ecosystem.
 pub(crate) struct AuditableCoverage {
     /// The ecosystems the advisory check can speak for: those with at least
@@ -274,11 +292,19 @@ pub async fn sync(db: &Database) -> Result<SyncResult> {
         errors: Vec::new(),
     };
 
-    let by_ecosystem = auditable_packages_by_ecosystem(db)?;
+    let mut by_ecosystem = auditable_packages_by_ecosystem(db)?;
     if by_ecosystem.is_empty() {
         info!(target: "4da::osv", "No dependencies found — skipping OSV sync");
         return Ok(result);
     }
+    // D-4: the npm dependencies a vulnerable package's releases exact-pin or
+    // narrowly range (read from the registry facts) have their advisories
+    // mirrored too, so a fix target is judged by what it installs. Public
+    // names from public registry documents of packages already sent here.
+    let held_names = with_held_names(
+        &mut by_ecosystem,
+        super::release_facts::held_names_to_sync(db),
+    );
 
     let client = reqwest::Client::builder()
         .user_agent(USER_AGENT)
@@ -366,6 +392,12 @@ pub async fn sync(db: &Database) -> Result<SyncResult> {
                 db.update_osv_sync_status(ecosystem, 0, Some(&err_str)).ok();
             }
         }
+    }
+
+    // The held names are covered once the npm sync that included them
+    // succeeded: "no advisory" for one of them is then a reading.
+    if !held_names.is_empty() && !result.errors.iter().any(|e| e.starts_with("npm")) {
+        super::release_facts::record_held_synced(db, &held_names);
     }
 
     // Prune orphan advisories for ecosystems the user no longer depends on
