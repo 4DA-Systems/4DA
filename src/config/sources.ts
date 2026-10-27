@@ -10,6 +10,8 @@ interface SourceMeta {
   category: string;
   /** The user's choice in `sources.enabled` (AD-054: interests are opt-in). */
   enabled: boolean;
+  /** An opt-in reading source, not a registry or advisory feed. */
+  interest: boolean;
 }
 
 const DEFAULT_COLOR = 'bg-gray-500/20 text-gray-400';
@@ -56,6 +58,7 @@ export async function loadSourceMeta(): Promise<boolean> {
           colorClass: COLOR_MAP[s.color_hint] ?? DEFAULT_COLOR,
           category: s.category,
           enabled: s.enabled,
+          interest: s.class === 'interest',
         });
         if (s.enabled) enabledIds.add(s.type);
       }
@@ -102,11 +105,30 @@ export function getSourceFullName(id: string): string {
 export function getSourceColorClass(id: string): string {
   return sourcesCache.get(id)?.colorClass ?? DEFAULT_COLOR;
 }
-/** Enabled sources grouped by category. A turned-off source is never listed. */
-export function getSourcesByCategory(): Map<string, string[]> {
+/**
+ * How many interests the user has turned on; `null` until metadata loads.
+ * Not reactive: callers re-read it when the store's `sourceFilters` changes,
+ * which happens after the metadata load and on every Settings toggle.
+ */
+export function interestsEnabledCount(): number | null {
+  if (sourcesCache.size === 0) return null;
+  let count = 0;
+  for (const meta of sourcesCache.values()) {
+    if (meta.interest && meta.enabled) count += 1;
+  }
+  return count;
+}
+
+/**
+ * Enabled sources grouped by category. A turned-off source is never listed.
+ * `interestsOnly` leaves out the registries and advisory feeds, whose rows
+ * Signal's "Your stack" lane states and the reading feed never shows.
+ */
+export function getSourcesByCategory({ interestsOnly = false } = {}): Map<string, string[]> {
   const groups = new Map<string, string[]>();
   for (const [id, meta] of sourcesCache) {
     if (!meta.enabled) continue;
+    if (interestsOnly && !meta.interest) continue;
     const cat = meta.category;
     const list = groups.get(cat) ?? [];
     list.push(id);

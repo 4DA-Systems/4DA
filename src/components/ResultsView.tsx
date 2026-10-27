@@ -11,6 +11,7 @@ import { ResultLaneList } from './ResultLaneList';
 import { SignalLanes } from './SignalLanes';
 import { useAppStore } from '../store';
 import { useResultFilters } from '../hooks';
+import { isReadingRow } from './signals/reading-feed';
 import { flattenVisible, locateInLanes, partitionLanes, visibleLaneItems } from './signals/signal-lanes';
 import { useSignalDisplayOrder } from './signals/signal-display-order';
 import type { FeedbackAction, SourceRelevance } from '../types';
@@ -111,10 +112,15 @@ export function ResultsView({
     [recordInteraction],
   );
 
+  // The reading rows (interests only): every count and chip reads these, never
+  // the registry and advisory rows the "Your stack" lane states.
+  const readingResults = useMemo(() => state.relevanceResults.filter(isReadingRow), [state.relevanceResults]);
+  const readingNearMisses = useMemo(() => state.nearMisses?.filter(isReadingRow) ?? null, [state.nearMisses]);
   const relevantCount = useMemo(() => filteredResults.filter(r => r.relevant).length, [filteredResults]);
   const topPicksCount = useMemo(() => filteredResults.filter(r => r.top_score >= 0.72).length, [filteredResults]);
   const criticalCount = useMemo(() => filteredResults.filter(r => r.is_critical_alert).length, [filteredResults]);
-  const totalCount = state.relevanceResults.length;
+  const totalCount = readingResults.length;
+  const hasReading = state.analysisComplete && totalCount > 0;
 
   // Topic cluster detection: find where 2+ consecutive items share a primary_topic.
   // Disabled while lanes are active — lanes are the primary partition.
@@ -151,22 +157,22 @@ export function ResultsView({
       return;
     }
     // Hidden by the relevance filter but present in the full set — reveal and re-run.
-    if (showOnlyRelevant && state.relevanceResults.some(r => r.id === searchFocusItemId)) {
+    if (showOnlyRelevant && readingResults.some(r => r.id === searchFocusItemId)) {
       setShowOnlyRelevant(false);
       return;
     }
     // Off-feed corpus item not in this list — clear; the user is already on Signal.
     setSearchFocusItemId(null);
-  }, [searchFocusItemId, lanes, worthExpanded, moreExpanded, setWorthExpanded, setMoreExpanded, displayResults, setExpandedItem, setSearchFocusItemId, showOnlyRelevant, setShowOnlyRelevant, state.relevanceResults]);
+  }, [searchFocusItemId, lanes, worthExpanded, moreExpanded, setWorthExpanded, setMoreExpanded, displayResults, setExpandedItem, setSearchFocusItemId, showOnlyRelevant, setShowOnlyRelevant, readingResults]);
 
   useEffect(() => {
     const items = [
       ...filteredResults.map((r) => ({ id: String(r.id), text: r.title })),
-      ...(state.nearMisses ?? []).map((r) => ({ id: String(r.id), text: r.title })),
+      ...(readingNearMisses ?? []).map((r) => ({ id: String(r.id), text: r.title })),
     ];
     if (items.length > 0) requestTranslation(items);
-  }, [filteredResults, state.nearMisses, requestTranslation]);
-  const sourcesWithResults = useMemo(() => new Set(state.relevanceResults.map(r => r.source_type || 'hackernews')), [state.relevanceResults]);
+  }, [filteredResults, readingNearMisses, requestTranslation]);
+  const sourcesWithResults = useMemo(() => new Set(readingResults.map(r => r.source_type || 'hackernews')), [readingResults]);
 
   const listProps = {
     scrollElementRef: parentRef,
@@ -246,7 +252,7 @@ export function ResultsView({
                 </div>
                 <p className="text-xs text-text-muted" aria-live="polite">
                   {state.analysisComplete
-                    ? (profileEmpty
+                    ? (!hasReading ? null : profileEmpty
                         ? <>{filteredResults.length} {t('results.freshPicksSubtext', 'fresh picks · ranked by recency & quality. Add a project folder or interests to personalize.')}</>
                         : <>
                             {showOnlyRelevant
@@ -263,7 +269,7 @@ export function ResultsView({
           </div>
 
           {/* Filter Bar */}
-          {state.analysisComplete && (
+          {hasReading && (
             <ResultFiltersBar
               searchQuery={searchQuery}
               setSearchQuery={setSearchQuery}
@@ -292,12 +298,16 @@ export function ResultsView({
               detectedStack={discoveredContext?.tech?.map(item => item.name) ?? []}
               onStartAnalysis={() => { void startAnalysis(); }}
             />
+          ) : !hasReading ? (
+            <p className="text-xs text-text-muted px-1 py-2" data-testid="interests-pending">
+              {t('signals.interestsPending')}
+            </p>
           ) : filteredResults.length === 0 ? (
             <NoResultsState
-              totalAnalyzed={state.relevanceResults.length}
+              totalAnalyzed={totalCount}
               showOnlyRelevant={showOnlyRelevant}
               sourceFilters={sourceFilters}
-              nearMisses={state.nearMisses}
+              nearMisses={readingNearMisses}
               setShowOnlyRelevant={setShowOnlyRelevant}
               resetSourceFilters={resetSourceFilters}
               getTranslated={getTranslated}

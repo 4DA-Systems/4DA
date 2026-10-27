@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { useMemo, useCallback, useEffect } from 'react';
+import { isStackFactRow } from '../components/signals/signal-lanes';
 import { isSourceTurnedOff } from '../config/sources';
 import { useAppStore } from '../store';
 import { isProfileEmpty } from '../utils/profile-empty';
@@ -140,6 +141,12 @@ export const useResultFilters = () => {
     const filtered = relevanceResults.filter(item => {
       // Snoozed = deferred, not rejected: hidden until the snooze expires.
       if (snoozedItemIds.has(item.id)) return false;
+      // Registry releases and advisories are the "Your stack" lane's facts,
+      // graded against what is installed (AD-054). Listed again here they
+      // were the same fact twice, ungraded, and every count, sort and chip of
+      // the reading feed counted rows it never showed ("53 relevant" over an
+      // empty list, live 2026-10-27).
+      if (isStackFactRow(item)) return false;
       const source = item.source_type || 'hackernews';
       // A source the user turned off in Settings (AD-054) is never shown,
       // even if a stale row of it is still in the list and the filter below

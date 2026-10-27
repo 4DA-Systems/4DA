@@ -26,7 +26,9 @@ function makeMockState(overrides: Record<string, unknown> = {}) {
   return {
     appState: {
       loading: false, analysisComplete: true, status: 'Ready',
-      relevanceResults: [], progress: 0, progressStage: '',
+      // One reading row: the filter bar exists only once something is read.
+      relevanceResults: [{ id: 99, title: 'Read', top_score: 0.5, source_type: 'hackernews' }],
+      progress: 0, progressStage: '',
       progressMessage: '', contextFiles: [],
       ...((overrides.appState as Record<string, unknown>) || {}),
     },

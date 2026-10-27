@@ -163,12 +163,12 @@ describe('useResultFilters', () => {
       expect(result.current.filteredResults.map((r: { id: number }) => r.id)).toEqual([1]);
     });
 
-    it('keeps advisories once there is a profile to assess them against', () => {
+    it('keeps security news once there is a profile to assess it against', () => {
       setMockStoreState({
         appState: {
           relevanceResults: [
             makeItem(1, { relevant: false, source_type: 'hackernews' }),
-            makeItem(2, { relevant: true, source_type: 'cve' }),
+            makeItem(2, { relevant: true, source_type: 'github', signal_type: 'security_alert' }),
           ],
         },
         sourceFilters: new Set(),
@@ -177,6 +177,28 @@ describe('useResultFilters', () => {
       const { result } = renderHook(() => useResultFilters());
       expect(result.current.profileEmpty).toBe(false);
       expect(result.current.filteredResults.map((r: { id: number }) => r.id)).toContain(2);
+    });
+
+    // AD-054: registry releases and advisories are the "Your stack" lane's
+    // facts. In the reading feed they were the same fact twice, ungraded,
+    // and inflated every count over a list that never showed them.
+    it('never lists registry releases or advisories, with or without a profile', () => {
+      setMockStoreState({
+        appState: {
+          relevanceResults: [
+            makeItem(1, { source_type: 'hackernews' }),
+            makeItem(2, { source_type: 'cve' }),
+            makeItem(3, { source_type: 'osv' }),
+            makeItem(4, { source_type: 'crates_io' }),
+            makeItem(5, { source_type: 'npm_registry' }),
+            makeItem(6, { source_type: 'pypi' }),
+          ],
+        },
+        sourceFilters: new Set(),
+        userContext: { interests: [{ topic: 'rust' }] },
+      });
+      const { result } = renderHook(() => useResultFilters());
+      expect(result.current.filteredResults.map((r: { id: number }) => r.id)).toEqual([1]);
     });
 
     it('filters by saved only when showSavedOnly is true', () => {

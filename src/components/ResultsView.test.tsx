@@ -39,7 +39,9 @@ function makeMockState(overrides: Record<string, unknown> = {}) {
       loading: false,
       analysisComplete: true,
       status: 'Ready',
-      relevanceResults: [],
+      // One reading row: the feed's counts and filter bar exist only once
+      // something from an interest has been read.
+      relevanceResults: [{ id: 99, title: 'Read', top_score: 0.5, source_type: 'hackernews' }],
       progress: 0,
       progressStage: '',
       progressMessage: '',
@@ -481,6 +483,32 @@ describe('ResultsView', () => {
     expect(screen.getByRole('toolbar', { name: 'Filter and sort controls' })).toBeInTheDocument();
     // The "no results" empty state should NOT be shown
     expect(screen.queryByText('results.noResults')).not.toBeInTheDocument();
+  });
+
+  // =========================================================================
+  // 22b. Only stack facts read: no counts over rows it never shows
+  // =========================================================================
+  it('with only registry and advisory rows read, says nothing has been read yet', () => {
+    currentMockState = makeMockState({
+      appState: {
+        analysisComplete: true,
+        loading: false,
+        status: 'Ready',
+        relevanceResults: [
+          { id: 1, title: 'zip 4.6.1', top_score: 0.9, source_type: 'crates_io' },
+          { id: 2, title: '[RUSTSEC-2026-0368] zip', top_score: 0.9, source_type: 'osv' },
+        ],
+        progress: 0,
+        progressStage: '',
+        progressMessage: '',
+        contextFiles: [],
+      },
+    });
+    render(<ResultsView {...defaultProps} />);
+    expect(screen.getByTestId('interests-pending')).toHaveTextContent('signals.interestsPending');
+    expect(screen.queryByText('results.countAll')).not.toBeInTheDocument();
+    expect(screen.queryByRole('toolbar', { name: 'Filter and sort controls' })).not.toBeInTheDocument();
+    expect(screen.queryByText('results.noMatch')).not.toBeInTheDocument();
   });
 
   // =========================================================================
