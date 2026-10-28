@@ -22,7 +22,7 @@
 
 use std::collections::HashMap;
 
-use rusqlite::{params, Connection, DatabaseName, OptionalExtension, Result as SqliteResult};
+use rusqlite::{params, Connection, OptionalExtension, Result as SqliteResult, MAIN_DB};
 
 use super::{blob_to_embedding, parse_datetime, StoredSourceItem};
 
@@ -155,7 +155,7 @@ fn load_chunked(conn: &Connection, ids: &[i64]) -> SqliteResult<HashMap<i64, Vec
     let mut out = HashMap::with_capacity(ids.len());
     for (chunk, slots) in by_chunk {
         let blob = conn.blob_open(
-            DatabaseName::Main,
+            MAIN_DB,
             "source_vec_vector_chunks00",
             "vectors",
             chunk,
