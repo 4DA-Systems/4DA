@@ -338,7 +338,7 @@ jobs:
           version: 10.34.6 # must match package.json packageManager
 
       - name: Setup Node.js
-        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v4
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v4
         with:
           # Node 22 (was 20): on Node 20 the Windows leg's `better-sqlite3`
           # prebuild-install finds no matching ABI prebuilt, falls back to a
@@ -356,7 +356,7 @@ jobs:
           targets: ${{ matrix.target }}
 
       - name: Rust cache
-        uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
           workspaces: src-tauri
 
@@ -443,7 +443,7 @@ jobs:
       # every leg and running it four times would only burn minutes.
       - name: Install cargo-deny (prebuilt)
         if: matrix.label == 'Linux'
-        uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2
+        uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2
         with:
           tool: cargo-deny
 
