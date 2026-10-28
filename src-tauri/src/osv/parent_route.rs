@@ -12,7 +12,7 @@ use crate::db::Database;
 use super::fix_path::requirement_admits;
 use super::parent_hint::{installed_parent, normalize_path, read_edges, EdgeObs, InstalledObs};
 
-/// The lockfile root sentinel (`ace::scanner::ROOT_PARENT`).
+/// The lockfile root sentinel (`fourda_depengine::lockfile::graph::ROOT_PARENT`).
 const ROOT_PARENT: &str = "__root__";
 /// Graph entries visited before the walk gives up (the MCP's
 /// `MAX_THROUGH_NODES`).

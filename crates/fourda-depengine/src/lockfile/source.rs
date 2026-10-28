@@ -43,13 +43,7 @@ pub trait FileSource {
     /// `dir` joined with `name` in the host's spelling. The default joins
     /// with `/`; a name that is already absolute replaces `dir`.
     fn join(&self, dir: &str, name: &str) -> String {
-        if dir.is_empty() || name.starts_with('/') {
-            name.to_string()
-        } else if dir.ends_with(['/', '\\']) {
-            format!("{dir}{name}")
-        } else {
-            format!("{dir}/{name}")
-        }
+        join_slash(dir, name)
     }
 
     /// The directory holding `path` (`""` for a bare file name), `None` for
@@ -67,9 +61,29 @@ pub trait FileSource {
     }
 }
 
+/// `dir` joined with `name` by `/`; an absolute `name` replaces `dir`.
+fn join_slash(dir: &str, name: &str) -> String {
+    if dir.is_empty() || name.starts_with('/') {
+        name.to_string()
+    } else if dir.ends_with(['/', '\\']) {
+        format!("{dir}{name}")
+    } else {
+        format!("{dir}/{name}")
+    }
+}
+
 /// A path's components: separators (`/` and `\`) and `.` dropped, `..`
 /// kept. Two spellings of one path (`a/./b.txt`, `a//b.txt`) agree here, as
 /// they do for `std::path::Path`'s comparison.
+///
+/// Deliberately host-neutral, so one rule serves every host: `\` is a
+/// separator on every platform (`std::path` on Unix reads it as part of a
+/// name), and a leading `.` is dropped (`std::path` keeps it, so `./a` and
+/// `a` differ there). Both only matter for a file name containing `\` on
+/// Unix, or for two relative spellings of one file, which name the same file
+/// anyway. The readers use components to order a directory's files and as
+/// the requirements include cycle guard; neither difference shows on the
+/// paths a walk produces (absolute, one host spelling).
 pub fn components(path: &str) -> Vec<&str> {
     path.split(['/', '\\'])
         .filter(|c| !c.is_empty() && *c != ".")
@@ -99,9 +113,37 @@ pub fn extension(name: &str) -> Option<&str> {
     }
 }
 
+/// `path` with `.` dropped and `..` resolved lexically (`/p/sub/../a.txt`
+/// is `/p/a.txt`), joined by `/`. A `..` above a relative start is kept;
+/// one above the root is dropped, as the root's parent is the root.
+pub fn normalize(path: &str) -> String {
+    let absolute = path.starts_with(['/', '\\']);
+    let mut out: Vec<&str> = Vec::new();
+    for c in components(path) {
+        if c == ".." {
+            match out.last() {
+                Some(last) if *last != ".." => {
+                    out.pop();
+                }
+                None if absolute => {}
+                _ => out.push(c),
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    let joined = out.join("/");
+    if absolute {
+        format!("/{joined}")
+    } else {
+        joined
+    }
+}
+
 /// A file system held in memory: `path -> text`, directories implied by the
-/// paths. Paths are compared by [`components`], so `/p/a.txt` and
-/// `/p/./a.txt` name one file.
+/// paths. Paths are [`normalize`]d, in keys and in joins, so `/p/a.txt`,
+/// `/p/./a.txt` and `/p/sub/../a.txt` name one file (a `-r ../base.txt`
+/// include resolves as it does on disk).
 #[derive(Debug, Clone, Default)]
 pub struct MemFs {
     files: BTreeMap<Vec<String>, (String, String)>,
@@ -127,10 +169,18 @@ impl MemFs {
 }
 
 fn key(path: &str) -> Vec<String> {
-    components(path).into_iter().map(str::to_string).collect()
+    let normal = normalize(path);
+    components(&normal)
+        .into_iter()
+        .map(str::to_string)
+        .collect()
 }
 
 impl FileSource for MemFs {
+    fn join(&self, dir: &str, name: &str) -> String {
+        normalize(&join_slash(dir, name))
+    }
+
     fn read(&self, path: &str) -> Result<String, String> {
         self.files
             .get(&key(path))
@@ -195,6 +245,25 @@ mod tests {
         assert_eq!(extension(".txt"), None);
         assert_eq!(extension("..txt"), Some("txt"));
         assert_eq!(extension("README"), None);
+    }
+
+    #[test]
+    fn mem_fs_resolves_dot_and_dot_dot_in_keys_and_joins() {
+        assert_eq!(normalize("/p/sub/../a.txt"), "/p/a.txt");
+        assert_eq!(normalize("/p/./sub//b.txt"), "/p/sub/b.txt");
+        assert_eq!(
+            normalize("/../a.txt"),
+            "/a.txt",
+            "the root's parent is the root"
+        );
+        assert_eq!(normalize("../a/../b.txt"), "../b.txt");
+        let fs = MemFs::new().with("/p/base.txt", "click==8.1.7\n");
+        assert_eq!(fs.join("/p/sub", "../base.txt"), "/p/base.txt");
+        assert!(fs.is_file("/p/sub/../base.txt"));
+        assert_eq!(
+            fs.read("/p/x/./../base.txt").as_deref(),
+            Ok("click==8.1.7\n")
+        );
     }
 
     #[test]

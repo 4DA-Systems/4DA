@@ -352,6 +352,21 @@ git+https://github.com/x/y.git#egg=y
 }
 
 #[test]
+fn requirements_include_above_the_file_resolves_through_dot_dot() {
+    let content = "-r ../base.txt\nflask==3.0.0\n";
+    let fs = MemFs::new()
+        .with("/p/base.txt", "click==8.1.7\n")
+        .with("/p/requirements/prod.txt", content);
+    let read = read_in(
+        &fs,
+        "/p/requirements/prod.txt",
+        LockFormat::Requirements,
+        content,
+    );
+    assert_eq!(ids(&read), ["click@8.1.7", "flask@3.0.0"]);
+}
+
+#[test]
 fn requirements_variants_and_requirements_dir_are_found() {
     let mut fs = MemFs::new();
     for name in [
@@ -444,6 +459,44 @@ fn go_mod_pre_117_completes_the_build_list_from_go_sum_highest() {
     // No go.sum on the host: go.mod's own requirements are all there is.
     let alone = read_in(&MemFs::new(), "/m/go.mod", LockFormat::GoMod, go_mod);
     assert_eq!(ids(&alone), ["github.com/a/a@1.2.0"]);
+}
+
+#[test]
+fn dependency_file_names_are_the_ones_read_dir_reports() {
+    for name in [
+        "package-lock.json",
+        "go.sum",
+        "pom.xml",
+        "requirements-dev.txt",
+        "Api.CSPROJ",
+    ] {
+        assert!(is_dependency_file_name(name), "{name}");
+    }
+    for name in ["package.json", "notes.txt", "requirements.in", ".csproj"] {
+        assert!(!is_dependency_file_name(name), "{name}");
+    }
+}
+
+#[test]
+fn go_mod_pre_117_skips_graph_only_modules() {
+    let go_mod = "module example.com/old\n\ngo 1.14\n\nrequire github.com/a/a v1.2.0\n";
+    // node_exporter / hugo / traefik shape: `c/c` is only walked (go.mod
+    // hashes), `gogo` has a leftover v1.1.1 source hash but the graph
+    // selects v1.2.1, whose source go.sum never hashed.
+    let fs = MemFs::new().with(
+        "/m/go.sum",
+        "github.com/a/a v1.2.0 h1:x=\n\
+         github.com/a/a v1.2.0/go.mod h1:x=\n\
+         github.com/c/c v0.4.0/go.mod h1:x=\n\
+         github.com/c/c v0.5.0/go.mod h1:x=\n\
+         github.com/gogo/protobuf v1.1.1 h1:x=\n\
+         github.com/gogo/protobuf v1.1.1/go.mod h1:x=\n\
+         github.com/gogo/protobuf v1.2.1/go.mod h1:x=\n\
+         github.com/d/d v1.0.0 h1:x=\n\
+         github.com/d/d v1.0.0/go.mod h1:x=\n",
+    );
+    let read = read_in(&fs, "/m/go.mod", LockFormat::GoMod, go_mod);
+    assert_eq!(ids(&read), ["github.com/a/a@1.2.0", "github.com/d/d@1.0.0"]);
 }
 
 #[test]

@@ -41,19 +41,27 @@ impl FileSource for StdFs {
         Path::new(path).is_file()
     }
 
+    /// Entries whose names are not UTF-8 are skipped, as the readers always
+    /// skipped them (`to_str()`): such a name cannot be handed to them, and a
+    /// lossy spelling would come back as "unreadable: not found".
     fn list(&self, dir: &str) -> Option<Vec<Entry>> {
         let entries = std::fs::read_dir(dir).ok()?;
         Some(
             entries
                 .flatten()
-                .map(|e| Entry {
-                    name: e.file_name().to_string_lossy().into_owned(),
-                    is_file: e.path().is_file(),
+                .filter_map(|e| {
+                    let name = e.file_name().into_string().ok()?;
+                    Some(Entry {
+                        name,
+                        is_file: e.path().is_file(),
+                    })
                 })
                 .collect(),
         )
     }
 
+    // `dir`, `path` and `name` are UTF-8, so joining or taking a parent of
+    // them is UTF-8 too: the lossy conversions below never replace anything.
     fn join(&self, dir: &str, name: &str) -> String {
         Path::new(dir).join(name).to_string_lossy().into_owned()
     }
@@ -65,20 +73,76 @@ impl FileSource for StdFs {
     }
 }
 
-fn host(path: &Path) -> String {
-    path.to_string_lossy().into_owned()
+/// Why a dependency file under a non-UTF-8 path is not read: the readers take
+/// host paths as UTF-8 strings. Reported as a failure, never passed over.
+pub(crate) const NON_UTF8_REASON: &str =
+    "path is not valid UTF-8: 4DA cannot read this file, so its installed versions are not checked";
+
+/// The dependency files directly in `dir` (and in its `requirements/`
+/// folder), found with `std::fs` for a directory the readers cannot be
+/// handed. Sorted, like the readers' own order within a kind.
+fn dependency_files_std(dir: &Path) -> Vec<PathBuf> {
+    let listed = |d: &Path| -> Vec<PathBuf> {
+        std::fs::read_dir(d)
+            .map(|entries| {
+                entries
+                    .flatten()
+                    .map(|e| e.path())
+                    .filter(|p| p.is_file())
+                    .collect()
+            })
+            .unwrap_or_default()
+    };
+    let mut files: Vec<PathBuf> = listed(dir)
+        .into_iter()
+        .filter(|p| {
+            p.file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(engine::is_dependency_file_name)
+        })
+        .collect();
+    files.extend(listed(&dir.join("requirements")).into_iter().filter(|p| {
+        p.extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|e| e.eq_ignore_ascii_case("txt"))
+    }));
+    files.sort();
+    files
+}
+
+/// One [`NON_UTF8_REASON`] failure per dependency file in a directory whose
+/// path is not UTF-8. Before C0.3 such a directory was read through
+/// `PathBuf`; now it is at least reported.
+fn non_utf8_outcomes(dir: &Path) -> Vec<LockfileOutcome> {
+    dependency_files_std(dir)
+        .into_iter()
+        .map(|path| LockfileOutcome::Failed {
+            path: path.display().to_string(),
+            format: None,
+            reason: NON_UTF8_REASON.to_string(),
+        })
+        .collect()
 }
 
 /// The first dependency file in `dir` (readable or not), for the walk's
-/// relevance probe. `None` when the directory holds none.
+/// relevance probe. `None` when the directory holds none. A directory whose
+/// path is not UTF-8 still probes positive when it holds one, so the walk
+/// reaches [`read_dir`] and reports it.
 pub(crate) fn probe(dir: &Path) -> Option<PathBuf> {
-    engine::probe(&StdFs, &host(dir)).map(PathBuf::from)
+    match dir.to_str() {
+        Some(host) => engine::probe(&StdFs, host).map(PathBuf::from),
+        None => dependency_files_std(dir).into_iter().next(),
+    }
 }
 
 /// Read every dependency file in `dir`. Never fails: a file that cannot be
-/// read becomes a [`LockfileOutcome::Failed`].
+/// read becomes a [`LockfileOutcome::Failed`], and so does every dependency
+/// file of a directory whose path is not UTF-8 ([`NON_UTF8_REASON`]).
 pub(crate) fn read_dir(dir: &Path) -> Vec<LockfileOutcome> {
-    engine::read_dir(&StdFs, &host(dir))
+    match dir.to_str() {
+        Some(host) => engine::read_dir(&StdFs, host),
+        None => non_utf8_outcomes(dir),
+    }
 }
 
 /// Parse lockfile text as `format`. `path` names the file in the outcome; the
@@ -86,14 +150,22 @@ pub(crate) fn read_dir(dir: &Path) -> Vec<LockfileOutcome> {
 /// includes) beside it.
 #[cfg(test)]
 pub(crate) fn read_text(path: &Path, format: LockFormat, content: &str) -> LockfileOutcome {
-    engine::read_text(&StdFs, &host(path), format, content)
+    match path.to_str() {
+        Some(host) => engine::read_text(&StdFs, host, format, content),
+        None => LockfileOutcome::Failed {
+            path: path.display().to_string(),
+            format: Some(format),
+            reason: NON_UTF8_REASON.to_string(),
+        },
+    }
 }
-
 /// The requirements files a directory holds (`*requirements*.txt`,
 /// `requirements/*.txt`), sorted.
 #[cfg(test)]
 pub(crate) fn requirements_files(dir: &Path) -> Vec<PathBuf> {
-    engine::requirements_files(&StdFs, &host(dir))
+    dir.to_str()
+        .map(|host| engine::requirements_files(&StdFs, host))
+        .unwrap_or_default()
         .into_iter()
         .map(PathBuf::from)
         .collect()

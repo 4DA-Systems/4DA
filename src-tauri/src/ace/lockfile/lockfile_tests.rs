@@ -198,3 +198,84 @@ fn parse_lockfiles_under_flattens_every_directory() {
         "outcome paths are the host's own spelling"
     );
 }
+
+/// A name that is not valid UTF-8 on this platform: an unpaired surrogate on
+/// Windows, a lone `0xff` byte on Unix.
+#[cfg(any(windows, unix))]
+fn non_utf8_name(prefix: &str) -> std::ffi::OsString {
+    #[cfg(windows)]
+    {
+        use std::os::windows::ffi::OsStringExt;
+        let mut wide: Vec<u16> = prefix.encode_utf16().collect();
+        wide.push(0xD800);
+        std::ffi::OsString::from_wide(&wide)
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::ffi::OsStringExt;
+        let mut bytes = prefix.as_bytes().to_vec();
+        bytes.push(0xff);
+        std::ffi::OsString::from_vec(bytes)
+    }
+}
+
+/// Review of #1045: a directory whose path is not UTF-8 cannot be handed to
+/// the readers. It must still probe positive and come back as one failure
+/// per dependency file, never as a directory with nothing in it.
+#[cfg(any(windows, unix))]
+#[test]
+fn a_non_utf8_directory_is_reported_not_dropped() {
+    let name = non_utf8_name("app");
+    assert!(
+        name.to_str().is_none(),
+        "the helper must build a non-UTF-8 name"
+    );
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path().join(&name);
+    std::fs::create_dir(&dir).unwrap();
+    std::fs::write(dir.join("package-lock.json"), "{}").unwrap();
+    std::fs::write(dir.join("requirements.txt"), "flask==3.0.0\n").unwrap();
+    std::fs::write(dir.join("README.md"), "# app\n").unwrap();
+
+    assert_eq!(probe(&dir), Some(dir.join("package-lock.json")));
+    let outcomes = read_dir(&dir);
+    let failed: Vec<(String, String)> = outcomes
+        .iter()
+        .map(|o| match o {
+            LockfileOutcome::Failed { path, reason, .. } => (path.clone(), reason.clone()),
+            other => panic!("expected a failure, got {other:?}"),
+        })
+        .collect();
+    assert_eq!(failed.len(), 2, "{outcomes:?}");
+    assert!(failed[0].0.ends_with("package-lock.json"), "{failed:?}");
+    assert!(failed[1].0.ends_with("requirements.txt"), "{failed:?}");
+    assert!(failed.iter().all(|(_, reason)| reason == NON_UTF8_REASON));
+
+    let mut report = LockfileReport::default();
+    for outcome in &outcomes {
+        report.record(outcome);
+    }
+    assert_eq!(report.to_json()["failed_count"], 2);
+}
+
+/// An entry whose NAME is not UTF-8, in a UTF-8 directory, is skipped as the
+/// readers always skipped it, not lossy-spelled into a path that then fails
+/// as "unreadable: not found".
+#[cfg(any(windows, unix))]
+#[test]
+fn a_non_utf8_file_name_is_skipped_not_misreported() {
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path();
+    let mut odd = non_utf8_name("requirements");
+    odd.push(".txt");
+    std::fs::write(dir.join(&odd), "flask==3.0.0\n").unwrap();
+    std::fs::write(dir.join("requirements.txt"), "click==8.1.7\n").unwrap();
+
+    let listed = StdFs.list(&dir.display().to_string()).unwrap_or_default();
+    assert_eq!(listed.len(), 1, "{listed:?}");
+    let outcomes = read_dir(dir);
+    assert!(
+        matches!(outcomes.as_slice(), [LockfileOutcome::Read(r)] if r.path.ends_with("requirements.txt")),
+        "{outcomes:?}"
+    );
+}

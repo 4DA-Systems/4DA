@@ -252,6 +252,20 @@ const UNSUPPORTED: &[(&str, &str)] = &[
     ("conda-lock.yml", "conda lockfile"),
 ];
 
+/// Whether a file directly in a directory, named `name`, is one [`read_dir`]
+/// reports (read, failed or unsupported): a fixed lockfile name, `go.sum`, a
+/// `*requirements*.txt`, or a .NET project. A host that cannot hand a
+/// directory to the readers (its path is not UTF-8) uses this to say which
+/// files it could not read, instead of reporting nothing.
+pub fn is_dependency_file_name(name: &str) -> bool {
+    let ext = extension(name).map(str::to_ascii_lowercase);
+    READERS.iter().any(|(n, _)| *n == name)
+        || UNSUPPORTED.iter().any(|(n, _)| *n == name)
+        || name == "go.sum"
+        || (ext.as_deref() == Some("txt") && name.to_ascii_lowercase().contains("requirements"))
+        || matches!(ext.as_deref(), Some("csproj" | "fsproj" | "vbproj"))
+}
+
 /// The first dependency file in `dir` (readable or not), for the walk's
 /// relevance probe. `None` when the directory holds none.
 pub fn probe(fs: &dyn FileSource, dir: &str) -> Option<String> {

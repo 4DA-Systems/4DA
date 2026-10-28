@@ -220,6 +220,13 @@ const MAX_INCLUDE_DEPTH: usize = 5;
 
 /// The cycle guard's identity of a path ([`components`]): `a/./b.txt` and
 /// `a/b.txt` are one file, as `std::path::Path` compares them.
+///
+/// Deliberately host-neutral rather than `std::path` exact (see
+/// [`components`]): `\` splits on every platform and a leading `.` is
+/// dropped. The guard can therefore only treat two spellings as one file
+/// where `std::path` would not when a Unix file name contains `\`, or for
+/// `./x` vs `x`, which is the same file; `..` is kept, as `std::path` keeps
+/// it. Depth stays bounded by [`MAX_INCLUDE_DEPTH`] either way.
 fn path_key(path: &str) -> Vec<String> {
     components(path).into_iter().map(str::to_string).collect()
 }

@@ -34,7 +34,9 @@
 //!   by the lockfile readers (C0.3) from `files` held as a
 //!   [`crate::lockfile::MemFs`] (companions such as `go.sum` or `-r` includes
 //!   are read from `files` too). An outcome is `{"read":{..}}`,
-//!   `{"failed":{..}}` or `{"unsupported":{..}}`.
+//!   `{"failed":{..}}` or `{"unsupported":{..}}`. At most
+//!   [`MAX_LOCKFILE_FILES`] files and [`MAX_LOCKFILE_BYTES`] bytes of them;
+//!   a request over either cap is an error.
 
 use std::cmp::Ordering;
 
@@ -158,6 +160,32 @@ fn match_op(
     Ok(json!({ "records": records.len(), "findings": findings }))
 }
 
+/// The most files one `read_lockfiles` request may carry.
+pub const MAX_LOCKFILE_FILES: usize = 4096;
+
+/// The most text, in bytes summed over every file, one `read_lockfiles`
+/// request may carry. The largest lockfile in the conformance corpus is a few
+/// MB; this leaves headroom for a monorepo's without letting a request
+/// make the module hold an unbounded copy.
+pub const MAX_LOCKFILE_BYTES: usize = 64 * 1024 * 1024;
+
+/// A `read_lockfiles` request over the caps is an error, not a read.
+fn check_file_bounds(files: &std::collections::BTreeMap<String, String>) -> Result<(), String> {
+    if files.len() > MAX_LOCKFILE_FILES {
+        return Err(format!(
+            "read_lockfiles: {} files, more than the {MAX_LOCKFILE_FILES} allowed",
+            files.len()
+        ));
+    }
+    let bytes: usize = files.iter().map(|(p, t)| p.len() + t.len()).sum();
+    if bytes > MAX_LOCKFILE_BYTES {
+        return Err(format!(
+            "read_lockfiles: {bytes} bytes of files, more than the {MAX_LOCKFILE_BYTES} allowed"
+        ));
+    }
+    Ok(())
+}
+
 /// A ranges array as the stored JSON text the rules read.
 fn stored(ranges: Option<&Value>) -> Option<String> {
     ranges.filter(|v| !v.is_null()).map(Value::to_string)
@@ -220,6 +248,7 @@ fn answer(request: Request) -> Result<Value, String> {
             registry,
         } => match_op(&inventory, records, &osv, &registry_index(registry))?,
         Request::ReadLockfiles { dir, files } => {
+            check_file_bounds(&files)?;
             let mut fs = MemFs::new();
             for (path, text) in &files {
                 fs.insert(path, text);
@@ -362,6 +391,29 @@ mod tests {
         assert_eq!(req["packages"][0]["name"], "click", "the include is read");
         assert_eq!(req["packages"][1]["name"], "flask");
         assert_eq!(outcomes[1]["unsupported"]["path"], "/p/pom.xml");
+    }
+
+    #[test]
+    fn read_lockfiles_over_its_caps_is_an_error() {
+        let many: serde_json::Map<String, Value> = (0..=MAX_LOCKFILE_FILES)
+            .map(|i| (format!("/p/{i}.txt"), json!("")))
+            .collect();
+        let v: Value = serde_json::from_str(&call(
+            &json!({"op": "read_lockfiles", "dir": "/p", "files": many}).to_string(),
+        ))
+        .unwrap_or_default();
+        assert_eq!(v["ok"], false, "{}", v["error"]);
+        assert!(v["error"].as_str().is_some_and(|e| e.contains("files")));
+
+        let big = "x".repeat(MAX_LOCKFILE_BYTES);
+        let v: Value = serde_json::from_str(&call(
+            &json!({"op": "read_lockfiles", "dir": "/p",
+                    "files": {"/p/requirements.txt": big}})
+            .to_string(),
+        ))
+        .unwrap_or_default();
+        assert_eq!(v["ok"], false);
+        assert!(v["error"].as_str().is_some_and(|e| e.contains("bytes")));
     }
 
     #[test]
