@@ -1267,30 +1267,18 @@ fn an_introduces_fact_keeps_its_signature_shape() {
 /// carries its caveat into every fix clause; a moved target needs none.
 #[test]
 fn a_held_caveat_follows_the_fix_clause() {
-    use fourda_depengine::held::{HeldDependency, HeldOutcome};
-    let qs = HeldDependency {
-        name: "qs".into(),
-        spec: "6.11.0".into(),
-        exact: true,
-        version: "6.11.0".into(),
-        ids: vec!["GHSA-4mjr-xmp4-gh2g".into()],
-    };
-    let blocked = HeldOutcome::Blocked {
-        target: "4.20.0".into(),
-        affected: vec![qs.clone()],
-        searched: vec!["4.20.0".into()],
-    };
+    use fourda_depengine::held::HeldOutcome;
+    let text = |o: &HeldOutcome| clause::held_caveat("express", o).map(|c| c.text);
     assert_eq!(
-        clause::held_caveat("express", &blocked).as_deref(),
+        text(&blocked_express()).as_deref(),
         Some("express 4.20.0 is NOT a clean fix: it installs an affected qs 6.11.0")
     );
     let unchecked = HeldOutcome::Unchecked {
         target: "4.20.0".into(),
         reason: "offline".into(),
     };
-    let caveat = clause::held_caveat("express", &unchecked);
     assert_eq!(
-        caveat.as_deref(),
+        text(&unchecked).as_deref(),
         Some("whether what express 4.20.0 pins or narrowly ranges is affected was NOT CHECKED")
     );
     let moved = HeldOutcome::Moved {
@@ -1299,7 +1287,64 @@ fn a_held_caveat_follows_the_fix_clause() {
         past: vec![],
     };
     assert_eq!(clause::held_caveat("express", &moved), None);
-    let site = SecuritySite {
+    let site = express_site(clause::held_caveat("express", &unchecked));
+    assert_eq!(
+        site_fix_clause("express", &site),
+        "bump express to >= 4.20.0 (whether what express 4.20.0 pins or narrowly ranges is \
+         affected was NOT CHECKED)"
+    );
+}
+
+/// Review of #1039, S3: the caveat's versions (qs 6.11.0) are facts, so a
+/// brief that quotes the fix clause is not faulted by the version check.
+#[test]
+fn a_held_caveats_versions_pass_the_version_check() {
+    let site = express_site(clause::held_caveat("express", &blocked_express()));
+    let mut fact = security(
+        "npm:express:nodegoat",
+        AlertUrgency::High,
+        "4.16.4",
+        "4.20.0",
+    );
+    fact.package = "express".into();
+    fact.sites = vec![site.clone()];
+    let facts = BriefFacts {
+        security: vec![fact],
+        ..BriefFacts::default()
+    };
+    let pf = package_facts(&facts);
+    let quoted = format!(
+        "- **express** (nodegoat): {}",
+        site_fix_clause("express", &site)
+    );
+    assert!(quoted.contains("qs 6.11.0"), "{quoted}");
+    assert_eq!(
+        crate::briefing_groundedness::check_factual_claims(&quoted, &pf),
+        Vec::<String>::new()
+    );
+    let versions = crate::morning_audit::fact_versions(&facts);
+    assert!(versions
+        .iter()
+        .any(|(p, v, what)| p == "qs" && v == "6.11.0" && *what == "held dependency"));
+}
+
+fn blocked_express() -> fourda_depengine::held::HeldOutcome {
+    fourda_depengine::held::HeldOutcome::Blocked {
+        target: "4.20.0".into(),
+        affected: vec![fourda_depengine::held::HeldDependency {
+            name: "qs".into(),
+            spec: "6.11.0".into(),
+            exact: true,
+            version: "6.11.0".into(),
+            ids: vec!["GHSA-4mjr-xmp4-gh2g".into()],
+        }],
+        searched: vec!["4.20.0".into()],
+        unchecked: vec![],
+    }
+}
+
+fn express_site(held: Option<HeldCaveat>) -> SecuritySite {
+    SecuritySite {
         label: "nodegoat".into(),
         installed: Some("4.16.4".into()),
         dev_only: false,
@@ -1309,11 +1354,6 @@ fn a_held_caveat_follows_the_fix_clause() {
             to: "4.20.0".into(),
             fix: None,
         },
-        held: caveat,
-    };
-    assert_eq!(
-        site_fix_clause("express", &site),
-        "bump express to >= 4.20.0 (whether what express 4.20.0 pins or narrowly ranges is \
-         affected was NOT CHECKED)"
-    );
+        held,
+    }
 }

@@ -21,6 +21,7 @@
 //! mirror holds a record for it, or the npm sync that included it as a held
 //! name succeeded (`release_facts::held_synced`).
 
+use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
 use fourda_depengine::fix_target::AdvisoryKind;
@@ -44,6 +45,11 @@ pub(crate) struct HeldContext<'a> {
     advisories: &'a [StoredAdvisory],
     /// npm package keys whose advisories the mirror covers.
     covered: BTreeSet<String>,
+    /// Memos (review of #1039, N1): the same dependency and range recur in
+    /// every candidate of every copy, and this runs inside every
+    /// `get_matched_advisories` call.
+    judged: RefCell<HashMap<(String, String), Option<String>>>,
+    hits: RefCell<HashMap<(String, String), Option<Vec<String>>>>,
 }
 
 fn is_npm(ecosystem: &str) -> bool {
@@ -80,6 +86,8 @@ impl<'a> HeldContext<'a> {
             records,
             advisories,
             covered,
+            judged: RefCell::default(),
+            hits: RefCell::default(),
         }
     }
 
@@ -97,11 +105,21 @@ impl<'a> HeldContext<'a> {
                 reason,
             })
         };
-        let Some(held) = self.book.held_specs(name) else {
+        let Some(read) = self.book.held_specs(name) else {
             return unchecked(format!(
                 "the npm registry has not been read for what {name}'s releases depend on"
             ));
         };
+        // Read from a higher release than the target (a lower copy was
+        // installed since): the target's own entry is simply absent, which
+        // must not read as "holds nothing" (review of #1039, B1).
+        if !read.covers(target) {
+            return unchecked(format!(
+                "the npm registry was read for {name} from {} up; {target} is below it",
+                read.from.as_deref().unwrap_or("its newest releases")
+            ));
+        }
+        let held = &read.specs;
         let at = |v: &str| held.get(v);
         at(target)?;
         let releases = self
@@ -143,7 +161,29 @@ impl HeldSources for HeldContext<'_> {
         self.book.held_facts(name)
     }
 
+    fn judged(&self, name: &str, spec: &str) -> Option<String> {
+        let key = (package_key(name, "npm"), spec.to_string());
+        if let Some(hit) = self.judged.borrow().get(&key) {
+            return hit.clone();
+        }
+        let got = fourda_depengine::held::judged_version(spec, self.facts(name).as_ref());
+        self.judged.borrow_mut().insert(key, got.clone());
+        got
+    }
+
     fn affected(&self, name: &str, version: &str) -> Option<Vec<String>> {
+        let key = (package_key(name, "npm"), version.to_string());
+        if let Some(hit) = self.hits.borrow().get(&key) {
+            return hit.clone();
+        }
+        let got = self.read_affected(name, version);
+        self.hits.borrow_mut().insert(key, got.clone());
+        got
+    }
+}
+
+impl HeldContext<'_> {
+    fn read_affected(&self, name: &str, version: &str) -> Option<Vec<String>> {
         if !self.covered.contains(&package_key(name, "npm")) {
             return None;
         }
@@ -174,6 +214,55 @@ impl HeldSources for HeldContext<'_> {
         ids.sort();
         Some(ids)
     }
+}
+
+/// Judge one release of an npm package outside a matching run, reading what
+/// the matcher reads (the raise in `raised_lines` names a release the walk
+/// never judged; review of #1039, S1). Unchecked when the inputs cannot be
+/// read.
+pub(crate) fn judge_in_db(
+    db: &crate::db::Database,
+    name: &str,
+    installed: &str,
+    target: &str,
+) -> Option<HeldOutcome> {
+    let read = || -> Result<_, String> {
+        let advisories = db.get_all_osv_advisories().map_err(|e| e.to_string())?;
+        let mut deps = db
+            .get_auditable_user_dependencies()
+            .map_err(|e| e.to_string())?;
+        deps.extend(
+            db.get_auditable_scanned_dependencies()
+                .map_err(|e| e.to_string())?,
+        );
+        Ok((advisories, deps))
+    };
+    let (advisories, deps) = match read() {
+        Ok(inputs) => inputs,
+        Err(e) => {
+            return Some(HeldOutcome::Unchecked {
+                target: target.to_string(),
+                reason: format!("the local advisory data could not be read ({e})"),
+            })
+        }
+    };
+    let records: Vec<AdvisoryRecord> = advisories
+        .iter()
+        .map(super::matching::advisory_record)
+        .collect();
+    let book = super::release_facts::book(db);
+    let installed_npm = deps
+        .into_iter()
+        .filter(|d| is_npm(&d.ecosystem))
+        .map(|d| d.package_name);
+    let ctx = HeldContext::new(
+        &book,
+        &records,
+        &advisories,
+        installed_npm,
+        super::release_facts::held_synced(db),
+    );
+    ctx.judge(name, installed, target)
 }
 
 /// Re-judge every confirmed npm copy's target in `findings`.

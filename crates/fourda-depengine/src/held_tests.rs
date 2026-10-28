@@ -350,3 +350,81 @@ fn own_advisories_with_a_fix_rule_a_release_out() {
     assert!(own.clean("1.0.5"), "only the unfixed one remains");
     assert!(!own.clears_all("1.0.5"));
 }
+
+/// Review of #1039, S4: an unchecked release mid-walk is passed, never
+/// called clean; when nothing clean follows, the note names it NOT CHECKED
+/// instead of claiming every release up to the last was judged.
+#[test]
+fn an_unchecked_release_mid_walk_is_named_not_checked() {
+    let affected = |v: &str| {
+        HeldCheck::Checked(vec![HeldDependency {
+            name: "qs".into(),
+            spec: "6.11.0".into(),
+            exact: true,
+            version: v.into(),
+            ids: vec!["GHSA-4mjr-xmp4-gh2g".into()],
+        }])
+    };
+    let c: Vec<String> = ["1.0.0", "1.0.1", "1.0.2", "1.0.3"]
+        .map(str::to_string)
+        .to_vec();
+    // 1.0.1 cannot be judged, 1.0.2 is clean: moved past it.
+    let moved = judge_target(&c, |v| match v {
+        "1.0.1" => HeldCheck::Unchecked("offline".into()),
+        "1.0.2" => HeldCheck::Checked(Vec::new()),
+        _ => affected("6.11.0"),
+    });
+    assert!(matches!(moved, Some(HeldOutcome::Moved { ref to, .. }) if to == "1.0.2"));
+    // Nothing clean: Blocked, and the unchecked releases are named.
+    let blocked = judge_target(&c, |v| match v {
+        "1.0.1" | "1.0.3" => HeldCheck::Unchecked("offline".into()),
+        _ => affected("6.11.0"),
+    });
+    let Some(out) = blocked else {
+        unreachable!("the target holds an affected dependency")
+    };
+    assert!(
+        matches!(out, HeldOutcome::Blocked { ref unchecked, .. } if *unchecked == ["1.0.1", "1.0.3"])
+    );
+    let note = held_note(&out);
+    assert!(
+        note.contains(
+            "no release on its line up to 1.0.3 that its own advisories leave clean clears it, of \
+             the releases that could be checked (1.0.1 and 1.0.3 NOT CHECKED), so 1.0.0 is NOT a \
+             clean fix"
+        ),
+        "{note}"
+    );
+    // A Blocked from before this field still reads.
+    let old: HeldOutcome = serde_json::from_value(json!({
+        "status": "blocked", "target": "1.0.0", "affected": [], "searched": ["1.0.0"]
+    }))
+    .unwrap_or(HeldOutcome::Unchecked {
+        target: String::new(),
+        reason: String::new(),
+    });
+    assert!(matches!(old, HeldOutcome::Blocked { ref unchecked, .. } if unchecked.is_empty()));
+}
+
+/// N1: a host's memoized `judged` is what the release check uses.
+#[test]
+fn the_check_reads_the_hosts_judged_version() {
+    struct Fixed;
+    impl HeldSources for Fixed {
+        fn facts(&self, _: &str) -> Option<HeldFacts> {
+            None
+        }
+        fn affected(&self, _: &str, version: &str) -> Option<Vec<String>> {
+            Some(if version == "6.14.2" {
+                vec!["GHSA-x".into()]
+            } else {
+                vec![]
+            })
+        }
+        fn judged(&self, _: &str, _: &str) -> Option<String> {
+            Some("6.14.2".into())
+        }
+    }
+    let got = check_release(&specs(&[("qs", "~6.14.0")]), &Fixed);
+    assert!(matches!(got, HeldCheck::Checked(ref a) if a.len() == 1 && a[0].version == "6.14.2"));
+}

@@ -406,7 +406,13 @@ fn npm_keeps_what_each_release_holds_from_the_installed_copy_up() {
         "qs ~6.16.0 is a narrow range"
     );
     assert!(
-        held_wants(&stored, |_| false).is_empty(),
+        held_wants(&stored, &Wants::new(), |_| false).is_empty(),
         "npm source off: no read"
     );
+    assert_eq!(held_wants(&stored, &Wants::new(), |_| true).len(), 1);
+    // Review of #1039, S2: qs is also a vulnerable package round one wants
+    // (held specs, parent requirements); round two must not re-read it bare.
+    let mut first: Wants = BTreeMap::new();
+    first.insert(("npm".into(), "QS".into()), floor("6.5.2"));
+    assert!(held_wants(&stored, &first, |_| true).is_empty());
 }

@@ -87,20 +87,36 @@ pub(crate) fn raise_declared_lines(
             continue; // the projects disagree: one line target cannot say both
         }
         notes.push(note(package, &current, &to, &packages));
+        let to = if ecosystem_norm == "npm" && to != current {
+            judge_raised(db, package, line, &current, to)
+        } else {
+            to
+        };
         line.upgrade_type = upgrade_type(&line.installed_version, &to);
-        // The held-dependency rule judged `current`, not the raised release:
-        // what that one holds was not checked here (D-4).
-        if line.held.is_some() && to != current {
-            line.held = Some(fourda_depengine::held::HeldOutcome::Unchecked {
-                target: to.clone(),
-                reason: format!(
-                    "{to} was raised for the copies {package} pins, after the check judged {current}"
-                ),
-            });
-        }
         line.target_version = Some(to);
     }
     notes.concat()
+}
+
+/// The held-dependency rule (D-4) on a raised npm release: the walk judged
+/// `current`, never `to`, and a release raised for the copies it pins can
+/// itself exact-pin an affected dependency (review of #1039, S1). Judged
+/// whatever `current`'s result was; the line takes the outcome, and the
+/// release it names when the rule moves past `to`.
+fn judge_raised(
+    db: &Database,
+    package: &str,
+    line: &mut LineTarget,
+    current: &str,
+    to: String,
+) -> String {
+    let outcome = crate::osv::held_targets::judge_in_db(db, package, &line.installed_version, &to);
+    let target = outcome
+        .as_ref()
+        .map_or_else(|| to.clone(), |o| o.target().to_string());
+    line.held = outcome;
+    tracing::debug!(target: "4da::osv", package, current, raised = %to, judged = %target, "held check on a raised release");
+    target
 }
 
 /// " Upgrade to express 4.22.3, not 4.20.0: express 4.20.0 still requires a

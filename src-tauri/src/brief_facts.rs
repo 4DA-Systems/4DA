@@ -184,7 +184,15 @@ pub(crate) struct SecuritySite {
     /// npm (audit 6.2.5 D-4): the target is NOT a clean fix, or what it
     /// holds was NOT CHECKED (`clause::held_caveat`); quoted after the fix.
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub held: Option<String>,
+    pub held: Option<HeldCaveat>,
+}
+
+/// A site's held-dependency caveat: the words, and every (package, version)
+/// they name, which the fact check must know (review of #1039, S3).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub(crate) struct HeldCaveat {
+    pub text: String,
+    pub versions: Vec<(String, String)>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -693,6 +701,11 @@ pub(crate) fn package_facts(facts: &BriefFacts) -> Vec<crate::briefing_groundedn
     for f in facts.security.iter().chain(facts.also_open.iter()) {
         for s in &f.sites {
             add(&f.package, s.installed.as_deref());
+            // The held-dependency caveat's versions (D-4): quoted in the fix
+            // clause, so they are facts the brief may repeat.
+            for (name, version) in s.held.iter().flat_map(|h| h.versions.iter()) {
+                add(name, Some(version));
+            }
             match &s.fix_path {
                 FixPath::Bump { to, .. }
                 | FixPath::Refresh { to, .. }

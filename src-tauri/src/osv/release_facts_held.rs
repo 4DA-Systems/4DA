@@ -28,7 +28,7 @@ const SYNCED_KEY: &str = "osv_held_synced_v1";
 
 /// Per release, the held specs (name -> spec) of one npm package.
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq, Eq)]
-pub(super) struct HeldSpecs {
+pub(crate) struct HeldSpecs {
     /// The document was read for held specs (a package stored before this
     /// existed, or never read as a vulnerable package, was not).
     #[serde(default)]
@@ -47,7 +47,7 @@ impl HeldSpecs {
     }
 
     /// Read for `floor` or lower already.
-    pub(super) fn covers(&self, floor: &str) -> bool {
+    pub(crate) fn covers(&self, floor: &str) -> bool {
         self.read
             && match (
                 self.from.as_deref().and_then(parse_version),
@@ -90,6 +90,19 @@ pub(super) fn parse_npm_held(doc: &serde_json::Value, floor: Option<&str>) -> He
     }
 }
 
+/// Some stored release exact-pins `package` at `version`: a real, published
+/// release the registry names, which the Brief may quote (review of #1039,
+/// S3: the held-dependency caveat names it).
+pub(super) fn exact_pins(held: &HeldSpecs, package: &str, version: &str) -> bool {
+    held.specs.values().any(|specs| {
+        specs.iter().any(|(name, spec)| {
+            name.eq_ignore_ascii_case(package)
+                && fourda_depengine::held::exact_pin_version(spec).as_deref()
+                    == Some(version.trim())
+        })
+    })
+}
+
 /// Every name some stored npm package's releases hold, and (second) the
 /// subset held through a narrow range, whose own document is needed.
 pub(super) fn held_names(
@@ -108,8 +121,12 @@ pub(super) fn held_names(
     (all, ranged)
 }
 
-/// The held-dependency names the npm OSV sync should include.
+/// The held-dependency names the npm OSV sync should include: none while the
+/// npm source is off, whatever facts are still stored (review of #1039, N2).
 pub(crate) fn names_to_sync(db: &Database) -> Vec<String> {
+    if !db.is_source_enabled("npm_registry") {
+        return Vec::new();
+    }
     let stored: HashMap<(String, String), StoredPackage> = super::read_stored(db)
         .into_iter()
         .map(|p| ((p.key.clone(), p.ecosystem.clone()), p))

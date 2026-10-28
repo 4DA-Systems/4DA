@@ -316,8 +316,11 @@ module proxy (§1b, §1e) receive them too; §4 has the complete list.
   (2) the names of the held dependencies are added to the npm package names the OSV mirror sync
   sends to `api.osv.dev` (`POST /v1/querybatch`, names only) and matches in the downloaded npm
   archive, so their advisories are known locally. These are public package names read from the
-  public registry documents of packages already sent; no version is sent. Offline, or with the npm
-  source off, nothing extra is read and every npm fix target says what it holds was NOT CHECKED.
+  public registry documents of packages already sent; no version is sent. With the npm source
+  off, no document is read and no held name is sent to OSV (the sync leaves them out). Offline or
+  with the source off, targets are judged from the facts already stored, which are used for up to
+  30 days; an npm package with no stored facts (or facts that do not reach back to its target)
+  says what it holds was NOT CHECKED.
 - **Trigger:** background, at startup, **only if dependencies exist** and the local mirror was last
   synced **> 6 hours ago** (`app_setup.rs`).
 - **Disable:** if 4DA has discovered no dependencies, nothing is sent. Removing/disabling ACE project

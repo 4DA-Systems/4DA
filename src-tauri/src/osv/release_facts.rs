@@ -102,7 +102,7 @@ struct StoredPackage {
 
 #[path = "release_facts_held.rs"]
 mod held;
-use held::HeldSpecs;
+pub(crate) use held::HeldSpecs;
 pub(crate) use held::{
     names_to_sync as held_names_to_sync, record_synced as record_held_synced, synced as held_synced,
 };
@@ -257,7 +257,9 @@ pub(crate) fn registry_lists(conn: &rusqlite::Connection, package: &str, version
                 .published
                 .iter()
                 .any(|v| v.trim() == version.trim())
-    })
+    }) || stored
+        .iter()
+        .any(|p| held::exact_pins(&p.held, package, version))
 }
 
 /// Fetch facts for the packages that need them (missing or older than a
@@ -271,7 +273,8 @@ pub(crate) async fn refresh(db: &Database) -> usize {
         .map(|p| ((p.key.clone(), p.ecosystem.clone()), p))
         .collect();
     let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(SYNC_BUDGET_SECS);
-    let first = due(wanted(db), &stored, now);
+    let wants = wanted(db);
+    let first = due(wants.clone(), &stored, now);
     let mut fetched = if first.is_empty() {
         0
     } else {
@@ -280,7 +283,7 @@ pub(crate) async fn refresh(db: &Database) -> usize {
     // D-4, second round: the documents of the dependencies the vulnerable
     // packages hold through a narrow range, read now so the first sync can
     // judge them; inside the same budget and cap.
-    let held_only = held_wants(&stored, |source| db.is_source_enabled(source));
+    let held_only = held_wants(&stored, &wants, |source| db.is_source_enabled(source));
     let second: Vec<Due> = due(held_only, &stored, now)
         .into_iter()
         .take(MAX_FETCHES_PER_SYNC.saturating_sub(fetched))
@@ -300,17 +303,27 @@ pub(crate) async fn refresh(db: &Database) -> usize {
 type Due = ((String, String), Want);
 
 /// The npm dependencies held through a narrow range by a stored package
-/// (D-4), when the npm source is enabled: release lists only.
+/// (D-4), when the npm source is enabled: release lists only. A package
+/// round one already wanted is left out: re-read with a bare want, its
+/// stored held specs and parent requirements would be replaced by empty
+/// ones (review of #1039, S2; qs is both vulnerable and held by express).
 fn held_wants(
     stored: &HashMap<(String, String), StoredPackage>,
+    first: &Wants,
     enabled: impl Fn(&str) -> bool,
 ) -> Wants {
     if !enabled("npm_registry") {
         return Wants::new();
     }
+    let wanted: BTreeSet<String> = first
+        .keys()
+        .filter(|(eco, _)| eco == "npm")
+        .map(|(_, name)| super::matching::package_key(name, "npm"))
+        .collect();
     held::held_names(stored)
         .1
         .into_iter()
+        .filter(|name| !wanted.contains(&super::matching::package_key(name, "npm")))
         .map(|name| (("npm".to_string(), name), Want::default()))
         .collect()
 }
@@ -569,9 +582,6 @@ fn parse_npm_parent(doc: &serde_json::Value, children: &BTreeSet<String>) -> Par
     }
 }
 
-/// Per release, what it holds (name -> spec), D-4.
-pub(crate) type HeldReleases = BTreeMap<String, BTreeMap<String, String>>;
-
 /// The stored registry facts, parsed once, for the parent-release walk (H1).
 pub(crate) struct ReleaseBook {
     by_key: HashMap<(String, String), StoredPackage>,
@@ -683,12 +693,13 @@ impl ReleaseBook {
             .unwrap_or_default()
     }
 
-    /// npm (D-4): what each release of `name` holds, `None` when the
-    /// document was never read for it.
-    pub(crate) fn held_specs(&self, name: &str) -> Option<&HeldReleases> {
+    /// npm (D-4): what each release of `name` holds, and from which release
+    /// up it was read ([`HeldSpecs::covers`]); `None` when the document was
+    /// never read for it.
+    pub(crate) fn held_specs(&self, name: &str) -> Option<&HeldSpecs> {
         self.get("npm", name)
             .filter(|p| !p.held.is_unread())
-            .map(|p| &p.held.specs)
+            .map(|p| &p.held)
     }
 
     /// npm (D-4): the facts a narrow range on `name` is judged with.
@@ -712,7 +723,7 @@ impl ReleaseBook {
 #[path = "release_facts_test_support.rs"]
 mod test_support;
 #[cfg(test)]
-pub(crate) use test_support::{store_docs_for_tests, store_for_tests};
+pub(crate) use test_support::{store_docs_for_tests, store_docs_from_for_tests, store_for_tests};
 
 fn npm_deprecated(manifest: &serde_json::Value) -> bool {
     manifest

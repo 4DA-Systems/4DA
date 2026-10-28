@@ -27,6 +27,16 @@ pub(crate) type TestFacts<'a> = (
 /// for tests and the graph rule vectors. Each document's requirements are
 /// kept for every dependency it names.
 pub(crate) fn store_docs_for_tests(db: &Database, docs: &[(String, serde_json::Value)]) {
+    store_docs_from_for_tests(db, docs, None);
+}
+
+/// [`store_docs_for_tests`], each document's held specs read from `floor` up
+/// (as a fetch for a copy installed at `floor` keeps them).
+pub(crate) fn store_docs_from_for_tests(
+    db: &Database,
+    docs: &[(String, serde_json::Value)],
+    floor: Option<&str>,
+) {
     let stored: HashMap<(String, String), StoredPackage> = docs
         .iter()
         .map(|(name, doc)| {
@@ -52,7 +62,7 @@ pub(crate) fn store_docs_for_tests(db: &Database, docs: &[(String, serde_json::V
                 releases: parse_npm(doc).unwrap_or_default(),
                 parents: parse_npm_parent(doc, &children),
                 // Every document's held specs, from its lowest release (D-4).
-                held: parse_npm_held(doc, None),
+                held: parse_npm_held(doc, floor),
             };
             ((key, "npm".to_string()), p)
         })

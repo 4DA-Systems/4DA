@@ -344,6 +344,12 @@ pub trait HeldSources {
     /// that affect `name` at `version`; `None` when that package's advisories
     /// cannot be read.
     fn affected(&self, name: &str, version: &str) -> Option<Vec<String>>;
+    /// The release an install of the narrow range `spec` on `name` gets
+    /// ([`judged_version`] over [`HeldSources::facts`]). A host judging many
+    /// releases memoizes it per (name, spec).
+    fn judged(&self, name: &str, spec: &str) -> Option<String> {
+        judged_version(spec, self.facts(name).as_ref())
+    }
 }
 
 /// "a, b and 3 more" for a reason.
@@ -363,9 +369,9 @@ pub fn check_release(specs: &BTreeMap<String, String>, sources: &dyn HeldSources
     let mut unread_ranges = Vec::new();
     let mut unread_advisories = Vec::new();
     for (name, spec) in specs {
-        let exact = exact_pin_version(spec).is_some();
-        let facts = if exact { None } else { sources.facts(name) };
-        let Some(version) = judged_version(spec, facts.as_ref()) else {
+        let pinned = exact_pin_version(spec);
+        let exact = pinned.is_some();
+        let Some(version) = pinned.or_else(|| sources.judged(name, spec)) else {
             unread_ranges.push(format!("{name} \"{spec}\""));
             continue;
         };
@@ -419,12 +425,16 @@ pub enum HeldOutcome {
         to: String,
         past: Vec<HeldPast>,
     },
-    /// The target holds `affected` and no release `searched` clears it: the
-    /// target stays, NOT a clean fix.
+    /// The target holds `affected` and no release `searched` that could be
+    /// checked clears it: the target stays, NOT a clean fix. `unchecked`:
+    /// the releases among `searched` whose held dependencies could not be
+    /// judged (passed, never called clean or affected).
     Blocked {
         target: String,
         affected: Vec<HeldDependency>,
         searched: Vec<String>,
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        unchecked: Vec<String>,
     },
     /// Whether the target's held dependencies are affected could not be
     /// checked: the target stays, and is not called a clean fix.
@@ -463,6 +473,7 @@ pub fn judge_target(
         HeldCheck::Checked(affected) if affected.is_empty() => return None,
         HeldCheck::Checked(affected) => affected,
     };
+    let mut unchecked = Vec::new();
     let mut past = vec![HeldPast {
         version: target.clone(),
         affected: own.clone(),
@@ -480,14 +491,16 @@ pub fn judge_target(
                 version: v.clone(),
                 affected: a,
             }),
-            // Passed silently: the one chosen after it was itself judged clean.
-            HeldCheck::Unchecked(_) => {}
+            // Passed: the one chosen after it is itself judged clean; with
+            // none chosen, the note names it NOT CHECKED.
+            HeldCheck::Unchecked(_) => unchecked.push(v.clone()),
         }
     }
     Some(HeldOutcome::Blocked {
         target: target.clone(),
         affected: own,
         searched: candidates.to_vec(),
+        unchecked,
     })
 }
 
@@ -576,6 +589,7 @@ pub fn held_note(outcome: &HeldOutcome) -> String {
             target,
             affected,
             searched,
+            unchecked,
         } => {
             let up_to = searched
                 .last()
@@ -583,9 +597,17 @@ pub fn held_note(outcome: &HeldOutcome) -> String {
                 .map(|l| format!("up to {l} "))
                 .unwrap_or_default();
             let them = if affected.len() == 1 { "it" } else { "them" };
+            let partial = if unchecked.is_empty() {
+                String::new()
+            } else {
+                format!(
+                    ", of the releases that could be checked ({} NOT CHECKED)",
+                    and(unchecked)
+                )
+            };
             format!(
                 "{}; no release on its line {up_to}that its own advisories leave clean clears \
-                 {them}, so {target} is NOT a clean fix",
+                 {them}{partial}, so {target} is NOT a clean fix",
                 held_text(target, affected)
             )
         }
