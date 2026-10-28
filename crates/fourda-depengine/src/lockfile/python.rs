@@ -8,17 +8,17 @@
 //! not, and nothing said so. PyPI recall measured 54% on 19 repositories.
 
 use std::collections::HashSet;
-use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
 
 use regex::Regex;
 use serde_json::Value;
 
-use super::{DepScope, LockFormat, LockedPackage, LockfileOutcome, LockfileRead};
+use super::source::{cmp_paths, components, extension, file_name};
+use super::{DepScope, FileSource, LockFormat, LockedPackage, LockfileOutcome, LockfileRead};
 
 fn empty(format: LockFormat) -> LockfileRead {
     LockfileRead {
-        path: PathBuf::new(),
+        path: String::new(),
         format,
         packages: Vec::new(),
         edges: Vec::new(),
@@ -162,55 +162,39 @@ pub(super) fn read_pipfile_lock(content: &str) -> Result<LockfileRead, String> {
 /// The requirements files a directory holds: any `*requirements*.txt` in it,
 /// and every `.txt` in a `requirements/` subdirectory (`requirements/base.txt`).
 /// A directory itself named `requirements` yields nothing — its parent owns it.
-pub(crate) fn requirements_files(dir: &Path) -> Vec<PathBuf> {
-    let is_requirements_dir = |p: &Path| {
-        p.file_name()
-            .and_then(|n| n.to_str())
-            .is_some_and(|n| n.eq_ignore_ascii_case("requirements"))
-    };
-    if is_requirements_dir(dir) {
+/// Sorted component by component, as the walk always sorted them.
+pub fn requirements_files(fs: &dyn FileSource, dir: &str) -> Vec<String> {
+    if file_name(dir).is_some_and(|n| n.eq_ignore_ascii_case("requirements")) {
         return Vec::new();
     }
-    let txt_files = |d: &Path| -> Vec<PathBuf> {
-        std::fs::read_dir(d)
-            .map(|entries| {
-                entries
-                    .flatten()
-                    .map(|e| e.path())
-                    .filter(|p| p.is_file())
-                    .filter(|p| {
-                        p.extension()
-                            .and_then(|e| e.to_str())
-                            .is_some_and(|e| e.eq_ignore_ascii_case("txt"))
-                    })
-                    .collect()
-            })
+    let txt_files = |d: &str| -> Vec<(String, String)> {
+        fs.list(d)
             .unwrap_or_default()
+            .into_iter()
+            .filter(|e| e.is_file)
+            .filter(|e| extension(&e.name).is_some_and(|x| x.eq_ignore_ascii_case("txt")))
+            .map(|e| (fs.join(d, &e.name), e.name))
+            .collect()
     };
-    let mut out: Vec<PathBuf> = txt_files(dir)
+    let mut out: Vec<String> = txt_files(dir)
         .into_iter()
-        .filter(|p| {
-            p.file_name()
-                .and_then(|n| n.to_str())
-                .is_some_and(|n| n.to_ascii_lowercase().contains("requirements"))
-        })
+        .filter(|(_, name)| name.to_ascii_lowercase().contains("requirements"))
+        .map(|(path, _)| path)
         .collect();
-    let sub = dir.join("requirements");
-    if sub.is_dir() {
-        out.extend(txt_files(&sub));
-    }
-    out.sort();
+    let sub = fs.join(dir, "requirements");
+    out.extend(txt_files(&sub).into_iter().map(|(path, _)| path));
+    out.sort_by(|a, b| cmp_paths(a, b));
     out
 }
 
 /// Read a directory's requirements files, one outcome each.
-pub(super) fn read_requirements_set(files: &[PathBuf]) -> Vec<LockfileOutcome> {
+pub(super) fn read_requirements_set(fs: &dyn FileSource, files: &[String]) -> Vec<LockfileOutcome> {
     files
         .iter()
-        .map(|path| match std::fs::read_to_string(path) {
+        .map(|path| match fs.read(path) {
             Ok(content) => {
-                let mut read = read_requirements(path, &content);
-                read.path = path.clone();
+                let mut read = read_requirements(fs, path, &content);
+                read.path.clone_from(path);
                 LockfileOutcome::Read(read)
             }
             Err(e) => LockfileOutcome::Failed {
@@ -223,30 +207,38 @@ pub(super) fn read_requirements_set(files: &[PathBuf]) -> Vec<LockfileOutcome> {
 }
 
 /// Exact pins from one requirements file, following `-r` / `--requirement`
-/// includes relative to it (cycle-guarded, depth-bounded).
-pub(super) fn read_requirements(path: &Path, content: &str) -> LockfileRead {
+/// includes relative to it (cycle-guarded, depth-bounded), read through `fs`.
+pub(super) fn read_requirements(fs: &dyn FileSource, path: &str, content: &str) -> LockfileRead {
     let mut read = empty(LockFormat::Requirements);
     let mut visited = HashSet::new();
-    visited.insert(path.to_path_buf());
-    collect_pins(path, content, 0, &mut visited, &mut read);
+    visited.insert(path_key(path));
+    collect_pins(fs, path, content, 0, &mut visited, &mut read);
     read
 }
 
 const MAX_INCLUDE_DEPTH: usize = 5;
 
+/// The cycle guard's identity of a path ([`components`]): `a/./b.txt` and
+/// `a/b.txt` are one file, as `std::path::Path` compares them.
+fn path_key(path: &str) -> Vec<String> {
+    components(path).into_iter().map(str::to_string).collect()
+}
+
 fn collect_pins(
-    path: &Path,
+    fs: &dyn FileSource,
+    path: &str,
     content: &str,
     depth: usize,
-    visited: &mut HashSet<PathBuf>,
+    visited: &mut HashSet<Vec<String>>,
     read: &mut LockfileRead,
 ) {
     for line in logical_lines(content) {
         if let Some(include) = include_target(&line) {
-            let target = path.parent().unwrap_or(Path::new(".")).join(include);
-            if depth < MAX_INCLUDE_DEPTH && visited.insert(target.clone()) {
-                if let Ok(nested) = std::fs::read_to_string(&target) {
-                    collect_pins(&target, &nested, depth + 1, visited, read);
+            let base = fs.parent(path).unwrap_or_else(|| ".".to_string());
+            let target = fs.join(&base, include);
+            if depth < MAX_INCLUDE_DEPTH && visited.insert(path_key(&target)) {
+                if let Ok(nested) = fs.read(&target) {
+                    collect_pins(fs, &target, &nested, depth + 1, visited, read);
                 }
             }
             continue;
@@ -257,7 +249,6 @@ fn collect_pins(
         }
     }
 }
-
 /// Physical lines joined across `\` continuations, comments removed. A `#`
 /// starts a comment at line start or after whitespace (URLs may hold `#`).
 fn logical_lines(content: &str) -> Vec<String> {

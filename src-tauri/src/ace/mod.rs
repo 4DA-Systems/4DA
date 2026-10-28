@@ -18,7 +18,6 @@ pub(crate) mod cargo_lock_facts;
 pub(crate) mod cargo_resolve;
 pub mod context;
 pub mod db;
-pub(crate) mod dep_scope;
 pub mod dormancy;
 pub mod embedding;
 pub mod git;

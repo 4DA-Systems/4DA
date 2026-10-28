@@ -11,7 +11,6 @@
 //! all before 2026-10-10: hono's 862-package bun.lock contributed nothing.
 
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
 
 use serde_json::Value;
 
@@ -225,7 +224,7 @@ pub(super) fn read_bun_lock(content: &str) -> Result<LockfileRead, String> {
         })
         .collect();
     Ok(LockfileRead {
-        path: PathBuf::new(),
+        path: String::new(),
         format: LockFormat::Bun,
         packages,
         edges: Vec::new(),

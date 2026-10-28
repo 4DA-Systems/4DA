@@ -29,9 +29,8 @@
 //! otherwise consider, and the requirement lines already record the result.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
-use std::path::{Path, PathBuf};
 
-use super::{LockFormat, LockedPackage, LockfileRead};
+use super::{FileSource, LockFormat, LockedPackage, LockfileRead};
 
 /// A Go module version: `v1.2.3`, a pre-release, a pseudo-version, `+incompatible`.
 fn is_go_version(v: &str) -> bool {
@@ -155,7 +154,7 @@ fn directive(out: &mut GoMod, kind: Block, line: &str) {
                 }
                 _ => Replacement::Local,
             };
-            let key = (module.to_string(), left.get(1).map(|v| v.to_string()));
+            let key = (module.to_string(), left.get(1).map(ToString::to_string));
             out.replaces.insert(key, target);
         }
         Block::None | Block::Other => {}
@@ -187,12 +186,11 @@ pub(super) fn highest_in_go_sum(content: &str) -> BTreeMap<String, String> {
         let (Some(module), Some(raw)) = (tokens.next(), tokens.next()) else {
             continue;
         };
-        let version = match raw.strip_suffix("/go.mod") {
-            Some(v) => v,
-            None => {
-                source_hashed.insert((module, raw));
-                raw
-            }
+        let version = if let Some(v) = raw.strip_suffix("/go.mod") {
+            v
+        } else {
+            source_hashed.insert((module, raw));
+            raw
         };
         if !is_go_version(version) {
             continue;
@@ -213,7 +211,7 @@ pub(super) fn highest_in_go_sum(content: &str) -> BTreeMap<String, String> {
 
 /// Semver precedence over two Go versions; build metadata ignored.
 fn go_order(a: &str, b: &str) -> std::cmp::Ordering {
-    let parse = |v: &str| crate::osv::version_order::OrderedVersion::parse(v);
+    let parse = |v: &str| crate::version_order::OrderedVersion::parse(v);
     match (parse(a), parse(b)) {
         (Some(x), Some(y)) => x.compare(&y).unwrap_or(std::cmp::Ordering::Equal),
         _ => std::cmp::Ordering::Equal,
@@ -221,18 +219,20 @@ fn go_order(a: &str, b: &str) -> std::cmp::Ordering {
 }
 
 /// The installed module set for the go.mod at `path` (content given).
-pub(super) fn read_go_module(path: &Path, content: &str) -> LockfileRead {
+/// Before go 1.17 the `go.sum` beside it is read through `fs`.
+pub(super) fn read_go_module(fs: &dyn FileSource, path: &str, content: &str) -> LockfileRead {
     let module = parse_go_mod(content);
     let mut selected: BTreeMap<String, String> = module.requires.clone();
     if !module.lists_build_list() {
-        if let Ok(sum) = std::fs::read_to_string(path.with_file_name("go.sum")) {
+        let sibling = fs.parent(path).map(|dir| fs.join(&dir, "go.sum"));
+        if let Some(Ok(sum)) = sibling.map(|p| fs.read(&p)) {
             for (name, version) in highest_in_go_sum(&sum) {
                 selected.entry(name).or_insert(version);
             }
         }
     }
     let mut read = LockfileRead {
-        path: PathBuf::new(),
+        path: String::new(),
         format: LockFormat::GoMod,
         packages: Vec::new(),
         edges: Vec::new(),

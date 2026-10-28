@@ -82,6 +82,42 @@ const checks = [
     },
     { line_fixes: ['1.2.5'], walk: { version: '1.2.5', clears_all: true }, withheld: ['1.2.4'] },
   ],
+  // The lockfile readers (C0.3) over host-supplied files: a pre-1.17 go.mod
+  // completes its build list from the go.sum beside it, read from `files`.
+  [
+    {
+      op: 'read_lockfiles',
+      dir: '/p',
+      files: {
+        '/p/go.mod': 'module x\n\ngo 1.16\n\nrequire github.com/a/a v1.2.0\n',
+        '/p/go.sum': 'github.com/b/b v0.9.0/go.mod h1:x=\ngithub.com/b/b v0.10.0 h1:x=\n',
+      },
+    },
+    {
+      outcomes: [
+        {
+          read: {
+            path: '/p/go.mod',
+            format: 'go-mod',
+            packages: ['github.com/a/a@1.2.0', 'github.com/b/b@0.10.0'].map((id) => {
+              const at = id.lastIndexOf('@');
+              return {
+                name: id.slice(0, at),
+                version: id.slice(at + 1),
+                scope: 'unknown',
+                primary: true,
+                top_level: true,
+                owner: null,
+                specs: [],
+              };
+            }),
+            edges: [],
+            non_registry_entries: 0,
+          },
+        },
+      ],
+    },
+  ],
 ];
 for (const [request, want] of checks) {
   const got = call(request);

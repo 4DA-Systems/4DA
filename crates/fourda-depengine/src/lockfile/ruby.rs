@@ -18,7 +18,6 @@
 //!   release are one installed version, so `(name, version)` is kept once.
 
 use std::collections::HashSet;
-use std::path::PathBuf;
 
 use super::{LockFormat, LockedPackage, LockfileRead};
 
@@ -55,7 +54,7 @@ fn spec_line(trimmed: &str) -> Option<(&str, &str)> {
 
 pub(super) fn read_gemfile_lock(content: &str) -> LockfileRead {
     let mut read = LockfileRead {
-        path: PathBuf::new(),
+        path: String::new(),
         format: LockFormat::Gemfile,
         packages: Vec::new(),
         edges: Vec::new(),

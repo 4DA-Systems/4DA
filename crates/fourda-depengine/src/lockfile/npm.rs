@@ -10,13 +10,12 @@
 //! 19 repositories sat in nested copies). v1 lockfiles nest the same copies
 //! under each entry's own `dependencies`, which were also never walked.
 
-use std::path::PathBuf;
-
 use serde_json::{Map, Value};
 
+use super::dep_scope::{pnpm_importer_pins, DevScope};
+use super::flat::pnpm_lock_yaml;
+use super::graph::{package_lock_edges, pnpm_lock_edges};
 use super::{DepScope, LockFormat, LockedPackage, LockfileRead};
-use crate::ace::dep_scope::DevScope;
-use crate::ace::scanner::ProjectScanner;
 
 /// A version an npm registry publishes (`1.2.3`, `0.0.1-security`), as
 /// opposed to a git URL, tarball path, `file:` / `link:` spec or alias.
@@ -58,10 +57,10 @@ fn slot_owner(key: &str, installed_as: &str) -> Option<String> {
 pub(super) fn read_package_lock(content: &str, format: LockFormat) -> Result<LockfileRead, String> {
     let lock: Value = serde_json::from_str(content).map_err(|e| format!("invalid JSON: {e}"))?;
     let mut read = LockfileRead {
-        path: PathBuf::new(),
+        path: String::new(),
         format,
         packages: Vec::new(),
-        edges: ProjectScanner::parse_package_lock_edges(content),
+        edges: package_lock_edges(content),
         non_registry_entries: 0,
     };
     // npm's own dev verdict per copy (AD-046), read by the one implementation.
@@ -153,9 +152,9 @@ pub(super) fn read_pnpm_lock(content: &str) -> LockfileRead {
     let scope = DevScope::from_pnpm_lock(content);
     // pnpm keys copies by identity, not position: the declared copy is the
     // version an importer pins (`importers:` -> `<dir>:` -> `dependencies:`).
-    let pins = crate::ace::dep_scope::pnpm_importer_pins(content);
+    let pins = pnpm_importer_pins(content);
     let mut seen = std::collections::HashSet::new();
-    let packages = ProjectScanner::parse_pnpm_lock_yaml(content)
+    let packages = pnpm_lock_yaml(content)
         .into_iter()
         .filter(|(name, version)| seen.insert((name.clone(), version.clone())))
         .map(|(name, version)| {
@@ -171,10 +170,10 @@ pub(super) fn read_pnpm_lock(content: &str) -> LockfileRead {
         })
         .collect();
     LockfileRead {
-        path: PathBuf::new(),
+        path: String::new(),
         format: LockFormat::Pnpm,
         packages,
-        edges: ProjectScanner::parse_pnpm_lock_edges(content),
+        edges: pnpm_lock_edges(content),
         non_registry_entries: 0,
     }
 }

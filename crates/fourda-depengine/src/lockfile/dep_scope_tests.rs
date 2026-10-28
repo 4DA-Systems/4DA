@@ -2,7 +2,8 @@
 //! Tests for `ace::dep_scope` (extracted via #[path]).
 
 use super::DevScope;
-use crate::ace::scanner::ProjectScanner;
+use crate::lockfile::flat::pnpm_lock_yaml;
+use crate::lockfile::graph::pnpm_lock_edges;
 
 /// Shaped like the live `paddle-webhook` lockfile (pnpm v9, 2026-09-10): the
 /// importer's only real work is `devDependencies`, and `sandbox` reaches it
@@ -171,7 +172,7 @@ fn peer_suffixes_aliases_and_optional_children_resolve_to_real_packages() {
 #[test]
 fn every_instance_the_walk_stores_gets_its_verdict() {
     let scope = DevScope::from_pnpm_lock(V9_PADDLE_SHAPED);
-    let mut dev_only: Vec<String> = ProjectScanner::parse_pnpm_lock_yaml(V9_PADDLE_SHAPED)
+    let mut dev_only: Vec<String> = pnpm_lock_yaml(V9_PADDLE_SHAPED)
         .iter()
         .filter(|(name, version)| scope.is_dev_only(name, version))
         .map(|(name, _)| name.clone())
@@ -444,17 +445,20 @@ fn a_lockfile_it_cannot_read_marks_nothing_dev() {
 /// keeps only packages some importer reaches, so any edge the parser drops
 /// strands a package as `unknown`. Ignored because the files change with
 /// every dependency bump; run it by hand after touching either parser:
-///   `cargo test --lib real_repo_lockfiles -- --ignored --nocapture`
+///   `cargo test --lib real_repo_lockfiles -- --ignored --nocapture` (in
+///   `crates/fourda-depengine`; tests may read files, the library may not)
 #[test]
 #[ignore = "reads the repository's tracked lockfiles, which change with every bump"]
 fn real_repo_lockfiles_parse_with_the_v9_graph() {
-    let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("..");
+    let repo = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("..");
     let read = |relative: &str| {
         std::fs::read_to_string(repo.join(relative)).unwrap_or_else(|e| panic!("{relative}: {e}"))
     };
     let tally = |content: &str| {
         let scope = DevScope::from_pnpm_lock(content);
-        let packages = ProjectScanner::parse_pnpm_lock_yaml(content);
+        let packages = pnpm_lock_yaml(content);
         let unknown: Vec<String> = packages
             .iter()
             .filter(|(n, v)| scope.label(n, v) == "unknown")
@@ -471,7 +475,7 @@ fn real_repo_lockfiles_parse_with_the_v9_graph() {
     // that declares no runtime dependencies, so everything it holds ships only
     // with dev tooling, sandbox included.
     let paddle = read("src-tauri/src/ace/fixtures/pnpm-v9-dev-only-graph.yaml");
-    let edges = ProjectScanner::parse_pnpm_lock_edges(&paddle).len();
+    let edges = pnpm_lock_edges(&paddle).len();
     let (_, packages, dev, unknown) = tally(&paddle);
     println!(
         "paddle-webhook: {} packages, {edges} edges, {dev} dev-only",

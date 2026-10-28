@@ -986,7 +986,7 @@ fn every_declared_unsupported_file_is_reported_not_covered() {
             let dir = path.parent().unwrap_or(&case.dir);
             let reported = read_dir(dir).into_iter().any(|o| {
                 matches!(&o, LockfileOutcome::Unsupported { path: p, .. }
-                    if p.file_name() == path.file_name())
+                    if Path::new(p).file_name() == path.file_name())
             });
             assert!(
                 reported,

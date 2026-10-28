@@ -29,6 +29,12 @@
 //!   Every `inventory` row must say `primary`; copies with no primary row
 //!   are an error, not an empty result. Optional `registry`:
 //!   `[{"ecosystem","name","published":[..],"excluded":[..]}]`.
+//! - `{"op":"read_lockfiles","dir":"/p","files":{"/p/package-lock.json":"..."}}`
+//!   → `{"outcomes":[LockfileOutcome..]}`: every dependency file in `dir`, read
+//!   by the lockfile readers (C0.3) from `files` held as a
+//!   [`crate::lockfile::MemFs`] (companions such as `go.sum` or `-r` includes
+//!   are read from `files` too). An outcome is `{"read":{..}}`,
+//!   `{"failed":{..}}` or `{"unsupported":{..}}`.
 
 use std::cmp::Ordering;
 
@@ -37,6 +43,7 @@ use serde_json::{json, Value};
 
 use crate::ecosystem::normalize as normalize_ecosystem;
 use crate::fix_target::{installable_line_fix, walk_target_kinds, AdvisoryKind};
+use crate::lockfile::{read_dir, MemFs};
 use crate::matching::{inventory_problem, match_inventory_with, package_key, Package};
 use crate::osv::{stored_records, AdvisoryRecord, OsvRecord};
 use crate::range::check_version_affected;
@@ -68,6 +75,11 @@ enum Request {
         /// Parallel to `ranges`: malware / maintenance-notice records.
         #[serde(default)]
         kinds: Vec<AdvisoryKind>,
+    },
+    ReadLockfiles {
+        dir: String,
+        #[serde(default)]
+        files: std::collections::BTreeMap<String, String>,
     },
     MatchInventory {
         inventory: Vec<Package>,
@@ -207,6 +219,13 @@ fn answer(request: Request) -> Result<Value, String> {
             osv,
             registry,
         } => match_op(&inventory, records, &osv, &registry_index(registry))?,
+        Request::ReadLockfiles { dir, files } => {
+            let mut fs = MemFs::new();
+            for (path, text) in &files {
+                fs.insert(path, text);
+            }
+            json!({ "outcomes": read_dir(&fs, &dir) })
+        }
     })
 }
 
@@ -324,6 +343,25 @@ mod tests {
         // An empty inventory is a truthful empty answer.
         let r = result(r#"{"op":"match_inventory","inventory":[]}"#);
         assert_eq!(r["findings"], json!([]));
+    }
+
+    #[test]
+    fn read_lockfiles_reads_the_files_given() {
+        let r = result(
+            r#"{"op":"read_lockfiles","dir":"/p","files":{
+                "/p/requirements.txt":"-r base.txt\nflask==3.0.0\n",
+                "/p/base.txt":"click==8.1.7\n",
+                "/p/pom.xml":"<project/>"}}"#,
+        );
+        let outcomes = r["outcomes"].as_array().cloned().unwrap_or_default();
+        // base.txt is not a requirements file by name; it is read as the include.
+        assert_eq!(outcomes.len(), 2, "{r}");
+        let req = &outcomes[0]["read"];
+        assert_eq!(req["path"], "/p/requirements.txt");
+        assert_eq!(req["format"], "requirements");
+        assert_eq!(req["packages"][0]["name"], "click", "the include is read");
+        assert_eq!(req["packages"][1]["name"], "flask");
+        assert_eq!(outcomes[1]["unsupported"]["path"], "/p/pom.xml");
     }
 
     #[test]

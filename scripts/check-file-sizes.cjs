@@ -41,7 +41,7 @@ const EXCEPTIONS = {
   'src-tauri/src/sso.rs':                  'SSO module — enterprise feature-gated, OAuth/SAML + tests',
   'src-tauri/src/app_setup.rs':            'App setup — Tauri setup() callback + pre-init + shutdown',
   'src-tauri/src/monitoring_briefing.rs':  'Briefing orchestration — enrichment + slots + novelty + tests',
-  'src-tauri/src/ace/scanner.rs':          'Project scanner — manifest + lockfile parsers + tests',
+  'src-tauri/src/ace/scanner.rs':          'Project scanner — manifest parsers + lockfile parser tests (parsers in fourda-depengine)',
   'src-tauri/src/blind_spots.rs':          'TEMP: slated for collapse into EvidenceItem in Intelligence Reconciliation Phase 4',
   'src-tauri/src/stability_detector.rs':   'TEMP: preference contamination fix in progress — split post-completion',
   'src-tauri/src/preemption.rs':           'TEMP: split suppression list into own module post-launch',
