@@ -29,6 +29,9 @@
 //! [`severity`]: the grade of an advisory its source never graded, read from
 //! its GHSA aliases (the rule `@4da/mcp-server` shares).
 //!
+//! [`held`]: an npm fix target judged by the dependencies it exact-pins or
+//! narrowly ranges (audit 6.2.5 D-4), over [`npm_range`]'s requirement reader.
+//!
 //! The app (`src-tauri`) keeps the DB and network halves and re-exports these
 //! under their old `crate::osv::...` paths.
 
@@ -36,9 +39,11 @@ pub mod api;
 pub mod ecosystem;
 pub mod exposure;
 pub mod fix_target;
+pub mod held;
 pub mod lines;
 pub mod malware;
 pub mod matching;
+pub mod npm_range;
 pub mod osv;
 pub mod range;
 pub mod registry;

@@ -16,6 +16,7 @@ fn line(installed: &str, target: &str, project: &str, direct: bool) -> LineTarge
         clears_all_known: true,
         introduces: Vec::new(),
         malicious: Vec::new(),
+        held: None,
         upgrade_type: Some(UpgradeType::Major),
         sites: vec![InstallSite {
             project_path: project.to_string(),

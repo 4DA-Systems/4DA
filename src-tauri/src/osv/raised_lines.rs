@@ -32,7 +32,15 @@ pub(crate) fn raised_line_targets(
         .first()
         .and_then(|m| crate::osv::exposure::canonical(&m.ecosystem).map(|e| (e, m)))
     {
-        Some((eco, m)) => raise_declared_lines(db, eco, &m.package_name, &mut lines),
+        Some((eco, m)) => {
+            let raised = raise_declared_lines(db, eco, &m.package_name, &mut lines);
+            // What each target holds (npm, audit 6.2.5 D-4): never a silent
+            // clean-fix claim.
+            format!(
+                "{raised}{}",
+                crate::osv::fix_target::held_sentences(&m.package_name, &lines)
+            )
+        }
         None => String::new(),
     };
     RaisedLines { lines, note }
@@ -79,10 +87,36 @@ pub(crate) fn raise_declared_lines(
             continue; // the projects disagree: one line target cannot say both
         }
         notes.push(note(package, &current, &to, &packages));
+        let to = if ecosystem_norm == "npm" && to != current {
+            judge_raised(db, package, line, &current, to)
+        } else {
+            to
+        };
         line.upgrade_type = upgrade_type(&line.installed_version, &to);
         line.target_version = Some(to);
     }
     notes.concat()
+}
+
+/// The held-dependency rule (D-4) on a raised npm release: the walk judged
+/// `current`, never `to`, and a release raised for the copies it pins can
+/// itself exact-pin an affected dependency (review of #1039, S1). Judged
+/// whatever `current`'s result was; the line takes the outcome, and the
+/// release it names when the rule moves past `to`.
+fn judge_raised(
+    db: &Database,
+    package: &str,
+    line: &mut LineTarget,
+    current: &str,
+    to: String,
+) -> String {
+    let outcome = crate::osv::held_targets::judge_in_db(db, package, &line.installed_version, &to);
+    let target = outcome
+        .as_ref()
+        .map_or_else(|| to.clone(), |o| o.target().to_string());
+    line.held = outcome;
+    tracing::debug!(target: "4da::osv", package, current, raised = %to, judged = %target, "held check on a raised release");
+    target
 }
 
 /// " Upgrade to express 4.22.3, not 4.20.0: express 4.20.0 still requires a

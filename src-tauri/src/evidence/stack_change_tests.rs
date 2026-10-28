@@ -48,6 +48,7 @@ fn site(label: &str, installed: &str, fix_path: FixPath) -> SecuritySite {
         scratch: false,
         dormant_days: None,
         fix_path,
+        held: None,
     }
 }
 

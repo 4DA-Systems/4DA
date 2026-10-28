@@ -361,6 +361,9 @@ fn security_fact(
                     && l.sites.iter().any(|s| norm_path(&s.project_path) == pnorm)
             });
             let fix_path = super::clause::with_introduces(fix_path, line);
+            let held = line
+                .and_then(|l| l.held.as_ref())
+                .and_then(|h| super::clause::held_caveat(&package, h));
             sites.push(SecuritySite {
                 label: labels.label(project),
                 installed,
@@ -370,6 +373,7 @@ fn security_fact(
                     .dormant_days(project)
                     .filter(|d| crate::ace::dormancy::is_dormant_days(*d)),
                 fix_path,
+                held,
             });
         }
     }

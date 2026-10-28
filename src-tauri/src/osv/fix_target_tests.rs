@@ -135,6 +135,7 @@ fn copy(project: &str, version: &str, fix: Option<&str>, clean: Option<&str>) ->
         withheld: Vec::new(),
         introduces: Vec::new(),
         malicious: Vec::new(),
+        held: None,
     }
 }
 

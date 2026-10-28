@@ -2,7 +2,50 @@
 //! The one line of fix advice per copy, worded for both the prompt and the
 //! floor (`fix_clause`).
 
-use super::{FixPath, ProvenParent};
+use fourda_depengine::held::HeldOutcome;
+
+use super::{FixPath, HeldCaveat, ProvenParent, SecuritySite};
+
+/// [`fix_clause`] for one site, with the site's held-dependency caveat
+/// (npm, audit 6.2.5 D-4) after it, so no surface quotes a target as a clean
+/// fix that the rule could not stand behind.
+pub(crate) fn site_fix_clause(package: &str, site: &SecuritySite) -> String {
+    let clause = fix_clause(package, &site.fix_path);
+    match &site.held {
+        Some(caveat) => format!("{clause} ({})", caveat.text),
+        None => clause,
+    }
+}
+
+/// The caveat a site's target carries: `None` when the target is clean as
+/// far as what it holds goes. Every version follows its own package's name
+/// (the Brief's version check reads them that way), and every version it
+/// names is in `versions`, so the fact check knows them (review of #1039, S3).
+pub(crate) fn held_caveat(package: &str, held: &HeldOutcome) -> Option<HeldCaveat> {
+    let target = held.target().to_string();
+    let mut versions = vec![(package.to_string(), target)];
+    let text = match held {
+        HeldOutcome::Moved { .. } => return None,
+        HeldOutcome::Blocked {
+            target, affected, ..
+        } => {
+            let shown = &affected[..affected.len().min(3)];
+            versions.extend(shown.iter().map(|d| (d.name.clone(), d.version.clone())));
+            let deps: Vec<String> = shown
+                .iter()
+                .map(|d| format!("{} {}", d.name, d.version))
+                .collect();
+            format!(
+                "{package} {target} is NOT a clean fix: it installs an affected {}",
+                deps.join(", ")
+            )
+        }
+        HeldOutcome::Unchecked { target, .. } => format!(
+            "whether what {package} {target} pins or narrowly ranges is affected was NOT CHECKED"
+        ),
+    };
+    Some(HeldCaveat { text, versions })
+}
 
 /// One line of fix advice, worded for both the prompt and the floor. Every
 /// version sits right after the name of the package it belongs to: the model

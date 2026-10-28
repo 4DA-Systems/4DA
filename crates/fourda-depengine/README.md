@@ -18,6 +18,8 @@ drifting apart.
 | `matching` (C0.2) | `match_inventory(&[Package], &[AdvisoryRecord]) -> Vec<Finding>`: which installed copies each advisory affects, confirmed or conservative, each copy's line fix and walk target; `match_inventory_with` adds a host hook (the app's AD-051 reachability filter); `package_key`, `pep503_name`, `MatchedDependency` | the rules of `src-tauri/src/osv/matching.rs` |
 | `exposure` (C0.2) | `exposure_for_record`: the same per-copy check for one advisory (the scorer's verdict) | the pure half of `src-tauri/src/osv/advisory_match.rs` |
 | `lines` (C0.2) | `line_targets`, `LineTarget`, `distinct_targets`, `describe_lines`: per-project, per-release-line upgrade targets | `src-tauri/src/osv/fix_target.rs` |
+| `npm_range` | `requirement_admits` / `strip_spec`: whether an npm requirement admits a version (exact bare versions, `||`, spaced operators, hyphen and x-ranges, `npm:` aliases) | moved from `src-tauri/src/osv/fix_path.rs` (re-exported there) |
+| `held` (D-4) | An npm fix target judged by what it installs: `exact_pin_version`, `is_narrow_range`, `held_specs_of`, `judged_version`, `held_candidates` (at most 10), `check_release`, `judge_target` (`Moved` / `Blocked`: NOT a clean fix / `Unchecked`: NOT CHECKED), `held_note`; the host supplies registry facts and the advisory lookup (`HeldSources`) | new, the rule `@4da/mcp-server` 6.2.5 applies (`src/live/held-dependencies.ts`); the app wires it in `src-tauri/src/osv/held_targets.rs` |
 | `api` | A provisional JSON call surface (`depengine/0`: `version_cmp`, `affected`, `fix_target`, `match_inventory`), exported by the wasm build | new; replaced by the versioned `depengine/1` contract later |
 
 The app keeps its old paths through re-exports (`crate::osv::version_order`,

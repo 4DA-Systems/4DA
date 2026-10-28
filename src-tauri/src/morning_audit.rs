@@ -82,6 +82,9 @@ pub(crate) fn fact_versions(facts: &BriefFacts) -> Vec<(String, String, &'static
             if let Some(i) = &s.installed {
                 push(&f.package, i, "installed");
             }
+            for (name, version) in s.held.iter().flat_map(|h| h.versions.iter()) {
+                push(name, version, "held dependency");
+            }
             match &s.fix_path {
                 FixPath::Bump { to, .. }
                 | FixPath::Refresh { to, .. }

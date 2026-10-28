@@ -77,6 +77,23 @@ Field conventions:
     pre-releases.
   - `withheld[]` (expected, checked only when present): the withdrawn
     releases the walk would otherwise have named, in the order met.
+- `fix_target` lines with a `held` block (D-4, ft-079..ft-092) hold the
+  whole case inline instead of `record_ids`: `held.advisories[]` (the graph
+  lines' `{id, package, ranges}`, optional `summary`; ft-079, ft-088 and
+  ft-089 use the real ids and ranges of `@4da/mcp-server`'s
+  `held-dependencies.test.ts`, the rest are SYNTHETIC `SYNT-D4-*`) and
+  `held.registry` (per package, its RAW npm abbreviated document cut down:
+  `dist-tags.latest` and each release's `dependencies`,
+  `optionalDependencies`, `devDependencies`, `peerDependencies`,
+  `deprecated`). `held.lookup` is `ok` (every package named has its
+  advisories known: one listed nowhere has none) or `down` (the held
+  packages' advisories cannot be read: the MCP's OSV lookup failing; the
+  app's mirror not covering them). Expected: `target` (the line target),
+  `held_outcome` (`clean`: the rule has nothing to say; `moved`;
+  `not_clean`; `not_checked`), and when present `held_from` (moved: the
+  advisories' own target) and `searched` (not_clean: every release judged).
+  The package's own target comes from its own advisories in the block, with
+  the registry's releases.
 - `parent_release` lines (audit H1) hold one parent and the transitive rows
   it blocks, all read from the live registry and OSV on the `source` date
   and cut to the releases the rule reads:
@@ -209,6 +226,16 @@ form.
 - A whole-major npm deprecation notice is not a withdrawal, so the target stays on the installed line (review of #976): ft-067 (glob 10.4.5 -> 10.5.0, not 12.0.0), ft-068 (tar 6.1.11 -> 6.2.1, while tar 7.0.0..7.5.7 are excluded because 7.5.8 is clean)
 - A target never brings in an advisory (parity decision 2, review of #994 B2): an advisory with no way out that the installed version does not have blocks every fixing release, so no target and no line fix; SYNTHETIC records, no live case across the 11 audit projects: ft-069
 - A malicious-package record is never brought in: with no target, `malicious[]` (record ids, sorted; checked only when present) names every malicious record a release from the landing on falls in, the MCP's `maliciousLanding`, worded "X is flagged malicious (<id>): remove or replace X"; SYNTHETIC: ft-070; beside `introduces` when a benign advisory also blocks (review of #1008, S2): ft-072
+- A fix target is judged by what it installs (audit 6.2.5 D-4; the rule `@4da/mcp-server` 6.2.5 applies in `src/live/held-dependencies.ts` and `held-targets.ts`; the app's is `fourda_depengine::held` over `osv::held_targets`). npm only. A release HOLDS a dependency its `dependencies` or `optionalDependencies` (the optional spec wins a name clash; dev and peer dependencies are not read) name with an exact pin (`^=?\s*v?(\d+\.\d+\.\d+(-pre)?)(\+build)?$`) or a narrow range (non-empty, no `||`, not exact, not a protocol, path, alias or tag, and any of: starts with `~`; matches `^\^?\s*v?0\.`; matches `^v?\d+\.\d+(\.[xX*])?$`; contains `<`; a hyphen range). Any other spec is wide and not judged. A narrow range is judged at the `latest` dist-tag when it admits it, else at the highest release it admits (withdrawn releases included; pre-releases only when the spec has `-`). A held dependency is affected when an advisory that is not a maintenance notice covers it at that version. The walk: the target, then the later stable releases on its caret line that the package's own advisories leave clean, at most 10; the first holding nothing affected is the target. None clean: the target stays, NOT a clean fix (the MCP's `installed_advisories_only`). The check cannot run: NOT CHECKED, and the target never moves on it. Lines carry a `held` block (below):
+  - The direct row, NodeGoat's express 4.16.4: 4.20.0 -> 4.22.3: ft-079
+  - Each narrow-range clause: `~` ft-080, `^0.` ft-081, `x.y` / `x.y.x` ft-082, a `<` bound ft-083, a hyphen range ft-084; a withdrawn release is judged: ft-085
+  - A wide spec is not judged: ft-086
+  - At most 10 releases are judged: ft-087
+  - No release clears it, NOT a clean fix: ft-088
+  - The check cannot run, NOT CHECKED: ft-089
+  - Only `dependencies` / `optionalDependencies`, the optional spec winning: ft-090, ft-091
+  - A maintenance notice does not make a held dependency affected: ft-092
+  - The same rule on a transitive copy, end to end: pr-007 (serve-static 1.16.0 exact-pins send 0.18.0, affected by GHSA-m6fv-jmcg-4jfg, so serve-static's target is 1.16.1)
 - A maintenance notice never blocks a target, is never one (not even its own fixed bound) and is never introduced: the walk leaves it out. The rule is the MCP's (review of #1008, B1; per-affected flag 2026-10-25): a record is a notice for package P when the summary says `unmaintained` / `no longer maintained` as words, OR the record-level `database_specific.informational` is `unmaintained` or `notice`, OR ANY `affected[]` entry for P carries `database_specific.informational` `unmaintained` or `notice` (`fourda_depengine::osv::is_notice_for`; the app's mirror stores it per row at sync, `osv_advisories.informational`, Phase 129). RustSec keeps the flag per affected entry: across the pinned corpus 0 record-level, 90 per-affected (34 unmaintained, 56 unsound). `unsound` is NOT a notice. SYNTHETIC: ft-071; ring's real RUSTSEC-2025-0010 ("prior to 0.17 are unmaintained", fixed 0.17.0): ft-073; tempdir's RUSTSEC-2018-0017 (per-affected unmaintained, summary only "deprecated", no fix): ft-074; the contrast, smallvec's per-affected unsound RUSTSEC-2018-0018 keeps its fix 0.6.13: ft-075
 
 ### Refresh verdict — AD-055 ¶1, ¶2, ¶3

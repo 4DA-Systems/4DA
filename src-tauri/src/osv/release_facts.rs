@@ -39,6 +39,11 @@
 //! through), the read keeps, per release, its requirement on that one
 //! package, and the `latest` tag. No other request is made for it: one
 //! abbreviated document per package, as before, still name only.
+//!
+//! The held-dependency rule (audit 6.2.5 D-4, `release_facts_held.rs`) reads
+//! the same document of a vulnerable npm package for what each release
+//! exact-pins or narrowly ranges, and, in a second round inside the same
+//! budget, the document of each dependency held through a narrow range.
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
@@ -90,7 +95,17 @@ struct StoredPackage {
     releases: RegistryReleases,
     #[serde(flatten)]
     parents: ParentFacts,
+    /// npm, a vulnerable package: what each release holds (D-4).
+    #[serde(default, skip_serializing_if = "HeldSpecs::is_unread")]
+    held: HeldSpecs,
 }
+
+#[path = "release_facts_held.rs"]
+mod held;
+pub(crate) use held::HeldSpecs;
+pub(crate) use held::{
+    names_to_sync as held_names_to_sync, record_synced as record_held_synced, synced as held_synced,
+};
 
 /// What the parent-release walk (H1) reads from an npm document beyond the
 /// release list. Empty for the other registries.
@@ -150,9 +165,19 @@ fn source_type(ecosystem: &str) -> Option<&'static str> {
     }
 }
 
-/// Per (OSV ecosystem, name): the packages whose per-release requirement is
-/// wanted from its document (empty: the release list only).
-type Wants = BTreeMap<(String, String), BTreeSet<String>>;
+/// What is wanted from one package's document.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+struct Want {
+    /// The packages whose per-release requirement is wanted (empty: the
+    /// release list only).
+    children: BTreeSet<String>,
+    /// npm, a vulnerable package: keep each release's held specs from this
+    /// release (its lowest confirmed installed copy) up (D-4).
+    held_from: Option<String>,
+}
+
+/// Per (OSV ecosystem, name): what is wanted from its document.
+type Wants = BTreeMap<(String, String), Want>;
 
 /// Every covered package with a version-confirmed advisory, plus (npm, H1)
 /// each installed package that pins such a package's vulnerable copy and the
@@ -164,13 +189,25 @@ fn wanted(db: &Database) -> Wants {
     let mut out: Wants = BTreeMap::new();
     for m in matches.iter().filter(|m| m.is_version_confirmed) {
         if let Some(eco) = covered(&m.ecosystem) {
-            out.entry((eco.to_string(), m.package_name.clone()))
+            let want = out
+                .entry((eco.to_string(), m.package_name.clone()))
                 .or_default();
+            if eco == "npm" {
+                want.held_from = lowest(
+                    want.held_from.take().into_iter().chain(
+                        m.dependency_instances
+                            .iter()
+                            .filter(|d| d.is_version_confirmed)
+                            .filter_map(|d| d.installed_version.clone()),
+                    ),
+                );
+            }
         }
     }
     for (parent, child) in super::parent_release_load::wanted_parents(db, &matches) {
         out.entry(("npm".to_string(), parent))
             .or_default()
+            .children
             .insert(child);
     }
     let kept: BTreeSet<(String, String)> = gate(out.keys().cloned().collect(), |source| {
@@ -180,6 +217,14 @@ fn wanted(db: &Database) -> Wants {
     .collect();
     out.retain(|k, _| kept.contains(k));
     out
+}
+
+/// The lowest semver version of `versions`.
+fn lowest(versions: impl Iterator<Item = String>) -> Option<String> {
+    versions
+        .filter_map(|v| parse_version(&v).map(|p| (p, v)))
+        .min_by(|a, b| a.0.cmp(&b.0))
+        .map(|(_, v)| v)
 }
 
 /// Drop the packages whose registry source is disabled.
@@ -212,7 +257,9 @@ pub(crate) fn registry_lists(conn: &rusqlite::Connection, package: &str, version
                 .published
                 .iter()
                 .any(|v| v.trim() == version.trim())
-    })
+    }) || stored
+        .iter()
+        .any(|p| held::exact_pins(&p.held, package, version))
 }
 
 /// Fetch facts for the packages that need them (missing or older than a
@@ -225,18 +272,61 @@ pub(crate) async fn refresh(db: &Database) -> usize {
         .filter(|p| now - p.fetched_at < Duration::days(KEEP_DAYS))
         .map(|p| ((p.key.clone(), p.ecosystem.clone()), p))
         .collect();
-    let due = due(wanted(db), &stored, now);
-    if due.is_empty() {
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(SYNC_BUDGET_SECS);
+    let wants = wanted(db);
+    let first = due(wants.clone(), &stored, now);
+    let mut fetched = if first.is_empty() {
+        0
+    } else {
+        fetch_all(first, &mut stored, deadline).await
+    };
+    // D-4, second round: the documents of the dependencies the vulnerable
+    // packages hold through a narrow range, read now so the first sync can
+    // judge them; inside the same budget and cap.
+    let held_only = held_wants(&stored, &wants, |source| db.is_source_enabled(source));
+    let second: Vec<Due> = due(held_only, &stored, now)
+        .into_iter()
+        .take(MAX_FETCHES_PER_SYNC.saturating_sub(fetched))
+        .collect();
+    if !second.is_empty() {
+        fetched += fetch_all(second, &mut stored, deadline).await;
+    }
+    if fetched == 0 {
         return 0;
     }
-    let fetched = fetch_all(due, &mut stored).await;
     save(db, stored);
     info!(target: "4da::osv", fetched, "registry release facts refreshed");
     fetched
 }
 
-/// One package to read, and the packages whose requirement it is read for.
-type Due = ((String, String), BTreeSet<String>);
+/// One package to read, and what is wanted from it.
+type Due = ((String, String), Want);
+
+/// The npm dependencies held through a narrow range by a stored package
+/// (D-4), when the npm source is enabled: release lists only. A package
+/// round one already wanted is left out: re-read with a bare want, its
+/// stored held specs and parent requirements would be replaced by empty
+/// ones (review of #1039, S2; qs is both vulnerable and held by express).
+fn held_wants(
+    stored: &HashMap<(String, String), StoredPackage>,
+    first: &Wants,
+    enabled: impl Fn(&str) -> bool,
+) -> Wants {
+    if !enabled("npm_registry") {
+        return Wants::new();
+    }
+    let wanted: BTreeSet<String> = first
+        .keys()
+        .filter(|(eco, _)| eco == "npm")
+        .map(|(_, name)| super::matching::package_key(name, "npm"))
+        .collect();
+    held::held_names(stored)
+        .1
+        .into_iter()
+        .filter(|name| !wanted.contains(&super::matching::package_key(name, "npm")))
+        .map(|name| (("npm".to_string(), name), Want::default()))
+        .collect()
+}
 
 /// The wanted packages with no facts, facts older than a day, or facts that
 /// lack a requirement now wanted, capped. Order (audit A-2): the vulnerable
@@ -252,18 +342,22 @@ fn due(
 ) -> Vec<Due> {
     let mut out: Vec<(Option<DateTime<Utc>>, Due)> = wanted
         .into_iter()
-        .filter_map(|((eco, name), children)| {
+        .filter_map(|((eco, name), want)| {
             let key = (super::matching::package_key(&name, &eco), eco.clone());
-            let held = stored.get(&key);
-            let is_due = held.is_none_or(|p| {
+            let have = stored.get(&key);
+            let is_due = have.is_none_or(|p| {
                 now - p.fetched_at >= Duration::hours(FRESH_HOURS)
-                    || children.iter().any(|c| !p.parents.requires.contains_key(c))
+                    || want
+                        .children
+                        .iter()
+                        .any(|c| !p.parents.requires.contains_key(c))
+                    || want.held_from.as_deref().is_some_and(|f| !p.held.covers(f))
             });
-            is_due.then(|| (held.map(|p| p.fetched_at), ((eco, name), children)))
+            is_due.then(|| (have.map(|p| p.fetched_at), ((eco, name), want)))
         })
         .collect();
     // `None` (never fetched) sorts before any fetch time.
-    out.sort_by_key(|(fetched, (_, children))| (!children.is_empty(), *fetched));
+    out.sort_by_key(|(fetched, (_, want))| (!want.children.is_empty(), *fetched));
     out.truncate(MAX_FETCHES_PER_SYNC);
     out.into_iter().map(|(_, due)| due).collect()
 }
@@ -284,8 +378,13 @@ fn save(db: &Database, stored: HashMap<(String, String), StoredPackage>) {
     GENERATION.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
 }
 
-/// Read each due package's registry; a success replaces its stored facts.
-async fn fetch_all(due: Vec<Due>, stored: &mut HashMap<(String, String), StoredPackage>) -> usize {
+/// Read each due package's registry, no read starting after `deadline`; a
+/// success replaces its stored facts.
+async fn fetch_all(
+    due: Vec<Due>,
+    stored: &mut HashMap<(String, String), StoredPackage>,
+    deadline: tokio::time::Instant,
+) -> usize {
     // Large documents are normal here: `next`'s abbreviated packument is
     // ~26 MB and boto3's PyPI JSON ~3.3 MB (2026-10-17), so the budget is
     // per-request generous rather than the 30 s the small reads use.
@@ -302,7 +401,6 @@ async fn fetch_all(due: Vec<Due>, stored: &mut HashMap<(String, String), StoredP
             return 0;
         }
     };
-    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(SYNC_BUDGET_SECS);
     // crates.io asks for at most one request per second, so it is a paced
     // lane of its own; npm and PyPI run beside it, a few at a time.
     let (crates, others): (Vec<Due>, Vec<Due>) = due
@@ -313,7 +411,7 @@ async fn fetch_all(due: Vec<Due>, stored: &mut HashMap<(String, String), StoredP
         lane(&client, others, MAX_IN_FLIGHT, 0, deadline),
     );
     let mut fetched = 0;
-    for ((eco, name), (releases, parents)) in paced.into_iter().chain(parallel) {
+    for ((eco, name), (releases, parents, held)) in paced.into_iter().chain(parallel) {
         fetched += 1;
         let key = super::matching::package_key(&name, &eco);
         stored.insert(
@@ -325,6 +423,7 @@ async fn fetch_all(due: Vec<Due>, stored: &mut HashMap<(String, String), StoredP
                 fetched_at: Utc::now(),
                 releases,
                 parents,
+                held,
             },
         );
     }
@@ -332,7 +431,7 @@ async fn fetch_all(due: Vec<Due>, stored: &mut HashMap<(String, String), StoredP
 }
 
 /// One package's read facts, keyed (OSV ecosystem, registry name).
-type Fetched = ((String, String), (RegistryReleases, ParentFacts));
+type Fetched = ((String, String), (RegistryReleases, ParentFacts, HeldSpecs));
 
 /// Read `due` in order, `width` at a time with `pause_ms` between batches,
 /// starting no batch after `deadline`; [`MAX_FAILURES`] failed batches in a
@@ -356,7 +455,7 @@ async fn lane(
         }
         let reads = batch
             .iter()
-            .map(|((eco, name), children)| fetch(client, eco, name, children));
+            .map(|((eco, name), want)| fetch(client, eco, name, want));
         let mut any = false;
         for (((eco, name), _), result) in batch.iter().zip(futures::future::join_all(reads).await) {
             match result {
@@ -382,8 +481,8 @@ async fn fetch(
     client: &reqwest::Client,
     eco: &str,
     name: &str,
-    children: &BTreeSet<String>,
-) -> Result<(RegistryReleases, ParentFacts), String> {
+    want: &Want,
+) -> Result<(RegistryReleases, ParentFacts, HeldSpecs), String> {
     let (url, accept) = match eco {
         "npm" => (
             format!("https://registry.npmjs.org/{}", name.replace('/', "%2f")),
@@ -415,12 +514,16 @@ async fn fetch(
         _ => parse_pypi(&doc),
     };
     let parents = if eco == "npm" {
-        parse_npm_parent(&doc, children)
+        parse_npm_parent(&doc, &want.children)
     } else {
         ParentFacts::default()
     };
+    let held = match (eco, want.held_from.as_deref()) {
+        ("npm", Some(floor)) => held::parse_npm_held(&doc, Some(floor)),
+        _ => HeldSpecs::default(),
+    };
     releases
-        .map(|r| (r, parents))
+        .map(|r| (r, parents, held))
         .ok_or_else(|| "unreadable registry answer".to_string())
 }
 
@@ -590,6 +693,24 @@ impl ReleaseBook {
             .unwrap_or_default()
     }
 
+    /// npm (D-4): what each release of `name` holds, and from which release
+    /// up it was read ([`HeldSpecs::covers`]); `None` when the document was
+    /// never read for it.
+    pub(crate) fn held_specs(&self, name: &str) -> Option<&HeldSpecs> {
+        self.get("npm", name)
+            .filter(|p| !p.held.is_unread())
+            .map(|p| &p.held)
+    }
+
+    /// npm (D-4): the facts a narrow range on `name` is judged with.
+    pub(crate) fn held_facts(&self, name: &str) -> Option<fourda_depengine::held::HeldFacts> {
+        self.get("npm", name)
+            .map(|p| fourda_depengine::held::HeldFacts {
+                published: p.releases.published.clone(),
+                latest: p.parents.latest.clone(),
+            })
+    }
+
     /// The release facts the fix-target walk reads for `name`.
     pub(crate) fn registry(&self, eco: &str, name: &str) -> RegistryReleases {
         self.get(eco, name)
@@ -602,7 +723,7 @@ impl ReleaseBook {
 #[path = "release_facts_test_support.rs"]
 mod test_support;
 #[cfg(test)]
-pub(crate) use test_support::{store_docs_for_tests, store_for_tests};
+pub(crate) use test_support::{store_docs_for_tests, store_docs_from_for_tests, store_for_tests};
 
 fn npm_deprecated(manifest: &serde_json::Value) -> bool {
     manifest

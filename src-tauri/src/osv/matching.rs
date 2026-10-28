@@ -118,9 +118,23 @@ pub(crate) fn get_matched_advisories_with_not_compiled(
     let mut reach = ReachFilter::default();
     // Releases each package's registry withdrew (FX-H5): never a target.
     let registry = super::release_facts::load(db);
-    let findings = match_inventory_with(&inventory, &records, &registry, |index, _, copies| {
+    let mut findings = match_inventory_with(&inventory, &records, &registry, |index, _, copies| {
         reach.retain_compiled(db, &advisories[index], copies);
     });
+    // npm: a target is judged by what it installs too (audit 6.2.5 D-4).
+    let book = super::release_facts::book(db);
+    let installed_npm = deps
+        .iter()
+        .filter(|d| normalize_ecosystem(&d.ecosystem) == "npm")
+        .map(|d| d.package_name.clone());
+    let held = super::held_targets::HeldContext::new(
+        &book,
+        &records,
+        &advisories,
+        installed_npm,
+        super::release_facts::held_synced(db),
+    );
+    super::held_targets::apply(&held, &mut findings);
 
     let mut matches: Vec<MatchedAdvisory> = findings
         .into_iter()

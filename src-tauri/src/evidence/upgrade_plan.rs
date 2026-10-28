@@ -678,6 +678,15 @@ fn line_citations(lines: &[LineTarget]) -> Vec<EvidenceCitation> {
             };
             let clears = if l.target_version.is_none() {
                 ""
+            } else if !fix_target::held_clean(l) {
+                // npm (D-4): what the target installs is affected, or was
+                // not checked; never "clears every known advisory".
+                match l.held {
+                    Some(fourda_depengine::held::HeldOutcome::Blocked { .. }) => {
+                        "; NOT a clean fix: a dependency it pins or narrowly ranges is affected"
+                    }
+                    _ => "; what it pins or narrowly ranges was NOT CHECKED",
+                }
             } else if l.clears_all_known {
                 "; clears every known advisory"
             } else {
@@ -736,6 +745,8 @@ fn target_detail(package: &str, lines: &[LineTarget], major: bool) -> String {
              the target clears the ones that have a fix."
         ));
     }
+    // npm (audit 6.2.5 D-4): what each target installs.
+    out.push_str(&fix_target::held_sentences(package, lines));
     out
 }
 

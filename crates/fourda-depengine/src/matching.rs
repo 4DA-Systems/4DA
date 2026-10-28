@@ -104,6 +104,14 @@ pub struct MatchedDependency {
     /// deduped. Named as malware, never as `introduces`; both can be set.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub malicious: Vec<String>,
+    /// npm (audit 6.2.5 D-4): what the held-dependency rule
+    /// ([`crate::held`]) said about this copy's target, set by the host after
+    /// matching. `Moved`: `target_version` (and `clean_version`, when it clears
+    /// everything) is already the release it names. `Blocked` / `Unchecked`:
+    /// the target stays and must not be called a clean fix. `None`: not npm,
+    /// no target, or the target holds nothing affected.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub held: Option<crate::held::HeldOutcome>,
 }
 
 /// One advisory row that affects at least one installed copy.
@@ -290,6 +298,7 @@ where
                     withheld: targets.withheld,
                     introduces: targets.introduces,
                     malicious: targets.malicious,
+                    held: None,
                 });
             }
         }

@@ -32,7 +32,7 @@ fn inst(name: &str, version: &str, direct: bool) -> DependencyInstanceInput {
     }
 }
 
-fn advisory(db: &Database, id: &str, package: &str, intro: &str, fixed: &str) {
+pub(crate) fn advisory(db: &Database, id: &str, package: &str, intro: &str, fixed: &str) {
     let ranges = format!(
         r#"[{{"type":"SEMVER","events":[{{"introduced":"{intro}"}},{{"fixed":"{fixed}"}}]}}]"#
     );

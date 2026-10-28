@@ -63,10 +63,17 @@ pub struct StepLine {
     pub target: Option<String>,
     /// `None` when either side is not semver, or there is no target.
     pub upgrade_type: Option<UpgradeType>,
-    /// `target` clears every known advisory of the package. `false` means it
-    /// clears only those with a fix on this line.
+    /// `target` clears every known advisory of the package and, for npm,
+    /// what it exact-pins or narrowly ranges was judged clean (audit 6.2.5
+    /// D-4). `false` means it clears only those with a fix on this line, or
+    /// `held` says it is not a clean fix / was not checked.
     pub clears_all_known: bool,
     pub sites: Vec<StepSite>,
+    /// npm (D-4): what the held-dependency rule said about `target`
+    /// (`moved` from the advisories' target, `blocked`: NOT a clean fix,
+    /// `unchecked`: NOT CHECKED). Absent when it had nothing to say.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub held: Option<fourda_depengine::held::HeldOutcome>,
 }
 
 /// One package's work order, keyed by the plan item it belongs to.
@@ -153,7 +160,9 @@ fn step_line(line: &LineTarget) -> StepLine {
         installed: line.installed_version.clone(),
         target: line.target_version.clone(),
         upgrade_type: line.upgrade_type,
-        clears_all_known: line.target_version.is_some() && line.clears_all_known,
+        clears_all_known: line.target_version.is_some()
+            && line.clears_all_known
+            && crate::osv::fix_target::held_clean(line),
         sites: line
             .sites
             .iter()
@@ -163,6 +172,7 @@ fn step_line(line: &LineTarget) -> StepLine {
                 dev: s.is_dev,
             })
             .collect(),
+        held: line.held.clone(),
     }
 }
 
