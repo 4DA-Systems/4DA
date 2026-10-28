@@ -3,10 +3,10 @@
 // bundle match that decision.
 //
 // tauri.conf.json bundles the whole `src-tauri/models` directory (ONNX runtime
-// + embedding model + the two OCR `.rten` files). The OCR code is entirely
+// + embedding model + the two OCR `.onnx` model files). The OCR code is entirely
 // `#[cfg(feature = "ocr")]` and the `ocr` cargo feature is OFF in release
 // builds (Cargo.toml default features; release.yml passes no `--features`), so
-// the 12 MB of `.rten` weights shipped in every installer with nothing able to
+// the 12 MB of OCR weights shipped in every installer with nothing able to
 // load them (audit 2026-10-09).
 //
 // The directory mapping itself stays as it is on purpose: tauri-build checks
@@ -20,8 +20,8 @@
 // So the decision is made where the release is built:
 //   * `ocr` reachable from the release feature set -> fetch + verify the
 //     pinned models (`fetch-ocr-models.cjs --require`), exactly as before;
-//   * otherwise -> remove the `.rten` files from `src-tauri/models` before
-//     tauri bundles it, and fail if any remain.
+//   * otherwise -> remove the OCR model files (and any legacy `.rten` copies)
+//     from `src-tauri/models` before tauri bundles it, and fail if any remain.
 //
 // Usage (release.yml, after `pnpm install`, before the tauri build):
 //   node scripts/release-ocr-models.cjs [--features "a,b"] [--dry-run]
@@ -30,7 +30,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
-const { MODELS, MODELS_DIR } = require('./fetch-ocr-models.cjs');
+const { MODELS, LEGACY_FILES, MODELS_DIR } = require('./fetch-ocr-models.cjs');
 
 const CARGO_TOML = path.join(__dirname, '..', 'src-tauri', 'Cargo.toml');
 
@@ -81,9 +81,11 @@ function ocrShipped(toml, requested = [], opts = {}) {
   return enabledFeatures(parseFeatures(toml), requested, opts).has('ocr');
 }
 
-/** The OCR model files currently present in `dir`. */
+/** The OCR model files currently present in `dir`, legacy `.rten` names included. */
 function presentModels(dir) {
-  return MODELS.map((m) => path.join(dir, m.file)).filter((p) => fs.existsSync(p));
+  return [...MODELS.map((m) => m.file), ...LEGACY_FILES]
+    .map((f) => path.join(dir, f))
+    .filter((p) => fs.existsSync(p));
 }
 
 function parseArgs(argv) {

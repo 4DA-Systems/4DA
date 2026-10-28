@@ -23,7 +23,7 @@ const { MODELS, sha256File, verify } = require('./fetch-ocr-models.cjs');
 
 function tmpFile(contents) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ocr-pin-'));
-  const file = path.join(dir, 'blob.rten');
+  const file = path.join(dir, 'blob.onnx');
   fs.writeFileSync(file, contents);
   return file;
 }
@@ -39,11 +39,28 @@ test('every model carries a pinned digest and byte length', () => {
   assert.notEqual(MODELS[0].sha256, MODELS[1].sha256);
 });
 
+test('models are the ONNX exports, and the Rust extractor loads exactly these names', () => {
+  // The `.rten` URLs are in an upstream brownout (HTTP 403 since 2026-10-27,
+  // robertknight/ocrs#282). rten's Model::load_file picks the format from the
+  // file extension, so the name on disk must stay `.onnx`, must match the URL
+  // it came from, and must be the name src-tauri/src/extractors/image.rs opens.
+  const imageRs = fs.readFileSync(
+    path.join(__dirname, '..', 'src-tauri', 'src', 'extractors', 'image.rs'),
+    'utf8',
+  );
+  for (const m of MODELS) {
+    assert.match(m.file, /\.onnx$/, `${m.file} must be an ONNX model`);
+    assert.ok(m.url.endsWith(`/${m.file}`), `${m.file} must be saved under the name it is fetched as`);
+    assert.ok(imageRs.includes(`"${m.file}"`), `image.rs must load ${m.file}`);
+  }
+  assert.doesNotMatch(imageRs, /"text-(detection|recognition)\.rten"/);
+});
+
 test('verify() accepts bytes that match the pin', () => {
   const body = Buffer.from('pretend model bytes');
   const file = tmpFile(body);
   const model = {
-    file: 'blob.rten',
+    file: 'blob.onnx',
     bytes: body.length,
     sha256: crypto.createHash('sha256').update(body).digest('hex'),
   };
@@ -53,7 +70,7 @@ test('verify() accepts bytes that match the pin', () => {
 test('verify() REJECTS a single flipped byte', () => {
   const body = Buffer.from('pretend model bytes');
   const model = {
-    file: 'blob.rten',
+    file: 'blob.onnx',
     bytes: body.length,
     sha256: crypto.createHash('sha256').update(body).digest('hex'),
   };
@@ -67,7 +84,7 @@ test('verify() REJECTS a single flipped byte', () => {
 test('verify() REJECTS a truncated download before it hashes', () => {
   const body = Buffer.from('pretend model bytes');
   const model = {
-    file: 'blob.rten',
+    file: 'blob.onnx',
     bytes: body.length,
     sha256: crypto.createHash('sha256').update(body).digest('hex'),
   };
@@ -81,7 +98,7 @@ test('verify() REJECTS a substituted file of the same length', () => {
   const evil = Buffer.from('PRETEND MODEL BYTES');
   assert.equal(body.length, evil.length);
   const model = {
-    file: 'blob.rten',
+    file: 'blob.onnx',
     bytes: body.length,
     sha256: crypto.createHash('sha256').update(body).digest('hex'),
   };
@@ -89,7 +106,7 @@ test('verify() REJECTS a substituted file of the same length', () => {
 });
 
 test('verify() REJECTS a missing file rather than passing vacuously', () => {
-  const result = verify(path.join(os.tmpdir(), 'definitely-not-here.rten'), MODELS[0]);
+  const result = verify(path.join(os.tmpdir(), 'definitely-not-here.onnx'), MODELS[0]);
   assert.equal(result.ok, false);
   assert.match(result.reason, /cannot stat/);
 });

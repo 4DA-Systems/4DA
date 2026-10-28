@@ -33,9 +33,11 @@ After installing Rust via rustup, the correct toolchain version is selected auto
 
 ```bash
 mkdir -p src-tauri/models
-curl -sSL -o src-tauri/models/text-detection.rten https://ocrs-models.s3-accelerate.amazonaws.com/text-detection.rten
-curl -sSL -o src-tauri/models/text-recognition.rten https://ocrs-models.s3-accelerate.amazonaws.com/text-recognition.rten
+curl -sSL -o src-tauri/models/text-detection.onnx https://ocrs-models.s3-accelerate.amazonaws.com/text-detection.onnx
+curl -sSL -o src-tauri/models/text-recognition.onnx https://ocrs-models.s3-accelerate.amazonaws.com/text-recognition.onnx
 ```
+
+These are the ONNX exports of the ocrs models. The older `.rten` files at the same location are deprecated upstream and have returned HTTP 403 since 2026-10-27 ([robertknight/ocrs#282](https://github.com/robertknight/ocrs/issues/282)). The expected SHA-256 of each file is pinned in `scripts/fetch-ocr-models.cjs`; `node scripts/fetch-ocr-models.cjs` downloads and verifies both.
 
 Install pnpm after Node.js:
 

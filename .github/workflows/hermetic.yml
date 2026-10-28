@@ -175,7 +175,7 @@ jobs:
       - name: Assert OCR bundle resources present (regression guard, Finding 1)
         run: |
           missing=0
-          for f in text-detection.rten text-recognition.rten; do
+          for f in text-detection.onnx text-recognition.onnx; do
             if [ ! -f "src-tauri/models/$f" ]; then
               echo "::error::src-tauri/models/$f is missing after install — a fresh clone cannot build src-tauri"
               missing=1
