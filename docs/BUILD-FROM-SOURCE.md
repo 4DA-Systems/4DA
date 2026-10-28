@@ -33,11 +33,11 @@ After installing Rust via rustup, the correct toolchain version is selected auto
 
 ```bash
 mkdir -p src-tauri/models
-curl -sSL -o src-tauri/models/text-detection.onnx https://ocrs-models.s3-accelerate.amazonaws.com/text-detection.onnx
-curl -sSL -o src-tauri/models/text-recognition.onnx https://ocrs-models.s3-accelerate.amazonaws.com/text-recognition.onnx
+curl -sSL -o src-tauri/models/text-detection.onnx https://github.com/4DA-Systems/4DA/releases/download/ocr-models-onnx-1/text-detection.onnx
+curl -sSL -o src-tauri/models/text-recognition.onnx https://github.com/4DA-Systems/4DA/releases/download/ocr-models-onnx-1/text-recognition.onnx
 ```
 
-These are the ONNX exports of the ocrs models. The older `.rten` files at the same location are deprecated upstream and have returned HTTP 403 since 2026-10-27 ([robertknight/ocrs#282](https://github.com/robertknight/ocrs/issues/282)). The expected SHA-256 of each file is pinned in `scripts/fetch-ocr-models.cjs`; `node scripts/fetch-ocr-models.cjs` downloads and verifies both.
+These are the ONNX exports of the ocrs models, mirrored on the 4DA `ocr-models-onnx-1` release because upstream asks consumers to host their own copies ([robertknight/ocrs#282](https://github.com/robertknight/ocrs/issues/282)). The upstream copies at `https://ocrs-models.s3-accelerate.amazonaws.com/<file>` are the fallback. The expected size and SHA-256 of each file are pinned in `scripts/fetch-ocr-models.cjs`; `node scripts/fetch-ocr-models.cjs` tries the mirror, then upstream, and accepts a file from either only if it matches the pin.
 
 Install pnpm after Node.js:
 
