@@ -2,13 +2,19 @@
 /// Image OCR extraction
 ///
 /// Extracts text from images using OCR via the ocrs crate (pure Rust).
-/// Requires model files in src-tauri/models/:
-///   - text-detection.rten (~2.5MB)
-///   - text-recognition.rten (~9.5MB)
+/// Requires the ONNX model files in src-tauri/models/ (`pnpm install` fetches
+/// and SHA-256-verifies them via scripts/fetch-ocr-models.cjs):
+///   - text-detection.onnx (~2.5MB)
+///   - text-recognition.onnx (~9.5MB)
 ///
 /// Models can be downloaded from:
-/// https://ocrs-models.s3-accelerate.amazonaws.com/text-detection.rten
-/// https://ocrs-models.s3-accelerate.amazonaws.com/text-recognition.rten
+/// https://ocrs-models.s3-accelerate.amazonaws.com/text-detection.onnx
+/// https://ocrs-models.s3-accelerate.amazonaws.com/text-recognition.onnx
+///
+/// rten picks the model format from the file extension, which is why these are
+/// loaded by their `.onnx` names. The `.rten` variants this used before are
+/// deprecated upstream and their URLs return HTTP 403 since 2026-10-27
+/// (robertknight/ocrs#282).
 use super::{DocumentExtractor, ExtractedDocument, PageContent};
 use crate::error::{Result, ResultExt};
 use image::ImageReader;
@@ -17,6 +23,11 @@ use rten::Model;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::OnceLock;
+
+/// Text-detection model file name inside the models directory.
+const DETECTION_MODEL: &str = "text-detection.onnx";
+/// Text-recognition model file name inside the models directory.
+const RECOGNITION_MODEL: &str = "text-recognition.onnx";
 
 /// Global OCR engine instance (expensive to create, reuse across calls)
 static OCR_ENGINE: OnceLock<std::result::Result<OcrEngine, String>> = OnceLock::new();
@@ -34,8 +45,8 @@ fn find_models_dir() -> Option<PathBuf> {
     ];
 
     for path_opt in search_paths.iter().flatten() {
-        let detection_path = path_opt.join("text-detection.rten");
-        let recognition_path = path_opt.join("text-recognition.rten");
+        let detection_path = path_opt.join(DETECTION_MODEL);
+        let recognition_path = path_opt.join(RECOGNITION_MODEL);
         if detection_path.exists() && recognition_path.exists() {
             return Some(path_opt.clone());
         }
@@ -47,15 +58,15 @@ fn find_models_dir() -> Option<PathBuf> {
 fn get_ocr_engine() -> crate::error::Result<&'static OcrEngine> {
     let engine = OCR_ENGINE.get_or_init(|| {
         let models_dir = find_models_dir().ok_or_else(|| {
-            "OCR models not found. Please download:\n\
-             - https://ocrs-models.s3-accelerate.amazonaws.com/text-detection.rten\n\
-             - https://ocrs-models.s3-accelerate.amazonaws.com/text-recognition.rten\n\
+            "OCR models not found. Run `node scripts/fetch-ocr-models.cjs`, or download:\n\
+             - https://ocrs-models.s3-accelerate.amazonaws.com/text-detection.onnx\n\
+             - https://ocrs-models.s3-accelerate.amazonaws.com/text-recognition.onnx\n\
              Place them in src-tauri/models/ or your local data directory under 4da/models/"
                 .to_string()
         })?;
 
-        let detection_path = models_dir.join("text-detection.rten");
-        let recognition_path = models_dir.join("text-recognition.rten");
+        let detection_path = models_dir.join(DETECTION_MODEL);
+        let recognition_path = models_dir.join(RECOGNITION_MODEL);
 
         let detection_model = Model::load_file(&detection_path)
             .map_err(|e| format!("Failed to load detection model: {e}"))?;
@@ -206,8 +217,78 @@ mod tests {
         let result = find_models_dir();
         // Result may be Some or None depending on whether models are installed
         if let Some(path) = result {
-            assert!(path.join("text-detection.rten").exists());
-            assert!(path.join("text-recognition.rten").exists());
+            assert!(path.join(DETECTION_MODEL).exists());
+            assert!(path.join(RECOGNITION_MODEL).exists());
         }
+    }
+
+    /// 5x7 bitmap glyphs (one byte per row, low 5 bits, MSB on the left).
+    fn glyph(c: char) -> [u8; 7] {
+        match c {
+            'D' => [0x1E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x1E],
+            'E' => [0x1F, 0x10, 0x10, 0x1E, 0x10, 0x10, 0x1F],
+            'H' => [0x11, 0x11, 0x11, 0x1F, 0x11, 0x11, 0x11],
+            'L' => [0x10, 0x10, 0x10, 0x10, 0x10, 0x10, 0x1F],
+            'O' => [0x0E, 0x11, 0x11, 0x11, 0x11, 0x11, 0x0E],
+            'R' => [0x1E, 0x11, 0x11, 0x1E, 0x14, 0x12, 0x11],
+            'W' => [0x11, 0x11, 0x11, 0x15, 0x15, 0x15, 0x0A],
+            _ => [0; 7],
+        }
+    }
+
+    /// Black-on-white PNG of `text`, each bitmap pixel drawn as a `scale` square.
+    fn render_text_png(text: &str, scale: u32, dest: &Path) {
+        let margin = 4 * scale;
+        // Two blank columns between glyphs: with one, "LL" reads as a single L.
+        let advance = 7 * scale;
+        let width = margin * 2 + advance * text.chars().count() as u32;
+        let height = margin * 2 + 7 * scale;
+        let mut img = image::RgbImage::from_pixel(width, height, image::Rgb([255, 255, 255]));
+        for (i, c) in text.chars().enumerate() {
+            let x0 = margin + advance * i as u32;
+            for (row, bits) in glyph(c).iter().enumerate() {
+                for col in 0..5u32 {
+                    if bits & (0x10 >> col) == 0 {
+                        continue;
+                    }
+                    for dy in 0..scale {
+                        for dx in 0..scale {
+                            let x = x0 + col * scale + dx;
+                            let y = margin + row as u32 * scale + dy;
+                            img.put_pixel(x, y, image::Rgb([0, 0, 0]));
+                        }
+                    }
+                }
+            }
+        }
+        img.save(dest).unwrap();
+    }
+
+    /// End to end: load both real ONNX models and read text back from a
+    /// generated image. Ignored by default because it needs the downloaded
+    /// models. Run with `node scripts/fetch-ocr-models.cjs`, then
+    /// `cargo test --features ocr --lib extractors::image -- --ignored`.
+    #[test]
+    #[ignore = "needs the OCR models in src-tauri/models (node scripts/fetch-ocr-models.cjs)"]
+    fn test_onnx_models_load_and_read_generated_text() {
+        assert!(
+            find_models_dir().is_some(),
+            "{DETECTION_MODEL} and {RECOGNITION_MODEL} not found; run node scripts/fetch-ocr-models.cjs"
+        );
+        get_ocr_engine().unwrap();
+
+        let dir = tempfile::tempdir().unwrap();
+        let png = dir.path().join("hello-world.png");
+        render_text_png("HELLO WORLD", 6, &png);
+
+        let doc = ImageExtractor::new().extract(&png).unwrap();
+        println!("OCR read: {:?} (confidence {})", doc.text, doc.confidence);
+        let letters: String = doc
+            .text
+            .to_uppercase()
+            .chars()
+            .filter(char::is_ascii_alphabetic)
+            .collect();
+        assert_eq!(letters, "HELLOWORLD", "OCR read {:?}", doc.text);
     }
 }

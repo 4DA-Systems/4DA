@@ -18,6 +18,17 @@
 // it (see the sizes, which are also asserted). Refresh them ONLY after
 // deliberately verifying an intentional upstream model update.
 //
+// FORMAT: these are the ONNX exports of the ocrs models. Until 2026-10-27 this
+// script fetched the `.rten` variants; upstream deprecated those and put their
+// URLs into a brownout (HTTP 403 since 2026-10-27, robertknight/ocrs#282),
+// which broke every fresh-clone install. rten 0.26 loads `.onnx` natively
+// (its default `onnx_format` feature, which src-tauri/Cargo.toml keeps on), and
+// `Model::load_file` picks the format from the file extension, so the file
+// names below are load-bearing. Upstream also asks consumers to host or bundle
+// their own copies long-term (robertknight/ocrs#283); until 4DA does, the pins
+// below are what keep a moved or replaced upstream file from reaching a build.
+// ONNX pins recorded 2026-10-28.
+//
 // FAILURE POLICY -- the two cases are deliberately different:
 //   * NETWORK failure  -> non-fatal by default. An offline install still
 //                         succeeds, with a clear pointer to the manual step,
@@ -38,18 +49,24 @@ const crypto = require("crypto");
 const MODELS_DIR = path.join(__dirname, "..", "src-tauri", "models");
 const MODELS = [
   {
-    file: "text-detection.rten",
-    url: "https://ocrs-models.s3-accelerate.amazonaws.com/text-detection.rten",
-    sha256: "f15cfb56bd02c4bf478a20343986504a1f01e1665c2b3a0ad66340f054b1b5ca",
-    bytes: 2510284,
+    file: "text-detection.onnx",
+    url: "https://ocrs-models.s3-accelerate.amazonaws.com/text-detection.onnx",
+    sha256: "a917b23dbd9524b465df7e922641b3ff2981623df4ded5a0234004ef2fee7cfe",
+    bytes: 2499479,
   },
   {
-    file: "text-recognition.rten",
-    url: "https://ocrs-models.s3-accelerate.amazonaws.com/text-recognition.rten",
-    sha256: "e484866d4cce403175bd8d00b128feb08ab42e208de30e42cd9889d8f1735a6e",
-    bytes: 9716568,
+    file: "text-recognition.onnx",
+    url: "https://ocrs-models.s3-accelerate.amazonaws.com/text-recognition.onnx",
+    sha256: "86c145c2edb96c8caed5b1ebb8f44d706408922211451c309c625157dd6061c5",
+    bytes: 9713177,
   },
 ];
+
+// The `.rten` files this script fetched before the switch to ONNX. Nothing
+// loads them any more; main() deletes them from MODELS_DIR so an existing
+// checkout does not keep 12 MB of dead weights, and release-ocr-models.cjs
+// strips them from a release bundle along with MODELS.
+const LEGACY_FILES = ["text-detection.rten", "text-recognition.rten"];
 
 function sha256File(file) {
   const hash = crypto.createHash("sha256");
@@ -123,6 +140,14 @@ async function main() {
   const require_ = process.argv.includes("--require");
   fs.mkdirSync(MODELS_DIR, { recursive: true });
 
+  for (const legacy of LEGACY_FILES) {
+    const stale = path.join(MODELS_DIR, legacy);
+    if (fs.existsSync(stale)) {
+      fs.rmSync(stale, { force: true });
+      console.log(`[ocr-models] removed ${legacy} (superseded by the ONNX model)`);
+    }
+  }
+
   for (const model of MODELS) {
     const dest = path.join(MODELS_DIR, model.file);
 
@@ -171,4 +196,4 @@ if (require.main === module) {
   main();
 }
 
-module.exports = { MODELS, MODELS_DIR, sha256File, verify };
+module.exports = { MODELS, LEGACY_FILES, MODELS_DIR, sha256File, verify };
