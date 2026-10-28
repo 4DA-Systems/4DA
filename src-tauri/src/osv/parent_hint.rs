@@ -41,7 +41,7 @@ use super::fix_path::{
 use super::fix_target::LineTarget;
 use super::matching::{check_version_affected, parse_version};
 
-/// The lockfile root sentinel (`ace::scanner::ROOT_PARENT`): an edge from it
+/// The lockfile root sentinel (`fourda_depengine::lockfile::graph::ROOT_PARENT`): an edge from it
 /// makes the child direct, which is not a parent to name.
 const ROOT_PARENT: &str = "__root__";
 

@@ -41,10 +41,6 @@ pub(crate) mod types;
 #[cfg(test)]
 mod vectors_tests;
 
-// Version ordering lives in the pure engine crate (single-engine C0.1); the
-// module path `crate::osv::version_order` stays as it was.
-pub(crate) use fourda_depengine::version_order;
-
 #[cfg(test)]
 mod depengine_parity_tests;
 

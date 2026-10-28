@@ -99,7 +99,7 @@ pub struct PackageDrift {
     /// Some stored npm advisory affects a pinned version (whether or not it
     /// affects the installed copy) — the pin is not a clean target to name.
     pub pin_exposed: bool,
-    /// Every pinned instance of it is dev-only (`ace::dep_scope`).
+    /// Every pinned instance of it is dev-only (`fourda_depengine::lockfile::dep_scope`).
     pub dev_only: bool,
 }
 

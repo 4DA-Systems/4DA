@@ -32,8 +32,14 @@
 //! [`held`]: an npm fix target judged by the dependencies it exact-pins or
 //! narrowly ranges (audit 6.2.5 D-4), over [`npm_range`]'s requirement reader.
 //!
+//! C0.3 adds the lockfile readers, behind a host [`lockfile::FileSource`]:
+//! [`lockfile`] reads every dependency file of one directory (npm, pnpm,
+//! yarn, bun, Cargo, Python, Go, Ruby, Composer) into installed copies with
+//! their scope and graph, and says which files it could not read. The host
+//! supplies the files; the directory walk stays in the app.
+//!
 //! The app (`src-tauri`) keeps the DB and network halves and re-exports these
-//! under their old `crate::osv::...` paths.
+//! under their old `crate::osv::...` / `crate::ace::...` paths.
 
 pub mod api;
 pub mod ecosystem;
@@ -41,6 +47,7 @@ pub mod exposure;
 pub mod fix_target;
 pub mod held;
 pub mod lines;
+pub mod lockfile;
 pub mod malware;
 pub mod matching;
 pub mod npm_range;

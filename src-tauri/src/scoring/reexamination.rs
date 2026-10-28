@@ -64,7 +64,7 @@ const CONVERGE_MAX_CHUNKS: usize = 12;
 /// 3 (2026-10-10): the same pins are judged against advisories differently —
 /// OSV `introduced: "0"` is unbounded below (Go pseudo-versions were "not
 /// affected"), build metadata no longer orders versions, PyPI versions order
-/// by PEP 440 and PyPI names compare PEP 503-normalized (`osv::version_order`,
+/// by PEP 440 and PyPI names compare PEP 503-normalized (`fourda_depengine::version_order`,
 /// `osv::matching::package_key`). One scoped re-examination of the held
 /// dependency releases and buried advisories instead of a corpus-wide
 /// `PIPELINE_VERSION` drain (AD-034).

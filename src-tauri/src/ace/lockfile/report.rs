@@ -83,7 +83,7 @@ impl LockfileReport {
     pub(crate) fn record(&mut self, outcome: &LockfileOutcome) {
         match outcome {
             LockfileOutcome::Read(read) => self.read.push(ReadEntry {
-                path: read.path.display().to_string(),
+                path: read.path.clone(),
                 format: format_label(read.format).to_string(),
                 ecosystem: read.format.ecosystem().to_string(),
                 packages: read.packages.len(),
@@ -94,14 +94,14 @@ impl LockfileReport {
                 format,
                 reason,
             } => self.failed.push(ProblemEntry {
-                path: path.display().to_string(),
+                path: path.clone(),
                 reason: match format {
                     Some(f) => format!("{}: {reason}", format_label(*f)),
                     None => reason.clone(),
                 },
             }),
             LockfileOutcome::Unsupported { path, kind } => self.unsupported.push(ProblemEntry {
-                path: path.display().to_string(),
+                path: path.clone(),
                 reason: (*kind).to_string(),
             }),
         }

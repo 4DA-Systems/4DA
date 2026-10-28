@@ -31,9 +31,8 @@
 
 use std::collections::{HashMap, HashSet, VecDeque};
 
-use crate::ace::scanner::{
-    parse_pnpm_package_key, split_pnpm_name_at_version, strip_pnpm_peer_suffix, ProjectScanner,
-};
+use super::flat::{parse_pnpm_package_key, split_pnpm_name_at_version, strip_pnpm_peer_suffix};
+use super::graph::pnpm_lock_edges;
 
 /// A package instance: lowercased name + version without any peer suffix —
 /// the identity `parse_pnpm_lock_yaml` / `ace::lockfile` give the
@@ -46,14 +45,14 @@ fn node(name: &str, version: &str) -> Node {
 
 /// Where one lockfile says each of its packages ships.
 #[derive(Debug, Default)]
-pub(crate) struct DevScope {
+pub struct DevScope {
     runtime: HashSet<Node>,
     dev: HashSet<Node>,
 }
 
 impl DevScope {
     /// From a `pnpm-lock.yaml` (v5, v6 or v9).
-    pub(crate) fn from_pnpm_lock(content: &str) -> Self {
+    pub fn from_pnpm_lock(content: &str) -> Self {
         let roots = pnpm_roots(content);
         let graph = pnpm_graph(content);
         Self {
@@ -63,7 +62,7 @@ impl DevScope {
     }
 
     /// From a `package-lock.json` (v1 `dependencies` tree, v2/v3 `packages`).
-    pub(crate) fn from_package_lock(content: &str) -> Self {
+    pub fn from_package_lock(content: &str) -> Self {
         let mut scope = Self::default();
         let Ok(lock) = serde_json::from_str::<serde_json::Value>(content) else {
             return scope;
@@ -97,15 +96,14 @@ impl DevScope {
     }
 
     /// Reached from a dev root and from no runtime root.
-    #[cfg(test)]
-    pub(crate) fn is_dev_only(&self, name: &str, version: &str) -> bool {
+    pub fn is_dev_only(&self, name: &str, version: &str) -> bool {
         let n = node(name, version);
         self.dev.contains(&n) && !self.runtime.contains(&n)
     }
 
     /// The `dependency_instances.scope` vocabulary: `runtime` when any runtime
     /// root reaches it, `dev` when only dev roots do, `unknown` otherwise.
-    pub(crate) fn label(&self, name: &str, version: &str) -> &'static str {
+    pub fn label(&self, name: &str, version: &str) -> &'static str {
         let n = node(name, version);
         if self.runtime.contains(&n) {
             "runtime"
@@ -226,7 +224,7 @@ fn pnpm_roots(content: &str) -> Roots {
 /// Every `(lowercased name, version)` an importer pins, runtime or dev — the
 /// copies a manifest declaration resolves to (every importer: the walk
 /// attributes a workspace's whole lockfile to the directory that holds it).
-pub(crate) fn pnpm_importer_pins(content: &str) -> HashSet<Node> {
+pub fn pnpm_importer_pins(content: &str) -> HashSet<Node> {
     let roots = pnpm_roots(content);
     roots.runtime.into_iter().chain(roots.dev).collect()
 }
@@ -245,7 +243,7 @@ pub(crate) fn pnpm_importer_pins(content: &str) -> HashSet<Node> {
 fn pnpm_graph(content: &str) -> HashMap<Node, Vec<Node>> {
     let optional_peers = pnpm_optional_peers(content);
     let mut graph: HashMap<Node, Vec<Node>> = HashMap::new();
-    for edge in ProjectScanner::parse_pnpm_lock_edges(content) {
+    for edge in pnpm_lock_edges(content) {
         let Some(parent_version) = edge.parent_version.as_deref() else {
             continue;
         };

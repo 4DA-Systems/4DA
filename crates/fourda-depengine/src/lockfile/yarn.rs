@@ -9,7 +9,6 @@
 //! packages, which are told apart by the `resolution:` protocol.
 
 use std::collections::HashMap;
-use std::path::PathBuf;
 
 use super::npm::{is_registry_version, split_name_at_version};
 use super::{LockFormat, LockedPackage, LockfileRead};
@@ -35,12 +34,11 @@ pub(super) fn read_yarn_lock(content: &str) -> Result<LockfileRead, String> {
     let mut index: HashMap<(String, String), usize> = HashMap::new();
     let mut packages: Vec<LockedPackage> = Vec::new();
     for pkg in std::mem::take(&mut read.packages) {
-        match index.get(&(pkg.name.clone(), pkg.version.clone())) {
-            Some(&i) => packages[i].specs.extend(pkg.specs),
-            None => {
-                index.insert((pkg.name.clone(), pkg.version.clone()), packages.len());
-                packages.push(pkg);
-            }
+        if let Some(&i) = index.get(&(pkg.name.clone(), pkg.version.clone())) {
+            packages[i].specs.extend(pkg.specs);
+        } else {
+            index.insert((pkg.name.clone(), pkg.version.clone()), packages.len());
+            packages.push(pkg);
         }
     }
     read.packages = packages;
@@ -51,7 +49,7 @@ pub(super) fn read_yarn_lock(content: &str) -> Result<LockfileRead, String> {
 /// compared in: `name@range`, with berry's `npm:` protocol dropped from a
 /// plain range (`lodash@npm:^4.17.21` -> `lodash@^4.17.21`). An alias
 /// (`x-cjs@npm:x@^4`) keeps it: the range names another package.
-pub(crate) fn normalize_descriptor(descriptor: &str) -> String {
+pub fn normalize_descriptor(descriptor: &str) -> String {
     let descriptor = descriptor.trim().trim_matches('"');
     match split_name_at_version(descriptor) {
         Some((name, range)) => match range.strip_prefix("npm:") {
@@ -78,7 +76,7 @@ fn unplaced(pkg: LockedPackage, specs: Vec<String>) -> LockedPackage {
 
 fn empty(format: LockFormat) -> LockfileRead {
     LockfileRead {
-        path: PathBuf::new(),
+        path: String::new(),
         format,
         packages: Vec::new(),
         edges: Vec::new(),
