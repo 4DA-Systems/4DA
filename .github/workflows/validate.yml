@@ -1096,7 +1096,7 @@ jobs:
           toolchain: stable
           components: clippy, rustfmt
 
-      - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2.7.8
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: src-tauri
           # default and experimental keep their own entries. The three dormant-
@@ -1303,7 +1303,7 @@ jobs:
           toolchain: stable
           components: clippy, rustfmt
 
-      - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2.7.8
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: src-tauri
           # READ the default leg's entry, never write one. Without `shared-key`
@@ -1468,7 +1468,7 @@ jobs:
         with:
           toolchain: stable
 
-      - uses: Swatinem/rust-cache@c8037a86dde8214a8310e9f54a8fc61ab362aa31 # v2.7.8
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
         with:
           workspaces: src-tauri
           key: windows
