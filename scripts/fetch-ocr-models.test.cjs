@@ -185,9 +185,28 @@ test('fetchModel: primary 404 -> falls back to upstream', async () => {
 test('fetchModel: primary digest mismatch is rejected -> falls back to upstream', async () => {
   const dest = path.join(tmpDir(), 'blob.onnx');
   const { fetcher, calls } = fakeFetcher({ [PRIMARY]: EVIL, [FALLBACK]: GOOD });
-  assert.deepEqual(await fetchModel(fakeModel(), dest, fetcher), { ok: true, url: FALLBACK });
+  const r = await fetchModel(fakeModel(), dest, fetcher);
+  assert.equal(r.ok, true);
+  assert.equal(r.url, FALLBACK);
+  assert.equal(r.tampered.length, 1, 'the mismatched mirror is reported, not swallowed');
+  assert.equal(r.tampered[0].url, PRIMARY);
+  assert.match(r.tampered[0].reason, /INTEGRITY: SHA-256/);
   assert.deepEqual(calls, [PRIMARY, FALLBACK]);
   assert.deepEqual(fs.readFileSync(dest), GOOD, 'the mirror bytes must not survive');
+});
+
+test('main: primary mismatch, upstream verified -> succeeds but warns loudly about the mirror', async () => {
+  const errors = [];
+  const orig = console.error;
+  console.error = (...a) => errors.push(a.join(' '));
+  try {
+    const { code, modelsDir } = await runMain({ [PRIMARY]: EVIL, [FALLBACK]: GOOD });
+    assert.equal(code, 0);
+    assert.deepEqual(fs.readFileSync(path.join(modelsDir, 'blob.onnx')), GOOD);
+  } finally {
+    console.error = orig;
+  }
+  assert.ok(errors.some((e) => e.includes(`WARNING: ${PRIMARY} served bytes that do not match the pin`)));
 });
 
 test('fetchModel: primary mismatch + fallback unreachable -> integrity failure, nothing kept', async () => {

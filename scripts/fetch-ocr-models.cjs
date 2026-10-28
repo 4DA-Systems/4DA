@@ -161,7 +161,12 @@ async function fetchModel(model, dest, fetcher = download) {
       continue;
     }
     const check = verify(dest, model);
-    if (check.ok) return { ok: true, url };
+    if (check.ok) {
+      // An earlier source served the wrong bytes: the install still succeeds on
+      // verified bytes, but the caller must surface it, never swallow it.
+      const tampered = failures.filter((f) => f.reason.startsWith("INTEGRITY:"));
+      return tampered.length ? { ok: true, url, tampered } : { ok: true, url };
+    }
     removeQuietly(dest);
     integrity = true;
     failures.push({ url, reason: `INTEGRITY: ${check.reason}` });
@@ -209,6 +214,10 @@ async function main(argv = process.argv, { models = MODELS, modelsDir = MODELS_D
     if (result.ok) {
       const via = result.url === model.urls[0] ? "" : `, via fallback ${result.url}`;
       console.log(`done (${(model.bytes / 1024 / 1024).toFixed(1)} MB, SHA-256 verified${via})`);
+      for (const f of result.tampered ?? []) {
+        console.error(`[ocr-models] WARNING: ${f.url} served bytes that do not match the pin`);
+        console.error(`[ocr-models]   (${f.reason}). They were deleted; investigate that source.`);
+      }
       continue;
     }
 
