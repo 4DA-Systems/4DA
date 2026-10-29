@@ -219,6 +219,23 @@ fn non_utf8_name(prefix: &str) -> std::ffi::OsString {
     }
 }
 
+/// Whether the non-UTF-8 entry was created. `false` when the filesystem
+/// refuses the name itself: APFS and HFS+ (macOS) store names as UTF-8 and
+/// answer `EILSEQ`, so there such a path cannot exist and nothing can hand it
+/// to the readers. Any other error fails the test.
+#[cfg(any(windows, unix))]
+fn created_non_utf8(result: std::io::Result<()>) -> bool {
+    match result {
+        Ok(()) => true,
+        #[cfg(unix)]
+        Err(e) if e.raw_os_error() == Some(libc::EILSEQ) => {
+            eprintln!("skipped: this filesystem refuses non-UTF-8 names ({e})");
+            false
+        }
+        Err(e) => panic!("could not create the non-UTF-8 entry: {e}"),
+    }
+}
+
 /// Review of #1045: a directory whose path is not UTF-8 cannot be handed to
 /// the readers. It must still probe positive and come back as one failure
 /// per dependency file, never as a directory with nothing in it.
@@ -232,7 +249,9 @@ fn a_non_utf8_directory_is_reported_not_dropped() {
     );
     let tmp = tempfile::tempdir().unwrap();
     let dir = tmp.path().join(&name);
-    std::fs::create_dir(&dir).unwrap();
+    if !created_non_utf8(std::fs::create_dir(&dir)) {
+        return;
+    }
     std::fs::write(dir.join("package-lock.json"), "{}").unwrap();
     std::fs::write(dir.join("requirements.txt"), "flask==3.0.0\n").unwrap();
     std::fs::write(dir.join("README.md"), "# app\n").unwrap();
@@ -268,7 +287,9 @@ fn a_non_utf8_file_name_is_skipped_not_misreported() {
     let dir = tmp.path();
     let mut odd = non_utf8_name("requirements");
     odd.push(".txt");
-    std::fs::write(dir.join(&odd), "flask==3.0.0\n").unwrap();
+    if !created_non_utf8(std::fs::write(dir.join(&odd), "flask==3.0.0\n")) {
+        return;
+    }
     std::fs::write(dir.join("requirements.txt"), "click==8.1.7\n").unwrap();
 
     let listed = StdFs.list(&dir.display().to_string()).unwrap_or_default();
