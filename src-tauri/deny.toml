@@ -86,10 +86,12 @@ ignore = [
     { id = "RUSTSEC-2023-0071", reason = "enterprise-only, signature verification not decryption, no fix upstream" },
     { id = "RUSTSEC-2026-0097", reason = "rand unsound only with custom global allocator + rand::rng(), neither applies to 4DA" },
     # zip <9 extract() advisories: full reachability note in .cargo/audit.toml.
-    # REVISIT: drop when calamine, docx-rs and tauri-plugin-updater move to zip >=9.
-    { id = "RUSTSEC-2026-0367", reason = "zip extract() SUID bits: 4DA, calamine, docx-rs never call extract(); updater extracts only our signature-verified archive" },
-    { id = "RUSTSEC-2026-0368", reason = "zip extract() symlink escape: 4DA, calamine, docx-rs never call extract(); updater extracts only our signature-verified archive" },
-    { id = "RUSTSEC-2026-0369", reason = "zip extract() permissions via symlink: 4DA, calamine, docx-rs never call extract(); updater extracts only our signature-verified archive" },
+    # 4DA's own code and calamine 0.37 are on zip 9.1. Still needed for the two
+    # zip <9 copies: docx-rs 0.4.22 (zip 8.6) and tauri-plugin-updater 2.14.0 (zip 4.6).
+    # REVISIT: drop when tauri-plugin-updater 2.14.1+ and docx-rs move to zip >=9.
+    { id = "RUSTSEC-2026-0367", reason = "zip <9 extract() SUID bits: docx-rs (zip 8.6) never calls extract(); updater (zip 4.6) extracts only our signature-verified archive" },
+    { id = "RUSTSEC-2026-0368", reason = "zip <9 extract() symlink escape: docx-rs (zip 8.6) never calls extract(); updater (zip 4.6) extracts only our signature-verified archive" },
+    { id = "RUSTSEC-2026-0369", reason = "zip <9 extract() permissions via symlink: docx-rs (zip 8.6) never calls extract(); updater (zip 4.6) extracts only our signature-verified archive" },
     # crypto-bigint 0.5.5 (no fix): full note in .cargo/audit.toml. REVISIT when jsonwebtoken moves to p256 0.14.
     { id = "RUSTSEC-2026-0387", reason = "crypto-bigint 0.5 timing: only via optional enterprise jsonwebtoken, used to verify public ES256/ES384 signatures; 0.7 copy bumped to 0.7.10" },
 
@@ -175,7 +177,7 @@ allow = [
 
     # --- bzip2 (BSD-style, attribution-only) ---
     # libbz2-rs-sys — the pure-Rust libbzip2 used by bzip2 0.6+ (pulled via
-    # zip 8.x). Same permissive terms as the original libbzip2 C library.
+    # zip 9.x). Same permissive terms as the original libbzip2 C library.
     "bzip2-1.0.6",
 
     # --- Unicode / standards body ---

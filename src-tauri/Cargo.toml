@@ -110,7 +110,7 @@ base64 = "0.23"
 pdf-extract = "0.12"         # PDF text extraction (0.12 uses lopdf ^0.42; RUSTSEC-2026-0187)
 lopdf = "0.42"               # PDF manipulation (RUSTSEC-2026-0187: stack overflow fixed in 0.42)
 docx-rs = "0.4.22"           # Word document parsing (>=0.4.21 for quick-xml 0.41: RUSTSEC-2026-0194/0195)
-calamine = "0.36"            # Excel spreadsheet parsing (>=0.36 for quick-xml 0.41: RUSTSEC-2026-0194/0195)
+calamine = "0.37"            # Excel spreadsheet parsing (>=0.36 for quick-xml 0.41: RUSTSEC-2026-0194/0195)
 image = "0.25"                                    # Image analysis (OCR + file extraction)
 ocrs = { version = "0.13", optional = true }     # Pure Rust OCR engine
 rten = { version = "0.26", optional = true }     # Model loading for ocrs (text-detection.onnx, text-recognition.onnx; ONNX loading is rten's default `onnx_format` feature)
@@ -118,9 +118,10 @@ rten = { version = "0.26", optional = true }     # Model loading for ocrs (text-
 # ZIP archive extraction (OSV cache + extractors). zip's defaults minus `zstd`:
 # zstd 0.13 / zstd-safe 7.3 carry RUSTSEC-2026-0391/0398/0403/0410 (+ unsound
 # notices) with no fix on the 0.13 line zip 8 requires. A zstd-compressed entry
-# in a user's archive is reported unsupported instead. Restore with zip >= 9.1
-# (zstd ^0.14.2) once calamine and docx-rs allow zip 9.
-zip = { version = "8.6", default-features = false, features = ["aes-crypto", "bzip2", "deflate64", "deflate", "lzma", "ppmd", "time", "xz"] }
+# in a user's archive is reported unsupported instead. This copy (shared with
+# calamine 0.37) is on zip 9.1, which takes zstd ^0.14.2, so restoring `zstd`
+# is no longer blocked; it is a separate change with its own dependency check.
+zip = { version = "9.1", default-features = false, features = ["aes-crypto", "bzip2", "deflate64", "deflate", "lzma", "ppmd", "time", "xz"] }
 tar = { version = "0.4.45", optional = true }        # TAR archive extraction
 # Gzip decompression. Not optional: the release-changelog lane reads registry
 # package archives (.crate / .tgz) in every build (release_changelog/archive.rs).
