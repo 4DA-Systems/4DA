@@ -72,19 +72,27 @@ pub(crate) struct CalibrationReport {
 pub(crate) async fn get_calibration_snapshot(threshold: Option<f32>) -> Result<CalibrationReport> {
     let db = get_database()?;
     let t = threshold.unwrap_or_else(crate::get_relevance_threshold);
-    let snapshot = crate::scoring::compute_calibration_snapshot(db, t)
-        .map_err(|e| format!("Failed to compute calibration snapshot: {e}"))?;
     // The dep-scoped high-stakes recall needs the live dependency graph; build the
     // scoring context best-effort (None if it can't be built / no deps yet).
-    let high_stakes_recall =
-        match crate::scoring::build_scoring_context_tagged(db, "calibration_snapshot").await {
-            Ok(ctx) => crate::scoring::compute_high_stakes_recall(db, &ctx, t).ok(),
-            Err(_) => None,
-        };
-    Ok(CalibrationReport {
-        snapshot,
-        high_stakes_recall,
+    let ctx = crate::scoring::build_scoring_context_tagged(db, "calibration_snapshot")
+        .await
+        .ok();
+    let db = std::sync::Arc::clone(db);
+    // Both reads walk the corpus (seconds on a cold cache): blocking pool,
+    // pooled readers — the scheduled job's stall class (2026-10-23).
+    crate::ipc_blocking::off_ui_thread("get_calibration_snapshot", move || {
+        let snapshot = crate::scoring::compute_calibration_snapshot(&db, t)
+            .map_err(|e| format!("Failed to compute calibration snapshot: {e}"))?;
+        let high_stakes_recall = ctx
+            .as_ref()
+            .and_then(|ctx| crate::scoring::compute_high_stakes_recall(&db, ctx, t).ok());
+        Ok::<_, String>(CalibrationReport {
+            snapshot,
+            high_stakes_recall,
+        })
     })
+    .await
+    .map_err(Into::into)
 }
 
 /// Lightweight scoring-coverage snapshot (Phase 1 observability). Cheap COUNT queries

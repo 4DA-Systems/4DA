@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, act } from '@testing-library/react';
+import { render, act, screen } from '@testing-library/react';
 import { CelebrationState, CELEBRATION_MOTION_MS } from './CelebrationState';
+
+vi.mock('../../lib/commands', () => ({ cmd: vi.fn(() => Promise.reject(new Error('offline'))) }));
 
 vi.mock('../../store', () => ({
   useAppStore: vi.fn((selector: (s: Record<string, unknown>) => unknown) =>
@@ -31,5 +33,78 @@ describe('CelebrationState brand mark', () => {
 
     act(() => { vi.advanceTimersByTime(CELEBRATION_MOTION_MS); });
     expect(mark().getAttribute('data-motion')).toBe('rest');
+  });
+});
+
+// Fresh-profile audit E7: after the scan the screen read "0 RELEVANT …
+// Nothing matched yet" over a news count. With dependencies found it leads
+// with them and their vulnerability check.
+describe('CelebrationState after a project scan', () => {
+  const summary = {
+    projects_scanned: 3,
+    total_dependencies: 1048,
+    dependencies_by_ecosystem: { rust: 40, npm: 900, python: 108, other: 0 },
+    languages: [], frameworks: [], primary_stack: '', key_packages: [], has_data: true,
+    advisory_sync: {
+      state: 'syncing' as const, ecosystems: 3, synced_at: null, error: null,
+      in_flight: true, skipped_temp: 0,
+    },
+  };
+
+  it('leads with the dependencies and the advisory check, never a news zero', () => {
+    render(
+      <CelebrationState
+        relevantCount={0}
+        totalCount={400}
+        topSignal={null}
+        stackInsights={[]}
+        embeddingMode={null}
+        scanSummary={summary}
+        onDismiss={vi.fn()}
+      />,
+    );
+    const deps = screen.getByTestId('first-run-dependencies');
+    expect(deps).toHaveTextContent('1048');
+    expect(deps).toHaveTextContent('firstRun.dependencies');
+    expect(screen.getByTestId('first-run-advisory')).toHaveTextContent('firstRun.advisory.checking');
+    expect(screen.queryByText('firstRun.relevantToYou')).toBeNull();
+    expect(screen.queryByText(/Nothing matched yet/)).toBeNull();
+    expect(screen.queryByText('firstRun.addSignalCta')).toBeNull();
+    // PR #961 review: the ecosystem count was wrong (Go/Ruby/PHP lumped into
+    // one bucket) and informed nothing, so it is not shown.
+    expect(screen.queryByText('firstRun.ecosystems')).toBeNull();
+  });
+
+  it('a stale advisory check says so, not "starts within a few minutes"', () => {
+    render(
+      <CelebrationState
+        relevantCount={0}
+        totalCount={400}
+        topSignal={null}
+        stackInsights={[]}
+        embeddingMode={null}
+        scanSummary={{
+          ...summary,
+          advisory_sync: { ...summary.advisory_sync, state: 'stale' as const, in_flight: false },
+        }}
+        onDismiss={vi.fn()}
+      />,
+    );
+    expect(screen.getByTestId('first-run-advisory')).toHaveTextContent('firstRun.advisory.stale');
+  });
+
+  it('without a scan, the relevance view is unchanged', () => {
+    render(
+      <CelebrationState
+        relevantCount={5}
+        totalCount={400}
+        topSignal={null}
+        stackInsights={[]}
+        embeddingMode={null}
+        onDismiss={vi.fn()}
+      />,
+    );
+    expect(screen.queryByTestId('first-run-dependencies')).toBeNull();
+    expect(screen.getByText('firstRun.relevantToYou')).toBeInTheDocument();
   });
 });

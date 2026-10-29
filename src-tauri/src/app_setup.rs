@@ -539,6 +539,54 @@ async fn persist_one_time_flag(db: &crate::db::Database, key: &str, version: &st
     }
 }
 
+/// Launch's advisory sync: sync when due and refresh the offline ZIP caches,
+/// both inside the shared gate (the cache refresh rewrites the archives in
+/// place, so it must not overlap another sync), then warm Preemption after
+/// first light either way: the recompute is CPU-heavy and must not starve
+/// boot.
+async fn startup_advisory_sync() {
+    use crate::osv::readiness::refresh::Outcome;
+    let Ok(db) = crate::get_database() else {
+        return;
+    };
+    match crate::osv::readiness::refresh::sync_with_caches_if_due(&db).await {
+        Outcome::NotDue => {
+            info!(target: "4da::osv", "OSV mirror current (or no dependencies) - skipping startup sync");
+        }
+        Outcome::Busy => {
+            info!(target: "4da::osv", "An advisory sync is already running - startup sync skipped");
+        }
+        Outcome::Ran((sync, caches)) => {
+            match sync {
+                Ok(r) => info!(
+                    target: "4da::osv",
+                    stored = r.advisories_stored,
+                    errors = r.errors.len(),
+                    duration_ms = r.duration_ms,
+                    "Background OSV sync complete"
+                ),
+                Err(e) => {
+                    warn!(target: "4da::osv", error = %e, "Background OSV sync failed (retried after a back-off)");
+                }
+            }
+            // Stale checks are cheap (HTTP HEAD), downloads only when ETags differ.
+            match caches {
+                Ok(r) if !r.ecosystems_updated.is_empty() => info!(
+                    target: "4da::osv::cache",
+                    updated = ?r.ecosystems_updated,
+                    advisories = r.total_advisories,
+                    "Background cache update complete"
+                ),
+                Ok(_) => {}
+                Err(e) => {
+                    warn!(target: "4da::osv::cache", error = %e, "Background cache update failed");
+                }
+            }
+        }
+    }
+    warm_preemption_cache_after_first_light("osv-startup").await;
+}
+
 async fn warm_preemption_cache_after_first_light(reason: &'static str) {
     const WAIT_FOR_FRONTEND: std::time::Duration = std::time::Duration::from_secs(90);
     // The data this warm is for (the OSV mirror, synced or current) is in
@@ -575,6 +623,15 @@ async fn warm_preemption_cache_after_first_light(reason: &'static str) {
     // Sequenced after the Preemption warm so the two builds never overlap.
     crate::blind_spots::warm_blind_spot_cache_after_startup().await;
 }
+
+/// How long the startup catch-up briefing waits for the startup lockfile
+/// rescan. The scan waits for first light plus a grace period and then walks
+/// every project (about 8 minutes on the operator's 19-lockfile machine,
+/// 2026-10-18). One minute past the gate's own hard deadline, so the gate
+/// decides; past it the scheduler tick takes over.
+const STARTUP_BRIEFING_INVENTORY_WAIT: std::time::Duration =
+    crate::inventory_freshness::STARTUP_SCAN_DEADLINE
+        .saturating_add(std::time::Duration::from_mins(1));
 
 /// Tauri `setup()` callback body.
 ///
@@ -1069,7 +1126,8 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
     if crate::startup_frontend::victauri_e2e_active() {
         info!(target: "4da::startup", "Victauri E2E active - skipping startup data cleanup");
     } else {
-        tauri::async_runtime::spawn(async {
+        // Blocking pool: the body is synchronous SQL with no await point.
+        tauri::async_runtime::spawn_blocking(|| {
             if let Ok(conn) = crate::open_db_connection() {
                 let mut total_deleted: usize = 0;
 
@@ -1258,22 +1316,24 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
                     }
                 }
 
-                // Purge user_dependencies with clearly ephemeral project paths (temp dirs).
-                // Filesystem checks would block the async runtime, so we pattern-match instead.
-                match conn.execute(
-                "DELETE FROM user_dependencies WHERE project_path LIKE '%/tmp/%' OR project_path LIKE '%\\tmp\\%' OR project_path LIKE '%AppData%Local%Temp%'",
-                [],
-            ) {
-                Ok(n) => {
-                    total_deleted += n;
-                    if n > 0 {
-                        info!(target: "4da::startup", deleted = n, "Startup cleanup: ephemeral temp-path user dependencies");
+                // Purge user_dependencies of projects inside the OS temp
+                // directory (temporary copies). The directory itself, not any
+                // path with a "tmp" segment (E6): string comparison only, no
+                // filesystem walk on the async runtime.
+                match crate::db::temp_paths::purge_temp_dependency_rows(
+                    &conn,
+                    crate::db::temp_paths::os_temp_roots(),
+                ) {
+                    Ok(n) => {
+                        total_deleted += n;
+                        if n > 0 {
+                            info!(target: "4da::startup", deleted = n, "Startup cleanup: ephemeral temp-path user dependencies");
+                        }
+                    }
+                    Err(e) => {
+                        warn!(target: "4da::startup", error = %e, "Startup cleanup: temp-path user_deps failed");
                     }
                 }
-                Err(e) => {
-                    warn!(target: "4da::startup", error = %e, "Startup cleanup: temp-path user_deps failed");
-                }
-            }
 
                 // Self-heal active_topics: delete generic tokens (canonical predicate
                 // scoring::is_generic_topic_token — "http", "rest", "api", class-name
@@ -1417,15 +1477,15 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
 
                 if total_deleted > 0 {
                     info!(target: "4da::startup", total_deleted, "Startup data cleanup complete");
-                    // Checkpoint WAL to reclaim space. TRUNCATE for substantial deletes,
-                    // PASSIVE (non-blocking) for small cleanups. Previous threshold of 1000
-                    // was too high — even 100 deleted rows can produce meaningful WAL bloat.
-                    if total_deleted > 100 {
-                        let _ = conn.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);");
-                        info!(target: "4da::startup", "WAL TRUNCATE checkpoint after startup cleanup");
-                    } else {
-                        let _ = conn.execute_batch("PRAGMA wal_checkpoint(PASSIVE);");
-                    }
+                    // PASSIVE only. A TRUNCATE checkpoint waits for every reader
+                    // to leave the WAL while it holds the write lock, and at
+                    // startup the first analysis pass is reading: every other
+                    // writer then sat in its 5 s busy handler, many of them on
+                    // runtime workers (isolated run, 2026-10-24: a 65 s
+                    // whole-app stall that ended as this checkpoint returned).
+                    // The hourly maintenance truncates a WAL that is actually
+                    // large (`Database::run_scheduled_maintenance`).
+                    let _ = conn.execute_batch("PRAGMA wal_checkpoint(PASSIVE);");
                 }
             }
         });
@@ -1623,75 +1683,32 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
         });
     }
 
-    // Background OSV advisory sync — keeps the local mirror fresh.
-    // Only runs if deps exist and last sync > 6 hours ago (or never synced).
+    // Background OSV advisory sync: keeps the local mirror fresh. Launch is one
+    // of three desktop triggers sharing one gate (`osv::readiness::refresh`):
+    // a scan that changes the inventory and the scheduler's freshness check
+    // are the others, so a fresh install syncs without a restart and a
+    // long-running app re-syncs on every platform (audit E1).
     if crate::startup_frontend::victauri_e2e_active() {
         info!(target: "4da::osv", "Victauri E2E active - skipping startup OSV sync and Preemption cache warm");
     } else {
-        tauri::async_runtime::spawn(async {
-            let db = match crate::get_database() {
-                Ok(db) => db,
-                Err(_) => return,
-            };
-            let dependency_count = db
-                .get_auditable_user_dependencies()
-                .map_or(0, |deps| deps.len())
-                + db.get_auditable_scanned_dependencies()
-                    .map_or(0, |deps| deps.len());
-            if dependency_count == 0 {
-                return;
-            }
-            let needs_sync =
-                crate::osv::sync::needs_sync(&db, crate::osv::sync::DEFAULT_SYNC_MAX_AGE_HOURS)
-                    .unwrap_or(true);
-            if !needs_sync {
-                info!(target: "4da::osv", "OSV mirror synced recently — skipping startup sync");
-                // Data is already current. Warm the Preemption feed cache only after
-                // first-light; the recompute is CPU-heavy and must not starve the
-                // webview, frontend IPC, or Victauri during boot.
-                warm_preemption_cache_after_first_light("osv-recently-synced").await;
-                return;
-            }
-            info!(target: "4da::osv", deps = dependency_count, "Starting background OSV sync");
-            match crate::osv::sync::sync(&db).await {
-                Ok(result) => {
-                    info!(
-                        target: "4da::osv",
-                        stored = result.advisories_stored,
-                        matched = result.advisories_matched,
-                        duration_ms = result.duration_ms,
-                        "Background OSV sync complete"
-                    );
-                }
-                Err(e) => {
-                    warn!(target: "4da::osv", error = %e, "Background OSV sync failed (will retry next launch)");
-                }
-            }
-
-            // Update offline cache ZIPs in the background (runs after API sync).
-            // Stale checks are cheap (HTTP HEAD), downloads only when ETags differ.
-            match crate::osv::cache::update_all_caches(&db).await {
-                Ok(result) => {
-                    if !result.ecosystems_updated.is_empty() {
-                        info!(
-                            target: "4da::osv::cache",
-                            updated = ?result.ecosystems_updated,
-                            advisories = result.total_advisories,
-                            "Background cache update complete"
-                        );
-                    }
-                }
-                Err(e) => {
-                    warn!(target: "4da::osv::cache", error = %e, "Background cache update failed");
-                }
-            }
-
-            // The sync stored fresh advisories + recomputed matches. Warm the
-            // Preemption feed cache against fresh data after first-light so the tab
-            // eventually paints from cache without turning startup into a CPU spike.
-            warm_preemption_cache_after_first_light("osv-sync-complete").await;
-        });
+        crate::osv::readiness::refresh::enable_gui_triggers();
+        tauri::async_runtime::spawn(startup_advisory_sync());
     }
+    // The ready listeners are registered BEFORE either window is created.
+    // Creating a WebView2 pumps window messages, so the toast page could load
+    // and emit `notification-ready` while the brief window was being created,
+    // before anyone listened: measured 2026-10-18, 8 of 16 cold starts lost it,
+    // and the first toast then destroyed and recreated the window. A ready
+    // event that is still lost is re-requested at the first show
+    // (`notification_window::show_notification_now`, `page_ready`).
+    app.listen("notification-ready", move |_| {
+        crate::notification_window::mark_ready();
+        info!(target: "4da::notify", "Notification window JS listener registered");
+    });
+    app.listen("briefing-ready", move |_| {
+        crate::briefing_window::mark_ready();
+        info!(target: "4da::briefing", "Briefing window JS listener registered");
+    });
 
     // Pre-warm the custom notification window (hidden, ready for instant show)
     if let Err(e) = crate::notification_window::init_notification_window(app.handle()) {
@@ -1702,18 +1719,6 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
     if let Err(e) = crate::briefing_window::init_briefing_window(app.handle()) {
         warn!(target: "4da::briefing", error = %e, "Briefing window pre-warm failed (will retry on first briefing)");
     }
-
-    // Listen for notification-ready from the notification frontend
-    app.listen("notification-ready", move |_| {
-        crate::notification_window::mark_ready();
-        info!(target: "4da::notify", "Notification window JS listener registered");
-    });
-
-    // Listen for briefing-ready from the briefing frontend
-    app.listen("briefing-ready", move |_| {
-        crate::briefing_window::mark_ready();
-        info!(target: "4da::briefing", "Briefing window JS listener registered");
-    });
 
     // Listen for notification-hidden from the notification frontend
     let app_handle_notif = app_handle.clone();
@@ -1904,6 +1909,16 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
         tauri::async_runtime::spawn(async move {
             // Short delay: let briefing window JS register its listener
             tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+
+            // The catch-up briefing states dependency facts built from the
+            // Preemption feed: wait for the startup lockfile rescan (bounded).
+            // Still pending past the bound: skip; the scheduler tick delivers
+            // the briefing once the inventory is fresh.
+            if !crate::inventory_freshness::wait_until_fresh(STARTUP_BRIEFING_INVENTORY_WAIT).await
+            {
+                warn!(target: "4da::briefing", "Immediate morning briefing skipped: the dependency inventory is still being refreshed");
+                return;
+            }
 
             if let Some(briefing) =
                 crate::monitoring_notifications::check_morning_briefing(&briefing_state)
@@ -2417,6 +2432,12 @@ async fn run_scheduled_analysis(handle: tauri::AppHandle) {
     let started = std::time::Instant::now();
     let mut receipt = crate::engine_runs::RunReceipt::begin("scheduled");
 
+    // Step 0: re-read the lockfiles when they changed since the last scan
+    // (live 2026-10-24: a merged bump left the startup-scanned inventory
+    // stale for hours and the brief named advisories already fixed). One
+    // mtime walk when nothing changed; skipped while the startup scan runs.
+    crate::dep_rescan::rescan_if_due(&handle).await;
+
     // Step 1: Fill cache with deep fetch (background, no UI blocking)
     info!(target: "4da::monitor", "Step 1: Filling cache with deep fetch...");
     match fill_cache_background(&handle).await {
@@ -2728,8 +2749,22 @@ fn initialize_ace_on_startup(app_handle: tauri::AppHandle) {
 
     info!(target: "4da::startup", dirs = context_dirs.len(), "Initializing ACE");
 
+    // From here until the scan below has re-read the lockfiles, the stored
+    // inventory is the previous session's: the brief and the morning
+    // briefing wait for it (`inventory_freshness`). The guard moves into the
+    // scan task and reopens the gate when it drops (scan done or failed, or a
+    // panic) or at the deadline if the scan hangs. On reopening: rebuild the
+    // Preemption feed against the inventory and tell the UI, so a brief it
+    // deferred is written now.
+    let refresh_handle = app_handle.clone();
+    let inventory_refresh = crate::inventory_freshness::begin_startup_refresh(move || {
+        crate::preemption::refresh_preemption_cache_after_cycle();
+        let _ = refresh_handle.emit(crate::inventory_freshness::INVENTORY_FRESH_EVENT, ());
+    });
+
     // Spawn async task for ACE initialization
     tauri::async_runtime::spawn(async move {
+        let inventory_refresh = inventory_refresh;
         // ACE full scans are valuable but expensive. Give the hidden webview
         // the first chance to load and report readiness before walking project
         // trees, parsing lockfiles, and analyzing git history.
@@ -2761,6 +2796,9 @@ fn initialize_ace_on_startup(app_handle: tauri::AppHandle) {
                 error!(target: "4da::startup", error = %e, "ACE scan failed");
             }
         }
+        // The lockfiles have been re-read (or the scan failed and nothing
+        // newer is coming this session): reopen the dependency-fact gate.
+        drop(inventory_refresh);
 
         // AUTO-SEED: Populate interests from ACE-detected tech if interests are empty
         // This provides immediate value without requiring manual configuration

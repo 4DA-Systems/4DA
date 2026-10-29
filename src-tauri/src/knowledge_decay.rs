@@ -1041,76 +1041,105 @@ fn classify_severity(
     }
 }
 
-/// The severity tier of the most severe stored advisory that still affects
-/// one of `versions` — CVSS band first, the source's curated label second
-/// (`None` when nothing affecting is graded). Mirrors
-/// `osv::identity::cluster_severity_tier` for rows read straight from the
-/// mirror.
-fn advisory_tier_for(
+/// The severity tier of the stored advisories that still affect one of
+/// `installs`, graded by the ONE alias-group rule every surface reads
+/// (`osv::severity::rows_grade`: each group's most severe own grade, else
+/// its GHSA aliases' from `grades`). `None` when nothing affecting is graded.
+pub(crate) fn advisory_tier_for(
     conn: &rusqlite::Connection,
     package: &str,
     installs: &[crate::osv::exposure::Install],
+    grades: &crate::osv::severity::AliasGrades,
 ) -> Option<&'static str> {
+    let affecting = affecting_advisories(conn, package, installs);
+    let refs: Vec<&crate::osv::types::StoredAdvisory> = affecting.iter().collect();
+    crate::osv::severity::rows_grade(&refs, grades).map(|g| g.tier)
+}
+
+/// Every stored advisory affecting one of `installs` is a maintenance notice
+/// (`osv::severity`'s one predicate): the package is unmaintained, not
+/// vulnerable, so it is never a security gap (#986).
+pub(crate) fn only_maintenance_notices(
+    conn: &rusqlite::Connection,
+    package: &str,
+    installs: &[crate::osv::exposure::Install],
+) -> bool {
+    let affecting = affecting_advisories(conn, package, installs);
+    !affecting.is_empty()
+        && affecting
+            .iter()
+            .all(crate::osv::severity::SeverityRecord::is_informational)
+}
+
+/// The active mirror rows for `package` whose range holds one of `installs`
+/// of the same ecosystem (AD-045).
+fn affecting_advisories(
+    conn: &rusqlite::Connection,
+    package: &str,
+    installs: &[crate::osv::exposure::Install],
+) -> Vec<crate::osv::types::StoredAdvisory> {
     let Ok(mut stmt) = conn.prepare(
-        "SELECT affected_ranges, cvss_score, severity_label, ecosystem FROM osv_advisories
+        "SELECT affected_ranges, cvss_score, severity_label, ecosystem, advisory_id,
+                aliases, summary, details, fixed_versions, cwe_ids, informational
+         FROM osv_advisories
          WHERE lower(package_name) = lower(?1) AND withdrawn_at IS NULL",
     ) else {
-        return None;
+        return Vec::new();
     };
     let Ok(rows) = stmt.query_map(params![package], |row| {
-        let ecosystem: Option<String> = row.get(3)?;
-        Ok((
-            row.get::<_, Option<String>>(0)?,
-            row.get::<_, Option<f64>>(1)?,
-            row.get::<_, Option<String>>(2)?,
-            ecosystem
-                .as_deref()
-                .and_then(crate::osv::exposure::canonical),
-        ))
+        let aliases: Option<String> = row.get(5)?;
+        Ok(crate::osv::types::StoredAdvisory {
+            id: 0,
+            advisory_id: row.get(4)?,
+            summary: row.get::<_, Option<String>>(6)?.unwrap_or_default(),
+            details: row.get(7)?,
+            package_name: package.to_string(),
+            ecosystem: row.get::<_, Option<String>>(3)?.unwrap_or_default(),
+            affected_ranges: row.get(0)?,
+            fixed_versions: row.get(8)?,
+            severity_type: None,
+            cvss_score: row.get(1)?,
+            source_url: None,
+            published_at: None,
+            modified_at: None,
+            withdrawn_at: None,
+            synced_at: String::new(),
+            aliases: aliases
+                .and_then(|a| serde_json::from_str(&a).ok())
+                .unwrap_or_default(),
+            severity_label: row.get(2)?,
+            cwe_ids: row
+                .get::<_, Option<String>>(9)?
+                .and_then(|c| serde_json::from_str(&c).ok())
+                .unwrap_or_default(),
+            informational: crate::db::notice_from_column(row.get(10)?),
+        })
     }) else {
-        return None;
+        return Vec::new();
     };
-    let rank = |t: &str| match t {
-        "critical" => 0u8,
-        "high" => 1,
-        "medium" => 2,
-        "low" => 3,
-        _ => 4,
-    };
-    let mut best: Option<&'static str> = None;
-    for (ranges, cvss, label, advisory_ecosystem) in rows.flatten() {
-        // Only an advisory for an install's OWN ecosystem can grade it (AD-045).
-        let affects = installs.iter().any(|install| {
-            let same_ecosystem = match (install.ecosystem, advisory_ecosystem) {
-                (Some(a), Some(b)) => a == b,
-                _ => true,
-            };
-            same_ecosystem
-                && crate::osv::matching::check_version_affected(
-                    advisory_ecosystem.or(install.ecosystem).unwrap_or_default(),
-                    Some(install.version.as_str()),
-                    &ranges,
-                )
-                .0
-        });
-        if !affects {
-            continue;
-        }
-        let tier: Option<&'static str> = match (cvss, label.as_deref()) {
-            (Some(score), _) => Some(crate::osv::types::cvss_band(score)),
-            (None, Some("critical")) => Some("critical"),
-            (None, Some("high")) => Some("high"),
-            (None, Some("medium")) => Some("medium"),
-            (None, Some("low")) => Some("low"),
-            _ => None,
-        };
-        if let Some(t) = tier {
-            if best.is_none_or(|b| rank(t) < rank(b)) {
-                best = Some(t);
-            }
-        }
-    }
-    best
+    // The alias-group notice rule over the package's rows, before the range
+    // filter: a vulnerability twin keeps a worded GHSA from reading as a notice.
+    let mut all: Vec<_> = rows.flatten().collect();
+    crate::osv::severity::settle_group_notices(&mut all);
+    all.into_iter()
+        .filter(|row| {
+            // Only an advisory for an install's OWN ecosystem can grade it (AD-045).
+            let advisory_ecosystem = crate::osv::exposure::canonical(&row.ecosystem);
+            installs.iter().any(|install| {
+                let same_ecosystem = match (install.ecosystem, advisory_ecosystem) {
+                    (Some(a), Some(b)) => a == b,
+                    _ => true,
+                };
+                same_ecosystem
+                    && crate::osv::matching::check_version_affected(
+                        advisory_ecosystem.or(install.ecosystem).unwrap_or_default(),
+                        Some(install.version.as_str()),
+                        &row.affected_ranges,
+                    )
+                    .0
+            })
+        })
+        .collect()
 }
 
 /// The subset of `project_paths` whose installed copy of `package` is inside

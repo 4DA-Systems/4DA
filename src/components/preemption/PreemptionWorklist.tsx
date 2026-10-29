@@ -12,6 +12,7 @@ import { URGENCY_ORDER, ItemCard } from './PreemptionCard';
 import { PreemptionTierSection } from './PreemptionTierSection';
 import { PreemptionFreeFloorNotice } from './PreemptionFreeFloorNotice';
 import { PreemptionAdvisoryNotice } from './PreemptionAdvisoryNotice';
+import { PreemptionNotCoveredNote } from './PreemptionNotCoveredNote';
 import { SignalUpgradeCTA } from '../SignalUpgradeCTA';
 import { ReportAge } from '../ReportAge';
 import { ScanProjectsPrompt } from '../blindspots/BlindSpotsFirstDay';
@@ -137,6 +138,10 @@ export const PreemptionWorklist = memo(function PreemptionWorklist() {
   // held-back step count (pinned by plan_cap_holds_back_the_collapsed_tail
   // in list_transport_tests.rs).
   const planHeldBack = feed ? Math.max(0, feed.total - feed.items.length) : 0;
+  // Rows rendered at the foot, outside the worklist sections: collapsed
+  // other-build-target advisories and the dormant-project footer.
+  const setAsideCount = otherTargetItems.length + dormantNoticeItems.length;
+  const onListCount = Math.max(0, totalAlerts - setAsideCount);
 
   // Free security floor: the backend served Tier 1 (OSV-verified) only.
   // Render the floor normally plus a compact locked-tiers notice — never a
@@ -188,7 +193,9 @@ export const PreemptionWorklist = memo(function PreemptionWorklist() {
           scan instead — the same local, click-is-consent flow as Blind Spots'
           day one (#888). `total_tracked` is null when the count could not be
           read; the no-threats copy is kept then. */}
-      {feed && totalAlerts === 0 && noDependenciesKnown && (
+      {/* A project 4DA cannot read (Maven, .NET …) is not "no dependencies":
+          the not-covered note below names it instead of asking for a scan. */}
+      {feed && totalAlerts === 0 && noDependenciesKnown && !feed.advisory_sync?.not_covered && (
         <ScanProjectsPrompt
           onScanned={rescan}
           titleKey="preemption.noDeps.title"
@@ -201,13 +208,19 @@ export const PreemptionWorklist = memo(function PreemptionWorklist() {
         <PreemptionAdvisoryNotice negative={negative} onRecheck={recheck} />
       )}
 
+      {/* Files whose versions 4DA does not read: never covered by an all-clear. */}
+      {feed && <PreemptionNotCoveredNote notCovered={feed.advisory_sync?.not_covered} />}
+
       {feed && totalAlerts === 0 && !noDependenciesKnown && negative.kind === 'assert' && (
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mb-3">
             {/* eslint-disable-next-line i18next/no-literal-string */}
             <span className="text-emerald-400 text-lg">&#x2713;</span>
           </div>
-          <p className="text-sm font-medium text-text-primary mb-1">{t('preemption.empty.title')}</p>
+          {/* Not "your stack is clean" while files 4DA cannot read stand beside it. */}
+          <p className="text-sm font-medium text-text-primary mb-1">
+            {feed.advisory_sync?.not_covered ? t('preemption.empty.partialTitle') : t('preemption.empty.title')}
+          </p>
           <p className="text-xs text-text-muted">{t('preemption.empty.subtitle')}</p>
         </div>
       )}
@@ -216,12 +229,6 @@ export const PreemptionWorklist = memo(function PreemptionWorklist() {
         <>
           <div className="flex items-center gap-4 px-4 py-3 rounded-lg bg-bg-secondary border border-border">
             <div className="flex items-center gap-3 text-xs">
-              {verifiedItems.length > 0 && (
-                <span className="inline-flex items-center gap-1.5 text-emerald-400 font-medium">
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                  {verifiedItems.length} {t('preemption.badge.verified').toLowerCase()}
-                </span>
-              )}
               {criticalCount > 0 && (
                 <span className="inline-flex items-center gap-1.5 text-red-400 font-medium">
                   <span className="w-1.5 h-1.5 rounded-full bg-red-400" />
@@ -235,8 +242,14 @@ export const PreemptionWorklist = memo(function PreemptionWorklist() {
                 </span>
               )}
             </div>
-            <span className="ms-auto text-xs text-text-muted tabular-nums">
-              {t('preemption.alert', { count: totalAlerts })}
+            {/* Audit L6: "61 alerts" beside "49 ranked upgrades" beside 37 cards
+                reconciled with nothing. The total now splits into what this
+                list asks the reader to work through (every section subtitle
+                below sums to it, "Show N more" included) and what is set
+                aside at the foot (other build targets + dormant projects). */}
+            <span className="ms-auto flex items-center gap-3 text-xs text-text-muted tabular-nums" data-testid="preemption-header-counts">
+              <span>{t('preemption.header.onList', { count: onListCount })}</span>
+              {setAsideCount > 0 && <span>{t('preemption.header.setAside', { count: setAsideCount })}</span>}
             </span>
           </div>
 

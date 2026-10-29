@@ -220,6 +220,7 @@ mod delegation;
 #[path = "delegation_stub.rs"]
 mod delegation;
 pub(crate) mod dep_linker;
+mod dep_rescan;
 mod dependency_commands;
 mod dependency_health;
 mod developer_dna;
@@ -253,6 +254,7 @@ mod achievement_engine;
 mod briefing_dedupe;
 mod briefing_dev_tags;
 mod briefing_groundedness;
+mod briefing_meta;
 #[cfg(test)]
 mod briefing_pipeline_tests;
 mod briefing_quality;
@@ -282,6 +284,7 @@ mod integrity;
 mod intelligence_core;
 mod intelligence_history;
 mod intelligence_metrics;
+mod inventory_freshness;
 mod ipc_blocking;
 mod ipc_guard;
 mod ipc_rate_limit;
@@ -305,6 +308,7 @@ mod monitoring_briefing;
 mod monitoring_commands;
 mod monitoring_jobs;
 mod monitoring_notifications;
+mod morning_audit;
 mod morning_floor;
 mod natural_language_search;
 mod notification_window;
@@ -313,6 +317,7 @@ mod ollama;
 mod onboarding_save_commands;
 mod osv;
 mod package_ambiguity;
+mod page_ready;
 mod platform_filter;
 pub mod plugins;
 mod preemption;
@@ -380,6 +385,8 @@ mod url_validation;
 mod void_commands;
 mod void_engine;
 mod waitlist;
+mod webview_profile;
+mod webview_visibility;
 mod weekly_digest;
 
 mod stack_commands;
@@ -809,6 +816,10 @@ pub fn run() {
     // identifier (a test profile may run under a non-default one) — and only
     // from the GUI entry point, after the single-instance lock above.
     let context = app_context();
+    // A previous instance's WebView2 can hold the shared profile for a while
+    // after the app exits; creating the window then panics with 0x800700AA.
+    // Wait for it first (and before the dev purge touches the profile).
+    webview_profile::wait_for_webview_profile(&context.config().identifier);
     app_setup::purge_dev_webview_service_worker_cache(&context.config().identifier);
     startup_watchdog::mark_pre_tauri_complete();
     // Spans `Builder::build` (plugins, window + WebView2 creation, then the
@@ -826,7 +837,9 @@ pub fn run() {
         }))
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
-        .plugin(tauri_plugin_deep_link::init());
+        .plugin(tauri_plugin_deep_link::init())
+        // A hidden or minimised window's WebView2 stops rendering (G6 idle).
+        .plugin(webview_visibility::init());
 
     #[cfg(not(debug_assertions))]
     {
@@ -987,6 +1000,7 @@ pub fn run() {
             ace_commands::ace_auto_discover,
             ace_commands::ace_preview_discovery_dirs,
             ace_commands::ace_candidate_dev_roots,
+            ace_commands::ace_check_scan_folder,
             ace_commands::ace_get_scan_summary,
             ace_commands::ace_record_interaction,
             ace_commands::ace_find_similar_topics,
@@ -1103,7 +1117,6 @@ pub fn run() {
             delegation::get_delegation_score,
             // Toolkit
             toolkit::toolkit_list_ports,
-            toolkit::toolkit_env_snapshot,
             toolkit_http::toolkit_http_request,
             toolkit_http::toolkit_get_http_history,
             // Stack Intelligence

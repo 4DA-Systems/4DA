@@ -19,11 +19,10 @@ pub(crate) struct BatchQuery {
     pub version: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub(crate) struct PackageRef {
-    pub name: String,
-    pub ecosystem: String,
-}
+// `PackageRef` and `Affected` (one `affected[]` entry, its `versions` list
+// included) live in the pure engine crate, which merges and stores them
+// (single-engine C0.2).
+pub(crate) use fourda_depengine::osv::{Affected, PackageRef};
 
 #[derive(Debug, Deserialize)]
 pub(crate) struct BatchResponse {
@@ -68,24 +67,12 @@ pub(crate) struct Severity {
     pub score: String,
 }
 
-#[derive(Debug, Deserialize, Clone)]
-pub(crate) struct Affected {
-    pub package: Option<PackageRef>,
-    pub ranges: Option<Vec<Range>>,
-    /// OSV's explicit list of affected versions. Some advisories carry ONLY
-    /// this (GHSA-q58r-hwc8-rm9j, bootstrap) or only `GIT` ranges plus this.
-    /// It used to be dropped on the belief that the matcher would then "assume
-    /// affected" — it did not: the stored ranges were `[]` and an empty
-    /// range list reads as "confirmed not affected". Stored as an
-    /// [`ENUMERATED_RANGE`] range so every ranges reader sees it.
-    #[serde(default)]
-    pub versions: Option<Vec<String>>,
-}
-
 // `Range` (one stored OSV range) and `ENUMERATED_RANGE` (the synthetic range
 // carrying an advisory's enumerated `versions` list) live in the pure engine
-// crate, which evaluates them (single-engine C0.1).
-pub(crate) use fourda_depengine::range::{Range, ENUMERATED_RANGE};
+// crate, which evaluates them (C0.1) and merges and stores records (C0.2);
+// only the sync tests still build a `Range` by hand.
+#[cfg(test)]
+pub(crate) use fourda_depengine::range::Range;
 
 #[derive(Debug, Deserialize, Clone)]
 pub(crate) struct Reference {
@@ -129,6 +116,30 @@ pub struct StoredAdvisory {
     /// `None` when the source gives neither (RustSec maintenance notices).
     #[serde(default)]
     pub severity_label: Option<String>,
+    /// `database_specific.cwe_ids` (Phase 128). Empty on rows synced before
+    /// the column existed, until the next sync (made due by the migration).
+    #[serde(default)]
+    pub cwe_ids: Vec<String>,
+    /// Whether the row is a maintenance notice, as the sync judged it
+    /// (Phase 130): the engine crate's `osv::is_notice_for`, where a class
+    /// OSV states (RustSec's per-affected `database_specific.informational`)
+    /// beats the summary's wording. `None` on rows synced before the verdict
+    /// was stored, until the next sync (made due by the migration); the
+    /// summary rule decides for them (`osv::severity::is_notice`).
+    #[serde(default)]
+    pub informational: Option<bool>,
+}
+
+impl StoredAdvisory {
+    /// A malicious-package record (`fourda_depengine::is_malware`).
+    pub fn is_malware(&self) -> bool {
+        fourda_depengine::is_malware(
+            &self.advisory_id,
+            &self.aliases,
+            &self.cwe_ids,
+            &self.summary,
+        )
+    }
 }
 
 /// A version-confirmed copy an advisory does NOT apply to: every source file
@@ -174,9 +185,36 @@ pub struct MatchedAdvisory {
     /// See [`StoredAdvisory::aliases`].
     #[serde(default)]
     pub aliases: Vec<String>,
-    /// See [`StoredAdvisory::severity_label`].
+    /// See [`StoredAdvisory::severity_label`]. For a record its source never
+    /// graded, the grade of its highest GHSA alias in the mirror
+    /// (`osv::alias_severity`); [`Self::severity_from`] then names that alias.
     #[serde(default)]
     pub severity_label: Option<String>,
+    /// See [`StoredAdvisory::cwe_ids`].
+    #[serde(default)]
+    pub cwe_ids: Vec<String>,
+    /// The GHSA id `severity_label` was read from, when the record carries no
+    /// grade of its own. `None` means the label is the record's own. Every
+    /// surface that shows an inherited grade names this id beside it.
+    /// Always serialized (`null` for an own grade), so a client reading
+    /// `severity_label` can never take an inherited grade for the record's own.
+    #[serde(default)]
+    pub severity_from: Option<String>,
+    /// See [`StoredAdvisory::informational`].
+    #[serde(default)]
+    pub informational: Option<bool>,
+}
+
+impl MatchedAdvisory {
+    /// A malicious-package record (`fourda_depengine::is_malware`).
+    pub fn is_malware(&self) -> bool {
+        fourda_depengine::is_malware(
+            &self.advisory_id,
+            &self.aliases,
+            &self.cwe_ids,
+            &self.summary,
+        )
+    }
 }
 
 /// Normalise a source severity label to the four-tier vocabulary every
@@ -204,36 +242,9 @@ pub fn cvss_band(score: f64) -> &'static str {
     }
 }
 
-/// One installed dependency instance affected by an advisory.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct MatchedDependency {
-    pub project_path: String,
-    pub installed_version: Option<String>,
-    pub is_direct: bool,
-    pub is_dev: bool,
-    pub is_version_confirmed: bool,
-    /// This advisory's fix on the release line THIS copy is on (`None` when
-    /// the window has no fix, or the copy could not be placed in a window).
-    #[serde(default)]
-    pub fixed_version: Option<String>,
-    /// The lowest version reachable from this copy by successive fixes that
-    /// no known advisory of the package affects — the version that clears
-    /// everything, on this copy's own line where one exists. `None` when the
-    /// path runs into a window no known release leaves (open-ended, or a
-    /// `last_affected` bound with nothing published above it in the data), or
-    /// an advisory the matcher cannot evaluate (no clean version can then be
-    /// claimed).
-    #[serde(default)]
-    pub clean_version: Option<String>,
-    /// Where that walk lands when it cannot clear everything: the lowest
-    /// version reachable by successive fixes that no advisory WITH a way out
-    /// affects (equal to `clean_version` when that is set). It is never
-    /// inside a window a later release leaves; only advisories no release
-    /// fixes stay open there. `None` when nothing has a way out, or the walk
-    /// could not evaluate an advisory.
-    #[serde(default)]
-    pub target_version: Option<String>,
-}
+// One installed copy an advisory affects, with that copy's own fix targets:
+// produced by the engine crate's `match_inventory` (single-engine C0.2).
+pub use fourda_depengine::matching::MatchedDependency;
 
 /// Result of a sync operation.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -308,6 +319,22 @@ impl Vulnerability {
         curated.or_else(|| self.best_cvss().1.map(|s| cvss_band(s).to_string()))
     }
 
+    /// JSON array of `database_specific.cwe_ids`, or `None` when the source
+    /// lists none.
+    pub(crate) fn cwe_ids_json(&self) -> Option<String> {
+        let ids: Vec<&str> = self
+            .database_specific
+            .as_ref()?
+            .get("cwe_ids")?
+            .as_array()?
+            .iter()
+            .filter_map(|v| v.as_str())
+            .collect();
+        (!ids.is_empty())
+            .then(|| serde_json::to_string(&ids).ok())
+            .flatten()
+    }
+
     /// JSON array of alias ids, or `None` when the source lists none.
     pub(crate) fn aliases_json(&self) -> Option<String> {
         let aliases = self.aliases.as_ref()?;
@@ -315,6 +342,17 @@ impl Vulnerability {
             return None;
         }
         serde_json::to_string(aliases).ok()
+    }
+
+    /// Whether this record is a maintenance notice for the package of
+    /// `merged` (one entry of `osv::sync::merge_affected`): the engine
+    /// crate's `osv::is_notice_for`, the MCP's rule.
+    pub(crate) fn is_notice_for(&self, merged: &Affected) -> bool {
+        fourda_depengine::osv::is_notice_for(
+            self.summary.as_deref().unwrap_or(""),
+            self.database_specific.as_ref(),
+            merged,
+        )
     }
 
     pub(crate) fn best_url(&self) -> Option<String> {

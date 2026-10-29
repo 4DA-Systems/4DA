@@ -45,7 +45,7 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
-    "test:scripts": "node --test scripts/launch-gates.test.mjs scripts/check-vanity-metrics.test.cjs scripts/check-llm-gate-honesty.test.cjs scripts/check-no-window-spawns.test.cjs scripts/check-pages-secrets.test.cjs scripts/check-pr-metadata.test.cjs scripts/check-release-channel.test.cjs scripts/check-retired-claims.test.cjs scripts/check-pnpm-overrides.test.cjs scripts/audit-lockfiles.test.cjs scripts/check-release-notes-claims.test.cjs scripts/check-privacy-egress.test.cjs scripts/check-workflow-shell-syntax.test.cjs scripts/compound-quality-check.test.cjs scripts/lib/secret-patterns.test.cjs scripts/fetch-ocr-models.test.cjs scripts/release-ocr-models.test.cjs scripts/release-embedding-model.test.cjs scripts/gate-hook.test.cjs scripts/gate-jobs.test.cjs scripts/generate-knowledge.test.cjs scripts/generate-notice.test.cjs scripts/ghost-commands.test.cjs scripts/judge-cohort-monitor.test.cjs scripts/check-deploy-truth.test.cjs scripts/kill-fourda.test.cjs scripts/kill-port.test.cjs scripts/run-with-timeout.test.cjs scripts/check-remove-by.test.cjs scripts/sentinel-scan.test.cjs scripts/dismiss-fixture-alerts.test.cjs scripts/scan-secrets.test.cjs scripts/verify-installer.test.cjs scripts/i18n-sync.test.cjs scripts/update-site-release.test.cjs scripts/signal-terminal-xss.test.cjs scripts/payments-canary.test.cjs site/lib/abuse-guards.test.mjs site/lib/entitlement.test.mjs site/lib/email-shell.test.mjs site/lib/license-email.test.mjs site/lib/license-health.test.mjs site/lib/renewal.test.mjs site/lib/stripe-client.test.mjs",
+    "test:scripts": "node --test scripts/launch-gates.test.mjs scripts/launch-gates-records.test.mjs scripts/check-vanity-metrics.test.cjs scripts/check-llm-gate-honesty.test.cjs scripts/check-no-window-spawns.test.cjs scripts/check-pages-secrets.test.cjs scripts/check-pr-metadata.test.cjs scripts/check-release-channel.test.cjs scripts/check-retired-claims.test.cjs scripts/check-pnpm-overrides.test.cjs scripts/audit-lockfiles.test.cjs scripts/check-release-notes-claims.test.cjs scripts/check-privacy-egress.test.cjs scripts/check-workflow-shell-syntax.test.cjs scripts/compound-quality-check.test.cjs scripts/lib/secret-patterns.test.cjs scripts/fetch-ocr-models.test.cjs scripts/release-ocr-models.test.cjs scripts/release-embedding-model.test.cjs scripts/gate-hook.test.cjs scripts/gate-jobs.test.cjs scripts/generate-knowledge.test.cjs scripts/generate-notice.test.cjs scripts/ghost-commands.test.cjs scripts/judge-cohort-monitor.test.cjs scripts/check-deploy-truth.test.cjs scripts/kill-fourda.test.cjs scripts/kill-port.test.cjs scripts/run-with-timeout.test.cjs scripts/check-remove-by.test.cjs scripts/sentinel-scan.test.cjs scripts/dismiss-fixture-alerts.test.cjs scripts/scan-secrets.test.cjs scripts/verify-installer.test.cjs scripts/i18n-sync.test.cjs scripts/update-site-release.test.cjs scripts/signal-terminal-xss.test.cjs scripts/payments-canary.test.cjs site/lib/abuse-guards.test.mjs site/lib/entitlement.test.mjs site/lib/email-shell.test.mjs site/lib/license-email.test.mjs site/lib/license-health.test.mjs site/lib/renewal.test.mjs site/lib/stripe-client.test.mjs",
     "gates": "node scripts/launch-gates.mjs",
     "validate:sizes": "node scripts/check-file-sizes.cjs",
     "bench:judge": "node scripts/judge-benchmark.cjs",
@@ -106,9 +106,9 @@
     "@fontsource-variable/inter": "^5.3.0",
     "@fontsource-variable/jetbrains-mono": "^5.3.0",
     "@tanstack/react-virtual": "^3.14.13",
-    "@tauri-apps/api": "^2.11.1",
-    "@tauri-apps/plugin-opener": "^2.5.5",
-    "@tauri-apps/plugin-updater": "^2.12.0",
+    "@tauri-apps/api": "^2.12.3",
+    "@tauri-apps/plugin-opener": "^2.7.1",
+    "@tauri-apps/plugin-updater": "^2.13.3",
     "@xyflow/react": "^12.12.0",
     "i18next": "^26.4.2",
     "i18next-resources-to-backend": "^1.2.3",
@@ -122,7 +122,7 @@
     "@playwright/test": "^1.63.0",
     "@size-limit/esbuild": "^14.0.0",
     "@tailwindcss/vite": "^4.3.3",
-    "@tauri-apps/cli": "^2.11.5",
+    "@tauri-apps/cli": "^2.12.2",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
     "@types/better-sqlite3": "^7.6.13",
@@ -132,7 +132,7 @@
     "@typescript-eslint/eslint-plugin": "^8.70.1",
     "@typescript-eslint/parser": "^8.70.1",
     "@vitejs/plugin-react": "^6.1.1",
-    "@vitest/coverage-v8": "^4.1.11",
+    "@vitest/coverage-v8": "^4.1.12",
     "better-sqlite3": "^12.11.1",
     "eslint": "^9.39.4",
     "eslint-plugin-i18next": "^6.1.5",
@@ -147,8 +147,8 @@
     "size-limit": "^14.0.0",
     "tailwindcss": "^4.3.3",
     "typescript": "~6.0.3",
-    "vite": "^8.3.1",
-    "vitest": "^4.1.11"
+    "vite": "^8.3.3",
+    "vitest": "^4.1.12"
   },
   "pnpm": {
     "overrides": {
@@ -167,9 +167,11 @@
       "source-map-js@<1.2.2": ">=1.2.2 <2",
       "smol-toml@<1.7.1": ">=1.7.1 <2",
       "undici@>=7.0.0 <7.29.1": ">=7.29.1 <8",
+      "undici@>=8.0.0 <8.12.2": ">=8.12.2 <9",
       "vite@>=7.0.0 <7.3.5": ">=7.3.5",
       "@babel/core@<7.29.6": ">=7.29.6 <8",
-      "browserslist@<4.28.7": ">=4.28.7 <5"
+      "browserslist@<4.28.7": ">=4.28.7 <5",
+      "zod@<4.6.6": ">=4.6.6 <5"
     },
     "patchedDependencies": {
       "d3-color@3.1.0": "patches/d3-color@3.1.0.patch"

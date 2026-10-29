@@ -20,7 +20,11 @@
 //! new minor is worth knowing; a patch is not news on its own (security fixes
 //! reach the user through the advisory lanes, not the release row), and
 //! neither is a registry prerelease row (the announcement reaches the user
-//! through editorial coverage). A pinned version that has been YANKED is
+//! through editorial coverage). The grade never asks whether the announced
+//! release is itself safe: the surfaces that announce a release or name a
+//! command toward it (the stack-change stream, the Brief's upgrade facts)
+//! check it against the stored advisories first
+//! (`osv::release_advisories`). A pinned version that has been YANKED is
 //! the strongest case of all: the project is running something the publisher
 //! withdrew.
 //!
@@ -175,6 +179,20 @@ impl ReleaseGrade {
             pins,
             own_projects: Vec::new(),
         }
+    }
+
+    /// The grade restricted to the projects `keep` admits (by path).
+    ///
+    /// The class and the concerned projects are computed from the pins, so
+    /// a caller that only reports on WORKING projects must narrow the pins
+    /// BEFORE asking for them. Narrowing after picked the largest gap among
+    /// every project first: a scratch tree a major behind made the release
+    /// "breaking" for the scratch tree alone, and the active project a minor
+    /// behind was then filtered out with it — the release said nothing to the
+    /// one project that works on it, a malicious one included.
+    pub(crate) fn retain_projects(mut self, keep: impl Fn(&str) -> bool) -> Self {
+        self.pins.retain(|p| keep(&p.project_path));
+        self
     }
 
     /// Every project already runs the announced version or newer (the v33

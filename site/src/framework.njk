@@ -593,7 +593,7 @@ permalink: "/framework.html"
   <div class="fw-container">
 
     <div class="fw-abstract">
-      4DA (4 Dimensional Autonomy) is not a feed reader, a notification aggregator, or a recommendation engine. It is a framework for sovereign developer intelligence &mdash; a system where content is scored, filtered, and surfaced by a machine that works exclusively for its operator, on its operator's hardware, with no 4DA server in the path &mdash; data leaves only to a cloud provider the operator explicitly configures with their own key.
+      4DA (4 Dimensional Autonomy) is not a feed reader, a notification aggregator, or a recommendation engine. It is a framework for sovereign developer intelligence &mdash; a system where content is scored, filtered, and surfaced by a machine that works exclusively for its operator, on its operator's hardware, with no 4DA server in the path &mdash; beyond the package names and versions its dependency checks send to OSV.dev and the package registries, data leaves only to a cloud provider the operator explicitly configures with their own key.
       <br><br>
       This document formalises the three pillars of the 4DA framework: the <strong>PASIFA scoring philosophy</strong>, the <strong>Authority Stack governance model</strong>, and the <strong>Autonomous Operations System (AOS)</strong>. Together, they form a replicable methodology for building software that compounds knowledge privately.
       <br><br>
@@ -1070,7 +1070,7 @@ permalink: "/framework.html"
     <h2 id="privacy">6. Privacy as Architecture, Not Policy</h2>
 
     <p>Most software claims privacy through policy: "We don't sell your data." "We use encryption." "Read our privacy policy."</p>
-    <p>4DA claims privacy through architecture: <strong>it is structurally impossible for data to leave the machine without the user's explicit action.</strong></p>
+    <p>4DA claims privacy through architecture: <strong>your code and what 4DA learns from your projects cannot leave the machine without your explicit action.</strong> What does leave by default is small and listed in <a href="https://github.com/4DA-Systems/4DA/blob/main/NETWORK.md">NETWORK.md</a>: package names and versions for the dependency checks (OSV.dev and the package registries) and plain requests for public content from the news sources you enable.</p>
 
     <h3>6.1 How This Is Enforced</h3>
 
@@ -1079,12 +1079,12 @@ permalink: "/framework.html"
         <tr><th>Layer</th><th>Mechanism</th></tr>
       </thead>
       <tbody>
-        <tr><td>CSP</td><td>The interface itself cannot make network requests; every request goes through the local backend, to the user's own API providers, public data sources and local Ollama only. No 4DA-owned endpoints.</td></tr>
+        <tr><td>CSP</td><td>The interface itself cannot make network requests; every request goes through the local backend, to the user's own API providers, public data sources and local Ollama. The one 4DA-owned endpoint, <code>4da.ai</code>, is contacted only for paid licences (renewal near expiry, and recovery by email when you ask).</td></tr>
         <tr><td>Keychain</td><td>API keys stored in OS-level secure storage (Windows Credential Manager, macOS Keychain, Linux Secret Service) and removed from the settings file once verified there. If that storage is unavailable, keys stay in the settings file, readable only by your user account, and the app says so.</td></tr>
         <tr><td>Zero Telemetry</td><td>No analytics, no tracking, no phone-home, no error reporting to any external service.</td></tr>
         <tr><td>Secrets Scanning</td><td>23+ pattern detectors prevent API keys, credentials, private keys, PII from ever entering version control.</td></tr>
         <tr><td>Local Database</td><td>SQLite on the user's filesystem. No cloud sync unless explicitly enabled through encrypted Team Sync.</td></tr>
-        <tr><td>INV-004</td><td>"NO data leaves the machine without explicit user consent" &mdash; non-negotiable, violation = critical bug.</td></tr>
+        <tr><td>INV-004</td><td>"NO data leaves the machine without explicit user consent" &mdash; non-negotiable for what the context engine (ACE) learns from your projects; violation = critical bug. The package names and versions the dependency checks send are the product's disclosed default (NETWORK.md &sect;2c).</td></tr>
         <tr><td>W-2</td><td>"Data that can leak will leak. Enforce by structure, not policy." &mdash; the architectural philosophy.</td></tr>
       </tbody>
     </table>

@@ -120,6 +120,12 @@ pub(crate) struct TimeFloor {
     /// trial.rs); never touched by the floor policy below.
     #[serde(default)]
     pub(crate) trial_started_unix: i64,
+    /// First time a paid tier was seen WITHOUT a usable key, anchored to the
+    /// `activated_at` it then carried (unix seconds, 0 = never). The 30-day
+    /// activation grace counts from here, EARLIEST value wins, so re-editing
+    /// `activated_at` in settings.json cannot restart it (revalidation.rs).
+    #[serde(default)]
+    pub(crate) grace_started_unix: i64,
 }
 
 /// What one observation of the wall clock implies. Pure data — [`apply`]
@@ -411,6 +417,15 @@ fn load_floor_record() -> TimeFloor {
         .min()
         .unwrap_or(0);
 
+    // So does the activation-grace anchor.
+    let grace = [&from_keychain, &from_file]
+        .into_iter()
+        .flatten()
+        .map(|r| r.grace_started_unix)
+        .filter(|t| *t > 0)
+        .min()
+        .unwrap_or(0);
+
     let mut rec = match (from_keychain, from_file) {
         (Some(kc), Some(f)) => {
             if kc.floor_unix >= f.floor_unix {
@@ -424,6 +439,7 @@ fn load_floor_record() -> TimeFloor {
         (None, None) => TimeFloor::default(),
     };
     rec.trial_started_unix = trial;
+    rec.grace_started_unix = grace;
     rec
 }
 
@@ -433,6 +449,30 @@ pub(crate) fn note_trial_in_cache(trial_unix: i64) {
     if let Some(rec) = FLOOR_CACHE.lock().as_mut() {
         rec.trial_started_unix = trial_unix;
     }
+}
+
+/// Earliest non-zero of a recorded grace anchor and a new candidate.
+pub(crate) fn merge_grace_anchor(recorded_unix: i64, candidate_unix: i64) -> i64 {
+    match (recorded_unix > 0, candidate_unix > 0) {
+        (true, true) => recorded_unix.min(candidate_unix),
+        (true, false) => recorded_unix,
+        _ => candidate_unix,
+    }
+}
+
+/// Anchor the activation-grace start at the earliest of the recorded anchor
+/// and `candidate_unix`, persisting both stores when it moves. Returns the
+/// anchor grace is judged from. Best-effort like every floor write: if no
+/// store accepts it, the in-memory anchor still holds for this session.
+pub(crate) fn anchor_grace_start(candidate_unix: i64) -> i64 {
+    let mut cache = FLOOR_CACHE.lock();
+    let store = cache.get_or_insert_with(load_floor_record);
+    let anchored = merge_grace_anchor(store.grace_started_unix, candidate_unix);
+    if anchored != store.grace_started_unix {
+        store.grace_started_unix = anchored;
+        save_floor_record(store);
+    }
+    anchored
 }
 
 /// Write both stores; either surviving is enough. Both failing degrades to
@@ -652,6 +692,7 @@ mod anti_rollback_tests {
             pending_sessions: 1,
             pending_last_session: 42,
             trial_started_unix: 0,
+            grace_started_unix: 0,
         };
         let json = serde_json::to_string(&rec).expect("serialize");
         let back: TimeFloor = serde_json::from_str(&json).expect("parse");

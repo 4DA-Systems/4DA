@@ -14,6 +14,9 @@ fn line(installed: &str, target: &str, project: &str, direct: bool) -> LineTarge
         installed_version: installed.to_string(),
         target_version: Some(target.to_string()),
         clears_all_known: true,
+        introduces: Vec::new(),
+        malicious: Vec::new(),
+        held: None,
         upgrade_type: Some(UpgradeType::Major),
         sites: vec![InstallSite {
             project_path: project.to_string(),
@@ -191,6 +194,112 @@ fn an_npm_range_that_excludes_the_target_says_the_parent_must_move() {
     );
 }
 
+/// navcal (audit A7): brace-expansion 2.0.2 sits under a NESTED minimatch
+/// 9.0.5 (`^2.0.1`), while the hoisted minimatch 3.1.2 (`^1.1.7`) holds 1.1.12.
+/// With the nested edge stored, 2.0.2 is attributed to 9.0.5 and its target
+/// 2.1.7 is inside `^2.0.1`: a refresh, read from the requirement.
+#[test]
+fn a_nested_parent_is_named_for_its_own_copy() {
+    let navcal = "d:/runyourempire/navcal";
+    let edges = vec![
+        edge(navcal, "minimatch", Some("3.1.2"), Some("^1.1.7")),
+        edge(navcal, "minimatch", Some("9.0.5"), Some("^2.0.1")),
+    ];
+    let installed = vec![
+        inst(navcal, "brace-expansion", "1.1.12", false),
+        inst(navcal, "brace-expansion", "2.0.2", false),
+        inst(navcal, "minimatch", "3.1.2", false),
+        inst(navcal, "minimatch", "9.0.5", false),
+    ];
+    let lines = [line("2.0.2", "2.1.7", navcal, false)];
+    let links = parent_links("brace-expansion", &lines, &edges, &installed, &|_| true);
+    assert_eq!(links.len(), 1, "{links:?}");
+    assert_eq!(links[0].parent_version, "9.0.5");
+    assert_eq!(links[0].requirement.as_deref(), Some("^2.0.1"));
+    assert_eq!(links[0].refresh, Refresh::Enough(Basis::Requirement));
+    let unlinked = unlinked_sites("brace-expansion", &lines, &links, &|_| None);
+    assert!(
+        unlinked.is_empty(),
+        "no longer 'no parent 4DA can read': {unlinked:?}"
+    );
+}
+
+/// NodeGoat (audit E8): debug 2.2.0 bundled inside nyc. `npm update debug`
+/// cannot move it, so it is never "a refresh is enough" and gets no command,
+/// even where the project's tool is not known.
+#[test]
+fn a_bundled_copy_waits_on_its_owner() {
+    let p = "d:/nodegoat";
+    let edges = vec![edge(p, "nyc", Some("14.1.1"), Some("2.2.0 (bundled)"))];
+    let installed = vec![
+        inst(p, "debug", "2.2.0", false),
+        inst(p, "nyc", "14.1.1", true),
+    ];
+    let lines = [line("2.2.0", "2.6.9", p, false)];
+    for manager in [None, Some(Manager::Npm)] {
+        let readers = Readers {
+            manager: &|_| manager,
+            requirements: &|_, _, _, _, _| Vec::new(),
+            resolved_children: &|_, _, _, _| None,
+        };
+        let links = parent_links_with("debug", &lines, &edges, &installed, &|_| true, &readers);
+        assert_eq!(links.len(), 1, "{manager:?}: {links:?}");
+        assert_eq!(links[0].parent, "nyc");
+        assert_eq!(links[0].requirement.as_deref(), Some("2.2.0 (bundled)"));
+        assert_eq!(
+            links[0].refresh,
+            Refresh::ParentMustMove(Basis::Requirement)
+        );
+        assert_eq!(links[0].command, None);
+    }
+    // npm `overrides` cannot reach a bundled copy: no override is offered.
+    let links = parent_links("debug", &lines, &edges, &installed, &|_| true);
+    assert!(links[0].is_bundled());
+    use crate::osv::fix_path::override_hint;
+    assert_eq!(override_hint(Some(Manager::Npm), "npm", true), None);
+    assert_eq!(override_hint(None, "npm", true), None);
+    assert!(override_hint(Some(Manager::Npm), "npm", false).is_some());
+}
+
+/// NodeGoat (audit E8): needle 2.2.4's `^2.1.2` admits debug 2.2.0, but the
+/// lockfile tree resolves needle to the hoisted 2.6.9. Read from the tree,
+/// needle is not a parent of 2.2.0, so it adds no "npm update debug" for a
+/// copy it never held; connect, which does hold 2.2.0, stays.
+#[test]
+fn the_lockfile_tree_decides_which_copy_a_parent_holds() {
+    let p = "d:/nodegoat";
+    let edges = vec![
+        edge(p, "needle", Some("2.2.4"), Some("^2.1.2")),
+        edge(p, "connect", Some("3.4.1"), Some("~2.2.0")),
+    ];
+    let installed = vec![
+        inst(p, "debug", "2.2.0", false),
+        inst(p, "debug", "2.6.9", false),
+        inst(p, "needle", "2.2.4", true),
+        inst(p, "connect", "3.4.1", true),
+    ];
+    let lines = [line("2.2.0", "2.6.9", p, false)];
+    let tree = |_: &str, parent: &str, _: &str, _: &str| -> Option<Vec<String>> {
+        Some(vec![match parent {
+            "needle" => "2.6.9".to_string(),
+            _ => "2.2.0".to_string(),
+        }])
+    };
+    let readers = Readers {
+        manager: &|_| Some(Manager::Npm),
+        requirements: &|_, _, _, _, _| Vec::new(),
+        resolved_children: &tree,
+    };
+    let links = parent_links_with("debug", &lines, &edges, &installed, &|_| true, &readers);
+    let parents: Vec<&str> = links.iter().map(|l| l.parent.as_str()).collect();
+    assert_eq!(parents, vec!["connect"], "{links:?}");
+    // Without a tree (Readers::NONE) the range guess still names both.
+    assert_eq!(
+        parent_links("debug", &lines, &edges, &installed, &|_| true).len(),
+        2
+    );
+}
+
 #[test]
 fn an_edge_whose_range_excludes_the_installed_copy_is_not_its_parent() {
     let p = "d:/p";
@@ -260,6 +369,7 @@ fn a_pnpm_resolution_reads_the_installed_parent_and_names_the_command() {
     let readers = Readers {
         manager: &manager,
         requirements: &requirements,
+        resolved_children: &|_, _, _, _| None,
     };
     let links = parent_links_with("braces", &lines, &edges, &installed, &|_| true, &readers);
     assert_eq!(links.len(), 1, "{links:?}");
@@ -274,6 +384,7 @@ fn a_pnpm_resolution_reads_the_installed_parent_and_names_the_command() {
     let readers = Readers {
         manager: &manager,
         requirements: &none,
+        resolved_children: &|_, _, _, _| None,
     };
     let links = parent_links_with("braces", &lines, &edges, &installed, &|_| true, &readers);
     assert_eq!(links[0].refresh, Refresh::Enough(Basis::Semver));
@@ -298,6 +409,7 @@ fn a_cargo_parent_requirement_is_read_with_cargo_semantics() {
     let readers = Readers {
         manager: &manager,
         requirements: &requirements,
+        resolved_children: &|_, _, _, _| None,
     };
     let links = parent_links_with("mio", &lines, &edges, &installed, &|_| true, &readers);
     assert_eq!(links[0].refresh, Refresh::Enough(Basis::Requirement));
@@ -312,6 +424,7 @@ fn a_cargo_parent_requirement_is_read_with_cargo_semantics() {
     let readers = Readers {
         manager: &manager,
         requirements: &pinned,
+        resolved_children: &|_, _, _, _| None,
     };
     let links = parent_links_with("mio", &lines, &edges, &installed, &|_| true, &readers);
     assert_eq!(
@@ -413,20 +526,23 @@ fn a_newer_parent_release_on_record_is_named_and_lookalikes_are_not() {
 fn the_override_hint_names_the_projects_own_tool() {
     use crate::osv::fix_path::override_hint;
     assert_eq!(
-        override_hint(Some(Manager::Npm), "npm").as_deref(),
+        override_hint(Some(Manager::Npm), "npm", false).as_deref(),
         Some("an `overrides` entry in package.json (npm)")
     );
     assert_eq!(
-        override_hint(Some(Manager::PnpmWorkspace), "npm").as_deref(),
+        override_hint(Some(Manager::PnpmWorkspace), "npm", false).as_deref(),
         Some("a `pnpm.overrides` entry in package.json")
     );
     assert_eq!(
-        override_hint(Some(Manager::YarnClassic), "npm").as_deref(),
+        override_hint(Some(Manager::YarnClassic), "npm", false).as_deref(),
         Some("a `resolutions` entry in package.json (yarn)")
     );
-    assert!(override_hint(None, "npm")
+    assert!(override_hint(None, "npm", false)
         .is_some_and(|h| h.contains("`overrides`") && h.contains("`resolutions`")));
     // Cargo has no key that forces a crate outside its parent's line.
-    assert_eq!(override_hint(Some(Manager::Cargo), "crates.io"), None);
-    assert_eq!(override_hint(None, "crates.io"), None);
+    assert_eq!(
+        override_hint(Some(Manager::Cargo), "crates.io", false),
+        None
+    );
+    assert_eq!(override_hint(None, "crates.io", false), None);
 }

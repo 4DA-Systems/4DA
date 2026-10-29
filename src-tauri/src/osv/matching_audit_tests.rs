@@ -115,7 +115,7 @@ fn unparseable_bound_is_unknown_not_confirmed_safe() {
         (true, false),
         "an undecided window must not read as confirmed-not-affected"
     );
-    // `1.0.post1` is a PEP 440 bound now (`osv::version_order`): it decides.
+    // `1.0.post1` is a PEP 440 bound now (`fourda_depengine::version_order`): it decides.
     let pep440 = Some(
         r#"[{"type":"ECOSYSTEM","events":[{"introduced":"0"},{"fixed":"1.0.post1"}]}]"#.to_string(),
     );

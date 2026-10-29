@@ -192,6 +192,25 @@ pub(crate) fn todays_persisted_usage() -> Option<(u64, u64)> {
 // LLM Client
 // ============================================================================
 
+/// LLM purposes no user is waiting on: background passes that run on the
+/// engine cycle. They stop at the background share of the daily budget.
+/// Everything else (Assess with AI, search synthesis, a channel render the
+/// user asked for, connection tests, translation) keeps the whole cap. The
+/// scheduled `monitoring_brief` deliberately keeps it too: it is the brief
+/// the user reads, one call per window, and starving it would hide the day's
+/// findings behind background reranking.
+const BACKGROUND_PURPOSES: &[&str] = &[
+    "adversarial",
+    "rerank_judge",
+    "ingest_judge",
+    "verdict_drain",
+    crate::channel_render::RENDER_PURPOSE_AUTO,
+];
+
+pub(crate) fn is_background_purpose(purpose: Option<&str>) -> bool {
+    purpose.is_some_and(|p| BACKGROUND_PURPOSES.contains(&p))
+}
+
 pub struct LLMClient {
     provider: LLMProvider,
     client: reqwest::Client,
@@ -263,6 +282,18 @@ impl LLMClient {
         self.provider.provider != "ollama"
     }
 
+    /// Whether a metered call is refused for budget before it is sent: the
+    /// whole daily cap for every caller, and the background share
+    /// ([`crate::state::BACKGROUND_BUDGET_SHARE_PERCENT`]) for the passes no
+    /// user is waiting on, so they cannot spend the headroom reserved for
+    /// user-initiated calls (audit L2).
+    fn budget_refused(&self) -> bool {
+        self.metered()
+            && (is_llm_limit_reached()
+                || (is_background_purpose(self.purpose)
+                    && crate::state::background_llm_budget_reached()))
+    }
+
     /// Send a completion request.
     /// Enforces daily token and cost limits — returns an error if the budget is exhausted.
     pub async fn complete(&self, system: &str, messages: Vec<Message>) -> Result<LLMResponse> {
@@ -270,7 +301,7 @@ impl LLMClient {
         let (system, messages) = crate::privacy_egress::scrub_prompt(system, messages);
         let system = system.as_str();
         // Hard cutoff: refuse to call the LLM if daily limit is already reached
-        if self.metered() && is_llm_limit_reached() {
+        if self.budget_refused() {
             let (tokens_used, tokens_limit) = crate::state::get_llm_token_usage();
             let (cost_used, cost_limit) = crate::state::get_llm_cost_usage();
             warn!(
@@ -304,16 +335,27 @@ impl LLMClient {
             );
         }
         let started = std::time::Instant::now();
-        let result = match self.provider.provider.as_str() {
-            "anthropic" => self.complete_anthropic(system, messages.clone()).await,
-            "openai" | "openai-compatible" => self.complete_openai(system, messages.clone()).await,
-            "ollama" => self.complete_ollama(system, messages.clone()).await,
+        // A model load inside the call (another process unloaded it after this
+        // lane's warm-up) is Ollama's time, not a slow judge: it is subtracted.
+        let (result, load) = match self.provider.provider.as_str() {
+            "anthropic" => (
+                self.complete_anthropic(system, messages.clone()).await,
+                std::time::Duration::ZERO,
+            ),
+            "openai" | "openai-compatible" => (
+                self.complete_openai(system, messages.clone()).await,
+                std::time::Duration::ZERO,
+            ),
+            "ollama" => {
+                crate::local_judge::observe_load(self.complete_ollama(system, messages.clone()))
+                    .await
+            }
             _ => return Err(self.provider_error_message().into()),
         };
         if local_judge_call {
             crate::local_judge::record_call(
                 &self.provider.model,
-                started.elapsed(),
+                started.elapsed().saturating_sub(load),
                 result.is_ok(),
             );
         }
@@ -375,7 +417,7 @@ impl LLMClient {
         // Egress boundary: the user's local paths never reach a provider.
         let (system, messages) = crate::privacy_egress::scrub_prompt(system, messages);
         let system = system.as_str();
-        if self.metered() && is_llm_limit_reached() {
+        if self.budget_refused() {
             let (tokens_used, tokens_limit) = crate::state::get_llm_token_usage();
             let (cost_used, cost_limit) = crate::state::get_llm_cost_usage();
             warn!(
@@ -756,6 +798,7 @@ impl LLMClient {
             .json()
             .await
             .context("Failed to parse Ollama response")?;
+        crate::local_judge::note_load_duration(&data);
 
         let content = data["message"]["content"]
             .as_str()
@@ -981,7 +1024,7 @@ impl LLMClient {
         let (system, messages) = crate::privacy_egress::scrub_prompt(system, messages);
         let system = system.as_str();
         // Hard cutoff: refuse to call the LLM if daily limit is already reached
-        if self.metered() && is_llm_limit_reached() {
+        if self.budget_refused() {
             let (tokens_used, tokens_limit) = crate::state::get_llm_token_usage();
             let (cost_used, cost_limit) = crate::state::get_llm_cost_usage();
             warn!(
@@ -1073,7 +1116,9 @@ impl LLMClient {
         cost_used: u64,
         cost_limit: u64,
     ) -> String {
-        let mut parts = Vec::new();
+        // The headline names the cause and when it clears; the UI shows it
+        // instead of a generic "try again" (audit L2).
+        let mut parts = vec![crate::state::daily_budget_reached_message()];
 
         if tokens_limit > 0 && tokens_used >= tokens_limit {
             parts.push(format!(
@@ -1089,7 +1134,7 @@ impl LLMClient {
             ));
         }
 
-        if parts.is_empty() {
+        if parts.len() == 1 {
             // Fallback (shouldn't happen, but be defensive)
             parts.push("Daily LLM limit reached".to_string());
         }
@@ -1138,11 +1183,12 @@ impl LLMClient {
                 "LLM call skipped — estimated cost would cross the daily cap"
             );
             return Err(format!(
-                "Daily AI cost limit would be exceeded: this call is estimated at ~{:.1}c \
-                 with {cost_used}c of {cost_limit}c already spent today. The call was \
-                 skipped before spending anything. Raise the daily cost limit in Settings \
-                 or wait for the daily reset.",
-                estimated_millicents as f64 / 1000.0
+                "This call would exceed today's AI budget (estimated ~{:.1}c with \
+                 {cost_used}c of {cost_limit}c already spent), so it was skipped before \
+                 spending anything. {}. Raise the daily cost limit in Settings to continue \
+                 today.",
+                estimated_millicents as f64 / 1000.0,
+                crate::state::daily_budget_reached_message()
             )
             .into());
         }
@@ -1203,17 +1249,27 @@ pub(crate) const OLLAMA_NUM_CTX: u32 = 8192;
 // 14 days to 2026-09-24): lowering this below 8,192 truncates them again.
 const _: () = assert!(OLLAMA_NUM_CTX >= 8192);
 
-/// How long Ollama keeps a 4DA model loaded after a request. Ollama's default
-/// is 5 minutes, but the judge lanes run every ~10–12 minutes, so the judge
-/// model was evicted between every pass and reloaded on the next one —
-/// measured 2026-10-04: 117 loads of gemma4:26b in ~24 h, 46–112 s each.
-pub(crate) const OLLAMA_KEEP_ALIVE: &str = "30m";
+/// How long Ollama keeps a 4DA model loaded after a request: long enough to
+/// bridge the judge lanes WITHIN one cycle (scoring rerank, post-cycle judge,
+/// verdict drain run back to back), shorter than the ~10–12 minute gap BETWEEN
+/// cycles, so the model is never held resident from one cycle to the next.
+///
+/// History: 30m (2026-10-04) stopped gemma4:26b reloading inside a timed call
+/// (117 loads in ~24 h, 46–112 s each). That reason is gone: every judge lane
+/// now loads the model first through `local_judge::warm`, outside the breaker's
+/// timing. And 30m against a 10-minute cadence meant the judge never left:
+/// gemma4:12b held 8.1 GB of VRAM around the clock (G6, 2026-10-12). The
+/// cycle's last lane unloads it explicitly (`local_judge::release_after_cycle`);
+/// this window is the backstop when that does not run. Measured 2026-10-15
+/// (gemma4:12b, RTX 4080 SUPER): a reload costs 6.5–9.3 s from the OS file
+/// cache, 36 s from disk; a warm judge call ~0.3 s.
+pub(crate) const OLLAMA_KEEP_ALIVE: &str = "5m";
 
 /// The `keep_alive` 4DA sends, given the user's `OLLAMA_KEEP_ALIVE`. A
 /// per-request `keep_alive` overrides the server's setting, so a user who set
 /// one deliberately (say `24h`, or `0` to free VRAM at once) keeps it: 4DA only
 /// fills in its own value when the variable is unset or blank.
-fn ollama_keep_alive_for(env: Option<&str>) -> Option<&'static str> {
+pub(crate) fn ollama_keep_alive_for(env: Option<&str>) -> Option<&'static str> {
     match env {
         Some(v) if !v.trim().is_empty() => None,
         _ => Some(OLLAMA_KEEP_ALIVE),
@@ -1276,16 +1332,17 @@ mod tests {
     }
 
     #[test]
-    fn keep_alive_outlasts_the_judge_cadence() {
-        // The judge lanes run every ~10–12 min; anything shorter evicts the
-        // model between passes and every pass pays a full reload again.
+    fn keep_alive_never_bridges_two_cycles() {
+        // Cycles start every ~10–12 min. A window that long or longer keeps
+        // the judge in VRAM permanently (G6). Under 2 min would evict it
+        // between the lanes of one cycle.
         let minutes: u64 = OLLAMA_KEEP_ALIVE
             .strip_suffix('m')
             .and_then(|m| m.parse().ok())
             .expect("OLLAMA_KEEP_ALIVE is expressed in minutes");
         assert!(
-            minutes >= 15,
-            "keep_alive {minutes}m is shorter than a judge pass gap"
+            (2..10).contains(&minutes),
+            "keep_alive {minutes}m must stay between 2 and 9 minutes"
         );
     }
 
@@ -1589,6 +1646,32 @@ mod tests {
     // ========================================================================
     // format_limit_error — pure formatting logic
     // ========================================================================
+
+    /// Audit L2: only passes no user waits on answer to the background
+    /// share; a user-initiated call keeps the whole cap.
+    #[test]
+    fn background_share_gates_only_background_purposes() {
+        for p in [
+            "adversarial",
+            "rerank_judge",
+            "ingest_judge",
+            "verdict_drain",
+            "channel_render_auto",
+        ] {
+            assert!(is_background_purpose(Some(p)), "{p}");
+        }
+        for p in [
+            "channel_render",
+            "blind_spots",
+            "search_synthesis",
+            "digest",
+            "monitoring_brief",
+            "connection_test",
+        ] {
+            assert!(!is_background_purpose(Some(p)), "{p}");
+        }
+        assert!(!is_background_purpose(None));
+    }
 
     #[test]
     fn test_format_limit_error_token_exceeded() {

@@ -256,6 +256,105 @@ fn a_fixed_and_an_unfixed_advisory_on_one_package_still_upgrade() {
     );
 }
 
+/// Review of #994, B2 (parity decision 2): A is fixed at 1.2.0, B opens at
+/// 1.1.0 with no fix and the installed 1.0.0 does not have it. Every fixing
+/// release brings B in, so the row names no target (not even A's line fix)
+/// and says why; Preemption's sentence agrees.
+#[test]
+fn a_fix_that_brings_in_an_advisory_is_not_named() {
+    let db = test_db();
+    db.store_dependency("/proj/a", "foo", Some("1.0.0"), "npm", false, None)
+        .unwrap();
+    advisory(&db, "GHSA-foo-a", "foo", "npm", "1.2.0", 7.5);
+    db.upsert_osv_advisory(
+        "GHSA-foo-b",
+        "Unfixed issue in foo",
+        None,
+        "foo",
+        "npm",
+        Some(r#"[{"type":"SEMVER","events":[{"introduced":"1.1.0"}]}]"#),
+        None,
+        Some("CVSS_V3"),
+        Some(5.0),
+        None,
+        None,
+        None,
+        None,
+    )
+    .unwrap();
+    let plan = build_upgrade_plan(&db);
+    assert_eq!(plan.len(), 1);
+    let step = &plan[0];
+    assert!(
+        step.title.starts_with("No clean fix for foo"),
+        "{}",
+        step.title
+    );
+    let why =
+        "every fixing release brings in GHSA-foo-b, which the installed version does not have";
+    assert!(step.explanation.contains(why), "{}", step.explanation);
+    assert!(!step.title.contains("1.2.0"), "{}", step.title);
+
+    let matches = crate::osv::matching::get_matched_advisories(&db).unwrap();
+    let group: Vec<_> = matches.iter().collect();
+    let lines = crate::osv::fix_target::line_targets(&group, &["/proj/a".to_string()]);
+    let (fix, sentence) = crate::preemption::alert_fix_target(&group, &lines);
+    assert_eq!(fix, None);
+    assert!(sentence.contains(why), "{sentence}");
+}
+
+/// Follow-up of #994: a malicious record every fixing release falls in is
+/// named as malware (the MCP's words), never "brought in"; an unmaintained
+/// notice in the same place never blocks the target.
+#[test]
+fn a_malicious_landing_is_named_and_a_notice_never_blocks() {
+    let open_from = |db: &Database, id: &str, summary: &str, cvss: Option<f64>| {
+        db.upsert_osv_advisory(
+            id,
+            summary,
+            None,
+            "foo",
+            "npm",
+            Some(r#"[{"type":"SEMVER","events":[{"introduced":"1.1.0"}]}]"#),
+            None,
+            cvss.map(|_| "CVSS_V3"),
+            cvss,
+            None,
+            None,
+            None,
+            None,
+        )
+        .unwrap();
+    };
+    let db = test_db();
+    db.store_dependency("/proj/a", "foo", Some("1.0.0"), "npm", false, None)
+        .unwrap();
+    advisory(&db, "GHSA-foo-a", "foo", "npm", "1.2.0", 7.5);
+    open_from(&db, "GHSA-foo-m", "Malicious Package in foo", None);
+    let plan = build_upgrade_plan(&db);
+    let step = &plan[0];
+    let want = "foo is flagged malicious (GHSA-foo-m): remove or replace foo";
+    assert!(step.explanation.contains(want), "{}", step.explanation);
+    assert!(
+        !step.explanation.contains("brings in"),
+        "{}",
+        step.explanation
+    );
+
+    let db = test_db();
+    db.store_dependency("/proj/a", "foo", Some("1.0.0"), "npm", false, None)
+        .unwrap();
+    advisory(&db, "GHSA-foo-a", "foo", "npm", "1.2.0", 7.5);
+    open_from(&db, "RUSTSEC-foo-n", "foo is unmaintained", None);
+    let plan = build_upgrade_plan(&db);
+    assert!(
+        plan.iter()
+            .any(|i| i.title.starts_with("Upgrade foo to >= 1.2.0")),
+        "{:?}",
+        plan.iter().map(|i| &i.title).collect::<Vec<_>>()
+    );
+}
+
 #[test]
 fn every_emitted_item_is_schema_valid_across_a_mixed_plan() {
     let db = test_db();
@@ -418,6 +517,11 @@ fn dev_only_package_is_downranked_but_still_present() {
         plan[0].explanation.contains("dev-only"),
         "the discount is labelled in the explanation"
     );
+    // Audit L5: the advisory's own grade is named beside the adjusted one,
+    // in the first sentences (the list transport keeps 360 bytes).
+    let graded = "Graded medium, not the advisory's own high: every affected copy is dev-only.";
+    let at = plan[0].explanation.find(graded);
+    assert!(at.is_some_and(|i| i < 200), "{}", plan[0].explanation);
 }
 
 /// Live 2026-09-08: the plan graded sandbox (transitive in paddle-webhook,
@@ -495,11 +599,18 @@ fn matched(cvss: f64, installs: &[(bool, bool, bool)]) -> crate::osv::types::Mat
                     fixed_version: None,
                     clean_version: None,
                     target_version: None,
+                    withheld: Vec::new(),
+                    introduces: Vec::new(),
+                    malicious: Vec::new(),
+                    held: None,
                 },
             )
             .collect(),
         aliases: vec![],
         severity_label: None,
+        cwe_ids: Vec::new(),
+        severity_from: None,
+        informational: None,
     }
 }
 
@@ -512,6 +623,26 @@ fn both_grades(advisory: &crate::osv::types::MatchedAdvisory) -> (Urgency, Urgen
         &crate::preemption::osv_alert_urgency(&advisories, &projects),
     );
     (plan, alert)
+}
+
+/// Installed malware (a `MAL-` record on the installed version) is Critical on
+/// both surfaces in every scope: a dev-only or transitive malicious package
+/// still runs its code on the developer's machine, so the scope rule does not
+/// discount it (recovery-lead, 2026-10-18).
+#[test]
+fn installed_malware_is_critical_on_both_surfaces_in_every_scope() {
+    for (direct, dev) in [(true, false), (false, false), (true, true), (false, true)] {
+        let mut m = matched(0.0, &[(direct, dev, true)]);
+        m.advisory_id = "MAL-2026-2307".to_string();
+        m.cvss_score = None;
+        m.severity_type = None;
+        m.severity_label = Some("low".to_string());
+        assert_eq!(
+            both_grades(&m),
+            (Urgency::Critical, Urgency::Critical),
+            "direct={direct} dev={dev}"
+        );
+    }
 }
 
 #[test]
@@ -678,6 +809,19 @@ fn a_dev_only_transitive_critical_ranks_below_a_fixable_direct_medium() {
         sandbox.explanation.contains("dev-only"),
         "the discount is labelled: {}",
         sandbox.explanation
+    );
+    assert!(
+        sandbox.explanation.contains(
+            "Graded medium, not the advisory's own critical: every affected copy is a transitive dev dependency."
+        ),
+        "{}",
+        sandbox.explanation
+    );
+    assert!(
+        !plan[position("jsonwebtoken")]
+            .explanation
+            .contains("Graded"),
+        "an unmoved grade carries no note"
     );
     assert_eq!(plan[position("jsonwebtoken")].urgency, Urgency::Medium);
     assert!(
@@ -1249,4 +1393,77 @@ fn read_upgrade_plan_snapshot_rejects_incompatible_schema_version() {
     // Garbage JSON is also treated as absent, not a panic.
     db.set_kv("upgrade_plan_snapshot", "not json").unwrap();
     assert!(read_upgrade_plan_snapshot(&db).is_none());
+}
+
+/// E9: plan citations carried a 0.0 age, so 2023 advisories read "today".
+#[test]
+fn advisory_citation_age_comes_from_the_publish_date() {
+    use super::{advisory_age_days, UNKNOWN_AGE_DAYS};
+    assert!(advisory_age_days(Some("2023-01-02T00:00:00Z")) > 365.0);
+    assert!(advisory_age_days(Some("2023-01-02 00:00:00")) > 365.0);
+    assert!(advisory_age_days(Some("2023-01-02")) > 365.0);
+    assert_eq!(advisory_age_days(None), UNKNOWN_AGE_DAYS);
+    assert_eq!(advisory_age_days(Some("")), UNKNOWN_AGE_DAYS);
+    assert_eq!(advisory_age_days(Some("not a date")), UNKNOWN_AGE_DAYS);
+}
+
+// ---------------------------------------------------------------------------
+// FX-H5 (2026-10-16): lodash 4.17.21 was told "Upgrade lodash to >= 4.18.0";
+// npm marks 4.18.0 deprecated ("Bad release"). Neither the title nor the work
+// order may name a release its registry withdrew.
+// ---------------------------------------------------------------------------
+
+fn registry_facts(db: &Database, eco: &str, name: &str, published: &str, excluded: &str) {
+    let fetched_at = chrono::Utc::now().to_rfc3339();
+    let doc = format!(
+        r#"[{{"ecosystem":"{eco}","key":"{name}","name":"{name}","fetched_at":"{fetched_at}","published":{published},"excluded":{excluded}}}]"#
+    );
+    db.set_kv("osv_registry_releases", &doc).unwrap();
+}
+
+#[test]
+fn a_deprecated_fix_release_is_never_the_plan_target() {
+    let db = test_db();
+    db.store_dependency("/proj/a", "lodash", Some("4.17.21"), "npm", false, None)
+        .unwrap();
+    advisory(&db, "GHSA-lodash-2", "lodash", "npm", "4.18.0", 7.5);
+    registry_facts(
+        &db,
+        "npm",
+        "lodash",
+        r#"["4.17.21","4.17.23","4.18.0","4.18.1"]"#,
+        r#"["4.18.0"]"#,
+    );
+    let built = super::build_upgrade_plan(&db);
+    assert_eq!(built.items.len(), 1);
+    assert!(
+        built.items[0].title.contains(">= 4.18.1"),
+        "title: {}",
+        built.items[0].title
+    );
+    let all = serde_json::to_string(&(&built.items, &built.steps)).unwrap();
+    assert!(!all.contains("4.18.0"), "a withdrawn release leaked: {all}");
+}
+
+#[test]
+fn every_fixing_release_withdrawn_reads_no_installable_fix() {
+    let db = test_db();
+    db.store_dependency("/proj/a", "h2", Some("0.3.16"), "rust", false, None)
+        .unwrap();
+    advisory(&db, "RUSTSEC-2023-0034", "h2", "crates.io", "0.3.17", 7.5);
+    registry_facts(
+        &db,
+        "crates.io",
+        "h2",
+        r#"["0.3.16","0.3.17"]"#,
+        r#"["0.3.17"]"#,
+    );
+    let built = super::build_upgrade_plan(&db);
+    assert_eq!(built.items.len(), 1);
+    let title = &built.items[0].title;
+    assert!(
+        title.starts_with("No installable fix for h2"),
+        "title: {title}"
+    );
+    assert!(!title.contains("0.3.17"), "title: {title}");
 }

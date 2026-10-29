@@ -128,12 +128,65 @@ fn auditable_packages_by_ecosystem(db: &Database) -> Result<HashMap<String, Vec<
     Ok(by_ecosystem)
 }
 
-/// The OSV ecosystems the auditable inventory needs advisories for — the
-/// same set [`sync`] syncs and [`needs_sync`] checks — sorted.
-pub(crate) fn auditable_ecosystems(db: &Database) -> Result<Vec<String>> {
-    let mut ecosystems: Vec<String> = auditable_packages_by_ecosystem(db)?.into_keys().collect();
-    ecosystems.sort();
-    Ok(ecosystems)
+/// Add the held dependency names to the npm set (when the user has npm
+/// dependencies at all); returns the names added or already present.
+fn with_held_names(
+    by_ecosystem: &mut HashMap<String, Vec<String>>,
+    held: Vec<String>,
+) -> Vec<String> {
+    let Some(npm) = by_ecosystem.get_mut("npm") else {
+        return Vec::new();
+    };
+    if held.is_empty() {
+        return held;
+    }
+    npm.extend(held.iter().cloned());
+    npm.sort_by_key(|name| name.to_lowercase());
+    npm.dedup_by(|a, b| a.eq_ignore_ascii_case(b));
+    held
+}
+
+/// What the auditable inventory holds, by OSV ecosystem.
+pub(crate) struct AuditableCoverage {
+    /// The ecosystems the advisory check can speak for: those with at least
+    /// one auditable row that carries an installed version, sorted. A
+    /// manifest row has none until a lockfile pins it, and a versionless
+    /// dependency is never matched (#974). A Maven-only project made "Maven"
+    /// required, the sync succeeded, and readiness said Ready while nothing
+    /// was checked (W5a). The sync itself still covers every auditable
+    /// ecosystem ([`sync`], [`needs_sync`]).
+    pub versioned: Vec<String>,
+    /// Some auditable row is in an ecosystem OSV covers, versioned or not.
+    pub any_checkable: bool,
+}
+
+/// The auditable inventory's coverage, read once for readiness: which
+/// ecosystems are checkable now, and whether any checkable row exists at all
+/// (readiness tells "not read yet" from "nothing checkable" with it).
+pub(crate) fn auditable_coverage(db: &Database) -> Result<AuditableCoverage> {
+    let mut deps = db
+        .get_auditable_user_dependencies()
+        .map_err(|e| FourDaError::Internal(format!("Failed to read dependencies: {e}")))?;
+    deps.extend(
+        db.get_auditable_scanned_dependencies().map_err(|e| {
+            FourDaError::Internal(format!("Failed to read scanned dependencies: {e}"))
+        })?,
+    );
+    let any_checkable = deps
+        .iter()
+        .any(|d| normalize_supported_to_osv(&d.ecosystem).is_some());
+    let mut versioned: Vec<String> = deps
+        .iter()
+        .filter(|d| d.version.as_deref().is_some_and(|v| !v.trim().is_empty()))
+        .filter_map(|d| normalize_supported_to_osv(&d.ecosystem))
+        .map(str::to_string)
+        .collect();
+    versioned.sort();
+    versioned.dedup();
+    Ok(AuditableCoverage {
+        versioned,
+        any_checkable,
+    })
 }
 
 /// Whether any dependency ecosystem is missing a successful recent sync.
@@ -239,11 +292,19 @@ pub async fn sync(db: &Database) -> Result<SyncResult> {
         errors: Vec::new(),
     };
 
-    let by_ecosystem = auditable_packages_by_ecosystem(db)?;
+    let mut by_ecosystem = auditable_packages_by_ecosystem(db)?;
     if by_ecosystem.is_empty() {
         info!(target: "4da::osv", "No dependencies found — skipping OSV sync");
         return Ok(result);
     }
+    // D-4: the npm dependencies a vulnerable package's releases exact-pin or
+    // narrowly range (read from the registry facts) have their advisories
+    // mirrored too, so a fix target is judged by what it installs. Public
+    // names from public registry documents of packages already sent here.
+    let held_names = with_held_names(
+        &mut by_ecosystem,
+        super::release_facts::held_names_to_sync(db),
+    );
 
     let client = reqwest::Client::builder()
         .user_agent(USER_AGENT)
@@ -333,6 +394,12 @@ pub async fn sync(db: &Database) -> Result<SyncResult> {
         }
     }
 
+    // The held names are covered once the npm sync that included them
+    // succeeded: "no advisory" for one of them is then a reading.
+    if !held_names.is_empty() && !result.errors.iter().any(|e| e.starts_with("npm")) {
+        super::release_facts::record_held_synced(db, &held_names);
+    }
+
     // Prune orphan advisories for ecosystems the user no longer depends on
     // (e.g. NuGet/Maven/PyPI rows left by an earlier unfiltered cache ingestion
     // that can never match the current npm/crates.io dependency set). Keyed on
@@ -354,6 +421,11 @@ pub async fn sync(db: &Database) -> Result<SyncResult> {
     if resolved_alerts > 0 {
         info!(target: "4da::osv", resolved_alerts, "Retired patched dependency alerts");
     }
+
+    // Which releases the registries withdrew (yanked, deprecated), for the
+    // packages that now have a confirmed advisory: no fix target may name
+    // one. Best effort; without it targets come from the advisory data.
+    super::release_facts::refresh(db).await;
 
     // Count matched advisories
     result.advisories_matched = super::matching::count_matches(db).unwrap_or(0);
@@ -498,8 +570,12 @@ pub(super) fn store_vulnerability(
         }
         let ranges_json = serialize_ranges(&affected);
         let fixed_json = extract_fixed_versions(&affected);
+        // THE notice rule for this package (`fourda_depengine::osv::
+        // is_notice_for`): the summary, the record-level flag, or this
+        // package's own `affected[].database_specific.informational`.
+        let informational = vuln.is_notice_for(&affected);
 
-        db.upsert_osv_advisory_with_meta(
+        db.upsert_osv_advisory_record(
             &vuln.id,
             summary,
             vuln.details.as_deref(),
@@ -515,6 +591,8 @@ pub(super) fn store_vulnerability(
             vuln.withdrawn.as_deref(),
             vuln.aliases_json().as_deref(),
             vuln.severity_label().as_deref(),
+            vuln.cwe_ids_json().as_deref(),
+            Some(informational),
         )
         .map_err(|e| FourDaError::Internal(format!("Failed to store advisory: {e}")))?;
 
@@ -525,95 +603,23 @@ pub(super) fn store_vulnerability(
 }
 
 /// One advisory's affected entries grouped by (package, ecosystem), in first
-/// appearance order, with their ranges UNIONED. OSV can list the SAME package
-/// in MULTIPLE affected entries (different version branches, e.g. next
-/// [13.4.6,15.5.16) AND [16.0.0,16.2.5)). osv_advisories holds one row per
-/// (advisory, package), so keeping only the first dropped the branch that
-/// matched the user's pinned version — a completeness gap the live cycle
-/// exposed (this is the mirror-path twin of the same fix in
-/// sources/osv_live.rs). An explicit `versions` list becomes an
-/// [`super::types::ENUMERATED_RANGE`] range. Shared with the rule vectors
-/// (`vectors_tests`), so they evaluate a record exactly as it is stored.
+/// appearance order, with their ranges UNIONED and an explicit `versions`
+/// list as an `ENUMERATED` range. The rule lives in the
+/// pure engine crate (`fourda_depengine::osv::merge_affected`, single-engine
+/// C0.2), so the mirror, the conformance harness, the rule vectors and the
+/// wasm module store a record identically.
 pub(super) fn merge_affected(vuln: &Vulnerability) -> Vec<((String, String), Affected)> {
-    let affected_list = vuln.affected.as_deref().unwrap_or(&[]);
-    let mut by_pkg: std::collections::HashMap<(String, String), Affected> =
-        std::collections::HashMap::new();
-    let mut order: Vec<(String, String)> = Vec::new();
-    for affected in affected_list {
-        let Some(pkg) = &affected.package else {
-            continue;
-        };
-        let key = (pkg.name.clone(), pkg.ecosystem.clone());
-        let merged = by_pkg.entry(key.clone()).or_insert_with(|| {
-            order.push(key.clone());
-            Affected {
-                package: Some(pkg.clone()),
-                ranges: Some(Vec::new()),
-                versions: None,
-            }
-        });
-        if let Some(ranges) = &affected.ranges {
-            merged
-                .ranges
-                .get_or_insert_with(Vec::new)
-                .extend(ranges.iter().cloned());
-        }
-        if let Some(versions) = affected.versions.as_ref().filter(|v| !v.is_empty()) {
-            merged
-                .ranges
-                .get_or_insert_with(Vec::new)
-                .push(super::types::Range {
-                    range_type: super::types::ENUMERATED_RANGE.to_string(),
-                    events: Some(
-                        versions
-                            .iter()
-                            .cloned()
-                            .map(serde_json::Value::from)
-                            .collect(),
-                    ),
-                });
-        }
-    }
-    order
-        .into_iter()
-        .filter_map(|key| by_pkg.remove(&key).map(|affected| (key, affected)))
-        .collect()
+    fourda_depengine::osv::merge_affected(vuln.affected.as_deref().unwrap_or(&[]))
 }
 
 /// Serialize the affected ranges to JSON for storage.
 pub(super) fn serialize_ranges(affected: &Affected) -> Option<String> {
-    affected
-        .ranges
-        .as_ref()
-        .and_then(|r| serde_json::to_string(r).ok())
+    fourda_depengine::osv::serialize_ranges(affected)
 }
 
 /// Extract fixed versions from range events.
 fn extract_fixed_versions(affected: &Affected) -> Option<String> {
-    let fixed: Vec<String> = affected
-        .ranges
-        .as_ref()
-        .map(|ranges| {
-            ranges
-                .iter()
-                .filter_map(|r| r.events.as_ref())
-                .flatten()
-                .filter_map(|event| {
-                    event
-                        .as_object()
-                        .and_then(|obj| obj.get("fixed"))
-                        .and_then(|v| v.as_str())
-                        .map(String::from)
-                })
-                .collect()
-        })
-        .unwrap_or_default();
-
-    if fixed.is_empty() {
-        None
-    } else {
-        serde_json::to_string(&fixed).ok()
-    }
+    fourda_depengine::osv::fixed_versions_json(affected)
 }
 
 #[cfg(test)]
@@ -684,6 +690,7 @@ mod tests {
                 ]),
             }]),
             versions: None,
+            database_specific: None,
         };
 
         let fixed = extract_fixed_versions(&affected).unwrap();
@@ -706,6 +713,7 @@ mod tests {
                 ]),
             }]),
             versions: None,
+            database_specific: None,
         };
 
         let fixed = extract_fixed_versions(&affected).unwrap();
@@ -724,6 +732,7 @@ mod tests {
                 events: Some(vec![serde_json::json!({"introduced": "0"})]),
             }]),
             versions: None,
+            database_specific: None,
         };
 
         assert!(extract_fixed_versions(&affected).is_none());
@@ -751,6 +760,7 @@ mod tests {
                 }),
                 ranges: None,
                 versions: None,
+                database_specific: None,
             }]),
             references: None,
             published: None,
@@ -845,5 +855,52 @@ mod tests {
             needs_sync(&db, DEFAULT_SYNC_MAX_AGE_HOURS).unwrap(),
             "an old ecosystem status must make the dependency mirror stale"
         );
+    }
+
+    /// Phase 128 backfill: a row stored before `cwe_ids` existed is re-synced
+    /// with it. The migration makes every ecosystem due (a fresh status would
+    /// otherwise skip the sync for up to 6 h), and the next sync's upsert of
+    /// the same record writes its CWE ids, so crossenv GHSA-c2m4-w5hm-vqjw
+    /// (CWE-506, no `MAL-` alias) reads as malware.
+    #[test]
+    fn a_pre_migration_row_gets_its_cwe_ids_on_the_next_sync() {
+        let db = crate::test_utils::test_db();
+        db.store_dependency("/project", "crossenv", Some("1.0.0"), "npm", false, None)
+            .unwrap();
+        let record = serde_json::json!({
+            "id": "GHSA-c2m4-w5hm-vqjw",
+            "summary": "crossenv is malware",
+            "aliases": ["CVE-2017-16074"],
+            "affected": [{"package": {"ecosystem": "npm", "name": "crossenv"},
+                          "ranges": [{"type": "SEMVER", "events": [{"introduced": "0"}]}]}],
+            "database_specific": {"cwe_ids": ["CWE-506"], "severity": "CRITICAL"}
+        });
+        let vuln: Vulnerability = serde_json::from_value(record).unwrap();
+        // As stored before Phase 128: the row exists, its CWE ids do not.
+        let mut seen = std::collections::HashSet::new();
+        store_vulnerability(&db, &vuln, &mut seen).unwrap();
+        db.conn
+            .lock()
+            .execute("UPDATE osv_advisories SET cwe_ids = NULL", [])
+            .unwrap();
+        db.update_osv_sync_status("npm", 1, None).unwrap();
+        let stored = || {
+            db.get_osv_advisories_for_package("crossenv", "npm")
+                .unwrap()
+        };
+        assert!(!stored()[0].is_malware());
+        assert!(!needs_sync(&db, DEFAULT_SYNC_MAX_AGE_HOURS).unwrap());
+
+        // The migration's step makes the sync due ...
+        {
+            let conn = db.conn.lock();
+            crate::db::Database::make_osv_sync_due(&conn).unwrap();
+        }
+        assert!(needs_sync(&db, DEFAULT_SYNC_MAX_AGE_HOURS).unwrap());
+        // ... and the sync's re-upsert fills the column.
+        let mut seen = std::collections::HashSet::new();
+        store_vulnerability(&db, &vuln, &mut seen).unwrap();
+        assert_eq!(stored()[0].cwe_ids, ["CWE-506"]);
+        assert!(stored()[0].is_malware());
     }
 }

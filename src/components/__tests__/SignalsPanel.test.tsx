@@ -184,8 +184,7 @@ describe('SignalsPanel', () => {
 
   it('renders nothing when there are no results', () => {
     // Hide-when-empty: an empty run must not leave a bordered "no signals" card
-    // behind — the panel simply does not appear (same contract as
-    // WhatYouWouldHaveMissed).
+    // behind — the panel simply does not appear.
     const { container } = render(<SignalsPanel results={[]} />);
     expect(container).toBeEmptyDOMElement();
   });

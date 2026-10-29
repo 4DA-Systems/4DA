@@ -288,6 +288,7 @@ export function FirstRunTransition({ onComplete }: FirstRunTransitionProps) {
           embeddingMode={embeddingMode}
           detectedTech={detectedTech}
           profileEmpty={celebration.profileEmpty}
+          scanSummary={scanSummary}
           onDismiss={handleDismiss}
         />
       );

@@ -96,7 +96,8 @@ fn direct_unknown_and_missing_fixes() {
     assert_eq!(
         fix_path(Some("3.2.4"), Some("4.1.11"), Some(true), None),
         FixPath::Bump {
-            to: "4.1.11".into()
+            to: "4.1.11".into(),
+            fix: None
         }
     );
     assert_eq!(
@@ -388,8 +389,22 @@ fn a_proven_parent_release_is_named_with_its_evidence() {
 /// sentence, must pass the checker.
 #[test]
 fn every_fix_clause_quoted_verbatim_passes_the_version_check() {
+    let bump = |fix: &str| FixPath::Bump {
+        to: "2.1.0".into(),
+        fix: Some(fix.to_string()),
+    };
     let paths = [
-        FixPath::Bump { to: "2.1.0".into() },
+        FixPath::Bump {
+            to: "2.1.0".into(),
+            fix: None,
+        },
+        // The commands osv::direct_upgrade names (audit E8), as the Brief
+        // renders them: npm, Cargo, Go, and the PyPI manifest edit.
+        bump("run `npm install \"rmcp@^2.1.0\"`"),
+        bump("run `npm install rmcp@2.1.0 --save-exact`"),
+        bump("run `cargo add \"rmcp@~2.1.0\" --dev`"),
+        bump("run `go get rmcp@v2.1.0`"),
+        bump("change `rmcp==1.7.0` to `rmcp==2.1.0` in requirements.txt"),
         FixPath::Refresh {
             to: "2.1.0".into(),
             inferred: false,
@@ -432,6 +447,7 @@ fn every_fix_clause_quoted_verbatim_passes_the_version_check() {
                     standing: ParentStanding::Newer {
                         latest: "0.4.1".into(),
                     },
+                    ..Through::default()
                 }),
                 standing: ParentStanding::Newest { deprecated: true },
                 override_hint: None,
@@ -639,13 +655,16 @@ fn live_snapshot_brief_facts() {
 
 fn fix_target(path: &FixPath) -> Option<&str> {
     match path {
-        FixPath::Bump { to }
+        FixPath::Bump { to, .. }
         | FixPath::Refresh { to, .. }
         | FixPath::Parent { to, .. }
         | FixPath::ParentUnknown { to }
         | FixPath::Reinstall { to }
         | FixPath::Update { to } => Some(to),
-        FixPath::PerLine { .. } | FixPath::NoFix => None,
+        FixPath::PerLine { .. }
+        | FixPath::NoFix
+        | FixPath::Introduces { .. }
+        | FixPath::Malicious { .. } => None,
     }
 }
 
@@ -656,6 +675,7 @@ fn security(key: &str, urgency: AlertUrgency, installed: &str, to: &str) -> Secu
         ecosystem: "crates.io".into(),
         urgency,
         worst_tier: Some("high".into()),
+        worst_tier_from: None,
         advisory_count: 3,
         advisory_ids: vec![],
         title: "t".into(),
@@ -670,6 +690,7 @@ fn security(key: &str, urgency: AlertUrgency, installed: &str, to: &str) -> Secu
                 inferred: false,
                 command: None,
             },
+            held: None,
         }],
         not_compiled: vec![],
         first_seen: None,
@@ -911,6 +932,37 @@ fn a_lower_severity_fix_path_change_keeps_the_fingerprint() {
     );
 }
 
+/// The command a bump names (audit E8) is wording from the manifest, not
+/// state: adding it must not make an open act-now fact read as changed, and
+/// the signature stays the one stored before `fix` existed.
+#[test]
+fn a_bumps_command_does_not_change_its_signature() {
+    let bump = |fix: Option<&str>| {
+        let mut f = security("k", AlertUrgency::High, "1.0.0", "1.1.20");
+        f.sites[0].fix_path = FixPath::Bump {
+            to: "1.1.20".into(),
+            fix: fix.map(str::to_string),
+        };
+        f
+    };
+    let plain = bump(None);
+    let with_command = bump(Some("run `cargo add rmcp@1.1.20`"));
+    assert_eq!(
+        security_signature(&plain),
+        security_signature(&with_command)
+    );
+    assert_eq!(
+        security_signature(&plain),
+        "High||atlas/bridge/src-tauri=1.0.0->Bump { to: \"1.1.20\" }"
+    );
+    let mut moved = plain.clone();
+    moved.sites[0].fix_path = FixPath::Bump {
+        to: "1.1.21".into(),
+        fix: None,
+    };
+    assert_ne!(security_signature(&plain), security_signature(&moved));
+}
+
 #[test]
 fn act_now_ids_name_each_advisory_of_each_act_now_fact() {
     let mut a = security("crates.io:rmcp:atlas", AlertUrgency::High, "1.7.0", "2.1.0");
@@ -932,7 +984,7 @@ fn act_now_ids_name_each_advisory_of_each_act_now_fact() {
 // ============================================================================
 
 use crate::osv::fix_target::{InstallSite, LineTarget};
-use crate::osv::parent_hint::Through;
+use crate::osv::parent_hint::{ParentStanding, Through};
 
 const NAVCAL: &str = "d:/runyourempire/navcal";
 
@@ -941,6 +993,9 @@ fn line_in(project: &str, installed: &str, target: Option<&str>) -> LineTarget {
         installed_version: installed.into(),
         target_version: target.map(str::to_string),
         clears_all_known: target.is_some(),
+        introduces: Vec::new(),
+        malicious: Vec::new(),
+        held: None,
         upgrade_type: None,
         sites: vec![InstallSite {
             project_path: project.into(),
@@ -1094,6 +1149,7 @@ fn uuid_path(standing: ParentStanding, through_standing: ParentStanding) -> FixP
                 name: "javascript-opentimestamps".into(),
                 version: "0.4.5".into(),
                 standing: through_standing,
+                ..Through::default()
             }),
             standing,
             override_hint: Some("an `overrides` entry in package.json (npm)".into()),
@@ -1169,4 +1225,135 @@ fn a_lever_with_a_newer_release_on_record_is_upgraded_with_a_check() {
         ),
         "{unknown}"
     );
+}
+
+/// Review of #1008, S4: the malware clause names no version (the MCP's
+/// words), so the version check never faults the brief that quotes it.
+#[test]
+fn the_malicious_clause_passes_the_version_check() {
+    let mut facts = parent_rmcp_facts();
+    facts.security[0].sites[0].fix_path = FixPath::Malicious {
+        advisories: vec!["MAL-2026-0001".into()],
+        introduces: vec!["GHSA-synt-b".into()],
+    };
+    let clause = fix_clause("rmcp", &facts.security[0].sites[0].fix_path);
+    assert!(
+        clause.contains("rmcp is flagged malicious (MAL-2026-0001): remove or replace rmcp"),
+        "{clause}"
+    );
+    let pf = package_facts(&facts);
+    let prose = format!("- **rmcp** (atlas/bridge/src-tauri): {clause}.");
+    assert!(
+        crate::briefing_groundedness::check_factual_claims(&prose, &pf).is_empty(),
+        "{:?}",
+        crate::briefing_groundedness::check_factual_claims(&prose, &pf)
+    );
+}
+
+/// Review of #1008 (nit): the Brief's Debug-based signatures of existing
+/// `Introduces` facts are unchanged by the malware variant.
+#[test]
+fn an_introduces_fact_keeps_its_signature_shape() {
+    let path = FixPath::Introduces {
+        advisories: vec!["GHSA-x".into()],
+    };
+    assert_eq!(
+        format!("{path:?}"),
+        r#"Introduces { advisories: ["GHSA-x"] }"#
+    );
+}
+
+/// Audit 6.2.5 D-4: a target the held-dependency rule could not call clean
+/// carries its caveat into every fix clause; a moved target needs none.
+#[test]
+fn a_held_caveat_follows_the_fix_clause() {
+    use fourda_depengine::held::HeldOutcome;
+    let text = |o: &HeldOutcome| clause::held_caveat("express", o).map(|c| c.text);
+    assert_eq!(
+        text(&blocked_express()).as_deref(),
+        Some("express 4.20.0 is NOT a clean fix: it installs an affected qs 6.11.0")
+    );
+    let unchecked = HeldOutcome::Unchecked {
+        target: "4.20.0".into(),
+        reason: "offline".into(),
+    };
+    assert_eq!(
+        text(&unchecked).as_deref(),
+        Some("whether what express 4.20.0 pins or narrowly ranges is affected was NOT CHECKED")
+    );
+    let moved = HeldOutcome::Moved {
+        from: "4.20.0".into(),
+        to: "4.22.3".into(),
+        past: vec![],
+    };
+    assert_eq!(clause::held_caveat("express", &moved), None);
+    let site = express_site(clause::held_caveat("express", &unchecked));
+    assert_eq!(
+        site_fix_clause("express", &site),
+        "bump express to >= 4.20.0 (whether what express 4.20.0 pins or narrowly ranges is \
+         affected was NOT CHECKED)"
+    );
+}
+
+/// Review of #1039, S3: the caveat's versions (qs 6.11.0) are facts, so a
+/// brief that quotes the fix clause is not faulted by the version check.
+#[test]
+fn a_held_caveats_versions_pass_the_version_check() {
+    let site = express_site(clause::held_caveat("express", &blocked_express()));
+    let mut fact = security(
+        "npm:express:nodegoat",
+        AlertUrgency::High,
+        "4.16.4",
+        "4.20.0",
+    );
+    fact.package = "express".into();
+    fact.sites = vec![site.clone()];
+    let facts = BriefFacts {
+        security: vec![fact],
+        ..BriefFacts::default()
+    };
+    let pf = package_facts(&facts);
+    let quoted = format!(
+        "- **express** (nodegoat): {}",
+        site_fix_clause("express", &site)
+    );
+    assert!(quoted.contains("qs 6.11.0"), "{quoted}");
+    assert_eq!(
+        crate::briefing_groundedness::check_factual_claims(&quoted, &pf),
+        Vec::<String>::new()
+    );
+    let versions = crate::morning_audit::fact_versions(&facts);
+    assert!(versions
+        .iter()
+        .any(|(p, v, what)| p == "qs" && v == "6.11.0" && *what == "held dependency"));
+}
+
+fn blocked_express() -> fourda_depengine::held::HeldOutcome {
+    fourda_depengine::held::HeldOutcome::Blocked {
+        target: "4.20.0".into(),
+        affected: vec![fourda_depengine::held::HeldDependency {
+            name: "qs".into(),
+            spec: "6.11.0".into(),
+            exact: true,
+            version: "6.11.0".into(),
+            ids: vec!["GHSA-4mjr-xmp4-gh2g".into()],
+        }],
+        searched: vec!["4.20.0".into()],
+        unchecked: vec![],
+    }
+}
+
+fn express_site(held: Option<HeldCaveat>) -> SecuritySite {
+    SecuritySite {
+        label: "nodegoat".into(),
+        installed: Some("4.16.4".into()),
+        dev_only: false,
+        scratch: false,
+        dormant_days: None,
+        fix_path: FixPath::Bump {
+            to: "4.20.0".into(),
+            fix: None,
+        },
+        held,
+    }
 }

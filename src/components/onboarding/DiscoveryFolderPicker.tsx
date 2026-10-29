@@ -14,12 +14,19 @@ export function DiscoveryFolderPicker({ discovery, disabled = false }: Discovery
   const { t } = useTranslation();
   const [draft, setDraft] = useState('');
   const inputId = useId();
-  const { folders, loading, toggleFolder, addFolder, findMoreFolders, searchingDrives, drivesSearched } = discovery;
+  const { folders, loading, toggleFolder, addFolder, addError, findMoreFolders, searchingDrives, drivesSearched } = discovery;
 
+  // Keep the typed path when it was refused, so it can be corrected.
   const submit = () => {
-    addFolder(draft);
-    setDraft('');
+    void addFolder(draft).then((added) => { if (added) setDraft(''); });
   };
+  const errorText = (() => {
+    if (!addError) return null;
+    const path = addError.path;
+    if (addError.reason === 'not_found') return t('onboarding.projects.folderNotFound', { path });
+    if (addError.reason === 'not_a_folder') return t('onboarding.projects.notAFolder', { path });
+    return t('onboarding.projects.systemFolder', { path });
+  })();
 
   return (
     <div className="space-y-2 text-start">
@@ -69,6 +76,11 @@ export function DiscoveryFolderPicker({ discovery, disabled = false }: Discovery
           {t('onboarding.projects.addFolder')}
         </button>
       </div>
+      {errorText && (
+        <p className="text-[11px] text-red-400 break-all" role="alert" data-testid="add-folder-error">
+          {errorText}
+        </p>
+      )}
 
       {!drivesSearched ? (
         <button

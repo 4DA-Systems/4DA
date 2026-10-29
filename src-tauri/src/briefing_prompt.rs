@@ -27,7 +27,7 @@
 //! item. There is now no second chain to fall out of sync.
 
 use crate::brief_facts::{
-    fix_clause, BriefFacts, FactStatus, SecurityFact, UpgradeFact, WorthKnowingCandidate,
+    site_fix_clause, BriefFacts, FactStatus, SecurityFact, UpgradeFact, WorthKnowingCandidate,
 };
 use crate::preemption::AlertUrgency;
 use crate::prompt_safety::{
@@ -108,23 +108,41 @@ fn render_security(n: usize, f: &SecurityFact) -> String {
     let worst = f
         .worst_tier
         .as_deref()
-        .map(|t| format!(", worst advisory severity {}", t.to_uppercase()))
+        .map(|t| {
+            let from = f
+                .worst_tier_from
+                .as_deref()
+                .map(|id| format!(" (from {id}; the advisory has no grade of its own)"))
+                .unwrap_or_default();
+            format!(", worst advisory severity {}{from}", t.to_uppercase())
+        })
         .unwrap_or_default();
     let ids = if f.advisory_ids.is_empty() {
         String::new()
     } else {
         format!(" ({})", f.advisory_ids.join(", "))
     };
-    let mut out = format!(
-        "{n}. [{}] {} ({}) — {} advisor{}{ids}{worst}. Status: {}.\n   Advisory: {}\n",
-        urgency_label(&f.urgency),
-        f.package,
-        f.ecosystem,
-        f.advisory_count,
-        if f.advisory_count == 1 { "y" } else { "ies" },
-        status_label(&f.status),
-        f.title,
-    );
+    let mut out = if f.advisory_count == 0 {
+        // Maintenance notices only (#986): not a vulnerability, no severity.
+        format!(
+            "{n}. [NOTICE] {} ({}){ids}: {}. Status: {}.\n",
+            f.package,
+            f.ecosystem,
+            f.title,
+            status_label(&f.status),
+        )
+    } else {
+        format!(
+            "{n}. [{}] {} ({}) — {} advisor{}{ids}{worst}. Status: {}.\n   Advisory: {}\n",
+            urgency_label(&f.urgency),
+            f.package,
+            f.ecosystem,
+            f.advisory_count,
+            if f.advisory_count == 1 { "y" } else { "ies" },
+            status_label(&f.status),
+            f.title,
+        )
+    };
     for s in &f.sites {
         let installed = s
             .installed
@@ -135,7 +153,7 @@ fn render_security(n: usize, f: &SecurityFact) -> String {
             "   - {}: {installed}{} — fix: {}\n",
             s.label,
             site_notes(s.dev_only, s.scratch, s.dormant_days),
-            fix_clause(&f.package, &s.fix_path)
+            site_fix_clause(&f.package, s)
         ));
     }
     if !f.not_compiled.is_empty() {
@@ -162,7 +180,7 @@ fn render_security(n: usize, f: &SecurityFact) -> String {
 fn also_open_fix(f: &SecurityFact) -> String {
     let mut clauses: Vec<(Option<&str>, String)> = Vec::new();
     for s in &f.sites {
-        let clause = fix_clause(&f.package, &s.fix_path);
+        let clause = site_fix_clause(&f.package, s);
         if !clauses.iter().any(|(_, c)| *c == clause) {
             clauses.push((s.installed.as_deref(), clause));
         }
@@ -220,15 +238,42 @@ pub(crate) fn render_facts_for_prompt(facts: &BriefFacts) -> String {
                 are unaffected; the software appends the scan instruction itself.\n"
             .to_string();
     }
-    let mut out = String::from(
-        "FACTS (computed by 4DA from the user's lockfiles, OSV advisories and package registries; \
-         authoritative and complete for security and upgrades):\n\n",
-    );
+    let advisory_gap = crate::briefing_deterministic::advisory_gap_line(facts).is_some();
+    let not_covered = crate::briefing_deterministic::not_covered_line(facts)
+        .map(|line| format!("NOT CHECKED: {line}\n\n"))
+        .unwrap_or_default();
+    let mut out = if advisory_gap {
+        // The security lanes below are empty because advisories were not (all)
+        // checked, not because nothing applies (audit E3).
+        format!(
+            "ADVISORY CHECK NOT COMPLETE: the user's dependencies have not been fully checked \
+             against published vulnerability advisories yet. An empty ACT NOW or ALSO OPEN does \
+             NOT mean they are unaffected. Never say nothing touches their code or that they are \
+             unaffected; the software appends the status line itself.\n\n{not_covered}\
+             FACTS (computed by 4DA from the user's lockfiles and package registries):\n\n",
+        )
+    } else if let Some(line) = crate::briefing_deterministic::not_covered_line(facts) {
+        // Complete for what was read, not for the files 4DA does not read (W5a).
+        format!(
+            "NOT EVERYTHING WAS CHECKED: {line} Say \"the code 4DA checked\", never \"your code\", \
+             for any all-clear, and never call the user's whole codebase unaffected; the software \
+             appends the not-checked line itself.\n\n\
+             FACTS (computed by 4DA from the user's lockfiles, OSV advisories and package \
+             registries; authoritative for the files it read):\n\n"
+        )
+    } else {
+        String::from(
+            "FACTS (computed by 4DA from the user's lockfiles, OSV advisories and package \
+             registries; authoritative and complete for security and upgrades):\n\n",
+        )
+    };
     out.push_str(
         "ACT NOW — confirmed security, HIGH or CRITICAL (each installed version is inside the \
          advisory's affected range):\n",
     );
-    if facts.security.is_empty() {
+    if facts.security.is_empty() && advisory_gap {
+        out.push_str("none found so far — the advisory check is not complete.\n");
+    } else if facts.security.is_empty() {
         out.push_str(
             "none — no confirmed advisory at HIGH or CRITICAL affects an installed dependency.\n",
         );
@@ -316,6 +361,7 @@ Rules:
 - An item published more than 7 days ago is not news. Do not present a release the user already runs as news.
 - If no fact is NEW and no candidate qualifies, the whole brief is one sentence, "Nothing new touches your code today.", followed by Still open.
 - Refer to items by title, never by index number. Never write meta-commentary about 4DA, its data, freshness or pipeline.
+- Never write about the brief itself: not where a line is listed, why it is or is not in a section, or the FACTS block's labels (ACT NOW, ALSO OPEN, NEW, UNCHANGED). An ALSO OPEN fact goes only in the "Lower severity" line, even when it is NEW.
 - Plain sentences, no hype, at most 350 words.
 
 MACHINE TRAILER (required — parsed by software and stripped before the user sees the briefing):

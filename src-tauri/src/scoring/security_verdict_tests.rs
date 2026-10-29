@@ -65,6 +65,13 @@ fn severity_comes_from_the_advisory_text() {
         Some("critical")
     );
     assert_eq!(content_severity_tier("no metadata"), None);
+    // Label first, CVSS band second: the one per-record rule
+    // (`osv::severity::row_grade`; GHSA-23hp-3jrh-7fpw: v3 7.5, label CRITICAL).
+    assert_eq!(
+        content_severity_tier("Severity: CRITICAL\nCVSS: 7.5\n"),
+        Some("critical")
+    );
+    assert_eq!(content_severity_tier("CVSS: 7.5\n"), Some("high"));
 }
 
 fn seed_rmcp(db: &Database) {

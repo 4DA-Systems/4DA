@@ -85,6 +85,21 @@ describe('UnifiedAppBar — unjudged badge on the relevant chip', () => {
   });
 });
 
+describe('UnifiedAppBar — status text', () => {
+  // With every interest off the summary badge is absent (it counts reading
+  // rows only); a finished analysis still reads as finished, not "Ready".
+  it('reads "analysis complete" after a run with no reading rows to count', () => {
+    renderBar({ summaryBadges: null, state: { loading: false, analysisComplete: true } });
+    expect(screen.getByText('action.analysisComplete')).toBeInTheDocument();
+    expect(screen.queryByText('action.ready')).toBeNull();
+  });
+
+  it('reads "ready" before any run', () => {
+    renderBar({ summaryBadges: null, state: { loading: false, analysisComplete: false } });
+    expect(screen.getByText('action.ready')).toBeInTheDocument();
+  });
+});
+
 describe('UnifiedAppBar — the brand mark moves only while 4DA is working', () => {
   it('rests when idle: no analysis running and no background fetch', () => {
     backgroundWork.current = false;

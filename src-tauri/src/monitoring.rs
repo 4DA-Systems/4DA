@@ -13,7 +13,7 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIcon, TrayIconBuilder},
     AppHandle, Emitter, Manager, Runtime,
 };
-use tracing::{info, warn};
+use tracing::{debug, info, warn};
 
 use crate::error::Result;
 
@@ -497,6 +497,13 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
             // Background Jobs (run regardless of monitoring enabled state)
             // ================================================================
 
+            // Advisory mirror: start a sync (in the background, single
+            // flight) when dependencies were never synced, the mirror is
+            // stale, or a scan changed the inventory. The app's own check, on
+            // every platform: the headless engine is opt-in and Windows-only,
+            // and launch alone left long-running apps unsynced (audit E1).
+            crate::osv::readiness::refresh::on_scheduler_tick();
+
             // Health check - every 5 minutes (Critical — always runs)
             let last_health = state.last_health_check.load(Ordering::Relaxed);
             if now - last_health >= crate::scheduler_gate::effective_interval(HEALTH_CHECK_INTERVAL)
@@ -779,109 +786,29 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                 let job_started = std::time::Instant::now();
                 if let Ok(db) = crate::get_database() {
                     let threshold = crate::get_relevance_threshold();
-                    let mut snapshot_error: Option<String> = None;
-                    match crate::scoring::calibration_monitor::compute_calibration_snapshot(
-                        db, threshold,
-                    ) {
-                        Ok(snap) if snap.has_sufficient_feedback => {
-                            let health = snap.health().unwrap_or(1.0);
-                            info!(
-                                target: "4da::calibration",
-                                feedback = snap.feedback_count,
-                                precision_miss = snap.precision_miss_rate,
-                                recall_miss = snap.recall_miss_rate,
-                                discrimination = snap.discrimination,
-                                health,
-                                "Per-developer calibration snapshot"
-                            );
-                            // Recall misses (relevant items buried) are the worst failure —
-                            // surface drift loudly so it can't degrade silently.
-                            if health < 0.7 {
-                                warn!(
-                                    target: "4da::calibration",
-                                    health,
-                                    recall_miss = snap.recall_miss_rate,
-                                    precision_miss = snap.precision_miss_rate,
-                                    "Calibration drift detected for this developer — scoring may need recalibration"
-                                );
-                            }
-                        }
-                        Ok(snap) => {
-                            tracing::debug!(
-                                target: "4da::calibration",
-                                feedback = snap.feedback_count,
-                                "Calibration: insufficient feedback yet (cold start) — staying silent"
-                            );
-                        }
-                        Err(e) => {
-                            tracing::debug!(target: "4da::calibration", error = %e, "Calibration snapshot failed");
-                            snapshot_error = Some(e.to_string());
-                        }
-                    }
+                    // The dep-scoped recall check needs the scoring context (a
+                    // 5-minute cache, normally warm from the last analysis).
+                    let ctx = crate::scoring::build_scoring_context(db).await.ok();
+                    let db = std::sync::Arc::clone(db);
+                    // Blocking pool + pooled readers: inline on this worker with the
+                    // writer held, the job stalled the app at launch (2026-10-23).
+                    let snapshot_error = crate::ipc_blocking::off_ui_thread_infallible(
+                        "calibration_monitor",
+                        move || {
+                            crate::scoring::calibration_monitor::run_scheduled_checks(
+                                &db,
+                                threshold,
+                                ctx.as_ref(),
+                            )
+                        },
+                    )
+                    .await
+                    .unwrap_or_else(Some);
                     record_job_outcome(
                         crate::scheduler_state::jobs::CALIBRATION_MONITOR,
                         job_started,
                         snapshot_error,
                     );
-
-                    // Phase 5c: threshold cliffs — how many recently scored items sit
-                    // within ±0.03 of an embedding axis's confirmation threshold. The
-                    // 2-signal gate is a cliff, so this is the pipeline's exposure to
-                    // embedding jitter. Read-only; logged so a threshold re-tune is
-                    // measured before it is attempted (live 2026-09-05: context 2.7%,
-                    // interest 12.7%).
-                    match crate::scoring::compute_threshold_cliffs(db, 5000) {
-                        Ok(c) if c.sampled > 0 => info!(
-                            target: "4da::calibration",
-                            sampled = c.sampled,
-                            near_context = c.near_context,
-                            near_interest = c.near_interest,
-                            context_share = c.share_context(),
-                            interest_share = c.share_interest(),
-                            "Threshold cliffs: items perched within 0.03 of a confirmation threshold"
-                        ),
-                        Ok(_) => {}
-                        Err(e) => tracing::debug!(
-                            target: "4da::calibration",
-                            error = %e,
-                            "Threshold cliff probe failed"
-                        ),
-                    }
-
-                    // Phase 5b: dep-scoped high-stakes recall. Unlike the feedback metrics,
-                    // this works at cold start — it needs the dependency graph, not feedback.
-                    // A security/breaking advisory affecting the developer's OWN stack that
-                    // scored as noise is a concrete recall bug; surface it loudly.
-                    if let Ok(ctx) = crate::scoring::build_scoring_context(db).await {
-                        if let Ok(hs) =
-                            crate::scoring::compute_high_stakes_recall(db, &ctx, threshold)
-                        {
-                            if hs.alert {
-                                warn!(
-                                    target: "4da::calibration",
-                                    misscored = hs.misscored,
-                                    dep_matched = hs.dep_matched_total,
-                                    miss_rate = hs.miss_rate,
-                                    "Security/breaking advisories affecting your stack scored as noise — recall bug"
-                                );
-                            } else if hs.misscored > 0 {
-                                // Below the alert threshold: note it, don't page.
-                                info!(
-                                    target: "4da::calibration",
-                                    misscored = hs.misscored,
-                                    dep_matched = hs.dep_matched_total,
-                                    miss_rate = hs.miss_rate,
-                                    "High-stakes recall: isolated misses below alert threshold"
-                                );
-                            } else if hs.dep_matched_total > 0 {
-                                info!(
-                                    target: "4da::calibration",
-                                    dep_matched = hs.dep_matched_total,
-                                    "High-stakes recall clean — all stack advisories surfaced"
-                                );
-                            }
-                        }
-                    }
                 }
             }
 
@@ -898,6 +825,10 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
             if now - last_reexam
                 >= crate::scheduler_gate::effective_interval(REEXAMINATION_CHECK_INTERVAL)
                 && gate_policy.allows_job(crate::scheduler_gate::JobPriority::Low)
+                // Not against the previous session's pins while the startup
+                // lockfile rescan rewrites them: unstamped, so the first tick
+                // after the scan runs it.
+                && crate::inventory_freshness::is_fresh()
             {
                 state.last_reexamination.store(now, Ordering::Relaxed);
                 if let Ok(db) = crate::get_database() {
@@ -990,7 +921,15 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                     crate::scheduler_state::jobs::DEP_HEALTH,
                 );
                 let job_started = std::time::Instant::now();
-                match crate::run_dependency_health_check() {
+                // Blocking pool: a full health pass is ~19 s of synchronous SQL
+                // (`scheduler_state.last_duration_ms`, 2026-10-23).
+                let health_result = crate::ipc_blocking::off_ui_thread_infallible(
+                    "dep_health",
+                    crate::run_dependency_health_check,
+                )
+                .await
+                .and_then(|r| r.map_err(|e| e.to_string()));
+                match health_result {
                     Ok(health) => {
                         let actionable = health
                             .iter()
@@ -1417,6 +1356,16 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                         info!(target: "4da::monitor", "Pre-briefing analysis timeout after 5 ticks — proceeding with available data");
                     }
                 }
+                // The briefing states dependency facts: never from the
+                // previous session's inventory while the startup lockfile
+                // rescan runs (the gate reopens at the scan's end or its
+                // deadline). Checked before the reset below, so the
+                // stale-results wait is not restarted every tick meanwhile.
+                // Not marked sent: the next tick (60 s) asks again.
+                if !skip_briefing && !crate::inventory_freshness::is_fresh() {
+                    debug!(target: "4da::monitor", "Morning briefing waits: the dependency inventory is being refreshed");
+                    skip_briefing = true;
+                }
                 if !skip_briefing {
                     state
                         .briefing_needs_fresh_data
@@ -1518,10 +1467,20 @@ pub fn start_scheduler<R: Runtime>(app: AppHandle<R>, state: Arc<MonitoringState
                 }
             } // !skip_briefing
 
-            // Suns: tick all enabled suns
+            // Suns: tick all enabled suns — on the blocking pool. A tick is fully
+            // synchronous: PowerShell subprocesses (hardware/uptime) and full
+            // scans of the corpus (tech_moat_scanner 40 s, edge_detector 13 s on
+            // the operator's launch of 2026-10-23, `sun_runs.duration_ms`), which
+            // inline held this runtime worker for about a minute.
             {
-                let mut registry = crate::suns_commands::get_sun_registry();
-                let results = registry.tick();
+                let results = crate::ipc_blocking::off_ui_thread_infallible("suns_tick", || {
+                    crate::suns_commands::get_sun_registry().tick()
+                })
+                .await
+                .unwrap_or_else(|e| {
+                    warn!(target: "4da::suns", error = %e, "Sun tick failed");
+                    Vec::new()
+                });
                 for (sun_id, result) in &results {
                     if result.success {
                         tracing::debug!(target: "4da::suns", sun = %sun_id, msg = %result.message, "Sun completed");

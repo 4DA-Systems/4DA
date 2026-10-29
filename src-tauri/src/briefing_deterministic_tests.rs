@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! Tests for the deterministic brief floor (pure rendering — no feed/DB needed).
 
-use super::{build_deterministic_brief, escape_markdown, FloorReason, NO_LOCKFILES_LINE};
+use super::{
+    build_deterministic_brief, escape_markdown, security_line, FloorReason, NO_LOCKFILES_LINE,
+};
 use crate::brief_facts::{
     BriefFacts, FactStatus, FixPath, SecurityFact, SecuritySite, UpgradeFact, UpgradeSite,
     WorthKnowingCandidate,
@@ -15,6 +17,7 @@ fn rmcp(status: FactStatus) -> SecurityFact {
         ecosystem: "crates.io".into(),
         urgency: AlertUrgency::High,
         worst_tier: Some("high".into()),
+        worst_tier_from: None,
         advisory_count: 3,
         advisory_ids: vec![],
         title: "Unauthenticated session leak".into(),
@@ -32,6 +35,7 @@ fn rmcp(status: FactStatus) -> SecurityFact {
                 proven: None,
                 route: Default::default(),
             },
+            held: None,
         }],
         not_compiled: vec![],
         first_seen: Some("2026-09-16".into()),
@@ -280,4 +284,309 @@ fn titles_are_escaped_where_they_enter_markdown() {
     );
     assert_eq!(escape_markdown("a\\b"), "a\\\\b");
     assert_eq!(escape_markdown("plain title"), "plain title");
+}
+
+/// Fresh-profile audit E3 (2026-10-12): with lockfiles read but the advisory
+/// database never synced, the brief said "Nothing new touches your code
+/// today" against 156 vulnerable packages. Only a ready advisory check allows
+/// an all-clear; every other state says plainly where the check stands.
+#[test]
+fn no_all_clear_until_the_advisory_check_is_ready() {
+    use crate::osv::readiness::AdvisorySyncState as S;
+    let cases = [
+        (S::NotStarted, "has not been downloaded yet"),
+        (S::Syncing, "downloading vulnerability advisories"),
+        (S::Matching, "downloading vulnerability advisories"),
+        (S::Failed, "check failed"),
+        (S::Stale, "more than three days old"),
+        (S::NoInventory, "read no installed versions"),
+    ];
+    for (state, phrase) in cases {
+        let facts = BriefFacts {
+            advisories: Some(state),
+            ..BriefFacts::default()
+        };
+        for reason in [
+            FloorReason::NoCapableModel,
+            FloorReason::NarrationRejected,
+            FloorReason::Morning(super::MorningWhy::Skipped),
+        ] {
+            let out = build_deterministic_brief(&facts, reason);
+            assert!(
+                !out.contains("Nothing new touches your code"),
+                "{state:?}: {out}"
+            );
+            assert!(out.contains(phrase), "{state:?}: {out}");
+            assert!(!out.contains("OSV advisories"), "{state:?}: {out}");
+        }
+    }
+    let ready = BriefFacts {
+        advisories: Some(S::Ready),
+        ..BriefFacts::default()
+    };
+    let out = build_deterministic_brief(&ready, FloorReason::NoCapableModel);
+    assert!(
+        out.contains("Nothing new touches your code today."),
+        "{out}"
+    );
+}
+
+/// PR #961 review: when every project was skipped as a temp copy, the brief
+/// names that reason (as Preemption does), not missing advisory coverage.
+#[test]
+fn no_inventory_from_temp_skips_names_the_temp_folder() {
+    let facts = BriefFacts {
+        advisories: Some(crate::osv::readiness::AdvisorySyncState::NoInventory),
+        advisory_temp_skipped: 2,
+        ..BriefFacts::default()
+    };
+    let out = build_deterministic_brief(&facts, FloorReason::NoCapableModel);
+    assert!(out.contains("system temp folder"), "{out}");
+    assert!(!out.contains("in an ecosystem it can check"), "{out}");
+    assert!(!out.contains("Nothing new touches your code"), "{out}");
+}
+
+#[test]
+fn a_narration_before_the_advisory_check_drops_its_all_clear() {
+    let checking = BriefFacts {
+        advisories: Some(crate::osv::readiness::AdvisorySyncState::Syncing),
+        ..BriefFacts::default()
+    };
+    let draft = "## Worth knowing\n- Tokio 2 is out.\n\nNothing new touches your code today.\n";
+    let out = super::honest_without_lockfiles(draft, &checking);
+    assert!(!out.contains("Nothing new touches your code"), "{out}");
+    assert!(out.contains("- Tokio 2 is out."), "{out}");
+    assert!(
+        out.contains("downloading vulnerability advisories"),
+        "{out}"
+    );
+    assert_eq!(
+        super::honest_without_lockfiles(&out, &checking),
+        out,
+        "idempotent"
+    );
+
+    let prompt = crate::digest_commands::render_facts_for_prompt(&checking);
+    assert!(prompt.contains("ADVISORY CHECK NOT COMPLETE"), "{prompt}");
+    assert!(!prompt.contains("none — no confirmed advisory"), "{prompt}");
+}
+
+fn not_covered(
+    files: &[(&str, &str)],
+    unreadable: &[(&str, &str)],
+) -> crate::osv::readiness::NotCovered {
+    crate::osv::readiness::NotCovered {
+        count: files.len() as u32,
+        files: files
+            .iter()
+            .map(|(path, eco)| crate::osv::readiness::NotCoveredFile {
+                path: (*path).to_string(),
+                ecosystem: (*eco).to_string(),
+            })
+            .collect(),
+        unreadable_count: unreadable.len() as u32,
+        unreadable: unreadable
+            .iter()
+            .map(|(path, reason)| crate::osv::readiness::UnreadableFile {
+                path: (*path).to_string(),
+                reason: (*reason).to_string(),
+            })
+            .collect(),
+    }
+}
+
+fn ready_with_gaps(nc: crate::osv::readiness::NotCovered) -> BriefFacts {
+    BriefFacts {
+        advisories: Some(crate::osv::readiness::AdvisorySyncState::Ready),
+        not_covered: Some(nc),
+        ..BriefFacts::default()
+    }
+}
+
+/// W5a: with a pom.xml 4DA does not read, "Nothing new touches your code
+/// today" claimed code it never checked. The all-clear is scoped to what was
+/// checked, and the files it did not check are named.
+#[test]
+fn the_all_clear_names_what_was_not_checked() {
+    let facts = ready_with_gaps(not_covered(
+        &[("C:/p/spring-petclinic/pom.xml", "Maven")],
+        &[],
+    ));
+    let out = build_deterministic_brief(&facts, FloorReason::NoCapableModel);
+    assert!(!out.contains("Nothing new touches your code"), "{out}");
+    assert!(
+        out.contains("Nothing new touches the code 4DA checked today."),
+        "{out}"
+    );
+    assert!(
+        out.contains(
+            "Not checked: 1 dependency file 4DA does not read installed versions from: \
+             spring-petclinic/pom.xml (Maven)."
+        ),
+        "{out}"
+    );
+}
+
+#[test]
+fn the_not_checked_line_counts_the_rest_and_names_unreadable_lockfiles() {
+    let facts = ready_with_gaps(not_covered(
+        &[
+            ("C:/p/a/pom.xml", "Maven"),
+            ("C:/p/b/build.gradle", "Gradle"),
+            ("C:/p/c/build.gradle.kts", "Gradle"),
+            ("C:/p/d/packages.lock.json", "NuGet lockfile"),
+        ],
+        &[("C:/p/web/package-lock.json", "invalid JSON")],
+    ));
+    let line = super::not_covered_line(&facts).expect("a line");
+    assert!(line.contains("4 dependency files"), "{line}");
+    assert!(
+        line.contains("c/build.gradle.kts (Gradle), and 1 more."),
+        "{line}"
+    );
+    assert!(
+        !line.contains("packages.lock.json"),
+        "only three are named: {line}"
+    );
+    assert!(
+        line.contains(
+            "1 lockfile could not be read, so what it pinned was not checked: \
+             web/package-lock.json (invalid JSON)."
+        ),
+        "{line}"
+    );
+}
+
+/// A narrated brief: the model's all-clear is scoped and the not-checked line
+/// appended; running it twice changes nothing.
+#[test]
+fn a_narrated_all_clear_is_scoped_to_what_was_checked() {
+    let facts = ready_with_gaps(not_covered(
+        &[("C:/p/spring-petclinic/pom.xml", "Maven")],
+        &[],
+    ));
+    let draft = "## Worth knowing\n- Vite 7.1\n\nNothing new touches your code today.\n";
+    let out = super::honest_without_lockfiles(draft, &facts);
+    assert!(!out.contains("Nothing new touches your code"), "{out}");
+    assert!(
+        out.contains("Nothing new touches the code 4DA checked today."),
+        "{out}"
+    );
+    assert!(out.contains("spring-petclinic/pom.xml (Maven)"), "{out}");
+    assert_eq!(super::honest_without_lockfiles(&out, &facts), out);
+}
+
+/// The model is told before it writes: complete only for what was read.
+#[test]
+fn the_prompt_says_not_everything_was_checked() {
+    let facts = ready_with_gaps(not_covered(
+        &[("C:/p/spring-petclinic/pom.xml", "Maven")],
+        &[],
+    ));
+    let prompt = crate::digest_commands::render_facts_for_prompt(&facts);
+    assert!(
+        prompt.starts_with("NOT EVERYTHING WAS CHECKED:"),
+        "{prompt}"
+    );
+    assert!(
+        prompt.contains("spring-petclinic/pom.xml (Maven)"),
+        "{prompt}"
+    );
+    assert!(!prompt.contains("authoritative and complete"), "{prompt}");
+}
+
+/// Every file read: the brief is as before.
+#[test]
+fn with_everything_read_the_all_clear_is_unchanged() {
+    let facts = BriefFacts {
+        advisories: Some(crate::osv::readiness::AdvisorySyncState::Ready),
+        ..BriefFacts::default()
+    };
+    let out = build_deterministic_brief(&facts, FloorReason::NoCapableModel);
+    assert!(
+        out.contains("Nothing new touches your code today."),
+        "{out}"
+    );
+    assert!(!out.contains("Not checked:"), "{out}");
+    let draft = "Nothing new touches your code today.\n";
+    assert_eq!(super::honest_without_lockfiles(draft, &facts), draft);
+}
+
+/// #987 review B1: a Maven-only project is NoInventory, so a narrated brief
+/// takes the gap branch. It must still name the pom.xml, and so must the
+/// prompt the model writes from.
+#[test]
+fn a_narrated_maven_only_brief_names_the_pom() {
+    let facts = BriefFacts {
+        advisories: Some(crate::osv::readiness::AdvisorySyncState::NoInventory),
+        not_covered: Some(not_covered(
+            &[("C:/p/spring-petclinic/pom.xml", "Maven")],
+            &[],
+        )),
+        ..BriefFacts::default()
+    };
+    let draft = "Nothing new touches your code today.\n";
+    let out = super::honest_without_lockfiles(draft, &facts);
+    assert!(!out.contains("Nothing new touches your code"), "{out}");
+    assert!(out.contains("read no installed versions"), "{out}");
+    assert!(out.contains("spring-petclinic/pom.xml (Maven)"), "{out}");
+    assert_eq!(super::honest_without_lockfiles(&out, &facts), out);
+    let prompt = crate::digest_commands::render_facts_for_prompt(&facts);
+    assert!(
+        prompt.contains("NOT CHECKED: Not checked: 1 dependency file"),
+        "{prompt}"
+    );
+    let floor = build_deterministic_brief(&facts, FloorReason::NoCapableModel);
+    assert!(
+        floor.contains("spring-petclinic/pom.xml (Maven)"),
+        "{floor}"
+    );
+}
+
+/// #987 review B2: NoInventory means no installed version was read (OSV covers
+/// Maven; a package.json with no lockfile is npm), not "no ecosystem it can
+/// check".
+#[test]
+fn no_inventory_says_no_installed_versions_were_read() {
+    let facts = BriefFacts {
+        advisories: Some(crate::osv::readiness::AdvisorySyncState::NoInventory),
+        ..BriefFacts::default()
+    };
+    let out = build_deterministic_brief(&facts, FloorReason::NoCapableModel);
+    assert!(out.contains("read no installed versions"), "{out}");
+    assert!(out.contains("a manifest without a lockfile"), "{out}");
+    assert!(!out.contains("ecosystem it can check"), "{out}");
+}
+
+/// #987 review S5: only the claim is scoped; the rest of the line survives.
+#[test]
+fn scoping_the_all_clear_keeps_the_rest_of_the_line() {
+    let facts = ready_with_gaps(not_covered(&[("C:/p/a/pom.xml", "Maven")], &[]));
+    let draft = "- Nothing new touches your code today, and Vite 7.1 shipped.\n";
+    let out = super::honest_without_lockfiles(draft, &facts);
+    assert!(
+        out.contains("- Nothing new touches the code 4DA checked today, and Vite 7.1 shipped."),
+        "{out}"
+    );
+}
+
+/// #986: a fact of maintenance notices only names no severity and counts no
+/// vulnerability; its title says what it is.
+#[test]
+fn a_maintenance_notice_fact_is_worded_as_unmaintained() {
+    let mut f = rmcp(FactStatus::New);
+    f.package = "zvariant".into();
+    f.urgency = AlertUrgency::Watch;
+    f.worst_tier = None;
+    f.advisory_count = 0;
+    f.advisory_ids = vec!["RUSTSEC-2026-0370".into()];
+    f.title = crate::osv::severity::notice_wording("zvariant", &["RUSTSEC-2026-0370"]);
+    let line = security_line(&f);
+    assert!(
+        line.starts_with(
+            "- **zvariant** (crates.io): unmaintained: zvariant (RUSTSEC-2026-0370), no exploitable vulnerability"
+        ),
+        "{line}"
+    );
+    assert!(!line.contains("Low") && !line.contains("advisor"), "{line}");
 }

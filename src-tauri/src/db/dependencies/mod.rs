@@ -18,6 +18,7 @@ mod queries;
 mod scan_reconcile;
 #[cfg(test)]
 mod scope_tests;
+pub(crate) mod temp_paths;
 #[cfg(test)]
 mod tests;
 pub mod types;

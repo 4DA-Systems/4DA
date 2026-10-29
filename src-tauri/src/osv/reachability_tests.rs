@@ -192,6 +192,10 @@ fn instance(project: &str, version: &str, confirmed: bool) -> MatchedDependency 
         fixed_version: Some("2.0.0".to_string()),
         clean_version: None,
         target_version: None,
+        withheld: Vec::new(),
+        introduces: Vec::new(),
+        malicious: Vec::new(),
+        held: None,
     }
 }
 
@@ -214,6 +218,8 @@ fn advisory(eco: &str, details: &str) -> StoredAdvisory {
         synced_at: String::new(),
         aliases: Vec::new(),
         severity_label: Some("high".to_string()),
+        cwe_ids: Vec::new(),
+        informational: None,
     }
 }
 

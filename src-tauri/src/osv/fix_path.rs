@@ -31,7 +31,7 @@
 
 use std::path::{Path, PathBuf};
 
-use semver::{Version, VersionReq};
+use semver::VersionReq;
 
 use super::fix_target::{upgrade_type, UpgradeType};
 use super::matching::parse_version;
@@ -147,12 +147,56 @@ pub enum Manager {
 /// How far up from a project directory a workspace lockfile is looked for.
 const MAX_LOCKFILE_ASCENT: usize = 6;
 
+/// The directory on disk that a project path names. Findings carry project
+/// paths lowercased (`fourda_depengine::matching::normalize_project_path`),
+/// which still opens on Windows and macOS but not on a case-sensitive
+/// filesystem: `/home/runner/work/4DA/4DA/...` lowercased does not exist, so
+/// every manifest read from it failed and no command was named (#972's queue
+/// run, 2026-10-17). Each missing component is matched case-insensitively
+/// against its parent's entries; two entries that differ only by case are
+/// ambiguous and resolve to nothing.
+pub(crate) fn on_disk(path: &Path) -> Option<std::path::PathBuf> {
+    use std::path::{Component, PathBuf};
+    if path.is_dir() {
+        return Some(path.to_path_buf());
+    }
+    let mut out = PathBuf::new();
+    for component in path.components() {
+        let Component::Normal(name) = component else {
+            out.push(component.as_os_str());
+            continue;
+        };
+        let exact = out.join(name);
+        if exact.exists() {
+            out = exact;
+            continue;
+        }
+        let want = name.to_string_lossy().to_lowercase();
+        let base = if out.as_os_str().is_empty() {
+            Path::new(".")
+        } else {
+            out.as_path()
+        };
+        let mut hits = std::fs::read_dir(base)
+            .ok()?
+            .filter_map(std::result::Result::ok)
+            .filter(|e| e.file_name().to_string_lossy().to_lowercase() == want);
+        let found = hits.next()?.path();
+        if hits.next().is_some() {
+            return None;
+        }
+        out = found;
+    }
+    out.is_dir().then_some(out)
+}
+
 impl Manager {
     /// The manager whose lockfile holds `ecosystem_norm` (OSV-canonical)
     /// packages for the project at `dir`, nearest directory first. `None`
     /// for an ecosystem this module names no command for, or no lockfile.
     pub fn detect(dir: &Path, ecosystem_norm: &str) -> Option<Self> {
-        let mut here = Some(dir);
+        let resolved = on_disk(dir);
+        let mut here = Some(resolved.as_deref().unwrap_or(dir));
         for _ in 0..=MAX_LOCKFILE_ASCENT {
             let d = here?;
             let found = match ecosystem_norm {
@@ -214,8 +258,17 @@ impl Manager {
 
 /// The override mechanism for a project's tool, or, when the tool is not
 /// known, every npm-family one (`ecosystem_norm` is OSV-canonical). `None`
-/// for an ecosystem with no such mechanism.
-pub fn override_hint(manager: Option<Manager>, ecosystem_norm: &str) -> Option<String> {
+/// for an ecosystem with no such mechanism, and for a `bundled` copy: npm
+/// `overrides` (and pnpm's and yarn's) do not reach a dependency that ships
+/// inside its owner's tarball (`fourda_depengine::lockfile::npm_bundle::BUNDLED_SUFFIX`); only the owner can move.
+pub fn override_hint(
+    manager: Option<Manager>,
+    ecosystem_norm: &str,
+    bundled: bool,
+) -> Option<String> {
+    if bundled {
+        return None;
+    }
     match manager {
         Some(m) => m.override_mechanism().map(str::to_string),
         None if ecosystem_norm == "npm" => Some(
@@ -260,6 +313,121 @@ impl NpmLockfile {
             Self::Yarn => "yarn install",
         }
     }
+}
+
+/// The parsed `package-lock.json` that owns the npm tree of the project at
+/// `dir`: the nearest one up the same ascent [`Manager::detect`] takes (a
+/// workspace member's lockfile sits at the workspace root). Parsed once per
+/// file and kept while its modification time and size are unchanged: the Upgrade
+/// Plan asks once per vulnerable package, and a lockfile can be megabytes.
+pub(crate) fn npm_lock_tree(dir: &Path) -> Option<std::sync::Arc<serde_json::Value>> {
+    use std::collections::HashMap;
+    use std::sync::{Arc, LazyLock};
+    type Entry = (std::time::SystemTime, u64, Arc<serde_json::Value>);
+    static CACHE: LazyLock<parking_lot::Mutex<HashMap<PathBuf, Entry>>> =
+        LazyLock::new(Default::default);
+    const MAX_CACHED: usize = 16;
+
+    let mut here = Some(dir);
+    let mut file = None;
+    for _ in 0..=MAX_LOCKFILE_ASCENT {
+        let d = here?;
+        match NpmLockfile::detect(d) {
+            Some(NpmLockfile::Npm) => {
+                file = Some(d.join(NpmLockfile::Npm.file_name()));
+                break;
+            }
+            Some(_) => return None, // pnpm or yarn owns this tree
+            None => here = d.parent(),
+        }
+    }
+    let file = file?;
+    let meta = std::fs::metadata(&file).ok()?;
+    let stamp = (meta.modified().ok()?, meta.len());
+    if let Some((modified, len, tree)) = CACHE.lock().get(&file) {
+        if (*modified, *len) == stamp {
+            return Some(Arc::clone(tree));
+        }
+    }
+    let tree: Arc<serde_json::Value> =
+        Arc::new(serde_json::from_str(&std::fs::read_to_string(&file).ok()?).ok()?);
+    let mut cache = CACHE.lock();
+    if cache.len() >= MAX_CACHED {
+        cache.clear();
+    }
+    cache.insert(file, (stamp.0, stamp.1, Arc::clone(&tree)));
+    Some(tree)
+}
+
+// The `inBundle` rules moved into the engine crate with the package-lock
+// edge reader (single-engine C0.3); re-exported under their old paths.
+#[cfg(test)]
+pub(crate) use fourda_depengine::lockfile::npm_bundle::npm_bundle_owner;
+pub(crate) use fourda_depengine::lockfile::npm_bundle::{
+    is_dependency_key, npm_lock_entry_bundled,
+};
+
+/// The versions of `child` that the installed `parent` `parent_version`
+/// resolves to in a `package-lock.json` v2/v3 tree, by npm's own lookup: the
+/// parent's folder's `node_modules`, then each enclosing folder's, up to the
+/// root. A range alone cannot tell which copy a parent holds: NodeGoat's
+/// needle 2.2.4 (`^2.1.2`) admits debug 2.2.0 but resolves the hoisted 2.6.9,
+/// and was told `npm update debug` for a copy it never held (audit E8).
+///
+/// Copies of `parent` bundled inside a dependency are skipped: what they
+/// resolve is frozen in that bundle, and the bundled edge already names its
+/// owner. `None` when the lockfile has no `packages` map (v1) or holds no
+/// matching copy of `parent` that declares `child` (a database older than the
+/// lockfile on disk), so the caller keeps its range-based attribution.
+pub(crate) fn npm_lock_resolutions(
+    lock: &serde_json::Value,
+    parent: &str,
+    parent_version: &str,
+    child: &str,
+) -> Option<Vec<String>> {
+    let pkgs = lock.get("packages")?.as_object()?;
+    let mut matched = false;
+    let mut out: Vec<String> = Vec::new();
+    for (key, entry) in pkgs {
+        let name = key
+            .rsplit_once("node_modules/")
+            .map_or(key.as_str(), |(_, n)| n);
+        if !is_dependency_key(key)
+            || !name.eq_ignore_ascii_case(parent)
+            || entry.get("version").and_then(serde_json::Value::as_str) != Some(parent_version)
+            || npm_lock_entry_bundled(pkgs, key)
+        {
+            continue;
+        }
+        let declares = ["dependencies", "optionalDependencies", "peerDependencies"]
+            .iter()
+            .any(|s| entry.get(*s).and_then(|d| d.get(child)).is_some());
+        if !declares {
+            continue;
+        }
+        matched = true;
+        let mut base = key.as_str();
+        let resolved = loop {
+            let candidate = if base.is_empty() {
+                format!("node_modules/{child}")
+            } else {
+                format!("{base}/node_modules/{child}")
+            };
+            if let Some(found) = pkgs.get(&candidate) {
+                break found.get("version").and_then(serde_json::Value::as_str);
+            }
+            if base.is_empty() {
+                break None;
+            }
+            base = base.rsplit_once("/node_modules/").map_or("", |(b, _)| b);
+        };
+        if let Some(v) = resolved {
+            if !out.iter().any(|o| o == v) {
+                out.push(v.to_string());
+            }
+        }
+    }
+    matched.then_some(out)
 }
 
 fn is_yarn_berry(lockfile: &Path) -> bool {
@@ -489,94 +657,14 @@ fn crate_key(name: &str) -> String {
     name.trim().to_lowercase().replace('_', "-")
 }
 
-/// The spec without a pnpm peer suffix (`4.28.1(postcss@8.4.0)`), a leading
-/// `=`/`v`, and surrounding whitespace.
-pub(crate) fn strip_spec(spec: &str) -> &str {
-    let spec = spec.split('(').next().unwrap_or(spec).trim();
-    spec.trim_start_matches('=').trim().trim_start_matches('v')
-}
+pub use fourda_depengine::lockfile::npm_bundle::is_bundled;
+#[cfg(test)]
+pub use fourda_depengine::lockfile::npm_bundle::BUNDLED_SUFFIX;
 
-/// Whether an npm requirement admits `version`. `None` when either side
-/// cannot be read (dist-tags, `file:`/`git`/`workspace:` specs; an alias to
-/// another name is read by its range). Never guesses: an unreadable
-/// alternative in an `||` set makes a non-match unknown rather than false.
-/// npm spells an exact pin as a bare version (`5.28.4`), unions with `||`,
-/// ANDs comparators with spaces, allows a space after an operator
-/// (`>= 4.21.0`) and writes hyphen ranges (`1.2.3 - 2.3.4`).
-pub(crate) fn requirement_admits(spec: &str, version: &str) -> Option<bool> {
-    let version = parse_version(version)?;
-    let mut spec = spec.split('(').next().unwrap_or(spec).trim();
-    if let Some(alias) = spec.strip_prefix("npm:") {
-        spec = alias.rsplit_once('@').map(|(_, range)| range)?;
-    }
-    if spec.contains(':') || spec.contains('/') {
-        return None;
-    }
-    let mut unknown = false;
-    for alternative in spec.split("||") {
-        match comparator_set(alternative.trim()) {
-            Some(req) if req.matches(&version) => return Some(true),
-            Some(_) => {}
-            None => unknown = true,
-        }
-    }
-    (!unknown).then_some(false)
-}
-
-/// One npm comparator set (space-separated, AND) as a semver `VersionReq`.
-fn comparator_set(set: &str) -> Option<VersionReq> {
-    if set.is_empty() || set == "*" || set.eq_ignore_ascii_case("x") {
-        return Some(VersionReq::STAR);
-    }
-    if let Some((lo, hi)) = set.split_once(" - ") {
-        let (lo, hi) = (strip_spec(lo), strip_spec(hi));
-        Version::parse(lo).ok()?;
-        Version::parse(hi).ok()?;
-        return VersionReq::parse(&format!(">={lo}, <={hi}")).ok();
-    }
-    let mut comparators: Vec<String> = Vec::new();
-    let mut pending_op = String::new();
-    for token in set.split_whitespace() {
-        if token
-            .chars()
-            .all(|c| matches!(c, '<' | '>' | '=' | '^' | '~'))
-        {
-            pending_op.push_str(token);
-            continue;
-        }
-        let token = format!("{}{token}", std::mem::take(&mut pending_op));
-        comparators.push(npm_comparator(&token)?);
-    }
-    if !pending_op.is_empty() || comparators.is_empty() {
-        return None;
-    }
-    VersionReq::parse(&comparators.join(", ")).ok()
-}
-
-/// npm comparator -> Cargo comparator. A bare version is EXACT in npm (Cargo
-/// would read it as a caret); a partial or x-range bare version is its X-range.
-fn npm_comparator(token: &str) -> Option<String> {
-    let op_len = token
-        .find(|c: char| !matches!(c, '<' | '>' | '=' | '^' | '~'))
-        .unwrap_or(token.len());
-    let (op, rest) = token.split_at(op_len);
-    let rest = rest.trim_start_matches('v');
-    let parts: Vec<&str> = rest
-        .split('.')
-        .take_while(|p| !matches!(*p, "x" | "X" | "*"))
-        .collect();
-    if parts.is_empty() {
-        return match op {
-            "" | "=" | "^" | "~" | ">=" | "<=" => Some("*".to_string()),
-            _ => None,
-        };
-    }
-    let version = parts.join(".");
-    Some(match op {
-        "" => format!("={version}"),
-        _ => format!("{op}{version}"),
-    })
-}
+// The npm requirement reader moved into the engine crate (D-4: the held-
+// dependency rule reads a release's own ranges with it); re-exported under
+// its old path for every caller here.
+pub(crate) use fourda_depengine::npm_range::{requirement_admits, strip_spec};
 
 #[cfg(test)]
 #[path = "fix_path_tests.rs"]

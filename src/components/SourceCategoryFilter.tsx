@@ -3,10 +3,8 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { getSourceLabel, getSourcesByCategory, getSourceColorClass } from '../config/sources';
 
-const CATEGORY_ORDER = ['security', 'package_registry', 'news', 'social', 'research', 'community', 'general'];
+const CATEGORY_ORDER = ['news', 'social', 'research', 'community', 'general'];
 const CATEGORY_LABELS: Record<string, string> = {
-  security: 'Security',
-  package_registry: 'Packages',
   news: 'News',
   social: 'Social',
   research: 'Research',
@@ -14,8 +12,6 @@ const CATEGORY_LABELS: Record<string, string> = {
   general: 'Other',
 };
 const CATEGORY_COLORS: Record<string, string> = {
-  security: 'text-red-400',
-  package_registry: 'text-cyan-400',
   news: 'text-orange-400',
   social: 'text-blue-400',
   research: 'text-purple-400',
@@ -47,9 +43,10 @@ export function SourceCategoryFilter({ sourceFilters, sourcesWithResults, onTogg
     return () => { document.removeEventListener('mousedown', handler); };
   }, [openCategory]);
 
-  // Only the sources the user reads (AD-054): a turned-off interest is not a
-  // filter choice. With every interest off this is the stack sources alone.
-  const categories = getSourcesByCategory();
+  // Only the interests the user reads (AD-054): a turned-off interest is not a
+  // filter choice, and registry and advisory rows never reach this feed (the
+  // "Your stack" lane states them), so their sources are not offered either.
+  const categories = getSourcesByCategory({ interestsOnly: true });
   const listed = Array.from(categories.values()).flat();
   const totalActive = listed.filter(s => sourceFilters.has(s)).length;
   const totalSources = listed.length;

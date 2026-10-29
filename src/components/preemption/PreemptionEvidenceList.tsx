@@ -9,10 +9,16 @@ import type { EvidenceItem } from '../../../src-tauri/bindings/bindings/Evidence
 /** Citation rows rendered before the "show more" control. */
 export const EVIDENCE_COLLAPSE_THRESHOLD = 2;
 
+/**
+ * A citation's age. A negative age means the backend does not know when the
+ * cited item was published: no label, never "today" (fresh-profile audit E9
+ * showed 2023 advisories as "today").
+ */
 function formatFreshness(
   days: number,
   t: (key: string, opts?: Record<string, unknown>) => string,
 ): string {
+  if (days < 0) return '';
   const d = Math.round(days);
   if (d <= 0) return t('preemption.freshness.today');
   if (d === 1) return t('preemption.freshness.yesterday');

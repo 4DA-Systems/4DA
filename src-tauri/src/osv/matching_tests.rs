@@ -5,27 +5,18 @@ use super::*;
 
 #[test]
 fn npm_security_holding_placeholder_is_not_malware() {
-    assert!(is_npm_security_holding(
-        "MAL-2025-21003",
-        "npm",
-        Some("0.0.1-security")
-    ));
+    // A codeless placeholder, whichever advisory database flagged the name:
+    // fs@0.0.1-security (MAL-), crossenv@0.0.2-security (GHSA-c2m4-w5hm-vqjw).
+    assert!(is_npm_security_holding("npm", Some("0.0.1-security")));
+    assert!(is_npm_security_holding("npm", Some("0.0.2-security")));
+    // A real release of the name is what the advisory is about.
+    assert!(!is_npm_security_holding("npm", Some("0.0.2")));
+    assert!(!is_npm_security_holding("npm", Some("1.0.1")));
     assert!(!is_npm_security_holding(
-        "MAL-2025-21003",
-        "npm",
-        Some("0.0.2")
-    ));
-    assert!(!is_npm_security_holding(
-        "GHSA-xxxx",
-        "npm",
-        Some("0.0.1-security")
-    ));
-    assert!(!is_npm_security_holding(
-        "MAL-2025-21003",
         "crates.io",
         Some("0.0.1-security")
     ));
-    assert!(!is_npm_security_holding("MAL-2025-21003", "npm", None));
+    assert!(!is_npm_security_holding("npm", None));
 }
 
 #[test]

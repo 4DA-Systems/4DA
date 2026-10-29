@@ -113,9 +113,14 @@ docx-rs = "0.4.22"           # Word document parsing (>=0.4.21 for quick-xml 0.4
 calamine = "0.36"            # Excel spreadsheet parsing (>=0.36 for quick-xml 0.41: RUSTSEC-2026-0194/0195)
 image = "0.25"                                    # Image analysis (OCR + file extraction)
 ocrs = { version = "0.13", optional = true }     # Pure Rust OCR engine
-rten = { version = "0.26", optional = true }     # Model loading for ocrs (text-detection.rten, text-recognition.rten)
+rten = { version = "0.26", optional = true }     # Model loading for ocrs (text-detection.onnx, text-recognition.onnx; ONNX loading is rten's default `onnx_format` feature)
 # whisper-rs = "0.14"       # DISABLED: Requires vcpkg/system deps - audio.rs stubbed
-zip = "8.6"                                        # ZIP archive extraction (OSV cache + extractors)
+# ZIP archive extraction (OSV cache + extractors). zip's defaults minus `zstd`:
+# zstd 0.13 / zstd-safe 7.3 carry RUSTSEC-2026-0391/0398/0403/0410 (+ unsound
+# notices) with no fix on the 0.13 line zip 8 requires. A zstd-compressed entry
+# in a user's archive is reported unsupported instead. Restore with zip >= 9.1
+# (zstd ^0.14.2) once calamine and docx-rs allow zip 9.
+zip = { version = "8.6", default-features = false, features = ["aes-crypto", "bzip2", "deflate64", "deflate", "lzma", "ppmd", "time", "xz"] }
 tar = { version = "0.4.45", optional = true }        # TAR archive extraction
 # Gzip decompression. Not optional: the release-changelog lane reads registry
 # package archives (.crate / .tgz) in every build (release_changelog/archive.rs).
@@ -156,7 +161,11 @@ sysinfo = { version = "0.39", default-features = false, features = ["system"] }
 # 2026-09-30: bumped 0.8 -> 0.9 (0.9.0 is the hardening release from four audit
 # rounds, and a one-time semver break: its data types became #[non_exhaustive].
 # 4DA only builds CommandInfo, through CommandInfo::new, so no code changed).
-victauri-plugin = "0.9"
+# 2026-10-19: bumped 0.9 -> 0.10 (0.10.0: Tauri 3 support, postMessage IPC capture,
+# honest IPC log under route mocks, adversarial-audit fixes; the plugin no longer
+# enables tauri's `wry` feature, which 4DA's default-features tauri already has, so
+# no code changed).
+victauri-plugin = "0.10"
 
 # Compile-time scoring macros
 fourda-macros = { path = "fourda-macros" }
@@ -233,7 +242,7 @@ tempfile = "3"
 # Test builds only; the shipped binary keeps the plain `bundled` feature set.
 rusqlite = { version = "0.32", features = ["bundled", "trace", "blob"] }
 criterion = { version = "0.8", features = ["html_reports"] }
-victauri-test = "0.9"
+victauri-test = "0.10"
 # `test-util` gives tests tokio's virtual clock (`#[tokio::test(start_paused)]`),
 # so retry/backoff tests assert exact elapsed time without real sleeps. Test
 # builds only — it is deliberately NOT on the main tokio dependency.

@@ -54,6 +54,39 @@ pub async fn maybe_auto_briefing<R: Runtime>(app: &AppHandle<R>) {
     };
 
     match crate::digest_commands::generate_briefing_internal(true, anomalies).await {
+        Ok(result) if is_inventory_deferral(&result) => {
+            // The startup lockfile rescan is running: generate once it ends
+            // (the gate reopens at the scan's end or its hard deadline)
+            // instead of waiting for the next scheduler pass.
+            info!(target: "4da::jobs", "Auto-briefing deferred until the dependency inventory refresh finishes");
+            let app = app.clone();
+            tauri::async_runtime::spawn(async move {
+                let wait = crate::inventory_freshness::STARTUP_SCAN_DEADLINE
+                    .saturating_add(std::time::Duration::from_mins(1));
+                if crate::inventory_freshness::wait_until_fresh(wait).await {
+                    emit_auto_briefing(
+                        &app,
+                        crate::digest_commands::generate_briefing_internal(true, None).await,
+                    );
+                }
+            });
+        }
+        result => emit_auto_briefing(app, result),
+    }
+}
+
+fn is_inventory_deferral(result: &serde_json::Value) -> bool {
+    result
+        .get("inventory_refreshing")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false)
+}
+
+fn emit_auto_briefing<R: Runtime>(
+    app: &AppHandle<R>,
+    result: crate::error::Result<serde_json::Value>,
+) {
+    match result {
         Ok(result) => {
             if result
                 .get("success")
@@ -623,8 +656,14 @@ pub async fn run_cve_scan<R: Runtime>(app: &AppHandle<R>) {
 
         if !advisories.is_empty() {
             // 3. Cross-reference with semver version matching
+            // Only dependencies with a known installed version: the matcher
+            // "conservatively assumes affected" without one, which turned a
+            // Maven pom.xml (no versions resolved) into Critical/High
+            // security notifications that mostly did not apply (audit E4,
+            // 2026-10-12). Those files are reported as not covered instead.
             let dep_tuples: Vec<(String, String, Option<String>)> = user_deps
                 .iter()
+                .filter(|d| d.version.as_deref().is_some_and(|v| !v.trim().is_empty()))
                 .map(|d| {
                     (
                         d.package_name.clone(),
@@ -633,6 +672,15 @@ pub async fn run_cve_scan<R: Runtime>(app: &AppHandle<R>) {
                     )
                 })
                 .collect();
+            let unversioned = user_deps.len() - dep_tuples.len();
+            if unversioned > 0 {
+                info!(
+                    target: "4da::jobs",
+                    unversioned,
+                    checked = dep_tuples.len(),
+                    "CVE scan: dependencies without an installed version are not matched (reported as not covered)"
+                );
+            }
 
             let matches = crate::sources::cve::cross_reference_advisories(&advisories, &dep_tuples);
 

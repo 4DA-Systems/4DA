@@ -47,6 +47,7 @@ pub use cache::*;
 pub use dep_snapshots::*;
 pub use dependencies::*;
 pub(crate) use enrichment::{EnrichmentCandidate, EnrichmentOutcome};
+pub(crate) use osv_advisories::notice_from_column;
 // Flat re-export so every existing `crate::db::parse_datetime` /
 // `super::blob_to_embedding` path keeps working after the helpers extraction.
 pub(crate) use helpers::*;
@@ -182,6 +183,10 @@ pub struct Database {
     read_pool: Vec<Mutex<Connection>>,
     /// One more read-only connection that only user-facing queries take.
     interactive_reader: Option<Mutex<Connection>>,
+    /// The mirror's GHSA grades (`osv::severity::AliasGrades`), read once and
+    /// kept until the mirror is written (`db::osv_advisories`).
+    /// The `u64` counts mirror writes, so a load that raced one is not kept.
+    pub(crate) alias_grades: Mutex<(u64, Option<Arc<crate::osv::severity::AliasGrades>>)>,
 }
 
 /// Open one read-only connection configured like every pooled reader.
@@ -277,9 +282,10 @@ impl Database {
 
         let conn = Connection::open(db_path)?;
 
-        // Apply database encryption key if available.
-        // When SQLCipher is enabled, this must be the first statement after open.
-        let db_key = encryption::get_or_create_db_key();
+        // Apply the database encryption key. The keychain is read only when
+        // SQLCipher is linked (see `encryption::db_key_for`); with SQLCipher,
+        // `PRAGMA key` must be the first statement after open.
+        let db_key = encryption::db_key_for(&conn);
         if let Err(e) = encryption::apply_key_to_connection(&conn, db_key.as_deref()) {
             tracing::warn!(target: "4da::db", error = %e, "Failed to apply encryption key — continuing unencrypted");
         }
@@ -349,6 +355,7 @@ impl Database {
             db_path: db_path.to_path_buf(),
             read_pool,
             interactive_reader,
+            alias_grades: Mutex::new((0, None)),
         };
 
         db.migrate()?;
@@ -381,6 +388,30 @@ impl Database {
         }
         // All readers busy — fall back to writer (contention, but correct)
         self.conn.lock()
+    }
+
+    /// A pooled reader for background work on the blocking pool: waits for a
+    /// reader instead of falling back to the writer.
+    ///
+    /// [`Self::read_conn`] takes the writer when every reader is busy, and a
+    /// scoring drain borrows every reader — the drain that runs about 90 s after
+    /// launch, exactly when the scheduled calibration walk (tens of seconds on a
+    /// cold page cache) runs. Through `read_conn` that walk could hold the writer
+    /// for its whole run, the stall #1018 removes. Waiting here costs only this
+    /// background job. Only a database without a pool (in-memory tests) uses the
+    /// writer.
+    pub(crate) fn read_conn_blocking(&self) -> parking_lot::MutexGuard<'_, Connection> {
+        if self.read_pool.is_empty() {
+            return self.conn.lock();
+        }
+        for reader in &self.read_pool {
+            if let Some(guard) = reader.try_lock() {
+                return guard;
+            }
+        }
+        static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let i = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed) % self.read_pool.len();
+        self.read_pool[i].lock()
     }
 
     /// A read-only connection for a query a person is waiting on (the search box).

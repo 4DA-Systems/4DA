@@ -397,10 +397,10 @@ jobs:
       - name: OCR models — ship only when the release compiles OCR
         # tauri.conf.json bundles all of src-tauri/models, but the OCR code is
         # `#[cfg(feature = "ocr")]` and this workflow builds the default feature
-        # set, which leaves `ocr` off — so the two `.rten` files (~12 MB) shipped
+        # set, which leaves `ocr` off — so the two OCR model files (~12 MB) shipped
         # in every installer with nothing able to load them (audit 2026-10-09).
         # scripts/release-ocr-models.cjs reads the release feature set from
-        # Cargo.toml: with `ocr` off it removes the `.rten` files the postinstall
+        # Cargo.toml: with `ocr` off it removes the OCR model files the postinstall
         # fetched, before tauri bundles the directory; with `ocr` on it runs
         # `fetch-ocr-models.cjs --require` (SHA-256 pinned, network failure
         # fatal), exactly what this step did before. The dev/`--features ocr`

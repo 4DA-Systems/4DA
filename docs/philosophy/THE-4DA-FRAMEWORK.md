@@ -9,7 +9,7 @@
 
 ## Abstract
 
-4DA (4 Dimensional Autonomy) is not a feed reader, a notification aggregator, or a recommendation engine. It is a framework for sovereign developer intelligence — a system where content is scored, filtered, and surfaced by a machine that works exclusively for its operator, on its operator's hardware, with no 4DA server in the path — data leaves only to a cloud provider the operator explicitly configures with their own key.
+4DA (4 Dimensional Autonomy) is not a feed reader, a notification aggregator, or a recommendation engine. It is a framework for sovereign developer intelligence — a system where content is scored, filtered, and surfaced by a machine that works exclusively for its operator, on its operator's hardware, with no 4DA server in the path — beyond the package names and versions its dependency checks send to OSV.dev and the package registries, data leaves only to a cloud provider the operator explicitly configures with their own key.
 
 This document formalises the three pillars of the 4DA framework: the **PASIFA scoring philosophy**, the **Authority Stack governance model**, and the **Autonomous Operations System (AOS)**. Together, they form a replicable methodology for building software that compounds knowledge privately.
 
@@ -377,18 +377,18 @@ Each system makes the others more effective. The Authority Stack prevents PASIFA
 
 Most software claims privacy through policy: "We don't sell your data." "We use encryption." "Read our privacy policy."
 
-4DA claims privacy through architecture: **it is structurally impossible for data to leave the machine without the user's explicit action.**
+4DA claims privacy through architecture: **your code and what 4DA learns from your projects cannot leave the machine without your explicit action.** What does leave by default is small and listed in [NETWORK.md](../../NETWORK.md): package names and versions for the dependency checks (OSV.dev and the package registries) and plain requests for public content from the news sources you enable.
 
 ### 6.1 How This Is Enforced
 
 | Layer | Mechanism |
 |-------|-----------|
-| **CSP (Content Security Policy)** | The interface itself cannot make network requests; every request goes through the local backend, to the user's own API providers, public data sources and local Ollama only. No 4DA-owned endpoints. |
+| **CSP (Content Security Policy)** | The interface itself cannot make network requests; every request goes through the local backend, to the user's own API providers, public data sources and local Ollama. The one 4DA-owned endpoint, `4da.ai`, is contacted only for paid licences (renewal near expiry, and recovery by email when you ask). |
 | **Keychain Integration** | API keys stored in OS-level secure storage (Windows Credential Manager, macOS Keychain, Linux Secret Service) and removed from the settings file once verified there. If that storage is unavailable, keys stay in the settings file, readable only by your user account, and the app says so. |
 | **Zero Telemetry** | No analytics, no tracking, no phone-home, no error reporting to any external service. Verified by comprehensive codebase grep. |
 | **Pre-Commit Secrets Scanning** | 23+ pattern detectors prevent API keys, credentials, private keys, PII from ever entering version control. |
 | **Local Database** | SQLite on the user's filesystem. No cloud sync unless explicitly enabled through encrypted Team Sync. |
-| **Invariant INV-004** | "NO data leaves the machine without explicit user consent" — non-negotiable, violation = critical bug. |
+| **Invariant INV-004** | "NO data leaves the machine without explicit user consent" — non-negotiable for what the context engine (ACE) learns from your projects; violation = critical bug. The package names and versions the dependency checks send are the product's disclosed default (NETWORK.md §2c). |
 | **Wisdom Principle W-2** | "Data that can leak will leak. Enforce by structure, not policy." — the architectural philosophy. |
 
 ### 6.2 Why Architecture Beats Policy

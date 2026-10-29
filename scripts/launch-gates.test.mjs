@@ -2,12 +2,20 @@
 // Tests for scripts/launch-gates.mjs: the evaluators, the read-only DB readers on a
 // fixture database, the cold-start log parser and the idle-window classifier.
 import assert from 'node:assert/strict';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, describe, it } from 'node:test';
 
-import { collectDbFootprint, openReadOnly, readBrief, readCorpus, readRetention } from './launch-gates.mjs';
+import {
+  collectDbFootprint,
+  openReadOnly,
+  readBrief,
+  readCorpus,
+  readRetention,
+  REPO,
+  STACK_SOURCES,
+} from './launch-gates.mjs';
 import {
   evaluateG1,
   evaluateG2,
@@ -16,6 +24,8 @@ import {
   evaluateG5,
   evaluateG6,
   evaluateG9,
+  G6_DB_BUDGET_BYTES,
+  g6DbVerdict,
   parseColdStart,
   prevDay,
   projectSteadyState,
@@ -81,6 +91,18 @@ describe('fixture DB (read-only)', () => {
     assert.equal(f.projection.itemsLow, 92);
     assert.equal(f.projectionDefault.retentionDays, 30);
     assert.ok(f.projection.bytesHigh >= f.projection.bytesLow);
+    // Interests off: only crates_io writes. 30 created + 2 perennial at 30 days;
+    // the high end also counts the 2 old rows re-seen inside the window.
+    assert.equal(f.projectionStack.retentionDays, 30);
+    assert.equal(f.projectionStack.itemsLow, 32);
+    assert.equal(f.projectionStack.itemsHigh, 34);
+  });
+
+  it('STACK_SOURCES matches the Rust source of truth', () => {
+    const rust = readFileSync(join(REPO, 'src-tauri', 'src', 'sources', 'source_class.rs'), 'utf8');
+    const block = /pub\(crate\) const STACK_SOURCES: &\[&str\] = &\[([^\]]*)\]/.exec(rust)?.[1] ?? '';
+    const names = [...block.matchAll(/"([^"]+)"/g)].map((m) => m[1]);
+    assert.deepEqual([...STACK_SOURCES].sort(), names.sort());
   });
 
   it('reads morning outcomes and briefing days', async () => {
@@ -88,11 +110,12 @@ describe('fixture DB (read-only)', () => {
     const b = readBrief(db, 600);
     db.close();
     assert.deepEqual(Object.keys(b.outcomes), ['2026-10-09', '2026-10-10', '2026-10-11']);
-    assert.deepEqual(b.briefingDays, ['2026-10-11'], 'UTC 21:00 is the next local day at UTC+10');
-    const g4 = evaluateG4({ ...b, today: '2026-10-12', capConstant: 6 });
+    assert.deepEqual(b.briefingRowsByDay, { '2026-10-11': 1 }, 'UTC 21:00 is the next local day at UTC+10');
+    assert.deepEqual(b.briefWrites, {}, 'no brief_writes_by_day_v1 row yet');
+    const g4 = evaluateG4({ ...b, today: '2026-10-12', dailyCap: 3 });
     assert.equal(g4.status, 'pending');
-    assert.equal(g4.details.streak, 2, 'the failed 10-09 ends the streak; today unrecorded counts from yesterday');
-    assert.match(g4.summary, /version faults: not recorded/);
+    assert.equal(g4.details.streak, 0, 'records from before the audit are unknown, never a pass');
+    assert.match(g4.summary, /streak stops at 2026-10-11: no version audit recorded/);
   });
 });
 
@@ -104,7 +127,7 @@ describe('evaluators never pass on missing data', () => {
     assert.equal(evaluateG4({ outcomes: {}, today: '2026-10-12' }).status, 'pending');
     assert.equal(evaluateG5({}).status, 'pending');
     assert.equal(evaluateG6({ db: null, idle: null, cold: null }).status, 'pending');
-    assert.equal(evaluateG9({ today: '2026-10-12' }).status, 'pending');
+    assert.equal(evaluateG9({}).status, 'pending');
   });
 
   it('a passing corpus without CI is pending, with CI it passes, a red CI fails', () => {
@@ -153,9 +176,10 @@ describe('G1 / G2 on the real corpus files', () => {
 describe('G5 Wilson bound', () => {
   it('matches the textbook value and enforces n >= 80', () => {
     assert.ok(Math.abs(wilsonLower(49, 50) - 0.8950) < 0.001);
-    assert.equal(evaluateG5({ lane1: { successes: 49, n: 50 } }).status, 'pending');
-    assert.equal(evaluateG5({ lane1: { successes: 78, n: 80 } }).status, 'pass');
-    assert.equal(evaluateG5({ lane1: { successes: 64, n: 80 } }).status, 'fail');
+    const week = (useful, n) => [{ measured_at: '2026-10-12', useful, n }];
+    assert.equal(evaluateG5({ lane1Records: week(49, 50), today: '2026-10-13' }).status, 'pending');
+    assert.equal(evaluateG5({ lane1Records: week(78, 80), today: '2026-10-13' }).status, 'pass');
+    assert.equal(evaluateG5({ lane1Records: week(64, 80), today: '2026-10-13' }).status, 'fail');
   });
 });
 
@@ -188,6 +212,28 @@ describe('G6', () => {
     assert.equal(quiet.details.idle, 'pass');
     assert.equal(quiet.details.coldStart, 'pending', 'release budgets are unmeasured on a debug build');
     assert.equal(quiet.status, 'pending');
+  });
+
+  it('decides the DB budget on the high end of the interests-off projection', () => {
+    const p = (bytesHigh) => ({ retentionDays: 30, itemsLow: 1, itemsHigh: 2, bytesLow: 1, bytesHigh });
+    assert.equal(G6_DB_BUDGET_BYTES, 500 * 1024 ** 2);
+    assert.equal(g6DbVerdict(p(G6_DB_BUDGET_BYTES)), 'pass', 'the budget is inclusive');
+    assert.equal(g6DbVerdict(p(G6_DB_BUDGET_BYTES + 1)), 'fail');
+    assert.equal(g6DbVerdict(undefined), 'pending', 'no projection is never a pass');
+    assert.equal(
+      g6DbVerdict(p(1), true),
+      'pending',
+      'without dbstat the non-item tables count as 0, so a small projection is not proof',
+    );
+    const db = { fileBytes: 1, walBytes: 0, freelistBytes: 0, items: 1, disabledItems: 0, path: 'x', projectionStack: p(400 * 1024 ** 2) };
+    const g = evaluateG6({ db, idle: null, cold: null });
+    assert.equal(g.details.dbSize, 'pass');
+    assert.match(g.summary, /interests off at default retention .* against the 500 MiB budget \(pass\)/);
+    const noDbstat = evaluateG6({ db: { ...db, sizeIsUpperBound: true }, idle: null, cold: null });
+    assert.equal(noDbstat.details.dbSize, 'pending');
+    assert.match(noDbstat.summary, /undecided: dbstat unavailable/);
+    const big = evaluateG6({ db: { ...db, projectionStack: p(900 * 1024 ** 2) }, idle: null, cold: null });
+    assert.equal(big.status, 'fail');
   });
 
   it('projects steady state from the turned-on inflow', () => {

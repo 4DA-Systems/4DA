@@ -87,11 +87,21 @@ pub(crate) fn local_aware_redirect_policy() -> Policy {
 /// Global HTTP client with shared connection pool and TLS session cache.
 /// Suitable for health checks, license validation, API probes, and other
 /// general-purpose requests where the default 30s timeout is appropriate.
+///
+/// Every source adapter and user-supplied feed/scrape URL goes through this
+/// client (`sources::shared_client`), so it connects ONLY to public
+/// addresses: `PublicOnlyResolver` pins the connection to the addresses the
+/// SSRF check accepts, closing the DNS-rebinding window between
+/// `validate_not_internal` and the request. Never point it at localhost —
+/// local endpoints (Ollama) use `PROBE_CLIENT` or their own clients.
 pub(crate) static HTTP_CLIENT: LazyLock<reqwest::Client> = LazyLock::new(|| {
     reqwest::Client::builder()
         .user_agent("Mozilla/5.0 (compatible; desktop-app)")
         .timeout(Duration::from_secs(30))
         .connect_timeout(Duration::from_secs(10))
+        .dns_resolver(std::sync::Arc::new(
+            crate::url_validation::PublicOnlyResolver::from_system(),
+        ))
         .redirect(ssrf_guarded_redirect_policy())
         .build()
         .unwrap_or_else(|e| {

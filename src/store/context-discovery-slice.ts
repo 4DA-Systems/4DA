@@ -7,6 +7,7 @@ import type { AppStore, ContextDiscoverySlice } from './types';
 export const createContextDiscoverySlice: StateCreator<AppStore, [], [], ContextDiscoverySlice> = (set, get) => ({
   scanDirectories: [],
   missingScanDirectories: [],
+  excludedScanDirectories: [],
   newScanDir: '',
   isScanning: false,
   discoveredContext: { tech: [], topics: [], lastScan: null },
@@ -26,6 +27,8 @@ export const createContextDiscoverySlice: StateCreator<AppStore, [], [], Context
       set({
         scanDirectories: dirsResult.value.map(d => d.path),
         missingScanDirectories: dirsResult.value.filter(d => !d.exists).map(d => d.path),
+        // Excluded in Your Stack: listed, but nothing under them is checked.
+        excludedScanDirectories: dirsResult.value.filter(d => d.excluded === true).map(d => d.path),
       });
     }
 

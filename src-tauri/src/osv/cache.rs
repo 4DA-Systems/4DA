@@ -269,7 +269,13 @@ pub fn sync_from_zip(
         "Syncing advisories from cached ZIP"
     );
 
-    let (total_stored, errors) = process_zip_entries(&mut archive, db, user_packages)?;
+    // Parsing every entry of the npm archive (230k advisories) is one to five
+    // minutes of synchronous work, and the async OSV sync calls this inline.
+    // `cpu_bound` hands this worker's queued tasks to another worker first
+    // (isolated run, 2026-10-24: a 280 s inline sync overlapped a 56 s
+    // whole-runtime stall).
+    let (total_stored, errors) =
+        crate::ipc_blocking::cpu_bound(|| process_zip_entries(&mut archive, db, user_packages))?;
 
     // Update advisory_count in metadata
     if let Some(mut meta) = read_meta(ecosystem) {

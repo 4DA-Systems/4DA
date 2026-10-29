@@ -135,7 +135,7 @@ grep "zeroize" src-tauri/Cargo.toml
 
 ### 4.2 Network Boundary (All Outbound Connections)
 
-This is the most critical section. Every byte that leaves the machine originates from one of the paths listed below. There are no others.
+This is the most critical section. It walks the main outbound code paths for audit. It is not the complete list: the dependency checks (package names and versions to OSV.dev and the package registries), licence renewal and recovery at `4da.ai`, the one-time model download and the other flows are listed with source references in [NETWORK.md](../NETWORK.md), which is the canonical manifest. A connection missing from NETWORK.md is a bug.
 
 **HTTP Client definitions** (`src-tauri/src/http_client.rs`, 63 lines):
 

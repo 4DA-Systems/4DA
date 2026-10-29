@@ -43,7 +43,7 @@ use std::time::{Duration, Instant};
 
 use async_trait::async_trait;
 
-use crate::brief_facts::{fix_clause, FixPath, SecurityFact, SecuritySite};
+use crate::brief_facts::{site_fix_clause, FixPath, SecurityFact, SecuritySite};
 use crate::db::Database;
 use crate::error::{FourDaError, Result};
 
@@ -195,14 +195,14 @@ fn version_context(
 /// per-line path; none for no fix).
 fn fix_targets(path: &FixPath) -> Vec<&str> {
     match path {
-        FixPath::Bump { to }
+        FixPath::Bump { to, .. }
         | FixPath::Refresh { to, .. }
         | FixPath::Parent { to, .. }
         | FixPath::ParentUnknown { to }
         | FixPath::Reinstall { to }
         | FixPath::Update { to } => vec![to.as_str()],
         FixPath::PerLine { lines } => lines.iter().map(|l| l.to.as_str()).collect(),
-        FixPath::NoFix => Vec::new(),
+        FixPath::NoFix | FixPath::Introduces { .. } | FixPath::Malicious { .. } => Vec::new(),
     }
 }
 
@@ -261,6 +261,26 @@ fn site_qualifiers(s: &SecuritySite) -> String {
     }
 }
 
+/// The title carries the advisory's own grade; Preemption ranks the same
+/// fact by the scope rule (AD-046). When the two differ, say so and why
+/// (audit L5: "vitest ... security fix (critical)" here, HIGH there). The
+/// reason is the scope that reproduces Preemption's grade from the sites;
+/// with none that does, nothing is claimed.
+fn preemption_grade_note(fact: &SecurityFact, adjusted: Urgency) -> Option<String> {
+    let base = match fact.worst_tier.as_deref()? {
+        "critical" => Urgency::Critical,
+        "high" => Urgency::High,
+        "medium" | "moderate" => Urgency::Medium,
+        _ => return None,
+    };
+    let all_dev = Some(!fact.sites.is_empty() && fact.sites.iter().all(|s| s.dev_only));
+    let transitive = [Some(false), Some(true)]
+        .into_iter()
+        .find(|t| crate::osv::identity::scope_adjusted_urgency(base, *t, all_dev) == adjusted)?;
+    crate::osv::identity::scope_grade_note(base, transitive, all_dev)
+        .map(|g| format!("Preemption grades it {g}."))
+}
+
 /// One advisory fact from the Brief as a stream item.
 pub(crate) fn security_item(fact: &SecurityFact, now_ms: i64) -> Ranked {
     let pkg = &fact.package;
@@ -268,11 +288,18 @@ pub(crate) fn security_item(fact: &SecurityFact, now_ms: i64) -> Ranked {
     let target = target_span.as_deref();
     let installed = installed_span(fact.sites.iter().filter_map(|s| s.installed.as_deref()));
     let urgency = crate::preemption::alert_urgency_to_canonical(&fact.urgency);
-    let tier = fact
-        .worst_tier
-        .clone()
-        .unwrap_or_else(|| format!("{urgency:?}").to_lowercase());
+    let tier = match (&fact.worst_tier, &fact.worst_tier_from) {
+        (Some(t), Some(from)) => format!("{t}, from {from}"),
+        (Some(t), None) => t.clone(),
+        (None, _) => format!("{urgency:?}").to_lowercase(),
+    };
+    // Maintenance notices only (#986): worded as what they are, no severity.
+    let notice_only = fact.advisory_count == 0;
     let title = match (installed.as_deref(), target) {
+        _ if notice_only => match installed.as_deref() {
+            Some(i) => format!("{pkg} {i}: {}", fact.title),
+            None => fact.title.clone(),
+        },
         (Some(i), Some(t)) => format!("{pkg} {i} \u{2192} {t}: security fix ({tier})"),
         (Some(i), None) => format!("{pkg} {i}: {tier} advisory, no fix published"),
         (None, Some(t)) => format!("{pkg} \u{2192} {t}: security fix ({tier})"),
@@ -282,15 +309,18 @@ pub(crate) fn security_item(fact: &SecurityFact, now_ms: i64) -> Ranked {
     let ids = &fact.advisory_ids;
     let shown: Vec<&str> = ids.iter().take(4).map(String::as_str).collect();
     let more = ids.len().saturating_sub(shown.len());
-    let mut explanation = vec![
-        sentence(&fact.title),
-        format!(
+    let mut explanation = vec![sentence(&fact.title)];
+    // An install-drift fact is confirmed by the drift read, not the lockfile
+    // matcher, so it can arrive with no advisory id: the sentence would name
+    // none ("the affected range of advisory .", live 2026-10-27).
+    if !notice_only && !shown.is_empty() {
+        explanation.push(format!(
             "Version-confirmed, because the installed copy is inside the affected range of {} {}{}.",
             if fact.advisory_count == 1 { "advisory" } else { "advisories" },
             shown.join(", "),
             if more > 0 { format!(" and {more} more") } else { String::new() }
-        ),
-    ];
+        ));
+    }
     for s in &fact.sites {
         // A project holding copies on several lines gets one sentence per
         // copy, each naming the copy it is about.
@@ -303,8 +333,17 @@ pub(crate) fn security_item(fact: &SecurityFact, now_ms: i64) -> Ranked {
             "{}{copy}{}: {}",
             s.label,
             site_qualifiers(s),
-            fix_clause(pkg, &s.fix_path)
+            site_fix_clause(pkg, s)
         )));
+    }
+    if let Some(note) = preemption_grade_note(fact, urgency) {
+        explanation.push(note);
+    }
+    if let (Some(t), Some(from)) = (&fact.worst_tier, &fact.worst_tier_from) {
+        explanation.push(format!(
+            "Severity {}: the advisory carries no grade of its own, so the grade is that GHSA alias's.",
+            crate::osv::severity::labelled(t, Some(from))
+        ));
     }
     if !fact.not_compiled.is_empty() {
         let nc: Vec<&str> = fact
@@ -457,14 +496,10 @@ fn change_label(r: &ReleaseChange) -> &'static str {
     }
 }
 
-/// One graded registry release as a stream item.
-pub(crate) fn release_item(r: &ReleaseChange, now_ms: i64) -> Ranked {
+/// The release's explanation: what was published, whom it concerns, and
+/// what to do (the advisory's advice when one speaks against the release).
+fn release_explanation(r: &ReleaseChange) -> String {
     let pkg = &r.package;
-    let installed = installed_span(r.sites.iter().map(|s| s.installed.as_str()));
-    let title = match installed.as_deref() {
-        Some(i) => format!("{pkg} {i} \u{2192} {}: {}", r.announced, change_label(r)),
-        None => format!("{pkg} {}: {}", r.announced, change_label(r)),
-    };
     let who: Vec<String> = r
         .sites
         .iter()
@@ -492,24 +527,64 @@ pub(crate) fn release_item(r: &ReleaseChange, now_ms: i64) -> Ranked {
     if let Some(current) = &r.current {
         explanation.push(format!("Already current: {current}."));
     }
-    explanation.push(release_action(r));
+    // An affected or withdrawn release gets the advisory's advice, never the
+    // upgrade's; an unchecked or held one keeps it, said to be unchecked.
+    explanation.push(releases::advisory_action(r).unwrap_or_else(|| release_action(r)));
+    explanation.extend(releases::unchecked_note(r));
+    explanation.join(" ")
+}
 
-    let mut evidence = vec![version_context(
-        &r.ecosystem,
-        pkg,
-        installed.as_deref(),
-        Some(&r.announced),
-        r.change,
-    )];
+/// The version context, the registry row, and the advisories that affect
+/// the release.
+fn release_citations(r: &ReleaseChange, installed: Option<&str>) -> Vec<EvidenceCitation> {
+    let pkg = &r.package;
+    // Under a security badge "installed -> announced" would read as the fix
+    // (the advisory lane's arrow); an affected release is named, not aimed at.
+    let (from, to) = if r.change == StackChange::Security {
+        (None, None)
+    } else {
+        (installed, Some(r.announced.as_str()))
+    };
+    let mut context = version_context(&r.ecosystem, pkg, from, to, r.change);
+    if r.change == StackChange::Security {
+        context.title = format!("{} \u{b7} {pkg} {} (affected)", r.ecosystem, r.announced);
+    }
+    let mut evidence = vec![context];
     evidence.push(EvidenceCitation {
         source: r.source_type.clone(),
         title: r.row_title.clone(),
         url: r.url.clone(),
-        freshness_days: days_since(r.published.as_deref()),
+        // No registry date: unknown age (no label), not "today" (E5/E9).
+        freshness_days: r
+            .published
+            .as_deref()
+            .map_or(super::upgrade_plan::UNKNOWN_AGE_DAYS, |p| {
+                days_since(Some(p))
+            }),
         relevance_note: String::new(),
     });
+    evidence.extend(
+        releases::advisory_ids(r)
+            .iter()
+            .take(MAX_ADVISORY_CITATIONS)
+            .map(|id| EvidenceCitation {
+                source: "osv".to_string(),
+                title: id.clone(),
+                url: Some(format!("https://osv.dev/vulnerability/{id}")),
+                freshness_days: 0.0,
+                relevance_note: format!("affects {pkg} {}", r.announced),
+            }),
+    );
+    evidence
+}
 
+/// The review action (the advisory, when one affects the release), then the
+/// refresh commands the sites carry (only ever toward a release checked
+/// clear and past the hold).
+fn release_actions(r: &ReleaseChange) -> Vec<Action> {
+    let advisory_ids = releases::advisory_ids(r);
     let (action_id, label) = match r.change {
+        _ if !advisory_ids.is_empty() => ("review_security", "Read the advisory"),
         StackChange::Minor | StackChange::Security => ("review_updates", "Review the release"),
         StackChange::Yanked | StackChange::Major | StackChange::Breaking => {
             ("check_breaking", "Read the release notes")
@@ -518,7 +593,10 @@ pub(crate) fn release_item(r: &ReleaseChange, now_ms: i64) -> Ranked {
     let mut actions = vec![Action {
         action_id: action_id.to_string(),
         label: label.to_string(),
-        description: format!("Open {pkg} {} on its registry", r.announced),
+        description: advisory_ids.first().map_or_else(
+            || format!("Open {} {} on its registry", r.package, r.announced),
+            |id| format!("Open {id} on osv.dev"),
+        ),
     }];
     let mut seen: Vec<&str> = Vec::new();
     for s in &r.sites {
@@ -529,8 +607,23 @@ pub(crate) fn release_item(r: &ReleaseChange, now_ms: i64) -> Ranked {
             }
         }
     }
+    actions
+}
 
-    let urgency = match r.change {
+/// One graded registry release as a stream item.
+pub(crate) fn release_item(r: &ReleaseChange, now_ms: i64) -> Ranked {
+    let pkg = &r.package;
+    let installed = installed_span(r.sites.iter().map(|s| s.installed.as_str()));
+    let title = match (releases::advisory_title(r), installed.as_deref()) {
+        (Some(warning), _) => warning,
+        (None, Some(i)) => format!("{pkg} {i} \u{2192} {}: {}", r.announced, change_label(r)),
+        (None, None) => format!("{pkg} {}: {}", r.announced, change_label(r)),
+    };
+    // A non-malicious affected release keeps the rank and urgency its grade
+    // gives it (`rank_change`); a malicious one is High, first.
+    let rank = releases::rank_change(r);
+    let urgency = match rank {
+        _ if releases::is_malicious(r) => Urgency::High,
         StackChange::Yanked => Urgency::High,
         StackChange::Major | StackChange::Breaking if !r.dev_only => Urgency::Medium,
         _ => Urgency::Watch,
@@ -545,22 +638,22 @@ pub(crate) fn release_item(r: &ReleaseChange, now_ms: i64) -> Ranked {
             ),
             kind: EvidenceKind::Alert,
             title: fit_title(title),
-            explanation: explanation.join(" "),
+            explanation: release_explanation(r),
             confidence: Confidence::checklist(0.9),
             urgency,
             reversibility: None,
-            evidence,
+            evidence: release_citations(r, installed.as_deref()),
             evidence_total: None,
             affected_projects: r.sites.iter().map(|s| s.project_path.clone()).collect(),
             affected_deps: vec![pkg.clone()],
-            suggested_actions: actions,
+            suggested_actions: release_actions(r),
             precedents: Vec::new(),
             refutation_condition: None,
             lens_hints: LensHints::default(),
             created_at: now_ms,
             expires_at: None,
         },
-        change: r.change,
+        change: rank,
         dev_only: r.dev_only,
         published: r.published.clone(),
         package: pkg.clone(),

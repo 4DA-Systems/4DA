@@ -19,6 +19,25 @@ use super::{Source, SourceConfig, SourceError, SourceItem, SourceResult};
 #[derive(Debug, Deserialize)]
 struct PypiPackageInfo {
     info: PypiInfo,
+    /// The files of the CURRENT release (`info.version`).
+    #[serde(default)]
+    urls: Vec<PypiFile>,
+}
+
+#[derive(Debug, Deserialize)]
+struct PypiFile {
+    #[serde(default)]
+    upload_time_iso_8601: Option<String>,
+}
+
+/// When the current release was published: its earliest file upload. PyPI's
+/// JSON has no release date of its own; without one the item carried no date
+/// and the Brief said "released <the day 4DA fetched it>" (audit E5).
+fn release_published(files: &[PypiFile]) -> Option<&str> {
+    files
+        .iter()
+        .filter_map(|f| f.upload_time_iso_8601.as_deref())
+        .min()
 }
 
 #[derive(Debug, Deserialize)]
@@ -176,6 +195,9 @@ impl PypiSource {
         if let Some(ref req) = info.requires_python {
             metadata["requires_python"] = serde_json::json!(req);
         }
+        if let Some(published) = release_published(&pkg.urls) {
+            metadata["published_date"] = serde_json::json!(published);
+        }
 
         Ok(SourceItem::new("pypi", &source_id, &title)
             .with_url(Some(release_url))
@@ -319,6 +341,31 @@ fn release_page_url(name: &str, version: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// E5: the release date is the current release's earliest file upload,
+    /// carried under a key the store reads into `published_at`.
+    #[test]
+    fn the_release_date_is_the_first_upload_of_the_current_release() {
+        let pkg: PypiPackageInfo = serde_json::from_value(serde_json::json!({
+            "info": { "name": "requests", "version": "2.32.3" },
+            "urls": [
+                { "upload_time_iso_8601": "2024-05-29T15:37:49.123456Z" },
+                { "upload_time_iso_8601": "2024-05-29T15:37:47.000000Z" },
+                {}
+            ]
+        }))
+        .unwrap();
+        let published = release_published(&pkg.urls);
+        assert_eq!(published, Some("2024-05-29T15:37:47.000000Z"));
+        assert_eq!(release_published(&[]), None);
+
+        let item = SourceItem::new("pypi", "x", "x")
+            .with_metadata(serde_json::json!({ "published_date": published }));
+        assert_eq!(
+            crate::source_fetching::extract_published_at(&item).as_deref(),
+            Some("2024-05-29 15:37:47")
+        );
+    }
 
     #[test]
     fn release_page_url_is_distinct_per_version() {

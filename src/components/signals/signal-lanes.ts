@@ -47,47 +47,6 @@ export interface SignalLanes {
   more: SourceRelevance[];
 }
 
-/** Tier of a feed row: 0 security, 1 breaking / deprecation, 2 everything else. */
-export function stackTier(r: SourceRelevance): 0 | 1 | 2 {
-  const sb = r.score_breakdown;
-  if (
-    r.is_critical_alert === true ||
-    r.signal_type === 'security_alert' ||
-    r.applicability === 'affected' ||
-    r.applicability === 'likely_affected' ||
-    sb?.necessity_category === 'security_vulnerability' ||
-    sb?.content_type === 'security_advisory'
-  ) {
-    return 0;
-  }
-  if (
-    r.signal_type === 'breaking_change' ||
-    sb?.necessity_category === 'breaking_change' ||
-    sb?.necessity_category === 'deprecation_notice'
-  ) {
-    return 1;
-  }
-  return 2;
-}
-
-const URGENCY_RANK: Record<string, number> = { immediate: 0, this_week: 1, awareness: 2 };
-
-function urgencyRank(r: SourceRelevance): number {
-  return URGENCY_RANK[r.score_breakdown?.necessity_urgency ?? ''] ?? 3;
-}
-
-/**
- * Feed rows ordered security -> breaking -> other, then urgency, then the
- * incoming order. Used by "What you would have missed" to pick its hero.
- */
-export function orderByStackTier(results: SourceRelevance[]): SourceRelevance[] {
-  return results
-    .map((r, i) => ({ r, i }))
-    .sort((a, b) =>
-      (stackTier(a.r) - stackTier(b.r)) || (urgencyRank(a.r) - urgencyRank(b.r)) || (a.i - b.i))
-    .map((x) => x.r);
-}
-
 /** Pipeline score honouring the categorical ceiling (v19). */
 export function laneScore(r: SourceRelevance): number {
   const ceiling = r.score_breakdown?.score_ceiling;

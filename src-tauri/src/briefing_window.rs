@@ -49,6 +49,14 @@ const WINDOW_HEIGHT: u32 = 780;
 /// because it vanished before they noticed it.
 const AUTO_DISMISS_MS: u64 = 300_000;
 
+/// The backend's own hide fires this long after a showing, as a FALLBACK only.
+/// The page ends a showing itself (`public/briefing.js`: same
+/// [`AUTO_DISMISS_MS`], paused on hover, exit animation, then `briefing-hidden`
+/// hides the window). Hiding on the same timer cut the exit animation and
+/// ignored hover, and the hidden webview (`webview_visibility`) kept that
+/// half-animated frame for the next show.
+const BACKEND_FALLBACK_MS: u64 = AUTO_DISMISS_MS + 60_000;
+
 /// Duration (ms) the briefing stays always-on-top before dropping to normal z-order.
 /// Must be long enough for async LLM synthesis to arrive (~5-10s) plus reading time.
 /// The window never steals focus, so "always-on-top" just means visible — the user
@@ -69,6 +77,12 @@ static DISMISS_CANCEL: std::sync::LazyLock<parking_lot::Mutex<Option<Arc<AtomicB
 /// Whether the briefing window's JS listener is registered and ready.
 static WINDOW_READY: AtomicBool = AtomicBool::new(false);
 
+/// Whether the briefing page has finished loading (Tauri page-load event).
+static PAGE_LOADED: AtomicBool = AtomicBool::new(false);
+
+/// The event the page answers with `briefing-ready` (`public/briefing.js`).
+const PING_READY_EVENT: &str = "briefing-ping-ready";
+
 /// Whether the briefing window is currently visible (shown and not hidden).
 static WINDOW_VISIBLE: AtomicBool = AtomicBool::new(false);
 
@@ -81,6 +95,7 @@ static WINDOW_VISIBLE: AtomicBool = AtomicBool::new(false);
 /// Called once during app startup so the window is warm and can be shown
 /// instantly when a morning briefing fires.
 pub fn init_briefing_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
+    PAGE_LOADED.store(false, Ordering::Relaxed);
     let _window = tauri::webview::WebviewWindowBuilder::new(
         app,
         WINDOW_LABEL,
@@ -96,6 +111,11 @@ pub fn init_briefing_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()>
     .resizable(false)
     .visible(false)
     .inner_size(f64::from(WINDOW_WIDTH), f64::from(WINDOW_HEIGHT))
+    .on_page_load(|_, payload| {
+        if payload.event() == tauri::webview::PageLoadEvent::Finished {
+            PAGE_LOADED.store(true, Ordering::Relaxed);
+        }
+    })
     .build()?;
 
     info!(target: "4da::briefing", "Briefing window pre-warmed");
@@ -137,6 +157,26 @@ pub fn show_briefing_now<R: Runtime>(app: &AppHandle<R>, briefing: &BriefingNoti
     // Cancel any existing dismiss timer.
     cancel_dismiss_timer();
 
+    // A page that loaded but whose ready event was lost is asked again before
+    // the window is recreated (`page_ready`).
+    let exists = app.get_webview_window(WINDOW_LABEL).is_some();
+    let ready = WINDOW_READY.load(Ordering::Relaxed);
+    let loaded = PAGE_LOADED.load(Ordering::Relaxed);
+    if crate::page_ready::recovery(ready, loaded, exists) == crate::page_ready::Recovery::Ping {
+        let app = app.clone();
+        let briefing = briefing.clone();
+        tauri::async_runtime::spawn(async move {
+            crate::page_ready::ping_and_wait(&app, WINDOW_LABEL, PING_READY_EVENT, &WINDOW_READY)
+                .await;
+            present_briefing(&app, &briefing);
+        });
+        return;
+    }
+    present_briefing(app, briefing);
+}
+
+/// The show itself, once readiness is settled (see [`show_briefing_now`]).
+fn present_briefing<R: Runtime>(app: &AppHandle<R>, briefing: &BriefingNotification) {
     // Corner coordination: the small signal toast anchors to the same bottom-right
     // corner. The briefing (larger, always-on-top) would cover it, so slide any
     // toast that's currently showing up to the top-right. New toasts raised while
@@ -298,7 +338,7 @@ pub fn show_briefing_now<R: Runtime>(app: &AppHandle<R>, briefing: &BriefingNoti
 
     let app_handle = app.clone();
     tauri::async_runtime::spawn(async move {
-        tokio::time::sleep(std::time::Duration::from_millis(AUTO_DISMISS_MS)).await;
+        tokio::time::sleep(std::time::Duration::from_millis(BACKEND_FALLBACK_MS)).await;
         if !cancelled.load(Ordering::Relaxed) {
             hide_briefing(&app_handle);
         }
@@ -566,6 +606,16 @@ mod tests {
         assert_eq!(AUTO_DISMISS_MS, 300_000);
         assert_eq!(ALWAYS_ON_TOP_MS, 30_000);
         assert_eq!(WINDOW_LABEL, "briefing");
+    }
+
+    #[test]
+    fn the_backend_hide_is_only_a_fallback() {
+        let js = include_str!("../../public/briefing.js");
+        assert!(
+            js.contains(&format!("var AUTO_DISMISS_MS = {AUTO_DISMISS_MS};")),
+            "briefing.js must share AUTO_DISMISS_MS"
+        );
+        const { assert!(BACKEND_FALLBACK_MS > AUTO_DISMISS_MS + 400) };
     }
 
     #[test]

@@ -28,7 +28,7 @@ function fakeModels() {
   put('embeddings/nomic-embed-text-v1.5-fp16/model_fp16.onnx', 27000);
   put('embeddings/nomic-embed-text-v1.5-fp16/tokenizer.json', 70);
   put('embeddings/models--Snowflake--snowflake-arctic-embed-m/x.onnx', 10);
-  put('text-detection.rten', 250);
+  put('text-detection.onnx', 250);
   return dir;
 }
 
@@ -37,7 +37,7 @@ test('only paths under embeddings/ are the model', () => {
   assert.equal(isEmbeddingFile('embeddings'), true);
   assert.equal(isEmbeddingFile('ort/onnxruntime.dll'), false);
   assert.equal(isEmbeddingFile('embeddings-notes.txt'), false);
-  assert.equal(isEmbeddingFile('text-detection.rten'), false);
+  assert.equal(isEmbeddingFile('text-detection.onnx'), false);
 });
 
 test('the plan strips every embedding file and keeps the rest', () => {
@@ -52,7 +52,7 @@ test('the plan strips every embedding file and keeps the rest', () => {
         'embeddings/nomic-embed-text-v1.5-fp16/tokenizer.json',
       ],
     );
-    assert.deepEqual(plan.keep.map((f) => f.rel), ['ort/onnxruntime.dll', 'text-detection.rten']);
+    assert.deepEqual(plan.keep.map((f) => f.rel), ['ort/onnxruntime.dll', 'text-detection.onnx']);
     assert.equal(plan.stripBytes, 27080);
     assert.equal(plan.keepBytes, 1650);
   } finally {
@@ -89,7 +89,7 @@ test('the CLI strips the model end to end, and --dry-run touches nothing', () =>
     assert.equal(real.status, 0, real.stderr);
     assert.match(real.stdout, /removed 3 file\(s\)/);
     assert.equal(planStrip(dir).strip.length, 0);
-    assert.deepEqual(listFiles(dir).map((f) => f.rel), ['ort/onnxruntime.dll', 'text-detection.rten']);
+    assert.deepEqual(listFiles(dir).map((f) => f.rel), ['ort/onnxruntime.dll', 'text-detection.onnx']);
 
     // Idempotent: a tree without the model passes again.
     assert.equal(run().status, 0);

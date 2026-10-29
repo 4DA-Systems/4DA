@@ -28,6 +28,12 @@ use super::{Database, StoredSourceItem};
 /// [`Database::persist_analysis_scores`].
 pub const SCORE_WRITE_HYSTERESIS: f64 = 0.05;
 
+/// Rows per writer transaction in a re-examination re-queue: milliseconds of
+/// writer time on a warm cache, a few seconds at the worst contention measured
+/// (46 ms a row while the startup scan wrote, 2026-10-25), so no other writer
+/// waits behind a whole re-queue (see [`Database::requeue_and_clear_score_verdicts`]).
+pub const REQUEUE_BATCH: usize = 100;
+
 /// THE shared ranked-read ORDER BY expression (audit 2026-08-23 §3.5, items
 /// 12+26): rank when a batch layer has ranked the item, evidence otherwise.
 ///
@@ -98,6 +104,10 @@ pub struct HighStakesRow {
     /// The security version verdict: `Some(false)` means the installed version
     /// is CONFIRMED outside the affected range. `None` = no verdict.
     pub version_affected: Option<bool>,
+    /// The exposure's reach from the breakdown (`direct` / `transitive` /
+    /// `dev-only`), so a buried advisory can be reported by scope. `None`
+    /// when the breakdown names no dependency path.
+    pub dependency_path: Option<String>,
 }
 
 impl Database {
@@ -242,7 +252,9 @@ impl Database {
         threshold: f32,
         limit: usize,
     ) -> SqliteResult<Vec<(i64, String, String)>> {
-        let conn = self.conn.lock();
+        // A walk of the whole corpus by `created_at`: a pooled reader, never
+        // the writer.
+        let conn = self.read_conn_blocking();
         let mut stmt = conn.prepare_cached(&format!(
             "SELECT id, title, content
              FROM source_items
@@ -295,10 +307,24 @@ impl Database {
     /// `superseded_release`, `pending_retries_exhausted`, serendipity picks —
     /// are left alone. A withdrawn row gets its first verdict again from the
     /// risen sweep (score at or above the line) or stays out of the feed.
+    ///
+    /// Written in transactions of at most [`REQUEUE_BATCH`] rows, with the writer
+    /// released between them. One transaction for all of them (1,891 rows, two
+    /// UPDATEs each) held the writer for 87 s while the startup scan wrote to the
+    /// same file, and every task that wanted the writer meanwhile, many on async
+    /// runtime workers, blocked its thread: an 82 s `/health` stall in an
+    /// isolated run (2026-10-25). A crash between batches leaves the earlier ones
+    /// applied, which is the state the drain converges from anyway.
     pub fn requeue_and_clear_score_verdicts(&self, ids: &[i64]) -> SqliteResult<usize> {
-        if ids.is_empty() {
-            return Ok(0);
+        let mut count = 0;
+        for batch in ids.chunks(REQUEUE_BATCH) {
+            count += self.requeue_batch(batch)?;
         }
+        Ok(count)
+    }
+
+    /// One transaction of [`Self::requeue_and_clear_score_verdicts`].
+    fn requeue_batch(&self, ids: &[i64]) -> SqliteResult<usize> {
         let conn = self.conn.lock();
         let tx = conn.unchecked_transaction()?;
         let mut count = 0;
@@ -330,13 +356,15 @@ impl Database {
     /// dep-scoped recall check (Phase 5b), each with the pipeline's stored grounding
     /// and version verdicts (NULL when the item has no breakdown). One explanation
     /// row per item (`scoring_explanations.source_item_id` is unique), so the join
-    /// cannot fan out. Read-only.
+    /// cannot fan out. Read-only, on a pooled reader: on a cold page cache this
+    /// walk takes tens of seconds, and it must never hold the writer.
     pub fn get_scored_high_stakes_items(&self, limit: usize) -> SqliteResult<Vec<HighStakesRow>> {
-        let conn = self.conn.lock();
+        let conn = self.read_conn_blocking();
         let mut stmt = conn.prepare_cached(
             "SELECT s.id, s.title, s.content, s.relevance_score,
                     json_extract(e.breakdown, '$.breakdown.strongly_grounded'),
-                    json_extract(e.breakdown, '$.breakdown.is_version_affected')
+                    json_extract(e.breakdown, '$.breakdown.is_version_affected'),
+                    json_extract(e.breakdown, '$.breakdown.dependency_path')
              FROM source_items s
              LEFT JOIN scoring_explanations e ON e.source_item_id = s.id
              WHERE s.relevance_score IS NOT NULL
@@ -355,27 +383,45 @@ impl Database {
                 relevance: row.get(3)?,
                 strongly_grounded: grounded.map(|v| v != 0),
                 version_affected: affected.map(|v| v != 0),
+                dependency_path: row.get(6)?,
             })
         })?;
         rows.collect()
     }
 
-    /// The two embedding axes (context, interest) of the most recently scored
-    /// explanations, for the threshold-cliff probe. NULL where a breakdown
-    /// predates the field. Read-only.
+    /// The two embedding axes (context, interest) of the explanations of the
+    /// newest items, for the threshold-cliff probe. NULL where a breakdown
+    /// predates the field. Read-only, on a pooled reader.
+    ///
+    /// Newest by item id (the table's rowid), not by `scored_at`: that column
+    /// has no index, so `ORDER BY scored_at` read and sorted every explanation
+    /// in the corpus to keep 5,000 (measured on the operator's 170k-row copy,
+    /// 2026-10-24: 22 s with a cold page cache, 0.4 s warm, against 0.03 s
+    /// for the rowid walk). After a version drain re-stamps every row,
+    /// "most recently scored" was an arbitrary slice anyway.
+    ///
+    /// Only explanations written by the CURRENT pipeline version count: the
+    /// axes are calibrated per version, so a stale row's distance to today's
+    /// thresholds means nothing. Readings from this sample are not directly
+    /// comparable with the 2026-09-05 baselines (context 2.7%, interest
+    /// 12.7%), which sampled by `scored_at` across versions.
     pub fn get_recent_axis_scores(
         &self,
         limit: usize,
     ) -> SqliteResult<Vec<(Option<f64>, Option<f64>)>> {
-        let conn = self.conn.lock();
+        let conn = self.read_conn_blocking();
         let mut stmt = conn.prepare_cached(
             "SELECT json_extract(breakdown, '$.breakdown.context_score'),
                     json_extract(breakdown, '$.breakdown.interest_score')
              FROM scoring_explanations
-             ORDER BY scored_at DESC
+             WHERE pipeline_version = ?2
+             ORDER BY source_item_id DESC
              LIMIT ?1",
         )?;
-        let rows = stmt.query_map(params![limit as i64], |row| Ok((row.get(0)?, row.get(1)?)))?;
+        let rows = stmt.query_map(
+            params![limit as i64, crate::scoring::PIPELINE_VERSION],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )?;
         rows.collect()
     }
 
@@ -460,7 +506,16 @@ impl Database {
         const TOP_OFFENDERS_CAP: usize = 10;
 
         let conn = self.conn.lock();
-        let tx = conn.unchecked_transaction()?;
+        // IMMEDIATE: this transaction reads each row's old score and then
+        // writes. A deferred one has to upgrade its lock, and when another
+        // connection (the ACE scan's, an `open_db_connection` job's) committed
+        // in between, SQLite fails the upgrade with SQLITE_BUSY_SNAPSHOT at once,
+        // without the busy handler: a whole chunk of re-scored values was lost
+        // that way in every isolated run where a re-examination overlapped the
+        // startup scan (2026-10-25). Taking the write lock up front makes that a
+        // bounded busy wait instead (see `hygiene::prune_orphaned_project_dependencies`).
+        let tx =
+            rusqlite::Transaction::new_unchecked(&conn, rusqlite::TransactionBehavior::Immediate)?;
         let mut count = 0;
         let mut rescored: i64 = 0;
         let mut moved_up: i64 = 0;

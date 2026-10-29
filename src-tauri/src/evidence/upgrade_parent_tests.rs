@@ -289,6 +289,7 @@ fn a_refresh_is_enough_so_no_newer_parent_is_offered() {
         through: None,
         standing: Default::default(),
         override_hint: None,
+        lever_unknown: None,
     };
     let links = std::slice::from_ref(&link);
     let routes = TransitiveRoutes {
@@ -433,5 +434,214 @@ fn a_parent_with_no_registry_record_must_move_without_a_claimed_update() {
         !uuid.explanation.contains("must be updated"),
         "{}",
         uuid.explanation
+    );
+}
+
+const GOAT: &str = "d:/work/nodegoat";
+
+/// NodeGoat (audit E8): debug 2.2.0 ships bundled inside nyc 14.1.1, the
+/// declared dev tool. `npm update debug` cannot move it and npm `overrides`
+/// do not reach bundled dependencies: the step says the copy is bundled,
+/// offers no override, and never prints the edge's internal marker.
+#[test]
+fn a_bundled_copy_names_its_owner_and_no_override() {
+    let db = test_db();
+    db.store_transitive_dependency(GOAT, "debug", Some("2.2.0"), "npm", false)
+        .unwrap();
+    db.store_dependency_instances(
+        GOAT,
+        "npm",
+        &[
+            instance("nyc", "14.1.1", true, true),
+            instance("debug", "2.2.0", false, true),
+        ],
+    )
+    .unwrap();
+    let edges = crate::ace::scanner::ProjectScanner::parse_package_lock_edges(
+        r#"{"lockfileVersion": 2, "packages": {
+            "": { "devDependencies": { "nyc": "^14.0.0" } },
+            "node_modules/nyc": { "version": "14.1.1", "dev": true },
+            "node_modules/nyc/node_modules/debug": { "version": "2.2.0", "dev": true, "inBundle": true }
+        }}"#,
+    );
+    db.store_dependency_edges(GOAT, "npm", &edges).unwrap();
+    advisory(&db, "GHSA-gxpj-cx7g-858c", "debug", "npm", "2.6.9", 5.3);
+    let plan = plan(&db);
+    let debug = row(&plan, "debug");
+    validate_item(debug).expect("schema-valid");
+    let text = &debug.explanation;
+    assert!(
+        text.contains(
+            "debug 2.2.0 comes in through nyc 14.1.1 (a direct dependency), which ships it \
+             bundled inside its own package, so neither a lockfile refresh nor an override can \
+             move it to 2.6.9"
+        ),
+        "{text}"
+    );
+    assert!(!text.contains("(bundled)"), "{text}");
+    assert!(!text.contains("overrides"), "{text}");
+    assert!(!text.contains("npm update"), "{text}");
+}
+
+/// End to end on a real project directory (audit E8): the plan reads the
+/// project's package-lock.json from disk (Manager::Npm detection, the cached
+/// tree, npm's lookup). needle 2.2.4 admits debug 2.2.0 by range but resolves
+/// the hoisted 2.6.9, so it is no parent of 2.2.0; connect holds 2.2.0 by
+/// `~2.2.0`; nyc DECLARES and bundles its 2.2.0. No "npm update debug".
+#[test]
+fn the_plan_reads_the_lockfile_tree_on_disk() {
+    let dir = tempfile::Builder::new()
+        .prefix("fx-e2e-")
+        .tempdir_in(env!("CARGO_MANIFEST_DIR"))
+        .expect("tempdir");
+    let project = dir.path().to_string_lossy().replace('\\', "/");
+    if crate::project_inclusion::is_hard_excluded(&project) {
+        eprintln!("SKIPPED the_plan_reads_the_lockfile_tree_on_disk: {project} is excluded from DB writes here");
+        return;
+    }
+    let lock = r#"{"name": "app", "lockfileVersion": 2, "packages": {
+        "": { "name": "app", "dependencies": { "needle": "2.2.4", "connect": "3.4.1", "nyc": "7.1.0" } },
+        "node_modules/debug": { "version": "2.6.9" },
+        "node_modules/needle": { "version": "2.2.4", "dependencies": { "debug": "^2.1.2" } },
+        "node_modules/connect": { "version": "3.4.1", "dependencies": { "debug": "~2.2.0" } },
+        "node_modules/connect/node_modules/debug": { "version": "2.2.0" },
+        "node_modules/nyc": { "version": "7.1.0", "bundleDependencies": ["debug"], "dependencies": { "debug": "^2.2.0" } },
+        "node_modules/nyc/node_modules/debug": { "version": "2.2.0", "inBundle": true }
+    }}"#;
+    std::fs::write(dir.path().join("package-lock.json"), lock).unwrap();
+    std::fs::write(
+        dir.path().join("package.json"),
+        r#"{"name": "app", "dependencies": {"needle": "2.2.4", "connect": "3.4.1", "nyc": "7.1.0"}}"#,
+    )
+    .unwrap();
+
+    let db = test_db();
+    db.store_transitive_dependency(&project, "debug", Some("2.2.0"), "npm", false)
+        .unwrap();
+    db.store_dependency_instances(
+        &project,
+        "npm",
+        &[
+            instance("needle", "2.2.4", true, false),
+            instance("connect", "3.4.1", true, false),
+            instance("nyc", "7.1.0", true, false),
+            instance("debug", "2.6.9", false, false),
+            instance("debug", "2.2.0", false, false),
+        ],
+    )
+    .unwrap();
+    let edges = crate::ace::scanner::ProjectScanner::parse_package_lock_edges(lock);
+    db.store_dependency_edges(&project, "npm", &edges).unwrap();
+    advisory(&db, "GHSA-gxpj-cx7g-858c", "debug", "npm", "2.6.9", 5.3);
+
+    let plan = plan(&db);
+    let debug = row(&plan, "debug");
+    validate_item(debug).expect("schema-valid");
+    let text = &debug.explanation;
+    assert!(
+        text.contains("comes in through connect 3.4.1 (a direct dependency), whose requirement ~2.2.0 excludes 2.6.9"),
+        "{text}"
+    );
+    assert!(
+        text.contains("comes in through nyc 7.1.0 (a direct dependency), which ships it bundled"),
+        "{text}"
+    );
+    assert!(
+        !text.contains("needle"),
+        "needle resolves the hoisted 2.6.9: {text}"
+    );
+    assert!(!text.contains("npm update debug"), "{text}");
+    assert!(!text.contains("(bundled)"), "{text}");
+}
+
+/// Audit E8, direct half: a direct row names the command that moves the
+/// dependency where it is declared, read from the project's own manifest. The
+/// tilde survives (plain `npm install x@v` wrote `^v` over `~1.2.5`, npm 10.9.2).
+#[test]
+fn a_direct_row_names_the_command_for_its_declaration() {
+    let dir = tempfile::Builder::new()
+        .prefix("direct-row-")
+        .tempdir_in(env!("CARGO_MANIFEST_DIR"))
+        .expect("tempdir");
+    let project = dir.path().to_string_lossy().replace('\\', "/");
+    if crate::project_inclusion::is_hard_excluded(&project) {
+        eprintln!("SKIPPED a_direct_row_names_the_command_for_its_declaration: {project} is excluded from DB writes here");
+        return;
+    }
+    std::fs::write(
+        dir.path().join("package.json"),
+        r#"{"name": "app", "dependencies": {"minimist": "1.2.5"}}"#,
+    )
+    .unwrap();
+    std::fs::write(
+        dir.path().join("package-lock.json"),
+        r#"{"lockfileVersion": 3, "packages": {"": {"dependencies": {"minimist": "1.2.5"}}, "node_modules/minimist": {"version": "1.2.5"}}}"#,
+    )
+    .unwrap();
+    let db = test_db();
+    db.store_dependency(&project, "minimist", Some("1.2.5"), "npm", false, None)
+        .unwrap();
+    db.store_dependency_instances(
+        &project,
+        "npm",
+        &[instance("minimist", "1.2.5", true, false)],
+    )
+    .unwrap();
+    advisory(&db, "GHSA-xvch-5gv4-984h", "minimist", "npm", "1.2.6", 9.8);
+    let plan = plan(&db);
+    let row = row(&plan, "minimist");
+    validate_item(row).expect("schema-valid");
+    assert!(
+        row.explanation.contains(
+            "Fixable now via a direct dependency bump: `npm install minimist@1.2.6 --save-exact`"
+        ),
+        "{}",
+        row.explanation
+    );
+}
+
+/// Live 2026-10-18 (navcal sharp, next, vite): a declared `~1.2.5` already admits the
+/// fix 1.2.6, so the row names the in-range refresh, not an install that
+/// rewrites the manifest.
+#[test]
+fn a_direct_row_whose_range_admits_the_fix_names_the_refresh() {
+    let dir = tempfile::Builder::new()
+        .prefix("direct-refresh-")
+        .tempdir_in(env!("CARGO_MANIFEST_DIR"))
+        .expect("tempdir");
+    let project = dir.path().to_string_lossy().replace('\\', "/");
+    if crate::project_inclusion::is_hard_excluded(&project) {
+        eprintln!("SKIPPED a_direct_row_whose_range_admits_the_fix_names_the_refresh: {project} is excluded from DB writes here");
+        return;
+    }
+    std::fs::write(
+        dir.path().join("package.json"),
+        r#"{"name": "app", "dependencies": {"minimist": "~1.2.5"}}"#,
+    )
+    .unwrap();
+    std::fs::write(
+        dir.path().join("package-lock.json"),
+        r#"{"lockfileVersion": 3, "packages": {"": {"dependencies": {"minimist": "1.2.5"}}, "node_modules/minimist": {"version": "1.2.5"}}}"#,
+    )
+    .unwrap();
+    let db = test_db();
+    db.store_dependency(&project, "minimist", Some("1.2.5"), "npm", false, None)
+        .unwrap();
+    db.store_dependency_instances(
+        &project,
+        "npm",
+        &[instance("minimist", "1.2.5", true, false)],
+    )
+    .unwrap();
+    advisory(&db, "GHSA-xvch-5gv4-984h", "minimist", "npm", "1.2.6", 9.8);
+    let plan = plan(&db);
+    let row = row(&plan, "minimist");
+    validate_item(row).expect("schema-valid");
+    assert!(
+        row.explanation.contains(
+            "Fixable now with a lockfile refresh (the declared range already admits the fix): `npm update minimist`"
+        ),
+        "{}",
+        row.explanation
     );
 }

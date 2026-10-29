@@ -41,6 +41,10 @@ pub(crate) struct BackfillProgress {
 /// both clear this comfortably; only tiny probe/tail batches fall through.
 const PARALLEL_SCORE_MIN_ITEMS: usize = 64;
 
+/// Rows per writer transaction when a drain chunk is persisted and stamped
+/// (see `persist_drain_chunk`). Each persist batch logs its own churn summary.
+const DRAIN_WRITE_BATCH: usize = 100;
+
 /// Reduce ONE freshly-scored item to the tuple `persist_analysis_scores` writes,
 /// applying THE canonical score-shaping boundary (`scoring::finalize_scores`)
 /// first.
@@ -433,6 +437,75 @@ mod tests {
         );
         assert_eq!(scored_ids.len(), 10, "sequential path stamps every item");
     }
+
+    thread_local! {
+        static TRACED: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
+    }
+
+    fn record(sql: &str) {
+        TRACED.with(|t| t.borrow_mut().push(sql.to_lowercase()));
+    }
+
+    /// Rows written per writer transaction, from a statement trace.
+    fn rows_per_transaction(traced: &[String], marker: &str) -> Vec<usize> {
+        let mut per_tx = Vec::new();
+        let mut open: Option<usize> = None;
+        for sql in traced {
+            if sql.starts_with("begin") {
+                open = Some(0);
+            } else if sql.starts_with("commit") {
+                per_tx.push(open.take().unwrap_or(0));
+            } else if sql.contains(marker) {
+                *open.as_mut().expect("write outside a transaction") += 1;
+            }
+        }
+        per_tx
+    }
+
+    /// A drain chunk is persisted and stamped in transactions of at most
+    /// `DRAIN_WRITE_BATCH` rows, so the writer is released between batches
+    /// (a whole 500-row chunk held it for 22 s under contention, 2026-10-25),
+    /// and every row still lands.
+    #[test]
+    fn persist_drain_chunk_holds_the_writer_one_batch_at_a_time() {
+        let db = crate::test_utils::test_db();
+        let n = DRAIN_WRITE_BATCH * 2 + 11;
+        let ids: Vec<i64> = (0..n)
+            .map(|i| {
+                crate::test_utils::insert_test_item(&db, "hackernews", &format!("d{i}"), "t", "")
+            })
+            .collect();
+        let rows: Vec<crate::db::ScorePersistRow> =
+            ids.iter().map(|&id| (id, 0.5, None, None, None)).collect();
+
+        db.conn.lock().trace(Some(record));
+        persist_drain_chunk(&db, &rows, &ids).expect("persist");
+        db.conn.lock().trace(None);
+
+        let traced = TRACED.with(|t| t.borrow().clone());
+        let scores = rows_per_transaction(&traced, "set relevance_score");
+        let stamps = rows_per_transaction(&traced, "set scored_pipeline_version = ");
+        for (what, per_tx) in [("persist", &scores), ("stamp", &stamps)] {
+            let written: usize = per_tx.iter().sum();
+            assert!(
+                written >= n,
+                "{what}: trace saw {written} of {n} writes: {per_tx:?}"
+            );
+            assert!(
+                per_tx.iter().all(|&r| r <= DRAIN_WRITE_BATCH),
+                "{what}: a transaction spanned more than one batch: {per_tx:?}"
+            );
+        }
+        let conn = db.conn.lock();
+        let current: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM source_items WHERE scored_pipeline_version = ?1 AND relevance_score > 0.4",
+                [scoring::PIPELINE_VERSION],
+                |r| r.get(0),
+            )
+            .expect("count");
+        assert_eq!(current as usize, n, "every row scored and stamped");
+    }
 }
 
 /// Re-score one chunk of items stamped at an OLDER `PIPELINE_VERSION`, persist the
@@ -453,11 +526,12 @@ pub(crate) async fn drain_stale_scores_cycle(chunk_size: usize) -> Result<Backfi
     // drain below only works the slice the change could actually touch.
     // ~0ms no-op when the registry is empty or the corpus is current;
     // fail-open (a promotion error just means a full drain).
-    scoring::epochs::promote_unaffected_stale_logged(db);
-
-    let items = db
-        .get_stale_scored_items(scoring::PIPELINE_VERSION, chunk_size)
-        .map_err(|e| format!("Failed to load stale-version backlog: {e}"))?;
+    // Both are synchronous SQL (the promotion writes), so off the async worker.
+    let items = crate::ipc_blocking::cpu_bound(|| {
+        scoring::epochs::promote_unaffected_stale_logged(db);
+        db.get_stale_scored_items(scoring::PIPELINE_VERSION, chunk_size)
+    })
+    .map_err(|e| format!("Failed to load stale-version backlog: {e}"))?;
     if items.is_empty() {
         return Ok(BackfillProgress {
             scored_this_cycle: 0,
@@ -483,23 +557,10 @@ pub(crate) async fn drain_stale_scores_cycle(chunk_size: usize) -> Result<Backfi
         score_chunk(&items, &ctx, db, &options, Some(signal_classifier()));
 
     let relevant_this_cycle = score_data.len();
-    if !score_data.is_empty() {
-        if let Err(e) = db.persist_analysis_scores(&score_data, "drain") {
-            warn!(target: "4da::backfill", error = %e, "Failed to persist re-scored values");
-        }
-    }
-    // Stamp EVERY re-scored item (including any that fell to noise) so it leaves the
-    // stale pool and the drain converges — same invariant as the analysis path.
-    if let Err(e) = db.mark_items_scored_version(&scored_ids, scoring::PIPELINE_VERSION) {
-        warn!(target: "4da::backfill", error = %e, "Failed to stamp re-scored pipeline version");
-    }
-
-    // Remaining stale items are those still below the current version. Reuse the
-    // same query with a probe-sized window to learn whether more work remains.
-    let remaining = db
-        .get_stale_scored_items(scoring::PIPELINE_VERSION, 1)
-        .map(|v| v.len() as i64)
-        .unwrap_or(0);
+    // Writer work, off the async worker like the scoring above: a chunk's
+    // persist and stamp hold the writer for seconds on a cold page cache.
+    let remaining =
+        crate::ipc_blocking::cpu_bound(|| persist_drain_chunk(db, &score_data, &scored_ids))?;
     info!(
         target: "4da::backfill",
         rescored = scored_ids.len(),
@@ -514,6 +575,42 @@ pub(crate) async fn drain_stale_scores_cycle(chunk_size: usize) -> Result<Backfi
         remaining_unscored: remaining,
         done: remaining == 0,
     })
+}
+
+/// Persist one drain chunk's scores, stamp its ids at the current version, and
+/// return how many stale rows remain (0 or 1: a probe-sized window).
+///
+/// A chunk whose scores could not be written is NOT stamped: stamping it would
+/// mark the old scores current and the re-score (a re-examination's whole
+/// point) would be lost for good. Unstamped, the next drain re-scores it.
+///
+/// Both writes go in transactions of [`DRAIN_WRITE_BATCH`] rows with the writer
+/// released between them. A whole 500-row chunk in one transaction held the
+/// writer for up to 22 s while the startup scan's writers contended for the
+/// file (isolated run, 2026-10-25), and every task that needed the writer
+/// meanwhile blocked its thread.
+fn persist_drain_chunk(
+    db: &crate::db::Database,
+    score_data: &[crate::db::ScorePersistRow],
+    scored_ids: &[i64],
+) -> Result<i64> {
+    for batch in score_data.chunks(DRAIN_WRITE_BATCH) {
+        db.persist_analysis_scores(batch, "drain")
+            .map_err(|e| format!("Failed to persist re-scored values: {e}"))?;
+    }
+    // Stamp EVERY re-scored item (including any that fell to noise) so it leaves the
+    // stale pool and the drain converges — same invariant as the analysis path.
+    for batch in scored_ids.chunks(DRAIN_WRITE_BATCH) {
+        if let Err(e) = db.mark_items_scored_version(batch, scoring::PIPELINE_VERSION) {
+            warn!(target: "4da::backfill", error = %e, "Failed to stamp re-scored pipeline version");
+        }
+    }
+    // Remaining stale items are those still below the current version. Reuse the
+    // same query with a probe-sized window to learn whether more work remains.
+    Ok(db
+        .get_stale_scored_items(scoring::PIPELINE_VERSION, 1)
+        .map(|v| v.len() as i64)
+        .unwrap_or(0))
 }
 
 /// Drain stale SCORES and stale VERDICTS together, one bounded chunk of each.

@@ -22,7 +22,11 @@ use super::{embedding_to_blob, Database};
 
 #[path = "hybrid_search_exact.rs"]
 mod exact;
-use exact::{exact_title_queries, sanitize_fts5_query, title_has_exact_phrase};
+pub(crate) use exact::title_has_exact_phrase;
+use exact::{exact_title_queries, sanitize_fts5_query};
+
+#[path = "hybrid_search_package.rs"]
+mod package;
 
 #[cfg(test)]
 #[path = "hybrid_search_tests.rs"]
@@ -47,6 +51,12 @@ pub struct HybridSearchResult {
     /// The item's title contains the query as a whole word or phrase. These are
     /// pinned ahead of the fused ranking (see the module docs).
     pub exact_title: bool,
+    /// The query names this installed package and the item is an advisory whose
+    /// `Affected:` list contains it (see `hybrid_search_package.rs`).
+    pub query_package: Option<String>,
+    /// The query names an installed package and this advisory affects only
+    /// ecosystems the user has no dependencies in.
+    pub foreign_ecosystem: bool,
 }
 
 /// RRF smoothing constant (Cormack et al. 2009). Higher values dampen rank differences.
@@ -88,6 +98,8 @@ impl Candidate {
             vec_rank: None,
             vec_distance: self.distance,
             exact_title: false,
+            query_package: None,
+            foreign_ecosystem: false,
         }
     }
 }
@@ -391,6 +403,8 @@ impl Database {
         t.conn_wait_ms = lap_ms(&mut clock);
         let k = (limit * 3).max(50); // fetch 3x candidates from each method
         let exact = exact_title_lane(&conn, query_text);
+        let packages = package::package_context(&conn, query_text);
+        let package_hits = package::package_lane(&conn, &packages);
         t.exact_ms = lap_ms(&mut clock);
         let bm25 = bm25_leg(&conn, query_text, k);
         t.fts_ms = lap_ms(&mut clock);
@@ -400,11 +414,15 @@ impl Database {
 
         let fused = fuse_rrf(&bm25, &vector, fts_weight, vec_weight);
         let results = merge_with_exact_lane(&exact, fused, limit);
+        let mut results = package::merge_package_lane(results, &package_hits, limit);
+        package::annotate(&mut results, &packages);
         t.fuse_ms = lap_ms(&mut clock);
 
         debug!(
             target: "4da::hybrid_search",
             exact_count = exact.len(),
+            package_count = package_hits.len(),
+            named_packages = ?packages.named,
             bm25_count = bm25.len(),
             vec_count = vector.len(),
             fused_count = results.len(),

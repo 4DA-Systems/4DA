@@ -3,14 +3,17 @@
 //
 // Proves the fourda-depengine wasm module is pure: it must declare ZERO
 // imports (no WASI, no host functions — so it cannot reach a file, socket or
-// clock), and it must actually run. Reports its size, raw and gzipped.
+// clock), and it must actually run. Reports its size, raw and gzipped. Then
+// replays one real conformance case (tests/fixtures/match_inventory_case.json)
+// and requires the wasm answer to equal the native engine's.
 //
-// Usage: node check-wasm.cjs <path/to/fourda_depengine.wasm>
-// Exit 1 on any import, a missing export, or a wrong answer.
+// Usage: node check-wasm.cjs <path/to/fourda_depengine.wasm> [fixture.json]
+// Exit 1 on any import, a missing export, a wrong answer, or wasm != native.
 
 'use strict';
 
 const fs = require('node:fs');
+const path = require('node:path');
 const zlib = require('node:zlib');
 const { isDeepStrictEqual } = require('node:util');
 
@@ -66,7 +69,54 @@ const checks = [
   [{ op: 'affected', eco: 'npm', version: '1.2.3', ranges }, { affected: true, confirmed: true }],
   [
     { op: 'fix_target', eco: 'npm', installed: '1.2.3', ranges: [ranges] },
-    { line_fixes: ['1.2.4'], walk: { version: '1.2.4', clears_all: true } },
+    { line_fixes: ['1.2.4'], walk: { version: '1.2.4', clears_all: true }, withheld: [] },
+  ],
+  // The registry withdrew the fix (yanked / deprecated): the next release it offers.
+  [
+    {
+      op: 'fix_target',
+      eco: 'npm',
+      installed: '1.2.3',
+      ranges: [ranges],
+      registry: { published: ['1.2.4', '1.2.5'], excluded: ['1.2.4'] },
+    },
+    { line_fixes: ['1.2.5'], walk: { version: '1.2.5', clears_all: true }, withheld: ['1.2.4'] },
+  ],
+  // The lockfile readers (C0.3) over host-supplied files: a pre-1.17 go.mod
+  // completes its build list from the go.sum beside it, read from `files`.
+  [
+    {
+      op: 'read_lockfiles',
+      dir: '/p',
+      files: {
+        '/p/go.mod': 'module x\n\ngo 1.16\n\nrequire github.com/a/a v1.2.0\n',
+        '/p/go.sum': 'github.com/b/b v0.9.0/go.mod h1:x=\ngithub.com/b/b v0.10.0 h1:x=\n',
+      },
+    },
+    {
+      outcomes: [
+        {
+          read: {
+            path: '/p/go.mod',
+            format: 'go-mod',
+            packages: ['github.com/a/a@1.2.0', 'github.com/b/b@0.10.0'].map((id) => {
+              const at = id.lastIndexOf('@');
+              return {
+                name: id.slice(0, at),
+                version: id.slice(at + 1),
+                scope: 'unknown',
+                primary: true,
+                top_level: true,
+                owner: null,
+                specs: [],
+              };
+            }),
+            edges: [],
+            non_registry_entries: 0,
+          },
+        },
+      ],
+    },
   ],
 ];
 for (const [request, want] of checks) {
@@ -74,5 +124,38 @@ for (const [request, want] of checks) {
   const ok = got.ok === true && isDeepStrictEqual(got.result, want);
   console.log(`${ok ? 'ok  ' : 'FAIL'} ${request.op}: ${JSON.stringify(got.result ?? got.error)}`);
   if (!ok) failed = true;
+}
+
+// One real corpus case through the wasm module, compared with the native
+// engine's answer for the same request. The fixture is written and checked by
+// the app's conformance harness (lockfile readers -> inventory, pinned OSV
+// records, native `match_inventory`) and replayed natively by
+// tests/match_fixture.rs, so equality here means wasm == native on real input.
+const fixturePath =
+  process.argv[3] || path.join(__dirname, '..', 'tests', 'fixtures', 'match_inventory_case.json');
+const fixture = JSON.parse(fs.readFileSync(fixturePath, 'utf8'));
+const started = process.hrtime.bigint();
+const got = call(fixture.request);
+const ms = Number(process.hrtime.bigint() - started) / 1e6;
+const findings = got.result?.findings?.length ?? 0;
+const same = isDeepStrictEqual(got, fixture.response);
+console.log(
+  `${same ? 'ok  ' : 'FAIL'} match_inventory on corpus case ${fixture.case}: ` +
+    `${fixture.request.inventory.length} packages, ${fixture.request.osv.length} OSV records, ` +
+    `${findings} findings, ${ms.toFixed(1)} ms; wasm ${same ? '==' : '!='} native`,
+);
+if (!same) {
+  const want = fixture.response.result?.findings ?? [];
+  const have = got.result?.findings ?? [];
+  for (let i = 0; i < Math.max(want.length, have.length); i++) {
+    if (!isDeepStrictEqual(want[i], have[i])) {
+      console.error(`::error::first difference at finding ${i}`);
+      console.error(`native: ${JSON.stringify(want[i])}`);
+      console.error(`wasm:   ${JSON.stringify(have[i])}`);
+      break;
+    }
+  }
+  if (!got.ok) console.error(`::error::wasm error: ${got.error}`);
+  failed = true;
 }
 process.exit(failed ? 1 : 0);

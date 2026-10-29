@@ -43,10 +43,6 @@ export function SignalLanes({
   const { t } = useTranslation();
   const moreOffset = visible.worth.length;
 
-  if (lanes.worth.length === 0 && lanes.more.length === 0) {
-    return <p className="text-xs text-text-muted px-1 py-2">{t('signals.stack.feedOnlyStack')}</p>;
-  }
-
   return (
     <div>
       {lanes.worth.length > 0 && (

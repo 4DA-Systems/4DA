@@ -6,6 +6,8 @@ interface ContextDiscoverySectionProps {
   scanDirectories: string[];
   /** Configured directories that do not exist on this machine. */
   missingScanDirectories?: string[];
+  /** Configured directories the user excluded in Settings > Your Stack. */
+  excludedScanDirectories?: string[];
   newScanDir: string;
   setNewScanDir: (val: string) => void;
   isScanning: boolean;
@@ -23,6 +25,7 @@ interface ContextDiscoverySectionProps {
 export function ContextDiscoverySection({
   scanDirectories,
   missingScanDirectories = [],
+  excludedScanDirectories = [],
   newScanDir,
   setNewScanDir,
   isScanning,
@@ -93,6 +96,17 @@ export function ContextDiscoverySection({
                       {missingScanDirectories.includes(dir) && (
                         <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] bg-bg-tertiary text-text-muted border border-border">
                           {t('settings.context.notOnThisMachine')}
+                        </span>
+                      )}
+                      {/* Audit L7: an excluded root read as active here while
+                          the lockfile walk skipped it "excluded by the user". */}
+                      {excludedScanDirectories.includes(dir) && (
+                        <span
+                          className="shrink-0 px-1.5 py-0.5 rounded text-[10px] bg-bg-tertiary text-text-muted border border-border"
+                          title={t('settings.context.excludedInStackHint')}
+                          data-testid="scan-dir-excluded"
+                        >
+                          {t('settings.context.excludedInStack')}
                         </span>
                       )}
                     </span>

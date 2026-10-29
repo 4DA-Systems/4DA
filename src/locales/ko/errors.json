@@ -39,6 +39,8 @@
   "errorMsg.parse": "데이터 형식 오류입니다. 다시 시도하거나 앱을 재시작하세요.",
   "errorMsg.permission": "권한이 거부되었습니다. 파일 권한을 확인하세요.",
   "errorMsg.rateLimit": "요청 한도에 도달했습니다. 잠시 기다린 후 다시 시도하세요.",
+  "errorMsg.inventoryRefreshing": "프로젝트를 다시 스캔하고 있습니다. 스캔이 끝나는 대로 브리핑을 작성합니다.",
+  "errorMsg.budgetReached": "일일 AI 예산에 도달했습니다 — {{time}}에 초기화됩니다 ({{in}})",
   "errorMsg.timeout": "요청 시간이 초과되었습니다. 잠시 후 다시 시도하세요.",
   "translation.noLlm": "LLM이 설정되지 않았습니다 — 콘텐츠 번역을 활성화하려면 설정에서 API 키를 설정하세요"
 }

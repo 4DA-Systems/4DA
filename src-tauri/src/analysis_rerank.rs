@@ -319,7 +319,7 @@ pub(crate) async fn apply_llm_reranking(
     // apply to it) and before core construction, so the advisor identity,
     // provenance rows, and calibration samples all record the model that
     // actually judged.
-    crate::local_judge::refresh_if_stale().await;
+    let _lane = crate::local_judge::refresh_if_stale().await;
     let llm_settings = {
         let settings = get_settings_manager().lock();
         crate::llm_judge::judge_provider(&settings.get().llm)

@@ -4,4 +4,12 @@ import type { AdapterStatus } from "./AdapterStatus";
 /**
  * Aggregate summary of all source adapter health.
  */
-export type SourceHealthSummary = { adapters: Array<AdapterStatus>, total_active: number, total_failing: number, total_disabled: number, };
+export type SourceHealthSummary = { adapters: Array<AdapterStatus>, total_active: number, total_failing: number, 
+/**
+ * Adapters of sources the user turned off.
+ */
+total_disabled: number, 
+/**
+ * Adapters of enabled sources with no success in 7 days, or none ever.
+ */
+total_stale: number, };

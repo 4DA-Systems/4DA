@@ -443,6 +443,8 @@ interface CommandMap {
   ace_get_scan_summary: { params: Record<string, never>; result: ScanSummary };
   ace_preview_discovery_dirs: { params: Record<string, never>; result: string[] };
   ace_candidate_dev_roots: { params: Record<string, never>; result: string[] };
+  /** Why a typed folder cannot be scanned ('not_found' | 'not_a_folder' | 'system_folder'), or null. */
+  ace_check_scan_folder: { params: { path: string }; result: string | null };
 
   // -- Learned Preferences (P6) --
   get_learned_preferences: { params: Record<string, never>; result: { facets: Array<{ facet_id: string; class: string; key: string; value: string; stability: number; state: string; user_state: string; evidence_count: number; first_seen_at: number; last_seen_at: number }>; count: number } };
@@ -452,7 +454,7 @@ interface CommandMap {
   get_preference_evidence: { params: { facetId: string }; result: { facet_id: string; evidence: Array<{ cue_family: string; evidence_type: string; confidence: number; observed_at: number }>; count: number } };
 
   // -- Context Directories --
-  get_context_dirs: { params: Record<string, never>; result: Array<{ path: string; exists: boolean }> };
+  get_context_dirs: { params: Record<string, never>; result: Array<{ path: string; exists: boolean; excluded: boolean }> };
   set_context_dirs: { params: { dirs: string[] }; result: void };
 
   // -- Monitoring --
@@ -466,7 +468,7 @@ interface CommandMap {
 
   // -- Briefing --
   get_latest_briefing: { params: Record<string, never>; result: { content: string; model: string | null; item_count: number; created_at: string } | null };
-  generate_ai_briefing: { params: { auto?: boolean }; result: { success: boolean; briefing: string | null; error?: string; model?: string; item_count?: number; latency_ms?: number; cached?: boolean; briefing_created_at?: string } };
+  generate_ai_briefing: { params: { auto?: boolean }; result: { success: boolean; briefing: string | null; error?: string; inventory_refreshing?: boolean; model?: string; item_count?: number; latency_ms?: number; cached?: boolean; briefing_created_at?: string } };
   get_brief_display_verdicts: { params: Record<string, never>; result: { filtered: Array<{ id: number; reason: string }>; expires_in_seconds: number } };
   generate_free_briefing: { params: Record<string, never>; result: { content: string; item_count: number; created_at: string } };
   get_source_health_status: { params: Record<string, never>; result: SourceHealthStatus[] };
@@ -574,11 +576,11 @@ interface CommandMap {
   get_blind_spot_teaser: { params: Record<string, never>; result: BlindSpotTeaser };
   assess_blind_spots_with_ai: { params: { force?: boolean }; result: BlindSpotAssessment };
   get_cached_blind_spot_assessment: { params: Record<string, never>; result: BlindSpotAssessment | null };
-  get_source_health: { params: Record<string, never>; result: { adapters: Array<{ source_type: string; feed_origin: string; status: string; consecutive_failures: number; last_success_at: string | null; last_failure_at: string | null; last_error: string | null }>; total_active: number; total_failing: number; total_disabled: number } };
+  get_source_health: { params: Record<string, never>; result: { adapters: Array<{ source_type: string; feed_origin: string; status: string; consecutive_failures: number; last_success_at: string | null; last_failure_at: string | null; last_error: string | null }>; total_active: number; total_failing: number; total_disabled: number; total_stale: number } };
 
   // -- OSV Local Mirror (Tier 1 verified intelligence) --
   osv_sync_now: { params: Record<string, never>; result: { ecosystems_synced: string[]; advisories_stored: number; advisories_matched: number; duration_ms: number; errors: string[] } };
-  osv_get_matches: { params: Record<string, never>; result: { advisory_id: string; summary: string; details: string | null; package_name: string; ecosystem: string; installed_version: string | null; fixed_version: string | null; severity_type: string | null; cvss_score: number | null; source_url: string | null; is_version_confirmed: boolean; project_paths: string[]; published_at: string | null }[] };
+  osv_get_matches: { params: Record<string, never>; result: { advisory_id: string; summary: string; details: string | null; package_name: string; ecosystem: string; installed_version: string | null; fixed_version: string | null; severity_type: string | null; cvss_score: number | null; source_url: string | null; is_version_confirmed: boolean; project_paths: string[]; published_at: string | null; severity_label: string | null; severity_from: string | null }[] };
   osv_get_sync_status: { params: Record<string, never>; result: { ecosystem: string; last_synced_at: string | null; advisory_count: number; error: string | null }[] };
   osv_update_cache: { params: Record<string, never>; result: { ecosystems_updated: string[]; ecosystems_skipped: string[]; total_advisories: number; duration_ms: number; errors: string[] } };
   osv_cache_status: { params: Record<string, never>; result: { ecosystem: string; etag: string | null; last_modified: string | null; downloaded_at: string; size_bytes: number; advisory_count: number }[] };
@@ -702,7 +704,6 @@ interface CommandMap {
   toolkit_test_feed: { params: { url: string }; result: FeedTestResult };
   toolkit_score_sandbox: { params: { title: string; content: string | null; sourceType: string }; result: SandboxScoreResult };
   toolkit_generate_export_pack: { params: Record<string, never>; result: ExportPackResult };
-  toolkit_env_snapshot: { params: { workingDir: string | null }; result: EnvSnapshot };
 
   // -- Channels --
   list_channels: { params: Record<string, never>; result: ChannelSummary[] };
@@ -1367,6 +1368,10 @@ interface NlqQueryItem {
   match_reason: string;
   /** Title contains the query as a whole word/phrase; pinned first, relevance ~1.0. */
   exact_match: boolean;
+  /** Installed package this advisory affects, when the query named it; ranked next after exact matches. */
+  affects_package?: string | null;
+  /** Query named an installed package and this advisory only affects ecosystems with no installed deps; demoted. */
+  foreign_ecosystem?: boolean;
 }
 
 /** Free-tier ghost preview (mirrors Rust `GhostPreview`). */
@@ -1560,15 +1565,6 @@ interface ExportPackResult {
   file_path: string;
   size_bytes: number;
   items_exported: number;
-}
-
-interface EnvSnapshot {
-  os: string;
-  arch: string;
-  node_version: string | null;
-  rust_version: string | null;
-  tools: Array<{ name: string; version: string | null; available: boolean }>;
-  env_vars: Record<string, string>;
 }
 
 interface ScanSummary {
@@ -1972,6 +1968,8 @@ const LONG_RUNNING_COMMANDS = new Set<string>([
   'index_context',
   'ace_full_scan',
   'ace_auto_discover',
+  // "Check now": a first advisory download (npm's export is ~200 MB) runs for minutes.
+  'osv_sync_now',
   'pull_ollama_model',
   'prepare_embedding_engine',
   // Embeds every Quick Setup interest; a cold local embedder can take a while.
@@ -2049,7 +2047,6 @@ export type {
   FeedTestResult,
   SandboxScoreResult,
   ExportPackResult,
-  EnvSnapshot,
   ScanSummary,
   ScoringStats,
   FeedbackLiveness,

@@ -8,22 +8,38 @@ pub(crate) mod advisory_match;
 pub(crate) mod cache;
 #[cfg(test)]
 mod conformance_tests;
+pub(crate) mod direct_upgrade;
+#[cfg(test)]
+mod engine_snapshot_tests;
 pub(crate) mod exposure;
 pub(crate) mod fix_path;
 pub(crate) mod fix_target;
+pub(crate) mod held_targets;
+#[cfg(test)]
+mod held_vectors;
 pub(crate) mod identity;
 pub(crate) mod matching;
 pub(crate) mod parent_hint;
+pub(crate) mod parent_release;
+#[cfg(test)]
+pub(crate) mod parent_release_fixture;
+#[cfg(test)]
+mod parent_release_graph_vectors;
+mod parent_release_hop;
+pub(crate) mod parent_release_load;
+#[cfg(test)]
+mod parent_release_vectors;
+pub(crate) mod parent_route;
+pub(crate) mod raised_lines;
 pub(crate) mod reachability;
 pub(crate) mod readiness;
+pub(crate) mod release_advisories;
+pub(crate) mod release_facts;
+pub(crate) mod severity;
 pub(crate) mod sync;
 pub(crate) mod types;
 #[cfg(test)]
 mod vectors_tests;
-
-// Version ordering lives in the pure engine crate (single-engine C0.1); the
-// module path `crate::osv::version_order` stays as it was.
-pub(crate) use fourda_depengine::version_order;
 
 #[cfg(test)]
 mod depengine_parity_tests;
@@ -34,12 +50,14 @@ use crate::error::{Result, ResultExt};
 // Tauri Commands
 // ============================================================================
 
-/// Trigger a manual OSV sync. Queries the OSV API for all user dependencies
-/// and stores advisories locally.
+/// Trigger a manual OSV sync ("Check now"). Queries the OSV API for all user
+/// dependencies and stores advisories locally. Single flight with every other
+/// desktop sync (`readiness::refresh`): it waits for a running one instead of
+/// starting a second.
 #[tauri::command]
 pub async fn osv_sync_now() -> Result<serde_json::Value> {
     let db = crate::get_database()?;
-    let result = sync::sync(&db).await?;
+    let result = readiness::refresh::sync_now(&db).await?;
     // The sync recomputed matches — refresh the Preemption feed cache in the
     // background so a manual refresh is reflected on the next tab open without
     // paying the 30-40s recompute (live matching + adversarial deliberation).

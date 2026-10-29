@@ -1,0 +1,15 @@
+{
+  "id": "synth-dotnet-csproj",
+  "source": "synthetic",
+  "licence": "CC0-1.0 (authored for this corpus; package names/versions are public registry facts)",
+  "formats": [
+    "Api.csproj (.NET, unsupported)"
+  ],
+  "notes": "A .NET project with only a .csproj (no packages.lock.json). 4DA does not resolve NuGet versions, and before audit A2 (2026-10-12) this project was not reported at all, so it read as having no dependencies. It must be an explicit, counted unsupported file, never a silent drop. Both pinned packages have published advisories (Newtonsoft.Json 12.0.1, System.Text.Encodings.Web 4.5.0), which is why a clean answer here would be wrong.",
+  "unsupported": [
+    {
+      "path": "Api.csproj",
+      "reason": "NuGet is not a supported lockfile ecosystem; a .csproj declares PackageReference ranges, not an installed set"
+    }
+  ]
+}

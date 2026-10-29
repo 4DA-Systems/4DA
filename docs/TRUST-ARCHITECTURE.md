@@ -2,7 +2,7 @@
 
 **Why 4DA is built so that trust is unnecessary.**
 
-Most software asks you to trust that the company won't misuse your data. 4DA is architectured so that trust is unnecessary -- there is no 4DA server, and your indexed content, scores, and learning stay in a local SQLite database. A local model keeps everything on-device; a cloud model sees only what you choose to send it, with your own key, never through 4DA. This is not a policy promise -- it is verifiable in the source.
+Most software asks you to trust that the company won't misuse your data. 4DA is architectured so that trust is unnecessary -- 4DA runs no server that receives your projects, scores or reading, and your indexed content, scores, and learning stay in a local SQLite database. The app contacts 4DA's own server (`4da.ai`) only for paid licences: the key, when a subscription renews near expiry, and your email, if you ask to recover a lost key. Everything else it sends goes to public third-party services (OSV.dev, the package registries, the news sources you enable) or to a provider you configured, and never includes your source code. A local model keeps everything on-device; a cloud model sees only what you choose to send it, with your own key, never through 4DA. This is not a policy promise -- it is verifiable in the source.
 
 ---
 
@@ -30,7 +30,7 @@ Layer 6: Track Record    Years of consistent, honest operation
 Layer 5: Transparency    Source-available code, public audits, honest communication
 Layer 4: Legal           Registered company, privacy policy, Australian jurisdiction
 Layer 3: Technical       Signed binaries, Minisign updates, CSP enforcement
-Layer 2: Architecture    Local-first + direct-to-provider — no 4DA-operated server for your data to land in
+Layer 2: Architecture    Local-first + direct-to-provider — no 4DA-operated server that receives your data
 Layer 1: Philosophy      Privacy-by-design, not privacy-by-policy
 ```
 
@@ -38,17 +38,17 @@ Layer 1: Philosophy      Privacy-by-design, not privacy-by-policy
 
 ### Layer 1: Philosophy
 
-4DA was conceived as local-first software from the first line of code. Privacy is not a feature that was added later. It is the architectural foundation that every other feature is built on top of. The application was designed from the ground up so that there is no server to send data to, no account system to correlate users, and no telemetry pipeline to aggregate behavior.
+4DA was conceived as local-first software from the first line of code. Privacy is not a feature that was added later. It is the architectural foundation that every other feature is built on top of. The application was designed from the ground up so that there is no server that collects your data, no account system to correlate users, and no telemetry pipeline to aggregate behavior.
 
 ### Layer 2: Architecture
 
-The application is a Tauri 2.0 desktop binary. Rust backend, React frontend, SQLite database. Everything runs on your machine. There is no 4DA-operated cloud component and no 4DA sync service. Data only leaves your machine if you explicitly configure an external API with your own key — and then only to that provider.
+The application is a Tauri 2.0 desktop binary. Rust backend, React frontend, SQLite database. Everything runs on your machine. There is no 4DA-operated cloud component and no 4DA sync service. What does leave the machine is listed, with source references, in [NETWORK.md](../NETWORK.md): package names and versions to OSV.dev and the package registries for the dependency checks, plain requests for public content to the news sources you enable, and, only if you configure them with your own key, requests to your AI or translation provider.
 
 ### Layer 3: Technical Controls
 
 - **Code signing:** Windows binaries are not yet Authenticode-signed (planned); verify them with the published SHA-256 checksums and minisign signatures. macOS binaries are signed with an Apple Developer ID certificate and notarized by Apple.
 - **Update verification:** The Tauri updater verifies every update against a Minisign public key (key ID `46ECE1D6A97849EF`) before applying it. A compromised download server cannot push malicious updates.
-- **Content Security Policy:** The CSP in `tauri.conf.json` restricts all outbound connections to an explicit allowlist. The browser context inside the application cannot contact arbitrary servers.
+- **Content Security Policy:** The CSP in `tauri.conf.json` (`connect-src 'self' ipc: http://ipc.localhost`) lets the window's interface code reach no network host at all. Every outbound request is made by the Rust backend, so the CSP does not limit those; [NETWORK.md](../NETWORK.md) lists each one with the code that makes it.
 
 ### Layer 4: Legal
 
@@ -72,11 +72,11 @@ This layer belongs to users, not to us. When people who use 4DA begin vouching f
 
 Each claim below includes the mechanism that enforces it and the method you can use to verify it independently.
 
-### a) There is no 4DA server
+### a) No 4DA server receives your data
 
-**Mechanism:** All user data is stored in a SQLite database at `data/4da.db` on your local filesystem. There is no remote database, no sync endpoint, no backup service, and no cloud storage integration. The application has no server-side component that could receive data even if the client attempted to send it.
+**Mechanism:** All user data is stored in a SQLite database at `data/4da.db` on your local filesystem. There is no remote database, no sync endpoint, no backup service, and no cloud storage integration. The one 4DA-operated host the app contacts is `4da.ai`, for two licence operations only: a key-only renewal of a paid subscription near expiry, and a recovery lookup by email that you start yourself (NETWORK.md §2e, §2k). Neither carries project, score or reading data.
 
-**Verify:** Monitor the application's network traffic using Wireshark, Fiddler, or your operating system's built-in network monitor. Every outbound connection will be to one of the endpoints listed in the CSP allowlist (see Section 3c). None of them are 4DA Systems servers, because 4DA Systems does not operate data-receiving servers.
+**Verify:** Monitor the `fourda` process's network traffic using Wireshark, Fiddler, or your operating system's built-in network monitor, and match every connection against [NETWORK.md](../NETWORK.md). On Windows you will also see `msedgewebview2.exe`: that is Microsoft's WebView2 runtime, which draws the window and contacts Microsoft on its own (NETWORK.md §5).
 
 ### b) Zero telemetry collection
 
@@ -104,28 +104,15 @@ The only results are in exclusion lists and URL validation rules -- code that ex
 - **macOS:** Keychain
 - **Linux:** Secret Service (GNOME Keyring / KWallet)
 
-Keys are transmitted only to the endpoints you configure -- your chosen LLM provider (Anthropic, OpenAI) or your local Ollama instance. The Content Security Policy in `tauri.conf.json` enforces this at the browser level:
+Keys are transmitted only to the endpoints you configure -- your chosen LLM provider (Anthropic, OpenAI, an OpenAI-compatible endpoint) or your local Ollama instance. The requests are made by the Rust backend, not by the window's interface code: the Content Security Policy in `tauri.conf.json` (`connect-src 'self' ipc: http://ipc.localhost`) allows the interface no network host, so a key typed into Settings travels to the backend over IPC and from there only to its provider.
 
-```
-connect-src 'self'
-  https://api.anthropic.com
-  https://api.openai.com
-  http://localhost:11434
-  https://hacker-news.firebaseio.com
-  https://export.arxiv.org
-  https://www.reddit.com
-  https://api.github.com
-```
+**Verify:** Inspect the CSP directly in `src-tauri/tauri.conf.json`. Audit the LLM request code in `src-tauri/src/llm.rs`. Every outbound API call uses the key stored in your local keychain and sends it only to the provider URL you selected.
 
-No 4DA Systems endpoint appears in this list. The application cannot send data to us because the CSP does not permit it.
+### d) The AI features work offline
 
-**Verify:** Inspect the CSP directly in `src-tauri/tauri.conf.json` (line 35). Audit the LLM request code in `src-tauri/src/llm.rs`. Every outbound API call uses the key stored in your local keychain and sends it only to the provider URL you selected.
+**Mechanism:** When configured with Ollama (a local LLM running at `localhost:11434`), AI judging, briefings and embeddings make no external request. The dependency checks still need OSV.dev and the package registries for fresh advisories and releases; offline, 4DA shows the last data it fetched. Content sources can be individually disabled.
 
-### d) The app works fully offline
-
-**Mechanism:** When configured with Ollama (a local LLM running at `localhost:11434`), the application makes zero external network requests. Local embeddings are computed via `sqlite-vec`. Content sources can be individually disabled for full air-gap operation.
-
-**Verify:** Disconnect your network, configure Ollama as your LLM provider, and use the free tier. The application continues to function with full intelligence capabilities.
+**Verify:** Disconnect your network, configure Ollama as your LLM provider, and use the free tier. The application keeps working on its cached advisory and registry data.
 
 ### e) Updates are cryptographically verified
 
@@ -149,7 +136,7 @@ Platform-specific signing provides an additional layer:
 
 This is the question that separates local-first software from everything else.
 
-**The app keeps working.** There is no server to shut down. No authentication endpoint to go offline. No license server to stop responding (with one narrow exception; see below). The binary on your machine continues to function exactly as it did the day you installed it.
+**The app keeps working.** There is no server to shut down. No authentication endpoint to go offline. No license server your free use depends on (paid licences are the one narrow exception; see below). The binary on your machine continues to function exactly as it did the day you installed it.
 
 **Your data remains yours.** The SQLite database is a standard file format readable by any SQLite client. Your data is not encrypted with a key held by 4DA Systems. It is not stored in a proprietary format. It is yours, in a format the entire software industry can read.
 
@@ -157,7 +144,7 @@ This is the question that separates local-first software from everything else.
 
 **The build remains reproducible.** Pinned dependencies (`Cargo.lock`, `pnpm-lock.yaml`) ensure that the exact versions used to build a release can be restored. The build does not depend on 4DA Systems infrastructure.
 
-**The one exception:** Signal tier license validation uses Keygen (api.keygen.sh). If Keygen becomes unreachable, the offline validation cache (7-day window) continues to authorize the application. If both Keygen and the cache expire, Signal tier features degrade to free tier. The free tier has zero external dependencies and is completely unaffected.
+**The one exception:** Signal tier license validation uses Keygen (api.keygen.sh), and subscription renewal uses `4da.ai`. If Keygen becomes unreachable, the offline validation cache (90 days) continues to authorize the application. If both Keygen and the cache expire, Signal tier features degrade to free tier. The free tier has zero external dependencies and is completely unaffected.
 
 ---
 
@@ -169,11 +156,11 @@ BYOK -- Bring Your Own Key -- is not just a feature. It is a trust architecture 
 
 **Your keys are stored in your operating system's credential manager** -- Windows Credential Manager, macOS Keychain, or Linux Secret Service. Not in a config file. Not in our database. In the same secure storage your OS uses for its own credentials.
 
-**Your keys are sent only to the provider you configured.** If you enter an Anthropic API key, it is sent to `api.anthropic.com` and nowhere else. The CSP enforces this at the browser level.
+**Your keys are sent only to the provider you configured.** If you enter an Anthropic API key, it is sent to `api.anthropic.com` and nowhere else; the backend code that sends it is in `src-tauri/src/llm.rs`.
 
 **4DA Systems never sees, stores, proxies, or has access to your keys.** There is no intermediary server. There is no "4DA API" that your requests pass through. The application on your machine talks directly to the provider you chose.
 
-**If you use Ollama, zero keys are needed.** Zero external API calls are made. The application runs entirely on your hardware, using your local LLM, with your local embeddings, against your local database. The network cable could be unplugged and nothing would change.
+**If you use Ollama, zero keys are needed.** No AI request leaves the machine. The AI features run entirely on your hardware, using your local LLM, with your local embeddings, against your local database. Unplug the network cable and they keep working; only the dependency checks wait for the next connection to refresh their advisory and release data.
 
 ---
 
@@ -181,9 +168,9 @@ BYOK -- Bring Your Own Key -- is not just a feature. It is a trust architecture 
 
 | Aspect | Cloud SaaS | Local + Cloud Backend | 4DA (Local-First) |
 |---|---|---|---|
-| Where your data lives | Their servers | Split between local and remote | Your machine only |
+| Where your data lives | Their servers | Split between local and remote | Your machine only (OSV.dev and registries see package names and versions) |
 | Account required | Yes | Yes | No |
-| Works offline | No | Partially | Yes (with Ollama) |
+| Works offline | No | Partially | Yes, on cached advisory data (AI with Ollama) |
 | Company shutdown impact | Total loss of service and data | Partial loss (cloud features die) | Zero impact (free tier) |
 | Source audit possible | No | Partial (client only) | Full (client and backend are the same binary) |
 | Trust required | High | Medium | Minimal |
@@ -223,16 +210,16 @@ A trustworthy version today does not guarantee a trustworthy version tomorrow.
 **Mitigations:**
 - Source diffs between any two versions are publicly inspectable.
 - Minisign verification means you can pin to a known-good version and refuse updates.
-- The CSP is visible in the source code -- adding a new outbound endpoint would appear in the diff.
+- NETWORK.md lists every outbound endpoint with the code that calls it -- a new one would appear in the source diff.
 - The FSL-1.1-Apache-2.0 license ensures the source remains available for comparison.
 
 ### Trust in Keygen for license validation (Signal tier only)
 
-Signal tier license validation contacts `api.keygen.sh`. This is the only 4DA feature that depends on a third-party service for authorization.
+Signal tier license validation contacts `api.keygen.sh`, and subscription renewal contacts `4da.ai`. Licensing is the only 4DA feature that depends on a remote service for authorization.
 
 **Mitigations:**
 - Only Signal tier is affected. The free tier makes zero external calls for license validation.
-- Offline validation caches the result for 7 days, providing resilience against outages.
+- Offline validation caches the result for 90 days, providing resilience against outages.
 - If validation fails after the cache expires, the application degrades gracefully to free tier -- it does not stop working.
 
 ---
@@ -243,7 +230,7 @@ This document is the architectural overview. The following documents provide spe
 
 | Document | Purpose |
 |---|---|
-| **NETWORK-TRANSPARENCY.md** | Every outbound connection the app makes, with verification steps |
+| **NETWORK.md** | Every outbound connection the app makes, with source references and verification steps |
 | **BUILD-FROM-SOURCE.md** | Build the application from source code yourself |
 | **VERIFY-DOWNLOADS.md** | Verify binary authenticity using code signatures and checksums |
 | **SECURITY-AUDIT-GUIDE.md** | Audit the trust-critical code paths in the source |

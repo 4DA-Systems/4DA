@@ -40,6 +40,8 @@ pub(super) struct GapScan<'a> {
     active_projects: Vec<String>,
     /// Stored scoring verdicts read so far, by item id (see `stored_verdict`).
     verdicts: RefCell<HashMap<i64, StoredVerdict>>,
+    /// The mirror's GHSA grades for the alias rule, read once per scan.
+    alias_grades: crate::osv::severity::AliasGrades,
 }
 
 /// A candidate's stored scoring-time version verdict.
@@ -96,6 +98,7 @@ impl<'a> GapScan<'a> {
                 .map(|p| normalize_project_path(p))
                 .collect(),
             verdicts: RefCell::new(HashMap::new()),
+            alias_grades: crate::osv::severity::AliasGrades::load(conn),
         })
     }
 
@@ -249,8 +252,11 @@ impl<'a> GapScan<'a> {
         let installs = installs_for(self.conn, name, paths);
         let dep_lower = name.to_lowercase();
         let live = |c: &GapCandidate| self.verdict(c, name, &dep_lower, &installs);
+        // A package whose affecting advisories are all maintenance notices
+        // is unmaintained, not vulnerable (#986).
         let vulnerable = still_vulnerable(self.conn, name, first.version.as_deref(), paths)
-            && grounded_security_advisory(&self.candidates, name, &live);
+            && grounded_security_advisory(&self.candidates, name, &live)
+            && !crate::knowledge_decay::only_maintenance_notices(self.conn, name, &installs);
         let exposed = if vulnerable {
             affected_project_paths(self.conn, name, paths)
         } else {
@@ -267,7 +273,7 @@ impl<'a> GapScan<'a> {
         } else {
             exposed.iter().map(|(_, install)| install.clone()).collect()
         };
-        let tier = advisory_tier_for(self.conn, name, &tier_installs);
+        let tier = advisory_tier_for(self.conn, name, &tier_installs, &self.alias_grades);
         let base = classify_severity(&triage.kept, days_since, name, vulnerable, tier);
         (release_adjusted(base, triage, name), exposed)
     }

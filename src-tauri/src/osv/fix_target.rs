@@ -4,169 +4,96 @@
 //! A fix target is a fact about ONE install: the version that copy must reach.
 //! The per-version rules (the line fix, the walk past every window, the
 //! upgrade type) live in the pure engine crate,
-//! `fourda_depengine::fix_target` (single-engine C0.1), and are re-exported
-//! here under their old paths. This module keeps the half that aggregates the
-//! app's `MatchedAdvisory` rows per project: [`line_targets`] and friends.
-//!
-//! Split out of `matching.rs` (file-size gate).
+//! `fourda_depengine::fix_target` (single-engine C0.1), and the per-project,
+//! per-line aggregation in `fourda_depengine::lines` (C0.2). Both are
+//! re-exported here under their old paths; [`line_targets`] reads the app's
+//! `MatchedAdvisory` rows.
 
-use std::collections::BTreeMap;
-
-use semver::Version;
-
-use super::matching::parse_version;
 use super::types::MatchedAdvisory;
 
 #[cfg(test)]
-pub(crate) use fourda_depengine::fix_target::clean_version;
-pub(crate) use fourda_depengine::fix_target::{fix_for_version, walk_target, WalkTarget};
+pub(crate) use fourda_depengine::fix_target::{
+    clean_version, fix_for_version, walk_target, WalkTarget,
+};
 pub use fourda_depengine::fix_target::{upgrade_type, UpgradeType};
-/// One project holding one copy of the package.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct InstallSite {
-    pub project_path: String,
-    /// Declared directly in that project's manifest (bumpable now).
-    pub is_direct: bool,
-    /// Every recorded instance at this site is a dev dependency.
-    pub is_dev: bool,
+#[cfg(test)]
+pub use fourda_depengine::lines::InstallSite;
+pub use fourda_depengine::lines::{describe_lines, distinct_targets, LineTarget};
+
+/// Parity decision 2, the MCP's words: why no target is named for a copy.
+pub fn introduces_text(advisories: &[String]) -> String {
+    format!(
+        "every fixing release brings in {}, which the installed version does not have",
+        advisories.join(", ")
+    )
 }
 
-/// The target for one installed version across the projects a row names.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LineTarget {
-    pub installed_version: String,
-    /// The version to reach. `None` when no advisory on this copy has a fix.
-    pub target_version: Option<String>,
-    /// `target_version` clears every known advisory of the package (the
-    /// clean walk succeeded). `false` means it clears only the advisories
-    /// that HAVE a fix on this line — another one stays open upstream.
-    pub clears_all_known: bool,
-    pub upgrade_type: Option<UpgradeType>,
-    pub sites: Vec<InstallSite>,
+/// A malicious landing, in the MCP's words (`malwareText`, fix-paths.ts):
+/// "<pkg> is flagged malicious (<ids>): remove or replace <pkg>". No version
+/// is named, so the Brief's version check has nothing to fault.
+pub fn malicious_text(package: &str, advisories: &[String]) -> String {
+    format!(
+        "{package} is flagged malicious ({}): remove or replace {package}",
+        advisories.join(", ")
+    )
 }
 
-impl LineTarget {
-    pub fn is_major(&self) -> bool {
-        self.upgrade_type == Some(UpgradeType::Major)
+/// The malicious records a fixing release of these lines falls in, sorted
+/// and deduped; empty when any line has a target.
+pub fn malicious_of(lines: &[LineTarget]) -> Vec<String> {
+    if lines.iter().any(|l| l.target_version.is_some()) {
+        return Vec::new();
     }
+    let mut out: Vec<String> = lines.iter().flat_map(|l| l.malicious.clone()).collect();
+    out.sort();
+    out.dedup();
+    out
+}
+
+/// The advisories every fixing release of these lines brings in, sorted and
+/// deduped; empty when any line has a target.
+pub fn introduced_by(lines: &[LineTarget]) -> Vec<String> {
+    if lines.iter().any(|l| l.target_version.is_some()) {
+        return Vec::new();
+    }
+    let mut out: Vec<String> = lines.iter().flat_map(|l| l.introduces.clone()).collect();
+    out.sort();
+    out.dedup();
+    out
+}
+
+/// npm (audit 6.2.5 D-4): the target of `line` may be called a clean fix as
+/// far as the dependencies it holds go (judged clean, or nothing to judge).
+pub fn held_clean(line: &LineTarget) -> bool {
+    line.held
+        .as_ref()
+        .is_none_or(fourda_depengine::held::HeldOutcome::is_clean)
+}
+
+/// What the held-dependency rule said about each line's target, one sentence
+/// per line that has something to say, each starting with a space:
+/// " express 4.16.4: 4.20.0 exact-pins qs 6.11.0 (GHSA-...); so 4.22.3, ...".
+/// Empty when no line has a note.
+pub fn held_sentences(package: &str, lines: &[LineTarget]) -> String {
+    lines
+        .iter()
+        .filter_map(|l| {
+            let note = fourda_depengine::held::held_note(l.held.as_ref()?);
+            (!note.is_empty()).then(|| format!(" {package} {}: {note}.", l.installed_version))
+        })
+        .collect()
 }
 
 /// Per-line targets for the version-confirmed copies of a package in
 /// `projects`, sorted by installed version. A copy in a project the caller
 /// does not speak for can neither set nor raise a target here (AD-044).
 pub fn line_targets(advisories: &[&MatchedAdvisory], projects: &[String]) -> Vec<LineTarget> {
-    struct Acc {
-        clean: Option<String>,
-        walked: Option<String>,
-        partial: Option<(Version, String)>,
-        sites: BTreeMap<String, InstallSite>,
-    }
-    let mut by_version: BTreeMap<String, Acc> = BTreeMap::new();
-    let instances = advisories
-        .iter()
-        .flat_map(|a| a.dependency_instances.iter())
-        .filter(|d| d.is_version_confirmed)
-        .filter(|d| projects.iter().any(|p| p == &d.project_path));
-    for d in instances {
-        let Some(installed) = d.installed_version.as_deref() else {
-            continue;
-        };
-        let acc = by_version
-            .entry(installed.to_string())
-            .or_insert_with(|| Acc {
-                clean: None,
-                walked: None,
-                partial: None,
-                sites: BTreeMap::new(),
-            });
-        if acc.clean.is_none() {
-            acc.clean.clone_from(&d.clean_version);
-        }
-        if acc.walked.is_none() {
-            acc.walked.clone_from(&d.target_version);
-        }
-        if let Some(fix) = d
-            .fixed_version
-            .as_deref()
-            .and_then(|f| parse_version(f).map(|parsed| (parsed, f.to_string())))
-        {
-            if acc.partial.as_ref().is_none_or(|(best, _)| fix.0 > *best) {
-                acc.partial = Some(fix);
-            }
-        }
-        acc.sites
-            .entry(d.project_path.clone())
-            .and_modify(|s| {
-                s.is_direct |= d.is_direct;
-                s.is_dev &= d.is_dev;
-            })
-            .or_insert_with(|| InstallSite {
-                project_path: d.project_path.clone(),
-                is_direct: d.is_direct,
-                is_dev: d.is_dev,
-            });
-    }
-
-    let mut lines: Vec<LineTarget> = by_version
-        .into_iter()
-        .map(|(installed, acc)| {
-            let clears_all_known = acc.clean.is_some();
-            // Clean; else where the walk landed (past every window that has
-            // a way out); else, when the walk could not run, the highest
-            // own-line fix.
-            let target_version = acc.clean.or(acc.walked).or(acc.partial.map(|(_, f)| f));
-            let upgrade_type = target_version
-                .as_deref()
-                .and_then(|t| upgrade_type(&installed, t));
-            LineTarget {
-                installed_version: installed,
-                target_version,
-                clears_all_known,
-                upgrade_type,
-                sites: acc.sites.into_values().collect(),
-            }
-        })
-        .collect();
-    lines.sort_by(|a, b| {
-        match (
-            parse_version(&a.installed_version),
-            parse_version(&b.installed_version),
-        ) {
-            (Some(va), Some(vb)) => va.cmp(&vb),
-            _ => a.installed_version.cmp(&b.installed_version),
-        }
-    });
-    lines
-}
-
-/// The distinct targets of `lines`, ascending — one entry means every copy
-/// the row names converges on the same version.
-pub fn distinct_targets(lines: &[LineTarget]) -> Vec<String> {
-    let mut targets: Vec<String> = lines
-        .iter()
-        .filter_map(|l| l.target_version.clone())
-        .collect();
-    targets.sort_by(|a, b| match (parse_version(a), parse_version(b)) {
-        (Some(va), Some(vb)) => va.cmp(&vb),
-        _ => a.cmp(b),
-    });
-    targets.dedup();
-    targets
-}
-
-/// "1.1.18 -> 1.1.21, 5.0.9 -> 5.0.12": the per-line upgrade, for text that
-/// must say where EACH copy goes. Lines without a target are left out.
-pub fn describe_lines(lines: &[LineTarget]) -> String {
-    lines
-        .iter()
-        .filter_map(|l| {
-            l.target_version.as_deref().map(|t| {
-                let major = if l.is_major() { " (major)" } else { "" };
-                format!("{} -> {t}{major}", l.installed_version)
-            })
-        })
-        .collect::<Vec<_>>()
-        .join(", ")
+    fourda_depengine::lines::line_targets(
+        advisories
+            .iter()
+            .flat_map(|a| a.dependency_instances.iter()),
+        projects,
+    )
 }
 
 #[cfg(test)]

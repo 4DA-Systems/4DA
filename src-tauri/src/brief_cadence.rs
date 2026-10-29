@@ -97,9 +97,80 @@ pub(crate) fn has_new_act_now(recorded: &[String], current: &[String]) -> bool {
     current.iter().any(|c| !known.contains(c.as_str()))
 }
 
+/// Briefs written per local day, by trigger. Launch gate G4 ("cap
+/// respected") reads the auto count against [`DAILY_AUTO_BRIEF_CAP`]: the
+/// `briefings` table cannot tell an auto brief from a manual Regenerate,
+/// which is the user's own and never counts toward the cap.
+pub(crate) const BRIEF_WRITES_KV_KEY: &str = "brief_writes_by_day_v1";
+const BRIEF_WRITES_RETENTION_DAYS: i64 = 60;
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub(crate) struct DayWrites {
+    #[serde(default)]
+    pub auto: u32,
+    #[serde(default)]
+    pub manual: u32,
+}
+
+/// Count one written brief for today (local).
+pub(crate) fn note_brief_written(db: &crate::db::Database, auto: bool) {
+    note_brief_written_on(db, &crate::brief_facts::local_today(), auto);
+}
+
+pub(crate) fn note_brief_written_on(db: &crate::db::Database, day: &str, auto: bool) {
+    let mut all = load_brief_writes(db);
+    let entry = all.entry(day.to_string()).or_default();
+    if auto {
+        entry.auto += 1;
+    } else {
+        entry.manual += 1;
+    }
+    let cutoff = (chrono::Local::now() - chrono::Duration::days(BRIEF_WRITES_RETENTION_DAYS))
+        .format("%Y-%m-%d")
+        .to_string();
+    all.retain(|d, _| d.as_str() >= cutoff.as_str() || d.as_str() == day);
+    match serde_json::to_string(&all) {
+        Ok(json) => {
+            if let Err(e) = db.set_kv(BRIEF_WRITES_KV_KEY, &json) {
+                tracing::warn!(target: "4da::briefing", error = %e, "brief write count not persisted");
+            }
+        }
+        Err(e) => {
+            tracing::warn!(target: "4da::briefing", error = %e, "brief write count not serialized");
+        }
+    }
+}
+
+pub(crate) fn load_brief_writes(
+    db: &crate::db::Database,
+) -> std::collections::BTreeMap<String, DayWrites> {
+    db.get_kv(BRIEF_WRITES_KV_KEY)
+        .ok()
+        .flatten()
+        .and_then(|s| serde_json::from_str(&s).ok())
+        .unwrap_or_default()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn brief_writes_are_counted_per_day_and_trigger() {
+        let db = crate::test_utils::test_db();
+        note_brief_written_on(&db, "2026-10-13", true);
+        note_brief_written_on(&db, "2026-10-13", true);
+        note_brief_written_on(&db, "2026-10-13", false);
+        note_brief_written_on(&db, "2026-10-14", true);
+        let all = load_brief_writes(&db);
+        assert_eq!(all["2026-10-13"], DayWrites { auto: 2, manual: 1 });
+        assert_eq!(all["2026-10-14"], DayWrites { auto: 1, manual: 0 });
+        let raw = db.get_kv(BRIEF_WRITES_KV_KEY).unwrap().unwrap();
+        assert!(
+            raw.contains("\"2026-10-13\":{\"auto\":2,\"manual\":1}"),
+            "{raw}"
+        );
+    }
 
     #[test]
     fn release_lines_follow_the_compatibility_unit() {

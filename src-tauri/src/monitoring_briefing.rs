@@ -67,6 +67,12 @@ pub struct DataFreshness {
     /// Source adapters that failed in the most recent recorded cycle.
     #[serde(default)]
     pub last_run_sources_failed: Option<u32>,
+    /// Source adapters the most recent recorded cycle did not fetch: disabled,
+    /// circuit open, or fetched within the last few minutes (cache fresh). A
+    /// cycle with 0 succeeded / 0 failed / N skipped is a healthy no-op, not a
+    /// dead engine.
+    #[serde(default)]
+    pub last_run_sources_skipped: Option<u32>,
     /// Minutes since the most recent recorded cycle completed. None with no receipt.
     #[serde(default)]
     pub last_run_age_minutes: Option<f64>,
@@ -164,10 +170,17 @@ pub(crate) fn compute_data_freshness_from_conn(conn: &rusqlite::Connection) -> D
         last_run_items_scored,
         last_run_sources_succeeded,
         last_run_sources_failed,
+        last_run_sources_skipped,
         last_run_age_minutes,
-    ): (Option<u32>, Option<u32>, Option<u32>, Option<f64>) = conn
+    ): (
+        Option<u32>,
+        Option<u32>,
+        Option<u32>,
+        Option<u32>,
+        Option<f64>,
+    ) = conn
         .query_row(
-            "SELECT items_scored, sources_succeeded, sources_failed,
+            "SELECT items_scored, sources_succeeded, sources_failed, sources_skipped,
                     (julianday('now') - julianday(completed_at)) * 24.0 * 60.0
              FROM engine_runs ORDER BY id DESC LIMIT 1",
             [],
@@ -176,11 +189,12 @@ pub(crate) fn compute_data_freshness_from_conn(conn: &rusqlite::Connection) -> D
                     Some(row.get::<_, i64>(0)?.max(0) as u32),
                     Some(row.get::<_, i64>(1)?.max(0) as u32),
                     Some(row.get::<_, i64>(2)?.max(0) as u32),
-                    row.get::<_, Option<f64>>(3)?.map(|m| m.max(0.0)),
+                    Some(row.get::<_, i64>(3)?.max(0) as u32),
+                    row.get::<_, Option<f64>>(4)?.map(|m| m.max(0.0)),
                 ))
             },
         )
-        .unwrap_or((None, None, None, None));
+        .unwrap_or((None, None, None, None, None));
 
     DataFreshness {
         newest_item_age_hours: newest_age,
@@ -199,6 +213,7 @@ pub(crate) fn compute_data_freshness_from_conn(conn: &rusqlite::Connection) -> D
         last_run_items_scored,
         last_run_sources_succeeded,
         last_run_sources_failed,
+        last_run_sources_skipped,
         last_run_age_minutes,
         computed_at: Some(chrono::Utc::now().to_rfc3339()),
     }

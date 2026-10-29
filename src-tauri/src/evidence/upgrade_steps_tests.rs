@@ -134,6 +134,18 @@ fn mixed_fixture() -> Database {
         "paste - no longer maintained",
         None,
     );
+    // The registry was read (D-4) and these releases hold nothing: their
+    // targets are clean as far as what they install goes.
+    crate::osv::release_facts::store_docs_for_tests(
+        &db,
+        &[
+            ("undici".to_string(), serde_json::json!({"versions": {}})),
+            (
+                "brace-expansion".to_string(),
+                serde_json::json!({"versions": {}}),
+            ),
+        ],
+    );
     db
 }
 
@@ -380,4 +392,30 @@ fn live_snapshot_work_order() {
         );
     }
     assert_eq!(plan.drops, 0);
+}
+
+/// Audit 6.2.5 D-4: a target the held-dependency rule could not call clean is
+/// never `clears_all_known` in the agent's work order, and says why.
+#[test]
+fn a_held_target_is_not_clears_all_known() {
+    use fourda_depengine::held::HeldOutcome;
+    let mut line = crate::osv::fix_target::LineTarget {
+        installed_version: "4.16.4".into(),
+        target_version: Some("4.20.0".into()),
+        clears_all_known: true,
+        upgrade_type: Some(UpgradeType::Minor),
+        sites: Vec::new(),
+        introduces: Vec::new(),
+        malicious: Vec::new(),
+        held: None,
+    };
+    assert!(super::step_line(&line).clears_all_known);
+    line.held = Some(HeldOutcome::Unchecked {
+        target: "4.20.0".into(),
+        reason: "offline".into(),
+    });
+    let step = super::step_line(&line);
+    assert!(!step.clears_all_known);
+    let json = serde_json::to_value(&step).unwrap_or_default();
+    assert_eq!(json["held"]["status"], "unchecked");
 }

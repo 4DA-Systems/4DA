@@ -10,6 +10,12 @@ import { PreemptionWorklist } from './PreemptionWorklist';
 
 vi.mock('../SignalUpgradeCTA', () => ({ SignalUpgradeCTA: () => <div /> }));
 
+const cmdMock = vi.fn((..._args: unknown[]) => Promise.resolve({}));
+vi.mock('../../lib/commands', () => ({
+  cmd: (...args: unknown[]) => cmdMock(...args),
+  CommandTimeoutError: class CommandTimeoutError extends Error {},
+}));
+
 let mockState: Record<string, unknown> = {};
 vi.mock('../../store', () => ({
   useAppStore: vi.fn((selector: (s: Record<string, unknown>) => unknown) => selector(mockState)),
@@ -20,7 +26,14 @@ const refreshPreemptionQuietly = vi.fn(() => Promise.resolve());
 const runAutoDiscovery = vi.fn(() => Promise.resolve());
 const loadUserContext = vi.fn(() => Promise.resolve());
 
-type Sync = { state: string; ecosystems: number; synced_at: string | null; error: string | null };
+type Sync = {
+  state: string; ecosystems: number; synced_at: string | null; error: string | null;
+  in_flight?: boolean; skipped_temp?: number;
+  not_covered?: { count: number; files: { path: string; ecosystem: string }[]; unreadable_count: number; unreadable: { path: string; reason: string }[] };
+};
+const NOT_COVERED = {
+  count: 1, files: [{ path: 'svc/Api.fsproj', ecosystem: 'NuGet' }], unreadable_count: 0, unreadable: [],
+};
 const READY: Sync = { state: 'ready', ecosystems: 2, synced_at: '2026-10-12 06:00:00', error: null };
 
 function setFeed(
@@ -85,6 +98,23 @@ describe('PreemptionWorklist — empty state', () => {
     render(<PreemptionWorklist />);
     expect(screen.getByText('preemption.empty.title')).toBeInTheDocument();
     expect(screen.queryByTestId('preemption-scan-prompt')).toBeNull();
+  });
+
+  // Audit E4 review: files 4DA cannot read stand beside the all-clear, so it
+  // claims only what was checked, and names the files.
+  it('with not-covered files, the all-clear is partial, never "your stack is clean"', () => {
+    setFeed(166, { ...READY, not_covered: NOT_COVERED });
+    render(<PreemptionWorklist />);
+    expect(screen.getByText('preemption.empty.partialTitle')).toBeInTheDocument();
+    expect(screen.queryByText('preemption.empty.title')).toBeNull();
+    expect(screen.getByTestId('preemption-not-covered')).toBeInTheDocument();
+  });
+
+  it('a .NET-only project is named as not covered, not "scan your projects"', () => {
+    setFeed(0, { state: 'no_inventory', ecosystems: 0, synced_at: null, error: null, not_covered: NOT_COVERED });
+    render(<PreemptionWorklist />);
+    expect(screen.queryByTestId('preemption-scan-prompt')).toBeNull();
+    expect(screen.getByTestId('preemption-not-covered')).toBeInTheDocument();
   });
 
   it('keeps the no-threats copy when the dependency count could not be read', () => {
@@ -154,6 +184,38 @@ describe('PreemptionWorklist — the all-clear follows advisory readiness', () =
     expect(screen.queryByText(CLEAN)).toBeNull();
   });
 
+  // Fresh-profile audit E2/E3: a profile showed "syncing the advisory
+  // database" for 8.5 h while no sync ran. Not started is its own state, and
+  // the user can start the check.
+  it('lockfiles read, no sync ever ran: says so and offers Check now', async () => {
+    setFeed(40, { state: 'not_started', ecosystems: 2, synced_at: null, error: null, in_flight: false });
+    render(<PreemptionWorklist />);
+    const notice = screen.getByTestId('preemption-advisories-not_started');
+    expect(notice).toHaveTextContent('preemption.advisories.notStarted.title');
+    expect(screen.queryByText(CLEAN)).toBeNull();
+    fireEvent.click(screen.getByTestId('preemption-advisories-check-now'));
+    expect(cmdMock).toHaveBeenCalledWith('osv_sync_now');
+    await waitFor(() => expect(refreshPreemptionQuietly).toHaveBeenCalled());
+  });
+
+  it('a failed or stale check can be re-run; a running one cannot be doubled', () => {
+    setFeed(40, { state: 'failed', ecosystems: 2, synced_at: null, error: 'npm: timeout', in_flight: false });
+    const { unmount } = render(<PreemptionWorklist />);
+    expect(screen.getByTestId('preemption-advisories-check-now')).not.toBeDisabled();
+    unmount();
+    setFeed(40, { ...READY, state: 'stale', in_flight: true });
+    render(<PreemptionWorklist />);
+    expect(screen.getByTestId('preemption-advisories-check-now')).toBeDisabled();
+  });
+
+  it('every project skipped as a temp copy: names that reason, not coverage', () => {
+    setFeed(12, { state: 'no_inventory', ecosystems: 0, synced_at: null, error: null, skipped_temp: 2 });
+    render(<PreemptionWorklist />);
+    const notice = screen.getByTestId('preemption-advisories-uncovered');
+    expect(notice).toHaveTextContent('preemption.advisories.tempSkipped.title');
+    expect(notice).not.toHaveTextContent('preemption.advisories.uncovered.title');
+  });
+
   it('synced with zero findings: the all-clear is allowed', () => {
     setFeed(40, READY);
     render(<PreemptionWorklist />);
@@ -206,7 +268,7 @@ describe('PreemptionWorklist — the all-clear follows advisory readiness', () =
     const feed = mockState.preemptionFeed as Record<string, unknown>;
     mockState.preemptionFeed = { ...feed, total: 1, high_count: 1, items: [finding()] };
     render(<PreemptionWorklist />);
-    expect(screen.getByText('preemption.alert')).toBeInTheDocument();
+    expect(screen.getByText('preemption.header.onList')).toBeInTheDocument();
     expect(screen.queryByTestId(/preemption-advisories-/)).toBeNull();
   });
 });

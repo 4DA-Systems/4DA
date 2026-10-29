@@ -746,6 +746,16 @@ impl ProjectScanner {
                 signal.dependencies.push(dep);
             }
         }
+        // Development declarations (PEP 735 groups, uv/PDM/Poetry dev
+        // tables) — dev only when not also a runtime requirement (A-4).
+        for dep in crate::ace::pyproject_dev::parse_pyproject_dev_dependencies(content) {
+            let runtime = signal.dependencies.iter().any(|d| {
+                crate::osv::matching::pep503_name(d) == crate::osv::matching::pep503_name(&dep)
+            });
+            if !runtime && !signal.dev_dependencies.contains(&dep) {
+                signal.dev_dependencies.push(dep);
+            }
+        }
 
         // Framework detection from PARSED dependency names only.
         // Only actual web frameworks — ML libraries, ORMs, and task queues
@@ -1206,640 +1216,50 @@ impl ProjectScanner {
     }
 
     // ========================================================================
-    // Lockfile Parsers — discover transitive (indirect) dependencies
+    // Lockfile parsers — the engine crate's (`fourda_depengine::lockfile`,
+    // single-engine C0.3), kept under their old names
     // ========================================================================
 
-    /// Parse a Cargo.lock file and return (package_name, version) pairs.
-    /// The root project package (matching the project_name from Cargo.toml) is excluded.
+    /// Every `(name, version)` a Cargo.lock lists, the project's own crates included.
     pub(crate) fn parse_cargo_lock(content: &str) -> Vec<(String, String)> {
-        let mut packages = Vec::new();
-        let mut current_name: Option<String> = None;
-        let mut current_version: Option<String> = None;
-
-        for line in content.lines() {
-            let trimmed = line.trim();
-            if trimmed == "[[package]]" {
-                // Flush previous package
-                if let (Some(name), Some(version)) = (current_name.take(), current_version.take()) {
-                    packages.push((name, version));
-                }
-            } else if let Some(rest) = trimmed.strip_prefix("name = ") {
-                current_name = Some(rest.trim_matches('"').to_string());
-            } else if let Some(rest) = trimmed.strip_prefix("version = ") {
-                current_version = Some(rest.trim_matches('"').to_string());
-            }
-        }
-        // Don't forget the last package
-        if let (Some(name), Some(version)) = (current_name, current_version) {
-            packages.push((name, version));
-        }
-
-        packages
+        fourda_depengine::lockfile::flat::cargo_lock(content)
     }
 
-    /// Parse a pnpm-lock.yaml (v5/v6/v9) and return (package_name, version) pairs.
-    /// Uses focused line-by-line parsing (no YAML crate needed) since the `packages:`
-    /// section has a predictable structure: top-level keys at 2-space indent.
-    ///
-    /// v5/v6 keys: `  /@scope/pkg/1.2.3:` or `  /pkg/1.2.3:`
-    /// v9 keys:    `  @scope/pkg@1.2.3:` or `  pkg@1.2.3:`
-    /// Some entries have a nested `version:` field instead of version-in-key.
-    ///
-    /// An entry that records its own `name:` (pnpm writes one when the key is
-    /// not `name@version`: a tarball URL, a git or directory source) is
-    /// identified by its `name:` / `version:` fields, never by its key — trpc's
-    /// `'@registry.npmjs.com/@prisma/client/-/client-4.7.1.tgz?id=…'` key was
-    /// read as a package name (conformance corpus, 2026-10-10). Such an entry
-    /// is a registry release only when it resolves to a registry tarball
-    /// (`…/<name>/-/<name>-<version>.tgz`); git, codeload and directory
-    /// sources are local code and are not returned.
+    /// The registry `(name, version)` identities of a pnpm-lock.yaml (v5/v6/v9).
+    #[cfg(test)]
     pub(crate) fn parse_pnpm_lock_yaml(content: &str) -> Vec<(String, String)> {
-        let mut packages = Vec::new();
-        let mut in_packages = false;
-        let mut entry: Option<PnpmEntry> = None;
-
-        for line in content.lines() {
-            if line.starts_with("packages:") {
-                in_packages = true;
-                continue;
-            }
-            if !in_packages {
-                continue;
-            }
-            // A new top-level key (no indent) ends the packages section
-            if !line.is_empty() && !line.starts_with(' ') && !line.starts_with('\t') {
-                break;
-            }
-
-            let trimmed = line.trim();
-
-            // Top-level package key: exactly 2 spaces (or 1 tab) of indentation + ends with ':'
-            let is_package_key = (line.starts_with("  ") && !line.starts_with("    "))
-                || (line.starts_with('\t') && !line.starts_with("\t\t"));
-
-            if is_package_key && trimmed.ends_with(':') {
-                packages.extend(entry.take().and_then(PnpmEntry::identity));
-                let key = trimmed.trim_end_matches(':');
-                // Strip optional YAML quoting
-                let key = key.trim_matches('\'').trim_matches('"');
-                entry = Some(PnpmEntry::new(key));
-            } else if let Some(current) = entry.as_mut() {
-                current.field_line(line, trimmed);
-            }
-        }
-        packages.extend(entry.take().and_then(PnpmEntry::identity));
-
-        packages
+        fourda_depengine::lockfile::flat::pnpm_lock_yaml(content)
     }
 
+    /// `packages` + `packages-dev` of a composer.lock.
+    #[cfg(test)]
     pub(crate) fn parse_composer_lock(content: &str) -> Vec<(String, String)> {
-        let parsed: serde_json::Value = match serde_json::from_str(content) {
-            Ok(v) => v,
-            Err(_) => return Vec::new(),
-        };
-
-        let mut packages = Vec::new();
-
-        for key in &["packages", "packages-dev"] {
-            if let Some(arr) = parsed.get(key).and_then(|v| v.as_array()) {
-                for entry in arr {
-                    let name = entry.get("name").and_then(|v| v.as_str());
-                    let version = entry.get("version").and_then(|v| v.as_str());
-                    if let (Some(n), Some(v)) = (name, version) {
-                        let v = v.strip_prefix('v').unwrap_or(v);
-                        if !n.is_empty() && !v.is_empty() {
-                            packages.push((n.to_string(), v.to_string()));
-                        }
-                    }
-                }
-            }
-        }
-
-        packages
+        fourda_depengine::lockfile::flat::composer_lock(content)
     }
 
-    // ========================================================================
-    // Edge parsers — capture parent->child graph (alongside flatten parsers)
-    // ========================================================================
-
-    /// Parse a Cargo.lock and return parent->child dependency edges.
-    /// Each `[[package]]` block carries `name`, `version`, and an optional
-    /// `dependencies = [ "dep", "dep 1.2.3", ... ]` array. We emit one edge per
-    /// child. Cargo.lock does not separate dev deps in its resolved graph, so all
-    /// edges are `Runtime`. Robust to malformed input — returns what it can.
+    /// Parent -> child edges of a Cargo.lock (all `Runtime`).
     pub(crate) fn parse_cargo_lock_edges(content: &str) -> Vec<DependencyEdge> {
-        let mut edges = Vec::new();
-        let mut name: Option<String> = None;
-        let mut version: Option<String> = None;
-        let mut in_deps = false;
-
-        // Flush the current package's dependency list as edges.
-        fn flush(
-            edges: &mut Vec<DependencyEdge>,
-            name: &Option<String>,
-            version: &Option<String>,
-            children: &[(String, Option<String>)],
-        ) {
-            if let Some(parent) = name {
-                for (child, child_version) in children {
-                    edges.push(DependencyEdge {
-                        parent: parent.clone(),
-                        parent_version: version.clone(),
-                        child: child.clone(),
-                        child_version: child_version.clone(),
-                        scope: EdgeScope::Runtime,
-                    });
-                }
-            }
-        }
-
-        let mut children: Vec<(String, Option<String>)> = Vec::new();
-
-        for line in content.lines() {
-            let trimmed = line.trim();
-
-            if trimmed == "[[package]]" {
-                flush(&mut edges, &name, &version, &children);
-                name = None;
-                version = None;
-                children.clear();
-                in_deps = false;
-                continue;
-            }
-
-            if in_deps {
-                // Inside a `dependencies = [` array until the closing `]`.
-                if trimmed.contains(']') {
-                    in_deps = false;
-                    // A single-line array may close on the same logical line; the
-                    // entries themselves are handled below for the multi-line form.
-                    let inner = trimmed.trim_end_matches(']');
-                    for part in inner.split(',') {
-                        let part = part.trim();
-                        if part.is_empty() || part == "[" {
-                            continue;
-                        }
-                        let (c, v) = split_cargo_dep_spec(part);
-                        if !c.is_empty() {
-                            children.push((c, v));
-                        }
-                    }
-                    continue;
-                }
-                let part = trimmed.trim_end_matches(',');
-                if !part.is_empty() {
-                    let (c, v) = split_cargo_dep_spec(part);
-                    if !c.is_empty() {
-                        children.push((c, v));
-                    }
-                }
-                continue;
-            }
-
-            if let Some(rest) = trimmed.strip_prefix("name = ") {
-                name = Some(rest.trim_matches('"').to_string());
-            } else if let Some(rest) = trimmed.strip_prefix("version = ") {
-                version = Some(rest.trim_matches('"').to_string());
-            } else if let Some(rest) = trimmed.strip_prefix("dependencies = ") {
-                let rest = rest.trim();
-                // Inline single-line array: dependencies = ["a", "b 1.0"]
-                if let Some(inner) = rest.strip_prefix('[') {
-                    if let Some(inner) = inner.strip_suffix(']') {
-                        for part in inner.split(',') {
-                            let part = part.trim();
-                            if part.is_empty() {
-                                continue;
-                            }
-                            let (c, v) = split_cargo_dep_spec(part);
-                            if !c.is_empty() {
-                                children.push((c, v));
-                            }
-                        }
-                    } else {
-                        // Multi-line array begins here.
-                        in_deps = true;
-                    }
-                }
-            }
-        }
-
-        flush(&mut edges, &name, &version, &children);
-        edges
+        fourda_depengine::lockfile::graph::cargo_lock_edges(content)
     }
 
-    /// Parse a package-lock.json (v2/v3 `packages` map, v1 `dependencies` tree)
-    /// and return parent->child edges. Root edges use the [`ROOT_PARENT`] sentinel.
-    /// `dependencies` keys are `Runtime`, `devDependencies` are `Dev`.
-    /// Robust to malformed input — returns an empty Vec on parse failure.
+    /// Parent -> child edges of a package-lock.json (v1 tree, v2/v3 map;
+    /// bundled copies get one edge from their owner).
+    #[cfg(test)]
     pub(crate) fn parse_package_lock_edges(content: &str) -> Vec<DependencyEdge> {
-        let Ok(lock) = serde_json::from_str::<serde_json::Value>(content) else {
-            return Vec::new();
-        };
-
-        let mut edges = Vec::new();
-
-        // v2/v3: a `packages` map keyed by node_modules path. "" is the root.
-        if let Some(pkgs) = lock.get("packages").and_then(|v| v.as_object()) {
-            for (key, value) in pkgs {
-                // Skip deeply nested node_modules — first-level edges only.
-                let name_part = key.strip_prefix("node_modules/").unwrap_or(key);
-                if name_part.contains("node_modules/") {
-                    continue;
-                }
-                let parent = if key.is_empty() {
-                    ROOT_PARENT.to_string()
-                } else {
-                    name_part.to_string()
-                };
-                let parent_version = value
-                    .get("version")
-                    .and_then(|v| v.as_str())
-                    .map(str::to_string);
-
-                for (section, scope) in [
-                    ("dependencies", EdgeScope::Runtime),
-                    ("devDependencies", EdgeScope::Dev),
-                    ("optionalDependencies", EdgeScope::Dev),
-                    ("peerDependencies", EdgeScope::Runtime),
-                ] {
-                    if let Some(deps) = value.get(section).and_then(|v| v.as_object()) {
-                        for (child, spec) in deps {
-                            edges.push(DependencyEdge {
-                                parent: parent.clone(),
-                                parent_version: parent_version.clone(),
-                                child: child.clone(),
-                                child_version: spec.as_str().map(str::to_string),
-                                scope,
-                            });
-                        }
-                    }
-                }
-            }
-            return edges;
-        }
-
-        // v1 fallback: a `dependencies` tree where each node may carry `requires`
-        // (its runtime children) and a `dev` flag. Emit root->dep edges and
-        // dep->requires edges.
-        if let Some(deps) = lock.get("dependencies").and_then(|v| v.as_object()) {
-            for (name, value) in deps {
-                let is_dev = value.get("dev").and_then(|v| v.as_bool()).unwrap_or(false);
-                let version = value
-                    .get("version")
-                    .and_then(|v| v.as_str())
-                    .map(str::to_string);
-                edges.push(DependencyEdge {
-                    parent: ROOT_PARENT.to_string(),
-                    parent_version: None,
-                    child: name.clone(),
-                    child_version: version.clone(),
-                    scope: if is_dev {
-                        EdgeScope::Dev
-                    } else {
-                        EdgeScope::Runtime
-                    },
-                });
-                if let Some(requires) = value.get("requires").and_then(|v| v.as_object()) {
-                    for (child, spec) in requires {
-                        edges.push(DependencyEdge {
-                            parent: name.clone(),
-                            parent_version: version.clone(),
-                            child: child.clone(),
-                            child_version: spec.as_str().map(str::to_string),
-                            scope: if is_dev {
-                                EdgeScope::Dev
-                            } else {
-                                EdgeScope::Runtime
-                            },
-                        });
-                    }
-                }
-            }
-        }
-
-        edges
+        fourda_depengine::lockfile::graph::package_lock_edges(content)
     }
 
-    /// Parse a pnpm-lock.yaml and return parent->child edges. An entry's nested
-    /// `dependencies:` sub-map yields `Runtime` children;
-    /// `devDependencies:`/`optionalDependencies:` yield `Dev` children.
-    ///
-    /// The child maps live in `packages:` for v5/v6 and in `snapshots:` for v9,
-    /// which moved every dependency map out of `packages:` (a v9 `packages:`
-    /// entry carries only resolution/engines metadata). Reading `packages:`
-    /// alone and stopping at the next top-level key found ZERO edges in every
-    /// v9 lockfile — live 2026-09-10, `paddle-webhook`, so `sandbox`, reached
-    /// only through `vercel`'s dev tree, could never be shown to be dev-only
-    /// (AD-046). Both sections are read now.
-    ///
-    /// Line-based on pnpm's fixed layout: entries at indent 2 (`key:`, or
-    /// `key: {}` for a v9 snapshot with no fields), an entry's fields at 4, a
-    /// child map's entries at 6. A scalar field that follows a child map
-    /// (`dev: false`, `optional: true`) ends the map — it is not an edge to a
-    /// package named `dev`. The raw child reference is kept as the best-effort
-    /// `child_version` hint (peer suffix included). Robust to malformed input.
+    /// Parent -> child edges of a pnpm-lock.yaml (`packages:` and v9 `snapshots:`).
+    #[cfg(test)]
     pub(crate) fn parse_pnpm_lock_edges(content: &str) -> Vec<DependencyEdge> {
-        let mut edges = Vec::new();
-        let mut in_graph = false;
-        let mut current_parent: Option<(String, Option<String>)> = None;
-        let mut current_scope: Option<EdgeScope> = None;
-
-        for line in content.lines() {
-            let trimmed = line.trim();
-            if trimmed.is_empty() {
-                continue;
-            }
-            match pnpm_indent(line) {
-                0 => {
-                    // A top-level key opens (or closes) a graph section.
-                    in_graph = matches!(trimmed, "packages:" | "snapshots:");
-                    current_parent = None;
-                    current_scope = None;
-                }
-                _ if !in_graph => {}
-                2 => {
-                    current_parent = pnpm_entry_key(trimmed);
-                    current_scope = None;
-                }
-                4 => {
-                    // Any field other than a dependency map ends the child map.
-                    current_scope = match trimmed {
-                        "dependencies:" => Some(EdgeScope::Runtime),
-                        "devDependencies:" | "optionalDependencies:" => Some(EdgeScope::Dev),
-                        _ => None,
-                    };
-                }
-                6 => {
-                    let (Some((parent, parent_version)), Some(scope)) =
-                        (current_parent.as_ref(), current_scope)
-                    else {
-                        continue;
-                    };
-                    let Some((child, spec)) = trimmed.split_once(':') else {
-                        continue;
-                    };
-                    let child = child.trim().trim_matches('\'').trim_matches('"');
-                    if child.is_empty() {
-                        continue;
-                    }
-                    let spec = spec.trim().trim_matches('\'').trim_matches('"');
-                    edges.push(DependencyEdge {
-                        parent: parent.clone(),
-                        parent_version: parent_version.clone(),
-                        child: child.to_string(),
-                        child_version: (!spec.is_empty()).then(|| spec.to_string()),
-                        scope,
-                    });
-                }
-                _ => {}
-            }
-        }
-
-        edges
+        fourda_depengine::lockfile::graph::pnpm_lock_edges(content)
     }
 }
 
-/// Leading indentation of a pnpm-lock line, a tab counting as two spaces.
-fn pnpm_indent(line: &str) -> usize {
-    line.chars()
-        .take_while(|c| *c == ' ' || *c == '\t')
-        .map(|c| if c == '\t' { 2 } else { 1 })
-        .sum()
-}
-
-/// A `packages:`/`snapshots:` entry line (`key:` or `key: {}`, optionally
-/// quoted) as `(name, version)`. A key the parser cannot split keeps its name
-/// with no version rather than being dropped.
-fn pnpm_entry_key(trimmed: &str) -> Option<(String, Option<String>)> {
-    let key = trimmed
-        .strip_suffix(": {}")
-        .or_else(|| trimmed.strip_suffix(':'))?;
-    let key = key.trim().trim_matches('\'').trim_matches('"');
-    let (name, version) = match parse_pnpm_package_key(key) {
-        Some((name, version)) => (name, Some(version)),
-        None => (key.trim_start_matches('/').to_string(), None),
-    };
-    (!name.is_empty()).then_some((name, version))
-}
-
-/// One `packages:` entry of a pnpm lockfile, as far as its identity goes.
-struct PnpmEntry {
-    key: String,
-    /// The entry's own `name:` field (written when the key is not `name@version`).
-    name: Option<String>,
-    version: Option<String>,
-    tarball: Option<String>,
-    /// A git or directory resolution (`commit:` / `repo:` / `directory:`).
-    local: bool,
-    in_resolution: bool,
-}
-
-impl PnpmEntry {
-    fn new(key: &str) -> Self {
-        Self {
-            key: key.to_string(),
-            name: None,
-            version: None,
-            tarball: None,
-            local: false,
-            in_resolution: false,
-        }
-    }
-
-    /// A line below the entry key: an entry field at 4 spaces (or 2 tabs),
-    /// or a continuation of a multi-line `resolution:` mapping.
-    fn field_line(&mut self, line: &str, trimmed: &str) {
-        let field_level = (line.starts_with("    ") && !line.starts_with("     "))
-            || (line.starts_with("\t\t") && !line.starts_with("\t\t\t"));
-        if !field_level {
-            if self.in_resolution {
-                self.resolution_text(trimmed);
-            }
-            return;
-        }
-        self.in_resolution = false;
-        if let Some(name) = yaml_scalar_field(trimmed, "name") {
-            self.name = Some(name);
-        } else if let Some(version) = yaml_scalar_field(trimmed, "version") {
-            self.version = Some(strip_pnpm_peer_suffix(&version).to_string());
-        } else if let Some(rest) = trimmed.strip_prefix("resolution:") {
-            self.in_resolution = true;
-            self.resolution_text(rest);
-        }
-    }
-
-    fn resolution_text(&mut self, text: &str) {
-        for part in text.split([',', '{', '}']) {
-            let part = part.trim();
-            if let Some(url) = part.strip_prefix("tarball:") {
-                self.tarball = Some(url.trim().trim_matches(['\'', '"']).to_string());
-            } else if ["commit:", "repo:", "directory:"]
-                .iter()
-                .any(|k| part.starts_with(k))
-            {
-                self.local = true;
-            }
-        }
-    }
-
-    /// The `(name, version)` this entry installs from a registry, if any.
-    fn identity(self) -> Option<(String, String)> {
-        if self.local {
-            return None;
-        }
-        if let Some(name) = self.name {
-            if self
-                .tarball
-                .as_deref()
-                .is_some_and(|t| !is_registry_tarball(t))
-            {
-                return None;
-            }
-            let version = self
-                .version
-                .or_else(|| parse_pnpm_package_key(&self.key).map(|(_, v)| v))?;
-            return (!name.is_empty() && !version.is_empty()).then_some((name, version));
-        }
-        if let Some(id) = parse_pnpm_package_key(&self.key) {
-            return Some(id);
-        }
-        let name = self.key.trim_start_matches('/');
-        let version = self.version?;
-        (!name.is_empty() && !version.is_empty()).then(|| (name.to_string(), version))
-    }
-}
-
-/// `key: value` (value unquoted) when the line is exactly that field.
-fn yaml_scalar_field(trimmed: &str, key: &str) -> Option<String> {
-    let value = trimmed.strip_prefix(key)?.strip_prefix(':')?.trim();
-    let value = value.trim_matches(['\'', '"']).trim();
-    (!value.is_empty()).then(|| value.to_string())
-}
-
-/// A registry tarball (`https://<registry>/<name>/-/<name>-<version>.tgz`,
-/// query allowed), as opposed to a codeload / git / arbitrary URL archive.
-fn is_registry_tarball(url: &str) -> bool {
-    let path = url.split(['?', '#']).next().unwrap_or(url);
-    path.contains("/-/")
-        && std::path::Path::new(path)
-            .extension()
-            .is_some_and(|ext| ext.eq_ignore_ascii_case("tgz"))
-}
-
-/// Parse pnpm package key formats:
-/// - v9: `@scope/pkg@1.2.3` or `pkg@1.2.3` (`snapshots:` keys add `(peer@x)`)
-/// - v6: `/@scope/pkg@1.2.3` or `/pkg@1.2.3`, peers as `(peer@x)`
-/// - v5: `/@scope/pkg/1.2.3` or `/pkg/1.2.3`, peers as `_peer@x`
-///
-/// The peer suffix is never part of the identity: `@hono/node-server@2.1.0(hono@4.13.5)`
-/// is `@hono/node-server` 2.1.0. Read with the old `rfind('@')` it was the package
-/// `@hono/node-server@2.1.0(hono`, version `4.13.5)` — and a v6 scoped key
-/// `/@babel/core@7.24.0` was the package `@babel`, version `core@7.24.0`.
-pub(crate) fn parse_pnpm_package_key(key: &str) -> Option<(String, String)> {
-    let key = strip_pnpm_peer_suffix(key);
-    match key.strip_prefix('/') {
-        Some(rest) => parse_pnpm_slash_key(rest),
-        None => split_pnpm_name_at_version(key),
-    }
-}
-
-/// Drop pnpm's peer-resolution suffix (`(react@18.2.0)`, v6/v9): everything
-/// from the first `(` on. v5's `_peer` form is handled where versions are read.
-pub(crate) fn strip_pnpm_peer_suffix(s: &str) -> &str {
-    s.split('(').next().unwrap_or(s).trim()
-}
-
-/// `name@version`, scope-aware (`@scope/name@1.0.0`): the LAST `@` past the
-/// scope marker separates the two.
-pub(crate) fn split_pnpm_name_at_version(s: &str) -> Option<(String, String)> {
-    let at = s.rfind('@').filter(|&p| p > 0)?;
-    let (name, version) = (&s[..at], &s[at + 1..]);
-    if name.is_empty() || version.is_empty() {
-        return None;
-    }
-    Some((name.to_string(), version.to_string()))
-}
-
-/// A v5/v6 key after its leading `/`: v5 puts the version after a `/` (with
-/// peers after `_`), v6 after an `@`. The scope segment belongs to the name in
-/// both.
-fn parse_pnpm_slash_key(rest: &str) -> Option<(String, String)> {
-    let (scope, body) = match rest.strip_prefix('@') {
-        Some(scoped) => {
-            let (scope, body) = scoped.split_once('/')?;
-            (Some(scope), body)
-        }
-        None => (None, rest),
-    };
-    let (name, version) = match body.split_once('/') {
-        Some((name, version)) => (name, version.split('_').next().unwrap_or(version)),
-        None => {
-            let at = body.rfind('@').filter(|&p| p > 0)?;
-            (&body[..at], &body[at + 1..])
-        }
-    };
-    if name.is_empty() || version.is_empty() {
-        return None;
-    }
-    let name = match scope {
-        Some(scope) => format!("@{scope}/{name}"),
-        None => name.to_string(),
-    };
-    Some((name, version.to_string()))
-}
-
-// ============================================================================
-// Dependency Edge Parsers — capture the parent->child graph (Step 1: reachability)
-// ============================================================================
-
-/// The dependency scope of an edge. Cargo.lock does not separate dev in its
-/// resolved graph (everything is `Runtime`); npm/pnpm distinguish dev/runtime.
-/// The `scope` column keeps its `DEFAULT 'unknown'` for rows written before the
-/// parsers emitted a scope — no Rust variant produces that string.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum EdgeScope {
-    Runtime,
-    Dev,
-}
-
-impl EdgeScope {
-    /// Canonical lowercase string stored in the `scope` column.
-    pub(crate) fn as_str(self) -> &'static str {
-        match self {
-            EdgeScope::Runtime => "runtime",
-            EdgeScope::Dev => "dev",
-        }
-    }
-}
-
-/// A single parent->child dependency edge extracted from a lockfile.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) struct DependencyEdge {
-    pub parent: String,
-    pub parent_version: Option<String>,
-    pub child: String,
-    pub child_version: Option<String>,
-    pub scope: EdgeScope,
-}
-
-/// Sentinel parent name for edges that originate from a lockfile's root project
-/// node (e.g. the `""` entry in package-lock v2/v3). Reachability treats this as
-/// a synthetic root so direct deps become BFS entry points.
-pub(crate) const ROOT_PARENT: &str = "__root__";
-
-/// Split a Cargo.lock `dependencies` array entry into (name, optional version).
-/// Entries look like `"serde"` or `"serde 1.0.0"` or `"serde 1.0.0 (registry+...)"`.
-fn split_cargo_dep_spec(spec: &str) -> (String, Option<String>) {
-    let spec = spec.trim().trim_matches('"').trim();
-    match spec.split_once(' ') {
-        Some((name, rest)) => {
-            // Version is the first whitespace-separated token after the name.
-            let version = rest.split_whitespace().next().map(str::to_string);
-            (name.to_string(), version)
-        }
-        None => (spec.to_string(), None),
-    }
-}
+// The edge type, its scope and the root sentinel moved with the parsers.
+pub(crate) use fourda_depengine::lockfile::graph::DependencyEdge;
+#[cfg(test)]
+pub(crate) use fourda_depengine::lockfile::graph::{EdgeScope, ROOT_PARENT};
 
 impl Default for ProjectScanner {
     fn default() -> Self {
@@ -2086,7 +1506,7 @@ fn extract_toml_value(content: &str, key: &str) -> Option<String> {
 
 /// Strip a PEP 508 requirement spec down to its package name:
 /// `"requests[security]>=2.31,<3 ; python_version >= '3.8'"` -> `requests`.
-fn pep508_package_name(spec: &str) -> Option<String> {
+pub(crate) fn pep508_package_name(spec: &str) -> Option<String> {
     let name = spec
         .split(&['=', '>', '<', '~', '!', '[', ';', '@', ' '][..])
         .next()
@@ -2208,7 +1628,7 @@ pub(crate) fn parse_pyproject_dependencies(content: &str) -> Vec<String> {
 /// (both `"basic"` and `'literal'` quoting). Escaped quotes inside basic
 /// strings are not modeled — PEP 508 specs don't contain them, and this is a
 /// dependency-name extractor, not a TOML validator.
-fn strip_toml_comment(line: &str) -> &str {
+pub(crate) fn strip_toml_comment(line: &str) -> &str {
     let mut in_double = false;
     let mut in_single = false;
     for (i, c) in line.char_indices() {
@@ -2225,7 +1645,7 @@ fn strip_toml_comment(line: &str) -> &str {
 /// True when a `]` appears on the line OUTSIDE string literals — i.e. the
 /// line actually closes a TOML array (a `]` inside a spec like
 /// `"uvicorn[standard]>=0.29"` or `'pydantic[email]'` does not count).
-fn closes_toml_array(line: &str) -> bool {
+pub(crate) fn closes_toml_array(line: &str) -> bool {
     let mut in_double = false;
     let mut in_single = false;
     for c in line.chars() {
@@ -2420,6 +1840,7 @@ pub(crate) fn detect_learning_directories(path: &Path) -> Vec<LearningSignal> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use fourda_depengine::lockfile::flat::parse_pnpm_package_key;
 
     /// `db_key()` must reproduce EXACTLY what the old writer stored, or every
     /// existing `project_dependencies` row stops matching and the fix silently
@@ -2548,6 +1969,148 @@ dependencies = ["once_cell", "log 0.4.20"]
         assert!(edges.iter().any(|e| e.parent == "left-pad"
             && e.child == "tiny-dep"
             && e.scope == EdgeScope::Runtime));
+    }
+
+    /// navcal's shape (audit A7, 2026-10-12): brace-expansion 2.0.2 is held by
+    /// a NESTED minimatch 9.0.5, which must be a parent like a hoisted one.
+    #[test]
+    fn package_lock_nested_packages_are_parents() {
+        let content = r#"{
+            "lockfileVersion": 3,
+            "packages": {
+                "": { "name": "app", "dependencies": { "glob": "^10.0.0", "minimatch": "^3.1.2" } },
+                "node_modules/minimatch": { "version": "3.1.2", "dependencies": { "brace-expansion": "^1.1.7" } },
+                "node_modules/brace-expansion": { "version": "1.1.12" },
+                "node_modules/glob": { "version": "10.4.5", "dependencies": { "minimatch": "^9.0.4" } },
+                "node_modules/glob/node_modules/minimatch": { "version": "9.0.5", "dependencies": { "brace-expansion": "^2.0.1" } },
+                "node_modules/glob/node_modules/brace-expansion": { "version": "2.0.2" },
+                "node_modules/@ts/est/node_modules/@scope/inner": { "version": "1.0.0", "dependencies": { "brace-expansion": "^2.0.1" } }
+            }
+        }"#;
+        let edges = ProjectScanner::parse_package_lock_edges(content);
+        let into_brace: Vec<(&str, Option<&str>, Option<&str>)> = edges
+            .iter()
+            .filter(|e| e.child == "brace-expansion")
+            .map(|e| {
+                (
+                    e.parent.as_str(),
+                    e.parent_version.as_deref(),
+                    e.child_version.as_deref(),
+                )
+            })
+            .collect();
+        // The first-level edge is unchanged.
+        assert!(into_brace.contains(&("minimatch", Some("3.1.2"), Some("^1.1.7"))));
+        // The nested parent is named by its own name and version.
+        assert!(into_brace.contains(&("minimatch", Some("9.0.5"), Some("^2.0.1"))));
+        // A scoped nested parent keeps its scope.
+        assert!(into_brace.contains(&("@scope/inner", Some("1.0.0"), Some("^2.0.1"))));
+        assert!(edges
+            .iter()
+            .any(|e| e.parent == "glob" && e.child == "minimatch"));
+        assert_eq!(edges.iter().filter(|e| e.parent == ROOT_PARENT).count(), 2);
+    }
+
+    /// NodeGoat's shape (audit E8): debug inside nyc's bundle (and two levels
+    /// down inside npm's) ships with its owner; `npm update debug` cannot move
+    /// it. One edge from the owner, pinned and marked bundled; the bundle's
+    /// inner packages declare none.
+    #[test]
+    fn package_lock_bundled_copies_hang_off_their_owner() {
+        let content = r#"{
+            "lockfileVersion": 2,
+            "packages": {
+                "": { "name": "app", "devDependencies": { "nyc": "^14.0.0", "npm": "^6.0.0" } },
+                "node_modules/nyc": { "version": "14.1.1", "dev": true, "bundleDependencies": ["babel-traverse", "debug"], "dependencies": { "babel-traverse": "^6.11.4", "debug": "^2.2.0" } },
+                "node_modules/nyc/node_modules/babel-traverse": { "version": "6.11.4", "dev": true, "inBundle": true, "dependencies": { "debug": "^2.2.0" } },
+                "node_modules/nyc/node_modules/debug": { "version": "2.2.0", "dev": true, "inBundle": true },
+                "node_modules/npm": { "version": "6.14.18", "dependencies": { "node-gyp": "^5.1.1", "semver": "^5.7.1" } },
+                "node_modules/npm/node_modules/semver": { "version": "5.7.1", "inBundle": true },
+                "node_modules/npm/node_modules/node-gyp/node_modules/array-index": { "version": "1.0.0", "inBundle": true, "dependencies": { "debug": "^2.2.0" } },
+                "node_modules/npm/node_modules/node-gyp/node_modules/array-index/node_modules/debug": { "version": "2.6.9", "inBundle": true }
+            }
+        }"#;
+        let edges = ProjectScanner::parse_package_lock_edges(content);
+        let mut into_debug: Vec<(&str, Option<&str>, Option<&str>, EdgeScope)> = edges
+            .iter()
+            .filter(|e| e.child == "debug")
+            .map(|e| {
+                (
+                    e.parent.as_str(),
+                    e.parent_version.as_deref(),
+                    e.child_version.as_deref(),
+                    e.scope,
+                )
+            })
+            .collect();
+        into_debug.sort_by_key(|e| e.0);
+        assert_eq!(
+            into_debug,
+            vec![
+                (
+                    "npm",
+                    Some("6.14.18"),
+                    Some("2.6.9 (bundled)"),
+                    EdgeScope::Runtime
+                ),
+                (
+                    "nyc",
+                    Some("14.1.1"),
+                    Some("2.2.0 (bundled)"),
+                    EdgeScope::Dev
+                ),
+            ]
+        );
+        // Bundled packages declare nothing: babel-traverse's `^2.2.0` would
+        // read as "a refresh is enough".
+        assert!(!edges.iter().any(|e| e.parent == "babel-traverse"));
+        assert!(!edges.iter().any(|e| e.parent == "array-index"));
+        // The owner itself is not bundled: an ordinary root edge.
+        assert!(edges
+            .iter()
+            .any(|e| e.parent == ROOT_PARENT && e.child == "nyc"));
+        // An owner DECLARES what it bundles (npm 3.10.10 declares all 82): its
+        // range must not become a second, refreshable edge to the same copy.
+        let into_semver: Vec<Option<&str>> = edges
+            .iter()
+            .filter(|e| e.child == "semver")
+            .map(|e| e.child_version.as_deref())
+            .collect();
+        assert_eq!(into_semver, vec![Some("5.7.1 (bundled)")]);
+        assert!(!edges
+            .iter()
+            .any(|e| e.parent == "nyc" && e.child_version.as_deref() == Some("^2.2.0")));
+    }
+
+    /// A project's OWN `bundleDependencies` also mark its top-level copies
+    /// `inBundle` (npm Arborist: the bundler can be the root). Those sit in the
+    /// user's tree, where `npm update` and overrides reach them: they keep
+    /// their ordinary edges and get no bundled marker.
+    #[test]
+    fn package_lock_root_bundles_keep_their_edges() {
+        let content = r#"{
+            "lockfileVersion": 3,
+            "packages": {
+                "": { "name": "app", "bundleDependencies": ["left-pad"], "dependencies": { "left-pad": "^1.3.0" } },
+                "node_modules/left-pad": { "version": "1.3.0", "inBundle": true, "dependencies": { "tiny-dep": "^2.0.0" } },
+                "node_modules/tiny-dep": { "version": "2.0.1", "inBundle": true },
+                "packages/web": { "name": "web", "bundleDependencies": ["kleur"], "dependencies": { "kleur": "^4.0.0" } },
+                "packages/web/node_modules/kleur": { "version": "4.1.5", "inBundle": true }
+            }
+        }"#;
+        let edges = ProjectScanner::parse_package_lock_edges(content);
+        let has = |parent: &str, child: &str, spec: &str| {
+            edges.iter().any(|e| {
+                e.parent == parent && e.child == child && e.child_version.as_deref() == Some(spec)
+            })
+        };
+        assert!(has(ROOT_PARENT, "left-pad", "^1.3.0"));
+        assert!(has("left-pad", "tiny-dep", "^2.0.0"));
+        assert!(has("packages/web", "kleur", "^4.0.0"));
+        assert!(!edges.iter().any(|e| e
+            .child_version
+            .as_deref()
+            .is_some_and(|v| v.ends_with("(bundled)"))));
     }
 
     #[test]

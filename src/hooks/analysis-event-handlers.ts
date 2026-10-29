@@ -3,6 +3,7 @@ import type { Event } from '@tauri-apps/api/event';
 import i18n from 'i18next';
 
 import type { SourceRelevance, AnalysisProgress } from '../types';
+import { isReadingRow } from '../components/signals/reading-feed';
 import { getSourceLabel } from '../config/sources';
 import { cmd } from '../lib/commands';
 import { useAppStore } from '../store';
@@ -88,8 +89,12 @@ export function handleAnalysisComplete(event: Event<SourceRelevance[]>): void {
   // toast firing seconds after an offline/source warning is a mixed signal
   // that reads as the product failing silently (F-3); the warnings already
   // told the real story, and the status line reflects the empty result.
-  if (results.length > 0) {
-    useAppStore.getState().addToast('success', i18n.t('analysis.complete', { count: relevantCount }));
+  // Counted over reading rows: registry releases and advisories are the
+  // "Your stack" lane's facts, never listed in the feed, and counting them
+  // announced "38 relevant items found" with every interest off (2026-10-27).
+  const readingRelevant = results.filter((r) => isReadingRow(r) && isSurfacedSignal(r)).length;
+  if (readingRelevant > 0) {
+    useAppStore.getState().addToast('success', i18n.t('analysis.complete', { count: readingRelevant }));
   }
 
   // Re-sync source health so the cold-start gate reflects the data THIS analysis
@@ -203,7 +208,8 @@ export function createBackgroundResultsHandler(
     const newItems = event.payload;
     if (newItems.length === 0) return;
     clearStaleAnalysisFailureToasts();
-    const relevantNew = newItems.filter(isSurfacedSignal).length;
+    // Reading rows only, like the analysis-complete toast above.
+    const relevantNew = newItems.filter((r) => isReadingRow(r) && isSurfacedSignal(r)).length;
     useAppStore.getState().setAppStateFull((s) => {
       const existingIds = new Set(newItems.map((n) => n.id));
       // Cross-cycle URL dedup (live audit 2026-08-31): the same story

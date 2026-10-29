@@ -10,6 +10,7 @@
 #   - github-actions (/)                — workflow action pins
 #   - cargo          (/src-tauri)       — Rust crates (Cargo.lock)
 #   - cargo          (/relay)           — Team Relay server (Cargo.lock)
+#   - cargo          (/crates/fourda-depengine) — pure engine crate (Cargo.lock)
 #   - npm            (/)                — root frontend (pnpm-lock.yaml)
 #   - npm            (/mcp-memory-server) — MCP memory server (package-lock.json)
 #   - npm            (/editors/vscode/4da) — VS Code extension (package-lock.json)
@@ -130,6 +131,42 @@ updates:
       prefix: "chore(relay)"
       include: "scope"
 
+  # ── Rust (pure dependency engine) ─────────────────────────────────
+  # crates/fourda-depengine has its own Cargo.lock for its standalone CI
+  # build and the wasm module (inside the app it resolves through
+  # /src-tauri's lockfile). Four direct deps (serde, serde_json, semver,
+  # regex), 16 packages shared with /src-tauri. This block and the
+  # /src-tauri one open SEPARATE PRs. The depengine CI job
+  # (scripts/check-lock-drift.cjs) lets either merge alone in the right
+  # order: a /src-tauri PR that moves a shared package to a new major.minor
+  # merges with a ::warning; a PR here that moves the crate PAST the app
+  # fails until the /src-tauri bump has landed, after which Dependabot's
+  # rebase of it passes. Patch-level differences are only noted.
+  - package-ecosystem: "cargo"
+    directory: "/crates/fourda-depengine"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "06:00"
+      timezone: "Etc/UTC"
+    open-pull-requests-limit: 5
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+    cooldown:
+      default-days: 3
+      semver-major-days: 7
+    labels:
+      - "dependencies"
+      - "rust"
+    assignees:
+      - "runyourempire"
+    reviewers:
+      - "runyourempire"
+    commit-message:
+      prefix: "chore(depengine)"
+      include: "scope"
+
   # ── Frontend (root pnpm workspace) ────────────────────────────────
   - package-ecosystem: "npm"
     directory: "/"
@@ -210,6 +247,13 @@ updates:
       time: "06:00"
       timezone: "Etc/UTC"
     open-pull-requests-limit: 5
+    # @types/vscode must match engines.vscode (the oldest VS Code the
+    # extension supports): vsce refuses to package when the types are newer,
+    # and newer types let code use APIs older editors lack. #838 bumped it to
+    # 1.140 and packaging failed from then on. Raise both together, by hand.
+    ignore:
+      - dependency-name: "@types/vscode"
+        update-types: ["version-update:semver-minor", "version-update:semver-major"]
     groups:
       minor-and-patch:
         update-types: ["minor", "patch"]

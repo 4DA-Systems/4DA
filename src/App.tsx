@@ -60,6 +60,10 @@ import { ENABLED_SOURCE_IDS, loadSourceMeta } from './config/sources';
 import { runWhenIdle } from './lib/defer';
 import { isSurfacedSignal } from './utils/score';
 import { useSignalDisplayOrder } from './components/signals/signal-display-order';
+import { isReadingRow } from './components/signals/reading-feed';
+import type { SourceRelevance } from './types';
+
+const NO_ROWS: SourceRelevance[] = [];
 
 function App() {
   const { t } = useTranslation();
@@ -80,17 +84,19 @@ function App() {
   const [newItemIds, setNewItemIds] = useState<Set<number>>(new Set());
   const newItemTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Data selectors (may change, use useShallow)
-  const { activeView, showOnlyRelevant, relevanceResults } = useAppStore(
+  const { activeView, showOnlyRelevant } = useAppStore(
     useShallow((s) => ({
       activeView: s.activeView,
       showOnlyRelevant: s.showOnlyRelevant,
-      relevanceResults: s.appState.relevanceResults,
     })),
   );
   // Keyboard shortcuts walk what the Signal list shows, in on-screen order
   // (lanes, filters, collapse state) — the highlighted row is the acted-on row.
+  // No list on screen (another view, or Signal with every interest off) means
+  // no rows: falling back to the raw results let j/k/s/d act on rows nobody
+  // could see.
   const displayedResults = useSignalDisplayOrder(s => s.visible);
-  const filteredResults = displayedResults ?? relevanceResults;
+  const filteredResults = displayedResults ?? NO_ROWS;
 
   // Action selectors (stable references, no need for useShallow)
   const setActiveView = useAppStore(s => s.setActiveView);
@@ -181,13 +187,18 @@ function App() {
 
   const summaryBadges = useMemo(() => {
     if (!state.analysisComplete || state.loading) return null;
+    // The reading feed's counts: registry releases and advisories are the
+    // "Your stack" lane's facts, never listed in the feed, so counting them
+    // put "25 to review · 53 relevant" over an empty list (live 2026-10-27).
+    const reading = state.relevanceResults.filter(isReadingRow);
+    if (reading.length === 0) return null;
     let relevantCount = 0, topCount = 0;
-    for (const r of state.relevanceResults) {
+    for (const r of reading) {
       // The one definition of "signal", shared with the Signal tab's card.
       if (isSurfacedSignal(r)) relevantCount++;
       if (r.top_score >= 0.6) topCount++;
     }
-    return { relevantCount, topCount, total: state.relevanceResults.length };
+    return { relevantCount, topCount, total: reading.length };
   }, [state.analysisComplete, state.loading, state.relevanceResults]);
 
   // AI Briefing (extracted hook)

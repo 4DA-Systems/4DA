@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //! OSV Advisory storage — CRUD operations for the local OSV mirror.
 
+use std::sync::Arc;
+
 use rusqlite::{params, Result as SqliteResult};
 
 use super::Database;
@@ -72,12 +74,65 @@ impl Database {
         aliases_json: Option<&str>,
         severity_label: Option<&str>,
     ) -> SqliteResult<()> {
+        self.upsert_osv_advisory_record(
+            advisory_id,
+            summary,
+            details,
+            package_name,
+            ecosystem,
+            affected_ranges,
+            fixed_versions,
+            severity_type,
+            cvss_score,
+            source_url,
+            published_at,
+            modified_at,
+            withdrawn_at,
+            aliases_json,
+            severity_label,
+            None,
+            None,
+        )
+    }
+
+    /// The sync's upsert: everything [`Self::upsert_osv_advisory_with_meta`]
+    /// stores plus the record's `database_specific.cwe_ids` (Phase 128) and
+    /// whether the row is a maintenance notice by the engine crate's
+    /// `osv::is_notice_for` (Phase 129), in the same statement. Like the
+    /// aliases, a later upsert without CWE ids keeps the stored ones; an
+    /// upsert with `informational: None` keeps the stored verdict, and the
+    /// sync always passes one, so a record that stops being a notice is
+    /// cleared. Stored as [`notice_column`] (Phase 130).
+    #[allow(clippy::too_many_arguments)]
+    pub fn upsert_osv_advisory_record(
+        &self,
+        advisory_id: &str,
+        summary: &str,
+        details: Option<&str>,
+        package_name: &str,
+        ecosystem: &str,
+        affected_ranges: Option<&str>,
+        fixed_versions: Option<&str>,
+        severity_type: Option<&str>,
+        cvss_score: Option<f64>,
+        source_url: Option<&str>,
+        published_at: Option<&str>,
+        modified_at: Option<&str>,
+        withdrawn_at: Option<&str>,
+        aliases_json: Option<&str>,
+        severity_label: Option<&str>,
+        cwe_ids_json: Option<&str>,
+        informational: Option<bool>,
+    ) -> SqliteResult<()> {
+        self.invalidate_alias_grades();
         let conn = self.conn.lock();
         conn.execute(
             "INSERT INTO osv_advisories (advisory_id, summary, details, package_name, ecosystem,
                 affected_ranges, fixed_versions, severity_type, cvss_score, source_url,
-                published_at, modified_at, withdrawn_at, aliases, severity_label, synced_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, datetime('now'))
+                published_at, modified_at, withdrawn_at, aliases, severity_label, cwe_ids,
+                informational, synced_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16,
+                COALESCE(?17, 0), datetime('now'))
              ON CONFLICT(advisory_id, package_name, ecosystem) DO UPDATE SET
                 summary = ?2,
                 details = COALESCE(?3, osv_advisories.details),
@@ -91,6 +146,8 @@ impl Database {
                 withdrawn_at = ?13,
                 aliases = COALESCE(?14, osv_advisories.aliases),
                 severity_label = COALESCE(?15, osv_advisories.severity_label),
+                cwe_ids = COALESCE(?16, osv_advisories.cwe_ids),
+                informational = COALESCE(?17, osv_advisories.informational),
                 synced_at = datetime('now')",
             params![
                 advisory_id,
@@ -108,8 +165,12 @@ impl Database {
                 withdrawn_at,
                 aliases_json,
                 severity_label,
+                cwe_ids_json,
+                informational.map(notice_column),
             ],
         )?;
+        drop(conn);
+        self.invalidate_alias_grades();
         Ok(())
     }
 
@@ -124,14 +185,14 @@ impl Database {
             "SELECT id, advisory_id, summary, details, package_name, ecosystem,
                     affected_ranges, fixed_versions, severity_type, cvss_score,
                     source_url, published_at, modified_at, withdrawn_at, synced_at,
-                    aliases, severity_label
+                    aliases, severity_label, cwe_ids, informational
              FROM osv_advisories
              WHERE package_name = ?1 AND ecosystem = ?2 AND withdrawn_at IS NULL
              ORDER BY cvss_score DESC NULLS LAST, published_at DESC",
         )?;
 
         let rows = stmt.query_map(params![package_name, ecosystem], map_advisory_row)?;
-        Ok(rows.filter_map(|r| r.ok()).collect())
+        Ok(settled(rows.filter_map(|r| r.ok()).collect()))
     }
 
     /// The active advisory carrying `advisory_id` — as its own id or as an
@@ -147,21 +208,12 @@ impl Database {
         &self,
         advisory_id: &str,
     ) -> SqliteResult<Option<StoredAdvisory>> {
-        let conn = self.conn.lock();
-        let mut stmt = conn.prepare(
-            "SELECT id, advisory_id, summary, details, package_name, ecosystem,
-                    affected_ranges, fixed_versions, severity_type, cvss_score,
-                    source_url, published_at, modified_at, withdrawn_at, synced_at,
-                    aliases, severity_label
-             FROM osv_advisories
-             WHERE withdrawn_at IS NULL
-               AND (advisory_id = ?1 COLLATE NOCASE
-                    OR aliases LIKE '%\"' || ?1 || '\"%')
-             ORDER BY (advisory_id LIKE 'GHSA-%') DESC, cvss_score DESC NULLS LAST
-             LIMIT 1",
-        )?;
-        let mut rows = stmt.query_map(params![advisory_id], map_advisory_row)?;
-        rows.next().transpose()
+        // The same rows and order as before (GHSA-led first), read whole so
+        // the alias-group notice rule sees the record's twins.
+        Ok(self
+            .get_osv_advisories_by_id(advisory_id)?
+            .into_iter()
+            .next())
     }
 
     /// EVERY active mirror row for an advisory id (aliases count) — one per
@@ -175,7 +227,7 @@ impl Database {
             "SELECT id, advisory_id, summary, details, package_name, ecosystem,
                     affected_ranges, fixed_versions, severity_type, cvss_score,
                     source_url, published_at, modified_at, withdrawn_at, synced_at,
-                    aliases, severity_label
+                    aliases, severity_label, cwe_ids, informational
              FROM osv_advisories
              WHERE withdrawn_at IS NULL
                AND (advisory_id = ?1 COLLATE NOCASE
@@ -183,7 +235,7 @@ impl Database {
              ORDER BY (advisory_id LIKE 'GHSA-%') DESC, cvss_score DESC NULLS LAST",
         )?;
         let rows = stmt.query_map(params![advisory_id], map_advisory_row)?;
-        rows.collect()
+        Ok(settled(rows.collect::<SqliteResult<Vec<_>>>()?))
     }
 
     /// Get all active (non-withdrawn) stored advisories.
@@ -193,14 +245,14 @@ impl Database {
             "SELECT id, advisory_id, summary, details, package_name, ecosystem,
                     affected_ranges, fixed_versions, severity_type, cvss_score,
                     source_url, published_at, modified_at, withdrawn_at, synced_at,
-                    aliases, severity_label
+                    aliases, severity_label, cwe_ids, informational
              FROM osv_advisories
              WHERE withdrawn_at IS NULL
              ORDER BY cvss_score DESC NULLS LAST, published_at DESC",
         )?;
 
         let rows = stmt.query_map([], map_advisory_row)?;
-        Ok(rows.filter_map(|r| r.ok()).collect())
+        Ok(settled(rows.filter_map(|r| r.ok()).collect()))
     }
 
     /// Get all stored advisories including withdrawn ones (for audit/diagnostics).
@@ -210,7 +262,7 @@ impl Database {
             "SELECT id, advisory_id, summary, details, package_name, ecosystem,
                     affected_ranges, fixed_versions, severity_type, cvss_score,
                     source_url, published_at, modified_at, withdrawn_at, synced_at,
-                    aliases, severity_label
+                    aliases, severity_label, cwe_ids, informational
              FROM osv_advisories
              ORDER BY cvss_score DESC NULLS LAST, published_at DESC",
         )?;
@@ -278,11 +330,14 @@ impl Database {
         ecosystem: &str,
         before_synced_at: &str,
     ) -> SqliteResult<usize> {
+        self.invalidate_alias_grades();
         let conn = self.conn.lock();
         let count = conn.execute(
             "DELETE FROM osv_advisories WHERE ecosystem = ?1 AND synced_at < ?2",
             params![ecosystem, before_synced_at],
         )?;
+        drop(conn);
+        self.invalidate_alias_grades();
         Ok(count)
     }
 
@@ -300,11 +355,42 @@ impl Database {
         if keep_ecosystems.is_empty() {
             return Ok(0);
         }
+        self.invalidate_alias_grades();
         let conn = self.conn.lock();
         let placeholders = vec!["?"; keep_ecosystems.len()].join(",");
         let sql = format!("DELETE FROM osv_advisories WHERE ecosystem NOT IN ({placeholders})");
         let count = conn.execute(&sql, rusqlite::params_from_iter(keep_ecosystems.iter()))?;
+        drop(conn);
+        self.invalidate_alias_grades();
         Ok(count)
+    }
+
+    /// The mirror's GHSA grades for the alias rule (`osv::severity`): ONE
+    /// query the first time, then the kept copy until the mirror is written.
+    /// The scorer grades every advisory item from it without a lookup per item.
+    pub(crate) fn alias_grades(&self) -> Arc<crate::osv::severity::AliasGrades> {
+        let generation = {
+            let kept = self.alias_grades.lock();
+            if let Some(grades) = &kept.1 {
+                return Arc::clone(grades);
+            }
+            kept.0
+        };
+        let loaded = Arc::new(crate::osv::severity::AliasGrades::load(&self.conn.lock()));
+        let mut kept = self.alias_grades.lock();
+        // A write since the read began: hand this copy out, but do not keep it.
+        if kept.0 == generation {
+            kept.1 = Some(Arc::clone(&loaded));
+        }
+        loaded
+    }
+
+    /// Drop the kept grades: every write to `osv_advisories` goes through
+    /// here, before and after the statement runs.
+    fn invalidate_alias_grades(&self) {
+        let mut kept = self.alias_grades.lock();
+        kept.0 = kept.0.wrapping_add(1);
+        kept.1 = None;
     }
 }
 
@@ -334,7 +420,41 @@ fn map_advisory_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<StoredAdvisory>
             .and_then(|s| serde_json::from_str::<Vec<String>>(&s).ok())
             .unwrap_or_default(),
         severity_label: row.get(16)?,
+        cwe_ids: row
+            .get::<_, Option<String>>(17)?
+            .and_then(|s| serde_json::from_str::<Vec<String>>(&s).ok())
+            .unwrap_or_default(),
+        informational: notice_from_column(row.get(18)?),
     })
+}
+
+/// Rows as every surface reads them: the alias-group notice rule
+/// (`osv::severity::settle_group_notices`) applied.
+fn settled(mut rows: Vec<StoredAdvisory>) -> Vec<StoredAdvisory> {
+    crate::osv::severity::settle_group_notices(&mut rows);
+    rows
+}
+
+/// `osv_advisories.informational` (Phase 130) for the sync's notice verdict
+/// (the engine crate's `osv::is_notice_for`): 1 a notice, 2 not one. 0, the
+/// column default, means no verdict was stored.
+pub(crate) fn notice_column(notice: bool) -> i64 {
+    if notice {
+        1
+    } else {
+        2
+    }
+}
+
+/// The stored verdict, `None` for a row written before Phase 130 stored one
+/// (0, or NULL from an older select): `osv::severity::is_notice` then lets the
+/// summary decide, as Phase 129 did.
+pub(crate) fn notice_from_column(value: Option<i64>) -> Option<bool> {
+    match value {
+        Some(1) => Some(true),
+        Some(2) => Some(false),
+        _ => None,
+    }
 }
 
 // ============================================================================

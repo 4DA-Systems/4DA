@@ -2,6 +2,8 @@
 // Stack-specific celebration insights utility
 // Extracted from FirstRunTransition for modularity
 
+import type { AdvisorySync } from '../../../src-tauri/bindings/bindings/AdvisorySync';
+
 export interface ScanSummary {
   projects_scanned: number;
   total_dependencies: number;
@@ -11,6 +13,8 @@ export interface ScanSummary {
   primary_stack: string;
   key_packages: string[];
   has_data: boolean;
+  /** Where the vulnerability check of these dependencies stands (newer backends). */
+  advisory_sync?: AdvisorySync | null;
 }
 
 export type Phase = 'preparing' | 'intelligence' | 'fetching' | 'analyzing' | 'celebrating' | 'fading';

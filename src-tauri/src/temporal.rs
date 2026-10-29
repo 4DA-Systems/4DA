@@ -331,7 +331,67 @@ pub fn get_all_dependencies(conn: &rusqlite::Connection) -> Result<Vec<ProjectDe
 /// for the grounding set.
 pub fn get_inventory_dependencies(conn: &rusqlite::Connection) -> Result<Vec<ProjectDependency>> {
     let active_roots = active_repo_roots(conn);
+    let all_deps = included_dependencies_resolved(conn, &active_roots)?;
 
+    // Filter to deps from active project trees only
+    if active_roots.is_empty() {
+        // No git signals yet — return all included deps (first run fallback).
+        // Genuinely unscoped, so it degrades loudly like every other widening.
+        DEP_SCOPE_DEGRADED.store(true, std::sync::atomic::Ordering::Relaxed);
+        return Ok(all_deps);
+    }
+
+    let filtered: Vec<ProjectDependency> = all_deps
+        .iter()
+        .filter(|dep| dep_within_active_root(&dep.project_path, &active_roots))
+        .cloned()
+        .collect();
+
+    if !filtered.is_empty() {
+        DEP_SCOPE_DEGRADED.store(false, std::sync::atomic::Ordering::Relaxed);
+        return Ok(filtered);
+    }
+
+    // Nothing matched. Every dependency-bearing project is either gone or has
+    // had no commit in 60 days. Widening to EVERYTHING was the old behaviour
+    // and is exactly what let a dormant project's deps score at full weight;
+    // widen instead to the highest-relevance projects present (ACE's scan-time
+    // path/git score), and say so at ERROR.
+    let max_relevance = all_deps
+        .iter()
+        .map(|d| d.project_relevance)
+        .fold(f32::MIN, f32::max);
+    let primary: Vec<ProjectDependency> = all_deps
+        .iter()
+        .filter(|d| (d.project_relevance - max_relevance).abs() < f32::EPSILON)
+        .cloned()
+        .collect();
+
+    DEP_SCOPE_DEGRADED.store(true, std::sync::atomic::Ordering::Relaxed);
+    tracing::error!(
+        target: "4da::scoring",
+        active_roots = active_roots.len(),
+        total_deps = all_deps.len(),
+        fallback_deps = primary.len(),
+        max_relevance,
+        "dependency scope filter matched NOTHING — falling back to the highest-relevance projects; every breakdown scored under this run carries dep_scope_degraded"
+    );
+
+    if primary.is_empty() {
+        return Ok(all_deps);
+    }
+    Ok(primary)
+}
+
+/// Every dependency row of every project the user has not excluded, with
+/// its INSTALLED version resolved from the lockfile layer (same project and
+/// ecosystem family in SQL, then the same active repo root), but NOT scoped
+/// to active roots. Shared by [`get_inventory_dependencies`] and the
+/// Preemption Tier 2 grounding set, which admits dormant projects.
+pub(crate) fn included_dependencies_resolved(
+    conn: &rusqlite::Connection,
+    active_roots: &[String],
+) -> Result<Vec<ProjectDependency>> {
     // The manifest parsers extract dependency NAMES only — a manifest
     // carries a RANGE ("^2.0.0"), not an installed version — so
     // `project_dependencies.version` has been NULL for every row since
@@ -393,56 +453,8 @@ pub fn get_inventory_dependencies(conn: &rusqlite::Connection) -> Result<Vec<Pro
             )
         })
         .collect();
-    resolve_versions_within_roots(conn, &mut all_deps, &active_roots);
-
-    // Filter to deps from active project trees only
-    if active_roots.is_empty() {
-        // No git signals yet — return all included deps (first run fallback).
-        // Genuinely unscoped, so it degrades loudly like every other widening.
-        DEP_SCOPE_DEGRADED.store(true, std::sync::atomic::Ordering::Relaxed);
-        return Ok(all_deps);
-    }
-
-    let filtered: Vec<ProjectDependency> = all_deps
-        .iter()
-        .filter(|dep| dep_within_active_root(&dep.project_path, &active_roots))
-        .cloned()
-        .collect();
-
-    if !filtered.is_empty() {
-        DEP_SCOPE_DEGRADED.store(false, std::sync::atomic::Ordering::Relaxed);
-        return Ok(filtered);
-    }
-
-    // Nothing matched. Every dependency-bearing project is either gone or has
-    // had no commit in 60 days. Widening to EVERYTHING was the old behaviour
-    // and is exactly what let a dormant project's deps score at full weight;
-    // widen instead to the highest-relevance projects present (ACE's scan-time
-    // path/git score), and say so at ERROR.
-    let max_relevance = all_deps
-        .iter()
-        .map(|d| d.project_relevance)
-        .fold(f32::MIN, f32::max);
-    let primary: Vec<ProjectDependency> = all_deps
-        .iter()
-        .filter(|d| (d.project_relevance - max_relevance).abs() < f32::EPSILON)
-        .cloned()
-        .collect();
-
-    DEP_SCOPE_DEGRADED.store(true, std::sync::atomic::Ordering::Relaxed);
-    tracing::error!(
-        target: "4da::scoring",
-        active_roots = active_roots.len(),
-        total_deps = all_deps.len(),
-        fallback_deps = primary.len(),
-        max_relevance,
-        "dependency scope filter matched NOTHING — falling back to the highest-relevance projects; every breakdown scored under this run carries dep_scope_degraded"
-    );
-
-    if primary.is_empty() {
-        return Ok(all_deps);
-    }
-    Ok(primary)
+    resolve_versions_within_roots(conn, &mut all_deps, active_roots);
+    Ok(all_deps)
 }
 
 /// Repo roots with a commit in the last 60 days — the scope every
@@ -570,6 +582,12 @@ fn resolve_versions_within_roots(
             .map(|(_, _, version)| version);
     }
 }
+
+// The bounded "installed versions near a project" lookup shared by the
+// scorer and Preemption Tier 2 (audit E4 review).
+#[path = "temporal_versions.rs"]
+mod versions;
+pub(crate) use versions::installed_versions_nearby;
 
 /// Do two project paths sit under one common active repo root?
 fn shares_active_root(a: &str, b: &str, active_roots: &[String]) -> bool {

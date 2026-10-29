@@ -131,6 +131,46 @@ fn to_query_item(position: usize, r: HybridSearchResult) -> QueryResultItem {
         timestamp: r.created_at,
         match_reason,
         exact_match: r.exact_title,
+        affects_package: r.query_package,
+        foreign_ecosystem: r.foreign_ecosystem,
+    }
+}
+
+/// Lowest displayed relevance of an advisory for a package the query named.
+const PACKAGE_BAND_FLOOR: f64 = 0.90;
+/// Ceiling for every other non-exact result while such an advisory is present.
+const BELOW_PACKAGE_BAND: f64 = 0.899;
+/// Factor applied to an advisory for an ecosystem the user has no dependencies in.
+const FOREIGN_ECOSYSTEM_FACTOR: f64 = 0.5;
+
+/// Rank by what the query named (audit L8).
+///
+/// When the query names an installed package, its own advisories are the answer:
+/// they move into a band above every other non-exact result, keeping their
+/// semantic order inside it, and advisories that only mention the package (or
+/// rode a stack boost) sit below. Advisories for ecosystems the user has no
+/// dependencies in are halved. Runs after the stack boost, before sorting.
+/// Exact-title matches are untouched, and a query that names no installed
+/// package carries no marks, so this is a no-op for topic queries.
+pub(crate) fn rank_named_packages(items: &mut [QueryResultItem]) {
+    let any_package = items
+        .iter()
+        .any(|i| !i.exact_match && i.affects_package.is_some());
+    for item in items.iter_mut().filter(|i| !i.exact_match) {
+        if let Some(pkg) = &item.affects_package {
+            let within = item.relevance.clamp(0.0, 1.0);
+            item.relevance =
+                (PACKAGE_BAND_FLOOR + 0.09 * within).min(super::NON_EXACT_RELEVANCE_CAP);
+            item.match_reason = format!("advisory for {pkg} + {}", item.match_reason);
+            continue;
+        }
+        if item.foreign_ecosystem {
+            item.relevance *= FOREIGN_ECOSYSTEM_FACTOR;
+            item.match_reason = format!("{} (ecosystem not in your projects)", item.match_reason);
+        }
+        if any_package {
+            item.relevance = item.relevance.min(BELOW_PACKAGE_BAND);
+        }
     }
 }
 

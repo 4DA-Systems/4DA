@@ -1,5 +1,9 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
+//! The file-system half: finding the lockfile and the workspace manifest.
+//! The rules over lockfile text are tested in the engine crate
+//! (`crates/fourda-depengine/src/lockfile/cargo_facts_tests.rs`).
 use super::*;
+use crate::ace::scanner::ProjectScanner;
 
 /// The live shape: a workspace whose members (`acme-core`, `acme-cli`) carry
 /// no `source`, next to registry crates. `acme-plugin` also resolves from the
@@ -64,36 +68,6 @@ name = "fastrand"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 "#;
-
-#[test]
-fn packages_without_a_source_are_the_projects_own() {
-    let local = local_packages(WORKSPACE_LOCK);
-    assert!(local.contains(&("acme-core".to_string(), "0.8.8".to_string())));
-    assert!(local.contains(&("acme-cli".to_string(), "0.8.8".to_string())));
-    assert!(local.contains(&("acme-plugin".to_string(), "0.8.8".to_string())));
-    assert!(!local.iter().any(|(n, _)| n == "serde" || n == "clap"));
-}
-
-#[test]
-fn a_name_that_also_resolves_from_a_registry_is_not_local_only() {
-    let names = local_only_names(WORKSPACE_LOCK);
-    assert!(names.contains("acme-core"));
-    assert!(names.contains("acme-cli"));
-    assert!(
-        !names.contains("acme-plugin"),
-        "a registry copy exists, so a manifest naming it may mean the published crate"
-    );
-}
-
-#[test]
-fn crate_names_compare_with_hyphen_and_underscore_as_one() {
-    assert_eq!(norm_crate_name("ed25519_dalek"), "ed25519-dalek");
-    assert_eq!(norm_crate_name("Tower_HTTP"), "tower-http");
-    assert_eq!(
-        norm_crate_name("proc-macro2"),
-        norm_crate_name("proc_macro2")
-    );
-}
 
 #[test]
 fn workspace_inherited_path_dependency_is_dropped_from_a_member_manifest() {
@@ -162,56 +136,4 @@ fn the_lockfile_search_stops_at_the_repository_root() {
         None,
         "a lockfile outside the repository belongs to another project"
     );
-}
-
-#[test]
-fn a_dev_dependency_and_what_only_it_pulls_in_are_dev() {
-    let scope = CargoDevScope::new(
-        WORKSPACE_LOCK,
-        &["clap".to_string(), "serde".to_string()],
-        &["tempfile".to_string()],
-    );
-    assert!(scope.is_dev_only("tempfile"));
-    assert!(
-        scope.is_dev_only("fastrand"),
-        "reached only through tempfile"
-    );
-    assert_eq!(scope.label("fastrand"), "dev");
-    assert!(!scope.is_dev_only("clap"));
-    assert!(!scope.is_dev_only("clap_lex"));
-    assert_eq!(
-        scope.label("clap-lex"),
-        "runtime",
-        "underscore and hyphen agree"
-    );
-    assert_eq!(scope.label("acme-plugin"), "unknown");
-    assert!(!scope.is_dev_only("acme-plugin"), "unknown is never dev");
-}
-
-#[test]
-fn a_crate_both_dev_and_runtime_reachable_is_runtime() {
-    // tempfile declared dev, but clap (runtime) also depends on it here.
-    let lock = WORKSPACE_LOCK.replace(" \"clap_lex\",\n", " \"clap_lex\",\n \"tempfile\",\n");
-    let scope = CargoDevScope::new(&lock, &["clap".to_string()], &["tempfile".to_string()]);
-    assert!(!scope.is_dev_only("tempfile"));
-    assert!(!scope.is_dev_only("fastrand"));
-}
-
-#[test]
-fn edges_out_of_a_workspace_member_are_not_followed() {
-    // acme-cli's lock entry lists tempfile (its dev-dependency); a runtime root
-    // on the member must not make tempfile runtime.
-    let scope = CargoDevScope::new(
-        WORKSPACE_LOCK,
-        &["acme-cli".to_string()],
-        &["tempfile".to_string()],
-    );
-    assert!(scope.is_dev_only("tempfile"));
-}
-
-#[test]
-fn garbage_lockfiles_yield_nothing() {
-    assert!(parse_lock_packages("").is_empty());
-    assert!(parse_lock_packages("[[package]]\nname = \"x\"\n").is_empty());
-    assert!(local_only_names("not a lockfile").is_empty());
 }

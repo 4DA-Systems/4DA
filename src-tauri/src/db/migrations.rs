@@ -1488,7 +1488,7 @@ impl Database {
             .query_row("SELECT version FROM schema_version", [], |row| row.get(0))
             .unwrap_or(1);
 
-        const TARGET_VERSION: i64 = 127;
+        const TARGET_VERSION: i64 = 130;
 
         // Downgrade detection: if DB schema is newer than this binary expects,
         // show a clear error instead of silently corrupting the schema.
@@ -5914,12 +5914,114 @@ impl Database {
                 )?;
             }
 
+            // Phase 128 (review of #981, parity decision 1): an advisory's
+            // CWE ids, so a GitHub malware advisory with no `MAL-` alias
+            // (crossenv GHSA-c2m4-w5hm-vqjw: CWE-506 only) reads as malware
+            // (`fourda_depengine::is_malware`). The column fills on the next
+            // sync; every ecosystem's sync is made due now, so rows stored
+            // before it do not stay NULL until a 6-hour window passes.
+            if current_version < 128 {
+                Self::run_versioned_migration(
+                    &conn,
+                    127,
+                    128,
+                    "Phase 128: osv_advisories.cwe_ids; mirror re-sync due",
+                    |c| {
+                        Self::add_column_if_missing(c, "osv_advisories", "cwe_ids", "TEXT")?;
+                        let due = Self::make_osv_sync_due(c)?;
+                        info!(
+                            target: "4da::db",
+                            due,
+                            "Phase 128: cwe_ids added; every advisory ecosystem re-syncs next cycle"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
+            // Phase 129 (parity with @4da/mcp-server): whether a row is a
+            // maintenance notice by OSV's own flag. RustSec keeps
+            // `database_specific.informational` per affected entry, never at
+            // the record level, so a notice whose summary lacks the word
+            // ("`tempdir` crate has been deprecated", RUSTSEC-2018-0017) read
+            // as a vulnerability. The column is the engine crate's
+            // `osv::is_notice_for`, written by the sync; like Phase 128 every
+            // ecosystem's sync is made due, so existing rows fill next cycle.
+            if current_version < 129 {
+                Self::run_versioned_migration(
+                    &conn,
+                    128,
+                    129,
+                    "Phase 129: osv_advisories.informational; mirror re-sync due",
+                    |c| {
+                        Self::add_column_if_missing(
+                            c,
+                            "osv_advisories",
+                            "informational",
+                            "INTEGER NOT NULL DEFAULT 0",
+                        )?;
+                        let due = Self::make_osv_sync_due(c)?;
+                        info!(
+                            target: "4da::db",
+                            due,
+                            "Phase 129: informational added; every advisory ecosystem re-syncs next cycle"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
+            // Phase 130 (the 6.2.5 audit, F-7): a class OSV states beats the
+            // summary's wording. RUSTSEC-2025-0068 (serde_yml) states
+            // `unsound` and its summary says "unsound and unmaintained", so
+            // Phase 129's rule stored it as a notice and it was never counted.
+            // `osv_advisories.informational` now holds the sync's verdict as
+            // 1 (notice) or 2 (not a notice); 0 is "no verdict stored" and the
+            // summary decides (`db::osv_advisories::notice_from_column`). A
+            // row cannot be re-judged without its record, so, like Phases 128
+            // and 129, every ecosystem's sync is made due and rewrites every
+            // row's verdict next cycle. Until then a 0 row reads exactly as
+            // under Phase 129 and a 1 row stays a notice.
+            if current_version < 130 {
+                Self::run_versioned_migration(
+                    &conn,
+                    129,
+                    130,
+                    "Phase 130: notice verdict beats wording; mirror re-sync due",
+                    |c| {
+                        let due = Self::make_osv_sync_due(c)?;
+                        info!(
+                            target: "4da::db",
+                            due,
+                            "Phase 130: every advisory ecosystem re-syncs next cycle to store the notice verdict"
+                        );
+                        Ok(())
+                    },
+                )?;
+            }
+
             info!(target: "4da::db", "Database schema initialized with sqlite-vec");
             return Ok(());
         }
 
         info!(target: "4da::db", "Database schema initialized with sqlite-vec");
         Ok(())
+    }
+
+    /// Phase 128: make every ecosystem's advisory sync due on the next cycle,
+    /// so the mirror is re-upserted with the new column. `osv::sync::needs_sync`
+    /// is due once `last_synced_at` is the max age old, so the status is set
+    /// back by exactly that: due now, and every surface that shows the last
+    /// sync still shows a plausible time (not 1970). Returns rows changed.
+    pub(crate) fn make_osv_sync_due(c: &Connection) -> SqliteResult<usize> {
+        let hours = crate::osv::sync::osv_sync_max_age_hours();
+        c.execute(
+            "UPDATE osv_sync_status
+             SET last_synced_at = datetime('now', '-' || ?1 || ' hours')
+             WHERE last_synced_at IS NOT NULL
+               AND last_synced_at > datetime('now', '-' || ?1 || ' hours')",
+            [hours],
+        )
     }
 
     /// Phase 126 (a): turn every interest off (AD-054). Returns rows changed.

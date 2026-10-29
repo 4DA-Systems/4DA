@@ -16,6 +16,7 @@ use super::*;
 // Per-copy targets and parent routes (file-size gate).
 #[path = "brief_facts_copies.rs"]
 mod copies;
+use super::clause::with_direct_fix;
 pub(crate) use copies::{copy_fix, CopyFix};
 use copies::{project_copies, with_parent_route};
 
@@ -32,7 +33,20 @@ pub(crate) fn build_brief_facts(db: &Database) -> BriefFacts {
     let (security, also_open) = build_security_facts(db, &novelty, &liveness, &mut labels);
     let upgrades = build_upgrade_facts(db, &novelty, &liveness, &mut labels);
     let worth_knowing = build_worth_knowing(db, &novelty, &today);
-    let fingerprint = fingerprint(&security, &also_open, &upgrades);
+    let readiness = crate::osv::readiness::advisory_sync(db);
+    let fingerprint = with_advisory_state(
+        &fingerprint(&security, &also_open, &upgrades),
+        Some(readiness.state),
+    );
+    // What was not covered is part of the brief (W5a): a newly unread file
+    // must not reuse yesterday's text (#987 review S4).
+    let fingerprint = match &readiness.not_covered {
+        Some(nc) => format!(
+            "{fingerprint}:not_covered={}/{}",
+            nc.count, nc.unreadable_count
+        ),
+        None => fingerprint,
+    };
     // A failed read keeps the old behaviour (dependencies assumed known)
     // rather than telling a scanned user to scan.
     let no_dependencies_known = crate::open_db_connection()
@@ -45,6 +59,9 @@ pub(crate) fn build_brief_facts(db: &Database) -> BriefFacts {
         worth_knowing,
         fingerprint,
         no_dependencies_known,
+        advisories: Some(readiness.state),
+        advisory_temp_skipped: readiness.skipped_temp,
+        not_covered: readiness.not_covered,
     }
 }
 
@@ -101,16 +118,6 @@ fn urgency_rank(u: &AlertUrgency) -> u8 {
         AlertUrgency::High => 1,
         AlertUrgency::Medium => 2,
         AlertUrgency::Watch => 3,
-    }
-}
-
-fn tier_rank(t: &str) -> u8 {
-    match t {
-        "critical" => 0,
-        "high" => 1,
-        "medium" => 2,
-        "low" => 3,
-        _ => 4,
     }
 }
 
@@ -215,22 +222,42 @@ fn security_fact(
         .first()
         .map(|m| m.ecosystem.clone())
         .unwrap_or_else(|| "npm".to_string());
-    let clusters = crate::osv::identity::cluster_by_vulnerability(&group);
-    let worst_tier = clusters
-        .iter()
-        .filter_map(|c| crate::osv::identity::cluster_severity_tier(c))
-        .min_by_key(|t| tier_rank(t))
-        .map(str::to_string);
-    let advisory_ids: Vec<String> = clusters.iter().map(|c| c[0].advisory_id.clone()).collect();
+    // Maintenance notices (#986) are never counted or graded as vulnerabilities.
+    let (clusters, notices): (Vec<_>, Vec<_>) =
+        crate::osv::identity::cluster_by_vulnerability(&group)
+            .into_iter()
+            .partition(|c| !crate::osv::severity::is_notice_group(c));
+    let notice_ids: Vec<&str> = notices.iter().map(|c| c[0].advisory_id.as_str()).collect();
+    let notice_only = clusters.is_empty() && !notice_ids.is_empty();
+    // The worst grade, and the GHSA alias an inherited one came from.
+    let worst = crate::osv::severity::worst(
+        clusters
+            .iter()
+            .filter_map(|c| crate::osv::severity::cluster_severity(c)),
+    );
+    let worst_tier = worst.as_ref().map(|g| g.tier.to_string());
+    let worst_tier_from = worst.and_then(|g| g.from);
+    let advisory_ids: Vec<String> = if notice_only {
+        notice_ids.iter().map(|id| (*id).to_string()).collect()
+    } else {
+        clusters.iter().map(|c| c[0].advisory_id.clone()).collect()
+    };
     let is_drift = alert.id.starts_with("install-drift:");
     // "rmcp@1.7.0: 3 known vulnerabilities" says nothing a reader can weigh;
     // the worst advisory's own summary says what the bug IS.
     let worst_summary = clusters
         .iter()
-        .min_by_key(|c| crate::osv::identity::cluster_severity_tier(c).map_or(4, tier_rank))
+        // The first most severe (the one shared rank, `osv::severity::tier_rank`).
+        .min_by_key(|c| {
+            std::cmp::Reverse(
+                crate::osv::identity::cluster_severity_tier(c)
+                    .map_or(0, crate::osv::severity::tier_rank),
+            )
+        })
         .map(|c| c[0].summary.trim().to_string())
         .filter(|s| !s.is_empty());
     let title = match worst_summary {
+        _ if notice_only => crate::osv::severity::notice_wording(&package, &notice_ids),
         Some(summary) if alert.title.contains("known vulnerabilit") => {
             if clusters.len() > 1 {
                 format!("{summary} (worst of {})", clusters.len())
@@ -250,7 +277,11 @@ fn security_fact(
     // every one fixed) and brace-expansion had no fix published (2026-10-12).
     // The alert's project paths as the matcher wrote them (the matcher's
     // copies compare by exact path), as Preemption passes them.
-    let lines = crate::osv::fix_target::line_targets(&group, &alert.affected_projects);
+    // Raised like the plan's and the alert's (audit H1): a declared parent's
+    // target also clears the copies it pins.
+    let lines =
+        crate::osv::raised_lines::raised_line_targets(ctx.db, &group, &alert.affected_projects)
+            .lines;
     let eco_norm = crate::osv::exposure::canonical(&ecosystem);
     let parent_links = eco_norm
         .map(|eco| crate::osv::parent_hint::load_parent_links(ctx.db, eco, &package, &lines))
@@ -301,12 +332,38 @@ fn security_fact(
                             &package,
                             installed.as_deref(),
                         );
+                        // Only a version-confirmed copy: without one the
+                        // version and target are the alert's fallbacks, which
+                        // the Upgrade Plan names no command for (review of #982).
+                        let path = with_direct_fix(
+                            path,
+                            project,
+                            &ecosystem,
+                            &package,
+                            copy.and_then(|d| d.installed_version.as_deref()),
+                        );
                         let path = with_proven_parent(path, &parent_links, &pnorm, labels);
-                        with_parent_route(path, &parent_links, &pnorm, project, eco_norm, ctx.db)
+                        with_parent_route(
+                            path,
+                            &parent_links,
+                            &pnorm,
+                            project,
+                            eco_norm,
+                            ctx.db,
+                            installed.as_deref(),
+                        )
                     }
                     CopyFix::PerLine(lines) => FixPath::PerLine { lines },
                 }
             };
+            let line = lines.iter().find(|l| {
+                installed.as_deref() == Some(l.installed_version.as_str())
+                    && l.sites.iter().any(|s| norm_path(&s.project_path) == pnorm)
+            });
+            let fix_path = super::clause::with_introduces(fix_path, line);
+            let held = line
+                .and_then(|l| l.held.as_ref())
+                .and_then(|h| super::clause::held_caveat(&package, h));
             sites.push(SecuritySite {
                 label: labels.label(project),
                 installed,
@@ -316,6 +373,7 @@ fn security_fact(
                     .dormant_days(project)
                     .filter(|d| crate::ace::dormancy::is_dormant_days(*d)),
                 fix_path,
+                held,
             });
         }
     }
@@ -340,7 +398,12 @@ fn security_fact(
         ecosystem,
         urgency: alert.urgency.clone(),
         worst_tier,
-        advisory_count: clusters.len().max(1),
+        worst_tier_from,
+        advisory_count: if notice_only {
+            0
+        } else {
+            clusters.len().max(1)
+        },
         advisory_ids,
         title,
         sites,
@@ -633,6 +696,22 @@ pub(super) fn own_package_names() -> HashSet<String> {
         .unwrap_or_default()
 }
 
+/// A release grade as an upgrade-fact candidate: graded over working
+/// projects only (a scratch tree's gap must not set the class, then take
+/// the package's single slot and be filtered out, hiding an active
+/// project's), and only when that is Breaking or Yanked.
+fn upgrade_grade(
+    grade: release_grade::ReleaseGrade,
+    liveness: &crate::evidence::ProjectLiveness,
+) -> Option<release_grade::ReleaseGrade> {
+    let grade = grade.retain_projects(|p| !liveness.is_scratch(p) && !liveness.is_dormant(p));
+    matches!(
+        grade.class(),
+        Some(ReleaseClass::Breaking | ReleaseClass::Yanked)
+    )
+    .then_some(grade)
+}
+
 fn build_upgrade_facts(
     db: &Database,
     novelty: &Novelty,
@@ -650,8 +729,8 @@ fn build_upgrade_facts(
             .collect::<Vec<_>>()
             .join(",");
         let sql = format!(
-            "SELECT id, source_type, title, COALESCE(content, ''), url,
-                    COALESCE(published_at, created_at)
+            // The registry's publish date or none — never the fetch time (E5).
+            "SELECT id, source_type, title, COALESCE(content, ''), url, published_at
              FROM source_items
              WHERE source_type IN ({placeholders})
                AND COALESCE(published_at, created_at) >= datetime('now', ?1)
@@ -688,15 +767,10 @@ fn build_upgrade_facts(
     > = BTreeMap::new();
     for (id, source_type, title, content, url, published) in rows {
         let Some(grade) = release_grade::grade_registry_release(db, &source_type, &title, &content)
+            .and_then(|g| upgrade_grade(g, liveness))
         else {
             continue;
         };
-        if !matches!(
-            grade.class(),
-            Some(ReleaseClass::Breaking | ReleaseClass::Yanked)
-        ) {
-            continue;
-        }
         if is_own_package(&grade.package, &own) {
             continue;
         }
@@ -710,8 +784,14 @@ fn build_upgrade_facts(
         }
     }
 
+    let checker = crate::osv::release_advisories::ReleaseChecker::load(db);
     let mut facts: Vec<UpgradeFact> = Vec::new();
     for ((_, pkg_key), (grade, id, url, published, source_type)) in best {
+        // Never an upgrade toward a release an advisory affects or its
+        // registry withdrew (`osv::release_advisories`).
+        if checker.advises_against(db, &source_type, &grade, published.as_deref()) {
+            continue;
+        }
         let concerned = grade.concerned_pins();
         let active: Vec<_> = concerned
             .iter()
@@ -867,3 +947,34 @@ fn build_worth_knowing(
         )
         .collect()
 }
+
+impl super::BriefFacts {
+    /// The advisory check supports an all-clear: `Ready`, or not read (tests).
+    pub(crate) fn advisories_ready(&self) -> bool {
+        self.advisories
+            .is_none_or(|s| s == crate::osv::readiness::AdvisorySyncState::Ready)
+    }
+}
+
+/// The brief's reuse identity: the facts' [`super::fingerprint`] plus where the
+/// advisory check stands. The brief's wording depends on readiness (no
+/// all-clear before `Ready`), so a brief written in one state must not be
+/// re-served in another — a Ready-time all-clear surviving into Failed, or a
+/// "not downloaded yet" brief outliving the sync (PR #961 review).
+pub(crate) fn with_advisory_state(
+    fingerprint: &str,
+    advisories: Option<crate::osv::readiness::AdvisorySyncState>,
+) -> String {
+    match advisories {
+        Some(state) => format!("{fingerprint}:advisories={state:?}"),
+        None => fingerprint.to_string(),
+    }
+}
+
+#[cfg(test)]
+#[path = "brief_facts_build_tests.rs"]
+mod direct_fix_tests;
+
+#[cfg(test)]
+#[path = "brief_facts_h1_tests.rs"]
+mod h1_tests;

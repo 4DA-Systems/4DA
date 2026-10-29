@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 //
 // Tests for scripts/release-ocr-models.cjs — the release-time decision that
-// keeps the OCR `.rten` weights out of installers built without `ocr`.
+// keeps the OCR model weights out of installers built without `ocr`.
 //
 // Run: node --test scripts/release-ocr-models.test.cjs   (or `pnpm run test:scripts`)
 
@@ -78,9 +78,26 @@ test('presentModels lists only the pinned OCR files that exist', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ocr-models-'));
   try {
     assert.deepEqual(presentModels(dir), []);
-    fs.writeFileSync(path.join(dir, 'text-detection.rten'), 'x');
+    fs.writeFileSync(path.join(dir, 'text-detection.onnx'), 'x');
     fs.mkdirSync(path.join(dir, 'embeddings'));
-    assert.deepEqual(presentModels(dir), [path.join(dir, 'text-detection.rten')]);
+    fs.writeFileSync(path.join(dir, 'embeddings', 'model_fp16.onnx'), 'x');
+    assert.deepEqual(presentModels(dir), [path.join(dir, 'text-detection.onnx')]);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('presentModels also catches the legacy .rten files a pre-ONNX checkout left behind', () => {
+  // A release built from a tree that still holds the old `.rten` weights must
+  // not ship them: nothing loads them, and they are the 12 MB #900 removed.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ocr-models-'));
+  try {
+    fs.writeFileSync(path.join(dir, 'text-recognition.onnx'), 'x');
+    fs.writeFileSync(path.join(dir, 'text-recognition.rten'), 'x');
+    assert.deepEqual(presentModels(dir), [
+      path.join(dir, 'text-recognition.onnx'),
+      path.join(dir, 'text-recognition.rten'),
+    ]);
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

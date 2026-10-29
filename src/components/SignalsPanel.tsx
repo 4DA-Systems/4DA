@@ -140,14 +140,17 @@ export const SignalsPanel = memo(function SignalsPanel({ results }: SignalsPanel
   }, [results, typeFilter, priorityFilter, briefFilteredIds, orbitExpanded]);
 
   // Hide-when-empty: a bordered card whose only content is "no signals" is dead
-  // chrome that reads as a broken panel. Same contract as WhatYouWouldHaveMissed —
-  // the surface appears only when it has something to say. Zero signals in a run
+  // chrome that reads as a broken panel — the surface appears only when it
+  // has something to say. Zero signals in a run
   // is normal: classification requires >=2 trigger keywords (signals.rs) plus
   // score >= 0.30, so a run of ordinary posts legitimately yields none. Guarded
   // on `signals` (pre-filter), NOT `filtered` — the "no signals match your
   // filters" message below stays for user-applied filters.
   // Keyed on Affects You: with nothing grounded, the panel is only generic
-  // orbit news — it hides and the Your stack lane below carries the view.
+  // orbit news — it hides and the Your stack lane above carries the view.
+  // It is handed reading rows only (ViewRouter): a registry release or an
+  // advisory is that lane's fact, graded there, and was shown here a second
+  // time as a raw "Security advisory: [RUSTSEC-…]" card (live 2026-10-27).
   const affectsYouCount = poolCounts.affects_you;
   if (affectsYouCount === 0) return null;
 

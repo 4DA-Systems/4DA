@@ -89,6 +89,12 @@ export interface BriefingState {
   content: string | null;
   loading: boolean;
   error: string | null;
+  /**
+   * Not an error: the backend deferred the brief while the startup
+   * dependency rescan runs; it is written on `inventory-fresh`. Shown as a
+   * neutral status, never with Retry.
+   */
+  pending?: string | null;
   model: string | null;
   lastGenerated: Date | null;
 }

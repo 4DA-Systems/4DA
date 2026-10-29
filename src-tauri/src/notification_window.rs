@@ -57,6 +57,12 @@ static DISMISS_CANCEL: std::sync::LazyLock<parking_lot::Mutex<Option<Arc<AtomicB
 /// Whether the notification window's JS listener is registered and ready.
 static WINDOW_READY: AtomicBool = AtomicBool::new(false);
 
+/// Whether the notification page has finished loading (Tauri page-load event).
+static PAGE_LOADED: AtomicBool = AtomicBool::new(false);
+
+/// The event the page answers with `notification-ready` (`public/notification.js`).
+const PING_READY_EVENT: &str = "notification-ping-ready";
+
 // ============================================================================
 // Data Types
 // ============================================================================
@@ -149,6 +155,7 @@ pub(crate) fn notification_style() -> String {
 /// instantly when a notification arrives. The window is transparent,
 /// borderless, always-on-top, and excluded from the taskbar.
 pub fn init_notification_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
+    PAGE_LOADED.store(false, Ordering::Relaxed);
     let _window = tauri::webview::WebviewWindowBuilder::new(
         app,
         WINDOW_LABEL,
@@ -163,6 +170,11 @@ pub fn init_notification_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result
     .resizable(false)
     .visible(false)
     .inner_size(f64::from(WINDOW_WIDTH), f64::from(WINDOW_HEIGHT))
+    .on_page_load(|_, payload| {
+        if payload.event() == tauri::webview::PageLoadEvent::Finished {
+            PAGE_LOADED.store(true, Ordering::Relaxed);
+        }
+    })
     .build()?;
 
     info!(target: "4da::notify", "Notification window pre-warmed");
@@ -293,6 +305,25 @@ pub fn show_notification_now<R: Runtime>(app: &AppHandle<R>, data: NotificationD
     // Cancel any existing dismiss timer before doing anything else.
     cancel_dismiss_timer();
 
+    // A page that loaded but whose ready event was lost is asked again before
+    // the window is recreated (`page_ready`).
+    let exists = app.get_webview_window(WINDOW_LABEL).is_some();
+    let ready = WINDOW_READY.load(Ordering::Relaxed);
+    let loaded = PAGE_LOADED.load(Ordering::Relaxed);
+    if crate::page_ready::recovery(ready, loaded, exists) == crate::page_ready::Recovery::Ping {
+        let app = app.clone();
+        tauri::async_runtime::spawn(async move {
+            crate::page_ready::ping_and_wait(&app, WINDOW_LABEL, PING_READY_EVENT, &WINDOW_READY)
+                .await;
+            present_notification(&app, data);
+        });
+        return;
+    }
+    present_notification(app, data);
+}
+
+/// The show itself, once readiness is settled (see [`show_notification_now`]).
+fn present_notification<R: Runtime>(app: &AppHandle<R>, data: NotificationData) {
     // Recovery: if the window's JS never loaded (dev server race condition on
     // startup), destroy the stale window so it gets recreated with a fresh load.
     //
@@ -370,7 +401,7 @@ pub fn show_notification_now<R: Runtime>(app: &AppHandle<R>, data: NotificationD
     );
 
     // Start auto-dismiss timer.
-    let dismiss_ms = dismiss_duration_ms(&data.priority);
+    let dismiss_ms = dismiss_duration_ms(&data.priority, WINDOW_READY.load(Ordering::Relaxed));
 
     let cancelled = Arc::new(AtomicBool::new(false));
     {
@@ -433,14 +464,42 @@ fn cancel_dismiss_timer() {
     }
 }
 
-/// Map priority string to auto-dismiss duration in milliseconds.
-fn dismiss_duration_ms(priority: &str) -> u64 {
+/// How long the toast's own script shows it (`DISMISS_DURATIONS` in
+/// `public/notification.js`). The script, not this timer, ends a showing: it
+/// pauses on hover, plays the exit animation, then emits `notification-hidden`,
+/// which hides the window (`app_setup`).
+fn js_display_ms(priority: &str) -> u64 {
     match priority {
         "critical" => 8000,
         "alert" => 6000,
         "advisory" => 5000,
-        _ => 4000, // "watch" and fallback
+        "watch" => 6000,
+        // `DISMISS_DURATIONS[p] || 4000`: any other priority, e.g. "high" from
+        // the flood summary.
+        _ => 4000,
     }
+}
+
+/// Slack past the script's own timer before the backend hides the window
+/// anyway, for a page that has reported ready. Its script ends the showing,
+/// so this is generous: a user hovering the card keeps it, and the window is
+/// never hidden mid-animation. Hiding mid-animation froze that frame in the
+/// hidden webview (`webview_visibility`), and the next show could flash it.
+const FALLBACK_SLACK_MS: u64 = 60_000;
+
+/// The script's exit animation (`hideNotification`: 400 ms for an auto hide).
+const EXIT_ANIMATION_MS: u64 = 400;
+
+/// The backend's fallback hide, in milliseconds after a show. A page that never
+/// reported ready may never hide itself, so the backend hides it on the
+/// script's own schedule rather than leaving an empty window up for a minute.
+fn dismiss_duration_ms(priority: &str, page_ready: bool) -> u64 {
+    let slack = if page_ready {
+        FALLBACK_SLACK_MS
+    } else {
+        EXIT_ANIMATION_MS
+    };
+    js_display_ms(priority) + slack
 }
 
 // ============================================================================
@@ -493,12 +552,46 @@ mod tests {
 
     #[test]
     fn dismiss_duration_by_priority() {
-        assert_eq!(dismiss_duration_ms("critical"), 8000);
-        assert_eq!(dismiss_duration_ms("alert"), 6000);
-        assert_eq!(dismiss_duration_ms("advisory"), 5000);
-        assert_eq!(dismiss_duration_ms("watch"), 4000);
-        assert_eq!(dismiss_duration_ms("unknown"), 4000);
-        assert_eq!(dismiss_duration_ms(""), 4000);
+        // The script's own durations (public/notification.js DISMISS_DURATIONS).
+        assert_eq!(js_display_ms("critical"), 8000);
+        assert_eq!(js_display_ms("alert"), 6000);
+        assert_eq!(js_display_ms("advisory"), 5000);
+        assert_eq!(js_display_ms("watch"), 6000);
+        assert_eq!(js_display_ms("high"), 4000);
+        assert_eq!(js_display_ms("unknown"), 4000);
+    }
+
+    #[test]
+    fn the_backend_hide_is_only_a_fallback() {
+        let js = include_str!("../../public/notification.js");
+        for (p, ms) in [
+            ("critical", 8000),
+            ("alert", 6000),
+            ("advisory", 5000),
+            ("watch", 6000),
+        ] {
+            assert!(
+                js.contains(&format!("{p}: {ms}")),
+                "notification.js DISMISS_DURATIONS.{p} must stay {ms} ms"
+            );
+            // Never before the script's own hide and its 400 ms exit animation.
+            assert!(dismiss_duration_ms(p, true) >= js_display_ms(p) + 400);
+            assert!(dismiss_duration_ms(p, false) >= js_display_ms(p) + 400);
+        }
+        assert!(
+            js.contains("DISMISS_DURATIONS[currentPriority] || 4000"),
+            "notification.js default duration must stay 4000 ms"
+        );
+        assert!(js.contains("var delay = reason === 'dismiss' ? 150 : 400;"));
+    }
+
+    #[test]
+    fn a_page_that_never_loaded_is_hidden_on_the_scripts_schedule() {
+        // Ready: the script hides itself; the backend waits a minute past it.
+        assert_eq!(dismiss_duration_ms("alert", true), 6000 + 60_000);
+        // Never ready: nothing will hide it, so the backend does at once.
+        assert_eq!(dismiss_duration_ms("alert", false), 6000 + 400);
+        assert_eq!(dismiss_duration_ms("high", false), 4000 + 400);
     }
 
     // The two cancel_dismiss_timer tests mutate the process-global DISMISS_CANCEL

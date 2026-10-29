@@ -52,14 +52,20 @@ pub(super) fn is_system_directory(path: &Path) -> bool {
     }
     #[cfg(not(target_os = "windows"))]
     {
-        let s = path.to_string_lossy();
-        return s.starts_with("/etc")
-            || s.starts_with("/usr")
-            || s.starts_with("/var")
-            || s.starts_with("/sys")
-            || s.starts_with("/proc")
-            || s.starts_with("/boot")
-            || s == "/";
+        // Whole components, not string prefixes: `/variants` is a user folder.
+        // macOS canonicalises `/etc` and `/var` to `/private/...`, so a typed
+        // folder re-checked after `canonicalize` must still be refused.
+        const SYSTEM_ROOTS: [&str; 8] = [
+            "/etc",
+            "/usr",
+            "/var",
+            "/sys",
+            "/proc",
+            "/boot",
+            "/private/etc",
+            "/private/var",
+        ];
+        return path == Path::new("/") || SYSTEM_ROOTS.iter().any(|root| path.starts_with(root));
     }
 }
 
@@ -282,6 +288,12 @@ pub async fn ace_full_scan(paths: Vec<String>) -> Result<serde_json::Value> {
         }
     }
 
+    // The inventory may have changed: sync the advisory mirror now rather than
+    // at the next launch (a fresh install showed zero findings until a
+    // restart, audit E1). Background, single flight, desktop only; a no-op
+    // when the mirror already covers these packages.
+    crate::osv::readiness::refresh::spawn_if_due(crate::osv::readiness::refresh::Trigger::Scan);
+
     // Phase 1b: Learning trajectory detection
     let learning_scan_paths = scan_paths.clone();
     let learning_topics: Vec<String> = tauri::async_runtime::spawn_blocking(move || {
@@ -488,6 +500,11 @@ pub async fn ace_get_scan_summary() -> Result<serde_json::Value> {
         .and_then(|db| db.get_all_user_dependencies().ok())
         .map(|rows| dependency_breakdown(&rows))
         .unwrap_or_default();
+    // Where the vulnerability check of these dependencies stands, so the
+    // first-run screen leads with it instead of a news relevance count (E7).
+    let advisory_sync = db
+        .as_ref()
+        .map(|db| crate::osv::readiness::advisory_sync(db));
     // The last lockfile walk's account of itself (read / failed /
     // unsupported / skipped), saved by `store_lockfile_dependencies`.
     let lockfiles = db
@@ -500,6 +517,7 @@ pub async fn ace_get_scan_summary() -> Result<serde_json::Value> {
     let total_deps = deps.total;
     Ok(serde_json::json!({
         "lockfiles": lockfiles,
+        "advisory_sync": advisory_sync,
         "projects_scanned": projects_scanned,
         "total_dependencies": total_deps,
         "dependencies_by_ecosystem": {
@@ -585,5 +603,23 @@ mod tests {
         assert!(!is_system_directory(Path::new(
             r"C:\Users\dev\projects\app"
         )));
+    }
+
+    #[cfg(not(target_os = "windows"))]
+    #[test]
+    fn rejects_system_roots_by_component_not_by_prefix() {
+        use std::path::Path;
+        assert!(is_system_directory(Path::new("/")));
+        assert!(is_system_directory(Path::new("/etc")));
+        assert!(is_system_directory(Path::new("/var/lib/app")));
+        assert!(is_system_directory(Path::new("/usr/local/src")));
+        // macOS canonical forms of /etc and /var.
+        assert!(is_system_directory(Path::new("/private/var/folders/x")));
+        assert!(is_system_directory(Path::new("/private/etc")));
+        // Same leading letters, different folder.
+        assert!(!is_system_directory(Path::new("/variants/app")));
+        assert!(!is_system_directory(Path::new("/usr-projects")));
+        assert!(!is_system_directory(Path::new("/private/code")));
+        assert!(!is_system_directory(Path::new("/home/dev/projects/app")));
     }
 }

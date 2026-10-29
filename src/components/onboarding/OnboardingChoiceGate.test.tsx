@@ -103,7 +103,9 @@ describe('OnboardingChoiceGate', () => {
       target: { value: 'E:\\work\\app' },
     });
     fireEvent.click(screen.getByText('onboarding.projects.addFolder'));
-    expect(screen.getByLabelText('E:\\work\\app')).toBeChecked();
+    // Added once the backend confirms the folder exists (ace_check_scan_folder).
+    expect(await screen.findByLabelText('E:\\work\\app')).toBeChecked();
+    expect(cmdMock).toHaveBeenCalledWith('ace_check_scan_folder', { path: 'E:\\work\\app' });
 
     fireEvent.click(screen.getByText('Scan my projects'));
     expect(mockScanProjects).toHaveBeenCalledWith([...HOME_FOLDERS, 'E:\\work\\app']);

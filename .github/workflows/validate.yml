@@ -152,6 +152,9 @@ jobs:
               # The pure engine crate, and the rule vectors its own test reads.
               - 'crates/fourda-depengine/**'
               - 'src-tauri/tests/conformance/vectors/**'
+              # The app's lockfile: the job's drift check holds the crate's
+              # own lockfile to it (scripts/check-lock-drift.cjs).
+              - 'src-tauri/Cargo.lock'
             frontend:
               - 'src/**'
               # .husky/ holds the local commit-msg / pre-push guards. A PR that
@@ -420,8 +423,11 @@ jobs:
             if ($line -match '(\d+)\s+passed') { $count = [int]$Matches[1] }
           }
           Write-Output "Frontend tests passed: $count"
-          if ($count -lt 1000) {
-            Write-Output "::error::Frontend test count dropped below 1000 (got $count)"
+          # ~90% of the measured count (1,857 passed on the pr-938 queue entry,
+          # 2026-10-12). 1000 sat at 54% and could not notice whole suites
+          # vanishing. Raise it as the suite grows.
+          if ($count -lt 1670) {
+            Write-Output "::error::Frontend test count dropped below 1670 (got $count)"
             exit 1
           }
           Remove-Item test-output.txt -ErrorAction SilentlyContinue
@@ -629,6 +635,47 @@ jobs:
 
       - name: Test
         run: cargo test --locked
+
+      # The crate's own Cargo.lock feeds this job and the wasm module; the
+      # app's audit (rust job) only sees the versions src-tauri/Cargo.lock
+      # resolves for it. Same tools, same policy file as the app.
+      # cargo-deny pinned: 0.20 moved `--config` from `check` to a global
+      # option (0.19 accepts only the old form, 0.20 only the new), so this
+      # job's invocation is valid on exactly one line of releases.
+      - name: Install cargo-audit + cargo-deny (prebuilt)
+        uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2
+        with:
+          tool: cargo-audit,cargo-deny@0.20.2
+
+      - name: Advisory audit (crate lockfile)
+        run: cargo audit
+
+      # src-tauri/deny.toml's ignore list names app-only crates; on this
+      # 17-crate graph those entries are simply not encountered.
+      - name: Supply chain policy check (crate lockfile)
+        run: cargo deny --config ../../src-tauri/deny.toml check -A advisory-not-detected -A license-not-encountered -A license-exception-not-encountered
+
+      # Drift the crate's lockfile introduces fails; drift the app's lockfile
+      # led (a one-sided Dependabot bump of /src-tauri) only warns, so each
+      # directory's Dependabot PR can merge on its own. Blame needs the crate
+      # lockfile at the merge base; with no base (schedule, dispatch) drift
+      # only warns.
+      - name: Shared dependencies match the app's lockfile
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+        run: |
+          node --test scripts/check-lock-drift.test.cjs
+          args=()
+          if [ -n "$BASE_SHA" ]; then
+            if git fetch --no-tags --depth=1 origin "$BASE_SHA" 2>/dev/null; then
+              # Absent at the base: an empty file, so every crate version is new.
+              git show "$BASE_SHA:crates/fourda-depengine/Cargo.lock" > "$RUNNER_TEMP/base-crate.lock" 2>/dev/null || : > "$RUNNER_TEMP/base-crate.lock"
+              args=(--base-crate-lock "$RUNNER_TEMP/base-crate.lock")
+            else
+              echo "::warning::could not fetch base $BASE_SHA; lockfile drift is reported, not blamed"
+            fi
+          fi
+          node scripts/check-lock-drift.cjs "${args[@]}"
 
       # `cargo rustc --crate-type cdylib`: the manifest declares a plain rlib,
       # so the app never links a cdylib; only this build asks for one. The
@@ -981,7 +1028,12 @@ jobs:
         include:
           - label: default
             cargo-features: ''
-            test-floor: 2000
+            # ~90% of the measured count, so a lost test binary or a silently
+            # skipped module fails the gate. 2000 sat at 31% of the suite and
+            # could not notice a third of it vanishing. Measured 2026-10-12 on
+            # the pr-938 queue entry: 6,480 passed across 7 binaries. Raise it
+            # as the suite grows.
+            test-floor: 5800
           - label: experimental
             cargo-features: '--features experimental'
             test-floor: 0
@@ -1366,6 +1418,218 @@ jobs:
           cargo test --lib --features calibrated-sim scoring::
 
   # ─────────────────────────────────────────────────────────────────────
+  # Rust tests on WINDOWS, in the merge queue.
+  #
+  # Windows is the main install target, yet until this job every Rust leg of
+  # the queue ran on ubuntu. Windows Rust tests ran only after the merge, in
+  # hermetic.yml, which nothing waits on. #897 (a Windows-only clock bug) kept
+  # that canary red for 14 pushes, about 25.7 hours, until #914 fixed it. This
+  # job puts the same suite in front of the merge instead.
+  #
+  # Same trigger as the Rust matrix's TEST steps: merge_group, dispatch and
+  # schedule, never pull_request. The 2026-09-25 decision (see the note above
+  # the test step) made the queue entry the authoritative test gate so a PR
+  # does not pay the suite twice; a Windows-only failure ejects the entry like
+  # any other test failure. On these events the matrix's own `if:` is always
+  # true, so `needs: changes` would add nothing (it skips off pull_request).
+  #
+  # Setup mirrors `Rust (default)` and hermetic.yml's windows leg (green on
+  # main): stable toolchain (rust-toolchain.toml pins the real version), the
+  # OCR bundle fetch the build needs, nextest with the `ci` profile, and the
+  # same throwaway data dir. No Linux system packages, no clippy/fmt/audit (the
+  # ubuntu leg owns those). Debuginfo is cut to line tables: full debuginfo on
+  # MSVC means multi-GB PDBs, which are slow to link and would bloat the cache
+  # entry, and line tables still give file:line in a panic backtrace.
+  #
+  # Cache: its own Swatinem entry (`windows`), saved from main only like every
+  # other Rust entry, so the daily scheduled run writes it and queue entries
+  # restore it. The repo sits near its 10 GB cache limit (measured 2026-10-13:
+  # 10.08 GB, of which ~3.4 GB are superseded Linux Rust entries that age out).
+  # ─────────────────────────────────────────────────────────────────────
+  rust-windows:
+    name: Rust (windows)
+    if: github.event_name != 'pull_request'
+    runs-on: windows-latest
+    # The cold hermetic windows leg compiles and tests in ~18 min; a warm
+    # dependency cache cuts the compile. 60 leaves room for a cold-cache day.
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+        working-directory: src-tauri
+    env:
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+      CARGO_PROFILE_TEST_DEBUG: line-tables-only
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # v1
+        with:
+          toolchain: stable
+
+      - uses: Swatinem/rust-cache@f0d9c3887740aee45f6153b24b3a6b815192ec16 # v2.7.8
+        with:
+          workspaces: src-tauri
+          key: windows
+          save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v4
+        with:
+          node-version: '22'
+
+      - name: Fetch OCR bundle resources (build dependency)
+        working-directory: .
+        run: node scripts/fetch-ocr-models.cjs
+
+      - name: Install cargo-nextest (prebuilt)
+        uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2
+        with:
+          tool: cargo-nextest
+
+      - name: Run tests (unit + integration) and verify count floor
+        env:
+          # The directory name must keep containing "data" (see the Rust matrix).
+          FOURDA_DATA_DIR: ${{ runner.temp }}/4da-validate-data
+          FOURDA_DB_PATH: ${{ runner.temp }}/4da-validate-data/4da.db
+          # ~90% of the measured Windows count: hermetic.yml's windows leg
+          # passed 6,506 on 2026-10-12 (26 more than ubuntu: cfg(windows) tests).
+          TEST_FLOOR: '5850'
+        run: |
+          set -o pipefail
+          cargo nextest run --tests --profile ci 2>&1 | tee test-output.txt
+          status=${PIPESTATUS[0]}
+          tail -n 15 test-output.txt
+          if [ "$status" -ne 0 ]; then
+            echo "::error::Tests exited with code $status"
+            exit 1
+          fi
+          # Node, not python3: python3 is not reliably on PATH on hosted Windows.
+          # nextest's junit lists one <testsuite> per test binary and one
+          # <testcase> per test that ran; <flakyFailure> marks a retry pass.
+          read -r count binaries flaky < <(JUNIT=target/nextest/ci/junit.xml node -e '
+            const x = require("fs").readFileSync(process.env.JUNIT, "utf8");
+            const suites = (x.match(/<testsuite[\s>]/g) || []).length;
+            const cases = x.match(/<testcase\b[^>]*?(\/>|>[\s\S]*?<\/testcase>)/g) || [];
+            const passed = cases.filter((c) => !/<(failure|error|skipped)[\s>\/]/.test(c));
+            const flaky = cases.filter((c) => /<flaky(Failure|Error)[\s>\/]/.test(c));
+            for (const c of flaky) console.error("::warning::FLAKY (failed, then passed on retry): " + (c.match(/name="([^"]*)"/) || [])[1]);
+            console.log(passed.length, suites, flaky.length);
+          ')
+          flaky=${flaky%$'\r'}
+          # Fail CLOSED on an unreadable report (see the Rust matrix).
+          for v in "$count" "$binaries" "$flaky"; do
+            case "$v" in
+              ''|*[!0-9]*)
+                echo "::error::could not read test counts from target/nextest/ci/junit.xml (count='$count' binaries='$binaries' flaky='$flaky')"
+                exit 1 ;;
+            esac
+          done
+          echo "Rust tests passed (windows): $count across $binaries test binaries ($flaky flaky)"
+          if [ "$count" -lt "$TEST_FLOOR" ]; then
+            echo "::error::Windows Rust test count dropped below $TEST_FLOOR (got $count)"
+            exit 1
+          fi
+          if [ "$binaries" -lt 5 ]; then
+            echo "::error::only $binaries test binaries ran; the integration tests in src-tauri/tests/ did not execute"
+            exit 1
+          fi
+          rm -f test-output.txt
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Rust tests on macOS, NIGHTLY only (schedule + dispatch).
+  #
+  # macOS Rust was never tested anywhere: release.yml only builds bundles, and
+  # hermetic.yml runs ubuntu + windows. This leg surfaces a macOS regression
+  # within a day without touching the queue: it is skipped on pull_request and
+  # merge_group (skipped == pass in Validate Success), and on the 05:00 UTC
+  # schedule a failure turns Validate Success red, which `main-health` reports
+  # as an issue. Public repo, so macOS minutes are free; the constraint is the
+  # 5-concurrent-macOS-job cap, which one nightly job cannot strain.
+  #
+  # Deliberately NO build cache: one more ~2 GB entry would push the repo past
+  # its 10 GB limit and evict an entry the queue reads. A once-a-day cold build
+  # costs wall-clock only. Same suite, profile and data-dir isolation as the
+  # Windows leg; the floor is a sanity floor (macOS skips the cfg(windows)
+  # tests, so it sits under the ubuntu count).
+  # ─────────────────────────────────────────────────────────────────────
+  rust-macos:
+    name: Rust (macos, nightly)
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: macos-latest
+    timeout-minutes: 75
+    defaults:
+      run:
+        shell: bash
+        working-directory: src-tauri
+    env:
+      CARGO_PROFILE_DEV_DEBUG: line-tables-only
+      CARGO_PROFILE_TEST_DEBUG: line-tables-only
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@7e38f4b43b4db5c8dd498af069a4f6196df1d067 # v1
+        with:
+          toolchain: stable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v4
+        with:
+          node-version: '22'
+
+      - name: Fetch OCR bundle resources (build dependency)
+        working-directory: .
+        run: node scripts/fetch-ocr-models.cjs
+
+      - name: Install cargo-nextest (prebuilt)
+        uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2
+        with:
+          tool: cargo-nextest
+
+      - name: Run tests (unit + integration) and verify count floor
+        env:
+          FOURDA_DATA_DIR: ${{ runner.temp }}/4da-validate-data
+          FOURDA_DB_PATH: ${{ runner.temp }}/4da-validate-data/4da.db
+          TEST_FLOOR: '5800'
+        run: |
+          set -o pipefail
+          cargo nextest run --tests --profile ci 2>&1 | tee test-output.txt
+          status=${PIPESTATUS[0]}
+          tail -n 15 test-output.txt
+          if [ "$status" -ne 0 ]; then
+            echo "::error::Tests exited with code $status"
+            exit 1
+          fi
+          read -r count binaries flaky < <(JUNIT=target/nextest/ci/junit.xml node -e '
+            const x = require("fs").readFileSync(process.env.JUNIT, "utf8");
+            const suites = (x.match(/<testsuite[\s>]/g) || []).length;
+            const cases = x.match(/<testcase\b[^>]*?(\/>|>[\s\S]*?<\/testcase>)/g) || [];
+            const passed = cases.filter((c) => !/<(failure|error|skipped)[\s>\/]/.test(c));
+            const flaky = cases.filter((c) => /<flaky(Failure|Error)[\s>\/]/.test(c));
+            for (const c of flaky) console.error("::warning::FLAKY (failed, then passed on retry): " + (c.match(/name="([^"]*)"/) || [])[1]);
+            console.log(passed.length, suites, flaky.length);
+          ')
+          for v in "$count" "$binaries" "$flaky"; do
+            case "$v" in
+              ''|*[!0-9]*)
+                echo "::error::could not read test counts from target/nextest/ci/junit.xml (count='$count' binaries='$binaries' flaky='$flaky')"
+                exit 1 ;;
+            esac
+          done
+          echo "Rust tests passed (macos): $count across $binaries test binaries ($flaky flaky)"
+          if [ "$count" -lt "$TEST_FLOOR" ]; then
+            echo "::error::macOS Rust test count dropped below $TEST_FLOOR (got $count)"
+            exit 1
+          fi
+          if [ "$binaries" -lt 5 ]; then
+            echo "::error::only $binaries test binaries ran; the integration tests in src-tauri/tests/ did not execute"
+            exit 1
+          fi
+          rm -f test-output.txt
+
+  # ─────────────────────────────────────────────────────────────────────
   # Aggregate gate: a SINGLE status check to require in branch protection.
   # Listing each matrix leg (Rust default / experimental, Frontend, MCP) as a
   # required check is brittle — renaming a job silently drops it from the gate.
@@ -1392,7 +1656,9 @@ jobs:
     # protection change is needed to enforce it. It runs on pull_request AND
     # merge_group (where it scans the final squash commits) and SKIPS on
     # workflow_dispatch/schedule (skipped == pass below).
-    needs: [changes, pr-metadata, repo-guards, dependabot-notice, frontend, e2e, mcp-contract, relay, depengine, rust, rust-calibration]
+    # `rust-windows` runs on every non-PR event (merge queue included);
+    # `rust-macos` only on schedule/dispatch, so it skips (== pass) elsewhere.
+    needs: [changes, pr-metadata, repo-guards, dependabot-notice, frontend, e2e, mcp-contract, relay, depengine, rust, rust-calibration, rust-windows, rust-macos]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -1531,4 +1797,6 @@ jobs:
   # so a GitHub-hosted runner can do a real, GATING fresh build + test. That
   # lives in hermetic.yml (ubuntu + windows, no cache, isolated data dir), which
   # also regression-guards both 2026-06-13 fresh-clone findings. macOS bundles
-  # are built in release.yml.
+  # are built in release.yml. Since 2026-10-13 Windows Rust tests also gate the
+  # merge queue (`rust-windows` above) and macOS Rust tests run nightly
+  # (`rust-macos`).

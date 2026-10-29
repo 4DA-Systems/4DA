@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import type { StateCreator } from 'zustand';
 import { cmd } from '../lib/commands';
+import { budgetRefusalMessage } from '../utils/error-messages';
 import type { AppStore } from './types';
 import type { ChannelSummary, ChannelRender, RenderProvenance, ChannelChangelog } from '../types/channels';
 
@@ -76,7 +77,8 @@ export const createChannelsSlice: StateCreator<AppStore, [], [], ChannelsSlice> 
         void get().loadChangelog(id);
       }
     } catch (error) {
-      set({ renderLoading: false, renderError: `${error}` });
+      // An LLM-backed render: a budget refusal must read as one, localized.
+      set({ renderLoading: false, renderError: budgetRefusalMessage(error) ?? `${error}` });
     }
   },
 

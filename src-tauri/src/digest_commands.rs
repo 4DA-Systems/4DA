@@ -107,6 +107,14 @@ pub(crate) async fn generate_briefing_internal(
         info!(target: "4da::briefing", count = anomalies.len(), "Unresolved anomalies left out of the brief prompt");
     }
 
+    // Dependency facts come from the stored inventory: while the startup
+    // lockfile rescan runs it is the previous session's (brief #421 told the
+    // user to bump an ammonia the lockfile already carried). While it runs,
+    // defer at once (no facts built); the UI re-requests on `inventory-fresh`.
+    if let Some(deferred) = crate::inventory_freshness::brief_gate_global() {
+        return Ok(deferred);
+    }
+
     // Serialize generations so the reuse/cap decision always sees the last
     // brief written (see `BRIEF_GENERATION_GATE`).
     let _gate = briefing_reuse::BRIEF_GENERATION_GATE.lock().await;
@@ -121,7 +129,9 @@ pub(crate) async fn generate_briefing_internal(
 
     let act_now = crate::brief_cadence::act_now_ids(&facts);
     if auto_triggered {
-        if let Some(cached) = try_reuse_recent_briefing(db, &facts.fingerprint, &act_now) {
+        if let Some(cached) =
+            try_reuse_recent_briefing(db, &facts.fingerprint, &act_now, facts.advisories_ready())
+        {
             return Ok(cached);
         }
     }
@@ -221,6 +231,9 @@ pub(crate) async fn generate_briefing_internal(
             crate::brief_rejections::extract_rejects_trailer(&response.content);
         let content = crate::brief_facts::drop_sections_without_news(&content, &facts);
         let content = crate::briefing_dev_tags::strip_unfounded_dev_tags(&content, &package_facts);
+        // Never the model's notes about where it put a line (brief #421).
+        let fact_packages: Vec<String> = package_facts.iter().map(|p| p.name.clone()).collect();
+        let content = crate::briefing_meta::strip_meta_commentary(&content, &fact_packages);
         let content = crate::briefing_deterministic::honest_without_lockfiles(&content, &facts);
         let violations =
             crate::briefing_groundedness::check_factual_claims(&content, &package_facts);
@@ -274,7 +287,14 @@ pub(crate) async fn generate_briefing_internal(
             // Join trailer indices back to the candidate slate's real ids.
             // `slate_ids` came out of the same pass that rendered the prompt.
             crate::brief_rejections::record_rejections(db, briefing_id, &rejects, &slate_ids);
-            remember_fingerprint(db, briefing_id, &facts.fingerprint, &act_now);
+            remember_fingerprint(
+                db,
+                briefing_id,
+                &facts.fingerprint,
+                &act_now,
+                facts.advisories_ready(),
+            );
+            crate::brief_cadence::note_brief_written(db, auto_triggered);
         }
         Err(e) => {
             error!(target: "4da::briefing", error = %e, "Failed to persist briefing");
@@ -311,12 +331,16 @@ fn serve_deterministic(
         Some(0),
         Some(0),
     ) {
-        Ok(id) => remember_fingerprint(
-            db,
-            id,
-            &facts.fingerprint,
-            &crate::brief_cadence::act_now_ids(facts),
-        ),
+        Ok(id) => {
+            remember_fingerprint(
+                db,
+                id,
+                &facts.fingerprint,
+                &crate::brief_cadence::act_now_ids(facts),
+                facts.advisories_ready(),
+            );
+            crate::brief_cadence::note_brief_written(db, auto_triggered);
+        }
         Err(e) => {
             error!(target: "4da::briefing", error = %e, "Failed to persist deterministic briefing");
         }
@@ -342,7 +366,12 @@ fn serve_deterministic(
 
 /// The user-facing message for a provider error.
 fn provider_error_message(e_str: &str) -> String {
-    if e_str.contains("Connection refused") || e_str.contains("connect") {
+    // A budget refusal passes through whole: it already names the cause and
+    // the reset, and its `[budget_reset:…]` token lets the UI say it in the
+    // user's language. It must never be re-classified by the checks below.
+    if e_str.contains("[budget_reset:") || e_str.contains("Daily AI budget reached") {
+        e_str.to_string()
+    } else if e_str.contains("Connection refused") || e_str.contains("connect") {
         "Ollama is not running. Start it with 'ollama serve' or check your LLM settings."
             .to_string()
     } else if e_str.contains("401")
@@ -421,6 +450,20 @@ pub async fn generate_ai_briefing(
 
 #[cfg(test)]
 mod tests {
+    /// Round-3 review: a budget refusal reaches the briefing slice whole, so
+    /// the UI can localize its reset token; it is never re-classified (it
+    /// mentions neither "connect" nor "model", but must not depend on that).
+    #[test]
+    fn a_budget_refusal_passes_through_whole() {
+        let refusal =
+            "Daily AI budget reached \u{2014} resets at 00:00 local time (in 3 h 12 min) \
+                       [budget_reset:00:00:192]. Daily LLM cost limit exceeded";
+        assert_eq!(super::provider_error_message(refusal), refusal);
+        let preflight = "This call would exceed today's AI budget (estimated ~1.0c), connect \
+                         [budget_reset:00:00:5]";
+        assert_eq!(super::provider_error_message(preflight), preflight);
+    }
+
     /// End-to-end on a REAL corpus snapshot with the user's configured model:
     /// facts -> prompt -> model -> version check -> persist -> novelty. Costs
     /// one model call; writes only to the snapshot. Run with

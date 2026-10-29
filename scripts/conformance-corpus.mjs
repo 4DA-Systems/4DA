@@ -52,6 +52,7 @@ const ONLY = opt("only", null)?.split(",");
 export function isLockfileLike(relPath) {
   const base = posix.basename(relPath);
   if (/^(package-lock\.json|npm-shrinkwrap\.json|pnpm-lock\.yaml|yarn\.lock|bun\.lockb?|Cargo\.lock|poetry\.lock|uv\.lock|Pipfile\.lock|go\.mod|go\.sum|Gemfile\.lock|composer\.lock|pom\.xml|gradle\.lockfile)$/.test(base)) return true;
+  if (/\.(cs|fs|vb)proj$/i.test(base)) return true;
   if (/requirements.*\.txt$/i.test(base)) return true;
   return /(^|\/)requirements\/[^/]+\.txt$/i.test(relPath);
 }
@@ -64,6 +65,7 @@ const ECOSYSTEM_OF = [
   [/^Gemfile\.lock$/, "RubyGems"],
   [/^composer\.lock$/, "Packagist"],
   [/^(pom\.xml|gradle\.lockfile)$/, "Maven"],
+  [/\.(cs|fs|vb)proj$/i, "NuGet"],
 ];
 export const ecosystemOf = (relPath) => ECOSYSTEM_OF.find(([re]) => re.test(posix.basename(relPath)))?.[1] ?? "unknown";
 
@@ -550,6 +552,20 @@ function engineInventory(id) {
   return readJson(join(ENGINE_DUMP, `${id}.json`), { inventory: [] }).inventory;
 }
 
+/** Every live (non-SYNT-) record id a rule vector names in `record_ids`. */
+function vectorRecordIds() {
+  const dir = join(CORPUS, "vectors");
+  if (!existsSync(dir)) return [];
+  const out = [];
+  for (const f of readdirSync(dir).filter((n) => n.endsWith(".jsonl"))) {
+    for (const line of readFileSync(join(dir, f), "utf8").split(/\r?\n/)) {
+      if (!line.trim()) continue;
+      for (const id of JSON.parse(line).record_ids ?? []) if (!id.startsWith("SYNT-")) out.push(id);
+    }
+  }
+  return out;
+}
+
 async function stepPin(cases, adjud) {
   const names = new Map();
   for (const c of cases) {
@@ -561,16 +577,24 @@ async function stepPin(cases, adjud) {
   }
   const list = [...names.values()].sort((a, b) => `${a.eco}|${a.name}`.localeCompare(`${b.eco}|${b.name}`));
   const idLists = await querybatch(list.map((p) => ({ package: { ecosystem: p.eco, name: p.name } })), "names");
-  const ids = [...new Set(idLists.flat())].sort();
+  // A rule vector may pin a live record no case inventories (fix_target
+  // ft-076, web3): a re-pin fetches it too, so the vector keeps its record.
+  const ids = [...new Set([...idLists.flat(), ...vectorRecordIds()])].sort();
   console.log(`pin: ${list.length} package names -> ${ids.length} advisories`);
   const osvDir = join(CORPUS, "osv");
+  // SYNTHETIC records (SYNT-*.json) pin rule vectors no live case shows
+  // (fix_target ft-069); a re-pin keeps them, it never fetches them.
+  const synthetic = existsSync(osvDir)
+    ? readdirSync(osvDir).filter((f) => f.startsWith("SYNT-")).map((f) => [f, readFileSync(join(osvDir, f))])
+    : [];
   rmSync(osvDir, { recursive: true, force: true });
   mkdirSync(osvDir, { recursive: true });
+  for (const [f, body] of synthetic) writeFileSync(join(osvDir, f), body);
   await pool(ids, 16, async (id) => {
     const rec = await fetchJson(`https://api.osv.dev/v1/vulns/${encodeURIComponent(id)}`, null, join(CACHE, "vulns", `${id}.json`));
     if (rec) writeFileSync(join(osvDir, `${id}.json`), `${JSON.stringify(rec)}\n`);
   });
-  writeJson(join(CORPUS, "osv-snapshot.json"), { fetched_at: new Date().toISOString().slice(0, 10), source: "https://api.osv.dev/v1/vulns/<id>", package_names: list.length, records: ids.length });
+  writeJson(join(CORPUS, "osv-snapshot.json"), { fetched_at: new Date().toISOString().slice(0, 10), source: "https://api.osv.dev/v1/vulns/<id>", package_names: list.length, records: ids.length, synthetic: synthetic.length, note: "records counts the live OSV records fetched; synthetic counts the SYNT-*.json rule records (not from OSV), kept on a re-pin. Files under osv/ = records + synthetic." });
 }
 
 // ---------------------------------------------------------------------------

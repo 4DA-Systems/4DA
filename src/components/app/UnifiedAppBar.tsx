@@ -34,7 +34,7 @@ interface UnifiedAppBarProps {
    * pipeline-only "69 relevant" must not read as a judged 69.
    */
   judged: boolean;
-  aiBriefing: { error: string | null };
+  aiBriefing: { error: string | null; pending?: string | null };
   onAnalyze: () => void;
   onOpenSettings: () => void;
   analysisPulse: boolean;
@@ -75,10 +75,12 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
       ? 'bg-orange-400 animate-pulse'
       : 'bg-gray-500';
 
-  // Compact status text
+  // Compact status text. Keyed on completion alone: the summary badge counts
+  // reading rows and is absent with every interest off, which is a finished
+  // analysis too, not "Ready to analyze".
   const statusText = isLoading
     ? t('action.analyzing')
-    : isComplete && summaryBadges
+    : isComplete
       ? t('action.analysisComplete')
       : t('action.ready');
 
@@ -283,6 +285,14 @@ export const UnifiedAppBar = memo(function UnifiedAppBar({
             className="h-full bg-gradient-to-r from-orange-600 to-orange-400 transition-all duration-300 ease-out"
             style={{ width: `${progress * 100}%` }}
           />
+        </div>
+      )}
+
+      {/* AI Briefing deferred while the dependency rescan runs: neutral status */}
+      {aiBriefing.pending && !aiBriefing.error && (
+        <div role="status" className="mx-4 mt-2 px-3 py-2 bg-bg-secondary border border-border rounded-md text-text-secondary text-xs flex items-center gap-2">
+          <span className="w-3 h-3 border-2 border-text-muted/30 border-t-text-muted rounded-full animate-spin" aria-hidden="true" />
+          <span className="flex-1">{aiBriefing.pending}</span>
         </div>
       )}
 

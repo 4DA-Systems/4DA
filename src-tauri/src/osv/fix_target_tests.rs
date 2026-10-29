@@ -132,6 +132,10 @@ fn copy(project: &str, version: &str, fix: Option<&str>, clean: Option<&str>) ->
         fixed_version: fix.map(str::to_string),
         clean_version: clean.map(str::to_string),
         target_version: clean.map(str::to_string),
+        withheld: Vec::new(),
+        introduces: Vec::new(),
+        malicious: Vec::new(),
+        held: None,
     }
 }
 
@@ -156,6 +160,9 @@ fn matched(id: &str, instances: Vec<MatchedDependency>) -> MatchedAdvisory {
         dependency_instances: instances,
         aliases: vec![],
         severity_label: None,
+        cwe_ids: Vec::new(),
+        severity_from: None,
+        informational: None,
     }
 }
 
@@ -295,7 +302,9 @@ fn last_affected_with_nothing_known_above_it_declines_the_clean_claim() {
 
 /// With an advisory no release leaves, the walk still clears every one that
 /// HAS a way out. The old fallback (highest own-line fix, 2.0.0) sat inside
-/// the second window.
+/// the second window. The open window is one the installed 1.6.0 already
+/// has; from 1.0.0, which does not, every fixing release brings it in, so
+/// nothing is named (parity decision 2, review of #994 B2).
 #[test]
 fn a_target_that_cannot_clear_everything_still_clears_every_fixable_window() {
     let all = ranges(&[
@@ -303,7 +312,8 @@ fn a_target_that_cannot_clear_everything_still_clears_every_fixable_window() {
         r#"[{"type":"SEMVER","events":[{"introduced":"2.0.0"},{"fixed":"2.5.0"}]}]"#,
         r#"[{"type":"SEMVER","events":[{"introduced":"1.5.0"}]}]"#,
     ]);
-    assert_eq!(walk("npm", "1.0.0", &all), landed("2.5.0", false));
+    assert_eq!(walk("npm", "1.6.0", &all), landed("2.5.0", false));
+    assert_eq!(walk("npm", "1.0.0", &all), None);
     // Nothing with a way out affects the copy: no target to name.
     let open_only = ranges(&[r#"[{"type":"SEMVER","events":[{"introduced":"1.5.0"}]}]"#]);
     assert_eq!(walk("npm", "1.6.0", &open_only), None);

@@ -70,8 +70,7 @@ pub(crate) use ace_context::{get_ace_context, primary_project_dirs, ACEContext};
 pub(crate) use analyzer::{run_post_analysis_hooks, score_items_full};
 pub(crate) use calibration::calibrate_score;
 pub(crate) use calibration_monitor::{
-    compute_calibration_snapshot, compute_high_stakes_recall, compute_threshold_cliffs,
-    CalibrationSnapshot, HighStakesRecall,
+    compute_calibration_snapshot, compute_high_stakes_recall, CalibrationSnapshot, HighStakesRecall,
 };
 pub(crate) use composition::{enforce_composition_floors, FloorConfig};
 pub(crate) use context::{
@@ -700,7 +699,41 @@ pub(crate) use types::{ScoringInput, ScoringOptions};
 // "breaking change" or "eol" can change, so the bump IS registered in
 // `epochs::SCOPED_EPOCHS` on the title. (The paired dependency-event
 // enumeration rule is a display claim — AD-034, no bump.)
-pub(crate) const PIPELINE_VERSION: i32 = 41;
+// v42 (2026-10-12 adversarial audit E4: a fresh profile with one Maven
+// pom.xml showed 15 GHSA rows as grounded "Affects You" items, 14 of which did
+// not apply): a registry advisory (cve / osv) naming a dependency whose
+// installed version is unknown — manifest-only, no lockfile, or an ecosystem
+// 4DA does not resolve — takes the confirmed-not-affected tier: no critical
+// fast path, the registry-ungrounded ceiling, never feed-relevant, never
+// strongly grounded or a dependency event, applicability `version_unknown`,
+// and its reason says "unconfirmed" instead of "affects". Only cve / osv rows
+// can change, so the bump IS registered in `epochs::SCOPED_EPOCHS` on
+// `source_type` (assigned at ingest, never re-derived).
+// v43 (2026-10-18, severity parity with `@4da/mcp-server`): ONE per-record
+// grade rule for every grader (`osv::severity::row_grade`): the curated label
+// first, the CVSS band second. The security lane's tier
+// (`security_verdict::advisory_tier`, `mirror_severity_tier`,
+// `content_severity_tier`) read the CVSS band first, so the 123 pinned GHSA
+// records whose label and v3 band disagree (113 beside a v4 vector the
+// engines cannot score) could carry another persisted `signal_priority` /
+// critical-alert flag than the Preemption tab gives. The tier is computed
+// only for `source_type IN ('cve','osv')` (`is_security_source`), so the bump
+// IS registered in `epochs::SCOPED_EPOCHS` on that set.
+// v44 (2026-10-25, calibration monitor "recall bug misscored=53/62"): v38 let
+// the OSV matcher's confirmation GROUND an advisory, but three earlier gates
+// still read only the TEXT dependency match — 0 for an ambiguous name (`next`,
+// `zip`) and for every transitive copy: the security no-match penalty (×0.35),
+// the registry-ungrounded ceiling (0.35 + 0.02 = 0.37, where 12 confirmed
+// Next.js rows sat) and the critical fast path (text match >= 0.25), so the
+// v38 0.65 direct floor never fired for a confirmed direct exposure. A
+// matcher-confirmed RUNTIME copy (direct or transitive, in a project that
+// counts toward the stack, not a maintenance notice —
+// `SecurityVerdict::confirmed_runtime_copy`) now counts as dependency evidence
+// for all three. Dev-only exposures score exactly as before (whether they
+// belong in the feed is an open product decision). The matcher only runs for
+// `source_type IN ('cve','osv')`, so the bump IS registered in
+// `epochs::SCOPED_EPOCHS` on that set.
+pub(crate) const PIPELINE_VERSION: i32 = 44;
 
 /// Parse the topic tags carried in the `source_items.tags` column.
 ///

@@ -7,7 +7,8 @@ import { getCelebrationMessage } from '../../utils/first-run-messages';
 import { getSourceFullName } from '../../config/sources';
 import { getRelevancePresentation } from '../../utils/score';
 import { useAppStore } from '../../store';
-import type { StackInsight } from './utils';
+import { DependencySummary } from './DependencySummary';
+import type { ScanSummary, StackInsight } from './utils';
 
 interface TopSignal {
   title: string;
@@ -37,6 +38,9 @@ interface CelebrationStateProps {
    *  project folder, no ACE context). 0 relevant is then structural, not a
    *  failure — show an honest "add a signal" framing, not a vanity "0". */
   profileEmpty?: boolean;
+  /** What the project scan found. With dependencies, the screen leads with
+   *  them and their vulnerability check, not a news relevance count (E7). */
+  scanSummary?: ScanSummary | null;
   onDismiss: (view: 'briefing' | 'results') => void;
 }
 
@@ -67,6 +71,7 @@ export function CelebrationState({
   embeddingMode,
   detectedTech,
   profileEmpty = false,
+  scanSummary = null,
   onDismiss,
 }: CelebrationStateProps) {
   const { t } = useTranslation();
@@ -82,6 +87,12 @@ export function CelebrationState({
   const setShowSettings = useAppStore(s => s.setShowSettings);
   const setSettingsInitialTab = useAppStore(s => s.setSettingsInitialTab);
   const matchReason = topSignal ? buildMatchReason(topSignal, t) : null;
+  // Dependencies found: they lead, and "0 relevant … Nothing matched yet"
+  // (a news count the doctrine bans as an empty state) is not shown.
+  const dependenciesFirst = scanSummary !== null && scanSummary.total_dependencies > 0;
+  const quietNews = dependenciesFirst && relevantCount === 0;
+  // A scan that found dependencies IS a profile: never ask to add one.
+  const noProfile = profileEmpty && !dependenciesFirst;
 
   // Deep-link straight to the Projects tab (folders + stack discovery) — not the
   // General tab — then drop into results so Settings is the visible surface.
@@ -116,7 +127,9 @@ export function CelebrationState({
           profileless run) said how much was read, which informs no action
           (doctrine rule 3). "Relevant" is hidden on a profileless first run —
           a giant "0" is a banned vanity zero and reads as failure. */}
-      {!profileEmpty && (
+      {dependenciesFirst && scanSummary && <DependencySummary initial={scanSummary} />}
+
+      {!noProfile && !quietNews && (
         <div className="flex justify-center gap-8 mb-6">
           <div className="text-center">
             <span className="text-3xl font-bold text-text-primary tabular-nums">{relevantCount}</span>
@@ -157,9 +170,11 @@ export function CelebrationState({
       )}
 
       {/* Celebration message */}
-      <p className="text-sm text-text-secondary mb-6">
-        {getCelebrationMessage(relevantCount, profileEmpty)}
-      </p>
+      {!quietNews && (
+        <p className="text-sm text-text-secondary mb-6">
+          {getCelebrationMessage(relevantCount, noProfile)}
+        </p>
+      )}
 
       {/* Top signal highlight with match reasoning */}
       {topSignal && (
@@ -227,7 +242,7 @@ export function CelebrationState({
       {/* CTAs — a profileless first run leads with the one action that unlocks
           ranking (add a signal), then offers the fresh picks. */}
       <div className="flex flex-col items-center gap-3">
-        {profileEmpty ? (
+        {noProfile ? (
           <>
             <button
               onClick={handleAddSignal}

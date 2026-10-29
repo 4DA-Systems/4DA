@@ -87,7 +87,8 @@ describe('PreemptionWorklist — more findings than fit on screen', () => {
     const { container } = render(<PreemptionWorklist />);
     expect(container.textContent).toContain('31 preemption.urgency.critical');
     expect(container.textContent).toContain('14 preemption.urgency.high');
-    expect(container.textContent).toContain('preemption.alert:45');
+    expect(container.textContent).toContain('preemption.header.onList:45');
+    expect(container.textContent).not.toContain('preemption.header.setAside');
     expect(container.textContent).toContain('preemption.tier.verifiedSubtitle:45');
   });
 
@@ -108,5 +109,38 @@ describe('PreemptionWorklist — more findings than fit on screen', () => {
     expect(ids).toHaveLength(45);
     expect(ids).toContain('high-13');
     expect(within(section).queryByRole('button', { name: /showMore/ })).toBeNull();
+  });
+
+  // Audit L6 (2026-10-12): "61 alerts", "49 ranked upgrades" and 37 cards
+  // described one list. Every number in the header now reconciles with a
+  // section: the on-list count is the sum of the section subtitles, the
+  // set-aside count is the collapsed other-target group plus the dormant rows.
+  it('splits the total into the worklist and what is set aside at the foot', () => {
+    setLargeFeed();
+    const plan = Array.from({ length: 3 }, (_, i) => {
+      const a = osvAlert(`plan-${i}`, 'medium');
+      return { ...a, confidence: { ...a.confidence, provenance: 'heuristic' }, lens_hints: { ...a.lens_hints, upgrade_plan: true } };
+    });
+    const other = Array.from({ length: 5 }, (_, i) => {
+      const a = osvAlert(`other-${i}`, 'watch');
+      return { ...a, lens_hints: { ...a.lens_hints, other_build_target: true } };
+    });
+    const dormantBase = osvAlert('dormant-0', 'watch');
+    const dormant = { ...dormantBase, lens_hints: { ...dormantBase.lens_hints, dormant_notice: true } };
+    const feed = mockState.preemptionFeed as { items: unknown[] };
+    const items = [...plan, ...other, dormant];
+    // Two plan steps held back by the list transport: `total` still counts them.
+    mockState.preemptionFeed = { ...feed, items, total: items.length + 2, critical_count: 0, high_count: 0 };
+    const { container } = render(<PreemptionWorklist />);
+    const header = screen.getByTestId('preemption-header-counts');
+    // 3 shipped + 2 held-back plan steps = the plan subtitle; nothing else on the list.
+    expect(header.textContent).toContain('preemption.header.onList:5');
+    expect(container.textContent).toContain('preemption.upgradePlan.subtitle:5');
+    // 5 other-target advisories + 1 dormant row.
+    expect(header.textContent).toContain('preemption.header.setAside:6');
+    expect(container.textContent).toContain('preemption.otherTargets.show:5');
+    // The "N verified" chip duplicated a section subtitle and ignored the
+    // (equally version-confirmed) plan steps: cut.
+    expect(container.textContent).not.toContain('preemption.badge.verified');
   });
 });

@@ -551,6 +551,54 @@ mod scrubber {
         assert!(twice.contains(r"C:\Users\<user>\x"));
     }
 
+    /// Audit C9: the exact shape of a live 4DA log line — a JSON-serialized
+    /// tracing field, so every backslash is doubled. The old scrubber matched
+    /// `\Users\` on the first backslash pair and then saw an empty segment.
+    #[test]
+    fn redacts_json_escaped_windows_paths() {
+        let live = r#"INFO 4da::startup: ACE FileWatcher started result={"paths":["D:\\4DA","C:\\Users\\Administrator\\Documents\\4da-platform","C:\\Users\\Administrator\\Documents\\navcal"],"success":true}"#;
+        let out = super::super::scrub_for_user(live, None);
+        assert!(!out.contains("Administrator"), "username leaked: {out}");
+        assert!(
+            out.contains(r"C:\\Users\\<user>\\Documents\\navcal"),
+            "got: {out}"
+        );
+        assert!(
+            out.contains(r#""D:\\4DA""#),
+            "unrelated path must survive: {out}"
+        );
+    }
+
+    #[test]
+    fn redacts_forward_slash_lowercase_and_url_encoded_forms() {
+        for (input, name) in [
+            ("open C:/Users/alice/AppData/x", "alice"),
+            (r"open c:\users\alice\appdata\x", "alice"),
+            ("file:///C:/Users/alice/x.txt", "alice"),
+            ("GET /x?path=C%3A%5CUsers%5Calice%5Cx", "alice"),
+            (r"quad C:\\\\Users\\\\alice\\\\x", "alice"),
+            (r#"{"home":"/home/alice"}"#, "alice"),
+        ] {
+            let out = super::super::scrub_for_user(input, None);
+            assert!(!out.contains(name), "{input:?} leaked: {out}");
+            assert!(out.contains("<user>"), "{input:?} -> {out}");
+        }
+    }
+
+    /// A profile directory with a space only loses its first word to the path
+    /// rule; the account-name rule catches the rest and bare mentions.
+    #[test]
+    fn redacts_the_account_name_outside_paths() {
+        let out = super::super::scrub_for_user(
+            r#"USERNAME=Jane.Doe profile "C:\Users\Jane.Doe\x" by JANE.DOE"#,
+            Some("Jane.Doe"),
+        );
+        assert!(!out.to_lowercase().contains("jane"), "got: {out}");
+        // Whole words only: a short name never mangles longer words.
+        let dev = super::super::scrub_for_user("development by dev on devbox", Some("dev"));
+        assert_eq!(dev, "development by <user> on devbox");
+    }
+
     #[test]
     fn redacts_openai_and_anthropic_key_shapes() {
         // Deliberately short, obviously-fake values: the scrubber redacts on the

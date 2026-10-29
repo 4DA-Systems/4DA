@@ -156,6 +156,9 @@ struct DirectRuntimeDep {
     package_name: String,
     project_path: String,
     language: String,
+    /// The installed version, when a lockfile resolved one. `None` for a
+    /// manifest-only dependency or an ecosystem 4DA does not resolve.
+    version: Option<String>,
 }
 
 // ============================================================================
@@ -271,20 +274,39 @@ fn load_direct_runtime_deps(conn: &rusqlite::Connection) -> Result<Vec<DirectRun
     // `apply_liveness_policy` caps an all-dormant alert and
     // `evidence::collapse_dormant_alerts` folds them into ONE Watch notice
     // per project.
-    let mut stmt = conn.prepare(
-        "SELECT package_name, project_path, language
-         FROM project_dependencies
-         WHERE is_dev = 0
-           AND is_direct = 1",
-    )?;
-    let rows = stmt.query_map([], |row| {
-        Ok(DirectRuntimeDep {
-            package_name: row.get(0)?,
-            project_path: row.get(1)?,
-            language: row.get(2)?,
-        })
-    })?;
-    let deps = rows.collect::<rusqlite::Result<Vec<_>>>()?;
+    // The installed version comes from the ONE resolver every dependency
+    // reader shares (`temporal::included_dependencies_resolved`): the same
+    // project's lockfile row in the same ecosystem family, then the same
+    // active repo root. `project_dependencies.version` alone is a manifest
+    // range or NULL (NULL on every live row, 2026-10-16), and a name-only
+    // join let an npm row give a same-named Cargo package its "version".
+    // Not scoped to active roots: dormant projects are admitted (above).
+    let active_roots = crate::temporal::active_repo_roots(conn);
+    let deps: Vec<DirectRuntimeDep> =
+        crate::temporal::included_dependencies_resolved(conn, &active_roots)?
+            .into_iter()
+            .filter(|d| !d.is_dev && d.is_direct)
+            .map(|d| {
+                // Same bounded "nearby pin" lookup the scorer uses before it
+                // calls an advisory version-unknown, so Tier 2 and Signal agree.
+                let version = d.version.filter(|v| !v.trim().is_empty()).or_else(|| {
+                    crate::temporal::installed_versions_nearby(
+                        conn,
+                        &d.package_name,
+                        &d.language,
+                        std::slice::from_ref(&d.project_path),
+                    )
+                    .into_iter()
+                    .next()
+                });
+                DirectRuntimeDep {
+                    package_name: d.package_name,
+                    project_path: d.project_path,
+                    language: d.language,
+                    version,
+                }
+            })
+            .collect();
     // Canonical project-inclusion policy: the Preemption Radar's grounding
     // set must not include deps from agent infra / scaffolding (tiers 1+2 —
     // defense in depth over the write guards + startup purge) or from
@@ -348,9 +370,48 @@ fn matched_direct_runtime_deps(
                     return None;
                 }
             }
+            // A registry advisory (cve / osv row) against a dependency with
+            // no known installed version cannot be confirmed: it is the
+            // Maven-manifest case of audit E4 (2026-10-12), never an alert.
+            // Preemption names the file as not covered instead.
+            if matches!(source_type, "cve" | "osv") && dep.version.is_none() {
+                return None;
+            }
             Some(dep.clone())
         })
         .collect()
+}
+
+/// Whether a registry advisory row's stored version verdict lets it be a
+/// Tier 2 alert: the scorer saw an installed version and did not find it
+/// outside the affected range. Fails closed: an unscored row (no stored
+/// explanation) or an unreadable one is not an alert. Tier 1 lists every
+/// version-confirmed match independently.
+fn stored_version_verdict_allows(conn: &rusqlite::Connection, source_item_id: i64) -> bool {
+    conn.query_row(
+        "SELECT json_extract(breakdown, '$.breakdown.installed_version'),
+                json_extract(breakdown, '$.breakdown.is_version_affected')
+         FROM scoring_explanations
+         WHERE source_item_id = ?1 AND json_valid(breakdown)",
+        rusqlite::params![source_item_id],
+        |row| {
+            Ok((
+                row.get::<_, Option<String>>(0)?,
+                row.get::<_, Option<i64>>(1)?,
+            ))
+        },
+    )
+    .is_ok_and(|(installed, affected)| version_verdict_allows(installed.as_deref(), affected))
+}
+
+/// The pure rule: confirmed not affected (`false`) never; no installed
+/// version and no verdict (`version_unknown`) never; otherwise yes.
+fn version_verdict_allows(installed: Option<&str>, affected: Option<i64>) -> bool {
+    match affected {
+        Some(0) => false,
+        Some(_) => true,
+        None => installed.is_some_and(|v| !v.trim().is_empty()),
+    }
 }
 
 fn collapse_direct_dep_targets(matches: &[DirectRuntimeDep]) -> (Vec<String>, Vec<String>) {
@@ -447,6 +508,9 @@ pub(crate) fn osv_alert_urgency(
     group: &[&crate::osv::types::MatchedAdvisory],
     projects: &[String],
 ) -> AlertUrgency {
+    if crate::osv::severity::contains_malware(group) {
+        return AlertUrgency::Critical;
+    }
     let scope = crate::osv::identity::ExposureScope::of(group, projects);
     rank_osv_urgency(
         most_urgent_tier(group),
@@ -455,26 +519,36 @@ pub(crate) fn osv_alert_urgency(
     )
 }
 
-/// Most urgent vulnerability for this package: the shared tier (CVSS band,
-/// else the source's curated label — the same tier Blind Spots, the banner and
-/// the MCP read) before the summary heuristic, so a MODERATE type-confusion
-/// bug is medium here and medium everywhere, not "authorization bypass → High"
-/// on one surface and Critical on the next.
+/// Why [`osv_alert_urgency`] differs from the advisory's own grade, as a
+/// sentence for the explanation (audit L5: Signal said "critical", this tab
+/// said HIGH, and neither said why). Empty when the scope rule moved nothing.
+fn osv_grade_sentence(
+    group: &[&crate::osv::types::MatchedAdvisory],
+    projects: &[String],
+) -> String {
+    if crate::osv::severity::contains_malware(group) {
+        return String::new();
+    }
+    let scope = crate::osv::identity::ExposureScope::of(group, projects);
+    crate::osv::identity::scope_grade_note(
+        alert_urgency_to_canonical(&most_urgent_tier(group)),
+        scope.all_transitive(),
+        scope.all_dev(),
+    )
+    .map(|g| format!(" Graded {g}."))
+    .unwrap_or_default()
+}
+
+/// Most urgent vulnerability for this package: each cluster's base urgency by
+/// the ONE rule the Upgrade Plan grades by too (`osv::severity::
+/// cluster_urgency`): the shared tier, its GHSA alias's grade for a record
+/// the source never graded, and Medium for one still unknown. The alert path
+/// used to guess an unknown cluster's urgency from its summary words (Watch
+/// unless it said "rce" or "xss"), while the plan said Medium.
 fn most_urgent_tier(group: &[&crate::osv::types::MatchedAdvisory]) -> AlertUrgency {
     crate::osv::identity::cluster_by_vulnerability(group)
         .iter()
-        .map(
-            |cluster| match crate::osv::identity::cluster_severity_tier(cluster) {
-                Some("critical") => AlertUrgency::Critical,
-                Some("high") => AlertUrgency::High,
-                Some("medium") => AlertUrgency::Medium,
-                Some("low") => AlertUrgency::Watch,
-                _ => {
-                    let rep = cluster[0];
-                    infer_urgency_from_summary(&rep.summary, &rep.advisory_id)
-                }
-            },
-        )
+        .map(|cluster| canonical_to_alert_urgency(crate::osv::severity::cluster_urgency(cluster)))
         .min_by_key(urgency_rank)
         .unwrap_or(AlertUrgency::Watch)
 }
@@ -504,13 +578,16 @@ fn rank_osv_urgency(
 /// none, and the sentence says where each line goes. With no version-confirmed
 /// copy at all (a conservative, name-only match) there is no line to scope
 /// to, so the fix that clears every listed range is kept.
-fn alert_fix_target(
+///
+/// `lines` are the copies' raised targets (`osv::raised_lines`): the route
+/// sentences name the parent release that also clears what it pins, and the
+/// parent's own alert names the same one (audit H1).
+pub(crate) fn alert_fix_target(
     group: &[&crate::osv::types::MatchedAdvisory],
-    projects: &[String],
+    lines: &[crate::osv::fix_target::LineTarget],
 ) -> (Option<String>, String) {
-    use crate::osv::fix_target::{describe_lines, distinct_targets, line_targets};
-    let lines = line_targets(group, projects);
-    let targets = distinct_targets(&lines);
+    use crate::osv::fix_target::{describe_lines, distinct_targets};
+    let targets = distinct_targets(lines);
     let best_fix: Option<String> = match targets.as_slice() {
         [only] => Some(only.clone()),
         [] if lines.is_empty() => group
@@ -531,12 +608,35 @@ fn alert_fix_target(
     } else {
         ""
     };
+    let introduced = crate::osv::fix_target::introduced_by(lines);
+    let malicious = crate::osv::fix_target::malicious_of(lines);
     let sentence = match (best_fix.as_deref(), targets.len()) {
         (Some(f), _) => format!(" Update to >= {f}.{major}"),
+        // A malicious release is named as malware, never "brought in".
+        (None, 0) if !malicious.is_empty() => {
+            let package = group.first().map_or("", |m| m.package_name.as_str());
+            let also = if introduced.is_empty() {
+                String::new()
+            } else {
+                format!(
+                    " It also cannot move: {}.",
+                    crate::osv::fix_target::introduces_text(&introduced)
+                )
+            };
+            format!(
+                " No release is named: {}.{also}",
+                crate::osv::fix_target::malicious_text(package, &malicious)
+            )
+        }
+        // Parity decision 2: say why nothing is named.
+        (None, 0) if !introduced.is_empty() => format!(
+            " No release is named: {}.",
+            crate::osv::fix_target::introduces_text(&introduced)
+        ),
         (None, 0) => String::new(),
         (None, _) => format!(
             " Update each copy on its own line: {}.{major}",
-            describe_lines(&lines)
+            describe_lines(lines)
         ),
     };
     (best_fix, sentence)
@@ -605,9 +705,26 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
             // bug on every surface (2026-09-07). Everything below that counts,
             // cites or grades reads the cluster representatives.
             let clusters = crate::osv::identity::cluster_by_vulnerability(&group);
+            // A maintenance notice is not a vulnerability (#986): it is never
+            // counted as one, and an alert of notices only says what it is.
+            let (vuln_clusters, notice_clusters): (Vec<_>, Vec<_>) = clusters
+                .iter()
+                .partition(|c| !crate::osv::severity::is_notice_group(c));
+            let notice_ids: Vec<&str> = notice_clusters
+                .iter()
+                .map(|c| c[0].advisory_id.as_str())
+                .collect();
+            let notice_only = vuln_clusters.is_empty();
+            let counted = if notice_only {
+                &notice_clusters
+            } else {
+                &vuln_clusters
+            };
             let representatives: Vec<&crate::osv::types::MatchedAdvisory> =
-                clusters.iter().map(|c| c[0]).collect();
-            let advisory_count = clusters.len();
+                counted.iter().map(|c| c[0]).collect();
+            let advisory_count = counted.len();
+            let notice_line = (!notice_ids.is_empty())
+                .then(|| crate::osv::severity::notice_wording(&first.package_name, &notice_ids));
 
             // Most urgent vulnerability, then the ONE scope rule every
             // surface grades by (AD-046) — see `osv_alert_urgency`.
@@ -652,13 +769,15 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
                 (base + cvss_bonus).min(0.99)
             };
 
-            let (best_fix, fix_str) = alert_fix_target(&group, &all_projects);
+            let raised = crate::osv::raised_lines::raised_line_targets(db, &group, &all_projects);
+            let lines = raised.lines;
+            let (best_fix, fix_str) = alert_fix_target(&group, &lines);
+            let fix_str = format!("{fix_str}{}", raised.note);
             // A copy no project declares is not fixed by "update to >= X":
             // the plan's route sentence says whether a lockfile refresh is
             // enough (and the command) or which parent must move.
             let route = crate::osv::exposure::canonical(&first.ecosystem)
                 .and_then(|eco| {
-                    let lines = crate::osv::fix_target::line_targets(&group, &all_projects);
                     crate::evidence::transitive_route_note(
                         db,
                         eco,
@@ -705,8 +824,10 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
                 "vulnerabilities"
             };
 
-            let title = if advisory_count == 1 {
-                truncate(&first.summary, 120).to_string()
+            let title = if let (true, Some(line)) = (notice_only, &notice_line) {
+                line.clone()
+            } else if advisory_count == 1 {
+                truncate(&representatives[0].summary, 120).to_string()
             } else {
                 format!(
                     "{subject}: {count} known {vuln_word}",
@@ -741,17 +862,44 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
             } else {
                 ""
             };
-            let explanation = format!(
-                "{ids} ({count} {vuln_word}) affect {subject} in {projects}. Scope: {scope}.{fix}{reach}",
-                ids = ids_display,
-                count = advisory_count,
-                vuln_word = vuln_word,
-                subject = subject,
-                projects = project_display,
-                scope = scope_label,
-                fix = fix_str,
-                reach = reachability,
-            );
+            // An inherited grade names the GHSA alias it came from.
+            let severity_note = crate::osv::severity::inherited_note(
+                crate::osv::severity::group_severity(&group).as_ref(),
+                &group,
+            )
+            .map(|note| format!(" {note}"))
+            .unwrap_or_default();
+            // A platform-inactive row is capped to Watch and says why itself.
+            let grade_note = if platform_inactive {
+                String::new()
+            } else {
+                osv_grade_sentence(&group, &all_projects)
+            };
+            let explanation = match (notice_only, &notice_line) {
+                (true, Some(line)) => format!(
+                    "{line}. Installed in {projects}. Scope: {scope}.{reach}",
+                    projects = project_display,
+                    scope = scope_label,
+                    reach = reachability,
+                ),
+                _ => format!(
+                    "{ids} ({count} {vuln_word}) affect {subject} in {projects}.{grade}{sev} Scope: {scope}.{fix}{reach}{also}",
+                    grade = grade_note,
+                    sev = severity_note,
+                    ids = ids_display,
+                    count = advisory_count,
+                    vuln_word = vuln_word,
+                    subject = subject,
+                    projects = project_display,
+                    scope = scope_label,
+                    fix = fix_str,
+                    reach = reachability,
+                    also = notice_line
+                        .as_deref()
+                        .map(|l| format!(" Also {l}."))
+                        .unwrap_or_default(),
+                ),
+            };
 
             // 4DA is read-only local intelligence: it surfaces the advisory and
             // the fix version (shown in the version_context chip and explanation),
@@ -777,11 +925,12 @@ fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
                     source: "osv".to_string(),
                     title: m.summary.clone(),
                     url: m.source_url.clone(),
+                    // Unknown publish date: a negative age the UI shows as
+                    // no label, never "today" (fresh-profile audit E9).
                     freshness_days: m
                         .published_at
                         .as_deref()
-                        .map(|ts| freshness_from_timestamp(ts))
-                        .unwrap_or(0.0),
+                        .map_or(-1.0, freshness_from_timestamp),
                     relevance_score: 1.0,
                 })
                 .collect();
@@ -924,6 +1073,14 @@ fn llm_judged_to_alerts() -> Vec<PreemptionAlert> {
             continue;
         }
         if find_unmet_platform_scope(&combined_lower, &user_context_lower).is_some() {
+            continue;
+        }
+        // A registry advisory row carries the scorer's version verdict; Tier 2
+        // must not list one the scorer found not affected, or could not check
+        // (no installed version), as an alert (audit E4 review).
+        if matches!(source_type.as_str(), "cve" | "osv")
+            && !stored_version_verdict_allows(&conn, j.source_item_id)
+        {
             continue;
         }
         let matched = matched_direct_runtime_deps(
@@ -1386,36 +1543,6 @@ fn dormancy_labeled_project(path: &str, liveness: &crate::evidence::ProjectLiven
         label = format!("{label} {}", crate::ace::scratch::scratch_label());
     }
     label
-}
-
-/// Infer urgency from advisory summary text when CVSS score is absent.
-fn infer_urgency_from_summary(summary: &str, advisory_id: &str) -> AlertUrgency {
-    let s = summary.to_lowercase();
-    let id = advisory_id.to_lowercase();
-    let has_critical_keyword = s.contains("remote code execution")
-        || s.contains("rce")
-        || s.contains("arbitrary code")
-        || s.contains("sandbox escape")
-        || s.contains("authentication bypass")
-        || s.contains("authorization bypass");
-    if has_critical_keyword {
-        return AlertUrgency::High;
-    }
-    let has_high_keyword = s.contains("prototype pollution")
-        || s.contains("ssrf")
-        || s.contains("xss")
-        || s.contains("cross-site scripting")
-        || s.contains("injection")
-        || s.contains("exfiltration")
-        || s.contains("credential")
-        || s.contains("timing sidechannel");
-    if has_high_keyword {
-        return AlertUrgency::Medium;
-    }
-    if id.starts_with("mal-") {
-        return AlertUrgency::High;
-    }
-    AlertUrgency::Watch
 }
 
 /// Build a normalized dedup key for cross-tier duplicate detection.
@@ -1962,24 +2089,29 @@ async fn compute_preemption_evidence_feed() -> std::result::Result<EvidenceFeed,
         "preemption feed recomputed"
     );
     // TitanCA-inspired adversarial deliberation — two-perspective signal/noise
-    // validation. Critical/High items bypass; Medium/Watch get deliberated.
-    // Gracefully degrades when LLM is unavailable (items pass through unchanged).
+    // validation, with verdicts cached by content (audit L2). It FAILS CLOSED:
+    // a rejected item stays out while its verdict is valid, and an unvetted
+    // heuristic item (a signal chain) is held back when the model cannot
+    // judge it (background budget share spent, provider error). OSV-verified,
+    // LLM-assessed and corroborated Critical/High items always pass; with no
+    // deliberation configured, items pass after the escalation gate.
     let user_context = crate::adversarial::build_user_context_summary();
     let before = items.len();
-    let items = crate::adversarial::filter_batch(items, &user_context).await;
+    let crate::adversarial::BatchOutcome {
+        passed: items,
+        stats,
+    } = crate::adversarial::filter_batch(items, &user_context).await;
     let dropped = before.saturating_sub(items.len());
     if dropped > 0 {
+        // Routine once the background share is spent: the held-back chains
+        // return when the model can vet them (or from cached verdicts).
         info!(
             target: "4da::preemption",
             dropped, before, after = items.len(),
+            filtered_by_verdict = stats.filtered,
+            held_back_unjudged = stats.held_back,
+            model_unavailable = ?stats.unavailable,
             "adversarial filter dropped preemption items"
-        );
-    }
-    if before > 0 && items.is_empty() {
-        warn!(
-            target: "4da::preemption",
-            before,
-            "adversarial filter dropped ALL preemption items - possible LLM failure"
         );
     }
 
@@ -1990,25 +2122,13 @@ async fn compute_preemption_evidence_feed() -> std::result::Result<EvidenceFeed,
 }
 
 fn compute_preemption_fast_full_feed() -> std::result::Result<EvidenceFeed, String> {
-    let mut items = validated_preemption_items()?;
-    // The fast path skips adversarial deliberation (a cache miss must not
-    // wait on an LLM), but the escalation-corroboration gate is
-    // deterministic — apply it here too, so an uncorroborated critical
-    // chain cannot flash in the fast feed and vanish when the deliberated
-    // recompute lands.
-    let mut demoted = 0usize;
-    for item in items.iter_mut() {
-        if crate::adversarial::gate_escalation(item) {
-            demoted += 1;
-        }
-    }
-    if demoted > 0 {
-        info!(
-            target: "4da::preemption",
-            demoted,
-            "fast-path escalation gate demoted uncorroborated critical/high items"
-        );
-    }
+    // The fast path makes no model call (a cache miss must not wait on an
+    // LLM), but the deterministic parts of deliberation apply here too: the
+    // escalation gate, so an uncorroborated critical chain cannot flash in
+    // the fast feed, and stored verdicts, so a chain the model rejected
+    // cannot either (audit L2). Unvetted heuristics wait for the deliberated
+    // refresh started beside this feed.
+    let mut items = crate::adversarial::apply_stored_verdicts(validated_preemption_items()?);
     append_upgrade_plan_items(&mut items);
     Ok(assemble_feed(items, TierScope::Full))
 }
@@ -2259,6 +2379,9 @@ mod tests {
             ecosystems: 2,
             synced_at: Some("2026-10-12 06:00:00".to_string()),
             error: None,
+            in_flight: false,
+            skipped_temp: 0,
+            not_covered: None,
         };
         let full = EvidenceFeed {
             tier_scope: Some(TierScope::Full),
@@ -3086,6 +3209,52 @@ mod tests {
         assert_eq!(alert_subject("vitest", &set(&[])), "vitest");
     }
 
+    /// Review of #992 and #986: a malicious-package record on the installed
+    /// version is Critical by the shared predicate, not only a `MAL-` id:
+    /// GHSA-28f8-hqmc-7ph8 (title only) and crossenv GHSA-c2m4-w5hm-vqjw
+    /// (CWE-506 only). An unrated record that is not malware is Medium.
+    #[test]
+    fn an_unrated_malware_record_is_critical_by_the_shared_predicate() {
+        let rec = |id: &str, summary: &str, cwe: &[&str]| crate::osv::types::MatchedAdvisory {
+            advisory_id: id.into(),
+            summary: summary.into(),
+            details: None,
+            package_name: "pkg".into(),
+            ecosystem: "npm".into(),
+            installed_version: Some("1.0.0".into()),
+            fixed_version: None,
+            severity_type: None,
+            cvss_score: None,
+            source_url: None,
+            is_version_confirmed: true,
+            project_paths: vec![],
+            published_at: None,
+            aliases: vec![],
+            severity_label: None,
+            cwe_ids: cwe.iter().map(ToString::to_string).collect(),
+            severity_from: None,
+            dependency_instances: vec![],
+            informational: None,
+        };
+        for m in [
+            rec(
+                "GHSA-28f8-hqmc-7ph8",
+                "Malicious Package in ember-power-timepicker",
+                &[],
+            ),
+            rec("GHSA-c2m4-w5hm-vqjw", "crossenv is malware", &["CWE-506"]),
+            rec("MAL-2026-0001", "x", &[]),
+        ] {
+            assert!(
+                matches!(most_urgent_tier(&[&m]), AlertUrgency::Critical),
+                "{}",
+                m.advisory_id
+            );
+        }
+        let plain = rec("GHSA-xxxx", "Malicious-looking prose", &[]);
+        assert!(matches!(most_urgent_tier(&[&plain]), AlertUrgency::Medium));
+    }
+
     #[test]
     fn osv_group_scope_prefers_direct_runtime_over_weaker_scopes() {
         let matched = crate::osv::types::MatchedAdvisory {
@@ -3104,6 +3273,8 @@ mod tests {
             published_at: None,
             aliases: vec![],
             severity_label: None,
+            cwe_ids: Vec::new(),
+            severity_from: None,
             dependency_instances: vec![
                 crate::osv::types::MatchedDependency {
                     project_path: "/transitive".into(),
@@ -3114,6 +3285,10 @@ mod tests {
                     fixed_version: None,
                     clean_version: None,
                     target_version: None,
+                    withheld: Vec::new(),
+                    introduces: Vec::new(),
+                    malicious: Vec::new(),
+                    held: None,
                 },
                 crate::osv::types::MatchedDependency {
                     project_path: "/direct".into(),
@@ -3124,8 +3299,13 @@ mod tests {
                     fixed_version: None,
                     clean_version: None,
                     target_version: None,
+                    withheld: Vec::new(),
+                    introduces: Vec::new(),
+                    malicious: Vec::new(),
+                    held: None,
                 },
             ],
+            informational: None,
         };
 
         let both = vec!["/direct".to_string(), "/transitive".to_string()];
@@ -3165,6 +3345,10 @@ mod tests {
             fixed_version: Some(fix.into()),
             clean_version: Some(fix.into()),
             target_version: Some(fix.into()),
+            withheld: Vec::new(),
+            introduces: Vec::new(),
+            malicious: Vec::new(),
+            held: None,
         };
         let advisory = crate::osv::types::MatchedAdvisory {
             advisory_id: "GHSA-q2hr-2g5m-vwhr".into(),
@@ -3183,18 +3367,27 @@ mod tests {
             published_at: None,
             aliases: vec![],
             severity_label: None,
+            cwe_ids: Vec::new(),
+            severity_from: None,
             dependency_instances: vec![
                 copy("/navcal", "1.1.12", "1.1.21"),
                 copy("/webhook", "1.1.18", "1.1.21"),
                 copy("/webhook", "5.0.9", "5.0.12"),
             ],
+            informational: None,
         };
 
-        let (fix, sentence) = alert_fix_target(&[&advisory], &["/navcal".to_string()]);
+        let (fix, sentence) = alert_fix_target(
+            &[&advisory],
+            &crate::osv::fix_target::line_targets(&[&advisory], &["/navcal".to_string()]),
+        );
         assert_eq!(fix.as_deref(), Some("1.1.21"));
         assert_eq!(sentence, " Update to >= 1.1.21.");
 
-        let (fix, sentence) = alert_fix_target(&[&advisory], &["/webhook".to_string()]);
+        let (fix, sentence) = alert_fix_target(
+            &[&advisory],
+            &crate::osv::fix_target::line_targets(&[&advisory], &["/webhook".to_string()]),
+        );
         assert_eq!(fix, None, "two lines have no single target");
         assert_eq!(
             sentence,
@@ -3206,7 +3399,10 @@ mod tests {
         for d in &mut unconfirmed.dependency_instances {
             d.is_version_confirmed = false;
         }
-        let (fix, _) = alert_fix_target(&[&unconfirmed], &["/navcal".to_string()]);
+        let (fix, _) = alert_fix_target(
+            &[&unconfirmed],
+            &crate::osv::fix_target::line_targets(&[&unconfirmed], &["/navcal".to_string()]),
+        );
         assert_eq!(fix.as_deref(), Some("5.0.12"));
     }
 
@@ -3232,6 +3428,8 @@ mod tests {
             published_at: None,
             aliases: vec![],
             severity_label: Some("critical".into()),
+            cwe_ids: Vec::new(),
+            severity_from: None,
             dependency_instances: vec![crate::osv::types::MatchedDependency {
                 project_path: "/paddle-webhook".into(),
                 installed_version: Some("3.1.2".into()),
@@ -3241,7 +3439,12 @@ mod tests {
                 fixed_version: None,
                 clean_version: None,
                 target_version: None,
+                withheld: Vec::new(),
+                introduces: Vec::new(),
+                malicious: Vec::new(),
+                held: None,
             }],
+            informational: None,
         };
         let projects = vec!["/paddle-webhook".to_string()];
         assert_eq!(
@@ -3256,6 +3459,13 @@ mod tests {
             osv_alert_urgency(&[&sandbox], &projects),
             AlertUrgency::Medium
         ));
+        // Audit L5: the explanation names the advisory's own grade and why
+        // this tab ranks it lower.
+        assert_eq!(
+            osv_grade_sentence(&[&sandbox], &projects),
+            " Graded medium, not the advisory's own critical: every affected copy is a \
+             transitive dev dependency."
+        );
     }
 
     /// Insert one direct runtime dep at a given relevance.
@@ -3315,6 +3525,162 @@ mod tests {
         let deps = load_direct_runtime_deps(&conn).unwrap();
         assert_eq!(deps.len(), 1, "dev and transitive deps are still excluded");
         assert_eq!(deps[0].package_name, "axios");
+    }
+
+    /// Audit E4 (2026-10-12): a cve/osv item cannot become a Tier 2 alert
+    /// against a dependency whose installed version is unknown (a Maven
+    /// pom.xml); an editorial story still can, and a resolved version still
+    /// matches.
+    #[test]
+    fn tier2_never_matches_a_registry_advisory_to_an_unversioned_dep() {
+        let db = crate::test_utils::test_db();
+        let conn = db.conn.lock();
+        conn.execute(
+            "INSERT INTO project_dependencies
+                (project_path, manifest_type, package_name, version, is_dev, is_direct, language, project_relevance)
+             VALUES ('/home/dev/api', 'package.json', 'express', NULL, 0, 1, 'javascript', 1.0)",
+            [],
+        )
+        .unwrap();
+        let deps = load_direct_runtime_deps(&conn).unwrap();
+        assert_eq!(deps[0].version, None, "manifest only: no installed version");
+        let title = "[ghsa-xxxx] express: open redirect in express";
+        assert!(matched_direct_runtime_deps(&deps, title, "osv", None).is_empty());
+        assert!(matched_direct_runtime_deps(&deps, title, "cve", None).is_empty());
+        assert_eq!(
+            matched_direct_runtime_deps(&deps, title, "hackernews", None).len(),
+            1,
+            "editorial coverage keeps its name match"
+        );
+
+        // The lockfile row for the same project resolves the version.
+        conn.execute(
+            "INSERT INTO user_dependencies (project_path, package_name, version, ecosystem, is_dev, is_direct)
+             VALUES ('/home/dev/api', 'express', '4.17.1', 'javascript', 0, 1)",
+            [],
+        )
+        .unwrap();
+        let deps = load_direct_runtime_deps(&conn).unwrap();
+        assert_eq!(deps[0].version.as_deref(), Some("4.17.1"));
+        assert_eq!(
+            matched_direct_runtime_deps(&deps, title, "osv", None).len(),
+            1
+        );
+    }
+
+    /// Review SF1: the version comes from the shared resolver, which keeps
+    /// ecosystem families apart. An npm `serde` row in the same folder must
+    /// not give the Cargo `serde` crate its "version".
+    #[test]
+    fn tier2_version_never_crosses_ecosystems() {
+        let db = crate::test_utils::test_db();
+        let conn = db.conn.lock();
+        conn.execute(
+            "INSERT INTO project_dependencies
+                (project_path, manifest_type, package_name, version, is_dev, is_direct, language, project_relevance)
+             VALUES ('/home/dev/app', 'Cargo.toml', 'serde', NULL, 0, 1, 'rust', 1.0)",
+            [],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO user_dependencies (project_path, package_name, version, ecosystem, is_dev, is_direct)
+             VALUES ('/home/dev/app', 'serde', '9.9.9', 'npm', 0, 1)",
+            [],
+        )
+        .unwrap();
+        let deps = load_direct_runtime_deps(&conn).unwrap();
+        assert_eq!(deps.len(), 1);
+        assert_eq!(
+            deps[0].version, None,
+            "an npm lockfile row is not the crate's version"
+        );
+    }
+
+    /// Round-3 review SF2: Tier 2 and the scorer read installed versions
+    /// through the same bounded lookup. On one fixture (no own lockfile,
+    /// exactly one nested project pins the package) both see 4.17.1.
+    #[test]
+    fn tier2_and_the_scorer_agree_on_the_installed_version() {
+        let db = crate::test_utils::test_db();
+        db.store_dependency(
+            "/w/app/web",
+            "express",
+            Some("4.17.1"),
+            "javascript",
+            false,
+            None,
+        )
+        .unwrap();
+        let conn = db.conn.lock();
+        conn.execute(
+            "INSERT INTO project_dependencies
+                (project_path, manifest_type, package_name, version, is_dev, is_direct, language, project_relevance)
+             VALUES ('/w/app', 'package.json', 'express', NULL, 0, 1, 'javascript', 1.0)",
+            [],
+        )
+        .unwrap();
+        let tier2 = load_direct_runtime_deps(&conn).unwrap();
+        let scorer = crate::temporal::installed_versions_nearby(
+            &conn,
+            "express",
+            "javascript",
+            &["/w/app".to_string()],
+        );
+        let app = tier2
+            .iter()
+            .find(|d| d.project_path == "/w/app")
+            .expect("the manifest dep");
+        assert_eq!(app.version.as_deref(), Some("4.17.1"));
+        assert_eq!(scorer, vec!["4.17.1".to_string()]);
+    }
+
+    /// Review SF2: Tier 2 lists a registry row only when the scorer's stored
+    /// verdict did not find the installed version outside the range.
+    #[test]
+    fn tier2_respects_the_stored_version_verdict() {
+        assert!(
+            !version_verdict_allows(Some("4.17.21"), Some(0)),
+            "past the fix"
+        );
+        assert!(!version_verdict_allows(None, None), "version unknown");
+        assert!(
+            version_verdict_allows(Some("4.17.1"), Some(1)),
+            "confirmed affected"
+        );
+        assert!(
+            version_verdict_allows(Some("4.17.1"), None),
+            "installed, range unknown"
+        );
+
+        let db = crate::test_utils::test_db();
+        let id = crate::test_utils::insert_test_item(
+            &db,
+            "osv",
+            "GHSA-test-0001",
+            "lodash advisory",
+            "x",
+        );
+        let conn = db.conn.lock();
+        assert!(
+            !stored_version_verdict_allows(&conn, id),
+            "an unscored row is not an alert"
+        );
+        conn.execute(
+            "INSERT INTO scoring_explanations (source_item_id, pipeline_version, breakdown)
+             VALUES (?1, 42, ?2)",
+            rusqlite::params![id, r#"{"score":0.3,"breakdown":{"installed_version":"4.17.21","is_version_affected":false}}"#],
+        )
+        .unwrap();
+        assert!(
+            !stored_version_verdict_allows(&conn, id),
+            "installed version past the fix: never a Tier 2 alert"
+        );
+        conn.execute(
+            "UPDATE scoring_explanations SET breakdown = ?1 WHERE source_item_id = ?2",
+            rusqlite::params![r#"{"score":0.8,"breakdown":{"installed_version":"4.17.1","is_version_affected":true}}"#, id],
+        )
+        .unwrap();
+        assert!(stored_version_verdict_allows(&conn, id));
     }
 
     #[test]

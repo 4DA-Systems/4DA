@@ -57,8 +57,9 @@ describe('context-discovery-slice', () => {
     it('loads directories, tech, and topics', async () => {
       vi.mocked(invoke)
         .mockResolvedValueOnce([
-          { path: '/home/user/project1', exists: true },
-          { path: '/home/user/project2', exists: false },
+          { path: '/home/user/project1', exists: true, excluded: false },
+          { path: '/home/user/project2', exists: false, excluded: false },
+          { path: '/home/user/kairos-mvp', exists: true, excluded: true },
         ]) // get_context_dirs
         .mockResolvedValueOnce({ detected_tech: [{ name: 'React', category: 'frontend', confidence: 0.95 }] }) // ace_get_detected_tech
         .mockResolvedValueOnce({ topics: [{ topic: 'web-dev', weight: 0.8 }] }); // ace_get_active_topics
@@ -68,9 +69,11 @@ describe('context-discovery-slice', () => {
       expect(invoke).toHaveBeenCalledWith('get_context_dirs', {});
       expect(invoke).toHaveBeenCalledWith('ace_get_detected_tech', {});
       expect(invoke).toHaveBeenCalledWith('ace_get_active_topics', {});
-      expect(useAppStore.getState().scanDirectories).toEqual(['/home/user/project1', '/home/user/project2']);
+      expect(useAppStore.getState().scanDirectories).toEqual(['/home/user/project1', '/home/user/project2', '/home/user/kairos-mvp']);
       // A configured root that is not on this machine stays listed, flagged.
       expect(useAppStore.getState().missingScanDirectories).toEqual(['/home/user/project2']);
+      // Audit L7: a root excluded in Your Stack stays listed, flagged excluded.
+      expect(useAppStore.getState().excludedScanDirectories).toEqual(['/home/user/kairos-mvp']);
       expect(useAppStore.getState().discoveredContext.tech).toHaveLength(1);
       expect(useAppStore.getState().discoveredContext.topics).toEqual(['web-dev']);
     });

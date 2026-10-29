@@ -114,11 +114,25 @@ pub fn build_upgrade_plan(db: &Database) -> BuiltPlan {
     let mut candidates: Vec<(EvidenceItem, Vec<UpgradeStep>)> = steps
         .into_iter()
         .map(|mut g| {
+            // One bump per dependency (audit H1): a declared package's target
+            // rises to the release that also clears the copies it pins.
+            g.raise_note = crate::osv::raised_lines::raise_declared_lines(
+                db,
+                &g.ecosystem_norm,
+                &g.package,
+                &mut g.lines,
+            );
+            if !g.raise_note.is_empty() {
+                g.targets = fix_target::distinct_targets(&g.lines);
+            }
             // How the fix reaches each transitive copy: its installed parent,
             // whether a lockfile refresh is enough and the command that does
             // it (`osv::fix_path`; empty for a direct-only row).
             g.routes =
                 crate::osv::parent_hint::load_routes(db, &g.ecosystem_norm, &g.package, &g.lines);
+            // How each DIRECT copy moves where it is declared (audit E8).
+            g.direct_fixes =
+                crate::osv::direct_upgrade::direct_fixes(&g.ecosystem_norm, &g.package, &g.lines);
             g.into_evidence_item(now)
         })
         .collect();
@@ -164,9 +178,15 @@ struct PackageGroup<'a> {
     any_confirmed: bool,
     /// At least one affected instance is a DIRECT dep — the user can bump it now.
     fixable_now: bool,
+    /// Per declaring project and target: the command or manifest edit that
+    /// moves the direct copy (`osv::direct_upgrade`); empty when none is
+    /// certain.
+    direct_fixes: Vec<(String, String, crate::osv::direct_upgrade::DirectFix)>,
     /// Every affected instance is a dev dependency (a labelled discount).
     all_dev: bool,
     urgency: Urgency,
+    /// Why `urgency` differs from the advisory's own grade (audit L5).
+    grade_note: Option<String>,
     max_cvss: f64,
     /// The target of each installed version in THIS row's projects (Phase
     /// 1.1). Never the machine-wide maximum: a copy in another project can
@@ -179,6 +199,12 @@ struct PackageGroup<'a> {
     /// "Upgrade" (2026-09-06: 14 of 30 live plan items said "Upgrade gtk —
     /// clears 1 advisory" with nothing to upgrade to).
     has_fix: bool,
+    /// With no fix: the releases that fixed it but that the registry withdrew
+    /// (yanked, deprecated; FX-H5). Non-empty means "no installable fix",
+    /// never "no fix published".
+    withheld: Vec<String>,
+    /// With no fix: every fixing release brings in these (parity decision 2).
+    introduces: Vec<String>,
     /// Every advisory is a maintenance notice (unmaintained / deprecated: no
     /// fix, no CVSS). Folded into ONE Watch item, never an upgrade step.
     informational: bool,
@@ -189,6 +215,9 @@ struct PackageGroup<'a> {
     /// The route of each transitive copy (`osv::parent_hint`,
     /// `osv::fix_path`). Filled after ranking; it never changes the rank.
     routes: crate::osv::parent_hint::TransitiveRoutes,
+    /// Why a declared line's target was raised above its own advisories' fix
+    /// (`osv::raised_lines`); empty in the common case.
+    raise_note: String,
 }
 
 fn aggregate_by_package(matches: &[MatchedAdvisory]) -> Vec<PackageGroup<'_>> {
@@ -246,7 +275,22 @@ fn package_group<'a>(
     // (no fix exists) read "Fixable now via a direct dependency bump"
     // on the live plan (2026-09-06).
     let fixable_now = has_fix && instances().any(|d| d.is_direct);
-    let informational = !has_fix && advisories.iter().all(|a| is_informational(a));
+    let mut withheld: Vec<String> = Vec::new();
+    if !has_fix {
+        for w in instances().flat_map(|d| d.withheld.iter()) {
+            if !withheld.contains(w) {
+                withheld.push(w.clone());
+            }
+        }
+    }
+    let introduces = fix_target::introduced_by(&lines);
+    let informational = !has_fix
+        && withheld.is_empty()
+        && introduces.is_empty()
+        && fix_target::malicious_of(&lines).is_empty()
+        && advisories
+            .iter()
+            .all(|a| crate::osv::severity::is_informational(a));
     // The inputs of the ONE scope rule (AD-046): version-confirmed installs in
     // the projects this row names — the set the alert path reads too.
     let scope = crate::osv::identity::ExposureScope::of(&advisories, &projects);
@@ -265,14 +309,19 @@ fn package_group<'a>(
     // Critical on the other. One function, one input set.
     let base_urgency = crate::osv::identity::cluster_by_vulnerability(&advisories)
         .iter()
-        .map(|cluster| cluster_urgency(cluster))
+        .map(|cluster| crate::osv::severity::cluster_urgency(cluster))
         .min()
         .unwrap_or(Urgency::Medium);
-    let urgency = crate::osv::identity::scope_adjusted_urgency(
-        base_urgency,
-        scope.all_transitive(),
-        scope.all_dev(),
-    );
+    let (transitive, dev) = (scope.all_transitive(), scope.all_dev());
+    let (urgency, grade_note) = if crate::osv::severity::contains_malware(&advisories) {
+        (Urgency::Critical, None)
+    } else {
+        (
+            crate::osv::identity::scope_adjusted_urgency(base_urgency, transitive, dev),
+            // Said up front, so the list transport's 360-byte cap keeps it.
+            crate::osv::identity::scope_grade_note(base_urgency, transitive, dev),
+        )
+    };
 
     PackageGroup {
         package,
@@ -283,13 +332,18 @@ fn package_group<'a>(
         fixable_now,
         all_dev,
         urgency,
+        grade_note,
         max_cvss,
         lines,
         targets,
         has_fix,
+        withheld,
+        introduces,
         informational,
         cohort_key,
         routes: crate::osv::parent_hint::TransitiveRoutes::default(),
+        direct_fixes: Vec::new(),
+        raise_note: String::new(),
     }
 }
 
@@ -383,7 +437,16 @@ impl PackageGroup<'_> {
             )
         } else {
             format!(
-                "No fix published for {pkg} — {n} {adv} across {m} {proj}",
+                "{none} for {pkg} — {n} {adv} across {m} {proj}",
+                none = if !self.introduces.is_empty()
+                    || !fix_target::malicious_of(&self.lines).is_empty()
+                {
+                    "No clean fix"
+                } else if self.withheld.is_empty() {
+                    "No fix published"
+                } else {
+                    "No installable fix"
+                },
                 pkg = self.package,
                 n = n,
                 adv = plural(n, "advisory", "advisories"),
@@ -392,7 +455,32 @@ impl PackageGroup<'_> {
             )
         });
 
-        let scope_note = if !self.has_fix {
+        let malicious = fix_target::malicious_of(&self.lines);
+        let scope_note = if !self.has_fix && !malicious.is_empty() {
+            // The MCP's order: the malware first, then what else blocks.
+            let also = if self.introduces.is_empty() {
+                String::new()
+            } else {
+                format!(
+                    ". It also cannot move: {}",
+                    fix_target::introduces_text(&self.introduces)
+                )
+            };
+            format!(
+                "No release is named: {}{also}",
+                fix_target::malicious_text(&self.package, &malicious)
+            )
+        } else if !self.has_fix && !self.introduces.is_empty() {
+            let why = fix_target::introduces_text(&self.introduces);
+            format!("No release is named: {why} — pin, patch, or replace")
+        } else if !self.has_fix && !self.withheld.is_empty() {
+            format!(
+                "The release that fixes it ({}) is not installable from its registry (yanked, \
+                 deprecated or not published), and no later release is known to clear it — pin, \
+                 patch, or replace",
+                self.withheld.join(", ")
+            )
+        } else if !self.has_fix {
             "No fix has been published — pin, patch, or replace; there is nothing to upgrade to yet"
                 .to_string()
         } else if self.fixable_now {
@@ -403,14 +491,20 @@ impl PackageGroup<'_> {
                 .lines
                 .iter()
                 .any(|l| l.target_version.is_some() && l.sites.iter().any(|s| !s.is_direct));
+            let how = crate::osv::direct_upgrade::direct_fix_note(&self.direct_fixes, m > 1);
+            // The declared range already admits the fix: a refresh, not a bump.
+            let lead = if crate::osv::direct_upgrade::all_refresh(&self.direct_fixes, &self.lines) {
+                "Fixable now with a lockfile refresh (the declared range already admits the fix)"
+            } else {
+                "Fixable now via a direct dependency bump"
+            };
             if transitive {
                 format!(
-                    "Fixable now via a direct dependency bump where it is declared. Elsewhere it is \
-                     transitive — {}",
+                    "{lead} where it is declared{how}. Elsewhere it is transitive — {}",
                     super::upgrade_parent::upstream_note(&self.package, &self.routes, m > 1)
                 )
             } else {
-                "Fixable now via a direct dependency bump".to_string()
+                format!("{lead}{how}")
             }
         } else {
             super::upgrade_parent::upstream_note(&self.package, &self.routes, m > 1)
@@ -420,7 +514,11 @@ impl PackageGroup<'_> {
         } else {
             ""
         };
-        let target_detail = target_detail(&self.package, &self.lines, major);
+        let target_detail = format!(
+            "{}{}",
+            target_detail(&self.package, &self.lines, major),
+            self.raise_note
+        );
         let representatives = self.representatives();
         let ids: Vec<&str> = representatives
             .iter()
@@ -433,9 +531,17 @@ impl PackageGroup<'_> {
         } else {
             String::new()
         };
+        // An inherited grade is never presented as the record's own: the
+        // sentence names the GHSA alias it came from (`osv::severity`).
+        let graded = crate::osv::severity::group_severity(&self.advisories);
+        let severity_note = crate::osv::severity::inherited_note(graded.as_ref(), &self.advisories)
+            .map(|note| format!(" {note}"))
+            .unwrap_or_default();
         let explanation = format!(
-            "{pkg} has {n} version-confirmed {adv} matching installed versions across {m} {proj}. \
+            "{pkg} has {n} version-confirmed {adv} matching installed versions across {m} {proj}.{grade}{sev} \
              {scope}.{dev}{targets} Advisories: {ids}{more}.",
+            grade = self.grade_note.as_deref().map(|g| format!(" Graded {g}.")).unwrap_or_default(),
+            sev = severity_note,
             pkg = self.package,
             n = n,
             adv = plural(n, "advisory", "advisories"),
@@ -458,14 +564,11 @@ impl PackageGroup<'_> {
                 source: "osv-advisory".to_string(),
                 title: truncate(&a.summary, 160),
                 url: a.source_url.clone(),
-                freshness_days: 0.0,
+                freshness_days: advisory_age_days(a.published_at.as_deref()),
                 relevance_note: truncate(
                     &format!(
                         "{sev}affects installed {ver}",
-                        sev = a
-                            .cvss_score
-                            .map(|c| format!("CVSS {c:.1}; "))
-                            .unwrap_or_default(),
+                        sev = crate::osv::severity::citation_lead(a),
                         ver = installed_in(a, &self.projects),
                     ),
                     200,
@@ -561,7 +664,12 @@ fn line_citations(lines: &[LineTarget]) -> Vec<EvidenceCitation> {
     lines
         .iter()
         .map(|l| {
-            let target = l.target_version.as_deref().unwrap_or("no fix published");
+            let none = if l.introduces.is_empty() {
+                "no fix published"
+            } else {
+                "no clean fix"
+            };
+            let target = l.target_version.as_deref().unwrap_or(none);
             let kind = match l.upgrade_type {
                 Some(fix_target::UpgradeType::Patch) => "patch",
                 Some(fix_target::UpgradeType::Minor) => "minor",
@@ -570,6 +678,15 @@ fn line_citations(lines: &[LineTarget]) -> Vec<EvidenceCitation> {
             };
             let clears = if l.target_version.is_none() {
                 ""
+            } else if !fix_target::held_clean(l) {
+                // npm (D-4): what the target installs is affected, or was
+                // not checked; never "clears every known advisory".
+                match l.held {
+                    Some(fourda_depengine::held::HeldOutcome::Blocked { .. }) => {
+                        "; NOT a clean fix: a dependency it pins or narrowly ranges is affected"
+                    }
+                    _ => "; what it pins or narrowly ranges was NOT CHECKED",
+                }
             } else if l.clears_all_known {
                 "; clears every known advisory"
             } else {
@@ -628,6 +745,8 @@ fn target_detail(package: &str, lines: &[LineTarget], major: bool) -> String {
              the target clears the ones that have a fix."
         ));
     }
+    // npm (audit 6.2.5 D-4): what each target installs.
+    out.push_str(&fix_target::held_sentences(package, lines));
     out
 }
 
@@ -700,12 +819,25 @@ fn informational_item(
         dep = plural(k, "dependency", "dependencies"),
         list = listed.join(", "),
     ));
+    // Each named as what it is (#986): `unmaintained: <crate> (<id>), no
+    // exploitable vulnerability` (`osv::severity::notice_wording`).
+    let notices: Vec<String> = names
+        .iter()
+        .map(|name| {
+            let mut ids: Vec<&str> = groups
+                .iter()
+                .filter(|g| &g.package == name)
+                .flat_map(|g| g.advisories.iter().map(|a| a.advisory_id.as_str()))
+                .collect();
+            ids.sort_unstable();
+            ids.dedup();
+            crate::osv::severity::notice_wording(name, &ids)
+        })
+        .collect();
     let explanation = format!(
-        "{list} {carry} maintenance notices (unmaintained or deprecated), not vulnerabilities \
-         with a published fix. There is nothing to upgrade to; replace {them} when convenient. \
+        "{list}. There is nothing to upgrade to; replace {them} when convenient. \
          Installed across {m} {proj}.",
-        list = names.join(", "),
-        carry = if k == 1 { "carries" } else { "carry" },
+        list = notices.join("; "),
         them = if k == 1 { "it" } else { "them" },
         proj = plural(m, "project", "projects"),
     );
@@ -718,7 +850,7 @@ fn informational_item(
             source: "osv-advisory".to_string(),
             title: truncate(&a.summary, 160),
             url: a.source_url.clone(),
-            freshness_days: 0.0,
+            freshness_days: advisory_age_days(a.published_at.as_deref()),
             relevance_note: truncate(
                 &format!(
                     "{}: no fixed version; installed {}",
@@ -789,56 +921,11 @@ fn plan_actions(review_description: String) -> Vec<Action> {
     ]
 }
 
-/// Maintenance-notice vocabulary (RustSec INFO advisories, npm deprecations).
-const UNMAINTAINED_MARKERS: &[&str] = &[
-    "unmaintained",
-    "no longer maintained",
-    "not maintained",
-    "is deprecated",
-    "has been deprecated",
-    "deprecated crate",
-    "abandoned",
-    "archived",
-];
-
-/// A maintenance notice, not a vulnerability: no fixed version, no CVSS, and
-/// the advisory text says so. An unsound-code or no-fix VULNERABILITY (rsa's
-/// Marvin attack: CVSS 5.9, no fix) is NOT informational — it stays a step
-/// that reads "No fix published".
-fn is_informational(a: &MatchedAdvisory) -> bool {
-    let no_fix = a
-        .fixed_version
-        .as_deref()
-        .is_none_or(|v| v.trim().is_empty());
-    if !no_fix || a.cvss_score.is_some() {
-        return false;
-    }
-    let text = format!("{} {}", a.summary, a.details.as_deref().unwrap_or("")).to_lowercase();
-    UNMAINTAINED_MARKERS.iter().any(|m| text.contains(m))
-}
-
 // ---- helpers ----
 
 fn normalize_ecosystem(eco: &str) -> String {
     crate::ecosystem::Ecosystem::parse(eco)
         .map_or_else(|| eco.to_string(), |e| e.osv_name().to_string())
-}
-
-/// CVSS-driven urgency. OSV `severity_type` is the scoring *system*
-/// ("CVSS_V3"), NOT the level — so the level comes from `cvss_score`. A
-/// confirmed match with no score defaults to `Medium` (a real advisory, but no
-/// evidence to call it Critical or dismiss it to Watch).
-/// Urgency of one vulnerability cluster from the shared severity tier (CVSS
-/// band, else the source's curated label). A cluster the source never graded
-/// stays Medium — the pre-Phase-120 default for an unscored advisory.
-fn cluster_urgency(cluster: &[&MatchedAdvisory]) -> Urgency {
-    match crate::osv::identity::cluster_severity_tier(cluster) {
-        Some("critical") => Urgency::Critical,
-        Some("high") => Urgency::High,
-        Some("medium") => Urgency::Medium,
-        Some("low") => Urgency::Watch,
-        _ => Urgency::Medium,
-    }
 }
 
 fn plural(n: usize, one: &'static str, many: &'static str) -> &'static str {
@@ -880,10 +967,32 @@ pub(super) fn truncate(s: &str, max: usize) -> String {
     format!("{}\u{2026}", &s[..end])
 }
 
-#[cfg(test)]
-#[path = "upgrade_plan_tests.rs"]
-mod tests;
+/// A citation age the UI shows as unknown (no label) — never "today".
+pub(crate) const UNKNOWN_AGE_DAYS: f32 = -1.0;
+
+/// Days since an advisory was published (OSV `published`: RFC 3339, SQLite
+/// `YYYY-MM-DD HH:MM:SS`, or a bare date), or [`UNKNOWN_AGE_DAYS`] without a
+/// parseable date. The citations carried a 0.0 placeholder, so 2023 CVEs read
+/// "today" (fresh-profile audit E9).
+pub(crate) fn advisory_age_days(published: Option<&str>) -> f32 {
+    let Some(p) = published.map(str::trim).filter(|p| !p.is_empty()) else {
+        return UNKNOWN_AGE_DAYS;
+    };
+    chrono::DateTime::parse_from_rfc3339(p)
+        .map(|d| d.naive_utc())
+        .or_else(|_| chrono::NaiveDateTime::parse_from_str(p, "%Y-%m-%d %H:%M:%S"))
+        .or_else(|_| {
+            chrono::NaiveDate::parse_from_str(p.get(..10).unwrap_or(p), "%Y-%m-%d")
+                .map(|d| d.and_time(chrono::NaiveTime::MIN))
+        })
+        .map(|at| ((chrono::Utc::now().naive_utc() - at).num_hours() as f32 / 24.0).max(0.0))
+        .unwrap_or(UNKNOWN_AGE_DAYS)
+}
 
 #[cfg(test)]
 #[path = "upgrade_targets_tests.rs"]
 mod target_tests;
+
+#[cfg(test)]
+#[path = "upgrade_plan_tests.rs"]
+mod tests;

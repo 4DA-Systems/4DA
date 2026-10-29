@@ -6,7 +6,8 @@ import type { AdvisorySync } from '../../src-tauri/bindings/bindings/AdvisorySyn
 import type { DataFreshness } from '../../src-tauri/bindings/bindings/DataFreshness';
 
 const sync = (over: Partial<AdvisorySync>): AdvisorySync => ({
-  state: 'ready', ecosystems: 2, synced_at: '2026-10-12 06:00:00', error: null, ...over,
+  state: 'ready', ecosystems: 2, synced_at: '2026-10-12 06:00:00', error: null,
+  in_flight: false, skipped_temp: 0, ...over,
 });
 
 describe('preemptionNegative', () => {
@@ -19,15 +20,24 @@ describe('preemptionNegative', () => {
     expect(preemptionNegative(sync({ state: 'matching' }))).toEqual({ kind: 'checking' });
   });
 
-  it('a failed sync carries its error', () => {
-    expect(preemptionNegative(sync({ state: 'failed', error: 'npm: HTTP 503' })))
-      .toEqual({ kind: 'failed', error: 'npm: HTTP 503' });
+  it('never synced with no sync running is not started, not checking', () => {
+    expect(preemptionNegative(sync({ state: 'not_started', synced_at: null }))).toEqual({ kind: 'not_started' });
   });
 
-  it('stale carries the sync time; no inventory is uncovered', () => {
+  it('a failed sync carries its error and whether a retry is running', () => {
+    expect(preemptionNegative(sync({ state: 'failed', error: 'npm: HTTP 503' })))
+      .toEqual({ kind: 'failed', error: 'npm: HTTP 503', inFlight: false });
+    expect(preemptionNegative(sync({ state: 'failed', error: 'x', in_flight: true })))
+      .toEqual({ kind: 'failed', error: 'x', inFlight: true });
+  });
+
+  it('stale carries the sync time; no inventory is uncovered, with temp skips', () => {
     expect(preemptionNegative(sync({ state: 'stale' })))
-      .toEqual({ kind: 'stale', syncedAt: '2026-10-12 06:00:00' });
-    expect(preemptionNegative(sync({ state: 'no_inventory', ecosystems: 0 }))).toEqual({ kind: 'uncovered' });
+      .toEqual({ kind: 'stale', syncedAt: '2026-10-12 06:00:00', inFlight: false });
+    expect(preemptionNegative(sync({ state: 'no_inventory', ecosystems: 0 })))
+      .toEqual({ kind: 'uncovered', tempSkipped: 0 });
+    expect(preemptionNegative(sync({ state: 'no_inventory', ecosystems: 0, skipped_temp: 3 })))
+      .toEqual({ kind: 'uncovered', tempSkipped: 3 });
   });
 
   it('a missing field (older backend) is silent, never an all-clear', () => {
@@ -41,6 +51,7 @@ const fresh = (over: Partial<DataFreshness>): DataFreshness => ({
   newest_source_check_age_hours: 0.5, source_checks_last_24h: 6, source_checks_last_72h: 6,
   failing_sources: 0, stale_sources: 0, total_sources: 6, is_stale: false, no_recent_fetches: false,
   last_run_items_scored: 4, last_run_sources_succeeded: 6, last_run_sources_failed: 0,
+  last_run_sources_skipped: 0,
   last_run_age_minutes: 12, computed_at: null, ...over,
 });
 

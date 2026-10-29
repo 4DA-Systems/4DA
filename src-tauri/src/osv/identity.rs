@@ -131,23 +131,11 @@ fn normalize_summary(summary: &str) -> String {
 
 /// The four-tier severity every surface shares, for one vulnerability
 /// cluster: the highest CVSS band across the cluster's rows when any row is
-/// scored, else the most severe curated label. `None` when the source gives
-/// neither (RustSec maintenance notices) — the caller decides the fallback.
+/// scored, else the most severe label — the record's own, or for a record its
+/// source never graded, its GHSA alias's (`osv::severity`, which also says
+/// where an inherited grade came from). `None` when nothing grades it.
 pub fn cluster_severity_tier(cluster: &[&MatchedAdvisory]) -> Option<&'static str> {
-    let max_cvss = cluster
-        .iter()
-        .filter_map(|m| m.cvss_score)
-        .fold(None, |acc: Option<f64>, s| {
-            Some(acc.map_or(s, |a| a.max(s)))
-        });
-    if let Some(score) = max_cvss {
-        return Some(crate::osv::types::cvss_band(score));
-    }
-    cluster
-        .iter()
-        .filter_map(|m| m.severity_label.as_deref())
-        .filter_map(canonical_tier)
-        .min_by_key(|t| tier_rank(t))
+    super::severity::cluster_severity(cluster).map(|g| g.tier)
 }
 
 // ============================================================================
@@ -307,6 +295,38 @@ pub fn scope_adjusted_urgency(
     }
 }
 
+/// Why a grade [`scope_adjusted_urgency`] moved differs from the advisory's
+/// own, as a clause every surface showing the adjusted grade can carry:
+/// "medium, not the advisory's own high: every affected copy is dev-only".
+/// `None` when the scope rule changed nothing.
+///
+/// Audit L5 (2026-10-12): Signal said "vitest ... security fix (critical)"
+/// (the advisory's grade) while Preemption said HIGH (dev-only), and nothing
+/// on either surface said why. The fix is honesty, not one number.
+pub fn scope_grade_note(
+    base: Urgency,
+    all_transitive: Option<bool>,
+    all_dev: Option<bool>,
+) -> Option<String> {
+    let adjusted = scope_adjusted_urgency(base, all_transitive, all_dev);
+    if adjusted == base {
+        return None;
+    }
+    let clamped = all_transitive == Some(true) && base == Urgency::Critical;
+    let dev = all_dev == Some(true);
+    let why = match (clamped, dev) {
+        (true, true) => "every affected copy is a transitive dev dependency",
+        (true, false) => "every affected copy is transitive (reached only through another package)",
+        _ => "every affected copy is dev-only",
+    };
+    let name = |u: Urgency| format!("{u:?}").to_lowercase();
+    Some(format!(
+        "{}, not the advisory's own {}: {why}",
+        name(adjusted),
+        name(base)
+    ))
+}
+
 /// Which kinds of install an aggregate row speaks for: the version-CONFIRMED
 /// instances in the projects it names (AD-044). Both aggregators — the
 /// upgrade plan and the alert path — read the inputs of
@@ -357,26 +377,6 @@ impl ExposureScope {
     }
 }
 
-fn canonical_tier(label: &str) -> Option<&'static str> {
-    match label {
-        "critical" => Some("critical"),
-        "high" => Some("high"),
-        "medium" => Some("medium"),
-        "low" => Some("low"),
-        _ => None,
-    }
-}
-
-fn tier_rank(tier: &str) -> u8 {
-    match tier {
-        "critical" => 0,
-        "high" => 1,
-        "medium" => 2,
-        "low" => 3,
-        _ => 4,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -407,6 +407,9 @@ mod tests {
             dependency_instances: vec![],
             aliases: aliases.iter().map(|s| s.to_string()).collect(),
             severity_label: label.map(str::to_string),
+            cwe_ids: Vec::new(),
+            severity_from: None,
+            informational: None,
         }
     }
 
@@ -661,12 +664,15 @@ mod tests {
         assert_eq!(cluster_by_vulnerability(&[&a, &b, &c]).len(), 3);
     }
 
-    /// CVSS decides the tier when present; the curated label decides when the
-    /// CVSS block is unscorable (GHSA-h395-gr6q-cpjc: a v4 vector the mirror
-    /// cannot score, labelled MODERATE by GitHub → medium, not critical).
+    /// The curated label decides; the CVSS band only when there is no label
+    /// (`osv::severity::row_grade`, `vectors/severity.jsonl` sv-015..sv-017).
+    /// GHSA-h395-gr6q-cpjc: a v4 vector the mirror cannot score, labelled
+    /// MODERATE by GitHub → medium, not critical.
     #[test]
-    fn severity_tier_prefers_cvss_then_curated_label() {
-        let scored = adv("GHSA-s", "x", None, "s", &[], Some(9.1), Some("low"));
+    fn severity_tier_prefers_the_curated_label_then_cvss() {
+        let both = adv("GHSA-s", "x", None, "s", &[], Some(9.1), Some("low"));
+        assert_eq!(cluster_severity_tier(&[&both]), Some("low"));
+        let scored = adv("GHSA-c", "x", None, "s", &[], Some(9.1), None);
         assert_eq!(cluster_severity_tier(&[&scored]), Some("critical"));
         let labelled = adv(
             "GHSA-l",
@@ -717,6 +723,34 @@ mod tests {
         }
     }
 
+    /// Audit L5: an adjusted grade always carries the advisory's own grade and
+    /// the scope that moved it; an unmoved grade carries nothing.
+    #[test]
+    fn scope_grade_note_names_both_grades_and_the_reason() {
+        use crate::evidence::Urgency::{Critical, High, Medium};
+        assert_eq!(
+            scope_grade_note(Critical, Some(false), Some(true)).as_deref(),
+            Some("high, not the advisory's own critical: every affected copy is dev-only")
+        );
+        assert_eq!(
+            scope_grade_note(High, Some(true), Some(true)).as_deref(),
+            Some("medium, not the advisory's own high: every affected copy is dev-only")
+        );
+        assert_eq!(
+            scope_grade_note(Critical, Some(true), Some(false)).as_deref(),
+            Some(concat!(
+                "high, not the advisory's own critical: every affected copy is transitive ",
+                "(reached only through another package)"
+            ))
+        );
+        assert_eq!(
+            scope_grade_note(Critical, Some(true), Some(true)).as_deref(),
+            Some("medium, not the advisory's own critical: every affected copy is a transitive dev dependency")
+        );
+        assert_eq!(scope_grade_note(High, Some(true), Some(false)), None);
+        assert_eq!(scope_grade_note(Medium, None, None), None);
+    }
+
     /// The inputs come from version-confirmed installs in the NAMED projects
     /// only — an unconfirmed copy, or a copy in a project the row does not
     /// speak for, can neither grant nor withhold a discount (AD-044).
@@ -732,6 +766,10 @@ mod tests {
             fixed_version: None,
             clean_version: None,
             target_version: None,
+            withheld: Vec::new(),
+            introduces: Vec::new(),
+            malicious: Vec::new(),
+            held: None,
         };
         let mut sandbox = adv("GHSA-s", "sandbox", None, "s", &[], Some(9.8), None);
         sandbox.dependency_instances = vec![

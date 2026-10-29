@@ -14,6 +14,14 @@ fn read(name: &str, format: LockFormat, content: &str) -> LockfileRead {
     }
 }
 
+/// Declarations naming `direct` only (no ranges, no dev-only names).
+fn names(direct: Vec<String>) -> Declarations {
+    Declarations {
+        names: direct,
+        ..Declarations::default()
+    }
+}
+
 /// paddle-webhook's shape, cut down: `vercel` is a devDependency that
 /// brings `sandbox` -> `@vercel/sandbox`; `hono` is the runtime root; and
 /// `debug` is installed twice — once at runtime, once only for dev.
@@ -101,7 +109,7 @@ fn the_walk_records_lockfile_scope_on_instances_and_collapsed_rows() {
         "hono".to_string(),
         "vercel".to_string(),
     ];
-    store_ecosystem(&db, project, "javascript", &[&lock], &direct, &[]);
+    store_ecosystem(&db, project, "javascript", &[&lock], &names(direct), &[]);
 
     let instances = db.get_dependency_instances(project).unwrap();
     let instance = |name: &str, version: &str| {
@@ -157,7 +165,14 @@ fn two_lockfiles_of_one_ecosystem_are_merged_not_replaced() {
         "flask==3.0.0\nrequests==2.31.0\n",
     );
     let direct = vec!["flask".to_string(), "requests".to_string()];
-    store_ecosystem(&db, project, "python", &[&poetry, &reqs], &direct, &[]);
+    store_ecosystem(
+        &db,
+        project,
+        "python",
+        &[&poetry, &reqs],
+        &names(direct),
+        &[],
+    );
 
     let mut names: Vec<String> = db
         .get_dependency_instances(project)

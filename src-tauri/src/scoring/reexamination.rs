@@ -64,7 +64,7 @@ const CONVERGE_MAX_CHUNKS: usize = 12;
 /// 3 (2026-10-10): the same pins are judged against advisories differently —
 /// OSV `introduced: "0"` is unbounded below (Go pseudo-versions were "not
 /// affected"), build metadata no longer orders versions, PyPI versions order
-/// by PEP 440 and PyPI names compare PEP 503-normalized (`osv::version_order`,
+/// by PEP 440 and PyPI names compare PEP 503-normalized (`fourda_depengine::version_order`,
 /// `osv::matching::package_key`). One scoped re-examination of the held
 /// dependency releases and buried advisories instead of a corpus-wide
 /// `PIPELINE_VERSION` drain (AD-034).
@@ -150,8 +150,22 @@ pub(crate) fn requeue_reexaminable_items(
 /// epoch has changed, re-queue and converge. `None` when the pins are unchanged (the
 /// common case — one indexed read plus a hash).
 pub(crate) async fn reexamine_if_pins_changed(db: &Database) -> Option<usize> {
-    let epoch = dependency_pin_epoch(db);
-    if epoch == crate::scheduler_state::get_dep_epoch_hash() {
+    if !crate::inventory_freshness::is_fresh() {
+        // The startup lockfile rescan is still rewriting the pins. Grading
+        // against the previous session's pins is wasted work (the epoch moves
+        // again when the scan lands), and the convergence fought the scan's
+        // writers for the database: the whole-app stalls of 2026-10-24, and
+        // re-scores and verdicts lost to `database is locked` in every
+        // overlapping run of 2026-10-25. The epoch is not stamped, so the
+        // first check after the scan runs it.
+        return None;
+    }
+    // A full read of the pins plus the stored epoch: synchronous SQL.
+    let (epoch, stored) = crate::ipc_blocking::cpu_bound(|| {
+        let epoch = dependency_pin_epoch(db);
+        (epoch, crate::scheduler_state::get_dep_epoch_hash())
+    });
+    if epoch == stored {
         return None;
     }
     let ctx = match super::build_scoring_context(db).await {
@@ -161,8 +175,15 @@ pub(crate) async fn reexamine_if_pins_changed(db: &Database) -> Option<usize> {
             return None;
         }
     };
-    let requeued = requeue_reexaminable_items(db, &ctx, crate::get_relevance_threshold());
-    crate::scheduler_state::persist_dep_epoch_hash(epoch);
+    // Up to 5,000 candidate rows through the dependency matcher plus a batched
+    // write: seconds of synchronous work. `cpu_bound` hands this worker's queued
+    // tasks to another worker first, so nothing waits behind it.
+    let threshold = crate::get_relevance_threshold();
+    let requeued = crate::ipc_blocking::cpu_bound(|| {
+        let requeued = requeue_reexaminable_items(db, &ctx, threshold);
+        crate::scheduler_state::persist_dep_epoch_hash(epoch);
+        requeued
+    });
     if requeued > 0 {
         converge(requeued).await;
     }

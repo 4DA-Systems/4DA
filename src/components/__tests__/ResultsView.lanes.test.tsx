@@ -27,10 +27,10 @@ vi.mock('react-i18next', () => ({
 }));
 
 let storeState: Record<string, unknown> = {};
-function baseState(overrides: Record<string, unknown> = {}) {
+function baseState(overrides: Record<string, unknown> = {}, relevanceResults: SourceRelevance[] = []) {
   return {
     appState: {
-      loading: false, analysisComplete: true, status: 'Ready', relevanceResults: [] as SourceRelevance[],
+      loading: false, analysisComplete: true, status: 'Ready', relevanceResults,
       progress: 0, progressStage: '', progressMessage: '', contextFiles: [], nearMisses: null,
     },
     feedbackGiven: {}, discoveredContext: null, expandedItem: null, searchFocusItemId: null,
@@ -99,7 +99,7 @@ const news = (n: number) => Array.from({ length: n }, (_, i) => mk(`news-${i}`, 
 
 function setup(results: SourceRelevance[], filters: Record<string, unknown> = {}, store: Record<string, unknown> = {}) {
   filterState = { filteredResults: results, ...filters };
-  storeState = baseState(store);
+  storeState = baseState(store, results);
   return render(<ResultsView newItemIds={new Set()} focusedIndex={-1} />);
 }
 const titles = (el: HTMLElement) => within(el).queryAllByTestId('row').map((r) => r.textContent);
@@ -145,15 +145,19 @@ describe('ResultsView reading-feed lanes', () => {
     expect(screen.getByRole('listbox', { name: 'signals.laneMore' })).toBeInTheDocument();
   });
 
-  it('hides empty lanes, and says so plainly when the feed holds only stack facts', () => {
-    const a = setup(news(4));
-    expect(lane(a.container, 'more')).toBeNull();
-    expect(lane(a.container, 'worth')).not.toBeNull();
-    a.unmount();
-    const b = setup(releases(3));
-    expect(lane(b.container, 'worth')).toBeNull();
-    expect(lane(b.container, 'more')).toBeNull();
-    expect(screen.getByText('signals.stack.feedOnlyStack')).toBeInTheDocument();
+  it('hides empty lanes', () => {
+    const { container } = setup(news(4));
+    expect(lane(container, 'more')).toBeNull();
+    expect(lane(container, 'worth')).not.toBeNull();
+  });
+
+  it('holding only stack facts, says nothing has been read yet: no lanes, counts or filter bar', () => {
+    const { container } = setup(releases(3));
+    expect(lane(container, 'worth')).toBeNull();
+    expect(lane(container, 'more')).toBeNull();
+    expect(screen.getByTestId('interests-pending')).toHaveTextContent('signals.interestsPending');
+    expect(screen.queryByText(/results\.count/)).toBeNull();
+    expect(screen.queryByText(/results\.topPicks/)).toBeNull();
   });
 
   it('keeps the flat list for non-score sorts (no lane headings, incoming order)', () => {
@@ -183,8 +187,9 @@ describe('ResultsView reading-feed lanes', () => {
 
   it('marks the focused row using the global on-screen index across lanes', () => {
     useSignalDisplayOrder.setState({ worthExpanded: true });
-    filterState = { filteredResults: [...news(3), ...releases(2)] };
-    storeState = baseState();
+    const results = [...news(3), ...releases(2)];
+    filterState = { filteredResults: results };
+    storeState = baseState({}, results);
     render(<ResultsView newItemIds={new Set()} focusedIndex={0} />);
     expect(screen.getByText('news-0')).toHaveAttribute('aria-selected', 'true');
     expect(screen.getByRole('listbox', { name: 'signals.laneWorth' })).toHaveAttribute('aria-activedescendant', 'result-item-1');
