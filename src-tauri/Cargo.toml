@@ -120,7 +120,7 @@ rten = { version = "0.26", optional = true }     # Model loading for ocrs (text-
 # notices) with no fix on the 0.13 line zip 8 requires. A zstd-compressed entry
 # in a user's archive is reported unsupported instead. Restore with zip >= 9.1
 # (zstd ^0.14.2) once calamine and docx-rs allow zip 9.
-zip = { version = "8.6", default-features = false, features = ["aes-crypto", "bzip2", "deflate64", "deflate", "lzma", "ppmd", "time", "xz"] }
+zip = { version = "9.0", default-features = false, features = ["aes-crypto", "bzip2", "deflate64", "deflate", "lzma", "ppmd", "time", "xz"] }
 tar = { version = "0.4.45", optional = true }        # TAR archive extraction
 # Gzip decompression. Not optional: the release-changelog lane reads registry
 # package archives (.crate / .tgz) in every build (release_changelog/archive.rs).
