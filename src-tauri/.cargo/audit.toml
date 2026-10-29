@@ -87,7 +87,7 @@ ignore = [
     "RUSTSEC-2026-0369", # zip permissions through symlinks on extract
     # -----------------------------------------------------------------------
     # crypto-bigint <0.7.6 timing variability (RUSTSEC-2026-0387). The 0.7
-    # copy is bumped to 0.7.6. The remaining 0.5.5 copy has no fix (patched
+    # copy is bumped to 0.7.10. The remaining 0.5.5 copy has no fix (patched
     # >=0.7.6 only) and comes from jsonwebtoken 11.1 (newest) -> p256/p384 0.13
     # -> elliptic-curve 0.13. Checked 2026-10-25:
     # - jsonwebtoken is optional, behind the `enterprise` feature, which no
