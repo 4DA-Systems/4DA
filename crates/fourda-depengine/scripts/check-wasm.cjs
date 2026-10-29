@@ -5,7 +5,8 @@
 // imports (no WASI, no host functions — so it cannot reach a file, socket or
 // clock), and it must actually run. Reports its size, raw and gzipped. Then
 // replays one real conformance case (tests/fixtures/match_inventory_case.json)
-// and requires the wasm answer to equal the native engine's.
+// and the parent_links needs round-trip (tests/fixtures/parent_links_case.json),
+// and requires the wasm answers to equal the native engine's.
 //
 // Usage: node check-wasm.cjs <path/to/fourda_depengine.wasm> [fixture.json]
 // Exit 1 on any import, a missing export, a wrong answer, or wasm != native.
@@ -157,5 +158,32 @@ if (!same) {
   }
   if (!got.ok) console.error(`::error::wasm error: ${got.error}`);
   failed = true;
+}
+
+// The fix path for transitive copies (C0.4), through its `needs` round-trip:
+// every recorded round of tests/fixtures/parent_links_case.json (the first
+// request, then each one carrying the host's answers to the previous round's
+// needs) through the wasm module. tests/parent_links_fixture.rs plays the same
+// rounds natively, so equality here means wasm == native on every round.
+const linksPath = path.join(__dirname, '..', 'tests', 'fixtures', 'parent_links_case.json');
+const links = JSON.parse(fs.readFileSync(linksPath, 'utf8'));
+if (!Array.isArray(links.rounds) || links.rounds.length < 2) {
+  console.error('::error::parent_links_case.json has no recorded round-trip');
+  failed = true;
+} else {
+  links.rounds.forEach((round, i) => {
+    const got = call(round.request);
+    const same = isDeepStrictEqual(got, round.response);
+    const r = got.result ?? {};
+    const what = r.needs
+      ? `${r.needs.length} needs (${[...new Set(r.needs.map((n) => n.kind))].join(', ')})`
+      : `${r.links?.length ?? 0} links, ${r.unlinked?.length ?? 0} unlinked`;
+    console.log(`${same ? 'ok  ' : 'FAIL'} parent_links round ${i + 1}: ${what}; wasm ${same ? '==' : '!='} native`);
+    if (!same) {
+      console.error(`native: ${JSON.stringify(round.response)}`);
+      console.error(`wasm:   ${JSON.stringify(got)}`);
+      failed = true;
+    }
+  });
 }
 process.exit(failed ? 1 : 0);

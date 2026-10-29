@@ -63,6 +63,8 @@ const MAX_NOTE_BYTES: usize = 200;
 /// `validate_item` caps a title at 120 BYTES.
 const MAX_TITLE_BYTES: usize = 120;
 
+use crate::osv::fix_path::DetectLockfile;
+
 /// The lockfile whose pins `dependency_instances` holds for a project — the
 /// same detection the fix-path rule names its refresh command from
 /// (`osv::fix_path`), so the two never disagree about a project's tool.

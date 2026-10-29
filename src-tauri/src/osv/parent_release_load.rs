@@ -25,7 +25,7 @@ use fourda_depengine::fix_target::walk_target_kinds;
 use crate::db::Database;
 use crate::osv::types::MatchedAdvisory;
 
-use super::fix_path::{requirement_admits, Dialect, Manager};
+use super::fix_path::{requirement_admits, DetectManager, Dialect, Manager};
 use super::parent_hint::{normalize_path, ParentLink, ParentRelease, ParentStanding};
 use super::parent_release::{
     compare, decide, is_major, Advisories, Child, Decision, Found, RowIn, RowOut, Standing,

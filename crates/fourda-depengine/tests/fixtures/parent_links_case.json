@@ -1,0 +1,614 @@
+{
+  "case": "braces 3.0.2 under micromatch in a pnpm project (its store manifest read in round 2) and an npm project (the package-lock tree decides anymatch holds 3.0.3), plus a yarn 1 project with no edges",
+  "disk": {
+    "crate_manifests": {},
+    "listings": {
+      "/w/taxonomy/node_modules/.pnpm": [
+        "braces@3.0.2",
+        "micromatch@4.0.5"
+      ]
+    },
+    "manifests": {
+      "/w/taxonomy/node_modules/.pnpm/micromatch@4.0.5/node_modules/micromatch/package.json": "{\"name\": \"micromatch\", \"version\": \"4.0.5\", \"dependencies\": {\"braces\": \"^3.0.2\"}}"
+    },
+    "npm_locks": {
+      "/w/app": "{\"lockfileVersion\": 3, \"packages\": {\"\": {\"dependencies\": {\"micromatch\": \"^4.0.5\", \"anymatch\": \"^3.1.3\"}}, \"node_modules/braces\": {\"version\": \"3.0.3\"}, \"node_modules/anymatch\": {\"version\": \"3.1.3\", \"dependencies\": {\"braces\": \"^3.0.2\"}}, \"node_modules/micromatch\": {\"version\": \"4.0.5\", \"dependencies\": {\"braces\": \"^3.0.2\"}}, \"node_modules/micromatch/node_modules/braces\": {\"version\": \"3.0.2\"}}}"
+    }
+  },
+  "request": {
+    "eco": "npm",
+    "edges": [
+      {
+        "child_spec": "3.0.2",
+        "parent": "micromatch",
+        "parent_version": "4.0.5",
+        "project": "/w/taxonomy"
+      },
+      {
+        "child_spec": "^3.0.0",
+        "parent": "__root__",
+        "parent_version": "1.0.0",
+        "project": "/w/app"
+      },
+      {
+        "child_spec": "^3.0.2",
+        "parent": "micromatch",
+        "parent_version": "4.0.5",
+        "project": "/w/app"
+      },
+      {
+        "child_spec": "^3.0.2",
+        "parent": "anymatch",
+        "parent_version": "3.1.3",
+        "project": "/w/app"
+      }
+    ],
+    "installed": [
+      {
+        "is_direct": false,
+        "package": "braces",
+        "project": "/w/taxonomy",
+        "version": "3.0.2"
+      },
+      {
+        "is_direct": true,
+        "package": "micromatch",
+        "project": "/w/taxonomy",
+        "version": "4.0.5"
+      },
+      {
+        "is_direct": false,
+        "package": "braces",
+        "project": "/w/app",
+        "version": "3.0.2"
+      },
+      {
+        "is_direct": false,
+        "package": "braces",
+        "project": "/w/app",
+        "version": "3.0.3"
+      },
+      {
+        "is_direct": true,
+        "package": "micromatch",
+        "project": "/w/app",
+        "version": "4.0.5"
+      },
+      {
+        "is_direct": true,
+        "package": "anymatch",
+        "project": "/w/app",
+        "version": "3.1.3"
+      },
+      {
+        "is_direct": false,
+        "package": "braces",
+        "project": "/w/legacy",
+        "version": "3.0.2"
+      }
+    ],
+    "lines": [
+      {
+        "installed_version": "3.0.2",
+        "sites": [
+          {
+            "is_direct": false,
+            "project_path": "/w/taxonomy"
+          },
+          {
+            "is_direct": false,
+            "project_path": "/w/app"
+          },
+          {
+            "is_direct": false,
+            "project_path": "/w/legacy"
+          }
+        ],
+        "target_version": "3.0.3"
+      }
+    ],
+    "managers": {
+      "/w/app": "npm",
+      "/w/legacy": "yarn_classic",
+      "/w/taxonomy": "pnpm"
+    },
+    "op": "parent_links",
+    "package": "braces",
+    "provided": {},
+    "ranges": [
+      [
+        {
+          "events": [
+            {
+              "introduced": "0"
+            },
+            {
+              "fixed": "3.0.3"
+            }
+          ],
+          "type": "SEMVER"
+        }
+      ]
+    ]
+  },
+  "rounds": [
+    {
+      "request": {
+        "eco": "npm",
+        "edges": [
+          {
+            "child_spec": "3.0.2",
+            "parent": "micromatch",
+            "parent_version": "4.0.5",
+            "project": "/w/taxonomy"
+          },
+          {
+            "child_spec": "^3.0.0",
+            "parent": "__root__",
+            "parent_version": "1.0.0",
+            "project": "/w/app"
+          },
+          {
+            "child_spec": "^3.0.2",
+            "parent": "micromatch",
+            "parent_version": "4.0.5",
+            "project": "/w/app"
+          },
+          {
+            "child_spec": "^3.0.2",
+            "parent": "anymatch",
+            "parent_version": "3.1.3",
+            "project": "/w/app"
+          }
+        ],
+        "installed": [
+          {
+            "is_direct": false,
+            "package": "braces",
+            "project": "/w/taxonomy",
+            "version": "3.0.2"
+          },
+          {
+            "is_direct": true,
+            "package": "micromatch",
+            "project": "/w/taxonomy",
+            "version": "4.0.5"
+          },
+          {
+            "is_direct": false,
+            "package": "braces",
+            "project": "/w/app",
+            "version": "3.0.2"
+          },
+          {
+            "is_direct": false,
+            "package": "braces",
+            "project": "/w/app",
+            "version": "3.0.3"
+          },
+          {
+            "is_direct": true,
+            "package": "micromatch",
+            "project": "/w/app",
+            "version": "4.0.5"
+          },
+          {
+            "is_direct": true,
+            "package": "anymatch",
+            "project": "/w/app",
+            "version": "3.1.3"
+          },
+          {
+            "is_direct": false,
+            "package": "braces",
+            "project": "/w/legacy",
+            "version": "3.0.2"
+          }
+        ],
+        "lines": [
+          {
+            "installed_version": "3.0.2",
+            "sites": [
+              {
+                "is_direct": false,
+                "project_path": "/w/taxonomy"
+              },
+              {
+                "is_direct": false,
+                "project_path": "/w/app"
+              },
+              {
+                "is_direct": false,
+                "project_path": "/w/legacy"
+              }
+            ],
+            "target_version": "3.0.3"
+          }
+        ],
+        "managers": {
+          "/w/app": "npm",
+          "/w/legacy": "yarn_classic",
+          "/w/taxonomy": "pnpm"
+        },
+        "op": "parent_links",
+        "package": "braces",
+        "provided": {},
+        "ranges": [
+          [
+            {
+              "events": [
+                {
+                  "introduced": "0"
+                },
+                {
+                  "fixed": "3.0.3"
+                }
+              ],
+              "type": "SEMVER"
+            }
+          ]
+        ]
+      },
+      "response": {
+        "ok": true,
+        "result": {
+          "needs": [
+            {
+              "kind": "manifest",
+              "path": "/w/taxonomy/node_modules/micromatch/package.json"
+            },
+            {
+              "dir": "/w/taxonomy/node_modules/.pnpm",
+              "kind": "listing"
+            },
+            {
+              "dir": "/w/app",
+              "kind": "npm_lock"
+            },
+            {
+              "dir": "/w/taxonomy",
+              "kind": "npm_lock"
+            }
+          ]
+        },
+        "schema": "depengine/0"
+      }
+    },
+    {
+      "request": {
+        "eco": "npm",
+        "edges": [
+          {
+            "child_spec": "3.0.2",
+            "parent": "micromatch",
+            "parent_version": "4.0.5",
+            "project": "/w/taxonomy"
+          },
+          {
+            "child_spec": "^3.0.0",
+            "parent": "__root__",
+            "parent_version": "1.0.0",
+            "project": "/w/app"
+          },
+          {
+            "child_spec": "^3.0.2",
+            "parent": "micromatch",
+            "parent_version": "4.0.5",
+            "project": "/w/app"
+          },
+          {
+            "child_spec": "^3.0.2",
+            "parent": "anymatch",
+            "parent_version": "3.1.3",
+            "project": "/w/app"
+          }
+        ],
+        "installed": [
+          {
+            "is_direct": false,
+            "package": "braces",
+            "project": "/w/taxonomy",
+            "version": "3.0.2"
+          },
+          {
+            "is_direct": true,
+            "package": "micromatch",
+            "project": "/w/taxonomy",
+            "version": "4.0.5"
+          },
+          {
+            "is_direct": false,
+            "package": "braces",
+            "project": "/w/app",
+            "version": "3.0.2"
+          },
+          {
+            "is_direct": false,
+            "package": "braces",
+            "project": "/w/app",
+            "version": "3.0.3"
+          },
+          {
+            "is_direct": true,
+            "package": "micromatch",
+            "project": "/w/app",
+            "version": "4.0.5"
+          },
+          {
+            "is_direct": true,
+            "package": "anymatch",
+            "project": "/w/app",
+            "version": "3.1.3"
+          },
+          {
+            "is_direct": false,
+            "package": "braces",
+            "project": "/w/legacy",
+            "version": "3.0.2"
+          }
+        ],
+        "lines": [
+          {
+            "installed_version": "3.0.2",
+            "sites": [
+              {
+                "is_direct": false,
+                "project_path": "/w/taxonomy"
+              },
+              {
+                "is_direct": false,
+                "project_path": "/w/app"
+              },
+              {
+                "is_direct": false,
+                "project_path": "/w/legacy"
+              }
+            ],
+            "target_version": "3.0.3"
+          }
+        ],
+        "managers": {
+          "/w/app": "npm",
+          "/w/legacy": "yarn_classic",
+          "/w/taxonomy": "pnpm"
+        },
+        "op": "parent_links",
+        "package": "braces",
+        "provided": {
+          "listings": {
+            "/w/taxonomy/node_modules/.pnpm": [
+              "braces@3.0.2",
+              "micromatch@4.0.5"
+            ]
+          },
+          "manifests": {
+            "/w/taxonomy/node_modules/micromatch/package.json": null
+          },
+          "npm_locks": {
+            "/w/app": "{\"lockfileVersion\": 3, \"packages\": {\"\": {\"dependencies\": {\"micromatch\": \"^4.0.5\", \"anymatch\": \"^3.1.3\"}}, \"node_modules/braces\": {\"version\": \"3.0.3\"}, \"node_modules/anymatch\": {\"version\": \"3.1.3\", \"dependencies\": {\"braces\": \"^3.0.2\"}}, \"node_modules/micromatch\": {\"version\": \"4.0.5\", \"dependencies\": {\"braces\": \"^3.0.2\"}}, \"node_modules/micromatch/node_modules/braces\": {\"version\": \"3.0.2\"}}}",
+            "/w/taxonomy": null
+          }
+        },
+        "ranges": [
+          [
+            {
+              "events": [
+                {
+                  "introduced": "0"
+                },
+                {
+                  "fixed": "3.0.3"
+                }
+              ],
+              "type": "SEMVER"
+            }
+          ]
+        ]
+      },
+      "response": {
+        "ok": true,
+        "result": {
+          "needs": [
+            {
+              "kind": "manifest",
+              "path": "/w/taxonomy/node_modules/.pnpm/micromatch@4.0.5/node_modules/micromatch/package.json"
+            }
+          ]
+        },
+        "schema": "depengine/0"
+      }
+    },
+    {
+      "request": {
+        "eco": "npm",
+        "edges": [
+          {
+            "child_spec": "3.0.2",
+            "parent": "micromatch",
+            "parent_version": "4.0.5",
+            "project": "/w/taxonomy"
+          },
+          {
+            "child_spec": "^3.0.0",
+            "parent": "__root__",
+            "parent_version": "1.0.0",
+            "project": "/w/app"
+          },
+          {
+            "child_spec": "^3.0.2",
+            "parent": "micromatch",
+            "parent_version": "4.0.5",
+            "project": "/w/app"
+          },
+          {
+            "child_spec": "^3.0.2",
+            "parent": "anymatch",
+            "parent_version": "3.1.3",
+            "project": "/w/app"
+          }
+        ],
+        "installed": [
+          {
+            "is_direct": false,
+            "package": "braces",
+            "project": "/w/taxonomy",
+            "version": "3.0.2"
+          },
+          {
+            "is_direct": true,
+            "package": "micromatch",
+            "project": "/w/taxonomy",
+            "version": "4.0.5"
+          },
+          {
+            "is_direct": false,
+            "package": "braces",
+            "project": "/w/app",
+            "version": "3.0.2"
+          },
+          {
+            "is_direct": false,
+            "package": "braces",
+            "project": "/w/app",
+            "version": "3.0.3"
+          },
+          {
+            "is_direct": true,
+            "package": "micromatch",
+            "project": "/w/app",
+            "version": "4.0.5"
+          },
+          {
+            "is_direct": true,
+            "package": "anymatch",
+            "project": "/w/app",
+            "version": "3.1.3"
+          },
+          {
+            "is_direct": false,
+            "package": "braces",
+            "project": "/w/legacy",
+            "version": "3.0.2"
+          }
+        ],
+        "lines": [
+          {
+            "installed_version": "3.0.2",
+            "sites": [
+              {
+                "is_direct": false,
+                "project_path": "/w/taxonomy"
+              },
+              {
+                "is_direct": false,
+                "project_path": "/w/app"
+              },
+              {
+                "is_direct": false,
+                "project_path": "/w/legacy"
+              }
+            ],
+            "target_version": "3.0.3"
+          }
+        ],
+        "managers": {
+          "/w/app": "npm",
+          "/w/legacy": "yarn_classic",
+          "/w/taxonomy": "pnpm"
+        },
+        "op": "parent_links",
+        "package": "braces",
+        "provided": {
+          "listings": {
+            "/w/taxonomy/node_modules/.pnpm": [
+              "braces@3.0.2",
+              "micromatch@4.0.5"
+            ]
+          },
+          "manifests": {
+            "/w/taxonomy/node_modules/.pnpm/micromatch@4.0.5/node_modules/micromatch/package.json": "{\"name\": \"micromatch\", \"version\": \"4.0.5\", \"dependencies\": {\"braces\": \"^3.0.2\"}}",
+            "/w/taxonomy/node_modules/micromatch/package.json": null
+          },
+          "npm_locks": {
+            "/w/app": "{\"lockfileVersion\": 3, \"packages\": {\"\": {\"dependencies\": {\"micromatch\": \"^4.0.5\", \"anymatch\": \"^3.1.3\"}}, \"node_modules/braces\": {\"version\": \"3.0.3\"}, \"node_modules/anymatch\": {\"version\": \"3.1.3\", \"dependencies\": {\"braces\": \"^3.0.2\"}}, \"node_modules/micromatch\": {\"version\": \"4.0.5\", \"dependencies\": {\"braces\": \"^3.0.2\"}}, \"node_modules/micromatch/node_modules/braces\": {\"version\": \"3.0.2\"}}}",
+            "/w/taxonomy": null
+          }
+        },
+        "ranges": [
+          [
+            {
+              "events": [
+                {
+                  "introduced": "0"
+                },
+                {
+                  "fixed": "3.0.3"
+                }
+              ],
+              "type": "SEMVER"
+            }
+          ]
+        ]
+      },
+      "response": {
+        "ok": true,
+        "result": {
+          "links": [
+            {
+              "child_version": "3.0.2",
+              "command": "pnpm update braces --depth Infinity",
+              "lever_unknown": null,
+              "override_hint": null,
+              "parent": "micromatch",
+              "parent_is_direct": true,
+              "parent_version": "4.0.5",
+              "project": "/w/taxonomy",
+              "refresh": {
+                "enough": "requirement"
+              },
+              "requirement": "^3.0.2",
+              "resolutions": [],
+              "standing": {
+                "kind": "unknown"
+              },
+              "target": "3.0.3",
+              "through": null
+            },
+            {
+              "child_version": "3.0.2",
+              "command": "npm update braces",
+              "lever_unknown": null,
+              "override_hint": null,
+              "parent": "micromatch",
+              "parent_is_direct": true,
+              "parent_version": "4.0.5",
+              "project": "/w/app",
+              "refresh": {
+                "enough": "requirement"
+              },
+              "requirement": "^3.0.2",
+              "resolutions": [],
+              "standing": {
+                "kind": "unknown"
+              },
+              "target": "3.0.3",
+              "through": null
+            }
+          ],
+          "unlinked": [
+            {
+              "command": null,
+              "installed": "3.0.2",
+              "project": "/w/legacy",
+              "refresh": {
+                "enough": "semver"
+              },
+              "target": "3.0.3"
+            }
+          ]
+        },
+        "schema": "depengine/0"
+      }
+    }
+  ]
+}
