@@ -103,7 +103,7 @@ async-trait = "0.1"
 lettre = { version = "0.11.22", default-features = false, features = ["tokio1-rustls-tls", "builder", "smtp-transport", "hostname"] }
 
 # Base64 encoding/decoding (for GitHub README)
-base64 = "0.22"
+base64 = "0.23"
 
 # Phase 1: Multi-format document extraction (basic support)
 # Note: Using pure Rust alternatives instead of C library bindings
