@@ -123,8 +123,18 @@ pub(crate) async fn fetch_github_advisories(ecosystem: Option<&str>) -> Result<V
         };
 
         if !response.status().is_success() {
-            // First page: preserve the empty-result contract; later pages: keep
-            // what already landed.
+            let err = advisory_status_error(
+                response.status(),
+                response.headers(),
+                chrono::Utc::now().timestamp(),
+            );
+            // First page: nothing landed, so this is a failed fetch, never an
+            // empty window (a rate-limited cycle used to read as a quiet day and
+            // the source stayed healthy). Later pages: keep what already landed.
+            if pages_fetched == 0 {
+                return Err(err.into());
+            }
+            tracing::warn!(target: "4da::sources", page = pages_fetched, error = %err, "CVE: pagination page failed, keeping advisories fetched so far");
             break;
         }
 
@@ -164,6 +174,71 @@ pub(crate) async fn fetch_github_advisories(ecosystem: Option<&str>) -> Result<V
     }
 
     Ok(advisories)
+}
+
+/// The error for a non-2xx GitHub Advisory API response. The unauthenticated
+/// API (60 requests an hour) reports an exhausted budget as 403 or 429 with
+/// `x-ratelimit-remaining: 0` and the reset as an epoch in `x-ratelimit-reset`;
+/// a secondary limit is 403 or 429 with `retry-after`. Both are rate limits with
+/// a known cooldown, not a missing credential. Everything else follows
+/// [`super::classify_http_status_with_retry_after`].
+fn advisory_status_error(
+    status: reqwest::StatusCode,
+    headers: &reqwest::header::HeaderMap,
+    now_epoch: i64,
+) -> SourceError {
+    let header = |name: &str| headers.get(name).and_then(|v| v.to_str().ok());
+    let retry_after = header("retry-after").and_then(super::parse_retry_after);
+    let limit_status = status == reqwest::StatusCode::FORBIDDEN
+        || status == reqwest::StatusCode::TOO_MANY_REQUESTS;
+    if limit_status && header("x-ratelimit-remaining") == Some("0") {
+        let until_reset = header("x-ratelimit-reset")
+            .and_then(|v| v.parse::<i64>().ok())
+            .map(|reset| u64::try_from(reset - now_epoch).unwrap_or(0));
+        return SourceError::rate_limited_after(
+            format!(
+                "GitHub Advisory API rate limited (HTTP {}, hourly budget exhausted)",
+                status.as_u16()
+            ),
+            until_reset.or(retry_after),
+        );
+    }
+    if limit_status && retry_after.is_some() {
+        return SourceError::rate_limited_after(
+            format!(
+                "GitHub Advisory API rate limited (HTTP {}, secondary limit)",
+                status.as_u16()
+            ),
+            retry_after,
+        );
+    }
+    match super::classify_http_status_with_retry_after(status, retry_after, "GitHub Advisory API") {
+        Err(e) => e,
+        Ok(()) => SourceError::Network(format!("GitHub Advisory API returned HTTP {status}")),
+    }
+}
+
+/// A failed advisory fetch as the source error it carries, so a rate limit
+/// reaches the breaker as one instead of as a generic network error.
+fn as_source_error(e: anyhow::Error) -> SourceError {
+    match e.downcast::<SourceError>() {
+        Ok(source_error) => source_error,
+        Err(other) => SourceError::Network(other.to_string()),
+    }
+}
+
+/// The source's result over its ecosystems. Any ecosystem that answered makes
+/// it a (possibly partial) success; only when every one failed is the source
+/// failed, so its health records the outage instead of a quiet day.
+fn ecosystems_outcome<T>(
+    succeeded: usize,
+    first_error: Option<SourceError>,
+    items: Vec<T>,
+) -> SourceResult<Vec<T>> {
+    match first_error {
+        Some(e) if succeeded == 0 => Err(e),
+        _ => Ok(items),
+    }
 }
 
 fn parse_github_advisory(item: &serde_json::Value) -> Option<CveAdvisory> {
@@ -457,26 +532,30 @@ impl Source for CveSource {
             // Fallback: no ACE data yet, fetch unfiltered (current behavior)
             let advisories = fetch_github_advisories(None)
                 .await
-                .map_err(|e| SourceError::Network(e.to_string()))?;
+                .map_err(as_source_error)?;
             let items = advisories_to_source_items(&advisories);
             tracing::info!(target: "4da::sources", count = items.len(), "CVE: Fetched security advisories (unfiltered, no ACE data)");
             return Ok(items.into_iter().take(self.config.max_items).collect());
         }
 
         let mut all_items = Vec::new();
+        let (mut succeeded, mut first_error) = (0usize, None);
         for ecosystem in &user_ecosystems {
             match fetch_github_advisories(Some(ecosystem)).await {
                 Ok(advisories) => {
+                    succeeded += 1;
                     let items = advisories_to_source_items(&advisories);
                     tracing::info!(target: "4da::sources", ecosystem = %ecosystem, count = items.len(), "CVE: Fetched advisories for ecosystem");
                     all_items.extend(items);
                 }
                 Err(e) => {
                     tracing::warn!(target: "4da::sources", ecosystem = %ecosystem, error = %e, "CVE: Failed to fetch advisories for ecosystem");
+                    first_error.get_or_insert(as_source_error(e));
                 }
             }
         }
         tracing::info!(target: "4da::sources", count = all_items.len(), ecosystems = ?user_ecosystems, "CVE: Fetched filtered security advisories");
+        let all_items = ecosystems_outcome(succeeded, first_error, all_items)?;
         Ok(all_items.into_iter().take(self.config.max_items).collect())
     }
 
@@ -505,19 +584,22 @@ impl Source for CveSource {
         };
 
         let mut all_items = Vec::new();
+        let (mut succeeded, mut first_error) = (0usize, None);
         for eco in &ecosystems {
             match fetch_github_advisories(Some(eco)).await {
                 Ok(advisories) => {
+                    succeeded += 1;
                     let items = advisories_to_source_items(&advisories);
                     all_items.extend(items.into_iter().take(items_per_category));
                 }
                 Err(e) => {
                     tracing::warn!(target: "4da::sources", ecosystem = %eco, error = %e, "CVE: Failed for ecosystem");
+                    first_error.get_or_insert(as_source_error(e));
                 }
             }
         }
         tracing::info!(target: "4da::sources", count = all_items.len(), ecosystems = ?ecosystems, "CVE: Deep scan complete");
-        Ok(all_items)
+        ecosystems_outcome(succeeded, first_error, all_items)
     }
 }
 
@@ -717,3 +799,7 @@ mod tests {
         assert!(content.contains("CVSS: 7.5"), "{content}");
     }
 }
+
+#[cfg(test)]
+#[path = "cve_status_tests.rs"]
+mod status_tests;
