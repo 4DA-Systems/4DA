@@ -471,3 +471,58 @@ fn test_multiple_affected_packages() {
     let pkgs = metadata["affected_packages"].as_array().unwrap();
     assert_eq!(pkgs.len(), 2);
 }
+
+/// Mirror lane, end to end on the real record: GO-2026-6603 names `stdlib` (listed FIRST in
+/// affected[]) and golang.org/x/net <0.60.0. A go.mod `go 1.22` directive is inventoried as
+/// stdlib 1.22.0, so the matcher returns a row for EACH package; strict mode must still
+/// surface one item, named for the pinned module (see `osv_collapse`).
+#[test]
+fn mirror_lane_surfaces_one_go_item_named_for_the_pinned_module() {
+    use crate::test_utils::test_db;
+
+    let db = test_db();
+    let project = "/stack/go-service";
+    db.store_dependency(project, "stdlib", Some("1.22.0"), "go", false, None)
+        .unwrap();
+    db.store_dependency(
+        project,
+        "golang.org/x/net",
+        Some("0.21.0"),
+        "go",
+        false,
+        None,
+    )
+    .unwrap();
+    let vuln: crate::osv::types::Vulnerability = serde_json::from_str(include_str!(
+        "../../tests/conformance/osv/GO-2026-6603.json"
+    ))
+    .unwrap();
+    crate::osv::sync::store_vulnerability(&db, &vuln, &mut std::collections::HashSet::new())
+        .unwrap();
+
+    let matched = crate::osv::matching::get_matched_advisories(&db).unwrap();
+    let mut packages: Vec<&str> = matched.iter().map(|m| m.package_name.as_str()).collect();
+    packages.sort_unstable();
+    assert_eq!(packages, ["golang.org/x/net", "stdlib"], "both rows match");
+
+    let items = crate::sources::osv_collapse::one_item_per_advisory(
+        matched
+            .iter()
+            .map(matched_advisory_to_source_item)
+            .collect(),
+    );
+    let titles: Vec<&str> = items.iter().map(|i| i.title.as_str()).collect();
+    assert_eq!(items.len(), 1, "one item per advisory id, got {titles:?}");
+    assert!(
+        items[0]
+            .title
+            .starts_with("[GO-2026-6603] golang.org/x/net: "),
+        "{:?}",
+        items[0].title
+    );
+    assert!(
+        items[0].content.contains("Fixed in: 0.60.0"),
+        "{}",
+        items[0].content
+    );
+}
