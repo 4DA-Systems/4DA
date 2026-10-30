@@ -72,22 +72,23 @@ ignore = [
     # zip <9.0.0 extract() path handling (RUSTSEC-2026-0367 SUID/SGID kept,
     # -0368 symlink targets outside the destination, -0369 permissions applied
     # through symlinks). All three are in ZipArchive::extract /
-    # ZipStreamReader::extract. Checked 2026-10-17:
-    # - 4DA (fastembed.rs, extractors/archive.rs, extractors/office.rs) never
-    #   calls extract(); it copies chosen entries to paths it names.
-    # - calamine 0.36.1 and docx-rs 0.4.22 (zip ^8.6) only read entries.
-    # - tauri-plugin-updater 2.13.1 (zip ^4, also 2.14.0) calls extract() on
-    #   Windows only, AFTER verify_signature against our updater pubkey: the
-    #   archive is one we signed.
-    # No consumer releases a zip 9 build yet. Do NOT bump the direct dep alone;
-    # that adds a third copy and changes no reachable code.
-    # REVISIT: drop when calamine, docx-rs and tauri-plugin-updater move to zip >=9.
+    # ZipStreamReader::extract. Re-checked 2026-10-30:
+    # - 4DA's own code (fastembed.rs, osv/cache.rs, extractors/archive.rs,
+    #   extractors/office.rs) and calamine 0.37 are on zip 9.1.3, which is
+    #   not affected. 4DA never calls extract() in any case; it copies chosen
+    #   entries to paths it names.
+    # - The ignores are still needed for the two zip <9 copies left:
+    #   - docx-rs 0.4.22 (zip 8.6.0) only reads entries through ZipArchive.
+    #   - tauri-plugin-updater 2.14.0 (zip 4.6.1) calls extract() on Windows
+    #     only, AFTER verify_signature against our updater pubkey: the archive
+    #     is one we signed.
+    # REVISIT: drop when tauri-plugin-updater 2.14.1+ and docx-rs move to zip >=9.
     "RUSTSEC-2026-0367", # zip SUID/SGID on extract
     "RUSTSEC-2026-0368", # zip symlink escape on extract
     "RUSTSEC-2026-0369", # zip permissions through symlinks on extract
     # -----------------------------------------------------------------------
     # crypto-bigint <0.7.6 timing variability (RUSTSEC-2026-0387). The 0.7
-    # copy is bumped to 0.7.6. The remaining 0.5.5 copy has no fix (patched
+    # copy is bumped to 0.7.10. The remaining 0.5.5 copy has no fix (patched
     # >=0.7.6 only) and comes from jsonwebtoken 11.1 (newest) -> p256/p384 0.13
     # -> elliptic-curve 0.13. Checked 2026-10-25:
     # - jsonwebtoken is optional, behind the `enterprise` feature, which no

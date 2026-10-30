@@ -332,7 +332,15 @@ fn process_single_entry<R: std::io::Read + std::io::Seek>(
         FourDaError::Internal(e.to_string())
     })?;
 
-    let name = entry.name().to_string();
+    // zip 9: `name()` fails when the raw name is neither UTF-8 nor CP437.
+    // Counted as an entry error, like an unreadable entry above.
+    let name = entry
+        .name()
+        .map_err(|e| {
+            debug!(target: "4da::osv::cache", index = index, error = %e, "Skipping ZIP entry with an undecodable name");
+            FourDaError::Internal(e.to_string())
+        })?
+        .into_owned();
     if !std::path::Path::new(&name)
         .extension()
         .is_some_and(|ext| ext.eq_ignore_ascii_case("json"))
@@ -677,7 +685,7 @@ mod tests {
 
         for i in 0..archive.len() {
             let mut entry = archive.by_index(i).expect("entry");
-            let name = entry.name().to_string();
+            let name = entry.name().expect("entry name").into_owned();
 
             if !name.ends_with(".json") {
                 continue;
@@ -725,7 +733,7 @@ mod tests {
         let mut json_count = 0;
         for i in 0..archive.len() {
             let entry = archive.by_index(i).expect("entry");
-            if entry.name().ends_with(".json") {
+            if entry.name().expect("entry name").ends_with(".json") {
                 json_count += 1;
             }
         }

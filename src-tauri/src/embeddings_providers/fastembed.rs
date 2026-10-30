@@ -186,8 +186,16 @@ fn extract_ort_library(
             let mut entry = archive
                 .by_index(i)
                 .map_err(|e| FourDaError::from(format!("zip entry: {e}")))?;
-            let name = entry.name().to_string();
-            if name.ends_with(lib_name) {
+            // zip 9: `name()` fails when the raw name is neither UTF-8 nor
+            // CP437. Such an entry cannot be the runtime library; skip it.
+            let is_lib = match entry.name() {
+                Ok(name) => name.ends_with(lib_name),
+                Err(e) => {
+                    tracing::debug!(target: "4da::embeddings", index = i, error = %e, "Skipping ORT archive entry with an undecodable name");
+                    continue;
+                }
+            };
+            if is_lib {
                 let mut out = std::fs::File::create(dll_dest)
                     .map_err(|e| FourDaError::from(format!("create dll: {e}")))?;
                 std::io::copy(&mut entry, &mut out)
