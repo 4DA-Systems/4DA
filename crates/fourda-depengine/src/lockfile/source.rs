@@ -62,7 +62,7 @@ pub trait FileSource {
 }
 
 /// `dir` joined with `name` by `/`; an absolute `name` replaces `dir`.
-fn join_slash(dir: &str, name: &str) -> String {
+pub(crate) fn join_slash(dir: &str, name: &str) -> String {
     if dir.is_empty() || name.starts_with('/') {
         name.to_string()
     } else if dir.ends_with(['/', '\\']) {

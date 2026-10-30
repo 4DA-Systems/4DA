@@ -37,17 +37,51 @@
 //!   `{"failed":{..}}` or `{"unsupported":{..}}`. At most
 //!   [`MAX_LOCKFILE_FILES`] files and [`MAX_LOCKFILE_BYTES`] bytes of them;
 //!   a request over either cap is an error.
+//! - `{"op":"parent_links","eco":"npm","package":"braces","round":0,"lines":[{"installed_version",
+//!   "target_version","sites":[{"project_path","is_direct"}]}],"edges":[EdgeObs..],
+//!   "installed":[InstalledObs..],"ranges":[..],"managers":{"<project>":"pnpm"},
+//!   "dirs":{"<project>":"<dir>"},"provided":{..}}` (C0.4) → either
+//!   `{"needs":[Need..]}` or `{"links":[ParentLink..],"unlinked":[UnlinkedSite..]}`,
+//!   plus `"unanswered":[Need..]` when needs were left unanswered.
+//!   The parents that bring each transitive copy in and whether a lockfile
+//!   refresh reaches the target ([`crate::parent_hint::parent_links_lookup`]).
+//!   `ranges` (required, never empty) are the package's advisories: a
+//!   resolution elsewhere is cited only when clear of all of them, so with
+//!   none nothing could be checked and the request is an error. `managers` is
+//!   the tool the host detected per project; `dirs` maps a project to its
+//!   directory (default: the project itself), joined with `/`. With `needs`,
+//!   read them and call again with `round` one higher and the answers in
+//!   `provided`: `{"manifests":{path:text|null},"listings":{dir:[names]|null},
+//!   "crate_manifests":{"name@version":text|null},"npm_locks":{dir:text|null},
+//!   "exhausted":bool}` (`null`: looked, not there), each keyed exactly as its
+//!   need names it. `round` (required: 0 on the first call) is the engine's
+//!   own cap: from round [`crate::needs::MAX_ROUNDS`] on, or once the host
+//!   sets `exhausted`, it asks for nothing more and answers from what it was
+//!   given. A need never answered by then (answered under another key counts
+//!   as never answered) is listed in `unanswered` and read as absent, so what
+//!   rests on it was NOT CHECKED: an unanswered manifest leaves the refresh
+//!   verdict inferred from semver, and an unanswered `package-lock.json`
+//!   tree names no parent from a requirement range alone (unless another
+//!   parent is evidenced, the copy gets the semver route in `unlinked`). A
+//!   tree answered `null` keeps the range-based attribution. Provided texts
+//!   and listings are capped at [`MAX_LOCKFILE_BYTES`] in all.
 
 use std::cmp::Ordering;
+use std::collections::BTreeMap;
 
 use serde::Deserialize;
 use serde_json::{json, Value};
 
 use crate::ecosystem::normalize as normalize_ecosystem;
+use crate::fix_path::Manager;
 use crate::fix_target::{installable_line_fix, walk_target_kinds, AdvisoryKind};
+use crate::lines::{InstallSite, LineTarget};
+use crate::lockfile::source::join_slash;
 use crate::lockfile::{read_dir, MemFs};
 use crate::matching::{inventory_problem, match_inventory_with, package_key, Package};
+use crate::needs::{Lookup, Provided, MAX_ROUNDS};
 use crate::osv::{stored_records, AdvisoryRecord, OsvRecord};
+use crate::parent_hint::{parent_links_lookup, unlinked_sites, EdgeObs, InstalledObs, Projects};
 use crate::range::check_version_affected;
 use crate::registry::{RegistryIndex, RegistryReleases};
 use crate::version_order::OrderedVersion;
@@ -83,6 +117,7 @@ enum Request {
         #[serde(default)]
         files: std::collections::BTreeMap<String, String>,
     },
+    ParentLinks(Box<ParentLinksRequest>),
     MatchInventory {
         inventory: Vec<Package>,
         #[serde(default)]
@@ -92,6 +127,178 @@ enum Request {
         #[serde(default)]
         registry: Vec<PackageReleases>,
     },
+}
+
+/// A `parent_links` request (C0.4).
+#[derive(Deserialize)]
+struct ParentLinksRequest {
+    eco: String,
+    package: String,
+    /// The calls made before this one: 0, then one higher per round of needs.
+    round: usize,
+    lines: Vec<LineIn>,
+    #[serde(default)]
+    edges: Vec<EdgeObs>,
+    #[serde(default)]
+    installed: Vec<InstalledObs>,
+    /// Required, with no default: an absent list would read every version
+    /// as clear of the package's advisories.
+    ranges: Vec<Option<Value>>,
+    #[serde(default)]
+    managers: BTreeMap<String, Manager>,
+    #[serde(default)]
+    dirs: BTreeMap<String, String>,
+    #[serde(default)]
+    provided: ProvidedIn,
+}
+
+/// One release line of the package: what a link reads of a `LineTarget`.
+#[derive(Deserialize)]
+struct LineIn {
+    installed_version: String,
+    target_version: Option<String>,
+    sites: Vec<SiteIn>,
+}
+
+#[derive(Deserialize)]
+struct SiteIn {
+    project_path: String,
+    is_direct: bool,
+    #[serde(default)]
+    is_dev: bool,
+}
+
+impl LineIn {
+    fn into_line(self) -> LineTarget {
+        LineTarget {
+            installed_version: self.installed_version,
+            target_version: self.target_version,
+            clears_all_known: false,
+            upgrade_type: None,
+            sites: self
+                .sites
+                .into_iter()
+                .map(|s| InstallSite {
+                    project_path: s.project_path,
+                    is_direct: s.is_direct,
+                    is_dev: s.is_dev,
+                })
+                .collect(),
+            introduces: Vec::new(),
+            malicious: Vec::new(),
+            held: None,
+        }
+    }
+}
+
+/// The host's answers to earlier `needs`, as JSON carries them.
+#[derive(Deserialize, Default)]
+struct ProvidedIn {
+    #[serde(default)]
+    manifests: BTreeMap<String, Option<String>>,
+    #[serde(default)]
+    listings: BTreeMap<String, Option<Vec<String>>>,
+    #[serde(default)]
+    crate_manifests: BTreeMap<String, Option<String>>,
+    /// `package-lock.json` text; text that does not parse reads as absent.
+    #[serde(default)]
+    npm_locks: BTreeMap<String, Option<String>>,
+    #[serde(default)]
+    exhausted: bool,
+}
+
+impl ProvidedIn {
+    fn into_provided(self) -> Result<Provided, String> {
+        let texts: usize = [&self.manifests, &self.crate_manifests, &self.npm_locks]
+            .iter()
+            .flat_map(|m| m.iter())
+            .map(|(k, v)| k.len() + v.as_ref().map_or(0, String::len))
+            .sum();
+        let names: usize = self
+            .listings
+            .iter()
+            .map(|(dir, names)| dir.len() + names.iter().flatten().map(String::len).sum::<usize>())
+            .sum();
+        let bytes = texts + names;
+        if bytes > MAX_LOCKFILE_BYTES {
+            return Err(format!(
+                "parent_links: {bytes} bytes of provided files and listings, more than the {MAX_LOCKFILE_BYTES} allowed"
+            ));
+        }
+        let npm_locks = self
+            .npm_locks
+            .into_iter()
+            .map(|(dir, text)| {
+                let tree = text.and_then(|t| serde_json::from_str::<Value>(&t).ok());
+                (dir, tree.map(std::sync::Arc::new))
+            })
+            .collect();
+        Ok(Provided {
+            manifests: self.manifests,
+            listings: self.listings,
+            crate_manifests: self.crate_manifests,
+            npm_locks,
+            exhausted: self.exhausted,
+        })
+    }
+}
+
+/// The `parent_links` op: the links, or what the host must read first.
+fn parent_links_op(request: ParentLinksRequest) -> Result<Value, String> {
+    let ParentLinksRequest {
+        eco,
+        package,
+        round,
+        lines,
+        edges,
+        installed,
+        ranges,
+        managers,
+        dirs,
+        provided,
+    } = request;
+    if ranges.is_empty() {
+        return Err(
+            "parent_links: `ranges` is empty; with no advisory ranges no version can be checked as clear"
+                .to_string(),
+        );
+    }
+    let mut provided = provided.into_provided()?;
+    // The engine's own cap, whatever the host does with `exhausted`.
+    provided.exhausted |= round >= MAX_ROUNDS;
+    let lines: Vec<LineTarget> = lines.into_iter().map(LineIn::into_line).collect();
+    let stored: Vec<Option<String>> = ranges.iter().map(|r| stored(r.as_ref())).collect();
+    let is_clear = |version: &str| {
+        stored
+            .iter()
+            .all(|r| !check_version_affected(&eco, Some(version), r).0)
+    };
+    let manager = |project: &str| managers.get(project).copied();
+    let dir = |project: &str| {
+        dirs.get(project)
+            .cloned()
+            .unwrap_or_else(|| project.to_string())
+    };
+    let projects = Projects {
+        manager: &manager,
+        dir: &dir,
+        join: &join_slash,
+    };
+    let found = parent_links_lookup(
+        &package, &lines, &edges, &installed, &is_clear, &projects, &provided,
+    );
+    let (links, unanswered) = match found {
+        Lookup::Needs(needs) => return Ok(json!({ "needs": needs })),
+        Lookup::Done(links) => (links, Vec::new()),
+        Lookup::Partial { value, unanswered } => (value, unanswered),
+    };
+    let unlinked = unlinked_sites(&package, &lines, &links, &manager);
+    let mut out = json!({ "links": links, "unlinked": unlinked });
+    // Only when set, so a complete answer keeps its exact shape.
+    if !unanswered.is_empty() {
+        out["unanswered"] = json!(unanswered);
+    }
+    Ok(out)
 }
 
 /// One package's registry facts in a `match_inventory` request.
@@ -247,6 +454,7 @@ fn answer(request: Request) -> Result<Value, String> {
             osv,
             registry,
         } => match_op(&inventory, records, &osv, &registry_index(registry))?,
+        Request::ParentLinks(request) => parent_links_op(*request)?,
         Request::ReadLockfiles { dir, files } => {
             check_file_bounds(&files)?;
             let mut fs = MemFs::new();
@@ -272,6 +480,10 @@ pub fn call(request: &str) -> String {
     };
     response.to_string()
 }
+
+#[cfg(test)]
+#[path = "api_parent_links_tests.rs"]
+mod parent_links_tests;
 
 #[cfg(test)]
 mod tests {

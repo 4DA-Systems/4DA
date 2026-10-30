@@ -7,7 +7,7 @@
 use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet};
 
 use crate::db::Database;
-use crate::osv::fix_path::{installed_parent_requirements, Manager, Requirement};
+use crate::osv::fix_path::{installed_parent_requirements, DetectManager, Manager, Requirement};
 use crate::preemption::{AlertUrgency, PreemptionAlert};
 use crate::scoring::release_grade::{self, ReleaseClass};
 

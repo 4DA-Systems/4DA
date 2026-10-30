@@ -38,20 +38,32 @@
 //! their scope and graph, and says which files it could not read. The host
 //! supplies the files; the directory walk stays in the app.
 //!
+//! C0.4 adds the fix path for a transitive copy, with the host's files read
+//! through a `needs` round-trip ([`needs`]): the rule asks, the host reads,
+//! the rule runs again.
+//! - [`fix_path`]: does a lockfile refresh reach the target, or must the
+//!   parent move (`refresh_verdict`), the tool's commands, and the parent's
+//!   requirement read from its installed manifest or cargo's checkout;
+//! - [`parent_hint`]: which installed parent brings a vulnerable copy in
+//!   (`parent_links_lookup`), and the copies no parent could be read for.
+//!
 //! The app (`src-tauri`) keeps the DB and network halves and re-exports these
 //! under their old `crate::osv::...` / `crate::ace::...` paths.
 
 pub mod api;
 pub mod ecosystem;
 pub mod exposure;
+pub mod fix_path;
 pub mod fix_target;
 pub mod held;
 pub mod lines;
 pub mod lockfile;
 pub mod malware;
 pub mod matching;
+pub mod needs;
 pub mod npm_range;
 pub mod osv;
+pub mod parent_hint;
 pub mod range;
 pub mod registry;
 pub mod severity;

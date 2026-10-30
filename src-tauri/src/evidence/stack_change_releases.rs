@@ -26,7 +26,7 @@ use semver::Version;
 use crate::brief_facts::{is_own_package, UPGRADE_WINDOW_DAYS};
 use crate::db::Database;
 use crate::evidence::ProjectLiveness;
-use crate::osv::fix_path::{cargo_requirements, Manager, Requirement};
+use crate::osv::fix_path::{cargo_requirements, DetectManager, Manager, Requirement};
 use crate::osv::release_advisories::{ReleaseAdvisories, ReleaseChecker, RELEASE_HOLD_DAYS};
 use crate::scoring::release_grade::{self, ProjectPin, ReleaseClass, ReleaseGrade};
 

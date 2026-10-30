@@ -28,121 +28,23 @@
 //! behind (Principle 5): `npm update`, `pnpm update --depth Infinity`,
 //! `yarn up -R` (berry) and `cargo update --precise`. Yarn v1 has no command
 //! that moves one transitive copy in place, so none is named.
+//!
+//! The rule moved into the engine crate (`fourda_depengine::fix_path`,
+//! single-engine C0.4) and is re-exported here under its old paths. This
+//! module is its host: it finds which tool owns a project's lockfile
+//! ([`DetectManager`], [`DetectLockfile`]: the directory ascent and its
+//! probes), the `package-lock.json` above a project ([`npm_lock_tree`]) and
+//! cargo's registry checkout, and answers the engine's `needs`
+//! ([`answer_need`]).
 
 use std::path::{Path, PathBuf};
 
-use semver::VersionReq;
+use fourda_depengine::needs::{resolve, Answer, Need};
 
-use super::fix_target::{upgrade_type, UpgradeType};
-use super::matching::parse_version;
-
-/// How a refresh verdict was reached.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Basis {
-    /// The parent's own requirement on the package was read.
-    Requirement,
-    /// No requirement could be read; inferred from semver compatibility.
-    Semver,
-}
-
-/// Does refreshing the lockfile reach the target?
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Refresh {
-    /// Yes: no manifest changes, the lockfile moves inside existing ranges.
-    Enough(Basis),
-    /// No: a parent's requirement (or a semver-incompatible jump) keeps the
-    /// copy on its line until that parent moves.
-    ParentMustMove(Basis),
-    /// Neither the requirement nor the versions could be read.
-    Unknown,
-}
-
-impl Refresh {
-    pub fn is_enough(self) -> bool {
-        matches!(self, Self::Enough(_))
-    }
-}
-
-/// The requirement syntax a recorded requirement is written in.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Dialect {
-    /// npm/pnpm/yarn: a bare version is an exact pin, `||` unions, spaces AND.
-    Npm,
-    /// Cargo: a bare version is a caret requirement, commas AND.
-    Cargo,
-}
-
-/// A parent's requirement on the package, as written.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Requirement {
-    pub text: String,
-    pub dialect: Dialect,
-}
-
-impl Requirement {
-    pub fn npm(text: &str) -> Self {
-        Self {
-            text: text.trim().to_string(),
-            dialect: Dialect::Npm,
-        }
-    }
-
-    pub fn cargo(text: &str) -> Self {
-        Self {
-            text: text.trim().to_string(),
-            dialect: Dialect::Cargo,
-        }
-    }
-
-    /// `None` when the requirement or the version cannot be read.
-    pub fn admits(&self, version: &str) -> Option<bool> {
-        match self.dialect {
-            Dialect::Npm => requirement_admits(&self.text, version),
-            Dialect::Cargo => {
-                let v = parse_version(version)?;
-                VersionReq::parse(&self.text).ok().map(|r| r.matches(&v))
-            }
-        }
-    }
-}
-
-/// THE fix-path rule for a transitive copy at `installed` whose target is
-/// `target`, given every requirement read for the parent(s) that pull it in.
-/// Any requirement that excludes the target sends the fix to the parent;
-/// all of them admitting it makes a refresh enough; nothing readable falls
-/// back to semver compatibility.
-pub fn refresh_verdict(installed: &str, target: &str, requirements: &[Requirement]) -> Refresh {
-    let read: Vec<bool> = requirements
-        .iter()
-        .filter_map(|r| r.admits(target))
-        .collect();
-    if read.iter().any(|admits| !admits) {
-        return Refresh::ParentMustMove(Basis::Requirement);
-    }
-    if !read.is_empty() && read.len() == requirements.len() {
-        return Refresh::Enough(Basis::Requirement);
-    }
-    match upgrade_type(installed, target) {
-        Some(UpgradeType::Major) => Refresh::ParentMustMove(Basis::Semver),
-        Some(_) => Refresh::Enough(Basis::Semver),
-        None => Refresh::Unknown,
-    }
-}
-
-/// The package manager that owns a project's lockfile for one ecosystem.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum Manager {
-    Npm,
-    Pnpm,
-    /// A pnpm workspace root (`pnpm-workspace.yaml`): `pnpm update` without
-    /// `-r` touches only the root project's own tree.
-    PnpmWorkspace,
-    /// Yarn 1 (`yarn.lock` without a `__metadata:` header).
-    YarnClassic,
-    /// Yarn 2+ (berry).
-    YarnBerry,
-    Cargo,
-}
+pub(crate) use fourda_depengine::fix_path::cargo_requirements;
+pub use fourda_depengine::fix_path::{
+    override_hint, refresh_verdict, Basis, Dialect, Manager, NpmLockfile, Refresh, Requirement,
+};
 
 /// How far up from a project directory a workspace lockfile is looked for.
 const MAX_LOCKFILE_ASCENT: usize = 6;
@@ -190,11 +92,20 @@ pub(crate) fn on_disk(path: &Path) -> Option<std::path::PathBuf> {
     out.is_dir().then_some(out)
 }
 
-impl Manager {
+/// [`Manager::detect`](DetectManager::detect): which tool owns a project's
+/// lockfile. Host-side (it probes the directories above the project), so it
+/// stayed here when `Manager` moved into the engine crate (single-engine
+/// C0.4); callers bring this trait into scope and call `Manager::detect` as
+/// before.
+pub trait DetectManager: Sized {
     /// The manager whose lockfile holds `ecosystem_norm` (OSV-canonical)
     /// packages for the project at `dir`, nearest directory first. `None`
     /// for an ecosystem this module names no command for, or no lockfile.
-    pub fn detect(dir: &Path, ecosystem_norm: &str) -> Option<Self> {
+    fn detect(dir: &Path, ecosystem_norm: &str) -> Option<Self>;
+}
+
+impl DetectManager for Manager {
+    fn detect(dir: &Path, ecosystem_norm: &str) -> Option<Self> {
         let resolved = on_disk(dir);
         let mut here = Some(resolved.as_deref().unwrap_or(dir));
         for _ in 0..=MAX_LOCKFILE_ASCENT {
@@ -219,99 +130,19 @@ impl Manager {
         }
         None
     }
-
-    /// The lockfile records each parent's REQUIREMENT on its children (only
-    /// `package-lock.json` does; the others record resolved versions).
-    pub fn records_requirements(self) -> bool {
-        self == Self::Npm
-    }
-
-    /// The one command that refreshes `package` inside the existing ranges,
-    /// or `None` when this tool has no such command (yarn 1).
-    pub fn refresh_command(self, package: &str, installed: &str, target: &str) -> Option<String> {
-        match self {
-            Self::Npm => Some(format!("npm update {package}")),
-            Self::Pnpm => Some(format!("pnpm update {package} --depth Infinity")),
-            Self::PnpmWorkspace => Some(format!("pnpm update -r {package} --depth Infinity")),
-            Self::YarnBerry => Some(format!("yarn up -R {package}")),
-            Self::YarnClassic => None,
-            Self::Cargo => Some(format!(
-                "cargo update -p {package}@{installed} --precise {target}"
-            )),
-        }
-    }
-
-    /// Where this tool lets a project force a transitive copy past its
-    /// parent's requirement, worded to follow "with". `None` for Cargo: no
-    /// manifest key moves a crate outside the line its parent requires.
-    pub fn override_mechanism(self) -> Option<&'static str> {
-        match self {
-            Self::Npm => Some("an `overrides` entry in package.json (npm)"),
-            Self::Pnpm | Self::PnpmWorkspace => Some("a `pnpm.overrides` entry in package.json"),
-            Self::YarnClassic | Self::YarnBerry => {
-                Some("a `resolutions` entry in package.json (yarn)")
-            }
-            Self::Cargo => None,
-        }
-    }
 }
 
-/// The override mechanism for a project's tool, or, when the tool is not
-/// known, every npm-family one (`ecosystem_norm` is OSV-canonical). `None`
-/// for an ecosystem with no such mechanism, and for a `bundled` copy: npm
-/// `overrides` (and pnpm's and yarn's) do not reach a dependency that ships
-/// inside its owner's tarball (`fourda_depengine::lockfile::npm_bundle::BUNDLED_SUFFIX`); only the owner can move.
-pub fn override_hint(
-    manager: Option<Manager>,
-    ecosystem_norm: &str,
-    bundled: bool,
-) -> Option<String> {
-    if bundled {
-        return None;
-    }
-    match manager {
-        Some(m) => m.override_mechanism().map(str::to_string),
-        None if ecosystem_norm == "npm" => Some(
-            "an override in package.json (npm `overrides`, pnpm `pnpm.overrides` or yarn `resolutions`)"
-                .to_string(),
-        ),
-        None => None,
-    }
+/// [`NpmLockfile::detect`](DetectLockfile::detect): the npm-family lockfile
+/// in one directory (no ascent). Host-side, like [`DetectManager`].
+pub trait DetectLockfile: Sized {
+    fn detect(dir: &Path) -> Option<Self>;
 }
 
-/// The npm-family lockfile in one directory (no ascent). The walk runs the
-/// package-lock, then the pnpm, then the yarn processor, and each REPLACES
-/// the project's npm instance set — so the last one present wrote the pins.
-/// Shared with `evidence::install_drift`, which names its install command.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum NpmLockfile {
-    Npm,
-    Pnpm,
-    Yarn,
-}
-
-impl NpmLockfile {
-    pub fn detect(dir: &Path) -> Option<Self> {
+impl DetectLockfile for NpmLockfile {
+    fn detect(dir: &Path) -> Option<Self> {
         [Self::Yarn, Self::Pnpm, Self::Npm]
             .into_iter()
             .find(|kind| dir.join(kind.file_name()).is_file())
-    }
-
-    pub fn file_name(self) -> &'static str {
-        match self {
-            Self::Npm => "package-lock.json",
-            Self::Pnpm => "pnpm-lock.yaml",
-            Self::Yarn => "yarn.lock",
-        }
-    }
-
-    /// The command that makes `node_modules` match this lockfile again.
-    pub fn install_command(self) -> &'static str {
-        match self {
-            Self::Npm => "npm ci",
-            Self::Pnpm => "pnpm install",
-            Self::Yarn => "yarn install",
-        }
     }
 }
 
@@ -359,77 +190,6 @@ pub(crate) fn npm_lock_tree(dir: &Path) -> Option<std::sync::Arc<serde_json::Val
     Some(tree)
 }
 
-// The `inBundle` rules moved into the engine crate with the package-lock
-// edge reader (single-engine C0.3); re-exported under their old paths.
-#[cfg(test)]
-pub(crate) use fourda_depengine::lockfile::npm_bundle::npm_bundle_owner;
-pub(crate) use fourda_depengine::lockfile::npm_bundle::{
-    is_dependency_key, npm_lock_entry_bundled,
-};
-
-/// The versions of `child` that the installed `parent` `parent_version`
-/// resolves to in a `package-lock.json` v2/v3 tree, by npm's own lookup: the
-/// parent's folder's `node_modules`, then each enclosing folder's, up to the
-/// root. A range alone cannot tell which copy a parent holds: NodeGoat's
-/// needle 2.2.4 (`^2.1.2`) admits debug 2.2.0 but resolves the hoisted 2.6.9,
-/// and was told `npm update debug` for a copy it never held (audit E8).
-///
-/// Copies of `parent` bundled inside a dependency are skipped: what they
-/// resolve is frozen in that bundle, and the bundled edge already names its
-/// owner. `None` when the lockfile has no `packages` map (v1) or holds no
-/// matching copy of `parent` that declares `child` (a database older than the
-/// lockfile on disk), so the caller keeps its range-based attribution.
-pub(crate) fn npm_lock_resolutions(
-    lock: &serde_json::Value,
-    parent: &str,
-    parent_version: &str,
-    child: &str,
-) -> Option<Vec<String>> {
-    let pkgs = lock.get("packages")?.as_object()?;
-    let mut matched = false;
-    let mut out: Vec<String> = Vec::new();
-    for (key, entry) in pkgs {
-        let name = key
-            .rsplit_once("node_modules/")
-            .map_or(key.as_str(), |(_, n)| n);
-        if !is_dependency_key(key)
-            || !name.eq_ignore_ascii_case(parent)
-            || entry.get("version").and_then(serde_json::Value::as_str) != Some(parent_version)
-            || npm_lock_entry_bundled(pkgs, key)
-        {
-            continue;
-        }
-        let declares = ["dependencies", "optionalDependencies", "peerDependencies"]
-            .iter()
-            .any(|s| entry.get(*s).and_then(|d| d.get(child)).is_some());
-        if !declares {
-            continue;
-        }
-        matched = true;
-        let mut base = key.as_str();
-        let resolved = loop {
-            let candidate = if base.is_empty() {
-                format!("node_modules/{child}")
-            } else {
-                format!("{base}/node_modules/{child}")
-            };
-            if let Some(found) = pkgs.get(&candidate) {
-                break found.get("version").and_then(serde_json::Value::as_str);
-            }
-            if base.is_empty() {
-                break None;
-            }
-            base = base.rsplit_once("/node_modules/").map_or("", |(b, _)| b);
-        };
-        if let Some(v) = resolved {
-            if !out.iter().any(|o| o == v) {
-                out.push(v.to_string());
-            }
-        }
-    }
-    matched.then_some(out)
-}
-
 fn is_yarn_berry(lockfile: &Path) -> bool {
     std::fs::read_to_string(lockfile)
         .map(|s| s.lines().take(12).any(|l| l.starts_with("__metadata:")))
@@ -439,7 +199,9 @@ fn is_yarn_berry(lockfile: &Path) -> bool {
 /// The requirements `parent` `parent_version` places on `child`, read from
 /// the parent's installed manifest: cargo's registry checkout of that release,
 /// or the copy under the project's `node_modules`. Empty when not on disk —
-/// the caller then falls back to semver compatibility, and says so.
+/// the caller then falls back to semver compatibility, and says so. The rule
+/// is the engine's (`fourda_depengine::fix_path::installed_parent_requirements`);
+/// this runs its `needs` round-trip against the disk.
 pub fn installed_parent_requirements(
     manager: Manager,
     project_dir: &Path,
@@ -447,20 +209,55 @@ pub fn installed_parent_requirements(
     parent_version: &str,
     child: &str,
 ) -> Vec<Requirement> {
-    match manager {
-        Manager::Cargo => crate_checkout(parent, parent_version)
-            .and_then(|dir| std::fs::read_to_string(dir.join("Cargo.toml")).ok())
-            .map(|manifest| {
-                cargo_requirements(&manifest, child)
-                    .iter()
-                    .map(|r| Requirement::cargo(r))
-                    .collect()
-            })
-            .unwrap_or_default(),
-        _ => node_modules_manifest(project_dir, parent, parent_version)
-            .and_then(|pkg| npm_requirement(&pkg, child))
-            .map(|r| vec![Requirement::npm(&r)])
-            .unwrap_or_default(),
+    let Some(dir) = project_dir.to_str() else {
+        // Project paths come from the database as text, so every caller's is
+        // UTF-8; a directory the engine cannot be handed has nothing to read.
+        return Vec::new();
+    };
+    resolve(
+        |provided| {
+            fourda_depengine::fix_path::installed_parent_requirements_lookup(
+                manager,
+                dir,
+                parent,
+                parent_version,
+                child,
+                provided,
+                &host_join,
+            )
+        },
+        answer_need,
+    )
+}
+
+/// `dir` joined with `name` the way `std::path` joins them on this platform,
+/// so the paths the engine names in its needs are the ones the old reads
+/// opened. `dir` and `name` are UTF-8, so the join is too: the lossy
+/// conversion never replaces anything.
+pub(crate) fn host_join(dir: &str, name: &str) -> String {
+    Path::new(dir).join(name).to_string_lossy().into_owned()
+}
+
+/// Read what the engine asked for. A file that cannot be read, a directory
+/// that cannot be listed and a checkout cargo never extracted all answer
+/// "not there", as the reads they replace did.
+pub(crate) fn answer_need(need: &Need) -> Answer {
+    match need {
+        Need::Manifest { path } => Answer::Text(std::fs::read_to_string(path).ok()),
+        // Entries whose names are not UTF-8 are skipped: the engine cannot be
+        // handed them (`ace::lockfile::StdFs::list` does the same). pnpm names
+        // its store entries from package names and versions, which are ASCII.
+        Need::Listing { dir } => Answer::Names(std::fs::read_dir(dir).ok().map(|entries| {
+            entries
+                .flatten()
+                .filter_map(|e| e.file_name().into_string().ok())
+                .collect()
+        })),
+        Need::CrateManifest { name, version } => Answer::Text(
+            crate_checkout(name, version)
+                .and_then(|dir| std::fs::read_to_string(dir.join("Cargo.toml")).ok()),
+        ),
+        Need::NpmLock { dir } => Answer::Tree(npm_lock_tree(Path::new(dir))),
     }
 }
 
@@ -483,188 +280,15 @@ fn crate_checkout(package: &str, version: &str) -> Option<PathBuf> {
         .find(|dir| dir.join("Cargo.toml").is_file())
 }
 
-/// The parent's `package.json` at exactly `version` under `project_dir`'s
-/// `node_modules`: the hoisted copy, or pnpm's virtual store entry.
-fn node_modules_manifest(
-    project_dir: &Path,
-    name: &str,
-    version: &str,
-) -> Option<serde_json::Value> {
-    let nm = project_dir.join("node_modules");
-    let mut candidates: Vec<PathBuf> = vec![nm.join(name).join("package.json")];
-    let store_key = format!("{}@{version}", name.replace('/', "+"));
-    if let Ok(entries) = std::fs::read_dir(nm.join(".pnpm")) {
-        for entry in entries.flatten() {
-            let file = entry.file_name();
-            let file = file.to_string_lossy();
-            // `name@1.2.3` or `name@1.2.3_peer…` / `name@1.2.3(peer…)`.
-            let rest = file.strip_prefix(store_key.as_str());
-            if rest.is_some_and(|r| r.is_empty() || r.starts_with(['_', '('])) {
-                candidates.push(
-                    entry
-                        .path()
-                        .join("node_modules")
-                        .join(name)
-                        .join("package.json"),
-                );
-            }
-        }
-    }
-    candidates.into_iter().find_map(|path| {
-        let pkg: serde_json::Value =
-            serde_json::from_str(&std::fs::read_to_string(path).ok()?).ok()?;
-        let installed = pkg.get("version")?.as_str()?;
-        (installed.trim_start_matches('v') == version.trim_start_matches('v')).then_some(pkg)
-    })
-}
-
-/// The requirement a `package.json` places on `child` in the sections that
-/// resolve with the package (`dependencies`, `optionalDependencies`). Also
-/// read for a project's OWN manifest by Signal's stack-change stream, to say
-/// whether a new release is inside the declared range.
-pub(crate) fn npm_requirement(pkg: &serde_json::Value, child: &str) -> Option<String> {
-    ["dependencies", "optionalDependencies"]
-        .iter()
-        .find_map(|section| {
-            pkg.get(section)?
-                .as_object()?
-                .iter()
-                .find(|(name, _)| name.eq_ignore_ascii_case(child))
-                .and_then(|(_, req)| req.as_str())
-                .map(str::to_string)
-        })
-}
-
-/// Every requirement a crate's `Cargo.toml` places on `child` in the tables
-/// that resolve for a consumer (`[dependencies]`, `[build-dependencies]` and
-/// their `[target.*]` forms; never `[dev-dependencies]`). Reads both the
-/// inline form (`mio = "0.8"`, `mio = { version = "0.8" }`) and the table form
-/// crates.io normalizes to (`[dependencies.mio]` + `version = "0.8"`), and a
-/// renamed dependency (`package = "mio"`). Line-based on purpose: the crate
-/// has no TOML parser, and a manifest this cannot read yields nothing.
-pub(crate) fn cargo_requirements(manifest: &str, child: &str) -> Vec<String> {
-    let want = crate_key(child);
-    let mut out = Vec::new();
-    let mut table: Option<CargoTable> = None;
-    let flush = |t: Option<CargoTable>, out: &mut Vec<String>| {
-        if let Some(CargoTable::Dep {
-            name,
-            package,
-            version,
-        }) = t
-        {
-            if crate_key(package.as_deref().unwrap_or(&name)) == want {
-                out.extend(version);
-            }
-        }
-    };
-    for line in manifest.lines() {
-        let line = line.trim();
-        if line.starts_with('[') {
-            flush(table.take(), &mut out);
-            table = cargo_table(line);
-            continue;
-        }
-        let Some((key, value)) = line.split_once('=') else {
-            continue;
-        };
-        let (key, value) = (unquote(key.trim()), value.trim());
-        match table.as_mut() {
-            Some(CargoTable::Deps) => {
-                if let Some(req) = inline_dep(key, value, &want) {
-                    out.push(req);
-                }
-            }
-            Some(CargoTable::Dep {
-                version, package, ..
-            }) => match key {
-                "version" => *version = Some(unquote(value).to_string()),
-                "package" => *package = Some(unquote(value).to_string()),
-                _ => {}
-            },
-            None => {}
-        }
-    }
-    flush(table, &mut out);
-    out
-}
-
-enum CargoTable {
-    /// `[dependencies]`-style: one `name = spec` per line.
-    Deps,
-    /// `[dependencies.name]`-style: the fields of one dependency.
-    Dep {
-        name: String,
-        package: Option<String>,
-        version: Option<String>,
-    },
-}
-
-fn cargo_table(header: &str) -> Option<CargoTable> {
-    let inner = header.trim_start_matches('[').trim_end_matches(']').trim();
-    // `target.'cfg(unix)'.dependencies.mio` -> drop the target prefix.
-    let inner = match inner.strip_prefix("target.") {
-        Some(rest) => {
-            let rest = rest.trim_start_matches(['"', '\'']);
-            let close = rest.find(['"', '\''])?;
-            rest[close + 1..].trim_start_matches('.')
-        }
-        None => inner,
-    };
-    let (section, name) = match inner.split_once('.') {
-        Some((section, name)) => (section, Some(unquote(name))),
-        None => (inner, None),
-    };
-    if section != "dependencies" && section != "build-dependencies" {
-        return None;
-    }
-    Some(match name {
-        Some(name) => CargoTable::Dep {
-            name: name.to_string(),
-            package: None,
-            version: None,
-        },
-        None => CargoTable::Deps,
-    })
-}
-
-/// `mio = "0.8"` or `mio = { version = "0.8", package = "x" }` when it names
-/// the wanted crate.
-fn inline_dep(key: &str, value: &str, want: &str) -> Option<String> {
-    if let Some(body) = value.strip_prefix('{') {
-        let body = body.trim_end_matches('}');
-        let field = |name: &str| {
-            body.split(',').find_map(|kv| {
-                let (k, v) = kv.split_once('=')?;
-                (k.trim() == name).then(|| unquote(v.trim()).to_string())
-            })
-        };
-        let package = field("package");
-        (crate_key(package.as_deref().unwrap_or(key)) == want)
-            .then(|| field("version"))
-            .flatten()
-    } else {
-        (crate_key(key) == want).then(|| unquote(value).to_string())
-    }
-}
-
-fn unquote(s: &str) -> &str {
-    s.trim().trim_matches('"').trim_matches('\'')
-}
-
-/// Cargo treats `-` and `_` in crate names as the same crate.
-fn crate_key(name: &str) -> String {
-    name.trim().to_lowercase().replace('_', "-")
-}
-
-pub use fourda_depengine::lockfile::npm_bundle::is_bundled;
+// The `inBundle` rules moved into the engine crate with the package-lock
+// edge reader (single-engine C0.3); re-exported under their old paths.
 #[cfg(test)]
-pub use fourda_depengine::lockfile::npm_bundle::BUNDLED_SUFFIX;
+pub use fourda_depengine::lockfile::npm_bundle::{is_bundled, BUNDLED_SUFFIX};
 
 // The npm requirement reader moved into the engine crate (D-4: the held-
 // dependency rule reads a release's own ranges with it); re-exported under
 // its old path for every caller here.
-pub(crate) use fourda_depengine::npm_range::{requirement_admits, strip_spec};
+pub(crate) use fourda_depengine::npm_range::requirement_admits;
 
 #[cfg(test)]
 #[path = "fix_path_tests.rs"]

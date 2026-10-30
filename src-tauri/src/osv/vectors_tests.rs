@@ -30,14 +30,15 @@ use std::path::{Path, PathBuf};
 use serde_json::Value;
 
 // version_order, osv_range and fix_target run against the pure engine crate
-// directly (single-engine C0.1); refresh_verdict and fix_command are still the
-// app's `fix_path` (C0.4), and records are merged by the app's `osv::sync`.
+// directly (single-engine C0.1); refresh_verdict is the engine's too, through
+// the app's `fix_path` re-export (C0.4), whose tool detection names the
+// fix_command; records are merged by the app's `osv::sync`.
 use fourda_depengine::fix_target::{installable_line_fix, walk_target_kinds, AdvisoryKind};
 use fourda_depengine::range::{check_version_affected, parse_version};
 use fourda_depengine::registry::RegistryReleases;
 use fourda_depengine::version_order::OrderedVersion;
 
-use super::fix_path::{refresh_verdict, Basis, Manager, Refresh, Requirement};
+use super::fix_path::{refresh_verdict, Basis, DetectManager, Manager, Refresh, Requirement};
 use super::matching::package_key;
 use super::types::{MatchedAdvisory, StoredAdvisory, Vulnerability};
 

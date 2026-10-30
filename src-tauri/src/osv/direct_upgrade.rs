@@ -36,7 +36,7 @@
 
 use std::path::Path;
 
-use super::fix_path::{on_disk, requirement_admits, Manager, Requirement};
+use super::fix_path::{on_disk, requirement_admits, DetectManager, Manager, Requirement};
 use super::fix_target::LineTarget;
 
 /// What to tell the user, per declaring project.

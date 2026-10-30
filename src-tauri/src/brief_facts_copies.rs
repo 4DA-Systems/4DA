@@ -7,7 +7,7 @@
 use std::collections::BTreeMap;
 
 use crate::db::Database;
-use crate::osv::fix_path::Manager;
+use crate::osv::fix_path::{DetectManager, Manager};
 
 use super::{norm_path, FixPath, LineFix, ParentRoute};
 

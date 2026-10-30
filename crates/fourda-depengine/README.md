@@ -6,7 +6,7 @@ Stage C0 of the single-engine plan: one Rust engine, built into the desktop
 app and, later, into `@4da/mcp-server` as a wasm module, so the two stop
 drifting apart.
 
-## What is in it (C0.1, C0.2, C0.3)
+## What is in it (C0.1 to C0.4)
 
 | Module | What it does | Came from |
 |---|---|---|
@@ -24,7 +24,10 @@ drifting apart.
 | `lockfile::flat` / `lockfile::graph` (C0.3) | The flat `(name, version)` lists of Cargo.lock / pnpm-lock.yaml / composer.lock and pnpm's key spellings; the parent -> child edges of Cargo.lock / package-lock.json / pnpm-lock.yaml (`DependencyEdge`, `EdgeScope`, `ROOT_PARENT`) | the lockfile parsers of `src-tauri/src/ace/scanner.rs` (`ProjectScanner::parse_*` now call these) |
 | `lockfile::npm_bundle` (C0.3) | `inBundle` copies: `npm_bundle_owner`, `npm_lock_entry_bundled`, `is_dependency_key`, `BUNDLED_SUFFIX`, `is_bundled` | `src-tauri/src/osv/fix_path.rs` (re-exported there) |
 | `lockfile::dep_scope` / `lockfile::cargo_facts` (C0.3) | AD-046 dev-vs-runtime reachability (`DevScope` for package-lock / pnpm, `CargoDevScope`); a Cargo.lock's own crates (`local_packages`, `local_only_names`, `declared_copies`) and a workspace manifest's `path` / `git` declarations | `src-tauri/src/ace/dep_scope.rs` (whole), the pure half of `src-tauri/src/ace/cargo_lock_facts.rs` |
-| `api` | A provisional JSON call surface (`depengine/0`: `version_cmp`, `affected`, `fix_target`, `match_inventory`, `read_lockfiles`), exported by the wasm build | new; replaced by the versioned `depengine/1` contract later |
+| `fix_path` (C0.4) | THE fix-path rule for a transitive copy: `refresh_verdict` (`Refresh`, `Basis`, `Requirement`, `Dialect`), `Manager` (refresh commands, override mechanisms), `override_hint`, `NpmLockfile`, `npm_lock_resolutions` (npm's lookup in a `package-lock.json` tree), `npm_requirement`, `cargo_requirements`, and `installed_parent_requirements` (the parent's installed `package.json`, hoisted or in pnpm's store, or cargo's checkout of its `Cargo.toml`, read through the host's `needs`) | `src-tauri/src/osv/fix_path.rs` (everything but the disk probes) |
+| `parent_hint` (C0.4) | Which installed parent brings a vulnerable transitive copy in: `parent_links_with` (over `Readers`), `parent_links_lookup` (the same, files read through `needs`), `unlinked_sites`, `installed_parent`, `normalize_path`; the types `EdgeObs`, `InstalledObs`, `ParentLink`, `Resolution`, `ParentStanding`, `ParentRelease`, `Through`, `UnlinkedSite`, `TransitiveRoutes`, `MAX_LEVERS` | the pure core of `src-tauri/src/osv/parent_hint.rs` |
+| `needs` (C0.4) | The round-trip a rule reads the host's files through: `Need`, `Provided`, `Answer`, `Lookup`, `lookup`, `resolve`, `MAX_ROUNDS` | new |
+| `api` | A provisional JSON call surface (`depengine/0`: `version_cmp`, `affected`, `fix_target`, `match_inventory`, `read_lockfiles`, `parent_links`), exported by the wasm build | new; replaced by the versioned `depengine/1` contract later |
 
 The app keeps its old paths through re-exports (`crate::osv::version_order`
 (removed in C0.3 with its last user, the Go reader),
@@ -35,13 +38,70 @@ The app keeps its old paths through re-exports (`crate::osv::version_order`
 `crate::ace::lockfile::{LockFormat, DepScope, LockedPackage, LockfileRead, LockfileOutcome, normalize_descriptor}`,
 `crate::ace::scanner::{DependencyEdge, EdgeScope, ROOT_PARENT}`,
 `crate::ace::cargo_lock_facts::{local_packages, local_only_names, declared_copies, CargoDevScope}`,
-`crate::osv::fix_path::{npm_bundle_owner, npm_lock_entry_bundled, BUNDLED_SUFFIX, is_bundled}`),
-so no caller changed. `ProjectScanner::parse_cargo_lock` / `parse_pnpm_lock_yaml` /
+`crate::osv::fix_path::{Basis, Refresh, Requirement, Dialect, Manager, NpmLockfile, refresh_verdict, override_hint, cargo_requirements, requirement_admits}`,
+`crate::osv::parent_hint::{EdgeObs, InstalledObs, ParentLink, ParentStanding, ParentRelease, Through, UnlinkedSite, TransitiveRoutes, unlinked_sites, MAX_LEVERS, installed_parent, normalize_path}`,
+and, for the app's tests only, `crate::osv::fix_path::{is_bundled, BUNDLED_SUFFIX}`
+and `crate::osv::parent_hint::Resolution`),
+so no caller changed what it calls. One exception: `Manager::detect` and
+`NpmLockfile::detect` probe the disk, so they stayed in the app as the traits
+`osv::fix_path::{DetectManager, DetectLockfile}`; their callers import the
+trait and call `Manager::detect` as before. `ProjectScanner::parse_cargo_lock` / `parse_pnpm_lock_yaml` /
 `parse_composer_lock` / `parse_*_edges` keep their names as one-line calls into
 `lockfile::flat` and `lockfile::graph`. `get_matched_advisories` and `exposure_for_advisory` stay in
 the app as thin DB adapters: they read `osv_advisories`,
 `user_dependencies` / `project_dependencies` and `dependency_instances` into
 `Package` and `AdvisoryRecord` rows and call the crate.
+
+### The `needs` round-trip (C0.4)
+
+The fix path reads files the engine cannot know in advance: an installed
+parent's `package.json` (hoisted, or in pnpm's `node_modules/.pnpm` store
+under a name only a listing shows), cargo's extracted `Cargo.toml` of a crate
+release, and the `package-lock.json` that owns a project's npm tree. Design
+§3.2's `needs` protocol carries them:
+
+```rust
+pub enum Need {                     // JSON: {"kind": "manifest", "path": ..}
+    Manifest { path: String },      // a file's text
+    Listing { dir: String },        // a directory's entry names
+    CrateManifest { name: String, version: String }, // where cargo extracted it is the host's to know
+    NpmLock { dir: String },        // the package-lock.json above a project dir
+}
+pub enum Lookup<T> {
+    Done(T),                                         // every need answered
+    Needs(Vec<Need>),                                // answer these, call again
+    Partial { value: T, unanswered: Vec<Need> },     // exhausted; these never answered
+}
+```
+
+A rule runs against a `Provided` store of answers. What the store lacks is
+recorded as a `Need` and read as absent for the rest of that run; `lookup`
+returns `Done` only when nothing was missing. The host reads the needs, adds
+the answers (`None`: looked, not there) and calls again; every call
+recomputes from scratch, so the final answer is the rule's with every answer
+in hand. After `MAX_ROUNDS` (3) rounds the store is exhausted and the rule
+answers from what it has, but a need still unanswered is never read as
+clean: the result is `Partial`, naming each such need so the host can say
+NOT CHECKED (the JSON `parent_links` answer lists them in `unanswered`). A
+missing parent manifest leaves the refresh verdict inferred from semver; a
+`package-lock.json` tree that went unanswered names no parent from a
+requirement range alone, so that copy takes the semver route instead (a tree
+answered "not there" keeps the range-based attribution, as an unreadable
+lockfile always did). The engine caps the JSON round-trip itself: every
+`parent_links` request carries a required `round`, and from round
+`MAX_ROUNDS` on the engine asks for nothing more, so a host whose answers
+never match a need (a key spelled differently) still gets a final answer
+that names what it missed. Three rounds, not the design's two: a round's
+`package-lock.json` tree can name a parent whose manifest is only then asked
+for, and a pnpm store entry under it is listed in that round and read in the
+next.
+
+Paths are the host's spelling, built with the host's join (`Projects::join`;
+the app's is `Path::join`, so every need names exactly the file the old code
+opened). Which tool owns a project (`Manager`) is discovery, so the host
+passes it in, as it passes in the lockfiles themselves. The app's host is
+`osv::fix_path::answer_need` over `fourda_depengine::needs::resolve`; the
+wasm caller sends the answers in the `parent_links` request's `provided`.
 
 ### The host's files (`FileSource`, C0.3)
 
@@ -81,9 +141,15 @@ walk stays in the app too: which directories to read (`SKIPPED_DIR_NAMES`,
 `MAX_WALK_DEPTH`, the user-scope gates in `ace_commands::dependencies`),
 `StdFs`, finding the `Cargo.lock` / workspace manifest above a crate
 (`ace::cargo_lock_facts::{nearest_cargo_lock, workspace_local_crate_names}`),
-and the walk's report (`ace::lockfile::report`, which logs). Still in the app
-and planned to move: `fix_path` / `parent_hint` with a `needs` protocol
-(C0.4), and a `range_check` port (C0.5).
+and the walk's report (`ace::lockfile::report`, which logs). From the fix
+path (C0.4), the app keeps the disk and the database: tool detection
+(`DetectManager` / `DetectLockfile`, with `on_disk`'s case-insensitive path
+resolution), `npm_lock_tree` (the ascent and its parse cache), cargo's
+checkout (`$CARGO_HOME`), the registry-row standing (`parent_standing`,
+`standing_from_with`), the edge and instance reads (`load_routes`,
+`read_edges`) and the walk up to the declared dependencies
+(`osv::parent_route`, one DB read per step). Still planned: a `range_check`
+port (C0.5).
 
 ## Purity rules
 
@@ -96,12 +162,16 @@ and planned to move: `fix_path` / `parent_hint` with a `needs` protocol
 - The proof is mechanical: CI builds the crate for `wasm32-unknown-unknown`
   and `scripts/check-wasm.cjs` fails on **any** import (no WASI, no host
   functions), then instantiates the module with an empty import object and
-  checks a few answers. It then replays one real conformance case
+  checks a few answers. It replays the `parent_links` needs round-trip
+  (`tests/fixtures/parent_links_case.json`, every round natively played by
+  `tests/parent_links_fixture.rs`) and requires wasm == native per round. It
+  then replays one real conformance case
   (`tests/fixtures/match_inventory_case.json`: the inventory the app's
   lockfile readers produce for `py-fastapi-requirements`, the pinned OSV
   records naming its packages, and the native answer) through the module and
   requires wasm == native. `tests/match_fixture.rs` replays it natively, and
-  the app's conformance harness rewrites it with `FOURDA_DEPENGINE_FIXTURE=1`.
+  the app's conformance harness rewrites it with `FOURDA_DEPENGINE_FIXTURE=1`
+  (the same variable makes `tests/parent_links_fixture.rs` rewrite its rounds).
   The only `unsafe` is the three wasm exports in
   `src/wasm.rs`, compiled on wasm32 only.
 - Tests may read files (the rule vectors in
