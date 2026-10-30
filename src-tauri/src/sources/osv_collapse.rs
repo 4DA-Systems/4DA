@@ -68,6 +68,50 @@ fn merge_copies(mut copies: Vec<SourceItem>) -> Option<SourceItem> {
     Some(lead)
 }
 
+/// Heal an OSV item stored before [`one_item_per_advisory`]: the fetcher keeps a stored
+/// item's title on every re-see, so a title written as `[id] stdlib: ...` would stand
+/// forever even though the collapsed item now names the pinned module. When the stored
+/// title leads with a Go toolchain pseudo-package and the fresh one for the same id leads
+/// with something else, write the fresh title and return it. One-shot and one-way: once
+/// rewritten the stored title no longer leads with the toolchain, and a module title is
+/// never turned back into a toolchain one.
+pub(crate) fn heal_toolchain_title(
+    db: &crate::db::Database,
+    source_type: &str,
+    source_id: &str,
+    stored_title: &str,
+    fresh_title: &str,
+) -> Option<String> {
+    if source_type != "osv"
+        || !leads_with_go_toolchain(stored_title)
+        || leads_with_go_toolchain(fresh_title)
+        || !fresh_title.starts_with(&format!("[{source_id}] "))
+    {
+        return None;
+    }
+    let conn = db.conn.lock();
+    match conn.execute(
+        "UPDATE source_items SET title = ?3 WHERE source_type = ?1 AND source_id = ?2",
+        rusqlite::params![source_type, source_id, fresh_title],
+    ) {
+        Ok(1) => Some(fresh_title.to_string()),
+        Ok(_) => None,
+        Err(e) => {
+            tracing::warn!(target: "4da::sources", source_id, error = %e, "OSV title heal failed");
+            None
+        }
+    }
+}
+
+/// `[id] stdlib: ...` / `[id] toolchain: ...`: the title names the Go toolchain.
+fn leads_with_go_toolchain(title: &str) -> bool {
+    let body = title
+        .split_once("] ")
+        .map_or(title, |(_, rest)| rest)
+        .trim_start();
+    body.starts_with("stdlib:") || body.starts_with("toolchain:")
+}
+
 /// OSV's Go ecosystem names the standard library `stdlib` and the go command `toolchain`.
 fn is_go_toolchain(item: &SourceItem) -> bool {
     let go = meta_str(item, "ecosystem").is_some_and(|e| e.eq_ignore_ascii_case("go"));
@@ -142,6 +186,63 @@ mod tests {
                 serde_json::json!(["golang.org/x/net", "stdlib"])
             );
         }
+    }
+
+    /// The five go-service rows were stored on 2026-10-08 as `stdlib: ...`. After the collapse
+    /// the fresh item names x/net; the stored title must follow, once, and only that way.
+    #[test]
+    fn stored_toolchain_title_heals_to_the_collapsed_module_title_once() {
+        let db = crate::test_utils::test_db();
+        let vuln = go_2026_6603();
+        let stored = live_vuln_to_grounded_item(&vuln, "stdlib", "Go", "1.22.0").title;
+        let fresh = one_item_per_advisory(vec![
+            live_vuln_to_grounded_item(&vuln, "golang.org/x/net", "Go", "0.21.0"),
+            live_vuln_to_grounded_item(&vuln, "stdlib", "Go", "1.22.0"),
+        ])
+        .remove(0)
+        .title;
+        db.conn
+            .lock()
+            .execute(
+                "INSERT INTO source_items (source_type, source_id, title, content, content_hash, embedding)
+                 VALUES ('osv', 'GO-2026-6603', ?1, '', 'h', X'')",
+                [&stored],
+            )
+            .unwrap();
+        let read = |db: &crate::db::Database| -> String {
+            db.conn
+                .lock()
+                .query_row(
+                    "SELECT title FROM source_items WHERE source_id = 'GO-2026-6603'",
+                    [],
+                    |r| r.get(0),
+                )
+                .unwrap()
+        };
+
+        let healed = heal_toolchain_title(&db, "osv", "GO-2026-6603", &stored, &fresh);
+        assert_eq!(healed.as_deref(), Some(fresh.as_str()));
+        assert!(read(&db).starts_with("[GO-2026-6603] golang.org/x/net: "));
+        // Idempotent: the stored title no longer leads with the toolchain.
+        assert_eq!(
+            heal_toolchain_title(&db, "osv", "GO-2026-6603", &fresh, &fresh),
+            None
+        );
+        // One-way: a module title is never turned back into a toolchain one.
+        assert_eq!(
+            heal_toolchain_title(&db, "osv", "GO-2026-6603", &fresh, &stored),
+            None
+        );
+        assert_eq!(read(&db), fresh);
+        // Other sources, and a fresh title for a different id, are left alone.
+        assert_eq!(
+            heal_toolchain_title(&db, "cve", "GO-2026-6603", &stored, &fresh),
+            None
+        );
+        assert_eq!(
+            heal_toolchain_title(&db, "osv", "GO-2026-6610", &stored, &fresh),
+            None
+        );
     }
 
     fn item(id: &str, package: &str, confirmed: bool) -> SourceItem {

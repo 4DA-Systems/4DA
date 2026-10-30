@@ -356,12 +356,22 @@ pub(crate) async fn fetch_all_sources(
                                 warn!(target: "4da::sources", source_type, error = %e, "Tags refresh failed on re-seen item");
                             }
                         }
+                        // The stored title is kept, except an OSV title that named the Go
+                        // toolchain where the fresh item names the pinned module.
+                        let title = crate::sources::osv_collapse::heal_toolchain_title(
+                            &db,
+                            source_type,
+                            &item.source_id,
+                            &cached.title,
+                            &item.title,
+                        )
+                        .unwrap_or(cached.title);
                         all_items.push((
                             GenericSourceItem {
                                 id,
                                 source_id: item.source_id,
                                 source_type: source_type.to_string(),
-                                title: cached.title,
+                                title,
                                 url: cached.url,
                                 content: cached.content,
                                 feed_origin: cached.feed_origin,
