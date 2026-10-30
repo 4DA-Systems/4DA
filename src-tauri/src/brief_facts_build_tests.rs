@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-//! Tests for `brief_facts_build`'s direct-fix step (audit E8).
+//! Tests for `brief_facts_build`'s direct-fix step (audit E8) and its walk
+//! up `dependency_edges` to the parent that holds a copy.
 
 use super::*;
 
@@ -298,4 +299,138 @@ fn a_scratch_tree_never_sets_the_class_of_an_upgrade_fact() {
         .map(|p| p.project_path.as_str())
         .collect();
     assert_eq!(concerned, vec!["/dev/app"]);
+}
+
+/// Seed one Cargo project's inventory and `zip`-style edges, rows in the
+/// order given (the walk reads them in rowid order).
+fn seed_cargo_graph(
+    db: &crate::db::Database,
+    project: &str,
+    instances: &[(&str, &str, bool)],
+    edges: &[(&str, &str, &str, &str)],
+) {
+    let instances: Vec<_> = instances
+        .iter()
+        .map(
+            |(name, version, is_direct)| crate::db::DependencyInstanceInput {
+                package_name: (*name).to_string(),
+                version: (*version).to_string(),
+                is_direct: *is_direct,
+                is_dev: false,
+                scope: "runtime".to_string(),
+            },
+        )
+        .collect();
+    db.store_dependency_instances(project, "crates.io", &instances)
+        .unwrap();
+    let edges: Vec<_> = edges
+        .iter()
+        .map(
+            |(parent, pv, child, cv)| crate::ace::scanner::DependencyEdge {
+                parent: (*parent).to_string(),
+                parent_version: Some((*pv).to_string()),
+                child: (*child).to_string(),
+                child_version: Some((*cv).to_string()),
+                scope: crate::ace::scanner::EdgeScope::Runtime,
+            },
+        )
+        .collect();
+    db.store_dependency_edges(project, "rust", &edges).unwrap();
+}
+
+/// Briefs 446 and 447 (2026-10-28/29): 4da/src-tauri holds zip 4.6.1, which
+/// ONLY tauri-plugin-updater 2.13.1 pulls in, beside zip 8.6.0 (calamine
+/// 0.36.1, docx-rs 0.4.22, the app itself). Cargo.lock records the RESOLVED
+/// version on each edge, so an edge into 8.6.0 is no route to 4.6.1; the
+/// walk read every `zip` edge as one and named calamine, the first row, as
+/// the parent of 4.6.1. The rows and their order are the live table's, stale
+/// ones included (earlier lockfiles' parents, which the version filter drops).
+#[test]
+fn each_copy_is_attributed_to_the_parent_that_holds_it() {
+    const APP: &str = "/projects/zip-copies";
+    let db = crate::test_utils::test_db();
+    seed_cargo_graph(
+        &db,
+        APP,
+        &[
+            ("calamine", "0.36.1", true),
+            ("docx-rs", "0.4.22", true),
+            ("tauri-plugin-updater", "2.13.1", true),
+            ("zip", "4.6.1", false),
+            ("zip", "8.6.0", true),
+        ],
+        &[
+            ("calamine", "0.25.0", "zip", "1.1.4"),
+            ("docx-rs", "0.4.20", "zip", "0.6.6"),
+            ("fourda", "1.0.1", "zip", "0.6.6"),
+            ("calamine", "0.36.1", "zip", "8.6.0"),
+            ("docx-rs", "0.4.22", "zip", "8.6.0"),
+            ("fourda", "1.0.2", "zip", "0.6.6"),
+            ("tauri-plugin-updater", "2.10.1", "zip", "4.6.1"),
+            ("fourda", "1.0.2", "zip", "8.6.0"),
+            ("tauri-plugin-updater", "2.12.0", "zip", "4.6.1"),
+            ("fourda", "1.0.3", "zip", "8.6.0"),
+            ("tauri-plugin-updater", "2.13.1", "zip", "4.6.1"),
+        ],
+    );
+    let conn = db.conn.lock();
+    let parent_of = |copy: &str| {
+        direct_parent(&conn, APP, "crates.io", "zip", Some(copy), Some("9.0.5"))
+            .map(|l| format!("{} {}", l.immediate, l.immediate_version))
+    };
+    assert_eq!(
+        parent_of("4.6.1").as_deref(),
+        Some("tauri-plugin-updater 2.13.1"),
+        "zip 4.6.1 is held only by tauri-plugin-updater"
+    );
+    let other = parent_of("8.6.0");
+    assert!(
+        matches!(other.as_deref(), Some("calamine 0.36.1" | "docx-rs 0.4.22")),
+        "zip 8.6.0 is held by calamine and docx-rs, never the updater: {other:?}"
+    );
+}
+
+/// The same rule one hop up: the copy of the INTERMEDIATE parent the chain
+/// runs through is the one whose parents count. leaf 1.0.0 sits under mid
+/// 1.0.0 (alpha's); mid 2.0.0 (beta's) holds leaf 2.0.0.
+#[test]
+fn the_walk_climbs_through_the_copy_it_reached() {
+    const APP: &str = "/projects/two-mids";
+    let db = crate::test_utils::test_db();
+    seed_cargo_graph(
+        &db,
+        APP,
+        &[
+            ("alpha", "1.0.0", true),
+            ("beta", "1.0.0", true),
+            ("mid", "1.0.0", false),
+            ("mid", "2.0.0", false),
+            ("leaf", "1.0.0", false),
+            ("leaf", "2.0.0", false),
+        ],
+        &[
+            ("mid", "2.0.0", "leaf", "2.0.0"),
+            ("mid", "1.0.0", "leaf", "1.0.0"),
+            ("beta", "1.0.0", "mid", "2.0.0"),
+            ("alpha", "1.0.0", "mid", "1.0.0"),
+        ],
+    );
+    let conn = db.conn.lock();
+    let link = direct_parent(
+        &conn,
+        APP,
+        "crates.io",
+        "leaf",
+        Some("1.0.0"),
+        Some("3.0.0"),
+    )
+    .expect("a parent");
+    assert_eq!(
+        (link.immediate.as_str(), link.immediate_version.as_str()),
+        ("mid", "1.0.0")
+    );
+    assert_eq!(
+        (link.direct.as_str(), link.direct_version.as_str()),
+        ("alpha", "1.0.0")
+    );
 }

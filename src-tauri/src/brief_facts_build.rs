@@ -511,8 +511,9 @@ fn not_compiled_notes(
 }
 
 /// Walk `dependency_edges` up from `package` in `project` to the DIRECT
-/// dependency that pulls it in, using only edges whose parent version is the
-/// one installed now (the table keeps stale rows from earlier scans).
+/// dependency that pulls in the copy at `installed_version`, using only edges
+/// from a parent copy installed now (the table keeps stale rows from earlier
+/// scans) into the copy being walked (a project can hold several).
 fn direct_parent(
     conn: &rusqlite::Connection,
     project: &str,
@@ -582,18 +583,35 @@ fn direct_parent(
     let manager = Manager::detect(std::path::Path::new(project), inst_eco);
     let requirement_recorded = manager.is_some_and(Manager::records_requirements);
 
-    // Each frontier entry carries the depth-0 edge it descends from — the
-    // immediate parent and its requirements — so the reported requirement,
-    // and the parent it belongs to, are the ones on THIS chain.
-    let mut frontier: Vec<(String, Vec<Requirement>, Option<(String, String)>)> =
-        vec![(package.to_string(), Vec::new(), None)];
+    // Each frontier entry carries the copy it stands for and the depth-0 edge
+    // it descends from — the immediate parent and its requirements — so the
+    // reported requirement, and the parent it belongs to, are the ones on
+    // THIS chain.
+    let mut frontier = vec![(
+        package.to_string(),
+        installed_version.map(str::to_string),
+        Vec::<Requirement>::new(),
+        None::<(String, String)>,
+    )];
     let mut seen: HashSet<String> = HashSet::new();
     for depth in 0..MAX_PARENT_DEPTH {
         let mut next = Vec::new();
-        for (child, chain_req, immediate) in &frontier {
+        for (child, child_version, chain_req, immediate) in &frontier {
             let mut hops: Vec<(String, String, bool, Vec<Requirement>)> = Vec::new();
             for (parent, parent_version, child_req) in edges_of(child) {
                 if parent == "__root__" || seen.contains(&parent) {
+                    continue;
+                }
+                // An edge into ANOTHER copy of the child is no route to this
+                // one. It records the parent's requirement (package-lock) or
+                // the copy it resolved to (Cargo.lock, pnpm-lock: an exact
+                // pin). Briefs 446/447 named calamine, whose edge runs to zip
+                // 8.6.0, as the parent of zip 4.6.1.
+                let other_copy = child_req
+                    .as_deref()
+                    .zip(child_version.as_deref())
+                    .is_some_and(|(r, v)| Requirement::npm(r).admits(v) == Some(false));
+                if other_copy {
                     continue;
                 }
                 // Only an edge from a copy of the parent installed now. The
@@ -610,18 +628,10 @@ fn direct_parent(
                 let req = if depth > 0 {
                     chain_req.clone()
                 } else if requirement_recorded {
-                    let req: Vec<Requirement> = child_req
+                    child_req
                         .filter(|r| !r.trim().is_empty())
                         .map(|r| vec![Requirement::npm(&r)])
-                        .unwrap_or_default();
-                    // A recorded requirement that excludes the installed copy
-                    // belongs to ANOTHER copy of the package.
-                    let other_copy = installed_version
-                        .is_some_and(|v| req.iter().any(|r| r.admits(v) == Some(false)));
-                    if other_copy {
-                        continue;
-                    }
-                    req
+                        .unwrap_or_default()
                 } else {
                     manager.map_or_else(Vec::new, |m| {
                         installed_parent_requirements(
@@ -660,7 +670,7 @@ fn direct_parent(
                         requirements: req,
                     });
                 }
-                next.push((parent, req, Some(immediate)));
+                next.push((parent, Some(current), req, Some(immediate)));
             }
         }
         if next.is_empty() {
