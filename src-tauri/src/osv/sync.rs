@@ -553,7 +553,7 @@ async fn sync_ecosystem(
 
 /// Store a single vulnerability's affected packages into the DB.
 /// Returns the number of rows stored.
-pub(super) fn store_vulnerability(
+pub(crate) fn store_vulnerability(
     db: &Database,
     vuln: &Vulnerability,
     seen: &mut std::collections::HashSet<String>,

@@ -34,6 +34,7 @@ pub mod mastodon;
 pub(crate) mod npm_negative_cache;
 pub mod npm_registry;
 pub mod osv;
+mod osv_collapse;
 mod osv_live;
 mod osv_types;
 pub mod papers_with_code;

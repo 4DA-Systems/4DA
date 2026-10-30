@@ -17,7 +17,13 @@ use super::osv_types::*;
 use super::{SourceError, SourceItem, SourceResult};
 
 /// Entry point for strict mode (called from `OsvSource::fetch_items`/`fetch_items_deep`).
+/// Both lanes emit one item per (advisory, matched package); the store keys items by
+/// advisory id, so they leave here as one item per advisory.
 pub(super) async fn live_matched_advisories_as_items(client: &reqwest::Client) -> Vec<SourceItem> {
+    super::osv_collapse::one_item_per_advisory(live_or_mirror_items(client).await)
+}
+
+async fn live_or_mirror_items(client: &reqwest::Client) -> Vec<SourceItem> {
     let db = match crate::get_database() {
         Ok(db) => db,
         Err(e) => {
@@ -236,7 +242,7 @@ fn dep_ecosystem_to_osv(ecosystem: &str) -> Option<&'static str> {
 /// pinned dep. Title LEADS with the package (`[id] pkg: summary`) so the ledger's grounding gate
 /// verifies it names a pinned dependency; content + metadata carry installed/fixed versions and
 /// severity.
-fn live_vuln_to_grounded_item(
+pub(super) fn live_vuln_to_grounded_item(
     vuln: &OsvVulnerability,
     package: &str,
     ecosystem: &str,
