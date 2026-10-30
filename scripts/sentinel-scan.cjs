@@ -571,10 +571,14 @@ function checkKnowledgeDiff() {
 const RUST_TEST_ATTR = /#\[(?:tokio::)?test\b|#\[rstest\b/g;
 const FRONTEND_TEST_CASE = /\b(?:it|test)(?:\.each)?\s*\(/g;
 
-function countRustLibTests() {
-  // --lib scope is src-tauri/src only; src-tauri/tests/ is a separate target.
-  const files = walkFiles(path.join(ROOT, "src-tauri", "src"), (n) =>
-    n.endsWith(".rs")
+function countRustTests() {
+  // The app's --lib tests (src-tauri/src) plus every workspace crate under
+  // crates/. Counting the app alone read a MOVE as a deletion: C0.3/C0.4 moved
+  // tests into crates/fourda-depengine and the scan raised "dropped by 51"
+  // (2026-10-30) while app + crate went 7101 -> 7142. src-tauri/tests/ is a
+  // separate target and stays out, as before.
+  const files = [path.join(ROOT, "src-tauri", "src"), path.join(ROOT, "crates")].flatMap(
+    (dir) => walkFiles(dir, (n) => n.endsWith(".rs"))
   );
   return countPattern(files, RUST_TEST_ATTR);
 }
@@ -618,7 +622,7 @@ function reportTestDelta(check, domain, expert, label, current, previous, critic
 }
 
 function checkTestRegression() {
-  const currentRust = countRustLibTests();
+  const currentRust = countRustTests();
   const currentFrontend = countFrontendTests();
 
   const baselines = readBaselines();
