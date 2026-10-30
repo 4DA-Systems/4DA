@@ -13,10 +13,15 @@
 //! answer in hand.
 //!
 //! An answer is `Some(..)` or `None` (the host looked: absent or unreadable).
-//! Once a host has run [`MAX_ROUNDS`] rounds it sets [`Provided::exhausted`]:
-//! every unanswered need then reads as absent and the rule answers from what
-//! it has, which for the fix path is the semver inference (`Basis::Semver`,
-//! "inferred").
+//! Once a host has run [`MAX_ROUNDS`] rounds it sets [`Provided::exhausted`]
+//! and stops answering. A need still unanswered then is never read as clean:
+//! the run ends in [`Lookup::Partial`], which names every such need so the
+//! host can say NOT CHECKED for what rests on it. The value reads each of
+//! them as absent, and each rule says what that costs: the fix path falls
+//! back to the semver inference (`Basis::Semver`, "inferred") where a parent's
+//! manifest is missing, and names no parent from a requirement range alone
+//! where the `package-lock.json` tree went unanswered
+//! ([`crate::parent_hint::parent_links_lookup`]).
 
 use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
@@ -123,9 +128,14 @@ pub fn crate_manifest_key(name: &str, version: &str) -> String {
 /// A rule's answer, or what it still needs from the host.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Lookup<T> {
+    /// Every need the rule had was answered: the answer is final.
     Done(T),
-    /// Sorted and deduplicated.
+    /// Answer these and call again. Sorted and deduplicated.
     Needs(Vec<Need>),
+    /// The store is exhausted and `unanswered` (sorted, deduplicated) never
+    /// got an answer. `value` reads each of them as absent, so whatever rests
+    /// on one of them was NOT CHECKED; it is never an all-clear.
+    Partial { value: T, unanswered: Vec<Need> },
 }
 
 /// The host as a rule sees it during one run: the answers held, the host's
@@ -134,6 +144,8 @@ pub struct Host<'a> {
     provided: &'a Provided,
     join: &'a dyn Fn(&str, &str) -> String,
     asked: RefCell<BTreeSet<Need>>,
+    /// Needs met once the store is exhausted: never answered, read as absent.
+    unanswered: RefCell<BTreeSet<Need>>,
 }
 
 impl Host<'_> {
@@ -150,10 +162,20 @@ impl Host<'_> {
         if let Some(answer) = held {
             return answer.as_ref();
         }
-        if !self.provided.exhausted {
-            self.asked.borrow_mut().insert(need());
+        let need = need();
+        if self.provided.exhausted {
+            self.unanswered.borrow_mut().insert(need);
+        } else {
+            self.asked.borrow_mut().insert(need);
         }
         None
+    }
+
+    /// Whether the host has answered [`Need::NpmLock`] for `dir` (found or
+    /// not there). Asks for nothing: a rule uses it to tell "no tree" from "no
+    /// answer yet", which must not name what only the tree could confirm.
+    pub fn npm_lock_answered(&self, dir: &str) -> bool {
+        self.provided.npm_locks.contains_key(dir)
     }
 
     /// The text of the file at `path`.
@@ -196,7 +218,8 @@ impl Host<'_> {
 }
 
 /// Run `rule` against `provided`: [`Lookup::Done`] when it asked for nothing
-/// the store lacks (or the store is exhausted), else every need it recorded.
+/// the store lacks; [`Lookup::Partial`] when the store is exhausted and it
+/// met needs nobody answered; else every need it recorded.
 pub fn lookup<T>(
     provided: &Provided,
     join: &dyn Fn(&str, &str) -> String,
@@ -206,26 +229,36 @@ pub fn lookup<T>(
         provided,
         join,
         asked: RefCell::new(BTreeSet::new()),
+        unanswered: RefCell::new(BTreeSet::new()),
     };
     let value = rule(&host);
     let asked = host.asked.into_inner();
-    if asked.is_empty() {
+    let unanswered = host.unanswered.into_inner();
+    if !asked.is_empty() {
+        Lookup::Needs(asked.into_iter().collect())
+    } else if unanswered.is_empty() {
         Lookup::Done(value)
     } else {
-        Lookup::Needs(asked.into_iter().collect())
+        Lookup::Partial {
+            value,
+            unanswered: unanswered.into_iter().collect(),
+        }
     }
 }
 
 /// The host's side of the round-trip: call `rule` until it is done, answering
 /// each round's needs with `answer`. After [`MAX_ROUNDS`] rounds the store is
-/// exhausted and the rule answers from what it has. The app reads the files
-/// here; a wasm host runs the same loop in its own language.
+/// exhausted, so the next call ends the loop: at most `MAX_ROUNDS + 1` calls.
+/// A need left unanswered there reads as absent, which for the app is what an
+/// unreadable file always read as. The app reads the files here; a wasm host
+/// runs the same loop in its own language (`api`'s `parent_links`, whose
+/// `round` puts the same cap on the engine's side).
 pub fn resolve<T>(rule: impl Fn(&Provided) -> Lookup<T>, answer: impl Fn(&Need) -> Answer) -> T {
     let mut provided = Provided::default();
     let mut rounds = 0;
     loop {
         match rule(&provided) {
-            Lookup::Done(value) => return value,
+            Lookup::Done(value) | Lookup::Partial { value, .. } => return value,
             Lookup::Needs(needs) => {
                 for need in &needs {
                     provided.answer(need, answer(need));
@@ -288,18 +321,37 @@ mod tests {
     }
 
     #[test]
-    fn an_exhausted_store_reads_every_unanswered_need_as_absent() {
-        let provided = Provided {
+    fn an_exhausted_store_reads_every_unanswered_need_as_absent_and_names_it() {
+        let mut provided = Provided {
             exhausted: true,
             ..Provided::default()
         };
+        // Answered "not there" before the cap: absent, and not unanswered.
+        provided.manifests.insert("/p/a.json".into(), None);
         let got = lookup(&provided, &slash, |h| {
             (
                 h.crate_manifest("mio", "0.8.0").is_none(),
                 h.npm_lock("/p").is_none(),
+                h.manifest("/p/a.json").is_none(),
+                h.npm_lock_answered("/p"),
             )
         });
-        assert_eq!(got, Lookup::Done((true, true)));
+        assert_eq!(
+            got,
+            Lookup::Partial {
+                value: (true, true, true, false),
+                unanswered: vec![
+                    Need::CrateManifest {
+                        name: "mio".into(),
+                        version: "0.8.0".into()
+                    },
+                    Need::NpmLock { dir: "/p".into() },
+                ],
+            }
+        );
+        // Everything asked was answered: an exhausted store is still Done.
+        let got = lookup(&provided, &slash, |h| h.manifest("/p/a.json").is_none());
+        assert_eq!(got, Lookup::Done(true));
     }
 
     #[test]

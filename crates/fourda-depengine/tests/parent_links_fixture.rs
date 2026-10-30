@@ -36,7 +36,8 @@ fn answer(disk: &Value, need: &Value) -> (&'static str, String, Value) {
 fn play(first: &Value, disk: &Value) -> Vec<Value> {
     let mut request = first.clone();
     let mut rounds = Vec::new();
-    for _ in 0..=fourda_depengine::needs::MAX_ROUNDS {
+    for round in 0..=fourda_depengine::needs::MAX_ROUNDS {
+        request["round"] = json!(round);
         let response: Value =
             serde_json::from_str(&fourda_depengine::api::call(&request.to_string()))
                 .unwrap_or_default();
@@ -44,10 +45,10 @@ fn play(first: &Value, disk: &Value) -> Vec<Value> {
         let Some(needs) = response["result"]["needs"].as_array() else {
             break;
         };
-        let provided = request["provided"]
+        let provided: Map<String, Value> = request["provided"]
             .as_object_mut()
             .map(std::mem::take)
-            .unwrap_or_else(Map::new);
+            .unwrap_or_default();
         let mut provided = Value::Object(provided);
         for need in needs {
             let (section, key, found) = answer(disk, need);

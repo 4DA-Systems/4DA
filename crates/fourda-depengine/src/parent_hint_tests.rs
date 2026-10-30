@@ -9,6 +9,26 @@ use crate::fix_target::UpgradeType;
 use crate::lines::InstallSite;
 use crate::range::check_version_affected;
 
+impl Readers<'_> {
+    /// Nothing on disk: only what the edges themselves record.
+    pub const NONE: Readers<'static> = Readers {
+        manager: &|_| None,
+        requirements: &|_, _, _, _, _| Vec::new(),
+        resolved_children: &|_, _, _, _| None,
+    };
+}
+
+/// The pure core of the app's `load_parent_links`, with nothing read from disk.
+fn parent_links(
+    package: &str,
+    lines: &[LineTarget],
+    edges: &[EdgeObs],
+    installed: &[InstalledObs],
+    is_clear: &dyn Fn(&str) -> bool,
+) -> Vec<ParentLink> {
+    parent_links_with(package, lines, edges, installed, is_clear, &Readers::NONE)
+}
+
 const BRIDGE: &str = "d:/runyourempire/bridge/src-tauri";
 const APP: &str = "d:/4da/src-tauri";
 const LIB: &str = "d:/runyourempire/victauri";
@@ -517,10 +537,11 @@ fn app_lock() -> serde_json::Value {
     }})
 }
 
-fn manager_of(project: &str) -> Option<Manager> {
+/// The tool per project of [`two_tools`].
+fn tool_of(project: &str) -> Manager {
     match project {
-        "/w/taxonomy" => Some(Manager::Pnpm),
-        _ => Some(Manager::Npm),
+        "/w/taxonomy" => Manager::Pnpm,
+        _ => Manager::Npm,
     }
 }
 
@@ -528,6 +549,7 @@ fn manager_of(project: &str) -> Option<Manager> {
 fn the_host_round_trip_gives_the_links_the_readers_give() {
     use crate::needs::{resolve, Answer, Need};
     use std::sync::Arc;
+    let manager_of = |project: &str| Some(tool_of(project));
     let (lines, edges, installed) = two_tools();
     let store_manifest =
         "/w/taxonomy/node_modules/.pnpm/micromatch@4.0.5/node_modules/micromatch/package.json";
@@ -604,4 +626,197 @@ fn the_host_round_trip_gives_the_links_the_readers_give() {
     assert!(via_host
         .iter()
         .all(|l| l.refresh == Refresh::Enough(Basis::Requirement)));
+}
+
+/// The store exhausted before any answer (a host that stopped early): the
+/// npm app's tree never came, so neither range-matched parent is named (the
+/// tree says anymatch holds 3.0.3, audit E8). The copy takes the semver
+/// route, and every need is named as unanswered. The pnpm edge records the
+/// resolved copy itself, so micromatch is still its parent, with the refresh
+/// verdict inferred: its manifest never came either.
+#[test]
+fn an_unanswered_tree_names_no_parent_from_a_range_and_says_so() {
+    use crate::needs::{Lookup, Need, Provided};
+    let manager_of = |project: &str| Some(tool_of(project));
+    let (lines, edges, installed) = two_tools();
+    let projects = Projects {
+        manager: &manager_of,
+        dir: &str::to_string,
+        join: &|d: &str, n: &str| format!("{d}/{n}"),
+    };
+    let exhausted = Provided {
+        exhausted: true,
+        ..Provided::default()
+    };
+    let got = parent_links_lookup(
+        "braces",
+        &lines,
+        &edges,
+        &installed,
+        &|_| true,
+        &projects,
+        &exhausted,
+    );
+    assert!(matches!(got, Lookup::Partial { .. }), "{got:?}");
+    let Lookup::Partial { value, unanswered } = got else {
+        return;
+    };
+    let named: Vec<(&str, &str, Refresh)> = value
+        .iter()
+        .map(|l| (l.project.as_str(), l.parent.as_str(), l.refresh))
+        .collect();
+    assert_eq!(
+        named,
+        vec![("/w/taxonomy", "micromatch", Refresh::Enough(Basis::Semver))]
+    );
+    assert!(unanswered.contains(&Need::NpmLock {
+        dir: "/w/app".into()
+    }));
+    assert!(unanswered.contains(&Need::Listing {
+        dir: "/w/taxonomy/node_modules/.pnpm".into()
+    }));
+    let unlinked = unlinked_sites("braces", &lines, &value, &manager_of);
+    assert_eq!(unlinked.len(), 1);
+    assert_eq!(unlinked[0].project, "/w/app");
+    assert_eq!(unlinked[0].refresh, Refresh::Enough(Basis::Semver));
+
+    // Answered "no tree" (no package-lock, or unreadable): the range-based
+    // attribution stands, as it always did, and nothing is unanswered.
+    let mut no_tree = exhausted.clone();
+    for dir in ["/w/app", "/w/taxonomy"] {
+        no_tree.npm_locks.insert(dir.into(), None);
+    }
+    no_tree.manifests.insert(
+        "/w/taxonomy/node_modules/micromatch/package.json".into(),
+        None,
+    );
+    no_tree
+        .listings
+        .insert("/w/taxonomy/node_modules/.pnpm".into(), None);
+    let got = parent_links_lookup(
+        "braces",
+        &lines,
+        &edges,
+        &installed,
+        &|_| true,
+        &projects,
+        &no_tree,
+    );
+    assert!(matches!(got, Lookup::Done(_)), "{got:?}");
+    let Lookup::Done(links) = got else {
+        return;
+    };
+    let app: Vec<&str> = links
+        .iter()
+        .filter(|l| l.project == "/w/app")
+        .map(|l| l.parent.as_str())
+        .collect();
+    assert_eq!(app, vec!["micromatch", "anymatch"]);
+}
+
+/// The deepest read the app makes, three rounds of needs. The first round's
+/// tree names chokidar as the parent of this copy (its edge records no spec,
+/// and the project holds two copies). Chokidar's manifest is asked in the
+/// second, but the hoisted one is another version, so the pnpm store entry
+/// the listing names is read in the third. The cap leaves that last answer
+/// in hand: a complete answer, nothing unanswered, on the fourth call.
+#[test]
+fn three_rounds_of_needs_fit_under_the_cap() {
+    use crate::needs::{Answer, Lookup, Need, Provided, MAX_ROUNDS};
+    use std::sync::Arc;
+    let mix = "/w/mix";
+    let lines = vec![line("3.0.2", "3.0.3", mix, false)];
+    let edges = vec![edge(mix, "chokidar", Some("3.5.3"), None)];
+    let installed = vec![
+        inst(mix, "braces", "3.0.2", false),
+        inst(mix, "braces", "3.0.3", false),
+        inst(mix, "chokidar", "3.5.3", true),
+    ];
+    let tree = serde_json::json!({"lockfileVersion": 3, "packages": {
+        "node_modules/braces": {"version": "3.0.3"},
+        "node_modules/chokidar": {"version": "3.5.3", "dependencies": {"braces": "~3.0.2"}},
+        "node_modules/chokidar/node_modules/braces": {"version": "3.0.2"}
+    }});
+    let store_entry = "/w/mix/node_modules/.pnpm/chokidar@3.5.3/node_modules/chokidar/package.json";
+    let answer = |need: &Need| match need {
+        Need::NpmLock { .. } => Answer::Tree(Some(Arc::new(tree.clone()))),
+        Need::Manifest { path } if path == "/w/mix/node_modules/chokidar/package.json" => {
+            Answer::Text(Some(
+                r#"{"version":"3.5.2","dependencies":{"braces":"^2.0.0"}}"#.into(),
+            ))
+        }
+        Need::Manifest { path } if path == store_entry => Answer::Text(Some(
+            r#"{"version":"3.5.3","dependencies":{"braces":"~3.0.2"}}"#.into(),
+        )),
+        Need::Listing { .. } => Answer::Names(Some(vec!["chokidar@3.5.3".into()])),
+        _ => Answer::Text(None),
+    };
+    let npm = |_: &str| Some(Manager::Npm);
+    let projects = Projects {
+        manager: &npm,
+        dir: &str::to_string,
+        join: &|d: &str, n: &str| format!("{d}/{n}"),
+    };
+    // The host loop of `needs::resolve`, keeping every call's outcome.
+    let mut provided = Provided::default();
+    let mut outcomes = Vec::new();
+    for round in 0..=MAX_ROUNDS {
+        provided.exhausted = round >= MAX_ROUNDS;
+        let got = parent_links_lookup(
+            "braces",
+            &lines,
+            &edges,
+            &installed,
+            &|_| true,
+            &projects,
+            &provided,
+        );
+        let needs = match &got {
+            Lookup::Needs(needs) => needs.clone(),
+            _ => Vec::new(),
+        };
+        outcomes.push(got);
+        if needs.is_empty() {
+            break;
+        }
+        for need in &needs {
+            provided.answer(need, answer(need));
+        }
+    }
+    let asked: Vec<Vec<Need>> = outcomes
+        .iter()
+        .filter_map(|o| match o {
+            Lookup::Needs(n) => Some(n.clone()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        asked,
+        vec![
+            vec![Need::NpmLock { dir: mix.into() }],
+            vec![
+                Need::Manifest {
+                    path: "/w/mix/node_modules/chokidar/package.json".into()
+                },
+                Need::Listing {
+                    dir: "/w/mix/node_modules/.pnpm".into()
+                },
+            ],
+            vec![Need::Manifest {
+                path: store_entry.into()
+            }],
+        ],
+        "three rounds of needs"
+    );
+    assert_eq!(outcomes.len(), MAX_ROUNDS + 1);
+    let last = outcomes.last();
+    assert!(matches!(last, Some(Lookup::Done(_))), "{last:?}");
+    let Some(Lookup::Done(links)) = last else {
+        return;
+    };
+    assert_eq!(links.len(), 1);
+    assert_eq!(links[0].parent, "chokidar");
+    assert_eq!(links[0].requirement.as_deref(), Some("~3.0.2"));
+    assert_eq!(links[0].refresh, Refresh::Enough(Basis::Requirement));
+    assert_eq!(links[0].command.as_deref(), Some("npm update braces"));
 }

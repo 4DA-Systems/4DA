@@ -389,9 +389,9 @@ fn node_modules_manifest(
 }
 
 /// The requirement a `package.json` places on `child` in the sections that
-/// resolve with the package (`dependencies`, `optionalDependencies`). Also
-/// read for a project's OWN manifest by Signal's stack-change stream, to say
-/// whether a new release is inside the declared range.
+/// resolve with the package (`dependencies`, `optionalDependencies`): what
+/// [`installed_parent_requirements`] reads from an installed parent's
+/// manifest.
 pub fn npm_requirement(pkg: &serde_json::Value, child: &str) -> Option<String> {
     ["dependencies", "optionalDependencies"]
         .iter()

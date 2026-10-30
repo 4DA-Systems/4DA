@@ -37,23 +37,34 @@
 //!   `{"failed":{..}}` or `{"unsupported":{..}}`. At most
 //!   [`MAX_LOCKFILE_FILES`] files and [`MAX_LOCKFILE_BYTES`] bytes of them;
 //!   a request over either cap is an error.
-//! - `{"op":"parent_links","eco":"npm","package":"braces","lines":[{"installed_version",
+//! - `{"op":"parent_links","eco":"npm","package":"braces","round":0,"lines":[{"installed_version",
 //!   "target_version","sites":[{"project_path","is_direct"}]}],"edges":[EdgeObs..],
 //!   "installed":[InstalledObs..],"ranges":[..],"managers":{"<project>":"pnpm"},
 //!   "dirs":{"<project>":"<dir>"},"provided":{..}}` (C0.4) → either
-//!   `{"needs":[Need..]}` or `{"links":[ParentLink..],"unlinked":[UnlinkedSite..]}`.
+//!   `{"needs":[Need..]}` or `{"links":[ParentLink..],"unlinked":[UnlinkedSite..]}`,
+//!   plus `"unanswered":[Need..]` when needs were left unanswered.
 //!   The parents that bring each transitive copy in and whether a lockfile
 //!   refresh reaches the target ([`crate::parent_hint::parent_links_lookup`]).
-//!   `ranges` are the package's advisories (a resolution elsewhere is cited
-//!   only when clear of all of them); `managers` is the tool the host
-//!   detected per project; `dirs` maps a project to its directory (default:
-//!   the project itself), joined with `/`. With `needs`, read them and call
-//!   again with the answers in `provided`: `{"manifests":{path:text|null},
-//!   "listings":{dir:[names]|null},"crate_manifests":{"name@version":text|null},
-//!   "npm_locks":{dir:text|null},"exhausted":bool}` (`null`: looked, not
-//!   there). After [`crate::needs::MAX_ROUNDS`] rounds set `exhausted`: the
-//!   answer then comes from what was given, inferred where a file is missing.
-//!   Provided texts are capped at [`MAX_LOCKFILE_BYTES`] in all.
+//!   `ranges` (required, never empty) are the package's advisories: a
+//!   resolution elsewhere is cited only when clear of all of them, so with
+//!   none nothing could be checked and the request is an error. `managers` is
+//!   the tool the host detected per project; `dirs` maps a project to its
+//!   directory (default: the project itself), joined with `/`. With `needs`,
+//!   read them and call again with `round` one higher and the answers in
+//!   `provided`: `{"manifests":{path:text|null},"listings":{dir:[names]|null},
+//!   "crate_manifests":{"name@version":text|null},"npm_locks":{dir:text|null},
+//!   "exhausted":bool}` (`null`: looked, not there), each keyed exactly as its
+//!   need names it. `round` (required: 0 on the first call) is the engine's
+//!   own cap: from round [`crate::needs::MAX_ROUNDS`] on, or once the host
+//!   sets `exhausted`, it asks for nothing more and answers from what it was
+//!   given. A need never answered by then (answered under another key counts
+//!   as never answered) is listed in `unanswered` and read as absent, so what
+//!   rests on it was NOT CHECKED: an unanswered manifest leaves the refresh
+//!   verdict inferred from semver, and an unanswered `package-lock.json`
+//!   tree names no parent from a requirement range alone (unless another
+//!   parent is evidenced, the copy gets the semver route in `unlinked`). A
+//!   tree answered `null` keeps the range-based attribution. Provided texts
+//!   and listings are capped at [`MAX_LOCKFILE_BYTES`] in all.
 
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
@@ -68,7 +79,7 @@ use crate::lines::{InstallSite, LineTarget};
 use crate::lockfile::source::join_slash;
 use crate::lockfile::{read_dir, MemFs};
 use crate::matching::{inventory_problem, match_inventory_with, package_key, Package};
-use crate::needs::{Lookup, Provided};
+use crate::needs::{Lookup, Provided, MAX_ROUNDS};
 use crate::osv::{stored_records, AdvisoryRecord, OsvRecord};
 use crate::parent_hint::{parent_links_lookup, unlinked_sites, EdgeObs, InstalledObs, Projects};
 use crate::range::check_version_affected;
@@ -123,12 +134,15 @@ enum Request {
 struct ParentLinksRequest {
     eco: String,
     package: String,
+    /// The calls made before this one: 0, then one higher per round of needs.
+    round: usize,
     lines: Vec<LineIn>,
     #[serde(default)]
     edges: Vec<EdgeObs>,
     #[serde(default)]
     installed: Vec<InstalledObs>,
-    #[serde(default)]
+    /// Required, with no default: an absent list would read every version
+    /// as clear of the package's advisories.
     ranges: Vec<Option<Value>>,
     #[serde(default)]
     managers: BTreeMap<String, Manager>,
@@ -195,14 +209,20 @@ struct ProvidedIn {
 
 impl ProvidedIn {
     fn into_provided(self) -> Result<Provided, String> {
-        let bytes: usize = [&self.manifests, &self.crate_manifests, &self.npm_locks]
+        let texts: usize = [&self.manifests, &self.crate_manifests, &self.npm_locks]
             .iter()
             .flat_map(|m| m.iter())
             .map(|(k, v)| k.len() + v.as_ref().map_or(0, String::len))
             .sum();
+        let names: usize = self
+            .listings
+            .iter()
+            .map(|(dir, names)| dir.len() + names.iter().flatten().map(String::len).sum::<usize>())
+            .sum();
+        let bytes = texts + names;
         if bytes > MAX_LOCKFILE_BYTES {
             return Err(format!(
-                "parent_links: {bytes} bytes of provided files, more than the {MAX_LOCKFILE_BYTES} allowed"
+                "parent_links: {bytes} bytes of provided files and listings, more than the {MAX_LOCKFILE_BYTES} allowed"
             ));
         }
         let npm_locks = self
@@ -228,6 +248,7 @@ fn parent_links_op(request: ParentLinksRequest) -> Result<Value, String> {
     let ParentLinksRequest {
         eco,
         package,
+        round,
         lines,
         edges,
         installed,
@@ -236,7 +257,15 @@ fn parent_links_op(request: ParentLinksRequest) -> Result<Value, String> {
         dirs,
         provided,
     } = request;
-    let provided = provided.into_provided()?;
+    if ranges.is_empty() {
+        return Err(
+            "parent_links: `ranges` is empty; with no advisory ranges no version can be checked as clear"
+                .to_string(),
+        );
+    }
+    let mut provided = provided.into_provided()?;
+    // The engine's own cap, whatever the host does with `exhausted`.
+    provided.exhausted |= round >= MAX_ROUNDS;
     let lines: Vec<LineTarget> = lines.into_iter().map(LineIn::into_line).collect();
     let stored: Vec<Option<String>> = ranges.iter().map(|r| stored(r.as_ref())).collect();
     let is_clear = |version: &str| {
@@ -258,13 +287,18 @@ fn parent_links_op(request: ParentLinksRequest) -> Result<Value, String> {
     let found = parent_links_lookup(
         &package, &lines, &edges, &installed, &is_clear, &projects, &provided,
     );
-    Ok(match found {
-        Lookup::Needs(needs) => json!({ "needs": needs }),
-        Lookup::Done(links) => {
-            let unlinked = unlinked_sites(&package, &lines, &links, &manager);
-            json!({ "links": links, "unlinked": unlinked })
-        }
-    })
+    let (links, unanswered) = match found {
+        Lookup::Needs(needs) => return Ok(json!({ "needs": needs })),
+        Lookup::Done(links) => (links, Vec::new()),
+        Lookup::Partial { value, unanswered } => (value, unanswered),
+    };
+    let unlinked = unlinked_sites(&package, &lines, &links, &manager);
+    let mut out = json!({ "links": links, "unlinked": unlinked });
+    // Only when set, so a complete answer keeps its exact shape.
+    if !unanswered.is_empty() {
+        out["unanswered"] = json!(unanswered);
+    }
+    Ok(out)
 }
 
 /// One package's registry facts in a `match_inventory` request.
@@ -446,6 +480,10 @@ pub fn call(request: &str) -> String {
     };
     response.to_string()
 }
+
+#[cfg(test)]
+#[path = "api_parent_links_tests.rs"]
+mod parent_links_tests;
 
 #[cfg(test)]
 mod tests {

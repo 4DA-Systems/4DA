@@ -306,16 +306,6 @@ pub struct Readers<'a> {
     pub resolved_children: &'a dyn Fn(&str, &str, &str, &str) -> Option<Vec<String>>,
 }
 
-#[cfg(test)]
-impl Readers<'_> {
-    /// Nothing on disk: only what the edges themselves record.
-    pub const NONE: Readers<'static> = Readers {
-        manager: &|_| None,
-        requirements: &|_, _, _, _, _| Vec::new(),
-        resolved_children: &|_, _, _, _| None,
-    };
-}
-
 /// What the host says about a project without the engine naming a file:
 /// which tool owns its lockfile (the host detects it, as it discovers the
 /// lockfiles themselves), where it lives, and how the host joins paths.
@@ -336,6 +326,14 @@ pub struct Projects<'a> {
 /// [`crate::needs::Need::Listing`] of pnpm's store) or a
 /// [`crate::needs::Need::CrateManifest`]; the `package-lock.json` tree is a
 /// [`crate::needs::Need::NpmLock`] per project directory.
+///
+/// Until the host has answered a project's tree, a requirement RANGE names
+/// no parent there: a range says only which copies a parent could hold, and
+/// the tree is what says which one it does (audit E8). An answer of "no tree"
+/// keeps the range-based attribution, as an unreadable lockfile always did;
+/// a tree never answered (the store exhausted first) leaves the site to the
+/// semver route of [`unlinked_sites`], and [`Lookup::Partial`] names the
+/// need.
 pub fn parent_links_lookup(
     package: &str,
     lines: &[LineTarget],
@@ -354,28 +352,26 @@ pub fn parent_links_lookup(
             let tree = host.npm_lock(&(projects.dir)(project))?;
             npm_lock_resolutions(tree, parent, version, child)
         };
+        let tree_unanswered = |project: &str| !host.npm_lock_answered(&(projects.dir)(project));
         let readers = Readers {
             manager: projects.manager,
             requirements: &requirements,
             resolved_children: &resolved_children,
         };
-        parent_links_with(package, lines, edges, installed, is_clear, &readers)
+        links_core(
+            package,
+            lines,
+            edges,
+            installed,
+            is_clear,
+            &readers,
+            &tree_unanswered,
+        )
     })
 }
 
-/// The pure core of the app's `load_parent_links`, with nothing read from disk.
-#[cfg(test)]
-pub fn parent_links(
-    package: &str,
-    lines: &[LineTarget],
-    edges: &[EdgeObs],
-    installed: &[InstalledObs],
-    is_clear: &dyn Fn(&str) -> bool,
-) -> Vec<ParentLink> {
-    parent_links_with(package, lines, edges, installed, is_clear, &Readers::NONE)
-}
-
-/// The pure core of the app's `load_parent_links`.
+/// The pure core of the app's `load_parent_links`. `readers` answer every
+/// read at once, so no tree is ever pending.
 pub fn parent_links_with(
     package: &str,
     lines: &[LineTarget],
@@ -383,6 +379,29 @@ pub fn parent_links_with(
     installed: &[InstalledObs],
     is_clear: &dyn Fn(&str) -> bool,
     readers: &Readers<'_>,
+) -> Vec<ParentLink> {
+    let none_pending = |_: &str| false;
+    links_core(
+        package,
+        lines,
+        edges,
+        installed,
+        is_clear,
+        readers,
+        &none_pending,
+    )
+}
+
+/// [`parent_links_with`]; `tree_unanswered(project)` says the host has not
+/// answered that project's lockfile tree yet ([`parent_links_lookup`]).
+fn links_core(
+    package: &str,
+    lines: &[LineTarget],
+    edges: &[EdgeObs],
+    installed: &[InstalledObs],
+    is_clear: &dyn Fn(&str) -> bool,
+    readers: &Readers<'_>,
+    tree_unanswered: &dyn Fn(&str) -> bool,
 ) -> Vec<ParentLink> {
     let child = package.to_lowercase();
     let mut out: Vec<ParentLink> = Vec::new();
@@ -396,15 +415,19 @@ pub fn parent_links_with(
                 }
                 // The lockfile tree, where it records one, says which copy this
                 // parent holds; a range only says which copies it could.
-                let resolved = match (edge.child_spec.as_deref(), edge.parent_version.as_deref()) {
-                    (Some(spec), _) if is_bundled(spec) => None,
-                    (_, Some(pv)) => {
-                        (readers.resolved_children)(&site.project_path, &edge.parent, pv, &child)
-                    }
-                    _ => None,
-                };
+                let tree_version =
+                    match (edge.child_spec.as_deref(), edge.parent_version.as_deref()) {
+                        (Some(spec), _) if is_bundled(spec) => None,
+                        (_, pv) => pv,
+                    };
+                let resolved = tree_version.and_then(|pv| {
+                    (readers.resolved_children)(&site.project_path, &edge.parent, pv, &child)
+                });
+                let tree_pending = tree_version.is_some() && tree_unanswered(&site.project_path);
                 let leads_here = match (resolved, edge.child_spec.as_deref()) {
                     (Some(versions), _) => versions.contains(&line.installed_version),
+                    // Not without the tree it would consult (audit E8).
+                    (None, Some(spec)) if tree_pending && is_range(spec) => false,
                     (None, Some(spec)) => {
                         requirement_admits(spec, &line.installed_version) == Some(true)
                     }

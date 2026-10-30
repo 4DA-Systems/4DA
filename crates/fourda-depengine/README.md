@@ -38,9 +38,10 @@ The app keeps its old paths through re-exports (`crate::osv::version_order`
 `crate::ace::lockfile::{LockFormat, DepScope, LockedPackage, LockfileRead, LockfileOutcome, normalize_descriptor}`,
 `crate::ace::scanner::{DependencyEdge, EdgeScope, ROOT_PARENT}`,
 `crate::ace::cargo_lock_facts::{local_packages, local_only_names, declared_copies, CargoDevScope}`,
-`crate::osv::fix_path::{npm_lock_entry_bundled, BUNDLED_SUFFIX, is_bundled}`,
-`crate::osv::fix_path::{Basis, Refresh, Requirement, Dialect, Manager, NpmLockfile, refresh_verdict, override_hint, cargo_requirements}`,
-`crate::osv::parent_hint::{EdgeObs, InstalledObs, ParentLink, ParentStanding, ParentRelease, Through, Resolution, UnlinkedSite, TransitiveRoutes, unlinked_sites, MAX_LEVERS, installed_parent, normalize_path}`),
+`crate::osv::fix_path::{Basis, Refresh, Requirement, Dialect, Manager, NpmLockfile, refresh_verdict, override_hint, cargo_requirements, requirement_admits}`,
+`crate::osv::parent_hint::{EdgeObs, InstalledObs, ParentLink, ParentStanding, ParentRelease, Through, UnlinkedSite, TransitiveRoutes, unlinked_sites, MAX_LEVERS, installed_parent, normalize_path}`,
+and, for the app's tests only, `crate::osv::fix_path::{is_bundled, BUNDLED_SUFFIX}`
+and `crate::osv::parent_hint::Resolution`),
 so no caller changed what it calls. One exception: `Manager::detect` and
 `NpmLockfile::detect` probe the disk, so they stayed in the app as the traits
 `osv::fix_path::{DetectManager, DetectLockfile}`; their callers import the
@@ -66,7 +67,11 @@ pub enum Need {                     // JSON: {"kind": "manifest", "path": ..}
     CrateManifest { name: String, version: String }, // where cargo extracted it is the host's to know
     NpmLock { dir: String },        // the package-lock.json above a project dir
 }
-pub enum Lookup<T> { Done(T), Needs(Vec<Need>) }
+pub enum Lookup<T> {
+    Done(T),                                         // every need answered
+    Needs(Vec<Need>),                                // answer these, call again
+    Partial { value: T, unanswered: Vec<Need> },     // exhausted; these never answered
+}
 ```
 
 A rule runs against a `Provided` store of answers. What the store lacks is
@@ -74,11 +79,22 @@ recorded as a `Need` and read as absent for the rest of that run; `lookup`
 returns `Done` only when nothing was missing. The host reads the needs, adds
 the answers (`None`: looked, not there) and calls again; every call
 recomputes from scratch, so the final answer is the rule's with every answer
-in hand. After `MAX_ROUNDS` (3) rounds the host sets `exhausted` and the rule
-answers from what it has (inferred, by semver, where a manifest is missing).
-Three rounds, not the design's two: a round's `package-lock.json` tree can
-name a parent whose manifest is only then asked for, and a pnpm store entry
-under it is listed in that round and read in the next.
+in hand. After `MAX_ROUNDS` (3) rounds the store is exhausted and the rule
+answers from what it has, but a need still unanswered is never read as
+clean: the result is `Partial`, naming each such need so the host can say
+NOT CHECKED (the JSON `parent_links` answer lists them in `unanswered`). A
+missing parent manifest leaves the refresh verdict inferred from semver; a
+`package-lock.json` tree that went unanswered names no parent from a
+requirement range alone, so that copy takes the semver route instead (a tree
+answered "not there" keeps the range-based attribution, as an unreadable
+lockfile always did). The engine caps the JSON round-trip itself: every
+`parent_links` request carries a required `round`, and from round
+`MAX_ROUNDS` on the engine asks for nothing more, so a host whose answers
+never match a need (a key spelled differently) still gets a final answer
+that names what it missed. Three rounds, not the design's two: a round's
+`package-lock.json` tree can name a parent whose manifest is only then asked
+for, and a pnpm store entry under it is listed in that round and read in the
+next.
 
 Paths are the host's spelling, built with the host's join (`Projects::join`;
 the app's is `Path::join`, so every need names exactly the file the old code

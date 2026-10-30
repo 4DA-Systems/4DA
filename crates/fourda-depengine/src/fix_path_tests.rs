@@ -304,7 +304,7 @@ fn npm_lock_resolutions_follow_npms_lookup() {
             "node_modules/nyc/node_modules/debug": { "version": "2.2.0", "inBundle": true }
         }}"#,
     )
-    .unwrap();
+    .unwrap_or_default();
     let r = |p: &str, v: &str| npm_lock_resolutions(&lock, p, v, "debug");
     let one = |v: &str| Some(vec![v.to_string()]);
     assert_eq!(r("needle", "2.2.4"), one("2.6.9"));
@@ -321,7 +321,8 @@ fn npm_lock_resolutions_follow_npms_lookup() {
     assert_eq!(r("needle", "9.9.9"), None);
     // A v1 lockfile has no tree to read.
     let v1: serde_json::Value =
-        serde_json::from_str(r#"{"lockfileVersion": 1, "dependencies": {}}"#).unwrap();
+        serde_json::from_str(r#"{"lockfileVersion": 1, "dependencies": {}}"#).unwrap_or_default();
+    assert_eq!(v1["lockfileVersion"], 1, "the v1 lockfile parses");
     assert_eq!(npm_lock_resolutions(&v1, "needle", "2.2.4", "debug"), None);
 }
 
@@ -341,8 +342,10 @@ fn npm_lock_entry_bundled_needs_a_dependency_as_bundler() {
             "node_modules/npm/node_modules/node-gyp/node_modules/array-index": { "version": "1.0.0", "inBundle": true }
         }}"#,
     )
-    .unwrap();
-    let pkgs = lock["packages"].as_object().unwrap();
+    .unwrap_or_default();
+    let empty = serde_json::Map::new();
+    let pkgs = lock["packages"].as_object().unwrap_or(&empty);
+    assert_eq!(pkgs.len(), 8, "the lockfile parses");
     assert!(!npm_lock_entry_bundled(pkgs, "node_modules/left-pad"));
     assert!(!npm_lock_entry_bundled(
         pkgs,
