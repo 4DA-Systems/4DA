@@ -186,6 +186,44 @@ fn two_lockfiles_of_one_ecosystem_are_merged_not_replaced() {
     assert_eq!(rows.len(), 3, "{rows:?}");
 }
 
+/// Two edge-producing lockfiles of one ecosystem in one directory: the store
+/// replaces the key's graph, so both lockfiles' edges must go in together
+/// (one call per read would leave only the last).
+#[test]
+fn every_lockfile_of_an_ecosystem_keeps_its_edges() {
+    let db = test_db();
+    let project = "/proj/two-locks";
+    let pnpm = read("pnpm-lock.yaml", LockFormat::Pnpm, PNPM_LOCK);
+    let npm = read(
+        "package-lock.json",
+        LockFormat::NpmLock,
+        r#"{"lockfileVersion":3,"packages":{
+            "":{"name":"app","dependencies":{"left-pad":"^1.3.0"}},
+            "node_modules/left-pad":{"version":"1.3.0"}
+        }}"#,
+    );
+    assert!(!pnpm.edges.is_empty() && !npm.edges.is_empty());
+    let direct = vec!["left-pad".to_string(), "hono".to_string()];
+    store_ecosystem(
+        &db,
+        project,
+        "javascript",
+        &[&pnpm, &npm],
+        &names(direct),
+        &[],
+    );
+
+    let children: Vec<String> = db
+        .get_dependency_edges(project)
+        .unwrap()
+        .into_iter()
+        .map(|e| e.child_package)
+        .collect();
+    assert!(children.iter().any(|c| c == "left-pad"), "{children:?}");
+    assert!(children.iter().any(|c| c == "sandbox"), "{children:?}");
+    assert_eq!(children.len(), pnpm.edges.len() + npm.edges.len());
+}
+
 /// The collapsed row keeps the copy the project itself resolves to (the
 /// hoisted npm copy), not whichever nested copy sorted last.
 #[test]

@@ -98,30 +98,120 @@ fn test_store_dependency_edges_new_version_pair_is_new_edge() {
     db.store_dependency_edges(
         "/projects/myapp",
         "rust",
-        &[edge(
-            "app",
-            Some("0.1.0"),
-            "serde",
-            Some("1.0.190"),
-            EdgeScope::Runtime,
-        )],
+        &[
+            edge(
+                "app",
+                Some("0.1.0"),
+                "serde",
+                Some("1.0.190"),
+                EdgeScope::Runtime,
+            ),
+            edge(
+                "app",
+                Some("0.1.0"),
+                "serde",
+                Some("1.0.200"),
+                EdgeScope::Runtime,
+            ),
+        ],
     )
-    .expect("store v190");
-    db.store_dependency_edges(
-        "/projects/myapp",
-        "rust",
-        &[edge(
-            "app",
-            Some("0.1.0"),
-            "serde",
-            Some("1.0.200"),
-            EdgeScope::Runtime,
-        )],
-    )
-    .expect("store v200");
+    .expect("store both versions");
 
     let rows = db
         .get_dependency_edges("/projects/myapp")
         .expect("get edges");
     assert_eq!(rows.len(), 2, "a new version pair is a new edge");
+}
+
+/// A rescan replaces the graph: an edge the lockfile no longer has is gone.
+/// Before 2026-11-01 the writer only upserted, so a package upgraded away
+/// still named its old parent (30% of live rows were stale).
+#[test]
+fn test_store_dependency_edges_rescan_drops_edges_the_lockfile_lost() {
+    let db = test_db();
+    let first = vec![
+        edge(
+            "app",
+            Some("0.1.0"),
+            "serde",
+            Some("1.0.190"),
+            EdgeScope::Runtime,
+        ),
+        edge(
+            "app",
+            Some("0.1.0"),
+            "zip",
+            Some("4.6.1"),
+            EdgeScope::Runtime,
+        ),
+    ];
+    let upgraded = vec![edge(
+        "app",
+        Some("0.1.0"),
+        "serde",
+        Some("1.0.200"),
+        EdgeScope::Runtime,
+    )];
+    db.store_dependency_edges("/projects/myapp", "rust", &first)
+        .expect("first scan");
+    db.store_dependency_edges("/projects/myapp", "rust", &upgraded)
+        .expect("rescan");
+
+    let rows = db
+        .get_dependency_edges("/projects/myapp")
+        .expect("get edges");
+    assert_eq!(rows.len(), 1, "{rows:?}");
+    assert_eq!(rows[0].child_package, "serde");
+    assert_eq!(rows[0].child_version.as_deref(), Some("1.0.200"));
+}
+
+/// The replace is scoped to one `(project_path, ecosystem)`: another project,
+/// or another ecosystem of the same project, keeps its graph.
+#[test]
+fn test_store_dependency_edges_replace_is_scoped_to_project_and_ecosystem() {
+    let db = test_db();
+    let one = |child: &str| vec![edge("app", None, child, None, EdgeScope::Runtime)];
+    db.store_dependency_edges("/projects/myapp", "rust", &one("serde"))
+        .unwrap();
+    db.store_dependency_edges("/projects/myapp", "javascript", &one("left-pad"))
+        .unwrap();
+    db.store_dependency_edges("/projects/other", "rust", &one("tokio"))
+        .unwrap();
+
+    db.store_dependency_edges("/projects/myapp", "rust", &one("anyhow"))
+        .unwrap();
+
+    let children = |p: &str| -> Vec<String> {
+        let mut c: Vec<String> = db
+            .get_dependency_edges(p)
+            .unwrap()
+            .into_iter()
+            .map(|r| r.child_package)
+            .collect();
+        c.sort();
+        c
+    };
+    assert_eq!(children("/projects/myapp"), ["anyhow", "left-pad"]);
+    assert_eq!(children("/projects/other"), ["tokio"]);
+}
+
+/// A scan whose lockfiles yield no edges clears the key: a project that moved
+/// off its edge-producing lockfile keeps no graph from it.
+#[test]
+fn test_store_dependency_edges_empty_graph_clears_the_key() {
+    let db = test_db();
+    db.store_dependency_edges(
+        "/projects/myapp",
+        "javascript",
+        &[edge("__root__", None, "left-pad", None, EdgeScope::Runtime)],
+    )
+    .unwrap();
+    let n = db
+        .store_dependency_edges("/projects/myapp", "javascript", &[])
+        .unwrap();
+    assert_eq!(n, 0);
+    assert!(db
+        .get_dependency_edges("/projects/myapp")
+        .unwrap()
+        .is_empty());
 }

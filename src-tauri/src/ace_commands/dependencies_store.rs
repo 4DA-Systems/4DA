@@ -263,10 +263,10 @@ pub(super) fn store_ecosystem(
         .collect();
     db.store_dependency_instances(project_path, ecosystem, &instances)
         .ok();
-    for read in reads.iter().filter(|r| !r.edges.is_empty()) {
-        db.store_dependency_edges(project_path, ecosystem, &read.edges)
-            .ok();
-    }
+    // One call with every lockfile's edges: the store replaces the key's graph.
+    let edges: Vec<_> = reads.iter().flat_map(|r| r.edges.iter().cloned()).collect();
+    db.store_dependency_edges(project_path, ecosystem, &edges)
+        .ok();
 
     let mut count = 0u32;
     for row in collapse(&packages) {
