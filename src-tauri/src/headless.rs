@@ -173,11 +173,12 @@ pub fn run_headless(mode: HeadlessMode, force: bool) -> ! {
 
     // Hold `app` until all work is done, then exit explicitly — there is no event loop to spin.
     drop(app);
-    // A controlled exit is not a crash. The pre-Tauri init armed the startup
-    // watchdog, and `process::exit` skips the GUI's exit handler that clears
-    // its running marker — so every headless drain made the NEXT GUI start
-    // report "Previous session exited uncleanly" (2026-09-06, after the v30
-    // and v31 drains) and flag crash recovery to the frontend.
+    // A controlled exit releases this process's integrity session, so the
+    // next start can skip the whole-file scan. The engine never claims the
+    // crash trail (it runs without the single-instance lock), so this leaves
+    // the GUI's `.running` marker and crash history alone. Before 2026-11-01
+    // the engine wrote `.running` itself, and this call deleted whichever
+    // marker was there, a live GUI's included.
     // Every mode, including the "already fresh" early exit that opens the
     // database without running a cycle.
     crate::db_recovery_marker::persist_pending_notice();
