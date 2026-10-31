@@ -82,9 +82,11 @@ pub use types::{
 
 // Phase 2 (D-1, DB-as-interface): persist the ranked plan for out-of-process
 // readers (the `4da plan` CLI and the MCP `upgrade_planner`, which read the
-// kv_store key themselves). `read_upgrade_plan_snapshot` is not yet called
-// in-process (the app reads the plan live from the feed).
+// kv_store key themselves). The app reads the plan live from the feed.
 #[allow(unused_imports)]
-pub use plan_snapshot::{persist_upgrade_plan, read_upgrade_plan_snapshot};
+pub use plan_snapshot::persist_upgrade_plan;
+// The plan tests read the persisted envelope back through this.
+#[cfg(test)]
+pub use plan_snapshot::read_upgrade_plan_snapshot;
 #[allow(unused_imports)]
 pub use validate::{validate_item, ValidationError};

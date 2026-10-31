@@ -112,15 +112,13 @@ pub fn persist_upgrade_plan(
 /// written by an incompatible schema version (fail closed — a reader must never
 /// act on a snapshot it cannot fully trust).
 ///
-/// Test-exercised only: the shipped `4da plan` CLI reads the `kv_store` key via
-/// raw SQL (it deliberately does not link `fourda_lib`), so it does NOT call this
-/// `Database`-based reader. This fn's production caller is the in-app Phase-2a
-/// reader (operator-gated), still pending.
-// Moved 2026-09-24 from 2026-10-01: the in-app Phase-2a reader that wires this
-// is still operator-gated, and deleting a tested, fail-closed reader ahead of
-// that decision would pre-empt it. Same review date as the seven markers #681
-// moved. If Phase-2a is not scheduled by then, delete this fn and its tests.
-#[allow(dead_code)] // REMOVE BY 2026-11-15 — wired by the in-app Phase-2a reader
+/// Test-only: the reference reader the plan tests use to prove what the
+/// out-of-process readers get (the `4da plan` CLI and the MCP
+/// `upgrade_planner` read the `kv_store` key with their own SQL; the app reads
+/// the plan live). It waited for an in-app Phase-2a reader under a dead-code
+/// expiry marker dated 2026-11-15; that reader is not scheduled, so the
+/// production copy is gone and only the contract tests keep it.
+#[cfg(test)]
 pub fn read_upgrade_plan_snapshot(db: &Database) -> Option<super::types::UpgradePlanSnapshot> {
     let json = db.get_kv(PLAN_KV_KEY).ok().flatten()?;
     let snapshot: super::types::UpgradePlanSnapshot = serde_json::from_str(&json).ok()?;
