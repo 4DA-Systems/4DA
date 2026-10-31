@@ -46,8 +46,8 @@ static STARTUP_CRASH_STATUS: once_cell::sync::OnceCell<crate::startup_watchdog::
 /// processes racing on the same data directory. IO errors are non-fatal;
 /// AlreadyRunning exits the process with a friendly message.
 ///
-/// Crash-loop: reads the previous session's exit state (via `.running`
-/// marker inspected in `begin_startup_watch`) and a persisted crash history.
+/// Crash-loop: claims the crash trail once the lock is held (the `.running`
+/// marker, `claim_crash_trail`) and reads a persisted crash history.
 /// If the recent crash rate breaches the Critical threshold, sets the
 /// safe-mode flag and arms the `startup-crash-loop-critical` event for
 /// later emission from `setup_app` once the AppHandle exists.
@@ -112,6 +112,11 @@ fn acquire_instance_and_detect_crash_loop() {
                 "Single-instance lock I/O error — continuing anyway (non-fatal)");
         }
     }
+
+    // The crash trail is the lock holder's: claimed only now, so a launch the
+    // lock turned away (it exited above) never reads or rewrites a live GUI's
+    // markers.
+    crate::startup_watchdog::claim_crash_trail();
 
     // Crash-loop detection.
     let prev_crashed = crate::startup_watchdog::previous_session_crashed();

@@ -21,7 +21,9 @@
 //!    session exited cleanly (via a `.running` marker that's deleted at the
 //!    Stop event). If the marker is still there on the next launch, the
 //!    previous session crashed — emit a `startup-crash-recovered` event so
-//!    the UI can surface it.
+//!    the UI can surface it. The trail belongs to the process holding the
+//!    single-instance lock (`claim_crash_trail`); the headless engine and a
+//!    rejected second launch never read or remove it.
 //!
 //! ## Why no new crates
 //!
@@ -96,22 +98,28 @@ static PHASE0_MARKED: AtomicBool = AtomicBool::new(false);
 /// Startup clock — set in `begin_startup_watch`, read by the phase-mark fns.
 static mut STARTUP_BEGAN: Option<Instant> = None;
 
-/// Did the PREVIOUS session crash? Captured during `begin_startup_watch` and
+/// Did the PREVIOUS session crash? Captured by `claim_crash_trail` and
 /// consumed by `check_crash_loop`. Separating the read from the append lets
-/// us keep `begin_startup_watch`'s sole responsibility unchanged (rotate the
-/// running-marker) while letting the crash-loop detector know whether the
-/// last boot was clean.
+/// the claim keep its sole responsibility (rotate the running-marker) while
+/// the crash-loop detector learns whether the last boot was clean.
 static PREV_CRASHED: AtomicBool = AtomicBool::new(false);
 
-/// Whether the previous session exited uncleanly, as observed by the most
-/// recent call to `begin_startup_watch`. Used by `check_crash_loop`.
+/// Whether this process claimed the crash trail, i.e. holds the
+/// single-instance lock. Only the owner rotates `.running` at start and
+/// clears the markers and the crash history at a clean exit.
+static OWNS_CRASH_TRAIL: AtomicBool = AtomicBool::new(false);
+
+/// Whether the previous session exited uncleanly, as observed by
+/// `claim_crash_trail`. Used by `check_crash_loop`.
 pub fn previous_session_crashed() -> bool {
     PREV_CRASHED.load(Ordering::SeqCst)
 }
 
-/// Initialize the startup watchdog. Call once from `initialize_pre_tauri()`
-/// before any other setup_app work. Records the startup time, inspects the
-/// crash trail from the previous session, and rotates the `.running` marker.
+/// Start the startup clock. Call once from `initialize_pre_tauri()` before
+/// any other setup work. Touches no marker file: every process starts the
+/// clock (the headless engine, and a second launch the single-instance lock
+/// is about to turn away), but only the lock holder owns the crash trail
+/// (`claim_crash_trail`).
 pub fn begin_startup_watch() {
     // Safety: called exactly once during startup, before any background
     // tasks exist. No concurrent readers.
@@ -119,24 +127,42 @@ pub fn begin_startup_watch() {
     unsafe {
         STARTUP_BEGAN = Some(Instant::now());
     }
+}
 
-    let data_dir = match data_dir() {
-        Some(d) => d,
-        None => {
-            warn!(target: "4da::watchdog", "Could not resolve data dir for startup watchdog");
-            return;
-        }
+/// Inspect the previous session's crash trail and rotate the `.running`
+/// marker. GUI only, called once the single-instance lock is held.
+///
+/// Until 2026-11-01 every process did this at `begin_startup_watch`. The
+/// headless engine (every 10 minutes, alongside the GUI) and a second launch
+/// the lock rejected both read the LIVE GUI's `.running` as a crash and
+/// deleted its `.stalled` marker. Then the engine's clean exit deleted the
+/// GUI's `.running` and cleared the crash history, so a GUI crash after the
+/// next engine run was never detected.
+pub fn claim_crash_trail() {
+    let Some(dir) = data_dir() else {
+        warn!(target: "4da::watchdog", "Could not resolve data dir for the crash trail");
+        return;
     };
+    let (prev_crashed, prev_stalled) = claim_crash_trail_in(&dir);
+    // Expose to the crash-loop detector (called next in pre-Tauri init).
+    PREV_CRASHED.store(prev_crashed, Ordering::SeqCst);
+    OWNS_CRASH_TRAIL.store(true, Ordering::SeqCst);
+    info!(
+        target: "4da::watchdog",
+        prev_crashed,
+        prev_stalled,
+        "Startup watchdog initialized"
+    );
+}
 
-    // Inspect the crash trail from the previous session.
+/// [`claim_crash_trail`] against an explicit data directory. Returns
+/// `(prev_crashed, prev_stalled)`.
+fn claim_crash_trail_in(data_dir: &Path) -> (bool, bool) {
     let running_marker = data_dir.join(".running");
     let stalled_marker = data_dir.join(".stalled");
 
     let prev_crashed = running_marker.exists();
     let prev_stalled = stalled_marker.exists();
-
-    // Expose to the crash-loop detector (called later in pre-Tauri init).
-    PREV_CRASHED.store(prev_crashed, Ordering::SeqCst);
 
     if prev_crashed || prev_stalled {
         warn!(
@@ -157,17 +183,11 @@ pub fn begin_startup_watch() {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
         .unwrap_or(0);
-    let _ = std::fs::create_dir_all(&data_dir);
+    let _ = std::fs::create_dir_all(data_dir);
     if let Err(e) = std::fs::write(&running_marker, now_secs.to_string().as_bytes()) {
         debug!(target: "4da::watchdog", error = %e, "Could not write .running marker");
     }
-
-    info!(
-        target: "4da::watchdog",
-        prev_crashed,
-        prev_stalled,
-        "Startup watchdog initialized"
-    );
+    (prev_crashed, prev_stalled)
 }
 
 /// Mark Phase 0 (first-light) complete. Logs the elapsed time. If the
@@ -370,19 +390,38 @@ pub fn write_heartbeat() {
 /// Clean up the `.running` marker during shutdown. Call from the Stop event
 /// handler. If the marker isn't cleaned up, the next launch treats the
 /// previous session as crashed.
+///
+/// Every process releases its own integrity session. Only the crash-trail
+/// owner (`claim_crash_trail`) removes `.running` / `.healthy` and clears the
+/// crash history: the headless engine and the console-control handler call
+/// this too, and they must not erase a live GUI's trail.
 pub fn mark_clean_shutdown() {
     let Some(dir) = data_dir() else {
         return;
     };
-    let _ = std::fs::remove_file(dir.join(".running"));
-    let _ = std::fs::remove_file(dir.join(".healthy"));
+    let owns_trail = OWNS_CRASH_TRAIL.load(Ordering::SeqCst);
+    clean_shutdown_in(&dir, owns_trail);
     // This process's `<db>.session.<pid>`: a clean exit is what lets the next
     // start skip the whole-file integrity scan (`db::integrity_gate`).
     crate::db::integrity_gate::release_session();
+    if owns_trail {
+        info!(target: "4da::watchdog", "Clean shutdown markers removed");
+    } else {
+        info!(target: "4da::watchdog", "Clean shutdown; the crash-trail markers belong to the instance-lock holder and stay");
+    }
+}
+
+/// The marker half of [`mark_clean_shutdown`] against an explicit directory.
+/// A no-op unless this process owns the crash trail.
+fn clean_shutdown_in(dir: &Path, owns_trail: bool) {
+    if !owns_trail {
+        return;
+    }
+    let _ = std::fs::remove_file(dir.join(".running"));
+    let _ = std::fs::remove_file(dir.join(".healthy"));
     // A clean shutdown is the recovery signal for crash-loop detection —
     // clear the history so future boots start from a clean slate.
-    clear_crash_history();
-    info!(target: "4da::watchdog", "Clean shutdown markers removed");
+    clear_crash_history_in(dir);
 }
 
 /// Resolve the data directory from the canonical DB path.
@@ -439,7 +478,7 @@ static SAFE_MODE: AtomicBool = AtomicBool::new(false);
 ///
 /// 1. Read the existing history (JSON array of unix-second timestamps).
 /// 2. If the PREVIOUS session exited cleanly (detected by absence of the
-///    `.running` marker at begin_startup_watch, signalled via
+///    `.running` marker at claim_crash_trail, signalled via
 ///    `prev_crashed` argument), do NOT append. A clean boot after a
 ///    crash-burst is the recovery signal — don't poison the history.
 /// 3. If the previous session crashed, append the current timestamp.
@@ -533,9 +572,13 @@ pub fn check_crash_loop(data_dir: &Path, prev_crashed: bool) -> CrashLoopStatus 
 /// after the app has been running for long enough that any prior burst
 /// can no longer reasonably be considered a loop.
 pub fn clear_crash_history() {
-    let Some(dir) = data_dir() else {
-        return;
-    };
+    if let Some(dir) = data_dir() {
+        clear_crash_history_in(&dir);
+    }
+}
+
+/// [`clear_crash_history`] against an explicit data directory.
+fn clear_crash_history_in(dir: &Path) {
     let path = dir.join(CRASH_HISTORY_FILENAME);
     match std::fs::remove_file(&path) {
         Ok(()) => info!(target: "4da::watchdog", "Crash history cleared (clean session)"),
@@ -766,5 +809,54 @@ mod tests {
             parsed.is_empty(),
             "clean-previous boot must not add a crash timestamp; got {parsed:?}"
         );
+    }
+
+    #[test]
+    fn claiming_a_fresh_trail_reports_a_clean_previous_session() {
+        let tmp = tempfile::TempDir::new().expect("tempdir");
+        assert_eq!(claim_crash_trail_in(tmp.path()), (false, false));
+        assert!(
+            tmp.path().join(".running").exists(),
+            "the owner marks its own session as running"
+        );
+    }
+
+    #[test]
+    fn claiming_after_a_crash_reports_it_and_consumes_the_stall_marker() {
+        let tmp = tempfile::TempDir::new().expect("tempdir");
+        std::fs::write(tmp.path().join(".running"), "1").unwrap();
+        std::fs::write(tmp.path().join(".stalled"), "phase0").unwrap();
+        assert_eq!(claim_crash_trail_in(tmp.path()), (true, true));
+        assert!(!tmp.path().join(".stalled").exists());
+        let rotated = std::fs::read_to_string(tmp.path().join(".running")).unwrap();
+        assert_ne!(rotated, "1", "the marker is rewritten for this session");
+    }
+
+    /// The headless engine and the console-control handler call
+    /// `mark_clean_shutdown` too. Without the trail they must leave a live
+    /// GUI's markers and crash history alone (2026-11-01: the engine's exit
+    /// deleted them every 10 minutes).
+    #[test]
+    fn a_clean_exit_without_the_trail_leaves_the_owners_markers() {
+        let tmp = tempfile::TempDir::new().expect("tempdir");
+        for f in [".running", ".healthy", CRASH_HISTORY_FILENAME] {
+            std::fs::write(tmp.path().join(f), "[1]").unwrap();
+        }
+        clean_shutdown_in(tmp.path(), false);
+        for f in [".running", ".healthy", CRASH_HISTORY_FILENAME] {
+            assert!(tmp.path().join(f).exists(), "{f} must survive");
+        }
+    }
+
+    #[test]
+    fn a_clean_exit_with_the_trail_removes_the_markers_and_history() {
+        let tmp = tempfile::TempDir::new().expect("tempdir");
+        for f in [".running", ".healthy", CRASH_HISTORY_FILENAME] {
+            std::fs::write(tmp.path().join(f), "[1]").unwrap();
+        }
+        clean_shutdown_in(tmp.path(), true);
+        for f in [".running", ".healthy", CRASH_HISTORY_FILENAME] {
+            assert!(!tmp.path().join(f).exists(), "{f} must be removed");
+        }
     }
 }
