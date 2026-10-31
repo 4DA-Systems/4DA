@@ -229,3 +229,41 @@ test("dependabot: a real medium alert is a warning", () => {
   const [f] = classifyDependabotAlerts([{ number: 4, manifest: "site/pnpm-lock.yaml", severity: "medium", pkg: "x" }]);
   assert.strictEqual(f.severity, "warning");
 });
+
+// ── Tauri crate/npm alignment on main (2026-10-29..31: updater 2.14 vs 2.13 sat on main) ──
+const { classifyTauriAlignment } = require("./sentinel-scan.cjs");
+const { evaluate: evaluateTauri } = require("./check-tauri-alignment.cjs");
+const TAURI_DECLARED = ["@tauri-apps/api", "@tauri-apps/plugin-updater"];
+
+test("tauri alignment: an aligned main is not a finding", () => {
+  const r = evaluateTauri(
+    { tauri: ["2.12.5"], "tauri-plugin-updater": ["2.14.1"] },
+    { "@tauri-apps/api": "2.12.4", "@tauri-apps/plugin-updater": "2.14.1" },
+    TAURI_DECLARED
+  );
+  assert.deepStrictEqual(classifyTauriAlignment(r), []);
+});
+
+test("tauri alignment: unknown inputs (null) and an unresolved pair are never findings", () => {
+  assert.deepStrictEqual(classifyTauriAlignment(null), []);
+  const unresolved = evaluateTauri({ "tauri-plugin-updater": ["2.14.0"] }, {}, TAURI_DECLARED);
+  assert.strictEqual(unresolved.inconclusive, true);
+  assert.deepStrictEqual(classifyTauriAlignment(unresolved), []);
+});
+
+test("tauri alignment: the #1044 drift on main is a WARNING (never critical) naming both sides and the consequence", () => {
+  const r = evaluateTauri(
+    { tauri: ["2.12.2"], "tauri-plugin-updater": ["2.14.0"] },
+    { "@tauri-apps/api": "2.12.3", "@tauri-apps/plugin-updater": "2.13.3" },
+    TAURI_DECLARED
+  );
+  const out = classifyTauriAlignment(r, "origin/main");
+  assert.strictEqual(out.length, 1);
+  assert.strictEqual(out[0].severity, "warning");
+  assert.strictEqual(
+    out[0].message,
+    "Tauri crate/npm major.minor mismatch (tauri-plugin-updater 2.14 vs @tauri-apps/plugin-updater 2.13): the next release build will fail"
+  );
+  assert.match(out[0].detail, /^read from origin\/main\n/);
+  assert.match(out[0].detail, /SAME PR/);
+});
