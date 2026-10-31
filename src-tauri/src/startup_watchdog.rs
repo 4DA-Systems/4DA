@@ -568,16 +568,8 @@ pub fn check_crash_loop(data_dir: &Path, prev_crashed: bool) -> CrashLoopStatus 
     status
 }
 
-/// Clear the crash history — call after a successful clean shutdown OR
-/// after the app has been running for long enough that any prior burst
-/// can no longer reasonably be considered a loop.
-pub fn clear_crash_history() {
-    if let Some(dir) = data_dir() {
-        clear_crash_history_in(&dir);
-    }
-}
-
-/// [`clear_crash_history`] against an explicit data directory.
+/// Clear the crash history in `dir`. Called by the crash-trail owner's clean
+/// shutdown (`clean_shutdown_in`): a clean exit means any prior burst is over.
 fn clear_crash_history_in(dir: &Path) {
     let path = dir.join(CRASH_HISTORY_FILENAME);
     match std::fs::remove_file(&path) {
