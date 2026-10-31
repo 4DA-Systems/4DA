@@ -86,12 +86,12 @@ ignore = [
     { id = "RUSTSEC-2023-0071", reason = "enterprise-only, signature verification not decryption, no fix upstream" },
     { id = "RUSTSEC-2026-0097", reason = "rand unsound only with custom global allocator + rand::rng(), neither applies to 4DA" },
     # zip <9 extract() advisories: full reachability note in .cargo/audit.toml.
-    # 4DA's own code and calamine 0.37 are on zip 9.1. Still needed for the two
-    # zip <9 copies: docx-rs 0.4.22 (zip 8.6) and tauri-plugin-updater 2.14.0 (zip 4.6).
-    # REVISIT: drop when tauri-plugin-updater 2.14.1+ and docx-rs move to zip >=9.
-    { id = "RUSTSEC-2026-0367", reason = "zip <9 extract() SUID bits: docx-rs (zip 8.6) never calls extract(); updater (zip 4.6) extracts only our signature-verified archive" },
-    { id = "RUSTSEC-2026-0368", reason = "zip <9 extract() symlink escape: docx-rs (zip 8.6) never calls extract(); updater (zip 4.6) extracts only our signature-verified archive" },
-    { id = "RUSTSEC-2026-0369", reason = "zip <9 extract() permissions via symlink: docx-rs (zip 8.6) never calls extract(); updater (zip 4.6) extracts only our signature-verified archive" },
+    # 4DA's own code, calamine 0.37 and tauri-plugin-updater 2.14.1 are on zip 9.1.
+    # Still needed for the one zip <9 copy left: docx-rs 0.4.22 (zip 8.6).
+    # REVISIT: drop when docx-rs moves to zip >=9.
+    { id = "RUSTSEC-2026-0367", reason = "zip <9 extract() SUID bits: docx-rs (zip 8.6) never calls extract()" },
+    { id = "RUSTSEC-2026-0368", reason = "zip <9 extract() symlink escape: docx-rs (zip 8.6) never calls extract()" },
+    { id = "RUSTSEC-2026-0369", reason = "zip <9 extract() permissions via symlink: docx-rs (zip 8.6) never calls extract()" },
     # crypto-bigint 0.5.5 (no fix): full note in .cargo/audit.toml. REVISIT when jsonwebtoken moves to p256 0.14.
     { id = "RUSTSEC-2026-0387", reason = "crypto-bigint 0.5 timing: only via optional enterprise jsonwebtoken, used to verify public ES256/ES384 signatures; 0.7 copy bumped to 0.7.10" },
 

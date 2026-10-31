@@ -72,17 +72,15 @@ ignore = [
     # zip <9.0.0 extract() path handling (RUSTSEC-2026-0367 SUID/SGID kept,
     # -0368 symlink targets outside the destination, -0369 permissions applied
     # through symlinks). All three are in ZipArchive::extract /
-    # ZipStreamReader::extract. Re-checked 2026-10-30:
+    # ZipStreamReader::extract. Re-checked 2026-11-01:
     # - 4DA's own code (fastembed.rs, osv/cache.rs, extractors/archive.rs,
-    #   extractors/office.rs) and calamine 0.37 are on zip 9.1.3, which is
-    #   not affected. 4DA never calls extract() in any case; it copies chosen
-    #   entries to paths it names.
-    # - The ignores are still needed for the two zip <9 copies left:
-    #   - docx-rs 0.4.22 (zip 8.6.0) only reads entries through ZipArchive.
-    #   - tauri-plugin-updater 2.14.0 (zip 4.6.1) calls extract() on Windows
-    #     only, AFTER verify_signature against our updater pubkey: the archive
-    #     is one we signed.
-    # REVISIT: drop when tauri-plugin-updater 2.14.1+ and docx-rs move to zip >=9.
+    #   extractors/office.rs), calamine 0.37 and tauri-plugin-updater 2.14.1
+    #   are on zip 9.1.3, which is not affected. 4DA never calls extract() in
+    #   any case; it copies chosen entries to paths it names.
+    # - The ignores are still needed for the one zip <9 copy left:
+    #   docx-rs 0.4.22 (zip 8.6.0, the newest docx-rs), which only reads
+    #   entries through ZipArchive.
+    # REVISIT: drop when docx-rs moves to zip >=9.
     "RUSTSEC-2026-0367", # zip SUID/SGID on extract
     "RUSTSEC-2026-0368", # zip symlink escape on extract
     "RUSTSEC-2026-0369", # zip permissions through symlinks on extract
