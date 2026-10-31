@@ -646,30 +646,43 @@ impl Database {
             .collect())
     }
 
-    /// Bulk-upsert parent->child dependency edges for a project (Step 1:
-    /// reachability foundation). Runs in a single transaction. Skips ephemeral
-    /// worktree/temp paths (same exclusion as the auditable-dependency queries).
+    /// Replace the parent->child dependency edges of one
+    /// `(project_path, ecosystem)` (Step 1: reachability foundation) with the
+    /// graph from this scan. Skips ephemeral worktree/temp paths (same
+    /// exclusion as the auditable-dependency queries).
     ///
-    /// Idempotent since schema 114: one row per logical edge
-    /// `(project_path, ecosystem, parent@version, child@version)` — a rescan
-    /// refreshes `scope` / `detected_at` in place instead of appending the
-    /// whole graph again (the pre-114 behavior that grew the table to ~642k
-    /// rows for ~12k distinct edges). The ON CONFLICT target must match
+    /// DELETE-then-insert in a single transaction, like
+    /// [`Self::store_dependency_instances`]: an edge the lockfile no longer
+    /// has must not outlive it. Upsert alone kept every edge ever seen, so a
+    /// package upgraded away still named its old parent (30% of live rows were
+    /// older than their project's latest scan on 2026-11-01). The caller passes
+    /// the whole graph of the scan in ONE call, every lockfile of that
+    /// ecosystem merged: a second call for the same key replaces the first.
+    /// An empty graph clears the key.
+    ///
+    /// One row per logical edge `(project_path, ecosystem, parent@version,
+    /// child@version)` since schema 114 (the pre-114 writer appended the whole
+    /// graph on every scan: ~642k rows for ~12k distinct edges). The ON
+    /// CONFLICT target dedups an edge repeated within the graph and must match
     /// `idx_dep_edges_unique` exactly, COALESCE expressions included, because
     /// SQLite resolves the conflict against that specific unique index.
-    /// Returns the number of edges written (0 for excluded/empty input).
+    /// Returns the number of edges written (0 for an excluded path).
     pub(crate) fn store_dependency_edges(
         &self,
         project_path: &str,
         ecosystem: &str,
         edges: &[DependencyEdge],
     ) -> SqliteResult<usize> {
-        if edges.is_empty() || is_excluded_project_path(project_path) {
+        if is_excluded_project_path(project_path) {
             return Ok(0);
         }
 
         let mut conn = self.conn.lock();
         let tx = conn.transaction()?;
+        tx.execute(
+            "DELETE FROM dependency_edges WHERE project_path = ?1 AND ecosystem = ?2",
+            params![project_path, ecosystem],
+        )?;
         let mut inserted = 0usize;
         {
             let mut stmt = tx.prepare(
