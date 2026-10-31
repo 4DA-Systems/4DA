@@ -570,9 +570,15 @@ mod tests {
     fn a_release_without_a_registry_date_shows_no_date_not_the_fetch_date() {
         let db = crate::test_utils::test_db();
         let conn = db.conn.lock();
+        // Relative to now: `load_rows` keeps only the last
+        // UPGRADE_WINDOW_DAYS, so a fixed date ages out of the window (a
+        // literal 2026-10-01 turned main red on 2026-10-31).
+        let dated = (chrono::Utc::now() - chrono::Duration::days(1))
+            .format("%Y-%m-%d %H:%M:%S")
+            .to_string();
         for (id, published) in [
             ("undated@2.0.0", None),
-            ("dated@3.0.0", Some("2026-10-01 10:00:00")),
+            ("dated@3.0.0", Some(dated.as_str())),
         ] {
             conn.execute(
                 "INSERT INTO source_items (source_type, source_id, title, content, content_hash,
@@ -589,9 +595,6 @@ mod tests {
                 .map(|r| r.published.clone())
         };
         assert_eq!(published("undated@2.0.0"), Some(None), "{rows:?}");
-        assert_eq!(
-            published("dated@3.0.0"),
-            Some(Some("2026-10-01 10:00:00".to_string()))
-        );
+        assert_eq!(published("dated@3.0.0"), Some(Some(dated)));
     }
 }
