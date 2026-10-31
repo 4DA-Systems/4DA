@@ -15,6 +15,8 @@
  *   6. File size compliance
  *   7. Git hygiene
  *   8. Merge-gate health (expired/imminent REMOVE BY, main + nightly CI red)
+ *   9. Dependabot alerts (real vs vendored-fixture)
+ *  10. Tauri crate/npm major.minor alignment on main (next release build)
  *
  * Output: JSON to stdout (structured signals array)
  * Usage:  node scripts/sentinel-scan.cjs [--json] [--quick]
@@ -977,6 +979,75 @@ function checkDependabotAlerts() {
 }
 
 // ---------------------------------------------------------------------------
+// CHECK 10: Tauri crate/npm alignment on main — will the next release build?
+// ---------------------------------------------------------------------------
+//
+// `tauri build` refuses a crate/npm major.minor mismatch, and release.yml
+// builds without --ignore-version-mismatches, so drift on main fails the NEXT
+// release, not the PR that caused it. It reached main twice: fixed in #966
+// (2026-10-16), then a one-sided cargo group bump (#1044, 2026-10-29) put
+// tauri-plugin-updater at 2.14 against npm 2.13 until #1062. CI only WARNS on
+// a PR (each one-sided Dependabot PR is misaligned by construction, so a gate
+// would fail them all), which is why main's drift has to keep surfacing HERE.
+
+/// Pure classifier — exported for negative tests. A null result (inputs
+/// unreadable) and an unresolved pair are unknown, never a finding.
+function classifyTauriAlignment(result, source = "origin/main") {
+  if (!result || result.ok !== false) return [];
+  const { summarize, fixFor } = require("./check-tauri-alignment.cjs");
+  return [
+    {
+      severity: "warning",
+      message: summarize(result),
+      detail: [`read from ${source}`, ...result.mismatches.map(fixFor)].join("\n"),
+    },
+  ];
+}
+
+/// A file reader over a git ref (null when the ref or path does not exist).
+function gitShowReader(ref) {
+  return (rel) => {
+    try {
+      return execFileSync("git", ["show", `${ref}:${rel}`], {
+        cwd: ROOT,
+        encoding: "utf-8",
+        timeout: 15000,
+        maxBuffer: 64 * 1024 * 1024,
+        stdio: ["ignore", "pipe", "ignore"],
+        ...NO_WINDOW,
+      });
+    } catch {
+      return null;
+    }
+  };
+}
+
+function checkTauriAlignment() {
+  let result = null;
+  // origin/main as last fetched is what the next release is cut from, whatever
+  // branch this checkout is on. Without that ref (no remote, never fetched) the
+  // working tree is the best view available, and the detail says so.
+  let source = "origin/main";
+  try {
+    const { check, fsReader } = require("./check-tauri-alignment.cjs");
+    result = check(gitShowReader("origin/main"));
+    if (result.missing.length > 0) {
+      source = "the working tree (origin/main not readable)";
+      result = check(fsReader(ROOT));
+    }
+  } catch {
+    result = null;
+  }
+  if (!result || result.missing.length > 0) return; // unknown: neither ok nor a finding
+  const findings = classifyTauriAlignment(result, source);
+  if (findings.length === 0) {
+    if (!result.inconclusive) addSignal("tauri_alignment", "ok", "CI", "", `Tauri crate/npm versions aligned (${source})`);
+    return;
+  }
+  for (const f of findings) addSignal("tauri_alignment", f.severity, "CI", "", f.message, f.detail);
+}
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 
@@ -994,6 +1065,7 @@ function main() {
   checkGitHygiene();
   checkMergeGateHealth();
   checkDependabotAlerts();
+  checkTauriAlignment();
 
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(1);
 
@@ -1077,5 +1149,5 @@ if (require.main === module) {
   // Exported for negative tests (scripts/sentinel-scan.test.cjs) — a
   // detector fix without a negative test is how the last five detector
   // bugs shipped (recipe-gate-precision-negative-test).
-  module.exports = { classifyTscResult, classifyIpcResult, classifyMergeGateHealth, classifyDependabotAlerts, parseCargoDiagnostics, safeExec };
+  module.exports = { classifyTscResult, classifyIpcResult, classifyMergeGateHealth, classifyDependabotAlerts, classifyTauriAlignment, parseCargoDiagnostics, safeExec };
 }
