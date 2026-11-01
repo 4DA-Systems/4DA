@@ -80,7 +80,8 @@ fn prune_unlisted(
     project_path: &str,
     deps: &[DepEntry],
 ) -> Result<usize> {
-    let mut by_ecosystem: std::collections::BTreeMap<&str, Vec<&str>> = Default::default();
+    let mut by_ecosystem: std::collections::BTreeMap<&str, Vec<&str>> =
+        std::collections::BTreeMap::new();
     for dep in deps {
         by_ecosystem
             .entry(dep.ecosystem.as_str())
