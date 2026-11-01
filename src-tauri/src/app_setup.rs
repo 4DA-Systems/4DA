@@ -24,11 +24,26 @@ use crate::{
 mod app_setup_tests;
 
 /// Process-lifetime holder for the single-instance lock. Set once in
-/// `initialize_pre_tauri` and kept alive until process exit so the Drop impl
-/// on `InstanceLock` fires during normal shutdown.
+/// `initialize_pre_tauri`. Rust never drops statics, so the lock's Drop (which
+/// removes `.process.lock`) runs only when [`release_instance_lock`] takes it
+/// out on a clean exit.
 static INSTANCE_LOCK: once_cell::sync::OnceCell<
     parking_lot::Mutex<Option<crate::single_instance::InstanceLock>>,
 > = once_cell::sync::OnceCell::new();
+
+/// Drop the single-instance lock, removing `.process.lock`. Called last on a
+/// clean exit, after the WAL checkpoint, so a new launch cannot open the
+/// database while this process still writes to it. Until 2026-11-01 nothing
+/// called it: every clean quit left the file behind, and the next launch then
+/// had to judge it by PID, which Windows reuses. `try_lock` because the
+/// console-control handler calls this from a system thread and must not block.
+pub(crate) fn release_instance_lock() {
+    if let Some(cell) = INSTANCE_LOCK.get() {
+        if let Some(mut held) = cell.try_lock() {
+            drop(held.take());
+        }
+    }
+}
 
 /// Crash-loop status captured during pre-Tauri init. Read by `setup_app`
 /// after the `AppHandle` exists so we can emit frontend events.
@@ -156,6 +171,7 @@ fn install_console_ctrl_handler() {
         );
         if ctrl_type == CTRL_C_EVENT || ctrl_type == CTRL_CLOSE_EVENT {
             crate::startup_watchdog::mark_clean_shutdown();
+            release_instance_lock();
         }
         // Bounded drain window for the tracing-appender worker thread. The
         // system allows console handlers seconds before force-killing; 200ms
@@ -2380,6 +2396,8 @@ pub(crate) fn handle_run_event(app_handle: &tauri::AppHandle, event: tauri::RunE
                 info!(target: "4da::shutdown", "Cleaned up temp directory");
             }
         }
+        // Last: the database is checkpointed, so a new launch may take over.
+        release_instance_lock();
         info!(target: "4da::shutdown", "Cleanup complete");
     }
 }
