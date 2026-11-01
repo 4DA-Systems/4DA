@@ -125,9 +125,7 @@ pub(crate) fn note_brief_written_on(db: &crate::db::Database, day: &str, auto: b
     } else {
         entry.manual += 1;
     }
-    let cutoff = (chrono::Local::now() - chrono::Duration::days(BRIEF_WRITES_RETENTION_DAYS))
-        .format("%Y-%m-%d")
-        .to_string();
+    let cutoff = retention_cutoff(day, BRIEF_WRITES_RETENTION_DAYS);
     all.retain(|d, _| d.as_str() >= cutoff.as_str() || d.as_str() == day);
     match serde_json::to_string(&all) {
         Ok(json) => {
@@ -139,6 +137,18 @@ pub(crate) fn note_brief_written_on(db: &crate::db::Database, day: &str, auto: b
             tracing::warn!(target: "4da::briefing", error = %e, "brief write count not serialized");
         }
     }
+}
+
+/// The oldest `%Y-%m-%d` day a per-day log keeps when `day` is written:
+/// `retention_days` before `day` itself, not before the wall clock. Callers
+/// write today, so live behaviour is the same, and a test that writes a fixed
+/// day keeps it no matter when the suite runs.
+pub(crate) fn retention_cutoff(day: &str, retention_days: i64) -> String {
+    let anchor = chrono::NaiveDate::parse_from_str(day, "%Y-%m-%d")
+        .unwrap_or_else(|_| chrono::Local::now().date_naive());
+    (anchor - chrono::Duration::days(retention_days))
+        .format("%Y-%m-%d")
+        .to_string()
 }
 
 pub(crate) fn load_brief_writes(
@@ -170,6 +180,18 @@ mod tests {
             raw.contains("\"2026-10-13\":{\"auto\":2,\"manual\":1}"),
             "{raw}"
         );
+    }
+
+    #[test]
+    fn retention_is_counted_back_from_the_day_written() {
+        assert_eq!(retention_cutoff("2026-10-14", 60), "2026-08-15");
+        let db = crate::test_utils::test_db();
+        note_brief_written_on(&db, "2026-08-14", true);
+        note_brief_written_on(&db, "2026-08-15", true);
+        note_brief_written_on(&db, "2026-10-14", true);
+        let all = load_brief_writes(&db);
+        assert!(!all.contains_key("2026-08-14"), "{all:?}");
+        assert!(all.contains_key("2026-08-15"), "{all:?}");
     }
 
     #[test]

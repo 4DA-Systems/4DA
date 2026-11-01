@@ -13,7 +13,11 @@ mod tests {
     #[test]
     fn verify_js_generated_license() {
         let key = "4DA-eyJ0aWVyIjoiY29tbXVuaXR5IiwiZW1haWwiOiJlMmUtdGVzdC0xNzcxNzQ4NDI0MTY1QDRkYS50ZXN0IiwiZXhwaXJlc19hdCI6IjIwMjctMDItMjJUMDg6MjA6MjQuNzM5WiIsImlzc3VlZF9hdCI6IjIwMjYtMDItMjJUMDg6MjA6MjQuNzM5WiIsImZlYXR1cmVzIjpbInN0cmVldHNfY29tbXVuaXR5Il19.1T/4tSaET1tC1z/fuEEGwecSqBd8fIrplHdFxnUW9J0ZIOfWRmKhnJvTIt1i+Q7U3+OkrLBpwl4f8hngo0t6Bg==";
-        let result = verify_license_key(key);
+        // Pinned inside the key's validity (it expires 2027-02-22), so the
+        // signature check does not start failing when the wall clock passes it.
+        let within: chrono::DateTime<chrono::Utc> =
+            "2026-06-01T00:00:00Z".parse().expect("fixed test instant");
+        let result = verify_license_key_at(key, within);
         assert!(result.is_ok(), "Verification failed: {:?}", result.err());
         let payload = result.unwrap();
         assert_eq!(payload.tier, "community");
