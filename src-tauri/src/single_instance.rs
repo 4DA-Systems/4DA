@@ -22,9 +22,11 @@
 //!   point Tauri rejects it — which for us has historically included DB
 //!   open, scheduler init, and other shared-resource code. That's how WAL
 //!   corruption happens.
-//! - Survives crashes. The Drop impl removes the file, but if the process
-//!   is SIGKILLed the file stays — the next launch detects the stale PID
-//!   (process no longer alive) and recovers.
+//! - Survives crashes. A clean exit removes the file
+//!   (`app_setup::release_instance_lock`), but if the process is killed the
+//!   file stays. The next launch detects the stale PID and recovers, even when
+//!   Windows has since given that PID to an unrelated process: the PID must be
+//!   running this executable (`is_instance_alive`).
 //! - Zero new crates. `sysinfo` would work but `std::process::Command`
 //!   with `tasklist` (Windows) and `libc::kill(pid, 0)` (Unix) is enough
 //!   and already in our deps.
@@ -171,7 +173,7 @@ pub fn acquire_instance_lock(data_dir: &Path) -> Result<InstanceLock, InstanceEr
         Err(InstanceError::Io(e)) if e.kind() == std::io::ErrorKind::AlreadyExists => {
             // Lock file exists — inspect PID.
             match read_lock_pid(&lock_path) {
-                Some(pid) if is_process_alive(pid) => {
+                Some(pid) if is_instance_alive(pid) => {
                     warn!(target: "4da::single_instance", pid, path = ?lock_path,
                         "Live 4DA instance detected");
                     Err(InstanceError::AlreadyRunning(pid))
@@ -252,43 +254,73 @@ pub(crate) fn is_process_alive(pid: u32) -> bool {
     }
 }
 
+/// Whether the lock's `pid` is a live 4DA instance. A live PID alone is not
+/// enough on Windows, which hands a dead process's PID to later processes: a
+/// lock left behind by a crash (or, before 2026-11-01, by every clean quit)
+/// could name an unrelated live process, and this launch would then refuse to
+/// start, with no window and no message, until that process exited. So the PID
+/// must also be running this executable's image. If the image name is unknown,
+/// a live PID is enough, as before.
+fn is_instance_alive(pid: u32) -> bool {
+    #[cfg(target_os = "windows")]
+    {
+        let image = std::env::current_exe()
+            .ok()
+            .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()));
+        tasklist_for_pid(pid).is_none_or(|out| tasklist_lists(&out, pid, image.as_deref()))
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        is_process_alive(pid)
+    }
+}
+
 #[cfg(target_os = "windows")]
 fn is_process_alive_windows(pid: u32) -> bool {
-    use std::process::Command;
+    tasklist_for_pid(pid).is_none_or(|out| tasklist_lists(&out, pid, None))
+}
+
+/// `tasklist`'s CSV row for `pid`, or `None` when tasklist itself failed (the
+/// callers then assume "alive" so they never stomp on a real instance).
+#[cfg(target_os = "windows")]
+fn tasklist_for_pid(pid: u32) -> Option<String> {
+    use std::os::windows::process::CommandExt;
 
     // tasklist is present on every Windows SKU since XP. We prefer it to
     // OpenProcess because it doesn't require additional features on
     // windows-sys and can't accidentally keep a handle open.
-    let mut cmd = Command::new("tasklist");
+    let mut cmd = std::process::Command::new("tasklist");
     cmd.args(["/FI", &format!("PID eq {pid}"), "/FO", "CSV", "/NH"]);
-    {
-        use std::os::windows::process::CommandExt;
-        cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
-    }
-    let output = cmd.output();
-
-    match output {
-        Ok(out) if out.status.success() => {
-            let stdout = String::from_utf8_lossy(&out.stdout);
-            // When there's no match, tasklist prints:
-            //   INFO: No tasks are running which match the specified criteria.
-            // When there IS a match, it prints CSV rows starting with a quoted
-            // image name. Look for the exact PID as a CSV field.
-            let needle = format!("\"{pid}\"");
-            stdout.contains(&needle)
-        }
+    cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+    match cmd.output() {
+        Ok(out) if out.status.success() => Some(String::from_utf8_lossy(&out.stdout).into_owned()),
         Ok(_) => {
-            // Non-zero exit — tasklist failed. Default to "alive" so we
-            // don't accidentally stomp on a real running instance.
             warn!(target: "4da::single_instance", pid, "tasklist returned non-zero status, assuming alive");
-            true
+            None
         }
         Err(e) => {
             warn!(target: "4da::single_instance", pid, error = %e,
                 "tasklist invocation failed, assuming alive");
-            true
+            None
         }
     }
+}
+
+/// Whether `tasklist /FO CSV /NH` output has a row for exactly `pid` and, when
+/// `image` is given, whether that row runs `image` (case-insensitive). A row is
+/// `"fourda.exe","21636","Console","1","512,000 K"`; with no match tasklist
+/// prints an `INFO: No tasks are running ...` line instead.
+#[cfg(any(target_os = "windows", test))]
+fn tasklist_lists(stdout: &str, pid: u32, image: Option<&str>) -> bool {
+    let pid = pid.to_string();
+    stdout.lines().any(|row| {
+        let mut fields = row.trim().split("\",\"");
+        let (Some(name), Some(row_pid)) = (fields.next(), fields.next()) else {
+            return false;
+        };
+        row_pid.trim_matches('"') == pid
+            && image.is_none_or(|want| name.trim_matches('"').eq_ignore_ascii_case(want))
+    })
 }
 
 #[cfg(not(target_os = "windows"))]
@@ -387,6 +419,56 @@ mod tests {
             std::process::id(),
             "take-over must rewrite with our PID"
         );
+    }
+
+    #[test]
+    fn a_tasklist_row_counts_only_for_its_exact_pid_and_image() {
+        let out = "\"fourda.exe\",\"21636\",\"Console\",\"1\",\"512,000 K\"\r\n";
+        assert!(tasklist_lists(out, 21636, Some("fourda.exe")));
+        assert!(
+            tasklist_lists(out, 21636, Some("FOURDA.EXE")),
+            "image match ignores case"
+        );
+        assert!(tasklist_lists(out, 21636, None), "no image: any live PID");
+        assert!(
+            !tasklist_lists(out, 2163, Some("fourda.exe")),
+            "a PID that is a prefix of the row's PID is not a match"
+        );
+        let reused = "\"svchost.exe\",\"21636\",\"Services\",\"0\",\"9,000 K\"\r\n";
+        assert!(
+            !tasklist_lists(reused, 21636, Some("fourda.exe")),
+            "a reused PID running another image is not a 4DA instance"
+        );
+        assert!(tasklist_lists(reused, 21636, None));
+        let none = "INFO: No tasks are running which match the specified criteria.\r\n";
+        assert!(!tasklist_lists(none, 21636, None));
+    }
+
+    /// The bug this guards: a stale lock whose PID Windows has handed to an
+    /// unrelated live process made the next launch exit as "already running".
+    #[cfg(target_os = "windows")]
+    #[test]
+    fn a_stale_lock_naming_a_live_unrelated_process_is_taken_over() {
+        use std::os::windows::process::CommandExt;
+
+        let mut cmd = std::process::Command::new("cmd");
+        cmd.args(["/C", "ping", "-n", "30", "127.0.0.1"])
+            .stdout(std::process::Stdio::null())
+            .creation_flags(0x08000000); // CREATE_NO_WINDOW
+        let mut other = cmd.spawn().expect("spawn an unrelated process");
+        let dir = TempDir::new().expect("tempdir");
+        let lock_path = dir.path().join(LOCK_FILENAME);
+        std::fs::write(&lock_path, format!("{}\n0\n", other.id())).expect("seed lock");
+        assert!(
+            is_process_alive(other.id()),
+            "precondition: the unrelated process is alive"
+        );
+
+        let taken = acquire_instance_lock(dir.path());
+        let _ = other.kill();
+        let _ = other.wait();
+        let lock = taken.expect("a live non-4DA PID must not block startup");
+        assert_eq!(read_lock_pid(&lock.path), Some(std::process::id()));
     }
 
     #[test]

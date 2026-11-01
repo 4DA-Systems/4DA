@@ -132,3 +132,22 @@ fn webview_purge_targets_the_running_identifier_only() {
         assert!(webview_service_worker_dir(local, bad).is_none(), "{bad:?}");
     }
 }
+
+/// A clean exit removes `.process.lock`. The lock lives in a static, which
+/// Rust never drops, so until `release_instance_lock` existed every clean quit
+/// left the file behind. This is the only test that touches `INSTANCE_LOCK`.
+#[test]
+fn a_clean_exit_releases_the_instance_lock_file() {
+    let dir = tempfile::TempDir::new().expect("tempdir");
+    let lock = crate::single_instance::acquire_instance_lock(dir.path()).expect("acquire");
+    let lock_file = dir.path().join(".process.lock");
+    assert!(lock_file.exists(), "precondition: the lock file exists");
+
+    let cell = super::INSTANCE_LOCK.get_or_init(|| parking_lot::Mutex::new(None));
+    *cell.lock() = Some(lock);
+    super::release_instance_lock();
+
+    assert!(!lock_file.exists(), "release must remove the lock file");
+    assert!(cell.lock().is_none(), "the slot is empty after release");
+    super::release_instance_lock(); // a second release is a no-op
+}
