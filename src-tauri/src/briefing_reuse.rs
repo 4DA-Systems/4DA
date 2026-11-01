@@ -203,8 +203,10 @@ mod tests {
     use super::*;
 
     // try_reuse_recent_briefing writes the process-global LATEST_BRIEFING on
-    // success; tests that can reach that write serialize on this lock.
-    static REUSE_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    // success; tests that can reach that write serialize on the lock every
+    // LATEST_BRIEFING test shares (digest_config's lifecycle test writes it
+    // too, and a private lock here did not stop that race).
+    use crate::digest_config::LATEST_BRIEFING_TEST_LOCK as REUSE_TEST_LOCK;
 
     fn backdate_latest_briefing(db: &crate::db::Database, hours: f64) {
         let conn = db.conn.lock();
