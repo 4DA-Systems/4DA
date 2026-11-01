@@ -13,6 +13,13 @@ use crate::get_settings_manager;
 /// Cached latest briefing text for TTS and handoff features
 pub(crate) static LATEST_BRIEFING: Lazy<Mutex<Option<String>>> = Lazy::new(|| Mutex::new(None));
 
+/// Serializes every test that writes or asserts [`LATEST_BRIEFING`]: the
+/// static is process-global, and `cargo test` runs a module's tests on
+/// parallel threads (nextest's process-per-test hid the race in CI). Held by
+/// this module's lifecycle test and the `briefing_reuse` tests.
+#[cfg(test)]
+pub(crate) static LATEST_BRIEFING_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 /// Get the latest generated briefing text (used by TTS and handoff)
 pub(crate) fn get_latest_briefing_text() -> Option<String> {
     LATEST_BRIEFING.lock().clone()
@@ -213,6 +220,10 @@ mod tests {
     /// to avoid data races (tests run in parallel and share the global static).
     #[test]
     fn latest_briefing_lifecycle() {
+        // The briefing_reuse tests write the same static.
+        let _guard = LATEST_BRIEFING_TEST_LOCK
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
         // 1. Write a value and read it back
         {
             *LATEST_BRIEFING.lock() = Some("First briefing".to_string());
