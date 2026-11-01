@@ -52,6 +52,9 @@ src-tauri/target/
 src-tauri/target-codex-audit/
 src-tauri/fourda-macros/target/
 src-tauri/fourda-macros/Cargo.lock
+# The pure engine crate's standalone build (its README's `cargo test` and the
+# wasm32 build); its Cargo.lock IS tracked.
+crates/fourda-depengine/target/
 
 # Stray root-level cargo build dir (e.g. probe/experiment builds run from repo
 # root) — the crate lives in src-tauri/, so a root /target/ is never tracked.

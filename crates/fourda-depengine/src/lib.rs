@@ -47,10 +47,20 @@
 //! - [`parent_hint`]: which installed parent brings a vulnerable copy in
 //!   (`parent_links_lookup`), and the copies no parent could be read for.
 //!
+//! C0.5 adds the constraint check (`dependency_check` given `"7.x"`,
+//! `"^1.20"`, `"~=3.1"` or `"v1"`):
+//! - [`constraint`]: whether a constraint admits a version, in each
+//!   ecosystem's own syntax (npm ranges, Cargo requirements, PEP 440
+//!   specifiers, Go majors);
+//! - [`range_check`]: the smallest and newest safe releases a constraint
+//!   admits, and the smallest safe upgrade above the installed version, over
+//!   the releases and advisories the host supplies.
+//!
 //! The app (`src-tauri`) keeps the DB and network halves and re-exports these
 //! under their old `crate::osv::...` / `crate::ace::...` paths.
 
 pub mod api;
+pub mod constraint;
 pub mod ecosystem;
 pub mod exposure;
 pub mod fix_path;
@@ -65,6 +75,7 @@ pub mod npm_range;
 pub mod osv;
 pub mod parent_hint;
 pub mod range;
+pub mod range_check;
 pub mod registry;
 pub mod severity;
 pub mod version_order;

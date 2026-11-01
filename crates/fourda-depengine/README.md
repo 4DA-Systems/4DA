@@ -6,7 +6,7 @@ Stage C0 of the single-engine plan: one Rust engine, built into the desktop
 app and, later, into `@4da/mcp-server` as a wasm module, so the two stop
 drifting apart.
 
-## What is in it (C0.1 to C0.4)
+## What is in it (C0.1 to C0.5)
 
 | Module | What it does | Came from |
 |---|---|---|
@@ -26,8 +26,10 @@ drifting apart.
 | `lockfile::dep_scope` / `lockfile::cargo_facts` (C0.3) | AD-046 dev-vs-runtime reachability (`DevScope` for package-lock / pnpm, `CargoDevScope`); a Cargo.lock's own crates (`local_packages`, `local_only_names`, `declared_copies`) and a workspace manifest's `path` / `git` declarations | `src-tauri/src/ace/dep_scope.rs` (whole), the pure half of `src-tauri/src/ace/cargo_lock_facts.rs` |
 | `fix_path` (C0.4) | THE fix-path rule for a transitive copy: `refresh_verdict` (`Refresh`, `Basis`, `Requirement`, `Dialect`), `Manager` (refresh commands, override mechanisms), `override_hint`, `NpmLockfile`, `npm_lock_resolutions` (npm's lookup in a `package-lock.json` tree), `npm_requirement`, `cargo_requirements`, and `installed_parent_requirements` (the parent's installed `package.json`, hoisted or in pnpm's store, or cargo's checkout of its `Cargo.toml`, read through the host's `needs`) | `src-tauri/src/osv/fix_path.rs` (everything but the disk probes) |
 | `parent_hint` (C0.4) | Which installed parent brings a vulnerable transitive copy in: `parent_links_with` (over `Readers`), `parent_links_lookup` (the same, files read through `needs`), `unlinked_sites`, `installed_parent`, `normalize_path`; the types `EdgeObs`, `InstalledObs`, `ParentLink`, `Resolution`, `ParentStanding`, `ParentRelease`, `Through`, `UnlinkedSite`, `TransitiveRoutes`, `MAX_LEVERS` | the pure core of `src-tauri/src/osv/parent_hint.rs` |
+| `constraint` (C0.5) | `constraint_admits(eco, constraint, version)`: whether a constraint admits a version in the ecosystem's own syntax (npm ranges, Cargo requirements then npm spellings, PEP 440 specifiers with `3.1.*` / `3.x` shorthand, Go majors such as `v1` over `v`-less semver ranges); `pep440_spec_admits` | the MCP's `rangeAdmits` / `pep440SpecAdmits` (`@4da/mcp-server` `src/tools/dependency-check-versions.ts`) |
+| `range_check` (C0.5) | `range_check(&RangeQuery) -> RangeCheck`: the releases a constraint admits judged against the package's advisories (`releases_in_range`, `vulnerable_in_range`, `smallest_safe_in_range`, `newest_safe_in_range`, `safe_versions`, `smallest_safe_upgrade` above `from`, and with nothing safe `affecting_all` / `newest_safe_outside_range`; withdrawn releases below the pick in `withheld`); the host supplies the releases (`RegistryReleases`), the advisories (`RangeAdvisory`, or `package_advisories` over stored rows) and its held-dependency verdicts (`held_unsafe`). A window the engine cannot decide counts as affecting and is named in `unconfirmed`; an unreadable constraint is an error | the MCP's `checkRange` (same file), pinned by the shared vectors rc-001..rc-028 |
 | `needs` (C0.4) | The round-trip a rule reads the host's files through: `Need`, `Provided`, `Answer`, `Lookup`, `lookup`, `resolve`, `MAX_ROUNDS` | new |
-| `api` | A provisional JSON call surface (`depengine/0`: `version_cmp`, `affected`, `fix_target`, `match_inventory`, `read_lockfiles`, `parent_links`), exported by the wasm build | new; replaced by the versioned `depengine/1` contract later |
+| `api` | A provisional JSON call surface (`depengine/0`: `version_cmp`, `affected`, `fix_target`, `match_inventory`, `read_lockfiles`, `parent_links`, `range_check`), exported by the wasm build | new; replaced by the versioned `depengine/1` contract later |
 
 The app keeps its old paths through re-exports (`crate::osv::version_order`
 (removed in C0.3 with its last user, the Go reader),
@@ -148,8 +150,11 @@ resolution), `npm_lock_tree` (the ascent and its parse cache), cargo's
 checkout (`$CARGO_HOME`), the registry-row standing (`parent_standing`,
 `standing_from_with`), the edge and instance reads (`load_routes`,
 `read_edges`) and the walk up to the declared dependencies
-(`osv::parent_route`, one DB read per step). Still planned: a `range_check`
-port (C0.5).
+(`osv::parent_route`, one DB read per step). From the constraint check
+(C0.5), the host keeps the registry reads (the release list, which releases
+were withdrawn, the npm deprecation rule that decides it), OSV's `/v1/query`
+for the package, the held-dependency lookups and the release-age hold (it
+reads the clock).
 
 ## Purity rules
 
@@ -182,8 +187,8 @@ port (C0.5).
 ```bash
 cd crates/fourda-depengine
 cargo test --locked                       # unit tests (the lockfile readers over MemFs included),
-                                          # the version_order vectors, and tests/match_fixture.rs
-                                          # (native replay of the corpus case)
+                                          # the version_order and range_check vectors, and
+                                          # tests/match_fixture.rs (native replay of the corpus case)
 node --test scripts/check-lock-drift.test.cjs
 cargo clippy --locked -- -D warnings
 CARGO_PROFILE_RELEASE_OPT_LEVEL=s CARGO_PROFILE_RELEASE_LTO=true \

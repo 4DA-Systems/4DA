@@ -436,13 +436,19 @@ A skip entry is a known disagreement with a stated truth, not an opinion.
 Fixing the engine removes the entry. If the truth is wrong, fix the vector
 and say why in the commit.
 
-## Rust skip list (2026-10-12)
+## Rust skip list (2026-11-01)
 
-28 entries, `RUST_SKIP_BASELINE = 28`.
+Empty: 0 entries, `RUST_SKIP_BASELINE = 0`. Every vector in every file
+passes against the Rust engine.
 
-| Ids | Reason |
-|---|---|
-| rc-001..rc-028 | Not implemented in Rust. `range_check` exists only in `@4da/mcp-server` (6.2.0 `dependency_check`). |
+Fixed and removed (2026-11-01):
+
+- **rc-001..rc-028:** `range_check` is now the engine's
+  (`crates/fourda-depengine/src/range_check.rs`, single-engine C0.5), a pure
+  port of `@4da/mcp-server`'s `checkRange` with constraint membership in
+  each ecosystem's syntax (`constraint.rs`: npm ranges, Cargo requirements,
+  PEP 440 specifiers, Go majors). The host supplies the releases and the
+  advisories. No vector changed.
 
 Fixed and removed (2026-10-12):
 

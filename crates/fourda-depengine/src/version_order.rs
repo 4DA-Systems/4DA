@@ -37,15 +37,15 @@ use semver::{BuildMetadata, Version};
 /// A PEP 440 version, local label included.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Pep440 {
-    epoch: u64,
-    release: Vec<u64>,
+    pub(crate) epoch: u64,
+    pub(crate) release: Vec<u64>,
     /// `(rank, n)`: a/alpha = 0, b/beta = 1, c/rc/pre/preview = 2.
-    pre: Option<(u8, u64)>,
-    post: Option<u64>,
-    dev: Option<u64>,
+    pub(crate) pre: Option<(u8, u64)>,
+    pub(crate) post: Option<u64>,
+    pub(crate) dev: Option<u64>,
     /// The local label (`+cpu`, `+abc.5`), empty when there is none. A
     /// version with one sorts above the same version without (PEP 440).
-    local: Vec<LocalSegment>,
+    pub(crate) local: Vec<LocalSegment>,
 }
 
 /// One segment of a local label. PEP 440: a numeric segment sorts above an
@@ -53,7 +53,7 @@ pub struct Pep440 {
 /// lexicographically (case-insensitive), and when one label is a prefix of
 /// the other the longer is greater. The variant order gives exactly that.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
-enum LocalSegment {
+pub(crate) enum LocalSegment {
     Text(String),
     Number(u64),
 }
@@ -127,7 +127,7 @@ pub fn parse_pep440(raw: &str) -> Option<Pep440> {
 /// PEP 440 sort order within one release:
 /// `X.devN < X.aN.devM < X.aN < X.aN.postM < X.bN < X.rcN < X < X+local < X.postN.devM < X.postN`,
 /// the local label deciding last.
-fn cmp_pep440(a: &Pep440, b: &Pep440) -> Ordering {
+pub(crate) fn cmp_pep440(a: &Pep440, b: &Pep440) -> Ordering {
     let release_len = a.release.len().max(b.release.len());
     let release = |v: &Pep440, i: usize| v.release.get(i).copied().unwrap_or(0);
     a.epoch
