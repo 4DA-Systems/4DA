@@ -71,6 +71,42 @@ pub(crate) fn expire_stale_snapshots_on(
     Ok(deleted)
 }
 
+/// Delete this project's snapshot rows that the scan no longer lists, per
+/// ecosystem present in `deps`. An ecosystem the scan did not cover is left
+/// alone, and an empty `deps` deletes nothing (an empty parse must not wipe
+/// a project).
+fn prune_unlisted(
+    conn: &rusqlite::Connection,
+    project_path: &str,
+    deps: &[DepEntry],
+) -> Result<usize> {
+    let mut by_ecosystem: std::collections::BTreeMap<&str, Vec<&str>> =
+        std::collections::BTreeMap::new();
+    for dep in deps {
+        by_ecosystem
+            .entry(dep.ecosystem.as_str())
+            .or_default()
+            .push(dep.name.as_str());
+    }
+    let mut removed = 0usize;
+    for (ecosystem, names) in by_ecosystem {
+        let placeholders = vec!["?"; names.len()].join(", ");
+        let sql = format!(
+            "DELETE FROM dependency_snapshots
+             WHERE project_path = ? AND ecosystem = ?
+               AND package_name NOT IN ({placeholders})"
+        );
+        let mut values: Vec<&str> = Vec::with_capacity(names.len() + 2);
+        values.push(project_path);
+        values.push(ecosystem);
+        values.extend(names);
+        removed += conn
+            .execute(&sql, rusqlite::params_from_iter(values))
+            .with_context(|| format!("prune unlisted {ecosystem} snapshots"))?;
+    }
+    Ok(removed)
+}
+
 // ============================================================================
 // Database Operations
 // ============================================================================
@@ -82,6 +118,14 @@ impl Database {
     /// `(project_path, package_name, ecosystem)` unique constraint, so
     /// re-scanning the same project replaces the previous snapshot row
     /// for each dependency.
+    ///
+    /// The scan is also the truth about what is GONE: per ecosystem in `deps`,
+    /// rows of this project that the scan no longer lists are deleted, in the
+    /// same transaction. Until 2026-11-01 only the 90-day expiry removed
+    /// them, so a dropped direct dependency kept counting as the user's stack
+    /// in the dep_linker for up to 90 days (48 such rows live). Same scope and
+    /// empty-list guard as `temporal::prune_removed_dependencies`, which runs
+    /// on `project_dependencies` right before this call.
     pub fn snapshot_project_deps(&self, project_path: &str, deps: &[DepEntry]) -> Result<usize> {
         // Agent worktrees / scratch fixtures / temp clones are not user
         // projects — same write-time guard as user_dependencies (this table
@@ -126,6 +170,7 @@ impl Database {
             .with_context(|| format!("upsert snapshot for {}/{}", dep.ecosystem, dep.name))?;
             count += 1;
         }
+        prune_unlisted(&tx, project_path, deps)?;
 
         tx.commit().context("commit snapshot transaction")?;
         Ok(count)
@@ -401,5 +446,52 @@ mod tests {
 
         let current = db.get_current_deps("/proj").unwrap();
         assert!(current.is_empty());
+    }
+
+    fn entry(name: &str, ecosystem: &str) -> DepEntry {
+        DepEntry {
+            name: name.into(),
+            ecosystem: ecosystem.into(),
+            version: None,
+            is_direct: true,
+            is_dev: false,
+            source: "manifest".into(),
+        }
+    }
+
+    fn names(db: &crate::db::Database, project: &str) -> Vec<String> {
+        let mut n: Vec<String> = db
+            .get_current_deps(project)
+            .unwrap()
+            .into_iter()
+            .map(|d| format!("{}:{}", d.ecosystem, d.package_name))
+            .collect();
+        n.sort();
+        n
+    }
+
+    /// A dependency dropped from the manifest is gone after the rescan, not
+    /// 90 days later; another ecosystem of the same project keeps its rows.
+    #[test]
+    fn a_rescan_drops_what_the_manifest_no_longer_lists() {
+        let db = test_db();
+        db.snapshot_project_deps("/proj", &[entry("serde", "rust"), entry("zip", "rust")])
+            .unwrap();
+        db.snapshot_project_deps("/proj", &[entry("react", "javascript")])
+            .unwrap();
+
+        db.snapshot_project_deps("/proj", &[entry("serde", "rust")])
+            .unwrap();
+
+        assert_eq!(names(&db, "/proj"), ["javascript:react", "rust:serde"]);
+    }
+
+    /// An empty scan (a manifest that parsed to nothing) wipes nothing.
+    #[test]
+    fn an_empty_rescan_keeps_the_existing_rows() {
+        let db = test_db();
+        db.snapshot_project_deps("/proj", &sample_deps()).unwrap();
+        db.snapshot_project_deps("/proj", &[]).unwrap();
+        assert_eq!(names(&db, "/proj").len(), 2);
     }
 }
