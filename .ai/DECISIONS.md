@@ -940,7 +940,37 @@
   - *Rewrite the MCP server in Rust, or the app in TypeScript:* Rejected. Shipping Rust over `npx` needs the native-binary route; a TypeScript/Electron app is larger and slower at the local work 4DA does.
 - **Amends:** AD-054 rule 4 (names the vehicle), and the trajectory plan Phase 3 item 1 (native optionalDependencies → wasm).
 - **Date:** 2026-10-12
-- **Status:** Accepted (C0 executing; C1+ gated on the licence decision)
+- **Status:** Accepted (C0 executing; C1+ licence decided by AD-057)
+
+---
+
+### AD-057: The Pure Dependency-Rules Crate Becomes Apache-2.0 When It First Ships in the MCP; Everything Else Stays FSL
+
+- **Decision:** 2026-11-01, operator-approved ("take the lead, apply your recommendations"; PENDING-DECISION Decision 13 item 4, option L1 as scoped).
+  1. **Scope: `crates/fourda-depengine` only.** It is the IO-free rules library: lockfile reading over host-supplied text, version order, OSV affected-window evaluation, fix targets, fix paths, parent hints, held targets, range checks. It will be licensed Apache-2.0.
+  2. **Everything that makes 4DA the product stays FSL-1.1-Apache-2.0:** ACE machine-wide discovery, the OSV and registry mirror and sync, the database, Brief, Preemption, the upgrade plan, PASIFA, the sources, history and verdicts, the UI, Team Relay. AD-054's "the product is the engine" means that whole machine-wide join, not the rules library inside it.
+  3. **Timing: the relicence lands in the same change window as the first `@4da/mcp-server` release that ships the wasm,** after AD-056's 14-day zero-difference shadow run. Not before: both repositories are public, so a pushed Apache LICENSE is already "made available". Until that commit lands, the crate stays FSL and L3 remains possible. The npm publish that ships it keeps its own explicit operator go.
+  4. **Mechanics for that change:**
+     - `crates/fourda-depengine/LICENSE` (Apache-2.0) and a `NOTICE` carrying the 4DA attribution, which Apache §4(d) requires redistributors to keep;
+     - Apache-2.0 SPDX headers and the Cargo `license` field;
+     - the licence and SPDX gates allow Apache-2.0 under that one path;
+     - the root NOTICE is regenerated;
+     - `publish = false` stays (no crates.io) until decided otherwise.
+     The "4DA" trademark is not licensed (Apache §6).
+- **Rationale:**
+  - The same rules are already public under Apache-2.0 in TypeScript, inside `@4da/mcp-server` (`src/live`: lockfile readers, OSV matching, fix paths, held dependencies; ~2.6k npm downloads a month). FSL on the Rust copy protected almost nothing that was not already permissively available.
+  - The FSL source is public anyway, and each FSL release converts to Apache 3 years after it ships.
+  - Keeping two engines kept costing double fixes: 5 rules in 3 days at measurement, then F-7, A6/A-1, D-4 and the held-blocked wording in late October.
+  - One Apache wasm keeps the MCP a single-licence package, which is why the MCP is Apache (directories and legal reviews avoid FSL).
+  - The CLA gives 4DA Systems sublicensing rights, and the crate's only authors are the operator's identities.
+- **Considered:**
+  - *L2, the FSL wasm inside the Apache package:* Rejected. A mixed-licence npm package reintroduces the friction the Apache split removed.
+  - *L3, keep FSL and never ship the crate in the MCP:* Rejected as the end state. It makes AD-056's two-engine cost permanent while protecting rules that are already public.
+  - *Relicense the whole app:* Rejected. The product's value (the machine-wide join, history, plan, Brief) is not public elsewhere, and FSL's competing-use clause still protects it.
+- **Risks accepted:** a competitor may embed the rules library, and a commercial licence for it can no longer be sold. A released Apache version cannot be withdrawn. Future versions can still be released under another licence.
+- **Amends:** the 2026-06-11 licence split (app FSL, MCP Apache), by adding one Apache crate inside the FSL repository, and AD-056 rule 3.
+- **Date:** 2026-11-01
+- **Status:** Accepted (takes effect with the first wasm-shipping MCP release)
 
 ---
 
