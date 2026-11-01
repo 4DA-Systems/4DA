@@ -5,8 +5,9 @@
 //! Runs every line of `src-tauri/tests/conformance/vectors/*.jsonl` against the
 //! REAL functions: `version_order`, the matcher's window check and the
 //! fix-target walk (all in `crates/fourda-depengine`), then
-//! `fix_path::refresh_verdict`, the refresh commands and the severity rule
-//! (`osv::severity`). The TypeScript
+//! `fix_path::refresh_verdict`, the refresh commands, the severity rule
+//! (`osv::severity`) and the constraint check (`range_check`, in the crate
+//! since C0.5). The TypeScript
 //! MCP engine runs the same files. Expected values come from stated truth
 //! (OSV's own answers, the 2026-10-10 fix-path oracle, PEP 440 / SemVer / Go
 //! spec examples, AD-055), never from this engine; `vectors/README.md` maps
@@ -44,7 +45,7 @@ use super::types::{MatchedAdvisory, StoredAdvisory, Vulnerability};
 
 /// The committed size of the `rust` skip list. Shrink-only: lower it in the
 /// same change that removes entries; it may never rise.
-const RUST_SKIP_BASELINE: usize = 28;
+const RUST_SKIP_BASELINE: usize = 0;
 
 const FILES: [&str; 9] = [
     "version_order",
@@ -686,10 +687,51 @@ fn check_severity(v: &Value) -> Result<(), String> {
     }
 }
 
-/// No Rust equivalent of the MCP's `range_check` (a `dependency_check` surface): every
-/// `range_check` vector stays in the skip list until one exists.
-fn check_range_check(_: &Value) -> Result<(), String> {
-    Err("not implemented in Rust".into())
+/// The MCP's `range_check` (`dependency_check` given a constraint), now the
+/// engine's (`fourda_depengine::range_check`, C0.5): the line's pinned
+/// records stored as the mirror stores them, the package's rows, and the
+/// line's releases.
+fn check_range_check(v: &Value) -> Result<(), String> {
+    use fourda_depengine::range_check::{package_advisories, range_check, RangeQuery};
+    let (eco, name) = (s(v, "eco"), s(v, "name"));
+    let mut rows = Vec::new();
+    for id in strings(v, "record_ids") {
+        let path = conformance_dir().join("osv").join(format!("{id}.json"));
+        let text =
+            std::fs::read_to_string(&path).map_err(|e| format!("record {id} not pinned: {e}"))?;
+        let rec: fourda_depengine::osv::OsvRecord =
+            serde_json::from_str(&text).map_err(|e| format!("record {id}: {e}"))?;
+        rows.extend(fourda_depengine::osv::stored_records(&rec));
+    }
+    let advisories = package_advisories(&rows, eco, name);
+    if advisories.is_empty() {
+        return Err(format!("no pinned record names {eco} {name}"));
+    }
+    let registry = RegistryReleases {
+        published: strings(v, "releases"),
+        excluded: Vec::new(),
+    };
+    let got = range_check(&RangeQuery {
+        ecosystem: eco,
+        constraint: s(v, "constraint"),
+        from: opt_s(v, "from"),
+        registry: &registry,
+        advisories: &advisories,
+        held_unsafe: &[],
+    })
+    .map_err(|e| e.to_string())?;
+    let got = serde_json::json!({
+        "releases_in_range": got.releases_in_range,
+        "vulnerable_in_range": got.vulnerable_in_range,
+        "smallest_safe_in_range": got.smallest_safe_in_range,
+        "newest_safe_in_range": got.newest_safe_in_range,
+        "smallest_safe_upgrade": got.smallest_safe_upgrade.flatten(),
+    });
+    if got == v["expected"] {
+        Ok(())
+    } else {
+        Err(format!("got {got}, want {}", v["expected"]))
+    }
 }
 
 // ============================================================================
