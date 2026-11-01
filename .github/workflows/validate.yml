@@ -149,9 +149,12 @@ jobs:
               # change there changes what the app compiles and tests.
               - 'crates/**'
             depengine:
-              # The pure engine crate, and the rule vectors its own test reads.
+              # The pure engine crate, and the rule vectors, pinned OSV records
+              # and corpus cases its own tests and the wasm parity run read.
               - 'crates/fourda-depengine/**'
               - 'src-tauri/tests/conformance/vectors/**'
+              - 'src-tauri/tests/conformance/osv/**'
+              - 'src-tauri/tests/conformance/cases/**'
               # The app's lockfile: the job's drift check holds the crate's
               # own lockfile to it (scripts/check-lock-drift.cjs).
               - 'src-tauri/Cargo.lock'
@@ -698,6 +701,23 @@ jobs:
             echo '### fourda-depengine wasm'
             echo '```'
             cat wasm-report.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Every shared rule vector the JSON API answers and every conformance
+      # case, through the wasm module, compared with the native engine on the
+      # same requests (and with each vector's own truth). The example writes
+      # the native answers; the harness replays them through the wasm.
+      - name: Vectors and corpus, wasm == native
+        run: |
+          set -o pipefail
+          node --test scripts/check-wasm-parity.test.cjs
+          cargo run --locked --release --example wasm_parity_requests -- "$RUNNER_TEMP/native.jsonl"
+          node scripts/check-wasm-parity.cjs target/wasm32-unknown-unknown/release/fourda_depengine.wasm "$RUNNER_TEMP/native.jsonl" | tee parity-report.txt
+          {
+            echo '### fourda-depengine wasm == native'
+            echo '```'
+            cat parity-report.txt
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 

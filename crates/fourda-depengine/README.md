@@ -179,8 +179,25 @@ reads the clock).
   (the same variable makes `tests/parent_links_fixture.rs` rewrite its rounds).
   The only `unsafe` is the three wasm exports in
   `src/wasm.rs`, compiled on wasm32 only.
-- Tests may read files (the rule vectors in
-  `src-tauri/tests/conformance/vectors/`); the library may not.
+- **wasm == native on everything the JSON API answers (C0.6).**
+  `examples/wasm_parity_requests.rs` turns every shared rule vector the API
+  can answer (`version_order` -> `version_cmp`, `osv_range` -> `affected`,
+  `fix_target` -> `fix_target` except the `held` lines, `range_check` ->
+  `range_check`) and every conformance corpus case (`read_lockfiles` for each
+  directory holding a dependency file, then `match_inventory` over the
+  inventory those reads give, built as the app's lockfile processor records
+  it, and the pinned OSV records naming its packages) into a request, and
+  writes the native answer beside it. `scripts/check-wasm-parity.cjs` sends
+  each request through the module and requires the same answer; where a
+  vector states its truth (`version_order`, `osv_range`, `range_check`), both
+  must agree with it too, and every answerable vector id must be present.
+  Today: 354 requests (91 + 67 + 78 + 28 vectors, 54 lockfile directories, 36
+  cases), all equal. `refresh_verdict`, `fix_command`, `holding`, `severity`
+  and `parent_release` have no op on `depengine/0` yet, so only the app's gate
+  runs them.
+- Tests and examples may read files (the rule vectors in
+  `src-tauri/tests/conformance/vectors/`, the pinned records and the corpus);
+  the library may not.
 
 ## Building and testing
 
@@ -195,6 +212,9 @@ CARGO_PROFILE_RELEASE_OPT_LEVEL=s CARGO_PROFILE_RELEASE_LTO=true \
 CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 CARGO_PROFILE_RELEASE_STRIP=true \
   cargo rustc --lib --release --locked --target wasm32-unknown-unknown --crate-type cdylib
 node scripts/check-wasm.cjs target/wasm32-unknown-unknown/release/fourda_depengine.wasm
+node --test scripts/check-wasm-parity.test.cjs
+cargo run --locked --release --example wasm_parity_requests -- target/native.jsonl
+node scripts/check-wasm-parity.cjs target/wasm32-unknown-unknown/release/fourda_depengine.wasm target/native.jsonl
 ```
 
 The crate is a plain `rlib` in its manifest, so the app never links a
@@ -202,8 +222,8 @@ The crate is a plain `rlib` in its manifest, so the app never links a
 settings come from the environment because a dependency's own `[profile]`
 would be ignored inside the app build anyway.
 
-The authoritative gates still run in the app: `osv::vectors_tests` (all six
-vector files, shrink-only skip list) and `osv::conformance_tests` (the
+The authoritative gates still run in the app: `osv::vectors_tests` (all nine
+vector files, shrink-only skip list, empty since C0.5) and `osv::conformance_tests` (the
 corpus, 1.0 on every ecosystem) both call this crate's functions.
 
 ## Supply chain
