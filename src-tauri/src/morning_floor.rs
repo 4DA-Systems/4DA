@@ -654,9 +654,7 @@ pub(crate) fn record_outcome_audited(
         }
     }
     all.insert(day.to_string(), record);
-    let cutoff = (chrono::Local::now() - chrono::Duration::days(OUTCOME_RETENTION_DAYS))
-        .format("%Y-%m-%d")
-        .to_string();
+    let cutoff = crate::brief_cadence::retention_cutoff(day, OUTCOME_RETENTION_DAYS);
     all.retain(|d, _| d.as_str() >= cutoff.as_str());
     match serde_json::to_string(&all) {
         Ok(json) => {

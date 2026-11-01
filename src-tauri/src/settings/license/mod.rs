@@ -31,9 +31,9 @@ pub use revalidation::{
 };
 pub use trial::reconcile_trial_stamp;
 pub use verify::{verify_license_key, LicensePayload};
-// The explicit-instant seam is consumed by license_tests.rs (a #[cfg(test)]
-// sibling); production callers go through verify_license_key.
-#[cfg(test)]
+// The explicit-instant seam: license_tests.rs pins it, and the deep-link
+// guard (settings_commands_license.rs) threads its instant through it so its
+// tests can too. Other callers go through verify_license_key.
 pub(crate) use verify::verify_license_key_at;
 
 // Rate limiting is pub from here

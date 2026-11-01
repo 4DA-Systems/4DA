@@ -101,9 +101,22 @@ pub async fn get_license_tier() -> Result<serde_json::Value> {
 /// a `4DA-` key, `None` for a Keygen key (which carries no local email and so can
 /// never prove it is the same account).
 fn deep_link_replacement_blocked(current_key: &str, incoming_email: Option<&str>) -> bool {
+    deep_link_replacement_blocked_at(
+        current_key,
+        incoming_email,
+        crate::settings::license_effective_now(),
+    )
+}
+
+/// `deep_link_replacement_blocked` evaluated at an explicit instant (test seam).
+fn deep_link_replacement_blocked_at(
+    current_key: &str,
+    incoming_email: Option<&str>,
+    now: chrono::DateTime<chrono::Utc>,
+) -> bool {
     // Only a live, valid 4DA- licence is worth protecting. An absent, invalid or
     // expired current key is not something a deep link needs consent to replace.
-    let current = match crate::settings::verify_license_key(current_key) {
+    let current = match crate::settings::verify_license_key_at(current_key, now) {
         Ok(payload) => payload,
         Err(_) => return false,
     };
@@ -522,11 +535,20 @@ pub async fn recover_license_by_email(email: String) -> Result<serde_json::Value
 
 #[cfg(test)]
 mod deep_link_guard_tests {
-    use super::deep_link_replacement_blocked;
+    use super::deep_link_replacement_blocked_at;
 
     // A real signed 4DA- key (same fixture as license_tests.rs). Embedded email:
-    // e2e-test-1771748424165@4da.test; expires 2027-02-22 (unexpired), so it
-    // verifies — a genuinely valid current licence worth protecting.
+    // e2e-test-1771748424165@4da.test; expires 2027-02-22. The guard is evaluated
+    // at a pinned instant inside that validity, so these tests do not change
+    // meaning when the wall clock passes the expiry.
+    fn deep_link_replacement_blocked(current_key: &str, incoming_email: Option<&str>) -> bool {
+        deep_link_replacement_blocked_at(current_key, incoming_email, at("2026-06-01T00:00:00Z"))
+    }
+
+    fn at(instant: &str) -> chrono::DateTime<chrono::Utc> {
+        instant.parse().expect("fixed test instant")
+    }
+
     const VALID_KEY: &str = "4DA-eyJ0aWVyIjoiY29tbXVuaXR5IiwiZW1haWwiOiJlMmUtdGVzdC0xNzcxNzQ4NDI0MTY1QDRkYS50ZXN0IiwiZXhwaXJlc19hdCI6IjIwMjctMDItMjJUMDg6MjA6MjQuNzM5WiIsImlzc3VlZF9hdCI6IjIwMjYtMDItMjJUMDg6MjA6MjQuNzM5WiIsImZlYXR1cmVzIjpbInN0cmVldHNfY29tbXVuaXR5Il19.1T/4tSaET1tC1z/fuEEGwecSqBd8fIrplHdFxnUW9J0ZIOfWRmKhnJvTIt1i+Q7U3+OkrLBpwl4f8hngo0t6Bg==";
     const OWNER_EMAIL: &str = "e2e-test-1771748424165@4da.test";
 
@@ -576,5 +598,15 @@ mod deep_link_guard_tests {
     fn a_keygen_key_cannot_replace_a_valid_4da_licence_via_deep_link() {
         // No embedded email to match → cannot prove same account → refuse.
         assert!(deep_link_replacement_blocked(VALID_KEY, None));
+    }
+
+    #[test]
+    fn once_the_current_key_has_expired_it_is_no_longer_protected() {
+        let after_expiry = at("2027-03-01T00:00:00Z");
+        assert!(!deep_link_replacement_blocked_at(
+            VALID_KEY,
+            Some("attacker@evil.com"),
+            after_expiry
+        ));
     }
 }
