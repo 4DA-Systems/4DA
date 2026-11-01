@@ -821,6 +821,28 @@ jobs:
       - name: pnpm security overrides are still honoured by the pinned pnpm
         run: node scripts/check-pnpm-overrides.cjs
 
+      # Tauri crate <-> npm package major.minor (tauri <-> @tauri-apps/api,
+      # tauri-plugin-<x> <-> @tauri-apps/plugin-<x>). `tauri build` refuses a
+      # mismatch, and release.yml builds through tauri-action without
+      # --ignore-version-mismatches, so drift that lands on main fails the NEXT
+      # app release, not the PR that caused it. It happened twice: #966
+      # (2026-10-16), then a cargo-only group bump (#1044) left
+      # tauri-plugin-updater 2.14 against npm 2.13 until #1062 (2026-10-31).
+      #
+      # A WARNING, deliberately not a gate. Dependabot opens the cargo and npm
+      # bumps as separate PRs, and each one-sided PR is misaligned by
+      # construction, so a hard gate would fail both of them forever (the same
+      # trap the NOTICE gate fell into; see the auto-heal job below). The
+      # annotation lands on the PR telling the reviewer to bring the other side
+      # into the SAME PR. `|| echo` keeps the step green, and continue-on-error
+      # keeps a crash in the check from ever blocking a merge.
+      - name: Tauri crate/npm versions aligned (warning only, not a gate)
+        continue-on-error: true
+        shell: bash
+        run: |
+          node scripts/check-tauri-alignment.cjs --annotate \
+            || echo "Tauri alignment check exited $? (1 = mismatch, 2 = inconclusive). Reported as a warning; it does not block this PR."
+
       # NETWORK.md promises git history and file contents never leave the
       # machine. On 2026-08-28 the reranker was sending the five most recent
       # commit messages to the configured cloud LLM, on by default. Nothing
