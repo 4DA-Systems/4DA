@@ -974,7 +974,7 @@ async fn css_style_inspection() {
         .lines()
         .next()
         .and_then(|line| {
-            let start = line.find("[e")?;
+            let start = line.find('[')?;
             let end = line[start..].find(']')? + start + 1;
             Some(&line[start + 1..end - 1])
         })
