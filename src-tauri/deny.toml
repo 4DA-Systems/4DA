@@ -92,6 +92,7 @@ ignore = [
     { id = "RUSTSEC-2026-0367", reason = "zip <9 extract() SUID bits: docx-rs (zip 8.6) never calls extract()" },
     { id = "RUSTSEC-2026-0368", reason = "zip <9 extract() symlink escape: docx-rs (zip 8.6) never calls extract()" },
     { id = "RUSTSEC-2026-0369", reason = "zip <9 extract() permissions via symlink: docx-rs (zip 8.6) never calls extract()" },
+    { id = "RUSTSEC-2026-0429", reason = "zip <9 extract() abort on a large symlink entry: docx-rs (zip 8.6) never calls extract()" },
     # crypto-bigint 0.5.5 (no fix): full note in .cargo/audit.toml. REVISIT when jsonwebtoken moves to p256 0.14.
     { id = "RUSTSEC-2026-0387", reason = "crypto-bigint 0.5 timing: only via optional enterprise jsonwebtoken, used to verify public ES256/ES384 signatures; 0.7 copy bumped to 0.7.10" },
 

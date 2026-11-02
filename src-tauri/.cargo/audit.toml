@@ -71,8 +71,9 @@ ignore = [
     # -----------------------------------------------------------------------
     # zip <9.0.0 extract() path handling (RUSTSEC-2026-0367 SUID/SGID kept,
     # -0368 symlink targets outside the destination, -0369 permissions applied
-    # through symlinks). All three are in ZipArchive::extract /
-    # ZipStreamReader::extract. Re-checked 2026-11-01:
+    # through symlinks, -0429 abort on a symlink entry with a large declared
+    # size). All four are in ZipArchive::extract / ZipStreamReader::extract.
+    # Re-checked 2026-11-03 (docx-rs 0.4.22's source has no extract() call):
     # - 4DA's own code (fastembed.rs, osv/cache.rs, extractors/archive.rs,
     #   extractors/office.rs), calamine 0.37 and tauri-plugin-updater 2.14.1
     #   are on zip 9.1.3, which is not affected. 4DA never calls extract() in
@@ -84,6 +85,7 @@ ignore = [
     "RUSTSEC-2026-0367", # zip SUID/SGID on extract
     "RUSTSEC-2026-0368", # zip symlink escape on extract
     "RUSTSEC-2026-0369", # zip permissions through symlinks on extract
+    "RUSTSEC-2026-0429", # zip abort on a large symlink entry on extract
     # -----------------------------------------------------------------------
     # crypto-bigint <0.7.6 timing variability (RUSTSEC-2026-0387). The 0.7
     # copy is bumped to 0.7.10. The remaining 0.5.5 copy has no fix (patched
