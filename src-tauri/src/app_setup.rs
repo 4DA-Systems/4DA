@@ -1084,6 +1084,18 @@ pub(crate) fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::
         info!(target: "4da::monitor", "Scheduled analysis starting (cache-first)");
         let handle = app_handle_scheduled.clone();
         tauri::async_runtime::spawn(async move {
+            // A game, VR session or presentation owns the machine: this
+            // background tick waits (measured 2026-11-03, `contention`). Release
+            // the scheduler's in-flight gate so the next tick retries.
+            if crate::contention::defer_scheduled_cycle("scheduled")
+                .await
+                .is_some()
+            {
+                get_monitoring_state()
+                    .is_checking
+                    .store(false, std::sync::atomic::Ordering::SeqCst);
+                return;
+            }
             // Boxed: the analysis future is ~24 KB, too large to move by value.
             Box::pin(run_scheduled_cycle_contained(
                 get_monitoring_state(),

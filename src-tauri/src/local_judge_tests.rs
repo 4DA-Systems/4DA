@@ -319,3 +319,71 @@ fn the_judge_that_will_run_is_loaded_for_users_who_chose_ai() {
     );
     assert!(may_route_local("anthropic", "k"));
 }
+
+// ── Live VRAM yield (RE4 VR stutter, 2026-11-03) ─────────────────────
+
+/// The measured incident: 16,376 MiB card, the game + desktop using ~9.6 GB.
+/// The size-only rule (`pick_judge`) still says gemma4:12b fits this card, so
+/// only the live check keeps it from loading beside the game.
+#[test]
+fn judge_stays_off_a_gpu_a_game_is_using() {
+    assert_eq!(
+        pick_judge(&[inst("gemma4:12b", 7_250)], Some(16_376)),
+        Some("gemma4:12b".into()),
+        "the card-size rule alone would load it"
+    );
+    assert!(
+        !gpu_has_room(16_376, 9_644, 0, 7_250),
+        "game running: no room"
+    );
+}
+
+#[test]
+fn judge_loads_on_an_idle_desktop() {
+    // dwm + browser ~1.9 GB, nothing else.
+    assert!(gpu_has_room(16_376, 1_900, 0, 7_250));
+}
+
+/// Measured state at 14:29: judge resident 8,251 MB, total use 15,898 MB.
+/// Its own footprint is not "other" use, but the other 7.6 GB still leave no
+/// room for it, so it must yield (and be unloaded).
+#[test]
+fn a_resident_judge_yields_when_a_game_fills_the_rest() {
+    assert!(!gpu_has_room(16_376, 15_898, 8_251, 7_250));
+}
+
+#[test]
+fn a_resident_judge_on_an_otherwise_idle_gpu_stays() {
+    assert!(gpu_has_room(16_376, 8_251 + 1_900, 8_251, 7_250));
+}
+
+#[test]
+fn yielding_routes_nowhere_until_the_recheck() {
+    let now = Instant::now();
+    let mut s = State {
+        model: Some("gemma4:12b".into()),
+        base_url: DEFAULT_OLLAMA_URL.into(),
+        ..State::default()
+    };
+    assert!(route(&s, now).is_some());
+    s.gpu_yield_until = Some(now + GPU_YIELD_RECHECK);
+    assert!(route(&s, now).is_none(), "busy GPU: no local judge");
+    assert!(
+        route(&s, now + GPU_YIELD_RECHECK).is_some(),
+        "rechecked after the window"
+    );
+}
+
+#[test]
+fn nvidia_smi_used_line_parses() {
+    assert_eq!(
+        crate::hardware_detect::parse_first_mib("15898\n"),
+        Some(15_898)
+    );
+    assert_eq!(
+        crate::hardware_detect::parse_first_mib(" 612 \n0\n"),
+        Some(612)
+    );
+    assert_eq!(crate::hardware_detect::parse_first_mib("[N/A]"), None);
+    assert_eq!(crate::hardware_detect::parse_first_mib(""), None);
+}

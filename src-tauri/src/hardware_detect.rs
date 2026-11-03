@@ -121,6 +121,23 @@ fn detect_nvidia() -> Option<GpuInfo> {
     })
 }
 
+/// VRAM in use RIGHT NOW across every process, in MiB, from `nvidia-smi`.
+/// Not cached: [`detect_hardware`] caches the card's size, but what other apps
+/// (a game, a VR runtime) hold changes minute to minute. `None` on non-NVIDIA
+/// GPUs or when the probe fails, and callers then keep their size-only rule.
+pub(crate) fn nvidia_vram_used_mb() -> Option<u64> {
+    let output = run_quiet(
+        "nvidia-smi",
+        &["--query-gpu=memory.used", "--format=csv,noheader,nounits"],
+    )?;
+    parse_first_mib(&output)
+}
+
+/// The first line of `nvidia-smi --format=csv,noheader,nounits` as MiB.
+pub(crate) fn parse_first_mib(output: &str) -> Option<u64> {
+    output.lines().next()?.trim().parse::<u64>().ok()
+}
+
 /// The display-adapter device class. Each adapter is a numbered subkey that
 /// carries its `DriverDesc` and, from WDDM drivers, a 64-bit
 /// `HardwareInformation.qwMemorySize`.
@@ -317,7 +334,7 @@ fn infer_vendor(name: &str) -> String {
 
 // ── Command runner (3s timeout, no window flash) ────────────────────
 
-fn run_quiet(program: &str, args: &[&str]) -> Option<String> {
+pub(crate) fn run_quiet(program: &str, args: &[&str]) -> Option<String> {
     use std::process::Command;
     use std::time::Duration;
 

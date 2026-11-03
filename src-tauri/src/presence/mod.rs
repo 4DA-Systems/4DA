@@ -195,6 +195,15 @@ pub fn current() -> Presence {
     Presence::Available
 }
 
+/// The OS presence state alone (fullscreen app, presentation, Focus Assist,
+/// locked, away), ignoring the user's notification settings. For callers that
+/// decide about COMPUTE rather than interruptions: `contention` defers 4DA's
+/// heavy background work while a game owns the screen, whatever the user's
+/// Do Not Disturb or "respect fullscreen" notification choices are.
+pub(crate) fn os_busy_reason() -> Option<BusyReason> {
+    platform::detect()
+}
+
 /// Convenience wrapper for call sites that only need a yes/no.
 pub fn is_available() -> bool {
     current().is_available()

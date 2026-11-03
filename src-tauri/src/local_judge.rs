@@ -83,6 +83,32 @@ pub(crate) const MEASURED_LOCAL_JUDGES: &[&str] = &["gemma4:26b", "gemma4:12b", 
 /// `embeddings_providers::ollama`.
 const MEASURED_OFFLOAD_FITS: &[(&str, u64)] = &[("gemma4:26b", 16_000)];
 
+/// VRAM the judge needs beyond its on-disk size once loaded: its 8k context
+/// cache and compute buffers. Measured 2026-11-03 (RTX 4080 SUPER): gemma4:12b
+/// is 7,250 MB on disk and its runner held 8,251 MB resident.
+pub(crate) const LIVE_HEADROOM_MB: u64 = 1536;
+/// How long the judge stays off a busy GPU before the next live check.
+const GPU_YIELD_RECHECK: Duration = Duration::from_mins(2);
+
+/// Whether the judge may sit in VRAM NOW, beside what every OTHER process is
+/// using. [`pick_judge`] answers "does it fit this card"; this answers "does it
+/// fit this card while the user is gaming". Measured 2026-11-03 in RE4 VR: the
+/// size-only rule loaded gemma4:12b (8.25 GB) next to the game, VRAM hit
+/// 15.9/16.4 GB, the game spilled 1.2 GB of textures into system RAM and
+/// stuttered unplayably on every area load. `ours_resident_mb` is the judge's
+/// own current footprint (it is not "other" use); a resident judge needs its
+/// resident size, a cold one its disk size plus [`LIVE_HEADROOM_MB`].
+pub(crate) fn gpu_has_room(
+    total_mb: u64,
+    used_mb: u64,
+    ours_resident_mb: u64,
+    model_mb: u64,
+) -> bool {
+    let other = used_mb.saturating_sub(ours_resident_mb);
+    let need = ours_resident_mb.max(model_mb + LIVE_HEADROOM_MB);
+    other + need <= total_mb
+}
+
 /// The purposes (`LLMClient::with_purpose`) of the three judge lanes.
 const JUDGE_PURPOSES: &[&str] = &["ingest_judge", "verdict_drain", "rerank_judge"];
 
@@ -90,8 +116,12 @@ const JUDGE_PURPOSES: &[&str] = &["ingest_judge", "verdict_drain", "rerank_judge
 struct State {
     checked_at: Option<Instant>,
     model: Option<String>,
+    /// On-disk size of `model`, for the live VRAM check.
+    model_size_mb: Option<u64>,
     base_url: String,
     tripped_until: Option<Instant>,
+    /// Set while another app needs the GPU ([`gpu_has_room`]): no local judge.
+    gpu_yield_until: Option<Instant>,
     /// Judge lanes running in this process ([`LaneGuard`]).
     lanes_in_flight: usize,
 }
@@ -270,7 +300,10 @@ pub(crate) async fn refresh_if_stale() -> LaneGuard {
     if let Some((model, base_url)) = target {
         // An Ollama main model is warmed through the same breaker: its judge
         // calls already run under it (`LLMClient::complete`).
-        if !cooling_off() {
+        // The live VRAM check guards only the ROUTED judge: an Ollama main
+        // model is the user's own choice and is not 4DA's to withhold.
+        let may_load = !route_local || Box::pin(yield_if_gpu_busy(&model, &base_url)).await;
+        if may_load && !cooling_off() {
             Box::pin(warm(model, base_url)).await;
         }
     }
@@ -354,6 +387,11 @@ pub(crate) async fn release_after_cycle() {
     ) else {
         return;
     };
+    unload(&model, &base_url).await;
+}
+
+/// Ask Ollama to unload `model` now (after a cycle, or to hand a busy GPU back).
+async fn unload(model: &str, base_url: &str) {
     let Ok(client) = reqwest::Client::builder()
         .timeout(Duration::from_secs(10))
         .build()
@@ -370,9 +408,7 @@ pub(crate) async fn release_after_cycle() {
         .await
         .and_then(reqwest::Response::error_for_status)
     {
-        Ok(_) => {
-            info!(target: "4da::local_judge", model, "Local judge unloaded until the next cycle")
-        }
+        Ok(_) => info!(target: "4da::local_judge", model, "Local judge unloaded"),
         Err(e) => {
             warn!(target: "4da::local_judge", model, error = %e, "Local judge unload failed; it expires on keep_alive")
         }
@@ -476,8 +512,75 @@ async fn redetect_if_stale() {
             "Judge lanes routed"
         );
     }
+    if installed.is_some() {
+        s.model_size_mb = model.as_deref().and_then(|m| {
+            installed
+                .as_deref()?
+                .iter()
+                .find(|i| i.name == m)
+                .map(|i| i.size_mb)
+        });
+    }
     s.model = model;
     s.base_url = base_url;
+}
+
+/// The judge's current VRAM footprint per Ollama's `/api/ps` (0 when not loaded).
+async fn resident_vram_mb(base_url: &str, model: &str) -> u64 {
+    let Ok(client) = reqwest::Client::builder()
+        .timeout(Duration::from_secs(3))
+        .build()
+    else {
+        return 0;
+    };
+    let Ok(resp) = client.get(format!("{base_url}/api/ps")).send().await else {
+        return 0;
+    };
+    let Ok(body) = resp.json::<serde_json::Value>().await else {
+        return 0;
+    };
+    body["models"]
+        .as_array()
+        .into_iter()
+        .flatten()
+        .filter(|m| m["name"].as_str().is_some_and(|n| same_model(n, model)))
+        .filter_map(|m| m["size_vram"].as_u64())
+        .sum::<u64>()
+        / (1024 * 1024)
+}
+
+/// Live check before a routed judge loads: if another app (a game, a VR
+/// runtime, a renderer) is using the GPU so the judge would not fit beside it,
+/// keep judging off the GPU for [`GPU_YIELD_RECHECK`] and, when the judge is
+/// already resident, unload it now so the app gets the VRAM back. Returns
+/// whether the judge may load. Non-NVIDIA GPUs report no live usage and keep
+/// the size-only rule.
+async fn yield_if_gpu_busy(model: &str, base_url: &str) -> bool {
+    let (Some(total), size) = (memory_budget_mb(), STATE.lock().model_size_mb) else {
+        return true;
+    };
+    let Ok(Some(used)) =
+        tokio::task::spawn_blocking(crate::hardware_detect::nvidia_vram_used_mb).await
+    else {
+        return true;
+    };
+    let ours = resident_vram_mb(base_url, model).await;
+    if gpu_has_room(total, used, ours, size.unwrap_or(0)) {
+        return true;
+    }
+    STATE.lock().gpu_yield_until = Some(Instant::now() + GPU_YIELD_RECHECK);
+    info!(
+        target: "4da::local_judge",
+        model,
+        vram_used_mb = used,
+        vram_total_mb = total,
+        judge_resident_mb = ours,
+        "GPU busy with another app; local judge stays off the GPU (cloud judge or skip)"
+    );
+    if ours > 0 {
+        unload(model, base_url).await;
+    }
+    false
 }
 
 /// The judge to route to after a probe. A probe that got no answer keeps the
@@ -499,6 +602,9 @@ pub(crate) fn next_route(
 
 fn route(state: &State, now: Instant) -> Option<(String, String)> {
     if state.tripped_until.is_some_and(|t| now < t) {
+        return None;
+    }
+    if state.gpu_yield_until.is_some_and(|t| now < t) {
         return None;
     }
     state.model.clone().map(|m| (m, state.base_url.clone()))
