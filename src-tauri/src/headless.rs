@@ -112,6 +112,9 @@ pub fn run_headless(mode: HeadlessMode, force: bool) -> ! {
     // headless engine deliberately coexists with a running GUI over the same WAL database.
     crate::app_setup::initialize_pre_tauri(false);
     info!(target: "4da::headless", ?mode, force, "Headless engine starting (no window, no WebView2)");
+    // Background work must never compete with the user's foreground apps
+    // (measured 2026-11-03: engine cycles beside a VR game made it unplayable).
+    crate::contention::lower_own_priority();
 
     // Build a Tauri app with the configured windows stripped: we need a real AppHandle for the
     // pipeline's best-effort emits, but with no window WebView2 never instantiates.
@@ -142,6 +145,14 @@ pub fn run_headless(mode: HeadlessMode, force: bool) -> ! {
                     "Feed and dependency intelligence already fresh — nothing to do. \
                      Pass --force to refresh anyway."
                 );
+                0
+            } else if !force
+                && tauri::async_runtime::block_on(crate::contention::defer_scheduled_cycle(
+                    "headless_once",
+                ))
+                .is_some()
+            {
+                // A clean "nothing done" run: the OS scheduler retries next tick.
                 0
             } else {
                 // Contain panics so an OS-scheduled invocation exits with the
@@ -670,7 +681,15 @@ fn append_receipt_error(receipt: &mut RunReceipt, error: String) {
 async fn run_daemon_loop(handle: &AppHandle, force: bool) {
     info!(target: "4da::headless", "Daemon mode — entering refresh loop (Ctrl-C to stop)");
     loop {
-        if force || !is_cycle_fresh() {
+        let due = force || !is_cycle_fresh();
+        // A due cycle waits while a game, VR session or presentation is using
+        // the machine (`contention`, logged there); the next tick looks again.
+        let deferred = due
+            && !force
+            && crate::contention::defer_scheduled_cycle("headless_daemon")
+                .await
+                .is_some();
+        if due && !deferred {
             // Contain panics. An unwind out of a cycle propagates through this
             // loop and kills the daemon outright — one bad item turns the
             // background engine into a dead process that never refreshes again,
@@ -688,7 +707,7 @@ async fn run_daemon_loop(handle: &AppHandle, force: bool) {
                     "Cycle panicked — daemon staying up, retrying on the next tick"
                 );
             }
-        } else {
+        } else if !due {
             info!(target: "4da::headless", "Feed and dependency intelligence already fresh — skipping this tick");
         }
 
