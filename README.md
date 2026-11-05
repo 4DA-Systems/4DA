@@ -101,8 +101,8 @@ flowchart LR
 
 | What | How it is measured | Result | Check it yourself |
 |---|---|---|---|
-| Lockfile reading and matching | 36 cases (32 public repositories at pinned commits plus 4 synthetic), 13 lockfile formats, vendored lockfiles, pinned OSV records, adjudicated truth | Precision and recall 1.0 for findings and inventory in every ecosystem; 0 silent drops. CI fails on any fall. | `cargo test --lib osv::conformance_tests` · [corpus](src-tauri/tests/conformance/) |
-| Fix paths | 22 recommended actions in 9 public repositories, each applied, re-resolved and re-scanned with osv-scanner | 22 / 22 clear the advisory with a minimal change; 0 recommended targets still vulnerable (2026-10-10) | Method in [AD-055](.ai/DECISIONS.md); the rules it settled (fix target, refresh verdict, parent release, command) are pinned by [rule vectors](src-tauri/tests/conformance/vectors/) in CI |
+| Lockfile reading and matching | 36 cases (32 public repositories at pinned commits plus 4 synthetic), 13 lockfile formats in 22 versions, vendored lockfiles, pinned OSV records, adjudicated truth | Precision and recall 1.0 for findings and inventory in every ecosystem; 0 silent drops. CI fails on any fall. | `cargo test --lib osv::conformance_tests` · [corpus](src-tauri/tests/conformance/) |
+| Fix paths | 22 recommended actions in 9 public repositories, each applied, re-resolved and re-scanned with osv-scanner | 21 / 22 clear the advisory with a minimal change (95.5%; the launch bar is 95%); no recommended target is still affected by an advisory that has a fix | Method in [AD-055](.ai/DECISIONS.md); the rules it settled (fix target, refresh verdict, parent release, command) are pinned by [rule vectors](src-tauri/tests/conformance/vectors/) in CI |
 | Agent safety | Preregistered A/B with headless Claude Code, above | 82 / 138 → 0 / 138 runs choosing a vulnerable version | Harness not public yet |
 | Engine parity | The Rust rules compiled to WebAssembly vs native | Identical on 354 / 354 requests | `crates/fourda-depengine` CI |
 
