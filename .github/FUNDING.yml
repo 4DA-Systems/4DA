@@ -5,7 +5,7 @@
 # fill in only those we actively use.
 #
 # The canonical way to support 4DA is by purchasing a Signal-tier license
-# at https://4da.ai/pricing — that's the `custom:` entry below. GitHub
+# at https://4da.ai/signal — that's the `custom:` entry below. GitHub
 # Sponsors is left commented until/unless the profile is enabled, to
 # avoid linking users to a dead page.
 
@@ -20,4 +20,4 @@
 # otechie: <name>
 # lfx_crowdfunding: <project-name>
 
-custom: ["https://4da.ai/pricing"]
+custom: ["https://4da.ai/signal"]

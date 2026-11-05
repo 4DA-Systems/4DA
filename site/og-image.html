@@ -2,72 +2,83 @@
 <html>
 <head>
 <meta charset="utf-8">
+<!--
+  Source of site/og-image.png (1200x630, the site's og:image) and of the GitHub
+  social preview (1280x640). Render: msedge --headless --hide-scrollbars
+  --window-size=1200,630 --screenshot=og-image.png file:///.../og-image.html
+  Copy is the AD-054 one-sentence description, verbatim.
+-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 100vw; height: 100vh; }
   body {
-    width: 1200px;
-    height: 630px;
     background: #0A0A0A;
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-family: 'Inter', -apple-system, 'Segoe UI', sans-serif;
+    color: #FFFFFF;
     overflow: hidden;
     position: relative;
+    display: flex;
+    align-items: center;
+    padding: 0 6.5vw;
+    gap: 5vw;
   }
-  /* Subtle grid pattern */
   body::before {
     content: '';
     position: absolute;
     inset: 0;
     background-image:
-      linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+      linear-gradient(rgba(255,255,255,0.025) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.025) 1px, transparent 1px);
     background-size: 60px 60px;
   }
-  /* Gold accent line */
-  .accent-line {
-    width: 80px;
-    height: 2px;
-    background: #D4AF37;
-    margin-bottom: 40px;
-  }
-  .logo {
-    font-size: 160px;
-    font-weight: 600;
-    color: #FFFFFF;
-    letter-spacing: -4px;
-    line-height: 1;
-    margin-bottom: 20px;
-  }
-  .tagline {
-    font-size: 28px;
-    font-weight: 400;
-    color: #A0A0A0;
-    letter-spacing: 6px;
-    text-transform: uppercase;
-    margin-bottom: 48px;
-  }
-  .tools {
-    font-size: 16px;
-    color: #666666;
-    letter-spacing: 3px;
-    text-transform: uppercase;
-  }
-  /* Corner accents */
-  .corner {
+  body::after {
+    content: '';
     position: absolute;
-    width: 40px;
-    height: 40px;
-    border-color: #D4AF37;
-    border-style: solid;
-    border-width: 0;
+    left: -10vw; top: 10vh;
+    width: 60vh; height: 60vh;
+    background: radial-gradient(circle, rgba(255,140,0,0.16) 0%, rgba(255,140,0,0) 70%);
+    pointer-events: none;
   }
-  .corner.tl { top: 40px; left: 40px; border-top-width: 1px; border-left-width: 1px; }
-  .corner.tr { top: 40px; right: 40px; border-top-width: 1px; border-right-width: 1px; }
-  .corner.bl { bottom: 40px; left: 40px; border-bottom-width: 1px; border-left-width: 1px; }
-  .corner.br { bottom: 40px; right: 40px; border-bottom-width: 1px; border-right-width: 1px; }
+  .corner { position: absolute; width: 40px; height: 40px; border: 0 solid #D4AF37; }
+  .corner.tl { top: 36px; left: 36px; border-top-width: 1px; border-left-width: 1px; }
+  .corner.tr { top: 36px; right: 36px; border-top-width: 1px; border-right-width: 1px; }
+  .corner.bl { bottom: 36px; left: 36px; border-bottom-width: 1px; border-left-width: 1px; }
+  .corner.br { bottom: 36px; right: 36px; border-bottom-width: 1px; border-right-width: 1px; }
+  .sun {
+    position: relative;
+    z-index: 1;
+    flex: 0 0 auto;
+    width: 34vh;
+    height: 34vh;
+    border-radius: 50%;
+    background: url('hero-sun.jpg') center 46% / 118% no-repeat;
+    box-shadow: 0 0 80px rgba(255,140,0,0.35);
+  }
+  .copy { position: relative; z-index: 1; display: flex; flex-direction: column; gap: 3.2vh; }
+  .wordmark {
+    display: flex; align-items: center; gap: 14px;
+    font-size: 3.4vh; font-weight: 600; letter-spacing: 0.32em; color: #FFFFFF;
+  }
+  .wordmark .rule { width: 56px; height: 2px; background: #D4AF37; }
+  .line {
+    font-size: 5.6vh;
+    line-height: 1.22;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    max-width: 62vw;
+  }
+  .line .agent { color: #D4AF37; }
+  .line .quiet { color: #A0A0A0; font-weight: 500; }
+  .meta {
+    font-family: 'JetBrains Mono', ui-monospace, monospace;
+    font-size: 2.3vh;
+    color: #8A8A8A;
+    letter-spacing: 0.02em;
+    display: flex; flex-direction: column; gap: 1vh;
+  }
+  .meta b { color: #A0A0A0; font-weight: 500; }
 </style>
 </head>
 <body>
@@ -75,9 +86,14 @@
   <div class="corner tr"></div>
   <div class="corner bl"></div>
   <div class="corner br"></div>
-  <div class="accent-line"></div>
-  <div class="logo">4DA</div>
-  <div class="tagline">Developer Intelligence</div>
-  <div class="tools">16 MCP Tools &middot; Privacy-First &middot; Local-Only</div>
+  <div class="sun" role="img" aria-label="4DA"></div>
+  <div class="copy">
+    <div class="wordmark"><span class="rule"></span>4DA</div>
+    <div class="line">4DA knows every dependency on your machine and tells you <span class="agent">&mdash; and your coding agent &mdash;</span> what changed and exactly what to run. <span class="quiet">Privately, locally.</span></div>
+    <div class="meta">
+      <span>npm &middot; pnpm &middot; Yarn &middot; Bun &middot; Cargo &middot; Python &middot; Go</span>
+      <span><b>free MCP server</b> &middot; no account &middot; 4da.ai</span>
+    </div>
+  </div>
 </body>
 </html>
