@@ -305,7 +305,13 @@ fn cmd_signals(conn: &rusqlite::Connection, critical_only: bool, json_mode: bool
         );
     } else if signal_count == 0 {
         if critical_only {
-            println!("No critical/high signals found. Your stack is clean.");
+            // This command classifies recent news titles; it never checks a
+            // dependency against an advisory, so it must not call the stack
+            // clean (the app says that only when the advisory data is fresh).
+            println!(
+                "No critical/high signals in recent news items. This command reads news, not advisories: \
+                 open Preemption in the app for your dependencies' vulnerabilities."
+            );
         } else {
             println!("No signals detected in recent items.");
         }
