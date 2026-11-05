@@ -328,7 +328,11 @@ module proxy (§1b, §1e) receive them too; §4 has the complete list.
 
 ### 2d. License validation (Keygen)
 
-Only contacted when you enter a license key (`src-tauri/src/settings/license/keygen.rs`).
+Only contacted for an older Keygen-format license key (`src-tauri/src/settings/license/keygen.rs`).
+The `4DA-…` keys sold today (issued by `site/functions/api/license/activate.js`) are verified
+offline against the embedded signing key and are **never** sent to Keygen (`keygen.rs`, the
+`starts_with("4DA-")` guard in `validate_license_key_keygen_inner`). A monthly or annual `4DA-` key
+contacts `4da.ai` only near expiry, to renew (§2k); a lifetime key contacts nothing.
 
 - **Host:** `api.keygen.sh`
 - **Endpoint:** `POST /v1/accounts/runyourempirehq/licenses/actions/validate-key`

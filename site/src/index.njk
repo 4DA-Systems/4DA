@@ -1064,7 +1064,7 @@ permalink: "/index.html"
       </div>
       <div style="margin-top: 28px; font-size: 13px; color: var(--text-muted); letter-spacing: 0.02em;">Runs locally &middot; Zero telemetry &middot; BYOK &middot; AI offline with Ollama</div>
       <div style="margin-top:48px; max-width:720px; margin-left:auto; margin-right:auto;">
-        <img src="screenshots/01-brief.png" alt="4DA Brief tab showing today's top picks and signal stream" style="width:100%; border-radius:12px; border:1px solid var(--border); box-shadow: 0 8px 32px rgba(0,0,0,0.4);">
+        <img src="screenshots/01-brief.png" alt="4DA Brief: each version-confirmed advisory in your projects, with the version that clears it and the command to run" width="2560" height="1600" style="width:100%; height:auto; border-radius:12px; border:1px solid var(--border); box-shadow: 0 8px 32px rgba(0,0,0,0.4);">
       </div>
     </div>
   </header>
@@ -1145,47 +1145,46 @@ permalink: "/index.html"
         <button class="gallery-tab active" data-filter="all">All</button>
         <button class="gallery-tab" data-filter="brief">Brief</button>
         <button class="gallery-tab" data-filter="preemption">Preemption</button>
-        <button class="gallery-tab" data-filter="blind-spots">Blind Spots</button>
         <button class="gallery-tab" data-filter="signal">Signal</button>
       </div>
       <div class="gallery-grid">
         <div class="gallery-item visible" data-category="brief">
-          <button type="button" class="gallery-item-trigger" data-lightbox-src="screenshots/01-brief.png" data-lightbox-caption="Brief — today's top picks and live signal stream" aria-label="Expand Brief screenshot">
-            <img src="screenshots/01-brief.png" alt="4DA Brief tab — top picks and live signal stream" loading="lazy" width="2559" height="1439">
+          <button type="button" class="gallery-item-trigger" data-lightbox-src="screenshots/01-brief.png" data-lightbox-caption="Brief — anything you need to do today, with the command to run" aria-label="Expand Brief screenshot">
+            <img src="screenshots/01-brief.png" alt="4DA Brief: version-confirmed advisories across your projects, each with the fixing version and the command" loading="lazy" width="2560" height="1600">
             <span class="zoom-hint">Click to expand</span>
             <div class="gallery-caption">
               <span class="caption-tag">Brief</span>
-              <p>Your daily intelligence briefing. Top picks surface what matters most, backed by a live signal stream scored against your stack.</p>
+              <p>One answer to &ldquo;anything I need to do today?&rdquo; Each advisory that affects an installed version, the version that clears it, and whether a lockfile refresh is enough or a parent package has to move.</p>
             </div>
           </button>
         </div>
         <div class="gallery-item visible" data-category="preemption">
-          <button type="button" class="gallery-item-trigger" data-lightbox-src="screenshots/02-preemption.png" data-lightbox-caption="Preemption — CVEs and dependency risks surfaced early" aria-label="Expand Preemption screenshot">
-            <img src="screenshots/02-preemption.png" alt="4DA Preemption Radar — CVE alerts for your dependencies" loading="lazy" width="2559" height="1439">
+          <button type="button" class="gallery-item-trigger" data-lightbox-src="screenshots/02-preemption.png" data-lightbox-caption="Preemption — the worklist and the Upgrade Plan" aria-label="Expand Preemption screenshot">
+            <img src="screenshots/02-preemption.png" alt="4DA Preemption: the Upgrade Plan ranks every fix across your projects, highest impact first" loading="lazy" width="2560" height="1600">
             <span class="zoom-hint">Click to expand</span>
             <div class="gallery-caption">
               <span class="caption-tag">Preemption</span>
-              <p>Forward-looking intelligence for your stack. CVEs, breaking changes, and dependency risks surfaced before they hit you.</p>
+              <p>The worklist. The Upgrade Plan ranks every fix across your projects by how many advisories each upgrade clears.</p>
             </div>
           </button>
         </div>
-        <div class="gallery-item visible" data-category="blind-spots">
-          <button type="button" class="gallery-item-trigger" data-lightbox-src="screenshots/03-blind-spots.png" data-lightbox-caption="Blind Spots — coverage gaps you never saw" aria-label="Expand Blind Spots screenshot">
-            <img src="screenshots/03-blind-spots.png" alt="4DA Blind Spot Index — coverage gaps and missed intelligence" loading="lazy" width="2559" height="1439">
+        <div class="gallery-item visible" data-category="preemption">
+          <button type="button" class="gallery-item-trigger" data-lightbox-src="screenshots/04-fix-path.png" data-lightbox-caption="The fix path — refresh or parent upgrade, read from your lockfiles" aria-label="Expand fix path screenshot">
+            <img src="screenshots/04-fix-path.png" alt="4DA fix path: a transitive copy traced to its direct parent, with the lockfile refresh command" loading="lazy" width="2560" height="1600">
             <span class="zoom-hint">Click to expand</span>
             <div class="gallery-caption">
-              <span class="caption-tag">Blind Spots</span>
-              <p>What you're not watching well enough. Coverage gaps, low-engagement topics, and high-relevance items you never saw.</p>
+              <span class="caption-tag">Fix path</span>
+              <p>A transitive copy traced to the direct dependency that brings it in, with the reason a lockfile refresh reaches the fix and the exact command.</p>
             </div>
           </button>
         </div>
         <div class="gallery-item visible" data-category="signal">
-          <button type="button" class="gallery-item-trigger" data-lightbox-src="screenshots/04-signal.png" data-lightbox-caption="Signal — confirmed key signals across 2+ axes" aria-label="Expand Signal screenshot">
-            <img src="screenshots/04-signal.png" alt="4DA Signal tab — key signals you would have missed" loading="lazy" width="2559" height="1439">
+          <button type="button" class="gallery-item-trigger" data-lightbox-src="screenshots/03-signal.png" data-lightbox-caption="Signal — what changed in your stack" aria-label="Expand Signal screenshot">
+            <img src="screenshots/03-signal.png" alt="4DA Signal: security fixes and releases for the packages you use, with a copyable command" loading="lazy" width="2560" height="1600">
             <span class="zoom-hint">Click to expand</span>
             <div class="gallery-caption">
               <span class="caption-tag">Signal</span>
-              <p>The items that earn their place. Confirmed through 2+ independent axes, classified by type, ready for action.</p>
+              <p>What changed in your stack: security fixes and releases for the packages you actually have installed, each with a command you can copy.</p>
             </div>
           </button>
         </div>
@@ -1397,7 +1396,7 @@ npx <span class="string">@4da/mcp-server</span>
           </div>
           <div class="trust-card">
             <h3>Clean uninstall</h3>
-            <p>Delete the app, delete the data folder. Nothing persists. No residual cloud storage.</p>
+            <p>Nothing of yours is stored in any 4DA cloud. Uninstalling removes the program; your data folder and the keys in your OS keychain stay until you delete them, and the Windows uninstaller offers to delete the data. <a href="https://github.com/4DA-Systems/4DA/blob/main/SECURITY.md#what-uninstalling-leaves-behind">What uninstalling leaves behind</a>.</p>
           </div>
         </div>
       </div>

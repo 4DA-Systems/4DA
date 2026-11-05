@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Report a vulnerability privately
+    url: https://github.com/4DA-Systems/4DA/security/advisories/new
+    about: Sensitive security reports go here (or to security@4da.ai), not to a public issue.
+  - name: MCP server (@4da/mcp-server) issues
+    url: https://github.com/4DA-Systems/4da-mcp-server/issues
+    about: Problems with the MCP server for Claude Code, Cursor, VS Code and other agents live in its own repository.
+  - name: Questions and ideas
+    url: https://github.com/4DA-Systems/4DA/discussions
+    about: Ask how something works, or share how you use 4DA.
