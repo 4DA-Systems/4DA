@@ -500,20 +500,30 @@ fn own_package_names(conn: &rusqlite::Connection) -> HashSet<String> {
 /// Every registry release from the Brief's window that changes something for
 /// an active project: the newest stable release per package, graded against
 /// each working project's pin.
+///
+/// Everything is read through `conn`, the pins once for the whole pass
+/// ([`release_grade::PinIndex`]): never the writer lock, and no query per
+/// registry row (a fresh profile has hundreds; live 2026-11-05 the per-row
+/// reads made the first `get_stack_changes` take over two minutes). `db`
+/// serves only the release checker's once-per-pass reads.
 pub(crate) fn collect_release_changes(
     db: &Database,
     conn: &rusqlite::Connection,
 ) -> Vec<ReleaseChange> {
     let own = own_package_names(conn);
     let liveness = ProjectLiveness::load(conn);
+    let pins = release_grade::PinIndex::load(conn);
     // (registry family, package) -> (announced, grade, row): the highest
     // STABLE release wins, so a 4.0.0-alpha row never hides 3.2.0.
     let mut best: BTreeMap<(String, String), (Version, ReleaseGrade, RegistryRow)> =
         BTreeMap::new();
     for row in load_rows(conn) {
-        let Some(grade) =
-            release_grade::grade_registry_release(db, &row.source_type, &row.title, &row.content)
-        else {
+        let Some(grade) = release_grade::grade_registry_release_in(
+            &pins,
+            &row.source_type,
+            &row.title,
+            &row.content,
+        ) else {
             continue;
         };
         if !grade.announced.pre.is_empty() || is_own_package(&grade.package, &own) {
@@ -549,7 +559,7 @@ pub(crate) fn collect_release_changes(
                 return None;
             }
             let verdict = checker.check_grade(
-                db,
+                conn,
                 &row.source_type,
                 &active,
                 &installed,
@@ -596,5 +606,78 @@ mod tests {
         };
         assert_eq!(published("undated@2.0.0"), Some(None), "{rows:?}");
         assert_eq!(published("dated@3.0.0"), Some(Some(dated)));
+    }
+
+    std::thread_local! {
+        static STATEMENTS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    }
+
+    fn count_statement(_sql: &str) {
+        STATEMENTS.with(|n| n.set(n.get() + 1));
+    }
+
+    /// A file database with `releases` crates.io release rows, one package
+    /// each, of which the first three are pinned (behind) by one project.
+    fn seeded(releases: usize) -> (tempfile::TempDir, std::sync::Arc<super::Database>) {
+        crate::register_sqlite_vec_extension();
+        let dir = tempfile::tempdir().expect("tmp");
+        let db = super::Database::new(&dir.path().join("4da.db")).expect("db");
+        {
+            let conn = db.conn.lock();
+            for i in 0..releases {
+                let title = format!("crates.io: pkg-{i} v2.0.0");
+                conn.execute(
+                    "INSERT INTO source_items (source_type, source_id, title, content,
+                         content_hash, embedding, published_at)
+                     VALUES ('crates_io', ?1, ?1, '', ?1, x'', datetime('now', '-1 day'))",
+                    rusqlite::params![title],
+                )
+                .expect("row");
+            }
+            for i in 0..3 {
+                conn.execute(
+                    "INSERT INTO user_dependencies (project_path, package_name, version,
+                         ecosystem, is_direct, is_dev)
+                     VALUES ('D:/work/app', ?1, '1.0.0', 'rust', 1, 0)",
+                    rusqlite::params![format!("pkg-{i}")],
+                )
+                .expect("pin");
+            }
+        }
+        (dir, std::sync::Arc::new(db))
+    }
+
+    /// Live 2026-11-05 (fresh profile, 1,904 packages): the release pass read
+    /// each registry row's pins through the writer lock, and the first
+    /// `get_stack_changes` waited behind startup writes (a background holder
+    /// taking the lock 20 ms at a time made the pass 27x slower: 7.6 s
+    /// instead of 0.28 s). It must finish while another thread HOLDS the
+    /// writer lock, and its statement count must not grow with the rows.
+    #[test]
+    fn the_release_pass_never_waits_for_the_writer_and_reads_pins_once() {
+        let (dir, db) = seeded(120);
+        let reader = rusqlite::Connection::open(dir.path().join("4da.db")).expect("reader");
+        let held = db.conn.lock();
+        let (tx, rx) = std::sync::mpsc::channel();
+        let worker_db = db.clone();
+        let worker = std::thread::spawn(move || {
+            let mut reader = reader;
+            #[allow(deprecated)]
+            reader.trace(Some(count_statement));
+            let changes = super::collect_release_changes(&worker_db, &reader);
+            tx.send((changes.len(), STATEMENTS.with(std::cell::Cell::get)))
+                .expect("send");
+        });
+        let outcome = rx.recv_timeout(std::time::Duration::from_secs(20));
+        drop(held);
+        worker.join().expect("worker");
+        let (changes, statements) = outcome.expect("the release pass waited for the writer lock");
+        assert_eq!(changes, 3, "the three pinned packages are behind 2.0.0");
+        // Fixed reads (rows, projects, liveness, pins, dormancy) plus one
+        // advisory read per graded package: not one or more per row.
+        assert!(
+            statements < 30,
+            "{statements} statements for 120 registry rows: a per-row read is back"
+        );
     }
 }

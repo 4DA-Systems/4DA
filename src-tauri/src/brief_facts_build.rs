@@ -729,10 +729,13 @@ fn build_upgrade_facts(
     labels: &mut LabelCache,
 ) -> Vec<UpgradeFact> {
     let own = own_package_names();
+    // One reader for the whole pass: the rows, every pin (once, not per
+    // row) and the advisory checks, never the writer lock (live 2026-11-05:
+    // per-row pin reads through `db.conn` stalled the first brief).
+    let Ok(conn) = crate::open_db_connection() else {
+        return Vec::new();
+    };
     let rows: Vec<(i64, String, String, String, Option<String>, Option<String>)> = {
-        let Ok(conn) = crate::open_db_connection() else {
-            return Vec::new();
-        };
         let placeholders = crate::dep_linker::REGISTRY_SOURCE_TYPES
             .iter()
             .map(|s| format!("'{s}'"))
@@ -775,9 +778,11 @@ fn build_upgrade_facts(
             String,
         ),
     > = BTreeMap::new();
+    let pins = release_grade::PinIndex::load(&conn);
     for (id, source_type, title, content, url, published) in rows {
-        let Some(grade) = release_grade::grade_registry_release(db, &source_type, &title, &content)
-            .and_then(|g| upgrade_grade(g, liveness))
+        let Some(grade) =
+            release_grade::grade_registry_release_in(&pins, &source_type, &title, &content)
+                .and_then(|g| upgrade_grade(g, liveness))
         else {
             continue;
         };
@@ -799,7 +804,7 @@ fn build_upgrade_facts(
     for ((_, pkg_key), (grade, id, url, published, source_type)) in best {
         // Never an upgrade toward a release an advisory affects or its
         // registry withdrew (`osv::release_advisories`).
-        if checker.advises_against(db, &source_type, &grade, published.as_deref()) {
+        if checker.advises_against(&conn, &source_type, &grade, published.as_deref()) {
             continue;
         }
         let concerned = grade.concerned_pins();

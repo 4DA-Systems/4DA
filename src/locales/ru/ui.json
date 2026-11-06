@@ -2621,6 +2621,8 @@
   "onboarding.setupAi.skipNoAi": "Пропустить — пока без ИИ",
   "onboarding.setupAi.skipNoAiDesc": "Без сводок от ИИ и переранжирования. Добавьте провайдера в любое время в Настройках.",
   "signals.stack.loading": "Проверяем, что изменилось в вашем стеке…",
+  "signals.stack.workingTitle": "Всё ещё проверяем ваш стек…",
+  "signals.stack.workingBody": "Первая проверка читает каждый пакет в ваших lock-файлах. Она ещё выполняется, и список появится здесь, когда она завершится.",
   "signals.stack.error": "Не удалось загрузить изменения вашего стека.",
   "signals.stack.retry": "Повторить",
   "signals.stack.refresh": "Обновить",

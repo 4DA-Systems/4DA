@@ -40,6 +40,7 @@
   "errorMsg.permission": "İzin reddedildi. Dosya izinlerini kontrol edin.",
   "errorMsg.rateLimit": "İstek sınırına ulaşıldı. Lütfen biraz bekleyin ve tekrar deneyin.",
   "errorMsg.inventoryRefreshing": "Projeleriniz yeniden taranıyor. Özet, tarama biter bitmez yazılacak.",
+  "errorMsg.briefStillWriting": "Özetiniz hâlâ yazılıyor. Hazır olur olmaz burada görünecek.",
   "errorMsg.budgetReached": "Günlük yapay zekâ bütçesine ulaşıldı — {{time}} itibarıyla sıfırlanır ({{in}})",
   "errorMsg.timeout": "İstek zaman aşımına uğradı. Biraz sonra tekrar deneyin.",
   "translation.noLlm": "LLM yapılandırılmadı — içerik çevirisini etkinleştirmek için Ayarlar'da API anahtarınızı girin"

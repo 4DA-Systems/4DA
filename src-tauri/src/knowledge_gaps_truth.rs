@@ -21,20 +21,15 @@
 #![deny(clippy::string_slice)]
 
 use std::cell::RefCell;
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 
 use semver::Version;
 
 use crate::evidence::ProjectLiveness;
-use crate::scoring::release_grade::{self, PinRow, ReleaseClass, ReleaseGrade};
+use crate::scoring::release_grade::{self, pin_key as canon, PinIndex, ReleaseClass, ReleaseGrade};
 use crate::scoring::release_version::{announced_release_version, lenient_semver};
 
 use super::MissedItem;
-
-/// `-`/`_`-insensitive, lowercase — the key `release_grade::load_pins` matches on.
-fn canon(name: &str) -> String {
-    name.replace('_', "-").to_lowercase()
-}
 
 /// A dependency's manifest language as a registry language
 /// (`ecosystem_congruent` accepts TypeScript under JavaScript).
@@ -48,41 +43,15 @@ pub(super) fn registry_lang(language: &str) -> String {
 /// Every project's pinned copy of every package, loaded once per pass, plus
 /// the liveness facts the brief's upgrade facts filter on.
 pub(super) struct PinBook {
-    by_name: HashMap<String, Vec<PinRow>>,
-    dormant: HashSet<String>,
-    excluded: Vec<String>,
+    pins: PinIndex,
     liveness: ProjectLiveness,
     own: RefCell<HashMap<(String, String, String), bool>>,
 }
 
 impl PinBook {
     pub(super) fn load(conn: &rusqlite::Connection) -> Self {
-        let mut by_name: HashMap<String, Vec<PinRow>> = HashMap::new();
-        if let Ok(mut stmt) = conn.prepare(
-            "SELECT package_name, project_path, version, ecosystem, is_direct, is_dev
-             FROM user_dependencies WHERE version IS NOT NULL AND version <> ''",
-        ) {
-            if let Ok(rows) = stmt.query_map([], |r| {
-                Ok((
-                    r.get::<_, String>(0)?,
-                    (
-                        r.get::<_, String>(1)?,
-                        r.get::<_, String>(2)?,
-                        r.get::<_, String>(3)?,
-                        r.get::<_, i64>(4)? != 0,
-                        r.get::<_, i64>(5)? != 0,
-                    ),
-                ))
-            }) {
-                for (name, row) in rows.flatten() {
-                    by_name.entry(canon(&name)).or_default().push(row);
-                }
-            }
-        }
         Self {
-            by_name,
-            dormant: crate::ace::dormancy::dormant_project_paths(conn),
-            excluded: crate::project_inclusion::user_excluded_paths(),
+            pins: PinIndex::load(conn),
             liveness: ProjectLiveness::load(conn),
             own: RefCell::new(HashMap::new()),
         }
@@ -94,20 +63,8 @@ impl PinBook {
         rows: &[(&str, &str, &str, &str, bool, bool)],
         liveness: ProjectLiveness,
     ) -> Self {
-        let mut by_name: HashMap<String, Vec<PinRow>> = HashMap::new();
-        for (name, path, version, eco, direct, dev) in rows {
-            by_name.entry(canon(name)).or_default().push((
-                (*path).to_string(),
-                (*version).to_string(),
-                (*eco).to_string(),
-                *direct,
-                *dev,
-            ));
-        }
         Self {
-            by_name,
-            dormant: HashSet::new(),
-            excluded: Vec::new(),
+            pins: PinIndex::from_rows(rows),
             liveness,
             own: RefCell::new(HashMap::new()),
         }
@@ -134,12 +91,7 @@ impl PinBook {
         lang: &str,
         yanked: &[String],
     ) -> Option<ReleaseGrade> {
-        let rows = self
-            .by_name
-            .get(&canon(subject))
-            .cloned()
-            .unwrap_or_default();
-        let pins = release_grade::filter_pin_rows(rows, lang, &self.dormant, &self.excluded);
+        let pins = self.pins.pins(subject, lang);
         release_grade::grade_pins(subject, announced, pins, yanked, |path| {
             self.is_own(path, subject, lang)
         })

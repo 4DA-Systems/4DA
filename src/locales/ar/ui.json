@@ -2617,6 +2617,8 @@
   "onboarding.setupAi.skipNoAi": "تخطٍّ — بلا ذكاء اصطناعي الآن",
   "onboarding.setupAi.skipNoAiDesc": "لا ملخصات يكتبها الذكاء الاصطناعي ولا إعادة ترتيب. أضف مزوّدًا في أي وقت من الإعدادات.",
   "signals.stack.loading": "جارٍ التحقق مما تغيّر في حزمتك التقنية…",
+  "signals.stack.workingTitle": "لا يزال التحقق من حزمتك التقنية جارياً…",
+  "signals.stack.workingBody": "يقرأ الفحص الأول كل حزمة في ملفات القفل لديك. لا يزال قيد التشغيل، وستظهر القائمة هنا عند انتهائه.",
   "signals.stack.error": "تعذّر تحميل التغييرات في حزمتك التقنية.",
   "signals.stack.retry": "حاول مرة أخرى",
   "signals.stack.refresh": "تحديث",

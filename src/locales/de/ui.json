@@ -2709,6 +2709,8 @@
   "onboarding.setupAi.skipNoAi": "Überspringen — vorerst keine KI",
   "onboarding.setupAi.skipNoAiDesc": "Keine KI-geschriebenen Briefings oder Neubewertung. Anbieter jederzeit in den Einstellungen hinzufügen.",
   "signals.stack.loading": "Prüfe, was sich in deinem Stack geändert hat…",
+  "signals.stack.workingTitle": "Dein Stack wird noch geprüft…",
+  "signals.stack.workingBody": "Die erste Prüfung liest jedes Paket in deinen Lockfiles. Sie läuft noch, und die Liste erscheint hier, sobald sie fertig ist.",
   "signals.stack.error": "Die Änderungen in deinem Stack konnten nicht geladen werden.",
   "signals.stack.retry": "Erneut versuchen",
   "signals.stack.refresh": "Aktualisieren",

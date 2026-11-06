@@ -2463,6 +2463,8 @@
   "onboarding.setupAi.skipNoAi": "Skip — no AI for now",
   "onboarding.setupAi.skipNoAiDesc": "No AI-written briefings or reranking. Add a provider anytime in Settings.",
   "signals.stack.loading": "Checking what changed in your stack…",
+  "signals.stack.workingTitle": "Still checking your stack…",
+  "signals.stack.workingBody": "The first check reads every package in your lockfiles. It is still running, and the list appears here when it finishes.",
   "signals.stack.error": "Couldn't load the changes in your stack.",
   "signals.stack.retry": "Try again",
   "signals.stack.refresh": "Refresh",

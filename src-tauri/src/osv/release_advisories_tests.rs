@@ -358,7 +358,7 @@ fn stored_advisories_match_the_package_as_the_registry_names_it() {
         .expect("upsert");
     }
     let ids = |eco: &str, pkg: &str| -> Vec<String> {
-        stored_advisories(&db, eco, pkg)
+        stored_advisories(&db.conn.lock(), eco, pkg)
             .expect("readable")
             .into_iter()
             .map(|a| a.advisory_id)
@@ -394,13 +394,27 @@ fn the_checker_reads_the_mirror_and_the_sync_rows() {
     db.update_osv_sync_status("npm", 1, None).expect("status");
     let checker = ReleaseChecker::load(&db);
     let installed = vec!["4.1.3".to_string()];
-    let bad = checker.check(&db, "npm", "left-padder", "4.2.0", &installed, None);
+    let bad = checker.check(
+        &db.conn.lock(),
+        "npm",
+        "left-padder",
+        "4.2.0",
+        &installed,
+        None,
+    );
     assert!(
         matches!(bad, ReleaseAdvisories::Affected(ref h) if h.malware),
         "{bad:?}"
     );
     let old = (chrono::Utc::now() - chrono::Duration::days(10)).to_rfc3339();
-    let good = checker.check(&db, "npm", "left-padder", "4.3.0", &installed, Some(&old));
+    let good = checker.check(
+        &db.conn.lock(),
+        "npm",
+        "left-padder",
+        "4.3.0",
+        &installed,
+        Some(&old),
+    );
     assert_eq!(good, ReleaseAdvisories::Clear);
 }
 
@@ -416,8 +430,9 @@ fn an_undecodable_advisory_row_makes_the_read_unknown() {
         .lock()
         .execute("UPDATE osv_advisories SET summary = x'00ff'", [])
         .expect("corrupt");
-    assert!(stored_advisories(&db, "npm", "pkg").is_none());
+    assert!(stored_advisories(&db.conn.lock(), "npm", "pkg").is_none());
     db.update_osv_sync_status("npm", 1, None).expect("status");
-    let v = ReleaseChecker::load(&db).check(&db, "npm", "pkg", "1.0.0", &[], None);
+    let checker = ReleaseChecker::load(&db);
+    let v = checker.check(&db.conn.lock(), "npm", "pkg", "1.0.0", &[], None);
     assert_eq!(v, ReleaseAdvisories::Unknown(UnknownReason::Unreadable));
 }

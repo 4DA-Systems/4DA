@@ -199,6 +199,14 @@ export function inventoryRefreshingMessage(): string {
   );
 }
 
+/** The brief is still being written after the IPC wait ran out: progress, not an error. */
+export function briefStillWritingMessage(): string {
+  return t(
+    'errors:errorMsg.briefStillWriting',
+    'Still writing your brief. It will appear here as soon as it is ready.',
+  );
+}
+
 /**
  * The localized budget refusal when `error` is one, else null. For surfaces
  * that otherwise show the backend's own (already user-facing) message: only

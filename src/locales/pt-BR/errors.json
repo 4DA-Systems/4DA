@@ -40,6 +40,7 @@
   "errorMsg.permission": "Permissão negada. Verifique as permissões dos arquivos.",
   "errorMsg.rateLimit": "Limite de requisições atingido. Aguarde um momento e tente novamente.",
   "errorMsg.inventoryRefreshing": "Seus projetos estão sendo verificados novamente. O resumo será escrito assim que a verificação terminar.",
+  "errorMsg.briefStillWriting": "Ainda escrevendo seu resumo. Ele aparecerá aqui assim que estiver pronto.",
   "errorMsg.budgetReached": "Orçamento diário de IA atingido — redefine às {{time}} ({{in}})",
   "errorMsg.timeout": "A requisição expirou. Tente novamente em instantes.",
   "translation.noLlm": "LLM não configurado — configure sua chave API em Configurações para habilitar a tradução de conteúdo"

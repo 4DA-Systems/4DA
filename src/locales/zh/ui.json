@@ -2606,6 +2606,8 @@
   "onboarding.setupAi.skipNoAi": "跳过——暂不使用 AI",
   "onboarding.setupAi.skipNoAiDesc": "没有 AI 撰写的简报或重新排序。可随时在设置中添加提供商。",
   "signals.stack.loading": "正在检查您的技术栈有哪些变化…",
+  "signals.stack.workingTitle": "仍在检查您的技术栈…",
+  "signals.stack.workingBody": "首次检查会读取锁文件中的每个软件包。检查仍在进行，完成后列表会显示在这里。",
   "signals.stack.error": "无法加载您技术栈中的变化。",
   "signals.stack.retry": "重试",
   "signals.stack.refresh": "刷新",

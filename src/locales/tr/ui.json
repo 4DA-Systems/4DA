@@ -2626,6 +2626,8 @@
   "onboarding.setupAi.skipNoAi": "Atla — şimdilik yapay zekâ yok",
   "onboarding.setupAi.skipNoAiDesc": "Yapay zekâ yazımı brifing veya yeniden sıralama yok. İstediğiniz zaman Ayarlar’dan sağlayıcı ekleyin.",
   "signals.stack.loading": "Yığınınızda nelerin değiştiği kontrol ediliyor…",
+  "signals.stack.workingTitle": "Yığınınız hâlâ kontrol ediliyor…",
+  "signals.stack.workingBody": "İlk kontrol, kilit dosyalarınızdaki her paketi okur. Hâlâ sürüyor; bittiğinde liste burada görünecek.",
   "signals.stack.error": "Yığınınızdaki değişiklikler yüklenemedi.",
   "signals.stack.retry": "Tekrar dene",
   "signals.stack.refresh": "Yenile",

@@ -38,6 +38,8 @@
 //! "breaking upgrade" for the victauri workspace itself (live 2026-10-02).
 //! When only such projects carry the package, the release is not news.
 
+use std::collections::{HashMap, HashSet};
+
 use semver::Version;
 
 use crate::db::Database;
@@ -438,6 +440,30 @@ pub(crate) fn grade_registry_release(
     title: &str,
     content: &str,
 ) -> Option<ReleaseGrade> {
+    grade_registry_with(source_type, title, content, |subject, lang| {
+        load_pins(db, subject, lang)
+    })
+}
+
+/// [`grade_registry_release`] against a [`PinIndex`] read once for the whole
+/// pass: no query, and no lock, per release.
+pub(crate) fn grade_registry_release_in(
+    index: &PinIndex,
+    source_type: &str,
+    title: &str,
+    content: &str,
+) -> Option<ReleaseGrade> {
+    grade_registry_with(source_type, title, content, |subject, lang| {
+        index.pins(subject, lang)
+    })
+}
+
+fn grade_registry_with(
+    source_type: &str,
+    title: &str,
+    content: &str,
+    pins_of: impl FnOnce(&str, &str) -> Vec<(String, String, bool, bool)>,
+) -> Option<ReleaseGrade> {
     if !crate::dep_linker::is_registry_source(source_type) {
         return None;
     }
@@ -452,7 +478,7 @@ pub(crate) fn grade_registry_release(
     grade_pins(
         &subject,
         announced,
-        load_pins(db, &subject, lang),
+        pins_of(&subject, lang),
         &yanked,
         |path| super::release_ownership::is_own_package(path, &subject, lang),
     )
@@ -491,8 +517,94 @@ fn own_project_paths(own: Vec<(String, String, bool, bool)>) -> Vec<String> {
 /// is_direct, is_dev).
 pub(crate) type PinRow = (String, String, String, bool, bool);
 
+/// The name form [`load_pins`] matches on: `-`/`_`-insensitive, lowercase.
+pub(crate) fn pin_key(name: &str) -> String {
+    name.replace('_', "-").to_lowercase()
+}
+
+/// Every project's pin of every package, read in ONE query, with the
+/// filters [`load_pins`] applies (dormant projects, the user's exclusions)
+/// read once too. A pass that grades many releases grades them all from it.
+///
+/// Live 2026-11-05, a fresh profile with 1,904 installed packages: the
+/// stack-change stream and the Brief's upgrade facts called [`load_pins`]
+/// once per registry row, each call through the writer lock (`db.conn`),
+/// plus the dormancy query and a settings read. Behind the startup jobs'
+/// writes the first `get_stack_changes` took more than two minutes, at no
+/// CPU, and the Signal tab timed out.
+pub(crate) struct PinIndex {
+    by_name: HashMap<String, Vec<PinRow>>,
+    dormant: HashSet<String>,
+    excluded: Vec<String>,
+}
+
+impl PinIndex {
+    /// Read every pin through `conn` (a reader, never the writer lock).
+    pub(crate) fn load(conn: &rusqlite::Connection) -> Self {
+        let mut by_name: HashMap<String, Vec<PinRow>> = HashMap::new();
+        if let Ok(mut stmt) = conn.prepare(
+            "SELECT package_name, project_path, version, ecosystem, is_direct, is_dev
+             FROM user_dependencies WHERE version IS NOT NULL AND version <> ''",
+        ) {
+            if let Ok(rows) = stmt.query_map([], |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    (
+                        r.get::<_, String>(1)?,
+                        r.get::<_, String>(2)?,
+                        r.get::<_, String>(3)?,
+                        r.get::<_, i64>(4)? != 0,
+                        r.get::<_, i64>(5)? != 0,
+                    ),
+                ))
+            }) {
+                for (name, row) in rows.flatten() {
+                    by_name.entry(pin_key(&name)).or_default().push(row);
+                }
+            }
+        }
+        Self {
+            by_name,
+            dormant: crate::ace::dormancy::dormant_project_paths(conn),
+            excluded: crate::project_inclusion::user_excluded_paths(),
+        }
+    }
+
+    /// An index over raw rows (package, path, version, ecosystem, direct,
+    /// dev), with no dormant or excluded project.
+    #[cfg(test)]
+    pub(crate) fn from_rows(rows: &[(&str, &str, &str, &str, bool, bool)]) -> Self {
+        let mut by_name: HashMap<String, Vec<PinRow>> = HashMap::new();
+        for (name, path, version, eco, direct, dev) in rows {
+            by_name.entry(pin_key(name)).or_default().push((
+                (*path).to_string(),
+                (*version).to_string(),
+                (*eco).to_string(),
+                *direct,
+                *dev,
+            ));
+        }
+        Self {
+            by_name,
+            dormant: HashSet::new(),
+            excluded: Vec::new(),
+        }
+    }
+
+    /// What [`load_pins`] returns for `subject` in `lang`.
+    pub(crate) fn pins(&self, subject: &str, lang: &str) -> Vec<(String, String, bool, bool)> {
+        let rows = self
+            .by_name
+            .get(&pin_key(subject))
+            .cloned()
+            .unwrap_or_default();
+        filter_pin_rows(rows, lang, &self.dormant, &self.excluded)
+    }
+}
+
 /// (project_path, version, is_direct, is_dev) for every included project that
-/// carries `subject` in `lang`.
+/// carries `subject` in `lang`. One query per call, through the writer lock:
+/// a pass over many releases uses [`PinIndex`] instead.
 pub(crate) fn load_pins(
     db: &Database,
     subject: &str,
