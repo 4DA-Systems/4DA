@@ -36,7 +36,7 @@ const WRY_DEFAULT_BROWSER_ARGS: &str =
     "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection";
 
 /// The CDP port a debug build opens unless `FOURDA_CDP_PORT` names another.
-#[cfg(debug_assertions)]
+#[cfg(all(debug_assertions, windows))]
 pub(crate) const DEFAULT_CDP_PORT: u16 = 9222;
 
 /// The browser arguments every webview of this process is created with, or
@@ -65,7 +65,7 @@ fn debug_browser_args(port: u16) -> String {
 
 /// `FOURDA_CDP_PORT` when it is a usable port, else [`DEFAULT_CDP_PORT`] — so a
 /// second debug app (or anything already on 9222) can take another port.
-#[cfg(debug_assertions)]
+#[cfg(all(debug_assertions, windows))]
 fn cdp_port(raw: Option<&str>) -> u16 {
     raw.and_then(|v| v.trim().parse::<u16>().ok())
         .filter(|&p| p != 0)
@@ -84,9 +84,9 @@ pub(crate) fn apply_to_config(config: &mut tauri::Config) {
 }
 
 /// Give a window built in code the shared arguments.
-pub(crate) fn apply_to_builder<'a, R: Runtime, M: Manager<R>>(
-    builder: WebviewWindowBuilder<'a, R, M>,
-) -> WebviewWindowBuilder<'a, R, M> {
+pub(crate) fn apply_to_builder<R: Runtime, M: Manager<R>>(
+    builder: WebviewWindowBuilder<'_, R, M>,
+) -> WebviewWindowBuilder<'_, R, M> {
     match webview_browser_args() {
         Some(args) => builder.additional_browser_args(args),
         None => builder,
@@ -188,7 +188,7 @@ mod tests {
         }
     }
 
-    #[cfg(debug_assertions)]
+    #[cfg(all(debug_assertions, windows))]
     #[test]
     fn cdp_port_honours_a_valid_override_only() {
         assert_eq!(cdp_port(None), DEFAULT_CDP_PORT);
