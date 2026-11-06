@@ -104,6 +104,8 @@ pub fn parent_standing(
     // never malware, never an advisory with a fix). Review of #981.
     let book = super::release_facts::book(db);
     let registry = book.registry(ecosystem_norm, name);
+    // Parsed once: it is asked about every release listed (live 2026-11-06).
+    let excluded = registry.excluded_set(ecosystem_norm);
     let advisories = super::parent_release::Advisories::stored(
         ecosystem_norm,
         db.get_osv_advisories_for_package(name, ecosystem_norm)
@@ -112,7 +114,7 @@ pub fn parent_standing(
     let releases = book.releases(ecosystem_norm, name).unwrap_or_default();
     let newest = advisories.newest(&releases);
     let usable = |v: &str| {
-        !registry.excludes(ecosystem_norm, v)
+        !excluded.contains(ecosystem_norm, v)
             && advisories.usable(v, newest.as_deref(), Some(installed))
     };
     let listed = releases.versions.clone();
@@ -130,7 +132,7 @@ pub fn parent_standing(
     }
     let newer = super::parent_release::ascending(&releases.versions, ecosystem_norm)
         .into_iter()
-        .filter(|v| !registry.excludes(ecosystem_norm, v))
+        .filter(|v| !excluded.contains(ecosystem_norm, v))
         .filter(|v| {
             super::parent_release::compare(v, installed, ecosystem_norm)
                 == Some(std::cmp::Ordering::Greater)

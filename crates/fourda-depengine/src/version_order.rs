@@ -157,6 +157,16 @@ fn pep440_key(v: &Pep440) -> (i8, u64, i128, i128) {
     (phase, pre_n, post, dev)
 }
 
+/// Parsed versions remembered per thread and side before the memo starts over.
+const PARSED_CACHE_MAX: usize = 200_000;
+
+type Parsed = [std::collections::HashMap<String, Option<OrderedVersion>>; 2];
+
+std::thread_local! {
+    /// raw -> [`OrderedVersion::parse_in`], index 1 for PyPI, 0 for the rest.
+    static PARSED: std::cell::RefCell<Parsed> = std::cell::RefCell::new(Default::default());
+}
+
 /// One version, readable under semver, PEP 440, or both.
 #[derive(Debug, Clone)]
 pub struct OrderedVersion {
@@ -180,8 +190,33 @@ impl OrderedVersion {
     /// `1.0.0.post1`, `1.0.0-a10` is above `1.0.0-a9`, and `2.3.0+cpu` is
     /// above `2.3.0`, where semver reads all three differently. Any other
     /// ecosystem (or an unknown one) parses as [`Self::parse`].
+    ///
+    /// Remembered per thread: the answer depends only on `raw` and on whether
+    /// `ecosystem` is PyPI, and the parent-release walk parses the same
+    /// release lists again and again (live 2026-11-06: 18.8 million parses,
+    /// 144 s of a 172 s debug Brief facts build, on a 1,904-package profile).
     pub fn parse_in(raw: &str, ecosystem: &str) -> Option<Self> {
-        if is_pypi(ecosystem) {
+        let pypi = is_pypi(ecosystem);
+        let hit = PARSED.with(|m| m.borrow()[usize::from(pypi)].get(raw).cloned());
+        if let Some(hit) = hit {
+            return hit;
+        }
+        let parsed = Self::parse_uncached(raw, pypi);
+        PARSED.with(|m| {
+            let mut m = m.borrow_mut();
+            let side = &mut m[usize::from(pypi)];
+            // Bounded: a long-lived worker thread never grows without limit.
+            if side.len() >= PARSED_CACHE_MAX {
+                side.clear();
+            }
+            side.insert(raw.to_string(), parsed.clone());
+        });
+        parsed
+    }
+
+    /// [`Self::parse_in`] without the memo (`pypi`: the ecosystem is PyPI).
+    fn parse_uncached(raw: &str, pypi: bool) -> Option<Self> {
+        if pypi {
             if let Some(pep440) = parse_pep440(raw) {
                 return Some(Self {
                     semver: None,

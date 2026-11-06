@@ -31,11 +31,70 @@ pub struct Range {
 /// `ecosystem` is the advisory's: a PyPI version orders by PEP 440 even when
 /// it also reads as semver (`version_order::OrderedVersion::parse_in`). An
 /// empty or unknown ecosystem keeps the generic semver-first order.
+///
+/// The answer is a pure function of its three inputs, so it is memoized per
+/// thread (see [`VERDICTS`]): the parent-release walk asks the same
+/// (advisory, version) pair thousands of times per pass, and each uncached
+/// call parses the ranges JSON and every bound again. Live 2026-11-06, a
+/// fresh profile with 1,904 packages: those re-parses were most of a 156 s
+/// (debug) Brief facts build.
 pub fn check_version_affected(
     ecosystem: &str,
     user_version: Option<&str>,
     affected_ranges_json: &Option<String>,
 ) -> (bool, bool) {
+    // Only a JSON-carrying call is worth remembering; the others return at once.
+    let (Some(json), Some(version)) = (affected_ranges_json.as_deref(), user_version) else {
+        return check_version_affected_uncached(ecosystem, user_version, affected_ranges_json);
+    };
+    let inner = format!("{ecosystem}\u{0}{version}");
+    let hit = VERDICTS.with(|m| m.borrow().get(json).and_then(|v| v.get(&inner).copied()));
+    if let Some(hit) = hit {
+        return hit;
+    }
+    let verdict = check_version_affected_uncached(ecosystem, user_version, affected_ranges_json);
+    VERDICTS.with(|m| {
+        let mut m = m.borrow_mut();
+        // Bounded: a long-lived worker thread never grows without limit.
+        if m.len() >= VERDICT_CACHE_MAX_RANGES {
+            m.clear();
+        }
+        let versions = m.entry(json.to_string()).or_default();
+        if versions.len() >= VERDICT_CACHE_MAX_VERSIONS {
+            versions.clear();
+        }
+        versions.insert(inner, verdict);
+    });
+    verdict
+}
+
+/// Distinct ranges documents remembered per thread before the memo starts over.
+const VERDICT_CACHE_MAX_RANGES: usize = 4_096;
+/// Versions remembered per ranges document.
+const VERDICT_CACHE_MAX_VERSIONS: usize = 4_096;
+
+type Verdicts = std::collections::HashMap<String, std::collections::HashMap<String, (bool, bool)>>;
+
+std::thread_local! {
+    /// ranges JSON -> ("ecosystem\0version" -> verdict), for this thread.
+    static VERDICTS: std::cell::RefCell<Verdicts> = std::cell::RefCell::new(Verdicts::new());
+    static EVALUATIONS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+/// How many uncached evaluations this thread has run: the memo's work bound,
+/// for tests.
+#[doc(hidden)]
+pub fn range_evaluations() -> usize {
+    EVALUATIONS.with(std::cell::Cell::get)
+}
+
+/// [`check_version_affected`] without the memo: the evaluation itself.
+pub fn check_version_affected_uncached(
+    ecosystem: &str,
+    user_version: Option<&str>,
+    affected_ranges_json: &Option<String>,
+) -> (bool, bool) {
+    EVALUATIONS.with(|n| n.set(n.get() + 1));
     let ranges_json = match affected_ranges_json {
         Some(json) if !json.is_empty() => json,
         _ => return (true, false), // No range info → conservative match
