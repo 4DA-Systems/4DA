@@ -175,12 +175,10 @@ async fn build_scoring_context_cold(db: &Database) -> Result<ScoringContext> {
         .collect();
 
     // User's professional role — infer from tech stack if not explicitly set.
-    // "backend_developer" was a bad default from early onboarding; override it
-    // when the domain profile provides stronger evidence.
-    let user_role = match static_identity.role.as_deref() {
-        Some("backend_developer") | None => None, // treat bad default as unset
-        other => other.map(String::from),
-    };
+    // The declaration is normalized to a lowercase slug, and the generic
+    // labels (onboarding's pre-selected "Developer", the early-onboarding
+    // "backend_developer" default) read as unset so inference below runs.
+    let user_role = super::role_inference::normalize_declared_role(static_identity.role.as_deref());
 
     // User's experience level (safe query — column may not exist yet)
     let experience_level: Option<String> = {

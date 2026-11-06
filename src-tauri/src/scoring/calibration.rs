@@ -207,7 +207,7 @@ impl<'a> SpecificityProfile<'a> {
         if let Some(role) = self.user_role {
             return ROLE_BROAD_EXEMPTIONS
                 .iter()
-                .any(|(r, terms)| *r == role && terms.contains(&topic_lower));
+                .any(|(r, terms)| r.eq_ignore_ascii_case(role) && terms.contains(&topic_lower));
         }
         false
     }
@@ -412,6 +412,27 @@ mod tests {
             embedding_specificity_weight_for("web", Some(&profile)),
             0.40
         );
+    }
+
+    #[test]
+    fn test_declared_security_chip_exempts_security() {
+        // Onboarding saves the display label "Security"; normalized it is the
+        // inferred slug, and a raw capitalised value still matches too.
+        let stack = tech_set(&["react"]);
+        let all = stack.clone();
+        let declared = crate::scoring::role_inference::normalize_declared_role(Some("Security"));
+        for role in [declared.as_deref(), Some("Security")] {
+            let profile = SpecificityProfile {
+                user_role: role,
+                primary_stack: &stack,
+                all_tech: &all,
+            };
+            assert_eq!(
+                embedding_specificity_weight_for("security", Some(&profile)),
+                1.0,
+                "declared security role {role:?} must exempt 'security'"
+            );
+        }
     }
 
     #[test]

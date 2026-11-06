@@ -55,7 +55,10 @@ pub fn compute_novelty(
     // ── Role-aware security scoring ──
     // Security professionals get the full 1.30x boost for ALL security content,
     // not just content about their known tech stack.
-    let is_security_role = matches!(user_role, Some("security"));
+    // Case-insensitive, and the inferred slug counts too: this used to match
+    // only a literal "security", which neither onboarding ("Security") nor
+    // role inference ("security_engineer") ever produced.
+    let is_security_role = crate::scoring::role_inference::is_security_role(user_role);
 
     // Dependency-aware novelty: releases/security about YOUR tech get stronger boosts
     let multiplier = if is_security && (about_known_tech || is_security_role) {
@@ -357,6 +360,25 @@ mod tests {
 
         let conf = detect_introductory_confidence("Unsafe Rust patterns in production", "");
         assert_eq!(conf, 0.0);
+    }
+
+    #[test]
+    fn test_security_role_boost_matches_declared_and_inferred_roles() {
+        // Off-stack security story: only a security role earns the full boost.
+        let user_tech: HashSet<String> = ["react".to_string()].into_iter().collect();
+        let title = "Critical remote code execution vulnerability in OpenSSH";
+        let score = |role: Option<&str>| {
+            compute_novelty(title, "", &["openssh".to_string()], &user_tech, role, None).multiplier
+        };
+        assert!((score(None) - 1.10).abs() < 1e-6);
+        // Onboarding's label, the normalized slug, and role inference's slug.
+        for role in ["Security", "security", "security_engineer"] {
+            assert!(
+                (score(Some(role)) - 1.30).abs() < 1e-6,
+                "role {role:?} must get the security-role boost"
+            );
+        }
+        assert!((score(Some("devops_engineer")) - 1.10).abs() < 1e-6);
     }
 
     #[test]

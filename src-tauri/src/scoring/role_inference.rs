@@ -225,6 +225,104 @@ pub(crate) fn infer_role(stack: &[String]) -> Option<String> {
     best.map(|(_, _, role)| role.to_string())
 }
 
+/// Canonical scoring slug for a role the user DECLARED (the onboarding chips
+/// or the free-text role field), or `None` when the declaration says nothing a
+/// stack inference would not say better.
+///
+/// Onboarding saves display labels — "Developer", "Security", "DevOps",
+/// "Data", "Manager" — and pre-selects "Developer", so nearly every profile
+/// held either "Developer" (which suppressed inference) or a capitalised label
+/// that no role check matched: scoring compares lowercase slugs ("security",
+/// "security_engineer"). Lowercased and `_`-joined here; the generic labels
+/// (and the early-onboarding "backend_developer" default) read as unset so
+/// [`infer_role`] runs; the three domain chips map onto the slugs inference
+/// itself produces.
+pub(crate) fn normalize_declared_role(raw: Option<&str>) -> Option<String> {
+    let slug = raw?
+        .split(|c: char| c.is_whitespace() || c == '-' || c == '_')
+        .filter(|part| !part.is_empty())
+        .map(str::to_lowercase)
+        .collect::<Vec<_>>()
+        .join("_");
+    match slug.as_str() {
+        "" | "developer" | "dev" | "engineer" | "software_developer" | "software_engineer"
+        | "programmer" | "backend_developer" => None,
+        "security" | "security_engineer" | "appsec" => Some("security_engineer".to_string()),
+        "devops" | "devops_engineer" | "sre" => Some("devops_engineer".to_string()),
+        "data" | "data_engineer" => Some("data_engineer".to_string()),
+        _ => Some(slug),
+    }
+}
+
+/// Is `role` (any case) a security role? The one predicate novelty scoring
+/// uses, so a declared "Security" and an inferred "security_engineer" agree.
+pub(crate) fn is_security_role(role: Option<&str>) -> bool {
+    role.is_some_and(|r| {
+        r.eq_ignore_ascii_case("security") || r.eq_ignore_ascii_case("security_engineer")
+    })
+}
+
+#[cfg(test)]
+mod declared_role_tests {
+    use super::*;
+
+    #[test]
+    fn onboarding_default_and_generic_labels_read_as_unset() {
+        for raw in [
+            "Developer",
+            "developer",
+            " Developer ",
+            "Software Engineer",
+            "backend_developer",
+            "",
+        ] {
+            assert_eq!(normalize_declared_role(Some(raw)), None, "{raw:?}");
+        }
+        assert_eq!(normalize_declared_role(None), None);
+    }
+
+    #[test]
+    fn onboarding_domain_chips_map_to_inferred_slugs() {
+        assert_eq!(
+            normalize_declared_role(Some("Security")).as_deref(),
+            Some("security_engineer")
+        );
+        assert_eq!(
+            normalize_declared_role(Some("DevOps")).as_deref(),
+            Some("devops_engineer")
+        );
+        assert_eq!(
+            normalize_declared_role(Some("Data")).as_deref(),
+            Some("data_engineer")
+        );
+        assert_eq!(
+            normalize_declared_role(Some("Manager")).as_deref(),
+            Some("manager")
+        );
+    }
+
+    #[test]
+    fn free_text_roles_become_lowercase_slugs() {
+        assert_eq!(
+            normalize_declared_role(Some("ML Engineer")).as_deref(),
+            Some("ml_engineer")
+        );
+        assert_eq!(
+            normalize_declared_role(Some("Frontend-Developer")).as_deref(),
+            Some("frontend_developer")
+        );
+    }
+
+    #[test]
+    fn security_role_check_is_case_insensitive_and_covers_both_slugs() {
+        assert!(is_security_role(Some("Security")));
+        assert!(is_security_role(Some("security")));
+        assert!(is_security_role(Some("security_engineer")));
+        assert!(!is_security_role(Some("devops_engineer")));
+        assert!(!is_security_role(None));
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
