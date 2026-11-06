@@ -9,8 +9,10 @@ name: Deploy site
 # Needs two repo secrets (Settings -> Secrets and variables -> Actions):
 #   CLOUDFLARE_API_TOKEN   scoped token, permission "Account > Cloudflare Pages > Edit"
 #   CLOUDFLARE_ACCOUNT_ID  the account that owns the 4da-site Pages project
-# Until both exist the job reports "skipped: no Cloudflare credentials" and
-# exits green, so this file can merge before the token is created.
+# Without both, a push to main FAILS (red) with "site NOT deployed". It used to
+# exit green, and that green tick hid a week with no deploy (2026-10-29 to
+# 11-06) while the live site served copy the source had already corrected.
+# A manual workflow_dispatch without credentials only warns.
 
 on:
   push:
@@ -48,6 +50,10 @@ jobs:
             echo "present=false" >> "$GITHUB_OUTPUT"
             echo "::warning::skipped: no Cloudflare credentials (CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID) — site NOT deployed"
             echo "### Site not deployed: Cloudflare credentials are not configured" >> "$GITHUB_STEP_SUMMARY"
+            if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+              echo "::error::a site change reached main but 4da.ai was NOT deployed; add the two secrets or run 'pnpm exec wrangler pages deploy --branch main' from site/"
+              exit 1
+            fi
           else
             echo "present=true" >> "$GITHUB_OUTPUT"
           fi
@@ -92,8 +98,9 @@ jobs:
             code=$(curl -s -o /dev/null -w '%{http_code}' https://4da.ai/) && [ "$code" = "200" ] && break
             sleep 10
           done
+          # -L: Pages answers /download with a 308 to /download/.
           for path in / /signal /download /activate; do
-            code=$(curl -s -o /dev/null -w '%{http_code}' "https://4da.ai$path")
+            code=$(curl -s -L -o /dev/null -w '%{http_code}' "https://4da.ai$path")
             echo "$path -> $code"
             [ "$code" = "200" ] || { echo "::error::https://4da.ai$path returned $code after deploy"; exit 1; }
           done
