@@ -210,7 +210,11 @@ Victauri capabilities (that CDP cannot do):
 - `recording` — time-travel event recording with checkpoints
 - `get_diagnostics` — full app diagnostics from inside the process
 
-Connection: `http://127.0.0.1:7373/mcp` (port may fallback to 7374-7383; the live port and auth token are in `%TEMP%\victauri\<pid>\`)
+Connection: `http://127.0.0.1:7373/mcp` (port may fall back to 7374-7383, or to an OS-assigned port when Hyper-V/WinNAT
+has reserved that whole range; the live port and auth token are in `%TEMP%\victauri\<pid>\`, which the Victauri CLI/bridge read)
+
+Debug builds also open the WebView2 DevTools Protocol (CDP) on `127.0.0.1:9222` (set `FOURDA_CDP_PORT` for another port,
+e.g. a second debug GUI). Release builds never open it (`src-tauri/src/dev_inspection.rs`).
 
 **Do NOT use Playwright MCP or CDP for tasks that Victauri can handle.** Only fall back to Playwright for browser-only work unrelated to the Tauri app.
 

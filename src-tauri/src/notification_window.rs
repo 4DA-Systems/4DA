@@ -156,26 +156,28 @@ pub(crate) fn notification_style() -> String {
 /// borderless, always-on-top, and excluded from the taskbar.
 pub fn init_notification_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     PAGE_LOADED.store(false, Ordering::Relaxed);
-    let _window = tauri::webview::WebviewWindowBuilder::new(
+    let builder = tauri::webview::WebviewWindowBuilder::new(
         app,
         WINDOW_LABEL,
         WebviewUrl::App("notification.html".into()),
-    )
-    .decorations(false)
-    .transparent(true)
-    .shadow(false)
-    .always_on_top(false)
-    .skip_taskbar(true)
-    .focused(false)
-    .resizable(false)
-    .visible(false)
-    .inner_size(f64::from(WINDOW_WIDTH), f64::from(WINDOW_HEIGHT))
-    .on_page_load(|_, payload| {
-        if payload.event() == tauri::webview::PageLoadEvent::Finished {
-            PAGE_LOADED.store(true, Ordering::Relaxed);
-        }
-    })
-    .build()?;
+    );
+    // Same browser args as every other webview, or WebView2 fails (0x8007139F).
+    let _window = crate::dev_inspection::apply_to_builder(builder)
+        .decorations(false)
+        .transparent(true)
+        .shadow(false)
+        .always_on_top(false)
+        .skip_taskbar(true)
+        .focused(false)
+        .resizable(false)
+        .visible(false)
+        .inner_size(f64::from(WINDOW_WIDTH), f64::from(WINDOW_HEIGHT))
+        .on_page_load(|_, payload| {
+            if payload.event() == tauri::webview::PageLoadEvent::Finished {
+                PAGE_LOADED.store(true, Ordering::Relaxed);
+            }
+        })
+        .build()?;
 
     info!(target: "4da::notify", "Notification window pre-warmed");
     Ok(())
