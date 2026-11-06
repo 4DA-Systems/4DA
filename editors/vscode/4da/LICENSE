@@ -92,7 +92,9 @@ the date we make the Software available. On or after that date, you may use the
 Software under the Apache License, Version 2.0, in which case the following
 will apply:
 
-Change Date: 2029-03-01
+Change Date: for each version of the Software, the third anniversary of the
+date we make that version available (for example, a version made available on
+2026-03-01 converts on 2029-03-01).
 
 Change License: Apache License 2.0
 
