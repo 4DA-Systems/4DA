@@ -305,7 +305,7 @@ impl Database {
 
     /// Get sync status for all ecosystems.
     pub fn get_osv_sync_statuses(&self) -> SqliteResult<Vec<SyncStatus>> {
-        let conn = self.conn.lock();
+        let conn = self.read_conn();
         let mut stmt = conn.prepare(
             "SELECT ecosystem, last_synced_at, advisory_count, error
              FROM osv_sync_status

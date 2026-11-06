@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { useAppStore } from '../index';
+import { BRIEF_REASKS } from '../briefing-slice';
 import { invoke } from '@tauri-apps/api/core';
 
 vi.mock('@tauri-apps/api/core', () => ({
@@ -175,6 +176,54 @@ describe('briefing-slice', () => {
       expect(aiBriefing.pending).toBe(
         'Your projects are being rescanned. The brief will be written as soon as the scan finishes.',
       );
+    });
+
+    // Live 2026-11-05: the backend finished the brief 36 s after the 120 s IPC
+    // wait ran out, and the user saw "Request timed out" plus an error panel
+    // over it. A timeout is progress: say so, and re-ask (as auto, which
+    // waits at the backend's gate and reuses that brief).
+    describe('when the backend outlives the IPC wait', () => {
+      beforeEach(() => vi.useFakeTimers());
+      afterEach(() => vi.useRealTimers());
+
+      it('says the brief is still being written, then shows it, never an error', async () => {
+        vi.mocked(invoke)
+          .mockImplementationOnce(() => new Promise(() => {}))
+          .mockImplementationOnce(
+            () => new Promise((resolve) => setTimeout(() => resolve({ success: true, briefing: 'Late brief', model: 'm' }), 36_000)),
+          )
+          .mockResolvedValue({ filtered: [], expires_in_seconds: 0 });
+
+        const done = useAppStore.getState().generateBriefing();
+        await vi.advanceTimersByTimeAsync(120_001);
+        let { aiBriefing } = useAppStore.getState();
+        expect(aiBriefing.error).toBeNull();
+        expect(aiBriefing.loading).toBe(true);
+        expect(aiBriefing.pending).toBe('Still writing your brief. It will appear here as soon as it is ready.');
+
+        await vi.advanceTimersByTimeAsync(36_000);
+        await done;
+        ({ aiBriefing } = useAppStore.getState());
+        expect(aiBriefing.content).toBe('Late brief');
+        expect(aiBriefing.error).toBeNull();
+        expect(aiBriefing.pending ?? null).toBeNull();
+        expect(vi.mocked(invoke).mock.calls.slice(0, 2)).toEqual([
+          ['generate_ai_briefing', { auto: false }],
+          ['generate_ai_briefing', { auto: true }],
+        ]);
+      });
+
+      it('reports the timeout only after the re-asks run out', async () => {
+        vi.mocked(invoke).mockImplementation(() => new Promise(() => {}));
+        const done = useAppStore.getState().generateBriefing();
+        await vi.advanceTimersByTimeAsync(120_001 * (BRIEF_REASKS + 1));
+        await done;
+        const { aiBriefing } = useAppStore.getState();
+        expect(vi.mocked(invoke)).toHaveBeenCalledTimes(BRIEF_REASKS + 1);
+        expect(aiBriefing.loading).toBe(false);
+        expect(aiBriefing.pending ?? null).toBeNull();
+        expect(aiBriefing.error).toBe('Request timed out. Try again in a moment.');
+      });
     });
 
     it('sets user-friendly error on invoke rejection', async () => {

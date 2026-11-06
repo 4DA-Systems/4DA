@@ -2444,6 +2444,8 @@
   "onboarding.setupAi.skipNoAi": "Passer — pas d'IA pour l'instant",
   "onboarding.setupAi.skipNoAiDesc": "Pas de briefings rédigés par l'IA ni de reclassement. Ajoutez un fournisseur à tout moment dans les Paramètres.",
   "signals.stack.loading": "Vérification de ce qui a changé dans votre stack…",
+  "signals.stack.workingTitle": "Vérification de votre stack toujours en cours…",
+  "signals.stack.workingBody": "La première vérification lit chaque paquet de vos lockfiles. Elle est toujours en cours, et la liste apparaîtra ici dès qu’elle sera terminée.",
   "signals.stack.error": "Impossible de charger les changements de votre stack.",
   "signals.stack.retry": "Réessayer",
   "signals.stack.refresh": "Actualiser",

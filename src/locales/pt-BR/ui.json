@@ -2675,6 +2675,8 @@
   "onboarding.setupAi.skipNoAi": "Pular — sem IA por enquanto",
   "onboarding.setupAi.skipNoAiDesc": "Sem briefings escritos por IA nem reordenação. Adicione um provedor quando quiser nas Configurações.",
   "signals.stack.loading": "Verificando o que mudou na sua stack…",
+  "signals.stack.workingTitle": "Ainda verificando sua stack…",
+  "signals.stack.workingBody": "A primeira verificação lê cada pacote dos seus lockfiles. Ela ainda está em andamento, e a lista aparece aqui quando terminar.",
   "signals.stack.error": "Não foi possível carregar as mudanças da sua stack.",
   "signals.stack.retry": "Tentar novamente",
   "signals.stack.refresh": "Atualizar",

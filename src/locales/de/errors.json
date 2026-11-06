@@ -40,6 +40,7 @@
   "errorMsg.permission": "Zugriff verweigert. Überprüfe die Dateiberechtigungen.",
   "errorMsg.rateLimit": "Rate-Limit erreicht. Bitte warte einen Moment und versuche es erneut.",
   "errorMsg.inventoryRefreshing": "Deine Projekte werden neu gescannt. Das Briefing wird geschrieben, sobald der Scan fertig ist.",
+  "errorMsg.briefStillWriting": "Dein Briefing wird noch geschrieben. Es erscheint hier, sobald es fertig ist.",
   "errorMsg.budgetReached": "Tägliches KI-Budget erreicht – wird um {{time}} zurückgesetzt ({{in}})",
   "errorMsg.timeout": "Zeitüberschreitung der Anfrage. Versuche es gleich nochmal.",
   "translation.noLlm": "LLM nicht konfiguriert — richte deinen API-Schlüssel in den Einstellungen ein, um die Inhaltsübersetzung zu aktivieren"

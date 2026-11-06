@@ -2,22 +2,33 @@
 //
 // Signal Lane 1, "Your stack": the deterministic stack-change stream
 // (AD-054). The backend orders it (security, yanked, breaking, minor) and
-// says whether any dependency was read at all. Four honest states: loading,
+// says whether any dependency was read at all. Five honest states: loading,
+// still working (the IPC wait ran out but the backend is still computing),
 // error, cold start (no lockfile read: onboarding, doctrine rule 6) and
 // "nothing changed" (lockfiles read, nothing to report).
 
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { EvidenceFeed } from '../../../src-tauri/bindings/bindings/EvidenceFeed';
-import { cmd } from '../../lib/commands';
+import { cmd, CommandTimeoutError } from '../../lib/commands';
 import { useAppStore } from '../../store';
 import { StackChangeCard } from './StackChangeCard';
 import { STACK_LANE_CAP, laneState, releasesWithheld } from './stack-change';
 
 type Load =
   | { status: 'loading' }
+  | { status: 'working' }
   | { status: 'error' }
   | { status: 'ready'; feed: EvidenceFeed };
+
+/**
+ * How many more times a timed-out request is re-asked before the lane gives
+ * up. The backend keeps computing after the IPC wait runs out, and a re-ask
+ * joins that computation (one compute at a time, `get_stack_changes`), so a
+ * slow first check ends in its answer, not "Couldn't load". Each wait is the
+ * long IPC timeout (120 s), so this allows about ten minutes in all.
+ */
+export const STACK_LANE_REASKS = 4;
 
 const buttonClass =
   'px-3 py-1.5 text-xs bg-bg-tertiary text-text-primary border border-border rounded-lg hover:border-text-muted ' +
@@ -55,31 +66,49 @@ export const StackChangeLane = memo(function StackChangeLane() {
   const fetchFeed = useCallback((force: boolean) => {
     const id = ++request.current;
     setLoad({ status: 'loading' });
-    cmd('get_stack_changes', { force })
-      .then((feed) => { if (id === request.current) setLoad({ status: 'ready', feed }); })
-      .catch(() => { if (id === request.current) setLoad({ status: 'error' }); });
+    const ask = (forced: boolean, reasks: number) => {
+      cmd('get_stack_changes', { force: forced })
+        .then((feed) => { if (id === request.current) setLoad({ status: 'ready', feed }); })
+        .catch((e: unknown) => {
+          if (id !== request.current) return;
+          // A timeout is not a failure: the computation is still running.
+          // Re-ask without force, which waits for that same computation.
+          if (e instanceof CommandTimeoutError && reasks > 0) {
+            setLoad({ status: 'working' });
+            ask(false, reasks - 1);
+            return;
+          }
+          setLoad({ status: 'error' });
+        });
+    };
+    ask(force, STACK_LANE_REASKS);
   }, []);
 
-  useEffect(() => { fetchFeed(false); }, [fetchFeed]);
+  // Unmounting retires the request, so no re-ask outlives the lane.
+  useEffect(() => {
+    fetchFeed(false);
+    return () => { request.current += 1; };
+  }, [fetchFeed]);
   const refetch = useCallback(() => fetchFeed(true), [fetchFeed]);
 
   const feed = load.status === 'ready' ? load.feed : null;
   const state = feed ? laneState(feed) : null;
   const items = feed?.items ?? [];
   const visible = showAll ? items : items.slice(0, STACK_LANE_CAP);
+  const busy = load.status === 'loading' || load.status === 'working';
 
   return (
     <section
       aria-labelledby="signal-lane-stack-heading"
       data-lane="stack"
-      aria-busy={load.status === 'loading'}
+      aria-busy={busy}
       className="bg-bg-secondary rounded-lg border border-border mx-4 mt-3 mb-4 px-5 py-4"
     >
       <div className="flex items-baseline gap-2 mb-3 pb-1 border-b border-emerald-500/30">
         <span aria-hidden="true">🎯</span>
         <h3 id="signal-lane-stack-heading" className="text-sm font-medium text-emerald-400">{t('signals.laneStack')}</h3>
         <span className="text-[10px] text-text-muted ms-1 hidden sm:inline flex-1">· {t('signals.laneStackSub')}</span>
-        {load.status !== 'loading' && (
+        {!busy && (
           <button type="button" onClick={refetch} className="ms-auto text-[10px] text-text-muted hover:text-text-secondary">
             {t('signals.stack.refresh')}
           </button>
@@ -88,6 +117,16 @@ export const StackChangeLane = memo(function StackChangeLane() {
 
       {load.status === 'loading' && (
         <p className="text-xs text-text-muted" role="status">{t('signals.stack.loading')}</p>
+      )}
+
+      {load.status === 'working' && (
+        <div role="status" data-testid="stack-lane-working" className="flex items-start gap-2">
+          <span className="mt-0.5 w-3 h-3 shrink-0 border-2 border-text-muted/30 border-t-text-muted rounded-full animate-spin" aria-hidden="true" />
+          <div>
+            <p className="text-xs text-text-secondary">{t('signals.stack.workingTitle')}</p>
+            <p className="text-[11px] text-text-muted mt-0.5">{t('signals.stack.workingBody')}</p>
+          </div>
+        </div>
       )}
 
       {load.status === 'error' && (

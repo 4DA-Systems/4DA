@@ -319,10 +319,12 @@ impl ReleaseChecker {
 
     /// The verdict for `release` of `package` (OSV-canonical `ecosystem`),
     /// given the versions the concerned projects run and the registry's
-    /// publish date. Blocking; takes the database lock briefly.
+    /// publish date. Blocking; reads the mirror through `conn` (a reader:
+    /// a pass checks one release per package, and the writer lock would
+    /// queue every one of them behind background writes).
     pub(crate) fn check(
         &self,
-        db: &Database,
+        conn: &rusqlite::Connection,
         ecosystem: &str,
         package: &str,
         release: &str,
@@ -333,7 +335,7 @@ impl ReleaseChecker {
             .registry
             .get(&(package_key(package, ecosystem), ecosystem.to_string()))
             .is_some_and(|r| r.excludes(ecosystem, release));
-        let advisories = match stored_advisories(db, ecosystem, package) {
+        let advisories = match stored_advisories(conn, ecosystem, package) {
             Some(a) => a,
             None => return ReleaseAdvisories::Unknown(UnknownReason::Unreadable),
         };
@@ -355,7 +357,7 @@ impl ReleaseChecker {
     /// projects run (coverage by the advisory lane is judged on them alone).
     pub(crate) fn check_grade(
         &self,
-        db: &Database,
+        conn: &rusqlite::Connection,
         source_type: &str,
         grade: &crate::scoring::release_grade::ReleaseGrade,
         installed: &[String],
@@ -365,7 +367,7 @@ impl ReleaseChecker {
             return ReleaseAdvisories::Unknown(UnknownReason::NeverSynced);
         };
         self.check(
-            db,
+            conn,
             ecosystem,
             &grade.package,
             &grade.announced.to_string(),
@@ -380,13 +382,13 @@ impl ReleaseChecker {
     /// unchecked release is still reported there.
     pub(crate) fn advises_against(
         &self,
-        db: &Database,
+        conn: &rusqlite::Connection,
         source_type: &str,
         grade: &crate::scoring::release_grade::ReleaseGrade,
         published: Option<&str>,
     ) -> bool {
         matches!(
-            self.check_grade(db, source_type, grade, &[], published),
+            self.check_grade(conn, source_type, grade, &[], published),
             ReleaseAdvisories::Affected(_) | ReleaseAdvisories::Withdrawn
         )
     }
@@ -394,9 +396,12 @@ impl ReleaseChecker {
 
 /// Every active stored advisory for `package` in `ecosystem`, matched by
 /// [`same_package`]. `None` when the mirror cannot be read.
-fn stored_advisories(db: &Database, ecosystem: &str, package: &str) -> Option<Vec<AdvisoryWindow>> {
+fn stored_advisories(
+    conn: &rusqlite::Connection,
+    ecosystem: &str,
+    package: &str,
+) -> Option<Vec<AdvisoryWindow>> {
     let folded = package.trim().to_lowercase().replace(['_', '.'], "-");
-    let conn = db.conn.lock();
     let mut stmt = conn
         .prepare_cached(
             "SELECT advisory_id, summary, aliases, affected_ranges, package_name, cwe_ids

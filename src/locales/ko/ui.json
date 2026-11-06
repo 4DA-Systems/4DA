@@ -2622,6 +2622,8 @@
   "onboarding.setupAi.skipNoAi": "건너뛰기 — 지금은 AI 없이",
   "onboarding.setupAi.skipNoAiDesc": "AI가 작성한 브리핑이나 재순위화가 없습니다. 설정에서 언제든 제공자를 추가하세요.",
   "signals.stack.loading": "스택에서 바뀐 내용을 확인하는 중…",
+  "signals.stack.workingTitle": "스택을 아직 확인하는 중…",
+  "signals.stack.workingBody": "첫 확인은 잠금 파일의 모든 패키지를 읽습니다. 아직 진행 중이며, 끝나면 여기에 목록이 표시됩니다.",
   "signals.stack.error": "스택의 변경 사항을 불러오지 못했습니다.",
   "signals.stack.retry": "다시 시도",
   "signals.stack.refresh": "새로 고침",

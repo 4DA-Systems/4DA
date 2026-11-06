@@ -2672,6 +2672,8 @@
   "onboarding.setupAi.skipNoAi": "Omitir — sin IA por ahora",
   "onboarding.setupAi.skipNoAiDesc": "Sin resúmenes escritos por IA ni reordenación. Añade un proveedor cuando quieras en Ajustes.",
   "signals.stack.loading": "Comprobando qué cambió en tu stack…",
+  "signals.stack.workingTitle": "Seguimos comprobando tu stack…",
+  "signals.stack.workingBody": "La primera comprobación lee cada paquete de tus lockfiles. Sigue en curso y la lista aparecerá aquí cuando termine.",
   "signals.stack.error": "No se pudieron cargar los cambios de tu stack.",
   "signals.stack.retry": "Reintentar",
   "signals.stack.refresh": "Actualizar",

@@ -737,11 +737,20 @@ impl EvidenceMaterializer for StackChangeMaterializer {
 static CACHE: parking_lot::Mutex<Option<(Instant, bool, EvidenceFeed)>> =
     parking_lot::Mutex::new(None);
 
-fn cached(entitled: bool) -> Option<EvidenceFeed> {
+/// One compute at a time. A request that arrives while one runs waits for
+/// it and takes its answer: the frontend re-asks after its IPC wait runs
+/// out, and that re-ask must join the running compute, not start another.
+static COMPUTE: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
+/// The cached feed for `entitled`, if younger than the TTL and computed at
+/// or after `since` (`None`: any age within the TTL).
+fn cached(entitled: bool, since: Option<Instant>) -> Option<EvidenceFeed> {
     let guard = CACHE.lock();
     guard
         .as_ref()
-        .filter(|(at, scope, _)| *scope == entitled && at.elapsed() < CACHE_TTL)
+        .filter(|(at, scope, _)| {
+            *scope == entitled && at.elapsed() < CACHE_TTL && since.is_none_or(|s| *at >= s)
+        })
         .map(|(.., feed)| feed.clone())
 }
 
@@ -782,14 +791,21 @@ async fn compute_feed(entitled: bool) -> Result<EvidenceFeed> {
 /// Signal Lane 1: what changed in the user's stack, as an `EvidenceFeed`.
 /// `total_tracked` is the number of dependencies known (0 = nothing scanned
 /// yet); `tier_scope` says whether releases are included. Served from a
-/// ten-minute cache unless `force`.
+/// ten-minute cache unless `force`; a compute that finishes while this
+/// request waits for it answers it too, forced or not.
 #[tauri::command]
 pub async fn get_stack_changes(force: Option<bool>) -> std::result::Result<EvidenceFeed, String> {
     let entitled = crate::settings::is_signal();
-    if !force.unwrap_or(false) {
-        if let Some(feed) = cached(entitled) {
+    let asked = Instant::now();
+    let force = force.unwrap_or(false);
+    if !force {
+        if let Some(feed) = cached(entitled, None) {
             return Ok(feed);
         }
+    }
+    let _one_at_a_time = COMPUTE.lock().await;
+    if let Some(feed) = cached(entitled, force.then_some(asked)) {
+        return Ok(feed);
     }
     let feed = compute_feed(entitled).await.map_err(|e| e.to_string())?;
     *CACHE.lock() = Some((Instant::now(), entitled, feed.clone()));

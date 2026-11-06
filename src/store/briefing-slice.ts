@@ -1,8 +1,13 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import type { StateCreator } from 'zustand';
-import { cmd } from '../lib/commands';
+import { cmd, CommandTimeoutError, type CommandResult } from '../lib/commands';
 import { safeListen } from '../lib/tauri-events';
-import { budgetRefusalMessage, inventoryRefreshingMessage, translateError } from '../utils/error-messages';
+import {
+  briefStillWritingMessage,
+  budgetRefusalMessage,
+  inventoryRefreshingMessage,
+  translateError,
+} from '../utils/error-messages';
 import type { AppStore, BriefingSlice, BriefingState, BriefVerdicts, FreeBriefingData, InstantBriefingSnapshot } from './types';
 
 /** Backend event: the startup dependency-inventory rescan finished. */
@@ -45,6 +50,37 @@ export function retryBriefingWhenInventoryFresh(
       if (inventoryRetryArmed && !stillPending()) disarm();
     });
   });
+}
+
+/**
+ * How many more times a timed-out brief request is re-asked. The backend
+ * keeps writing after the IPC wait (120 s) runs out; a re-ask waits at the
+ * backend's generation gate for that brief and, as an auto trigger, reuses it
+ * instead of writing another. Live 2026-11-05: the brief finished 36 s after
+ * the wait ran out, and the user saw "Request timed out" over it.
+ */
+export const BRIEF_REASKS = 2;
+
+type BriefingResult = CommandResult<'generate_ai_briefing'>;
+
+/**
+ * `generate_ai_briefing`, re-asked (as `auto`) while the backend is still
+ * writing. `onStillWriting` runs before each re-ask so the UI can say so.
+ * Any other error, or a timeout after the last re-ask, is thrown.
+ */
+export async function askForBriefing(auto: boolean, onStillWriting: () => void): Promise<BriefingResult> {
+  let reasks = BRIEF_REASKS;
+  let asAuto = auto;
+  for (;;) {
+    try {
+      return await cmd('generate_ai_briefing', { auto: asAuto });
+    } catch (error) {
+      if (!(error instanceof CommandTimeoutError) || reasks === 0) throw error;
+      reasks -= 1;
+      asAuto = true;
+      onStillWriting();
+    }
+  }
 }
 
 /** Test seam: forget an armed retry between tests. */
@@ -185,7 +221,11 @@ export const createBriefingSlice: StateCreator<AppStore, [], [], BriefingSlice> 
     try {
       // Until 2026-10-02 no caller passed `auto`, so every app-initiated
       // trigger regenerated (~28 briefs a day, 73% repeating the previous).
-      const result = await cmd('generate_ai_briefing', { auto: options?.auto ?? false });
+      const result = await askForBriefing(options?.auto ?? false, () => {
+        set(state => ({
+          aiBriefing: { ...state.aiBriefing, loading: true, error: null, pending: briefStillWritingMessage() },
+        }));
+      });
 
       if (result.success && result.briefing) {
         // A reused brief keeps its real age ("written 3h ago"), not "just now".
@@ -223,6 +263,7 @@ export const createBriefingSlice: StateCreator<AppStore, [], [], BriefingSlice> 
           aiBriefing: {
             ...state.aiBriefing,
             loading: false,
+            pending: null,
             // The backend's own user-facing message, except a budget refusal,
             // whose reset token is rendered localized (never verbatim).
             error: result.error
@@ -236,6 +277,7 @@ export const createBriefingSlice: StateCreator<AppStore, [], [], BriefingSlice> 
         aiBriefing: {
           ...state.aiBriefing,
           loading: false,
+          pending: null,
           error: translateError(error),
         },
       }));

@@ -13,7 +13,10 @@ import type { EvidenceItem } from '../../../src-tauri/bindings/bindings/Evidence
 expect.extend(toHaveNoViolations);
 
 const cmdMock = vi.fn();
-vi.mock('../../lib/commands', () => ({ cmd: (...args: unknown[]) => cmdMock(...args) }));
+vi.mock('../../lib/commands', () => ({
+  cmd: (...args: unknown[]) => cmdMock(...args),
+  CommandTimeoutError: class CommandTimeoutError extends Error {},
+}));
 vi.mock('react-i18next', () => ({
   useTranslation: () => ({
     t: (key: string, opts?: Record<string, unknown>) =>
@@ -33,7 +36,8 @@ vi.mock('../ContentTranslationProvider', () => ({
   useTranslatedContent: () => ({ getTranslated: (_: string, t: string) => t, requestTranslation: vi.fn() }),
 }));
 
-import { StackChangeLane } from './StackChangeLane';
+import { CommandTimeoutError } from '../../lib/commands';
+import { StackChangeLane, STACK_LANE_REASKS } from './StackChangeLane';
 import { STACK_LANE_CAP } from './stack-change';
 
 function item(id: string, title: string, extra: Partial<EvidenceItem> = {}): EvidenceItem {
@@ -103,6 +107,45 @@ describe('StackChangeLane', () => {
     fireEvent.click(screen.getByRole('button', { name: 'signals.stack.retry' }));
     expect(await screen.findByTestId('stack-lane-empty')).toBeInTheDocument();
     expect(cmdMock).toHaveBeenLastCalledWith('get_stack_changes', { force: true });
+  });
+
+  // Live 2026-11-05: the first compute on ~1.9k packages outlived the 120 s
+  // IPC wait and the lane said "Couldn't load" while the backend was still
+  // working. A timeout is progress, and the re-ask waits for that answer.
+  it('shows a still-working state on a timeout and renders the answer the re-ask gets', async () => {
+    let finish: (f: EvidenceFeed) => void = () => {};
+    cmdMock
+      .mockRejectedValueOnce(new CommandTimeoutError('get_stack_changes', 120_000))
+      .mockImplementationOnce(() => new Promise<EvidenceFeed>((resolve) => { finish = resolve; }));
+    render(<StackChangeLane />);
+    const working = await screen.findByTestId('stack-lane-working');
+    expect(working).toHaveAttribute('role', 'status');
+    expect(working).toHaveTextContent('signals.stack.workingTitle');
+    expect(screen.queryByRole('alert')).toBeNull();
+    expect(screen.queryByText('signals.stack.refresh')).toBeNull();
+    expect(cmdMock).toHaveBeenLastCalledWith('get_stack_changes', { force: false });
+    finish(feed([item('stack-change:minor:npm:h3@1.13.0', 'h3 1.12.0 → 1.13.0: new minor')]));
+    expect(await screen.findByText('h3 1.12.0 → 1.13.0: new minor')).toBeInTheDocument();
+    expect(screen.queryByTestId('stack-lane-working')).toBeNull();
+  });
+
+  it('re-asks a forced refresh without force, so it joins the running compute', async () => {
+    cmdMock
+      .mockResolvedValueOnce(feed([]))
+      .mockRejectedValueOnce(new CommandTimeoutError('get_stack_changes', 120_000))
+      .mockResolvedValueOnce(feed([]));
+    render(<StackChangeLane />);
+    fireEvent.click(await screen.findByRole('button', { name: 'signals.stack.refresh' }));
+    await waitFor(() => expect(cmdMock).toHaveBeenCalledTimes(3));
+    expect(cmdMock.mock.calls.map((c) => c[1])).toEqual([{ force: false }, { force: true }, { force: false }]);
+    expect(await screen.findByTestId('stack-lane-empty')).toBeInTheDocument();
+  });
+
+  it('reports an error only after the re-asks run out, and never for a plain timeout before that', async () => {
+    cmdMock.mockRejectedValue(new CommandTimeoutError('get_stack_changes', 120_000));
+    render(<StackChangeLane />);
+    expect(await screen.findByRole('alert')).toHaveTextContent('signals.stack.error');
+    expect(cmdMock).toHaveBeenCalledTimes(STACK_LANE_REASKS + 1);
   });
 
   it('is onboarding, not an empty card, when no lockfile has been read (rule 6)', async () => {

@@ -2722,6 +2722,8 @@
   "onboarding.setupAi.skipNoAi": "Salta — niente IA per ora",
   "onboarding.setupAi.skipNoAiDesc": "Niente briefing scritti dall’IA né riordinamento. Aggiungi un provider quando vuoi nelle Impostazioni.",
   "signals.stack.loading": "Verifica di cosa è cambiato nel tuo stack…",
+  "signals.stack.workingTitle": "Verifica del tuo stack ancora in corso…",
+  "signals.stack.workingBody": "Il primo controllo legge ogni pacchetto dei tuoi lockfile. È ancora in corso e l’elenco apparirà qui appena termina.",
   "signals.stack.error": "Impossibile caricare le modifiche del tuo stack.",
   "signals.stack.retry": "Riprova",
   "signals.stack.refresh": "Aggiorna",

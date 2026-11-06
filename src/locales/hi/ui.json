@@ -2668,6 +2668,8 @@
   "onboarding.setupAi.skipNoAi": "छोड़ें — अभी कोई AI नहीं",
   "onboarding.setupAi.skipNoAiDesc": "AI-लिखित ब्रीफ़िंग या री-रैंकिंग नहीं। कभी भी सेटिंग्स में प्रदाता जोड़ें।",
   "signals.stack.loading": "जाँच रहे हैं कि आपके स्टैक में क्या बदला…",
+  "signals.stack.workingTitle": "आपके स्टैक की जाँच अभी जारी है…",
+  "signals.stack.workingBody": "पहली जाँच आपकी लॉकफ़ाइलों का हर पैकेज पढ़ती है। यह अभी चल रही है, और पूरी होते ही सूची यहाँ दिखेगी।",
   "signals.stack.error": "आपके स्टैक के बदलाव लोड नहीं हो सके।",
   "signals.stack.retry": "फिर से कोशिश करें",
   "signals.stack.refresh": "रीफ़्रेश करें",

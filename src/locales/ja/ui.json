@@ -2628,6 +2628,8 @@
   "onboarding.setupAi.skipNoAi": "スキップ — 今はAIなし",
   "onboarding.setupAi.skipNoAiDesc": "AIによるブリーフィングや再ランキングはありません。設定からいつでもプロバイダーを追加できます。",
   "signals.stack.loading": "スタックの変更を確認しています…",
+  "signals.stack.workingTitle": "スタックをまだ確認しています…",
+  "signals.stack.workingBody": "初回の確認ではロックファイル内のすべてのパッケージを読み込みます。まだ実行中で、完了するとここに一覧が表示されます。",
   "signals.stack.error": "スタックの変更を読み込めませんでした。",
   "signals.stack.retry": "再試行",
   "signals.stack.refresh": "更新",
