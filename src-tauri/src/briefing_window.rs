@@ -96,27 +96,29 @@ static WINDOW_VISIBLE: AtomicBool = AtomicBool::new(false);
 /// instantly when a morning briefing fires.
 pub fn init_briefing_window<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<()> {
     PAGE_LOADED.store(false, Ordering::Relaxed);
-    let _window = tauri::webview::WebviewWindowBuilder::new(
+    let builder = tauri::webview::WebviewWindowBuilder::new(
         app,
         WINDOW_LABEL,
         WebviewUrl::App("briefing.html".into()),
-    )
-    .title("4DA — Daily Brief")
-    .decorations(false)
-    .transparent(true)
-    .shadow(false)
-    .always_on_top(true)
-    .skip_taskbar(false)
-    .focused(false)
-    .resizable(false)
-    .visible(false)
-    .inner_size(f64::from(WINDOW_WIDTH), f64::from(WINDOW_HEIGHT))
-    .on_page_load(|_, payload| {
-        if payload.event() == tauri::webview::PageLoadEvent::Finished {
-            PAGE_LOADED.store(true, Ordering::Relaxed);
-        }
-    })
-    .build()?;
+    );
+    // Same browser args as every other webview, or WebView2 fails (0x8007139F).
+    let _window = crate::dev_inspection::apply_to_builder(builder)
+        .title("4DA — Daily Brief")
+        .decorations(false)
+        .transparent(true)
+        .shadow(false)
+        .always_on_top(true)
+        .skip_taskbar(false)
+        .focused(false)
+        .resizable(false)
+        .visible(false)
+        .inner_size(f64::from(WINDOW_WIDTH), f64::from(WINDOW_HEIGHT))
+        .on_page_load(|_, payload| {
+            if payload.event() == tauri::webview::PageLoadEvent::Finished {
+                PAGE_LOADED.store(true, Ordering::Relaxed);
+            }
+        })
+        .build()?;
 
     info!(target: "4da::briefing", "Briefing window pre-warmed");
     Ok(())

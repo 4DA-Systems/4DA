@@ -372,6 +372,7 @@ pub(crate) mod topic_hotness;
 // Wave 5 — universal startup watchdog with crash trail and heartbeat
 mod startup_watchdog;
 // Single-instance file lock (belt-and-braces with tauri_plugin_single_instance)
+mod dev_inspection;
 mod single_instance;
 mod suns;
 mod suns_commands;
@@ -775,18 +776,6 @@ pub fn run() {
         }
     }
 
-    // Enable WebView2 remote debugging in dev mode (port 9222)
-    // Allows Playwright to connect via CDP for functional testing
-    #[cfg(all(debug_assertions, target_os = "windows"))]
-    {
-        if std::env::var("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS").is_err() {
-            std::env::set_var(
-                "WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS",
-                "--remote-debugging-port=9222",
-            );
-        }
-    }
-
     // Set Windows AUMID so OS notifications show "4DA" instead of inheriting parent process name.
     // Two-part fix: (1) set process AUMID for taskbar grouping, (2) register in HKCU so the
     // Windows toast notification subsystem resolves "com.4da.app" → DisplayName "4DA".
@@ -816,7 +805,9 @@ pub fn run() {
     // Built before the builder so the dev WebView2 purge targets THIS app's
     // identifier (a test profile may run under a non-default one) — and only
     // from the GUI entry point, after the single-instance lock above.
-    let context = app_context();
+    let mut context = app_context();
+    // Debug builds open CDP on 127.0.0.1:9222 (`FOURDA_CDP_PORT`); release: no-op.
+    dev_inspection::apply_to_config(context.config_mut());
     // A previous instance's WebView2 can hold the shared profile for a while
     // after the app exits; creating the window then panics with 0x800700AA.
     // Wait for it first (and before the dev purge touches the profile).
@@ -858,7 +849,13 @@ pub fn run() {
                     .iter()
                     .map(|n| victauri_plugin::CommandInfo::new(*n))
                     .collect();
-            victauri_plugin::VictauriBuilder::new()
+            #[allow(unused_mut)]
+            let mut victauri = victauri_plugin::VictauriBuilder::new();
+            #[cfg(debug_assertions)]
+            if let Some(port) = dev_inspection::victauri_fallback_port() {
+                victauri = victauri.port(port);
+            }
+            victauri
                 .commands(&commands)
                 .auth_enabled()
                 // 4DA stores its SQLite DB in the project `data/` dir, not the OS
