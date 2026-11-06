@@ -50,8 +50,29 @@ impl RegistryReleases {
     /// Whether the registry withdrew `version` (equal as versions, so build
     /// metadata such as Go's `+incompatible` does not hide it).
     pub fn excludes(&self, ecosystem: &str, version: &str) -> bool {
-        OrderedVersion::parse_in(version, ecosystem)
-            .is_some_and(|v| is_listed(&self.excluded_in(ecosystem), &v))
+        self.excluded_set(ecosystem).contains(ecosystem, version)
+    }
+
+    /// The excluded releases parsed once, for a caller that asks
+    /// [`Self::excludes`] about many versions of one package: the
+    /// parent-release walk asks once per release listed, and parsing the
+    /// whole list on every ask was most of its cost (live 2026-11-06).
+    pub fn excluded_set(&self, ecosystem: &str) -> ExcludedSet {
+        ExcludedSet(self.excluded_in(ecosystem))
+    }
+}
+
+/// [`RegistryReleases::excluded_set`]: answers [`RegistryReleases::excludes`].
+#[derive(Debug, Clone, Default)]
+pub struct ExcludedSet(Vec<OrderedVersion>);
+
+impl ExcludedSet {
+    /// Whether the registry withdrew `version` (as [`RegistryReleases::excludes`]).
+    pub fn contains(&self, ecosystem: &str, version: &str) -> bool {
+        if self.0.is_empty() {
+            return false;
+        }
+        OrderedVersion::parse_in(version, ecosystem).is_some_and(|v| is_listed(&self.0, &v))
     }
 }
 

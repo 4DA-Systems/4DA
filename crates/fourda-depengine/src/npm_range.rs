@@ -24,6 +24,35 @@ pub fn strip_spec(spec: &str) -> &str {
 /// ANDs comparators with spaces, allows a space after an operator
 /// (`>= 4.21.0`) and writes hyphen ranges (`1.2.3 - 2.3.4`).
 pub fn requirement_admits(spec: &str, version: &str) -> Option<bool> {
+    // Pure in its inputs, and asked the same pairs again and again by the
+    // parent-release walk (every parent release against every child copy),
+    // so the answer is remembered per thread.
+    let key = format!("{spec}\u{0}{version}");
+    if let Some(hit) = ADMITS.with(|m| m.borrow().get(&key).copied()) {
+        return hit;
+    }
+    let answer = requirement_admits_uncached(spec, version);
+    ADMITS.with(|m| {
+        let mut m = m.borrow_mut();
+        if m.len() >= ADMITS_CACHE_MAX {
+            m.clear();
+        }
+        m.insert(key, answer);
+    });
+    answer
+}
+
+/// Answers remembered per thread before the memo starts over.
+const ADMITS_CACHE_MAX: usize = 100_000;
+
+std::thread_local! {
+    /// "spec\0version" -> [`requirement_admits`], for this thread.
+    static ADMITS: std::cell::RefCell<std::collections::HashMap<String, Option<bool>>> =
+        std::cell::RefCell::new(std::collections::HashMap::new());
+}
+
+/// [`requirement_admits`] without the memo: the evaluation itself.
+pub fn requirement_admits_uncached(spec: &str, version: &str) -> Option<bool> {
     let version = parse_version(version)?;
     let mut spec = spec.split('(').next().unwrap_or(spec).trim();
     if let Some(alias) = spec.strip_prefix("npm:") {

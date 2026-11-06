@@ -346,15 +346,20 @@ pub fn compare(a: &str, b: &str, eco: &str) -> Option<Ordering> {
     parse(a, eco)?.compare(&parse(b, eco)?)
 }
 
-fn stable(v: &str, eco: &str) -> bool {
-    parse(v, eco).is_some_and(|p| !p.is_prerelease())
-}
-
 /// Sorted ascending, stable releases only.
+///
+/// Each version is parsed once, then the parsed values are sorted: the same
+/// order `compare` gives (every kept version parses), without parsing both
+/// sides of every comparison. The walk sorts a package's whole release list
+/// once per parent release it tries (live 2026-11-06: most of the parses left
+/// in a debug Brief facts build).
 pub(super) fn ascending<'a>(versions: &'a [String], eco: &str) -> Vec<&'a String> {
-    let mut out: Vec<&String> = versions.iter().filter(|v| stable(v, eco)).collect();
-    out.sort_by(|a, b| compare(a, b, eco).unwrap_or(Ordering::Equal));
-    out
+    let mut out: Vec<(&String, OrderedVersion)> = versions
+        .iter()
+        .filter_map(|v| parse(v, eco).filter(|p| !p.is_prerelease()).map(|p| (v, p)))
+        .collect();
+    out.sort_by(|a, b| a.1.compare(&b.1).unwrap_or(Ordering::Equal));
+    out.into_iter().map(|(v, _)| v).collect()
 }
 
 /// The highest stable installable release (the MCP's `newestOf`): the release
