@@ -26,7 +26,7 @@ use super::{
 /// and license_clock.json (clock.rs), and the window counts from the EARLIEST
 /// anchor — a later or edited date never reopens it. Residual limit, as for
 /// the trial stamp: deleting every store restarts it once.
-fn is_within_activation_grace(license: &LicenseConfig) -> bool {
+pub(super) fn is_within_activation_grace(license: &LicenseConfig) -> bool {
     let now = super::license_effective_now();
     let Some(activated) = parse_activated_at(license, now) else {
         return false;

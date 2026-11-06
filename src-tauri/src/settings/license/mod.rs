@@ -3,6 +3,7 @@
 
 mod cache_mac;
 mod clock;
+mod entitlement;
 mod gating;
 mod keygen;
 mod renewal;
@@ -15,6 +16,7 @@ mod verify;
 // ============================================================================
 
 pub use clock::{license_effective_now, observe_license_clock};
+pub use entitlement::signal_entitlement_read_only;
 pub use gating::{
     get_trial_status, is_signal, is_signal_feature_available, is_trial_active,
     require_signal_feature, TrialStatus, SIGNAL_FEATURES,

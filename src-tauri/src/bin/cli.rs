@@ -16,7 +16,7 @@
 //!   4da health             Show project dependency health
 //!   4da status             Show database stats and last analysis time
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process;
 
 // ============================================================================
@@ -682,7 +682,17 @@ fn cmd_status(conn: &rusqlite::Connection, json_mode: bool) {
 /// the app already wrote. In `--json` mode the persisted envelope is emitted
 /// verbatim (the app is the single source of truth); human mode renders a
 /// short summary. Honest when nothing has been computed yet.
-fn cmd_plan(conn: &rusqlite::Connection, json_mode: bool) {
+///
+/// The cross-project plan is a Signal feature in the app (Preemption's Upgrade
+/// Plan), and the headless engine writes the snapshot every cycle whatever the
+/// tier, so the CLI gates it the same way: `entitled` comes from the app's own
+/// licence checks ([`plan_entitled`]) and a free install gets a pointer to what
+/// is free instead of the snapshot.
+fn cmd_plan(conn: &rusqlite::Connection, json_mode: bool, entitled: bool) {
+    if !entitled {
+        println!("{}", render_plan_requires_signal(json_mode));
+        return;
+    }
     let raw: Option<String> = conn
         .query_row(
             "SELECT value FROM kv_store WHERE key = 'upgrade_plan_snapshot'",
@@ -692,6 +702,50 @@ fn cmd_plan(conn: &rusqlite::Connection, json_mode: bool) {
         .optional()
         .unwrap_or(None);
     println!("{}", render_plan(raw, json_mode));
+}
+
+/// Does the install that owns `db_path` hold Signal, judged exactly as the app
+/// judges it (signed key, keychain, trial stamps merged across the machine
+/// stores, activation grace; `dev_unlock_all` in debug builds only)? Never
+/// from the `tier` field alone, which anyone can type into settings.json.
+fn plan_entitled(db_path: &Path) -> bool {
+    // The licence helpers resolve the validation cache, backup and clock floor
+    // from FOURDA_DB_PATH. Point them at the database this CLI is reading, so
+    // the licence and the plan always come from the same install.
+    std::env::set_var("FOURDA_DB_PATH", db_path);
+    let data_dir = db_path.parent().unwrap_or_else(|| Path::new("."));
+    fourda_lib::settings::signal_entitlement_read_only(data_dir)
+}
+
+const SIGNAL_URL: &str = "https://4da.ai/signal";
+
+/// What a free install sees instead of the cross-project plan: what is free,
+/// and where Signal is. `--json` keeps a structured, machine-checkable result.
+fn render_plan_requires_signal(json_mode: bool) -> String {
+    if json_mode {
+        return serde_json::json!({
+            "available": false,
+            "requires_signal": true,
+            "reason": "The cross-project Upgrade Plan is a 4DA Signal feature.",
+            "free_alternatives": [
+                "Version-confirmed vulnerability findings and their fixes, in the 4DA app (Preemption tab).",
+                "A per-project upgrade plan from the upgrade_planner tool in the 4DA MCP server (@4da/mcp-server)."
+            ],
+            "upgrade_url": SIGNAL_URL,
+        })
+        .to_string();
+    }
+    // ASCII only (see format_plan_human).
+    [
+        "The cross-project Upgrade Plan is part of 4DA Signal.",
+        "",
+        "Free on this machine:",
+        "  - Version-confirmed findings and their fixes: the Preemption tab in the 4DA app.",
+        "  - A per-project upgrade plan: the upgrade_planner tool in the 4DA MCP server (@4da/mcp-server).",
+        "",
+        &format!("Get Signal: {SIGNAL_URL}"),
+    ]
+    .join("\n")
 }
 
 /// Pure formatting of the persisted snapshot into what `cmd_plan` prints.
@@ -890,7 +944,7 @@ fn main() {
         }
         "gaps" | "gap" | "g" => cmd_gaps(&conn, json_mode),
         "health" | "h" => cmd_health(&conn, json_mode),
-        "plan" | "p" => cmd_plan(&conn, json_mode),
+        "plan" | "p" => cmd_plan(&conn, json_mode, plan_entitled(&db_path)),
         "status" | "st" => cmd_status(&conn, json_mode),
         other => {
             if json_mode {
@@ -917,7 +971,7 @@ fn print_usage() {
              --critical, -c   Only critical/high priority\n\
            gaps, g           Show knowledge gaps in your dependencies\n\
            health, h         Show project dependency health\n\
-           plan, p           Show the ranked dependency Upgrade Plan\n\
+           plan, p           Show the cross-project Upgrade Plan (Signal)\n\
            status, st        Show database stats\n\
          \n\
          Flags:\n\
@@ -937,7 +991,7 @@ fn print_usage() {
 
 #[cfg(test)]
 mod tests {
-    use super::{format_plan_human, render_plan};
+    use super::{format_plan_human, render_plan, render_plan_requires_signal};
 
     const SAMPLE: &str = r#"{
         "schema_version": 1,
@@ -949,6 +1003,40 @@ mod tests {
             {"title": "Upgrade axios to >= 1.7.4 — clears 2 advisories", "urgency": "critical"}
         ]
     }"#;
+
+    #[test]
+    fn free_tier_json_is_a_structured_requires_signal_result() {
+        let out = render_plan_requires_signal(true);
+        // Unparseable JSON reads as Null, which fails every assertion below.
+        let v: serde_json::Value = serde_json::from_str(&out).unwrap_or_default();
+        assert_eq!(v["requires_signal"], true);
+        assert_eq!(v["available"], false);
+        assert_eq!(v["upgrade_url"], "https://4da.ai/signal");
+        let alts = v["free_alternatives"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+        assert!(alts
+            .iter()
+            .any(|a| a.as_str().is_some_and(|s| s.contains("upgrade_planner"))));
+        assert!(alts
+            .iter()
+            .any(|a| a.as_str().is_some_and(|s| s.contains("Preemption"))));
+    }
+
+    #[test]
+    fn free_tier_human_names_what_is_free_and_where_signal_is() {
+        let out = render_plan_requires_signal(false);
+        assert!(out.contains("part of 4DA Signal"));
+        assert!(out.contains("Preemption tab"));
+        assert!(out.contains("upgrade_planner"));
+        assert!(out.contains("https://4da.ai/signal"));
+        assert!(out.is_ascii(), "terminal output stays 7-bit");
+        assert!(
+            out.contains("\n  - Version-confirmed"),
+            "list items are indented"
+        );
+    }
 
     #[test]
     fn json_mode_passes_the_envelope_through_verbatim() {
