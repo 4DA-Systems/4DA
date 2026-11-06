@@ -1007,11 +1007,15 @@ mod tests {
     #[test]
     fn free_tier_json_is_a_structured_requires_signal_result() {
         let out = render_plan_requires_signal(true);
-        let v: serde_json::Value = serde_json::from_str(&out).expect("valid JSON");
+        // Unparseable JSON reads as Null, which fails every assertion below.
+        let v: serde_json::Value = serde_json::from_str(&out).unwrap_or_default();
         assert_eq!(v["requires_signal"], true);
         assert_eq!(v["available"], false);
         assert_eq!(v["upgrade_url"], "https://4da.ai/signal");
-        let alts = v["free_alternatives"].as_array().expect("alternatives");
+        let alts = v["free_alternatives"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
         assert!(alts
             .iter()
             .any(|a| a.as_str().is_some_and(|s| s.contains("upgrade_planner"))));
