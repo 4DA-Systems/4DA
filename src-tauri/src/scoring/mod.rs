@@ -51,7 +51,7 @@ pub(crate) mod release_grade;
 pub(crate) mod release_ownership;
 mod release_story;
 pub(crate) mod release_version;
-mod role_inference;
+pub(crate) mod role_inference;
 pub(crate) mod security_verdict;
 mod semantic;
 #[cfg(test)]
@@ -733,7 +733,19 @@ pub(crate) use types::{ScoringInput, ScoringOptions};
 // belong in the feed is an open product decision). The matcher only runs for
 // `source_type IN ('cve','osv')`, so the bump IS registered in
 // `epochs::SCOPED_EPOCHS` on that set.
-pub(crate) const PIPELINE_VERSION: i32 = 44;
+// v45 (2026-11-06, role-aware scoring never matched): onboarding saves the
+// display labels "Developer" / "Security" / "DevOps" / "Data" and pre-selects
+// "Developer", while scoring compared lowercase slugs, and any declared role
+// other than "backend_developer" stopped stack inference. So the security-role
+// novelty boost (it matched only a literal "security", which neither
+// onboarding nor inference ("security_engineer") produced) and the role
+// broad-term exemptions never fired. The declared role is now normalized
+// (`role_inference::normalize_declared_role`: generic labels read as unset so
+// inference runs; the domain chips map to the inferred slugs) and both checks
+// compare case-insensitively. The role reaches the broad-term exemption, which
+// applies to any item an interest topic matches, so no row predicate bounds
+// the reach: NOT registered in `epochs::SCOPED_EPOCHS` (full re-score).
+pub(crate) const PIPELINE_VERSION: i32 = 45;
 
 /// Parse the topic tags carried in the `source_items.tags` column.
 ///
