@@ -24,5 +24,9 @@ pub use interactions::*;
 pub use scanning::*;
 pub use watcher::*;
 
+// The G4 morning replay runs the startup write-back on a database copy.
+#[cfg(test)]
+pub(crate) use dependencies::write_back_inventory;
+
 // Re-export README indexing for callers that use ace_commands::index_discovered_readmes
 pub(crate) use crate::ace::readme_indexing::index_discovered_readmes;

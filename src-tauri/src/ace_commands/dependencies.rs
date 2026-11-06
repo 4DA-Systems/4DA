@@ -57,35 +57,43 @@ pub(super) fn store_direct_dependencies(db: &Database) {
     if let Ok(ace) = get_ace_engine() {
         if let Ok(tech) = ace.get_detected_tech() {
             if let Ok(conn) = crate::open_db_connection() {
-                // The INVENTORY, not the stack-grounding set: a dormant or
-                // scratch project's manifest rows must keep refreshing so its
-                // advisories stay true in Preemption (AD-043).
-                if let Ok(deps) = crate::temporal::get_inventory_dependencies(&conn) {
-                    for dep in &deps {
-                        let ecosystem = &dep.language;
-                        // The manifest scan is authoritative for is_direct in
-                        // BOTH directions (a go.mod `// indirect` module is
-                        // downgraded even if an old row stored it direct) and
-                        // carries provenance through to user_dependencies.
-                        db.store_manifest_dependency(
-                            &dep.project_path,
-                            &dep.package_name,
-                            dep.version.as_deref(),
-                            ecosystem,
-                            dep.is_dev,
-                            dep.is_direct,
-                            &dep.detected_from,
-                        )
-                        .ok();
-                    }
-                    if !deps.is_empty() {
-                        info!(target: "4da::ace", count = deps.len(), "Stored dependencies in user_dependencies table");
-                    }
+                let count = write_back_inventory(db, &conn);
+                if count > 0 {
+                    info!(target: "4da::ace", count, "Stored dependencies in user_dependencies table");
                 }
             }
             drop(tech);
         }
     }
+}
+
+/// Write every inventory row, with its version resolved from the lockfile
+/// layer, into `user_dependencies`. Returns the rows written.
+///
+/// The INVENTORY, not the stack-grounding set: a dormant or scratch
+/// project's manifest rows must keep refreshing so its advisories stay true
+/// in Preemption (AD-043). The manifest scan is authoritative for is_direct
+/// in BOTH directions (a go.mod `// indirect` module is downgraded even if an
+/// old row stored it direct) and carries provenance through. A resolved
+/// version replaces the stored one, which is how a workspace member's row
+/// frozen by the old self-reading resolution heals (`temporal_resolve`).
+pub(crate) fn write_back_inventory(db: &Database, conn: &rusqlite::Connection) -> usize {
+    let Ok(deps) = crate::temporal::get_inventory_dependencies(conn) else {
+        return 0;
+    };
+    for dep in &deps {
+        db.store_manifest_dependency(
+            &dep.project_path,
+            &dep.package_name,
+            dep.version.as_deref(),
+            &dep.language,
+            dep.is_dev,
+            dep.is_direct,
+            &dep.detected_from,
+        )
+        .ok();
+    }
+    deps.len()
 }
 
 /// One pending directory of the lockfile walk: where it is, how deep, and

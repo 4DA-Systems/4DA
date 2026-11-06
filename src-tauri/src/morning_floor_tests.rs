@@ -775,6 +775,14 @@ async fn live_snapshot_morning_replay() {
         serde_json::from_str(&std::fs::read_to_string(days_path).expect("days file"))
             .expect("days json");
     let db = crate::get_database().expect("snapshot database");
+    // Every start runs the inventory write-back before a brief can go out
+    // (the inventory gate); replay it so the facts read what today's code
+    // stores. `FOURDA_REPLAY_NO_WRITE_BACK=1` reads the snapshot as stored.
+    if std::env::var("FOURDA_REPLAY_NO_WRITE_BACK").is_err() {
+        let conn = crate::open_db_connection().expect("connection");
+        let rows = crate::ace_commands::write_back_inventory(db, &conn);
+        println!("inventory write-back: {rows} rows");
+    }
     let started = std::time::Instant::now();
     let facts = tokio::task::spawn_blocking(move || crate::brief_facts::build_brief_facts(db))
         .await

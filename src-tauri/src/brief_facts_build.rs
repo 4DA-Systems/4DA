@@ -958,14 +958,6 @@ fn build_worth_knowing(
         .collect()
 }
 
-impl super::BriefFacts {
-    /// The advisory check supports an all-clear: `Ready`, or not read (tests).
-    pub(crate) fn advisories_ready(&self) -> bool {
-        self.advisories
-            .is_none_or(|s| s == crate::osv::readiness::AdvisorySyncState::Ready)
-    }
-}
-
 /// The brief's reuse identity: the facts' [`super::fingerprint`] plus where the
 /// advisory check stands. The brief's wording depends on readiness (no
 /// all-clear before `Ready`), so a brief written in one state must not be
