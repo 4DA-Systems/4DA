@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { parseBriefingContent, parseInline, type ParsedSection } from '../../utils/briefing-parser';
-import { openExternalUrl } from '../../lib/open-url';
+import { parseBriefingContent, type ParsedSection } from '../../utils/briefing-parser';
 import { RelativeTimestamp } from './BriefingHelpers';
+import { InlineText } from './InlineText';
 
 interface NarratedBriefProps {
   content: string;
@@ -22,34 +22,6 @@ const SECTION_STYLE: Record<ParsedSection['type'], { border: string; title: stri
   filtered: { border: 'border-border', title: 'text-text-muted' },
   general: { border: 'border-border', title: 'text-text-secondary' },
 };
-
-function InlineText({ line }: { line: string }) {
-  return (
-    <>
-      {parseInline(line).map((seg, i) => {
-        switch (seg.kind) {
-          case 'bold':
-            return <strong key={i} className="font-semibold text-text-primary">{seg.text}</strong>;
-          case 'code':
-            return <code key={i} className="font-mono text-[0.85em] px-1 rounded bg-bg-tertiary">{seg.text}</code>;
-          case 'link':
-            return (
-              <a
-                key={i}
-                href={seg.url}
-                onClick={(e) => { e.preventDefault(); openExternalUrl(seg.url); }}
-                className="text-text-primary underline decoration-border underline-offset-2 hover:decoration-text-secondary"
-              >
-                {seg.text}
-              </a>
-            );
-          default:
-            return <span key={i}>{seg.text}</span>;
-        }
-      })}
-    </>
-  );
-}
 
 /** Render one section's lines: bullets (with one nesting level) and prose. */
 function SectionBody({ lines }: { lines: string[] }) {
