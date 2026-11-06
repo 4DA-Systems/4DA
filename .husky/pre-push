@@ -73,14 +73,15 @@ if [ "$RUST_CHANGED" = "1" ] && [ -f "src-tauri/Cargo.toml" ] && command -v carg
     }
 fi
 
-# Site build verification (catches Eleventy/Vercel failures before push)
+# Site build verification (catches Eleventy/Pages failures before push).
+# A real build with the LOCKED Eleventy into a temp dir that must write >0 files;
+# the old `npx @11ty/eleventy --dryrun` fetched an unpinned Eleventy in fresh
+# worktrees and always reported "Wrote 0 files", so it verified nothing.
+# Without site deps it installs them only when this push touches site/, and
+# otherwise prints an explicit skip line. See scripts/verify-site-build.cjs.
 echo "Verifying site build..."
-if [ -d "site" ] && [ -f "site/package.json" ]; then
-    (cd site && npx @11ty/eleventy --dryrun) 2>&1 || {
-        echo "Site build failed. Fix site errors before pushing."
-        exit 1
-    }
-fi
+if [ -z "$CHANGED" ] || echo "$CHANGED" | grep -qE '^site/'; then SITE_FLAG="--site-changed"; else SITE_FLAG=""; fi
+node scripts/verify-site-build.cjs $SITE_FLAG || exit 1
 
 # Translation completeness check
 echo "Validating translations..."
