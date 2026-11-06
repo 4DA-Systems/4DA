@@ -9,6 +9,7 @@ import type { Urgency } from '../../../src-tauri/bindings/bindings/Urgency';
 import { cmd } from '../../lib/commands';
 import { recordTrustEvent } from '../../lib/trust-feedback';
 import { formatProjectNames } from '../../utils/project-path';
+import { InlineText } from '../briefing/InlineText';
 import { useTranslatedContent } from '../ContentTranslationProvider';
 import { EvidenceList } from './PreemptionEvidenceList';
 
@@ -72,11 +73,15 @@ function getTierStyle(provenance: string): {
   return { badge: null, badgeClass: '', borderClass: '' };
 }
 
-function truncateAt(text: string, limit: number): string {
+export function truncateAt(text: string, limit: number): string {
   if (text.length <= limit) return text;
   const cut = text.slice(0, limit);
   const lastSpace = cut.lastIndexOf(' ');
-  return `${lastSpace > limit - 40 ? cut.slice(0, lastSpace) : cut}…`;
+  const kept = lastSpace > limit - 40 ? cut.slice(0, lastSpace) : cut;
+  // A cut inside a `code` span would leave a stray backtick on screen; close
+  // the span so the visible part still renders as code.
+  const openTicks = (kept.match(/`/g) ?? []).length;
+  return `${kept}${openTicks % 2 === 1 ? '`' : ''}…`;
 }
 
 function kindAsSourceType(item: EvidenceItem): string {
@@ -280,7 +285,9 @@ export const ItemCard = memo(function ItemCard({
         })()}
         {item.explanation && (
           <p className="text-xs text-text-secondary leading-relaxed">
-            {displayedExplanation}
+            {/* Fix commands arrive as `code` spans; render them as <code> the
+                way the Brief does (text only, never HTML). */}
+            <InlineText line={displayedExplanation} allowLinks={false} />
             {needsTruncation && (
               <button
                 type="button"
