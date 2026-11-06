@@ -494,3 +494,64 @@ fn the_walk_stores_a_members_dependency_as_direct() {
     assert!(row("express").is_direct, "declared by a workspace member");
     assert!(!row("qs").is_direct, "reached only through express");
 }
+
+/// Live 2026-10-27..31: a workspace member's row kept `notify 7.0.0` for weeks
+/// after its workspace lockfile moved to 8.2.0, because resolution read the
+/// value the write-back had stored on the member itself. The next write-back
+/// now reads the lockfile and replaces the frozen version.
+#[test]
+fn a_frozen_member_version_heals_on_the_next_write_back() {
+    crate::register_sqlite_vec_extension();
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("4da.db");
+    let db = Database::new(&path).unwrap();
+    db.conn
+        .lock()
+        .execute_batch(
+            "CREATE TABLE IF NOT EXISTS git_signals (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                repo_path TEXT NOT NULL,
+                commit_hash TEXT,
+                timestamp TEXT DEFAULT (datetime('now'))
+            );
+            INSERT INTO git_signals (repo_path, commit_hash) VALUES ('D:\\ws', 'abc');
+            INSERT INTO project_dependencies
+                (project_path, manifest_type, package_name, language, detected_from)
+                VALUES ('d:/ws/crates/cli', 'cargotoml', 'notify', 'rust', 'manifest');",
+        )
+        .unwrap();
+    let member = "d:/ws/crates/cli";
+    db.store_manifest_dependency(
+        member,
+        "notify",
+        Some("7.0.0"),
+        "rust",
+        false,
+        true,
+        "manifest",
+    )
+    .unwrap();
+    db.store_dependency_instances(
+        "d:/ws",
+        "rust",
+        &[DependencyInstanceInput {
+            package_name: "notify".into(),
+            version: "8.2.0".into(),
+            is_direct: true,
+            is_dev: false,
+            scope: "runtime".into(),
+        }],
+    )
+    .unwrap();
+
+    let conn = rusqlite::Connection::open(&path).unwrap();
+    assert!(write_back_inventory(&db, &conn) >= 1);
+    let stored: String = conn
+        .query_row(
+            "SELECT version FROM user_dependencies WHERE project_path = ?1 AND package_name = 'notify'",
+            [member],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(stored, "8.2.0");
+}

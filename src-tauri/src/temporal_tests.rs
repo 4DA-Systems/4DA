@@ -334,6 +334,18 @@ fn setup_resolution_db() -> Connection {
             repo_path TEXT NOT NULL,
             commit_hash TEXT,
             timestamp TEXT DEFAULT (datetime('now'))
+        );
+        CREATE TABLE dependency_instances (
+            id INTEGER PRIMARY KEY,
+            project_path TEXT NOT NULL,
+            ecosystem TEXT NOT NULL,
+            package_name TEXT NOT NULL,
+            version TEXT NOT NULL,
+            is_direct INTEGER NOT NULL DEFAULT 0,
+            is_dev INTEGER NOT NULL DEFAULT 0,
+            scope TEXT NOT NULL DEFAULT 'unknown',
+            detected_at TEXT NOT NULL DEFAULT (datetime('now')),
+            UNIQUE(project_path, ecosystem, package_name, version)
         );",
     )
     .unwrap();
@@ -349,7 +361,32 @@ fn manifest_dep(conn: &Connection, project: &str, name: &str, language: &str) {
     .unwrap();
 }
 
+/// What a lockfile walk writes: the collapsed row and the lockfile layer.
 fn lockfile_dep(conn: &Connection, project: &str, name: &str, version: &str, eco: &str) {
+    stored_dep(conn, project, name, version, eco);
+    lockfile_copy(conn, project, name, version, eco, true);
+}
+
+/// One copy in a lockfile (`dependency_instances`) only.
+fn lockfile_copy(
+    conn: &Connection,
+    project: &str,
+    name: &str,
+    version: &str,
+    eco: &str,
+    direct: bool,
+) {
+    conn.execute(
+        "INSERT INTO dependency_instances (project_path, ecosystem, package_name, version, is_direct)
+         VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![project, eco, name, version, i64::from(direct)],
+    )
+    .unwrap();
+}
+
+/// A `user_dependencies` row with no lockfile behind it: what the inventory
+/// write-back leaves on a workspace member, or a `go.mod` directive.
+fn stored_dep(conn: &Connection, project: &str, name: &str, version: &str, eco: &str) {
     conn.execute(
         "INSERT INTO user_dependencies (project_path, package_name, version, ecosystem)
          VALUES (?1, ?2, ?3, ?4)",
@@ -441,6 +478,95 @@ fn version_resolves_from_a_workspace_lockfile_under_the_same_root() {
     let deps = get_all_dependencies(&conn).unwrap();
     assert_eq!(
         version_of(&deps, "d:/4da/crates/member", "serde").as_deref(),
+        Some("1.0.200")
+    );
+}
+
+/// Live 2026-10-27..31: a workspace member's own `user_dependencies` row held
+/// the version 4DA had written back to it weeks earlier (notify 7.0.0), and
+/// resolution read that row first, so it never saw the workspace lockfile
+/// move to 8.2.0. Three mornings told the user to upgrade from a version no
+/// lockfile held. The lockfile is the only source of an installed version.
+#[test]
+fn a_member_follows_the_workspace_lockfile_not_its_own_written_back_row() {
+    let conn = setup_resolution_db();
+    active_root(&conn, "D:\\ws");
+    manifest_dep(&conn, "d:/ws/crates/cli", "notify", "rust");
+    stored_dep(&conn, "d:/ws/crates/cli", "notify", "7.0.0", "rust");
+    lockfile_dep(&conn, "d:/ws", "notify", "8.2.0", "crates.io");
+
+    let deps = get_all_dependencies(&conn).unwrap();
+    assert_eq!(
+        version_of(&deps, "d:/ws/crates/cli", "notify").as_deref(),
+        Some("8.2.0")
+    );
+}
+
+/// A sibling member's written-back row is not a lockfile either: the old
+/// tier (ii) sorted it first (it is direct), so one frozen member kept the
+/// others frozen too.
+#[test]
+fn a_sibling_members_written_back_row_never_versions_a_member() {
+    let conn = setup_resolution_db();
+    active_root(&conn, "D:\\ws");
+    manifest_dep(&conn, "d:/ws/crates/a", "tokio", "rust");
+    stored_dep(&conn, "d:/ws/crates/b", "tokio", "1.52.1", "rust");
+    lockfile_copy(&conn, "d:/ws", "tokio", "1.53.3", "crates.io", false);
+
+    let deps = get_all_dependencies(&conn).unwrap();
+    assert_eq!(
+        version_of(&deps, "d:/ws/crates/a", "tokio").as_deref(),
+        Some("1.53.3")
+    );
+}
+
+/// Two lockfiles under one repository root: the member is built by the one
+/// that encloses it, not by a nested app that happens to pin the crate too.
+#[test]
+fn the_nearest_enclosing_lockfile_versions_a_member() {
+    let conn = setup_resolution_db();
+    active_root(&conn, "D:\\ws");
+    manifest_dep(&conn, "d:/ws/crates/daemon", "tokio", "rust");
+    lockfile_dep(&conn, "d:/ws/apps/desktop", "tokio", "1.52.3", "crates.io");
+    lockfile_copy(&conn, "d:/ws", "tokio", "1.54.1", "crates.io", false);
+
+    let deps = get_all_dependencies(&conn).unwrap();
+    assert_eq!(
+        version_of(&deps, "d:/ws/crates/daemon", "tokio").as_deref(),
+        Some("1.54.1")
+    );
+}
+
+/// `go`/`toolchain` directives have no lockfile row; their stored version is
+/// a fact of go.mod itself and still resolves.
+#[test]
+fn a_go_directive_version_still_resolves_without_a_lockfile_row() {
+    let conn = setup_resolution_db();
+    active_root(&conn, "D:\\svc");
+    manifest_dep(&conn, "d:/svc", "stdlib", "go");
+    stored_dep(&conn, "d:/svc", "stdlib", "1.22.3", "go");
+
+    let deps = get_all_dependencies(&conn).unwrap();
+    assert_eq!(
+        version_of(&deps, "d:/svc", "stdlib").as_deref(),
+        Some("1.22.3")
+    );
+}
+
+/// A database without the lockfile layer (a bare fixture) keeps the older
+/// single-table resolution instead of failing the whole read.
+#[test]
+fn a_database_without_the_lockfile_layer_still_resolves() {
+    let conn = setup_resolution_db();
+    conn.execute_batch("DROP TABLE dependency_instances;")
+        .unwrap();
+    active_root(&conn, "D:\\4DA");
+    manifest_dep(&conn, "d:/4da", "serde", "rust");
+    stored_dep(&conn, "d:/4da", "serde", "1.0.200", "rust");
+
+    let deps = get_all_dependencies(&conn).unwrap();
+    assert_eq!(
+        version_of(&deps, "d:/4da", "serde").as_deref(),
         Some("1.0.200")
     );
 }

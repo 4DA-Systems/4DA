@@ -414,25 +414,20 @@ pub(crate) fn included_dependencies_resolved(
     // src-tauri's `axum` resolved to relay's 0.7.9. Tier (ii), in Rust below,
     // widens only to lockfiles under the SAME active repo root (a workspace
     // member resolving from the workspace lockfile). Never across roots or
-    // ecosystems. Direct rows win over transitive, then most-recently-seen.
+    // ecosystems. Direct rows win over transitive.
+    //
+    // Both tiers read the LOCKFILE layer (`dependency_instances`), never the
+    // `user_dependencies` rows this function's own result is written back
+    // into: that loop froze every workspace member at its first version
+    // (`temporal_resolve`).
     let sql = format!(
         "SELECT pd.id, pd.project_path, pd.manifest_type, pd.package_name,
-                    COALESCE(
-                        pd.version,
-                        (SELECT ud.version FROM user_dependencies ud
-                          WHERE ud.project_path = pd.project_path
-                            AND LOWER(ud.package_name) = LOWER(pd.package_name)
-                            AND {ud_family} = {pd_family}
-                            AND ud.version IS NOT NULL AND ud.version <> ''
-                          ORDER BY ud.is_direct DESC, ud.last_seen_at DESC
-                          LIMIT 1)
-                    ) AS version,
+                    {version} AS version,
                     pd.is_dev, pd.is_direct, pd.language, pd.last_scanned,
                     pd.detected_from, pd.project_relevance
              FROM project_dependencies pd
              ORDER BY pd.project_path, pd.package_name",
-        ud_family = ecosystem_family_sql("ud.ecosystem"),
-        pd_family = ecosystem_family_sql("pd.language"),
+        version = resolve::same_project_version_sql(resolve::has_instance_layer(conn)),
     );
     let mut stmt = conn.prepare(&sql)?;
 
@@ -453,9 +448,12 @@ pub(crate) fn included_dependencies_resolved(
             )
         })
         .collect();
-    resolve_versions_within_roots(conn, &mut all_deps, active_roots);
+    resolve::resolve_versions_within_roots(conn, &mut all_deps, active_roots);
     Ok(all_deps)
 }
+
+#[path = "temporal_resolve.rs"]
+mod resolve;
 
 /// Repo roots with a commit in the last 60 days — the scope every
 /// dependency reader shares (this module's manifest funnel and the
@@ -538,49 +536,6 @@ fn ecosystem_family_sql(column: &str) -> String {
             acc
         });
     format!("CASE LOWER({column}){arms} ELSE LOWER({column}) END")
-}
-
-/// Tier (ii) of version resolution: a dep still version-less after the
-/// same-project lookup may resolve from a lockfile elsewhere under the SAME
-/// active repo root (a workspace member's crate resolved by the workspace
-/// `Cargo.lock`), same ecosystem family. Never across roots or ecosystems;
-/// with no active roots (first run) nothing widens.
-fn resolve_versions_within_roots(
-    conn: &rusqlite::Connection,
-    deps: &mut [ProjectDependency],
-    active_roots: &[String],
-) {
-    if active_roots.is_empty() || deps.iter().all(|d| d.version.is_some()) {
-        return;
-    }
-    let Ok(mut stmt) = conn.prepare(
-        "SELECT ud.project_path, ud.ecosystem, ud.version FROM user_dependencies ud
-         WHERE LOWER(ud.package_name) = LOWER(?1)
-           AND ud.version IS NOT NULL AND ud.version <> ''
-         ORDER BY ud.is_direct DESC, ud.last_seen_at DESC",
-    ) else {
-        return;
-    };
-    for dep in deps.iter_mut().filter(|d| d.version.is_none()) {
-        let family = ecosystem_family(&dep.language);
-        let dep_path = dep.project_path.clone();
-        let Ok(rows) = stmt.query_map(params![dep.package_name], |r| {
-            Ok((
-                r.get::<_, String>(0)?,
-                r.get::<_, String>(1)?,
-                r.get::<_, String>(2)?,
-            ))
-        }) else {
-            continue;
-        };
-        dep.version = rows
-            .flatten()
-            .find(|(path, ecosystem, _)| {
-                ecosystem_family(ecosystem) == family
-                    && shares_active_root(&dep_path, path, active_roots)
-            })
-            .map(|(_, _, version)| version);
-    }
 }
 
 // The bounded "installed versions near a project" lookup shared by the

@@ -129,9 +129,12 @@ pub(crate) async fn generate_briefing_internal(
 
     let act_now = crate::brief_cadence::act_now_ids(&facts);
     if auto_triggered {
-        if let Some(cached) =
-            try_reuse_recent_briefing(db, &facts.fingerprint, &act_now, facts.advisories_ready())
-        {
+        if let Some(cached) = try_reuse_recent_briefing(
+            db,
+            &facts.fingerprint,
+            &act_now,
+            briefing_reuse::Readiness::of(facts.advisories),
+        ) {
             return Ok(cached);
         }
     }
@@ -292,7 +295,7 @@ pub(crate) async fn generate_briefing_internal(
                 briefing_id,
                 &facts.fingerprint,
                 &act_now,
-                facts.advisories_ready(),
+                briefing_reuse::Readiness::of(facts.advisories),
             );
             crate::brief_cadence::note_brief_written(db, auto_triggered);
         }
@@ -337,7 +340,7 @@ fn serve_deterministic(
                 id,
                 &facts.fingerprint,
                 &crate::brief_cadence::act_now_ids(facts),
-                facts.advisories_ready(),
+                briefing_reuse::Readiness::of(facts.advisories),
             );
             crate::brief_cadence::note_brief_written(db, auto_triggered);
         }
