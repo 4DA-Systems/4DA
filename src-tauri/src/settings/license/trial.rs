@@ -53,6 +53,32 @@ fn to_rfc3339(unix: i64) -> String {
         .to_rfc3339()
 }
 
+/// The merged machine-scope trial stamp that [`reconcile_trial_stamp`] would
+/// settle on, computed WITHOUT writing any store. For out-of-process readers
+/// (the `4da` CLI) that must judge the trial exactly as the app does — never
+/// from settings.json alone, which a user can rewrite — but must not mutate
+/// the app's licence state. `None` = no stamp anywhere (trial never started).
+pub(crate) fn peek_trial_stamp(
+    data_dir: &std::path::Path,
+    settings_stamp: Option<&str>,
+    use_keychain: bool,
+) -> Option<String> {
+    let now = clock::license_effective_now().timestamp();
+    let from_keychain = if use_keychain {
+        keystore::get_secret(keystore::TRIAL_STAMP_KEY)
+            .ok()
+            .flatten()
+            .and_then(|s| parse_unix(&s))
+    } else {
+        None
+    };
+    let from_file = clock::load_floor_from(data_dir)
+        .map(|r| r.trial_started_unix)
+        .filter(|t| *t > 0);
+    let from_settings = settings_stamp.and_then(parse_unix);
+    merge_trial_stamps(&[from_settings, from_keychain, from_file], now).map(to_rfc3339)
+}
+
 /// Merge the trial stamp across settings.json, the keychain (when
 /// `use_keychain`) and `data_dir/license_clock.json`; write the merged value
 /// back to the machine-scope stores; return it as RFC 3339. With no stamp
