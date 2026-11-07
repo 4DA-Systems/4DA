@@ -5,6 +5,7 @@
 import { memo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { EvidenceItem } from '../../../src-tauri/bindings/bindings/EvidenceItem';
+import { InlineText } from '../briefing/InlineText';
 
 /** Citation rows rendered before the "show more" control. */
 export const EVIDENCE_COLLAPSE_THRESHOLD = 2;
@@ -79,14 +80,14 @@ export const EvidenceList = memo(function EvidenceList({
                 className="flex-1 min-w-0 text-text-secondary hover:text-text-primary transition-colors truncate"
                 title={e.title}
               >
-                {e.title}
+                <InlineText line={e.title} allowLinks={false} />
               </a>
             ) : (
               <span
                 className="flex-1 min-w-0 text-text-secondary truncate"
                 title={e.title}
               >
-                {e.title}
+                <InlineText line={e.title} allowLinks={false} />
               </span>
             )}
             <span className="shrink-0 text-[10px] text-text-muted tabular-nums">
