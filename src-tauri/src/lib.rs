@@ -849,13 +849,9 @@ pub fn run() {
                     .iter()
                     .map(|n| victauri_plugin::CommandInfo::new(*n))
                     .collect();
-            #[allow(unused_mut)]
-            let mut victauri = victauri_plugin::VictauriBuilder::new();
-            #[cfg(debug_assertions)]
-            if let Some(port) = dev_inspection::victauri_fallback_port() {
-                victauri = victauri.port(port);
-            }
-            victauri
+            // victauri-plugin picks its own port: 7373 (or VICTAURI_PORT), the next
+            // 10, then an OS-assigned one when Windows has reserved that range.
+            victauri_plugin::VictauriBuilder::new()
                 .commands(&commands)
                 .auth_enabled()
                 // 4DA stores its SQLite DB in the project `data/` dir, not the OS
