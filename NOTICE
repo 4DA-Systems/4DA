@@ -612,7 +612,7 @@ syn 3.0.9 - MIT OR Apache-2.0 - https://github.com/dtolnay/syn
 sync_wrapper 1.0.2 - Apache-2.0 - https://github.com/Actyx/sync_wrapper
 synstructure 0.13.2 - MIT - https://github.com/mystor/synstructure
 synstructure 0.14.0 - MIT - https://github.com/mystor/synstructure
-sysinfo 0.39.6 - MIT - https://github.com/GuillaumeGomez/sysinfo
+sysinfo 0.40.1 - MIT - https://github.com/GuillaumeGomez/sysinfo
 system-configuration 0.7.0 - MIT OR Apache-2.0 - https://github.com/mullvad/system-configuration-rs
 system-configuration-sys 0.6.0 - MIT OR Apache-2.0 - https://github.com/mullvad/system-configuration-rs
 system-deps 6.2.2 - MIT OR Apache-2.0 - https://github.com/gdesmott/system-deps
