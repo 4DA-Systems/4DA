@@ -2,8 +2,9 @@
 // Copyright (c) 2025-2026 4DA Systems Pty Ltd (ACN 696 078 841). All rights reserved.
 // Licensed under the Functional Source License 1.1 (FSL-1.1-Apache-2.0). See LICENSE file.
 
-//! The two programmatic inspection channels of a DEBUG build: the WebView2
-//! DevTools Protocol (CDP) port and the Victauri MCP server's port.
+//! The WebView2 DevTools Protocol (CDP) port of a DEBUG build. (The Victauri MCP
+//! server's port is victauri-plugin's own: since 0.10.4 it falls back to an
+//! OS-assigned port when all of 7373-7383 is unavailable.)
 //!
 //! A release build has neither. [`webview_browser_args`] is `None` there, so
 //! every webview keeps wry's own arguments and no remote debugging port can be
@@ -23,8 +24,6 @@
 //! notification window and the briefing window must all get the IDENTICAL
 //! string — computed once and cached here.
 
-#[cfg(debug_assertions)]
-use std::net::{Ipv4Addr, TcpListener};
 use std::sync::OnceLock;
 
 use tauri::{Manager, Runtime, WebviewWindowBuilder};
@@ -93,69 +92,6 @@ pub(crate) fn apply_to_builder<R: Runtime, M: Manager<R>>(
     }
 }
 
-// ============================================================================
-// Victauri port
-// ============================================================================
-
-/// The Victauri plugin's preferred port and the size of its fallback range.
-#[cfg(debug_assertions)]
-const VICTAURI_DEFAULT_PORT: u16 = 7373;
-#[cfg(debug_assertions)]
-const VICTAURI_FALLBACK_RANGE: u16 = 10;
-
-/// A port for the Victauri server when its whole 7373-7383 range is unusable.
-///
-/// Windows reserves dynamic 100-port blocks for Hyper-V/WinNAT (`netsh int
-/// ipv4 show excludedportrange protocol=tcp`), different on every boot; when
-/// one covers 7373-7383 every bind fails with `os error 10013` and victauri-plugin
-/// 0.10.3 gives up. Then this hands it a port the OS assigns; clients find it in
-/// the discovery directory as usual. `None` (use the plugin's own choice) when
-/// `VICTAURI_PORT` is set or any port in the range binds.
-///
-/// Remove once 4DA depends on a victauri-plugin release that falls back to an
-/// OS-assigned port itself.
-#[cfg(debug_assertions)]
-pub(crate) fn victauri_fallback_port() -> Option<u16> {
-    if std::env::var_os("VICTAURI_PORT").is_some() {
-        return None;
-    }
-    let chosen = choose_victauri_port(can_bind, os_assigned_port);
-    if let Some(port) = chosen {
-        tracing::warn!(
-            target: "4da::victauri",
-            port,
-            "Ports {}-{} are unavailable (reserved?); Victauri will use OS-assigned port {}",
-            VICTAURI_DEFAULT_PORT,
-            VICTAURI_DEFAULT_PORT + VICTAURI_FALLBACK_RANGE,
-            port
-        );
-    }
-    chosen
-}
-
-#[cfg(debug_assertions)]
-fn choose_victauri_port(
-    bindable: impl Fn(u16) -> bool,
-    os_port: impl FnOnce() -> Option<u16>,
-) -> Option<u16> {
-    let range = VICTAURI_DEFAULT_PORT..=VICTAURI_DEFAULT_PORT + VICTAURI_FALLBACK_RANGE;
-    if range.into_iter().any(bindable) {
-        return None;
-    }
-    os_port()
-}
-
-#[cfg(debug_assertions)]
-fn can_bind(port: u16) -> bool {
-    TcpListener::bind((Ipv4Addr::LOCALHOST, port)).is_ok()
-}
-
-#[cfg(debug_assertions)]
-fn os_assigned_port() -> Option<u16> {
-    let listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).ok()?;
-    listener.local_addr().ok().map(|a| a.port())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -207,37 +143,5 @@ mod tests {
             "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection \
              --remote-debugging-port=9333"
         );
-    }
-
-    #[cfg(debug_assertions)]
-    #[test]
-    fn victauri_keeps_its_own_choice_while_any_range_port_binds() {
-        let only_7380 = |p: u16| p == 7380;
-        assert_eq!(choose_victauri_port(only_7380, || Some(50_123)), None);
-        assert_eq!(choose_victauri_port(|_| true, || Some(50_123)), None);
-    }
-
-    #[cfg(debug_assertions)]
-    #[test]
-    fn victauri_gets_an_os_port_when_the_whole_range_is_reserved() {
-        let checked = std::cell::RefCell::new(Vec::new());
-        let none_bind = |p: u16| {
-            checked.borrow_mut().push(p);
-            false
-        };
-        assert_eq!(
-            choose_victauri_port(none_bind, || Some(50_123)),
-            Some(50_123)
-        );
-        assert_eq!(*checked.borrow(), (7373..=7383).collect::<Vec<_>>());
-        assert_eq!(choose_victauri_port(|_| false, || None), None);
-    }
-
-    #[cfg(debug_assertions)]
-    #[test]
-    fn os_assigned_port_is_a_real_bindable_port() {
-        let port = os_assigned_port().expect("loopback bind");
-        assert_ne!(port, 0);
-        assert!(can_bind(port));
     }
 }
