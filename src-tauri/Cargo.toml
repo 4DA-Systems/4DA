@@ -145,7 +145,7 @@ syn = { version = "3", features = ["full"] }
 tauri-plugin-autostart = "2"
 
 # System hardware detection (RAM, CPU) for model recommendations
-sysinfo = { version = "0.39", default-features = false, features = ["system"] }
+sysinfo = { version = "0.40", default-features = false, features = ["system"] }
 
 # AI agent introspection & control (MCP server).
 # Caret-compatible (not "=") so patch/minor Victauri releases flow in via
