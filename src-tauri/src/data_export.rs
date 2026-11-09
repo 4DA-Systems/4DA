@@ -229,7 +229,6 @@ fn safe_query_all(
 
     let column_names: Vec<String> = stmt
         .column_names()
-        .iter()
         .map(std::string::ToString::to_string)
         .collect();
 

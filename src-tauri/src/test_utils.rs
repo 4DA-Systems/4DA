@@ -71,6 +71,32 @@ pub(crate) fn empty_scoring_context() -> crate::scoring::ScoringContext {
     crate::scoring::ScoringContext::builder().build()
 }
 
+/// Send every statement `conn` runs to `sink` (`None` stops tracing), with the
+/// text the legacy `Connection::trace` gave: SQL with its parameters expanded,
+/// or SQLite's `-- TRIGGER ...` comment for a trigger program. rusqlite 0.41
+/// removed `trace`; this keeps the tests that count statements or read their
+/// text unchanged on `trace_v2`.
+#[cfg(test)]
+pub(crate) fn trace_sql(conn: &mut rusqlite::Connection, sink: Option<fn(&str)>) {
+    use rusqlite::trace::{TraceEvent, TraceEventCodes};
+    let result = match sink {
+        Some(sink) => conn.trace_v2(
+            TraceEventCodes::SQLITE_TRACE_STMT,
+            Some(move |event: TraceEvent<'_>| {
+                if let TraceEvent::Stmt(stmt, sql) = event {
+                    if sql.starts_with("--") {
+                        sink(sql);
+                    } else {
+                        sink(&stmt.expanded_sql().unwrap_or_else(|| sql.to_owned()));
+                    }
+                }
+            }),
+        ),
+        None => conn.trace_v2(TraceEventCodes::empty(), None::<fn(TraceEvent<'_>)>),
+    };
+    result.expect("register the SQL trace callback");
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
