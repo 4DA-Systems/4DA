@@ -2,6 +2,7 @@
 import { memo, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { parseBriefingContent, type ParsedSection } from '../../utils/briefing-parser';
+import { AgentHandoffButton } from '../agent-handoff/AgentHandoffButton';
 import { RelativeTimestamp } from './BriefingHelpers';
 import { InlineText } from './InlineText';
 
@@ -98,6 +99,7 @@ export const NarratedBrief = memo(function NarratedBrief({
         </span>
         <div className="ms-auto flex items-center gap-3">
           {lastGenerated && <RelativeTimestamp date={lastGenerated} />}
+          <AgentHandoffButton mode="brief" />
           <button
             type="button"
             onClick={onRegenerate}

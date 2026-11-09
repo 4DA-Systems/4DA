@@ -2489,5 +2489,20 @@
   "signals.stack.modeNote": "Themes and Graph map your reading feed. What changed in your stack is in List: each change is one package, so there is nothing to cluster.",
   "signals.interestsOff": "Reading is off, so Signal shows what changed in your stack. Turn on interests to also follow news and discussion about it.",
   "signals.interestsOffAction": "Choose interests",
-  "signals.interestsPending": "Nothing from your interests yet. They are fetched on the next refresh."
+  "signals.interestsPending": "Nothing from your interests yet. They are fetched on the next refresh.",
+  "agentHandoff.fix.claude_code": "Fix with Claude Code",
+  "agentHandoff.fix.vscode_claude": "Fix with Claude Code in VS Code",
+  "agentHandoff.fix.cursor": "Fix with Cursor",
+  "agentHandoff.brief.claude_code": "Ask Claude Code",
+  "agentHandoff.brief.vscode_claude": "Ask Claude Code in VS Code",
+  "agentHandoff.brief.cursor": "Ask Cursor",
+  "agentHandoff.tooltip": "Opens your own agent with the prompt filled in. Nothing is sent until you press Enter there.",
+  "agentHandoff.more": "More ways to hand this to your agent",
+  "agentHandoff.copy": "Copy prompt for your agent",
+  "agentHandoff.copyTooltip": "Copies a prompt to paste into Codex, Gemini CLI, Copilot or any agent that has the 4DA tools.",
+  "agentHandoff.copied": "Copied",
+  "agentHandoff.pasteHint": "Prompt copied. Paste it into Claude Code (Ctrl+V) and press Enter.",
+  "agentHandoff.needsFirstRun": "To open Claude Code from here, start Claude Code once and send any message.",
+  "agentHandoff.openFailed": "Could not open your agent.",
+  "agentHandoff.copyFailed": "Could not copy the prompt."
 }

@@ -496,6 +496,33 @@ release notes for that release instead:
   days, "no release found" 24 h) under a parser version, so each release is read once.
 - **Disable:** turn the setting off. Nothing is sent to GitHub for release notes while it is off.
 
+### 2n. Agent hand-off (only when you click)
+
+(`src-tauri/src/agent_handoff.rs`, `src/lib/agent-handoff.ts`) — **4DA makes no network call here.**
+"Fix with Claude Code" on a Preemption card and "Ask Claude Code" on the Brief hand a prompt to a
+coding agent installed on this machine, through the link handler that agent registered with the
+operating system:
+
+| Agent | What 4DA opens (locally) |
+|---|---|
+| Claude Code (terminal) | `claude-cli://open?cwd=<project folder>&q=<prompt>` |
+| Claude Code in VS Code | `vscode://anthropic.claude-code/open?prompt=<prompt>` |
+| Cursor | `cursor://anysphere.cursor-deeplink/prompt?text=<prompt>` |
+
+- **Nothing is sent until you press Enter.** Each link only fills in the agent's input box. When
+  you send it, that agent sends it to its own provider **under your own account and plan** — 4DA
+  never sees, stores or handles your agent's credentials, and never runs an agent itself.
+- **What the prompt contains:** dependency names, the installed and fix versions, advisory IDs
+  (GHSA/CVE/RUSTSEC/PYSEC/GO) and a short project label (`code/shop`). It is built only from
+  those structured fields; advisory summaries and other third-party text are never copied in. The
+  project's folder path is used only to open Claude Code in that folder.
+- **Windows without Windows Terminal:** Claude Code's link handler cannot open a window there, so
+  4DA copies the prompt to your clipboard and opens an empty Claude Code in a new console in the
+  project folder for you to paste into. **Copy prompt** puts the same prompt on your clipboard for
+  any other agent (Codex, Gemini CLI, Copilot).
+- **Disable:** don't click it. Nothing happens without a click, and detection only reads which
+  link handlers are registered (Windows registry, macOS app bundles, Linux `mimeapps.list`).
+
 ---
 
 ## 3. Setup-time (one-time downloads)
@@ -577,6 +604,7 @@ so it is fetched **once, on demand** (`src-tauri/src/embeddings_providers/model_
   | Stack Overflow | your tags | question fetch |
   | your configured LLM provider | dependency **names** (and, for the AI brief, the **installed and fix versions** of vulnerable or outdated ones), short project labels, git-derived work **topics**, declared interests, and the titles of items you saved — nouns and version numbers, never your prose | rerank + briefing (BYOK, off unless you supply a key) |
   | `api.openai.com` `POST /v1/embeddings` (§2a) — **only with `allow_cloud_embeddings = true`** | the text being embedded, **including chunks of text from your local files** (the `context_chunks` 4DA indexes: READMEs and other indexed context), plus item text | cloud embeddings (off by default; never enabled by setting a key alone) |
+  | your own coding agent (§2n) — only after you click a hand-off **and** press Enter in that agent, which then sends it to its provider under your account | dependency names, installed and fix versions, advisory IDs, a short project label — never advisory text, never your source code | agent hand-off |
   | your SMTP server (§2l) — only if you configure digest email | SMTP credentials + the digest (item titles, links, scores, the topics of yours they matched); **unencrypted if `use_tls = false`** | digest email |
 
   Go module paths are the sharpest edge here: a private module path such as

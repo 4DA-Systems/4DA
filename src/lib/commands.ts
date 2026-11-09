@@ -56,6 +56,9 @@ import type { StackProfileSummary, StackDetection } from '../types/stacks';
 import type { EvidenceFeed } from '../../src-tauri/bindings/bindings/EvidenceFeed';
 import type { EvidenceItem } from '../../src-tauri/bindings/bindings/EvidenceItem';
 import type { BlindSpotTeaser } from '../../src-tauri/bindings/bindings/BlindSpotTeaser';
+import type { AgentHandoffTargets } from '../../src-tauri/bindings/bindings/AgentHandoffTargets';
+import type { HandoffOutcome } from '../../src-tauri/bindings/bindings/HandoffOutcome';
+import type { HandoffTarget } from '../../src-tauri/bindings/bindings/HandoffTarget';
 import type { BlindSpotAssessment } from '../../src-tauri/bindings/bindings/BlindSpotAssessment';
 import type { CalibrationSprintCard } from '../../src-tauri/bindings/bindings/CalibrationSprintCard';
 import type { CalibrationSprintStatus } from '../../src-tauri/bindings/bindings/CalibrationSprintStatus';
@@ -350,6 +353,9 @@ interface CommandMap {
   notification_clicked: { params: { item_id?: number | null }; result: void };
   briefing_item_clicked: { params: { item_id?: number | null }; result: void };
   briefing_open_url: { params: { url: string }; result: void };
+  // Agent hand-off: pre-fill a prompt in the user's own agent (nothing is sent until they press Enter)
+  agent_handoff_targets: { params: Record<string, never>; result: AgentHandoffTargets };
+  open_agent_handoff: { params: { target: HandoffTarget; prompt: string; cwd: string | null }; result: HandoffOutcome };
   // Sovereign Cold Boot — instant first-paint of yesterday's briefing snapshot.
   // Returns null if no fresh (≤24h, version-matched) snapshot is on disk.
   get_briefing_snapshot: { params: Record<string, never>; result: BriefingSnapshotResult | null };
