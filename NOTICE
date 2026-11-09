@@ -207,7 +207,7 @@ exr 1.74.2 - BSD-3-Clause - https://github.com/johannesvollmer/exrs
 fallible-iterator 0.3.0 - MIT/Apache-2.0 - https://github.com/sfackler/rust-fallible-iterator
 fallible-streaming-iterator 0.1.9 - MIT/Apache-2.0 - https://github.com/sfackler/fallible-streaming-iterator
 fast-float2 0.2.4 - MIT OR Apache-2.0 - https://github.com/Alexhuszagh/fast-float-rust
-fastembed 7.5.0 - Apache-2.0 - https://github.com/Anush008/fastembed-rs
+fastembed 7.6.1 - Apache-2.0 - https://github.com/Anush008/fastembed-rs
 fastrand 2.5.0 - Apache-2.0 OR MIT - https://github.com/smol-rs/fastrand
 fax 0.2.7 - MIT - https://github.com/pdf-rs/fax
 fdeflate 0.3.7 - MIT OR Apache-2.0 - https://github.com/image-rs/fdeflate
@@ -356,7 +356,7 @@ log 0.4.34 - MIT OR Apache-2.0 - https://github.com/rust-lang/log
 loop9 0.1.5 - MIT - https://gitlab.com/kornelski/loop9.git
 lopdf 0.42.0 - MIT - https://github.com/J-F-Liu/lopdf.git
 lru-slab 0.1.3 - MIT OR Apache-2.0 OR Zlib - https://github.com/Ralith/lru-slab
-lzma-rust2 0.23.0 - Apache-2.0 - https://github.com/hasenbanck/lzma-rust2/
+lzma-rust2 0.25.0 - Apache-2.0 - https://github.com/hasenbanck/lzma-rust2/
 mac-notification-sys 0.6.15 - MIT/Apache-2.0 - https://github.com/h4llow3En/mac-notification-sys
 macro_rules_attribute 0.2.3 - Apache-2.0 OR MIT OR Zlib - https://github.com/danielhenrymantilla/macro_rules_attribute-rs
 macro_rules_attribute-proc_macro 0.2.3 - Apache-2.0 OR MIT OR Zlib - https://github.com/danielhenrymantilla/macro_rules_attribute-rs
@@ -827,7 +827,7 @@ zerotrie 0.2.5 - Unicode-3.0 - https://github.com/unicode-org/icu4x
 zerovec 0.11.8 - Unicode-3.0 - https://github.com/unicode-org/icu4x
 zerovec-derive 0.11.6 - Unicode-3.0 - https://github.com/unicode-org/icu4x
 zip 8.6.0 - MIT - https://github.com/zip-rs/zip2
-zip 9.1.3 - MIT - https://github.com/zip-rs/zip2
+zip 9.4.1 - MIT - https://github.com/zip-rs/zip2
 zlib-rs 0.6.8 - Zlib - https://github.com/trifectatechfoundation/zlib-rs
 zmij 1.0.23 - MIT - https://github.com/dtolnay/zmij
 zopfli 0.8.3 - Apache-2.0 - https://github.com/zopfli-rs/zopfli
