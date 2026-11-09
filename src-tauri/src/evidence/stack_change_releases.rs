@@ -662,8 +662,7 @@ mod tests {
         let worker_db = db.clone();
         let worker = std::thread::spawn(move || {
             let mut reader = reader;
-            #[allow(deprecated)]
-            reader.trace(Some(count_statement));
+            crate::test_utils::trace_sql(&mut reader, Some(count_statement));
             let changes = super::collect_release_changes(&worker_db, &reader);
             tx.send((changes.len(), STATEMENTS.with(std::cell::Cell::get)))
                 .expect("send");

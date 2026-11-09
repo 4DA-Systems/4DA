@@ -478,9 +478,9 @@ mod tests {
         let rows: Vec<crate::db::ScorePersistRow> =
             ids.iter().map(|&id| (id, 0.5, None, None, None)).collect();
 
-        db.conn.lock().trace(Some(record));
+        crate::test_utils::trace_sql(&mut db.conn.lock(), Some(record));
         persist_drain_chunk(&db, &rows, &ids).expect("persist");
-        db.conn.lock().trace(None);
+        crate::test_utils::trace_sql(&mut db.conn.lock(), None);
 
         let traced = TRACED.with(|t| t.borrow().clone());
         let scores = rows_per_transaction(&traced, "set relevance_score");
