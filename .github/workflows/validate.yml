@@ -305,7 +305,7 @@ jobs:
       # node_modules (the `clean: false` this job used to rely on), so the store
       # cache is what keeps the install off the critical path.
       - name: Setup pnpm
-        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
         with:
           # MUST equal package.json's packageManager — action-setup hard-errors
           # on a mismatch (the reason nightly-audit.yml installs pnpm 11 by hand).
@@ -452,7 +452,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
         with:
           version: 10.34.6
 
@@ -515,7 +515,7 @@ jobs:
           persist-credentials: false
 
       - name: Setup pnpm
-        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+        uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
         with:
           # The server's own pin (its package.json packageManager).
           package_json_file: mcp-server/package.json
@@ -646,7 +646,7 @@ jobs:
       # option (0.19 accepts only the old form, 0.20 only the new), so this
       # job's invocation is valid on exactly one line of releases.
       - name: Install cargo-audit + cargo-deny (prebuilt)
-        uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2
+        uses: taiki-e/install-action@3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2 # v2
         with:
           tool: cargo-audit,cargo-deny@0.20.2
 
@@ -1165,7 +1165,7 @@ jobs:
 
       - name: Install cargo-audit + cargo-deny (prebuilt)
         if: matrix.label == 'default'
-        uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2
+        uses: taiki-e/install-action@3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2 # v2
         with:
           tool: cargo-audit,cargo-deny
 
@@ -1218,7 +1218,7 @@ jobs:
       # hundreds of times. Hermetic mirrors a contributor's `cargo test`.
       - name: Install cargo-nextest (prebuilt)
         if: github.event_name != 'pull_request'
-        uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2
+        uses: taiki-e/install-action@3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2 # v2
         with:
           tool: cargo-nextest
 
@@ -1507,7 +1507,7 @@ jobs:
         run: node scripts/fetch-ocr-models.cjs
 
       - name: Install cargo-nextest (prebuilt)
-        uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2
+        uses: taiki-e/install-action@3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2 # v2
         with:
           tool: cargo-nextest
 
@@ -1607,7 +1607,7 @@ jobs:
         run: node scripts/fetch-ocr-models.cjs
 
       - name: Install cargo-nextest (prebuilt)
-        uses: taiki-e/install-action@1e29709c0ec63babbe8f266397a465f29a825f91 # v2
+        uses: taiki-e/install-action@3a3daafd3b7f23b8f65d9f5ba2db203fb59b79e2 # v2
         with:
           tool: cargo-nextest
 
