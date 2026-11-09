@@ -104,15 +104,32 @@ pub enum HandoffOutcome {
 
 /// Which agents can take a hand-off on this machine. Reads only link-handler
 /// registrations, install folders and PATH; never runs anything.
+/// Detection reads the registry, the file system and PATH, so it runs on the
+/// blocking pool, never the UI thread (ipc_blocking).
 #[tauri::command]
-pub fn agent_handoff_targets() -> AgentHandoffTargets {
-    detect::detect().targets
+pub async fn agent_handoff_targets() -> std::result::Result<AgentHandoffTargets, String> {
+    crate::ipc_blocking::off_ui_thread_infallible("agent_handoff_targets", || {
+        detect::detect().targets
+    })
+    .await
 }
 
 /// Open the user's agent with `prompt` pre-filled (and, for Claude Code, in `cwd`).
 /// The prompt is NOT sent: the user reviews it and presses Enter in their agent.
+/// Detection and the process spawn run on the blocking pool (ipc_blocking).
 #[tauri::command]
-pub fn open_agent_handoff(
+pub async fn open_agent_handoff(
+    target: HandoffTarget,
+    prompt: String,
+    cwd: Option<String>,
+) -> Result<HandoffOutcome> {
+    crate::ipc_blocking::off_ui_thread("open_agent_handoff", move || {
+        open_agent_handoff_blocking(target, prompt, cwd)
+    })
+    .await
+}
+
+fn open_agent_handoff_blocking(
     target: HandoffTarget,
     prompt: String,
     cwd: Option<String>,
