@@ -153,6 +153,7 @@ mod ace;
 mod ace_commands;
 mod adversarial;
 mod agent_brief;
+mod agent_handoff;
 mod agent_memory;
 mod ai_costs;
 mod alert_triage;
@@ -985,6 +986,9 @@ pub fn run() {
             briefing_window::briefing_item_clicked,
             briefing_window::briefing_open_url,
             briefing_window::trigger_morning_briefing,
+            // Agent hand-off: open the user's own agent with a prompt pre-filled
+            agent_handoff::agent_handoff_targets,
+            agent_handoff::open_agent_handoff,
             // Briefing snapshot — Sovereign Cold Boot instant-paint
             briefing_snapshot::get_briefing_snapshot,
             // ACE (frontend-used subset)

@@ -90,6 +90,8 @@ pub const REGISTERED_COMMANDS: &[&str] = &[
     "briefing_item_clicked",
     "briefing_open_url",
     "trigger_morning_briefing",
+    "agent_handoff_targets",
+    "open_agent_handoff",
     "get_briefing_snapshot",
     "ace_get_detected_tech",
     "ace_get_active_topics",

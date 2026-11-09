@@ -6,9 +6,11 @@ import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { EvidenceItem } from '../../../src-tauri/bindings/bindings/EvidenceItem';
 import type { Urgency } from '../../../src-tauri/bindings/bindings/Urgency';
+import { canBuildFixPrompt } from '../../lib/agent-handoff';
 import { cmd } from '../../lib/commands';
 import { recordTrustEvent } from '../../lib/trust-feedback';
 import { formatProjectNames } from '../../utils/project-path';
+import { AgentHandoffButton } from '../agent-handoff/AgentHandoffButton';
 import { InlineText } from '../briefing/InlineText';
 import { useTranslatedContent } from '../ContentTranslationProvider';
 import { EvidenceList } from './PreemptionEvidenceList';
@@ -181,6 +183,11 @@ export const ItemCard = memo(function ItemCard({
     return hydratingRef.current;
   }, [fullItem, isListTrimmed, item.id]);
 
+  // The agent hand-off needs every citation (versions, all advisories), not the trimmed list copy.
+  const resolveFullItem = useCallback(async (): Promise<EvidenceItem> =>
+    fullItem ?? (isListTrimmed ? cmd('get_preemption_item_detail', { itemId: item.id }) : item),
+  [fullItem, isListTrimmed, item]);
+
   const cfg = URGENCY_CONFIG[item.urgency] ?? URGENCY_CONFIG.watch;
   const tier = getTierStyle(item.confidence.provenance);
   const sourceType = kindAsSourceType(item);
@@ -318,8 +325,9 @@ export const ItemCard = memo(function ItemCard({
           hiddenExtra={evidenceHeldBack}
           onExpand={hydrate}
         />
-        {shown.suggested_actions.length > 0 && (
-          <div className="mt-4 flex flex-wrap gap-2">
+        {(shown.suggested_actions.length > 0 || canBuildFixPrompt(shown)) && (
+          <div className="mt-4 flex flex-wrap items-start gap-2">
+            <AgentHandoffButton mode="fix" item={shown} resolveItem={resolveFullItem} />
             {shown.suggested_actions.map((action, i) => (
               <button
                 key={i}
