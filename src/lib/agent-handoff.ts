@@ -4,8 +4,10 @@
  * Cursor, or anything they paste into).
  *
  * Built ONLY from structured, 4DA-owned fields: dependency names from the
- * lockfile scan, versions from the version_context citation, advisory IDs
- * matched by strict patterns, and a short project label (the folder path is
+ * lockfile scan, versions from the version_context or fix-target citations,
+ * parent packages from dependency-path citations (every piece re-validated by
+ * a strict pattern), advisory IDs matched by strict patterns, and a short
+ * project label (the folder path is
  * only used to open Claude Code there, never written into the prompt, the same
  * rule as NETWORK.md "No local paths"). Third-party free text
  * (advisory summaries, feed titles, explanations) never goes in: it could
@@ -33,14 +35,87 @@ const ADVISORY_ID =
 /** "Installed: 1.2.3 -> update to >= 1.2.4 (direct) [dev]" (preemption.rs). */
 const INSTALLED_LINE =
   /^Installed: (\S+?)(?: \u2192 update to >= (\S+?))?(?: \((direct|transitive)\))?(?: \[dev\])?$/;
+/** Upgrade Plan step, one per installed version: "3.4.1 -> 3.9.0" (upgrade_plan.rs). */
+const FIX_TARGET_TITLE = /^(\S+) -> (\S+)$/;
+/** Its note lists the sites: "... Installed in: d:/a (direct), d:/b (transitive, dev)". */
+const FIX_TARGET_SITE = /([^,]+?) \((direct|transitive)(?:, dev)?\)(?:, |$)/g;
+/** "rmcp 3.4.1 <- victauri-plugin 0.10.3" (upgrade_parent.rs). */
+const DEP_PATH_TITLE = /^(\S+) (\S+) <- (\S+) (\S+)$/;
+/** "In d:/a; victauri-plugin is a direct dependency; requires ^3.1, which admits 3.9.0". */
+const DEP_PATH_NOTE = /^In (.+?); \S+ is a (?:direct|transitive) dependency; requires (.+?), which (admits|excludes) (\S+)$/;
+/** One comparator of a version requirement: "^3.1", ">=1.0.0-rc.1", "~=3.1", "1.x", "*". */
+const REQUIREMENT_TOKEN = /^[\^~=<>!]*[0-9*xX][0-9A-Za-z.+_*-]*$/;
+const MAX_PARENTS = 3;
+
+/** A version requirement as lockfiles record it ("^3.1", ">=1.2, <2", "1.x || 2.x"); no words. */
+function isRequirement(s: string): boolean {
+  const tokens = s.split(/[\s,|]+/).filter(Boolean);
+  return s.length <= 40 && tokens.length > 0 && tokens.every(tok => REQUIREMENT_TOKEN.test(tok));
+}
 
 export interface FixFacts {
   packages: string[];
   installed: string | null;
   fixedIn: string | null;
   direct: boolean | null;
+  /** Parent packages that pull the dependency into the project, with what their requirement allows. */
+  parents: string[];
   advisories: string[];
   project: string | null;
+}
+
+/** Folder paths compare case- and separator-insensitively (the scan lower-cases them on Windows). */
+function samePath(a: string, b: string): boolean {
+  const norm = (p: string) => p.trim().replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+  return norm(a) === norm(b);
+}
+
+/** Installed and fix version for `project` from Upgrade Plan fix-target citations. */
+function fixTargetFor(
+  item: EvidenceItem,
+  project: string | null,
+): { installed: string | null; fixedIn: string | null; direct: boolean | null } {
+  const targets: string[] = [];
+  for (const cite of item.evidence) {
+    if (cite.source !== 'fix-target') continue;
+    const m = FIX_TARGET_TITLE.exec(cite.title.trim());
+    if (!m?.[1] || !m[2] || !VERSION.test(m[1]) || !VERSION.test(m[2])) continue;
+    targets.push(m[2]);
+    const sites = (cite.relevance_note ?? '').split('Installed in: ')[1] ?? '';
+    for (const site of sites.matchAll(FIX_TARGET_SITE)) {
+      if (project && site[1] && samePath(site[1], project)) {
+        return { installed: m[1], fixedIn: m[2], direct: site[2] === 'direct' };
+      }
+    }
+  }
+  // No site matched: still name the fix when every installed version shares it.
+  const unique = [...new Set(targets)];
+  return { installed: null, fixedIn: unique.length === 1 ? (unique[0] ?? null) : null, direct: null };
+}
+
+/** "victauri-plugin 0.10.3, which requires ^3.1 (admits 3.9.0: a lockfile refresh is enough)". */
+function parentsFor(item: EvidenceItem, packages: string[], project: string | null): string[] {
+  const out: string[] = [];
+  for (const cite of item.evidence) {
+    if (cite.source !== 'dependency-path' || out.length >= MAX_PARENTS) continue;
+    const t = DEP_PATH_TITLE.exec(cite.title.trim());
+    if (!t?.[1] || !t[2] || !t[3] || !t[4]) continue;
+    const [, child, childVersion, parent, parentVersion] = t;
+    if (!packages.includes(child) || !VERSION.test(childVersion) || !PACKAGE_NAME.test(parent) || !VERSION.test(parentVersion)) continue;
+    // Every link note starts "In <project>; " — a link in another project is not this fix.
+    const note = (cite.relevance_note ?? '').trim();
+    const inProject = /^In (.+?); /.exec(note)?.[1];
+    if (!inProject || !project || !samePath(inProject, project)) continue;
+    const n = DEP_PATH_NOTE.exec(note);
+    let line = `${parent} ${parentVersion} (pulls in ${child} ${childVersion})`;
+    if (n?.[2] && n[4] && isRequirement(n[2]) && VERSION.test(n[4])) {
+      line += n[3] === 'admits'
+        ? `, which requires ${n[2]}: that admits ${n[4]}, so refreshing the lockfile is enough`
+        : `, which requires ${n[2]}: that excludes ${n[4]}, so a lockfile refresh cannot reach it until a ${parent} release allows it`;
+    }
+    if (!out.includes(line)) out.push(line);
+  }
+  return out;
 }
 
 /** Characters that can hide or reorder text for the person reviewing the prompt. */
@@ -88,11 +163,15 @@ export function extractFixFacts(item: EvidenceItem): FixFacts {
   const project =
     item.affected_projects.find(p => isAbsolutePath(p) && !hasHiddenChars(p) && !p.includes('..')) ?? null;
 
+  // Upgrade Plan steps carry their versions as fix-target citations instead.
+  if (!m) ({ installed, fixedIn, direct } = fixTargetFor(item, project));
+
   return {
     packages,
     installed,
     fixedIn,
     direct,
+    parents: parentsFor(item, packages, project),
     advisories: advisories.slice(0, MAX_ADVISORIES),
     project,
   };
@@ -110,6 +189,7 @@ export function buildFixPrompt(item: EvidenceItem): string {
   lines.push(`${f.packages.length > 1 ? 'Packages' : 'Package'}: ${f.packages.join(', ')}`);
   if (f.installed) lines.push(`Installed: ${f.installed}${f.direct === false ? ' (transitive)' : f.direct ? ' (direct)' : ''}`);
   if (f.fixedIn) lines.push(`4DA says it is fixed from: ${f.fixedIn}`);
+  for (const parent of f.parents) lines.push(`Pulled in by: ${parent}`);
   if (f.advisories.length > 0) lines.push(`Advisories: ${f.advisories.join(', ')}`);
   if (f.project) lines.push(`Project: ${shortenProjectPath(f.project)}`);
   lines.push(

@@ -105,6 +105,25 @@ describe('AgentHandoffButton', () => {
     })));
   });
 
+  it('renders the menu outside the card (so overflow cannot clip it) and closes it on Escape or an outside press', async () => {
+    withTargets({ claude_code: 'ready', vscode_claude: 'ready' });
+    const { container } = render(<AgentHandoffButton mode="brief" />);
+    const more = await screen.findByLabelText('agentHandoff.more');
+    fireEvent.click(more);
+    const menu = screen.getByRole('menu');
+    expect(container.contains(menu)).toBe(false);
+    expect(menu.style.position).toBe('fixed');
+    expect(more.getAttribute('aria-expanded')).toBe('true');
+    fireEvent.mouseDown(menu);
+    expect(screen.queryByRole('menu')).not.toBeNull();
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByRole('menu')).toBeNull();
+    fireEvent.click(more);
+    expect(screen.queryByRole('menu')).not.toBeNull();
+    fireEvent.mouseDown(document.body);
+    expect(screen.queryByRole('menu')).toBeNull();
+  });
+
   it('shows the first-run hint when Claude Code has no link handler yet', async () => {
     withTargets({ claude_code: 'needs_first_run' });
     render(<AgentHandoffButton mode="brief" />);
@@ -119,6 +138,27 @@ describe('AgentHandoffButton', () => {
     render(<AgentHandoffButton mode="fix" item={item} />);
     fireEvent.click(await screen.findByText('agentHandoff.fix.claude_code'));
     expect(await screen.findByText('Cannot open the agent there: the folder does not exist.')).toBeDefined();
+  });
+
+  it('builds the prompt from the full finding, not the trimmed list copy', async () => {
+    withTargets({ claude_code: 'ready' });
+    const trimmed = { ...item, evidence: [] } as EvidenceItem;
+    const resolveItem = vi.fn(() => Promise.resolve(item));
+    render(<AgentHandoffButton mode="fix" item={trimmed} resolveItem={resolveItem} />);
+    fireEvent.click(await screen.findByText('agentHandoff.fix.claude_code'));
+    await waitFor(() => expect(mockCmd).toHaveBeenCalledWith('open_agent_handoff', expect.objectContaining({
+      prompt: expect.stringContaining('Installed: 4.17.20 (direct)') as unknown as string,
+    })));
+    expect(resolveItem).toHaveBeenCalledTimes(1);
+  });
+
+  it('falls back to the list copy when the full finding cannot be fetched', async () => {
+    withTargets({});
+    const resolveItem = vi.fn(() => Promise.reject(new Error('gone')));
+    render(<AgentHandoffButton mode="fix" item={item} resolveItem={resolveItem} />);
+    fireEvent.click(await screen.findByText('agentHandoff.copy'));
+    await waitFor(() => expect(writeText).toHaveBeenCalledTimes(1));
+    expect(writeText.mock.calls[0]?.[0]).toContain('Package: lodash');
   });
 
   it('renders nothing for a finding with no dependency to fix', () => {

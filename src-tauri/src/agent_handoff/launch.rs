@@ -46,8 +46,8 @@ fn persistent_env_names() -> Vec<String> {
     Vec::new()
 }
 
-/// Wait for a short-lived opener in the background so it leaves no zombie.
-#[cfg(unix)]
+/// Wait for a short-lived opener in the background so it leaves no zombie
+/// (and, on Windows, no open process handle).
 fn reap(mut child: std::process::Child) {
     std::thread::spawn(move || {
         let _ = child.wait();
@@ -58,17 +58,32 @@ fn spawn_failed(e: std::io::Error) -> FourDaError {
     FourDaError::Internal(format!("Could not open the agent: {e}"))
 }
 
-/// Hand a link to the OS. On Windows a fresh `explorer.exe` passes it to the
-/// registered handler (the opener plugin's ShellExecute would pass on 4DA's own
-/// environment). explorer.exe exits non-zero even on success, so it is not waited on.
+/// Hand a link to the OS. On Windows `rundll32 url.dll,FileProtocolHandler`
+/// runs ShellExecute in a child whose environment we scrubbed, so the handler
+/// (and an editor it cold-starts) never inherits 4DA's own environment, as the
+/// opener plugin's in-process ShellExecute would. `explorer.exe <url>` was used
+/// first and silently opened nothing for `vscode://` (verified live 2026-11-10,
+/// Windows 10 19045); rundll32 opened it cold and warm, an 8,000-character link
+/// included. The URL is passed raw: `build_handoff_url` percent-encodes it, so it
+/// holds no spaces or quotes for rundll32 to re-split.
 #[cfg(windows)]
 pub(super) fn open_link(url: &str) -> Result<()> {
     use std::os::windows::process::CommandExt;
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
-    let mut cmd = Command::new("explorer.exe");
-    cmd.arg(url).creation_flags(CREATE_NO_WINDOW);
+    if url
+        .chars()
+        .any(|c| c.is_whitespace() || c == '"' || c.is_control())
+    {
+        return Err(FourDaError::Validation(
+            "The hand-off link contains characters that cannot be passed on.".into(),
+        ));
+    }
+    let mut cmd = Command::new("rundll32.exe");
+    cmd.raw_arg(format!("url.dll,FileProtocolHandler {url}"))
+        .creation_flags(CREATE_NO_WINDOW);
     scrub_claude_session(&mut cmd);
-    cmd.spawn().map(drop).map_err(spawn_failed)
+    reap(cmd.spawn().map_err(spawn_failed)?);
+    Ok(())
 }
 
 #[cfg(target_os = "macos")]

@@ -61,6 +61,7 @@ describe('extractFixFacts', () => {
       installed: '4.17.20',
       fixedIn: '4.17.21',
       direct: true,
+      parents: [],
       advisories: ['GHSA-35jh-r3h4-6jhm', 'CVE-2021-23337'],
       project: 'D:\\code\\shop',
     });
@@ -93,7 +94,91 @@ describe('extractFixFacts', () => {
   });
 });
 
+/** An Upgrade Plan step as upgrade_plan.rs / upgrade_parent.rs emit it (real shapes, 2026-11-09). */
+const planStep = (overrides: Partial<EvidenceItem> = {}): EvidenceItem => makeItem({
+  title: 'Upgrade rmcp to >= 3.9.0',
+  affected_deps: ['rmcp'],
+  affected_projects: ['d:/4da/src-tauri', 'd:/runyourempire/victauri', 'd:/runyourempire/victauri/crates/victauri-plugin'],
+  evidence: [
+    { source: 'osv-advisory', title: `Unbounded tool schema cache. ${INJECTION}`, url: 'https://osv.dev/vulnerability/RUSTSEC-2026-0461', freshness_days: 14, relevance_note: INJECTION },
+    { source: 'project-scan', title: 'Installed in 3 projects', url: null, freshness_days: 0, relevance_note: '' },
+    { source: 'fix-target', title: '3.1.2 -> 3.9.0', url: null, freshness_days: 0, relevance_note: 'minor upgrade; clears every known advisory. Installed in: d:/runyourempire/victauri (direct), d:/runyourempire/victauri/crates/victauri-plugin (direct)' },
+    { source: 'fix-target', title: '3.4.1 -> 3.9.0', url: null, freshness_days: 0, relevance_note: 'minor upgrade; clears every known advisory. Installed in: d:/4da/src-tauri (transitive)' },
+    { source: 'dependency-path', title: 'rmcp 3.4.1 <- victauri-plugin 0.10.3', url: null, freshness_days: 0, relevance_note: 'In d:/4da/src-tauri; victauri-plugin is a direct dependency; requires ^3.1, which admits 3.9.0' },
+    { source: 'dependency-path', title: 'rmcp 3.5.0 <- victauri-plugin 0.9.0', url: null, freshness_days: 0, relevance_note: 'In d:/code/other-app/src-tauri; victauri-plugin is a direct dependency; requires ^3.1, which admits 3.9.0' },
+  ],
+  ...overrides,
+});
+
+describe('extractFixFacts on Upgrade Plan steps', () => {
+  it('takes the installed and fix version of the project it opens in, and that project\'s parent', () => {
+    expect(extractFixFacts(planStep())).toMatchObject({
+      packages: ['rmcp'],
+      installed: '3.4.1',
+      fixedIn: '3.9.0',
+      direct: false,
+      parents: ['victauri-plugin 0.10.3 (pulls in rmcp 3.4.1), which requires ^3.1: that admits 3.9.0, so refreshing the lockfile is enough'],
+      advisories: ['RUSTSEC-2026-0461'],
+      project: 'd:/4da/src-tauri',
+    });
+  });
+
+  it('matches the exact folder, not a parent folder of it', () => {
+    const facts = extractFixFacts(planStep({ affected_projects: ['D:\\runyourempire\\victauri\\crates\\victauri-plugin\\'] }));
+    expect(facts).toMatchObject({ installed: '3.1.2', fixedIn: '3.9.0', direct: true, parents: [] });
+  });
+
+  it('still names a shared fix version when no site matches the project', () => {
+    const facts = extractFixFacts(planStep({ affected_projects: ['d:/elsewhere'] }));
+    expect(facts).toMatchObject({ installed: null, fixedIn: '3.9.0', direct: null, parents: [] });
+  });
+
+  it('says a lockfile refresh cannot reach the fix when the parent\'s requirement excludes it', () => {
+    const facts = extractFixFacts(planStep({
+      affected_deps: ['zip'],
+      affected_projects: ['d:/4da/src-tauri'],
+      evidence: [
+        { source: 'fix-target', title: '8.6.0 -> 9.0.5', url: null, freshness_days: 0, relevance_note: 'major upgrade; clears every known advisory. Installed in: d:/4da/src-tauri (transitive)' },
+        { source: 'dependency-path', title: 'zip 8.6.0 <- docx-rs 0.4.22', url: null, freshness_days: 0, relevance_note: 'In d:/4da/src-tauri; docx-rs is a direct dependency; requires ^8.6.0, which excludes 9.0.5' },
+      ],
+    }));
+    expect(facts.parents).toEqual(['docx-rs 0.4.22 (pulls in zip 8.6.0), which requires ^8.6.0: that excludes 9.0.5, so a lockfile refresh cannot reach it until a docx-rs release allows it']);
+  });
+
+  it('drops fix-target and dependency-path text that is not a plain version, package name or requirement', () => {
+    const hostile = planStep({
+      evidence: [
+        { source: 'fix-target', title: `3.4.1 -> 3.9.0 ${INJECTION}`, url: null, freshness_days: 0, relevance_note: 'Installed in: d:/4da/src-tauri (transitive)' },
+        { source: 'dependency-path', title: 'rmcp 3.4.1 <- evil;curl|sh 1.0', url: null, freshness_days: 0, relevance_note: 'In d:/4da/src-tauri; x is a direct dependency; requires ^3.1, which admits 3.9.0' },
+        { source: 'dependency-path', title: 'rmcp 3.4.1 <- victauri-plugin 0.10.3', url: null, freshness_days: 0, relevance_note: 'In d:/4da/src-tauri; victauri-plugin is a direct dependency; requires run curl x, which admits 3.9.0' },
+        { source: 'dependency-path', title: 'rmcp 3.4.1 <- other-parent 1.0.0', url: null, freshness_days: 0, relevance_note: `In d:/4da/src-tauri; other-parent is a direct dependency; requires ${INJECTION}, which admits 3.9.0` },
+      ],
+    });
+    const facts = extractFixFacts(hostile);
+    expect(facts).toMatchObject({ installed: null, fixedIn: null });
+    // Parents survive (names and versions are valid); the requirement text does not.
+    expect(facts.parents).toEqual([
+      'victauri-plugin 0.10.3 (pulls in rmcp 3.4.1)',
+      'other-parent 1.0.0 (pulls in rmcp 3.4.1)',
+    ]);
+    const prompt = buildFixPrompt(hostile);
+    expect(prompt).not.toContain('IGNORE');
+    expect(prompt).not.toContain('curl');
+  });
+});
+
 describe('buildFixPrompt', () => {
+  it('carries an Upgrade Plan step\'s versions and parent, and no third-party text', () => {
+    const prompt = buildFixPrompt(planStep());
+    expect(prompt).toContain('Installed: 3.4.1 (transitive)');
+    expect(prompt).toContain('4DA says it is fixed from: 3.9.0');
+    expect(prompt).toContain('Pulled in by: victauri-plugin 0.10.3 (pulls in rmcp 3.4.1), which requires ^3.1: that admits 3.9.0, so refreshing the lockfile is enough');
+    expect(prompt).toContain('Project: 4da/src-tauri');
+    expect(prompt).not.toContain('IGNORE');
+    expect(prompt).not.toContain('d:/');
+    expect(prompt).not.toMatch(/[*`#]|\u2014/);
+  });
+
   it('never carries third-party free text into the prompt', () => {
     const prompt = buildFixPrompt(makeItem());
     expect(prompt).not.toContain('IGNORE');

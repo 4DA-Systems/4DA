@@ -183,6 +183,11 @@ export const ItemCard = memo(function ItemCard({
     return hydratingRef.current;
   }, [fullItem, isListTrimmed, item.id]);
 
+  // The agent hand-off needs every citation (versions, all advisories), not the trimmed list copy.
+  const resolveFullItem = useCallback(async (): Promise<EvidenceItem> =>
+    fullItem ?? (isListTrimmed ? cmd('get_preemption_item_detail', { itemId: item.id }) : item),
+  [fullItem, isListTrimmed, item]);
+
   const cfg = URGENCY_CONFIG[item.urgency] ?? URGENCY_CONFIG.watch;
   const tier = getTierStyle(item.confidence.provenance);
   const sourceType = kindAsSourceType(item);
@@ -322,7 +327,7 @@ export const ItemCard = memo(function ItemCard({
         />
         {(shown.suggested_actions.length > 0 || canBuildFixPrompt(shown)) && (
           <div className="mt-4 flex flex-wrap items-start gap-2">
-            <AgentHandoffButton mode="fix" item={shown} />
+            <AgentHandoffButton mode="fix" item={shown} resolveItem={resolveFullItem} />
             {shown.suggested_actions.map((action, i) => (
               <button
                 key={i}
