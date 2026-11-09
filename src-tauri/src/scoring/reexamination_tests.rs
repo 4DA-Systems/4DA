@@ -251,7 +251,7 @@ fn a_pin_change_withdraws_score_verdicts_on_dependency_releases_only() {
 }
 
 thread_local! {
-    /// Statements the writer ran on this test's thread. `Connection::trace`
+    /// Statements the writer ran on this test's thread. `test_utils::trace_sql`
     /// takes a plain `fn`, so the sink is a static; thread-local keeps
     /// parallel tests out of each other's record.
     static TRACED: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
@@ -279,9 +279,9 @@ fn requeue_never_writes_more_than_one_batch_per_transaction() {
         })
         .collect();
 
-    db.conn.lock().trace(Some(record));
+    crate::test_utils::trace_sql(&mut db.conn.lock(), Some(record));
     let requeued = db.requeue_and_clear_score_verdicts(&ids).unwrap();
-    db.conn.lock().trace(None);
+    crate::test_utils::trace_sql(&mut db.conn.lock(), None);
 
     assert_eq!(requeued, n, "every row is re-queued");
     for id in [ids[0], ids[REQUEUE_BATCH], ids[n - 1]] {

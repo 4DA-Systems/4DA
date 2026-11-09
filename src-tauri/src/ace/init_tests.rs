@@ -13,8 +13,8 @@ use rusqlite::Connection;
 
 use super::ACE;
 
-/// Statements traced on the connection under test. `Connection::trace` takes
-/// a plain `fn`, so the sink has to be a static.
+/// Statements traced on the connection under test. `test_utils::trace_sql`
+/// takes a plain `fn`, so the sink has to be a static.
 static TRACED: StdMutex<Vec<String>> = StdMutex::new(Vec::new());
 
 fn record(sql: &str) {
@@ -36,7 +36,7 @@ fn ace_new_runs_no_whole_file_integrity_scan() {
     crate::register_sqlite_vec_extension();
     let dir = tempfile::tempdir().expect("tempdir");
     let mut conn = Connection::open(dir.path().join("4da.db")).expect("open temp db");
-    conn.trace(Some(record));
+    crate::test_utils::trace_sql(&mut conn, Some(record));
 
     let ace = ACE::new(Arc::new(Mutex::new(conn))).expect("ACE::new on an empty db");
     drop(ace);
