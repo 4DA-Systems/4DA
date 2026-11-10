@@ -266,9 +266,7 @@ pub(crate) fn answer_need(need: &Need) -> Answer {
 /// `osv::reachability` parses for AD-051 (kept local here while that file is
 /// in a peer's change; fold into one helper when it lands).
 fn crate_checkout(package: &str, version: &str) -> Option<PathBuf> {
-    let home = std::env::var_os("CARGO_HOME")
-        .map(PathBuf::from)
-        .or_else(|| dirs::home_dir().map(|h| h.join(".cargo")))?;
+    let home = cargo_home()?;
     let names = [
         format!("{package}-{version}"),
         format!("{}-{version}", package.to_lowercase()),
@@ -278,6 +276,23 @@ fn crate_checkout(package: &str, version: &str) -> Option<PathBuf> {
         .flatten()
         .flat_map(|index| names.iter().map(move |n| index.path().join(n)))
         .find(|dir| dir.join("Cargo.toml").is_file())
+}
+
+/// The cargo home whose extracted checkouts are read.
+#[cfg(not(test))]
+fn cargo_home() -> Option<PathBuf> {
+    std::env::var_os("CARGO_HOME")
+        .map(PathBuf::from)
+        .or_else(|| dirs::home_dir().map(|h| h.join(".cargo")))
+}
+
+/// Tests never read the host's cargo registry: which crates happen to be
+/// extracted there differs between machines (CI had docx-rs 0.4.22, a dev
+/// box did not), so the same test produced different text. Under test there
+/// is no registry: every checkout read answers "not there".
+#[cfg(test)]
+fn cargo_home() -> Option<PathBuf> {
+    None
 }
 
 // The `inBundle` rules moved into the engine crate with the package-lock
