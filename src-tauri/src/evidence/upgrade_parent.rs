@@ -204,6 +204,28 @@ fn link_sentence(package: &str, l: &ParentLink, multi_project: bool) -> String {
     let Some(target) = l.target.as_deref() else {
         return head;
     };
+    // Y5: no published release can move it: the one blocked sentence.
+    if super::upgrade_blocked::link_blocked(l) {
+        let requirement = match l.refresh {
+            Refresh::ParentMustMove(Basis::Requirement) if !l.is_bundled() => {
+                l.requirement.as_deref()
+            }
+            _ => None,
+        };
+        return super::upgrade_blocked::BlockedCopy {
+            package,
+            installed: Some(&l.child_version),
+            place: &place(&l.project, multi_project),
+            target,
+            parent: &l.parent,
+            parent_version: &l.parent_version,
+            requirement,
+            standing: &l.standing,
+            through: l.through.as_ref(),
+            override_hint: l.override_hint.as_deref(),
+        }
+        .sentence();
+    }
     if l.is_bundled() {
         // The edge records the shipped version, not a requirement: say what
         // it is, never print the internal marker.
@@ -282,61 +304,6 @@ fn link_move(package: &str, target: &str, l: &ParentLink) -> String {
 /// (`brief_facts::fix_clause`), so the three name the same parent and the
 /// same move.
 pub(crate) fn parent_move(
-    package: &str,
-    target: &str,
-    parent: &str,
-    parent_version: &str,
-    standing: &ParentStanding,
-    through: Option<&Through>,
-    override_hint: Option<&str>,
-) -> String {
-    // Y5: no published release of what the project can move admits the fix.
-    // The move says what is known, then that nothing fixes it yet and the
-    // options (the override, when there is one, is among them).
-    let blocked = super::upgrade_blocked::standing_blocked(standing, through)
-        && !matches!(
-            standing,
-            ParentStanding::Admits(_)
-                | ParentStanding::Malicious { .. }
-                | ParentStanding::Introduces { .. }
-                | ParentStanding::Undecided { .. }
-        );
-    if blocked {
-        let head = move_text(
-            package,
-            target,
-            parent,
-            parent_version,
-            standing,
-            through,
-            None,
-        );
-        return format!(
-            "{head}{}",
-            super::upgrade_blocked::blocked_suffix(
-                package,
-                target,
-                parent,
-                standing,
-                through,
-                override_hint
-            )
-        );
-    }
-    move_text(
-        package,
-        target,
-        parent,
-        parent_version,
-        standing,
-        through,
-        override_hint,
-    )
-}
-
-/// [`parent_move`]'s words for the registry standing, the override clause
-/// (when given) appended where a lever cannot move.
-fn move_text(
     package: &str,
     target: &str,
     parent: &str,
@@ -650,7 +617,7 @@ fn requirement_note(l: &ParentLink) -> String {
 fn link_note(l: &ParentLink) -> String {
     let note = requirement_note(l);
     if super::upgrade_blocked::link_blocked(l) {
-        format!("{note}; blocked upstream")
+        format!("{note}{}", super::upgrade_blocked::note_marker(l))
     } else {
         note
     }

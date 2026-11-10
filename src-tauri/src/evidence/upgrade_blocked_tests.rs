@@ -149,7 +149,7 @@ fn a_parent_at_its_newest_release_is_blocked_upstream() {
     );
     assert!(
         zip.explanation
-            .contains("blocked upstream: no release fixes it yet. Options: fork docx-rs so it accepts zip >= 9.0.5 and point `[patch.crates-io]` at the fork"),
+            .contains("Blocked upstream: zip 8.6.0 comes in through docx-rs 0.4.22, the newest release, which does not allow a fixed zip (>= 9.0.5) yet. Options: fork docx-rs so it accepts zip >= 9.0.5 and point `[patch.crates-io]` at the fork"),
         "{}",
         zip.explanation
     );
@@ -181,10 +181,9 @@ fn a_parent_at_its_newest_release_is_blocked_upstream() {
     assert_eq!(v["blocked_upstream"][0]["cleared_version"], "9.0.5");
     // The dependency-path citation carries the marker the hand-off reads.
     assert!(
-        zip.evidence
-            .iter()
-            .any(|c| c.source == "dependency-path"
-                && c.relevance_note.ends_with("; blocked upstream")),
+        zip.evidence.iter().any(|c| c.source == "dependency-path"
+            && c.relevance_note
+                .ends_with("; blocked upstream: docx-rs 0.4.22 is the newest release")),
         "{:#?}",
         zip.evidence
     );

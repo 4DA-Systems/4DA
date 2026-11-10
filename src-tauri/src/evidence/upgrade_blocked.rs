@@ -149,27 +149,89 @@ pub(crate) fn blocked_options(
     }
 }
 
-/// The sentence a blocked move ends with: "no release fixes it yet. Options:
-/// ...". Follows the move text (`parent_move`), so no version is named
-/// before its own package.
-pub(crate) fn blocked_suffix(
-    package: &str,
-    target: &str,
-    parent: &str,
-    standing: &ParentStanding,
-    through: Option<&Through>,
-    override_hint: Option<&str>,
-) -> String {
-    let held_by = if at_newest(standing) {
-        parent
-    } else {
-        through.map_or(parent, |t| t.name.as_str())
-    };
-    let options = blocked_options(None, package, target, parent, held_by, override_hint);
-    format!(
-        "; blocked upstream: no release fixes it yet. Options: {}",
-        options.join("; or ")
-    )
+/// One blocked copy, as the ONE sentence every surface prints (the plan step
+/// and the Preemption alert through `upgrade_parent::link_sentence`, the
+/// Brief through `brief_facts::fix_clause`):
+/// "zip 8.6.0 comes in through docx-rs 0.4.22, the newest release, whose
+/// requirement ^8.6.0 does not allow a fixed zip (>= 9.0.5) yet. Options:
+/// ...". Every version follows its own package's name (the Brief's version
+/// check reads the nearest preceding package).
+pub(crate) struct BlockedCopy<'a> {
+    pub package: &'a str,
+    /// `None` where the surface does not hold it (the Brief's clause).
+    pub installed: Option<&'a str>,
+    /// " in <project>" when the step names several projects, else empty.
+    pub place: &'a str,
+    pub target: &'a str,
+    pub parent: &'a str,
+    pub parent_version: &'a str,
+    /// The parent's requirement on the package, when read.
+    pub requirement: Option<&'a str>,
+    pub standing: &'a ParentStanding,
+    pub through: Option<&'a Through>,
+    pub override_hint: Option<&'a str>,
+}
+
+impl BlockedCopy<'_> {
+    /// The package that cannot move, and its newest release seen.
+    fn holder(&self) -> (&str, String) {
+        let newest = |s: &ParentStanding, v: &str| match s {
+            ParentStanding::NoneAdmits {
+                latest: Some(latest),
+            } => latest.clone(),
+            _ => v.to_string(),
+        };
+        if at_newest(self.standing) {
+            return (self.parent, newest(self.standing, self.parent_version));
+        }
+        match self.through {
+            Some(t) => (t.name.as_str(), newest(&t.standing, &t.version)),
+            None => (self.parent, self.parent_version.to_string()),
+        }
+    }
+
+    pub(crate) fn sentence(&self) -> String {
+        let (package, target, parent) = (self.package, self.target, self.parent);
+        let copy = self.installed.map_or_else(
+            || format!("{package}{}", self.place),
+            |v| format!("{package} {v}{}", self.place),
+        );
+        let fixed = format!("a fixed {package} (>= {target})");
+        let (held_by, newest) = self.holder();
+        let hold = if held_by == parent && newest == self.parent_version {
+            let allow = self.requirement.map_or_else(
+                || format!("which does not allow {fixed} yet"),
+                |r| format!("whose requirement {r} does not allow {fixed} yet"),
+            );
+            format!(
+                "{parent} {}, the newest release, {allow}",
+                self.parent_version
+            )
+        } else if held_by == parent {
+            format!(
+                "{parent} {}, and no {parent} release up to {parent} {newest} allows {fixed} yet",
+                self.parent_version
+            )
+        } else {
+            format!(
+                "{parent} {}, which arrives through {held_by} {newest}, the newest {held_by} \
+                 release, and no {held_by} release allows {fixed} yet",
+                self.parent_version
+            )
+        };
+        let options = blocked_options(None, package, target, parent, held_by, self.override_hint);
+        format!(
+            "{copy} comes in through {hold}. Options: {}",
+            options.join("; or ")
+        )
+    }
+}
+
+/// The marker a blocked link's `dependency-path` note ends with, read by the
+/// hand-off prompt (`src/lib/agent-handoff.ts`): who holds the copy.
+pub(crate) fn note_marker(l: &ParentLink) -> String {
+    let (held_by, newest) = holder(l);
+    format!("; blocked upstream: {held_by} {newest} is the newest release")
 }
 
 fn route_of_copy(links: &[&ParentLink]) -> CopyRoute {

@@ -151,11 +151,11 @@ describe('extractFixFacts on Upgrade Plan steps', () => {
       affected_projects: ['d:/code/app/src-tauri'],
       evidence: [
         { source: 'fix-target', title: '8.6.0 -> 9.0.5', url: null, freshness_days: 0, relevance_note: 'major upgrade; clears every known advisory. Installed in: d:/code/app/src-tauri (transitive)' },
-        { source: 'dependency-path', title: 'zip 8.6.0 <- docx-rs 0.4.22', url: null, freshness_days: 0, relevance_note: 'In d:/code/app/src-tauri; docx-rs is a direct dependency; requires ^8.6.0, which excludes 9.0.5; blocked upstream' },
+        { source: 'dependency-path', title: 'zip 8.6.0 <- docx-rs 0.4.22', url: null, freshness_days: 0, relevance_note: 'In d:/code/app/src-tauri; docx-rs is a direct dependency; requires ^8.6.0, which excludes 9.0.5; blocked upstream: docx-rs 0.4.22 is the newest release' },
       ],
     });
     const facts = extractFixFacts(step);
-    expect(facts.parents).toEqual(['docx-rs 0.4.22 (pulls in zip 8.6.0), which requires ^8.6.0: that excludes 9.0.5, and no published docx-rs release allows it yet (blocked upstream), so neither a lockfile refresh nor a docx-rs upgrade can fix it']);
+    expect(facts.parents).toEqual(['docx-rs 0.4.22 (pulls in zip 8.6.0), the newest release, whose requirement ^8.6.0 does not allow a fixed zip (>= 9.0.5) yet (blocked upstream)']);
     const prompt = buildFixPrompt(step);
     expect(prompt).toContain('A parent marked blocked upstream has no release that fixes this yet');
     expect(prompt).not.toContain('until a docx-rs release allows it');
@@ -166,10 +166,21 @@ describe('extractFixFacts on Upgrade Plan steps', () => {
       affected_deps: ['zip'],
       affected_projects: ['d:/code/app/src-tauri'],
       evidence: [
-        { source: 'dependency-path', title: 'zip 8.6.0 <- docx-rs 0.4.22', url: null, freshness_days: 0, relevance_note: 'In d:/code/app/src-tauri; docx-rs is a direct dependency; requirement not on disk; 9.0.5 is a semver-incompatible jump from 8.6.0; blocked upstream' },
+        { source: 'dependency-path', title: 'zip 8.6.0 <- docx-rs 0.4.22', url: null, freshness_days: 0, relevance_note: 'In d:/code/app/src-tauri; docx-rs is a direct dependency; requirement not on disk; 9.0.5 is a semver-incompatible jump from 8.6.0; blocked upstream: docx-rs 0.4.22 is the newest release' },
       ],
     }));
-    expect(facts.parents).toEqual(['docx-rs 0.4.22 (pulls in zip 8.6.0): no published docx-rs release lets it reach the fix yet (blocked upstream)']);
+    expect(facts.parents).toEqual(['docx-rs 0.4.22 (pulls in zip 8.6.0), the newest release, which does not allow a fixed zip (>= 9.0.5) yet (blocked upstream)']);
+  });
+
+  it('names the declared dependency when it is the one at its newest release', () => {
+    const facts = extractFixFacts(planStep({
+      affected_deps: ['crypto-bigint'],
+      affected_projects: ['d:/code/app/src-tauri'],
+      evidence: [
+        { source: 'dependency-path', title: 'crypto-bigint 0.5.5 <- elliptic-curve 0.13.8', url: null, freshness_days: 0, relevance_note: 'In d:/code/app/src-tauri; elliptic-curve is a transitive dependency; requires ^0.5.4, which excludes 0.7.0; blocked upstream: jsonwebtoken 11.1.0 is the newest release' },
+      ],
+    }));
+    expect(facts.parents).toEqual(['elliptic-curve 0.13.8 (pulls in crypto-bigint 0.5.5), which arrives through jsonwebtoken 11.1.0, the newest jsonwebtoken release, and no jsonwebtoken release allows a fixed crypto-bigint (>= 0.7.0) yet (blocked upstream)']);
   });
 
   it('drops fix-target and dependency-path text that is not a plain version, package name or requirement', () => {

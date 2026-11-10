@@ -43,12 +43,14 @@ const FIX_TARGET_SITE = /([^,]+?) \((direct|transitive)(?:, dev)?\)(?:, |$)/g;
 const DEP_PATH_TITLE = /^(\S+) (\S+) <- (\S+) (\S+)$/;
 /**
  * "In d:/a; victauri-plugin is a direct dependency; requires ^3.1, which admits 3.9.0", ending
- * "; blocked upstream" when no published release of the parent (newest included) admits the fix
- * (upgrade_parent.rs `link_note`, Y5).
+ * "; blocked upstream: docx-rs 0.4.22 is the newest release" when no published release of what
+ * holds the copy admits the fix (upgrade_parent.rs `link_note`, upgrade_blocked.rs `note_marker`, Y5).
  */
+const BLOCKED_MARKER = /; blocked upstream: (\S+) (\S+) is the newest release$/;
 const DEP_PATH_NOTE =
-  /^In (.+?); \S+ is a (?:direct|transitive) dependency; requires (.+?), which (admits|excludes) (\S+?)(?:; blocked upstream)?$/;
-const BLOCKED_SUFFIX = /; blocked upstream$/;
+  /^In (.+?); \S+ is a (?:direct|transitive) dependency; requires (.+?), which (admits|excludes) (\S+)$/;
+/** The note when the requirement was not on disk: "...; requirement not on disk; 9.0.5 is a semver-incompatible jump from 8.6.0". */
+const SEMVER_JUMP = /; (\S+) is a semver-incompatible jump from \S+$/;
 /** One comparator of a version requirement: "^3.1", ">=1.0.0-rc.1", "~=3.1", "1.x", "*". */
 const REQUIREMENT_TOKEN = /^[\^~=<>!]*[0-9*xX][0-9A-Za-z.+_*-]*$/;
 const MAX_PARENTS = 3;
@@ -109,22 +111,35 @@ function parentsFor(item: EvidenceItem, packages: string[], project: string | nu
     const [, child, childVersion, parent, parentVersion] = t;
     if (!packages.includes(child) || !VERSION.test(childVersion) || !PACKAGE_NAME.test(parent) || !VERSION.test(parentVersion)) continue;
     // Every link note starts "In <project>; " — a link in another project is not this fix.
-    const note = (cite.relevance_note ?? '').trim();
-    const inProject = /^In (.+?); /.exec(note)?.[1];
+    const raw = (cite.relevance_note ?? '').trim();
+    const inProject = /^In (.+?); /.exec(raw)?.[1];
     if (!inProject || !project || !samePath(inProject, project)) continue;
+    const b = BLOCKED_MARKER.exec(raw);
+    const note = b ? raw.slice(0, b.index) : raw;
     const n = DEP_PATH_NOTE.exec(note);
-    const blocked = BLOCKED_SUFFIX.test(note);
+    const requirement = n?.[2] && isRequirement(n[2]) ? n[2] : null;
+    const excluded = n?.[4] && VERSION.test(n[4]) ? n[4] : null;
     let line = `${parent} ${parentVersion} (pulls in ${child} ${childVersion})`;
-    if (n?.[2] && n[4] && isRequirement(n[2]) && VERSION.test(n[4])) {
-      if (n[3] === 'admits') {
-        line += `, which requires ${n[2]}: that admits ${n[4]}, so refreshing the lockfile is enough`;
-      } else if (blocked) {
-        line += `, which requires ${n[2]}: that excludes ${n[4]}, and no published ${parent} release allows it yet (blocked upstream), so neither a lockfile refresh nor a ${parent} upgrade can fix it`;
+    const heldBy = b?.[1] && PACKAGE_NAME.test(b[1]) ? b[1] : null;
+    const heldNewest = b?.[2] && VERSION.test(b[2]) ? b[2] : null;
+    if (heldBy && heldNewest) {
+      // Y5: the plan's blocked sentence (upgrade_blocked.rs `BlockedCopy`).
+      const jump = SEMVER_JUMP.exec(note)?.[1];
+      const target = excluded ?? (jump && VERSION.test(jump) ? jump : null);
+      const fixed = `a fixed ${child}${target ? ` (>= ${target})` : ''}`;
+      if (heldBy !== parent) {
+        line += `, which arrives through ${heldBy} ${heldNewest}, the newest ${heldBy} release, and no ${heldBy} release allows ${fixed} yet (blocked upstream)`;
+      } else if (heldNewest !== parentVersion) {
+        line += `, and no ${parent} release up to ${parent} ${heldNewest} allows ${fixed} yet (blocked upstream)`;
+      } else if (requirement && n?.[3] === 'excludes') {
+        line += `, the newest release, whose requirement ${requirement} does not allow ${fixed} yet (blocked upstream)`;
       } else {
-        line += `, which requires ${n[2]}: that excludes ${n[4]}, so a lockfile refresh cannot reach it until a ${parent} release allows it`;
+        line += `, the newest release, which does not allow ${fixed} yet (blocked upstream)`;
       }
-    } else if (blocked) {
-      line += `: no published ${parent} release lets it reach the fix yet (blocked upstream)`;
+    } else if (requirement && excluded) {
+      line += n?.[3] === 'admits'
+        ? `, which requires ${requirement}: that admits ${excluded}, so refreshing the lockfile is enough`
+        : `, which requires ${requirement}: that excludes ${excluded}, so a lockfile refresh cannot reach it until a ${parent} release allows it`;
     }
     if (!out.includes(line)) out.push(line);
   }
