@@ -11,7 +11,7 @@ use crate::ace::scanner::{DependencyEdge, EdgeScope};
 use crate::db::{Database, DependencyInstanceInput};
 use crate::evidence::upgrade_steps::{Mechanism, UpgradeStep};
 use crate::evidence::{validate_item, EvidenceItem};
-use crate::osv::parent_hint::{ParentRelease, ParentStanding, Through};
+use crate::osv::parent_hint::{ParentLink, ParentRelease, ParentStanding, Through};
 use crate::test_utils::test_db;
 
 const APP: &str = "d:/code/app/src-tauri";
@@ -133,15 +133,16 @@ fn a_parent_at_its_newest_release_is_blocked_upstream() {
     let (items, steps) = built(&db);
     let zip = item(&items, "zip");
     validate_item(zip).expect("schema-valid");
-    assert!(
-        zip.title.starts_with("zip 8.6.0 is held")
-            && zip
-                .title
-                .contains("by docx-rs 0.4.22 (newest): no release fixes it yet"),
-        "{}",
-        zip.title
+    assert_eq!(
+        zip.title,
+        "zip 8.6.0: blocked by docx-rs 0.4.22 (newest), no fix yet"
     );
-    assert!(!zip.title.contains("Upgrade"), "{}", zip.title);
+    // Nothing to upgrade to: no changelog advice (live 2026-11-10).
+    assert!(
+        !zip.explanation.contains("changelog") && !zip.explanation.contains("before upgrading"),
+        "{}",
+        zip.explanation
+    );
     assert!(
         zip.explanation.contains("Blocked upstream: "),
         "{}",
@@ -336,25 +337,156 @@ fn standing_decides_blocked() {
     assert!(!standing_blocked(&newer, Some(&movable)));
 }
 
-#[test]
-fn the_title_names_the_lever_when_it_holds_the_parent() {
-    let hold = BlockedHold {
-        project: APP.to_string(),
-        installed: "0.5.5".to_string(),
+fn hold(installed: &str, parent: &str, held_by: &str, newest: &str, project: &str) -> BlockedHold {
+    BlockedHold {
+        project: project.to_string(),
+        installed: installed.to_string(),
         cleared_version: "0.7.0".to_string(),
-        parent: "elliptic-curve".to_string(),
+        parent: parent.to_string(),
         parent_version: "0.13.8".to_string(),
         requirement: Some("^0.5.4".to_string()),
-        held_by: "jsonwebtoken".to_string(),
-        held_by_newest: "11.1.0".to_string(),
+        held_by: held_by.to_string(),
+        held_by_newest: newest.to_string(),
+        held_by_version: newest.to_string(),
         options: Vec::new(),
-    };
+    }
+}
+
+/// Live 2026-11-10: "...which jsonwebtoken 11.1.0 (newest) brings in: no
+/// release f" (cut at the 120-byte cap). The short form fits; one copy held
+/// in two projects is one hold, not "(+1 more)".
+#[test]
+fn blocked_titles_fit_by_construction() {
+    let a = hold("0.5.5", "elliptic-curve", "jsonwebtoken", "11.1.0", APP);
+    let b = hold("0.5.5", "elliptic-curve", "jsonwebtoken", "11.1.0", BRIDGE);
     assert_eq!(
-        blocked_title("crypto-bigint", std::slice::from_ref(&hold)).unwrap(),
-        "crypto-bigint 0.5.5 is held at ^0.5.4 by elliptic-curve 0.13.8, which jsonwebtoken \
-         11.1.0 (newest) brings in: no release fixes it yet"
+        blocked_title("crypto-bigint", &[a.clone(), b]).unwrap(),
+        "crypto-bigint 0.5.5: blocked by jsonwebtoken 11.1.0 (newest), no fix yet"
+    );
+    let other = hold("0.4.9", "elliptic-curve", "p256", "0.13.2", APP);
+    assert_eq!(
+        blocked_title("crypto-bigint", &[a, other]).unwrap(),
+        "crypto-bigint 0.5.5: blocked by jsonwebtoken 11.1.0 (newest), no fix yet (+1 more)"
     );
     assert_eq!(blocked_title("x", &[]), None);
+    // The longest real names: a scoped npm package held by a long one.
+    let scoped = "@typescript-eslint/typescript-estree-internal-utilities";
+    let long = hold(
+        "8.15.0-alpha.12",
+        "@angular-devkit/build-angular",
+        "@angular-devkit/build-angular-schematics-tooling",
+        "19.2.11-next.3",
+        APP,
+    );
+    let t = blocked_title(scoped, std::slice::from_ref(&long)).unwrap();
+    assert!(t.len() <= 120, "{} bytes: {t}", t.len());
+    assert!(t.ends_with("no fix yet"), "{t}");
+    let absurd = "a".repeat(200);
+    let t = blocked_title(&absurd, &[long]).unwrap();
+    assert!(t.ends_with("no fix yet"), "{t}");
+}
+
+/// Live 2026-11-10: the crypto-bigint card printed the blocked sentence and
+/// its options once per project. One sentence, the projects listed, the
+/// options once.
+#[test]
+fn one_blocked_copy_in_two_projects_is_one_sentence() {
+    let link = |project: &str| ParentLink {
+        project: project.to_string(),
+        child_version: "0.5.5".to_string(),
+        target: Some("0.7.0".to_string()),
+        parent: "elliptic-curve".to_string(),
+        parent_version: "0.13.8".to_string(),
+        parent_is_direct: false,
+        requirement: Some("^0.5.4".to_string()),
+        refresh: crate::osv::fix_path::Refresh::ParentMustMove(
+            crate::osv::fix_path::Basis::Requirement,
+        ),
+        command: None,
+        resolutions: Vec::new(),
+        through: Some(Through {
+            standing: ParentStanding::Newest { deprecated: false },
+            ..Through::declared("jsonwebtoken", "11.1.0")
+        }),
+        standing: ParentStanding::Newer {
+            latest: "0.14.0".to_string(),
+        },
+        override_hint: None,
+        lever_unknown: None,
+    };
+    let routes = crate::osv::parent_hint::TransitiveRoutes {
+        links: vec![link(APP), link(BRIDGE)],
+        unlinked: Vec::new(),
+    };
+    let note = crate::evidence::upgrade_parent::upstream_note("crypto-bigint", &routes, true);
+    assert_eq!(
+        note,
+        format!(
+            "Blocked upstream: crypto-bigint 0.5.5 (in {APP}, {BRIDGE}) comes in through \
+             elliptic-curve 0.13.8, which arrives through jsonwebtoken 11.1.0, the newest \
+             jsonwebtoken release, and no jsonwebtoken release allows a fixed crypto-bigint \
+             (>= 0.7.0) yet. Options: fork jsonwebtoken so it accepts crypto-bigint >= 0.7.0 \
+             and point `[patch.crates-io]` at the fork; or backport the fix onto the \
+             crypto-bigint line elliptic-curve allows and point `[patch.crates-io]` at that \
+             fork; or accept the risk with a written review date"
+        )
+    );
+    assert_eq!(note.matches("Options:").count(), 1);
+}
+
+/// Live 2026-11-10, 4da-ledger: request 2.88.2's lockfile edge requires qs
+/// `~6.5.2`, but package.json overrides qs to `^6.16.0` (npm installed
+/// 6.16.0). The override is the requirement: a lockfile refresh reaches the
+/// fix 6.16.1, and the text says the override replaces request's own. (The
+/// project directory is a temp dir, which the plan's inventory excludes, so
+/// the route rule is exercised directly, as `load_routes` runs it.)
+#[test]
+fn a_package_json_override_replaces_the_parents_requirement() {
+    use crate::osv::fix_path::{Basis, Manager, Refresh};
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(
+        dir.path().join("package.json"),
+        r#"{"name":"ledger","overrides":{"qs":"^6.16.0"}}"#,
+    )
+    .unwrap();
+    let mut links = vec![ParentLink {
+        project: "d:/code/ledger".to_string(),
+        child_version: "6.16.0".to_string(),
+        target: Some("6.16.1".to_string()),
+        parent: "request".to_string(),
+        parent_version: "2.88.2".to_string(),
+        parent_is_direct: false,
+        requirement: Some("~6.5.2".to_string()),
+        refresh: Refresh::ParentMustMove(Basis::Requirement),
+        command: None,
+        resolutions: Vec::new(),
+        through: None,
+        standing: ParentStanding::Newest { deprecated: true },
+        override_hint: None,
+        lever_unknown: None,
+    }];
+    let path = dir.path().to_string_lossy().to_string();
+    crate::osv::parent_override::apply("qs", &mut links, &|_| path.clone(), &|_| {
+        Some(Manager::Npm)
+    });
+    let l = &links[0];
+    assert!(l.refresh.is_enough(), "{:?}", l.refresh);
+    assert_eq!(l.command.as_deref(), Some("npm update qs"));
+    assert!(!link_blocked(l));
+    let routes = crate::osv::parent_hint::TransitiveRoutes {
+        links,
+        unlinked: Vec::new(),
+    };
+    let note = crate::evidence::upgrade_parent::upstream_note("qs", &routes, false);
+    assert!(
+        note.starts_with(
+            "No manifest change needed: qs 6.16.0 comes in through request 2.88.2, whose \
+             requirement ^6.16.0 (a package.json override, replacing request's own ~6.5.2) \
+             already admits 6.16.1"
+        ),
+        "{note}"
+    );
+    assert!(note.contains("Run: `npm update qs`"), "{note}");
 }
 
 #[test]

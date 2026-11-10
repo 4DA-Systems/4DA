@@ -440,6 +440,8 @@ impl PackageGroup<'_> {
                     .flatten()
             })
             .flatten();
+        // Nothing to upgrade to yet: no "check the changelog before upgrading".
+        let blocked = blocked_title.is_some();
         let title = clamp_title(if let Some(t) = blocked_title {
             t
         } else if self.has_fix {
@@ -533,7 +535,7 @@ impl PackageGroup<'_> {
         };
         let target_detail = format!(
             "{}{}",
-            super::upgrade_plan_text::target_detail(&self.package, &self.lines, major),
+            super::upgrade_plan_text::target_detail(&self.package, &self.lines, major && !blocked),
             self.raise_note
         );
         let representatives = self.representatives();
@@ -874,11 +876,19 @@ fn clamp_title(s: String) -> String {
     if s.len() <= 120 {
         return s;
     }
-    let mut end = 120;
+    // Backstop (live 2026-11-10: "... brings in: no release f"): cut at the
+    // last word boundary that leaves room for the ellipsis (3 bytes).
+    let mut end = 117;
     while end > 0 && !s.is_char_boundary(end) {
         end -= 1;
     }
-    s[..end].trim_end().trim_end_matches('.').to_string()
+    let head = &s[..end];
+    let head = head
+        .rfind(' ')
+        .filter(|&i| i > 0)
+        .map_or(head, |i| &head[..i]);
+    let head = head.trim_end_matches(|c: char| c.is_whitespace() || ",;:.-(".contains(c));
+    format!("{head}\u{2026}")
 }
 
 /// Truncate to at most `max` bytes on a char boundary (adds an ellipsis if cut).

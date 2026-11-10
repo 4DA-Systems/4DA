@@ -1354,3 +1354,26 @@ fn express_site(held: Option<HeldCaveat>) -> SecuritySite {
         held,
     }
 }
+
+/// Live 2026-11-10: "bump rmcp to >= 3.9.0: bump rmcp to 3.9.0 in the
+/// workspace root's ...". The workspace-inherited form replaces the generic
+/// one; any other how still follows it.
+#[test]
+fn a_workspace_bump_is_said_once() {
+    let how = "bump rmcp to 3.9.0 in the workspace root's [workspace.dependencies] (it is \
+               inherited here; `cargo add` in this crate would replace the inheritance with a \
+               local pin)";
+    let path = FixPath::Bump {
+        to: "3.9.0".into(),
+        fix: Some(how.to_string()),
+    };
+    assert_eq!(fix_clause("rmcp", &path), how);
+    let cmd = FixPath::Bump {
+        to: "3.9.0".into(),
+        fix: Some("run `cargo add \"rmcp@^3.9.0\"`".to_string()),
+    };
+    assert_eq!(
+        fix_clause("rmcp", &cmd),
+        "bump rmcp to >= 3.9.0: run `cargo add \"rmcp@^3.9.0\"`"
+    );
+}

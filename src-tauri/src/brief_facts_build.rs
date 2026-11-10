@@ -582,6 +582,10 @@ fn direct_parent(
     // (`osv::fix_path`, the rule the plan applies too).
     let manager = Manager::detect(std::path::Path::new(project), inst_eco);
     let requirement_recorded = manager.is_some_and(Manager::records_requirements);
+    // A package.json override replaces every parent's requirement on it.
+    let forced = (inst_eco == "npm")
+        .then(|| crate::osv::parent_override::project_override(project, package))
+        .flatten();
 
     // Each frontier entry carries the copy it stands for and the depth-0 edge
     // it descends from — the immediate parent and its requirements — so the
@@ -602,6 +606,11 @@ fn direct_parent(
                 if parent == "__root__" || seen.contains(&parent) {
                     continue;
                 }
+                let child_req: Option<String> = if child == package {
+                    forced.clone().or(child_req)
+                } else {
+                    child_req
+                };
                 // An edge into ANOTHER copy of the child is no route to this
                 // one. It records the parent's requirement (package-lock) or
                 // the copy it resolved to (Cargo.lock, pnpm-lock: an exact

@@ -347,6 +347,11 @@ pub(super) fn load_routes_with(
         },
         answer_need,
     );
+    // A package.json override replaces the parents' requirements (qs in
+    // 4da-ledger, 2026-11-10: `~6.5.2` on request's edge, `^6.16.0` forced).
+    if ecosystem_norm == "npm" {
+        super::parent_override::apply(package, &mut links, &raw, &manager);
+    }
     annotate(db, ecosystem_norm, &mut links, &manager);
     if releases {
         super::parent_release_load::annotate(db, ecosystem_norm, package, &mut links, &raw);

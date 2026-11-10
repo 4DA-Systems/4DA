@@ -46,7 +46,7 @@ const DEP_PATH_TITLE = /^(\S+) (\S+) <- (\S+) (\S+)$/;
  * "; blocked upstream: docx-rs 0.4.22 is the newest release" when no published release of what
  * holds the copy admits the fix (upgrade_parent.rs `link_note`, upgrade_blocked.rs `note_marker`, Y5).
  */
-const BLOCKED_MARKER = /; blocked upstream: (\S+) (\S+) is the newest release$/;
+const BLOCKED_MARKER = /; blocked upstream: (?:(\S+) (\S+) is the newest release|no (\S+) release up to its newest admits it)$/;
 const DEP_PATH_NOTE =
   /^In (.+?); \S+ is a (?:direct|transitive) dependency; requires (.+?), which (admits|excludes) (\S+)$/;
 /** The note when the requirement was not on disk: "...; requirement not on disk; 9.0.5 is a semver-incompatible jump from 8.6.0". */
@@ -120,17 +120,23 @@ function parentsFor(item: EvidenceItem, packages: string[], project: string | nu
     const requirement = n?.[2] && isRequirement(n[2]) ? n[2] : null;
     const excluded = n?.[4] && VERSION.test(n[4]) ? n[4] : null;
     let line = `${parent} ${parentVersion} (pulls in ${child} ${childVersion})`;
-    const heldBy = b?.[1] && PACKAGE_NAME.test(b[1]) ? b[1] : null;
+    // Either "<holder> <version> is the newest release", or (every release read, none admits it)
+    // "no <holder> release up to its newest admits it", which names no version.
+    const heldRaw = b?.[1] ?? b?.[3];
+    const heldBy = heldRaw && PACKAGE_NAME.test(heldRaw) ? heldRaw : null;
     const heldNewest = b?.[2] && VERSION.test(b[2]) ? b[2] : null;
-    if (heldBy && heldNewest) {
+    const noneAdmits = Boolean(b?.[3]);
+    if (heldBy && (heldNewest || noneAdmits)) {
       // Y5: the plan's blocked sentence (upgrade_blocked.rs `BlockedCopy`).
       const jump = SEMVER_JUMP.exec(note)?.[1];
       const target = excluded ?? (jump && VERSION.test(jump) ? jump : null);
       const fixed = `a fixed ${child}${target ? ` (>= ${target})` : ''}`;
-      if (heldBy !== parent) {
+      if (noneAdmits) {
+        line += heldBy === parent
+          ? `, and no ${parent} release up to its newest allows ${fixed} yet (blocked upstream)`
+          : `, which arrives through ${heldBy}, and no ${heldBy} release up to its newest allows ${fixed} yet (blocked upstream)`;
+      } else if (heldBy !== parent) {
         line += `, which arrives through ${heldBy} ${heldNewest}, the newest ${heldBy} release, and no ${heldBy} release allows ${fixed} yet (blocked upstream)`;
-      } else if (heldNewest !== parentVersion) {
-        line += `, and no ${parent} release up to ${parent} ${heldNewest} allows ${fixed} yet (blocked upstream)`;
       } else if (requirement && n?.[3] === 'excludes') {
         line += `, the newest release, whose requirement ${requirement} does not allow ${fixed} yet (blocked upstream)`;
       } else {

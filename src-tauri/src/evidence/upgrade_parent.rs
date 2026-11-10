@@ -62,22 +62,31 @@ pub(super) fn upstream_note(
     // 3.13.1: three parents take ^3.13, mocha pins 3.13.1). Those links lead.
     let mut links: Vec<&ParentLink> = routes.links.iter().collect();
     links.sort_by_key(|l| (l.refresh.is_enough(), !blocked(&routes.links, l)));
-    let mut parts: Vec<String> = links
-        .iter()
-        .map(|l| {
-            let sentence = link_sentence(package, l, multi_project);
-            if l.refresh.is_enough() && blocked(&routes.links, l) {
-                // This parent allows the target; another parent of the same
-                // copy does not, so it is not "a refresh is enough".
-                let cut = sentence
-                    .find(" — a lockfile refresh")
-                    .unwrap_or(sentence.len());
-                let cut = cut.min(sentence.find(", so a lockfile refresh").unwrap_or(cut));
-                format!("{} (another parent of this copy pins it)", &sentence[..cut])
-            } else {
-                sentence
-            }
-        })
+    // Y5: a blocked copy is one sentence however many projects hold it
+    // (live 2026-11-10 the crypto-bigint card said it twice, options and
+    // all), and the options come once, at the end.
+    let (blocked_parts, options) = blocked_sentences(package, &links, multi_project);
+    let mut parts: Vec<String> = blocked_parts
+        .into_iter()
+        .chain(
+            links
+                .iter()
+                .filter(|l| !super::upgrade_blocked::link_blocked(l))
+                .map(|l| {
+                    let sentence = link_sentence(package, l, multi_project);
+                    if l.refresh.is_enough() && blocked(&routes.links, l) {
+                        // This parent allows the target; another parent of the same
+                        // copy does not, so it is not "a refresh is enough".
+                        let cut = sentence
+                            .find(" — a lockfile refresh")
+                            .unwrap_or(sentence.len());
+                        let cut = cut.min(sentence.find(", so a lockfile refresh").unwrap_or(cut));
+                        format!("{} (another parent of this copy pins it)", &sentence[..cut])
+                    } else {
+                        sentence
+                    }
+                }),
+        )
         .chain(
             unlinked
                 .iter()
@@ -113,6 +122,9 @@ pub(super) fn upstream_note(
         "Transitive"
     };
     let mut out = format!("{head}: {}", parts.join("; "));
+    if !options.is_empty() {
+        out.push_str(&format!(". Options: {}", options.join("; or ")));
+    }
     let commands = commands(routes);
     if !commands.is_empty() {
         out.push_str(&format!(
@@ -141,6 +153,73 @@ pub(super) fn upstream_note(
         out.push_str(&seen);
     }
     out
+}
+
+/// The blocked links' sentences, one per distinct hold (the projects that
+/// share it listed together), and the union of their options.
+fn blocked_sentences(
+    package: &str,
+    links: &[&ParentLink],
+    multi_project: bool,
+) -> (Vec<String>, Vec<String>) {
+    let mut groups: Vec<(String, &ParentLink, Vec<String>)> = Vec::new();
+    let mut options: Vec<String> = Vec::new();
+    for l in links
+        .iter()
+        .filter(|l| super::upgrade_blocked::link_blocked(l))
+    {
+        let copy = blocked_copy(package, l, "");
+        for o in copy.options() {
+            if !options.contains(&o) {
+                options.push(o);
+            }
+        }
+        let key = copy.clause();
+        match groups.iter_mut().find(|(k, ..)| *k == key) {
+            Some((_, _, projects)) => {
+                if !projects.contains(&l.project) {
+                    projects.push(l.project.clone());
+                }
+            }
+            None => groups.push((key, l, vec![l.project.clone()])),
+        }
+    }
+    let sentences = groups
+        .into_iter()
+        .map(|(key, l, projects)| {
+            if multi_project {
+                let place = format!(" (in {})", projects.join(", "));
+                blocked_copy(package, l, &place).clause()
+            } else {
+                key
+            }
+        })
+        .collect();
+    (sentences, options)
+}
+
+/// The blocked copy of one link (`link_blocked`), for its sentence.
+fn blocked_copy<'a>(
+    package: &'a str,
+    l: &'a ParentLink,
+    place: &'a str,
+) -> super::upgrade_blocked::BlockedCopy<'a> {
+    let requirement = match l.refresh {
+        Refresh::ParentMustMove(Basis::Requirement) if !l.is_bundled() => l.requirement.as_deref(),
+        _ => None,
+    };
+    super::upgrade_blocked::BlockedCopy {
+        package,
+        installed: Some(&l.child_version),
+        place,
+        target: l.target.as_deref().unwrap_or(""),
+        parent: &l.parent,
+        parent_version: &l.parent_version,
+        requirement,
+        standing: &l.standing,
+        through: l.through.as_ref(),
+        override_hint: l.override_hint.as_deref(),
+    }
 }
 
 /// Some link of the same copy (project, installed version) does not admit a
@@ -206,25 +285,7 @@ fn link_sentence(package: &str, l: &ParentLink, multi_project: bool) -> String {
     };
     // Y5: no published release can move it: the one blocked sentence.
     if super::upgrade_blocked::link_blocked(l) {
-        let requirement = match l.refresh {
-            Refresh::ParentMustMove(Basis::Requirement) if !l.is_bundled() => {
-                l.requirement.as_deref()
-            }
-            _ => None,
-        };
-        return super::upgrade_blocked::BlockedCopy {
-            package,
-            installed: Some(&l.child_version),
-            place: &place(&l.project, multi_project),
-            target,
-            parent: &l.parent,
-            parent_version: &l.parent_version,
-            requirement,
-            standing: &l.standing,
-            through: l.through.as_ref(),
-            override_hint: l.override_hint.as_deref(),
-        }
-        .sentence();
+        return blocked_copy(package, l, &place(&l.project, multi_project)).sentence();
     }
     if l.is_bundled() {
         // The edge records the shipped version, not a requirement: say what

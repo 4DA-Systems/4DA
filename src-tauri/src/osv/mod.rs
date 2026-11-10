@@ -20,6 +20,7 @@ mod held_vectors;
 pub(crate) mod identity;
 pub(crate) mod matching;
 pub(crate) mod parent_hint;
+pub(crate) mod parent_override;
 pub(crate) mod parent_release;
 #[cfg(test)]
 pub(crate) mod parent_release_fixture;

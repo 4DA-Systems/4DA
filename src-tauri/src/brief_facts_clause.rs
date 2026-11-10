@@ -92,6 +92,11 @@ pub(crate) fn fix_clause_for(package: &str, installed: Option<&str>, path: &FixP
     }
     match path {
         FixPath::Bump { to, fix } => match fix {
+            // The how already says the bump (a workspace-inherited dependency:
+            // "bump rmcp to 3.9.0 in the workspace root's ..."): it replaces the
+            // generic form instead of following it (live 2026-11-10 the Brief
+            // said "bump rmcp to >= 3.9.0: bump rmcp to 3.9.0 in ...").
+            Some(how) if how.starts_with(&format!("bump {package} ")) => how.clone(),
             Some(how) => format!("bump {package} to >= {to}: {how}"),
             None => format!("bump {package} to >= {to}"),
         },

@@ -51,6 +51,10 @@ pub struct BlockedHold {
     /// `held_by`'s newest release 4DA has seen (its installed version when
     /// that is the newest).
     pub held_by_newest: String,
+    /// `held_by`'s installed version. Equal to `held_by_newest` when it is
+    /// already the newest; lower when every release was read and none admits
+    /// a clean copy.
+    pub held_by_version: String,
     /// What the reader can do instead, in order.
     pub options: Vec<String>,
 }
@@ -88,19 +92,35 @@ pub(crate) fn link_blocked(l: &ParentLink) -> bool {
 }
 
 /// The package that keeps the copy, and its newest release seen.
-fn holder(l: &ParentLink) -> (String, String) {
+fn holder(l: &ParentLink) -> (String, String, String, bool) {
     let newest = |s: &ParentStanding, installed: &str| match s {
         ParentStanding::NoneAdmits {
             latest: Some(latest),
         } => latest.clone(),
         _ => installed.to_string(),
     };
+    let none = |s: &ParentStanding| matches!(s, ParentStanding::NoneAdmits { .. });
     if at_newest(&l.standing) {
-        return (l.parent.clone(), newest(&l.standing, &l.parent_version));
+        return (
+            l.parent.clone(),
+            l.parent_version.clone(),
+            newest(&l.standing, &l.parent_version),
+            none(&l.standing),
+        );
     }
     match &l.through {
-        Some(t) => (t.name.clone(), newest(&t.standing, &t.version)),
-        None => (l.parent.clone(), l.parent_version.clone()),
+        Some(t) => (
+            t.name.clone(),
+            t.version.clone(),
+            newest(&t.standing, &t.version),
+            none(&t.standing),
+        ),
+        None => (
+            l.parent.clone(),
+            l.parent_version.clone(),
+            l.parent_version.clone(),
+            false,
+        ),
     }
 }
 
@@ -174,31 +194,52 @@ pub(crate) struct BlockedCopy<'a> {
 
 impl BlockedCopy<'_> {
     /// The package that cannot move, and its newest release seen.
-    fn holder(&self) -> (&str, String) {
-        let newest = |s: &ParentStanding, v: &str| match s {
-            ParentStanding::NoneAdmits {
-                latest: Some(latest),
-            } => latest.clone(),
-            _ => v.to_string(),
-        };
+    /// The package that cannot move, its installed version, and whether
+    /// every release of it was read and none admits a clean copy (then no
+    /// release is named: the parent's own row names the one it moves to).
+    fn holder(&self) -> (&str, &str, bool) {
+        let none = |s: &ParentStanding| matches!(s, ParentStanding::NoneAdmits { .. });
         if at_newest(self.standing) {
-            return (self.parent, newest(self.standing, self.parent_version));
+            return (self.parent, self.parent_version, none(self.standing));
         }
         match self.through {
-            Some(t) => (t.name.as_str(), newest(&t.standing, &t.version)),
-            None => (self.parent, self.parent_version.to_string()),
+            Some(t) => (t.name.as_str(), t.version.as_str(), none(&t.standing)),
+            None => (self.parent, self.parent_version, false),
         }
     }
 
+    /// The sentence with its options: what the Brief prints per site.
     pub(crate) fn sentence(&self) -> String {
+        format!(
+            "{}. Options: {}",
+            self.clause(),
+            self.options().join("; or ")
+        )
+    }
+
+    /// The honest options for this copy.
+    pub(crate) fn options(&self) -> Vec<String> {
+        let (held_by, ..) = self.holder();
+        blocked_options(
+            None,
+            self.package,
+            self.target,
+            self.parent,
+            held_by,
+            self.override_hint,
+        )
+    }
+
+    /// The sentence without its options (the plan states them once).
+    pub(crate) fn clause(&self) -> String {
         let (package, target, parent) = (self.package, self.target, self.parent);
         let copy = self.installed.map_or_else(
             || format!("{package}{}", self.place),
             |v| format!("{package} {v}{}", self.place),
         );
         let fixed = format!("a fixed {package} (>= {target})");
-        let (held_by, newest) = self.holder();
-        let hold = if held_by == parent && newest == self.parent_version {
+        let (held_by, held_version, none_admits) = self.holder();
+        let hold = if held_by == parent && !none_admits {
             let allow = self.requirement.map_or_else(
                 || format!("which does not allow {fixed} yet"),
                 |r| format!("whose requirement {r} does not allow {fixed} yet"),
@@ -209,29 +250,35 @@ impl BlockedCopy<'_> {
             )
         } else if held_by == parent {
             format!(
-                "{parent} {}, and no {parent} release up to {parent} {newest} allows {fixed} yet",
+                "{parent} {}, and no {parent} release up to its newest allows {fixed} yet",
+                self.parent_version
+            )
+        } else if none_admits {
+            format!(
+                "{parent} {}, which arrives through {held_by} {held_version}, and no {held_by} \
+                 release up to its newest allows {fixed} yet",
                 self.parent_version
             )
         } else {
             format!(
-                "{parent} {}, which arrives through {held_by} {newest}, the newest {held_by} \
+                "{parent} {}, which arrives through {held_by} {held_version}, the newest {held_by} \
                  release, and no {held_by} release allows {fixed} yet",
                 self.parent_version
             )
         };
-        let options = blocked_options(None, package, target, parent, held_by, self.override_hint);
-        format!(
-            "{copy} comes in through {hold}. Options: {}",
-            options.join("; or ")
-        )
+        format!("{copy} comes in through {hold}")
     }
 }
 
 /// The marker a blocked link's `dependency-path` note ends with, read by the
 /// hand-off prompt (`src/lib/agent-handoff.ts`): who holds the copy.
 pub(crate) fn note_marker(l: &ParentLink) -> String {
-    let (held_by, newest) = holder(l);
-    format!("; blocked upstream: {held_by} {newest} is the newest release")
+    let (held_by, version, _, none_admits) = holder(l);
+    if none_admits {
+        format!("; blocked upstream: no {held_by} release up to its newest admits it")
+    } else {
+        format!("; blocked upstream: {held_by} {version} is the newest release")
+    }
 }
 
 fn route_of_copy(links: &[&ParentLink]) -> CopyRoute {
@@ -315,7 +362,7 @@ pub(super) fn holds(ecosystem: &str, package: &str, routes: &TransitiveRoutes) -
         }) {
             continue;
         }
-        let (held_by, held_by_newest) = holder(l);
+        let (held_by, held_by_version, held_by_newest, _) = holder(l);
         let requirement = match l.refresh {
             Refresh::ParentMustMove(crate::osv::fix_path::Basis::Requirement) => {
                 l.requirement.clone().filter(|_| !l.is_bundled())
@@ -339,40 +386,55 @@ pub(super) fn holds(ecosystem: &str, package: &str, routes: &TransitiveRoutes) -
             requirement,
             held_by,
             held_by_newest,
+            held_by_version,
         });
     }
     out
 }
 
-/// The title of a `blocked_upstream` step: "zip 8.6.0 is held at ^8.6.0 by
-/// docx-rs 0.4.22 (newest): no release fixes it yet". `None` without holds.
+/// The title of a `blocked_upstream` step: "zip 8.6.0: blocked by docx-rs
+/// 0.4.22 (newest), no fix yet". Short by construction (live 2026-11-10 the
+/// longer "is held ... by elliptic-curve 0.13.8, which jsonwebtoken 11.1.0
+/// (newest) brings in" form ran past the 120-byte cap and was cut
+/// mid-word): the requirement and the parent are in the explanation. Other
+/// holds count as "(+N more)" (distinct copy and holder, not one per
+/// project); parts drop, last first, until it fits. `None` without holds.
 pub(super) fn blocked_title(package: &str, holds: &[BlockedHold]) -> Option<String> {
+    const MAX: usize = 120;
     let h = holds.first()?;
-    let at = h
-        .requirement
-        .as_deref()
-        .map_or_else(String::new, |r| format!(" at {r}"));
-    let by = if h.held_by == h.parent && h.held_by_newest == h.parent_version {
-        format!("{} {} (newest)", h.parent, h.parent_version)
-    } else if h.held_by == h.parent {
-        format!(
-            "{} {} (no release up to {} {} admits it)",
-            h.parent, h.parent_version, h.parent, h.held_by_newest
-        )
-    } else {
-        format!(
-            "{} {}, which {} {} (newest) brings in",
-            h.parent, h.parent_version, h.held_by, h.held_by_newest
-        )
-    };
-    let more = match holds.len() {
+    let mut distinct: Vec<(&str, &str)> = holds
+        .iter()
+        .map(|h| (h.installed.as_str(), h.held_by.as_str()))
+        .collect();
+    distinct.sort_unstable();
+    distinct.dedup();
+    let more = match distinct.len() {
         1 => String::new(),
         n => format!(" (+{} more)", n - 1),
     };
-    Some(format!(
-        "{package} {} is held{at} by {by}: no release fixes it yet{more}",
-        h.installed
-    ))
+    // "(newest)" only when the holder IS at its newest; when no release up
+    // to the newest admits it, no release is named (the parent's own row
+    // names the one it moves to).
+    let by = if h.held_by_version == h.held_by_newest {
+        format!("{} {} (newest)", h.held_by, h.held_by_newest)
+    } else {
+        h.held_by.clone()
+    };
+    let candidates = [
+        format!(
+            "{package} {}: blocked by {by}, no fix yet{more}",
+            h.installed
+        ),
+        format!("{package} {}: blocked by {by}, no fix yet", h.installed),
+        format!(
+            "{package} {}: blocked by {}, no fix yet",
+            h.installed, h.held_by
+        ),
+        format!("{package}: blocked by {}, no fix yet", h.held_by),
+        format!("{package}: blocked upstream, no fix yet"),
+    ];
+    let fits = candidates.iter().find(|t| t.len() <= MAX).cloned();
+    Some(fits.unwrap_or_else(|| candidates[candidates.len() - 1].clone()))
 }
 
 #[cfg(test)]

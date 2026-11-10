@@ -172,6 +172,17 @@ describe('extractFixFacts on Upgrade Plan steps', () => {
     expect(facts.parents).toEqual(['docx-rs 0.4.22 (pulls in zip 8.6.0), the newest release, which does not allow a fixed zip (>= 9.0.5) yet (blocked upstream)']);
   });
 
+  it('names no release when every release of the parent was read and none admits the fix', () => {
+    const facts = extractFixFacts(planStep({
+      affected_deps: ['tinypool'],
+      affected_projects: ['d:/code/app'],
+      evidence: [
+        { source: 'dependency-path', title: 'tinypool 1.0.0 <- vitest 4.0.0', url: null, freshness_days: 0, relevance_note: 'In d:/code/app; vitest is a direct dependency; requires ^1.0.0, which excludes 3.0.0; blocked upstream: no vitest release up to its newest admits it' },
+      ],
+    }));
+    expect(facts.parents).toEqual(['vitest 4.0.0 (pulls in tinypool 1.0.0), and no vitest release up to its newest allows a fixed tinypool (>= 3.0.0) yet (blocked upstream)']);
+  });
+
   it('names the declared dependency when it is the one at its newest release', () => {
     const facts = extractFixFacts(planStep({
       affected_deps: ['crypto-bigint'],
