@@ -362,7 +362,9 @@ fn fixed_version_for(vuln: &OsvVulnerability, package: &str, ecosystem: &str) ->
     None
 }
 
-/// Prefer CVSS_V3 severity; return (severity_type, numeric_score).
+/// Prefer CVSS_V3 severity, then CVSS_V4 (Y6); return (severity_type,
+/// numeric_score). The score is usually a VECTOR, so it goes through the one
+/// parser (a bare `parse::<f64>` read every vector as no score).
 fn best_severity(vuln: &OsvVulnerability) -> (Option<String>, Option<f64>) {
     let Some(severities) = &vuln.severity else {
         return (None, None);
@@ -370,9 +372,13 @@ fn best_severity(vuln: &OsvVulnerability) -> (Option<String>, Option<f64>) {
     let chosen = severities
         .iter()
         .find(|s| s.severity_type == "CVSS_V3")
+        .or_else(|| severities.iter().find(|s| s.severity_type == "CVSS_V4"))
         .or_else(|| severities.first());
     match chosen {
-        Some(s) => (Some(s.severity_type.clone()), s.score.parse::<f64>().ok()),
+        Some(s) => (
+            Some(s.severity_type.clone()),
+            crate::scoring::cvss::parse_cvss_score(&s.score),
+        ),
         None => (None, None),
     }
 }

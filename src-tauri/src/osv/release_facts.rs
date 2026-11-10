@@ -210,6 +210,10 @@ fn wanted(db: &Database) -> Wants {
             .children
             .insert(child);
     }
+    // Y5: a crates.io / PyPI parent's release list (is it the newest?).
+    for key in super::parent_hint::wanted_release_lists(db, &matches) {
+        out.entry(key).or_default();
+    }
     let kept: BTreeSet<(String, String)> = gate(out.keys().cloned().collect(), |source| {
         db.is_source_enabled(source)
     })

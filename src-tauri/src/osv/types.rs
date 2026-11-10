@@ -292,9 +292,12 @@ pub struct CacheUpdateResult {
 
 impl Vulnerability {
     pub(crate) fn best_cvss(&self) -> (Option<String>, Option<f64>) {
+        // v3 first (the score most tools quote), then v4 (Y6: RustSec's
+        // newer records publish only a v4.0 vector), then whatever is there.
         let sev = self.severity.as_ref().and_then(|s| {
             s.iter()
                 .find(|sv| sv.severity_type == "CVSS_V3")
+                .or_else(|| s.iter().find(|sv| sv.severity_type == "CVSS_V4"))
                 .or_else(|| s.first())
         });
         let sev_type = sev.map(|s| s.severity_type.clone());
@@ -306,7 +309,7 @@ impl Vulnerability {
 
     /// The severity label the mirror stores: the source's curated label
     /// (`database_specific.severity`, GitHub-reviewed advisories) first —
-    /// it is authoritative even when the CVSS block is an unscorable v4
+    /// it is authoritative even when the CVSS block is a v4
     /// vector — then the band of the best CVSS score. `None` when the
     /// source gives neither.
     pub(crate) fn severity_label(&self) -> Option<String> {

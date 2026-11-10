@@ -2797,11 +2797,8 @@ fn classify_signals(
                                 .unwrap_or(std::cmp::Ordering::Equal)
                         });
                     c.priority = security.priority(best);
-                    let prefix = if c.priority == signals::SignalPriority::Critical {
-                        "Critical"
-                    } else {
-                        "Security"
-                    };
+                    // Y6: the word is the scored severity, never the tier.
+                    let prefix = security.severity_word().unwrap_or("Security");
                     // v39: "Security issue affects <dep>" is a claim about an
                     // installed version — only a registry advisory the version
                     // verdict confirms may make it. Editorial coverage and an
@@ -3380,12 +3377,15 @@ pub(crate) fn score_item(
     // below the installed 4.13.3 ranked above grounded, AFFECTED items).
     // (`is_security_source`, `advisory_id`, `sec_verdict` and
     // `sec_exposed_copy` are computed before Phase 5 since v44.)
+    // Y4: a matcher-confirmed copy shows ITS target (every advisory of the
+    // package cleared, `osv::advisory_match::clearing_target`), the one the
+    // Upgrade Plan names; the item text's `Fixed in:` (this advisory's own
+    // fix) is only the fallback.
     let fixed_version = if is_security_source {
-        extract_fixed_version(input.content).or_else(|| {
-            sec_exposed_copy
-                .and(sec_verdict.as_ref())
-                .and_then(|v| v.fixed_version.clone())
-        })
+        sec_exposed_copy
+            .and(sec_verdict.as_ref())
+            .and_then(|v| v.fixed_version.clone())
+            .or_else(|| extract_fixed_version(input.content))
     } else {
         None
     };
@@ -3863,6 +3863,13 @@ pub(crate) fn score_item(
             .unwrap_or_default(),
         tier: security_tier,
         package: display_deps.first().map(|d| d.package_name.as_str()),
+        exposed_scope: if security_confirmed {
+            sec_verdict
+                .as_ref()
+                .and_then(super::security_verdict::SecurityVerdict::exposed_scope)
+        } else {
+            None
+        },
     };
     let (sig_type, mut sig_priority, mut sig_action, sig_triggers, sig_horizon) = classify_signals(
         relevant,

@@ -17,6 +17,7 @@ mod context;
 pub(crate) mod context_cache;
 pub(crate) mod corpus_calibration;
 pub(crate) mod cvss;
+pub(crate) mod cvss4;
 mod dedup;
 #[cfg(test)]
 mod dep_axis_live_verify;

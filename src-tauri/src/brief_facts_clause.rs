@@ -10,7 +10,7 @@ use super::{FixPath, HeldCaveat, ProvenParent, SecuritySite};
 /// (npm, audit 6.2.5 D-4) after it, so no surface quotes a target as a clean
 /// fix that the rule could not stand behind.
 pub(crate) fn site_fix_clause(package: &str, site: &SecuritySite) -> String {
-    let clause = fix_clause(package, &site.fix_path);
+    let clause = fix_clause_for(package, site.installed.as_deref(), &site.fix_path);
     match &site.held {
         Some(caveat) => format!("{clause} ({})", caveat.text),
         None => clause,
@@ -52,10 +52,51 @@ pub(crate) fn held_caveat(package: &str, held: &HeldOutcome) -> Option<HeldCavea
 /// copies this clause, and on 2026-10-03 the old wording ("transitive via
 /// victauri-plugin 0.8.4, ... the fix (>= 2.1.0)") put rmcp's fix after
 /// victauri-plugin's name, so the version check faulted the brief that quoted
-/// it faithfully.
+/// it faithfully. Without the installed version: the tests' entry point.
+#[cfg(test)]
 pub(crate) fn fix_clause(package: &str, path: &FixPath) -> String {
+    fix_clause_for(package, None, path)
+}
+
+/// [`fix_clause`] with the copy's installed version, which the blocked
+/// sentence names (Y5).
+pub(crate) fn fix_clause_for(package: &str, installed: Option<&str>, path: &FixPath) -> String {
+    if let FixPath::Parent {
+        parent,
+        parent_version,
+        to,
+        proven: None,
+        route,
+        ..
+    } = path
+    {
+        // Y5: no published release can move it. The same sentence the plan
+        // step and the Preemption alert print (`evidence::BlockedCopy`); the
+        // requirement is left out here, as everywhere in the Brief.
+        if crate::evidence::standing_blocked(&route.standing, route.through.as_ref()) {
+            let sentence = crate::evidence::BlockedCopy {
+                package,
+                installed,
+                place: "",
+                target: to,
+                parent,
+                parent_version,
+                requirement: None,
+                standing: &route.standing,
+                through: route.through.as_ref(),
+                override_hint: route.override_hint.as_deref(),
+            }
+            .sentence();
+            return format!("transitive; {sentence}");
+        }
+    }
     match path {
         FixPath::Bump { to, fix } => match fix {
+            // The how already says the bump (a workspace-inherited dependency:
+            // "bump rmcp to 3.9.0 in the workspace root's ..."): it replaces the
+            // generic form instead of following it (live 2026-11-10 the Brief
+            // said "bump rmcp to >= 3.9.0: bump rmcp to 3.9.0 in ...").
+            Some(how) if how.starts_with(&format!("bump {package} ")) => how.clone(),
             Some(how) => format!("bump {package} to >= {to}: {how}"),
             None => format!("bump {package} to >= {to}"),
         },

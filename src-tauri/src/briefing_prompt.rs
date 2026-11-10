@@ -338,7 +338,7 @@ The FACTS block in the user message was computed by software from the user's loc
 Write these sections in this order. Omit a section that would be empty.
 
 ## Act now
-One bullet per ACT NOW fact whose status is NEW. Lead with the package and the project label, give the fix exactly as the fact's fix clause says (same parent package, same versions), and add one short clause on why it matters: what the advisory is about, its severity, and "(dev tooling)" when — and only when — the site is marked DEV-ONLY. A fact marked UNCHANGED does not go here.
+One bullet per ACT NOW fact whose status is NEW. Lead with the package and the project label, give the fix exactly as the fact's fix clause says (same parent package, same versions), and add one short clause on why it matters: what the advisory is about, its severity, and "(dev tooling)" when — and only when — the site is marked DEV-ONLY. When the fix clause says "blocked upstream: no release fixes it yet", say exactly that and give its options; never tell the user to upgrade or refresh for it. A fact marked UNCHANGED does not go here.
 
 ## Upgrades to plan
 One bullet per UPGRADES fact whose status is NEW: the package, the new version, each project with its installed version, and how far behind it is. Say it is a breaking release and that the changelog should be read before bumping. Do not describe what changed in the release: you have not read its changelog. An upgrade marked DEV-ONLY gets half a sentence and may say "(dev tooling)"; never call a package dev tooling or dev-only unless its fact is marked DEV-ONLY.

@@ -373,14 +373,11 @@ fn a_parent_at_its_newest_release_is_not_told_to_update() {
     validate_item(uuid).expect("schema-valid");
     assert!(
         uuid.explanation.contains(
-            "uuid 3.4.0 comes in through request 2.88.2, whose requirement ^3.3.2 excludes 11.1.1 \
-             — request 2.88.2 is already the newest request release 4DA has seen and is \
-             deprecated, and it arrives through javascript-opentimestamps 0.4.5, a direct \
-             dependency; javascript-opentimestamps 0.4.5 is already the newest \
-             javascript-opentimestamps release 4DA has seen, so no javascript-opentimestamps \
-             upgrade is known to admit it: replace javascript-opentimestamps, or force uuid >= \
-             11.1.1 with an override in package.json (npm `overrides`, pnpm `pnpm.overrides` or \
-             yarn `resolutions`)"
+            "uuid 3.4.0 comes in through request 2.88.2, the newest release, whose requirement ^3.3.2 \
+             does not allow a fixed uuid (>= 11.1.1) yet. Options: force uuid >= 11.1.1 with an override \
+             in package.json (npm `overrides`, pnpm `pnpm.overrides` or yarn `resolutions`); it runs \
+             outside the range request declares, so test it; or fork request so it accepts uuid >= \
+             11.1.1; or accept the risk with a written review date"
         ),
         "{}",
         uuid.explanation

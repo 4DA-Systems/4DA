@@ -1467,3 +1467,16 @@ fn every_fixing_release_withdrawn_reads_no_installable_fix() {
     );
     assert!(!title.contains("0.3.17"), "title: {title}");
 }
+
+/// Backstop for any title over the cap (live 2026-11-10: "... brings in: no
+/// release f"): cut at a word boundary, an ellipsis, never past 120 bytes.
+#[test]
+fn clamp_title_cuts_at_a_word_with_an_ellipsis() {
+    let long = format!("{} release fixes it yet", "word ".repeat(30));
+    let t = super::clamp_title(long);
+    assert!(t.len() <= 120, "{} bytes", t.len());
+    assert!(t.ends_with("word\u{2026}"), "{t}");
+    assert_eq!(super::clamp_title("short.".to_string()), "short");
+    let t = super::clamp_title("x".repeat(300));
+    assert!(t.len() <= 120 && t.ends_with('\u{2026}'), "{t}");
+}

@@ -177,7 +177,7 @@ fn range_contains(ecosystem: &str, user: &OrderedVersion, range: &Range) -> Opti
     };
     for obj in range.events.iter().flatten().filter_map(|e| e.as_object()) {
         if let Some(intro) = obj.get("introduced").and_then(|v| v.as_str()) {
-            lower = Lower::parse_in(intro, ecosystem);
+            lower = Lower::parse_in(&coerce_bound(intro, ecosystem), ecosystem);
             if lower.is_none() && note(None) {
                 return Some(true);
             }
@@ -189,7 +189,8 @@ fn range_contains(ecosystem: &str, user: &OrderedVersion, range: &Range) -> Opti
         if let Some((bound, inclusive)) = upper {
             let bound = bound.as_str().unwrap_or("");
             if let (Some(low), false) = (lower.as_ref(), is_unknown_bound(bound)) {
-                let verdict = OrderedVersion::parse_in(bound, ecosystem).and_then(|version| {
+                let bound = coerce_bound(bound, ecosystem);
+                let verdict = OrderedVersion::parse_in(&bound, ecosystem).and_then(|version| {
                     in_window(
                         user,
                         low,
@@ -213,6 +214,64 @@ fn range_contains(ecosystem: &str, user: &OrderedVersion, range: &Range) -> Opti
         }
     }
     (!undecided).then_some(false)
+}
+
+/// A range bound as OSV.dev evaluates it, for the semver ecosystems (npm,
+/// crates.io, Go). Advisory data is hand-written and sometimes not semver:
+/// GHSA-92cp-5422-2mw7 (go-redis v9) opens a range at `9.6.0b1`. Unread, the
+/// window was undecided; OSV's own coercion (missing minor and patch are 0,
+/// a bare suffix is a prerelease) puts it just below 9.6.0, which is what
+/// api.osv.dev answers per version (9.6.0 to 9.6.2 affected, 9.5.5 and 9.6.3
+/// not, 2026-11-10). A bound that already reads as semver, `0`, a bound of
+/// another ecosystem, or one even the coercion cannot read is kept as
+/// written. The MCP server's `coerceBound` (osv-ranges.ts) is the same rule
+/// (Y4: one reading on every surface).
+pub fn coerce_bound<'a>(bound: &'a str, ecosystem: &str) -> std::borrow::Cow<'a, str> {
+    use std::borrow::Cow;
+    let semver_family = matches!(
+        ecosystem.to_ascii_lowercase().as_str(),
+        "npm" | "crates.io" | "go"
+    );
+    let t = bound.trim();
+    if t == "0" || !semver_family || parse_version(t).is_some() {
+        return Cow::Borrowed(bound);
+    }
+    let (v, body) = t.strip_prefix('v').map_or(("", t), |b| ("v", b));
+    // major[.minor[.patch]], then an optional separated or bare suffix.
+    let mut parts: Vec<&str> = Vec::new();
+    let mut rest = body;
+    while parts.len() < 3 {
+        let digits = rest.bytes().take_while(u8::is_ascii_digit).count();
+        if digits == 0 {
+            break;
+        }
+        parts.push(&rest[..digits]);
+        rest = &rest[digits..];
+        match rest.strip_prefix('.') {
+            Some(r) if parts.len() < 3 && r.starts_with(|c: char| c.is_ascii_digit()) => rest = r,
+            _ => break,
+        }
+    }
+    if parts.is_empty() {
+        return Cow::Borrowed(bound);
+    }
+    let core = format!(
+        "{v}{}.{}.{}",
+        parts[0],
+        parts.get(1).unwrap_or(&"0"),
+        parts.get(2).unwrap_or(&"0")
+    );
+    let coerced = match rest.chars().next() {
+        None => core,
+        Some('+' | '-') => format!("{core}{rest}"),
+        Some(c) if c.is_ascii_alphanumeric() => format!("{core}-{rest}"),
+        Some(_) => return Cow::Borrowed(bound),
+    };
+    if parse_version(&coerced).is_some() {
+        Cow::Owned(coerced)
+    } else {
+        Cow::Borrowed(bound)
+    }
 }
 
 /// Whether an OSV version boundary is an unknown ("not available") sentinel rather than a
@@ -270,3 +329,7 @@ pub fn parse_version(ver: &str) -> Option<Version> {
 
     None
 }
+
+#[cfg(test)]
+#[path = "range_bound_tests.rs"]
+mod bound_tests;

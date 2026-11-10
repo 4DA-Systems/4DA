@@ -18,6 +18,7 @@
 use serde::{Deserialize, Serialize};
 
 use crate::osv::fix_target::{LineTarget, UpgradeType};
+use crate::osv::parent_hint::TransitiveRoutes;
 use crate::osv::types::MatchedAdvisory;
 
 /// The fixed instruction every step carries: how the agent proves the change
@@ -27,16 +28,32 @@ pub const VERIFICATION: &str = "After the change, wait for 4DA to rescan the pro
      recompute the plan (a newer generated_at), then re-run `4da plan --json`: this step's \
      item_id must no longer appear in `steps`. If it is still there, the change did not take.";
 
-/// How the fix reaches the installs a step names.
+/// How the fix reaches the installs a step names. Schema v5 (Y5,
+/// 2026-11-10) added `lockfile_refresh`, `parent_update` and
+/// `blocked_upstream`; `lockfile_or_parent_update` now means only "the route
+/// of some transitive copy could not be decided" (or the copies' routes
+/// differ), never the default for every transitive step.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Mechanism {
     /// Every install site declares the package directly: bump it in each
     /// project's manifest.
     ManifestBump,
-    /// The package is transitive at every site: the fix arrives by updating
-    /// the parent that pulls it in, or by refreshing the lockfile.
+    /// Transitive everywhere, and the routes were not all decided (or they
+    /// differ: some copies refresh, some are blocked): update the parent that
+    /// pulls it in, or refresh the lockfile, per the item's route text.
     LockfileOrParentUpdate,
+    /// Transitive everywhere, and every parent's requirement admits the fix:
+    /// refresh the lockfile, no manifest change.
+    LockfileRefresh,
+    /// Transitive everywhere; some parent must move, and for each such copy
+    /// the registry (or a project here) shows a parent release that admits
+    /// the fix; the rest refresh.
+    ParentUpdate,
+    /// Transitive everywhere, and no published release of the parent (or of
+    /// the declared dependency it arrives through), newest included, admits
+    /// the fix: `blocked_upstream` lists what holds each copy and the options.
+    BlockedUpstream,
     /// Direct at some sites, transitive at others: both of the above.
     Mixed,
     /// No installed line has a fixed version to move to.
@@ -90,18 +107,27 @@ pub struct UpgradeStep {
     /// Sorted by installed version.
     pub lines: Vec<StepLine>,
     pub mechanism: Mechanism,
+    /// Schema v5 (Y5): every transitive copy no published release can fix
+    /// yet, with what holds it and the options. Empty (and absent from the
+    /// JSON) when no copy is blocked; a `blocked_upstream` step has one per
+    /// copy, a `lockfile_or_parent_update` step may have some.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub blocked_upstream: Vec<super::upgrade_blocked::BlockedHold>,
     /// Every advisory id behind the step, aliases included, sorted.
     pub advisory_ids: Vec<String>,
     /// [`VERIFICATION`].
     pub verification: String,
 }
 
-/// Build the step for one plan row from the row's own lines.
+/// Build the step for one plan row from the row's own lines and the routes
+/// of its transitive copies (`osv::parent_hint::load_routes`; empty for a
+/// direct-only row and for the maintenance-notice item).
 pub(super) fn step_for(
     item_id: &str,
     ecosystem: &str,
     package: &str,
     lines: &[LineTarget],
+    routes: &TransitiveRoutes,
     advisories: &[&MatchedAdvisory],
 ) -> UpgradeStep {
     let mut advisory_ids: Vec<String> = advisories.iter().map(|a| a.advisory_id.clone()).collect();
@@ -112,7 +138,12 @@ pub(super) fn step_for(
         ecosystem: ecosystem.to_string(),
         package: package.to_string(),
         lines: lines.iter().map(step_line).collect(),
-        mechanism: mechanism(lines),
+        mechanism: mechanism(lines, routes),
+        blocked_upstream: if lines.iter().any(|l| l.target_version.is_some()) {
+            super::upgrade_blocked::holds(ecosystem, package, routes)
+        } else {
+            Vec::new()
+        },
         advisory_ids,
         verification: VERIFICATION.to_string(),
     }
@@ -148,6 +179,7 @@ pub(super) fn merge_same_package(steps: Vec<UpgradeStep>) -> Vec<UpgradeStep> {
                 None => existing.lines.push(line),
             }
         }
+        existing.blocked_upstream.extend(step.blocked_upstream);
         existing.advisory_ids.extend(step.advisory_ids);
         existing.advisory_ids.sort_unstable();
         existing.advisory_ids.dedup();
@@ -177,8 +209,10 @@ fn step_line(line: &LineTarget) -> StepLine {
 }
 
 /// `no_fix` when no line has a target (the same test that makes the item say
-/// "No fix published"); otherwise by where the package is declared.
-fn mechanism(lines: &[LineTarget]) -> Mechanism {
+/// "No fix published"); otherwise by where the package is declared and, for
+/// an all-transitive step, by the decided route of every copy
+/// (`upgrade_blocked::transitive_mechanism`).
+fn mechanism(lines: &[LineTarget], routes: &TransitiveRoutes) -> Mechanism {
     if lines.iter().all(|l| l.target_version.is_none()) {
         return Mechanism::NoFix;
     }
@@ -186,7 +220,7 @@ fn mechanism(lines: &[LineTarget]) -> Mechanism {
     if sites().all(|s| s.is_direct) {
         Mechanism::ManifestBump
     } else if sites().all(|s| !s.is_direct) {
-        Mechanism::LockfileOrParentUpdate
+        super::upgrade_blocked::transitive_mechanism(lines, routes)
     } else {
         Mechanism::Mixed
     }

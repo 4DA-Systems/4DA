@@ -17,8 +17,12 @@ const PLAN_KV_KEY: &str = "upgrade_plan_snapshot";
 /// Persisted-shape version. Bump on an incompatible change to
 /// [`super::types::UpgradePlanSnapshot`] / the item JSON; a reader that sees a
 /// higher version treats the snapshot as absent (fail closed). v4: `steps`
-/// (AD-049).
-const PLAN_SCHEMA_VERSION: u32 = 4;
+/// (AD-049). v5 (Y5, 2026-11-10): a step's `mechanism` may be
+/// `lockfile_refresh`, `parent_update` or `blocked_upstream`, and
+/// `lockfile_or_parent_update` narrowed to "route undecided"; a step may
+/// carry `blocked_upstream` holds. A v4 reader switching on `mechanism`
+/// would misread them, so it must see the bump and fail closed.
+const PLAN_SCHEMA_VERSION: u32 = 5;
 
 /// Persist the ranked plan to `kv_store` (blueprint D-1, DB-as-interface) so it
 /// survives restart and is readable out-of-process (the `4da plan` CLI reads

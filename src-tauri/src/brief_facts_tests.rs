@@ -1169,13 +1169,10 @@ fn a_parent_at_its_newest_release_gets_replace_or_override_not_upgrade() {
     let clause = fix_clause("uuid", &path);
     assert_eq!(
         clause,
-        "transitive; request 2.88.2 requires a uuid line that excludes the fix (uuid >= 11.1.1), \
-         so a lockfile refresh will NOT fix it: request 2.88.2 is already the newest request \
-         release 4DA has seen and is deprecated, and it arrives through javascript-opentimestamps \
-         0.4.5, a direct dependency; javascript-opentimestamps 0.4.5 is already the newest \
-         javascript-opentimestamps release 4DA has seen, so no javascript-opentimestamps upgrade \
-         is known to admit it: replace javascript-opentimestamps, or force uuid >= 11.1.1 with an \
-         `overrides` entry in package.json (npm)"
+        "transitive; uuid comes in through request 2.88.2, the newest release, which does not allow \
+         a fixed uuid (>= 11.1.1) yet. Options: force uuid >= 11.1.1 with an `overrides` entry in \
+         package.json (npm); it runs outside the range request declares, so test it; or fork request \
+         so it accepts uuid >= 11.1.1; or accept the risk with a written review date"
     );
     assert!(!clause.contains("upgrade request"), "{clause}");
     assert!(!clause.contains("must be updated"), "{clause}");
@@ -1356,4 +1353,27 @@ fn express_site(held: Option<HeldCaveat>) -> SecuritySite {
         },
         held,
     }
+}
+
+/// Live 2026-11-10: "bump rmcp to >= 3.9.0: bump rmcp to 3.9.0 in the
+/// workspace root's ...". The workspace-inherited form replaces the generic
+/// one; any other how still follows it.
+#[test]
+fn a_workspace_bump_is_said_once() {
+    let how = "bump rmcp to 3.9.0 in the workspace root's [workspace.dependencies] (it is \
+               inherited here; `cargo add` in this crate would replace the inheritance with a \
+               local pin)";
+    let path = FixPath::Bump {
+        to: "3.9.0".into(),
+        fix: Some(how.to_string()),
+    };
+    assert_eq!(fix_clause("rmcp", &path), how);
+    let cmd = FixPath::Bump {
+        to: "3.9.0".into(),
+        fix: Some("run `cargo add \"rmcp@^3.9.0\"`".to_string()),
+    };
+    assert_eq!(
+        fix_clause("rmcp", &cmd),
+        "bump rmcp to >= 3.9.0: run `cargo add \"rmcp@^3.9.0\"`"
+    );
 }

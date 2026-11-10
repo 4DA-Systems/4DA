@@ -935,6 +935,7 @@ use build::{copy_fix, own_package_names, CopyFix};
 #[path = "brief_facts_clause.rs"]
 mod clause;
 #[cfg(test)]
+#[cfg(test)]
 pub(crate) use clause::fix_clause;
 pub(crate) use clause::site_fix_clause;
 

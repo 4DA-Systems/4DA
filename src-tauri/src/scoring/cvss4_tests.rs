@@ -1,0 +1,449 @@
+// SPDX-License-Identifier: FSL-1.1-Apache-2.0
+//! The CVSS v4.0 port against FIRST's reference calculator: every expected
+//! score below was produced by running the reference JS
+//! (FIRSTdotorg/cvss-v4-calculator `cvss_score.js`) on the same vector.
+
+use super::cvss4_base_score;
+
+const REFERENCE: [(&str, f64); 68] = [
+    (
+        "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N",
+        9.3,
+    ),
+    (
+        "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:H/SI:H/SA:H",
+        10.0,
+    ),
+    (
+        "CVSS:4.0/AV:L/AC:L/AT:N/PR:L/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N",
+        8.5,
+    ),
+    (
+        "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:N",
+        8.7,
+    ),
+    (
+        "CVSS:4.0/AV:P/AC:H/AT:P/PR:H/UI:A/VC:L/VI:N/VA:N/SC:N/SI:N/SA:N",
+        1.0,
+    ),
+    (
+        "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:N/SC:N/SI:N/SA:N",
+        0.0,
+    ),
+    (
+        "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N/E:U",
+        8.1,
+    ),
+    (
+        "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:L/VA:N/SC:N/SI:N/SA:N/CR:L/IR:M/AR:L",
+        7.8,
+    ),
+    (
+        "CVSS:4.0/AV:L/AC:L/AT:P/PR:H/UI:A/VC:L/VI:L/VA:H/SC:N/SI:L/SA:H",
+        5.8,
+    ),
+    (
+        "CVSS:4.0/AV:L/AC:H/AT:N/PR:L/UI:A/VC:N/VI:L/VA:N/SC:L/SI:N/SA:H",
+        2.0,
+    ),
+    (
+        "CVSS:4.0/AV:A/AC:H/AT:N/PR:N/UI:N/VC:H/VI:L/VA:N/SC:H/SI:H/SA:L",
+        7.2,
+    ),
+    (
+        "CVSS:4.0/AV:P/AC:L/AT:N/PR:N/UI:A/VC:L/VI:N/VA:H/SC:L/SI:H/SA:H",
+        7.0,
+    ),
+    (
+        "CVSS:4.0/AV:A/AC:H/AT:P/PR:N/UI:A/VC:H/VI:H/VA:H/SC:L/SI:L/SA:H",
+        8.7,
+    ),
+    (
+        "CVSS:4.0/AV:A/AC:H/AT:P/PR:N/UI:N/VC:H/VI:H/VA:N/SC:L/SI:N/SA:H",
+        8.7,
+    ),
+    (
+        "CVSS:4.0/AV:L/AC:L/AT:P/PR:N/UI:N/VC:N/VI:L/VA:L/SC:H/SI:N/SA:L",
+        4.8,
+    ),
+    (
+        "CVSS:4.0/AV:A/AC:H/AT:N/PR:H/UI:P/VC:H/VI:L/VA:L/SC:L/SI:H/SA:N",
+        5.8,
+    ),
+    (
+        "CVSS:4.0/AV:L/AC:L/AT:N/PR:N/UI:P/VC:N/VI:H/VA:H/SC:H/SI:L/SA:H",
+        8.4,
+    ),
+    (
+        "CVSS:4.0/AV:N/AC:L/AT:N/PR:H/UI:P/VC:N/VI:H/VA:N/SC:L/SI:N/SA:N",
+        6.8,
+    ),
+    (
+        "CVSS:4.0/AV:A/AC:L/AT:N/PR:L/UI:A/VC:L/VI:H/VA:L/SC:H/SI:H/SA:H",
+        7.2,
+    ),
+    (
+        "CVSS:4.0/AV:P/AC:L/AT:N/PR:H/UI:P/VC:H/VI:H/VA:L/SC:N/SI:N/SA:H",
+        8.2,
+    ),
+    (
+        "CVSS:4.0/AV:P/AC:L/AT:N/PR:N/UI:A/VC:N/VI:N/VA:N/SC:H/SI:N/SA:L",
+        4.2,
+    ),
+    (
+        "CVSS:4.0/AV:A/AC:L/AT:P/PR:N/UI:N/VC:L/VI:N/VA:H/SC:H/SI:H/SA:N",
+        7.2,
+    ),
+    (
+        "CVSS:4.0/AV:L/AC:L/AT:P/PR:L/UI:P/VC:N/VI:N/VA:L/SC:L/SI:N/SA:H",
+        2.0,
+    ),
+    (
+        "CVSS:4.0/AV:P/AC:H/AT:N/PR:N/UI:A/VC:N/VI:N/VA:L/SC:H/SI:L/SA:H",
+        2.3,
+    ),
+    (
+        "CVSS:4.0/AV:N/AC:H/AT:N/PR:H/UI:A/VC:L/VI:L/VA:L/SC:H/SI:H/SA:L",
+        4.7,
+    ),
+    (
+        "CVSS:4.0/AV:P/AC:H/AT:N/PR:L/UI:A/VC:N/VI:L/VA:N/SC:L/SI:N/SA:H",
+        2.0,
+    ),
+    (
+        "CVSS:4.0/AV:N/AC:L/AT:P/PR:H/UI:P/VC:H/VI:L/VA:N/SC:N/SI:H/SA:N",
+        6.9,
+    ),
+    (
+        "CVSS:4.0/AV:P/AC:H/AT:N/PR:N/UI:A/VC:N/VI:L/VA:H/SC:H/SI:H/SA:L",
+        5.9,
+    ),
+    (
+        "CVSS:4.0/AV:A/AC:L/AT:P/PR:N/UI:P/VC:L/VI:N/VA:H/SC:H/SI:N/SA:H",
+        7.1,
+    ),
+    (
+        "CVSS:4.0/AV:A/AC:H/AT:P/PR:H/UI:P/VC:L/VI:H/VA:N/SC:N/SI:N/SA:L",
+        4.3,
+    ),
+    (
+        "CVSS:4.0/AV:N/AC:L/AT:P/PR:H/UI:P/VC:N/VI:L/VA:H/SC:H/SI:H/SA:N",
+        7.0,
+    ),
+    (
+        "CVSS:4.0/AV:A/AC:L/AT:N/PR:N/UI:P/VC:L/VI:N/VA:N/SC:H/SI:H/SA:L",
+        6.3,
+    ),
+    (
+        "CVSS:4.0/AV:P/AC:H/AT:P/PR:L/UI:A/VC:N/VI:N/VA:H/SC:L/SI:L/SA:N",
+        4.1,
+    ),
+    (
+        "CVSS:4.0/AV:N/AC:H/AT:N/PR:L/UI:A/VC:N/VI:H/VA:N/SC:H/SI:H/SA:L",
+        7.0,
+    ),
+    (
+        "CVSS:4.0/AV:A/AC:H/AT:N/PR:N/UI:N/VC:N/VI:N/VA:L/SC:L/SI:N/SA:N",
+        2.3,
+    ),
+    (
+        "CVSS:4.0/AV:N/AC:L/AT:N/PR:H/UI:N/VC:L/VI:L/VA:N/SC:L/SI:N/SA:L",
+        5.1,
+    ),
+    (
+        "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:A/VC:H/VI:L/VA:N/SC:H/SI:N/SA:L",
+        8.3,
+    ),
+    (
+        "CVSS:4.0/AV:L/AC:H/AT:N/PR:N/UI:P/VC:L/VI:L/VA:L/SC:N/SI:L/SA:N",
+        2.0,
+    ),
+    (
+        "CVSS:4.0/AV:A/AC:H/AT:P/PR:L/UI:P/VC:H/VI:H/VA:N/SC:H/SI:N/SA:N",
+        6.7,
+    ),
+    (
+        "CVSS:4.0/AV:N/AC:H/AT:N/PR:H/UI:N/VC:H/VI:H/VA:L/SC:N/SI:H/SA:L",
+        8.7,
+    ),
+    (
+        "CVSS:4.0/AV:N/AC:L/AT:P/PR:L/UI:A/VC:L/VI:N/VA:H/SC:L/SI:N/SA:L",
+        5.8,
+    ),
+    (
+        "CVSS:4.0/AV:P/AC:L/AT:N/PR:N/UI:A/VC:H/VI:N/VA:L/SC:L/SI:H/SA:N",
+        6.8,
+    ),
+    (
+        "CVSS:4.0/AV:L/AC:H/AT:N/PR:L/UI:N/VC:N/VI:N/VA:L/SC:L/SI:L/SA:L",
+        2.0,
+    ),
+    (
+        "CVSS:4.0/AV:A/AC:L/AT:N/PR:L/UI:P/VC:L/VI:L/VA:L/SC:L/SI:H/SA:H",
+        4.5,
+    ),
+    (
+        "CVSS:4.0/AV:N/AC:H/AT:P/PR:N/UI:A/VC:H/VI:H/VA:H/SC:H/SI:N/SA:H",
+        8.8,
+    ),
+    (
+        "CVSS:4.0/AV:A/AC:H/AT:N/PR:L/UI:P/VC:L/VI:H/VA:H/SC:N/SI:L/SA:H",
+        5.8,
+    ),
+    (
+        "CVSS:4.0/AV:P/AC:L/AT:N/PR:H/UI:P/VC:H/VI:L/VA:L/SC:N/SI:H/SA:H",
+        7.0,
+    ),
+    (
+        "CVSS:4.0/AV:L/AC:L/AT:P/PR:H/UI:A/VC:N/VI:H/VA:H/SC:L/SI:L/SA:L",
+        4.4,
+    ),
+    (
+        "CVSS:4.0/AV:P/AC:L/AT:N/PR:N/UI:P/VC:H/VI:L/VA:H/SC:N/SI:N/SA:L",
+        5.3,
+    ),
+    (
+        "CVSS:4.0/AV:N/AC:H/AT:N/PR:N/UI:P/VC:L/VI:H/VA:L/SC:L/SI:N/SA:H",
+        7.2,
+    ),
+    (
+        "CVSS:4.0/AV:A/AC:L/AT:N/PR:N/UI:N/VC:L/VI:L/VA:L/SC:N/SI:N/SA:H",
+        6.3,
+    ),
+    (
+        "CVSS:4.0/AV:P/AC:L/AT:N/PR:H/UI:P/VC:L/VI:L/VA:H/SC:N/SI:H/SA:H",
+        7.0,
+    ),
+    (
+        "CVSS:4.0/AV:P/AC:L/AT:N/PR:L/UI:A/VC:N/VI:L/VA:L/SC:L/SI:N/SA:N",
+        2.4,
+    ),
+    (
+        "CVSS:4.0/AV:L/AC:L/AT:P/PR:L/UI:A/VC:N/VI:H/VA:N/SC:L/SI:N/SA:H",
+        5.7,
+    ),
+    (
+        "CVSS:4.0/AV:P/AC:L/AT:N/PR:H/UI:A/VC:L/VI:H/VA:N/SC:N/SI:N/SA:H",
+        6.7,
+    ),
+    (
+        "CVSS:4.0/AV:N/AC:H/AT:P/PR:N/UI:N/VC:N/VI:N/VA:L/SC:H/SI:H/SA:L",
+        7.0,
+    ),
+    (
+        "CVSS:4.0/AV:N/AC:L/AT:P/PR:L/UI:N/VC:L/VI:N/VA:L/SC:H/SI:L/SA:L",
+        5.3,
+    ),
+    (
+        "CVSS:4.0/AV:L/AC:H/AT:N/PR:H/UI:N/VC:H/VI:N/VA:H/SC:N/SI:L/SA:N",
+        5.7,
+    ),
+    (
+        "CVSS:4.0/AV:P/AC:H/AT:P/PR:N/UI:P/VC:L/VI:H/VA:H/SC:H/SI:L/SA:N",
+        5.8,
+    ),
+    (
+        "CVSS:4.0/AV:L/AC:L/AT:N/PR:L/UI:N/VC:N/VI:N/VA:N/SC:L/SI:N/SA:N",
+        4.8,
+    ),
+    (
+        "CVSS:4.0/AV:P/AC:H/AT:N/PR:N/UI:P/VC:N/VI:N/VA:L/SC:N/SI:N/SA:H",
+        1.8,
+    ),
+    (
+        "CVSS:4.0/AV:P/AC:L/AT:N/PR:L/UI:N/VC:N/VI:N/VA:L/SC:N/SI:N/SA:L",
+        2.4,
+    ),
+    (
+        "CVSS:4.0/AV:L/AC:L/AT:P/PR:H/UI:P/VC:L/VI:L/VA:N/SC:N/SI:N/SA:N",
+        1.0,
+    ),
+    (
+        "CVSS:4.0/AV:N/AC:H/AT:N/PR:L/UI:A/VC:H/VI:N/VA:H/SC:N/SI:H/SA:L",
+        7.0,
+    ),
+    (
+        "CVSS:4.0/AV:L/AC:L/AT:N/PR:L/UI:A/VC:N/VI:N/VA:N/SC:N/SI:N/SA:H",
+        4.1,
+    ),
+    (
+        "CVSS:4.0/AV:L/AC:L/AT:N/PR:N/UI:A/VC:L/VI:H/VA:H/SC:N/SI:H/SA:L",
+        8.2,
+    ),
+    (
+        "CVSS:4.0/AV:A/AC:L/AT:P/PR:H/UI:N/VC:L/VI:H/VA:H/SC:N/SI:N/SA:L",
+        5.9,
+    ),
+    (
+        "CVSS:4.0/AV:A/AC:H/AT:N/PR:L/UI:A/VC:L/VI:L/VA:H/SC:H/SI:N/SA:H",
+        5.9,
+    ),
+];
+
+#[test]
+fn scores_match_the_reference_calculator() {
+    for (vector, want) in REFERENCE {
+        let got = cvss4_base_score(vector).unwrap_or_else(|| panic!("no score for {vector}"));
+        assert!(
+            (got - want).abs() < 1e-9,
+            "{vector}: got {got}, want {want}"
+        );
+    }
+}
+
+#[test]
+fn rejects_what_is_not_a_full_v4_base_vector() {
+    assert_eq!(
+        cvss4_base_score("CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"),
+        None
+    );
+    assert_eq!(cvss4_base_score("CVSS:4.0/AV:N/AC:L/AT:N"), None);
+    assert_eq!(
+        cvss4_base_score("CVSS:4.0/AV:Q/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N"),
+        None
+    );
+    assert_eq!(
+        cvss4_base_score("CVSS:4.0/AV:N/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N"),
+        None
+    );
+    assert_eq!(cvss4_base_score(""), None);
+}
+
+/// Y6: a v4.0-only advisory is graded through the one score parser.
+#[test]
+fn the_score_parser_grades_a_v4_vector() {
+    let v = "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N";
+    assert_eq!(crate::scoring::cvss::parse_cvss_score(v), Some(9.3));
+    assert_eq!(crate::osv::types::cvss_band(9.3), "critical");
+}
+
+/// The vectors the MCP server's port is tested on (4da-mcp-server
+/// `src/__tests__/cvss4.test.ts`, W1a): the two engines grade alike (Y4).
+/// The first six are NVD's / GitHub's published scores; RUSTSEC-2026-0459 is
+/// the seventh (medium, 6.8).
+const SHARED_WITH_MCP: [(&str, f64); 24] = [
+    (
+        "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N",
+        9.3,
+    ),
+    (
+        "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:H/SI:H/SA:H",
+        10.0,
+    ),
+    (
+        "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:H/SC:N/SI:N/SA:N",
+        8.7,
+    ),
+    (
+        "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:L/VI:N/VA:N/SC:N/SI:N/SA:N",
+        6.9,
+    ),
+    (
+        "CVSS:4.0/AV:L/AC:L/AT:N/PR:L/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N",
+        8.5,
+    ),
+    (
+        "CVSS:4.0/AV:N/AC:L/AT:P/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N",
+        9.2,
+    ),
+    (
+        "CVSS:4.0/AV:L/AC:L/AT:N/PR:N/UI:P/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N",
+        6.8,
+    ),
+    (
+        "CVSS:4.0/AV:N/AC:H/AT:P/PR:L/UI:A/VC:L/VI:N/VA:N/SC:N/SI:N/SA:N",
+        2.0,
+    ),
+    (
+        "CVSS:4.0/AV:P/AC:H/AT:P/PR:H/UI:A/VC:L/VI:N/VA:N/SC:N/SI:N/SA:N",
+        1.0,
+    ),
+    (
+        "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:N/SC:N/SI:N/SA:N",
+        0.0,
+    ),
+    (
+        "CVSS:4.0/AV:N/AC:L/AT:N/PR:L/UI:N/VC:L/VI:N/VA:N/SC:H/SI:H/SA:L",
+        6.4,
+    ),
+    (
+        "CVSS:4.0/AV:A/AC:H/AT:P/PR:L/UI:N/VC:L/VI:H/VA:N/SC:N/SI:H/SA:N",
+        7.0,
+    ),
+    (
+        "CVSS:4.0/AV:P/AC:H/AT:N/PR:L/UI:P/VC:L/VI:N/VA:N/SC:N/SI:N/SA:H",
+        1.8,
+    ),
+    (
+        "CVSS:4.0/AV:L/AC:L/AT:N/PR:H/UI:P/VC:L/VI:H/VA:N/SC:H/SI:H/SA:L",
+        7.0,
+    ),
+    (
+        "CVSS:4.0/AV:N/AC:H/AT:P/PR:L/UI:N/VC:H/VI:N/VA:L/SC:H/SI:N/SA:H",
+        7.2,
+    ),
+    (
+        "CVSS:4.0/AV:P/AC:H/AT:P/PR:L/UI:N/VC:H/VI:N/VA:N/SC:H/SI:H/SA:N",
+        5.8,
+    ),
+    (
+        "CVSS:4.0/AV:P/AC:L/AT:P/PR:H/UI:A/VC:L/VI:H/VA:L/SC:H/SI:N/SA:N",
+        5.7,
+    ),
+    (
+        "CVSS:4.0/AV:L/AC:H/AT:N/PR:N/UI:P/VC:N/VI:N/VA:N/SC:N/SI:H/SA:L",
+        4.5,
+    ),
+    (
+        "CVSS:4.0/AV:N/AC:L/AT:N/PR:L/UI:P/VC:H/VI:L/VA:N/SC:H/SI:L/SA:H",
+        8.4,
+    ),
+    (
+        "CVSS:4.0/AV:P/AC:H/AT:N/PR:H/UI:P/VC:N/VI:N/VA:N/SC:L/SI:H/SA:H",
+        2.3,
+    ),
+    (
+        "CVSS:4.0/AV:L/AC:L/AT:P/PR:H/UI:A/VC:N/VI:H/VA:N/SC:N/SI:N/SA:N",
+        4.1,
+    ),
+    (
+        "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N/E:U",
+        8.1,
+    ),
+    (
+        "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:N/SA:N/E:P/CR:L/IR:L/AR:L",
+        7.9,
+    ),
+    (
+        "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:N/VI:N/VA:N/SC:N/SI:N/SA:N/MSI:S",
+        8.9,
+    ),
+];
+
+#[test]
+fn scores_match_the_mcp_servers_vectors() {
+    for (vector, want) in SHARED_WITH_MCP {
+        let got = cvss4_base_score(vector).unwrap_or_else(|| panic!("no score for {vector}"));
+        assert!(
+            (got - want).abs() < 1e-9,
+            "{vector}: got {got}, want {want}"
+        );
+    }
+    let rustsec_0459 = "CVSS:4.0/AV:L/AC:L/AT:N/PR:N/UI:P/VC:H/VI:N/VA:N/SC:N/SI:N/SA:N";
+    let score = cvss4_base_score(rustsec_0459).unwrap();
+    assert_eq!(crate::osv::types::cvss_band(score), "medium");
+}
+
+#[test]
+fn rejects_what_the_mcp_server_rejects() {
+    for bad in [
+        "CVSS:4.0/AV:N/AC:L/AT:N/PR:N/UI:N/VC:H/VI:H/VA:H/SC:N/SI:S/SA:N",
+        "CVSS:4.0",
+        "CVSS:4.0/",
+        "/////",
+        ":::",
+        "CVSS:4.0/AV",
+    ] {
+        assert_eq!(cvss4_base_score(bad), None, "{bad}");
+    }
+}

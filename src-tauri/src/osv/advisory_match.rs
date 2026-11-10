@@ -59,6 +59,48 @@ pub(crate) fn exposure_for_advisory(db: &Database, advisory: &StoredAdvisory) ->
     fourda_depengine::exposure::exposure_for_record(&advisory_record(advisory), &inventory)
 }
 
+/// The version ONE installed copy must reach to clear every known advisory
+/// of its package that has a way out: the walk the matcher runs for each
+/// copy's `target_version` (`fourda_depengine::matching`, over every stored
+/// advisory of the package and the registry's withdrawn releases), so it is
+/// the target the Upgrade Plan's line for that copy names (Y4). One
+/// advisory's own fix is not it: rmcp 3.1.2 under RUSTSEC-2026-0461 (fixed
+/// 3.6.0) still carries 0457 (3.7.0) and 0462 (3.9.0), so the copy's target
+/// is 3.9.0. `None` when no walk lands (no fix with a way out).
+pub(crate) fn clearing_target(
+    db: &Database,
+    registry: &fourda_depengine::registry::RegistryIndex,
+    package: &str,
+    ecosystem_norm: &str,
+    installed: &str,
+) -> Option<String> {
+    let all = db
+        .get_osv_advisories_for_package(package, ecosystem_norm)
+        .ok()?;
+    let records: Vec<fourda_depengine::osv::AdvisoryRecord> =
+        all.iter().map(advisory_record).collect();
+    let ranges: Vec<&Option<String>> = records.iter().map(|r| &r.affected_ranges).collect();
+    let kinds: Vec<_> = records
+        .iter()
+        .map(fourda_depengine::osv::AdvisoryRecord::kind)
+        .collect();
+    let key = (
+        super::matching::package_key(package, ecosystem_norm),
+        ecosystem_norm.to_string(),
+    );
+    let none = fourda_depengine::registry::RegistryReleases::default();
+    let facts = registry.get(&key).unwrap_or(&none);
+    fourda_depengine::fix_target::walk_target_kinds(
+        ecosystem_norm,
+        installed,
+        &ranges,
+        &kinds,
+        facts,
+    )
+    .target
+    .map(|w| w.version)
+}
+
 #[cfg(test)]
 #[path = "advisory_match_tests.rs"]
 mod tests;

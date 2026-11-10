@@ -306,13 +306,13 @@ fn the_snapshot_carries_the_steps_and_never_an_orphan() {
     persist_upgrade_plan(&db, &plan.items, &steps, plan.drops, None);
 
     let snap = read_upgrade_plan_snapshot(&db).expect("current schema reads back");
-    assert_eq!(snap.schema_version, 4);
+    assert_eq!(snap.schema_version, 5);
     assert_eq!(snap.steps, plan.steps, "the orphan is never written");
     assert_eq!(snap.items, plan.items);
 }
 
 /// The reader is fail-closed on any other schema version: a v3 envelope (no
-/// `steps`) and a future v5 both read as absent, so the caller recomputes;
+/// `steps`), the v4 shape before Y5 and a future v6 all read as absent, so the caller recomputes;
 /// after the recompute the current envelope reads back with its steps.
 #[test]
 fn another_schema_version_reads_as_absent_until_recomputed() {
@@ -331,12 +331,20 @@ fn another_schema_version_reads_as_absent_until_recomputed() {
         "v3 is not trusted"
     );
 
-    let mut v5 = current;
-    v5["schema_version"] = 5.into();
-    db.set_kv("upgrade_plan_snapshot", &v5.to_string()).unwrap();
+    let mut v4 = current.clone();
+    v4["schema_version"] = 4.into();
+    db.set_kv("upgrade_plan_snapshot", &v4.to_string()).unwrap();
     assert!(
         read_upgrade_plan_snapshot(&db).is_none(),
-        "v5 is not trusted"
+        "v4 is not trusted"
+    );
+
+    let mut v6 = current;
+    v6["schema_version"] = 6.into();
+    db.set_kv("upgrade_plan_snapshot", &v6.to_string()).unwrap();
+    assert!(
+        read_upgrade_plan_snapshot(&db).is_none(),
+        "v6 is not trusted"
     );
 
     // The recompute every writer performs restores a readable plan.

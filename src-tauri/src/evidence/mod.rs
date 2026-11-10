@@ -32,9 +32,11 @@ mod plan_snapshot;
 // facts and the release grades. `pub` for the command path in lib.rs.
 pub mod stack_change;
 mod types;
+mod upgrade_blocked;
 mod upgrade_parent;
 mod upgrade_parent_release;
 mod upgrade_plan;
+mod upgrade_plan_text;
 mod upgrade_steps;
 mod validate;
 
@@ -61,6 +63,10 @@ pub use upgrade_plan::{build_upgrade_plan, BuiltPlan};
 // The ONE transitive-route sentence (`osv::fix_path`): the plan step prints
 // it, and so does the Preemption alert for an all-transitive package.
 pub(crate) use upgrade_parent::{parent_move, transitive_route_note};
+
+// Y5: the one blocked-upstream sentence and its predicate, shared with the
+// Brief's fix clause.
+pub(crate) use upgrade_blocked::{standing_blocked, BlockedCopy};
 
 // Preemption LIST transport (AD-036): the single visibility filter (returned
 // counts == rendered cards) plus the list-payload trim, applied only in

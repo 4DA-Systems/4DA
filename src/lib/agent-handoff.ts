@@ -41,8 +41,16 @@ const FIX_TARGET_TITLE = /^(\S+) -> (\S+)$/;
 const FIX_TARGET_SITE = /([^,]+?) \((direct|transitive)(?:, dev)?\)(?:, |$)/g;
 /** "rmcp 3.4.1 <- victauri-plugin 0.10.3" (upgrade_parent.rs). */
 const DEP_PATH_TITLE = /^(\S+) (\S+) <- (\S+) (\S+)$/;
-/** "In d:/a; victauri-plugin is a direct dependency; requires ^3.1, which admits 3.9.0". */
-const DEP_PATH_NOTE = /^In (.+?); \S+ is a (?:direct|transitive) dependency; requires (.+?), which (admits|excludes) (\S+)$/;
+/**
+ * "In d:/a; victauri-plugin is a direct dependency; requires ^3.1, which admits 3.9.0", ending
+ * "; blocked upstream: docx-rs 0.4.22 is the newest release" when no published release of what
+ * holds the copy admits the fix (upgrade_parent.rs `link_note`, upgrade_blocked.rs `note_marker`, Y5).
+ */
+const BLOCKED_MARKER = /; blocked upstream: (?:(\S+) (\S+) is the newest release|no (\S+) release up to its newest admits it)$/;
+const DEP_PATH_NOTE =
+  /^In (.+?); \S+ is a (?:direct|transitive) dependency; requires (.+?), which (admits|excludes) (\S+)$/;
+/** The note when the requirement was not on disk: "...; requirement not on disk; 9.0.5 is a semver-incompatible jump from 8.6.0". */
+const SEMVER_JUMP = /; (\S+) is a semver-incompatible jump from \S+$/;
 /** One comparator of a version requirement: "^3.1", ">=1.0.0-rc.1", "~=3.1", "1.x", "*". */
 const REQUIREMENT_TOKEN = /^[\^~=<>!]*[0-9*xX][0-9A-Za-z.+_*-]*$/;
 const MAX_PARENTS = 3;
@@ -103,15 +111,41 @@ function parentsFor(item: EvidenceItem, packages: string[], project: string | nu
     const [, child, childVersion, parent, parentVersion] = t;
     if (!packages.includes(child) || !VERSION.test(childVersion) || !PACKAGE_NAME.test(parent) || !VERSION.test(parentVersion)) continue;
     // Every link note starts "In <project>; " — a link in another project is not this fix.
-    const note = (cite.relevance_note ?? '').trim();
-    const inProject = /^In (.+?); /.exec(note)?.[1];
+    const raw = (cite.relevance_note ?? '').trim();
+    const inProject = /^In (.+?); /.exec(raw)?.[1];
     if (!inProject || !project || !samePath(inProject, project)) continue;
+    const b = BLOCKED_MARKER.exec(raw);
+    const note = b ? raw.slice(0, b.index) : raw;
     const n = DEP_PATH_NOTE.exec(note);
+    const requirement = n?.[2] && isRequirement(n[2]) ? n[2] : null;
+    const excluded = n?.[4] && VERSION.test(n[4]) ? n[4] : null;
     let line = `${parent} ${parentVersion} (pulls in ${child} ${childVersion})`;
-    if (n?.[2] && n[4] && isRequirement(n[2]) && VERSION.test(n[4])) {
-      line += n[3] === 'admits'
-        ? `, which requires ${n[2]}: that admits ${n[4]}, so refreshing the lockfile is enough`
-        : `, which requires ${n[2]}: that excludes ${n[4]}, so a lockfile refresh cannot reach it until a ${parent} release allows it`;
+    // Either "<holder> <version> is the newest release", or (every release read, none admits it)
+    // "no <holder> release up to its newest admits it", which names no version.
+    const heldRaw = b?.[1] ?? b?.[3];
+    const heldBy = heldRaw && PACKAGE_NAME.test(heldRaw) ? heldRaw : null;
+    const heldNewest = b?.[2] && VERSION.test(b[2]) ? b[2] : null;
+    const noneAdmits = Boolean(b?.[3]);
+    if (heldBy && (heldNewest || noneAdmits)) {
+      // Y5: the plan's blocked sentence (upgrade_blocked.rs `BlockedCopy`).
+      const jump = SEMVER_JUMP.exec(note)?.[1];
+      const target = excluded ?? (jump && VERSION.test(jump) ? jump : null);
+      const fixed = `a fixed ${child}${target ? ` (>= ${target})` : ''}`;
+      if (noneAdmits) {
+        line += heldBy === parent
+          ? `, and no ${parent} release up to its newest allows ${fixed} yet (blocked upstream)`
+          : `, which arrives through ${heldBy}, and no ${heldBy} release up to its newest allows ${fixed} yet (blocked upstream)`;
+      } else if (heldBy !== parent) {
+        line += `, which arrives through ${heldBy} ${heldNewest}, the newest ${heldBy} release, and no ${heldBy} release allows ${fixed} yet (blocked upstream)`;
+      } else if (requirement && n?.[3] === 'excludes') {
+        line += `, the newest release, whose requirement ${requirement} does not allow ${fixed} yet (blocked upstream)`;
+      } else {
+        line += `, the newest release, which does not allow ${fixed} yet (blocked upstream)`;
+      }
+    } else if (requirement && excluded) {
+      line += n?.[3] === 'admits'
+        ? `, which requires ${requirement}: that admits ${excluded}, so refreshing the lockfile is enough`
+        : `, which requires ${requirement}: that excludes ${excluded}, so a lockfile refresh cannot reach it until a ${parent} release allows it`;
     }
     if (!out.includes(line)) out.push(line);
   }
@@ -192,12 +226,16 @@ export function buildFixPrompt(item: EvidenceItem): string {
   for (const parent of f.parents) lines.push(`Pulled in by: ${parent}`);
   if (f.advisories.length > 0) lines.push(`Advisories: ${f.advisories.join(', ')}`);
   if (f.project) lines.push(`Project: ${shortenProjectPath(f.project)}`);
+  const blocked = f.parents.some(p => p.includes('(blocked upstream)'));
   lines.push(
     '',
     'Steps:',
     '1. Call dependency_check on the fix version, passing from (the installed version) and to (the target). Apply it only if the verdict is proceed.',
     '2. If it is a major upgrade (a 0.x minor counts), call upgrade_impact first and make the code changes it lists.',
     '3. Apply it with the project\'s own package manager so the lockfile updates. If the package is not a direct dependency, update it within the existing ranges or upgrade the parent that pulls it in. Never add it as a new direct dependency and never edit the lockfile by hand.',
+    ...(blocked
+      ? ['   A parent marked blocked upstream has no release that fixes this yet: do not upgrade or refresh for it. Tell me the options instead (an override or `[patch]` pointing at a fork, a fork of the parent, or accepting the risk with a review date) and change nothing on that path until I choose.']
+      : []),
     '4. Run the project\'s tests (and its build or type-check if it has one). If anything fails, revert the change and tell me why.',
     '5. Report what you changed, the test results, and anything you did not apply.',
     '',
