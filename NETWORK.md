@@ -305,6 +305,13 @@ module proxy (§1b, §1e) receive them too; §4 has the complete list.
   their names are sent, never a version. Same 300-per-sync cap, daily re-read, local cache and
   npm-source toggle as above; the per-release requirements kept are only those on the vulnerable
   package.
+- **Parent release lists (crates.io, PyPI, `osv/parent_hint.rs` `wanted_release_lists`):** for
+  the same kind of parent in a Cargo or Python project (and the declared dependency it arrives
+  through), the same release-list document (`GET /api/v1/crates/{crate}` /
+  `GET /pypi/{package}/json`, name only) is read, so the plan can say when the installed parent is
+  already its newest release and no release fixes the copy yet ("blocked upstream"). No new
+  destination and no new data: the same registries, package names only, the same cap, cache,
+  daily re-read and source toggles.
 - **Held dependencies (npm, audit 6.2.5 D-4, `src-tauri/src/osv/release_facts_held.rs`,
   `osv/held_targets.rs`):** a fix target is also judged by what it installs at a fixed version. The
   vulnerable package's own abbreviated document (already read above, no new request) is kept per
@@ -594,7 +601,7 @@ so it is fetched **once, on demand** (`src-tauri/src/embeddings_providers/model_
   | `crates.io` | your crate names | as above |
   | `static.crates.io` / `registry.npmjs.org` (§1e) | the crate / package name and the new public version of a graded release — never your installed version | the release card's "what changed" |
   | `api.github.com/repos/{owner}/{repo}/releases` (§2m) — **only with `github_release_notes = true`** (off by default) | the GitHub repository of a dependency whose package shipped no usable changelog for a graded release | the release card's "what changed" |
-  | `registry.npmjs.org` / `crates.io` / `pypi.org` registry release check (§2c) | the name of each package with a version-confirmed advisory, (npm) of each installed package that pins such a copy, and (npm) of each dependency a vulnerable package's releases hold through a narrow range — name only | no fix target names a yanked or deprecated release; the parent release that fixes a nested advisory is named; an npm fix target is judged by what it installs (D-4) |
+  | `registry.npmjs.org` / `crates.io` / `pypi.org` registry release check (§2c) | the name of each package with a version-confirmed advisory, of each installed package that pins such a copy (npm, crates.io, PyPI), and (npm) of each dependency a vulnerable package's releases hold through a narrow range — name only | no fix target names a yanked or deprecated release; the parent release that fixes a nested advisory is named; an npm fix target is judged by what it installs (D-4) |
   | `registry.npmjs.org` full packument (MCP `dependency_check`, §2j) | the npm package name being checked — name only | release vetting |
   | `crates.io/api/v1/crates/{crate}/versions` (MCP `dependency_check`, §2j) | the crate name being checked — name only | release vetting |
   | `proxy.golang.org` | your **full Go module paths** | as above |

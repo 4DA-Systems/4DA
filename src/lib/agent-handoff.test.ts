@@ -145,6 +145,33 @@ describe('extractFixFacts on Upgrade Plan steps', () => {
     expect(facts.parents).toEqual(['docx-rs 0.4.22 (pulls in zip 8.6.0), which requires ^8.6.0: that excludes 9.0.5, so a lockfile refresh cannot reach it until a docx-rs release allows it']);
   });
 
+  it('says no release exists yet when the parent is blocked upstream (Y5)', () => {
+    const step = planStep({
+      affected_deps: ['zip'],
+      affected_projects: ['d:/code/app/src-tauri'],
+      evidence: [
+        { source: 'fix-target', title: '8.6.0 -> 9.0.5', url: null, freshness_days: 0, relevance_note: 'major upgrade; clears every known advisory. Installed in: d:/code/app/src-tauri (transitive)' },
+        { source: 'dependency-path', title: 'zip 8.6.0 <- docx-rs 0.4.22', url: null, freshness_days: 0, relevance_note: 'In d:/code/app/src-tauri; docx-rs is a direct dependency; requires ^8.6.0, which excludes 9.0.5; blocked upstream' },
+      ],
+    });
+    const facts = extractFixFacts(step);
+    expect(facts.parents).toEqual(['docx-rs 0.4.22 (pulls in zip 8.6.0), which requires ^8.6.0: that excludes 9.0.5, and no published docx-rs release allows it yet (blocked upstream), so neither a lockfile refresh nor a docx-rs upgrade can fix it']);
+    const prompt = buildFixPrompt(step);
+    expect(prompt).toContain('A parent marked blocked upstream has no release that fixes this yet');
+    expect(prompt).not.toContain('until a docx-rs release allows it');
+  });
+
+  it('marks a blocked parent whose requirement was not on disk', () => {
+    const facts = extractFixFacts(planStep({
+      affected_deps: ['zip'],
+      affected_projects: ['d:/code/app/src-tauri'],
+      evidence: [
+        { source: 'dependency-path', title: 'zip 8.6.0 <- docx-rs 0.4.22', url: null, freshness_days: 0, relevance_note: 'In d:/code/app/src-tauri; docx-rs is a direct dependency; requirement not on disk; 9.0.5 is a semver-incompatible jump from 8.6.0; blocked upstream' },
+      ],
+    }));
+    expect(facts.parents).toEqual(['docx-rs 0.4.22 (pulls in zip 8.6.0): no published docx-rs release lets it reach the fix yet (blocked upstream)']);
+  });
+
   it('drops fix-target and dependency-path text that is not a plain version, package name or requirement', () => {
     const hostile = planStep({
       evidence: [

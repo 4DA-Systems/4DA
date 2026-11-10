@@ -41,8 +41,14 @@ const FIX_TARGET_TITLE = /^(\S+) -> (\S+)$/;
 const FIX_TARGET_SITE = /([^,]+?) \((direct|transitive)(?:, dev)?\)(?:, |$)/g;
 /** "rmcp 3.4.1 <- victauri-plugin 0.10.3" (upgrade_parent.rs). */
 const DEP_PATH_TITLE = /^(\S+) (\S+) <- (\S+) (\S+)$/;
-/** "In d:/a; victauri-plugin is a direct dependency; requires ^3.1, which admits 3.9.0". */
-const DEP_PATH_NOTE = /^In (.+?); \S+ is a (?:direct|transitive) dependency; requires (.+?), which (admits|excludes) (\S+)$/;
+/**
+ * "In d:/a; victauri-plugin is a direct dependency; requires ^3.1, which admits 3.9.0", ending
+ * "; blocked upstream" when no published release of the parent (newest included) admits the fix
+ * (upgrade_parent.rs `link_note`, Y5).
+ */
+const DEP_PATH_NOTE =
+  /^In (.+?); \S+ is a (?:direct|transitive) dependency; requires (.+?), which (admits|excludes) (\S+?)(?:; blocked upstream)?$/;
+const BLOCKED_SUFFIX = /; blocked upstream$/;
 /** One comparator of a version requirement: "^3.1", ">=1.0.0-rc.1", "~=3.1", "1.x", "*". */
 const REQUIREMENT_TOKEN = /^[\^~=<>!]*[0-9*xX][0-9A-Za-z.+_*-]*$/;
 const MAX_PARENTS = 3;
@@ -107,11 +113,18 @@ function parentsFor(item: EvidenceItem, packages: string[], project: string | nu
     const inProject = /^In (.+?); /.exec(note)?.[1];
     if (!inProject || !project || !samePath(inProject, project)) continue;
     const n = DEP_PATH_NOTE.exec(note);
+    const blocked = BLOCKED_SUFFIX.test(note);
     let line = `${parent} ${parentVersion} (pulls in ${child} ${childVersion})`;
     if (n?.[2] && n[4] && isRequirement(n[2]) && VERSION.test(n[4])) {
-      line += n[3] === 'admits'
-        ? `, which requires ${n[2]}: that admits ${n[4]}, so refreshing the lockfile is enough`
-        : `, which requires ${n[2]}: that excludes ${n[4]}, so a lockfile refresh cannot reach it until a ${parent} release allows it`;
+      if (n[3] === 'admits') {
+        line += `, which requires ${n[2]}: that admits ${n[4]}, so refreshing the lockfile is enough`;
+      } else if (blocked) {
+        line += `, which requires ${n[2]}: that excludes ${n[4]}, and no published ${parent} release allows it yet (blocked upstream), so neither a lockfile refresh nor a ${parent} upgrade can fix it`;
+      } else {
+        line += `, which requires ${n[2]}: that excludes ${n[4]}, so a lockfile refresh cannot reach it until a ${parent} release allows it`;
+      }
+    } else if (blocked) {
+      line += `: no published ${parent} release lets it reach the fix yet (blocked upstream)`;
     }
     if (!out.includes(line)) out.push(line);
   }
@@ -192,12 +205,16 @@ export function buildFixPrompt(item: EvidenceItem): string {
   for (const parent of f.parents) lines.push(`Pulled in by: ${parent}`);
   if (f.advisories.length > 0) lines.push(`Advisories: ${f.advisories.join(', ')}`);
   if (f.project) lines.push(`Project: ${shortenProjectPath(f.project)}`);
+  const blocked = f.parents.some(p => p.includes('(blocked upstream)'));
   lines.push(
     '',
     'Steps:',
     '1. Call dependency_check on the fix version, passing from (the installed version) and to (the target). Apply it only if the verdict is proceed.',
     '2. If it is a major upgrade (a 0.x minor counts), call upgrade_impact first and make the code changes it lists.',
     '3. Apply it with the project\'s own package manager so the lockfile updates. If the package is not a direct dependency, update it within the existing ranges or upgrade the parent that pulls it in. Never add it as a new direct dependency and never edit the lockfile by hand.',
+    ...(blocked
+      ? ['   A parent marked blocked upstream has no release that fixes this yet: do not upgrade or refresh for it. Tell me the options instead (an override or `[patch]` pointing at a fork, a fork of the parent, or accepting the risk with a review date) and change nothing on that path until I choose.']
+      : []),
     '4. Run the project\'s tests (and its build or type-check if it has one). If anything fails, revert the change and tell me why.',
     '5. Report what you changed, the test results, and anything you did not apply.',
     '',

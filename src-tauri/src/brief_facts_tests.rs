@@ -1174,8 +1174,10 @@ fn a_parent_at_its_newest_release_gets_replace_or_override_not_upgrade() {
          release 4DA has seen and is deprecated, and it arrives through javascript-opentimestamps \
          0.4.5, a direct dependency; javascript-opentimestamps 0.4.5 is already the newest \
          javascript-opentimestamps release 4DA has seen, so no javascript-opentimestamps upgrade \
-         is known to admit it: replace javascript-opentimestamps, or force uuid >= 11.1.1 with an \
-         `overrides` entry in package.json (npm)"
+         is known to admit it: replace javascript-opentimestamps; blocked upstream: no release \
+         fixes it yet. Options: force uuid >= 11.1.1 with an `overrides` entry in package.json \
+         (npm); it runs outside the range request declares, so test it; or fork request so it \
+         accepts uuid >= 11.1.1; or accept the risk with a written review date"
     );
     assert!(!clause.contains("upgrade request"), "{clause}");
     assert!(!clause.contains("must be updated"), "{clause}");

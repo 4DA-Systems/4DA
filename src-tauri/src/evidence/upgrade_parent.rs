@@ -95,8 +95,18 @@ pub(super) fn upstream_note(
     }
     let refreshable = links.iter().filter(|l| !blocked(&routes.links, l)).count()
         + unlinked.iter().filter(|u| u.refresh.is_enough()).count();
+    // Y5: every copy has a parent no published release can move yet.
+    let held = |l: &&ParentLink| {
+        routes.links.iter().any(|o| {
+            o.project == l.project
+                && o.child_version == l.child_version
+                && super::upgrade_blocked::link_blocked(o)
+        })
+    };
     let head = if refreshable == links.len() + unlinked.len() {
         "No manifest change needed"
+    } else if unlinked.is_empty() && links.iter().all(held) {
+        "Blocked upstream"
     } else if refreshable == 0 {
         "Fixed only upstream"
     } else {
@@ -272,6 +282,61 @@ fn link_move(package: &str, target: &str, l: &ParentLink) -> String {
 /// (`brief_facts::fix_clause`), so the three name the same parent and the
 /// same move.
 pub(crate) fn parent_move(
+    package: &str,
+    target: &str,
+    parent: &str,
+    parent_version: &str,
+    standing: &ParentStanding,
+    through: Option<&Through>,
+    override_hint: Option<&str>,
+) -> String {
+    // Y5: no published release of what the project can move admits the fix.
+    // The move says what is known, then that nothing fixes it yet and the
+    // options (the override, when there is one, is among them).
+    let blocked = super::upgrade_blocked::standing_blocked(standing, through)
+        && !matches!(
+            standing,
+            ParentStanding::Admits(_)
+                | ParentStanding::Malicious { .. }
+                | ParentStanding::Introduces { .. }
+                | ParentStanding::Undecided { .. }
+        );
+    if blocked {
+        let head = move_text(
+            package,
+            target,
+            parent,
+            parent_version,
+            standing,
+            through,
+            None,
+        );
+        return format!(
+            "{head}{}",
+            super::upgrade_blocked::blocked_suffix(
+                package,
+                target,
+                parent,
+                standing,
+                through,
+                override_hint
+            )
+        );
+    }
+    move_text(
+        package,
+        target,
+        parent,
+        parent_version,
+        standing,
+        through,
+        override_hint,
+    )
+}
+
+/// [`parent_move`]'s words for the registry standing, the override clause
+/// (when given) appended where a lever cannot move.
+fn move_text(
     package: &str,
     target: &str,
     parent: &str,
@@ -517,7 +582,7 @@ pub(super) fn path_citations(package: &str, links: &[ParentLink]) -> Vec<Evidenc
                 } else {
                     "transitive"
                 },
-                requirement_note(l)
+                link_note(l)
             ),
         ));
     }
@@ -577,6 +642,17 @@ fn requirement_note(l: &ParentLink) -> String {
         ),
         (_, Some(r), _) => format!("requires {r}"),
         (_, None, _) => "requirement not recorded in the lockfile".to_string(),
+    }
+}
+
+/// [`requirement_note`], marked "; blocked upstream" when no published
+/// release can move the link (Y5): the hand-off prompt reads the marker.
+fn link_note(l: &ParentLink) -> String {
+    let note = requirement_note(l);
+    if super::upgrade_blocked::link_blocked(l) {
+        format!("{note}; blocked upstream")
+    } else {
+        note
     }
 }
 

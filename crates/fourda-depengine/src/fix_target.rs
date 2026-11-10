@@ -50,15 +50,18 @@ fn windows(ecosystem: &str, ranges: &[Range]) -> Vec<Window> {
         let mut lower: Option<Lower> = None;
         for obj in range.events.iter().flatten().filter_map(|e| e.as_object()) {
             if let Some(intro) = obj.get("introduced").and_then(|v| v.as_str()) {
-                lower = Lower::parse_in(intro, ecosystem);
+                lower = Lower::parse_in(&crate::range::coerce_bound(intro, ecosystem), ecosystem);
             }
             let bound = obj
                 .get("fixed")
                 .or_else(|| obj.get("last_affected"))
                 .and_then(|v| v.as_str());
             if let Some(bound) = bound {
-                let end =
-                    OrderedVersion::parse_in(bound, ecosystem).filter(|_| !is_unknown_bound(bound));
+                let end = OrderedVersion::parse_in(
+                    &crate::range::coerce_bound(bound, ecosystem),
+                    ecosystem,
+                )
+                .filter(|_| !is_unknown_bound(bound));
                 if let (Some(low), Some(end)) = (lower.take(), end) {
                     let fixed = obj.contains_key("fixed");
                     out.push(Window {

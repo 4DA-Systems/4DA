@@ -722,6 +722,7 @@
   - *Keeping `item_id` unique by giving each maintenance-notice package its own item:* Rejected — the 2026-09-06 audit folded those fourteen nothing-to-upgrade rows into one Watch item on purpose; the work order follows the plan's shape, not the reverse.
 - **Date:** 2026-10-02
 - **Status:** Final
+- **Amended 2026-11-10 (Y5, schema v5):** `mechanism` gains `lockfile_refresh` (every transitive copy's requirement admits the fix), `parent_update` (a parent must move, and the registry or a project on this machine shows a release that admits the fix) and `blocked_upstream` (no published release of the parent, or of the declared dependency it arrives through, newest included, admits the fix); `lockfile_or_parent_update` narrows to "some route undecided, or the copies' routes differ". A step may carry `blocked_upstream` holds (`project`, `installed`, `cleared_version`, `parent`, `parent_version`, `requirement`, `held_by`, `held_by_newest`, `options`). Field meaning changed, so `PLAN_SCHEMA_VERSION` is 5 and a v4 reader (MCP <= 6.2.7, `APP_PLAN_SCHEMA_VERSION = 4`) fails closed with its stated reason until it learns v5. The decision is `evidence::upgrade_blocked`, read from the route data the plan already loads; no new type on `EvidenceItem`.
 
 ---
 

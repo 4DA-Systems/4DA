@@ -32,9 +32,11 @@ mod plan_snapshot;
 // facts and the release grades. `pub` for the command path in lib.rs.
 pub mod stack_change;
 mod types;
+mod upgrade_blocked;
 mod upgrade_parent;
 mod upgrade_parent_release;
 mod upgrade_plan;
+mod upgrade_plan_text;
 mod upgrade_steps;
 mod validate;
 

@@ -355,6 +355,58 @@ pub(super) fn load_routes_with(
     TransitiveRoutes { links, unlinked }
 }
 
+/// Crates.io and PyPI (Y5): the parents of a vulnerable transitive copy
+/// whose requirement keeps it off the fix, and the declared dependencies they
+/// arrive through, as `(OSV ecosystem, name)`. Their release lists decide
+/// [`ParentStanding`] (is the installed parent already the newest release?),
+/// so the release-facts read keeps them: the same one document per package
+/// from the same registry host (`osv::release_facts`, NETWORK.md 2c), cached
+/// in `kv_store` for a day. npm parents go through
+/// `parent_release_load::wanted_parents`, which also keeps requirements.
+pub(crate) fn wanted_release_lists(
+    db: &Database,
+    matches: &[super::types::MatchedAdvisory],
+) -> Vec<(String, String)> {
+    let mut groups: std::collections::BTreeMap<
+        (String, String),
+        Vec<&super::types::MatchedAdvisory>,
+    > = std::collections::BTreeMap::new();
+    for m in matches.iter().filter(|m| m.is_version_confirmed) {
+        if let Some(eco @ ("crates.io" | "PyPI")) = super::exposure::canonical(&m.ecosystem) {
+            groups
+                .entry((eco.to_string(), m.package_name.clone()))
+                .or_default()
+                .push(m);
+        }
+    }
+    let mut out: std::collections::BTreeSet<(String, String)> = std::collections::BTreeSet::new();
+    for ((eco, package), advisories) in groups {
+        let transitive = advisories
+            .iter()
+            .flat_map(|a| a.dependency_instances.iter())
+            .any(|d| d.is_version_confirmed && !d.is_direct);
+        if !transitive {
+            continue;
+        }
+        let mut projects: Vec<String> = advisories
+            .iter()
+            .flat_map(|a| a.dependency_instances.iter())
+            .map(|d| d.project_path.clone())
+            .collect();
+        projects.sort();
+        projects.dedup();
+        let lines = super::fix_target::line_targets(&advisories, &projects);
+        let routes = load_routes_with(db, &eco, &package, &lines, false);
+        for link in routes.links.iter().filter(|l| !l.refresh.is_enough()) {
+            out.insert((eco.clone(), link.parent.clone()));
+            for t in link.through.iter().flat_map(|t| t.all()) {
+                out.insert((eco.clone(), t.name.clone()));
+            }
+        }
+    }
+    out.into_iter().collect()
+}
+
 pub(super) fn read_edges(
     db: &Database,
     ecosystem_norm: &str,

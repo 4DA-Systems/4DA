@@ -8,13 +8,17 @@
 //! (some sources emit "9.8") are still handled by [`parse_cvss_score`].
 
 /// Parse a CVSS severity `score` string into a numeric base score (0.0–10.0).
-/// Tries a bare number first, else computes from a CVSS v3.x vector. `None` if neither yields a value.
+/// Tries a bare number first, else computes from a CVSS v4.0 vector (`super::cvss4`, Y6) or a
+/// v3.x vector. `None` if neither yields a value.
 pub(crate) fn parse_cvss_score(s: &str) -> Option<f64> {
     let s = s.trim();
     if let Ok(n) = s.parse::<f64>() {
         if (0.0..=10.0).contains(&n) {
             return Some(n);
         }
+    }
+    if s.starts_with("CVSS:4.0/") {
+        return super::cvss4::cvss4_base_score(s);
     }
     cvss_base_score(s)
 }

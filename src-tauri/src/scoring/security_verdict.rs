@@ -38,7 +38,11 @@ pub(crate) struct SecurityVerdict {
     /// its alias group graded by `osv::severity::rows_grade`. `None` when
     /// nothing grades it.
     pub tier: Option<&'static str>,
-    /// The fix for the exposed copy's package (highest listed fix).
+    /// The version the worst exposed copy must reach to clear EVERY known
+    /// advisory of its package (`osv::advisory_match::clearing_target`, the
+    /// Upgrade Plan's target for that copy), raised for a declared package
+    /// whose fix pins a vulnerable copy. Falls back to this advisory's
+    /// highest listed fix only when no walk lands.
     pub fixed_version: Option<String>,
     /// Every row the matcher checked is a maintenance notice
     /// (`osv::severity`'s one predicate): not a vulnerability (#986).
@@ -52,7 +56,9 @@ impl SecurityVerdict {
         self.exposed.first()
     }
 
-    /// Distinct exposed projects, sorted.
+    /// Distinct exposed projects: the worst copy's project first (the one
+    /// the action line names, so its installed version and direct /
+    /// transitive label are THAT project's, Y4), the rest sorted.
     pub(crate) fn exposed_projects(&self) -> Vec<String> {
         let mut paths: Vec<String> = self
             .exposed
@@ -61,6 +67,10 @@ impl SecurityVerdict {
             .collect();
         paths.sort();
         paths.dedup();
+        if let Some(first) = self.worst_copy().map(|c| c.project_path.clone()) {
+            paths.retain(|p| *p != first);
+            paths.insert(0, first);
+        }
         paths
     }
 
@@ -99,6 +109,17 @@ impl SecurityVerdict {
             .find(|c| crate::project_inclusion::counts_toward_stack(&c.project_path, &membership))
     }
 
+    /// `(every exposed copy is transitive, every exposed copy is dev-only)`,
+    /// the inputs of the ONE scope rule (AD-046); `None` with no exposure.
+    pub(crate) fn exposed_scope(&self) -> Option<(bool, bool)> {
+        (!self.exposed.is_empty()).then(|| {
+            (
+                self.exposed.iter().all(|c| !c.is_direct),
+                self.exposed.iter().all(|c| c.is_dev),
+            )
+        })
+    }
+
     /// The dependency path label of the worst exposed copy.
     pub(crate) fn path_label(&self) -> Option<&'static str> {
         self.worst_copy().map(|c| {
@@ -130,6 +151,9 @@ pub(crate) struct SecurityLane<'a> {
     pub tier: Option<&'static str>,
     /// The package the advisory names (for the action line).
     pub package: Option<&'a str>,
+    /// [`SecurityVerdict::exposed_scope`]: the scope the severity word is
+    /// graded with.
+    pub exposed_scope: Option<(bool, bool)>,
 }
 
 impl SecurityLane<'_> {
@@ -153,6 +177,33 @@ impl SecurityLane<'_> {
             },
             (None, None) => SignalPriority::Advisory,
         }
+    }
+
+    /// The severity word an action line leads with (Y6): the advisory's own
+    /// tier after the ONE scope rule (`osv::identity::scope_adjusted_urgency`,
+    /// AD-046) over the exposed copies, so it is the grade the Upgrade Plan
+    /// and Preemption print. Never the attention tier: "Critical:" used to
+    /// lead a CVSS 7.5 (High) rmcp advisory because a direct HIGH pages as a
+    /// Critical-tier signal. `None` when nothing grades it.
+    pub(crate) fn severity_word(&self) -> Option<&'static str> {
+        use crate::evidence::Urgency;
+        let base = match self.tier? {
+            "critical" => Urgency::Critical,
+            "high" => Urgency::High,
+            "medium" => Urgency::Medium,
+            _ => Urgency::Watch,
+        };
+        let (transitive, dev) = self
+            .exposed_scope
+            .map_or((None, None), |(t, d)| (Some(t), Some(d)));
+        Some(
+            match crate::osv::identity::scope_adjusted_urgency(base, transitive, dev) {
+                Urgency::Critical => "Critical",
+                Urgency::High => "High",
+                Urgency::Medium => "Medium",
+                Urgency::Watch => "Low",
+            },
+        )
     }
 
     /// May the action line say "Security issue affects <dep>"? Only a
@@ -379,6 +430,24 @@ pub(crate) fn matcher_verdict(db: &Database, ids: &[String]) -> Option<SecurityV
             .then_with(|| a.project_path.cmp(&b.project_path))
     });
     verdict.exposed.dedup();
+    // Y4: the banner's "-> X" is the version that clears every advisory of
+    // the copy it names, the plan step's target for that site, never one
+    // advisory's fix (rmcp 3.1.2 showed "-> 3.6.0" while 0457 and 0462 stayed
+    // open; the plan said >= 3.9.0).
+    if let (Some(copy), Some(row)) = (verdict.worst_copy().cloned(), fix_row) {
+        let eco = crate::ecosystem::Ecosystem::parse(&row.ecosystem)
+            .map_or(row.ecosystem.as_str(), |e| e.osv_name());
+        let registry = registry.get_or_insert_with(|| crate::osv::release_facts::load(db));
+        if let Some(to) = crate::osv::advisory_match::clearing_target(
+            db,
+            registry,
+            &row.package_name,
+            eco,
+            &copy.installed_version,
+        ) {
+            verdict.fixed_version = Some(to);
+        }
+    }
     verdict.affected = if !verdict.exposed.is_empty() {
         Some(true)
     } else if undecided == 0 {

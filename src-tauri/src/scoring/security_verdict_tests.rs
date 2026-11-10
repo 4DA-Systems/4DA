@@ -158,6 +158,7 @@ fn rmcp_verdict_finds_the_transitive_exposure() {
         exposed_projects: v.exposed_projects(),
         tier: v.tier,
         package: Some("rmcp"),
+        exposed_scope: v.exposed_scope(),
     };
     // HIGH, transitive-only -> Alert (not Watch, not Critical).
     assert_eq!(lane.priority(None), SignalPriority::Alert);
@@ -295,4 +296,119 @@ fn editorial_items_keep_the_classifier_verdict() {
         Some(crate::signals::SignalType::TechTrend)
     );
     assert!(advisory_signal_type(false, "Some HN story", None).is_none());
+}
+
+/// Y4 (live 2026-11-10): the banner said "rmcp 3.1.2 (direct) -> 3.6.0",
+/// the fix of RUSTSEC-2026-0461 alone, while 0457 (3.7.0) and 0462 (3.9.0)
+/// stay open on that copy, and it named a different project than the copy
+/// it showed. The verdict now carries the copy's clearing target (the plan's
+/// ">= 3.9.0"), names that copy's project first, and grades the word.
+fn seed_rmcp_three(db: &Database) {
+    db.store_dependency("d:/code/tool", "rmcp", Some("3.1.2"), "rust", false, None)
+        .unwrap();
+    db.store_transitive_dependency(
+        "d:/code/app/src-tauri",
+        "rmcp",
+        Some("3.4.1"),
+        "rust",
+        false,
+    )
+    .unwrap();
+    db.store_dependency_instances(
+        "d:/code/app/src-tauri",
+        "crates.io",
+        &[DependencyInstanceInput {
+            package_name: "rmcp".into(),
+            version: "3.4.1".into(),
+            is_direct: false,
+            is_dev: false,
+            scope: "runtime".into(),
+        }],
+    )
+    .unwrap();
+    for (id, fixed) in [
+        ("RUSTSEC-2026-0461", "3.6.0"),
+        ("RUSTSEC-2026-0457", "3.7.0"),
+        ("RUSTSEC-2026-0462", "3.9.0"),
+    ] {
+        db.upsert_osv_advisory_with_meta(
+            id,
+            &format!("rmcp advisory {id}"),
+            None,
+            "rmcp",
+            "crates.io",
+            Some(&format!(
+                r#"[{{"type":"SEMVER","events":[{{"introduced":"0"}},{{"fixed":"{fixed}"}}]}}]"#
+            )),
+            Some(&format!(r#"["{fixed}"]"#)),
+            Some("CVSS_V3"),
+            Some(7.5),
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some("high"),
+        )
+        .unwrap();
+    }
+}
+
+#[test]
+fn the_banner_fix_clears_every_advisory_of_the_copy_it_names() {
+    let db = test_db();
+    seed_rmcp_three(&db);
+    let v = matcher_verdict(&db, &["RUSTSEC-2026-0461".to_string()]).expect("verdict");
+    let worst = v.worst_copy().expect("exposed").clone();
+    assert_eq!(worst.installed_version, "3.1.2");
+    assert!(worst.is_direct);
+    assert_eq!(
+        v.fixed_version.as_deref(),
+        Some("3.9.0"),
+        "not 0461's own 3.6.0"
+    );
+    // The project the action line names is the copy's own.
+    assert_eq!(v.exposed_projects()[0], worst.project_path);
+    assert_eq!(v.path_label(), Some("direct"));
+    let lane = SecurityLane {
+        registry_advisory: true,
+        affected: v.affected,
+        exposed: v.worst_copy(),
+        exposed_projects: v.exposed_projects(),
+        tier: v.tier,
+        package: Some("rmcp"),
+        exposed_scope: v.exposed_scope(),
+    };
+    // A direct HIGH pages at the Critical tier, but the word is the grade.
+    assert_eq!(lane.priority(None), SignalPriority::Critical);
+    assert_eq!(lane.severity_word(), Some("High"));
+    let action = exposed_security_action("rmcp", &lane.exposed_projects, "High");
+    assert!(
+        action.starts_with("High: Security issue affects rmcp in code/tool"),
+        "{action}"
+    );
+}
+
+#[test]
+fn the_severity_word_follows_the_scope_rule() {
+    let lane = |tier, scope| SecurityLane {
+        registry_advisory: true,
+        tier,
+        exposed_scope: scope,
+        ..SecurityLane::default()
+    };
+    assert_eq!(
+        lane(Some("critical"), Some((true, false))).severity_word(),
+        Some("High")
+    );
+    assert_eq!(
+        lane(Some("critical"), Some((false, false))).severity_word(),
+        Some("Critical")
+    );
+    assert_eq!(
+        lane(Some("high"), Some((false, true))).severity_word(),
+        Some("Medium")
+    );
+    assert_eq!(lane(Some("low"), None).severity_word(), Some("Low"));
+    assert_eq!(lane(None, None).severity_word(), None);
 }

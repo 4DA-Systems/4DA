@@ -298,7 +298,8 @@ fn rmcp_transitive_exposure_surfaces_as_an_alert() {
     );
     let action = result.signal_action.as_deref().unwrap_or_default();
     assert!(
-        action.starts_with("Security:")
+        // Y6: the word is the scored severity (HIGH), not the tier.
+        action.starts_with("High:")
             && action.contains("rmcp")
             && action.contains("bridge/src-tauri")
             && !action.contains("victauri"),
