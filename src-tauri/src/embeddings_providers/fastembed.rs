@@ -53,23 +53,37 @@ fn ensure_ort_runtime(
         return Ok(());
     }
 
+    use super::ort_runtime::{host_archive, lib_runs_here};
+    use sha2::{Digest as _, Sha256};
+
     let bundled_path = crate::runtime_paths::RuntimePaths::get()
         .bundled_models_dir()
         .join("ort")
         .join(lib_name);
     if bundled_path.exists() {
-        std::env::set_var("ORT_DYLIB_PATH", &bundled_path);
-        tracing::info!(target: "4da::embeddings", path = %bundled_path.display(), "Using bundled ORT runtime");
-        return Ok(());
+        if lib_runs_here(&bundled_path) {
+            std::env::set_var("ORT_DYLIB_PATH", &bundled_path);
+            tracing::info!(target: "4da::embeddings", path = %bundled_path.display(), "Using bundled ORT runtime");
+            return Ok(());
+        }
+        // v1.0.3's Intel macOS app shipped an ARM64 library (audit 2026-11-11, R10).
+        tracing::warn!(target: "4da::embeddings", path = %bundled_path.display(), "Bundled ORT runtime is built for another CPU; not used");
     }
 
     let ort_dir = cache_dir.join("ort");
     let dll_path = ort_dir.join(lib_name);
 
     if dll_path.exists() {
-        std::env::set_var("ORT_DYLIB_PATH", &dll_path);
-        return Ok(());
+        if lib_runs_here(&dll_path) {
+            std::env::set_var("ORT_DYLIB_PATH", &dll_path);
+            return Ok(());
+        }
+        tracing::warn!(target: "4da::embeddings", path = %dll_path.display(), "Cached ORT runtime is built for another CPU; removed");
+        let _ = std::fs::remove_file(&dll_path);
     }
+
+    // No pinned archive for this platform (Intel macOS): say why, without a doomed download.
+    let spec = host_archive().map_err(|why| FourDaError::from(why.to_string()))?;
 
     let _ = std::fs::create_dir_all(&ort_dir);
     tracing::info!(
@@ -77,19 +91,8 @@ fn ensure_ort_runtime(
         dest = %ort_dir.display(),
         "Downloading ONNX Runtime 1.24.2 (one-time, ~70MB)"
     );
-
-    #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
-    let url = "https://github.com/microsoft/onnxruntime/releases/download/v1.24.2/onnxruntime-win-x64-1.24.2.zip";
-    #[cfg(all(target_os = "windows", target_arch = "aarch64"))]
-    let url = "https://github.com/microsoft/onnxruntime/releases/download/v1.24.2/onnxruntime-win-arm64-1.24.2.zip";
-    #[cfg(all(target_os = "macos", target_arch = "aarch64"))]
-    let url = "https://github.com/microsoft/onnxruntime/releases/download/v1.24.2/onnxruntime-osx-arm64-1.24.2.tgz";
-    #[cfg(all(target_os = "macos", target_arch = "x86_64"))]
-    let url = "https://github.com/microsoft/onnxruntime/releases/download/v1.24.2/onnxruntime-osx-x86_64-1.24.2.tgz";
-    #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
-    let url = "https://github.com/microsoft/onnxruntime/releases/download/v1.24.2/onnxruntime-linux-x64-1.24.2.tgz";
-    #[cfg(all(target_os = "linux", target_arch = "aarch64"))]
-    let url = "https://github.com/microsoft/onnxruntime/releases/download/v1.24.2/onnxruntime-linux-aarch64-1.24.2.tgz";
+    let url = spec.url;
+    let mut hasher = Sha256::new();
 
     let archive_path = ort_dir.join("ort_download.tmp");
     let client = reqwest::blocking::Client::builder()
@@ -122,6 +125,7 @@ fn ensure_ort_runtime(
         }
         file.write_all(&buf[..n])
             .map_err(|e| FourDaError::from(format!("write chunk: {e}")))?;
+        hasher.update(&buf[..n]);
         downloaded += n as u64;
         if downloaded - last_report > 524_288 {
             last_report = downloaded;
@@ -149,6 +153,16 @@ fn ensure_ort_runtime(
     }
     drop(file);
 
+    // The library is loaded into this process: an archive that does not match its pin is never extracted.
+    let digest = hex::encode(hasher.finalize());
+    if digest != spec.sha256 {
+        let _ = std::fs::remove_file(&archive_path);
+        return Err(FourDaError::from(format!(
+            "ONNX Runtime download rejected: its SHA-256 is {digest}, expected {} ({url})",
+            spec.sha256
+        )));
+    }
+
     if let Some(tx) = progress.as_ref() {
         let _ = tx.send(DownloadProgress {
             stage: "ort-extract".into(),
@@ -160,8 +174,14 @@ fn ensure_ort_runtime(
         });
     }
 
-    extract_ort_library(&archive_path, &dll_path)?;
+    extract_ort_library(&archive_path, &dll_path, spec.kind)?;
     let _ = std::fs::remove_file(&archive_path);
+    if !lib_runs_here(&dll_path) {
+        let _ = std::fs::remove_file(&dll_path);
+        return Err(FourDaError::from(
+            "ONNX Runtime download contained a library for another CPU".to_string(),
+        ));
+    }
 
     std::env::set_var("ORT_DYLIB_PATH", &dll_path);
     tracing::info!(target: "4da::embeddings", path = %dll_path.display(), "ONNX Runtime ready");
@@ -172,12 +192,13 @@ fn ensure_ort_runtime(
 fn extract_ort_library(
     archive_path: &std::path::Path,
     dll_dest: &std::path::Path,
+    kind: super::ort_runtime::ArchiveKind,
 ) -> std::result::Result<(), FourDaError> {
     let lib_name = ort_lib_filename();
-    if archive_path
-        .extension()
-        .is_some_and(|e| e == "zip" || e == "tmp")
-    {
+    // The kind comes from the pinned archive, not the file name: the download is
+    // always saved as `ort_download.tmp`, and a `.tmp` name sent every macOS and
+    // Linux .tgz down the zip path ("invalid zip") (audit 2026-11-11).
+    if kind == super::ort_runtime::ArchiveKind::Zip {
         let file = std::fs::File::open(archive_path)
             .map_err(|e| FourDaError::from(format!("open archive: {e}")))?;
         let mut archive = zip::ZipArchive::new(file)

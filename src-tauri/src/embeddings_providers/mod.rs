@@ -13,6 +13,8 @@ pub(crate) mod model_store;
 mod observe;
 mod ollama;
 mod openai;
+#[cfg(feature = "fastembed-local")]
+pub(crate) mod ort_runtime;
 mod retry;
 
 pub(crate) use observe::observe_embed_load;
