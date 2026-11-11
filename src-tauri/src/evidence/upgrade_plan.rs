@@ -57,15 +57,21 @@ pub struct BuiltPlan {
 /// Items and drop count only — the shape the plan tests assert on.
 #[cfg(test)]
 pub fn build_upgrade_plan_with_drops(db: &Database) -> (Vec<EvidenceItem>, u32) {
-    let plan = build_upgrade_plan(db);
+    let plan = build_upgrade_plan(db).expect("the matcher read the test database");
     (plan.items, plan.drops)
 }
 
 /// Build the ranked dependency Upgrade Plan as validated [`EvidenceItem`]s,
 /// most-actionable first, with each item's [`UpgradeStep`]s and the count of
 /// items dropped because they failed `validate_item` (their steps go with
-/// them). Empty on cold-start (no matches) or if the matcher errors — never
-/// breaks on a data quirk.
+/// them). Empty on cold-start (no matches); a data quirk in one item drops
+/// that item, never the plan.
+///
+/// A matcher that could not READ is an error, never an empty plan (audit
+/// 2026-11-11): the empty plan was persisted over the last good snapshot, so
+/// `4da plan` and the MCP `upgrade_planner` answered "evaluated, nothing to
+/// do" for a database that had not been read. A caller holding an `Err` has
+/// no plan to render or persist.
 ///
 /// Consumed by `preemption::compute_preemption_evidence_feed` (the Signal-tier
 /// feed) which renders the items as the "Upgrade Plan" group and persists the
@@ -73,18 +79,8 @@ pub fn build_upgrade_plan_with_drops(db: &Database) -> (Vec<EvidenceItem>, u32) 
 /// "thin plan" canary (a silent drop in a release build once shipped a truncated
 /// citation as a dropped step; a reader that sees a non-zero count knows the
 /// plan may under-report).
-pub fn build_upgrade_plan(db: &Database) -> BuiltPlan {
-    let matches = match crate::osv::matching::get_matched_advisories(db) {
-        Ok(m) => m,
-        Err(e) => {
-            tracing::warn!(target: "4da::upgrade_plan", error = %e, "matcher failed — empty plan");
-            return BuiltPlan {
-                items: Vec::new(),
-                steps: Vec::new(),
-                drops: 0,
-            };
-        }
-    };
+pub fn build_upgrade_plan(db: &Database) -> crate::error::Result<BuiltPlan> {
+    let matches = crate::osv::matching::get_matched_advisories(db)?;
 
     let mut groups = aggregate_by_package(&matches);
     // Accuracy-first: the plan is the version-confirmed set only.
@@ -160,11 +156,11 @@ pub fn build_upgrade_plan(db: &Database) -> BuiltPlan {
             }
         }
     }
-    BuiltPlan {
+    Ok(BuiltPlan {
         items,
         steps: work_order,
         drops,
-    }
+    })
 }
 
 /// One package's aggregated upgrade step.

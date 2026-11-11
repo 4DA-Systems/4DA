@@ -30,10 +30,17 @@ pub(crate) fn build_brief_facts(db: &Database) -> BriefFacts {
         .map(|conn| crate::evidence::ProjectLiveness::load(&conn))
         .unwrap_or_default();
 
-    let (security, also_open) = build_security_facts(db, &novelty, &liveness, &mut labels);
+    let security_read = build_security_facts(db, &novelty, &liveness, &mut labels);
     let upgrades = build_upgrade_facts(db, &novelty, &liveness, &mut labels);
     let worth_knowing = build_worth_knowing(db, &novelty, &today);
-    let readiness = crate::osv::readiness::advisory_sync(db);
+    let mut readiness = crate::osv::readiness::advisory_sync(db);
+    // A security lane that could not be READ is not an empty one: the check
+    // reads as failed, so no brief gives an all-clear over it (audit 2026-11-11).
+    let (security, also_open) = security_read.unwrap_or_else(|e| {
+        tracing::warn!(target: "4da::briefing", error = %e, "brief facts: security lane unreadable");
+        readiness.state = crate::osv::readiness::AdvisorySyncState::Failed;
+        Default::default()
+    });
     let fingerprint = with_advisory_state(
         &fingerprint(&security, &also_open, &upgrades),
         Some(readiness.state),
@@ -126,16 +133,10 @@ fn build_security_facts(
     novelty: &Novelty,
     liveness: &crate::evidence::ProjectLiveness,
     labels: &mut LabelCache,
-) -> (Vec<SecurityFact>, Vec<SecurityFact>) {
-    let feed = match crate::preemption::get_preemption_feed() {
-        Ok(f) => f,
-        Err(e) => {
-            tracing::warn!(target: "4da::briefing", error = %e, "brief facts: preemption feed unavailable");
-            return (Vec::new(), Vec::new());
-        }
-    };
+) -> crate::error::Result<(Vec<SecurityFact>, Vec<SecurityFact>)> {
+    let feed = crate::preemption::get_preemption_feed()?;
     let (matched, not_compiled) =
-        crate::osv::matching::get_matched_advisories_with_not_compiled(db).unwrap_or_default();
+        crate::osv::matching::get_matched_advisories_with_not_compiled(db)?;
     let conn = crate::open_db_connection().ok();
     let ctx = FactCtx {
         db,
@@ -176,7 +177,7 @@ fn build_security_facts(
             .cmp(&urgency_rank(&b.urgency))
             .then_with(|| a.package.cmp(&b.package))
     });
-    (act, also)
+    Ok((act, also))
 }
 
 /// What every security fact of one build reads.

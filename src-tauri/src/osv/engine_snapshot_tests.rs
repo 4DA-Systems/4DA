@@ -68,7 +68,7 @@ fn dump_engine_outputs_from_snapshot() {
         Some(true),
     ))
     .expect("lane 1");
-    let plan = crate::evidence::build_upgrade_plan(db);
+    let plan = crate::evidence::build_upgrade_plan(db).expect("upgrade plan");
 
     let mut dump = json!({
         "matcher": {

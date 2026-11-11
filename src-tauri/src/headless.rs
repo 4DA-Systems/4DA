@@ -541,13 +541,18 @@ async fn run_one_cycle(handle: &AppHandle, trigger: &'static str, force_osv: boo
     // the DB-as-interface starved — the engine freshens the plan's exact inputs
     // (deps in step 0b, OSV matches in step 3) yet never computed the plan from
     // them. `build_upgrade_plan` is deterministic + DB-only (no LLM, no
-    // network), so this is cheap; `persist_upgrade_plan` always writes (even an
-    // empty plan = "evaluated, nothing to do"). Best-effort: it logs its failures.
+    // network), so this is cheap; a plan that was built is always written (even
+    // an empty one = "evaluated, nothing to do"). Best-effort: failures are logged.
     if let Ok(db) = crate::get_database() {
-        let plan = crate::evidence::build_upgrade_plan(&db);
-        let steps = plan.items.len();
-        crate::evidence::persist_upgrade_plan(&db, &plan.items, &plan.steps, plan.drops, run_id);
-        info!(target: "4da::headless", steps, "Upgrade Plan snapshot refreshed");
+        match refresh_plan_snapshot(db, run_id) {
+            Ok(steps) => info!(target: "4da::headless", steps, "Upgrade Plan snapshot refreshed"),
+            Err(e) => error!(
+                target: "4da::headless",
+                error = %e,
+                "Upgrade Plan snapshot NOT refreshed: the plan could not be read, so the \
+                 previous snapshot is kept"
+            ),
+        }
     }
 
     // Step 3b-ii — Tier-2 LLM passes (judge + content analysis + LlmReject
@@ -667,6 +672,20 @@ async fn ensure_dependencies_scanned() {
             warn!(target: "4da::headless", error = %e, "ACE dependency scan failed — cycle continues without dependency profile");
         }
     }
+}
+
+/// Build the Upgrade Plan and persist it as the snapshot `4da plan` and the MCP
+/// server read; returns how many items it holds. A plan that could not be READ
+/// is an error and nothing is written (audit 2026-11-11): the engine used to
+/// persist the empty plan a failed read produced, replacing the last good
+/// snapshot with "evaluated, nothing to do".
+fn refresh_plan_snapshot(
+    db: &crate::db::Database,
+    run_id: Option<i64>,
+) -> crate::error::Result<usize> {
+    let plan = crate::evidence::build_upgrade_plan(db)?;
+    crate::evidence::persist_upgrade_plan(db, &plan.items, &plan.steps, plan.drops, run_id);
+    Ok(plan.items.len())
 }
 
 fn append_receipt_error(receipt: &mut RunReceipt, error: String) {
@@ -811,3 +830,7 @@ fn scoring_epoch_is_behind() -> bool {
 fn is_cycle_fresh() -> bool {
     is_data_fresh() && is_osv_fresh() && !scoring_epoch_is_behind()
 }
+
+#[cfg(test)]
+#[path = "headless_tests.rs"]
+mod tests;

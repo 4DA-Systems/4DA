@@ -150,7 +150,7 @@ fn mixed_fixture() -> Database {
 }
 
 fn built(db: &Database) -> (Vec<EvidenceItem>, Vec<UpgradeStep>) {
-    let plan = super::super::build_upgrade_plan(db);
+    let plan = super::super::build_upgrade_plan(db).expect("upgrade plan");
     assert_eq!(plan.drops, 0, "no plan item may fail validation");
     (plan.items, plan.steps)
 }
@@ -298,7 +298,7 @@ fn a_step_serializes_to_the_documented_shape() {
 #[test]
 fn the_snapshot_carries_the_steps_and_never_an_orphan() {
     let db = mixed_fixture();
-    let plan = super::super::build_upgrade_plan(&db);
+    let plan = super::super::build_upgrade_plan(&db).expect("upgrade plan");
     let mut steps = plan.steps.clone();
     let mut orphan = steps[0].clone();
     orphan.item_id = "upgrade-plan:npm:not-in-the-plan".to_string();
@@ -317,7 +317,7 @@ fn the_snapshot_carries_the_steps_and_never_an_orphan() {
 #[test]
 fn another_schema_version_reads_as_absent_until_recomputed() {
     let db = mixed_fixture();
-    let plan = super::super::build_upgrade_plan(&db);
+    let plan = super::super::build_upgrade_plan(&db).expect("upgrade plan");
     persist_upgrade_plan(&db, &plan.items, &plan.steps, plan.drops, None);
     let current: serde_json::Value =
         serde_json::from_str(&db.get_kv("upgrade_plan_snapshot").unwrap().unwrap()).unwrap();
@@ -348,7 +348,7 @@ fn another_schema_version_reads_as_absent_until_recomputed() {
     );
 
     // The recompute every writer performs restores a readable plan.
-    let again = super::super::build_upgrade_plan(&db);
+    let again = super::super::build_upgrade_plan(&db).expect("upgrade plan");
     persist_upgrade_plan(&db, &again.items, &again.steps, again.drops, None);
     let snap = read_upgrade_plan_snapshot(&db).expect("recomputed");
     assert_eq!(snap.steps, again.steps);
@@ -375,7 +375,7 @@ fn live_snapshot_work_order() {
         crate::db::prune_orphaned_project_dependencies(&conn, &crate::db::project_gone_from_disk)
             .expect("prune");
     }
-    let plan = super::super::build_upgrade_plan(&db);
+    let plan = super::super::build_upgrade_plan(&db).expect("upgrade plan");
     persist_upgrade_plan(&db, &plan.items, &plan.steps, plan.drops, None);
     println!(
         "PLAN items={} steps={} drops={}",

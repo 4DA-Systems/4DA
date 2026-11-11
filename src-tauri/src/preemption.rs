@@ -642,22 +642,43 @@ pub(crate) fn alert_fix_target(
     (best_fix, sentence)
 }
 
-fn osv_matches_to_alerts() -> Vec<PreemptionAlert> {
-    let db = match crate::get_database() {
-        Ok(db) => db,
-        Err(e) => {
-            warn!(target: "4da::preemption", error = %e, "Failed to get database for OSV matches");
-            return Vec::new();
-        }
-    };
+/// Tier 1: the version-confirmed OSV alerts of the app's database.
+///
+/// A read that fails is an error, never "no advisories" (audit 2026-11-11).
+/// This returned an empty list on a failed read; the feed built from it was
+/// then stamped with the live advisory state (`assemble_feed`), cached and
+/// persisted, so the tab said "no known vulnerabilities" for a database it
+/// had not read.
+fn osv_matches_to_alerts() -> Result<Vec<PreemptionAlert>> {
+    osv_alerts_from_db(crate::get_database().map_err(|e| unread("the database", &e))?)
+}
 
-    let matches = match crate::osv::matching::get_matched_advisories(db) {
-        Ok(m) => m,
-        Err(e) => {
-            warn!(target: "4da::preemption", error = %e, "Failed to get OSV matched advisories");
-            return Vec::new();
-        }
-    };
+/// [`osv_matches_to_alerts`] for one database (the tests' seam).
+fn osv_alerts_from_db(db: &crate::db::Database) -> Result<Vec<PreemptionAlert>> {
+    let matches = crate::osv::matching::get_matched_advisories(db)
+        .map_err(|e| unread("the advisory matches", &e))?;
+    Ok(osv_alerts_with_host_context(db, matches))
+}
+
+/// A failed read as the error the feed fails with. Logged here, once, with
+/// its cause; worded so the view's error mapping names the database rather
+/// than falling back to "something went wrong".
+fn unread(what: &str, cause: &crate::error::FourDaError) -> crate::error::FourDaError {
+    warn!(
+        target: "4da::preemption",
+        error = %cause,
+        what,
+        "preemption read failed: the feed fails rather than reading as empty"
+    );
+    crate::error::FourDaError::Internal(format!("Database error: could not read {what} ({cause})"))
+}
+
+fn osv_alerts_with_host_context(
+    db: &crate::db::Database,
+    matches: Vec<crate::osv::types::MatchedAdvisory>,
+) -> Vec<PreemptionAlert> {
+    // The two context reads below only de-prioritise and label: when one
+    // fails, every alert keeps its full urgency, so neither fails the feed.
 
     // Group confirmed matches by (package_name, ecosystem) — one alert per package.
     let mut pkg_groups: std::collections::BTreeMap<
@@ -1015,7 +1036,10 @@ fn llm_judged_to_alerts() -> Vec<PreemptionAlert> {
 
     let conn = match crate::open_db_connection() {
         Ok(c) => c,
-        Err(_) => return Vec::new(),
+        Err(e) => {
+            warn!(target: "4da::preemption", error = %e, "Failed to open the database for LLM-assessed alerts");
+            return Vec::new();
+        }
     };
     let direct_runtime_deps = match load_direct_runtime_deps(&conn) {
         Ok(deps) => deps,
@@ -1177,7 +1201,7 @@ pub fn get_preemption_feed() -> Result<PreemptionFeed> {
     let mut alerts = Vec::new();
 
     // ─── 0. Tier 1: OSV verified advisories (deterministic, highest trust) ──
-    let tier1 = osv_matches_to_alerts();
+    let tier1 = osv_matches_to_alerts()?;
     debug!(target: "4da::preemption", tier1_count = tier1.len(), "Tier 1 OSV alerts");
     alerts.extend(tier1);
 
@@ -2116,7 +2140,7 @@ async fn compute_preemption_evidence_feed() -> std::result::Result<EvidenceFeed,
     }
 
     let mut items = items;
-    append_upgrade_plan_items(&mut items);
+    append_upgrade_plan_items(&mut items)?;
 
     Ok(assemble_feed(items, TierScope::Full))
 }
@@ -2129,7 +2153,7 @@ fn compute_preemption_fast_full_feed() -> std::result::Result<EvidenceFeed, Stri
     // cannot either (audit L2). Unvetted heuristics wait for the deliberated
     // refresh started beside this feed.
     let mut items = crate::adversarial::apply_stored_verdicts(validated_preemption_items()?);
-    append_upgrade_plan_items(&mut items);
+    append_upgrade_plan_items(&mut items)?;
     Ok(assemble_feed(items, TierScope::Full))
 }
 
@@ -2139,51 +2163,56 @@ fn compute_preemption_fast_full_feed() -> std::result::Result<EvidenceFeed, Stri
 // version-confirmed advisory matches, so there is nothing for an LLM to
 // second-guess. The fast command path also appends the same deterministic plan
 // so a cache miss remains useful and bounded.
-fn append_upgrade_plan_items(items: &mut Vec<EvidenceItem>) {
-    match crate::get_database() {
-        Ok(db) => {
-            let crate::evidence::BuiltPlan {
-                items: mut plan,
-                steps,
-                drops,
-            } = crate::evidence::build_upgrade_plan(db);
-            // Dormancy cap (2026-08-31) BEFORE persisting: the upgrade steps
-            // are exactly the cards the live audit caught nagging Critical
-            // about repos dead since February, and the persisted snapshot the
-            // MCP server reads must carry the same capped urgencies the feed
-            // shows.
-            if let Ok(conn) = crate::open_db_connection() {
-                let liveness = crate::evidence::ProjectLiveness::load(&conn);
-                let capped = crate::evidence::cap_dormant_items(&mut plan, &liveness);
-                if capped > 0 {
-                    info!(
-                        target: "4da::preemption",
-                        capped,
-                        "dormant-project upgrade steps capped to Medium"
-                    );
-                }
-            }
-            // Persist the plan to kv_store (D-1, DB-as-interface) so the MCP
-            // server / CLI can read it out-of-process. Always persist — even an
-            // empty plan — so a reader distinguishes "evaluated, nothing to do"
-            // from "never computed". Best-effort; never blocks the feed.
-            // GUI compute — no engine run to attribute (engine_run_id = None).
-            crate::evidence::persist_upgrade_plan(db, &plan, &steps, drops, None);
-            if !plan.is_empty() {
-                info!(
-                    target: "4da::preemption",
-                    steps = plan.len(),
-                    "upgrade plan appended to preemption feed + persisted"
-                );
-                items.extend(plan);
-            }
+//
+// A plan that could not be READ is not an empty plan (audit 2026-11-11): the
+// feed fails, and nothing is persisted, so the snapshot `4da plan` and the MCP
+// server read stays the last good one (its `generated_at` says how old).
+fn append_upgrade_plan_items(items: &mut Vec<EvidenceItem>) -> std::result::Result<(), String> {
+    let db = crate::get_database().map_err(|e| unread("the database", &e).to_string())?;
+    append_upgrade_plan_from(db, items)
+}
+
+/// [`append_upgrade_plan_items`] for one database (the tests' seam).
+fn append_upgrade_plan_from(
+    db: &crate::db::Database,
+    items: &mut Vec<EvidenceItem>,
+) -> std::result::Result<(), String> {
+    let crate::evidence::BuiltPlan {
+        items: mut plan,
+        steps,
+        drops,
+    } = crate::evidence::build_upgrade_plan(db)
+        .map_err(|e| unread("the upgrade plan's advisory matches", &e).to_string())?;
+    // Dormancy cap (2026-08-31) BEFORE persisting: the upgrade steps are
+    // exactly the cards the live audit caught nagging Critical about repos
+    // dead since February, and the persisted snapshot the MCP server reads
+    // must carry the same capped urgencies the feed shows.
+    if let Ok(conn) = crate::open_db_connection() {
+        let liveness = crate::evidence::ProjectLiveness::load(&conn);
+        let capped = crate::evidence::cap_dormant_items(&mut plan, &liveness);
+        if capped > 0 {
+            info!(
+                target: "4da::preemption",
+                capped,
+                "dormant-project upgrade steps capped to Medium"
+            );
         }
-        Err(e) => warn!(
-            target: "4da::preemption",
-            error = %e,
-            "upgrade plan skipped — database unavailable"
-        ),
     }
+    // Persist the plan to kv_store (D-1, DB-as-interface) so the MCP server /
+    // CLI can read it out-of-process. Every plan that was BUILT is persisted,
+    // an empty one too, so a reader distinguishes "evaluated, nothing to do"
+    // from "never computed". Best-effort; never blocks the feed.
+    // GUI compute — no engine run to attribute (engine_run_id = None).
+    crate::evidence::persist_upgrade_plan(db, &plan, &steps, drops, None);
+    if !plan.is_empty() {
+        info!(
+            target: "4da::preemption",
+            steps = plan.len(),
+            "upgrade plan appended to preemption feed + persisted"
+        );
+        items.extend(plan);
+    }
+    Ok(())
 }
 
 /// The last steps before a lens feed exists, applied on all three paths (full,
@@ -2240,7 +2269,7 @@ fn assemble_feed(mut items: Vec<EvidenceItem>, scope: TierScope) -> EvidenceFeed
 /// there is nothing for an LLM to second-guess and free tier must not
 /// depend on an LLM being configured).
 fn compute_preemption_free_floor_feed() -> std::result::Result<EvidenceFeed, String> {
-    let items = validated_osv_preemption_items();
+    let items = validated_osv_preemption_items()?;
     info!(
         target: "4da::preemption",
         tier1 = items.len(),
@@ -2249,8 +2278,9 @@ fn compute_preemption_free_floor_feed() -> std::result::Result<EvidenceFeed, Str
     Ok(assemble_feed(items, TierScope::FreeFloor))
 }
 
-fn validated_osv_preemption_items() -> Vec<EvidenceItem> {
+fn validated_osv_preemption_items() -> std::result::Result<Vec<EvidenceItem>, String> {
     let mut items: Vec<EvidenceItem> = osv_matches_to_alerts()
+        .map_err(|e| e.to_string())?
         .iter()
         .map(PreemptionAlert::to_evidence_item)
         .collect();
@@ -2280,7 +2310,7 @@ fn validated_osv_preemption_items() -> Vec<EvidenceItem> {
             false
         }
     });
-    items
+    Ok(items)
 }
 
 /// Shared materialization step: produce canonical `EvidenceItem`s from the
@@ -2318,6 +2348,10 @@ fn validated_preemption_items() -> std::result::Result<Vec<EvidenceItem>, String
 #[cfg(test)]
 #[path = "preemption_rank_tests.rs"]
 mod rank_tests;
+
+#[cfg(test)]
+#[path = "preemption_read_error_tests.rs"]
+mod read_error_tests;
 
 #[cfg(test)]
 mod tests {
