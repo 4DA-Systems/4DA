@@ -18,6 +18,26 @@ const OSV_BATCH_URL: &str = "https://api.osv.dev/v1/querybatch";
 const USER_AGENT: &str = "4DA/1.0 (local-osv-mirror)";
 const MAX_BATCH_SIZE: usize = 1000;
 pub(crate) const DEFAULT_SYNC_MAX_AGE_HOURS: i64 = 6;
+/// The batch API's rate-limit refusal. The pass matches this exact text: a
+/// bare "429" also appears in other errors (a port number in a URL).
+const RATE_LIMITED: &str = "Rate limited by OSV API (429)";
+
+/// The remote endpoints and the local archive store a sync pass uses.
+/// Production is [`SyncEndpoints::live`]; tests point both at a local
+/// stand-in, so the pass under test is the one that ships.
+pub(crate) struct SyncEndpoints {
+    pub(crate) batch_url: String,
+    pub(crate) mirror: super::cache::Mirror,
+}
+
+impl SyncEndpoints {
+    fn live() -> Self {
+        Self {
+            batch_url: OSV_BATCH_URL.to_string(),
+            mirror: super::cache::Mirror::live(),
+        }
+    }
+}
 
 /// Maximum advisory-mirror age (hours) before a sync is due. Read once from
 /// `FOURDA_OSV_MAX_AGE_HOURS`, falling back to [`DEFAULT_SYNC_MAX_AGE_HOURS`].
@@ -225,62 +245,6 @@ pub(crate) fn needs_sync(db: &Database, max_age_hours: i64) -> Result<bool> {
     Ok(false)
 }
 
-/// Populate advisories for one ecosystem from the locally cached OSV ZIP
-/// mirror, (re)downloading the ZIP when it is missing or when OSV has published
-/// a newer advisory set (cheap ETag HEAD check) so routine syncs pick up
-/// newly-disclosed CVEs.
-///
-/// This exists because the OSV `/v1/querybatch` API returns only vulnerability
-/// ID-stubs (`{id, modified}`) — never the `affected` package ranges that
-/// `store_vulnerability` needs — so the batch path cannot fill the mirror on
-/// its own. The per-ecosystem ZIP carries full advisory JSON and is matched
-/// locally, so it is both the path that actually populates `osv_advisories`
-/// and the more privacy-preserving one (nothing about the user's dependency
-/// set leaves the machine).
-async fn populate_from_zip_mirror(
-    db: &Database,
-    ecosystem: &str,
-    packages: &[String],
-) -> Result<usize> {
-    let pkg_set: std::collections::HashSet<String> = packages
-        .iter()
-        .map(|p| super::matching::package_key(p, ecosystem))
-        .collect();
-
-    // Refresh the cached ZIP when OSV has published a new advisory set for this
-    // ecosystem (ETag mismatch) or when no ZIP exists yet. The staleness check is
-    // a cheap HTTP HEAD, so the heavy full download (npm's ZIP is ~200MB) only
-    // runs when the advisory data actually changed — that is what lets a routine
-    // sync pick up newly-published CVEs instead of serving a frozen snapshot.
-    // Best effort: a failed check (offline) falls back to the ZIP already on disk
-    // (`is_cache_stale` Err -> treat as fresh); a failed download likewise leaves
-    // the prior ZIP intact (the download writes the destination only on success);
-    // a genuinely missing ZIP is still downloaded by the match arm below.
-    if super::cache::is_cache_stale(ecosystem)
-        .await
-        .unwrap_or(false)
-    {
-        if let Err(e) = super::cache::download_ecosystem_zip(ecosystem).await {
-            warn!(
-                target: "4da::osv",
-                ecosystem = ecosystem,
-                error = %e,
-                "ZIP refresh failed; falling back to the existing cached ZIP if present"
-            );
-        }
-    }
-
-    match super::cache::sync_from_zip(db, ecosystem, &pkg_set) {
-        Ok(count) => Ok(count),
-        Err(_) => {
-            // No usable ZIP on disk (first run offline, or a refresh that never
-            // completed) — make a final attempt to download, then match locally.
-            super::cache::download_ecosystem_zip(ecosystem).await?;
-            super::cache::sync_from_zip(db, ecosystem, &pkg_set)
-        }
-    }
-}
-
 /// Run a full sync: read deps → query OSV → store advisories → update status.
 pub async fn sync(db: &Database) -> Result<SyncResult> {
     let start = std::time::Instant::now();
@@ -313,89 +277,15 @@ pub async fn sync(db: &Database) -> Result<SyncResult> {
         .build()
         .unwrap_or_default();
 
+    let endpoints = SyncEndpoints::live();
     for (ecosystem, packages) in &by_ecosystem {
-        let sync_start = chrono::Utc::now().format("%Y-%m-%d %H:%M:%S").to_string();
-        match sync_ecosystem(&client, db, ecosystem, packages, &sync_start).await {
-            Ok(count) if count > 0 => {
-                result.ecosystems_synced.push(ecosystem.clone());
-                result.advisories_stored += count;
-                db.update_osv_sync_status(ecosystem, count as i64, None)
-                    .ok();
-            }
-            // The batch API stored nothing. `/v1/querybatch` returns vulnerability
-            // ID-stubs without the `affected` ranges `store_vulnerability` needs,
-            // so it can never populate the mirror on its own. Fall back to the
-            // cached ZIP mirror (full advisory JSON, matched locally). This — not
-            // the batch query — is what actually fills `osv_advisories` for
-            // npm/crates.io.
-            //
-            // The ZIP path itself sends no package names: it downloads the whole
-            // ecosystem archive and matches locally. That is NOT a privacy property
-            // of OSV sync as a whole — `sync_ecosystem` above already POSTed the
-            // user's package names to `OSV_BATCH_URL` (up to 1000 per request), and
-            // it is attempted first on every cycle. Reaching this branch means the
-            // dependency set has already been disclosed to api.osv.dev. Only a
-            // ZIP-only configuration would keep it local.
-            Ok(_) => match populate_from_zip_mirror(db, ecosystem, packages).await {
-                Ok(zip_count) if zip_count > 0 => {
-                    info!(
-                        target: "4da::osv",
-                        ecosystem = ecosystem.as_str(),
-                        cached_advisories = zip_count,
-                        "Batch API returned no storable advisories; populated from ZIP mirror"
-                    );
-                    result.ecosystems_synced.push(ecosystem.clone());
-                    result.advisories_stored += zip_count;
-                    db.update_osv_sync_status(ecosystem, zip_count as i64, None)
-                        .ok();
-                }
-                Ok(_) => {
-                    // Genuinely no advisories for this ecosystem's packages.
-                    result.ecosystems_synced.push(ecosystem.clone());
-                    db.update_osv_sync_status(ecosystem, 0, None).ok();
-                }
-                Err(e) => {
-                    let msg = format!("{ecosystem} (zip): {e}");
-                    warn!(target: "4da::osv", error = %msg, "ZIP mirror population failed");
-                    result.errors.push(msg);
-                    db.update_osv_sync_status(ecosystem, 0, Some(&e.to_string()))
-                        .ok();
-                }
-            },
-            Err(e) => {
-                let err_str = e.to_string();
-                // Rate limit errors should not fall back to cache
-                let is_rate_limit = err_str.contains("429");
-
-                if !is_rate_limit {
-                    // Attempt cache fallback for network/server errors
-                    if let Ok(zip_count) = populate_from_zip_mirror(db, ecosystem, packages).await {
-                        if zip_count > 0 {
-                            info!(
-                                target: "4da::osv",
-                                ecosystem = ecosystem.as_str(),
-                                cached_advisories = zip_count,
-                                "API sync failed, fell back to cached ZIP"
-                            );
-                            result.ecosystems_synced.push(ecosystem.clone());
-                            result.advisories_stored += zip_count;
-                            db.update_osv_sync_status(ecosystem, zip_count as i64, None)
-                                .ok();
-                            continue;
-                        }
-                    }
-                }
-
-                let msg = format!("{ecosystem}: {e}");
-                warn!(target: "4da::osv", error = %msg, "Ecosystem sync failed");
-                result.errors.push(msg);
-                db.update_osv_sync_status(ecosystem, 0, Some(&err_str)).ok();
-            }
-        }
+        let outcome = pass::sync_one_ecosystem(&client, db, &endpoints, ecosystem, packages).await;
+        pass::record_outcome(db, ecosystem, outcome, &mut result);
     }
 
     // The held names are covered once the npm sync that included them
-    // succeeded: "no advisory" for one of them is then a reading.
+    // succeeded: "no advisory" for one of them is then a reading. A pass that
+    // could not verify npm's data records an error, so it does not count.
     if !held_names.is_empty() && !result.errors.iter().any(|e| e.starts_with("npm")) {
         super::release_facts::record_held_synced(db, &held_names);
     }
@@ -408,6 +298,7 @@ pub async fn sync(db: &Database) -> Result<SyncResult> {
     match db.prune_advisories_outside_ecosystems(&keep) {
         Ok(pruned) if pruned > 0 => {
             info!(target: "4da::osv", pruned, "Pruned orphan advisories for unused ecosystems");
+            pass::forget_ingested_archives(db);
         }
         Err(e) => warn!(target: "4da::osv", error = %e, "Orphan-advisory prune failed"),
         _ => {}
@@ -431,14 +322,28 @@ pub async fn sync(db: &Database) -> Result<SyncResult> {
     result.advisories_matched = super::matching::count_matches(db).unwrap_or(0);
     result.duration_ms = start.elapsed().as_millis() as u64;
 
-    info!(
-        target: "4da::osv",
-        ecosystems = ?result.ecosystems_synced,
-        stored = result.advisories_stored,
-        matched = result.advisories_matched,
-        duration_ms = result.duration_ms,
-        "OSV sync complete"
-    );
+    if result.errors.is_empty() {
+        info!(
+            target: "4da::osv",
+            ecosystems = ?result.ecosystems_synced,
+            stored = result.advisories_stored,
+            matched = result.advisories_matched,
+            duration_ms = result.duration_ms,
+            "OSV sync complete"
+        );
+    } else {
+        // Not "complete": an ecosystem listed here was not verified, whatever
+        // was matched from the archive on disk.
+        warn!(
+            target: "4da::osv",
+            verified = ?result.ecosystems_synced,
+            not_verified = ?result.errors,
+            stored = result.advisories_stored,
+            matched = result.advisories_matched,
+            duration_ms = result.duration_ms,
+            "OSV sync finished without verifying every ecosystem"
+        );
+    }
 
     Ok(result)
 }
@@ -447,6 +352,7 @@ pub async fn sync(db: &Database) -> Result<SyncResult> {
 async fn sync_ecosystem(
     client: &reqwest::Client,
     db: &Database,
+    batch_url: &str,
     ecosystem: &str,
     packages: &[String],
     sync_start: &str,
@@ -477,7 +383,7 @@ async fn sync_ecosystem(
         let body = BatchRequest { queries };
 
         let response = client
-            .post(OSV_BATCH_URL)
+            .post(batch_url)
             .json(&body)
             .send()
             .await
@@ -486,9 +392,7 @@ async fn sync_ecosystem(
         let status = response.status();
         if status == reqwest::StatusCode::TOO_MANY_REQUESTS {
             warn!(target: "4da::osv", ecosystem = ecosystem, "Rate limited by OSV API");
-            return Err(FourDaError::Internal(
-                "Rate limited by OSV API (429)".into(),
-            ));
+            return Err(FourDaError::Internal(RATE_LIMITED.into()));
         }
         if !status.is_success() {
             return Err(FourDaError::Internal(format!(
@@ -538,6 +442,7 @@ async fn sync_ecosystem(
                 deleted = deleted,
                 "Removed withdrawn advisories"
             );
+            pass::forget_ingested_archives(db);
         }
     }
 
@@ -622,285 +527,10 @@ fn extract_fixed_versions(affected: &Affected) -> Option<String> {
     fourda_depengine::osv::fixed_versions_json(affected)
 }
 
+// One ecosystem's pass and what it may record (verified, unverified, failed).
+#[path = "sync_pass.rs"]
+mod pass;
+
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_parse_osv_max_age() {
-        // Unset / blank / non-numeric -> conservative 6h default (desktop unchanged).
-        assert_eq!(parse_osv_max_age(None), DEFAULT_SYNC_MAX_AGE_HOURS);
-        assert_eq!(
-            parse_osv_max_age(Some("".into())),
-            DEFAULT_SYNC_MAX_AGE_HOURS
-        );
-        assert_eq!(
-            parse_osv_max_age(Some("soon".into())),
-            DEFAULT_SYNC_MAX_AGE_HOURS
-        );
-        // Explicit value (the ledger sets "1") is honored.
-        assert_eq!(parse_osv_max_age(Some("1".into())), 1);
-        assert_eq!(parse_osv_max_age(Some(" 2 ".into())), 2);
-        assert_eq!(parse_osv_max_age(Some("24".into())), 24);
-        // A misconfigured 0/negative is clamped to a 1h floor (never sync-every-cycle).
-        assert_eq!(parse_osv_max_age(Some("0".into())), 1);
-        assert_eq!(parse_osv_max_age(Some("-5".into())), 1);
-    }
-
-    #[test]
-    fn test_normalize_to_osv() {
-        assert_eq!(normalize_to_osv("rust"), "crates.io");
-        assert_eq!(normalize_to_osv("Rust"), "crates.io");
-        assert_eq!(normalize_to_osv("javascript"), "npm");
-        assert_eq!(normalize_to_osv("typescript"), "npm");
-        assert_eq!(normalize_to_osv("npm"), "npm");
-        assert_eq!(normalize_to_osv("python"), "PyPI");
-        assert_eq!(normalize_to_osv("pypi"), "PyPI");
-        assert_eq!(normalize_to_osv("go"), "Go");
-        assert_eq!(normalize_to_osv("golang"), "Go");
-        assert_eq!(normalize_to_osv("unknown"), "unknown");
-        // Language-name keys must resolve, not just registry aliases — the ACE scanner tags
-        // scanned deps with the language ("csharp"/"php"/"dart"), so without these a whole
-        // ecosystem's advisories were silently skipped (regression guard for the langmap gap).
-        assert_eq!(normalize_to_osv("java"), "Maven");
-        assert_eq!(normalize_to_osv("kotlin"), "Maven");
-        assert_eq!(normalize_to_osv("ruby"), "RubyGems");
-        assert_eq!(normalize_to_osv("csharp"), "NuGet");
-        assert_eq!(normalize_to_osv("C#"), "NuGet"); // case-insensitive
-        assert_eq!(normalize_to_osv("dotnet"), "NuGet");
-        assert_eq!(normalize_to_osv("nuget"), "NuGet");
-        assert_eq!(normalize_to_osv("php"), "Packagist");
-        assert_eq!(normalize_to_osv("packagist"), "Packagist");
-        assert_eq!(normalize_to_osv("dart"), "Pub");
-        assert_eq!(normalize_to_osv("flutter"), "Pub");
-        assert_eq!(normalize_to_osv("pub"), "Pub");
-    }
-
-    #[test]
-    fn test_extract_fixed_versions() {
-        use super::super::types::{Affected, Range};
-
-        let affected = Affected {
-            package: None,
-            ranges: Some(vec![Range {
-                range_type: "SEMVER".to_string(),
-                events: Some(vec![
-                    serde_json::json!({"introduced": "0"}),
-                    serde_json::json!({"fixed": "1.2.3"}),
-                ]),
-            }]),
-            versions: None,
-            database_specific: None,
-        };
-
-        let fixed = extract_fixed_versions(&affected).unwrap();
-        assert!(fixed.contains("1.2.3"));
-    }
-
-    #[test]
-    fn test_extract_fixed_versions_multiple() {
-        use super::super::types::{Affected, Range};
-
-        let affected = Affected {
-            package: None,
-            ranges: Some(vec![Range {
-                range_type: "SEMVER".to_string(),
-                events: Some(vec![
-                    serde_json::json!({"introduced": "1.0.0"}),
-                    serde_json::json!({"fixed": "1.0.5"}),
-                    serde_json::json!({"introduced": "2.0.0"}),
-                    serde_json::json!({"fixed": "2.1.0"}),
-                ]),
-            }]),
-            versions: None,
-            database_specific: None,
-        };
-
-        let fixed = extract_fixed_versions(&affected).unwrap();
-        let versions: Vec<String> = serde_json::from_str(&fixed).unwrap();
-        assert_eq!(versions, vec!["1.0.5", "2.1.0"]);
-    }
-
-    #[test]
-    fn test_extract_fixed_versions_none() {
-        use super::super::types::{Affected, Range};
-
-        let affected = Affected {
-            package: None,
-            ranges: Some(vec![Range {
-                range_type: "SEMVER".to_string(),
-                events: Some(vec![serde_json::json!({"introduced": "0"})]),
-            }]),
-            versions: None,
-            database_specific: None,
-        };
-
-        assert!(extract_fixed_versions(&affected).is_none());
-    }
-
-    #[test]
-    fn test_store_vulnerability_dedup() {
-        use crate::test_utils::test_db;
-
-        let db = test_db();
-        let mut seen = std::collections::HashSet::new();
-
-        let vuln = Vulnerability {
-            id: "GHSA-test-001".to_string(),
-            summary: Some("Test vuln".to_string()),
-            details: None,
-            severity: Some(vec![super::super::types::Severity {
-                severity_type: "CVSS_V3".to_string(),
-                score: "7.5".to_string(),
-            }]),
-            affected: Some(vec![super::super::types::Affected {
-                package: Some(PackageRef {
-                    name: "react".to_string(),
-                    ecosystem: "npm".to_string(),
-                }),
-                ranges: None,
-                versions: None,
-                database_specific: None,
-            }]),
-            references: None,
-            published: None,
-            modified: None,
-            withdrawn: None,
-            aliases: None,
-            database_specific: None,
-        };
-
-        let stored1 = store_vulnerability(&db, &vuln, &mut seen).unwrap();
-        assert_eq!(stored1, 1);
-
-        let stored2 = store_vulnerability(&db, &vuln, &mut seen).unwrap();
-        assert_eq!(stored2, 0, "Duplicate should be skipped");
-    }
-
-    /// A `versions`-only advisory (GHSA-q58r-hwc8-rm9j's shape) keeps its list,
-    /// so the matcher can confirm the listed versions.
-    #[test]
-    fn a_versions_only_advisory_is_stored_matchable() {
-        let db = crate::test_utils::test_db();
-        let vuln: Vulnerability = serde_json::from_value(serde_json::json!({
-            "id": "GHSA-q58r-hwc8-rm9j",
-            "affected": [{
-                "package": {"name": "bootstrap", "ecosystem": "npm"},
-                "versions": ["3.4.0", "3.4.1"]
-            }]
-        }))
-        .unwrap();
-        store_vulnerability(&db, &vuln, &mut std::collections::HashSet::new()).unwrap();
-        let stored = db.get_all_osv_advisories().unwrap();
-        let ranges = &stored[0].affected_ranges;
-        assert_eq!(
-            super::super::matching::check_version_affected("npm", Some("3.4.1"), ranges),
-            (true, true)
-        );
-    }
-
-    #[test]
-    fn test_needs_sync_requires_every_active_ecosystem_to_be_fresh() {
-        use crate::test_utils::test_db;
-
-        let db = test_db();
-        assert!(!needs_sync(&db, DEFAULT_SYNC_MAX_AGE_HOURS).unwrap());
-
-        db.store_dependency(
-            "/project",
-            "internal-package",
-            Some("1.0.0"),
-            "custom",
-            false,
-            None,
-        )
-        .unwrap();
-        assert!(
-            !needs_sync(&db, DEFAULT_SYNC_MAX_AGE_HOURS).unwrap(),
-            "unsupported ecosystems must not keep OSV freshness permanently stale"
-        );
-
-        db.store_dependency("/project", "react", Some("19.0.0"), "npm", false, None)
-            .unwrap();
-        db.store_dependency("/project", "tokio", Some("1.0.0"), "rust", false, None)
-            .unwrap();
-        assert!(needs_sync(&db, DEFAULT_SYNC_MAX_AGE_HOURS).unwrap());
-
-        db.update_osv_sync_status("npm", 0, None).unwrap();
-        assert!(
-            needs_sync(&db, DEFAULT_SYNC_MAX_AGE_HOURS).unwrap(),
-            "fresh npm status must not mask missing crates.io status"
-        );
-
-        db.update_osv_sync_status("crates.io", 0, None).unwrap();
-        assert!(!needs_sync(&db, DEFAULT_SYNC_MAX_AGE_HOURS).unwrap());
-
-        db.update_osv_sync_status("npm", 0, Some("network failed"))
-            .unwrap();
-        assert!(
-            needs_sync(&db, DEFAULT_SYNC_MAX_AGE_HOURS).unwrap(),
-            "a recorded ecosystem failure must remain stale"
-        );
-
-        db.update_osv_sync_status("npm", 0, None).unwrap();
-        {
-            let conn = db.conn.lock();
-            conn.execute(
-                "UPDATE osv_sync_status SET last_synced_at = datetime('now', '-7 hours') WHERE ecosystem = 'npm'",
-                [],
-            )
-            .unwrap();
-        }
-        assert!(
-            needs_sync(&db, DEFAULT_SYNC_MAX_AGE_HOURS).unwrap(),
-            "an old ecosystem status must make the dependency mirror stale"
-        );
-    }
-
-    /// Phase 128 backfill: a row stored before `cwe_ids` existed is re-synced
-    /// with it. The migration makes every ecosystem due (a fresh status would
-    /// otherwise skip the sync for up to 6 h), and the next sync's upsert of
-    /// the same record writes its CWE ids, so crossenv GHSA-c2m4-w5hm-vqjw
-    /// (CWE-506, no `MAL-` alias) reads as malware.
-    #[test]
-    fn a_pre_migration_row_gets_its_cwe_ids_on_the_next_sync() {
-        let db = crate::test_utils::test_db();
-        db.store_dependency("/project", "crossenv", Some("1.0.0"), "npm", false, None)
-            .unwrap();
-        let record = serde_json::json!({
-            "id": "GHSA-c2m4-w5hm-vqjw",
-            "summary": "crossenv is malware",
-            "aliases": ["CVE-2017-16074"],
-            "affected": [{"package": {"ecosystem": "npm", "name": "crossenv"},
-                          "ranges": [{"type": "SEMVER", "events": [{"introduced": "0"}]}]}],
-            "database_specific": {"cwe_ids": ["CWE-506"], "severity": "CRITICAL"}
-        });
-        let vuln: Vulnerability = serde_json::from_value(record).unwrap();
-        // As stored before Phase 128: the row exists, its CWE ids do not.
-        let mut seen = std::collections::HashSet::new();
-        store_vulnerability(&db, &vuln, &mut seen).unwrap();
-        db.conn
-            .lock()
-            .execute("UPDATE osv_advisories SET cwe_ids = NULL", [])
-            .unwrap();
-        db.update_osv_sync_status("npm", 1, None).unwrap();
-        let stored = || {
-            db.get_osv_advisories_for_package("crossenv", "npm")
-                .unwrap()
-        };
-        assert!(!stored()[0].is_malware());
-        assert!(!needs_sync(&db, DEFAULT_SYNC_MAX_AGE_HOURS).unwrap());
-
-        // The migration's step makes the sync due ...
-        {
-            let conn = db.conn.lock();
-            crate::db::Database::make_osv_sync_due(&conn).unwrap();
-        }
-        assert!(needs_sync(&db, DEFAULT_SYNC_MAX_AGE_HOURS).unwrap());
-        // ... and the sync's re-upsert fills the column.
-        let mut seen = std::collections::HashSet::new();
-        store_vulnerability(&db, &vuln, &mut seen).unwrap();
-        assert_eq!(stored()[0].cwe_ids, ["CWE-506"]);
-        assert!(stored()[0].is_malware());
-    }
-}
+#[path = "sync_tests.rs"]
+mod tests;

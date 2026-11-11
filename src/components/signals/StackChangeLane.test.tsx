@@ -64,10 +64,17 @@ function item(id: string, title: string, extra: Partial<EvidenceItem> = {}): Evi
   } as EvidenceItem;
 }
 
+const READY = {
+  state: 'ready', ecosystems: 2, synced_at: '2026-11-09 04:00:00', error: null, in_flight: false, skipped_temp: 0,
+} as const;
+const FAILED = {
+  ...READY, state: 'failed', error: 'npm: could not check for newer advisories (HEAD request failed)',
+} as const;
+
 function feed(items: EvidenceItem[], extra: Partial<EvidenceFeed> = {}): EvidenceFeed {
   return {
     items, total: items.length, critical_count: 0, high_count: items.length, score: null,
-    total_tracked: 120, tier_scope: 'full', ...extra,
+    total_tracked: 120, tier_scope: 'full', advisory_sync: READY, ...extra,
   } as EvidenceFeed;
 }
 
@@ -172,6 +179,84 @@ describe('StackChangeLane', () => {
     render(<StackChangeLane />);
     expect(await screen.findByTestId('stack-lane-empty')).toHaveTextContent('signals.stack.emptyBodyFree');
     expect(screen.getByText('signals.stack.releasesSignal')).toBeInTheDocument();
+  });
+
+  // 2026-11-11: the empty lane said "No open advisory for the packages your
+  // projects install" from the item count alone. With the advisory check
+  // failed, out of date or never run that is not known.
+  it('does not say "no open advisory" when the advisory check failed', async () => {
+    cmdMock.mockResolvedValue(feed([], { advisory_sync: FAILED }));
+    render(<StackChangeLane />);
+    const unchecked = await screen.findByTestId('stack-lane-unchecked');
+    expect(unchecked).toHaveTextContent('preemption.advisories.failed.title');
+    expect(unchecked).toHaveTextContent('preemption.advisories.failed.bodyDated');
+    expect(unchecked).toHaveTextContent('npm: could not check for newer advisories');
+    expect(screen.queryByTestId('stack-lane-empty')).toBeNull();
+    expect(screen.queryByText('signals.stack.emptyTitle')).toBeNull();
+    expect(screen.queryByText('signals.stack.emptyBody')).toBeNull();
+  });
+
+  it.each([
+    ['stale', 'preemption.advisories.stale.title'],
+    ['syncing', 'preemption.advisories.checking.title'],
+    ['matching', 'preemption.advisories.checking.title'],
+    ['not_started', 'preemption.advisories.notStarted.title'],
+    ['no_inventory', 'preemption.advisories.uncovered.title'],
+  ] as const)('an empty lane with advisories %s says that, not "nothing changed"', async (state, title) => {
+    cmdMock.mockResolvedValue(feed([], { advisory_sync: { ...READY, state } }));
+    render(<StackChangeLane />);
+    expect(await screen.findByTestId('stack-lane-unchecked')).toHaveTextContent(title);
+    expect(screen.queryByTestId('stack-lane-empty')).toBeNull();
+  });
+
+  it('makes no advisory claim when the backend sent no advisory state', async () => {
+    cmdMock.mockResolvedValue(feed([], { advisory_sync: null }));
+    render(<StackChangeLane />);
+    expect(await screen.findByTestId('stack-lane-unchecked')).toHaveTextContent('signals.stack.uncheckedBody');
+    expect(screen.queryByTestId('stack-lane-empty')).toBeNull();
+  });
+
+  it('"Check now" in the lane runs the advisory check, then re-asks without blanking the lane', async () => {
+    cmdMock.mockImplementation((name: string) =>
+      Promise.resolve(name === 'osv_sync_now' ? {} : feed([], { advisory_sync: FAILED })));
+    render(<StackChangeLane />);
+    fireEvent.click(await screen.findByTestId('preemption-advisories-check-now'));
+    await waitFor(() => expect(cmdMock).toHaveBeenCalledWith('osv_sync_now'));
+    await waitFor(() => expect(cmdMock.mock.calls.filter((c) => c[0] === 'get_stack_changes')).toHaveLength(2));
+    expect(cmdMock).toHaveBeenLastCalledWith('get_stack_changes', { force: false });
+    expect(screen.queryByText('signals.stack.loading')).toBeNull();
+    expect(screen.getByTestId('stack-lane-unchecked')).toBeInTheDocument();
+  });
+
+  it('the re-ask replaces the notice with the claim once the advisories are checked', async () => {
+    let checked = false;
+    cmdMock.mockImplementation((name: string) => {
+      if (name === 'osv_sync_now') { checked = true; return Promise.resolve({}); }
+      return Promise.resolve(feed([], { advisory_sync: checked ? READY : FAILED }));
+    });
+    render(<StackChangeLane />);
+    fireEvent.click(await screen.findByTestId('preemption-advisories-check-now'));
+    expect(await screen.findByTestId('stack-lane-empty')).toHaveTextContent('signals.stack.emptyTitle');
+    expect(screen.queryByTestId('stack-lane-unchecked')).toBeNull();
+  });
+
+  it('with changes listed and the advisory check failed, a line above them says so', async () => {
+    cmdMock.mockResolvedValue(feed(
+      [item('stack-change:minor:npm:h3@1.13.0', 'h3 1.12.0 → 1.13.0: new minor')],
+      { advisory_sync: FAILED },
+    ));
+    render(<StackChangeLane />);
+    await screen.findByText('h3 1.12.0 → 1.13.0: new minor');
+    const line = screen.getByTestId('preemption-advisories-line');
+    expect(line).toHaveAttribute('data-kind', 'failed');
+    expect(line).toHaveTextContent('preemption.advisories.line.failed');
+  });
+
+  it('with changes listed and current advisories, there is no line', async () => {
+    cmdMock.mockResolvedValue(feed([item('stack-change:minor:npm:h3@1.13.0', 'h3 1.12.0 → 1.13.0: new minor')]));
+    render(<StackChangeLane />);
+    await screen.findByText('h3 1.12.0 → 1.13.0: new minor');
+    expect(screen.queryByTestId('preemption-advisories-line')).toBeNull();
   });
 
   it(`caps the lane at ${STACK_LANE_CAP} behind an explicit "Show all N"`, async () => {

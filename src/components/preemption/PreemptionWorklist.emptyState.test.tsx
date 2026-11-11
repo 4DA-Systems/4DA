@@ -166,7 +166,18 @@ describe('PreemptionWorklist — the all-clear follows advisory readiness', () =
     render(<PreemptionWorklist />);
     const notice = screen.getByTestId('preemption-advisories-failed');
     expect(notice).toHaveTextContent('preemption.advisories.failed.title');
+    expect(notice).toHaveTextContent('preemption.advisories.failed.body');
     expect(notice).toHaveTextContent('npm: HTTP 503');
+    expect(screen.queryByText(CLEAN)).toBeNull();
+  });
+
+  // A check that could not verify the data still has data, with an age: the
+  // notice says how old it is instead of only "did not complete".
+  it('the check failed over data verified earlier: the notice dates that data', () => {
+    setFeed(40, { state: 'failed', ecosystems: 2, synced_at: '2026-11-09 04:00:00', error: 'npm: could not check' });
+    render(<PreemptionWorklist />);
+    const notice = screen.getByTestId('preemption-advisories-failed');
+    expect(notice).toHaveTextContent('preemption.advisories.failed.bodyDated');
     expect(screen.queryByText(CLEAN)).toBeNull();
   });
 
@@ -260,7 +271,8 @@ describe('PreemptionWorklist — the all-clear follows advisory readiness', () =
     setFeed(40, null);
     const { container } = render(<PreemptionWorklist />);
     expect(screen.queryByText(CLEAN)).toBeNull();
-    expect(container.textContent).toBe('');
+    // Nothing but the Refresh control: no claim, no notice, no "as of".
+    expect(container.textContent).toBe('preemption.refresh');
   });
 
   it('real findings render whatever the advisory state', () => {

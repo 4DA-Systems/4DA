@@ -11,7 +11,9 @@ import { preemptionNegative } from '../../lib/negative-readiness';
 import { URGENCY_ORDER, ItemCard } from './PreemptionCard';
 import { PreemptionTierSection } from './PreemptionTierSection';
 import { PreemptionFreeFloorNotice } from './PreemptionFreeFloorNotice';
-import { PreemptionAdvisoryNotice } from './PreemptionAdvisoryNotice';
+import {
+  PreemptionAdvisoryNotice, PreemptionFreshnessRow, needsAdvisoryLine, useRefreshWhenVisible,
+} from './PreemptionAdvisoryNotice';
 import { PreemptionNotCoveredNote } from './PreemptionNotCoveredNote';
 import { SignalUpgradeCTA } from '../SignalUpgradeCTA';
 import { ReportAge } from '../ReportAge';
@@ -61,6 +63,10 @@ export const PreemptionWorklist = memo(function PreemptionWorklist() {
   useEffect(() => {
     void loadPreemption();
   }, [loadPreemption]);
+
+  // Shown again or focused again: ask again, quietly (the list stays put and
+  // the backend answers from its cache with the live advisory state on it).
+  useRefreshWhenVisible(refreshQuietly);
 
   const handleDismiss = useCallback((id: string) => {
     // Persist + refetch: the backend re-applies THE visibility filter, so the
@@ -153,11 +159,15 @@ export const PreemptionWorklist = memo(function PreemptionWorklist() {
   // was synced, is recent, and was matched by this feed (doctrine rule 6).
   const negative = preemptionNegative(feed?.advisory_sync);
   const recheck = useCallback(() => { void refreshQuietly(); }, [refreshQuietly]);
+  // When the advisory data behind this list was last verified. Said only
+  // when it is current; a failed or out-of-date check says its own age.
+  const checkedAt = negative.kind === 'assert' ? feed?.advisory_sync?.synced_at : null;
 
   return (
     <div className="space-y-5">
       {/* A previous run's feed (after a restart) says its age; the rebuild swaps in quietly. */}
       <ReportAge computedAt={feed?.computed_at} onReload={refreshQuietly} i18nKey="preemption.reportAge" testId="preemption-report-age" />
+      {feed && <PreemptionFreshnessRow checkedAt={checkedAt} refreshing={loading} onRefresh={rescan} />}
       {/* Stale-backend fallback only: since the 2026-06-12 tier rebalance the
           backend never gates get_preemption_alerts (free tier gets the OSV
           floor), so this branch fires only against an older backend binary.
@@ -223,6 +233,14 @@ export const PreemptionWorklist = memo(function PreemptionWorklist() {
           </p>
           <p className="text-xs text-text-muted">{t('preemption.empty.subtitle')}</p>
         </div>
+      )}
+
+      {/* Findings are listed, but the advisory check behind them failed or is
+          out of date: say so above them, with the age of the data. This used
+          to show only when the list was EMPTY, so a list with items read as
+          current however old its advisory data was. */}
+      {feed && totalAlerts > 0 && needsAdvisoryLine(negative) && (
+        <PreemptionAdvisoryNotice variant="line" negative={negative} onRecheck={recheck} />
       )}
 
       {feed && totalAlerts > 0 && (

@@ -12,6 +12,7 @@
 
 import type { EvidenceFeed } from '../../../src-tauri/bindings/bindings/EvidenceFeed';
 import type { EvidenceItem } from '../../../src-tauri/bindings/bindings/EvidenceItem';
+import { advisoriesChecked } from '../../lib/negative-readiness';
 
 export type StackChange = 'security' | 'yanked' | 'major' | 'breaking' | 'minor';
 
@@ -53,13 +54,21 @@ export function primaryLink(item: EvidenceItem): string | null {
 }
 
 /** What the lane should show for a loaded feed. */
-export type StackLaneState = 'cold_start' | 'empty' | 'items';
+export type StackLaneState = 'cold_start' | 'unchecked' | 'empty' | 'items';
 
-export function laneState(feed: Pick<EvidenceFeed, 'items' | 'total_tracked'>): StackLaneState {
+export function laneState(
+  feed: Pick<EvidenceFeed, 'items' | 'total_tracked' | 'advisory_sync'>,
+): StackLaneState {
   // No dependency has been read yet: nothing was compared, so this is
   // onboarding, not "nothing changed" (doctrine rule 6).
   if (feed.total_tracked === 0) return 'cold_start';
-  return feed.items.length === 0 ? 'empty' : 'items';
+  if (feed.items.length > 0) return 'items';
+  // An empty lane says "no open advisory". That is a claim about advisory
+  // data, true only when it was synced, is current and was matched: the
+  // same rule as Preemption's empty worklist. It used to follow from the
+  // item count alone, so it was said with the advisory check failed, out of
+  // date or never run.
+  return advisoriesChecked(feed.advisory_sync) ? 'empty' : 'unchecked';
 }
 
 /** Releases were left out because they are part of Signal (AD-054 rule 6). */

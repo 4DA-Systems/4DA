@@ -355,3 +355,86 @@ fn before_the_first_lockfile_walk_versionless_rows_are_not_started() {
     .unwrap();
     assert_eq!(advisory_sync(&db).state, AdvisorySyncState::NoInventory);
 }
+
+// --- Advisory freshness truth (2026-11-11) --------------------------------
+// With the network blocked, a sync re-read its cached archives and recorded
+// every ecosystem as synced "now" with no error, so the mirror could never
+// read as failed or stale. The sync time is now the last VERIFIED sync, a
+// failed check keeps its error, and readiness says how old the data is.
+
+/// A failed check does not move the last verified time, and readiness reports
+/// that time as the age of the data still being served.
+#[test]
+fn a_failed_pass_keeps_the_last_verified_time_and_readiness_reports_it() {
+    let db = crate::test_utils::test_db();
+    db.store_dependency("/project", "serde", Some("1.0.200"), "rust", false, None)
+        .unwrap();
+    db.update_osv_sync_status("crates.io", 12, None).unwrap();
+    db.conn
+        .lock()
+        .execute(
+            "UPDATE osv_sync_status SET last_synced_at = '2026-11-08 02:00:00'",
+            [],
+        )
+        .unwrap();
+
+    db.update_osv_sync_status("crates.io", 12, Some("could not reach the advisory host"))
+        .unwrap();
+
+    let rows = db.get_osv_sync_statuses().unwrap();
+    assert_eq!(
+        rows[0].last_synced_at.as_deref(),
+        Some("2026-11-08 02:00:00"),
+        "a pass that verified nothing must not look like a sync"
+    );
+    assert_eq!(
+        rows[0].error.as_deref(),
+        Some("could not reach the advisory host")
+    );
+    let r = advisory_sync(&db);
+    assert_eq!(r.state, AdvisorySyncState::Failed);
+    assert_eq!(r.synced_at.as_deref(), Some("2026-11-08 02:00:00"));
+    assert!(
+        crate::osv::sync::needs_sync(&db, crate::osv::sync::DEFAULT_SYNC_MAX_AGE_HOURS).unwrap(),
+        "an unverified mirror keeps being retried"
+    );
+}
+
+/// The age a failed state reports is the oldest verified sync among the
+/// ecosystems the inventory needs, the failing one included.
+#[test]
+fn a_failed_check_reports_the_age_of_the_data_it_still_serves() {
+    let r = classify(
+        &req(&["crates.io", "npm"]),
+        &[
+            row("crates.io", Some("2026-10-12 06:00:00"), None),
+            row("npm", Some("2026-10-09 11:00:00"), Some("could not check")),
+        ],
+        now(),
+        false,
+    );
+    assert_eq!(r.state, AdvisorySyncState::Failed);
+    assert_eq!(r.error.as_deref(), Some("npm: could not check"));
+    assert_eq!(
+        r.synced_at.as_deref(),
+        Some("2026-10-09 11:00:00"),
+        "the failing ecosystem's last verified sync is the floor"
+    );
+}
+
+/// A failing ecosystem that never had a verified sync has no data to date:
+/// another ecosystem's fresh sync must not be shown as its age.
+#[test]
+fn a_failed_check_with_no_verified_data_claims_no_age() {
+    let r = classify(
+        &req(&["crates.io", "npm"]),
+        &[
+            row("crates.io", Some("2026-10-12 06:00:00"), None),
+            row("npm", None, Some("offline on first run")),
+        ],
+        now(),
+        false,
+    );
+    assert_eq!(r.state, AdvisorySyncState::Failed);
+    assert_eq!(r.synced_at, None);
+}

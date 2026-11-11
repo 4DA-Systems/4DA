@@ -6,7 +6,12 @@ use std::sync::Arc;
 use rusqlite::{params, Result as SqliteResult};
 
 use super::Database;
-use crate::osv::types::{StoredAdvisory, SyncStatus};
+use crate::osv::types::StoredAdvisory;
+
+// The per-ecosystem sync status (`osv_sync_status`): what the last sync pass
+// verified, and when. Split out when this file neared the size limit.
+#[path = "osv_sync_status.rs"]
+mod sync_status;
 
 // ============================================================================
 // Database Operations
@@ -280,45 +285,6 @@ impl Database {
              GROUP BY ecosystem ORDER BY ecosystem",
         )?;
         let rows = stmt.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))?;
-        Ok(rows.filter_map(|r| r.ok()).collect())
-    }
-
-    /// Update the sync status for an ecosystem.
-    pub fn update_osv_sync_status(
-        &self,
-        ecosystem: &str,
-        advisory_count: i64,
-        error: Option<&str>,
-    ) -> SqliteResult<()> {
-        let conn = self.conn.lock();
-        conn.execute(
-            "INSERT INTO osv_sync_status (ecosystem, last_synced_at, advisory_count, error)
-             VALUES (?1, datetime('now'), ?2, ?3)
-             ON CONFLICT(ecosystem) DO UPDATE SET
-                last_synced_at = datetime('now'),
-                advisory_count = ?2,
-                error = ?3",
-            params![ecosystem, advisory_count, error],
-        )?;
-        Ok(())
-    }
-
-    /// Get sync status for all ecosystems.
-    pub fn get_osv_sync_statuses(&self) -> SqliteResult<Vec<SyncStatus>> {
-        let conn = self.read_conn();
-        let mut stmt = conn.prepare(
-            "SELECT ecosystem, last_synced_at, advisory_count, error
-             FROM osv_sync_status
-             ORDER BY ecosystem",
-        )?;
-        let rows = stmt.query_map([], |row| {
-            Ok(SyncStatus {
-                ecosystem: row.get(0)?,
-                last_synced_at: row.get(1)?,
-                advisory_count: row.get(2)?,
-                error: row.get(3)?,
-            })
-        })?;
         Ok(rows.filter_map(|r| r.ok()).collect())
     }
 

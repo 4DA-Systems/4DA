@@ -2,16 +2,20 @@
 //
 // Signal Lane 1, "Your stack": the deterministic stack-change stream
 // (AD-054). The backend orders it (security, yanked, breaking, minor) and
-// says whether any dependency was read at all. Five honest states: loading,
+// says whether any dependency was read at all. Six honest states: loading,
 // still working (the IPC wait ran out but the backend is still computing),
-// error, cold start (no lockfile read: onboarding, doctrine rule 6) and
-// "nothing changed" (lockfiles read, nothing to report).
+// error, cold start (no lockfile read: onboarding, doctrine rule 6),
+// unchecked (nothing to list, but the advisory check behind "no open
+// advisory" is not current, so that is not said) and "nothing changed"
+// (lockfiles read, advisories checked, nothing to report).
 
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { EvidenceFeed } from '../../../src-tauri/bindings/bindings/EvidenceFeed';
 import { cmd, CommandTimeoutError } from '../../lib/commands';
+import { preemptionNegative } from '../../lib/negative-readiness';
 import { useAppStore } from '../../store';
+import { PreemptionAdvisoryNotice, needsAdvisoryLine } from '../preemption/PreemptionAdvisoryNotice';
 import { StackChangeCard } from './StackChangeCard';
 import { STACK_LANE_CAP, laneState, releasesWithheld } from './stack-change';
 
@@ -90,9 +94,20 @@ export const StackChangeLane = memo(function StackChangeLane() {
     return () => { request.current += 1; };
   }, [fetchFeed]);
   const refetch = useCallback(() => fetchFeed(true), [fetchFeed]);
+  // Ask again without blanking the lane: what the advisory notice does while
+  // a check runs and after "Check now". Not forced, so it never starts a
+  // second compute; the backend recomputes by itself once the data is ready.
+  const reaskQuietly = useCallback(() => {
+    const id = request.current;
+    cmd('get_stack_changes', { force: false })
+      .then((feed) => { if (id === request.current) setLoad({ status: 'ready', feed }); })
+      .catch(() => { /* keep what is shown; Refresh reports a real failure */ });
+  }, []);
 
   const feed = load.status === 'ready' ? load.feed : null;
   const state = feed ? laneState(feed) : null;
+  // The same readiness rule as Preemption's empty worklist.
+  const advisories = feed ? preemptionNegative(feed.advisory_sync) : null;
   const items = feed?.items ?? [];
   const visible = showAll ? items : items.slice(0, STACK_LANE_CAP);
   const busy = load.status === 'loading' || load.status === 'working';
@@ -138,6 +153,18 @@ export const StackChangeLane = memo(function StackChangeLane() {
 
       {state === 'cold_start' && <ColdStart onScanned={refetch} />}
 
+      {/* Nothing to list, and the advisory check is not current: say what the
+          check is doing instead of "no open advisory". */}
+      {state === 'unchecked' && advisories && (
+        <div data-testid="stack-lane-unchecked">
+          {advisories.kind === 'assert' || advisories.kind === 'silent' ? (
+            <p className="text-xs text-text-muted" role="status">{t('signals.stack.uncheckedBody')}</p>
+          ) : (
+            <PreemptionAdvisoryNotice variant="inline" negative={advisories} onRecheck={reaskQuietly} />
+          )}
+        </div>
+      )}
+
       {state === 'empty' && feed && (
         <div data-testid="stack-lane-empty">
           <p className="text-sm text-text-primary font-medium">{t('signals.stack.emptyTitle')}</p>
@@ -149,6 +176,11 @@ export const StackChangeLane = memo(function StackChangeLane() {
 
       {state === 'items' && (
         <>
+          {advisories && needsAdvisoryLine(advisories) && (
+            <div className="mb-3">
+              <PreemptionAdvisoryNotice variant="line" negative={advisories} onRecheck={reaskQuietly} />
+            </div>
+          )}
           <ul id="signal-lane-stack-list" aria-label={t('signals.stack.listLabel')} className="space-y-2">
             {visible.map((item) => (
               <li key={item.id}><StackChangeCard item={item} /></li>

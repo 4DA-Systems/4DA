@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { describe, it, expect } from 'vitest';
+import type { AdvisorySync } from '../../../src-tauri/bindings/bindings/AdvisorySync';
 import type { EvidenceItem } from '../../../src-tauri/bindings/bindings/EvidenceItem';
 import { commandsOf, laneState, primaryLink, releasesWithheld, stackChangeOf, versionLine } from './stack-change';
 
@@ -7,6 +8,10 @@ const base = {
   kind: 'alert', title: 't', explanation: '', confidence: { value: 0.9, provenance: 'checklist' }, urgency: 'watch',
   affected_projects: [], affected_deps: ['serde'], lens_hints: {}, created_at: 0,
 } as const;
+
+const READY: AdvisorySync = {
+  state: 'ready', ecosystems: 1, synced_at: '2026-11-09 04:00:00', error: null, in_flight: false, skipped_temp: 0,
+};
 
 function item(id: string, extra: Partial<EvidenceItem> = {}): EvidenceItem {
   return { ...base, id, evidence: [], suggested_actions: [], ...extra } as unknown as EvidenceItem;
@@ -50,11 +55,26 @@ describe('stack-change item contract', () => {
   });
 
   it('tells cold start (nothing read) from "nothing changed"', () => {
-    expect(laneState({ items: [], total_tracked: 0 })).toBe('cold_start');
-    expect(laneState({ items: [], total_tracked: 40 })).toBe('empty');
-    expect(laneState({ items: [], total_tracked: null })).toBe('empty');
-    expect(laneState({ items: [item('stack-change:minor:npm:x@1.2.0')], total_tracked: 40 })).toBe('items');
+    expect(laneState({ items: [], total_tracked: 0, advisory_sync: READY })).toBe('cold_start');
+    expect(laneState({ items: [], total_tracked: 40, advisory_sync: READY })).toBe('empty');
+    expect(laneState({ items: [], total_tracked: null, advisory_sync: READY })).toBe('empty');
+    expect(laneState({ items: [item('stack-change:minor:npm:x@1.2.0')], total_tracked: 40, advisory_sync: READY })).toBe('items');
     expect(releasesWithheld({ tier_scope: 'free_floor' })).toBe(true);
     expect(releasesWithheld({ tier_scope: 'full' })).toBe(false);
+  });
+
+  // 2026-11-11: the empty lane said "No open advisory" from the item count
+  // alone, with the advisory check failed, out of date or never run.
+  it('an empty lane is "nothing changed" only when the advisories were checked', () => {
+    for (const state of ['failed', 'stale', 'syncing', 'matching', 'not_started', 'no_inventory'] as const) {
+      expect(laneState({ items: [], total_tracked: 40, advisory_sync: { ...READY, state } })).toBe('unchecked');
+    }
+    // A feed without the field (an older backend) makes no claim either.
+    expect(laneState({ items: [], total_tracked: 40 })).toBe('unchecked');
+    expect(laneState({ items: [], total_tracked: 40, advisory_sync: null })).toBe('unchecked');
+    // Items always render; nothing read yet is still onboarding.
+    const failed = { ...READY, state: 'failed' as const };
+    expect(laneState({ items: [item('stack-change:minor:npm:x@1.2.0')], total_tracked: 40, advisory_sync: failed })).toBe('items');
+    expect(laneState({ items: [], total_tracked: 0, advisory_sync: failed })).toBe('cold_start');
   });
 });

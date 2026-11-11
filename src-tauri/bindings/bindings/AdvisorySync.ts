@@ -11,8 +11,9 @@ export type AdvisorySync = { state: AdvisorySyncState,
  */
 ecosystems: number, 
 /**
- * Oldest last-sync time among those ecosystems (UTC,
- * `YYYY-MM-DD HH:MM:SS`): the freshness floor of the advisory data.
+ * Oldest last VERIFIED sync among those ecosystems (UTC,
+ * `YYYY-MM-DD HH:MM:SS`): the freshness floor of the advisory data,
+ * whatever the state. `None` when an ecosystem has no verified data.
  */
 synced_at: string | null, 
 /**

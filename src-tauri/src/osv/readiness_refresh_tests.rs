@@ -271,3 +271,55 @@ async fn the_follow_up_runs_inside_the_gate_only_after_a_sync() {
     assert!(matches!(out, Outcome::NotDue));
     assert!(!followed.load(Ordering::SeqCst), "no sync, no follow-up");
 }
+
+fn sync_result(stored: usize, errors: &[&str]) -> SyncResult {
+    SyncResult {
+        ecosystems_synced: Vec::new(),
+        advisories_stored: stored,
+        advisories_matched: 0,
+        duration_ms: 0,
+        errors: errors.iter().map(|e| (*e).to_string()).collect(),
+    }
+}
+
+/// An offline retry that verified nothing and read nothing does not trigger a
+/// feed recompute; anything that changed the mirror, or a clean sync, does.
+#[test]
+fn only_a_sync_that_changed_the_mirror_recomputes_the_feed() {
+    assert!(
+        feed_inputs_changed(&sync_result(0, &[])),
+        "clean, nothing applies"
+    );
+    assert!(feed_inputs_changed(&sync_result(12, &[])));
+    assert!(
+        feed_inputs_changed(&sync_result(12, &["npm: could not check"])),
+        "served from the archive on disk and stored rows"
+    );
+    assert!(
+        !feed_inputs_changed(&sync_result(0, &["npm: could not check"])),
+        "an unverified retry over an archive already in the mirror"
+    );
+}
+
+/// An unverified mirror stays due: the scheduler retries it (after the
+/// back-off), and "Check now" retries it at once.
+#[test]
+fn an_unverified_mirror_stays_due() {
+    let db = crate::test_utils::test_db();
+    db.store_dependency("/p", "serde", Some("1.0.200"), "rust", false, None)
+        .unwrap();
+    db.update_osv_sync_status("crates.io", 3, None).unwrap();
+    db.set_kv(INVENTORY_KV_KEY, &inventory_fingerprint(&db).unwrap())
+        .unwrap();
+    let now = chrono::Utc::now().timestamp();
+    let b = Backoff::new();
+    assert!(!due_at(&db, &b, true, now), "verified and fresh");
+
+    db.record_osv_sync_unverified("crates.io", Some(3), "could not check", None)
+        .unwrap();
+    assert!(due_at(&db, &b, true, now), "unverified: due again");
+    b.record(false, now);
+    assert!(!due_at(&db, &b, true, now + 60), "inside the back-off");
+    assert!(due_at(&db, &b, true, now + 5 * 60), "retried after it");
+    assert!(due_at(&db, &b, false, now + 60), "Check now does not wait");
+}
