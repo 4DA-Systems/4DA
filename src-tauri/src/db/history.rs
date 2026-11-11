@@ -103,8 +103,9 @@ impl Database {
         let conn = self.conn.lock();
         let tx = conn.unchecked_transaction()?;
 
+        let keep_saved = keep_saved_clause(&tx)?;
         let deleted_items: usize = tx.execute(
-            "DELETE FROM source_items WHERE last_seen < date('now', ?1)",
+            &format!("DELETE FROM source_items WHERE last_seen < date('now', ?1){keep_saved}"),
             params![format!("-{} days", retention_days)],
         )?;
 
@@ -248,7 +249,10 @@ impl Database {
     /// last shared a run with would make eviction unstable and unauditable.
     /// What an item IS worth (evidence) decides what is forgotten; how it
     /// displays (rank) never does.
-    fn noise_prune_predicate(noise_threshold: f64, min_age_days: i64) -> String {
+    ///
+    /// **A saved item is never noise** (`keep_saved`, from
+    /// [`keep_saved_clause`]): the user's own save outranks any score.
+    fn noise_prune_predicate(noise_threshold: f64, min_age_days: i64, keep_saved: &str) -> String {
         let current_version = crate::scoring::PIPELINE_VERSION;
         format!(
             "relevance_score IS NOT NULL \
@@ -257,7 +261,7 @@ impl Database {
                AND created_at < datetime('now', '-{min_age_days} days') \
                AND cve_ids IS NULL \
                AND (content_type IS NULL \
-                    OR content_type NOT IN ('security_advisory', 'breaking_change'))"
+                    OR content_type NOT IN ('security_advisory', 'breaking_change')){keep_saved}"
         )
     }
 
@@ -270,7 +274,7 @@ impl Database {
         let conn = self.conn.lock();
         let sql = format!(
             "SELECT COUNT(*) FROM source_items WHERE {}",
-            Self::noise_prune_predicate(noise_threshold, min_age_days)
+            Self::noise_prune_predicate(noise_threshold, min_age_days, keep_saved_clause(&conn)?)
         );
         conn.query_row(&sql, [], |r| r.get(0))
     }
@@ -289,7 +293,7 @@ impl Database {
              FROM source_items WHERE {}
              ORDER BY relevance_score ASC, created_at ASC
              LIMIT ?1",
-            Self::noise_prune_predicate(noise_threshold, min_age_days)
+            Self::noise_prune_predicate(noise_threshold, min_age_days, keep_saved_clause(&conn)?)
         );
         let mut stmt = conn.prepare(&sql)?;
         let rows = stmt.query_map(params![limit as i64], |row| {
@@ -324,7 +328,7 @@ impl Database {
                      ORDER BY relevance_score ASC, created_at ASC
                      LIMIT ?1
                  )",
-                Self::noise_prune_predicate(noise_threshold, min_age_days)
+                Self::noise_prune_predicate(noise_threshold, min_age_days, keep_saved_clause(&tx)?)
             ),
             params![max_delete as i64],
         )?;
@@ -580,8 +584,9 @@ impl Database {
         // microseconds ago (last_seen < now) — a time-of-day race. `date('now',
         // '-N days')` means "older than midnight N days ago", so today's items
         // always survive a 0-day cleanup and the boundary is deterministic.
+        let keep_saved = keep_saved_clause(&conn)?;
         let deleted = conn.execute(
-            "DELETE FROM source_items WHERE last_seen < date('now', ?1)",
+            &format!("DELETE FROM source_items WHERE last_seen < date('now', ?1){keep_saved}"),
             params![format!("-{} days", max_age_days)],
         )?;
         if let Err(e) = conn.execute(
@@ -638,9 +643,42 @@ impl Database {
     }
 }
 
+/// The SQL that keeps the user's saved items out of a `source_items` prune:
+/// appended to a prune's `WHERE`, it excludes every item with a `save`.
+///
+/// The Saved list is `interactions JOIN source_items` on a `save` row
+/// (`content_commands::get_saved_items`), so a prune that deletes the item
+/// takes it off the user's own list with no trace. All three prunes here did
+/// (audit 2026-11-11): a save older than the retention window was gone on the
+/// next maintenance run. The item's other rows (embedding, feedback,
+/// analyses, search postings) are swept only as orphans of a deleted item, so
+/// keeping the item keeps them.
+///
+/// `interactions` is ACE-owned (`ace::db::migrate` creates it on its own
+/// schedule). Where it does not exist yet nothing has been saved and the
+/// clause is empty; if that cannot be read, the prune fails rather than
+/// deleting what it could not check.
+fn keep_saved_clause(conn: &rusqlite::Connection) -> SqliteResult<&'static str> {
+    let has_saves: bool = conn.query_row(
+        "SELECT EXISTS (SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'interactions')",
+        [],
+        |row| row.get(0),
+    )?;
+    Ok(if has_saves {
+        " AND NOT EXISTS (SELECT 1 FROM interactions saved \
+                           WHERE saved.item_id = source_items.id AND saved.action_type = 'save')"
+    } else {
+        ""
+    })
+}
+
 #[path = "history_vacuum.rs"]
 mod vacuum;
 use vacuum::vacuum_conn_if_reclaimable;
+
+#[cfg(test)]
+#[path = "history_saved_tests.rs"]
+mod saved_tests;
 
 #[cfg(test)]
 mod tests {
