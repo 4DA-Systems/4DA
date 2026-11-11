@@ -3,6 +3,7 @@ import { useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { cmd } from '../../lib/commands';
+import { readableError } from '../../utils/error-messages';
 import type { TasteProfileSummary } from '../../types/calibration';
 
 interface CalibrationSummaryProps {
@@ -37,7 +38,7 @@ export function CalibrationSummary({ summary, onContinue }: CalibrationSummaryPr
       setLiked((prev) => prev.filter((i) => i !== topic));
       setGuessed((prev) => prev.filter((i) => i !== topic));
     } catch (e) {
-      setSaveError(t('onboarding.calib.saveFailed', { error: String(e) }));
+      setSaveError(t('onboarding.calib.saveFailed', { error: readableError(e) }));
     } finally {
       setSaving(false);
     }
@@ -61,7 +62,7 @@ export function CalibrationSummary({ summary, onContinue }: CalibrationSummaryPr
       setDraft('');
     } catch (e) {
       // The draft is kept so the user can retry without retyping.
-      setSaveError(t('onboarding.calib.saveFailed', { error: String(e) }));
+      setSaveError(t('onboarding.calib.saveFailed', { error: readableError(e) }));
     } finally {
       setSaving(false);
     }

@@ -6,7 +6,7 @@ import { memo, useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLicense } from '../../hooks/use-license';
 import { cmd } from '../../lib/commands';
-import { isSignalGateError, translateError } from '../../utils/error-messages';
+import { isSignalGateError, rawErrorText, translateError } from '../../utils/error-messages';
 import { SignalUpgradeCTA } from '../SignalUpgradeCTA';
 import { StandingQueryRow } from './StandingQueryRow';
 import type { StandingQuery, StandingQuerySuggestion } from '../../lib/commands';
@@ -19,7 +19,7 @@ const MAX_ACTIVE_QUERIES = 10;
  * everything else goes through the shared translateError patterns.
  */
 function describeCreateError(e: unknown, t: (key: string) => string): string {
-  const raw = e instanceof Error ? e.message : String(e ?? '');
+  const raw = rawErrorText(e);
   if (/maximum of 10/i.test(raw)) return t('settings.standingQueries.maxReached');
   if (/no meaningful keywords|cannot be empty/i.test(raw)) return t('settings.standingQueries.errorNoKeywords');
   return translateError(e);

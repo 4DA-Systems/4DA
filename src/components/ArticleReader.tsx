@@ -2,6 +2,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../lib/commands';
+import { readableError } from '../utils/error-messages';
 import type { ItemContent } from '../types';
 import { getContentTypeBadge } from '../config/content-types';
 
@@ -31,7 +32,7 @@ export function ArticleReader({ itemId, url, contentType }: ArticleReaderProps) 
         setIsOpen(true);
       }
     } catch (e) {
-      setError(String(e));
+      setError(readableError(e));
     } finally {
       setLoading(false);
     }

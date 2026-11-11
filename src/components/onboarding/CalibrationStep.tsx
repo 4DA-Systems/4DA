@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../../lib/commands';
 import { safeListen } from '../../lib/tauri-events';
+import { readableError } from '../../utils/error-messages';
 import { useAppStore } from '../../store';
 import type { CalibrationResult, Recommendation } from '../../types/calibration';
 import { SemanticSearchSummaryLine } from './SemanticSearchSummaryLine';
@@ -58,7 +59,7 @@ export function CalibrationStep({ isAnimating, finishing = false, onComplete, on
     try {
       setResult(await cmd('run_calibration'));
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      setError(readableError(e));
     } finally {
       setLoading(false);
     }
@@ -113,7 +114,7 @@ export function CalibrationStep({ isAnimating, finishing = false, onComplete, on
           setTimeout(() => setPullProgress(null), 1500);
           await runCalibration();
         } catch (e) {
-          setError(t('calibration.onboarding.pullFailed', { error: e instanceof Error ? e.message : String(e) }));
+          setError(t('calibration.onboarding.pullFailed', { error: readableError(e) }));
           setActionInProgress(null);
           setPullProgress(null);
         }
@@ -130,7 +131,7 @@ export function CalibrationStep({ isAnimating, finishing = false, onComplete, on
             setNotice(t('calibration.onboarding.noStacksDetected'));
           }
         } catch (e) {
-          setError(t('calibration.onboarding.detectFailed', { error: e instanceof Error ? e.message : String(e) }));
+          setError(t('calibration.onboarding.detectFailed', { error: readableError(e) }));
         } finally {
           setActionInProgress(null);
         }

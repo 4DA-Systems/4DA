@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { cmd } from '../lib/commands';
 import { reportError } from '../lib/error-reporter';
 import { DocumentDetail } from './documents/DocumentDetail';
+import { readableError } from '../utils/error-messages';
 import { formatLocalDate, formatRelativeDate } from '../utils/format-date';
 import type {
   IndexedDocument,
@@ -73,7 +74,7 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
       loaded.current = true;
     } catch (error) {
       reportError('IndexedDocumentsPanel.load', error);
-      onStatusChange?.(`Error loading documents: ${error}`);
+      onStatusChange?.(`Error loading documents: ${readableError(error)}`);
     } finally {
       setLoading(false);
     }
@@ -94,7 +95,7 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
       setSearchResults(result.results);
     } catch (error) {
       reportError('IndexedDocumentsPanel.search', error);
-      onStatusChange?.(`Search error: ${error}`);
+      onStatusChange?.(`Search error: ${readableError(error)}`);
     } finally {
       setLoading(false);
     }
@@ -110,7 +111,7 @@ export function IndexedDocumentsPanel({ onStatusChange }: IndexedDocumentsPanelP
       setSelectedDoc(result);
     } catch (error) {
       reportError('IndexedDocumentsPanel.loadDocument', error);
-      onStatusChange?.(`Error loading document: ${error}`);
+      onStatusChange?.(`Error loading document: ${readableError(error)}`);
     } finally {
       setLoading(false);
     }

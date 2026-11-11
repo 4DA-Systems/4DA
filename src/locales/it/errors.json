@@ -30,6 +30,7 @@
   "errorMsg.database": "Errore del database. Prova a riavviare l'app.",
   "errorMsg.embedding": "Servizio di embedding non disponibile. Verifica che Ollama sia in esecuzione.",
   "errorMsg.fallback": "Qualcosa è andato storto. Riprova.",
+  "errorMsg.signalRequired": "Questa funzione fa parte di 4DA Signal. Passa a Signal per sbloccarla.",
   "errorMsg.fileNotFound": "File non trovato. Potrebbe essere stato spostato o eliminato.",
   "errorMsg.git": "Operazione Git non riuscita. Controlla il percorso del repository.",
   "errorMsg.ipc": "Errore di comunicazione dell'app. Riavvia l'app.",

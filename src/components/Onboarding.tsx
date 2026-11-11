@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { cmd } from '../lib/commands';
 import { runDiscovery } from '../lib/discovery';
 import { tabbableIn, trapTabKey } from '../lib/focus-trap';
+import { readableError } from '../utils/error-messages';
 import { useAppVersion } from '../hooks/use-app-version';
 
 import { LanguageSwitcher } from './LanguageSwitcher';
@@ -142,7 +143,7 @@ export function Onboarding({ onComplete }: OnboardingProps) {
     }
     if (!persisted) {
       console.error('Could not save onboarding completion', lastError);
-      setCompletionError(t('onboarding.completion.saveFailed', { error: String(lastError) }));
+      setCompletionError(t('onboarding.completion.saveFailed', { error: readableError(lastError) }));
       setFinishing(false);
       return;
     }

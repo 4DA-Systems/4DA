@@ -2,7 +2,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../../lib/commands';
-import { budgetRefusalMessage } from '../../utils/error-messages';
+import { readableError } from '../../utils/error-messages';
 
 type Verdict = 'Pass' | 'PassWithWarnings' | 'Fail';
 
@@ -37,7 +37,7 @@ export function ModelEvalSection() {
       const summary = await cmd('run_model_eval');
       setResult(summary as unknown as EvalResult);
     } catch (e) {
-      setError(budgetRefusalMessage(e) ?? String(e));
+      setError(readableError(e));
     } finally {
       setRunning(false);
     }

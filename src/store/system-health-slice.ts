@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import type { StateCreator } from 'zustand';
 import { cmd } from '../lib/commands';
+import { readableError } from '../utils/error-messages';
 import type { AppStore, SystemHealthSlice } from './types';
 
 export const createSystemHealthSlice: StateCreator<AppStore, [], [], SystemHealthSlice> = (set, get) => ({
@@ -65,7 +66,7 @@ export const createSystemHealthSlice: StateCreator<AppStore, [], [], SystemHealt
       setSettingsStatus(`Found ${result.count} anomalies`);
       setTimeout(() => set({ settingsStatus: '' }), 3000);
     } catch (error) {
-      setSettingsStatus(`Error: ${error}`);
+      setSettingsStatus(`Error: ${readableError(error)}`);
     }
   },
 
@@ -77,7 +78,7 @@ export const createSystemHealthSlice: StateCreator<AppStore, [], [], SystemHealt
       setTimeout(() => set({ settingsStatus: '' }), 2000);
       await loadSystemHealth();
     } catch (error) {
-      setSettingsStatus(`Error: ${error}`);
+      setSettingsStatus(`Error: ${readableError(error)}`);
     }
   },
 
@@ -91,7 +92,7 @@ export const createSystemHealthSlice: StateCreator<AppStore, [], [], SystemHealt
       });
       set({ similarTopicResults: result.results || [] });
     } catch (error) {
-      setSettingsStatus(`Error: ${error}`);
+      setSettingsStatus(`Error: ${readableError(error)}`);
     }
   },
 
@@ -102,7 +103,7 @@ export const createSystemHealthSlice: StateCreator<AppStore, [], [], SystemHealt
       setSettingsStatus('Watcher state saved');
       setTimeout(() => set({ settingsStatus: '' }), 2000);
     } catch (error) {
-      setSettingsStatus(`Error: ${error}`);
+      setSettingsStatus(`Error: ${readableError(error)}`);
     }
   },
 });

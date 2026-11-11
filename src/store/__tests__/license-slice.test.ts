@@ -110,6 +110,23 @@ describe('license-slice', () => {
       expect(useAppStore.getState().licenseLoadError).toBe('IPC timeout');
     });
 
+    it('keeps a readable detail when the tier probe rejects with a structured error object', async () => {
+      vi.mocked(invoke).mockRejectedValueOnce({
+        code: 'E1001',
+        title: 'Component not ready',
+        detail: 'Settings manager is still initializing.',
+        remediation: ['Wait a moment for 4DA to finish starting up.', 'If this persists, restart the application.'],
+        severity: 'warning',
+      });
+
+      await useAppStore.getState().loadLicense();
+
+      const detail = useAppStore.getState().licenseLoadError;
+      expect(detail).toContain('Settings manager is still initializing.');
+      expect(detail).not.toBe('Unknown error');
+      expect(detail).not.toContain('[object');
+    });
+
     it('does not confidently claim Free when the first-ever load fails', async () => {
       // Fresh boot: tier defaults to 'free' but licenseLoaded is still false, so the UI
       // treats this as UNVERIFIED (badge "?"), not a confirmed Free tier.
@@ -185,6 +202,35 @@ describe('license-slice', () => {
       expect(result.reason).toBe('Network timeout');
       expect(useAppStore.getState().licenseLoading).toBe(false);
     });
+
+    // activate_license returns Result<_, FourDaError>: a refusal (rate limit,
+    // empty key, bad signature) rejects with the catch-all OBJECT (error.rs).
+    // Anything that was not an Error or a string became "Unknown error".
+    it('returns the backend reason when the rejection is a structured error object', async () => {
+      vi.mocked(invoke).mockRejectedValueOnce({
+        code: 'E9999',
+        title: 'Unexpected error',
+        detail: 'Too many activation attempts. Please wait a minute before trying again.',
+        remediation: ['Try the operation again.', 'If this persists, restart 4DA.'],
+        severity: 'error',
+      });
+
+      const result = await useAppStore.getState().activateLicense('KEY');
+
+      expect(result.ok).toBe(false);
+      expect(result.reason).toBe('Too many activation attempts. Please wait a minute before trying again.');
+      expect(result.reason).not.toBe('Unknown error');
+      expect(useAppStore.getState().licenseLoading).toBe(false);
+    });
+
+    it('leaves the reason unset when the backend gave none, so the UI shows its own line', async () => {
+      vi.mocked(invoke).mockResolvedValueOnce({ success: false });
+
+      const result = await useAppStore.getState().activateLicense('KEY');
+
+      expect(result.ok).toBe(false);
+      expect(result.reason).toBeUndefined();
+    });
   });
 
   // ---------------------------------------------------------------------------
@@ -238,12 +284,32 @@ describe('license-slice', () => {
       expect(useAppStore.getState().trialStatus!.days_remaining).toBe(14);
     });
 
-    it('returns false when trial start fails', async () => {
-      vi.mocked(invoke).mockResolvedValueOnce({ success: false });
+    // The trial starts by itself on first launch, so a manual start is nearly
+    // always refused (settings_commands_license.rs `start_trial`). The refusal
+    // re-reads the real status so no paywall keeps offering it.
+    it('returns false and re-reads the trial status when the backend refuses', async () => {
+      const used = { active: false, days_remaining: 0, started_at: '2026-09-01T00:00:00Z', has_license: false };
+      vi.mocked(invoke)
+        .mockResolvedValueOnce({ success: false, reason: 'Trial already started', active: false, days_remaining: 0 })
+        .mockResolvedValueOnce(used);
 
       const result = await useAppStore.getState().startTrial();
 
       expect(result).toBe(false);
+      expect(invoke).toHaveBeenNthCalledWith(1, 'start_trial', {});
+      expect(invoke).toHaveBeenNthCalledWith(2, 'get_trial_status', {});
+      expect(useAppStore.getState().trialStatus).toEqual(used);
+    });
+
+    it('a refused start with an unreadable status leaves the trial unknown, not on offer', async () => {
+      vi.mocked(invoke)
+        .mockResolvedValueOnce({ success: false })
+        .mockRejectedValueOnce(new Error('fail'));
+
+      const result = await useAppStore.getState().startTrial();
+
+      expect(result).toBe(false);
+      expect(useAppStore.getState().trialStatus).toBeNull();
     });
 
     it('returns false on error', async () => {
