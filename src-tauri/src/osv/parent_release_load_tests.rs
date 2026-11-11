@@ -90,7 +90,9 @@ fn the_walk_asks_for_the_parents_that_pin_a_vulnerable_copy() {
 #[test]
 fn the_plan_names_one_express_release_on_every_row() {
     let (db, _project) = nodegoat();
-    let items = crate::evidence::build_upgrade_plan(&db).items;
+    let items = crate::evidence::build_upgrade_plan(&db)
+        .expect("upgrade plan")
+        .items;
     let find = |pkg: &str| {
         items
             .iter()

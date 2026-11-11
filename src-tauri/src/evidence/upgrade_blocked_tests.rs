@@ -69,7 +69,7 @@ fn crates_row(db: &Database, title: &str) {
 }
 
 fn built(db: &Database) -> (Vec<EvidenceItem>, Vec<UpgradeStep>) {
-    let plan = crate::evidence::build_upgrade_plan(db);
+    let plan = crate::evidence::build_upgrade_plan(db).expect("upgrade plan");
     assert_eq!(plan.drops, 0, "no plan item may fail validation");
     (plan.items, plan.steps)
 }

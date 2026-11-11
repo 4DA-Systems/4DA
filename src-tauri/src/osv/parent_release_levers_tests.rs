@@ -153,7 +153,9 @@ fn item<'a>(items: &'a [EvidenceItem], pkg: &str) -> &'a EvidenceItem {
 #[test]
 fn one_vitest_release_on_every_row_and_surface() {
     let (db, project) = vitest();
-    let items = crate::evidence::build_upgrade_plan(&db).items;
+    let items = crate::evidence::build_upgrade_plan(&db)
+        .expect("upgrade plan")
+        .items;
     let own = item(&items, "vitest");
     assert!(own.title.contains(">= 4.1.11"), "{}", own.title);
     let mocker = item(&items, "@vitest/mocker");

@@ -1205,7 +1205,7 @@ fn persist_and_read_upgrade_plan_snapshot_round_trips() {
     db.store_dependency("/proj/a", "lodash", Some("4.17.20"), "npm", false, None)
         .unwrap();
     advisory(&db, "GHSA-snap-1", "lodash", "npm", "4.17.21", 7.5);
-    let built = super::build_upgrade_plan(&db);
+    let built = super::build_upgrade_plan(&db).expect("upgrade plan");
     let plan = built.items.clone();
     assert_eq!(plan.len(), 1);
     persist_upgrade_plan(&db, &plan, &built.steps, 0, None);
@@ -1434,7 +1434,7 @@ fn a_deprecated_fix_release_is_never_the_plan_target() {
         r#"["4.17.21","4.17.23","4.18.0","4.18.1"]"#,
         r#"["4.18.0"]"#,
     );
-    let built = super::build_upgrade_plan(&db);
+    let built = super::build_upgrade_plan(&db).expect("upgrade plan");
     assert_eq!(built.items.len(), 1);
     assert!(
         built.items[0].title.contains(">= 4.18.1"),
@@ -1458,7 +1458,7 @@ fn every_fixing_release_withdrawn_reads_no_installable_fix() {
         r#"["0.3.16","0.3.17"]"#,
         r#"["0.3.17"]"#,
     );
-    let built = super::build_upgrade_plan(&db);
+    let built = super::build_upgrade_plan(&db).expect("upgrade plan");
     assert_eq!(built.items.len(), 1);
     let title = &built.items[0].title;
     assert!(
@@ -1479,4 +1479,34 @@ fn clamp_title_cuts_at_a_word_with_an_ellipsis() {
     assert_eq!(super::clamp_title("short.".to_string()), "short");
     let t = super::clamp_title("x".repeat(300));
     assert!(t.len() <= 120 && t.ends_with('\u{2026}'), "{t}");
+}
+
+/// Audit 2026-11-11: a matcher that cannot READ is an error, never an empty
+/// plan. The empty plan it used to return was persisted over the last good
+/// snapshot, so `4da plan` and the MCP `upgrade_planner` answered "evaluated,
+/// nothing to do" for a database nobody had read.
+#[test]
+fn a_matcher_that_cannot_read_is_an_error_not_an_empty_plan() {
+    let db = test_db();
+    db.store_dependency("/proj/a", "lodash", Some("4.17.20"), "npm", false, None)
+        .unwrap();
+    advisory(&db, "GHSA-unread-1", "lodash", "npm", "4.17.21", 7.5);
+    assert_eq!(
+        super::build_upgrade_plan(&db)
+            .expect("a readable mirror")
+            .items
+            .len(),
+        1
+    );
+
+    // The advisory mirror becomes unreadable (a damaged or half-migrated
+    // database).
+    db.conn
+        .lock()
+        .execute_batch("DROP TABLE osv_advisories")
+        .unwrap();
+    assert!(
+        super::build_upgrade_plan(&db).is_err(),
+        "an unreadable advisory mirror must not read as a plan with nothing to do"
+    );
 }

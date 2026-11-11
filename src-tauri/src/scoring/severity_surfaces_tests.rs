@@ -116,6 +116,7 @@ fn five_tiers(
         crate::evidence::Urgency::Watch => "low",
     };
     let plan = crate::evidence::build_upgrade_plan(db)
+        .expect("upgrade plan")
         .items
         .iter()
         .find(|i| i.affected_deps.iter().any(|d| d == package))
@@ -316,7 +317,7 @@ fn maintenance_notices_are_never_worded_as_vulnerabilities() {
         assert_eq!(verdict.tier, None);
     }
     // The plan: one Watch fold naming each notice as what it is.
-    let plan = crate::evidence::build_upgrade_plan(&db);
+    let plan = crate::evidence::build_upgrade_plan(&db).expect("upgrade plan");
     assert_eq!(
         plan.items.len(),
         1,

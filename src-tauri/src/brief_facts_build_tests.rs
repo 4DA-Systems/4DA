@@ -237,7 +237,9 @@ fn the_brief_and_the_plan_name_the_same_command() {
             return;
         };
         seed_copy(&db, &project);
-        let plan = crate::evidence::build_upgrade_plan(&db).items;
+        let plan = crate::evidence::build_upgrade_plan(&db)
+            .expect("upgrade plan")
+            .items;
         let row = plan
             .iter()
             .find(|i| i.title.contains("minimist"))
@@ -432,5 +434,50 @@ fn the_walk_climbs_through_the_copy_it_reached() {
     assert_eq!(
         (link.direct.as_str(), link.direct_version.as_str()),
         ("alpha", "1.0.0")
+    );
+}
+
+/// Audit 2026-11-11: the security lane's reads decide what the Brief says, and
+/// a read that failed used to become an empty lane beside a `Ready` advisory
+/// check — "Nothing new touches your code today" for a database nobody could
+/// read. Unread is not empty: the lane stays empty, the check reads as failed,
+/// and every renderer keyed on it withholds the all-clear.
+#[test]
+fn an_unreadable_security_lane_is_a_failed_check_never_an_all_clear() {
+    use crate::osv::readiness::AdvisorySyncState;
+    let db = crate::test_utils::test_db();
+    db.store_dependency("/project", "serde", Some("1.0.200"), "rust", false, None)
+        .unwrap();
+    db.update_osv_sync_status("crates.io", 0, None).unwrap();
+    let ready = build_brief_facts(&db);
+    assert_eq!(
+        ready.advisories,
+        Some(AdvisorySyncState::Ready),
+        "the fixture's advisory check is ready while the mirror reads"
+    );
+    assert!(crate::briefing_deterministic::advisory_gap_line(&ready).is_none());
+
+    // The advisory mirror becomes unreadable (a damaged or half-migrated
+    // database): the matcher read the lane is built from now fails.
+    db.conn
+        .lock()
+        .execute_batch("DROP TABLE osv_advisories")
+        .unwrap();
+    let facts = build_brief_facts(&db);
+    assert!(facts.security.is_empty() && facts.also_open.is_empty());
+    assert_eq!(
+        facts.advisories,
+        Some(AdvisorySyncState::Failed),
+        "an unread lane must not ride on a Ready advisory check"
+    );
+    let gap = crate::briefing_deterministic::advisory_gap_line(&facts)
+        .expect("the brief says the check failed in place of an all-clear");
+    assert!(
+        gap.contains("cannot say your dependencies are clear"),
+        "{gap}"
+    );
+    assert_ne!(
+        facts.fingerprint, ready.fingerprint,
+        "a brief written over an unread lane is never reused once it reads, or the reverse"
     );
 }
