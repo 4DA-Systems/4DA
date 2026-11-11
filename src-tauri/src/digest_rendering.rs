@@ -217,7 +217,14 @@ impl Digest {
                     Some("competitive_intel") => "intel",
                     _ => "trend",
                 };
-                let priority_class = item.signal_priority.as_deref().unwrap_or("watch");
+                // A class name from a fixed set, never the stored string.
+                let priority_class = match item.signal_priority.as_deref() {
+                    Some("critical") => "critical",
+                    Some("high") => "high",
+                    Some("medium") => "medium",
+                    Some("low") => "low",
+                    _ => "watch",
+                };
                 let label = match item.signal_type.as_deref() {
                     Some("security_alert") => "Security",
                     Some("breaking_change") => "Breaking",
@@ -230,7 +237,7 @@ impl Digest {
                 output.push_str(&format!(
                     r#"<div class="signal-item"><span class="priority-dot {}"></span><span class="signal-badge {}">{}</span> {}</div>"#,
                     priority_class, badge_class, label,
-                    item.signal_action.as_deref().unwrap_or(&item.title)
+                    escape_html(item.signal_action.as_deref().unwrap_or(&item.title))
                 ));
             }
             output.push_str("</div>");
@@ -252,14 +259,16 @@ impl Digest {
     <div class="item-title">"#,
                 score_class,
                 item.relevance_score * 100.0,
-                item.source,
+                escape_html(&item.source),
                 item.discovered_at.format("%b %d")
             ));
 
-            if let Some(url) = &item.url {
-                output.push_str(&format!(r#"<a href="{}">{}</a>"#, url, item.title));
-            } else {
-                output.push_str(&item.title);
+            // A link only for a plain web address; anything else keeps the
+            // title as text.
+            let title = escape_html(&item.title);
+            match item.url.as_deref().and_then(web_href) {
+                Some(href) => output.push_str(&format!(r#"<a href="{href}">{title}</a>"#)),
+                None => output.push_str(&title),
             }
 
             output.push_str("</div>");
@@ -267,7 +276,10 @@ impl Digest {
             if !item.matched_topics.is_empty() {
                 output.push_str(r#"<div class="item-topics">"#);
                 for topic in &item.matched_topics {
-                    output.push_str(&format!(r#"<span class="topic">{topic}</span>"#));
+                    output.push_str(&format!(
+                        r#"<span class="topic">{}</span>"#,
+                        escape_html(topic)
+                    ));
                 }
                 output.push_str("</div>");
             }
@@ -411,3 +423,42 @@ fn signal_type_label(item: &DigestItem) -> &'static str {
         Some(_) | None => "SIGNAL",
     }
 }
+
+/// Text from a fetched item, made inert for the HTML digest: safe as a text
+/// node and inside a double- or single-quoted attribute.
+///
+/// The HTML digest is written to disk after every analysis and is the email
+/// body, and every title, source name, topic and action in it comes from a
+/// third party (a feed, a registry, an advisory). Unescaped, a title such as
+/// `<img src=x onerror=...>` ran as markup in whatever opened the file (audit
+/// 2026-11-11). HTML only: the text and Markdown renderers print it as is.
+fn escape_html(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for c in text.chars() {
+        match c {
+            '&' => out.push_str("&amp;"),
+            '<' => out.push_str("&lt;"),
+            '>' => out.push_str("&gt;"),
+            '"' => out.push_str("&quot;"),
+            '\'' => out.push_str("&#39;"),
+            _ => out.push(c),
+        }
+    }
+    out
+}
+
+/// The `href` value for an item's link, escaped, or `None` when the URL is
+/// not a plain `http`/`https` address: a `javascript:`, `data:` or `file:`
+/// URL from a feed must never become something the reader can click.
+///
+/// The parsed form is what is written, so the browser reads exactly the
+/// address that was checked (the URL parser drops the tabs and newlines a
+/// browser would also drop from `java\nscript:`).
+fn web_href(url: &str) -> Option<String> {
+    let parsed = url::Url::parse(url.trim()).ok()?;
+    matches!(parsed.scheme(), "http" | "https").then(|| escape_html(parsed.as_str()))
+}
+
+#[cfg(test)]
+#[path = "digest_rendering_tests.rs"]
+mod tests;
