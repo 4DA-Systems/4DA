@@ -30,6 +30,7 @@
   "errorMsg.database": "数据库错误。请尝试重新启动应用。",
   "errorMsg.embedding": "嵌入服务不可用。请检查 Ollama 是否正在运行。",
   "errorMsg.fallback": "出了点问题。请重试。",
+  "errorMsg.signalRequired": "这是 4DA Signal 的功能。升级即可解锁。",
   "errorMsg.fileNotFound": "文件未找到。可能已被移动或删除。",
   "errorMsg.git": "Git 操作失败。请检查仓库路径。",
   "errorMsg.ipc": "应用通信错误。请重新启动应用。",

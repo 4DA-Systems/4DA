@@ -30,6 +30,7 @@
   "errorMsg.database": "Veritabanı hatası. Uygulamayı yeniden başlatmayı deneyin.",
   "errorMsg.embedding": "Gömme servisi kullanılamıyor. Ollama'nın çalıştığını kontrol edin.",
   "errorMsg.fallback": "Bir şeyler ters gitti. Lütfen tekrar deneyin.",
+  "errorMsg.signalRequired": "Bu, 4DA Signal'in bir parçasıdır. Kilidini açmak için yükseltin.",
   "errorMsg.fileNotFound": "Dosya bulunamadı. Taşınmış veya silinmiş olabilir.",
   "errorMsg.git": "Git işlemi başarısız. Depo yolunu kontrol edin.",
   "errorMsg.ipc": "Uygulama iletişim hatası. Lütfen uygulamayı yeniden başlatın.",

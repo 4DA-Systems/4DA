@@ -125,6 +125,39 @@ describe('KnowledgeGapsPanel', () => {
     expect(screen.queryByText('knowledgeGaps.noGaps')).not.toBeInTheDocument();
   });
 
+  // `get_knowledge_gaps` returns `Result<_, FourDaError>`, so the gate reaches
+  // the webview as the catch-all OBJECT (error.rs), never as a string. Matching
+  // only strings sent every free user to "Couldn't check... Retry".
+  it('a Signal gate arriving as the backend\'s structured error renders the upgrade path, not Retry', async () => {
+    cmdMock.mockRejectedValue({
+      code: 'E9999',
+      title: 'Unexpected error',
+      detail: 'Knowledge Gaps requires 4DA Signal — start your free trial or upgrade to unlock it.',
+      remediation: ['Try the operation again.', 'If this persists, restart 4DA.'],
+      severity: 'error',
+    });
+    render(<KnowledgeGapsPanel />);
+    await act(async () => {});
+    expect(screen.getByTestId('pro-gate')).toBeInTheDocument();
+    expect(screen.getByTestId('knowledge-gaps-gated')).toBeInTheDocument();
+    expect(screen.queryByTestId('knowledge-gaps-error')).not.toBeInTheDocument();
+    expect(screen.queryByText('action.retry')).not.toBeInTheDocument();
+  });
+
+  it('a structured fault that is not a gate still offers Retry', async () => {
+    cmdMock.mockRejectedValue({
+      code: 'E3001',
+      title: 'Database busy',
+      detail: 'The database is temporarily locked by another operation.',
+      remediation: ['Wait a moment and try again.', 'If this persists, restart 4DA.'],
+      severity: 'warning',
+    });
+    render(<KnowledgeGapsPanel />);
+    await act(async () => {});
+    expect(screen.getByTestId('knowledge-gaps-error')).toBeInTheDocument();
+    expect(screen.queryByTestId('knowledge-gaps-gated')).not.toBeInTheDocument();
+  });
+
   it('any other failure offers Retry and never claims "current"', async () => {
     cmdMock.mockRejectedValueOnce(new Error('database is locked'));
     render(<KnowledgeGapsPanel />);

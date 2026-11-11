@@ -2,6 +2,7 @@
 import type { StateCreator } from 'zustand';
 import type { AppStore, UserContextSlice } from './types';
 import { cmd } from '../lib/commands';
+import { readableError } from '../utils/error-messages';
 
 export const createUserContextSlice: StateCreator<AppStore, [], [], UserContextSlice> = (set, get) => ({
   userContext: null,
@@ -45,7 +46,7 @@ export const createUserContextSlice: StateCreator<AppStore, [], [], UserContextS
       setSettingsStatus('Interest added');
       setTimeout(() => set({ settingsStatus: '' }), 2000);
     } catch (error) {
-      setSettingsStatus(`Error: ${error}`);
+      setSettingsStatus(`Error: ${readableError(error)}`);
     }
   },
 
@@ -57,7 +58,7 @@ export const createUserContextSlice: StateCreator<AppStore, [], [], UserContextS
       setSettingsStatus('Interest removed');
       setTimeout(() => set({ settingsStatus: '' }), 2000);
     } catch (error) {
-      setSettingsStatus(`Error: ${error}`);
+      setSettingsStatus(`Error: ${readableError(error)}`);
     }
   },
 
@@ -71,7 +72,7 @@ export const createUserContextSlice: StateCreator<AppStore, [], [], UserContextS
       setSettingsStatus('Exclusion added');
       setTimeout(() => set({ settingsStatus: '' }), 2000);
     } catch (error) {
-      setSettingsStatus(`Error: ${error}`);
+      setSettingsStatus(`Error: ${readableError(error)}`);
     }
   },
 
@@ -83,7 +84,7 @@ export const createUserContextSlice: StateCreator<AppStore, [], [], UserContextS
       setSettingsStatus('Exclusion removed');
       setTimeout(() => set({ settingsStatus: '' }), 2000);
     } catch (error) {
-      setSettingsStatus(`Error: ${error}`);
+      setSettingsStatus(`Error: ${readableError(error)}`);
     }
   },
 
@@ -97,7 +98,7 @@ export const createUserContextSlice: StateCreator<AppStore, [], [], UserContextS
       setSettingsStatus('Technology added');
       setTimeout(() => set({ settingsStatus: '' }), 2000);
     } catch (error) {
-      setSettingsStatus(`Error: ${error}`);
+      setSettingsStatus(`Error: ${readableError(error)}`);
     }
   },
 
@@ -109,7 +110,7 @@ export const createUserContextSlice: StateCreator<AppStore, [], [], UserContextS
       setSettingsStatus('Technology removed');
       setTimeout(() => set({ settingsStatus: '' }), 2000);
     } catch (error) {
-      setSettingsStatus(`Error: ${error}`);
+      setSettingsStatus(`Error: ${readableError(error)}`);
     }
   },
 
@@ -121,7 +122,7 @@ export const createUserContextSlice: StateCreator<AppStore, [], [], UserContextS
       setSettingsStatus('Role updated');
       setTimeout(() => set({ settingsStatus: '' }), 2000);
     } catch (error) {
-      setSettingsStatus(`Error: ${error}`);
+      setSettingsStatus(`Error: ${readableError(error)}`);
     }
   },
 });

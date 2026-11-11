@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
+import { readableError } from '../../utils/error-messages';
 
 const ACTION_CATEGORIES = [
   'license', 'member', 'signal', 'decision',
@@ -82,7 +83,7 @@ export function AuditLogViewer() {
   useEffect(() => {
     setOffset(0);
     loadAuditLog(auditActionFilter || undefined, auditResourceFilter || undefined, PAGE_SIZE, 0)
-      .catch(e => setError(String(e)));
+      .catch(e => setError(readableError(e)));
     loadAuditSummary(30).catch(() => {});
   }, [auditActionFilter, auditResourceFilter, loadAuditLog, loadAuditSummary]);
 
@@ -90,7 +91,7 @@ export function AuditLogViewer() {
     setOffset(0);
     setError(null);
     loadAuditLog(auditActionFilter || undefined, auditResourceFilter || undefined, PAGE_SIZE, 0)
-      .catch(e => setError(String(e)));
+      .catch(e => setError(readableError(e)));
     loadAuditSummary(30).catch(() => {});
   }, [auditActionFilter, auditResourceFilter, loadAuditLog, loadAuditSummary]);
 
@@ -98,7 +99,7 @@ export function AuditLogViewer() {
     const next = offset + PAGE_SIZE;
     setOffset(next);
     loadAuditLog(auditActionFilter || undefined, auditResourceFilter || undefined, PAGE_SIZE, next)
-      .catch(e => setError(String(e)));
+      .catch(e => setError(readableError(e)));
   }, [offset, auditActionFilter, auditResourceFilter, loadAuditLog]);
 
   const handleExport = useCallback(async () => {
@@ -112,7 +113,7 @@ export function AuditLogViewer() {
       a.click();
       URL.revokeObjectURL(url);
     } catch (e) {
-      setError(String(e));
+      setError(readableError(e));
     }
   }, [exportAuditCsv, exportFrom, exportTo]);
 

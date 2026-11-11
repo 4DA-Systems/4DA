@@ -22,11 +22,6 @@ const mockGenerateBriefing = vi.fn();
 const mockSetActiveView = vi.fn();
 
 let briefingError: string | null = null;
-const mockStartTrial = vi.fn();
-
-vi.mock('../../hooks/use-license', () => ({
-  useLicense: () => ({ isPro: false, trialStatus: null }),
-}));
 
 vi.mock('../../store', () => ({
   useAppStore: vi.fn((selector: (s: Record<string, unknown>) => unknown) => {
@@ -45,7 +40,6 @@ vi.mock('../../store', () => ({
         error: briefingError,
         model: null,
       },
-      startTrial: mockStartTrial,
       startAnalysis: mockStartAnalysis,
       generateBriefing: mockGenerateBriefing,
       setActiveView: mockSetActiveView,
@@ -143,15 +137,36 @@ describe('BriefingReadyState — failure recovery', () => {
     expect(mockGenerateBriefing).toHaveBeenCalledTimes(2);
   });
 
-  it('says so when the free trial cannot start', async () => {
-    mockStartTrial.mockResolvedValue(false);
+});
+
+// AI briefings run on the user's own AI provider and are not Signal-gated
+// (gating.rs free-floor exceptions, AD-025). This screen used to tell free
+// users "AI briefings are a Signal feature. Start a free trial to try it."
+// beside a Generate button that already worked.
+describe('BriefingReadyState — nothing here is gated', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    briefingError = null;
+  });
+
+  it('offers one Generate button and no Signal note or trial offer', () => {
+    render(<BriefingReadyState />);
+
+    expect(screen.getAllByRole('button')).toHaveLength(1);
+    expect(screen.getByRole('button')).toHaveAccessibleName('briefing.generateAria');
+    expect(screen.queryByText('briefing.signalFeatureNote')).not.toBeInTheDocument();
+    expect(screen.queryByText(/Signal feature/i)).not.toBeInTheDocument();
+    expect(screen.queryByText('pro.startTrial')).not.toBeInTheDocument();
+  });
+
+  it('generates without consulting the licence or the trial', async () => {
+    mockGenerateBriefing.mockResolvedValue(undefined);
     render(<BriefingReadyState />);
 
     await act(async () => {
-      fireEvent.click(screen.getByText('pro.startTrial'));
+      fireEvent.click(screen.getByRole('button'));
     });
 
-    expect(screen.getByRole('alert')).toHaveTextContent('briefing.trialStartFailed');
-    expect(mockGenerateBriefing).not.toHaveBeenCalled();
+    expect(mockGenerateBriefing).toHaveBeenCalledTimes(1);
   });
 });

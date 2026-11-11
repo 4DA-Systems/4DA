@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import type { StateCreator } from 'zustand';
 import { cmd } from '../lib/commands';
+import { readableError } from '../utils/error-messages';
 import type { AppStore } from './types';
 import type {
   AuditEntry,
@@ -118,7 +119,7 @@ export const createEnterpriseSlice: StateCreator<AppStore, [], [], EnterpriseSli
       return { ok: true };
     } catch (e) {
       console.error('Failed to register webhook:', e);
-      return { ok: false, error: String(e) };
+      return { ok: false, error: readableError(e) };
     }
   },
 

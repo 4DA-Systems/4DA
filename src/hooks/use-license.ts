@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { useAppStore } from '../store';
+import { trialOfferFor } from '../lib/trial-offer';
 
 export function useLicense() {
   const tier = useAppStore((s) => s.tier);
@@ -14,5 +15,7 @@ export function useLicense() {
   // The tier badge uses this to show a "?" state instead of a confident (and possibly wrong)
   // "FREE", so a paid user whose cold-boot probe failed is never silently presented as Free.
   const licenseUnverified = !licenseLoaded && licenseLoadError !== null;
-  return { tier, isPro, trialStatus, expired, daysRemaining, expiresAt, licenseLoaded, licenseLoadError, licenseUnverified };
+  // Whether a paywall may offer the free trial, say it has ended, or stay silent.
+  const trialOffer = trialOfferFor(trialStatus);
+  return { tier, isPro, trialStatus, trialOffer, expired, daysRemaining, expiresAt, licenseLoaded, licenseLoadError, licenseUnverified };
 }

@@ -10,6 +10,7 @@ import { useAppStore } from '../../store';
 import { cmd } from '../../lib/commands';
 import { recordTrustEvent } from '../../lib/trust-feedback';
 import { sourceNewsReady } from '../../lib/negative-readiness';
+import { rawErrorText } from '../../utils/error-messages';
 import { useBlindSpotsData } from '../../hooks/use-blind-spots-data';
 
 import { BlindSpotsPaywall } from './BlindSpotsPaywall';
@@ -110,7 +111,10 @@ const BlindSpotsView = memo(function BlindSpotsView() {
         }
       })
       .catch((e: unknown) => {
-        setAiError(String(e).includes('no_llm_configured') ? 'no_llm' : String(e));
+        // Kept raw: AiAssessmentStatus reads the budget token out of it and
+        // otherwise shows its own line, so this text is never displayed.
+        const raw = rawErrorText(e);
+        setAiError(raw.includes('no_llm_configured') ? 'no_llm' : raw);
       })
       .finally(() => setAiLoading(false));
   }, [applyAssessment]);

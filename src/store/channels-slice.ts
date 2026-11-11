@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import type { StateCreator } from 'zustand';
 import { cmd } from '../lib/commands';
-import { budgetRefusalMessage } from '../utils/error-messages';
+import { readableError } from '../utils/error-messages';
 import type { AppStore } from './types';
 import type { ChannelSummary, ChannelRender, RenderProvenance, ChannelChangelog } from '../types/channels';
 
@@ -42,7 +42,7 @@ export const createChannelsSlice: StateCreator<AppStore, [], [], ChannelsSlice> 
       const channels = await cmd('list_channels') as unknown as ChannelSummary[];
       set({ channels, channelsLoading: false });
     } catch (e) {
-      set({ channelsLoading: false, channelsError: String(e) });
+      set({ channelsLoading: false, channelsError: readableError(e) });
     }
   },
 
@@ -58,7 +58,7 @@ export const createChannelsSlice: StateCreator<AppStore, [], [], ChannelsSlice> 
         void get().loadChangelog(id);
       }
     } catch (error) {
-      set({ renderLoading: false, renderError: `${error}` });
+      set({ renderLoading: false, renderError: readableError(error) });
     }
   },
 
@@ -78,7 +78,7 @@ export const createChannelsSlice: StateCreator<AppStore, [], [], ChannelsSlice> 
       }
     } catch (error) {
       // An LLM-backed render: a budget refusal must read as one, localized.
-      set({ renderLoading: false, renderError: budgetRefusalMessage(error) ?? `${error}` });
+      set({ renderLoading: false, renderError: readableError(error) });
     }
   },
 

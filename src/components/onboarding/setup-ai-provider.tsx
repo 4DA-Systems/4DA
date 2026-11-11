@@ -4,6 +4,7 @@ import { useState, useEffect, useId } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { cmd } from '../../lib/commands';
+import { readableError } from '../../utils/error-messages';
 import { IMPORTED_FROM_ENV, isOllamaReady, localServerChoice, modelDownloadSize, pickOllamaModel } from './quick-setup-utils';
 import type { LocalServerChoice, ProviderType } from './quick-setup-utils';
 import type { OllamaStatus, PullProgress } from './types';
@@ -80,7 +81,7 @@ export function SetupAIProvider({
       onApiKeyChange(IMPORTED_FROM_ENV);
     } catch (e) {
       // The key field stays usable, so pasting the key by hand still works.
-      setImportError(t('onboarding.setupAi.importFailed', { error: String(e) }));
+      setImportError(t('onboarding.setupAi.importFailed', { error: readableError(e) }));
     } finally {
       setImporting(false);
     }

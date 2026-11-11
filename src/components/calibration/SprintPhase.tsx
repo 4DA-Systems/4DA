@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 
 import { cmd } from '../../lib/commands';
+import { readableError } from '../../utils/error-messages';
 import type { CalibrationSprintCard } from '../../../src-tauri/bindings/bindings/CalibrationSprintCard';
 import type { CalibrationSprintStatus } from '../../../src-tauri/bindings/bindings/CalibrationSprintStatus';
 
@@ -40,7 +41,7 @@ export function SprintPhase({ onClose }: SprintPhaseProps) {
       })
       .catch((e) => {
         if (cancelled) return;
-        setError(String(e));
+        setError(readableError(e));
         setState('empty');
       });
     return () => {
@@ -77,7 +78,7 @@ export function SprintPhase({ onClose }: SprintPhaseProps) {
         }
         advance();
       } catch (e) {
-        setError(String(e));
+        setError(readableError(e));
       } finally {
         setBusy(false);
       }

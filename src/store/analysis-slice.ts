@@ -3,7 +3,7 @@ import type { StateCreator } from 'zustand';
 import { cmd } from '../lib/commands';
 import { isPlainBrowserRuntime } from '../lib/tauri-runtime';
 import type { AppStore, AnalysisSlice, AppState } from './types';
-import { translateError } from '../utils/error-messages';
+import { rawErrorText, translateError } from '../utils/error-messages';
 
 const initialAppState: AppState = {
   contextFiles: [],
@@ -72,7 +72,7 @@ export const createAnalysisSlice: StateCreator<AppStore, [], [], AnalysisSlice> 
     try {
       await cmd('run_cached_analysis');
     } catch (error) {
-      const errorMsg = String(error);
+      const errorMsg = rawErrorText(error);
       if (errorMsg.includes('invoke') || errorMsg.includes('__TAURI__')) {
         set(state => ({
           appState: {
@@ -116,7 +116,7 @@ export const createAnalysisSlice: StateCreator<AppStore, [], [], AnalysisSlice> 
         isBrowserMode: false,
       }));
     } catch (error) {
-      const errorMsg = String(error);
+      const errorMsg = rawErrorText(error);
       if (errorMsg.includes('invoke') || errorMsg.includes('__TAURI__')) {
         set(state => ({
           isBrowserMode: true,

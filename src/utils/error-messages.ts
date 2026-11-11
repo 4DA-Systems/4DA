@@ -1,11 +1,18 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 /**
- * Translates raw Rust backend error strings into user-friendly messages.
+ * Turns a rejected backend call into text a person can read.
  *
- * Tauri invoke errors often expose internal Rust error chains like
- * "Failed to fetch: reqwest::Error { kind: Request, ... }" which are
- * meaningless (and alarming) to users. This utility maps known patterns
- * to concise, actionable messages.
+ * A Tauri invoke rejects with whatever the command's error type serialises
+ * to. A `FourDaError` arrives as an OBJECT `{ code, title, detail,
+ * remediation, severity }` (src-tauri/src/error.rs), a `Result<_, String>`
+ * command as a plain string, and the webview itself throws `Error`s.
+ * `String(e)` prints "[object Object]" for the first, so nothing outside this
+ * module stringifies a rejection:
+ *
+ * - `readableError`  what to show: the backend's own words.
+ * - `translateError` what to show when only the category matters: known
+ *   patterns map to short localized messages, anything else stays generic.
+ * - `rawErrorText`   what to match against, or to log.
  */
 
 interface ErrorPattern {
@@ -55,114 +62,145 @@ function t(key: string, fallback: string, opts?: Record<string, unknown>): strin
   return fallback;
 }
 
-/**
- * Structured error from the 4DA backend (matches Rust UserError).
- * When the backend returns errors, they now come as structured objects
- * with error codes, titles, details, and remediation steps.
- */
+/** A `FourDaError` as the frontend receives it (Rust `UserError`, error.rs). */
 interface StructuredError {
   code: string;
   title: string;
   detail: string;
-  remediation: string[];
-  severity: 'info' | 'warning' | 'error' | 'critical';
+  remediation?: string[];
+  severity?: 'info' | 'warning' | 'error' | 'critical';
 }
 
 /**
- * Check if an error is a structured error from the backend.
+ * Codes whose `detail` IS the backend's original sentence: the catch-all arm
+ * (`Internal`, which every `Err("...".into())` becomes) and `Validation`
+ * (error.rs `to_user_error`). Their title ("Unexpected error", "Invalid
+ * input") and remediation ("Try the operation again.") are boilerplate.
  */
+const PASSTHROUGH_CODES = new Set(['E9999', 'E6001']);
+
 function isStructuredError(error: unknown): error is StructuredError {
   if (typeof error !== 'object' || error === null) return false;
   const obj = error as Record<string, unknown>;
   return typeof obj.code === 'string' && typeof obj.title === 'string' && typeof obj.detail === 'string';
 }
 
-/**
- * Parse a structured error from various error shapes.
- * The backend may return the error directly or wrapped in a string.
- */
+/** The structured error in `error`: the object itself, or one serialised into a string. */
 function parseStructuredError(error: unknown): StructuredError | null {
-  // Direct object
   if (isStructuredError(error)) return error;
-
-  // String that might be JSON
-  const raw = typeof error === 'string' ? error : error instanceof Error ? error.message : String(error ?? '');
+  const raw = typeof error === 'string' ? error : error instanceof Error ? error.message : '';
+  if (!raw.trimStart().startsWith('{')) return null;
   try {
-    const parsed = JSON.parse(raw);
+    const parsed: unknown = JSON.parse(raw);
     if (isStructuredError(parsed)) return parsed;
   } catch {
-    // Not JSON — fall through to pattern matching
+    // Not JSON: an ordinary message.
   }
   return null;
 }
 
+/** A structured error as one line: the backend's sentence, and its first fix when asked. */
+function structuredText(error: StructuredError, withRemediation: boolean): string {
+  const detail = error.detail.trim();
+  if (detail && PASSTHROUGH_CODES.has(error.code)) return detail;
+  const head = detail ? `${error.title}: ${detail}` : error.title;
+  const fix = withRemediation && Array.isArray(error.remediation) ? error.remediation[0] : undefined;
+  return fix ? `${head} ${fix}` : head;
+}
+
 /**
- * Translate a raw backend error into a user-friendly message.
+ * The backend's own words for a rejection, whatever shape it arrived in:
+ * structured object, `Error`, string, or anything else. For matching (the
+ * Signal gate, the budget token, a known phrase) and for logs. Empty when the
+ * rejection carries no text. Show `readableError` to users instead.
+ */
+export function rawErrorText(error: unknown): string {
+  const structured = parseStructuredError(error);
+  if (structured) return structuredText(structured, false);
+  if (typeof error === 'string') return error;
+  if (error instanceof Error) return error.message;
+  if (typeof error === 'object' && error !== null) {
+    const { message, detail } = error as { message?: unknown; detail?: unknown };
+    if (typeof message === 'string') return message;
+    return typeof detail === 'string' ? detail : '';
+  }
+  return error === null || error === undefined ? '' : String(error);
+}
+
+/**
+ * Any rejection as text a person can read. Never "[object Object]", never a
+ * machine token.
  *
- * First tries to parse as a structured error (from the new error framework).
- * Falls back to regex pattern matching for legacy/unstructured errors.
+ * - A spent AI budget and a Signal gate get their own localized sentence.
+ * - A structured error with a specific code reads as `translateError` renders it.
+ * - Everything else is the backend's own sentence, unchanged: the `detail` of
+ *   a pass-through structured error, an `Error`'s message, a string.
+ * - A rejection with no text gives `fallback`, or the generic message.
+ */
+export function readableError(error: unknown, fallback?: string): string {
+  const special = budgetRefusalMessage(error) ?? signalGateMessage(error);
+  if (special) return special;
+  const structured = parseStructuredError(error);
+  if (structured && !PASSTHROUGH_CODES.has(structured.code)) return translateError(structured);
+  return rawErrorText(error).trim() || fallback || t(FALLBACK_KEY, FALLBACK_MESSAGE);
+}
+
+/**
+ * A rejection as a short, categorized message: known patterns (network,
+ * timeout, auth, ...) map to localized copy; an unrecognised structured error
+ * reads as the backend wrote it; anything else stays generic so backend
+ * internals never reach a banner.
  *
  * @param error - The raw error from a Tauri invoke catch block (can be any type)
- * @returns A user-friendly error string
  */
 export function translateError(error: unknown): string {
-  // A spent daily AI budget is not a fault to retry: say so, and when it resets.
-  const reset = parseBudgetReset(error);
-  if (reset) {
-    const vars = budgetResetVars(reset, currentLanguage());
-    return t('errors:errorMsg.budgetReached', englishBudgetReached(vars), vars);
-  }
+  // Neither is a fault to retry: a spent daily AI budget says when it resets,
+  // a tier gate says it is one.
+  const special = budgetRefusalMessage(error) ?? signalGateMessage(error);
+  if (special) return special;
 
-  // Try structured error first (new backend error framework)
-  const structured = parseStructuredError(error);
-  if (structured) {
-    // Try to match the structured error against known patterns for i18n
-    const combined = `${structured.title} ${structured.detail}`;
+  const raw = rawErrorText(error);
+  if (raw && raw !== 'undefined' && raw !== 'null') {
     for (const pattern of ERROR_PATTERNS) {
-      if (pattern.test.test(combined)) {
-        return t(pattern.key, pattern.fallback);
-      }
+      if (pattern.test.test(raw)) return t(pattern.key, pattern.fallback);
     }
-    // No pattern match — use raw structured error with remediation
-    if (structured.remediation.length > 0) {
-      return `${structured.title}: ${structured.detail} ${structured.remediation[0]}`;
-    }
-    return `${structured.title}: ${structured.detail}`;
+    const structured = parseStructuredError(error);
+    if (structured) return structuredText(structured, true);
   }
-
-  const raw = error instanceof Error ? error.message : String(error ?? '');
-
-  if (!raw || raw === 'undefined' || raw === 'null') {
-    return FALLBACK_MESSAGE;
-  }
-
-  for (const pattern of ERROR_PATTERNS) {
-    if (pattern.test.test(raw)) {
-      return t(pattern.key, pattern.fallback);
-    }
-  }
-
   return t(FALLBACK_KEY, FALLBACK_MESSAGE);
 }
+
+const SIGNAL_GATE = /requires 4DA Signal/i;
 
 /**
  * Detect a Signal-tier paywall rejection.
  *
- * The backend gate `require_signal_feature`
- * (src-tauri/src/settings/license/gating.rs:102) is the SOLE producer of this
- * phrase — defined in exactly one place and pinned by no test, so the token is
- * stable. A paywall is NOT a fault: a Signal-gated surface that catches this
- * must render an upgrade CTA, never a red error banner (which is what
- * `translateError` would otherwise produce — it has no Signal pattern and falls
- * through to "Something went wrong"). Centralized here so every gated tab
- * classifies the gate identically; the next gated surface inherits it for free.
+ * `require_signal_feature` (src-tauri/src/settings/license/gating.rs) is the
+ * sole producer: `"<Feature> requires 4DA Signal — ..."`. It sets no code of
+ * its own. Commands returning `Result<_, String>` reject with that sentence;
+ * commands returning `FourDaError` reject with the catch-all object
+ * `{ code: "E9999", title: "Unexpected error", detail: "<sentence>" }`, so the
+ * sentence is matched in whichever field carries it. A gate that was only
+ * looked for in a string turned the Knowledge Gaps upgrade card into
+ * "Couldn't check... Retry" for every free user.
  *
- * Antibody AB-011 (display-contradicts-data): the Preemption and Blind Spots
- * tabs both shipped this bug independently before this helper existed.
+ * A paywall is NOT a fault: a gated surface that catches this renders the
+ * upgrade path, never a red error banner (antibody AB-011,
+ * display-contradicts-data).
  */
 export function isSignalGateError(error: unknown): boolean {
-  const raw = error instanceof Error ? error.message : String(error ?? '');
-  return /requires 4DA Signal/i.test(raw);
+  const structured = parseStructuredError(error);
+  return SIGNAL_GATE.test(structured ? `${structured.title} ${structured.detail}` : rawErrorText(error));
+}
+
+/**
+ * What a gate rejection reads as wherever no upgrade card catches it. The
+ * backend's sentence offers a free trial, which starts by itself on first
+ * launch and cannot be started again, so it is never shown.
+ */
+function signalGateMessage(error: unknown): string | null {
+  if (!isSignalGateError(error)) return null;
+  return t('errors:errorMsg.signalRequired', 'This is part of 4DA Signal. Upgrade to unlock it.');
 }
 
 /** When a refused call's daily AI budget comes back (local time). */
@@ -182,8 +220,7 @@ export interface BudgetReset {
  * the reset (audit L2, 2026-10-12).
  */
 export function parseBudgetReset(error: unknown): BudgetReset | null {
-  const raw = error instanceof Error ? error.message : String(error ?? '');
-  const match = /\[budget_reset:(\d{2}:\d{2}):(\d+)\]/.exec(raw);
+  const match = /\[budget_reset:(\d{2}:\d{2}):(\d+)\]/.exec(rawErrorText(error));
   if (!match) return null;
   return { time: match[1]!, minutes: Number(match[2]) };
 }
@@ -258,6 +295,5 @@ function currentLanguage(): string {
  *   setError(userMsg);
  */
 export function translateErrorWithRaw(error: unknown): [userFriendly: string, raw: string] {
-  const raw = error instanceof Error ? error.message : String(error ?? '');
-  return [translateError(error), raw];
+  return [translateError(error), rawErrorText(error)];
 }

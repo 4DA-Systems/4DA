@@ -4,7 +4,7 @@ import { cmd } from '../lib/commands';
 import type { AppStore, SettingsSlice, SettingsForm, OllamaStatus } from './types';
 import type { Settings } from '../types/settings';
 import { normalizeOllamaStatus } from '../utils/normalize-ollama';
-import { translateError } from '../utils/error-messages';
+import { readableError, translateError } from '../utils/error-messages';
 import { setActivityTrackingEnabled } from '../hooks/use-telemetry';
 
 const defaultSettingsForm: SettingsForm = {
@@ -202,7 +202,7 @@ export const createSettingsSlice: StateCreator<AppStore, [], [], SettingsSlice> 
         version: null,
         models: [],
         base_url: baseUrl || 'http://localhost:11434',
-        error: String(error),
+        error: readableError(error),
       };
       set({ ollamaStatus: errorStatus });
       return errorStatus;

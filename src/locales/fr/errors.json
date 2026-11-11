@@ -30,6 +30,7 @@
   "errorMsg.database": "Erreur de base de données. Essayez de redémarrer l'application.",
   "errorMsg.embedding": "Service d'embedding indisponible. Vérifiez qu'Ollama est en cours d'exécution.",
   "errorMsg.fallback": "Quelque chose s'est mal passé. Veuillez réessayer.",
+  "errorMsg.signalRequired": "Ceci fait partie de 4DA Signal. Passez à Signal pour le débloquer.",
   "errorMsg.fileNotFound": "Fichier introuvable. Il a peut-être été déplacé ou supprimé.",
   "errorMsg.git": "L'opération Git a échoué. Vérifiez le chemin du dépôt.",
   "errorMsg.ipc": "Erreur de communication de l'application. Veuillez redémarrer l'application.",

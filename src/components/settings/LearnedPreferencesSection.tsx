@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../../lib/commands';
 import { useAppStore } from '../../store';
+import { readableError } from '../../utils/error-messages';
 import { facetLabel } from './learned-facet-label';
 
 interface LearnedFacet {
@@ -153,7 +154,7 @@ export function LearnedPreferencesSection() {
       setSelectedId(null);
       setTimeout(() => setSettingsStatus(''), 2000);
     } catch (error) {
-      setSettingsStatus(`Error: ${error}`);
+      setSettingsStatus(`Error: ${readableError(error)}`);
     }
   };
 

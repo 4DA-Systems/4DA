@@ -5,6 +5,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../../lib/commands';
+import { readableError } from '../../utils/error-messages';
 import type { ParsedInput } from '../../utils/source-input-parser';
 
 interface SourcePreviewProps {
@@ -75,7 +76,7 @@ export function SourcePreview({ parsed, onConfirm, onCancel }: SourcePreviewProp
       })
       .catch((err: unknown) => {
         if (cancelled) return;
-        const message = err instanceof Error ? err.message : String(err);
+        const message = readableError(err);
         setTestState(s => ({
           ...s,
           loading: false,

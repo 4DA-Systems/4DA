@@ -30,6 +30,7 @@
   "errorMsg.database": "データベースエラー。アプリを再起動してみてください。",
   "errorMsg.embedding": "エンベディングサービスが利用できません。Ollama が起動しているか確認してください。",
   "errorMsg.fallback": "問題が発生しました。もう一度お試しください。",
+  "errorMsg.signalRequired": "これは 4DA Signal の機能です。アップグレードするとご利用いただけます。",
   "errorMsg.fileNotFound": "ファイルが見つかりません。移動または削除された可能性があります。",
   "errorMsg.git": "Git 操作に失敗しました。リポジトリのパスを確認してください。",
   "errorMsg.ipc": "アプリ通信エラー。アプリを再起動してください。",

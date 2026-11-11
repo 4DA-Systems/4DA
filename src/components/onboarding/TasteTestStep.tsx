@@ -2,6 +2,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { cmd } from '../../lib/commands';
+import { readableError } from '../../utils/error-messages';
 
 import type { TasteProfileSummary } from '../../types/calibration';
 import { TasteTestCard } from './TasteTestCard';
@@ -50,7 +51,7 @@ export function TasteTestStep({ isAnimating, onComplete, onSkip }: TasteTestStep
       setSummary(await cmd('taste_test_finalize'));
       setPhase('complete');
     } catch (e) {
-      setError(t('tasteTest.finalizeFailed', { error: String(e) }));
+      setError(t('tasteTest.finalizeFailed', { error: readableError(e) }));
     }
   }, [t]);
 
@@ -69,7 +70,7 @@ export function TasteTestStep({ isAnimating, onComplete, onSkip }: TasteTestStep
         await finalize();
       }
     } catch (e) {
-      setError(t('tasteTest.startFailed', { error: String(e) }));
+      setError(t('tasteTest.startFailed', { error: readableError(e) }));
     } finally {
       setStarting(false);
     }
@@ -104,7 +105,7 @@ export function TasteTestStep({ isAnimating, onComplete, onSkip }: TasteTestStep
         await finalize();
       }
     } catch (e) {
-      setError(t('tasteTest.respondFailed', { error: String(e) }));
+      setError(t('tasteTest.respondFailed', { error: readableError(e) }));
       setCardAnimating(false);
     }
   }, [currentCard, finalize, t]);
