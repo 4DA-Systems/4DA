@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import type { StateCreator } from 'zustand';
 import { cmd } from '../lib/commands';
+import { readableError } from '../utils/error-messages';
 
 // ============================================================================
 // Types
@@ -48,7 +49,7 @@ export const createTrustSlice: StateCreator<
       const summary = await cmd('get_trust_dashboard', { days });
       set({ trustSummary: summary as unknown as TrustSummary, trustLoading: false });
     } catch (error) {
-      set({ trustError: String(error), trustLoading: false });
+      set({ trustError: readableError(error), trustLoading: false });
     }
   },
 });

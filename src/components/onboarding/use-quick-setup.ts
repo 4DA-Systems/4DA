@@ -6,6 +6,7 @@ import { runDiscovery } from '../../lib/discovery';
 import { safeListen } from '../../lib/tauri-events';
 
 import type { OllamaStatus, PullProgress } from './types';
+import { readableError } from '../../utils/error-messages';
 import { normalizeOllamaStatus } from '../../utils/normalize-ollama';
 import { fallbackSuggestions, SECTION_KEY, getPersistedSections } from './onboarding-constants';
 import type { SectionState } from './onboarding-constants';
@@ -114,7 +115,7 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
       }
     } catch (e) {
       if (!cancelRequested.current) {
-        setError(t('onboarding.setup.downloadFailed', { error: String(e) }));
+        setError(t('onboarding.setup.downloadFailed', { error: readableError(e) }));
       }
     } finally {
       unlisten?.();
@@ -133,7 +134,7 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
     } catch (e) {
       cancelRequested.current = false;
       setCancellingDownload(false);
-      setError(t('onboarding.setup.cancelDownloadFailed', { error: String(e) }));
+      setError(t('onboarding.setup.cancelDownloadFailed', { error: readableError(e) }));
     }
   }, [cancellingDownload, t]);
 
@@ -173,7 +174,7 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
       if (topics.length > 0) setDetectedTech(topics.slice(0, 12));
       setDiscoveryDone(true);
     } catch (e) {
-      setError(t('onboarding.projects.scanFailed', { error: String(e) }));
+      setError(t('onboarding.projects.scanFailed', { error: readableError(e) }));
     } finally {
       setScanning(false);
     }
@@ -353,7 +354,7 @@ export function useQuickSetup({ onComplete }: UseQuickSetupProps) {
       try { localStorage.removeItem(SECTION_KEY); } catch { /* noop */ }
       onComplete();
     } catch (e) {
-      setError(t('onboarding.setup.saveFailed', { error: String(e) }));
+      setError(t('onboarding.setup.saveFailed', { error: readableError(e) }));
     } finally {
       setIsSaving(false);
       setSaveProgress(null);

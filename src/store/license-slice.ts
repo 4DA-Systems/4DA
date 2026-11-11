@@ -2,6 +2,7 @@
 import type { StateCreator } from 'zustand';
 import { cmd } from '../lib/commands';
 import { isPlainBrowserRuntime } from '../lib/tauri-runtime';
+import { readableError } from '../utils/error-messages';
 import type { AppStore, LicenseSlice, TrialStatus } from './types';
 
 export const createLicenseSlice: StateCreator<AppStore, [], [], LicenseSlice> = (set, get) => ({
@@ -56,7 +57,7 @@ export const createLicenseSlice: StateCreator<AppStore, [], [], LicenseSlice> = 
       // into the Free experience for the whole session — the recurring Signal->Free badge bug.
       // Instead: keep whatever tier we already knew, flag the failure so the badge shows an
       // "unverified" (?) state, and let App.tsx retry with backoff.
-      const msg = e instanceof Error ? e.message : typeof e === 'string' ? e : 'Unknown error';
+      const msg = readableError(e);
       set({ licenseLoadError: msg });
       console.warn(
         '[4DA] Could not verify your license tier (transient load error — will retry). ' +
@@ -93,11 +94,14 @@ export const createLicenseSlice: StateCreator<AppStore, [], [], LicenseSlice> = 
         return { ok: true };
       }
       set({ licenseLoading: false });
-      return { ok: false, reason: (result as unknown as { reason?: string }).reason ?? 'Validation failed' };
+      // No reason from the backend: leave it unset so each surface shows its
+      // own localized "invalid key" line.
+      return { ok: false, reason: (result as unknown as { reason?: string }).reason || undefined };
     } catch (e) {
       set({ licenseLoading: false });
-      const msg = e instanceof Error ? e.message : typeof e === 'string' ? e : 'Unknown error';
-      return { ok: false, reason: msg };
+      // A refused activation (empty key, rate limit, bad signature) rejects
+      // with a structured object, which used to collapse to "Unknown error".
+      return { ok: false, reason: readableError(e) };
     }
   },
 
@@ -123,8 +127,7 @@ export const createLicenseSlice: StateCreator<AppStore, [], [], LicenseSlice> = 
       return { ok: false, reason: result.reason ?? 'Unknown error' };
     } catch (e) {
       set({ licenseLoading: false });
-      const msg = e instanceof Error ? e.message : typeof e === 'string' ? e : 'Unknown error';
-      return { ok: false, reason: msg };
+      return { ok: false, reason: readableError(e) };
     }
   },
 
@@ -135,8 +138,8 @@ export const createLicenseSlice: StateCreator<AppStore, [], [], LicenseSlice> = 
     }
 
     try {
-      const status = await cmd('get_trial_status') as unknown as TrialStatus;
-      set({ trialStatus: status });
+      const status = await cmd('get_trial_status') as unknown as TrialStatus | null;
+      set({ trialStatus: status ?? null });
     } catch {
       set({ trialStatus: null });
     }
@@ -158,6 +161,10 @@ export const createLicenseSlice: StateCreator<AppStore, [], [], LicenseSlice> = 
         });
         return true;
       }
+      // Refused: a trial already ran on this install (it starts by itself on
+      // first launch) or a licence key is present. Re-read the real status so
+      // no surface keeps offering a trial that cannot start.
+      await get().loadTrialStatus();
       return false;
     } catch {
       return false;

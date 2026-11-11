@@ -2,6 +2,7 @@
 import type { StateCreator } from 'zustand';
 import { cmd } from '../lib/commands';
 import { runDiscovery } from '../lib/discovery';
+import { readableError } from '../utils/error-messages';
 import type { AppStore, ContextDiscoverySlice } from './types';
 
 export const createContextDiscoverySlice: StateCreator<AppStore, [], [], ContextDiscoverySlice> = (set, get) => ({
@@ -81,7 +82,7 @@ export const createContextDiscoverySlice: StateCreator<AppStore, [], [], Context
       }
     } catch (error) {
       console.error('Auto-discovery failed:', error);
-      setSettingsStatus(`Auto-discovery failed: ${error}`);
+      setSettingsStatus(`Auto-discovery failed: ${readableError(error)}`);
     } finally {
       set({ isScanning: false });
     }
@@ -116,7 +117,7 @@ export const createContextDiscoverySlice: StateCreator<AppStore, [], [], Context
       setTimeout(() => set({ settingsStatus: '' }), 3000);
     } catch (error) {
       console.error('Full scan failed:', error);
-      setSettingsStatus(`Scan failed: ${error}`);
+      setSettingsStatus(`Scan failed: ${readableError(error)}`);
     } finally {
       set({ isScanning: false });
     }
@@ -144,7 +145,7 @@ export const createContextDiscoverySlice: StateCreator<AppStore, [], [], Context
       setSettingsStatus(`Added: ${dirToAdd}`);
       setTimeout(() => set({ settingsStatus: '' }), 2000);
     } catch (error) {
-      const errorMsg = String(error).replace('Error: ', '');
+      const errorMsg = readableError(error);
       setSettingsStatus(`Error: ${errorMsg}`);
       console.error('Failed to add directory:', error);
     }
@@ -159,7 +160,7 @@ export const createContextDiscoverySlice: StateCreator<AppStore, [], [], Context
       setSettingsStatus(`Removed: ${dir}`);
       setTimeout(() => set({ settingsStatus: '' }), 2000);
     } catch (error) {
-      const errorMsg = String(error).replace('Error: ', '');
+      const errorMsg = readableError(error);
       setSettingsStatus(`Error removing: ${errorMsg}`);
       console.error('Failed to remove directory:', error);
     }

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import type { StateCreator } from 'zustand';
 import { cmd } from '../lib/commands';
+import { readableError } from '../utils/error-messages';
 import type { AppStore, DecisionsSlice } from './types';
 
 export interface DeveloperDecision {
@@ -29,7 +30,7 @@ export const createDecisionsSlice: StateCreator<AppStore, [], [], DecisionsSlice
       const decisions = await cmd('get_decisions', {}) as unknown as DeveloperDecision[];
       set({ decisions, decisionsLoading: false });
     } catch (e) {
-      set({ decisionsLoading: false, decisionsError: String(e) });
+      set({ decisionsLoading: false, decisionsError: readableError(e) });
     }
   },
 

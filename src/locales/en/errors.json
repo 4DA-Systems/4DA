@@ -43,5 +43,6 @@
   "errorMsg.ipc": "App communication error. Please restart the app.",
   "errorMsg.git": "Git operation failed. Check the repository path.",
   "errorMsg.fallback": "Something went wrong. Please try again.",
+  "errorMsg.signalRequired": "This is part of 4DA Signal. Upgrade to unlock it.",
   "errorMsg.limitAdjust": "Adjust in Settings > Intelligence, or wait until midnight reset."
 }

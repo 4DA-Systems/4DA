@@ -165,6 +165,46 @@ describe('StandingQueriesSection — create', () => {
     fireEvent.click(screen.getByText('settings.standingQueries.create'));
     expect(await screen.findByRole('alert')).toHaveTextContent('settings.standingQueries.maxReached');
   });
+
+  // The standing-query commands return `Result<_, FourDaError>`: a rejection
+  // is the catch-all OBJECT (error.rs), which `String(e)` turned into
+  // "[object Object]" so neither the cap nor the gate was ever recognised.
+  it('recognises the max-10 rejection when it arrives as a structured error object', async () => {
+    routeCmd({
+      create_standing_query: () =>
+        Promise.reject({
+          code: 'E9999',
+          title: 'Unexpected error',
+          detail: 'Maximum of 10 active standing queries reached. Delete one to add another.',
+          remediation: ['Try the operation again.', 'If this persists, restart 4DA.'],
+          severity: 'error',
+        }),
+    });
+    render(<StandingQueriesSection />);
+    const input = await screen.findByLabelText('settings.standingQueries.inputLabel');
+    fireEvent.change(input, { target: { value: 'one query too many' } });
+    fireEvent.click(screen.getByText('settings.standingQueries.create'));
+    expect(await screen.findByRole('alert')).toHaveTextContent('settings.standingQueries.maxReached');
+  });
+
+  it('routes a structured Signal-gate rejection on create to the locked state', async () => {
+    routeCmd({
+      create_standing_query: () =>
+        Promise.reject({
+          code: 'E9999',
+          title: 'Unexpected error',
+          detail: 'Standing Queries requires 4DA Signal — start your free trial or upgrade to unlock it.',
+          remediation: ['Try the operation again.', 'If this persists, restart 4DA.'],
+          severity: 'error',
+        }),
+    });
+    render(<StandingQueriesSection />);
+    const input = await screen.findByLabelText('settings.standingQueries.inputLabel');
+    fireEvent.change(input, { target: { value: 'tauri updates' } });
+    fireEvent.click(screen.getByText('settings.standingQueries.create'));
+    expect(await screen.findByText('settings.standingQueries.locked.title')).toBeInTheDocument();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+  });
 });
 
 describe('StandingQueriesSection — suggestions', () => {

@@ -3,6 +3,7 @@ import { cmd } from '../../lib/commands';
 import { useTranslation } from 'react-i18next';
 import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '../../store';
+import { readableError } from '../../utils/error-messages';
 
 export function PersonalizationSection() {
   const { t } = useTranslation();
@@ -39,7 +40,7 @@ export function PersonalizationSection() {
       setSettingsStatus(t('settings.personalization.interestAdded'));
       setTimeout(() => setSettingsStatus(''), 2000);
     } catch (error) {
-      setSettingsStatus(`Error: ${error}`);
+      setSettingsStatus(`Error: ${readableError(error)}`);
     }
   };
 
@@ -51,7 +52,7 @@ export function PersonalizationSection() {
       setSettingsStatus(t('settings.personalization.suggestionDismissed'));
       setTimeout(() => setSettingsStatus(''), 2000);
     } catch (error) {
-      setSettingsStatus(`Error: ${error}`);
+      setSettingsStatus(`Error: ${readableError(error)}`);
     }
   };
 

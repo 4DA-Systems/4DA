@@ -54,14 +54,40 @@ describe('isSignalGateError', () => {
     expect(isSignalGateError(undefined)).toBe(false);
   });
 
-  // The reason a dedicated classifier is needed: translateError has no Signal
-  // pattern, so a paywall would fall through to the generic fallback and render
-  // as a red error. This guards the regression at its root.
-  it('translateError alone would mis-handle the gate (hence the separate classifier)', () => {
+  // A command returning `FourDaError` (get_knowledge_gaps, the standing-query
+  // commands, ...) rejects with an OBJECT: the gate sentence is the `detail`
+  // of the catch-all arm (error.rs). Looking for it only in a string showed
+  // every free user "Couldn't check... Retry" instead of the upgrade card.
+  it('detects the gate in the structured object the backend rejects with', () => {
+    for (const detail of GATE_MESSAGES) {
+      const rejection = {
+        code: 'E9999',
+        title: 'Unexpected error',
+        detail,
+        remediation: ['Try the operation again.', 'If this persists, restart 4DA.'],
+        severity: 'error',
+      };
+      expect(isSignalGateError(rejection)).toBe(true);
+    }
+    expect(isSignalGateError({
+      code: 'E3001',
+      title: 'Database busy',
+      detail: 'The database is temporarily locked by another operation.',
+      remediation: ['Wait a moment and try again.'],
+      severity: 'warning',
+    })).toBe(false);
+  });
+
+  // A gate that reaches a surface with no upgrade card used to read "Something
+  // went wrong" (string) or "Unexpected error: ... Try the operation again."
+  // (object). It is named instead, without the backend sentence's free-trial
+  // offer: the trial starts by itself on first launch and cannot be restarted.
+  // Gated tabs still branch on isSignalGateError FIRST, to render the card.
+  it('translateError names the gate rather than calling it a fault', () => {
     const out = translateError(GATE_MESSAGES[0]);
+    expect(out).toBe('This is part of 4DA Signal. Upgrade to unlock it.');
     expect(out).not.toContain('requires 4DA Signal'); // not surfaced verbatim
-    // It collapses to the generic fallback — which is exactly why callers must
-    // branch on isSignalGateError BEFORE translateError.
+    expect(out).not.toMatch(/free trial|try again/i);
     expect(isSignalGateError(GATE_MESSAGES[0])).toBe(true);
   });
 });

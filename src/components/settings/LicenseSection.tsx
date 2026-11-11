@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppStore } from '../../store';
 import { cmd } from '../../lib/commands';
+import { trialOfferFor } from '../../lib/trial-offer';
 import { formatLocalDate } from '../../utils/format-date';
 
 export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) {
@@ -59,7 +60,9 @@ export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) 
   const isPro = !expired && (tier === 'signal' || tier === 'team' || tier === 'enterprise' || tier === 'pro');
   const trialActive = trialStatus?.active === true;
   const trialExpired = trialStatus != null && !trialStatus.active && trialStatus.started_at != null;
-  const canStartTrial = !isPro && !trialStatus?.started_at;
+  // The trial starts by itself on first launch, so the button is offered only
+  // when the backend confirmed none has run and no licence is present.
+  const canStartTrial = !isPro && trialOfferFor(trialStatus) === 'available';
   const expiryWarning = isPro && daysRemaining > 0 && daysRemaining <= 14;
 
   const handleActivate = async () => {
@@ -71,7 +74,8 @@ export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) 
       onStatus(t('settings.license.activated'));
       setKey('');
     } else {
-      onStatus(result.reason ? t('error.license.validationFailed', { detail: result.reason }) : t('settings.license.invalidKey'));
+      // The key lives in the `errors` namespace: without the prefix the raw key was shown.
+      onStatus(result.reason ? t('errors:error.license.validationFailed', { detail: result.reason }) : t('settings.license.invalidKey'));
     }
     setTimeout(() => onStatus(''), 5000);
   };
@@ -110,7 +114,10 @@ export function LicenseSection({ onStatus }: { onStatus: (s: string) => void }) 
     if (ok) {
       onStatus(t('settings.license.trialStarted'));
     } else {
-      onStatus(t('settings.license.trialError'));
+      // A refused start re-reads the trial status (license-slice): say that the
+      // trial already ran when that is why, not a generic "could not start".
+      const used = trialOfferFor(useAppStore.getState().trialStatus) === 'used';
+      onStatus(used ? t('pro.trialEnded') : t('settings.license.trialError'));
     }
     setTimeout(() => onStatus(''), 3000);
   };

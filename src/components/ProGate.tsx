@@ -11,10 +11,11 @@ interface ProGateProps {
 
 export function ProGate({ children, feature }: ProGateProps) {
   const { t } = useTranslation();
-  const { isPro, trialStatus, expired, daysRemaining } = useLicense();
+  const { isPro, trialOffer, expired, daysRemaining } = useLicense();
   const startTrial = useAppStore((s) => s.startTrial);
   const activateLicense = useAppStore((s) => s.activateLicense);
   const [starting, setStarting] = useState(false);
+  const [startFailed, setStartFailed] = useState(false);
   const [licenseKey, setLicenseKey] = useState('');
   const [activating, setActivating] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -39,14 +40,20 @@ export function ProGate({ children, feature }: ProGateProps) {
     return <>{children}</>;
   }
 
-  const trialExpired = trialStatus && !trialStatus.active && trialStatus.started_at;
+  const trialExpired = trialOffer === 'used';
   const licenseExpired = expired;
-  const canStartTrial = !trialStatus?.started_at;
+  // The trial starts by itself on first launch, so it is offered here only
+  // when the backend confirmed none has run (use-license `trialOfferFor`).
+  const canStartTrial = trialOffer === 'available';
 
   const handleStartTrial = async () => {
     setStarting(true);
-    await startTrial();
+    setStartFailed(false);
+    // A refused start re-reads the trial status: a trial that already ran
+    // turns the offer into the "trial has ended" line above.
+    const started = await startTrial();
     setStarting(false);
+    setStartFailed(!started);
   };
 
   const handleActivate = async () => {
@@ -100,6 +107,9 @@ export function ProGate({ children, feature }: ProGateProps) {
               >
                 {starting ? t('pro.startingTrial') : t('pro.startTrial')}
               </button>
+            )}
+            {startFailed && !trialExpired && (
+              <p role="alert" className="text-[10px] text-error">{t('pro.trialStartFailed')}</p>
             )}
 
             {/* License key activation */}

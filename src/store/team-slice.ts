@@ -2,6 +2,7 @@
 import type { StateCreator } from 'zustand';
 import { cmd } from '../lib/commands';
 import type { TeamSyncStatus, TeamMember } from '../lib/commands';
+import { readableError } from '../utils/error-messages';
 import type { AppStore } from './types';
 
 export interface TeamSlice {
@@ -40,7 +41,7 @@ export const createTeamSlice: StateCreator<AppStore, [], [], TeamSlice> = (set, 
       const status = await cmd('get_team_sync_status');
       set({ teamStatus: status, teamError: null });
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
+      const msg = readableError(e);
       set({ teamError: msg });
     }
   },
@@ -51,7 +52,7 @@ export const createTeamSlice: StateCreator<AppStore, [], [], TeamSlice> = (set, 
       const members = await cmd('get_team_members');
       set({ teamMembers: members, teamLoading: false, teamError: null });
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
+      const msg = readableError(e);
       set({ teamMembers: [], teamLoading: false, teamError: msg });
     }
   },
@@ -77,7 +78,7 @@ export const createTeamSlice: StateCreator<AppStore, [], [], TeamSlice> = (set, 
       });
       return { ok: true };
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
+      const msg = readableError(e);
       set({ teamLoading: false, teamError: msg });
       return { ok: false, error: msg };
     }
@@ -107,7 +108,7 @@ export const createTeamSlice: StateCreator<AppStore, [], [], TeamSlice> = (set, 
       void get().loadTeamMembers();
       return { ok: true };
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
+      const msg = readableError(e);
       set({ teamLoading: false, teamError: msg });
       return { ok: false, error: msg };
     }
@@ -119,7 +120,7 @@ export const createTeamSlice: StateCreator<AppStore, [], [], TeamSlice> = (set, 
       set({ inviteCode: result.code, inviteExpiry: result.expires_at });
       return { ok: true, code: result.code, expiresAt: result.expires_at };
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
+      const msg = readableError(e);
       set({ teamError: msg });
       return { ok: false, error: msg };
     }
@@ -129,7 +130,7 @@ export const createTeamSlice: StateCreator<AppStore, [], [], TeamSlice> = (set, 
     try {
       await cmd('share_dna_with_team', { primaryStack, interests, blindSpots, identitySummary });
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
+      const msg = readableError(e);
       set({ teamError: msg });
     }
   },
@@ -138,7 +139,7 @@ export const createTeamSlice: StateCreator<AppStore, [], [], TeamSlice> = (set, 
     try {
       await cmd('share_signal_with_team', { signalId, chainName, priority, techTopics, suggestedAction });
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
+      const msg = readableError(e);
       set({ teamError: msg });
     }
   },
@@ -147,7 +148,7 @@ export const createTeamSlice: StateCreator<AppStore, [], [], TeamSlice> = (set, 
     try {
       await cmd('propose_team_decision', { decisionId, title, decisionType, rationale });
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
+      const msg = readableError(e);
       set({ teamError: msg });
     }
   },
