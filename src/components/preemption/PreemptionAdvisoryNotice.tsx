@@ -7,7 +7,7 @@ import { useTranslation } from 'react-i18next';
 
 import { cmd, CommandTimeoutError } from '../../lib/commands';
 import type { PreemptionNegative } from '../../lib/negative-readiness';
-import { translateError } from '../../utils/error-messages';
+import { readableError } from '../../utils/error-messages';
 import { formatRelativeDate } from '../../utils/format-date';
 
 /**
@@ -159,9 +159,9 @@ export const PreemptionAdvisoryNotice = memo(function PreemptionAdvisoryNotice({
         // A long first download outlives the IPC timeout while the sync keeps
         // running in the backend: that is "still checking", not a failure.
         if (e instanceof CommandTimeoutError) onRecheck();
-        // The backend rejects with an error object; `String(e)` printed
+        // The backend rejects with an error object, which printed as
         // "[object Object]" where the reason belongs.
-        else setCheckError(translateError(e));
+        else setCheckError(readableError(e));
       })
       .finally(() => setCheckingNow(false));
   }, [onRecheck]);

@@ -19,9 +19,6 @@ const ALLOWED = new Set([
   'utils/error-messages.ts',
   // Local diagnostic log only: it JSON-encodes objects before this fallback.
   'lib/error-reporter.ts',
-  // Owned by another Wave 0 stream, which gives its "Check now" failure
-  // readable text itself. Remove this entry once that lands.
-  'components/preemption/PreemptionAdvisoryNotice.tsx',
 ]);
 
 // A caught value, by the names this codebase gives it, stringified whole.
