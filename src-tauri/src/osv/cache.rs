@@ -9,7 +9,7 @@
 
 use std::collections::HashSet;
 use std::io::{BufReader, Read};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use tracing::{debug, info, warn};
 
@@ -38,6 +38,10 @@ const MAX_ECOSYSTEM_ZIP_BYTES: u64 = 1024 * 1024 * 1024;
 /// producing bytes for as long as the compressed stream does.
 const MAX_ADVISORY_JSON_BYTES: u64 = 8 * 1024 * 1024;
 
+/// A partial download left by a process that died is removed once it is this
+/// old. A live download cannot be: the client gives up after 300 s.
+const ABANDONED_PART_SECS: u64 = 15 * 60;
+
 /// Canonical ecosystem names as used in the GCS bucket paths.
 /// The GCS bucket uses these exact strings as path segments.
 const KNOWN_ECOSYSTEMS: &[&str] = &[
@@ -52,35 +56,244 @@ const KNOWN_ECOSYSTEMS: &[&str] = &[
     "Pub",
 ];
 
-/// Get the cache directory for OSV ZIP files.
-fn cache_dir() -> PathBuf {
-    RuntimePaths::get().data_dir.join("osv-cache")
+/// What asking the remote about an ecosystem's archive established. "Could
+/// not ask" is its own answer: it used to be read as "fresh", so an offline
+/// machine recorded a successful sync every time it re-read its old archive.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) enum Freshness {
+    /// The remote's ETag matches the archive on disk: it is the current one.
+    Current,
+    /// No usable archive on disk, or the remote publishes a different one.
+    Outdated,
+    /// The remote could not be asked (offline, a proxy, the host blocked).
+    Unknown(String),
 }
 
-/// Get the path where a cached ecosystem ZIP would be stored.
-fn zip_path(ecosystem: &str) -> PathBuf {
-    cache_dir().join(format!("{ecosystem}.zip"))
+/// Where the advisory archives come from and where they are kept.
+/// [`Mirror::live`] is OSV's bucket and this install's `osv-cache` directory;
+/// tests point one at a local server and a temp directory, so the code that
+/// runs in production is the code under test.
+#[derive(Debug, Clone)]
+pub(crate) struct Mirror {
+    base_url: String,
+    dir: PathBuf,
 }
 
-/// Get the path for the cache metadata file.
-fn meta_path(ecosystem: &str) -> PathBuf {
-    cache_dir().join(format!("{ecosystem}.meta.json"))
-}
+impl Mirror {
+    pub(crate) fn live() -> Self {
+        Self {
+            base_url: GCS_BASE_URL.to_string(),
+            dir: RuntimePaths::get().data_dir.join("osv-cache"),
+        }
+    }
 
-/// Read cached metadata for an ecosystem, if it exists.
-pub(crate) fn read_meta(ecosystem: &str) -> Option<CacheMeta> {
-    let path = meta_path(ecosystem);
-    let data = std::fs::read_to_string(&path).ok()?;
-    serde_json::from_str(&data).ok()
-}
+    #[cfg(test)]
+    pub(crate) fn at(base_url: &str, dir: &Path) -> Self {
+        Self {
+            base_url: base_url.trim_end_matches('/').to_string(),
+            dir: dir.to_path_buf(),
+        }
+    }
 
-/// Write cache metadata for an ecosystem.
-fn write_meta(meta: &CacheMeta) -> Result<()> {
-    let path = meta_path(&meta.ecosystem);
-    let json = serde_json::to_string_pretty(meta).context("Failed to serialize cache metadata")?;
-    std::fs::write(&path, json)
-        .with_context(|| format!("Failed to write cache meta to {}", path.display()))?;
-    Ok(())
+    /// Where a cached ecosystem ZIP is stored.
+    pub(crate) fn zip_path(&self, ecosystem: &str) -> PathBuf {
+        self.dir.join(format!("{ecosystem}.zip"))
+    }
+
+    fn meta_path(&self, ecosystem: &str) -> PathBuf {
+        self.dir.join(format!("{ecosystem}.meta.json"))
+    }
+
+    fn archive_url(&self, ecosystem: &str) -> String {
+        format!("{}/{ecosystem}/all.zip", self.base_url)
+    }
+
+    /// Read cached metadata for an ecosystem, if it exists.
+    pub(crate) fn read_meta(&self, ecosystem: &str) -> Option<CacheMeta> {
+        let data = std::fs::read_to_string(self.meta_path(ecosystem)).ok()?;
+        serde_json::from_str(&data).ok()
+    }
+
+    fn write_meta(&self, meta: &CacheMeta) -> Result<()> {
+        let path = self.meta_path(&meta.ecosystem);
+        let json =
+            serde_json::to_string_pretty(meta).context("Failed to serialize cache metadata")?;
+        std::fs::write(&path, json)
+            .with_context(|| format!("Failed to write cache meta to {}", path.display()))?;
+        Ok(())
+    }
+
+    /// When the archive on disk finished downloading, in the form the sync
+    /// status stores times (UTC `YYYY-MM-DD HH:MM:SS`): the last moment that
+    /// data is known to have been current. `None` without an archive or
+    /// without a readable record of its download.
+    pub(crate) fn archive_downloaded_at(&self, ecosystem: &str) -> Option<String> {
+        if !self.zip_path(ecosystem).exists() {
+            return None;
+        }
+        let meta = self.read_meta(ecosystem)?;
+        let at = chrono::DateTime::parse_from_rfc3339(&meta.downloaded_at).ok()?;
+        Some(
+            at.with_timezone(&chrono::Utc)
+                .format("%Y-%m-%d %H:%M:%S")
+                .to_string(),
+        )
+    }
+
+    /// Download an ecosystem's advisory ZIP from the OSV bucket
+    /// (`{base}/{ecosystem}/all.zip`) to `osv-cache/{ecosystem}.zip`.
+    ///
+    /// The archive on disk is replaced only by a complete download that
+    /// opens as a ZIP ([`replace_archive`]): a failed, partial or non-archive
+    /// response (a proxy's block page) leaves the previous archive as it was.
+    pub(crate) async fn download(&self, ecosystem: &str) -> Result<PathBuf> {
+        std::fs::create_dir_all(&self.dir)
+            .with_context(|| format!("Failed to create cache dir: {}", self.dir.display()))?;
+        remove_abandoned_parts(&self.dir, ecosystem);
+
+        let url = self.archive_url(ecosystem);
+        let dest = self.zip_path(ecosystem);
+
+        info!(target: "4da::osv::cache", ecosystem, url = %url, "Downloading ecosystem ZIP");
+
+        let client = build_client(300)?;
+        let response = client
+            .get(&url)
+            .send()
+            .await
+            .with_context(|| format!("Failed to download {url}"))?;
+
+        if !response.status().is_success() {
+            return Err(FourDaError::Internal(format!(
+                "GCS returned HTTP {} for {ecosystem}/all.zip",
+                response.status().as_u16()
+            )));
+        }
+
+        let etag = header_str(response.headers(), "etag");
+        let last_modified = header_str(response.headers(), "last-modified");
+
+        let size_bytes = replace_archive(
+            response.bytes_stream(),
+            &dest,
+            ecosystem,
+            MAX_ECOSYSTEM_ZIP_BYTES,
+        )
+        .await?;
+
+        self.write_meta(&CacheMeta {
+            ecosystem: ecosystem.to_string(),
+            etag,
+            last_modified,
+            downloaded_at: chrono::Utc::now().to_rfc3339(),
+            size_bytes,
+            advisory_count: 0, // Updated after sync_from_zip
+        })?;
+
+        info!(target: "4da::osv::cache", ecosystem, size_bytes, "ZIP downloaded");
+        Ok(dest)
+    }
+
+    /// Ask the remote whether the archive on disk is still the current one:
+    /// an HTTP HEAD and an ETag comparison, no download.
+    pub(crate) async fn freshness(&self, ecosystem: &str) -> Freshness {
+        let Some(stored_etag) = self.read_meta(ecosystem).and_then(|m| m.etag) else {
+            return Freshness::Outdated;
+        };
+        if !self.zip_path(ecosystem).exists() {
+            return Freshness::Outdated;
+        }
+
+        let url = self.archive_url(ecosystem);
+        let client = match build_client(15) {
+            Ok(client) => client,
+            Err(e) => return Freshness::Unknown(e.to_string()),
+        };
+        let response = match client.head(&url).send().await {
+            Ok(response) => response,
+            Err(e) => return Freshness::Unknown(format!("HEAD request failed for {url}: {e}")),
+        };
+
+        // The host answered, with a refusal. Some proxies refuse HEAD and
+        // serve GET, so the download is tried, and its result decides.
+        if !response.status().is_success() {
+            warn!(target: "4da::osv::cache", ecosystem, status = response.status().as_u16(), "HEAD failed");
+            return Freshness::Outdated;
+        }
+
+        match header_str(response.headers(), "etag") {
+            Some(ref remote) if remote == &stored_etag => {
+                debug!(target: "4da::osv::cache", ecosystem, "Cache fresh (ETags match)");
+                Freshness::Current
+            }
+            _ => {
+                debug!(target: "4da::osv::cache", ecosystem, "Cache stale (ETags differ)");
+                Freshness::Outdated
+            }
+        }
+    }
+
+    /// Sync advisories from the cached ZIP into the database.
+    ///
+    /// Streams through ZIP entries, deserializes each as `Vulnerability`,
+    /// filters to packages in `user_packages` set, stores via upsert.
+    ///
+    /// Returns count of advisories stored.
+    pub(crate) fn sync_from_zip(
+        &self,
+        db: &Database,
+        ecosystem: &str,
+        user_packages: &HashSet<String>,
+    ) -> Result<usize> {
+        let path = self.zip_path(ecosystem);
+        if !path.exists() {
+            return Err(FourDaError::Internal(format!(
+                "No cached ZIP for ecosystem {ecosystem}"
+            )));
+        }
+
+        let file = std::fs::File::open(&path)
+            .with_context(|| format!("Failed to open {}", path.display()))?;
+        let reader = BufReader::new(file);
+
+        let mut archive = zip::ZipArchive::new(reader)
+            .with_context(|| format!("Failed to read ZIP archive for {ecosystem}"))?;
+
+        let entry_count = archive.len();
+
+        info!(
+            target: "4da::osv::cache",
+            ecosystem = ecosystem,
+            entries = entry_count,
+            user_packages = user_packages.len(),
+            "Syncing advisories from cached ZIP"
+        );
+
+        // Parsing every entry of the npm archive (230k advisories) is one to five
+        // minutes of synchronous work, and the async OSV sync calls this inline.
+        // `cpu_bound` hands this worker's queued tasks to another worker first
+        // (isolated run, 2026-10-24: a 280 s inline sync overlapped a 56 s
+        // whole-runtime stall).
+        let (total_stored, errors) = crate::ipc_blocking::cpu_bound(|| {
+            process_zip_entries(&mut archive, db, user_packages)
+        })?;
+
+        // Update advisory_count in metadata
+        if let Some(mut meta) = self.read_meta(ecosystem) {
+            meta.advisory_count = total_stored;
+            let _ = self.write_meta(&meta);
+        }
+
+        info!(
+            target: "4da::osv::cache",
+            ecosystem = ecosystem,
+            stored = total_stored,
+            skipped_errors = errors,
+            "ZIP sync complete"
+        );
+
+        Ok(total_stored)
+    }
 }
 
 /// Build a reqwest client with the 4DA user-agent.
@@ -93,39 +306,37 @@ fn build_client(timeout_secs: u64) -> Result<reqwest::Client> {
         .map_err(|e| FourDaError::Internal(format!("Failed to build HTTP client: {e}")))
 }
 
-/// Stream a response body to `dest`, refusing to write more than
-/// `MAX_ECOSYSTEM_ZIP_BYTES`. Returns the number of bytes written.
-///
-/// Nothing is buffered in memory beyond one chunk, and an over-cap body is
-/// abandoned with its partial file removed rather than left to be parsed.
-async fn stream_to_file(
-    response: reqwest::Response,
-    dest: &std::path::Path,
-    ecosystem: &str,
-) -> Result<u64> {
+/// Stream a response body to `dest`, refusing to write more than `cap`
+/// bytes. Returns the number of bytes written. Nothing is buffered in memory
+/// beyond one chunk. The caller owns `dest` and removes it on an error.
+async fn stream_to_file<S, B, E>(body: S, dest: &Path, ecosystem: &str, cap: u64) -> Result<u64>
+where
+    S: futures::Stream<Item = std::result::Result<B, E>>,
+    B: AsRef<[u8]>,
+    E: std::fmt::Display,
+{
     use futures::StreamExt;
     use std::io::Write;
 
     let mut file = std::fs::File::create(dest)
         .with_context(|| format!("Failed to create {}", dest.display()))?;
     let mut written: u64 = 0;
-    let mut stream = response.bytes_stream();
+    let mut body = std::pin::pin!(body);
 
-    while let Some(chunk) = stream.next().await {
+    while let Some(chunk) = body.next().await {
         let chunk =
             chunk.with_context(|| format!("Failed to read response body for {ecosystem}"))?;
+        let chunk = chunk.as_ref();
         written = written.saturating_add(chunk.len() as u64);
 
-        if written > MAX_ECOSYSTEM_ZIP_BYTES {
-            drop(file);
-            let _ = std::fs::remove_file(dest);
+        if written > cap {
             return Err(FourDaError::Internal(format!(
                 "{ecosystem}/all.zip exceeds the {} MB download cap — refusing",
-                MAX_ECOSYSTEM_ZIP_BYTES / (1024 * 1024)
+                cap / (1024 * 1024)
             )));
         }
 
-        file.write_all(&chunk)
+        file.write_all(chunk)
             .with_context(|| format!("Failed to write ZIP to {}", dest.display()))?;
     }
 
@@ -134,164 +345,95 @@ async fn stream_to_file(
     Ok(written)
 }
 
+/// The temp file a download of `dest` streams into: beside it (the same
+/// volume, so the final rename is atomic) and named for this process, so a
+/// desktop app and a background engine downloading the same ecosystem never
+/// write one file.
+fn part_path(dest: &Path) -> PathBuf {
+    let name = dest.file_name().map_or_else(
+        || "archive.zip".to_string(),
+        |n| n.to_string_lossy().into_owned(),
+    );
+    dest.with_file_name(format!("{name}.{}.part", std::process::id()))
+}
+
+/// Whether a file name is one of [`part_path`]'s temp files.
+fn is_part_file(name: &str) -> bool {
+    Path::new(name)
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("part"))
+}
+
+/// Remove `ecosystem`'s partial downloads that no live download can own.
+/// Best effort.
+fn remove_abandoned_parts(dir: &Path, ecosystem: &str) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    let prefix = format!("{ecosystem}.zip.");
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if !name.starts_with(&prefix) || !is_part_file(&name) {
+            continue;
+        }
+        let abandoned = entry
+            .metadata()
+            .and_then(|m| m.modified())
+            .ok()
+            .and_then(|at| at.elapsed().ok())
+            .is_some_and(|age| age.as_secs() >= ABANDONED_PART_SECS);
+        if abandoned {
+            let _ = std::fs::remove_file(entry.path());
+        }
+    }
+}
+
+/// Whether `path` opens as a ZIP archive (its central directory reads).
+fn check_is_archive(path: &Path) -> Result<()> {
+    let file =
+        std::fs::File::open(path).with_context(|| format!("Failed to open {}", path.display()))?;
+    zip::ZipArchive::new(BufReader::new(file))
+        .map(|_| ())
+        .map_err(|e| FourDaError::Internal(format!("the response is not a ZIP archive ({e})")))
+}
+
+/// Put a downloaded archive at `dest` without ever exposing a partial or
+/// invalid file there.
+///
+/// The body streams to a temp file beside `dest`, must open as a ZIP archive,
+/// and only then replaces `dest` by a rename. The download used to create
+/// (truncate) `dest` first and write into it, so a connection that dropped
+/// mid-body, an over-cap body or a proxy's HTML page destroyed the good
+/// archive the offline fallback depends on. Any failure removes the temp file
+/// and leaves `dest` as it was. Returns the bytes written.
+async fn replace_archive<S, B, E>(body: S, dest: &Path, ecosystem: &str, cap: u64) -> Result<u64>
+where
+    S: futures::Stream<Item = std::result::Result<B, E>>,
+    B: AsRef<[u8]>,
+    E: std::fmt::Display,
+{
+    let part = part_path(dest);
+    let downloaded = async {
+        let written = stream_to_file(body, &part, ecosystem, cap).await?;
+        crate::ipc_blocking::cpu_bound(|| check_is_archive(&part))
+            .with_context(|| format!("Downloaded {ecosystem}/all.zip was rejected"))?;
+        std::fs::rename(&part, dest)
+            .with_context(|| format!("Failed to move the download to {}", dest.display()))?;
+        Ok(written)
+    }
+    .await;
+    if downloaded.is_err() {
+        let _ = std::fs::remove_file(&part);
+    }
+    downloaded
+}
+
 /// Extract a header value as an owned String.
 fn header_str(headers: &reqwest::header::HeaderMap, key: &str) -> Option<String> {
     headers
         .get(key)
         .and_then(|v| v.to_str().ok())
         .map(String::from)
-}
-
-/// Download an ecosystem's advisory ZIP from OSV GCS bucket.
-///
-/// URL: `https://osv-vulnerabilities.storage.googleapis.com/{ecosystem}/all.zip`
-/// Stores at: `data/osv-cache/{ecosystem}.zip`
-///
-/// Returns the path to the downloaded file.
-pub async fn download_ecosystem_zip(ecosystem: &str) -> Result<PathBuf> {
-    let dir = cache_dir();
-    std::fs::create_dir_all(&dir)
-        .with_context(|| format!("Failed to create cache dir: {}", dir.display()))?;
-
-    let url = format!("{GCS_BASE_URL}/{ecosystem}/all.zip");
-    let dest = zip_path(ecosystem);
-
-    info!(target: "4da::osv::cache", ecosystem, url = %url, "Downloading ecosystem ZIP");
-
-    let client = build_client(300)?;
-    let response = client
-        .get(&url)
-        .send()
-        .await
-        .with_context(|| format!("Failed to download {url}"))?;
-
-    if !response.status().is_success() {
-        return Err(FourDaError::Internal(format!(
-            "GCS returned HTTP {} for {ecosystem}/all.zip",
-            response.status().as_u16()
-        )));
-    }
-
-    let etag = header_str(response.headers(), "etag");
-    let last_modified = header_str(response.headers(), "last-modified");
-
-    let size_bytes = stream_to_file(response, &dest, ecosystem).await?;
-
-    write_meta(&CacheMeta {
-        ecosystem: ecosystem.to_string(),
-        etag,
-        last_modified,
-        downloaded_at: chrono::Utc::now().to_rfc3339(),
-        size_bytes,
-        advisory_count: 0, // Updated after sync_from_zip
-    })?;
-
-    info!(target: "4da::osv::cache", ecosystem, size_bytes, "ZIP downloaded");
-    Ok(dest)
-}
-
-/// Check if the cached ZIP is stale via HTTP HEAD request (ETag comparison).
-///
-/// Returns `true` if the cache needs updating (no cache, no ETag, or ETag differs).
-pub async fn is_cache_stale(ecosystem: &str) -> Result<bool> {
-    let stored_etag = match read_meta(ecosystem) {
-        Some(m) => match m.etag {
-            Some(e) => e,
-            None => return Ok(true),
-        },
-        None => return Ok(true),
-    };
-
-    if !zip_path(ecosystem).exists() {
-        return Ok(true);
-    }
-
-    let url = format!("{GCS_BASE_URL}/{ecosystem}/all.zip");
-    let client = build_client(15)?;
-
-    let response = client
-        .head(&url)
-        .send()
-        .await
-        .with_context(|| format!("HEAD request failed for {url}"))?;
-
-    if !response.status().is_success() {
-        warn!(target: "4da::osv::cache", ecosystem, status = response.status().as_u16(), "HEAD failed");
-        return Ok(true);
-    }
-
-    let remote_etag = header_str(response.headers(), "etag");
-
-    match remote_etag {
-        Some(ref remote) if remote == &stored_etag => {
-            debug!(target: "4da::osv::cache", ecosystem, "Cache fresh (ETags match)");
-            Ok(false)
-        }
-        _ => {
-            debug!(target: "4da::osv::cache", ecosystem, "Cache stale (ETags differ)");
-            Ok(true)
-        }
-    }
-}
-
-/// Sync advisories from a cached ZIP into the database.
-///
-/// Streams through ZIP entries, deserializes each as `Vulnerability`,
-/// filters to packages in `user_packages` set, stores via upsert.
-///
-/// Returns count of advisories stored.
-pub fn sync_from_zip(
-    db: &Database,
-    ecosystem: &str,
-    user_packages: &HashSet<String>,
-) -> Result<usize> {
-    let path = zip_path(ecosystem);
-    if !path.exists() {
-        return Err(FourDaError::Internal(format!(
-            "No cached ZIP for ecosystem {ecosystem}"
-        )));
-    }
-
-    let file =
-        std::fs::File::open(&path).with_context(|| format!("Failed to open {}", path.display()))?;
-    let reader = BufReader::new(file);
-
-    let mut archive = zip::ZipArchive::new(reader)
-        .with_context(|| format!("Failed to read ZIP archive for {ecosystem}"))?;
-
-    let entry_count = archive.len();
-
-    info!(
-        target: "4da::osv::cache",
-        ecosystem = ecosystem,
-        entries = entry_count,
-        user_packages = user_packages.len(),
-        "Syncing advisories from cached ZIP"
-    );
-
-    // Parsing every entry of the npm archive (230k advisories) is one to five
-    // minutes of synchronous work, and the async OSV sync calls this inline.
-    // `cpu_bound` hands this worker's queued tasks to another worker first
-    // (isolated run, 2026-10-24: a 280 s inline sync overlapped a 56 s
-    // whole-runtime stall).
-    let (total_stored, errors) =
-        crate::ipc_blocking::cpu_bound(|| process_zip_entries(&mut archive, db, user_packages))?;
-
-    // Update advisory_count in metadata
-    if let Some(mut meta) = read_meta(ecosystem) {
-        meta.advisory_count = total_stored;
-        let _ = write_meta(&meta);
-    }
-
-    info!(
-        target: "4da::osv::cache",
-        ecosystem = ecosystem,
-        stored = total_stored,
-        skipped_errors = errors,
-        "ZIP sync complete"
-    );
-
-    Ok(total_stored)
 }
 
 /// Process all entries in a ZIP archive, filtering and storing matching advisories.
@@ -411,13 +553,11 @@ fn vulnerability_matches_packages(vuln: &Vulnerability, user_packages: &HashSet<
 
 /// Get cache status for all known ecosystems.
 pub fn get_all_cache_statuses() -> Result<Vec<CacheMeta>> {
-    let mut statuses = Vec::new();
-    for eco in KNOWN_ECOSYSTEMS {
-        if let Some(meta) = read_meta(eco) {
-            statuses.push(meta);
-        }
-    }
-    Ok(statuses)
+    let mirror = Mirror::live();
+    Ok(KNOWN_ECOSYSTEMS
+        .iter()
+        .filter_map(|eco| mirror.read_meta(eco))
+        .collect())
 }
 
 /// Update all caches for active ecosystems.
@@ -440,8 +580,9 @@ pub async fn update_all_caches(db: &Database) -> Result<CacheUpdateResult> {
         return Ok(result);
     }
 
+    let mirror = Mirror::live();
     for (ecosystem, packages) in &by_ecosystem {
-        update_single_ecosystem(db, ecosystem, packages, &mut result).await;
+        update_single_ecosystem(&mirror, db, ecosystem, packages, &mut result).await;
     }
 
     result.duration_ms = start.elapsed().as_millis() as u64;
@@ -488,33 +629,37 @@ fn collect_ecosystem_packages(
 
 /// Update cache for a single ecosystem: check staleness, download if needed, sync.
 async fn update_single_ecosystem(
+    mirror: &Mirror,
     db: &Database,
     ecosystem: &str,
     packages: &HashSet<String>,
     result: &mut CacheUpdateResult,
 ) {
-    let needs_download = match is_cache_stale(ecosystem).await {
-        Ok(false) => {
+    match mirror.freshness(ecosystem).await {
+        Freshness::Current => {
             result.ecosystems_skipped.push(ecosystem.to_string());
             // Still sync from existing ZIP in case user packages changed
-            sync_and_record(db, ecosystem, packages, result);
+            sync_and_record(mirror, db, ecosystem, packages, result);
             return;
         }
-        Ok(true) => true,
-        Err(e) => {
-            warn!(target: "4da::osv::cache", ecosystem, error = %e, "Staleness check failed");
-            true // Try download anyway
+        Freshness::Outdated => {}
+        Freshness::Unknown(reason) => {
+            // The remote could not be asked, so there is nothing to refresh,
+            // and the archive on disk is unchanged: the sync pass that runs
+            // before this at launch has matched it and recorded the failed
+            // check. Downloading anyway and then re-reading the archive cost
+            // an offline launch minutes of CPU (npm) for the rows it had.
+            let msg = format!("{ecosystem} (check): {reason}");
+            warn!(target: "4da::osv::cache", error = %msg, "Staleness check failed");
+            result.errors.push(msg);
+            return;
         }
-    };
-
-    if !needs_download {
-        return;
     }
 
-    match download_ecosystem_zip(ecosystem).await {
+    match mirror.download(ecosystem).await {
         Ok(_) => {
             result.ecosystems_updated.push(ecosystem.to_string());
-            sync_and_record(db, ecosystem, packages, result);
+            sync_and_record(mirror, db, ecosystem, packages, result);
         }
         Err(e) => {
             let msg = format!("{ecosystem} (download): {e}");
@@ -522,9 +667,10 @@ async fn update_single_ecosystem(
             result.errors.push(msg);
 
             // Fall back to existing cache
-            if zip_path(ecosystem).exists() {
-                let _ =
-                    sync_from_zip(db, ecosystem, packages).map(|c| result.total_advisories += c);
+            if mirror.zip_path(ecosystem).exists() {
+                let _ = mirror
+                    .sync_from_zip(db, ecosystem, packages)
+                    .map(|c| result.total_advisories += c);
             }
         }
     }
@@ -532,12 +678,13 @@ async fn update_single_ecosystem(
 
 /// Sync from ZIP and record the result (advisory count or error).
 fn sync_and_record(
+    mirror: &Mirror,
     db: &Database,
     ecosystem: &str,
     packages: &HashSet<String>,
     result: &mut CacheUpdateResult,
 ) {
-    match sync_from_zip(db, ecosystem, packages) {
+    match mirror.sync_from_zip(db, ecosystem, packages) {
         Ok(count) => result.total_advisories += count,
         Err(e) => {
             let msg = format!("{ecosystem} (sync): {e}");
@@ -547,197 +694,7 @@ fn sync_and_record(
     }
 }
 
-// ============================================================================
-// Tests
-// ============================================================================
-
+// `pub(crate)`: the sync tests reuse its local stand-in for OSV.
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use std::io::Write;
-
-    /// Helper: create a minimal OSV Vulnerability JSON string.
-    fn make_vuln_json(id: &str, package: &str, ecosystem: &str) -> String {
-        serde_json::json!({
-            "id": id,
-            "summary": format!("Test vulnerability in {package}"),
-            "affected": [{
-                "package": {
-                    "name": package,
-                    "ecosystem": ecosystem
-                },
-                "ranges": [{
-                    "type": "SEMVER",
-                    "events": [
-                        {"introduced": "0"},
-                        {"fixed": "99.0.0"}
-                    ]
-                }]
-            }]
-        })
-        .to_string()
-    }
-
-    /// Helper: create an in-memory ZIP containing advisory JSON files.
-    fn make_test_zip(entries: &[(&str, &str)]) -> Vec<u8> {
-        let mut buf = Vec::new();
-        {
-            let mut writer = zip::ZipWriter::new(std::io::Cursor::new(&mut buf));
-            let options = zip::write::SimpleFileOptions::default()
-                .compression_method(zip::CompressionMethod::Stored);
-
-            for (name, content) in entries {
-                writer.start_file(*name, options).expect("start_file");
-                writer.write_all(content.as_bytes()).expect("write");
-            }
-            writer.finish().expect("finish");
-        }
-        buf
-    }
-
-    #[test]
-    fn test_cache_meta_round_trip() {
-        let meta = CacheMeta {
-            ecosystem: "npm".to_string(),
-            etag: Some("\"abc123\"".to_string()),
-            last_modified: Some("Mon, 01 Jan 2026 00:00:00 GMT".to_string()),
-            downloaded_at: "2026-01-01T00:00:00Z".to_string(),
-            size_bytes: 1024,
-            advisory_count: 42,
-        };
-
-        let json = serde_json::to_string(&meta).expect("serialize");
-        let parsed: CacheMeta = serde_json::from_str(&json).expect("deserialize");
-
-        assert_eq!(parsed.ecosystem, "npm");
-        assert_eq!(parsed.etag.as_deref(), Some("\"abc123\""));
-        assert_eq!(parsed.size_bytes, 1024);
-        assert_eq!(parsed.advisory_count, 42);
-    }
-
-    #[test]
-    fn test_vulnerability_matches_packages() {
-        let vuln_json = make_vuln_json("GHSA-test-001", "lodash", "npm");
-        let vuln: Vulnerability = serde_json::from_str(&vuln_json).expect("parse");
-
-        let mut packages = HashSet::new();
-        packages.insert("lodash".to_string());
-
-        assert!(
-            vulnerability_matches_packages(&vuln, &packages),
-            "lodash should match"
-        );
-
-        let mut other_packages = HashSet::new();
-        other_packages.insert("express".to_string());
-
-        assert!(
-            !vulnerability_matches_packages(&vuln, &other_packages),
-            "express should not match lodash vuln"
-        );
-    }
-
-    #[test]
-    fn test_package_filtering_case_insensitive() {
-        let vuln_json = make_vuln_json("GHSA-test-002", "Lodash", "npm");
-        let vuln: Vulnerability = serde_json::from_str(&vuln_json).expect("parse");
-
-        let mut packages = HashSet::new();
-        packages.insert("lodash".to_string()); // lowercase
-
-        assert!(
-            vulnerability_matches_packages(&vuln, &packages),
-            "Case-insensitive match should work"
-        );
-    }
-
-    #[test]
-    fn test_sync_from_zip_filters_and_stores() {
-        use crate::test_utils::test_db;
-
-        let db = test_db();
-
-        // Create a temporary ZIP with two advisories: one matching, one not
-        let lodash_vuln = make_vuln_json("GHSA-match-001", "lodash", "npm");
-        let express_vuln = make_vuln_json("GHSA-skip-001", "express", "npm");
-
-        let zip_bytes = make_test_zip(&[
-            ("GHSA-match-001.json", &lodash_vuln),
-            ("GHSA-skip-001.json", &express_vuln),
-        ]);
-
-        // Write the ZIP to a temp location
-        let tmp_dir = tempfile::tempdir().expect("tempdir");
-        let cache_subdir = tmp_dir.path().join("osv-cache");
-        std::fs::create_dir_all(&cache_subdir).expect("mkdir");
-        let zip_file = cache_subdir.join("npm.zip");
-        std::fs::write(&zip_file, &zip_bytes).expect("write zip");
-
-        // We need to test with actual file paths matching our cache_dir(),
-        // so let's test the filtering + parsing logic directly instead
-        let mut archive = zip::ZipArchive::new(std::io::Cursor::new(&zip_bytes)).expect("open zip");
-
-        let mut user_packages = HashSet::new();
-        user_packages.insert("lodash".to_string());
-
-        let mut total_stored = 0usize;
-        let mut seen_ids: HashSet<String> = HashSet::new();
-
-        for i in 0..archive.len() {
-            let mut entry = archive.by_index(i).expect("entry");
-            let name = entry.name().expect("entry name").into_owned();
-
-            if !name.ends_with(".json") {
-                continue;
-            }
-
-            let mut contents = String::new();
-            entry.read_to_string(&mut contents).expect("read");
-
-            let vuln: Vulnerability = serde_json::from_str(&contents).expect("parse");
-
-            if !vulnerability_matches_packages(&vuln, &user_packages) {
-                continue;
-            }
-
-            total_stored +=
-                super::super::sync::store_vulnerability(&db, &vuln, &mut seen_ids).expect("store");
-        }
-
-        assert_eq!(total_stored, 1, "Only lodash advisory should be stored");
-
-        let advisories = db
-            .get_osv_advisories_for_package("lodash", "npm")
-            .expect("query");
-        assert_eq!(advisories.len(), 1);
-        assert_eq!(advisories[0].advisory_id, "GHSA-match-001");
-
-        // express should NOT have been stored
-        let express_advisories = db
-            .get_osv_advisories_for_package("express", "npm")
-            .expect("query");
-        assert!(express_advisories.is_empty());
-    }
-
-    #[test]
-    fn test_zip_with_non_json_entries_ignored() {
-        let vuln_json = make_vuln_json("GHSA-test-003", "react", "npm");
-        let zip_bytes = make_test_zip(&[
-            ("README.md", "This is not JSON"),
-            ("GHSA-test-003.json", &vuln_json),
-            ("metadata.txt", "Also not JSON"),
-        ]);
-
-        let mut archive = zip::ZipArchive::new(std::io::Cursor::new(&zip_bytes)).expect("open zip");
-
-        let mut json_count = 0;
-        for i in 0..archive.len() {
-            let entry = archive.by_index(i).expect("entry");
-            if entry.name().expect("entry name").ends_with(".json") {
-                json_count += 1;
-            }
-        }
-
-        assert_eq!(json_count, 1, "Only .json entries should be considered");
-    }
-}
+#[path = "cache_tests.rs"]
+pub(crate) mod tests;

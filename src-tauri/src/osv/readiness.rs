@@ -6,7 +6,10 @@
 //! was matched against published advisories and none applied. That claim
 //! holds only when (1) there is an inventory to check, (2) every OSV
 //! ecosystem in it has a successful advisory sync, (3) that sync is recent
-//! enough to trust, and (4) the feed was computed after it. Until now the
+//! enough to trust, and (4) the feed was computed after it. "Successful"
+//! means verified against the remote: a pass that could only re-read the
+//! archive on disk (offline, a proxy) is a failed check, reported with the
+//! age of the data it still serves. Until now the
 //! view inferred all of this from a fetched-item count (>= 100), which a new
 //! user with only stack sources (AD-054) and a small project may never reach,
 //! and which says nothing about whether the advisory sync ever succeeded.
@@ -25,7 +28,10 @@ use crate::db::Database;
 /// A successful sync older than this no longer supports an all-clear. The
 /// sync re-runs every 6 h ([`super::sync::DEFAULT_SYNC_MAX_AGE_HOURS`]); three
 /// days is the same horizon after which source data counts as stale
-/// (`DataFreshness::is_stale`), so a weekend offline still reads as current.
+/// (`DataFreshness::is_stale`). It covers an app that was not running. A sync
+/// that ran and could not verify the data (offline) is `Failed` at once, not
+/// current until the horizon: the sync time is the last verified one, and
+/// the state says how old that is.
 pub(crate) const TRUST_HORIZON_HOURS: i64 = 72;
 
 /// What the advisory data behind an empty worklist supports.
@@ -46,7 +52,9 @@ pub enum AdvisorySyncState {
     /// Advisories are synced, but this feed was computed before they were;
     /// the recompute that matches against them has not landed yet.
     Matching,
-    /// The latest sync of an ecosystem in the inventory failed.
+    /// The latest sync of an ecosystem in the inventory failed, or could not
+    /// verify its data and served the archive on disk. `synced_at` is how old
+    /// the data still being matched is.
     Failed,
     /// Every ecosystem synced, but the oldest sync is past the trust horizon.
     Stale,
@@ -61,8 +69,9 @@ pub struct AdvisorySync {
     pub state: AdvisorySyncState,
     /// OSV ecosystems the dependency inventory needs advisories for.
     pub ecosystems: u32,
-    /// Oldest last-sync time among those ecosystems (UTC,
-    /// `YYYY-MM-DD HH:MM:SS`): the freshness floor of the advisory data.
+    /// Oldest last VERIFIED sync among those ecosystems (UTC,
+    /// `YYYY-MM-DD HH:MM:SS`): the freshness floor of the advisory data,
+    /// whatever the state. `None` when an ecosystem has no verified data.
     pub synced_at: Option<String>,
     /// The failing ecosystem's error, when `state` is `failed`.
     pub error: Option<String>,
@@ -121,6 +130,10 @@ const SYNC_TIME_FORMAT: &str = "%Y-%m-%d %H:%M:%S";
 /// failure outranks a missing sync, which outranks staleness — the most
 /// actionable problem is the one reported. A missing sync is `Syncing` only
 /// while a sync actually runs; otherwise it has `NotStarted`.
+///
+/// A row's time is its last verified sync, error or not (`db::osv_sync_status`),
+/// so a failing ecosystem still dates the data it serves: `synced_at` is the
+/// oldest such time, and is absent when any ecosystem has none.
 pub(crate) fn classify(
     required: &[String],
     statuses: &[SyncStatus],
@@ -142,6 +155,8 @@ pub(crate) fn classify(
         return out;
     }
     let mut never_synced = false;
+    // Some ecosystem has no verified data to date: there is no floor.
+    let mut undated = false;
     let mut oldest: Option<NaiveDateTime> = None;
     for ecosystem in required {
         let status = statuses
@@ -149,24 +164,28 @@ pub(crate) fn classify(
             .find(|s| s.ecosystem.eq_ignore_ascii_case(ecosystem));
         let Some(status) = status else {
             never_synced = true;
+            undated = true;
             continue;
         };
+        let verified_at = status
+            .last_synced_at
+            .as_deref()
+            .and_then(|t| NaiveDateTime::parse_from_str(t, SYNC_TIME_FORMAT).ok());
+        match verified_at {
+            Some(at) => oldest = Some(oldest.map_or(at, |o| o.min(at))),
+            None => undated = true,
+        }
         if let Some(err) = &status.error {
             if out.error.is_none() {
                 out.error = Some(format!("{}: {err}", status.ecosystem));
             }
-            continue;
-        }
-        match status
-            .last_synced_at
-            .as_deref()
-            .and_then(|t| NaiveDateTime::parse_from_str(t, SYNC_TIME_FORMAT).ok())
-        {
-            Some(at) => oldest = Some(oldest.map_or(at, |o| o.min(at))),
-            None => never_synced = true,
+        } else if verified_at.is_none() {
+            never_synced = true;
         }
     }
-    out.synced_at = oldest.map(|t| t.format(SYNC_TIME_FORMAT).to_string());
+    if !undated {
+        out.synced_at = oldest.map(|t| t.format(SYNC_TIME_FORMAT).to_string());
+    }
     out.state = if out.error.is_some() {
         AdvisorySyncState::Failed
     } else if never_synced && in_flight {

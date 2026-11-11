@@ -785,7 +785,57 @@ async fn compute_feed(entitled: bool) -> Result<EvidenceFeed> {
         TierScope::FreeFloor
     });
     feed.computed_at = Some(chrono::Utc::now().to_rfc3339());
+    // What the advisory matching above read. An empty lane says "no open
+    // advisory", which holds only when the advisory data was synced and is
+    // current; the lane asks the same question Preemption's empty worklist
+    // does (`osv::readiness`). Read after the items, as Preemption does.
+    feed.advisory_sync = advisory_readiness().await;
     Ok(feed)
+}
+
+/// The live advisory readiness, read off the async runtime.
+async fn advisory_readiness() -> Option<crate::osv::readiness::AdvisorySync> {
+    tokio::task::spawn_blocking(|| {
+        crate::get_database()
+            .ok()
+            .map(|db| crate::osv::readiness::advisory_sync(db))
+    })
+    .await
+    .ok()
+    .flatten()
+}
+
+/// The feed as served: its advisory state is what is true NOW combined with
+/// what its matching saw (`osv::readiness::overlay`), so a sync that failed
+/// or aged since a cached feed was computed shows at once, and a feed
+/// computed before the data was ready does not read as checked.
+fn with_live_readiness(
+    mut feed: EvidenceFeed,
+    live: Option<&crate::osv::readiness::AdvisorySync>,
+) -> EvidenceFeed {
+    if let Some(live) = live {
+        feed.advisory_sync = Some(crate::osv::readiness::overlay(
+            feed.advisory_sync.as_ref(),
+            live.clone(),
+        ));
+    }
+    feed
+}
+
+/// A cached feed whose matching ran before the advisory data was ready,
+/// while that data is ready now: it is recomputed instead of served, so the
+/// lane leaves "checking" on the first ask after the sync, not ten minutes
+/// later when the cache expires.
+fn predates_ready_data(
+    feed: &EvidenceFeed,
+    live: Option<&crate::osv::readiness::AdvisorySync>,
+) -> bool {
+    use crate::osv::readiness::AdvisorySyncState::Ready;
+    live.is_some_and(|live| live.state == Ready)
+        && feed
+            .advisory_sync
+            .as_ref()
+            .is_some_and(|stamped| stamped.state != Ready)
 }
 
 /// Signal Lane 1: what changed in the user's stack, as an `EvidenceFeed`.
@@ -798,18 +848,20 @@ pub async fn get_stack_changes(force: Option<bool>) -> std::result::Result<Evide
     let entitled = crate::settings::is_signal();
     let asked = Instant::now();
     let force = force.unwrap_or(false);
+    let live = advisory_readiness().await;
+    let servable = |feed: &EvidenceFeed| !predates_ready_data(feed, live.as_ref());
     if !force {
-        if let Some(feed) = cached(entitled, None) {
-            return Ok(feed);
+        if let Some(feed) = cached(entitled, None).filter(servable) {
+            return Ok(with_live_readiness(feed, live.as_ref()));
         }
     }
     let _one_at_a_time = COMPUTE.lock().await;
-    if let Some(feed) = cached(entitled, force.then_some(asked)) {
-        return Ok(feed);
+    if let Some(feed) = cached(entitled, force.then_some(asked)).filter(servable) {
+        return Ok(with_live_readiness(feed, live.as_ref()));
     }
     let feed = compute_feed(entitled).await.map_err(|e| e.to_string())?;
     *CACHE.lock() = Some((Instant::now(), entitled, feed.clone()));
-    Ok(feed)
+    Ok(with_live_readiness(feed, live.as_ref()))
 }
 
 #[cfg(test)]

@@ -1178,3 +1178,68 @@ fn lane1_on_a_snapshot() {
         println!("written to {out}");
     }
 }
+
+// --- The feed's advisory state (2026-11-11) --------------------------------
+// The lane's empty state says "no open advisory". It asked nothing about the
+// advisory data, so it said so with the sync failed, stale or never run.
+
+fn readiness(
+    state: crate::osv::readiness::AdvisorySyncState,
+) -> crate::osv::readiness::AdvisorySync {
+    crate::osv::readiness::AdvisorySync {
+        state,
+        ecosystems: 1,
+        synced_at: Some("2026-11-09 04:00:00".to_string()),
+        error: None,
+        in_flight: false,
+        skipped_temp: 0,
+        not_covered: None,
+    }
+}
+
+fn feed_stamped(state: Option<crate::osv::readiness::AdvisorySyncState>) -> EvidenceFeed {
+    let mut feed = EvidenceFeed::from_items(Vec::new());
+    feed.advisory_sync = state.map(readiness);
+    feed
+}
+
+#[test]
+fn a_served_feed_carries_the_live_advisory_state() {
+    use crate::osv::readiness::AdvisorySyncState::{Failed, Matching, Ready, Stale};
+    // A sync that failed after the feed was computed shows at once.
+    let served = with_live_readiness(feed_stamped(Some(Ready)), Some(&readiness(Failed)));
+    assert_eq!(served.advisory_sync.map(|s| s.state), Some(Failed));
+    // A feed matched before the data was ready is not "checked" yet.
+    let served = with_live_readiness(feed_stamped(Some(Stale)), Some(&readiness(Ready)));
+    assert_eq!(served.advisory_sync.map(|s| s.state), Some(Matching));
+    let served = with_live_readiness(feed_stamped(Some(Ready)), Some(&readiness(Ready)));
+    assert_eq!(served.advisory_sync.map(|s| s.state), Some(Ready));
+    // An unreadable live state leaves the stamp.
+    let served = with_live_readiness(feed_stamped(Some(Stale)), None);
+    assert_eq!(served.advisory_sync.map(|s| s.state), Some(Stale));
+}
+
+#[test]
+fn a_cached_feed_from_before_the_data_was_ready_is_recomputed_not_served() {
+    use crate::osv::readiness::AdvisorySyncState::{Failed, NotStarted, Ready};
+    let ready = readiness(Ready);
+    assert!(predates_ready_data(
+        &feed_stamped(Some(NotStarted)),
+        Some(&ready)
+    ));
+    assert!(predates_ready_data(
+        &feed_stamped(Some(Failed)),
+        Some(&ready)
+    ));
+    assert!(!predates_ready_data(
+        &feed_stamped(Some(Ready)),
+        Some(&ready)
+    ));
+    // Not ready now: the cached feed is served with the live state on it.
+    assert!(!predates_ready_data(
+        &feed_stamped(Some(NotStarted)),
+        Some(&readiness(Failed))
+    ));
+    assert!(!predates_ready_data(&feed_stamped(Some(NotStarted)), None));
+    assert!(!predates_ready_data(&feed_stamped(None), Some(&ready)));
+}

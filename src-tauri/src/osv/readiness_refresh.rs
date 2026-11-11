@@ -46,6 +46,12 @@ const INVENTORY_KV_KEY: &str = "osv.synced_inventory.v1";
 /// offline) would otherwise re-POST the whole inventory, and re-fetch the
 /// ecosystem archives, on every full check (PR #961 review). "Check now"
 /// bypasses it.
+///
+/// A sync that could only serve the archive on disk is not clean either: it
+/// records an error per unverified ecosystem, so an offline app keeps
+/// retrying at this pace until the advisory data is verified again. Such a
+/// retry is cheap (`osv::sync` does not re-read an archive already in the
+/// mirror, and [`feed_inputs_changed`] skips the recompute).
 const RETRY_BACKOFF_SECS: [i64; 3] = [5 * 60, 15 * 60, 30 * 60];
 
 /// The scheduler's full due check (it reads the whole inventory) runs at most
@@ -339,6 +345,17 @@ pub(crate) type SyncOutcome = Result<SyncResult>;
 /// An offline-archive refresh's result.
 pub(crate) type CacheOutcome = Result<crate::osv::types::CacheUpdateResult>;
 
+/// Whether a finished sync changed what the Preemption feed is computed
+/// from. A clean sync always may have (and the feed must be matched against
+/// it). A sync with errors did only if it stored advisories: an offline retry
+/// that verified nothing and read nothing leaves the mirror as it was, and
+/// recomputing the feed after each one (every 5 to 30 minutes, for as long
+/// as the network stays away) would be work for nothing. The feed's advisory
+/// state is read live when it is served, so the failure still shows.
+pub(crate) fn feed_inputs_changed(result: &SyncResult) -> bool {
+    result.errors.is_empty() || result.advisories_stored > 0
+}
+
 /// One gated attempt, then a Preemption recompute so findings appear without
 /// any user action.
 async fn refresh_if_due(trigger: Trigger) {
@@ -361,9 +378,11 @@ async fn refresh_if_due(trigger: Trigger) {
                 stored = r.advisories_stored,
                 errors = r.errors.len(),
                 duration_ms = r.duration_ms,
-                "Advisory sync complete"
+                "Advisory sync finished"
             );
-            crate::preemption::warm_preemption_cache().await;
+            if feed_inputs_changed(&r) {
+                crate::preemption::warm_preemption_cache().await;
+            }
         }
         Outcome::Ran(Err(e)) => {
             warn!(target: "4da::osv", ?trigger, error = %e, "Advisory sync failed; retried after a back-off");
