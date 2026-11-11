@@ -178,6 +178,48 @@ pub(crate) struct AuditableCoverage {
     pub versioned: Vec<String>,
     /// Some auditable row is in an ecosystem OSV covers, versioned or not.
     pub any_checkable: bool,
+    /// Per project: the dependencies (in an ecosystem OSV covers) that no row
+    /// gives an installed version. `versioned` is per ECOSYSTEM, so one
+    /// pinned project made a sibling's versionless dependencies read as
+    /// covered; this keeps them counted (W0-D). Sorted by project.
+    pub unversioned: Vec<(String, u32)>,
+}
+
+/// A dependency's identity within a project for the coverage count: the
+/// project compared case- and separator-blind, the OSV ecosystem, the name
+/// as that ecosystem compares names (PEP 503 for PyPI).
+fn coverage_key(project: &str, ecosystem: &str, name: &str) -> (String, String, String) {
+    let project = project.replace('\\', "/").to_lowercase();
+    let name = if ecosystem == "PyPI" {
+        name.to_lowercase().replace(['_', '.'], "-")
+    } else {
+        name.to_lowercase()
+    };
+    (project, ecosystem.to_string(), name)
+}
+
+/// [`AuditableCoverage::unversioned`] of an inventory.
+fn unversioned_by_project(deps: &[crate::db::StoredDependency]) -> Vec<(String, u32)> {
+    use std::collections::BTreeMap;
+    // key -> (project as stored, has a version)
+    let mut seen: BTreeMap<(String, String, String), (String, bool)> = BTreeMap::new();
+    for d in deps {
+        let Some(ecosystem) = normalize_supported_to_osv(&d.ecosystem) else {
+            continue;
+        };
+        let versioned = d.version.as_deref().is_some_and(|v| !v.trim().is_empty());
+        let entry = seen
+            .entry(coverage_key(&d.project_path, ecosystem, &d.package_name))
+            .or_insert_with(|| (d.project_path.clone(), false));
+        entry.1 |= versioned;
+    }
+    let mut by_project: BTreeMap<String, (String, u32)> = BTreeMap::new();
+    for ((project, _, _), (stored, versioned)) in seen {
+        if !versioned {
+            by_project.entry(project).or_insert((stored, 0)).1 += 1;
+        }
+    }
+    by_project.into_values().collect()
 }
 
 /// The auditable inventory's coverage, read once for readiness: which
@@ -206,6 +248,7 @@ pub(crate) fn auditable_coverage(db: &Database) -> Result<AuditableCoverage> {
     Ok(AuditableCoverage {
         versioned,
         any_checkable,
+        unversioned: unversioned_by_project(&deps),
     })
 }
 

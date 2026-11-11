@@ -199,6 +199,16 @@ fn collect_lockfile_dirs_reporting(
                 } else {
                     report.skip_dir(&dir, "example / fixture / scaffolding path");
                 }
+            } else if let Some(manifest) = lockfile::probe_manifest(&dir) {
+                // A manifest with no lockfile here: `read_dir` reports it as
+                // not checked unless a lockfile above covers it (a workspace
+                // member). Visited under the same gates; a scaffolding or
+                // temp manifest holds no lockfile, so nothing goes unsaid.
+                if !crate::db::temp_paths::is_under_any(&project_path, temp_roots)
+                    && lockfile_dir_is_relevant(root, &dir, &manifest)
+                {
+                    selected.push(dir.clone());
+                }
             }
             queue_subdirectories(&dir, depth, &scope, &mut dirs_to_visit, report);
         }

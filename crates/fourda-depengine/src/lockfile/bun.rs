@@ -229,5 +229,7 @@ pub(super) fn read_bun_lock(content: &str) -> Result<LockfileRead, String> {
         packages,
         edges: Vec::new(),
         non_registry_entries: non_registry,
+        unpinned: Vec::new(),
+        unread: Vec::new(),
     })
 }

@@ -237,6 +237,8 @@ pub(super) fn read_go_module(fs: &dyn FileSource, path: &str, content: &str) -> 
         packages: Vec::new(),
         edges: Vec::new(),
         non_registry_entries: 0,
+        unpinned: Vec::new(),
+        unread: Vec::new(),
     };
     let mut installed: BTreeMap<String, String> = BTreeMap::new();
     for (name, version) in selected {

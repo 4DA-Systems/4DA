@@ -352,6 +352,117 @@ git+https://github.com/x/y.git#egg=y
 }
 
 #[test]
+fn requirements_without_an_exact_pin_are_counted_per_file_not_dropped() {
+    // The same content as above: numpy>=1.26.0 and django==4.2.* name no
+    // installed version; `-e .` and the git URL are no index release.
+    let content = "\
+-r base.txt
+requests>=2
+Flask
+numpy >= 1.26 ; python_version >= '3.9'
+django==4.2.*
+click>=8
+-e .
+git+https://github.com/x/y.git#egg=y
+pkg @ https://example.com/pkg.whl
+--index-url https://pypi.org/simple
+";
+    let fs = MemFs::new()
+        .with("/p/base.txt", "click==8.1.7\nattrs\n")
+        .with("/p/requirements.txt", content);
+    let read = read_in(
+        &fs,
+        "/p/requirements.txt",
+        LockFormat::Requirements,
+        content,
+    );
+    assert_eq!(ids(&read), ["click@8.1.7"]);
+    // requests, flask, numpy, django in the file itself; click is pinned by
+    // the include, so it is installed, not unpinned; attrs is the include's.
+    assert_eq!(
+        read.unpinned,
+        [
+            UnpinnedFile {
+                path: "/p/base.txt".into(),
+                count: 1
+            },
+            UnpinnedFile {
+                path: "/p/requirements.txt".into(),
+                count: 4
+            },
+        ]
+    );
+    assert_eq!(read.non_registry_entries, 3, "-e ., git+, pkg @ url");
+    assert!(read.unread.is_empty());
+}
+
+#[test]
+fn an_unreadable_requirements_include_is_reported_not_skipped() {
+    let content = "-r missing.txt\nflask==3.0.0\n";
+    let fs = MemFs::new().with("/p/requirements.txt", content);
+    let read = read_in(
+        &fs,
+        "/p/requirements.txt",
+        LockFormat::Requirements,
+        content,
+    );
+    assert_eq!(ids(&read), ["flask@3.0.0"]);
+    assert_eq!(read.unread.len(), 1, "{:?}", read.unread);
+    assert_eq!(read.unread[0].path, "/p/missing.txt");
+    assert!(
+        read.unread[0]
+            .reason
+            .contains("-r include in /p/requirements.txt could not be read"),
+        "{}",
+        read.unread[0].reason
+    );
+}
+
+#[test]
+fn requirements_includes_past_the_depth_limit_are_reported() {
+    // a -> b -> c -> d -> e -> f -> g: the sixth include is not followed.
+    let mut fs = MemFs::new();
+    let chain = ["a", "b", "c", "d", "e", "f", "g"];
+    for pair in chain.windows(2) {
+        fs.insert(
+            &format!("/p/{}.txt", pair[0]),
+            &format!("-r {}.txt\n{}==1.0\n", pair[1], pair[0]),
+        );
+    }
+    fs.insert("/p/g.txt", "g==1.0\n");
+    let content = "-r b.txt\na==1.0\n";
+    let read = read_in(&fs, "/p/a.txt", LockFormat::Requirements, content);
+    assert_eq!(read.unread.len(), 1, "{:?}", read.unread);
+    assert!(read.unread[0].reason.contains("deeper than 5"));
+}
+
+#[test]
+fn a_pip_compile_requirements_dir_is_read_by_read_dir() {
+    // pallets/flask 2.0.0: requirements/*.txt and no requirements.txt.
+    let fs = MemFs::new()
+        .with(
+            "/flask/requirements/dev.txt",
+            "#\n# pip-compile\n#\nalabaster==0.7.12\n    # via sphinx\nclick==8.0.0\n",
+        )
+        .with("/flask/requirements/tests.txt", "pytest==6.2.4\n")
+        .with("/flask/requirements/dev.in", "-r tests.in\nsphinx\n");
+    assert_eq!(
+        crate::lockfile::probe(&fs, "/flask"),
+        Some("/flask/requirements/dev.txt".into())
+    );
+    let reads: Vec<LockfileRead> = read_dir(&fs, "/flask")
+        .into_iter()
+        .filter_map(|o| match o {
+            LockfileOutcome::Read(r) => Some(r),
+            _ => None,
+        })
+        .collect();
+    let packages: usize = reads.iter().map(|r| r.packages.len()).sum();
+    assert_eq!(packages, 3, "the .in source is not an install list");
+    assert!(reads.iter().all(|r| r.unpinned.is_empty()));
+}
+
+#[test]
 fn requirements_include_above_the_file_resolves_through_dot_dot() {
     let content = "-r ../base.txt\nflask==3.0.0\n";
     let fs = MemFs::new()
@@ -513,6 +624,7 @@ fn read_dir_reports_unsupported_and_orphan_go_sum() {
             LockfileOutcome::Read(r) => ("read", r.path.as_str()),
             LockfileOutcome::Failed { path, .. } => ("failed", path.as_str()),
             LockfileOutcome::Unsupported { path, .. } => ("unsupported", path.as_str()),
+            LockfileOutcome::ManifestOnly { path, .. } => ("manifest-only", path.as_str()),
         })
         .collect();
     assert_eq!(

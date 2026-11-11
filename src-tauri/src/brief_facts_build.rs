@@ -48,10 +48,7 @@ pub(crate) fn build_brief_facts(db: &Database) -> BriefFacts {
     // What was not covered is part of the brief (W5a): a newly unread file
     // must not reuse yesterday's text (#987 review S4).
     let fingerprint = match &readiness.not_covered {
-        Some(nc) => format!(
-            "{fingerprint}:not_covered={}/{}",
-            nc.count, nc.unreadable_count
-        ),
+        Some(nc) => format!("{fingerprint}:not_covered={}", nc.fingerprint()),
         None => fingerprint,
     };
     // A failed read keeps the old behaviour (dependencies assumed known)
