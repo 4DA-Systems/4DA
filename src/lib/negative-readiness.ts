@@ -24,8 +24,12 @@ export type PreemptionNegative =
   | { kind: 'checking' }
   /** An ecosystem was never synced and no sync is running (yet). */
   | { kind: 'not_started' }
-  /** The latest advisory sync failed. */
-  | { kind: 'failed'; error: string | null; inFlight: boolean }
+  /**
+   * The latest advisory check failed, or could not verify the data and served
+   * the copy on disk. `syncedAt` is when the data still being matched was
+   * last verified (null: none ever was).
+   */
+  | { kind: 'failed'; error: string | null; syncedAt: string | null; inFlight: boolean }
   /** The advisory data is older than the backend's trust horizon. */
   | { kind: 'stale'; syncedAt: string | null; inFlight: boolean }
   /**
@@ -54,7 +58,7 @@ export function preemptionNegative(sync: AdvisorySync | null | undefined): Preem
     case 'not_started':
       return { kind: 'not_started' };
     case 'failed':
-      return { kind: 'failed', error: sync.error, inFlight: sync.in_flight === true };
+      return { kind: 'failed', error: sync.error, syncedAt: sync.synced_at, inFlight: sync.in_flight === true };
     case 'stale':
       return { kind: 'stale', syncedAt: sync.synced_at, inFlight: sync.in_flight === true };
     case 'no_inventory':
@@ -62,6 +66,15 @@ export function preemptionNegative(sync: AdvisorySync | null | undefined): Preem
     default:
       return { kind: 'silent' };
   }
+}
+
+/**
+ * Whether a surface may say "no open advisory" for the stack. The one rule
+ * for every surface that makes the claim (Preemption's empty worklist,
+ * Signal's "Your stack" lane): only when the advisory data is `ready`.
+ */
+export function advisoriesChecked(sync: AdvisorySync | null | undefined): boolean {
+  return preemptionNegative(sync).kind === 'assert';
 }
 
 /**

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: FSL-1.1-Apache-2.0
 import { describe, it, expect } from 'vitest';
 
-import { preemptionNegative, sourceNewsReady } from './negative-readiness';
+import { advisoriesChecked, preemptionNegative, sourceNewsReady } from './negative-readiness';
 import type { AdvisorySync } from '../../src-tauri/bindings/bindings/AdvisorySync';
 import type { DataFreshness } from '../../src-tauri/bindings/bindings/DataFreshness';
 
@@ -24,11 +24,21 @@ describe('preemptionNegative', () => {
     expect(preemptionNegative(sync({ state: 'not_started', synced_at: null }))).toEqual({ kind: 'not_started' });
   });
 
-  it('a failed sync carries its error and whether a retry is running', () => {
+  it('a failed sync carries its error, the age of the data and whether a retry is running', () => {
     expect(preemptionNegative(sync({ state: 'failed', error: 'npm: HTTP 503' })))
-      .toEqual({ kind: 'failed', error: 'npm: HTTP 503', inFlight: false });
-    expect(preemptionNegative(sync({ state: 'failed', error: 'x', in_flight: true })))
-      .toEqual({ kind: 'failed', error: 'x', inFlight: true });
+      .toEqual({ kind: 'failed', error: 'npm: HTTP 503', syncedAt: '2026-10-12 06:00:00', inFlight: false });
+    expect(preemptionNegative(sync({ state: 'failed', error: 'x', synced_at: null, in_flight: true })))
+      .toEqual({ kind: 'failed', error: 'x', syncedAt: null, inFlight: true });
+  });
+
+  // One rule for every surface that says "no open advisory".
+  it('the advisories count as checked only when ready', () => {
+    expect(advisoriesChecked(sync({}))).toBe(true);
+    for (const state of ['failed', 'stale', 'syncing', 'matching', 'not_started', 'no_inventory'] as const) {
+      expect(advisoriesChecked(sync({ state }))).toBe(false);
+    }
+    expect(advisoriesChecked(null)).toBe(false);
+    expect(advisoriesChecked(undefined)).toBe(false);
   });
 
   it('stale carries the sync time; no inventory is uncovered, with temp skips', () => {
