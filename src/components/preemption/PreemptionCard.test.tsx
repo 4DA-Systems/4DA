@@ -63,9 +63,21 @@ describe('ItemCard', () => {
     expect(screen.getByText('React 19 breaking change')).toBeDefined();
   });
 
-  it('renders confidence percentage', () => {
-    render(<ItemCard item={makeItem()} surfacedRef={surfacedRef} onDismiss={vi.fn()} />);
-    expect(screen.getByText('85%')).toBeDefined();
+  // Doctrine rule 3: the percentage came from fixed constants per card kind
+  // (70/80/90/95 in `evidence/upgrade_plan.rs`), so it informed no action.
+  // The provenance badge (Verified / AI) carries what the user can act on.
+  it('shows no confidence percentage', () => {
+    for (const value of [0.7, 0.8, 0.85, 0.9, 0.95]) {
+      const { container, unmount } = render(
+        <ItemCard
+          item={makeItem({ confidence: { value, provenance: 'osv_verified', sample_size: null } })}
+          surfacedRef={surfacedRef}
+          onDismiss={vi.fn()}
+        />,
+      );
+      expect(container.textContent).not.toContain(`${Math.round(value * 100)}%`);
+      unmount();
+    }
   });
 
   it('renders explanation text', () => {

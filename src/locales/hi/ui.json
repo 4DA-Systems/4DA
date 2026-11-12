@@ -1397,7 +1397,6 @@
   "preemption.badge.ai": "AI",
   "preemption.badge.verified": "सत्यापित",
   "preemption.confidence": "विश्वसनीयता: {{value}}%",
-  "preemption.confidence.provenance": "विश्वास स्रोत: {{provenance}}{{sampleSize}}",
   "preemption.dismissed": "आइटम खारिज किया",
   "preemption.empty.subtitle": "कोई सत्यापित खतरा नहीं मिला। निगरानी सक्रिय है।",
   "preemption.advisories.checking.title": "आपकी निर्भरताओं को प्रकाशित सुरक्षा सूचनाओं से जाँचा जा रहा है",

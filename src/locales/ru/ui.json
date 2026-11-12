@@ -400,7 +400,6 @@
   "preemption.freshness.monthsAgo": "{{count}}мес назад",
   "preemption.evidence.showMore": "Показать ещё {{count}}",
   "preemption.evidence.showLess": "Свернуть",
-  "preemption.confidence.provenance": "Происхождение уверенности: {{provenance}}{{sampleSize}}",
   "preemption.tier.verified": "Проверенные данные",
   "preemption.tier.verifiedSubtitle_one": "{{count}} проверенная угроза",
   "preemption.tier.verifiedSubtitle_other": "{{count}} проверенных угроз",

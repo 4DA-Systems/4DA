@@ -474,7 +474,6 @@
   "preemption.freshness.monthsAgo": "{{count}}mo ago",
   "preemption.evidence.showMore": "Show {{count}} more",
   "preemption.evidence.showLess": "Show less",
-  "preemption.confidence.provenance": "Confidence provenance: {{provenance}}{{sampleSize}}",
   "preemption.tier.verified": "Verified Intelligence",
   "preemption.tier.verifiedSubtitle_one": "{{count}} verified threat",
   "preemption.tier.verifiedSubtitle_other": "{{count}} verified threats",

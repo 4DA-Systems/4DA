@@ -400,7 +400,6 @@
   "preemption.freshness.monthsAgo": "{{count}}m fa",
   "preemption.evidence.showMore": "Mostra altri {{count}}",
   "preemption.evidence.showLess": "Mostra meno",
-  "preemption.confidence.provenance": "Provenienza fiducia: {{provenance}}{{sampleSize}}",
   "preemption.tier.verified": "Intelligence verificata",
   "preemption.tier.verifiedSubtitle_one": "{{count}} minaccia verificata",
   "preemption.tier.verifiedSubtitle_other": "{{count}} minacce verificate",

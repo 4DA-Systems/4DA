@@ -269,15 +269,6 @@ export const ItemCard = memo(function ItemCard({
           <h3 className="flex-1 min-w-0 text-[13px] font-medium text-text-primary leading-snug">
             {displayTitle}
           </h3>
-          <span
-            className="shrink-0 text-[10px] font-mono tabular-nums text-text-muted"
-            title={t('preemption.confidence.provenance', {
-              provenance: item.confidence.provenance,
-              sampleSize: item.confidence.sample_size ? ` (n=${item.confidence.sample_size})` : '',
-            })}
-          >
-            {Math.round(item.confidence.value * 100)}%
-          </span>
         </div>
       </header>
       <div className="px-4 pb-4">

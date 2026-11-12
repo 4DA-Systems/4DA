@@ -400,7 +400,6 @@
   "preemption.freshness.monthsAgo": "{{count}}个月前",
   "preemption.evidence.showMore": "显示更多 {{count}} 条",
   "preemption.evidence.showLess": "收起",
-  "preemption.confidence.provenance": "置信度来源：{{provenance}}{{sampleSize}}",
   "preemption.tier.verified": "已验证情报",
   "preemption.tier.verifiedSubtitle_one": "{{count}} 个已验证威胁",
   "preemption.tier.verifiedSubtitle_other": "{{count}} 个已验证威胁",

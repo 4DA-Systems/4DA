@@ -400,7 +400,6 @@
   "preemption.freshness.monthsAgo": "{{count}}ヶ月前",
   "preemption.evidence.showMore": "さらに{{count}}件表示",
   "preemption.evidence.showLess": "折りたたむ",
-  "preemption.confidence.provenance": "信頼度の出所: {{provenance}}{{sampleSize}}",
   "preemption.tier.verified": "検証済みインテリジェンス",
   "preemption.tier.verifiedSubtitle_one": "{{count}} 件の検証済み脅威",
   "preemption.tier.verifiedSubtitle_other": "{{count}} 件の検証済み脅威",

@@ -1338,7 +1338,6 @@
   "preemption.badge.ai": "AI",
   "preemption.badge.verified": "검증됨",
   "preemption.confidence": "신뢰도: {{value}}%",
-  "preemption.confidence.provenance": "신뢰도 출처: {{provenance}}{{sampleSize}}",
   "preemption.dismissed": "항목 해제됨",
   "preemption.empty.subtitle": "검증된 위협이 감지되지 않았습니다. 모니터링이 활성 상태입니다.",
   "preemption.advisories.checking.title": "의존성을 공개된 보안 권고와 대조하는 중",
