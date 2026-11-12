@@ -510,9 +510,28 @@ fn get_llm_client() -> Result<llm::LLMClient> {
     let mut guard = manager.lock();
     guard.ensure_keys_hydrated();
     let provider = guard.get().llm.clone();
+    let consent = guard.get().translation.cloud_translation_consent;
+    drop(guard);
+    translation_llm_client(provider, consent)
+}
+
+/// The LLM client content translation may use, or why it may not.
+fn translation_llm_client(
+    provider: crate::settings::LLMProvider,
+    cloud_consent: bool,
+) -> Result<llm::LLMClient> {
     if provider.api_key.is_empty() && provider.provider != "ollama" {
         let lang = crate::i18n::get_user_language();
         return Err(crate::i18n::t("errors:translation.noLlm", &lang, &[]).into());
+    }
+    // The same consent DeepL / Google / Azure require: card text goes to a
+    // cloud model only once the user allowed cloud translation.
+    let on_machine = crate::llm_egress::provider_is_on_machine(&provider);
+    if !crate::translation_providers::llm_translation_allowed(cloud_consent, on_machine) {
+        return Err(
+            "Cloud translation is off: allow it in Settings > Language to translate with a cloud model"
+                .into(),
+        );
     }
     // llm-egress: no-item-body translates titles and 4DA's own labels (ContentTranslationProvider callers), not article text
     Ok(llm::LLMClient::with_purpose(provider, "translation"))
@@ -620,6 +639,21 @@ fn truncate_text(text: &str) -> &str {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Audit 2026-11-11: with a cloud key and a non-English UI, card text
+    /// went to the cloud model for translation without the consent the
+    /// dedicated cloud providers require.
+    #[test]
+    fn a_cloud_model_gets_no_card_text_without_consent() {
+        let mut cloud = crate::settings::LLMProvider::default();
+        cloud.provider = "anthropic".into();
+        cloud.api_key = "sk-test".into();
+        assert!(translation_llm_client(cloud.clone(), false).is_err());
+        assert!(translation_llm_client(cloud, true).is_ok());
+        let mut local = crate::settings::LLMProvider::default();
+        local.provider = "ollama".into();
+        assert!(translation_llm_client(local, false).is_ok());
+    }
 
     #[test]
     fn test_content_hash_stable() {

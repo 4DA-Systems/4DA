@@ -10,8 +10,10 @@ import {
   LANGUAGES,
   TRANSLATION_PROVIDERS,
   PROVIDERS_REQUIRING_KEY,
+  aiRunsOnMachine,
   getLanguageName,
 } from './locale-constants';
+import { useAppStore } from '../../store';
 
 export function LocaleSection() {
   const { t, i18n } = useTranslation();
@@ -28,6 +30,7 @@ export function LocaleSection() {
   const [currency, setCurrency] = useState('USD');
   const [loaded, setLoaded] = useState(false);
   const [translationCoverage, setTranslationCoverage] = useState<number | null>(null);
+  const aiOnMachine = useAppStore(s => aiRunsOnMachine(s.settings?.llm));
   const [txConfig, setTxConfig] = useState<TranslationConfig>({
     provider: 'auto', api_key: '', auto_translate: false, translate_descriptions: false, cloud_translation_consent: false,
   });
@@ -204,7 +207,7 @@ export function LocaleSection() {
                   const url = `https://github.com/4DA-Systems/4DA/issues/new?template=translation.yml&labels=i18n&title=${encodeURIComponent(`[i18n] ${lang}: Translation improvement`)}&language=${encodeURIComponent(lang)}&version=${encodeURIComponent(String(__APP_VERSION__))}`;
                   void import('@tauri-apps/plugin-opener').then(({ openUrl }) => openUrl(url));
                 }}
-                className="text-accent-gold hover:text-[#C4A030] transition-colors underline underline-offset-2"
+                className="text-accent-gold hover:text-accent-gold/80 transition-colors underline underline-offset-2"
               >
                 {t('settings.locale.feedbackLink')}
               </button>
@@ -216,7 +219,7 @@ export function LocaleSection() {
             <div className="pt-2">
               <button
                 onClick={() => setShowEditor(!showEditor)}
-                className="text-xs text-accent-gold hover:text-[#C4A030] transition-colors"
+                className="text-xs text-accent-gold hover:text-accent-gold/80 transition-colors"
               >
                 {showEditor ? '\u2212 ' : '+ '}
                 {showEditor
@@ -272,13 +275,16 @@ export function LocaleSection() {
                 </div>
               )}
 
-              {/* Cloud translation privacy consent — required before DeepL/Google/Azure */}
-              {PROVIDERS_REQUIRING_KEY.has(txConfig.provider) && (
+              {/* Cloud translation privacy consent — required before DeepL/Google/Azure,
+                  and before a cloud AI model translates (the other providers use it). */}
+              {(PROVIDERS_REQUIRING_KEY.has(txConfig.provider) || !aiOnMachine) && (
                 <div className="flex items-center justify-between">
                   <div className="flex-1 pr-3">
                     <span className="text-sm text-text-primary">{t('settings.translation.cloudConsent', 'Allow cloud translation')}</span>
                     <p className="text-[10px] text-text-muted mt-0.5">
-                      {t('settings.translation.cloudConsentHelp', 'Content will be sent to the selected provider for translation. Required for cloud providers.')}
+                      {PROVIDERS_REQUIRING_KEY.has(txConfig.provider)
+                        ? t('settings.translation.cloudConsentHelp', 'Content will be sent to the selected provider for translation. Required for cloud providers.')
+                        : t('settings.translation.cloudConsentLlmHelp')}
                     </p>
                   </div>
                   <button

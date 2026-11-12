@@ -2560,5 +2560,6 @@
   "agentHandoff.pasteHint": "Prompt copied. Paste it into Claude Code (Ctrl+V) and press Enter.",
   "agentHandoff.needsFirstRun": "To open Claude Code from here, start Claude Code once and send any message.",
   "agentHandoff.openFailed": "Could not open your agent.",
-  "agentHandoff.copyFailed": "Could not copy the prompt."
+  "agentHandoff.copyFailed": "Could not copy the prompt.",
+  "settings.translation.cloudConsentLlmHelp": "Translation uses your AI model, which runs in the cloud: card text is sent to it only when this is on."
 }
