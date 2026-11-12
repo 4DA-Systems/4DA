@@ -8,6 +8,7 @@ import { useShallow } from 'zustand/react/shallow';
 import { useAppStore } from '../../store';
 import type { EvidenceItem } from '../../../src-tauri/bindings/bindings/EvidenceItem';
 import { preemptionNegative } from '../../lib/negative-readiness';
+import type { PreemptionDismissAction } from '../../store/preemption-slice';
 import { URGENCY_ORDER, ItemCard } from './PreemptionCard';
 import { PreemptionTierSection } from './PreemptionTierSection';
 import { PreemptionFreeFloorNotice } from './PreemptionFreeFloorNotice';
@@ -69,10 +70,10 @@ export const PreemptionWorklist = memo(function PreemptionWorklist() {
   // the backend answers from its cache with the live advisory state on it).
   useRefreshWhenVisible(refreshQuietly);
 
-  const handleDismiss = useCallback((id: string) => {
+  const handleDismiss = useCallback((id: string, action: PreemptionDismissAction) => {
     // Persist + refetch: the backend re-applies THE visibility filter, so the
     // card and the header counts move in the same response (AD-035).
-    void dismissPreemptionItem(id);
+    void dismissPreemptionItem(id, action);
     if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
     undoTimerRef.current = setTimeout(() => clearPreemptionUndo(), 8000);
   }, [dismissPreemptionItem, clearPreemptionUndo]);

@@ -209,9 +209,10 @@ export function createBackgroundResultsHandler(
 ) {
   return (event: Event<SourceRelevance[]>): void => {
     const newItems = event.payload;
+    // A cycle ran, even one that found nothing: the header's ages move.
+    void useAppStore.getState().loadMonitoringStatus();
     if (newItems.length === 0) return;
     clearStaleAnalysisFailureToasts();
-    void useAppStore.getState().loadMonitoringStatus();
     // Reading rows only, like the analysis-complete toast above.
     const relevantNew = newItems.filter((r) => isReadingRow(r) && isSurfacedSignal(r)).length;
     useAppStore.getState().setAppStateFull((s) => {

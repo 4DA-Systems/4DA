@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useTranslatedContent } from './ContentTranslationProvider';
 import { useAppStore } from '../store';
-import { DISMISSAL_DAYS, HIDING_ACTIONS, dismissAlert, undoDismissal } from '../lib/alert-dismissals';
+import { HIDING_ACTIONS, dismissAlert, dismissalDays, undoDismissal } from '../lib/alert-dismissals';
 import { cmd } from '../lib/commands';
 import { readableError } from '../utils/error-messages';
 import { isSafeUrl } from '../utils/sanitize-html';
@@ -35,7 +35,7 @@ const SHOWN = 3;
  *
  * It persists until the user triages each alert. Triage goes to the one
  * dismissal store Preemption also uses (lib/alert-dismissals): every
- * dismissal expires after DISMISSAL_DAYS and can be undone. "Investigate"
+ * dismissal expires (90 days for N/A, 7 otherwise) and can be undone. "Investigate"
  * only opens the advisory; it never hides the alert (audit 2026-11-11).
  */
 export function CriticalAlertBanner() {
@@ -45,6 +45,7 @@ export function CriticalAlertBanner() {
   const [triaged, setTriaged] = useState<Set<number>>(new Set<number>());
   // The alerts the last dismissal hid, for Undo.
   const [lastDismissed, setLastDismissed] = useState<CriticalAlert[]>([]);
+  const [lastAction, setLastAction] = useState('acknowledged');
   const [triageError, setTriageError] = useState<string | null>(null);
 
   // Load live triage decisions when results change. A failed read hides
@@ -97,6 +98,7 @@ export function CriticalAlertBanner() {
     setTriageError(null);
     setTriaged(prev => new Set([...prev, ...ids]));
     setLastDismissed(alerts);
+    setLastAction(action);
     void Promise.all(alerts.map(a => dismissAlert({ itemId: a.id }, action, a.advisory_id ?? null)))
       .catch((e: unknown) => {
         setTriaged(prev => new Set([...prev].filter(id => !ids.includes(id))));
@@ -137,7 +139,7 @@ export function CriticalAlertBanner() {
       )}
       {lastDismissed.length > 0 && (
         <div role="status" className="mx-4 mt-2 mb-1 px-3 py-2 flex items-center gap-2 text-xs bg-bg-secondary border border-border rounded-lg text-text-secondary">
-          <span className="flex-1">{t('alerts.dismissedFor', { count: lastDismissed.length, days: DISMISSAL_DAYS })}</span>
+          <span className="flex-1">{t('alerts.dismissedFor', { count: lastDismissed.length, days: dismissalDays(lastAction) })}</span>
           <button onClick={handleUndo} className="px-2 py-0.5 rounded bg-bg-tertiary hover:text-text-primary transition-colors">
             {t('alerts.undo')}
           </button>

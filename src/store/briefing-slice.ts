@@ -85,6 +85,15 @@ export async function askForBriefing(auto: boolean, onStillWriting: () => void):
 }
 
 /**
+ * A brief's time: SQLite's zoneless UTC ("2026-11-12 01:30:00") or an
+ * RFC 3339 value that already names its zone ("...Z", "...+10:00").
+ */
+export function parseBriefTime(at: string): Date {
+  const iso = at.includes('T') ? at : at.replace(' ', 'T');
+  return new Date(/(?:[zZ]|[+-]\d\d:?\d\d)$/.test(iso) ? iso : `${iso}Z`);
+}
+
+/**
  * The briefing state a delivered brief sets — the one mapping for the
  * command's answer and the scheduler's `briefing-auto-generated` event
  * (whose payload is the same object). A reused brief keeps its real age
@@ -96,9 +105,7 @@ export function briefingStateFrom(
   result: Pick<BriefingResult, 'briefing' | 'model' | 'briefing_created_at' | 'narration_error'>,
   now: Date = new Date(),
 ): BriefingState {
-  const createdAt = result.briefing_created_at
-    ? new Date(`${result.briefing_created_at.replace(' ', 'T')}Z`)
-    : null;
+  const createdAt = result.briefing_created_at ? parseBriefTime(result.briefing_created_at) : null;
   return {
     content: result.briefing ?? null,
     loading: false,

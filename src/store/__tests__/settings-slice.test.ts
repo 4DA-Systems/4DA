@@ -230,6 +230,8 @@ describe('settings-slice', () => {
 
         expect(useAppStore.getState().settingsLoaded).toBe(true);
         expect(useAppStore.getState().settings).toBeNull();
+        // The splash lifts, but the onboarding decision is not known yet.
+        expect(useAppStore.getState().onboardingKnown).toBe(false);
 
         resolveSettings(loadedSettings);
         await vi.advanceTimersByTimeAsync(0);
@@ -238,6 +240,7 @@ describe('settings-slice', () => {
 
         expect(useAppStore.getState().settings?.llm.provider).toBe('openai');
         expect(useAppStore.getState().settingsForm.provider).toBe('openai');
+        expect(useAppStore.getState().onboardingKnown).toBe(true);
       } finally {
         vi.useRealTimers();
       }

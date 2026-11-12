@@ -111,6 +111,10 @@ export interface SettingsSlice {
    *  the splash so the app shell never flashes before the onboarding decision
    *  is known on a slow first-run IPC. */
   settingsLoaded: boolean;
+  /** True once settings were actually read, so the onboarding decision is
+   *  known. A bootstrap timeout lifts the splash (settingsLoaded) but leaves
+   *  this false: "not decided" is never "onboarding complete". */
+  onboardingKnown: boolean;
   ollamaStatus: OllamaStatus | null;
   ollamaModels: string[];
   modelRegistry: ModelRegistryData | null;

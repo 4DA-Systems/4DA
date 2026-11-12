@@ -80,6 +80,23 @@ describe('ItemCard', () => {
     }
   });
 
+  // Product decision 2026-11-13: "Not affected" is a deliberate N/A (held 90
+  // days by the store); a snooze is 7.
+  it('"Not affected" dismisses as not_applicable, a snooze as snoozed', () => {
+    const onDismiss = vi.fn();
+    const item = makeItem({
+      suggested_actions: [
+        { action_id: 'dismiss', label: 'Not affected', description: '' },
+        { action_id: 'snooze_7d', label: 'Snooze', description: '' },
+      ],
+    } as Partial<EvidenceItem>);
+    render(<ItemCard item={item} surfacedRef={surfacedRef} onDismiss={onDismiss} />);
+    fireEvent.click(screen.getByText('Not affected'));
+    expect(onDismiss).toHaveBeenLastCalledWith(item.id, 'not_applicable');
+    fireEvent.click(screen.getByText('Snooze'));
+    expect(onDismiss).toHaveBeenLastCalledWith(item.id, 'snoozed');
+  });
+
   it('renders explanation text', () => {
     render(<ItemCard item={makeItem()} surfacedRef={surfacedRef} onDismiss={vi.fn()} />);
     expect(screen.getByText('This affects your project dependencies')).toBeDefined();

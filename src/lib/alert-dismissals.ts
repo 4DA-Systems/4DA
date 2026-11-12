@@ -7,14 +7,23 @@
  * stores, and an "Investigate" click that hid a banner alert forever. Both
  * surfaces now write the backend triage table, keyed by `alert_key`
  * (`item:<source item id>` for banner alerts, `evidence:<id>` for Preemption
- * cards). Every dismissal expires after `DISMISSAL_DAYS` (the backend sets it)
- * and can be undone. `get_preemption_alerts` reads the live Preemption keys
+ * cards). Every dismissal expires (the backend sets it, see `dismissalDays`)
+ * and can be undone: a deliberate "not applicable" or accepted risk holds 90
+ * days so it does not nag weekly; investigating, snoozed, acknowledged and
+ * fixed hold 7 (product decision 2026-11-13, mirrors alert_triage.rs). `get_preemption_alerts` reads the live Preemption keys
  * itself, so its counts and items still move together (AD-035).
  */
 import { cmd } from './commands';
 
 /** How long a dismissal hides an alert before it comes back if still true. */
 export const DISMISSAL_DAYS = 7;
+/** How long a deliberate judgement (not applicable, accepted risk) holds. */
+export const DELIBERATE_DAYS = 90;
+
+/** Days a decision of this kind holds (backend `alert_triage::default_days`). */
+export function dismissalDays(action: string): number {
+  return action === 'not_applicable' || action === 'accepted_risk' ? DELIBERATE_DAYS : DISMISSAL_DAYS;
+}
 
 /** Triage actions that hide an alert. "investigating" never hides one. */
 export const HIDING_ACTIONS: ReadonlySet<string> = new Set([
@@ -73,8 +82,16 @@ export function moveLegacyPreemptionDismissals(): Promise<void> {
     try {
       const raw = localStorage.getItem(LEGACY_KEY);
       if (!raw) return;
-      entries = JSON.parse(raw) as Array<{ id: string; ts: number }>;
+      const parsed: unknown = JSON.parse(raw);
+      // Anything but a list cannot hold a dismissal: clear it, never retry
+      // (a non-array used to throw on every load).
+      if (!Array.isArray(parsed)) {
+        localStorage.removeItem(LEGACY_KEY);
+        return;
+      }
+      entries = parsed as Array<{ id: string; ts: number }>;
     } catch {
+      try { localStorage.removeItem(LEGACY_KEY); } catch { /* storage unavailable */ }
       return;
     }
     const now = Date.now();

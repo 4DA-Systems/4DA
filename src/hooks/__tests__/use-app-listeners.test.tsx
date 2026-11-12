@@ -57,19 +57,34 @@ describe('useAppListeners', () => {
     });
 
     it('waits for the onboarding decision, and starts nothing when the wizard opens', async () => {
-      useAppStore.setState({ settingsLoaded: false, showOnboarding: false, isFirstRun: false });
+      useAppStore.setState({ settingsLoaded: false, onboardingKnown: false, showOnboarding: false, isFirstRun: false });
       const startAnalysis = vi.fn();
       render(<Harness startAnalysis={startAnalysis} />);
       await waitFor(() => expect(invoke).toHaveBeenCalledWith('get_analysis_status', expect.anything()));
       await act(async () => { await new Promise(r => setTimeout(r, 20)); });
       expect(startAnalysis).not.toHaveBeenCalled();
-      act(() => { useAppStore.setState({ showOnboarding: true, settingsLoaded: true }); });
+      act(() => { useAppStore.setState({ showOnboarding: true, settingsLoaded: true, onboardingKnown: true }); });
+      await act(async () => { await new Promise(r => setTimeout(r, 20)); });
+      expect(startAnalysis).not.toHaveBeenCalled();
+    });
+
+    // PR #1131 review: a get_settings that misses the 5 s bootstrap timeout
+    // lifts the splash with showOnboarding still false. That is not
+    // "onboarding complete"; the wizard may open once settings arrive.
+    it('a timed-out settings load is not an onboarding decision', async () => {
+      useAppStore.setState({ settingsLoaded: true, onboardingKnown: false, showOnboarding: false, isFirstRun: false });
+      const startAnalysis = vi.fn();
+      render(<Harness startAnalysis={startAnalysis} />);
+      await waitFor(() => expect(invoke).toHaveBeenCalledWith('get_analysis_status', expect.anything()));
+      await act(async () => { await new Promise(r => setTimeout(r, 20)); });
+      expect(startAnalysis).not.toHaveBeenCalled();
+      act(() => { useAppStore.setState({ showOnboarding: true, onboardingKnown: true }); });
       await act(async () => { await new Promise(r => setTimeout(r, 20)); });
       expect(startAnalysis).not.toHaveBeenCalled();
     });
 
     it('starts one analysis once the user is in the app', async () => {
-      useAppStore.setState({ settingsLoaded: true, showOnboarding: false, isFirstRun: false });
+      useAppStore.setState({ settingsLoaded: true, onboardingKnown: true, showOnboarding: false, isFirstRun: false });
       const startAnalysis = vi.fn();
       render(<Harness startAnalysis={startAnalysis} />);
       await waitFor(() => expect(startAnalysis).toHaveBeenCalledTimes(1));

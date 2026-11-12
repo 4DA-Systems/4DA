@@ -6003,7 +6003,9 @@ impl Database {
             // Phase 131 (audit 2026-11-11): one store for alert dismissals.
             // `alert_triage` is keyed by `alert_key` so Preemption cards
             // (no source item) and banner alerts share it, and a decision
-            // with no expiry gets one (`alert_triage::migrate_to_alert_keys`).
+            // with no expiry gets one counted from when it was made: 90 days
+            // for not_applicable / accepted_risk, 7 for the rest
+            // (`alert_triage::migrate_to_alert_keys`, `default_days`).
             if current_version < 131 {
                 Self::run_versioned_migration(
                     &conn,

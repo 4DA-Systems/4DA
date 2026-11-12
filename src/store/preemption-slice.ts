@@ -27,6 +27,8 @@ import type { EvidenceFeed } from '../../src-tauri/bindings/bindings/EvidenceFee
 // then refetch — the view never filters or counts on its own.
 
 export type PreemptionAlert = EvidenceItem;
+/** What a Preemption dismissal says; it sets how long it holds. */
+export type PreemptionDismissAction = 'not_applicable' | 'snoozed' | 'acknowledged';
 export type { EvidenceFeed as PreemptionFeed };
 
 // ============================================================================
@@ -59,8 +61,9 @@ export interface PreemptionSlice {
    * blanking the tab. Same dismissals and plan scope as a normal load.
    */
   refreshPreemptionQuietly: () => Promise<void>;
-  /** Persist a dismissal, then refetch so items AND counts move together. */
-  dismissPreemptionItem: (id: string) => Promise<void>;
+  /** Persist a dismissal, then refetch so items AND counts move together.
+   *  "Not affected" (`not_applicable`) holds 90 days; a snooze 7. */
+  dismissPreemptionItem: (id: string, action?: PreemptionDismissAction) => Promise<void>;
   /** Undo the most recent dismissal, then refetch. */
   undoPreemptionDismissal: () => Promise<void>;
   /** Expire the undo affordance without touching the dismissal itself. */
@@ -146,9 +149,9 @@ export const createPreemptionSlice: StateCreator<
     }
   },
 
-  dismissPreemptionItem: async (id: string) => {
+  dismissPreemptionItem: async (id: string, action: PreemptionDismissAction = 'acknowledged') => {
     try {
-      await dismissAlert({ alertKey: evidenceAlertKey(id) }, 'acknowledged');
+      await dismissAlert({ alertKey: evidenceAlertKey(id) }, action);
     } catch (error) {
       // Not stored, so not hidden: say so instead of pretending.
       set({ preemptionError: translateError(error) });

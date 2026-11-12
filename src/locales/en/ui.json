@@ -11,6 +11,8 @@
   "header.freshness.advisoriesNever": "advisories not checked yet",
   "header.freshness.advisoriesFailed": "advisory check failed",
   "header.freshness.advisoriesFailedAsOf": "advisory check failed, data from {{age}}",
+  "header.freshness.advisoriesNotChecked": "advisories not checked",
+  "header.freshness.advisoriesStale": "advisories out of date, last checked {{age}}",
   "header.signalsLearned": "{{count}} learned",
   "header.toReview": "to review",
   "header.inCorpus": "in corpus",

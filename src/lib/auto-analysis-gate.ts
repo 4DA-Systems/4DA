@@ -20,13 +20,15 @@ import { useAppStore } from '../store';
 const SESSION_KEY = '4da-auto-analysis-started';
 
 interface GateState {
-  settingsLoaded: boolean;
+  /** Settings were read, so whether onboarding is complete is known. A
+   *  timed-out settings load lifts the splash but never sets this. */
+  onboardingKnown: boolean;
   showOnboarding: boolean;
 }
 
-/** Settings are loaded and onboarding is not open: the user is in the app. */
+/** Settings were read and onboarding is not open: the user is in the app. */
 export function onboardingSettled(s: GateState): boolean {
-  return s.settingsLoaded && !s.showOnboarding;
+  return s.onboardingKnown && !s.showOnboarding;
 }
 
 /** True once the app started an analysis of its own in this session. */
@@ -53,7 +55,7 @@ export function markAutoAnalysisStarted(): void {
 export function onboardingDecision(): Promise<'complete' | 'onboarding'> {
   const decide = (s: GateState): 'complete' | 'onboarding' | null => {
     if (s.showOnboarding) return 'onboarding';
-    return s.settingsLoaded ? 'complete' : null;
+    return s.onboardingKnown ? 'complete' : null;
   };
   const now = decide(useAppStore.getState());
   if (now) return Promise.resolve(now);

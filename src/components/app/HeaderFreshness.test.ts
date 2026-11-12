@@ -32,4 +32,19 @@ describe('freshnessView', () => {
     expect(freshnessView({ lastCycleAt: fresh, advisorySync: sync('syncing', null) }, NOW).amber).toBe(false);
     expect(freshnessView({ lastCycleAt: fresh, advisorySync: sync('no_inventory', null) }, NOW).amber).toBe(false);
   });
+
+  // PR #1131 review: a missing readiness dropped the advisory part with no
+  // amber, and "stale" read as "check failed".
+  it('no readiness at all is amber and "not checked", never fresh', () => {
+    const v = freshnessView({ lastCycleAt: '2026-11-12T12:00:00Z', advisorySync: null }, NOW);
+    expect(v.advisoryUnknown).toBe(true);
+    expect(v.amber).toBe(true);
+  });
+
+  it('stale advisories are their own state, not a failed check', () => {
+    const v = freshnessView({ lastCycleAt: '2026-11-12T12:00:00Z', advisorySync: sync('stale', '2026-11-08 11:00:00') }, NOW);
+    expect(v.advisoryStale).toBe(true);
+    expect(v.advisoryFailed).toBe(false);
+    expect(v.amber).toBe(true);
+  });
 });

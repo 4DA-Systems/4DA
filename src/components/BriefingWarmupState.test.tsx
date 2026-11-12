@@ -27,7 +27,7 @@ beforeEach(() => {
   cmdMock.mockImplementation(() => Promise.resolve(stackOnly));
   dogfood.on = true;
   window.sessionStorage.clear();
-  useAppStore.setState({ settingsLoaded: true, showOnboarding: false, isFirstRun: false });
+  useAppStore.setState({ settingsLoaded: true, onboardingKnown: true, showOnboarding: false, isFirstRun: false });
 });
 
 describe('BriefingWarmupState — cold start (doctrine rule 6)', () => {
@@ -75,7 +75,7 @@ describe('BriefingWarmupState — auto-start (audit 2026-11-11)', () => {
   });
 
   it('never starts one before the onboarding decision is made', async () => {
-    useAppStore.setState({ settingsLoaded: false, showOnboarding: false });
+    useAppStore.setState({ settingsLoaded: false, onboardingKnown: false, showOnboarding: false });
     setStore(false, []);
     const onAnalyze = vi.fn();
     render(<BriefingWarmupState onAnalyze={onAnalyze} />);

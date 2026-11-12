@@ -28,6 +28,10 @@ export interface FreshnessView {
   advisoriesAt: Date | null;
   /** The last advisory check failed (data may still be served from disk). */
   advisoryFailed: boolean;
+  /** The advisory data is older than the backend's trust horizon. */
+  advisoryStale: boolean;
+  /** No advisory readiness was reported at all: not checked, never clean. */
+  advisoryUnknown: boolean;
   /** Anything here is older than a day, missing, or failed. */
   amber: boolean;
 }
@@ -43,14 +47,17 @@ function parse(at: string | null | undefined): Date | null {
 export function freshnessView(input: FreshnessInput, now: number = Date.now()): FreshnessView {
   const cycleAt = parse(input.lastCycleAt);
   const sync = input.advisorySync ?? null;
+  // Unknown readiness (unreadable, older backend) is "not checked", never clean.
+  const advisoryUnknown = sync === null;
   // No ecosystem to check is not a failure of the check.
   const advisoriesApply = sync !== null && sync.state !== 'no_inventory';
   const advisoriesAt = advisoriesApply ? parse(sync.synced_at) : null;
-  const advisoryFailed = advisoriesApply && (sync.state === 'failed' || sync.state === 'stale');
+  const advisoryFailed = advisoriesApply && sync.state === 'failed';
+  const advisoryStale = advisoriesApply && sync.state === 'stale';
   const old = (d: Date | null) => d === null || now - d.getTime() > STALE_AFTER_MS;
-  const amber = old(cycleAt) || advisoryFailed || (advisoriesApply && old(advisoriesAt)
-    && sync.state !== 'syncing' && sync.state !== 'matching');
-  return { cycleAt, advisoriesAt, advisoryFailed, amber };
+  const amber = old(cycleAt) || advisoryUnknown || advisoryFailed || advisoryStale
+    || (advisoriesApply && old(advisoriesAt) && sync.state !== 'syncing' && sync.state !== 'matching');
+  return { cycleAt, advisoriesAt, advisoryFailed, advisoryStale, advisoryUnknown, amber };
 }
 
 /** Re-render every minute so an age keeps moving on an idle screen. */
@@ -73,8 +80,14 @@ export function HeaderFreshness({ lastCycleAt, advisorySync }: FreshnessInput) {
     ? t('header.freshness.updated', { age: formatRelativeDate(view.cycleAt) })
     : t('header.freshness.notUpdated');
   let advisories: string | null = null;
-  if (advisoriesApply) {
-    if (view.advisoryFailed) {
+  if (view.advisoryUnknown) {
+    advisories = t('header.freshness.advisoriesNotChecked');
+  } else if (advisoriesApply) {
+    if (view.advisoryStale) {
+      advisories = view.advisoriesAt
+        ? t('header.freshness.advisoriesStale', { age: formatRelativeDate(view.advisoriesAt) })
+        : t('header.freshness.advisoriesNotChecked');
+    } else if (view.advisoryFailed) {
       advisories = view.advisoriesAt
         ? t('header.freshness.advisoriesFailedAsOf', { age: formatRelativeDate(view.advisoriesAt) })
         : t('header.freshness.advisoriesFailed');

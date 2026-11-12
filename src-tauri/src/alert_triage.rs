@@ -4,8 +4,11 @@
 //! One store for every surface that dismisses an alert (audit 2026-11-11):
 //! the critical banner (source items, `item:<id>`) and the Preemption list
 //! (evidence items, `evidence:<id>`) both write here, keyed by `alert_key`.
-//! Every decision expires (default [`DISMISSAL_DAYS`]) so an alert that is
-//! still true comes back, and `untriage_alert` undoes one.
+//! Every decision expires so an alert that is still true comes back, and
+//! `untriage_alert` undoes one. How long a decision holds depends on what it
+//! says ([`default_days`]): a deliberate "not applicable" or "accept the
+//! risk" holds [`DELIBERATE_DAYS`] (90) so it does not nag weekly;
+//! investigating, snoozed, acknowledged and fixed hold [`DISMISSAL_DAYS`] (7).
 
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
@@ -42,6 +45,18 @@ const VALID_ACTIONS: &[&str] = &[
 /// How long a triage decision holds when the caller names no expiry.
 pub(crate) const DISMISSAL_DAYS: i64 = 7;
 
+/// How long a deliberate judgement holds: the user looked and decided the
+/// alert does not apply, or accepted the risk (product decision 2026-11-13).
+pub(crate) const DELIBERATE_DAYS: i64 = 90;
+
+/// Default lifetime of a decision with no explicit expiry.
+pub(crate) fn default_days(action: &str) -> i64 {
+    match action {
+        "not_applicable" | "accepted_risk" => DELIBERATE_DAYS,
+        _ => DISMISSAL_DAYS,
+    }
+}
+
 /// Prefix of the Preemption (evidence item) keys.
 pub(crate) const EVIDENCE_KEY_PREFIX: &str = "evidence:";
 
@@ -58,8 +73,9 @@ fn store_key(item_id: Option<i64>, alert_key: Option<String>) -> Result<String> 
 
 /// Phase 131: rebuild `alert_triage` keyed by `alert_key` (item id
 /// optional), carrying every row as `item:<id>`. A row with no expiry gets
-/// one [`DISMISSAL_DAYS`] after it was made: "Investigate" used to triage
-/// with no expiry and hid the alert for good.
+/// one counted from when it was made, by [`default_days`]: 90 days for
+/// not_applicable / accepted_risk, 7 for the rest. "Investigate" used to
+/// triage with no expiry and hid the alert for good.
 pub(crate) fn migrate_to_alert_keys(c: &rusqlite::Connection) -> rusqlite::Result<()> {
     c.execute_batch(&format!(
         "CREATE TABLE alert_triage_v131 (
@@ -74,7 +90,9 @@ pub(crate) fn migrate_to_alert_keys(c: &rusqlite::Connection) -> rusqlite::Resul
         );
         INSERT INTO alert_triage_v131 (id, alert_key, item_id, advisory_id, action, reason, resolved_at, expires_at)
             SELECT id, 'item:' || item_id, item_id, advisory_id, action, reason, resolved_at,
-                   COALESCE(expires_at, datetime(resolved_at, '+{DISMISSAL_DAYS} days'))
+                   COALESCE(expires_at, datetime(resolved_at, '+' ||
+                       CASE WHEN action IN ('not_applicable', 'accepted_risk')
+                            THEN {DELIBERATE_DAYS} ELSE {DISMISSAL_DAYS} END || ' days'))
             FROM alert_triage;
         DROP TABLE alert_triage;
         ALTER TABLE alert_triage_v131 RENAME TO alert_triage;
@@ -89,7 +107,7 @@ pub(crate) fn migrate_to_alert_keys(c: &rusqlite::Connection) -> rusqlite::Resul
 
 /// Triage an alert — persist the decision. Re-triaging the same alert
 /// replaces the previous decision. Without `expires_at` it holds for
-/// [`DISMISSAL_DAYS`].
+/// [`default_days`] for its action.
 #[tauri::command]
 pub async fn triage_alert(
     item_id: Option<i64>,
@@ -148,19 +166,18 @@ struct Decision<'a> {
 
 fn record(conn: &rusqlite::Connection, d: &Decision<'_>) -> rusqlite::Result<usize> {
     conn.execute(
-        &format!(
-            "INSERT OR REPLACE INTO alert_triage
-                 (alert_key, item_id, advisory_id, action, reason, resolved_at, expires_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, datetime('now'),
-                     COALESCE(?6, datetime('now', '+{DISMISSAL_DAYS} days')))"
-        ),
+        "INSERT OR REPLACE INTO alert_triage
+             (alert_key, item_id, advisory_id, action, reason, resolved_at, expires_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, datetime('now'),
+                 COALESCE(?6, datetime('now', '+' || ?7 || ' days')))",
         params![
             d.key,
             d.item_id,
             d.advisory_id,
             d.action,
             d.reason,
-            d.expires_at
+            d.expires_at,
+            default_days(d.action)
         ],
     )
 }
@@ -303,14 +320,16 @@ mod tests {
              INSERT INTO alert_triage (item_id, action, resolved_at)
                  VALUES (2, 'fixed', datetime('now', '-1 day'));
              INSERT INTO alert_triage (item_id, action, expires_at)
-                 VALUES (3, 'snoozed', datetime('now', '+2 days'));",
+                 VALUES (3, 'snoozed', datetime('now', '+2 days'));
+             INSERT INTO alert_triage (item_id, action, resolved_at)
+                 VALUES (4, 'not_applicable', datetime('now', '-30 days'));",
         )
         .unwrap();
         migrate_to_alert_keys(&conn).unwrap();
         let total: i64 = conn
             .query_row("SELECT COUNT(*) FROM alert_triage", [], |r| r.get(0))
             .unwrap();
-        assert_eq!(total, 3);
+        assert_eq!(total, 4);
         assert_eq!(
             live_count(&conn, "item:1"),
             0,
@@ -322,25 +341,40 @@ mod tests {
             "yesterday's Fixed still holds"
         );
         assert_eq!(live_count(&conn, "item:3"), 1, "an explicit expiry is kept");
+        assert_eq!(
+            live_count(&conn, "item:4"),
+            1,
+            "a month-old Not applicable holds for 90 days"
+        );
     }
 
+    fn days_held(conn: &Connection, key: &str) -> f64 {
+        conn.query_row(
+            "SELECT julianday(expires_at) - julianday('now') FROM alert_triage WHERE alert_key = ?1",
+            [key],
+            |r| r.get(0),
+        )
+        .unwrap()
+    }
+
+    /// Product decision 2026-11-13: a deliberate "not applicable" or an
+    /// accepted risk holds 90 days so it does not nag weekly; everything
+    /// else holds 7.
     #[test]
     fn every_decision_expires_by_default_and_undo_removes_it() {
         let conn = setup_test_db();
-        record(&conn, &decide("item:9", Some(9), "not_applicable")).unwrap();
-        let expires: String = conn
-            .query_row(
-                "SELECT expires_at FROM alert_triage WHERE alert_key = 'item:9'",
-                [],
-                |r| r.get(0),
-            )
-            .unwrap();
-        let days: f64 = conn
-            .query_row("SELECT julianday(?1) - julianday('now')", [&expires], |r| {
-                r.get(0)
-            })
-            .unwrap();
-        assert!((days - DISMISSAL_DAYS as f64).abs() < 0.01, "{days}");
+        for (key, action, days) in [
+            ("item:9", "not_applicable", DELIBERATE_DAYS),
+            ("item:10", "accepted_risk", DELIBERATE_DAYS),
+            ("item:11", "acknowledged", DISMISSAL_DAYS),
+            ("item:12", "snoozed", DISMISSAL_DAYS),
+            ("item:13", "investigating", DISMISSAL_DAYS),
+        ] {
+            record(&conn, &decide(key, None, action)).unwrap();
+            let held = days_held(&conn, key);
+            assert!((held - days as f64).abs() < 0.01, "{action}: {held}");
+        }
+        assert_eq!(DELIBERATE_DAYS, 90);
         conn.execute("DELETE FROM alert_triage WHERE alert_key = ?1", ["item:9"])
             .unwrap();
         assert_eq!(live_count(&conn, "item:9"), 0);

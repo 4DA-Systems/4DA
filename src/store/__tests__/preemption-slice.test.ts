@@ -115,6 +115,13 @@ describe('preemption-slice — backend-owned visibility (AD-035)', () => {
     expect(mockCmd).toHaveBeenLastCalledWith('get_preemption_alerts', { fullPlan: false });
   });
 
+  it('"Not affected" is stored as not_applicable, which the backend keeps 90 days', async () => {
+    await useAppStore.getState().dismissPreemptionItem('osv-axios', 'not_applicable');
+    expect(mockCmd).toHaveBeenCalledWith('triage_alert', {
+      itemId: null, alertKey: 'evidence:osv-axios', action: 'not_applicable', advisoryId: null, reason: null, expiresAt: null,
+    });
+  });
+
   it('a dismissal the store refused is not shown as done', async () => {
     mockCmd.mockImplementation((name: string) => name === 'triage_alert'
       ? Promise.reject(new Error('database is locked'))
