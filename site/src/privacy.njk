@@ -171,10 +171,10 @@ permalink: "/privacy.html"
 
   <div class="legal-container">
     <h1>Privacy Policy</h1>
-    <p class="effective-date"><strong>4DA Systems Pty Ltd</strong> &middot; Effective Date: 15 March 2026 &middot; Last Updated: 15 October 2026</p>
+    <p class="effective-date"><strong>4DA Systems Pty Ltd</strong> &middot; Effective Date: 15 March 2026 &middot; Last Updated: 13 November 2026</p>
 
     <div class="short-version">
-      4DA is a desktop application that runs on your computer. Your data stays on your computer. We do not collect it, we do not transmit it, we do not store it on our servers, and we do not sell it. To check your dependencies, the App downloads public vulnerability archives and compares them on your machine, and sends the names of your packages (never your code, never their versions, never private package names) to the public package registries described in Section 2.6; you can turn that off. This privacy policy exists because the law requires one, but also because we believe you deserve to know exactly how your software works.
+      4DA is a desktop application that runs on your computer. Your data stays on your computer. We do not collect it, we do not transmit it, we do not store it on our servers, and we do not sell it. To check your dependencies, from version 1.0.4 the App downloads public vulnerability archives and compares them on your machine, and sends the names of your packages (never your code, never their versions, never private package names) to the public package registries described in Section 2.6; you can turn that off. Versions 1.0.3 and earlier send the names and versions of your packages (never your code) to OSV.dev and the package registries. This privacy policy exists because the law requires one, but also because we believe you deserve to know exactly how your software works.
     </div>
 
     <h2>1. Introduction and Scope</h2>
@@ -198,7 +198,7 @@ permalink: "/privacy.html"
     <p>The App processes the following data <strong>entirely on your local machine</strong>:</p>
     <ul>
       <li><strong>Content from public APIs:</strong> The App fetches publicly available content from sources including Hacker News, GitHub, arXiv, Reddit, and RSS feeds. These requests go directly from your machine to the public APIs. No personal data is included in these requests beyond your device's IP address, which is inherent to any network request.</li>
-      <li><strong>Your project files:</strong> The Autonomous Context Engine (ACE) can scan local project directories you configure to understand your development context and improve content relevance. This data is processed locally; the file contents never leave your machine. Known vulnerabilities are checked on your machine against downloaded public archives; the names of the packages listed in your lockfiles are sent to the public package registries to check for new releases (see Section 2.6).</li>
+      <li><strong>Your project files:</strong> The Autonomous Context Engine (ACE) can scan local project directories you configure to understand your development context and improve content relevance. This data is processed locally; the file contents never leave your machine. From version 1.0.4, known vulnerabilities are checked on your machine against downloaded public archives, and the names of the packages listed in your lockfiles are sent to the public package registries to check for new releases. Versions 1.0.3 and earlier also send those names and installed versions to OSV.dev (see Section 2.6).</li>
       <li><strong>Your preferences and settings:</strong> Configuration data stored in a local JSON file on your device. This file contains non-sensitive preferences such as theme, source configuration, and display options. Sensitive credentials are stored separately in your operating system's keychain (see Section 2.4).</li>
       <li><strong>Local database:</strong> A SQLite database (with sqlite-vec for vector search) stored on your device containing aggregated content, embeddings, and relevance scores. This database is never synced to, uploaded to, or transmitted to any external service.</li>
       <li><strong>Local telemetry:</strong> Usage analytics are stored locally for your own reference. This telemetry data is never sent to 4DA Systems or any third party.</li>
@@ -260,8 +260,9 @@ permalink: "/privacy.html"
     <p>All of these requests go directly from your machine to the respective service. Your device's IP address is visible to each service as part of the standard HTTPS connection.</p>
     <p><strong>Dependency checks.</strong> When the App finds lockfiles in the projects you configure, it checks the packages they list:</p>
     <ul>
-      <li><strong>OSV vulnerability archives</strong> (<code>osv-vulnerabilities.storage.googleapis.com</code>, operated by Google): the App downloads the public per-ecosystem archive and compares it with your installed versions on your machine. Nothing about your packages is sent; Google sees only that the archive was downloaded (and your IP address).</li>
-      <li><strong>Package registries</strong> (npm, crates.io, PyPI and the Go module proxy): receive package names, to look up releases, deprecations and changelogs. Names your configuration marks private (for example Go modules matching <code>GOPRIVATE</code>, npm scopes routed to a private registry, packages from a private index or a git or path source) are never sent, and <strong>Settings → Privacy → Registry lookups</strong> stops these requests entirely.</li>
+      <li><strong>OSV vulnerability archives</strong> (<code>osv-vulnerabilities.storage.googleapis.com</code>, operated by Google), from version 1.0.4: the App downloads the public per-ecosystem archive and compares it with your installed versions on your machine. Nothing about your packages is sent; Google sees only that the archive was downloaded (and your IP address).</li>
+      <li><strong>OSV.dev</strong> (<code>api.osv.dev</code>, operated by Google), versions 1.0.3 and earlier: receives the package names, their ecosystems and, where the lockfile gives it, the installed version of each, to look up known vulnerabilities.</li>
+      <li><strong>Package registries</strong> (npm, crates.io, PyPI and the Go module proxy): receive package names, to look up releases, deprecations and changelogs. From version 1.0.4, names your configuration marks private (for example Go modules matching <code>GOPRIVATE</code>, npm scopes routed to a private registry, packages from a private index or a git or path source) are never sent, and <strong>Settings → Privacy → Registry lookups</strong> stops these requests entirely. In versions 1.0.3 and earlier, Go module paths are sent in full, so a private module path (for example <code>github.com/yourco/internal-svc</code>) names that repository.</li>
       <li>Your source code and file contents are never sent. The complete, source-referenced list of the App's connections is published in <a href="https://github.com/4DA-Systems/4DA/blob/main/NETWORK.md">NETWORK.md</a>.</li>
     </ul>
 
@@ -365,7 +366,8 @@ permalink: "/privacy.html"
         <tr><td>RSS/Atom feeds</td><td>App</td><td>Standard HTTP requests (your IP visible)</td><td>Content aggregation</td></tr>
         <tr><td>Keygen</td><td>App (Signal tier only)</td><td>License key</td><td>License validation</td></tr>
         <tr><td>4DA licensing endpoint (4da.ai)</td><td>App (Signal monthly / annual subscriptions only, near key expiry; and Recover License by Email, only when you use it)</td><td>License key; for recovery, the email address you enter</td><td>Automatic license renewal, confirmed against your Stripe subscription; re-sending a lost key</td></tr>
-        <tr><td>OSV archive storage (Google)</td><td>App (dependency checks)</td><td>Nothing from your lockfiles: a download of the public archive (your IP visible)</td><td>Known-vulnerability data, matched on your device</td></tr>
+        <tr><td>OSV archive storage (Google)</td><td>App 1.0.4 and later (dependency checks)</td><td>Nothing from your lockfiles: a download of the public archive (your IP visible)</td><td>Known-vulnerability data, matched on your device</td></tr>
+        <tr><td>OSV.dev (Google)</td><td>App 1.0.3 and earlier (dependency checks)</td><td>Package names, ecosystems and installed versions from your lockfiles (your IP visible)</td><td>Known-vulnerability lookup</td></tr>
         <tr><td>npm, crates.io, PyPI, Go module proxy</td><td>App (dependency checks)</td><td>Package names, including full Go module paths (your IP visible)</td><td>Releases, deprecations and changelogs</td></tr>
         <tr><td>Hugging Face</td><td>App (versions after 1.0.3; once, when a feature first needs the local search model)</td><td>A plain download request (your IP visible)</td><td>Downloading the local embedding model</td></tr>
         <tr><td>User's SMTP provider</td><td>App (optional, user-configured)</td><td>Digest email contents</td><td>Email delivery</td></tr>
@@ -464,7 +466,7 @@ permalink: "/privacy.html"
     <h2>10. International Data Transfers</h2>
 
     <h3>10.1 The App</h3>
-    <p>Your project data, scores and reading history stay on your device and are not transferred anywhere. The package names used for release checks go to the package registries (npm, crates.io, PyPI, the Go module proxy), whose servers are primarily in the United States; vulnerability archives are downloaded from Google's storage, and nothing about your packages is sent for them. When you choose to use LLM provider APIs, data flows directly from your device to the provider's servers. The location of those servers depends on the provider you choose:</p>
+    <p>Your project data, scores and reading history stay on your device and are not transferred anywhere. The package names used for release checks go to the package registries (npm, crates.io, PyPI, the Go module proxy), whose servers are primarily in the United States. From version 1.0.4, vulnerability archives are downloaded from Google's storage and nothing about your packages is sent for them; versions 1.0.3 and earlier send package names and versions to OSV.dev (operated by Google). When you choose to use LLM provider APIs, data flows directly from your device to the provider's servers. The location of those servers depends on the provider you choose:</p>
     <ul>
       <li><strong>Anthropic:</strong> Servers primarily in the United States</li>
       <li><strong>OpenAI:</strong> Servers primarily in the United States</li>

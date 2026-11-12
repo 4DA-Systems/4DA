@@ -12,7 +12,7 @@ On your computer. Only your computer.
 
 These, all documented:
 
-- **Dependency checks** -- advisories are checked on your machine against public archives the app downloads, so nothing about your packages is sent for that. To check for new releases, the app sends package names (never versions) to the package registries (npm, crates.io, PyPI, the Go module proxy). Private names (GOPRIVATE modules, private registries and indexes, git and path sources) are never sent, and Settings -> Privacy -> Registry lookups turns this off. Never your code.
+- **Dependency checks** -- from version 1.0.4, advisories are checked on your machine against public archives the app downloads, so nothing about your packages is sent for that. To check for new releases, the app sends package names (never versions) to the package registries (npm, crates.io, PyPI, the Go module proxy). Private names (GOPRIVATE modules, private registries and indexes, git and path sources) are never sent, and Settings -> Privacy -> Registry lookups turns this off. Versions 1.0.3 and earlier send the names and versions of your packages to OSV.dev and the registries, and Go module paths in full. Never your code.
 - **Content sources** (Hacker News, GitHub, Reddit, arXiv, RSS feeds) -- your computer fetches public articles directly from these services. We are not in the middle.
 - **AI providers** (only if you set one up) -- OpenAI, Anthropic, or Ollama (runs locally). You provide your own API key. It goes straight from your machine to the provider. We never see it.
 - **License check** (paid tier only) -- if you buy a Signal subscription, the app verifies your license key with Keygen and, near expiry, renews it with our own server, `4da.ai` (the key only). If you ask the app to recover a lost key, it sends your email to `4da.ai`. No name, no device ID.
@@ -31,7 +31,7 @@ The app records what you click and save to build a preference profile you can in
 
 **No telemetry, no exceptions**: 4DA sends no crash reports and no analytics to any server — there is no toggle that turns that on, because there is nothing to turn on. If something breaks, **Settings → Privacy → Export diagnostics** builds a scrubbed, local report (file paths, API keys, and PII redacted) that you review and choose whether to attach to a bug report. Nothing leaves your machine unless you send it yourself.
 
-Your BYOK LLM calls go direct to the provider *you* chose (Anthropic, OpenAI, or localhost Ollama). Dependency checks download public advisory archives and send package names to the package registries. Source adapters fetch public content (HN, GitHub, Reddit, CVE feeds, etc.). License validation and renewal reach Keygen and `4da.ai` if you're on a paid tier. Updates check GitHub Releases. The full list, including the opt-in flows (cloud translation, digest email, GitHub release notes), is in [NETWORK.md](../NETWORK.md) with source references.
+Your BYOK LLM calls go direct to the provider *you* chose (Anthropic, OpenAI, or localhost Ollama). Dependency checks download public advisory archives and send package names to the package registries (1.0.3 and earlier: names and versions to OSV.dev too). Source adapters fetch public content (HN, GitHub, Reddit, CVE feeds, etc.). License validation and renewal reach Keygen and `4da.ai` if you're on a paid tier. Updates check GitHub Releases. The full list, including the opt-in flows (cloud translation, digest email, GitHub release notes), is in [NETWORK.md](../NETWORK.md) with source references.
 
 ## What about my API keys?
 
