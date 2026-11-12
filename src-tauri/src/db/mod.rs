@@ -39,6 +39,8 @@ mod sources;
 mod startup_bench_tests;
 #[cfg(test)]
 mod stress_tests;
+#[cfg(test)]
+mod upgrade_from_v1_0_3_tests;
 pub(crate) mod vector_quant;
 mod verdicts;
 mod verdicts_promotion;

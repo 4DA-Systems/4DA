@@ -4,6 +4,75 @@ All notable changes to 4DA will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [1.0.4] - Unreleased
+
+The release that makes 4DA the dependency engine the site describes. A summary of what you
+will notice since 1.0.3, not the full commit log.
+
+**Upgrading from 1.0.3:** the database migrates from schema 124 to 130 on first launch, each
+step in its own transaction, after a backup (`4da.db.backup.v124`). Your dependencies,
+advisories, saved items and settings carry over (a test now opens a real 1.0.3 database
+and checks exactly that). Interest feeds (news sources) are switched off by the upgrade, as
+on a new install; turn the ones you want back on in Settings, and their items return
+unchanged. Every advisory ecosystem re-syncs on the first cycle.
+
+**The download is much smaller.** The local search model (about 260 MB) is no longer in
+the installer. The dependency engine does not need it; it is downloaded once, every file
+checked against a pinned SHA-256, only when you turn on interests or natural-language
+search.
+
+**Intel Macs: no built-in local embeddings.** ONNX Runtime publishes no Intel macOS build
+of the version 4DA needs, so the Intel build ships without it and says so. Everything else
+works, and Ollama provides embeddings if you run it. (1.0.3's Intel build carried a library
+for the wrong CPU, so this was already the case, silently.)
+
+**The Windows installer in this release is not code-signed.** Verify its SHA-256 against
+`SHASUMS256.txt` before running it. macOS is signed and notarized; Linux is unaffected.
+
+### Security
+
+- Dependencies updated to clear published advisories that 1.0.3 carries, among them
+  rustls-webpki, webpki-roots, libsqlite3-sys (rusqlite 0.41), tokio, ctutils, rustls,
+  ammonia, rmcp and zip.
+- The ONNX Runtime library is pinned by SHA-256 when it is bundled and when the app
+  downloads it, and a library built for another CPU is never loaded.
+- The HTML digest escapes everything it prints. The OS keychain is the source of truth for
+  API keys.
+
+### The dependency engine
+
+- Three tabs. Preemption is the worklist; Blind Spots and Knowledge Gaps are its sub-views.
+- One lockfile reader for every stack: Go build lists, Yarn Berry, Bun, uv, Pipfile, nested
+  npm copies, PEP 735 dependency groups and more, with nothing dropped silently.
+- The Upgrade Plan names, for each advisory, the release that clears it, whether a lockfile
+  refresh is enough or which parent to upgrade, and the command to run. It never
+  recommends a yanked or deprecated release, never introduces a new advisory, and says when
+  a fix is blocked upstream.
+- "Fix with Claude Code" hands a finding to your own coding agent.
+- Dependencies 4DA found but could not check are named and counted per project, so a partly
+  checked stack is never shown as clean.
+- A failed advisory refresh, a failed database read or an unreadable inventory shows as an
+  error, never as an all-clear or a fresh check.
+- Malware advisories are named as malware; maintenance notices are listed but never block.
+- Search finds a package's own advisories first.
+
+### Brief and Signal
+
+- The morning Brief always goes out: when the AI summary abstains or fails, the facts view
+  is sent instead. At most three automatic briefs a day.
+- Signal leads with what changed in your stack; reading news is opt-in (interests).
+
+### The app
+
+- Updates: the app checks every 6 hours and when you return to its window, shows download
+  progress, says why an update failed, and restarts into the new version. The last check
+  and any error are shown in About.
+- 4DA steps aside while a game, VR session or presentation is using the machine.
+- Hidden windows stop rendering, and the scheduled jobs no longer freeze the app.
+- Backend errors read as sentences; paywalls say exactly what is gated.
+- Saved items are kept by retention.
+- A clean quit releases the instance lock; a reused process id no longer blocks launch.
+
 ## [1.0.3] - 2026-10-05
 
 Curated highlights of the work since 1.0.2 — a selection, not an exhaustive commit log.

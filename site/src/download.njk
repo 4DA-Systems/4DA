@@ -35,6 +35,7 @@ permalink: "/download/"
     .dl-hero .eyebrow { font-family: 'JetBrains Mono', monospace; font-size: 12px; letter-spacing: .1em; text-transform: uppercase; color: var(--text-muted); }
     .dl-hero h1 { font-size: 40px; font-weight: 600; letter-spacing: -.02em; margin: 12px 0 10px; }
     .dl-hero p { color: var(--text-secondary); max-width: 52ch; margin: 0 auto; }
+    .dl-hero p.dl-stale { margin-top: 14px; font-size: 13px; color: var(--text-muted); }
 
     .dl-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin: 40px 0 12px; align-items: start; }
     .dl-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius); padding: 24px; display: flex; flex-direction: column; gap: 10px; position: relative; }
@@ -98,7 +99,12 @@ permalink: "/download/"
     <header class="dl-hero">
       <div class="eyebrow">Free forever &middot; No account &middot; Works offline &middot; v{{ release.version }}</div>
       <h1>Download 4DA</h1>
+      {% if release.published %}
+      <p>One click gets you the installer for your platform. The dependency engine needs nothing else. The local embedding model is not in the installer: it is downloaded only when you turn on interests or natural-language search (about 260 MB, every file checked against a pinned SHA-256).</p>
+      {% else %}
       <p>One click gets you the installer for your platform. The local embedding model ships inside it, so 4DA works fully offline on first run.</p>
+      <p class="dl-stale">This download is v{{ release.version }}, older than the screenshots on this site, which show v{{ release.next }}. v{{ release.next }} is being prepared.</p>
+      {% endif %}
     </header>
 
     <div class="dl-grid">
@@ -106,7 +112,7 @@ permalink: "/download/"
         <span class="dl-badge">Recommended for you</span>
         <div class="dl-os">Windows</div>
         <div class="dl-meta">Windows 10 (1803+) or 11. <code>.exe</code> installer (NSIS).</div>
-        <a class="dl-btn" data-dl="win" href="/download/{{ release.files.win.slug }}/">Download <span class="sz">{{ release.files.win.size }}</span></a>
+        <a class="dl-btn" data-dl="win" href="/download/{{ release.files.win.slug }}/">Download{% if release.files.win.size %} <span class="sz">{{ release.files.win.size }}</span>{% endif %}</a>
         <div class="dl-note-inline">First launch shows SmartScreen &mdash; see below.</div>
       </div>
       <div class="dl-card" data-os="mac">
@@ -117,13 +123,13 @@ permalink: "/download/"
           <a class="dl-btn" data-dl="mac-arm" href="/download/{{ release.files.macArm.slug }}/">Apple Silicon</a>
           <a class="dl-btn" data-dl="mac-intel" href="/download/{{ release.files.macIntel.slug }}/">Intel</a>
         </div>
-        <div class="dl-note-inline">On Apple Silicon? Choose Apple Silicon. Pre-2020 Macs: Intel.</div>
+        <div class="dl-note-inline">On Apple Silicon? Choose Apple Silicon. Pre-2020 Macs: Intel. On Intel Macs the built-in local embeddings are not available; semantic features use Ollama if you run it.</div>
       </div>
       <div class="dl-card" data-os="linux">
         <span class="dl-badge">Recommended for you</span>
         <div class="dl-os">Linux</div>
         <div class="dl-meta">Ubuntu 22.04+ (WebKitGTK 4.1). AppImage runs anywhere.</div>
-        <a class="dl-btn" data-dl="linux" href="/download/{{ release.files.linuxAppImage.slug }}/">Download AppImage <span class="sz">{{ release.files.linuxAppImage.size }}</span></a>
+        <a class="dl-btn" data-dl="linux" href="/download/{{ release.files.linuxAppImage.slug }}/">Download AppImage{% if release.files.linuxAppImage.size %} <span class="sz">{{ release.files.linuxAppImage.size }}</span>{% endif %}</a>
         <div class="dl-alt-links">
           <a data-dl="linux-deb" href="/download/{{ release.files.linuxDeb.slug }}/">.deb</a>
           <a data-dl="linux-rpm" href="/download/{{ release.files.linuxRpm.slug }}/">.rpm</a>

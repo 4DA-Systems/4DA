@@ -58,3 +58,26 @@ test('an asset name with replacement or template metacharacters is refused', () 
 test('rewriteRelease refuses an unsafe name even if a caller skips matchInstallers', () => {
   assert.throws(() => rewriteRelease(RELEASE_JS, 'v9.8.7', { win: { name: 'x_$&.exe', size: MB } }), /unsafe asset name/);
 });
+
+// The site says "the download is older than these screenshots" while VERSION
+// (the newest published release) trails NEXT_VERSION. Running this script for
+// the release that catches up must retire that line with no hand edit.
+test('publishing NEXT_VERSION flips `published`, retiring the stale-download line', async () => {
+  const os = require('node:os');
+  const { pathToFileURL } = require('node:url');
+  const next = RELEASE_JS.match(/const NEXT_VERSION = "([^"]+)";/);
+  assert.ok(next, 'release.js declares NEXT_VERSION');
+  const load = async (src, name) => {
+    const file = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'site-release-')), name);
+    fs.writeFileSync(file, src);
+    return (await import(pathToFileURL(file).href)).default;
+  };
+  const before = await load(RELEASE_JS, 'before.mjs');
+  if (before.version !== next[1]) assert.equal(before.published, false);
+  const { found } = matchInstallers(selectInstallers(assetsFor(next[1])));
+  const after = await load(rewriteRelease(RELEASE_JS, `v${next[1]}`, found), 'after.mjs');
+  assert.equal(after.version, next[1]);
+  assert.equal(after.next, next[1]);
+  assert.equal(after.published, true);
+  assert.ok(after.files.win.url.endsWith(`/v${next[1]}/4DA_${next[1]}_x64-setup.exe`));
+});

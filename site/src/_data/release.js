@@ -1,13 +1,23 @@
 // Single source of truth for the current release + download URLs.
-// UPDATE THIS ONE FILE per release: bump `VERSION`/`TAG` (and asset names if
-// Tauri's naming changes). The /download page and the vanity redirect pages
+// The /download page and the vanity redirect pages
 // (/download/<slug>/) are both generated from `files` below, so clean URLs
 // like 4da.ai/download/win never change and the buttons never expose the raw
 // versioned GitHub asset URL.
+//
+// Per release, run `node scripts/update-site-release.cjs vX.Y.Z --apply` AFTER
+// the release is published: it rewrites VERSION, TAG, every url and size from
+// the real release's assets.
+//
+// NEXT_VERSION is the version the site's screenshots and copy describe. While
+// it differs from VERSION (the newest published release), `/` and `/download`
+// say in one line that the download is older than the screenshots, and keep
+// the copy that is true of the older build. The update script moving VERSION
+// up to NEXT_VERSION retires that line by itself.
 const ORG = "4DA-Systems";
 const REPO = "4DA";
 const VERSION = "1.0.3";
 const TAG = "v1.0.3";
+const NEXT_VERSION = "1.0.4";
 const base = `https://github.com/${ORG}/${REPO}/releases/download/${TAG}`;
 
 // Exact asset names verified against the v1.0.3 release
@@ -26,6 +36,9 @@ export default {
   repo: REPO,
   version: VERSION,
   tag: TAG,
+  // The version the screenshots and copy describe, and whether it is the download.
+  next: NEXT_VERSION,
+  published: VERSION === NEXT_VERSION,
   repoUrl: `https://github.com/${ORG}/${REPO}`,
   releaseUrl: `https://github.com/${ORG}/${REPO}/releases/tag/${TAG}`,
   files,
