@@ -204,6 +204,7 @@ zeroize = "1"
 # Keyring — cross-platform credential storage (Windows Credential Manager, macOS Keychain, Linux Secret Service)
 keyring = { version = "3", features = ["sync-secret-service", "linux-native", "apple-native", "windows-native"] }
 ammonia = "4"
+tauri-plugin-process = "2.4.0"
 
 # Platform-specific dependencies
 [target.'cfg(not(windows))'.dependencies]

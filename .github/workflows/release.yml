@@ -1074,6 +1074,12 @@ jobs:
     permissions:
       contents: write
     steps:
+      # Only for scripts/pin-updater-manifest.cjs (runs on the image's Node).
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v4
+        with:
+          sparse-checkout: scripts
+          persist-credentials: false
+
       - name: Consolidate SHA-256 checksums
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -1139,6 +1145,27 @@ jobs:
           fi
           echo "All required artifacts present."
 
+      - name: Pin updater manifest URLs to this release
+        # tauri-action writes every payload URL as /releases/latest/download/,
+        # which follows GitHub's "Latest" flag, not this release (audit
+        # 2026-11-11, R5): before the un-draft lands, and after any later
+        # change of that flag, installed apps would fetch another release's
+        # file names. Rewrite them to /releases/download/<tag>/ and refuse an
+        # entry naming a file this release does not carry. Idempotent.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF#refs/tags/}"
+          rm -rf updater-pin && mkdir -p updater-pin
+          gh release download "$TAG" --repo "$GH_REPO" -p latest.json -D updater-pin --clobber
+          gh release view "$TAG" --repo "$GH_REPO" --json assets -q '.assets[].name' > updater-pin/assets.txt
+          node scripts/pin-updater-manifest.cjs pin updater-pin/latest.json \
+            --repo "$GH_REPO" --tag "$TAG" --assets updater-pin/assets.txt
+          gh release upload "$TAG" updater-pin/latest.json --repo "$GH_REPO" --clobber
+
       - name: Verify updater manifest platform coverage
         # latest.json EXISTING is not latest.json being COMPLETE. The
         # v0.0.15-test rehearsal (2026-08-30) published a manifest carrying
@@ -1175,6 +1202,49 @@ jobs:
             }
             console.log("Updater manifest covers every released platform, all entries signed.");
           '
+      # Order matters (audit 2026-11-11, R5). Installed apps read ONLY the
+      # desktop-latest pointer, so it moves LAST: un-draft (awaited and
+      # confirmed), then prove every payload URL in the manifest answers, then
+      # publish the pointer. Before, the pointer moved first and the un-draft
+      # call was not awaited, so apps could be told about a release whose
+      # files were still draft-only (404), and nothing ever fetched them.
+      #
+      # Only a production tag un-drafts. A dry run leaves the draft in place so
+      # the artifacts can be inspected and the draft deleted without ever having
+      # been visible to a user.
+      - name: Publish release
+        if: needs.create-release.outputs.production == 'true'
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v7
+        with:
+          script: |
+            const { data } = await github.rest.repos.updateRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              release_id: ${{ needs.create-release.outputs.release_id }},
+              draft: false,
+            });
+            if (data.draft !== false) {
+              core.setFailed(`Release ${data.tag_name} is still a draft after the update call.`);
+              return;
+            }
+            core.info(`Published ${data.tag_name}: ${data.html_url}`);
+
+      - name: Verify every updater payload URL answers
+        if: needs.create-release.outputs.production == 'true'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF#refs/tags/}"
+          test "$(gh release view "$TAG" --repo "$GH_REPO" --json isDraft -q .isDraft)" = "false"
+          rm -rf updater-urls && mkdir -p updater-urls
+          gh release download "$TAG" --repo "$GH_REPO" -p latest.json -D updater-urls --clobber
+          # Unauthenticated GETs, as an installed app makes them; retried while
+          # GitHub's CDN catches up with the un-draft.
+          node scripts/pin-updater-manifest.cjs check-urls updater-urls/latest.json --attempts 6 --delay-ms 10000
+
       - name: Publish desktop updater manifest
         if: needs.create-release.outputs.production == 'true'
         env:
@@ -1207,17 +1277,20 @@ jobs:
 
           gh release upload "$POINTER_TAG" "$WORK_DIR/latest.json" --repo "$GH_REPO" --clobber
 
-      # Only a production tag un-drafts. A dry run leaves the draft in place so
-      # the artifacts can be inspected and the draft deleted without ever having
-      # been visible to a user.
-      - name: Publish release
-        if: needs.create-release.outputs.production == 'true'
-        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v7
-        with:
-          script: |
-            github.rest.repos.updateRelease({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              release_id: ${{ needs.create-release.outputs.release_id }},
-              draft: false,
-            })
+          # What installed apps will now read: the pointer must serve exactly
+          # this release's pinned manifest.
+          # Retried: the CDN can serve the previous copy for a short while.
+          for attempt in 1 2 3 4 5 6; do
+            if curl -fsSL "https://github.com/$GH_REPO/releases/download/$POINTER_TAG/latest.json" -o "$WORK_DIR/served.json" \
+              && node -e '
+                const a = require("./" + process.argv[1]), b = require("./" + process.argv[2]);
+                if (JSON.stringify(a) !== JSON.stringify(b)) process.exit(1);
+                console.log("desktop-latest serves the " + process.argv[3] + " manifest (version " + b.version + ").");
+              ' "$WORK_DIR/latest.json" "$WORK_DIR/served.json" "$TAG"; then
+              exit 0
+            fi
+            echo "attempt $attempt: desktop-latest does not serve the $TAG manifest yet; retrying in 10 s"
+            sleep 10
+          done
+          echo "::error::desktop-latest/latest.json still differs from the $TAG manifest after 60 s. Installed apps may not see $TAG."
+          exit 1

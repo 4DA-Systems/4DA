@@ -134,7 +134,7 @@ function App() {
   const { toasts, addToast, removeToast } = useToasts();
 
   // Auto-update check
-  const { update, installing, installUpdate, dismiss: dismissUpdate } = useUpdateCheck();
+  const { update, installing, progress: updateProgress, installError: updateInstallError, installUpdate, dismiss: dismissUpdate } = useUpdateCheck();
   // All application state via hooks
   const {
     settingsForm,
@@ -407,6 +407,8 @@ function App() {
           <UpdateBanner
             update={update}
             installing={installing}
+            progress={updateProgress}
+            installError={updateInstallError}
             onInstall={() => { void installUpdate(); }}
             onDismiss={dismissUpdate}
           />

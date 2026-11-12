@@ -68,4 +68,25 @@ describe('UpdateBanner', () => {
     expect(link.closest('a')).toHaveAttribute('href', expect.stringContaining('github.com'));
     expect(link.closest('a')).toHaveAttribute('target', '_blank');
   });
+
+  // Audit 2026-11-11, R5: a large payload shows progress, and a failed
+  // install says why instead of leaving "Installing..." on screen.
+  it('shows download progress while installing', () => {
+    render(<UpdateBanner {...defaultProps} installing progress={{ downloaded: 2_097_152, total: 4_194_304 }} />);
+    expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '50');
+    expect(screen.getByText('update.progress')).toBeInTheDocument();
+  });
+
+  it('a failed install shows the reason and offers a retry', () => {
+    render(<UpdateBanner {...defaultProps} installError={{ stage: 'install', message: 'signature verification failed' }} />);
+    expect(screen.getByRole('alert')).toHaveTextContent('update.installFailed');
+    expect(screen.getByLabelText('update.retry')).toBeInTheDocument();
+  });
+
+  it('an installed update that could not restart asks for a manual restart, with no install button', () => {
+    render(<UpdateBanner {...defaultProps} installError={{ stage: 'restart', message: 'denied' }} />);
+    expect(screen.getByRole('alert')).toHaveTextContent('update.restartFailed');
+    expect(screen.queryByLabelText('update.install')).toBeNull();
+    expect(screen.queryByLabelText('update.retry')).toBeNull();
+  });
 });

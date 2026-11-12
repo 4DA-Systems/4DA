@@ -838,6 +838,9 @@ pub fn run() {
     #[cfg(not(debug_assertions))]
     {
         builder = builder.plugin(tauri_plugin_updater::Builder::new().build());
+        // The updater's relaunch after install (use-update-check.ts). Only
+        // `process:allow-restart` is granted; exit stays on `quit_app`.
+        builder = builder.plugin(tauri_plugin_process::init());
     }
 
     let app = builder
