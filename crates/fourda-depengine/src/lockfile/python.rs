@@ -14,7 +14,10 @@ use regex::Regex;
 use serde_json::Value;
 
 use super::source::{cmp_paths, components, extension, file_name};
-use super::{DepScope, FileSource, LockFormat, LockedPackage, LockfileOutcome, LockfileRead};
+use super::{
+    DepScope, FileSource, LockFormat, LockedPackage, LockfileOutcome, LockfileRead, UnpinnedFile,
+    UnreadFile,
+};
 
 fn empty(format: LockFormat) -> LockfileRead {
     LockfileRead {
@@ -23,6 +26,8 @@ fn empty(format: LockFormat) -> LockfileRead {
         packages: Vec::new(),
         edges: Vec::new(),
         non_registry_entries: 0,
+        unpinned: Vec::new(),
+        unread: Vec::new(),
     }
 }
 
@@ -212,8 +217,32 @@ pub(super) fn read_requirements(fs: &dyn FileSource, path: &str, content: &str) 
     let mut read = empty(LockFormat::Requirements);
     let mut visited = HashSet::new();
     visited.insert(path_key(path));
-    collect_pins(fs, path, content, 0, &mut visited, &mut read);
+    let mut unpinned: Vec<(String, Vec<String>)> = Vec::new();
+    collect_pins(fs, path, content, 0, &mut visited, &mut read, &mut unpinned);
+    // A name pinned anywhere in this read (`-r base.txt` pins what the file
+    // itself only ranges) has its installed version: not unpinned.
+    let pinned: HashSet<String> = read
+        .packages
+        .iter()
+        .map(|p| normalized_name(&p.name))
+        .collect();
+    read.unpinned = unpinned
+        .into_iter()
+        .filter_map(|(file, names)| {
+            let count = names
+                .iter()
+                .filter(|n| !pinned.contains(*n))
+                .collect::<HashSet<_>>()
+                .len();
+            (count > 0).then_some(UnpinnedFile { path: file, count })
+        })
+        .collect();
     read
+}
+
+/// PEP 503: case, `_` and `.` do not distinguish two distributions.
+fn normalized_name(name: &str) -> String {
+    name.to_lowercase().replace(['_', '.'], "-")
 }
 
 const MAX_INCLUDE_DEPTH: usize = 5;
@@ -231,6 +260,12 @@ fn path_key(path: &str) -> Vec<String> {
     components(path).into_iter().map(str::to_string).collect()
 }
 
+/// Read one requirements file's lines into `read`, following its includes.
+/// Exact pins become packages; a requirement with no exact pin is recorded
+/// under its file in `unpinned` (names, PEP 503-normalised); a URL, path or
+/// editable requirement counts as a non-registry entry; an include that
+/// cannot be followed lands in `read.unread`. Before 2026-11-11 the last
+/// three were dropped without a word (fresh-profile audit).
 fn collect_pins(
     fs: &dyn FileSource,
     path: &str,
@@ -238,23 +273,100 @@ fn collect_pins(
     depth: usize,
     visited: &mut HashSet<Vec<String>>,
     read: &mut LockfileRead,
+    unpinned: &mut Vec<(String, Vec<String>)>,
 ) {
     for line in logical_lines(content) {
         if let Some(include) = include_target(&line) {
             let base = fs.parent(path).unwrap_or_else(|| ".".to_string());
             let target = fs.join(&base, include);
-            if depth < MAX_INCLUDE_DEPTH && visited.insert(path_key(&target)) {
-                if let Ok(nested) = fs.read(&target) {
-                    collect_pins(fs, &target, &nested, depth + 1, visited, read);
+            if depth >= MAX_INCLUDE_DEPTH {
+                read.unread.push(UnreadFile {
+                    path: target,
+                    reason: format!(
+                        "-r include in {path} not followed: deeper than {MAX_INCLUDE_DEPTH} nested includes"
+                    ),
+                });
+            } else if visited.insert(path_key(&target)) {
+                match fs.read(&target) {
+                    Ok(nested) => {
+                        collect_pins(fs, &target, &nested, depth + 1, visited, read, unpinned);
+                    }
+                    Err(e) => read.unread.push(UnreadFile {
+                        path: target,
+                        reason: format!("-r include in {path} could not be read: {e}"),
+                    }),
                 }
             }
             continue;
         }
-        if let Some((name, version)) = exact_pin(&line) {
-            read.packages
-                .push(LockedPackage::new(name, version).primary(true));
+        match requirement_kind(&line) {
+            Requirement::Pin(name, version) => read
+                .packages
+                .push(LockedPackage::new(name, version).primary(true)),
+            Requirement::Unpinned(name) => match unpinned.iter_mut().find(|(f, _)| f == path) {
+                Some((_, names)) => names.push(name),
+                None => unpinned.push((path.to_string(), vec![name])),
+            },
+            Requirement::NonRegistry => read.non_registry_entries += 1,
+            Requirement::Option => {}
         }
     }
+}
+
+/// What one logical requirements line names.
+enum Requirement {
+    /// `name==1.2`: an installed version.
+    Pin(String, String),
+    /// A package with no exact pin (`name>=1`, `name`, `name==1.*`),
+    /// PEP 503-normalised.
+    Unpinned(String),
+    /// A URL, local path or editable install: no index release.
+    NonRegistry,
+    /// A pip option (`--index-url`, `-c constraints.txt`) or anything else.
+    Option,
+}
+
+fn requirement_kind(line: &str) -> Requirement {
+    if let Some((name, version)) = exact_pin(line) {
+        return Requirement::Pin(name, version);
+    }
+    if line.starts_with("-e") || line.starts_with("--editable") {
+        return Requirement::NonRegistry;
+    }
+    if line.starts_with('-') {
+        return Requirement::Option;
+    }
+    let spec = line.split(';').next().unwrap_or(line).trim();
+    if spec.contains("://") || spec.starts_with(['.', '/', '\\']) {
+        return Requirement::NonRegistry;
+    }
+    let Some(caps) = name_regex().and_then(|re| re.captures(spec)) else {
+        return Requirement::Option;
+    };
+    let Some(name) = caps.get(1) else {
+        return Requirement::Option;
+    };
+    let rest = spec[name.end()..].trim_start();
+    let rest = rest
+        .strip_prefix('[')
+        .and_then(|r| r.split_once(']'))
+        .map_or(rest, |(_, after)| after.trim_start());
+    if rest.starts_with('@') {
+        return Requirement::NonRegistry;
+    }
+    // A name followed by something that is not a version clause is not a
+    // requirement (a stray word, a Windows path): nothing to count.
+    if rest.is_empty() || rest.starts_with(['<', '>', '=', '!', '~', ',']) {
+        Requirement::Unpinned(normalized_name(name.as_str()))
+    } else {
+        Requirement::Option
+    }
+}
+
+fn name_regex() -> Option<&'static Regex> {
+    static RE: OnceLock<Option<Regex>> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"^([A-Za-z0-9][A-Za-z0-9._-]*)").ok())
+        .as_ref()
 }
 /// Physical lines joined across `\` continuations, comments removed. A `#`
 /// starts a comment at line start or after whitespace (URLs may hold `#`).

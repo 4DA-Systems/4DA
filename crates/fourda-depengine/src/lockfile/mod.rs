@@ -26,6 +26,7 @@ pub mod cargo_facts;
 pub mod dep_scope;
 pub mod flat;
 pub mod graph;
+mod manifest;
 pub mod npm_bundle;
 pub mod source;
 
@@ -192,6 +193,30 @@ pub struct LockfileRead {
     /// git / file / path sources). Not advisory-matchable, but counted so a
     /// lockfile that yields nothing says why.
     pub non_registry_entries: usize,
+    /// Requirements files only: lines naming a package with no exact pin
+    /// (`flask>=2`, a bare `flask`, `django==4.2.*`), per file that has any.
+    /// They name no installed version, so nothing in them was checked, and
+    /// that is said instead of dropping them (a name pinned elsewhere in the
+    /// same read is not counted).
+    pub unpinned: Vec<UnpinnedFile>,
+    /// Companion files this read needed and could not read (a `-r` include
+    /// that is missing, unreadable or past the include depth): what they pin
+    /// is not in `packages`.
+    pub unread: Vec<UnreadFile>,
+}
+
+/// A requirements file's requirements that name no installed version.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct UnpinnedFile {
+    pub path: String,
+    pub count: usize,
+}
+
+/// A companion file a read could not follow, and why.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct UnreadFile {
+    pub path: String,
+    pub reason: String,
 }
 
 /// What happened to one dependency file in a directory.
@@ -209,6 +234,19 @@ pub enum LockfileOutcome {
     Unsupported {
         path: String,
         kind: &'static str,
+    },
+    /// A manifest (`package.json`, `Cargo.toml`, `pyproject.toml`, `Pipfile`,
+    /// `Gemfile`, `composer.json`) with no lockfile of its ecosystem beside it
+    /// or in a directory above it. Its `dependencies` are declared ranges,
+    /// not installed versions, so none of them was checked (fresh-profile
+    /// audit 2026-11-11: such a project emitted nothing at all).
+    ManifestOnly {
+        path: String,
+        /// The ACE language string, as [`LockFormat::ecosystem`] spells it.
+        ecosystem: &'static str,
+        /// Registry dependencies it declares (local, path and git entries
+        /// excluded). Never 0: a manifest declaring none is not reported.
+        dependencies: usize,
     },
 }
 
@@ -319,7 +357,20 @@ pub fn read_dir(fs: &dyn FileSource, dir: &str) -> Vec<LockfileOutcome> {
             }
         }));
     }
+    let pins_python = out.iter().any(|o| {
+        matches!(o, LockfileOutcome::Read(r)
+            if r.format.ecosystem() == "python" && !r.packages.is_empty())
+    });
+    out.extend(manifest::unlocked_manifests(fs, dir, pins_python));
     out
+}
+
+/// The first manifest in `dir` that [`read_dir`] can report as
+/// [`LockfileOutcome::ManifestOnly`], for a walk that selects directories by
+/// [`probe`] (which finds lockfiles only) and must also visit a project that
+/// has only a manifest.
+pub fn probe_manifest(fs: &dyn FileSource, dir: &str) -> Option<String> {
+    manifest::first_manifest(fs, dir)
 }
 
 const DOTNET_PROJECT_KIND: &str = "NuGet (.NET project, installed versions not resolved)";
@@ -411,6 +462,8 @@ pub fn plain(format: LockFormat, packages: Vec<(String, String)>) -> LockfileRea
             .collect(),
         edges: Vec::new(),
         non_registry_entries: 0,
+        unpinned: Vec::new(),
+        unread: Vec::new(),
     }
 }
 

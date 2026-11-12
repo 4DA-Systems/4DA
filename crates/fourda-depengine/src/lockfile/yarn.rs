@@ -81,6 +81,8 @@ fn empty(format: LockFormat) -> LockfileRead {
         packages: Vec::new(),
         edges: Vec::new(),
         non_registry_entries: 0,
+        unpinned: Vec::new(),
+        unread: Vec::new(),
     }
 }
 

@@ -114,6 +114,9 @@ const checks = [
             }),
             edges: [],
             non_registry_entries: 0,
+            // #1125: what a requirements file leaves unpinned, and includes that could not be read.
+            unpinned: [],
+            unread: [],
           },
         },
       ],

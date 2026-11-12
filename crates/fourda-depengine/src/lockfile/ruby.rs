@@ -59,6 +59,8 @@ pub(super) fn read_gemfile_lock(content: &str) -> LockfileRead {
         packages: Vec::new(),
         edges: Vec::new(),
         non_registry_entries: 0,
+        unpinned: Vec::new(),
+        unread: Vec::new(),
     };
     let mut section = Section::Other;
     let mut in_specs = false;

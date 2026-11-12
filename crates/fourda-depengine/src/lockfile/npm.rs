@@ -62,6 +62,8 @@ pub(super) fn read_package_lock(content: &str, format: LockFormat) -> Result<Loc
         packages: Vec::new(),
         edges: package_lock_edges(content),
         non_registry_entries: 0,
+        unpinned: Vec::new(),
+        unread: Vec::new(),
     };
     // npm's own dev verdict per copy (AD-046), read by the one implementation.
     let scope = DevScope::from_package_lock(content);
@@ -175,5 +177,7 @@ pub(super) fn read_pnpm_lock(content: &str) -> LockfileRead {
         packages,
         edges: pnpm_lock_edges(content),
         non_registry_entries: 0,
+        unpinned: Vec::new(),
+        unread: Vec::new(),
     }
 }

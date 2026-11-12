@@ -665,6 +665,21 @@ fn manifest_less_shell_counts_as_gone() {
         );
     }
 
+    // A pip-compile layout: the pins live in requirements/*.txt and nothing
+    // sits at the top level. The walk reads it, so the prune must keep it
+    // (it deleted the 55 rows it had just stored, fresh profile 2026-11-11).
+    let pip_compile = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(pip_compile.path().join("requirements")).unwrap();
+    std::fs::write(
+        pip_compile.path().join("requirements").join("dev.txt"),
+        "flask==2.0.0\n",
+    )
+    .unwrap();
+    assert!(
+        !project_gone_from_disk(&pip_compile.path().to_string_lossy()),
+        "requirements/*.txt keeps the project"
+    );
+
     // Not a directory, relative, UNC: never gone by the manifest rule.
     let file = shell.path().join("README.md");
     assert!(!project_gone_from_disk(&file.to_string_lossy()));

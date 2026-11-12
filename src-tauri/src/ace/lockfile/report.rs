@@ -49,6 +49,21 @@ pub(crate) struct ProblemEntry {
     pub reason: String,
 }
 
+/// A requirements file's requirements that name no installed version.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub(crate) struct UnpinnedEntry {
+    pub path: String,
+    pub count: usize,
+}
+
+/// A manifest no lockfile pins, and how many dependencies it declares.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub(crate) struct ManifestOnlyEntry {
+    pub path: String,
+    pub ecosystem: String,
+    pub dependencies: usize,
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 pub(crate) struct LockfileReport {
     pub read: Vec<ReadEntry>,
@@ -57,6 +72,15 @@ pub(crate) struct LockfileReport {
     /// Directories holding a dependency file that the walk did not read
     /// (scaffolding path, nested foreign checkout, user-excluded, depth).
     pub skipped_dirs: Vec<ProblemEntry>,
+    /// Every dependency file in those directories, with the directory's
+    /// reason: fixture and example lockfiles stay unscanned by policy, but
+    /// they are counted and named, never a log line only (W0-D).
+    pub skipped_lockfiles: Vec<ProblemEntry>,
+    /// Requirements files with requirements that pin no version, one entry
+    /// per file (a file read twice, directly and as an include, once).
+    pub unpinned: Vec<UnpinnedEntry>,
+    /// Manifests with no lockfile: declared ranges, none of them checked.
+    pub manifest_only: Vec<ManifestOnlyEntry>,
 }
 
 pub(crate) fn format_label(format: LockFormat) -> &'static str {
@@ -82,13 +106,26 @@ pub(crate) fn format_label(format: LockFormat) -> &'static str {
 impl LockfileReport {
     pub(crate) fn record(&mut self, outcome: &LockfileOutcome) {
         match outcome {
-            LockfileOutcome::Read(read) => self.read.push(ReadEntry {
-                path: read.path.clone(),
-                format: format_label(read.format).to_string(),
-                ecosystem: read.format.ecosystem().to_string(),
-                packages: read.packages.len(),
-                non_registry_entries: read.non_registry_entries,
-            }),
+            LockfileOutcome::Read(read) => {
+                self.read.push(ReadEntry {
+                    path: read.path.clone(),
+                    format: format_label(read.format).to_string(),
+                    ecosystem: read.format.ecosystem().to_string(),
+                    packages: read.packages.len(),
+                    non_registry_entries: read.non_registry_entries,
+                });
+                for file in &read.unpinned {
+                    self.add_unpinned(&file.path, file.count);
+                }
+                for file in &read.unread {
+                    if !self.failed.iter().any(|f| f.path == file.path) {
+                        self.failed.push(ProblemEntry {
+                            path: file.path.clone(),
+                            reason: file.reason.clone(),
+                        });
+                    }
+                }
+            }
             LockfileOutcome::Failed {
                 path,
                 format,
@@ -104,13 +141,41 @@ impl LockfileReport {
                 path: path.clone(),
                 reason: (*kind).to_string(),
             }),
+            LockfileOutcome::ManifestOnly {
+                path,
+                ecosystem,
+                dependencies,
+            } => self.manifest_only.push(ManifestOnlyEntry {
+                path: path.clone(),
+                ecosystem: (*ecosystem).to_string(),
+                dependencies: *dependencies,
+            }),
+        }
+    }
+
+    /// One entry per file: an include read again from another file carries
+    /// the same lines, so the larger count stands.
+    fn add_unpinned(&mut self, path: &str, count: usize) {
+        match self.unpinned.iter_mut().find(|u| u.path == path) {
+            Some(entry) => entry.count = entry.count.max(count),
+            None => self.unpinned.push(UnpinnedEntry {
+                path: path.to_string(),
+                count,
+            }),
         }
     }
 
     pub(crate) fn skip_dir(&mut self, dir: &Path, reason: impl Into<String>) {
+        let reason = reason.into();
+        for file in super::dependency_files_std(dir) {
+            self.skipped_lockfiles.push(ProblemEntry {
+                path: file.display().to_string(),
+                reason: reason.clone(),
+            });
+        }
         self.skipped_dirs.push(ProblemEntry {
             path: dir.display().to_string(),
-            reason: reason.into(),
+            reason,
         });
     }
 
@@ -124,8 +189,20 @@ impl LockfileReport {
             failed = self.failed.len(),
             unsupported = self.unsupported.len(),
             skipped_dirs = self.skipped_dirs.len(),
+            skipped_lockfiles = self.skipped_lockfiles.len(),
+            unpinned_requirements = self.unpinned.iter().map(|u| u.count).sum::<usize>(),
+            manifests_without_lockfile = self.manifest_only.len(),
             "Lockfile walk report"
         );
+        for p in &self.skipped_lockfiles {
+            info!(target: "4da::ace", path = %p.path, reason = %p.reason, "Lockfile NOT scanned (counted as not checked)");
+        }
+        for u in &self.unpinned {
+            warn!(target: "4da::ace", path = %u.path, count = u.count, "Requirements without an exact pin: no installed version, not checked");
+        }
+        for m in &self.manifest_only {
+            warn!(target: "4da::ace", path = %m.path, dependencies = m.dependencies, "Manifest without a lockfile: declared ranges, not checked");
+        }
         for p in &self.failed {
             warn!(target: "4da::ace", path = %p.path, reason = %p.reason, "Lockfile NOT read");
         }
@@ -148,10 +225,22 @@ impl LockfileReport {
                 .iter()
                 .filter(|s| s.reason == TEMP_DIR_REASON)
                 .count(),
+            "skipped_lockfile_count": self.skipped_lockfiles.len(),
+            "unpinned_count": self.unpinned.iter().map(|u| u.count).sum::<usize>(),
+            "unpinned_file_count": self.unpinned.len(),
+            "manifest_only_count": self.manifest_only.len(),
+            "manifest_only_dependencies": self
+                .manifest_only
+                .iter()
+                .map(|m| m.dependencies)
+                .sum::<usize>(),
             "read": &self.read[..cap(self.read.len())],
             "failed": &self.failed[..cap(self.failed.len())],
             "unsupported": &self.unsupported[..cap(self.unsupported.len())],
             "skipped_dirs": &self.skipped_dirs[..cap(self.skipped_dirs.len())],
+            "skipped_lockfiles": &self.skipped_lockfiles[..cap(self.skipped_lockfiles.len())],
+            "unpinned": &self.unpinned[..cap(self.unpinned.len())],
+            "manifest_only": &self.manifest_only[..cap(self.manifest_only.len())],
         })
     }
 }

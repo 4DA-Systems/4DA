@@ -326,7 +326,67 @@ pub(crate) fn not_covered_line(facts: &BriefFacts) -> Option<String> {
             },
         ));
     }
+    parts.extend(unchecked_parts(nc));
     (!parts.is_empty()).then(|| parts.join(" "))
+}
+
+/// `1 thing` / `2 things`.
+fn plural(n: u32, one: &str, many: &str) -> String {
+    format!("{n} {}", if n == 1 { one } else { many })
+}
+
+/// The W0-D gaps (skipped lockfiles, unpinned requirements, manifests with
+/// no lockfile, versionless dependencies), each named with its count.
+fn unchecked_parts(nc: &crate::osv::readiness::NotCovered) -> Vec<String> {
+    let counted = |list: &Option<Vec<crate::osv::readiness::CountedFile>>, total: u32| {
+        let rows: Vec<(String, String)> = list
+            .iter()
+            .flatten()
+            .map(|f| (f.path.clone(), f.count.to_string()))
+            .collect();
+        name_list(rows.iter().map(|(p, c)| (p.as_str(), c.as_str())), total)
+    };
+    let mut parts = Vec::new();
+    if let Some(n) = nc.skipped_count.filter(|n| *n > 0) {
+        let named = name_list(
+            nc.skipped
+                .iter()
+                .flatten()
+                .map(|f| (f.path.as_str(), f.reason.as_str())),
+            n,
+        );
+        parts.push(format!(
+            "Not scanned: {} in example, fixture or other skipped folders: {named}.",
+            plural(n, "lockfile", "lockfiles")
+        ));
+    }
+    if let Some(n) = nc.unpinned_count.filter(|n| *n > 0) {
+        let files = nc.unpinned.as_ref().map_or(0, Vec::len) as u32;
+        parts.push(format!(
+            "{} pin no exact version, so {} not checked: {}.",
+            plural(n, "requirement", "requirements"),
+            if n == 1 { "it was" } else { "they were" },
+            counted(&nc.unpinned, files.max(1)),
+        ));
+    }
+    if let Some(n) = nc.manifest_only_count.filter(|n| *n > 0) {
+        parts.push(format!(
+            "{} with no lockfile {} ranges, not installed versions, so {} dependencies were not checked: {}.",
+            plural(n, "manifest", "manifests"),
+            if n == 1 { "declares" } else { "declare" },
+            if n == 1 { "its" } else { "their" },
+            counted(&nc.manifest_only, n),
+        ));
+    }
+    if let Some(n) = nc.unversioned_count.filter(|n| *n > 0) {
+        let projects = nc.unversioned.as_ref().map_or(0, Vec::len) as u32;
+        parts.push(format!(
+            "{} have no installed version 4DA could read, so they were not checked: {}.",
+            plural(n, "dependency", "dependencies"),
+            counted(&nc.unversioned, projects.max(1)),
+        ));
+    }
+    parts
 }
 
 /// A footer that names "OSV advisories" as a source only when the advisory
