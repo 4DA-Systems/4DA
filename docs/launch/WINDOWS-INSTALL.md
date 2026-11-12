@@ -60,7 +60,7 @@ Windows builds are **not yet Authenticode-signed**; code signing is planned. Unt
 - **Delivered from GitHub Releases**, the same channel you downloaded from.
 - **Verified before installation** — a failed signature check aborts the update.
 
-You do not need to do anything to receive updates. When a new version is available, 4DA will prompt you on next launch.
+You do not need to do anything to receive updates. 4DA checks shortly after it starts, every 6 hours while it runs, and when you return to its window. When a new version is available it shows a prompt; Install downloads it with progress, verifies the signature and restarts 4DA into the new version.
 
 ## If the installer still won't run
 

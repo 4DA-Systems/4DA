@@ -19,7 +19,7 @@ templateEngineOverride: md
 | News sources | HN, GitHub, Reddit, arXiv, RSS and the others you enable | Plain requests for public content; Reddit and Stack Overflow see the subreddits and tags you follow |
 | AI provider | Anthropic / OpenAI / any OpenAI-compatible endpoint, or local Ollama | Only if you set one up with your own key: item titles and snippets plus a short context profile (dependency names, project labels, git-derived topics, interests). File paths are replaced with project labels; source code and commit messages are never sent |
 | Licence | Keygen (`api.keygen.sh`) and 4DA's own `4da.ai` | Paid licences only: the key, to validate it and, for subscriptions, to renew it near expiry. `4da.ai` also receives your email if you use "Recover License by Email" |
-| Updater | GitHub Releases | A plain request for the update manifest, once per session; updates are minisign-verified |
+| Updater | GitHub Releases | A plain request for the update manifest: shortly after start, every 6 hours while the app runs, and when you return to its window; updates are minisign-verified |
 | One-time downloads | Hugging Face, GitHub | The local search model, only when a feature first needs it |
 | Crash reports | **None** | 4DA sends none. Export a scrubbed diagnostic bundle locally, on demand. |
 
